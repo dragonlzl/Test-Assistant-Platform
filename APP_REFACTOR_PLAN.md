@@ -444,3 +444,83 @@
   - app.js 行数：3891  
   - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui -- tests/ui/tempexec_progress.spec.js tests/ui/tempexec_drag.spec.js` 通过（需本地 8090 端口）  
   - 其他备注：临时执行状态刷新时同步导航/版本区；UI 用例校验状态类名；通知待最终结论时再发  
+- 日期：2025-12-02 22:05  
+  - 子目标：核心迁移阶段3（工具函数下沉 utils）  
+  - 影响范围：JSON 提取/格式化工具统一由 `scripts/base/utils.js` 提供；核心/handlers 通过 appUtils 复用；app.js 轻量化  
+  - 子目标进度：90%  
+  - 最终目标进度：90%  
+  - app.js 行数：3869  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（20/20，全量 UI 用例，需本地 8090 端口）  
+  - 其他备注：已调用 `python3 notify_feishu.py` 发送通知；提取/格式化函数供 compare/clean 等模块共享，避免重复实现  
+- 日期：2025-12-02 22:16  
+  - 子目标：核心迁移阶段3（清洗定位工具下沉 cleanHandlers）  
+  - 影响范围：原文片段定位/高亮的正则与归一化查找逻辑迁入 `scripts/handlers/cleanHandlers.js`；app.js 去除重复实现  
+  - 子目标进度：92%  
+  - 最终目标进度：92%  
+  - app.js 行数：3786  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（20/20，需本地 8090 端口）  
+  - 其他备注：通知已发送（`python3 notify_feishu.py`）；清洗片段查找逻辑集中到 handlers 便于后续维护  
+- 日期：2025-12-02 22:21  
+  - 子目标：核心迁移阶段3（JSON 解析工具下沉 utils）  
+  - 影响范围：`extractJsonObjects` 下沉至 `scripts/base/utils.js`，供 clean/cases 等核心统一复用；app.js 去除本地实现  
+  - 子目标进度：94%  
+  - 最终目标进度：94%  
+  - app.js 行数：3755  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（20/20，需本地 8090 端口）  
+  - 其他备注：`python3 notify_feishu.py` 已发送；JSON 片段提取逻辑统一在基础层，减少重复代码  
+- 日期：2025-12-02 22:28  
+  - 子目标：核心迁移阶段3（需求标识工具精简注入）  
+  - 影响范围：需求标识/封装/解包相关函数统一使用 requirementCore 输出，app.js 移除冗长 fallback；继续瘦身  
+  - 子目标进度：95%  
+  - 最终目标进度：95%  
+  - app.js 行数：3728  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（20/20，需本地 8090 端口）  
+  - 其他备注：`python3 notify_feishu.py` 已发送；需求标识处理集中在 requirementCore，app.js 仅注入引用  
+- 日期：2025-12-02 22:38  
+  - 子目标：核心迁移阶段3（用例解析 fallback 移除）  
+  - 影响范围：用例解析依赖强制使用 casesCore 的解析能力，移除 app.js 中静默返回空的 fallback；异常时直接报错，方便定位  
+  - 子目标进度：96%  
+  - 最终目标进度：96%  
+  - app.js 行数：3732  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（20/20，需本地 8090 端口）  
+  - 其他备注：`python3 notify_feishu.py` 已发送；用例解析依赖统一由 casesCore 提供，避免静默吞掉错误  
+- 日期：2025-12-02 22:41  
+  - 子目标：核心迁移阶段3（工具调用顺序修复）  
+  - 影响范围：统一使用 utils 提供的 `escapeHtml`/`escapeHtmlPreserve`，移除 app.js 内部实现并前置注入，修复初始化异常  
+  - 子目标进度：97%  
+  - 最终目标进度：97%  
+  - app.js 行数：3714  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（20/20，需本地 8090 端口）  
+  - 其他备注：`python3 notify_feishu.py` 已发送；页面初始化恢复正常（解决 escapeHtml 提前访问报错）  
+- 日期：2025-12-02 22:59  
+  - 子目标：核心迁移阶段3（用例导出工具下沉 utils）  
+  - 影响范围：用例导出清洗函数 `sanitizeCasesForExport` 统一由 utils 提供并注入；app.js 不再自定义实现  
+  - 子目标进度：98%  
+  - 最终目标进度：98%  
+  - app.js 行数：3719  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（20/20，需本地 8090 端口）  
+  - 其他备注：`python3 notify_feishu.py` 已发送；修复因缺少 sanitizeCasesForExport 导致的初始化错误  
+- 日期：2025-12-02 23:05  
+  - 子目标：核心迁移阶段3（并发工具下沉 utils）  
+  - 影响范围：并发执行工具 `runConcurrent` 下沉至 utils 供核心/handlers 复用，app.js 去除自定义实现  
+  - 子目标进度：99%  
+  - 最终目标进度：68%（app.js 由 9107 行降至 3718 行，距 1200 目标仍有约 2518 行待压缩）  
+  - app.js 行数：3718  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（20/20，需本地 8090 端口）  
+  - 其他备注：`python3 notify_feishu.py` 已发送；用例导出/并发工具统一基础层，减少 app.js 体积  
+- 日期：2025-12-02 23:19  
+  - 子目标：核心迁移阶段3（ID/归一化工具下沉 utils）  
+  - 影响范围：临时执行相关 ID 生成与名称归一化（generateTempExecId/generateTempVersionId/normalizeTempExecName）下沉至 utils；app.js 只做注入  
+  - 子目标进度：99%  
+  - 最终目标进度：68%（app.js 由 9107 行降至 3718 行，距 1200 目标仍有约 2518 行待压缩）  
+  - app.js 行数：3718  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（20/20，需本地 8090 端口）  
+  - 其他备注：`python3 notify_feishu.py` 已发送；临时执行 ID/名称工具集中到基础层，减少 app.js 内联实现  
+- 日期：2025-12-02 23:52  
+  - 子目标：核心迁移阶段3（临时执行工具函数下沉 utils 并修复初始化顺序）  
+  - 影响范围：临时执行 ID/名称归一化与 stringifyCaseField/ensureTempExecReplacement 统一由 utils 注入 tempexecCore/casesGenCore；修复 _inited 阻塞的 TDZ 报错  
+  - 子目标进度：99%  
+  - 最终目标进度：68%（app.js 由 9107 行降至 3731 行，距 1200 目标仍需继续瘦身）  
+  - app.js 行数：3731  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（20/20，全量 UI 用例，需本地 8090 端口）  
+  - 其他备注：已运行 `python3 notify_feishu.py` 通知；需注意后续迁移时保持工具函数声明在调用前，避免再触发初始化报错  

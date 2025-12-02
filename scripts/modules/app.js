@@ -344,6 +344,12 @@
       }
       return trimmed;
     };
+    const extractJsonPayload = appUtils.extractJsonPayload || function extractJsonPayloadFallback(rawText) {
+      return appUtils.extractJsonPayload ? appUtils.extractJsonPayload(rawText) : '';
+    };
+    const formatJsonOrText = appUtils.formatJsonOrText || function formatJsonOrTextFallback(text) {
+      return text ? text.trim() : '';
+    };
 
     if (!appUtils.setStatus) {
       window.app = window.app || {};
@@ -353,6 +359,47 @@
     if (!appUtils.debounce) appUtils.debounce = debounce;
     if (!appUtils.downloadText) appUtils.downloadText = downloadText;
     if (!appUtils.stripCodeFence) appUtils.stripCodeFence = stripCodeFence;
+    if (!appUtils.extractJsonPayload) appUtils.extractJsonPayload = extractJsonPayload;
+    if (!appUtils.formatJsonOrText) appUtils.formatJsonOrText = formatJsonOrText;
+    const extractJsonObjects = appUtils.extractJsonObjects || function extractJsonObjectsFallback(text) {
+      return appUtils.extractJsonObjects ? appUtils.extractJsonObjects(text) : [];
+    };
+    if (!appUtils.extractJsonObjects) appUtils.extractJsonObjects = extractJsonObjects;
+    const sanitizeCasesForExport = appUtils.sanitizeCasesForExport || function sanitizeCasesForExportFallback(list) {
+      const arr = Array.isArray(list) ? list : [];
+      return arr.map(function(item) {
+        if (!item || typeof item !== 'object') return item;
+        const clone = {};
+        Object.keys(item).forEach(function(key) {
+          if (key === 'remark') return;
+          clone[key] = item[key];
+        });
+        return clone;
+      });
+    };
+    if (!appUtils.sanitizeCasesForExport) appUtils.sanitizeCasesForExport = sanitizeCasesForExport;
+    const escapeHtml = appUtils.escapeHtml || function escapeHtmlFallback(text) {
+      return appUtils.escapeHtml ? appUtils.escapeHtml(text) : '';
+    };
+    const escapeHtmlPreserve = appUtils.escapeHtmlPreserve || function escapeHtmlPreserveFallback(text) {
+      return appUtils.escapeHtmlPreserve ? appUtils.escapeHtmlPreserve(text) : '';
+    };
+    const runConcurrent = appUtils.runConcurrent || async function runConcurrentFallback(items, concurrency, handler) {
+      if (!Array.isArray(items) || !items.length) return [];
+      const limit = Math.max(1, Number(concurrency) || 1);
+      const results = new Array(items.length);
+      let index = 0;
+      async function worker() {
+        while (index < items.length) {
+          const currentIndex = index;
+          index += 1;
+          results[currentIndex] = await handler(items[currentIndex], currentIndex);
+        }
+      }
+      const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+      await Promise.all(workers);
+      return results;
+    };
 
     const assignHandlersModule = window.app.assignHandlers && typeof window.app.assignHandlers.init === 'function'
       ? window.app.assignHandlers.init({
@@ -382,130 +429,103 @@
       ? window.app.requirementCore.init({
         state,
         utils: { stripCodeFence },
-        handlers: {
-          renderAutoRawInfo: function renderAutoRawInfoProxy() { renderAutoRawInfo(); },
-        },
+        handlers: { renderAutoRawInfo: function renderAutoRawInfoProxy() { renderAutoRawInfo(); } },
       })
       : null;
+    const reqCore = requirementCoreModule || {};
 
-    const normalizeRequirementName = requirementCoreModule && requirementCoreModule.normalizeRequirementName
-      ? requirementCoreModule.normalizeRequirementName
-      : function normalizeRequirementNameFallback(name) {
-        if (!name) return '';
-        return String(name).trim();
-      };
+    const normalizeRequirementName = reqCore.normalizeRequirementName || function normalizeRequirementNameFallback(name) {
+      if (!name) return '';
+      return String(name).trim();
+    };
 
-    const stripRequirementHeader = requirementCoreModule && requirementCoreModule.stripRequirementHeader
-      ? requirementCoreModule.stripRequirementHeader
-      : function stripRequirementHeaderFallback(text) {
-        if (!text) return '';
-        const lines = text.split(/\r?\n/);
-        if (lines.length && /^#需求标识：/.test(lines[0].trim())) return lines.slice(1).join('\n');
-        return text;
-      };
+    const stripRequirementHeader = reqCore.stripRequirementHeader || function stripRequirementHeaderFallback(text) {
+      if (!text) return '';
+      const lines = text.split(/\r?\n/);
+      if (lines.length && /^#需求标识：/.test(lines[0].trim())) return lines.slice(1).join('\n');
+      return text;
+    };
 
-    const wrapDataWithRequirement = requirementCoreModule && requirementCoreModule.wrapDataWithRequirement
-      ? requirementCoreModule.wrapDataWithRequirement
-      : function wrapDataWithRequirementFallback(data, type) {
-        const wrapped = { requirement: getRequirementLabel(true), data };
-        if (data && typeof data === 'object' && !Array.isArray(data) && Object.prototype.hasOwnProperty.call(data, 'data')) {
-          wrapped.data = data.data;
-        }
-        if (type) wrapped.type = type;
-        return wrapped;
-      };
+    const getRequirementLabel = reqCore.getRequirementLabel || function getRequirementLabelFallback(allowFallback) {
+      const label = state.requirementLabel || normalizeRequirementName(state.lastRawImportName);
+      if (label) return label;
+      if (allowFallback === false) return '';
+      return '当前需求';
+    };
 
-    const unwrapRequirementPayload = requirementCoreModule && requirementCoreModule.unwrapRequirementPayload
-      ? requirementCoreModule.unwrapRequirementPayload
-      : function unwrapRequirementPayloadFallback(rawText) {
-        const stripped = stripCodeFence(rawText || '').trim();
-        return { payload: stripped, requirement: '', type: '' };
-      };
+    const setRequirementLabel = reqCore.setRequirementLabel || function setRequirementLabelFallback(label, source) {
+      const normalized = normalizeRequirementName(label);
+      if (!normalized) return '';
+      state.requirementLabel = normalized;
+      if (source) state.requirementLabelSource = source;
+      renderAutoRawInfo();
+      return normalized;
+    };
 
-    const extractRequirementLabelFromText = requirementCoreModule && requirementCoreModule.extractRequirementLabelFromText
-      ? requirementCoreModule.extractRequirementLabelFromText
-      : function extractRequirementLabelFromTextFallback() { return ''; };
+    const buildRequirementPrompt = reqCore.buildRequirementPrompt || function buildRequirementPromptFallback(text) {
+      const suffix = '请填写本次需求名称，作为需求标识（不可为空）';
+      return text ? `${text}\n${suffix}` : suffix;
+    };
 
-    const buildRequirementPrompt = requirementCoreModule && requirementCoreModule.buildRequirementPrompt
-      ? requirementCoreModule.buildRequirementPrompt
-      : function buildRequirementPromptFallback(text) {
-        const suffix = '请填写本次需求名称，作为需求标识（不可为空）';
-        return text ? `${text}\n${suffix}` : suffix;
-      };
+    const ensureRequirementLabel = reqCore.ensureRequirementLabel || function ensureRequirementLabelFallback(promptText) {
+      const existing = getRequirementLabel(false);
+      if (existing) return existing;
+      const text = window.prompt(buildRequirementPrompt(promptText));
+      if (!text) return '';
+      return setRequirementLabel(text, 'manual');
+    };
 
-    const setRequirementLabel = requirementCoreModule && requirementCoreModule.setRequirementLabel
-      ? requirementCoreModule.setRequirementLabel
-      : function setRequirementLabelFallback(label, source) {
-        const normalized = normalizeRequirementName(label);
-        if (!normalized) return '';
-        state.requirementLabel = normalized;
-        if (source) state.requirementLabelSource = source;
-        renderAutoRawInfo();
-        return normalized;
-      };
+    const promptRequirementLabel = reqCore.promptRequirementLabel || function promptRequirementLabelFallback(promptText) {
+      const current = getRequirementLabel(false);
+      const text = window.prompt(buildRequirementPrompt(promptText), current || '');
+      if (!text) return '';
+      return setRequirementLabel(text, 'manual');
+    };
 
-    const getRequirementLabel = requirementCoreModule && requirementCoreModule.getRequirementLabel
-      ? requirementCoreModule.getRequirementLabel
-      : function getRequirementLabelFallback(allowFallback) {
-        const label = state.requirementLabel || normalizeRequirementName(state.lastRawImportName);
-        if (label) return label;
-        if (allowFallback === false) return '';
-        return '当前需求';
-      };
+    const promptTempExecRequirement = reqCore.promptTempExecRequirement || function promptTempExecRequirementFallback(fileName, fallbackLabel) {
+      const base = normalizeRequirementName(fallbackLabel || '')
+        || normalizeRequirementName(getRequirementLabel(false))
+        || normalizeRequirementName((fileName || '').replace(/\.[^.]+$/, ''))
+        || '';
+      const input = window.prompt(`请输入需求标识（用于区分执行用例），文件：${fileName || ''}`, base);
+      if (!input) return '';
+      return setRequirementLabel(normalizeRequirementName(input), 'import');
+    };
 
-    const ensureRequirementLabel = requirementCoreModule && requirementCoreModule.ensureRequirementLabel
-      ? requirementCoreModule.ensureRequirementLabel
-      : function ensureRequirementLabelFallback(promptText) {
-        const existing = getRequirementLabel(false);
-        if (existing) return existing;
-        const text = window.prompt(buildRequirementPrompt(promptText));
-        if (!text) return '';
-        return setRequirementLabel(text, 'manual');
-      };
+    const formatCompactTimestamp = reqCore.formatCompactTimestamp || function formatCompactTimestampFallback() {
+      const d = new Date();
+      const pad = function(n) { return n.toString().padStart(2, '0'); };
+      return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    };
 
-    const promptRequirementLabel = requirementCoreModule && requirementCoreModule.promptRequirementLabel
-      ? requirementCoreModule.promptRequirementLabel
-      : function promptRequirementLabelFallback(promptText) {
-        const current = getRequirementLabel(false);
-        const text = window.prompt(buildRequirementPrompt(promptText), current || '');
-        if (!text) return '';
-        return setRequirementLabel(text, 'manual');
-      };
+    const wrapDataWithRequirement = reqCore.wrapDataWithRequirement || function wrapDataWithRequirementFallback(data, type) {
+      const wrapped = { requirement: getRequirementLabel(true), data };
+      if (data && typeof data === 'object' && !Array.isArray(data) && Object.prototype.hasOwnProperty.call(data, 'data')) {
+        wrapped.data = data.data;
+      }
+      if (type) wrapped.type = type;
+      return wrapped;
+    };
 
-    const promptTempExecRequirement = requirementCoreModule && requirementCoreModule.promptTempExecRequirement
-      ? requirementCoreModule.promptTempExecRequirement
-      : function promptTempExecRequirementFallback(fileName, fallbackLabel) {
-        const base = normalizeRequirementName(fallbackLabel || '')
-          || normalizeRequirementName(getRequirementLabel(false))
-          || normalizeRequirementName((fileName || '').replace(/\.[^.]+$/, ''))
-          || '';
-        const input = window.prompt(`请输入需求标识（用于区分执行用例），文件：${fileName || ''}`, base);
-        if (!input) return '';
-        return setRequirementLabel(normalizeRequirementName(input), 'import');
-      };
+    const unwrapRequirementPayload = reqCore.unwrapRequirementPayload || function unwrapRequirementPayloadFallback(rawText) {
+      const stripped = stripCodeFence(rawText || '').trim();
+      return { payload: stripped, requirement: '', type: '' };
+    };
 
-    const formatCompactTimestamp = requirementCoreModule && requirementCoreModule.formatCompactTimestamp
-      ? requirementCoreModule.formatCompactTimestamp
-      : function formatCompactTimestampFallback() {
-        const d = new Date();
-        const pad = function(n) { return n.toString().padStart(2, '0'); };
-        return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-      };
+    const extractRequirementLabelFromText = reqCore.extractRequirementLabelFromText || function extractRequirementLabelFromTextFallback() { return ''; };
 
-    const wrapTextWithRequirement = requirementCoreModule && requirementCoreModule.wrapTextWithRequirement
-      ? requirementCoreModule.wrapTextWithRequirement
-      : function wrapTextWithRequirementFallback(text, type) {
-        const stripped = stripCodeFence(stripRequirementHeader(text || ''));
-        if (!stripped) return '';
-        try {
-          const parsed = JSON.parse(stripped);
-          return JSON.stringify(wrapDataWithRequirement(parsed, type), null, 2);
-        } catch (err) {
-          const header = [`#需求标识：${getRequirementLabel(true)}`];
-          if (type) header.push(`#类型：${type}`);
-          return `${header.join('\n')}\n${stripped}`;
-        }
-      };
+    const wrapTextWithRequirement = reqCore.wrapTextWithRequirement || function wrapTextWithRequirementFallback(text, type) {
+      const stripped = stripCodeFence(stripRequirementHeader(text || ''));
+      if (!stripped) return '';
+      try {
+        const parsed = JSON.parse(stripped);
+        return JSON.stringify(wrapDataWithRequirement(parsed, type), null, 2);
+      } catch (err) {
+        const header = [`#需求标识：${getRequirementLabel(true)}`];
+        if (type) header.push(`#类型：${type}`);
+        return `${header.join('\n')}\n${stripped}`;
+      }
+    };
 
     const getRequirementDisplayName = requirementCoreModule && requirementCoreModule.getRequirementDisplayName
       ? requirementCoreModule.getRequirementDisplayName
@@ -625,88 +645,6 @@
         pickFirstString,
       })
         : null;
-
-    function findSnippetRange(fullText, snippet, startIdx = 0) {
-      const target = (snippet || '').trim();
-      if (!target) return null;
-      let idx = fullText.indexOf(target, startIdx);
-      let length = target.length;
-      if (idx === -1) {
-        const lines = target.split(/\n+/).map(line => line.trim()).filter(Boolean);
-        if (lines.length) {
-          const first = lines[0];
-          idx = fullText.indexOf(first, startIdx);
-          length = first.length;
-        }
-      }
-      if (idx === -1) {
-        const pattern = escapeRegex(target).replace(/\s+/g, '\\s+');
-        try {
-          const regex = new RegExp(pattern, 'm');
-          const sliced = fullText.slice(startIdx);
-          const match = regex.exec(sliced);
-          if (match) {
-            idx = startIdx + match.index;
-            length = match[0].length;
-          }
-        } catch (err) {
-          idx = -1;
-        }
-      }
-      if (idx === -1) {
-        const normalized = buildNormalizedIndex(fullText);
-        const normalizedSnippet = normalizeForSearch(snippet);
-        if (normalizedSnippet) {
-          const normStart = findNormalizedStartIndex(normalized.indexMap, startIdx);
-          const normIdx = normalized.text.indexOf(normalizedSnippet, normStart);
-          if (normIdx !== -1) {
-            const startOriginal = normalized.indexMap[normIdx];
-            const endOriginal = normalized.indexMap[normIdx + normalizedSnippet.length - 1] + 1;
-            return { start: startOriginal, end: endOriginal };
-          }
-        }
-      }
-      if (idx === -1) return null;
-      return { start: idx, end: idx + length };
-    }
-
-    function escapeRegex(str) {
-      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-
-    function buildNormalizedIndex(text) {
-      const chars = [];
-      const indexMap = [];
-      for (let i = 0; i < text.length; i += 1) {
-        const ch = text[i];
-        if (shouldSkipChar(ch)) continue;
-        chars.push(ch);
-        indexMap.push(i);
-      }
-      return { text: chars.join(''), indexMap };
-    }
-
-    function findNormalizedStartIndex(indexMap, originalIndex) {
-      for (let i = 0; i < indexMap.length; i += 1) {
-        if (indexMap[i] >= originalIndex) return i;
-      }
-      return indexMap.length;
-    }
-
-    function normalizeForSearch(str) {
-      const chars = [];
-      for (let i = 0; i < str.length; i += 1) {
-        const ch = str[i];
-        if (shouldSkipChar(ch)) continue;
-        chars.push(ch);
-      }
-      return chars.join('');
-    }
-
-    function shouldSkipChar(ch) {
-      return /\s/.test(ch) || /[，,：:；;、。]/.test(ch);
-    }
-
 
     function clearRawInput() {
       rawText.value = '';
@@ -1558,23 +1496,6 @@
       return clampCoveragePercent(value);
     }
 
-    async function runConcurrent(items, concurrency, handler) {
-      if (!Array.isArray(items) || !items.length) return [];
-      const limit = Math.max(1, Number(concurrency) || 1);
-      const results = new Array(items.length);
-      let index = 0;
-      async function worker() {
-        while (index < items.length) {
-          const currentIndex = index;
-          index += 1;
-          results[currentIndex] = await handler(items[currentIndex], currentIndex);
-        }
-      }
-      const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
-      await Promise.all(workers);
-      return results;
-    }
-
     const defaultScrollOffset = 200;
     function scrollElementIntoView(el, behavior = 'smooth', offset = defaultScrollOffset) {
       if (!el) return;
@@ -1681,8 +1602,12 @@
         utils: { escapeHtml },
       })
       : null;
-    const parseCaseList = casesCore && casesCore.parseCaseList ? casesCore.parseCaseList : function() { return []; };
-    const deriveCaseListFromText = casesCore && casesCore.deriveCaseListFromText ? casesCore.deriveCaseListFromText : function() { return []; };
+    const parseCaseList = casesCore && casesCore.parseCaseList
+      ? casesCore.parseCaseList
+      : function missingParseCaseList() { throw new Error('casesCore.parseCaseList 不可用'); };
+    const deriveCaseListFromText = casesCore && casesCore.deriveCaseListFromText
+      ? casesCore.deriveCaseListFromText
+      : function missingDeriveCaseList() { throw new Error('casesCore.deriveCaseListFromText 不可用'); };
     if (casesCore) {
       if (casesCore.renderImportedCaseList) renderImportedCaseList = casesCore.renderImportedCaseList;
       if (casesCore.addImportedCase) addImportedCase = casesCore.addImportedCase;
@@ -1697,6 +1622,73 @@
       if (casesCore.buildCasesComparePayload) buildCasesComparePayload = casesCore.buildCasesComparePayload;
       if (casesCore.importCaseFiles) handleCaseFiles = casesCore.importCaseFiles;
     }
+
+    const generateTempExecId = appUtils.generateTempExecId || function generateTempExecIdFallback() {
+      return `tempexec-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 6)}`;
+    };
+
+    const generateTempVersionId = appUtils.generateTempVersionId || function generateTempVersionIdFallback() {
+      return `tempver-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 6)}`;
+    };
+
+    const normalizeTempExecName = appUtils.normalizeTempExecName || function normalizeTempExecNameFallback(name) {
+      return (name || '').trim().toLowerCase();
+    };
+
+    const stringifyCaseField = appUtils.stringifyCaseField || function stringifyCaseFieldFallback(value) {
+      if (Array.isArray(value)) {
+        return value
+          .map(v => {
+            const base = v === undefined || v === null ? '' : v;
+            return base.toString().trim();
+          })
+          .filter(Boolean)
+          .join(' / ');
+      }
+      if (value && typeof value === 'object') {
+        try {
+          return JSON.stringify(value);
+        } catch (err) {
+          return '';
+        }
+      }
+      if (value === undefined || value === null) return '';
+      return value.toString().trim();
+    };
+
+    const removePendingTempExecByName = appUtils.removePendingTempExecByName || function removePendingTempExecByNameFallback(pendingList, name) {
+      const normalized = normalizeTempExecName(name);
+      for (let i = pendingList.length - 1; i >= 0; i -= 1) {
+        const item = pendingList[i];
+        if (normalizeTempExecName(item && item.name) === normalized) {
+          pendingList.splice(i, 1);
+        }
+      }
+    };
+
+    const ensureTempExecReplacement = appUtils.ensureTempExecReplacement
+      ? function ensureTempExecReplacementProxy(entry, pendingList) {
+        return appUtils.ensureTempExecReplacement(entry, {
+          existingList: state.tempExecFiles,
+          pendingList: pendingList || [],
+          normalizeName: normalizeTempExecName,
+          removeExisting: removeTempExecFile,
+          removePending: removePendingTempExecByName,
+          confirmFn: window.confirm,
+        });
+      }
+      : function ensureTempExecReplacementFallback(entry, pendingList = []) {
+        const normalized = normalizeTempExecName(entry && entry.name);
+        const duplicates = state.tempExecFiles.filter(file => normalizeTempExecName(file && file.name) === normalized);
+        const pendingDuplicates = pendingList.filter(item => normalizeTempExecName(item && item.name) === normalized);
+        if (duplicates.length || pendingDuplicates.length) {
+          const confirmMsg = `检测到名称为【${entry ? entry.name : ''}】的用例已存在，替换将清除原有执行结果，是否继续？`;
+          if (!window.confirm(confirmMsg)) return false;
+          duplicates.forEach(file => removeTempExecFile(file && file.id));
+          removePendingTempExecByName(pendingList, entry && entry.name);
+        }
+        return true;
+      };
 
     const autoCoreModule = window.app && window.app.autoCore && typeof window.app.autoCore.init === 'function'
       ? window.app.autoCore.init({
@@ -1881,64 +1873,6 @@
       if (casesGenCoreModule.getCaseListForModule) getCaseListForModule = casesGenCoreModule.getCaseListForModule;
     }
 
-    function escapeHtml(str) {
-      const raw = str === undefined || str === null ? '' : str;
-      const value = raw.toString().trim();
-      const safe = /^(undefined|null)$/i.test(value) ? '' : value;
-      const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-      };
-      return safe.replace(/[&<>"]/g, ch => map[ch] || '');
-    }
-
-    function escapeHtmlPreserve(str) {
-      const raw = str === undefined || str === null ? '' : str.toString();
-      const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-      };
-      return raw.replace(/[&<>"]/g, ch => map[ch] || '');
-    }
-
-    function generateTempExecId() {
-      return `tempexec-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 6)}`;
-    }
-
-    function generateTempVersionId() {
-      return `tempver-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 6)}`;
-    }
-
-    function normalizeTempExecName(name) {
-      return (name || '').trim().toLowerCase();
-    }
-
-    function removePendingTempExecByName(pendingList, name) {
-      const normalized = normalizeTempExecName(name);
-      for (let i = pendingList.length - 1; i >= 0; i -= 1) {
-        if (normalizeTempExecName(pendingList[i].name) === normalized) {
-          pendingList.splice(i, 1);
-        }
-      }
-    }
-
-    function ensureTempExecReplacement(entry, pendingList = []) {
-      const normalized = normalizeTempExecName(entry.name);
-      const duplicates = state.tempExecFiles.filter(file => normalizeTempExecName(file.name) === normalized);
-      const pendingDuplicates = pendingList.filter(item => normalizeTempExecName(item.name) === normalized);
-      if (duplicates.length || pendingDuplicates.length) {
-        const confirmMsg = `检测到名称为【${entry.name}】的用例已存在，替换将清除原有执行结果，是否继续？`;
-        if (!window.confirm(confirmMsg)) return false;
-        duplicates.forEach(file => removeTempExecFile(file.id));
-        removePendingTempExecByName(pendingList, entry.name);
-      }
-      return true;
-    }
-
     function createTempExecFile(name, list = [], scope = 'current', explicitId, createdAt, requirementLabel) {
       const id = explicitId || generateTempExecId();
       const cases = normalizeTempExecCases(list, id);
@@ -1961,27 +1895,6 @@
       return entry;
     }
 
-    function stringifyCaseField(value) {
-      if (Array.isArray(value)) {
-        return value
-          .map(v => {
-            const base = v === undefined || v === null ? '' : v;
-            return base.toString().trim();
-          })
-          .filter(Boolean)
-          .join(' / ');
-      }
-      if (value && typeof value === 'object') {
-        try {
-          return JSON.stringify(value);
-        } catch (err) {
-          return '';
-        }
-      }
-      if (value === undefined || value === null) return '';
-      return value.toString().trim();
-    }
-
     const tempexecCore = window.app && window.app.tempexecCore && typeof window.app.tempexecCore.init === 'function'
       ? window.app.tempexecCore.init({
         setStatus,
@@ -1996,6 +1909,7 @@
         defaultTempExecPageSize,
         escapeHtml,
         escapeHtmlPreserve,
+        stringifyCaseField,
         setRequirementLabel,
         ensureTempExecColumns,
         persistSettings,
@@ -2991,14 +2905,6 @@
       return (state.caseGenSuggestions[moduleId] || '').trim();
     }
 
-    function sanitizeCasesForExport(list) {
-      return (list || []).map(item => {
-        if (!item || typeof item !== 'object') return item;
-        const { remark, ...rest } = item;
-        return { ...rest };
-      });
-    }
-
     function syncCaseModuleStatus(moduleId) {
       if (!casesGenerationContainer || !moduleId) return;
       const el = casesGenerationContainer.querySelector(`[data-case-status="${moduleId}"]`);
@@ -3110,41 +3016,6 @@
       }
     }
 
-
-    function extractJsonObjects(text) {
-      const objs = [];
-      let depth = 0;
-      let start = -1;
-      let inString = false;
-      let prevChar = '';
-      for (let i = 0; i < text.length; i++) {
-        const ch = text[i];
-        if (ch === '"' && prevChar !== '\\') {
-          inString = !inString;
-        }
-        if (inString) {
-          prevChar = ch;
-          continue;
-        }
-        if (ch === '{') {
-          if (depth === 0) start = i;
-          depth++;
-        } else if (ch === '}') {
-          depth = Math.max(0, depth - 1);
-          if (depth === 0 && start >= 0) {
-            const raw = text.slice(start, i + 1);
-            try {
-              objs.push(JSON.parse(raw));
-            } catch (err) {
-              // ignore invalid chunk
-            }
-            start = -1;
-          }
-        }
-        prevChar = ch;
-      }
-      return objs;
-    }
 
     function setStepInProgress(step) {
       state.inProgressStep = step || '';
@@ -3267,7 +3138,6 @@
           wrapTextWithRequirement,
           getRequirementLabel,
           hasImportedCases,
-          findSnippetRange,
           stripRequirementHeader,
           stripCodeFence,
           unwrapRequirementPayload,
@@ -3751,51 +3621,6 @@
     window.app = window.app || {};
     window.app.init = initApp;
 
-    function tryFormatJson(text) {
-      if (!text) return '';
-      try {
-        const parsed = JSON.parse(text);
-        return JSON.stringify(parsed, null, 2);
-      } catch (err) {
-        return '';
-      }
-    }
-
-    function extractJsonPayload(rawText) {
-      const text = rawText || '';
-      const stripped = stripCodeFence(text);
-      let attempt = tryFormatJson(stripped);
-      if (attempt) return attempt;
-      const fenceMatch = text.match(/```(?:json)?([\s\S]*?)```/i);
-      if (fenceMatch) {
-        attempt = tryFormatJson(fenceMatch[1].trim());
-        if (attempt) return attempt;
-      }
-      const braceStart = stripped.indexOf('{');
-      const braceEnd = stripped.lastIndexOf('}');
-      if (braceStart !== -1 && braceEnd > braceStart) {
-        attempt = tryFormatJson(stripped.slice(braceStart, braceEnd + 1));
-        if (attempt) return attempt;
-      }
-      const bracketStart = stripped.indexOf('[');
-      const bracketEnd = stripped.lastIndexOf(']');
-      if (bracketStart !== -1 && bracketEnd > bracketStart) {
-        attempt = tryFormatJson(stripped.slice(bracketStart, bracketEnd + 1));
-        if (attempt) return attempt;
-      }
-      return '';
-    }
-
-    function formatJsonOrText(text) {
-      if (!text) return '';
-      const trimmed = text.trim();
-      if (/^[\[{]/.test(trimmed)) {
-        const formatted = tryFormatJson(trimmed);
-        if (formatted) return formatted;
-        return trimmed;
-      }
-      return trimmed;
-    }
     function setCaseViewHint(text) {
       if (caseViewHint) {
         caseViewHint.textContent = text;

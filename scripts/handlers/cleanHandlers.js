@@ -15,7 +15,6 @@
     var renderCaseGenProgressBoard = handlers.renderCaseGenProgressBoard || function() {};
     var refreshMissingSmartFillButton = handlers.refreshMissingSmartFillButton || function() {};
     var wrapTextWithRequirement = handlers.wrapTextWithRequirement || function(text) { return text; };
-    var findSnippetRange = handlers.findSnippetRange || function() { return null; };
     var stripRequirementHeader = handlers.stripRequirementHeader || function(text) { return text; };
     var stripCodeFence = handlers.stripCodeFence || function(text) { return text; };
     var unwrapRequirementPayload = handlers.unwrapRequirementPayload || function(text) { return { payload: text }; };
@@ -61,6 +60,88 @@
       if (!desc || typeof desc !== 'object') return '';
       return desc.summary || '';
     };
+
+    function findSnippetRange(fullText, snippet, startIdx) {
+      var target = (snippet || '').trim();
+      if (!target) return null;
+      var start = typeof startIdx === 'number' ? startIdx : 0;
+      var idx = fullText.indexOf(target, start);
+      var length = target.length;
+      if (idx === -1) {
+        var lines = target.split(/\n+/).map(function(line) { return line.trim(); }).filter(Boolean);
+        if (lines.length) {
+          var first = lines[0];
+          idx = fullText.indexOf(first, start);
+          length = first.length;
+        }
+      }
+      if (idx === -1) {
+        var pattern = escapeRegex(target).replace(/\s+/g, '\\s+');
+        try {
+          var regex = new RegExp(pattern, 'm');
+          var sliced = fullText.slice(start);
+          var match = regex.exec(sliced);
+          if (match) {
+            idx = start + match.index;
+            length = match[0].length;
+          }
+        } catch (err) {
+          idx = -1;
+        }
+      }
+      if (idx === -1) {
+        var normalized = buildNormalizedIndex(fullText);
+        var normalizedSnippet = normalizeForSearch(snippet);
+        if (normalizedSnippet) {
+          var normStart = findNormalizedStartIndex(normalized.indexMap, start);
+          var normIdx = normalized.text.indexOf(normalizedSnippet, normStart);
+          if (normIdx !== -1) {
+            var startOriginal = normalized.indexMap[normIdx];
+            var endOriginal = normalized.indexMap[normIdx + normalizedSnippet.length - 1] + 1;
+            return { start: startOriginal, end: endOriginal };
+          }
+        }
+      }
+      if (idx === -1) return null;
+      return { start: idx, end: idx + length };
+    }
+
+    function escapeRegex(str) {
+      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function buildNormalizedIndex(text) {
+      var chars = [];
+      var indexMap = [];
+      for (var i = 0; i < text.length; i += 1) {
+        var ch = text[i];
+        if (shouldSkipChar(ch)) continue;
+        chars.push(ch);
+        indexMap.push(i);
+      }
+      return { text: chars.join(''), indexMap: indexMap };
+    }
+
+    function findNormalizedStartIndex(indexMap, originalIndex) {
+      for (var i = 0; i < indexMap.length; i += 1) {
+        if (indexMap[i] >= originalIndex) return i;
+      }
+      return indexMap.length;
+    }
+
+    function normalizeForSearch(str) {
+      var chars = [];
+      for (var i = 0; i < str.length; i += 1) {
+        var ch = str[i];
+        if (shouldSkipChar(ch)) continue;
+        chars.push(ch);
+      }
+      return chars.join('');
+    }
+
+    function shouldSkipChar(ch) {
+      return /\s/.test(ch) || /[，,：:；;、。]/.test(ch);
+    }
     var switchTab = handlers.switchTab || function() {};
     var escapeHtml = handlers.escapeHtml || function(text) {
       var map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
