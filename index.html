@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>用例助手</title>
+<link rel="stylesheet" href="./style.css"/>
+</head>
+<body>
+<div class="app-layout">
+<aside class="sidebar">
+<div class="sidebar-header">
+<h1>用例助手</h1>
+<button class="help-pill" data-tab-btn="help" type="button">
+<span class="icon">?</span>
+<span>使用帮助</span>
+</button>
+</div>
+<p class="sub">上传需求与测试用例，清洗、拆分、覆盖对比、生成、执行一站式完成，版本分组+总览直观掌握进度。</p>
+<button class="scroll-top-btn" type="button" id="scrollTopBtn">回到顶部</button>
+<button class="scroll-top-btn" type="button" id="scrollBottomBtn">跳到底部</button>
+<nav class="tabs vertical">
+<button class="active" data-tab-btn="auto">一键执行</button>
+<button data-tab-btn="clean">功能工作流</button>
+<button data-tab-btn="casesgen">用例生成</button>
+<button data-tab-btn="tempexec">用例执行</button>
+<button data-tab-btn="assign">功能指派</button>
+<button data-tab-btn="models">模型管理</button>
+<button data-tab-btn="settings">其他配置</button>
+</nav>
+<div class="casegen-progress-panel" id="caseGenProgressPanel">
+<div class="panel-head">
+<span class="title">用例生成进度</span>
+<span class="meta">点击跳转对应模块</span>
+</div>
+<div class="casegen-progress-list" id="caseGenProgressList">
+<p class="hint">暂无用例生成任务，请先完成“测试模块拆分”并生成用例</p>
+</div>
+</div>
+</aside>
+<div class="content-shell">
+<div class="flow" id="flowNav">
+  <div class="flow-title">一键执行操作步骤</div>
+  <div class="flow-steps">
+    <div class="step active" data-target="import"><span class="badge">1</span> 导入</div>
+    <div class="progress-line"></div>
+    <div class="step" data-target="review"><span class="badge">2</span> 评审</div>
+    <div class="progress-line"></div>
+    <div class="step" data-target="clean"><span class="badge">3</span> 清洗</div>
+    <div class="progress-line"></div>
+    <div class="step" data-target="split"><span class="badge">4</span> 拆分</div>
+    <div class="progress-line"></div>
+    <div class="step" data-target="cases-upload"><span class="badge">5</span> 用例导入</div>
+    <div class="progress-line"></div>
+    <div class="step" data-target="cases"><span class="badge">6</span> 覆盖对比</div>
+  </div>
+</div>
+<main>
+<section class="card hidden" data-section-id="help" data-tab-section="help">
+<div class="help-header">
+<h2>使用说明</h2>
+<button class="structure-pill" id="xmindStructureToggle" type="button">
+<span class="icon">!</span>
+<span>XMind 用例结构</span>
+</button>
+</div>
+<div class="card-body">
+<div class="notice-card">
+<h3>使用前须知</h3>
+<ul>
+<li><strong>先点击右上角“XMind 用例结构”按钮，务必阅读用例格式要求，这是用例执行的基础！</strong></li>
+<li>请先在<a data-jump="models" href="#">“模型管理”</a>中添加 <strong>DeepSeek-R1</strong>，并将 <code>Max Tokens</code> 设为 <strong>16,000</strong>。</li>
+<li>在<a data-jump="assign" href="#">“功能指派”</a>页将所有功能统一指派为上述模型，保持行为一致。</li>
+<li>如需自动通知，请前往<a data-jump="settings" href="#">“其他配置”</a>填写飞书 Webhook，建议使用群机器人同步执行结果。</li>
+</ul>
+</div>
+<div class="notice-card highlight">
+<h3>新增亮点（用例执行 & 总览）</h3>
+<ul>
+<li>“用例导入&分配”支持<strong>版本分组</strong>：新建版本后可拖拽需求盒子入版本，右上角“×”可移出，版本卡内需求盒子原样展示。</li>
+<li>总览视图全新分区：<strong>版本区</strong>按版本→需求分组、两列布局；<strong>需求区</strong>展示未分配版本的需求，四列布局，用例按执行进度升序自动排序。</li>
+<li>执行视图可自定义列显示：在“设置”→“执行视图列显示”中勾选表头，标题/实际结果/备注/缺陷/选择列为必选，其余可自由隐藏。</li>
+<li>总览卡片可点击跳转执行视图；专注用例在总览中以渐变标识高亮。</li>
+<li>用例导入标题右侧的“用例执行情况总览”按钮一键进入总览，信息分区更清晰。</li>
+</ul>
+</div>
+<p class="hint">按照下列步骤依次完成需求清洗、缺口补全与用例生成，过程中可随时回到“功能工作流”查看各卡片详情。</p>
+<ul class="help-steps">
+<li>在“导入”卡片上传原始需求与 XMind/文本测试用例，系统会自动在相关卡片同步内容。</li>
+<li>执行“需求评审”识别模糊点，可选地填写澄清结果后进入“需求清洗”。</li>
+<li>完成清洗后查看“清洗结果视图”与原文高亮，确认结构化字段及定位按钮是否准确。</li>
+<li>运行“对比完整性”→“测试模块拆分”→“XMind 覆盖对比”，根据覆盖率决定补全或重洗。</li>
+<li>当覆盖率达标后，进入“用例生成/用例补全”卡片，为拆分模块批量生成高质量测试用例。</li>
+<li>若需要省时，可在“一键执行”页直接串联上述流程，并使用补全/重新清洗按钮修复缺口。</li>
+</ul>
+<div class="help-grid">
+<article class="help-card">
+<h3>导入区</h3>
+<p>左列导入原始需求（支持 doc/docx/txt/md），右列导入多个 XMind 或文本用例。导入后的内容会同步到功能工作流中的对应区域。</p>
+</article>
+<article class="help-card">
+<h3>需求评审</h3>
+<p>点击“分析需求模糊点”即可输出模型评审 JSON，必要时手工补写澄清结果，在一键执行模式下会强制确认后继续。</p>
+</article>
+<article class="help-card">
+<h3>需求清洗</h3>
+<p>运行后得到结构化 JSON，并通过“清洗结果视图”查看表格 + 原文高亮。可以开启“需求位置”开关或“一键全亮”快速定位。</p>
+</article>
+<article class="help-card">
+<h3>对比完整性</h3>
+<p>将原文与清洗结果交叉校验，输出覆盖率与缺失项。覆盖率不足时，可在卡片底部勾选缺失内容并触发“补全/重新清洗”。</p>
+</article>
+<article class="help-card">
+<h3>测试模块拆分 &amp; 覆盖对比</h3>
+<p>拆分卡片会解析模型返回的模块结构，支持展开列表查看。覆盖对比卡片用于比较拆分结果与 XMind 用例，生成缺失/冗余列表。</p>
+</article>
+<article class="help-card">
+<h3>用例生成</h3>
+<p>选择模块后即可批量生成 JSON 用例；若覆盖对比仍有缺失，可使用补全按钮按选定缺失点补写。支持导出调试文件或继续流转。</p>
+</article>
+<article class="help-card">
+<h3>用例执行</h3>
+<p>导入 XMind/JSON 用例即可直接执行，结果实时保存。可切换当前/历史文件、批量更新执行状态，并在“用例执行情况总览”中查看彩色进度条。</p>
+</article>
+<article class="help-card">
+<h3>一键执行</h3>
+<p>在“自动执行工作流”卡片配置启动选项，一次性跑通评审→清洗→对比→拆分→覆盖的链路。失败时卡片会提示需要补齐的步骤。</p>
+</article>
+<article class="help-card">
+<h3>功能指派 &amp; 模型管理</h3>
+<p>在指派页配置每个功能使用的提示词与模型，并可设定默认提示词；模型管理页用于录入不同供应商的接口地址、密钥与超时。</p>
+</article>
+<article class="help-card">
+<h3>其他配置 / 通知</h3>
+<p>在“其他配置”里填写飞书 Webhook 或其它偏好。一键执行完成或失败都会自动推送通知，方便团队成员第一时间了解结果。</p>
+</article>
+</div>
+</div>
+</section>
+<section class="card hidden structure-card collapsed-card" data-tab-section="help" id="xmindStructureCard">
+<h3 style="margin:0 0 10px;">XMind 用例层级要求</h3>
+<p class="hint" style="margin:0 0 12px;">请严格按照“需求（根节点） → 模块 → 用例标题 → 优先级 → 前置条件 → 操作步骤 → 预期结果”七层结构填写。少任一层都会影响字段解析。</p>
+<div class="structure-diagram">
+<div class="structure-node node-root">需求（根）</div>
+<div class="structure-node node-module">模块</div>
+<div class="structure-node node-title">用例标题</div>
+<div class="structure-node node-priority">优先级 (P0/P1/P2)</div>
+<div class="structure-node node-pre">前置条件</div>
+<div class="structure-node node-steps">操作步骤</div>
+<div class="structure-node node-expected">预期结果</div>
+</div>
+<div class="structure-example">
+<strong>编写示例</strong>
+<div class="structure-image">
+<img alt="XMind 用例结构示例：武器皮肤根节点与两条解锁用例" src="帮助例子.png"/>
+</div>
+<strong style="display:block;margin-top:10px;">导出结构</strong>
+<code>[
+  {
+    "module": "解锁方式",
+    "title": "人民币解锁",
+    "priority": "P1",
+    "preconditions": "未解锁皮肤",
+    "steps": "进入商城或角色选择界面，选中皮肤，观察解锁方式",
+    "expected": "解锁方式为人民币解锁"
+  },
+  {
+    "module": "解锁方式",
+    "title": "蓝币解锁",
+    "priority": "P1",
+    "preconditions": "未解锁皮肤",
+    "steps": "进入商城或角色选择界面，选中皮肤，观察解锁方式",
+    "expected": "解锁方式为蓝币解锁"
+  },
+  {
+    "module": "通用",
+    "title": "皮肤名字展示",
+    "priority": "P1",
+    "preconditions": "已拥有皮肤",
+    "steps": "进入皮肤选择界面，观察皮肤在列表中的名称展示",
+    "expected": "皮肤名称展示正常"
+  }
+]</code>
+<p style="margin-top:8px;">同一根节点下可以继续添加其他模块与用例；若缺少根节点或其中某层，系统会降级为普通文本或字段缺失，建议严格遵循此结构，或直接上传拥有相同字段的 JSON/文本文件。</p>
+</div>
+</section>
+<section class="card hidden" data-section-id="auto-import" data-tab-section="auto">
+<h2>导入数据</h2>
+<div class="card-body">
+<div class="layout">
+<div class="pane">
+<p class="hint">将原始需求文档拖入或点击选择，等同于“导入需求文档”的操作。</p>
+<label class="zone" id="autoRawDropZone">
+<input accept=".doc,.docx,.txt,.md" hidden="" id="autoRawFile" type="file"/>
+<div class="zone-line">
+<strong>原始需求</strong>
+<span>拖拽或点击选择</span>
+</div>
+<div class="status">导入后内容会同步到左侧“导入需求”模块</div>
+</label>
+<div class="file-list" id="autoRawFileList">
+<span class="hint" data-auto-raw-placeholder="">未导入需求</span>
+</div>
+<div class="actions">
+<button class="secondary" disabled="" id="autoRawClear">清除原始需求</button>
+</div>
+</div>
+<div class="pane">
+<p class="hint">导入 XMind/文本用例后可直接用于覆盖对比。</p>
+<label class="zone" id="autoCaseDropZone">
+<input accept=".xmind,.txt,.md,.json" hidden="" id="autoCaseFile" multiple="" type="file"/>
+<div class="zone-line">
+<strong>测试用例</strong>
+<span>拖拽或点击选择</span>
+</div>
+<div class="status">导入结果同步到“测试用例导入”模块</div>
+</label>
+<div class="file-list" id="autoCaseFileList">
+<span class="hint" data-auto-case-placeholder="">未导入文件</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="card hidden" data-section-id="auto-run" data-tab-section="auto">
+<h2>自动执行工作流</h2>
+<div class="card-body">
+<p class="hint">自动按顺序执行：导入需求 → 需求评审 → 需求清洗 → 对比完整性 → 测试模块拆分 → 测试用例覆盖对比。执行前请确保已导入需求与测试用例，并在“功能指派”中配置所有模型。</p>
+<label style="display:flex;align-items:center;gap:8px;margin:8px 0;">
+<input id="autoNeedClarify" type="checkbox"/>
+<span>需要人工确认需求澄清后再继续自动流程</span>
+</label>
+<div class="actions">
+<button id="runAutoWorkflow">一键执行</button>
+</div>
+<p class="status" id="autoWorkflowStatus"></p>
+</div>
+</section>
+<section class="card hidden" data-section-id="auto-clarify" data-tab-section="auto">
+<h2>需求澄清（人工确认）</h2>
+<div class="card-body">
+<p class="hint">当勾选“需要人工确认”后，一键执行会在需求评审后暂停，请展开下方视图编辑澄清结果，再点“确认澄清”继续。</p>
+<div class="actions">
+<button class="secondary" disabled="" id="autoClarifyToggleBtn">展开澄清视图</button>
+</div>
+<div class="review-view hidden" id="autoClarifyContainer"></div>
+<div class="actions">
+<button class="secondary" disabled="" id="autoClarifyConfirm">确认澄清</button>
+</div>
+<p class="status" id="autoClarifyStatus"></p>
+</div>
+</section>
+<section class="card hidden" data-section-id="auto-compare" data-tab-section="auto">
+<h2>清洗后需求覆盖率</h2>
+<div class="card-body">
+<p class="hint">展示“对比完整性”步骤返回的覆盖率；低于 100% 表示清洗结果缺失，需要重新清洗并修正。</p>
+<div class="status" id="autoCompareStatus">尚未执行</div>
+<div class="review-view hidden" id="autoCompareMissing"></div>
+<div class="auto-compare-suggestion">
+<p class="hint">可输入对缺失项的补充说明（选填）。</p>
+<textarea class="small-textarea" id="autoCompareSuggestion" placeholder="如需说明额外上下文，可在此输入"></textarea>
+</div>
+<div class="actions">
+<button class="secondary" disabled="" id="autoFillCleanBtn">补全清洗并继续</button>
+<button class="secondary" disabled="" id="autoRecleanBtn">重新清洗并继续</button>
+<button class="secondary" disabled="" id="autoIgnoreCoverageBtn">忽略覆盖率继续</button>
+<button class="secondary" disabled="" id="autoJumpCleanView">查看高亮差异</button>
+</div>
+<p class="status" id="autoRecleanStatus"></p>
+</div>
+</section>
+<section class="card hidden" data-section-id="auto-cases-missing" data-tab-section="auto">
+<h2>用例缺失测试点</h2>
+<div class="card-body">
+<p class="hint">同步显示“测试用例覆盖对比”后的缺失模块详情，与功能工作流中的“缺失模块视图”一致。</p>
+<div class="actions" style="margin-bottom:8px;">
+<button class="secondary" disabled="" id="autoMissingToggle">缺失模块视图</button>
+<button class="secondary" disabled="" id="autoMissingCopy">复制缺失模块JSON</button>
+<button class="secondary" disabled="" id="autoMissingSmartFill">智能生成填充</button>
+<button class="secondary" disabled="" id="autoMissingGoUsecase">生成用例</button>
+</div>
+<p class="status" id="autoMissingStatus"></p>
+<div class="missing-view hidden" id="autoMissingView"></div>
+</div>
+</section>
+<section class="card" data-section-id="import" data-tab-section="clean">
+<h2>导入需求文档</h2>
+<div class="card-body">
+<div class="layout">
+<div class="pane">
+<p class="hint">点击选择或拖拽文件，解析后的原始需求文档会展示在右侧文本框，可手工修改后再进行清洗。</p>
+<label class="zone" id="dropZone">
+<input accept=".doc,.docx,.txt,.md" hidden="" id="fileInput" type="file"/>
+<div class="zone-line">
+<strong>点击选择</strong>
+<span>或拖拽文件到此处</span>
+</div>
+<div class="hint" id="fileName" style="margin-top:6px;">未选择文件</div>
+</label>
+<p class="status" id="parseStatus"></p>
+</div>
+<div class="pane">
+<textarea id="rawText" placeholder="原始需求将出现在这里，也可以直接粘贴/输入..." style="min-height: 360px;"></textarea>
+<div class="actions">
+<button class="secondary" id="saveRawDebug">保存调试TXT</button>
+<button class="secondary" id="importRawDebug">导入调试TXT</button>
+<input accept=".txt" hidden="" id="rawDebugFile" type="file"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="card" data-section-id="review" data-tab-section="clean">
+<h2>需求评审</h2>
+<div class="card-body">
+<div class="layout">
+<div class="pane">
+<p class="hint">基于原始需求快速识别不明确项与潜在分支，便于评审时沟通澄清。仅在已导入需求后可执行。</p>
+<div class="actions">
+<button class="secondary" disabled="" id="runReview">需求分析</button>
+</div>
+<p class="status" id="reviewStatus"></p>
+<p class="hint timing">模型用时：<strong><span id="reviewTiming">--</span> 秒</strong></p>
+</div>
+<div class="pane">
+<textarea class="split-area" id="reviewResult" placeholder="评审结果 JSON 将展示于此，必要时可手动补充说明" readonly=""></textarea>
+<div class="actions" style="margin-top:8px;">
+<button class="secondary" id="copyReviewResult">复制评审JSON</button>
+<button class="secondary" id="exportReviewResult">导出评审JSON</button>
+<button class="secondary" id="importReviewResult">导入评审JSON</button>
+<input accept=".json,.txt" hidden="" id="reviewImportFile" type="file"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="card" data-section-id="review-view" data-tab-section="clean">
+<h2>需求澄清点视图</h2>
+<div class="card-body">
+<p class="hint">汇总所有评审中发现的不明确点，可逐条补充澄清结果并同步回评审 JSON。</p>
+<div class="review-view hidden" id="reviewViewContainer"></div>
+<div class="actions">
+<button class="secondary" disabled="" id="toggleReviewView">展开澄清视图</button>
+<button class="secondary" disabled="" id="confirmClarifications">确认澄清</button>
+</div>
+</div>
+</section>
+<section class="card" data-section-id="clean" data-tab-section="clean">
+<h2>需求清洗</h2>
+<div class="card-body">
+<div class="layout">
+<div class="pane">
+<p class="hint">执行清洗后，可复制或保存结果，方便进一步审查。</p>
+<div class="actions">
+<button id="runClean">开始清洗</button>
+<button class="secondary" id="copyCleaned">复制清洗结果</button>
+</div>
+<p class="status" id="cleanStatus"></p>
+<p class="hint timing">模型用时：<strong><span id="cleanTiming">--</span> 秒</strong></p>
+</div>
+<div class="pane">
+<textarea id="cleanedText" placeholder="清洗后的需求将出现在这里..." readonly="" style="min-height: 360px;"></textarea>
+<div class="actions">
+<button class="secondary" id="saveCleanDebug">保存调试TXT</button>
+<button class="secondary" id="importCleanDebug">导入调试TXT</button>
+<input accept=".txt" hidden="" id="cleanDebugFile" type="file"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="card" data-section-id="clean-view" data-tab-section="clean">
+<h2>清洗结果视图</h2>
+<div class="card-body">
+<div class="clean-view-header">
+<p class="hint">列表展示清洗条目，可点击定位相关原始需求段落，快速核对清洗准确性。</p>
+<div class="clean-view-actions">
+<button class="secondary" id="toggleCleanViewBtn">收起视图</button>
+<button class="secondary" disabled="" id="cleanHighlightAllBtn">全部高亮</button>
+</div>
+</div>
+<div class="review-view visible" id="cleanViewContainer">
+<p class="hint" style="padding:12px;">暂无清洗数据，请先完成需求清洗</p>
+</div>
+<div class="clean-raw-panel">
+<div class="clean-raw-header">
+<p class="hint">原始需求全文将在下方展示，点击上方条目或选择文字后反向定位。</p>
+<div class="clean-view-actions">
+<button class="secondary" id="toggleCleanRawViewBtn">收起原文</button>
+<button class="secondary" disabled="" id="cleanRawLocateBtn">反向定位到条目</button>
+</div>
+</div>
+<div class="review-view visible clean-raw-view" id="cleanRawView">
+<p class="hint" style="padding:12px;">暂无原始需求，请先导入或填写</p>
+</div>
+</div>
+</div>
+</section>
+<section class="card" data-section-id="compare" data-tab-section="clean">
+<h2>对比完整性</h2>
+<div class="card-body">
+<div class="layout">
+<div class="pane">
+<p class="hint">使用指派的对比模型检查清洗结果是否覆盖原始需求。</p>
+<div class="actions">
+<button class="secondary" id="compareBtn">开始对比</button>
+</div>
+<p class="status" id="compareStatus"></p>
+<p class="hint timing">模型用时：<strong><span id="compareTiming">--</span> 秒</strong></p>
+</div>
+<div class="pane">
+<p class="hint">结果 JSON 字段：<code>coverage</code>=覆盖率，<code>missing</code>=未覆盖模块列表。</p>
+<textarea class="small-textarea" id="compareResult" placeholder="覆盖率和未覆盖要点将展示于此" readonly="" style="min-height: 220px;"></textarea>
+<div class="actions" style="margin-top:8px;">
+<button class="secondary" id="exportCompareResult">导出调试JSON</button>
+<button class="secondary" id="importCompareResult">导入调试JSON</button>
+<input accept=".json,.txt" hidden="" id="compareImportFile" type="file"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="card" data-section-id="split" data-tab-section="clean">
+<h2>测试模块拆分</h2>
+<div class="card-body">
+<div class="layout">
+<div class="pane">
+<p class="hint">将清洗结果进一步拆分为具体测试模块，用于测试设计。请让模型输出 JSON 数组，字段：module、key_scenarios、test_points、coupled_modules。</p>
+<div class="actions">
+<button class="secondary" id="splitBtn">开始拆分</button>
+</div>
+<p class="status" id="splitStatus"></p>
+<p class="hint timing">模型用时：<strong><span id="splitTiming">--</span> 秒</strong></p>
+</div>
+<div class="pane">
+<textarea class="split-area" id="splitResult" placeholder="拆分的测试模块将展示于此" readonly=""></textarea>
+<div class="actions" style="margin-top:8px;">
+<button class="secondary" id="goUsecaseGen">生成用例</button>
+<button class="secondary" id="saveSplitDebug">保存调试TXT</button>
+<button class="secondary" id="importSplitDebug">导入调试TXT</button>
+<input accept=".txt" hidden="" id="splitDebugFile" type="file"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="card" data-section-id="split-view" data-tab-section="clean">
+<h2>拆分视图</h2>
+<div class="card-body">
+<p class="hint">按模块查看拆分结构，便于核对场景与要点。</p>
+<div class="actions">
+<button class="secondary" disabled="" id="toggleSplitView">展开拆分视图</button>
+</div>
+<div class="review-view hidden" id="splitViewContainer"></div>
+</div>
+</section>
+<section class="card" data-section-id="cases-upload" data-tab-section="clean">
+<h2>测试用例导入（XMind）</h2>
+<div class="card-body">
+<div class="layout">
+<div class="pane">
+<p class="hint">可导入单份或多份 XMind/JSON/txt 测试用例，解析后可在右侧查看并用于覆盖对比。</p>
+<label class="zone" id="caseDropZone">
+<input accept=".xmind,.txt,.md,.json" hidden="" id="caseFileInput" multiple="" type="file"/>
+<div class="zone-line">
+<strong>点击选择</strong>
+<span>或拖拽测试用例到此处</span>
+</div>
+<div class="file-list" id="caseFileList">
+<span class="hint" data-placeholder="">未导入文件</span>
+</div>
+</label>
+<p class="status" id="caseStatus"></p>
+</div>
+<div class="pane">
+<textarea class="split-area" id="caseText" placeholder="解析后的测试用例文本，可手动编辑..."></textarea>
+<div class="actions" style="margin-top:8px;">
+<button class="secondary" id="saveCaseDebug">保存调试TXT</button>
+<button class="secondary" id="importCaseDebug">导入调试TXT</button>
+<input accept=".txt" hidden="" id="caseDebugFile" type="file"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="card" data-section-id="cases-view" data-tab-section="clean">
+<h2>测试用例视图</h2>
+<div class="card-body">
+<p class="hint">基于当前 XMind/文本内容渲染列表视图，可快速查看模块、用例标题、优先级等字段。</p>
+<div class="actions">
+<button class="secondary" id="caseViewBtn">刷新视图</button>
+<span class="hint" id="caseViewHint" style="margin:0;">请先上传或输入 XMind 测试用例</span>
+</div>
+<div class="caseview hidden" id="caseViewContainer"></div>
+</div>
+</section>
+<section class="card" data-section-id="cases" data-tab-section="clean">
+<h2>测试用例覆盖对比</h2>
+<div class="card-body">
+<div class="layout">
+<div class="pane">
+<p class="hint">使用专用模型，对比“测试模块拆分”与“测试用例”之间的覆盖情况，识别缺失或冗余点。</p>
+<div class="actions">
+<button class="secondary" id="casesCompareBtn">执行覆盖对比</button>
+</div>
+<p class="status" id="casesCoverageStatus"></p>
+<div class="module-progress" id="casesModuleProgress"></div>
+<p class="hint timing">模型用时：<strong><span id="casesTiming">--</span> 秒</strong></p>
+</div>
+<div class="pane">
+<p class="hint">结果 JSON 字段：<code>coverage</code>=覆盖率，<code>missing</code>=缺失模块列表（结构与“测试模块拆分”一致），<code>extra</code>=用例中多余的点。</p>
+<textarea class="split-area" id="casesCompareResult" placeholder="覆盖率与缺少/多余点将在此展示" readonly=""></textarea>
+<div class="actions" style="margin-top:8px;">
+<button class="secondary" id="exportCasesCoverage">导出对比结果</button>
+<button class="secondary" id="importCasesCoverage">导入对比结果</button>
+<input accept=".txt,.json" hidden="" id="importCasesCoverageFile" type="file"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="card" data-section-id="missing-view" data-tab-section="clean">
+<h2>缺失模块视图</h2>
+<div class="card-body">
+<p class="hint">运行“测试用例覆盖对比”后，可在此查看缺失模块详情，并复制 <code>missing</code> 字段 JSON。</p>
+<div class="actions" style="margin-bottom:8px;">
+<button class="secondary" disabled="" id="missingViewBtn">缺失模块视图</button>
+<button class="secondary" disabled="" id="copyMissingBtn">复制缺失模块JSON</button>
+<button class="secondary" disabled="" id="missingSmartFillBtn">智能生成填充</button>
+<button class="secondary" id="casesGoUsecaseGen">生成用例</button>
+</div>
+<p class="status" id="missingViewStatus"></p>
+<div class="missing-view hidden" id="missingViewContainer"></div>
+</div>
+</section>
+<section class="card hidden" data-tab-section="assign">
+<h2>功能指派</h2>
+<div class="card-body">
+<p class="hint">先在“模型管理”中创建模型，再为每个功能指派具体模型。</p>
+<div class="notice-card" style="background:linear-gradient(120deg,rgba(248,113,113,0.15),rgba(249,115,22,0.12));border-color:rgba(249,115,22,0.35);">
+<strong style="display:block;margin-bottom:6px;color:#b91c1c;">注意事项</strong>
+<p style="margin:0;color:#7c2d12;font-weight:600;">提示词内的 JSON 数据结构需要严格遵循，改动提示词时，请不要影响到 JSON 的数据结构要求！！！</p>
+</div>
+<div class="actions" style="margin-bottom:12px;">
+<button class="secondary" id="saveDefaultPrompts">设为默认提示词</button>
+<button class="secondary" id="exportDefaultPrompts">导出默认提示词</button>
+<button class="secondary" id="importDefaultPrompts">导入默认提示词</button>
+<input accept=".json,.txt" hidden="" id="importDefaultPromptsFile" type="file"/>
+</div>
+<p class="status" id="defaultPromptStatus"></p>
+<div class="model-card">
+<strong>清洗功能</strong>
+<div class="row">
+<label for="cleanModelSelect">使用模型</label>
+<select id="cleanModelSelect"></select>
+</div>
+<div class="row column">
+<label for="cleanPrompt">提示词</label>
+<textarea class="small-textarea" id="cleanPrompt" placeholder="为空则使用默认清洗提示词"></textarea>
+</div>
+<div class="row hidden" data-reasoning="clean">
+<label for="cleanReasoning">Reasoning Effort</label>
+<select id="cleanReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testCleanModel">测试连通性</button>
+</div>
+<p class="status" id="cleanAssignStatus"></p>
+</div>
+<div class="model-card">
+<strong>需求评审功能</strong>
+<div class="row">
+<label for="reviewModelSelect">使用模型</label>
+<select id="reviewModelSelect"></select>
+</div>
+<div class="row column">
+<label for="reviewPrompt">提示词</label>
+<textarea class="small-textarea" id="reviewPrompt" placeholder="为空则使用默认评审提示词"></textarea>
+</div>
+<div class="row hidden" data-reasoning="review">
+<label for="reviewReasoning">Reasoning Effort</label>
+<select id="reviewReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testReviewModel">测试连通性</button>
+</div>
+<p class="status" id="reviewAssignStatus"></p>
+</div>
+</div>
+<div class="model-card">
+<strong>对比完整性功能</strong>
+<div class="row">
+<label for="compareModelSelect">使用模型</label>
+<select id="compareModelSelect"></select>
+</div>
+<div class="row column">
+<label for="comparePrompt">提示词</label>
+<textarea class="small-textarea" id="comparePrompt" placeholder="为空则使用默认对比提示词"></textarea>
+</div>
+<div class="row hidden" data-reasoning="compare">
+<label for="compareReasoning">Reasoning Effort</label>
+<select id="compareReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testCompareModel">测试连通性</button>
+</div>
+<p class="status" id="compareAssignStatus"></p>
+</div>
+<div class="model-card">
+<strong>测试模块拆分功能</strong>
+<div class="row">
+<label for="splitModelSelect">使用模型</label>
+<select id="splitModelSelect"></select>
+</div>
+<div class="row column">
+<label for="splitPrompt">提示词</label>
+<textarea class="small-textarea" id="splitPrompt" placeholder="为空则使用默认拆分提示词"></textarea>
+</div>
+<div class="row hidden" data-reasoning="split">
+<label for="splitReasoning">Reasoning Effort</label>
+<select id="splitReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testSplitModel">测试连通性</button>
+</div>
+<p class="status" id="splitAssignStatus"></p>
+</div>
+<div class="model-card">
+<strong>XMind 覆盖对比功能</strong>
+<div class="row">
+<label for="casesModelSelect">使用模型</label>
+<select id="casesModelSelect"></select>
+</div>
+<div class="row column">
+<label for="casesPrompt">提示词</label>
+<textarea class="small-textarea" id="casesPrompt" placeholder="为空则使用默认覆盖对比提示词"></textarea>
+</div>
+<div class="row hidden" data-reasoning="cases">
+<label for="casesReasoning">Reasoning Effort</label>
+<select id="casesReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testCasesModel">测试连通性</button>
+</div>
+<p class="status" id="casesAssignStatus"></p>
+</div>
+<div class="model-card">
+<strong>用例生成功能</strong>
+<div class="row">
+<label for="caseGenModelSelect">使用模型</label>
+<select id="caseGenModelSelect"></select>
+</div>
+<div class="row column">
+<label for="caseGenPrompt">提示词</label>
+<textarea class="small-textarea" id="caseGenPrompt" placeholder="为空则使用默认用例生成提示词"></textarea>
+</div>
+<div class="row hidden" data-reasoning="casegen">
+<label for="caseGenReasoning">Reasoning Effort</label>
+<select id="caseGenReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testCaseGenModel">测试连通性</button>
+</div>
+<p class="status" id="caseGenAssignStatus"></p>
+</div>
+<div class="model-card">
+<strong>用例相似对比</strong>
+<div class="row">
+<label for="caseFilterModelSelect">使用模型</label>
+<select id="caseFilterModelSelect"></select>
+</div>
+<div class="row column">
+<label for="caseFilterPrompt">提示词</label>
+<textarea class="small-textarea" id="caseFilterPrompt" placeholder="为空则使用默认相似度对比提示词"></textarea>
+</div>
+<div class="row hidden" data-reasoning="casefilter">
+<label for="caseFilterReasoning">Reasoning Effort</label>
+<select id="caseFilterReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testCaseFilterModel">测试连通性</button>
+</div>
+<p class="status" id="caseFilterAssignStatus"></p>
+</div>
+<div class="actions">
+<button id="saveAssignments">保存指派</button>
+</div>
+</section>
+<section class="card hidden" data-section-id="casesgen" data-tab-section="casesgen">
+<h2>用例生成</h2>
+<div class="card-body">
+<p class="hint">根据测试模块拆分的结果生成结构化测试用例，每个模块可单独调用模型生成 JSON 格式用例。</p>
+<div class="actions">
+<button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
+<button class="secondary hidden" id="toSplitFromCaseGen">前往测试模块拆分</button>
+</div>
+<div class="usecase-modules" id="casesGenerationContainer"></div>
+<p class="status" id="caseGenStatus"></p>
+<p class="hint timing">模型用时：<strong><span id="caseGenTiming">--</span> 秒</strong></p>
+</div>
+</section>
+<section class="card hidden" data-section-id="tempexec-import" data-tab-section="tempexec">
+<div class="card-title-row">
+<h2>用例导入&分配</h2>
+<button class="pill primary" id="tempExecOverviewBtn">用例执行情况总览</button>
+</div>
+<div class="card-body">
+<p class="hint">导入 XMind/JSON/文本测试用例后，可在下方直接执行并记录实际结果。支持多份文件切换，执行数据会自动保存。</p>
+<div class="notice-card highlight" style="margin-bottom:12px;">
+<strong>温馨提示</strong>
+<p style="margin:4px 0 0;">点击下方“导出执行页面配置”可一键备份当前执行页面，若数据丢失，可通过导入该文件 100% 还原；导入时会覆盖当前数据，请谨慎操作。</p>
+</div>
+<div class="actions" style="margin-bottom:12px;">
+<button class="pill success" disabled="" id="exportTempExecConfigBtn">导出执行页面配置</button>
+<button class="secondary" id="importTempExecConfigBtn">导入执行页面配置</button>
+<input accept=".json" hidden="" id="importTempExecConfigFile" type="file"/>
+<div class="template-dropdown" id="caseTemplateDropdown">
+  <button class="pill template-toggle" id="caseTemplateToggle" type="button">
+    <span>常用用例模版</span>
+    <span class="template-caret">▼</span>
+  </button>
+  <div class="template-menu hidden" id="caseTemplateMenu">
+    <div class="template-menu-empty">正在加载模版...</div>
+  </div>
+</div>
+</div>
+<div class="temp-case-layout">
+<div class="pane">
+<label class="zone" id="tempExecDropZone">
+<input accept=".xmind,.txt,.md,.json" hidden="" id="tempExecInput" multiple="" type="file"/>
+<div class="zone-line">
+<strong>测试用例</strong>
+<span>拖拽或点击选择</span>
+</div>
+<div class="status">支持多份导入，解析后自动出现在下方视图</div>
+</label>
+<p class="status" id="tempExecStatus"></p>
+</div>
+</div>
+<div class="temp-exec-header">
+<p class="hint">需求用例组（可拖拽操作）</p>
+</div>
+<div class="temp-case-nav" id="tempExecNav">
+<span class="hint">暂无导入的测试用例</span>
+</div>
+<div class="temp-version-header">
+<div class="temp-version-title">版本分组</div>
+<button class="pill primary temp-version-create" id="createTempVersionBtn">＋ 新建版本</button>
+</div>
+<div class="temp-version-grid" id="tempVersionGrid">
+<span class="hint">暂无版本，点击“新建版本”创建</span>
+</div>
+<div class="temp-focus-block" id="tempFocusBlock">
+<div class="temp-case-group-label">专注区</div>
+<div class="temp-focus-zone" data-temp-focus-zone>
+<span class="hint">拖拽用例到此区域，专注处理关键用例</span>
+</div>
+<p class="hint">可从上方需求或版本盒子拖拽用例到此，移出时用例会回到需求区</p>
+</div>
+</div>
+</section>
+<section class="card hidden" data-section-id="tempexec-view" data-tab-section="tempexec">
+<h2>执行视图</h2>
+<div class="card-body">
+<div class="actions" style="margin-bottom:12px;">
+<button class="secondary" disabled="" id="exportTempExecBtn">导出本次执行JSON</button>
+<button class="secondary" id="importTempExecBtn">导入执行JSON</button>
+<button class="secondary" disabled="" id="exportTempExecXmindBtn">导出执行XMind</button>
+
+<input accept=".json,.txt" hidden="" id="importTempExecFile" type="file"/>
+</div>
+<div class="temp-case-view" id="tempExecView">
+<div class="temp-case-empty">请先在上方导入测试用例或点击历史用例</div>
+</div>
+
+</div></section>
+<section class="card hidden" data-section-id="tempexec-overview" data-tab-section="tempexec">
+<h2>用例执行总览</h2>
+<div class="card-body">
+<p class="hint">按文件汇总执行进度（当前导入与历史导入），颜色区分不同执行状态。</p>
+<div class="actions" style="margin:8px 0 12px;">
+<button class="pill secondary" id="tempExecBackBtn">返回执行视图</button>
+</div>
+<div class="temp-overview" id="tempExecOverview">
+<p class="hint">暂无用例执行数据</p>
+</div>
+</div>
+</section>
+<section class="card hidden" data-tab-section="models">
+<h2>模型管理</h2>
+<div class="card-body">
+<div class="notice-card highlight" style="margin: 0 0 12px;">
+  <h3>推荐配置</h3>
+  <ul>
+    <li>优先指派 <strong>DeepSeek-R1</strong>，输出质量更好。</li>
+    <li>请将 <code>Max Tokens</code> 设置为 <strong>16384</strong> 或更高，避免长回复被截断。</li>
+    <li>为每个功能统一指派此模型，保持行为一致。</li>
+  </ul>
+</div>
+<p class="hint">为不同供应商配置多个模型，可随时分配给清洗或对比任务。API Key 等敏感信息仅保存在本地浏览器。</p>
+<div class="actions">
+<button id="createModelBtn">新增模型</button>
+</div>
+<div class="model-card">
+<strong>全局调用设置</strong>
+<div class="row">
+<label for="modelTimeoutInput">模型超时时间（秒）</label>
+<input id="modelTimeoutInput" max="1800" min="30" placeholder="默认 300" step="30" type="number"/>
+</div>
+<p class="hint">超时后会自动中断模型请求，建议 30-1800 秒之间，根据模型响应速度适当调整。</p>
+<div class="actions">
+<button class="secondary" id="saveModelTimeout">保存超时设置</button>
+</div>
+<p class="status" id="modelTimeoutStatus"></p>
+</div>
+<div class="model-card hidden" id="modelFormWrapper">
+<h3 id="modelFormTitle">新增模型</h3>
+<div class="row">
+<label for="modelDisplayName">模型名称</label>
+<input id="modelDisplayName" placeholder="如：DeepSeek 清洗模型 A"/>
+</div>
+<div class="row">
+<label for="modelProvider">模型类型</label>
+<select id="modelProvider">
+<option value="deepseek">DeepSeek</option>
+<option value="kimi">Kimi K2</option>
+<option value="custom">自定义</option>
+</select>
+</div>
+<div class="row">
+<label for="modelBaseUrl">接口地址</label>
+<input id="modelBaseUrl" placeholder="如：https://api.xxx.com/v1/chat/completions"/>
+</div>
+<div class="row">
+<label for="modelApiKey">API Key</label>
+<input id="modelApiKey" placeholder="填写用于鉴权的 Key" type="password"/>
+</div>
+<div class="row">
+<label for="modelIdentifier">模型 ID</label>
+<input id="modelIdentifier" placeholder="如：deepseek-chat / k2 / 你的模型名"/>
+</div>
+<div class="row">
+<label for="modelMaxTokens">最大输出 Tokens</label>
+<input id="modelMaxTokens" min="256" placeholder="默认 1024" step="128" type="number"/>
+</div>
+<div class="actions">
+<button id="saveModelBtn">保存模型</button>
+<button class="secondary" id="resetModelForm">取消</button>
+</div>
+<p class="status" id="modelFormStatus"></p>
+</div>
+<h3>已配置模型</h3>
+<div class="model-list" id="modelList"></div>
+</div>
+</section>
+<section class="card hidden" data-tab-section="settings">
+<h2>飞书通知配置</h2>
+<div class="card-body">
+<p class="hint">仅“一键执行”流程会触发通知：覆盖率不足 100% 会推送失败提醒，完整执行成功会推送成功提醒。</p>
+<div class="row column">
+<label>飞书机器人</label>
+<div class="row" style="align-items:center; gap:8px; max-width:520px;">
+<span style="min-width:80px; color:var(--muted);">Webhook：</span>
+<input id="feishuWebhook" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxxx"/>
+</div>
+<div class="row" style="align-items:center; gap:8px; max-width:520px; margin-top:10px;">
+<span style="min-width:80px; color:var(--muted);">@角色ID：</span>
+<input id="feishuNotifyUser" placeholder="到“飞书开放平台→企业管理→成员管理”复制成员 open_id（推荐）或 user_id"/>
+</div>
+</div>
+<div class="actions">
+<button class="secondary" id="saveFeishuWebhook">保存配置</button>
+<button class="secondary" id="testFeishuWebhook">发送测试通知</button>
+</div>
+<p class="status" id="feishuWebhookStatus"></p>
+<p class="hint">请确保浏览器可访问该地址，建议使用群机器人以便团队及时获知执行状态。</p>
+</div>
+</section>
+<section class="card hidden" data-tab-section="settings">
+<h2>执行视图列显示</h2>
+<div class="card-body">
+<p class="hint">控制“用例执行”视图的表头展示，仅影响显示，不会修改用例数据。用例标题/实际结果/备注/缺陷链接为必选。</p>
+<form id="tempExecColumnForm" class="settings-grid">
+<label class="disabled"><input type="checkbox" data-temp-exec-col="select"/> 选择框（必选）</label>
+<label><input type="checkbox" data-temp-exec-col="index"/> 编号</label>
+<label><input type="checkbox" data-temp-exec-col="module"/> 模块</label>
+<label><input type="checkbox" data-temp-exec-col="priority"/> 优先级</label>
+<label><input type="checkbox" data-temp-exec-col="preconditions"/> 前提条件</label>
+<label><input type="checkbox" data-temp-exec-col="steps"/> 操作步骤</label>
+<label><input type="checkbox" data-temp-exec-col="expected"/> 预期结果</label>
+<label class="disabled">用例标题（必选）</label>
+<label class="disabled">实际结果（必选）</label>
+<label class="disabled">备注（必选）</label>
+<label class="disabled">缺陷链接（必选）</label>
+</form>
+<div class="actions" style="margin-top:8px;">
+<button class="secondary" id="saveTempExecColumns">保存列显示设置</button>
+</div>
+<p class="status" id="tempExecColumnStatus"></p>
+</div>
+</section>
+<section class="card hidden" data-tab-section="settings">
+<h2>其他设置</h2>
+<div class="card-body">
+<div class="settings-inline">
+<div class="meta">
+<strong>执行视图分页</strong>
+<p>设置“用例执行”表格每页展示的用例条数，范围 5-200 条，默认为 20。</p>
+</div>
+<div class="control">
+<input id="tempExecPageSizeInput" type="number" min="5" max="200" step="5" placeholder="请输入条数"/>
+</div>
+</div>
+<div class="actions">
+<button class="secondary" id="saveTempExecPageSize">保存分页设置</button>
+</div>
+<p class="status" id="tempExecPageSizeStatus"></p>
+</div>
+</section>
+</main>
+</div>
+</div>
+<script src="./scripts/vendor/jszip.min.js" defer></script>
+<script src="./config/constants.js" defer></script>
+<script src="./scripts/core/splitCore.js" defer></script>
+<script src="./scripts/core/cleanCore.js" defer></script>
+<script src="./scripts/core/compareCore.js" defer></script>
+<script src="./scripts/core/reviewCore.js" defer></script>
+<script src="./scripts/core/casesCore.js" defer></script>
+<script src="./scripts/core/autoCore.js" defer></script>
+<script src="./scripts/core/xmindCore.js" defer></script>
+<script src="./scripts/core/tempexecCore.js" defer></script>
+<script src="./scripts/core/casesGenCore.js" defer></script>
+<script src="./scripts/core/debugCore.js" defer></script>
+<script src="./scripts/core/requirementCore.js" defer></script>
+<script src="./scripts/handlers/cleanHandlers.js" defer></script>
+<script src="./scripts/base/state.js" defer></script>
+<script src="./scripts/base/utils.js" defer></script>
+<script src="./scripts/modules/settings.js" defer></script>
+<script src="./services/storage.js" defer></script>
+<script src="./services/modelClient.js" defer></script>
+<script src="./scripts/modules/models.js" defer></script>
+<script src="./scripts/handlers/assignHandlers.js" defer></script>
+<script src="./scripts/modules/assign.js" defer></script>
+<script src="./scripts/modules/review.js" defer></script>
+<script src="./scripts/modules/clean.js" defer></script>
+<script src="./scripts/modules/compare.js" defer></script>
+<script src="./scripts/modules/split.js" defer></script>
+<script src="./scripts/handlers/splitHandlers.js" defer></script>
+<script src="./scripts/modules/upload.js" defer></script>
+<script src="./scripts/handlers/casegenHandlers.js" defer></script>
+<script src="./scripts/core/casegenCore.js" defer></script>
+<script src="./scripts/modules/casegenProgress.js" defer></script>
+<script src="./scripts/handlers/layoutHandlers.js" defer></script>
+<script src="./scripts/modules/auto.js" defer></script>
+<script src="./scripts/modules/casesgen.js" defer></script>
+<script src="./scripts/modules/tempexec.js" defer></script>
+<script src="./scripts/modules/app.js" defer></script>
+<script src="./scripts/modules/bootstrap.js" defer></script>
+</body>
+</html>

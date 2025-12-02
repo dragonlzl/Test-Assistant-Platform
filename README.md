@@ -1,0 +1,29 @@
+# Test Assistant Platform
+
+## 简介
+静态前端工具，完成需求清洗、拆分、覆盖对比、用例生成与执行的一站式流程，支持版本分组、专注区、拖拽和导入导出等能力，全部逻辑在浏览器本地运行。
+
+## 目录结构
+- `index.html`：单页入口，按依赖顺序 defer 加载脚本。
+- `style.css`：全局样式。
+- `config/constants.js`：默认配置/键名/列显示等常量。
+- `scripts/`
+  - `vendor/`：第三方依赖（`jszip.min.js`）。
+  - `base/`：基础层（`state.js`、`utils.js`）。
+  - `core/`：纯核心逻辑（拆分/清洗/对比/生成/执行等 *Core.js）。
+  - `handlers/`：事件与布局交互（*Handlers.js）。
+  - `modules/`：模块入口与编排（`app.js`、`auto.js`、`tempexec.js` 等）。
+  - `legacy/`：历史保留脚本（`wrap.js`、`inject.js`）。
+- `services/`：模型请求与存储封装。
+- `tests/`：Playwright UI 用例与配置。
+- 资源/素材：`帮助例子.png`、`debug_*.txt`、`casegen_*.txt` 等。
+
+## 开发与验证
+- 本地预览：`python3 -m http.server 8090` 后访问 `http://127.0.0.1:8090/index.html`。
+- 语法检查：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js`。
+- UI 自动化：`npm run test:ui`（如遇拖拽类偶发失败，可使用 `npm run test:ui -- --workers=1` 单线程重跑）。
+
+## 约定
+- JS 兼容 ES2019，禁用可选链/空值合并等新语法；函数/DOM ID 使用 lowerCamelCase。
+- HTML/CSS 2 空格缩进，语句以分号结尾。
+- 新增外部依赖需本地 vendoring，避免直接依赖 CDN/npm 运行时下载。

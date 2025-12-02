@@ -1,0 +1,103 @@
+const { test, expect } = require('@playwright/test');
+
+test.describe('工作流关键交互', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.continue();
+      }
+      return route.abort();
+    });
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+  });
+
+  test('全页签与顶部步骤可点击', async ({ page }) => {
+    const tabs = await page.$$('[data-tab-btn]');
+    for (const tab of tabs) {
+      await tab.click();
+    }
+    const steps = await page.$$('#flowNav .step');
+    for (const step of steps) {
+      await step.click();
+    }
+  });
+
+  test('原始需求上传与清空', async ({ page }) => {
+    await page.setInputFiles('#fileInput', {
+      name: 'demo.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('测试上传内容'),
+    });
+    await expect(page.locator('#rawText')).toHaveValue('测试上传内容');
+    await expect(page.locator('#fileName')).toContainText('demo.txt');
+    await expect(page.locator('#parseStatus')).toContainText('读取完成');
+    await page.click('#autoRawClear');
+    await expect(page.locator('#rawText')).toHaveValue('');
+    await expect(page.locator('#fileName')).toContainText('未选择');
+  });
+
+  test('导入/导出控件默认状态与用例视图按钮可点击', async ({ page }) => {
+    const exportCaseGen = page.locator('#exportCaseGen');
+    await expect(exportCaseGen).toBeDisabled();
+    const exportTempExecCfg = page.locator('#exportTempExecConfigBtn');
+    await expect(exportTempExecCfg).toBeDisabled();
+    const importTempExecCfg = page.locator('#importTempExecConfigBtn');
+    await expect(importTempExecCfg).toHaveCount(1);
+    const caseViewBtn = page.locator('#caseViewBtn');
+    if (await caseViewBtn.isVisible()) {
+      await caseViewBtn.click();
+    }
+  });
+
+  test('用例执行拖拽占位可响应', async ({ page }) => {
+    await page.click('[data-tab-btn="tempexec"]');
+    const dropZone = page.locator('#tempExecDropZone');
+    const data = await page.evaluateHandle(() => {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', 'dummy');
+      return dt;
+    });
+    await dropZone.dispatchEvent('dragenter', { dataTransfer: data });
+    await dropZone.dispatchEvent('dragover', { dataTransfer: data });
+    await dropZone.dispatchEvent('drop', { dataTransfer: data });
+    await expect(dropZone).toBeVisible();
+  });
+
+  test('自动流程缺失视图与按钮默认状态', async ({ page }) => {
+    const autoTab = page.locator('[data-tab-btn="auto"]');
+    await expect(autoTab).toHaveClass(/active/);
+    const toggle = page.locator('#autoMissingToggle');
+    const copy = page.locator('#autoMissingCopy');
+    const smart = page.locator('#autoMissingSmartFill');
+    const view = page.locator('#autoMissingView');
+    const autoBtn = page.locator('#runAutoWorkflow');
+    const recleanBtn = page.locator('#autoRecleanBtn');
+    await expect(toggle).toBeDisabled();
+    await expect(copy).toBeDisabled();
+    await expect(smart).toBeDisabled();
+    await expect(view).toHaveClass(/hidden/);
+    await expect(autoBtn).toBeEnabled();
+    await expect(recleanBtn).toBeDisabled();
+  });
+
+  test('自动流程覆盖率不足时按钮可用', async ({ page }) => {
+    await page.evaluate(() => {
+      const payload = { coverage: 80, missing: ['缺少需求点'] };
+      const compareEl = document.getElementById('compareResult');
+      if (compareEl) compareEl.value = JSON.stringify(payload);
+      if (window.app && window.app.state) {
+        window.app.state.autoCompareSelections = new Set();
+        window.app.state.autoCompareMissingList = [];
+      }
+    });
+    await page.click('[data-tab-btn="clean"]');
+    await page.click('[data-tab-btn="auto"]');
+    const recleanBtn = page.locator('#autoRecleanBtn');
+    const ignoreBtn = page.locator('#autoIgnoreCoverageBtn');
+    await expect(recleanBtn).toBeEnabled();
+    await expect(ignoreBtn).toBeEnabled();
+  });
+});

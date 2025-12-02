@@ -1,0 +1,18 @@
+{
+  "name": "casetool",
+  "version": "1.0.0",
+  "description": "",
+  "main": "jszip.min.js",
+  "scripts": {
+    "test": "npm run test:ui",
+    "test:ui": "playwright test --config tests/playwright.config.js",
+    "test:ui:headed": "PLAYWRIGHT_HEADED=1 playwright test --config tests/playwright.config.js --headed",
+    "test:ui:install": "npx playwright install --with-deps"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.41.2"
+  }
+}

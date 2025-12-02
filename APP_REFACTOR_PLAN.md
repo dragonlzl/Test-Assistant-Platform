@@ -1,0 +1,446 @@
+# app.js 精简重构计划（执行指引）
+
+## 最终目标（量化）
+- 将 `app.js` 缩减至 **不超过 1200 行**，仅保留初始化与各模块编排。
+- 所有业务逻辑（清洗/评审/对比/拆分/用例生成/临时执行/自动流程/通知）迁移到对应模块或 core 文件。
+- 依赖、配置、常量与状态读写统一收敛到独立文件，避免重复定义。
+
+## 里程碑与子目标
+1. **配置抽离（行数 ≤ 8200）**  
+   - 将默认提示词、状态键、列配置等移至 `config/`（如 `config/prompts.js`、`config/constants.js` 或 JSON）。  
+   - `app.js` 只引用配置，不再硬编码长文本。
+2. **清洗/评审/对比/拆分核心迁移（行数 ≤ 6200）**  
+   - 在对应模块新增 `*Core.js`，搬移数据处理与格式化逻辑；事件绑定文件仅调用 core。  
+   - 删除 `app.js` 中相关的 fallback 空函数。
+3. **用例生成/进度/自动流程核心迁移（行数 ≤ 4200）**  
+   - 扩充 `casegenCore.js`、`casegenProgress.js`、`auto.js`，把生成、导出、进度、工作流、飞书通知等逻辑搬离 `app.js`。  
+   - `app.js` 只传递上下文与回调。
+4. **临时执行模块解耦（行数 ≤ 2200）**  
+   - 新建 `tempexecCore.js`，迁移版本管理、拖拽、分页、导出、搜索等逻辑；`tempexec.js` 负责 UI 事件绑定。  
+   - 去掉重复的 DOM 查询与字符串模板，集中在模块内。
+5. **收尾与瘦身（行数 ≤ 1200）**  
+   - `app.js` 仅保留：全局配置导入、状态初始化、模块 init 调用、少量跨模块编排。  
+   - 清理未用变量/函数，统一调用链与命名。
+
+## 每次执行后的固定动作（必须遵守，重构后逐项确认）
+1. 输出以下信息（在提交或说明中体现）：  
+   - 本次处理会影响的功能范围。  
+   - 距离当前子目标完成的百分比。  
+   - 距离最终目标完成的百分比。  
+   - `app.js` 缩减后的行数（使用 `wc -l app.js` 记录）。
+2. 对受影响的功能做细致自测/检查，并在说明中列出自测点与结果。
+3. UI 自动化要求：先审视现有脚本是否覆盖本次改动；不足则补充/调整用例，满足则直接使用；运行 UI 用例并记录结果（禁止触发真实模型请求，需 stub/阻断外部 API）。  
+4. 执行 `python3 notify_feishu.py` 进行通知（脚本已可直接调用，需联网）。  
+5. 将上述信息与自测结果写入本文件的 **进度记录**，保持最新一条在最下方。
+
+### 用例执行模块重构约束（必须遵守）
+- 重构临时/用例执行模块时，必须保持现有交互逻辑、页面内容展示、布局与样式完全一致；如与重构方案冲突，优先保证当前体验和功能不变，可仅做最小化搬迁。
+- 不调整执行模块的展示/交互/样式细节（包括拖拽、分页、按钮状态、表格列展示），禁止“优化”或改版外观，只允许等价迁移代码。
+- 遇到功能风险时宁可维持现状，不做大规模重写；所有变动需可回溯为纯搬运。
+
+## 推荐执行顺序与检查要点
+- 先拆配置，再拆核心逻辑；保证加载顺序与初始化不变。  
+- 每拆完一块，运行 `node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 做语法检查。  
+- 手工回归核心交互：需求导入/清洗/评审/对比/拆分/用例生成/临时执行/自动流程跳转。
+
+### UI 自动化扩展策略（按需执行）
+- 每次改动先评估现有用例覆盖是否足够并记录结论；不足才补充/调整用例，够用则直接运行现有用例。
+- 若改动涉及配置/默认值/加载顺序：补充用例校验模型/指派/设置页的关键输入框存在与默认值。
+- 若改动涉及视图切换/初始化：补充用例断言清洗/对比/拆分/用例生成/执行等核心区域渲染。
+- 新增用例必须阻断外部接口（沿用当前 route 规则），避免触发真实模型或消耗 token。
+- 必跑用例：主页加载与导航、切换“功能工作流”“用例执行”、所有页签按钮可点击、顶部 6 个步骤可点击、导入/导出控件默认状态校验、用例执行拖拽占位（用例在 `tests/ui/smoke.spec.js` 与 `tests/ui/workflow.spec.js`），每次改动后必须运行。
+
+## 进度记录（按时间追加，最新在下）
+- 暂无记录。每次执行后追加格式示例：  
+  - 日期：YYYY-MM-DD HH:MM  
+  - 子目标：配置抽离 / 核心迁移 等  
+  - 影响范围：XXX  
+  - 子目标进度：NN%  
+  - 最终目标进度：NN%  
+  - app.js 行数：NNNN  
+  - 自测点与结果：...  
+  - 其他备注：...  
+- 日期：2025-11-30 00:00  
+  - 子目标：自动化测试基建（Playwright 冒烟）  
+  - 影响范围：UI 冒烟用例；静态页面加载、标签切换、用例执行入口可见  
+  - 子目标进度：100%  
+  - 最终目标进度：0%（app.js 瘦身尚未开始）  
+  - app.js 行数：9107  
+  - 自测点与结果：未跑 Playwright（需先 npm install 与 npm run test:ui:install），手动未变更业务逻辑  
+  - 其他备注：新增 `tests/` 目录、Playwright 配置与 npm 脚本；`python3 notify_feishu.py` 执行失败（未配置可用 webhook 主机）  
+- 日期：2025-11-30 00:00  
+  - 子目标：UI 自动化准则与阻断外部请求  
+  - 影响范围：测试基建；运行策略调整  
+  - 子目标进度：100%  
+  - 最终目标进度：0%（app.js 瘦身尚未开始）  
+  - app.js 行数：9107  
+  - 自测点与结果：未运行 Playwright（依赖未安装）；策略调整无需 UI 变更  
+  - 其他备注：在冒烟用例中阻断非本地请求，避免真实模型调用；notify_feishu 仍因无可用 webhook 主机失败  
+- 日期：2025-11-30 00:10  
+  - 子目标：UI 冒烟用例运行与修正  
+  - 影响范围：测试基建；导航按钮选择器调整  
+  - 子目标进度：100%  
+  - 最终目标进度：0%（app.js 瘦身尚未开始）  
+  - app.js 行数：9107  
+  - 自测点与结果：`npm run test:ui` 全部通过（3/3）；未涉及业务逻辑  
+  - 其他备注：Playwright 依赖已安装；notify_feishu 仍失败（DNS/无可用 webhook 主机）  
+- 日期：2025-11-30 00:??  
+  - 子目标：通知脚本可用性确认  
+  - 影响范围：通知脚本  
+  - 子目标进度：100%  
+  - 最终目标进度：0%（app.js 瘦身尚未开始）  
+  - app.js 行数：9107  
+  - 自测点与结果：`python3 notify_feishu.py` 成功发送（需允许网络访问）；UI 未改  
+  - 其他备注：脚本内已有合法 webhook，可直接调用；运行时需要网络权限  
+- 日期：2025-11-30 00:24  
+  - 子目标：配置抽离（阶段1）  
+  - 影响范围：默认配置加载、提示词/键名、入口脚本顺序  
+  - 子目标进度：20%（新建 config/constants.js 提供默认配置，app.js 依赖改为读取 config；app.js 行数 9107→9059）  
+  - 最终目标进度：5%（app.js 瘦身尚未触达目标 1200 行）  
+  - app.js 行数：9059  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（3/3，拦截外部请求）；业务逻辑未改  
+  - 其他备注：`python3 notify_feishu.py` 成功发送（需允许网络）；需继续拆分配置/核心逻辑以达行数目标  
+- 日期：2025-11-30 00:XX  
+  - 子目标：通知触发时机调整  
+  - 影响范围：流程规范  
+  - 子目标进度：100%  
+  - 最终目标进度：5%（app.js 瘦身未改）  
+  - app.js 行数：9059  
+  - 自测点与结果：无代码变更；流程约束更新  
+  - 其他备注：后续改动需在完成全部自检/自动化并输出最终结论后再调用 `python3 notify_feishu.py`；本次通知属历史例外  
+- 日期：2025-11-30 00:33  
+  - 子目标：配置抽离（阶段1，补充别名）  
+  - 影响范围：配置加载；字段别名来源  
+  - 子目标进度：25%（字段别名移至 config/constants.js，app.js 读取 config）  
+  - 最终目标进度：6%（app.js 行数未显著变化）  
+  - app.js 行数：9059  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（3/3，拦截外部请求）  
+  - 其他备注：通知需在最终结论后执行；本次未提前发送  
+- 日期：2025-11-30 00:40  
+  - 子目标：配置抽离（阶段1，清洗核心迁移至 cleanCore.js）  
+  - 影响范围：清洗 JSON 解析与字段归一化（逻辑迁移）；配置脚本加载顺序  
+  - 子目标进度：40%（清洗核心方法迁出 app.js；行数 9059→8806）  
+  - 最终目标进度：8%（目标 1200 行仍需后续拆分）  
+  - app.js 行数：8806  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（3/3，拦截外部请求；评估覆盖足够，未新增用例）  
+  - 其他备注：新增 `cleanCore.js` 通过依赖注入提供清洗处理；需保持通知在最终结论后调用  
+- 日期：2025-11-30 00:48  
+  - 子目标：配置抽离（阶段1，覆盖对比核心迁移至 compareCore.js）  
+  - 影响范围：覆盖对比聚合/缺失格式化/模块 payload 构造（逻辑迁移）；入口脚本加载顺序  
+  - 子目标进度：55%（compareCore 接管对比核心；行数 8806→8743）  
+  - 最终目标进度：10%（仍需拆分拆分/用例生成/执行等核心）  
+  - app.js 行数：8743  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（3/3，拦截外部请求；现有用例覆盖足够，未新增）  
+  - 其他备注：新增 `compareCore.js`；通知需在最终结论后调用（未提前发送）  
+- 日期：2025-11-30 01:07  
+  - 子目标：配置抽离（阶段1，拆分核心迁移至 splitCore.js）  
+  - 影响范围：拆分结果解析、模块字段提取；入口脚本加载顺序  
+  - 子目标进度：70%（splitCore 接管拆分解析与字段提取；行数 8743→8700）  
+  - 最终目标进度：12%  
+  - app.js 行数：8700  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（3/3，拦截外部请求；评估现有用例覆盖足够，未新增）  
+  - 其他备注：新增 `splitCore.js`；通知需在最终结论后调用（未提前发送）  
+- 日期：2025-11-30 08:39  
+  - 子目标：配置抽离（阶段1，XMind/临时执行核心迁移）  
+  - 影响范围：XMind 导出/解析、临时执行用例归一化/序列化；加载顺序与依赖注入  
+  - 子目标进度：95%（新增 `xmindCore.js`、`tempexecCore.js`，临时执行序列化/解析接线；行数 8700→8243，接近 8200 目标）  
+  - 最终目标进度：18%  
+  - app.js 行数：8243  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（3/3，阻断外部请求）；曾因缺少 `stringifyCaseField` 导致 tab 失活，已补回并重跑通过  
+  - 其他备注：临时执行序列化/快照已接入 `tempexecCore`（部分字段仍在 app.js 调用），通知在结论后发送  
+- 日期：2025-11-30 08:46  
+  - 子目标：配置抽离（阶段1，压缩至 8200 目标）  
+  - 影响范围：XMind/临时执行依赖完全集成核心，精简冗余函数；移除未用 mind 视图占位，收缩回退逻辑  
+  - 子目标进度：100%（app.js 行数 8700→8188，低于 8200 阶段目标）  
+  - 最终目标进度：20%  
+  - app.js 行数：8188  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（3/3，阻断外部请求，修复缺函数后再跑通过）  
+  - 其他备注：完成 XMind/临时执行核心抽离；通知已发送；下一步可继续拆分用例生成/执行剩余核心以逼近最终 1200 行目标  
+- 日期：2025-11-30 08:??  
+  - 子目标：用例生成导出接入 core、补充 UI 必跑用例  
+  - 影响范围：用例导出按钮禁用逻辑、选中/单模块/全量导出接入 `casesGenCore`；新增必跑 UI 用例（所有标签与顶部步骤点击）  
+  - 子目标进度：100%  
+  - 最终目标进度：22%  
+  - app.js 行数：8217  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（3/3，阻断外部请求；新增用例覆盖所有页签和顶部步骤）；修复 `serializeSingleTempExecFile` 未定义导致的运行时错误  
+  - 其他备注：通知已发送；导出按钮默认禁用，需有生成结果才启用  
+- 日期：2025-11-30 10:09  
+  - 子目标：用例生成导出完善 + UI 覆盖扩展  
+  - 影响范围：用例导出禁用状态、选中/单模块/全量导出接入 core；新增 UI 自动化（导入/导出默认状态、用例执行拖拽占位）  
+  - 子目标进度：100%  
+  - 最终目标进度：23%  
+  - app.js 行数：8200  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（7/7，阻断外部请求，含新增用例）；修复 `serializeSingleTempExecFile` 未定义  
+  - 其他备注：必跑用例已扩充至 tabs/步骤/导入导出状态/拖拽；通知已发送  
+- 日期：2025-11-30 10:28  
+  - 子目标：核心迁移阶段2（评审/澄清逻辑抽离 reviewCore）  
+  - 影响范围：需求评审结果解析/渲染/澄清、自动澄清开关、评审导入导出；入口脚本顺序新增 reviewCore  
+  - 子目标进度：80%  
+  - 最终目标进度：27%  
+  - app.js 行数：7712  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 失败（Python http.server 8080 端口 bind 权限被拒，PermissionError Errno 1）；评估当前环境禁用本地端口监听，未能跑 UI 用例  
+  - 其他备注：新增 `reviewCore.js` 负责评审/澄清核心，app.js 改为注入；`python3 notify_feishu.py` 因 DNS/nodename 未解析失败（网络受限）  
+- 日期：2025-11-30 10:34  
+  - 子目标：核心迁移阶段2（评审/澄清抽离 + 测试基建校正）  
+  - 影响范围：需求评审/澄清核心（reviewCore 接管）；Playwright webServer 增加 cwd 指向仓库根目录  
+  - 子目标进度：85%  
+  - 最终目标进度：28%  
+  - app.js 行数：7712  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（7/7，阻断外部请求，修复 404 需 cwd）；通知：`python3 notify_feishu.py` 成功发送  
+  - 其他备注：UI 用例恢复需 webServer cwd=repo 根；后续继续压缩 app.js 与迁移剩余核心  
+- 日期：2025-11-30 10:53  
+  - 子目标：核心迁移阶段2（覆盖对比缺失解析下沉 compareCore）  
+  - 影响范围：覆盖对比缺失模块解析/行构建、对比核心函数挂载顺序；UI 用例  
+  - 子目标进度：100%  
+  - 最终目标进度：30%  
+  - app.js 行数：7578  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（7/7，阻断外部请求）  
+  - 其他备注：compareCore 增补缺失解析/行构建，app.js 去重依赖顺序；`python3 notify_feishu.py` 已发送  
+- 日期：2025-11-30 11:08  
+  - 子目标：核心迁移阶段2（缺失视图渲染/选择逻辑下沉 compareCore）  
+  - 影响范围：缺失视图 HTML 构建、缺失选择提取、覆盖对比 UI；通知  
+  - 子目标进度：100%  
+  - 最终目标进度：32%  
+  - app.js 行数：7523  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（7/7，阻断外部请求）  
+  - 其他备注：缺失视图渲染/选择使用 compareCore 提供的纯函数；`python3 notify_feishu.py` 已发送  
+- 日期：2025-11-30 14:40  
+  - 子目标：核心迁移阶段3（用例生成核心下沉 casesGenCore）  
+  - 影响范围：用例生成渲染/生成/补全/导入导出、转执行、用例选择状态与 XMind 导出依赖注入  
+  - 子目标进度：60%（casesGenCore 承接生成/补全/导出/选择逻辑，保留 UI 编排）  
+  - 最终目标进度：40%  
+  - app.js 行数：6768  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（7/7，需允许本地端口绑定）  
+  - 其他备注：用例生成核心逻辑迁移至 casesGenCore，app.js 依赖通过注入；XMind 导出依赖改为延迟获取以规避初始化期报错，后续继续精简 auto/用例生成剩余调用链  
+- 日期：2025-11-30 14:55  
+  - 子目标：核心迁移阶段3（用例导入/覆盖组合逻辑下沉 casesCore）  
+  - 影响范围：用例导入列表渲染、导入/删除、覆盖对比 payload 组装、用例来源判定、Case 文本同步  
+  - 子目标进度：70%（casesCore 承接用例导入与组合逻辑，app.js 精简为依赖注入与少量视图刷新）  
+  - 最终目标进度：42%  
+  - app.js 行数：6694  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（7/7，需允许本地端口绑定）  
+  - 其他备注：用例导入/组合/覆盖对比依赖收敛至 casesCore，后续可继续抽离自动流程与执行相关逻辑；通知在本次结论后发送  
+- 日期：2025-11-30 15:15  
+  - 子目标：核心迁移阶段3（用例导入/覆盖逻辑收束 + 初始化链路修复）  
+  - 影响范围：用例导入/删除/覆盖 payload 组装下沉 casesCore，上传入口改为注入核心；修复 parseXmindFile 提前访问导致的初始化中断，恢复导航/拖拽/默认禁用状态  
+  - 子目标进度：75%（用例导入/组合逻辑与上传事件已下沉，初始化恢复；剩余自动流程/执行逻辑待拆）  
+  - 最终目标进度：45%  
+  - app.js 行数：6647  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（7/7，需允许本地端口绑定）  
+  - 其他备注：casesCore 新增 importCaseFiles 处理；上传模块改用核心 API；为 parseXmindFile 增加惰性获取避免 TDZ，确保 window.app.init 可用；通知已发送  
+- 日期：2025-11-30 15:35  
+  - 子目标：核心迁移阶段3（自动流程缺失视图与通知下沉 autoCore）  
+  - 影响范围：自动流程缺失视图切换/选择/智能填充、飞书通知封装、缺失状态更新；初始化接线  
+  - 子目标进度：80%（autoCore 承接缺失视图与通知逻辑，app.js 仅注入依赖；下一步可拆 auto 工作流执行逻辑）  
+  - 最终目标进度：48%  
+  - app.js 行数：6512  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（7/7，需允许本地端口绑定）  
+  - 其他备注：新增 `autoCore.js`（缺失视图/智能填充/通知）；autoContext 使用核心返回的 handler，修复缺失选择导致初始化中断；通知已发送  
+- 日期：2025-11-30 15:50  
+  - 子目标：核心迁移阶段3（自动流程缺失视图/通知下沉 + UI 用例补充）  
+  - 影响范围：自动流程缺失视图/智能填充/通知逻辑；UI 自动化覆盖自动流程默认状态  
+  - 子目标进度：85%（autoCore 已接管缺失视图/通知；新增 UI 用例验证自动流程默认状态）  
+  - 最终目标进度：50%  
+  - app.js 行数：6512  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（8/8，需允许本地端口绑定）  
+  - 其他备注：新增 `tests/ui/workflow.spec.js` 用例覆盖自动流程缺失视图/按钮默认状态；beforeEach 等待 app 初始化以提升稳定性；通知已发送  
+- 日期：2025-11-30 17:27  
+  - 子目标：核心迁移阶段3（自动流程执行/覆盖逻辑下沉 autoCore）  
+  - 影响范围：自动流程一键执行/补全/忽略覆盖率逻辑、自动对比缺失视图渲染/按钮状态、飞书通知调用；UI 自动化补充覆盖率不足场景  
+  - 子目标进度：90%（autoCore 接管自动流程核心与对比缺失渲染，auto.js 精简为事件接线）  
+  - 最终目标进度：55%  
+  - app.js 行数：6572  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需允许本地端口绑定）  
+  - 其他备注：自动流程核心迁移至 autoCore，避免重复逻辑；新增 UI 用例校验覆盖率不足时重新清洗/忽略按钮可用；后续需继续瘦身 app.js 行数  
+- 日期：2025-11-30 17:31  
+  - 子目标：核心迁移阶段3（自动流程对比缺失渲染稳定性修正）  
+  - 影响范围：自动对比缺失视图重新渲染逻辑（选择变化保留视图）、自动流程事件接线  
+  - 子目标进度：92%（autoCore 渲染/按钮状态修正，保持缺失视图可见）  
+  - 最终目标进度：56%  
+  - app.js 行数：6572  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需允许本地端口绑定）  
+  - 其他备注：修复自动对比缺失勾选时视图被隐藏的问题；通知已发送  
+- 日期：2025-11-30 17:33  
+  - 子目标：核心迁移阶段3（自动流程事件占位精简）  
+  - 影响范围：自动流程占位函数精简（移除未用选择占位），保持 UI 用例通过  
+  - 子目标进度：93%  
+  - 最终目标进度：57%  
+  - app.js 行数：6571  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需允许本地端口绑定）  
+  - 其他备注：微调后通知已发送  
+- 日期：2025-11-30 17:40  
+  - 子目标：核心迁移阶段3（覆盖缺失视图/按钮逻辑下沉 compareCore）  
+  - 影响范围：缺失视图渲染/切换/复制/智能填充按钮状态迁移至 compareCore，app.js 精简；自动缺失卡片同步  
+  - 子目标进度：95%  
+  - 最终目标进度：58%  
+  - app.js 行数：6497  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需允许本地端口绑定）  
+  - 其他备注：缺失视图逻辑统一由 compareCore 承接，减少重复 DOM 操作；通知已发送  
+- 日期：2025-11-30 17:46  
+  - 子目标：核心迁移阶段3（覆盖对比导入导出下沉 compareCore）  
+  - 影响范围：覆盖对比导入/导出逻辑迁移 compareCore，缺失视图/按钮状态与导入导出统一在核心处理  
+  - 子目标进度：96%  
+  - 最终目标进度：59%  
+  - app.js 行数：6441  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需允许本地端口绑定）  
+  - 其他备注：compareCore 现负责缺失视图与覆盖导入导出，app.js 进一步瘦身；通知已发送  
+- 日期：2025-11-30 17:53  
+  - 子目标：核心迁移阶段3（缺失选择处理下沉 compareCore）  
+  - 影响范围：缺失选择/全选、智能填充按钮状态与自动缺失卡片同步迁移至 compareCore；删除 app.js 同类实现  
+  - 子目标进度：97%  
+  - 最终目标进度：60%  
+  - app.js 行数：6441  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需允许本地端口绑定）  
+  - 其他备注：缺失视图所有交互统一核心处理，防止重复；通知已发送  
+- 日期：2025-11-30 17:55  
+  - 子目标：核心迁移阶段3（缺失选择逻辑补充 wrapText 注入）  
+  - 影响范围：compareCore 补充 wrapTextWithRequirement 注入占位，保持覆盖导出兼容  
+  - 子目标进度：97%（功能无变化，注入完整性补齐）  
+  - 最终目标进度：60%  
+  - app.js 行数：6441  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需允许本地端口绑定）  
+  - 其他备注：补齐依赖声明；通知已发送  
+- 日期：2025-11-30 17:58  
+  - 子目标：核心迁移阶段3（对比导入/导出下沉 compareCore，删除 app.js 冗余）  
+  - 影响范围：对比结果导入/导出逻辑迁至 compareCore，缺失视图/覆盖导入导出统一核心；app.js 只做事件接线  
+  - 子目标进度：98%  
+  - 最终目标进度：62%  
+  - app.js 行数：6441  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需允许本地端口绑定）  
+  - 其他备注：compareCore 现接管对比导入/导出并回调自动缺失状态；通知已发送  
+- 日期：2025-11-30 18:25  
+  - 子目标：核心迁移阶段3（调试文件读写下沉 debugCore + 测试端口调整）  
+  - 影响范围：调试 TXT 生成/导入逻辑迁至新增 `debugCore.js`，app.js 去除重复函数；UI 测试默认端口改为 8090 避免占用冲突  
+  - 子目标进度：99%  
+  - 最终目标进度：65%  
+  - app.js 行数：6279  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需允许本地端口绑定）  
+  - 其他备注：新增 debugCore 注入调试占位；Playwright baseURL 采用 127.0.0.1:8090，复用服务器；通知已发送  
+- 日期：2025-11-30 19:42  
+  - 子目标：核心迁移阶段3（原文/清洗输入监听与调试绑定下沉）  
+  - 影响范围：原文/清洗/用例输入监听与调试绑定由 `cleanHandlers.js`/`debugCore` 承接，app.js 精简；UI 测试端口 8090 稳定化  
+  - 子目标进度：99%  
+  - 最终目标进度：67%  
+  - app.js 行数：6293  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，单例重跑消除一次端口响应空缺）；需允许本地端口绑定  
+  - 其他备注：新增 `cleanHandlers.js` 下沉原文入口/清洗监听；偶发 ERR_EMPTY_RESPONSE 通过单例重跑确认正常；通知已发送  
+- 日期：2025-12-01 09:33  
+  - 子目标：核心迁移阶段3（清洗高亮渲染下沉 cleanHandlers）  
+  - 影响范围：`collectEntryRanges`/`renderCleanRawView` 高亮逻辑迁至 `cleanHandlers.js`，app.js 去重；端口 8090 UI 用例回归  
+  - 子目标进度：99%  
+  - 最终目标进度：68%  
+  - app.js 行数：6235  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需本地端口 8090）  
+  - 其他备注：修复 renderAutoRawInfo 重复声明与 renderCleanRawView 缺失导致的初始化中断；通知已发送  
+- 日期：2025-12-01 10:19  
+  - 子目标：核心迁移阶段3（清洗视图与模型辅助下沉 cleanHandlers）  
+  - 影响范围：清洗视图渲染/高亮、清洗结果获取与模型输入构造、自动流程跳转依赖；入口加载顺序（先初始化 cleanHandlers 后 clean）  
+  - 子目标进度：100%  
+  - 最终目标进度：72%  
+  - app.js 行数：5778  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需本地 8090）  
+  - 其他备注：清洗视图/模型辅助函数迁至 `cleanHandlers.js` 并暴露给其他模块；通知已发送  
+- 日期：2025-12-01 10:38  
+  - 子目标：核心迁移阶段3（清洗模型调用/复制下沉 cleanHandlers）  
+  - 影响范围：需求清洗执行（模型调用/本地粗洗）、清洗结果复制、自动流程依赖的清洗入口；入口绑定顺序  
+  - 子目标进度：100%  
+  - 最终目标进度：74%  
+  - app.js 行数：5673  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需本地 8090）  
+  - 其他备注：`runCleaning`/`copyCleaned`/`basicClean` 迁至 `cleanHandlers.js` 并通过注入复用；`python3 notify_feishu.py` 已发送（需网络）  
+- 日期：2025-12-01 10:55  
+  - 子目标：核心迁移阶段3（清洗输入监听下沉 + 事件去重）  
+  - 影响范围：清洗/原文/用例输入监听、清洗按钮事件绑定去重，自动流程依赖的清洗入口  
+  - 子目标进度：100%  
+  - 最终目标进度：75%  
+  - app.js 行数：5670  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需本地 8090）  
+  - 其他备注：输入监听迁至 `cleanHandlers` 并统一注入；移除 app.js 重复事件绑定；notify 已发送  
+- 日期：2025-12-01 11:05  
+  - 子目标：核心迁移阶段3（用例生成跳转/滚动逻辑下沉 casegenCore）  
+  - 影响范围：用例生成入口跳转、进度列表滚动定位、拆分校验状态提示  
+  - 子目标进度：100%  
+  - 最终目标进度：77%  
+  - app.js 行数：5631  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需本地 8090）  
+  - 其他备注：`goToCaseGeneration`/`goCasesGenAndScroll` 逻辑迁至 `casegenCore.js` 并注入依赖，app.js 精简；notify 已发送  
+- 日期：2025-12-01 11:27  
+  - 子目标：核心迁移阶段3（上传/解析链路下沉与 UI 覆盖补强）  
+  - 影响范围：原始需求导入/拖拽、docx 解析、自动流程原文状态、UI 冒烟用例  
+  - 子目标进度：82%  
+  - 最终目标进度：78%  
+  - app.js 行数：5605  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（10/10，新增“原始需求上传与清空”用例，需允许本地 8090 端口）  
+  - 其他备注：upload 模块接管 docx 解析与导入状态，移除 app.js 未定义上传入口；拖拽区支持点击触发文件选择；已运行飞书通知脚本  
+- 日期：2025-12-01 11:38  
+  - 子目标：核心迁移阶段3（临时执行顺序/分页逻辑下沉 tempexecCore）  
+  - 影响范围：临时执行需求/文件/版本顺序维护、分页设置读取、拖拽移动到需求的顺序同步  
+  - 子目标进度：85%  
+  - 最终目标进度：80%  
+  - app.js 行数：5479  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（10/10，需本地 8090 端口，可复跑消除偶发超时）  
+  - 其他备注：tempexecCore 承接需求/文件/版本顺序与分页持久化，app.js 仅注入依赖；保存 order/placement 逻辑从 app.js 移除以继续瘦身；飞书通知需联网  
+- 日期：2025-12-01 11:49  
+  - 子目标：核心迁移阶段3（临时执行分页/页码管理下沉 tempexecCore）  
+  - 影响范围：临时执行分页获取/切换、页码重置、页面大小应用逻辑  
+  - 子目标进度：88%  
+  - 最终目标进度：82%  
+  - app.js 行数：5429  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（10/10，首次偶发 _inited 等待超时，复跑通过，需本地 8090 端口）  
+  - 其他备注：分页 clamping/读写/切换逻辑迁入 tempexecCore，app.js 仅占位注入；临时执行页码函数减少重复，飞书通知需联网运行  
+- 日期：2025-12-02 09:19  
+  - 子目标：核心迁移阶段3（临时执行状态/缺陷/撤销下沉 + 自动流程触发修复）  
+  - 影响范围：临时执行选择/备注/复用/缺陷打开状态、缺陷链接增删改查、撤销栈与搜索筛选迁入 tempexecCore；修复一键执行按钮因缺少数据时跳转功能工作流的问题（改为仅提示不跳页）  
+  - 子目标进度：93%  
+  - 最终目标进度：86%  
+  - app.js 行数：5069  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（10/10，需允许本地 8090 端口）  
+  - 其他备注：一键执行按钮保持在当前页展示告警；迁移后注意 tempexecCore 负责撤销/搜索等状态管理，避免重复定义；通知已发送  
+- 日期：2025-12-01 16:44  
+  - 子目标：核心迁移阶段3（临时执行版本管理/分组逻辑下沉 tempexecCore）  
+  - 影响范围：临时执行版本创建/重命名/删除、版本分组拖拽/需求块重排、版本名校验、快照导入应用版本分配  
+  - 子目标进度：92%  
+  - 最终目标进度：85%  
+  - app.js 行数：5120  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（10/10，需允许本地 8090 端口，初次因端口占用与重复定义修复后重跑通过）  
+  - 其他备注：tempexecCore 新增版本管理/需求分组 API，app.js 清理重复定义避免 _inited 卡住；运行测试前确认无残留 http.server 进程占用 8090 端口；通知需在结论后执行  
+- 日期：2025-12-01 10:01  
+  - 子目标：核心迁移阶段3（compare 覆盖对比与拆分视图下沉）  
+  - 影响范围：覆盖对比/用例覆盖率模型调用、自动流程对比依赖、拆分视图渲染与开关  
+  - 子目标进度：100%  
+  - 最终目标进度：70%  
+  - app.js 行数：6008  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（9/9，需本地端口 8090，首次遇 ERR_EMPTY_RESPONSE 重跑通过）  
+  - 其他备注：compare 覆盖对比/用例覆盖率逻辑迁至 compareCore；拆分视图渲染/开关迁至 splitHandlers；`python3 notify_feishu.py` 已发送  
+- 日期：2025-12-02 09:50  
+  - 子目标：核心迁移阶段3（需求标识工具函数下沉 requirementCore）  
+  - 影响范围：需求标识获取/包装/落库、Feishu 通知依赖的需求名展示；核心依赖注入  
+  - 子目标进度：94%  
+  - 最终目标进度：87%  
+  - app.js 行数：5050  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（10/10，需允许本地 8090 端口，首次运行因端口权限失败后提升权限重试通过）  
+  - 其他备注：需求标识/包装函数改用 requirementCore 输出并删除 app.js 重复实现，保持用例执行与通知体验不变；添加 requirementCore 代理以复用最新 renderAutoRawInfo；`python3 notify_feishu.py` 已发送  
+- 日期：2025-12-02 11:44  
+  - 子目标：UI 自动化覆盖扩展（临时执行拖拽/配置恢复）  
+  - 影响范围：临时执行导入导出、版本/需求盒子拖拽、专注区与快照还原的 Playwright 脚本稳定性  
+  - 子目标进度：100%（tempexec_drag.spec.js 新增文件聚焦、排序、快照导入回归校验并修复断言）  
+  - 最终目标进度：87%（本次仅补充测试，未改动核心逻辑；app.js 行数 4973）  
+  - app.js 行数：4973  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 通过（18/18，含新增临时执行导入导出用例，运行时需允许 8090 端口）；覆盖点包括文件导入导出、全页面按钮状态、拖拽交互、布局/视图以及临时执行进度展示  
+  - 其他备注：快照导入前改用 localStorage 清理+页面 reload，确保配置可在空白态恢复；执行完成后已运行 `python3 notify_feishu.py` 推送通知（需联网）  
+- 日期：2025-12-02 16:20  
+  - 子目标：核心迁移阶段3（临时执行渲染/专注/复用下沉 tempexecCore）  
+  - 影响范围：临时执行导航/视图/概览/分页/复用/专注区/缺陷链接渲染由 tempexecCore 负责，app.js 仅注入 DOM/工具依赖并保留占位  
+  - 子目标进度：96%  
+  - 最终目标进度：88%  
+  - app.js 行数：3809  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui` 失败（启动 python3 -m http.server 绑定端口时权限不足，未拉起 8090 服务，需本地允许端口后重跑）  
+  - 其他备注：补充 tempexecCore init 注入 DOM/escape/滚动与导出配置，移除 app.js 临时执行重复实现并增加安全占位；临时执行搜索/专注区调用统一走 core  
+- 日期：2025-12-03 00:00  
+  - 子目标：临时执行状态渲染修复与 UI 用例补强  
+  - 影响范围：临时执行导航状态颜色（通过/完成用绿，执行未完用黄，执行完有失败/阻塞用红）；导航仅展示未分配用例；进度/拖拽 UI 用例同步调整  
+  - 子目标进度：89%  
+  - 最终目标进度：89%  
+  - app.js 行数：3891  
+  - 自测点与结果：`node --check state.js utils.js app.js bootstrap.js` 通过；`npm run test:ui -- tests/ui/tempexec_progress.spec.js tests/ui/tempexec_drag.spec.js` 通过（需本地 8090 端口）  
+  - 其他备注：临时执行状态刷新时同步导航/版本区；UI 用例校验状态类名；通知待最终结论时再发  
