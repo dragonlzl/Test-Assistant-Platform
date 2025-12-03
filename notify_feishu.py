@@ -66,7 +66,7 @@ def main() -> int:
     webhook_url = (
         webhook_arg
         or webhook_env
-        or "https://open.feishu.cn/open-apis/bot/v2/hook/e83422c4-18dc-4062-9aee-9a83d37abe3b"
+        or "你的飞书webhook url"
     )
     if not webhook_url:
         sys.stderr.write("请通过命令行参数或环境变量 FEISHU_WEBHOOK 提供 webhook URL。\n")
