@@ -541,3 +541,11 @@
   - app.js 行数：2707  
   - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 在提权后全量 21/21 通过（首次因缺少函数报错，补齐后重跑通过）  
   - 其他备注：多次权限请求前按要求尝试运行 `python3 notify_feishu.py`（网络限制下发送失败）；测试需开启本地 8090 端口  
+- 日期：2025-12-03 14:33  
+  - 子目标：核心迁移阶段4（临时执行 API 默认值下沉）  
+  - 影响范围：临时执行 API fallback 统一集中到 tempExecApi 默认表，减少 app.js 冗余绑定；确保导入/分页/复用/缺陷/快照等接口始终可用  
+  - 子目标进度：70%（app.js 进一步压缩至 2708 行）  
+  - 最终目标进度：82%  
+  - app.js 行数：2708  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 提权后全量 21/21 通过  
+  - 其他备注：权限操作前已尝试运行 `python3 notify_feishu.py`（网络受限发送失败），测试需本地 8090 端口  

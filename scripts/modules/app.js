@@ -1865,67 +1865,68 @@
       })
       : null;
     const tempExecApi = tempexecCore ? { ...tempexecCore } : {};
-    const normalizeReusePresets = tempexecCore && tempexecCore.normalizeReusePresets
-      ? tempexecCore.normalizeReusePresets
-      : function(list) { return Array.isArray(list) ? list : []; };
-    const ensureTempExecSelection = (tempExecApi && tempExecApi.ensureTempExecSelection) || function(fileId) {
-      if (!state.tempExecSelections || typeof state.tempExecSelections !== 'object') state.tempExecSelections = {};
-      if (!fileId) return new Set();
-      if (!state.tempExecSelections[fileId]) state.tempExecSelections[fileId] = new Set();
-      return state.tempExecSelections[fileId];
+    const tempExecDefaults = {
+      normalizeReusePresets: function(list) { return Array.isArray(list) ? list : []; },
+      ensureTempExecSelection: function(fileId) {
+        if (!state.tempExecSelections || typeof state.tempExecSelections !== 'object') state.tempExecSelections = {};
+        if (!fileId) return new Set();
+        if (!state.tempExecSelections[fileId]) state.tempExecSelections[fileId] = new Set();
+        return state.tempExecSelections[fileId];
+      },
+      ensureTempExecRemarkOpen: function(fileId) {
+        if (!state.tempExecRemarkOpen || typeof state.tempExecRemarkOpen !== 'object') state.tempExecRemarkOpen = {};
+        if (!fileId) return new Set();
+        if (!state.tempExecRemarkOpen[fileId]) state.tempExecRemarkOpen[fileId] = new Set();
+        return state.tempExecRemarkOpen[fileId];
+      },
+      ensureTempExecReuseOpen: function(fileId) {
+        if (!state.tempExecReuseOpen || typeof state.tempExecReuseOpen !== 'object') state.tempExecReuseOpen = {};
+        if (!fileId) return new Set();
+        if (!state.tempExecReuseOpen[fileId]) state.tempExecReuseOpen[fileId] = new Set();
+        return state.tempExecReuseOpen[fileId];
+      },
+      ensureTempExecDefectOpen: function(fileId) {
+        if (!state.tempExecDefectOpen || typeof state.tempExecDefectOpen !== 'object') state.tempExecDefectOpen = {};
+        if (!fileId) return new Set();
+        if (!state.tempExecDefectOpen[fileId]) state.tempExecDefectOpen[fileId] = new Set();
+        return state.tempExecDefectOpen[fileId];
+      },
+      ensureTempExecReplacement: ensureTempExecReplacement,
+      generateTempExecId: generateTempExecId,
+      renderTempExecView: function() {},
+      renderTempVersionGrid: function() {},
+      renderTempExecNav: function() {},
+      getTempExecFile: function() { return null; },
+      serializeSingleTempExecFile: function(file) { return file || null; },
+      getTempExecPageSize: function() { return defaultTempExecPageSize; },
+      applyTempExecSearch: function(fileId, term, raw) {
+        state.tempExecSearch = { fileId: fileId || '', term: (term || '').trim().toLowerCase(), raw: raw || '' };
+        if (typeof tempExecApi.renderTempExecView === 'function') tempExecApi.renderTempExecView();
+      },
+      applyTempExecPageSize: function(value) { return { size: value, changed: false }; },
+      exportTempExecSnapshot: function() {
+        if (tempExecStatus) setStatus(tempExecStatus, '当前环境暂不支持导出执行页面配置', 'warn');
+      },
+      importTempExecSnapshot: async function() {
+        if (tempExecStatus) setStatus(tempExecStatus, '当前环境暂不支持导入执行页面配置', 'warn');
+      },
+      setTempExecActive: function() {},
+      createTempExecFile: function() { return null; },
+      syncTempExecFocus: function() {},
+      persistTempExecState: function() {},
+      removeTempExecFile: function() {},
+      getCaseExecutionDisplay: function() { return ''; },
     };
-    const ensureTempExecRemarkOpen = (tempExecApi && tempExecApi.ensureTempExecRemarkOpen) || function(fileId) {
-      if (!state.tempExecRemarkOpen || typeof state.tempExecRemarkOpen !== 'object') state.tempExecRemarkOpen = {};
-      if (!fileId) return new Set();
-      if (!state.tempExecRemarkOpen[fileId]) state.tempExecRemarkOpen[fileId] = new Set();
-      return state.tempExecRemarkOpen[fileId];
-    };
-    const ensureTempExecReuseOpen = (tempExecApi && tempExecApi.ensureTempExecReuseOpen) || function(fileId) {
-      if (!state.tempExecReuseOpen || typeof state.tempExecReuseOpen !== 'object') state.tempExecReuseOpen = {};
-      if (!fileId) return new Set();
-      if (!state.tempExecReuseOpen[fileId]) state.tempExecReuseOpen[fileId] = new Set();
-      return state.tempExecReuseOpen[fileId];
-    };
-    const ensureTempExecDefectOpen = (tempExecApi && tempExecApi.ensureTempExecDefectOpen) || function(fileId) {
-      if (!state.tempExecDefectOpen || typeof state.tempExecDefectOpen !== 'object') state.tempExecDefectOpen = {};
-      if (!fileId) return new Set();
-      if (!state.tempExecDefectOpen[fileId]) state.tempExecDefectOpen[fileId] = new Set();
-      return state.tempExecDefectOpen[fileId];
-    };
-    tempExecApi.ensureTempExecSelection = ensureTempExecSelection;
-    tempExecApi.ensureTempExecRemarkOpen = ensureTempExecRemarkOpen;
-    tempExecApi.ensureTempExecReuseOpen = ensureTempExecReuseOpen;
-    tempExecApi.ensureTempExecDefectOpen = ensureTempExecDefectOpen;
-    tempExecApi.normalizeReusePresets = normalizeReusePresets;
-    tempExecApi.ensureTempExecReplacement = ensureTempExecReplacement;
-    tempExecApi.generateTempExecId = generateTempExecId;
-    tempExecApi.renderTempExecView = tempExecApi.renderTempExecView || function() {};
-    tempExecApi.renderTempVersionGrid = tempExecApi.renderTempVersionGrid || function() {};
-    tempExecApi.renderTempExecNav = tempExecApi.renderTempExecNav || function() {};
-    tempExecApi.getTempExecFile = tempExecApi.getTempExecFile || function() { return null; };
-    tempExecApi.serializeSingleTempExecFile = tempExecApi.serializeSingleTempExecFile || function(file) { return file || null; };
-    tempExecApi.getTempExecPageSize = tempExecApi.getTempExecPageSize || function() { return defaultTempExecPageSize; };
-    tempExecApi.applyTempExecSearch = tempExecApi.applyTempExecSearch || function(fileId, term, raw) {
-      state.tempExecSearch = { fileId: fileId || '', term: (term || '').trim().toLowerCase(), raw: raw || '' };
-      if (typeof tempExecApi.renderTempExecView === 'function') tempExecApi.renderTempExecView();
-    };
-    tempExecApi.applyTempExecPageSize = tempExecApi.applyTempExecPageSize || function(value) {
-      return { size: value, changed: false };
-    };
-    tempExecApi.exportTempExecSnapshot = tempExecApi.exportTempExecSnapshot || function() {
-      if (tempExecStatus) setStatus(tempExecStatus, '当前环境暂不支持导出执行页面配置', 'warn');
-    };
-    tempExecApi.importTempExecSnapshot = tempExecApi.importTempExecSnapshot || async function() {
-      if (tempExecStatus) setStatus(tempExecStatus, '当前环境暂不支持导入执行页面配置', 'warn');
-    };
-    tempExecApi.setTempExecActive = tempExecApi.setTempExecActive || function() {};
+    Object.keys(tempExecDefaults).forEach(function(key) {
+      if (!tempExecApi[key]) tempExecApi[key] = tempExecDefaults[key];
+    });
     state.tempExecPageSize = tempExecApi.getTempExecPageSize();
-    createTempExecFile = tempExecApi.createTempExecFile || createTempExecFile;
-    syncTempExecFocus = tempExecApi.syncTempExecFocus || syncTempExecFocus;
-    persistTempExecState = tempExecApi.persistTempExecState || persistTempExecState;
-    setTempExecActive = tempExecApi.setTempExecActive || setTempExecActive;
-    removeTempExecFile = tempExecApi.removeTempExecFile || removeTempExecFile;
-    getCaseExecutionDisplay = tempExecApi.getCaseExecutionDisplay || getCaseExecutionDisplay;
+    createTempExecFile = tempExecApi.createTempExecFile;
+    syncTempExecFocus = tempExecApi.syncTempExecFocus;
+    persistTempExecState = tempExecApi.persistTempExecState;
+    setTempExecActive = tempExecApi.setTempExecActive;
+    removeTempExecFile = tempExecApi.removeTempExecFile;
+    getCaseExecutionDisplay = tempExecApi.getCaseExecutionDisplay;
     renderTempExecView = tempExecApi.renderTempExecView;
     applyTempExecPageSize = tempExecApi.applyTempExecPageSize;
 
