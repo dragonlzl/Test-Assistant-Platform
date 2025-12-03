@@ -1,3 +1,10 @@
 node_modules
 test-results
 .DS_Store
+feishu_config.json
+default_prompts_*.json
+.env
+.env.local
+*.pem
+*.key
+*.crt
