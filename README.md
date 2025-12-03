@@ -22,6 +22,7 @@
 - 本地预览：`python3 -m http.server 8090` 后访问 `http://127.0.0.1:8090/index.html`。
 - 语法检查：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js`。
 - UI 自动化：`npm run test:ui`（如遇拖拽类偶发失败，可使用 `npm run test:ui -- --workers=1` 单线程重跑）。
+- 权限申请：如需请求提权/联网等人工确认，发起请求前先运行 `python3 notify_feishu.py` 向群里提醒（需联网）。
 
 ## 约定
 - JS 兼容 ES2019，禁用可选链/空值合并等新语法；函数/DOM ID 使用 lowerCamelCase。
