@@ -27,3 +27,12 @@
 - JS 兼容 ES2019，禁用可选链/空值合并等新语法；函数/DOM ID 使用 lowerCamelCase。
 - HTML/CSS 2 空格缩进，语句以分号结尾。
 - 新增外部依赖需本地 vendoring，避免直接依赖 CDN/npm 运行时下载。
+
+## 工具脚本
+- 飞书通知：`notify_feishu.py` 发送群机器人消息。webhook 获取顺序为命令行参数 → 环境变量 `FEISHU_WEBHOOK` → 仓库根目录的 `feishu_config.json`。`feishu_config.json` 已加入 `.gitignore`，需自行创建并填入真实 webhook，例如：
+
+```json
+{
+  "webhook": "https://open.feishu.cn/open-apis/bot/v2/hook/REPLACE_WITH_YOUR_WEBHOOK"
+}
+```

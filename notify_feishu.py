@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 飞书机器人通知脚本。
-使用环境变量 FEISHU_WEBHOOK 或命令行参数传入 webhook URL。
-如有自定义根证书，可通过环境变量 FEISHU_CA_BUNDLE 指定证书路径。
+优先使用命令行参数或环境变量 FEISHU_WEBHOOK，若未提供则读取同目录下的
+feishu_config.json（需包含 webhook 字段）。如有自定义根证书，可通过环境变量
+FEISHU_CA_BUNDLE 指定证书路径。
 """
 
 import json
@@ -14,6 +15,7 @@ import urllib.request
 
 
 MESSAGE_TEXT = "任务执行完毕！！！"
+CONFIG_FILENAME = "feishu_config.json"
 
 
 def build_ssl_context() -> ssl.SSLContext:
@@ -40,8 +42,31 @@ def build_ssl_context() -> ssl.SSLContext:
     return ssl.create_default_context()
 
 
-def send_feishu_message(webhook_url: str, text: str) -> None:
-    """向飞书群机器人发送文本消息。"""
+def load_webhook_from_config(config_path: str) -> str:
+    """从配置文件读取 webhook，若不存在则返回空字符串。"""
+    if not os.path.exists(config_path):
+        return ""
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as config_file:
+            config = json.load(config_file)
+    except ValueError as exc:
+        raise ValueError(f"{config_path} 不是有效的 JSON：{exc}")
+    except OSError as exc:
+        raise OSError(f"读取 {config_path} 失败：{exc}")
+
+    if not isinstance(config, dict):
+        raise ValueError(f"{config_path} 应为包含 webhook 字段的 JSON 对象。")
+
+    webhook_url = config.get("webhook", "").strip()
+    if webhook_url:
+        return webhook_url
+
+    return ""
+
+
+def send_feishu_message(webhook_url: str, text: str):
+    """向飞书群机器人发送文本消息，返回 (status_code, response_body)。"""
     payload = {
         "msg_type": "text",
         "content": {"text": text},
@@ -56,29 +81,54 @@ def send_feishu_message(webhook_url: str, text: str) -> None:
     )
     with urllib.request.urlopen(request, timeout=10, context=ssl_context) as response:
         body = response.read().decode("utf-8", errors="replace")
-        if response.status >= 300:
-            raise RuntimeError(f"飞书返回状态码 {response.status}: {body}")
+        http_status = response.status
+
+    if http_status >= 300:
+        raise RuntimeError(f"飞书返回状态码 {http_status}: {body}")
+
+    parsed = None
+    try:
+        parsed = json.loads(body)
+    except ValueError:
+        parsed = None
+
+    if isinstance(parsed, dict):
+        status_code = parsed.get("StatusCode")
+        status_message = parsed.get("StatusMessage", "")
+        if status_code is None and "code" in parsed:
+            status_code = parsed.get("code")
+            status_message = parsed.get("msg", "")
+        if status_code not in (None, 0):
+            raise RuntimeError(f"飞书返回错误码 {status_code}: {status_message or body}")
+
+    return http_status, body
 
 
 def main() -> int:
     webhook_env = os.environ.get("FEISHU_WEBHOOK", "").strip()
     webhook_arg = sys.argv[1].strip() if len(sys.argv) > 1 else ""
+    config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), CONFIG_FILENAME)
+    try:
+        webhook_config = load_webhook_from_config(config_path)
+    except (ValueError, OSError) as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 1
     webhook_url = (
-        webhook_arg
-        or webhook_env
-        or "你的飞书机器人webhook url"
+        webhook_arg or webhook_env or webhook_config
     )
     if not webhook_url:
-        sys.stderr.write("请通过命令行参数或环境变量 FEISHU_WEBHOOK 提供 webhook URL。\n")
+        sys.stderr.write(
+            "请通过命令行参数、环境变量 FEISHU_WEBHOOK，或 feishu_config.json（webhook 字段）提供 webhook URL。\n"
+        )
         return 1
 
     try:
-        send_feishu_message(webhook_url, MESSAGE_TEXT)
+        http_status, resp_body = send_feishu_message(webhook_url, MESSAGE_TEXT)
     except (urllib.error.URLError, RuntimeError) as exc:
         sys.stderr.write(f"发送失败: {exc}\n")
         return 1
 
-    print("飞书通知已发送。")
+    print(f"飞书通知已发送，HTTP {http_status}，响应: {resp_body}")
     return 0
 
 
