@@ -20,12 +20,14 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
     };
+    var normalizeRequirementName = core.normalizeRequirementName || function(name) { return name || ''; };
     var defaultTempExecPageSize = config.defaultTempExecPageSize || 20;
 
     var tempExecDropZone = document.getElementById('tempExecDropZone');
     var tempExecInput = document.getElementById('tempExecInput');
     var tempExecStatus = document.getElementById('tempExecStatus');
     var tempExecNav = document.getElementById('tempExecNav');
+    var tempVersionGrid = document.getElementById('tempVersionGrid');
     var caseTemplateDropdown = document.getElementById('caseTemplateDropdown');
     var caseTemplateToggle = document.getElementById('caseTemplateToggle');
     var caseTemplateMenu = document.getElementById('caseTemplateMenu');
@@ -653,6 +655,287 @@
         navHoverReqName = '';
       });
     }
+
+    function setTempDragContext(ctx) {
+      window.app = window.app || {};
+      window.app.tempDragContext = ctx;
+    }
+
+    function resolveVersionTargetReq(card, clientY) {
+      if (!card) return { req: '', key: '' };
+      var boxes = Array.prototype.slice.call(card.querySelectorAll('[data-temp-req]'));
+      var target = { req: '', key: '' };
+      boxes.some(function(box) {
+        var rect = box.getBoundingClientRect();
+        if (clientY < rect.top + rect.height / 2) {
+          target = { req: box.dataset.tempReq || '', key: box.dataset.tempReqKey || '' };
+          return true;
+        }
+        return false;
+      });
+      if (!target.req && boxes.length) {
+        var last = boxes[boxes.length - 1];
+        target = { req: last.dataset.tempReq || '', key: last.dataset.tempReqKey || '' };
+      }
+      return target;
+    }
+
+    function resolveVersionFileInsertTarget(reqBox, clientY) {
+      if (!reqBox) return '';
+      var rows = Array.prototype.slice.call(reqBox.querySelectorAll('[data-temp-file]'));
+      var targetId = '';
+      rows.some(function(row) {
+        var rect = row.getBoundingClientRect();
+        if (clientY < rect.top + rect.height / 2) {
+          targetId = row.dataset.tempFile || '';
+          return true;
+        }
+        return false;
+      });
+      return targetId;
+    }
+
+    if (tempVersionGrid) {
+      tempVersionGrid.addEventListener('dragstart', function(e) {
+        var targetFile = e.target.closest('[data-temp-file]');
+        var targetReq = e.target.closest('[data-temp-req]');
+        var targetVer = e.target.closest('[data-temp-version]');
+        if (!targetFile && !targetReq && !targetVer) return;
+        if (!e.dataTransfer) return;
+        e.dataTransfer.effectAllowed = 'move';
+        if (targetFile) {
+          e.dataTransfer.setData('text/plain', targetFile.dataset.tempFile || '');
+        } else if (targetReq && targetReq.dataset.tempReq) {
+          var payload = [
+            targetReq.dataset.tempReq || '',
+            targetReq.dataset.tempReqKey || '',
+            targetReq.dataset.tempVersionGroup || '',
+          ].join('||');
+          e.dataTransfer.setData('text/temp-req-version', payload);
+          e.dataTransfer.setData('text/temp-req', targetReq.dataset.tempReq);
+          e.dataTransfer.setData('text/temp-req-key', targetReq.dataset.tempReqKey || '');
+        } else if (targetVer && targetVer.dataset.tempVersion) {
+          e.dataTransfer.setData('text/temp-version', targetVer.dataset.tempVersion);
+        }
+      });
+      tempVersionGrid.addEventListener('dragover', function(e) {
+        var card = e.target.closest('[data-temp-version]');
+        if (card) {
+          e.preventDefault();
+          card.classList.add('dragover');
+        }
+        var reqBox = e.target.closest('[data-temp-req]');
+        if (reqBox) {
+          e.preventDefault();
+          reqBox.classList.add('dragover');
+        }
+      });
+      tempVersionGrid.addEventListener('dragleave', function(e) {
+        var card = e.target.closest('[data-temp-version]');
+        if (card) card.classList.remove('dragover');
+        var reqBox = e.target.closest('[data-temp-req]');
+        if (reqBox) reqBox.classList.remove('dragover');
+      });
+      tempVersionGrid.addEventListener('drop', function(e) {
+        var card = e.target.closest('[data-temp-version]');
+        if (!card) return;
+        e.preventDefault();
+        card.classList.remove('dragover');
+        var reqBox = e.target.closest('[data-temp-req]');
+        if (reqBox) reqBox.classList.remove('dragover');
+        if (tempMouseDragFileId && tempMouseDragFromNav) {
+          var dropReq = reqBox && reqBox.dataset ? reqBox.dataset.tempReq : '';
+          var pendingFileId = tempMouseDragFileId;
+          tempMouseDragFileId = '';
+          tempMouseDragFromNav = false;
+          if (api.getTempExecFile && api.getTempExecFile(pendingFileId)) {
+            if (typeof api.moveTempExecFileWithinVersion === 'function') {
+              api.moveTempExecFileWithinVersion(pendingFileId, card.dataset.tempVersion, dropReq || '', '');
+            } else if (typeof api.moveTempExecToVersion === 'function') {
+              api.moveTempExecToVersion(pendingFileId, card.dataset.tempVersion);
+            }
+            return;
+          }
+        }
+        var dataTransfer = e.dataTransfer || null;
+        var verId = dataTransfer ? dataTransfer.getData('text/temp-version') : '';
+        if (verId) {
+          if (api.reorderTempVersion) api.reorderTempVersion(verId, card.dataset.tempVersion);
+          return;
+        }
+        var reqMove = dataTransfer ? dataTransfer.getData('text/temp-req') : '';
+        var reqKeyMove = dataTransfer ? dataTransfer.getData('text/temp-req-key') : '';
+        var reqPayload = dataTransfer ? dataTransfer.getData('text/temp-req-version') : '';
+        var payloadText = reqPayload || (reqMove ? [reqMove, reqKeyMove || '', card.dataset.tempVersion || ''].join('||') : '');
+        if (payloadText) {
+          var parts = payloadText.split('||');
+          var srcReq = parts[0] || '';
+          var srcKey = parts[1] || '';
+          var srcVer = parts[2] || '';
+          var targetResolved = resolveVersionTargetReq(card, e.clientY);
+          var tgtKey = reqBox && reqBox.dataset.tempReqKey ? reqBox.dataset.tempReqKey : targetResolved.key;
+          var tgtReq = reqBox && reqBox.dataset.tempReq ? reqBox.dataset.tempReq : targetResolved.req;
+          var targetVersion = card.dataset.tempVersion;
+          var targetObj = api.getTempVersion ? api.getTempVersion(targetVersion) : null;
+          var hasReqInVersion = targetObj && api.getVersionRequirementBlocks
+            ? api.getVersionRequirementBlocks(targetObj).some(function(block) {
+                return (block.key && block.key === srcKey) || (normalizeRequirementName(block.req) === normalizeRequirementName(srcReq));
+              })
+            : false;
+          if (srcVer === card.dataset.tempVersion && (srcKey || srcReq)) {
+            if (hasReqInVersion && api.reorderVersionRequirement) {
+              api.reorderVersionRequirement(card.dataset.tempVersion, srcKey || srcReq, tgtKey || tgtReq || '');
+            } else if (srcReq && api.moveRequirementToVersion) {
+              api.moveRequirementToVersion(srcReq, card.dataset.tempVersion, tgtKey || tgtReq || '');
+            }
+            return;
+          }
+          if (srcReq && api.moveRequirementToVersion) {
+            api.moveRequirementToVersion(srcReq, card.dataset.tempVersion, tgtKey || tgtReq || '');
+            return;
+          }
+        }
+        var ids = dataTransfer ? dataTransfer.getData('text/plain') : '';
+        if (!ids && window.app && window.app.tempDragContext && window.app.tempDragContext.type === 'file') {
+          ids = window.app.tempDragContext.fileId || '';
+        }
+        if (ids) {
+          var resolvedReq = reqBox && reqBox.dataset.tempReq ? reqBox.dataset.tempReq : resolveVersionTargetReq(card, e.clientY).req;
+          var beforeId = resolveVersionFileInsertTarget(reqBox, e.clientY);
+          if (!beforeId) {
+            var fileRow = e.target.closest('[data-temp-file]');
+            beforeId = fileRow && fileRow.dataset.tempFile ? fileRow.dataset.tempFile : '';
+          }
+          var idArr = ids.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+          var firstFile = idArr.length && api.getTempExecFile ? api.getTempExecFile(idArr[0]) : null;
+          var srcReqName = normalizeRequirementName(firstFile && firstFile.requirement) || '';
+          var tgtReqName = normalizeRequirementName(resolvedReq) || srcReqName;
+          if (idArr.length && srcReqName && tgtReqName && srcReqName !== tgtReqName) {
+            var confirmedMove = window.confirm('确定将用例从【' + srcReqName + '】移动到【' + tgtReqName + '】吗？');
+            if (!confirmedMove) return;
+          }
+          if (api.moveTempExecFileWithinVersion) {
+            api.moveTempExecFileWithinVersion(ids, card.dataset.tempVersion, resolvedReq, beforeId || '');
+          } else if (api.moveTempExecToVersion) {
+            api.moveTempExecToVersion(ids, card.dataset.tempVersion);
+          }
+        }
+      });
+      tempVersionGrid.addEventListener('click', function(e) {
+        var removeBtn = e.target.closest('[data-temp-version-remove]');
+        if (removeBtn && api.removeTempVersion) api.removeTempVersion(removeBtn.dataset.tempVersionRemove);
+        var groupRemoveBtn = e.target.closest('[data-temp-group-remove]');
+        if (groupRemoveBtn && api.removeTempGroupFromVersion) {
+          api.removeTempGroupFromVersion(groupRemoveBtn.dataset.tempGroupRemove, groupRemoveBtn.dataset.tempGroupIds || '');
+          return;
+        }
+        var renameBtn = e.target.closest('[data-temp-version-rename]');
+        if (renameBtn && api.renameTempVersion) {
+          api.renameTempVersion(renameBtn.dataset.tempVersionRename);
+          return;
+        }
+        var fileBtn = e.target.closest('[data-temp-file]');
+        if (fileBtn && typeof api.setTempExecActive === 'function') {
+          var fileId = fileBtn.dataset.tempFile;
+          if (fileId && api.getTempExecFile && api.getTempExecFile(fileId)) {
+            api.setTempExecActive(fileId);
+            switchTab('tempexec');
+            if (scrollElementIntoView && tempExecViewSection) {
+              scrollElementIntoView(tempExecViewSection, 'smooth', 120);
+            } else if (tempExecViewSection && tempExecViewSection.scrollIntoView) {
+              tempExecViewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+          }
+        }
+      });
+    }
+
+    function handleTempFileDragStart(e) {
+      if (!e) return;
+      setTempDragContext(null);
+      var fileBtn = e.target.closest('[data-temp-file]');
+      if (fileBtn) {
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', fileBtn.dataset.tempFile || '');
+        }
+        var file = api.getTempExecFile ? api.getTempExecFile(fileBtn.dataset.tempFile) : null;
+        var req = normalizeRequirementName(file && file.requirement) || fileBtn.dataset.tempReq || '';
+        setTempDragContext({
+          type: 'file',
+          fileId: fileBtn.dataset.tempFile || '',
+          requirement: req,
+          versionId: file && file.versionId ? file.versionId : '',
+        });
+        return;
+      }
+      var reqBox = e.target.closest('[data-temp-req]');
+      if (reqBox && reqBox.dataset.tempReq) {
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/temp-req', reqBox.dataset.tempReq);
+          var rect = reqBox.getBoundingClientRect();
+          var ghost = reqBox.cloneNode(true);
+          ghost.style.position = 'fixed';
+          ghost.style.top = '-9999px';
+          ghost.style.left = '-9999px';
+          ghost.style.width = rect.width + 'px';
+          ghost.style.maxWidth = rect.width + 'px';
+          ghost.style.boxSizing = 'border-box';
+          document.body.appendChild(ghost);
+          var offsetX = Math.max(0, e.clientX - rect.left);
+          var offsetY = Math.max(0, e.clientY - rect.top);
+          e.dataTransfer.setDragImage(ghost, offsetX, offsetY);
+          setTimeout(function() {
+            if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+          }, 0);
+        }
+        setTempDragContext({ type: 'req', req: reqBox.dataset.tempReq, versionId: reqBox.dataset.tempVersionGroup || '' });
+        return;
+      }
+      var versionCard = e.target.closest('[data-temp-version]');
+      if (versionCard && versionCard.dataset.tempVersion) {
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/temp-version', versionCard.dataset.tempVersion);
+        }
+        setTempDragContext({ type: 'version', versionId: versionCard.dataset.tempVersion });
+      }
+    }
+
+    document.addEventListener('dragstart', handleTempFileDragStart);
+    var tempMouseDragFileId = '';
+    var tempMouseDragFromNav = false;
+    document.addEventListener('mousedown', function(e) {
+      var fileRow = e.target.closest('[data-temp-file]');
+      if (fileRow && fileRow.dataset.tempFile) {
+        tempMouseDragFileId = fileRow.dataset.tempFile;
+        tempMouseDragFromNav = Boolean(tempExecNav && tempExecNav.contains(fileRow));
+      } else {
+        tempMouseDragFileId = '';
+        tempMouseDragFromNav = false;
+      }
+    });
+    document.addEventListener('mouseup', function(e) {
+      if (!tempMouseDragFileId || !tempMouseDragFromNav) return;
+      var versionBody = e.target.closest('[data-temp-version] .temp-version-body');
+      var versionCard = e.target.closest('[data-temp-version]');
+      if (versionCard && versionCard.dataset && versionCard.dataset.tempVersion && versionBody) {
+        var fileId = tempMouseDragFileId;
+        tempMouseDragFileId = '';
+        tempMouseDragFromNav = false;
+        if (api.getTempExecFile && !api.getTempExecFile(fileId)) return;
+        var resolvedReq = versionBody.dataset && versionBody.dataset.tempReq ? versionBody.dataset.tempReq : '';
+        if (typeof api.moveTempExecFileWithinVersion === 'function') {
+          api.moveTempExecFileWithinVersion(fileId, versionCard.dataset.tempVersion, resolvedReq, '');
+        } else if (typeof api.moveTempExecToVersion === 'function') {
+          api.moveTempExecToVersion(fileId, versionCard.dataset.tempVersion);
+        }
+        return;
+      }
+      tempMouseDragFileId = '';
+      tempMouseDragFromNav = false;
+    });
 
     if (tempFocusBlock && api.getTempExecFile && api.setTempExecActive) {
       tempFocusBlock.addEventListener('click', function(e) {

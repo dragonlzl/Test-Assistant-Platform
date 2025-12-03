@@ -32,6 +32,7 @@
 3. UI 自动化要求：先审视现有脚本是否覆盖本次改动；不足则补充/调整用例，满足则直接使用；运行 UI 用例并记录结果（禁止触发真实模型请求，需 stub/阻断外部 API）。  
 4. 执行 `python3 notify_feishu.py` 进行通知（脚本已可直接调用，需联网）。  
 5. 将上述信息与自测结果写入本文件的 **进度记录**，保持最新一条在最下方。
+6. 如因权限/提权请求需要人工确认，提交提权请求前同步调用 `python3 notify_feishu.py` 发送提醒（需联网）。
 
 ### 用例执行模块重构约束（必须遵守）
 - 重构临时/用例执行模块时，必须保持现有交互逻辑、页面内容展示、布局与样式完全一致；如与重构方案冲突，优先保证当前体验和功能不变，可仅做最小化搬迁。
@@ -524,3 +525,11 @@
   - app.js 行数：3731  
   - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（20/20，全量 UI 用例，需本地 8090 端口）  
   - 其他备注：已运行 `python3 notify_feishu.py` 通知；需注意后续迁移时保持工具函数声明在调用前，避免再触发初始化报错  
+- 日期：2025-12-03 11:53  
+  - 子目标：核心迁移阶段4（临时执行导入/状态/撤销/拖拽下沉 tempexecCore）  
+  - 影响范围：临时执行文件/需求导入与快照加载、撤销栈、分页与拖拽排序、版本网格拖拽事件、执行结果/缺陷/选择状态更新；app.js 初始化依赖注入与拖拽接线调整  
+  - 子目标进度：45%（临时执行核心逻辑已大幅下沉，后续需继续压缩视图占位以逼近 2200 行目标）  
+  - 最终目标进度：77%（app.js 由 9107 行降至 3042 行，距离 1200 行仍需继续精简）  
+  - app.js 行数：3042  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 首次因 http.server 返回 `ERR_EMPTY_RESPONSE` 中断，复跑提权后全量 20/20 通过（需本地 8090 端口）  
+  - 其他备注：tempexecCore 接管导入/创建/加载/撤销/分页/拖拽与执行结果同步，tempexec.js 完整接线版本网格与拖拽事件，app.js 删除重复声明并改用惰性依赖注入；飞书通知可在本次结论后直接调用  

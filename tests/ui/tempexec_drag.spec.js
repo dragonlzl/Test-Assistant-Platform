@@ -151,4 +151,56 @@ test.describe('执行视图导入导出与拖拽', () => {
     await expect(page.locator('#tempExecStatus')).toContainText('执行页面配置已导入', { timeout: 5000 });
     await expect(page.locator('#tempExecNav .temp-req-row[data-temp-file]')).toHaveCount(2);
   });
+
+  test('从版本拖回需求区不改变版本排序', async ({ page }) => {
+    await page.evaluate(() => {
+      ['usecase-temp-exec-v1', 'tempexec-focus-v1', 'tempexec-page-size'].forEach(function(key) {
+        window.localStorage.removeItem(key);
+      });
+    });
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    page.__promptAnswers = [];
+    await page.click('[data-tab-btn="tempexec"]');
+    await page.evaluate(() => {
+      window.app.state.requirementLabel = '版本排序需求';
+      window.app.state.requirementLabelSource = 'ui-test';
+    });
+
+    const execFile = {
+      name: 'req-sort.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify([
+        { module: '模块A', title: '登录', steps: '步骤1', expected: '成功' },
+        { module: '模块A', title: '退出', steps: '步骤2', expected: '成功' },
+      ], null, 2)),
+    };
+    await page.setInputFiles('#tempExecInput', execFile);
+    await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
+    const navReqList = page.locator('#tempExecNav [data-temp-req]');
+    expect(await navReqList.count()).toBeGreaterThan(0);
+
+    page.__promptAnswers.push('版本A');
+    await page.click('#createTempVersionBtn');
+    page.__promptAnswers.push('版本B');
+    await page.click('#createTempVersionBtn');
+    await expect(page.locator('#tempVersionGrid [data-temp-version]')).toHaveCount(2);
+
+    const versionOrderBefore = await page.$$eval('#tempVersionGrid [data-temp-version] .title', (nodes) => nodes.map((n) => (n.textContent || '').trim()));
+    expect(versionOrderBefore).toHaveLength(2);
+
+    const navReq = navReqList.first();
+    await navReq.scrollIntoViewIfNeeded();
+    const firstVersionBody = page.locator('#tempVersionGrid [data-temp-version]').first().locator('.temp-version-body');
+    await firstVersionBody.scrollIntoViewIfNeeded();
+    await navReq.dragTo(firstVersionBody, { timeout: 10000 });
+    expect(await firstVersionBody.locator('[data-temp-req]').count()).toBeGreaterThan(0);
+
+    const versionReqBox = firstVersionBody.locator('[data-temp-req]').first();
+    const navPool = page.locator('[data-temp-req-pool]');
+    await versionReqBox.dragTo(navPool);
+
+    const versionOrderAfter = await page.$$eval('#tempVersionGrid [data-temp-version] .title', (nodes) => nodes.map((n) => (n.textContent || '').trim()));
+    expect(versionOrderAfter).toEqual(versionOrderBefore);
+  });
 });
