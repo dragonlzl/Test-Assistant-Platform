@@ -177,6 +177,9 @@
     handleMissingSelectionChange = noop,
     handleMissingSelectAll = noop,
     smartFillMissingSuggestions = noop,
+    notifyFeishuWorkflowSuccess = noop,
+    notifyFeishuCoverageFailure = noop,
+    notifyFeishuClarificationNeeded = noop,
     generateCasesForModule = asyncNoop,
     topUpCasesForModule = asyncNoop,
     exportCaseGenerationResults = noop,
@@ -267,122 +270,41 @@
       importDefaultPrompts: async function noopImportPrompts() {},
     };
     const {
-      loadCustomDefaultPrompts,
-      saveDefaultPrompts,
-      exportDefaultPrompts,
-      importDefaultPrompts,
-    } = assignHandlersModule || assignHandlersFallback;
-    loadCustomDefaultPrompts();
+    loadCustomDefaultPrompts,
+    saveDefaultPrompts,
+    exportDefaultPrompts,
+    importDefaultPrompts,
+  } = assignHandlersModule || assignHandlersFallback;
+  loadCustomDefaultPrompts();
 
-    const requirementCoreModule = window.app.requirementCore && typeof window.app.requirementCore.init === 'function'
-      ? window.app.requirementCore.init({
-        state,
-        utils: { stripCodeFence },
-        handlers: { renderAutoRawInfo: function renderAutoRawInfoProxy() { renderAutoRawInfo(); } },
-      })
+  const requirementCoreModule = window.app.requirementCore && typeof window.app.requirementCore.init === 'function'
+    ? window.app.requirementCore.init({
+      state,
+      utils: { stripCodeFence },
+      handlers: { renderAutoRawInfo: function renderAutoRawInfoProxy() { renderAutoRawInfo(); } },
+    })
       : null;
-    const reqCore = requirementCoreModule || {};
-
-    const normalizeRequirementName = reqCore.normalizeRequirementName || function(name) {
-      if (!name) return '';
-      return String(name).trim();
-    };
-    const stripRequirementHeader = reqCore.stripRequirementHeader || function(text) {
-      if (!text) return '';
-      const lines = String(text).split(/\r?\n/);
-      if (lines.length && /^#需求标识：/.test(lines[0].trim())) return lines.slice(1).join('\n');
-      return String(text);
-    };
-    const setRequirementLabel = reqCore.setRequirementLabel || function(label, source) {
-      const normalized = normalizeRequirementName(label);
-      if (!normalized) return '';
-      state.requirementLabel = normalized;
-      if (source) state.requirementLabelSource = source;
-      renderAutoRawInfo();
-      return normalized;
-    };
-    const getRequirementLabel = reqCore.getRequirementLabel || function(allowFallback) {
-      const label = state.requirementLabel || normalizeRequirementName(state.lastRawImportName);
-      if (label) return label;
-      if (allowFallback === false) return '';
-      return '当前需求';
-    };
-    const buildRequirementPrompt = reqCore.buildRequirementPrompt || function(text) {
-      const suffix = '请填写本次需求名称，作为需求标识（不可为空）';
-      return text && text.trim() ? `${text}\n${suffix}` : suffix;
-    };
-    const ensureRequirementLabel = reqCore.ensureRequirementLabel || function(promptText) {
-      const existing = getRequirementLabel(false);
-      if (existing) return existing;
-      const text = window.prompt(buildRequirementPrompt(promptText));
-      if (!text) return '';
-      return setRequirementLabel(text, 'manual');
-    };
-    const promptRequirementLabel = reqCore.promptRequirementLabel || function(promptText) {
-      const current = getRequirementLabel(false);
-      const text = window.prompt(buildRequirementPrompt(promptText), current || '');
-      if (!text) return '';
-      return setRequirementLabel(text, 'manual');
-    };
-    const promptTempExecRequirement = reqCore.promptTempExecRequirement || function(fileName, fallbackLabel) {
-      const base = normalizeRequirementName(fallbackLabel || '')
-        || normalizeRequirementName(getRequirementLabel(false))
-        || normalizeRequirementName((fileName || '').replace(/\.[^.]+$/, ''))
-        || '';
-      const input = window.prompt(`请输入需求标识（用于区分执行用例），文件：${fileName || ''}`, base);
-      if (!input) return '';
-      return setRequirementLabel(normalizeRequirementName(input), 'import');
-    };
-    const formatCompactTimestamp = reqCore.formatCompactTimestamp || function() {
-      const d = new Date();
-      const pad = function(n) { return n.toString().padStart(2, '0'); };
-      return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-    };
-    const wrapDataWithRequirement = reqCore.wrapDataWithRequirement || function(data, type) {
-      const wrapped = { requirement: getRequirementLabel(true), data };
-      if (data && typeof data === 'object' && !Array.isArray(data) && Object.prototype.hasOwnProperty.call(data, 'data')) {
-        wrapped.data = data.data;
-      }
-      if (type) wrapped.type = type;
-      return wrapped;
-    };
-    const unwrapRequirementPayload = reqCore.unwrapRequirementPayload || function(rawText) {
-      const stripped = stripCodeFence(rawText || '').trim();
-      return { payload: stripped, requirement: '', type: '' };
-    };
-    const extractRequirementLabelFromText = reqCore.extractRequirementLabelFromText || function() { return ''; };
-    const wrapTextWithRequirement = reqCore.wrapTextWithRequirement || function(text, type) {
-      const stripped = stripCodeFence(stripRequirementHeader(text || ''));
-      if (!stripped) return '';
-      try {
-        const parsed = JSON.parse(stripped);
-        return JSON.stringify(wrapDataWithRequirement(parsed, type), null, 2);
-      } catch (err) {
-        const header = [`#需求标识：${getRequirementLabel(true)}`];
-        if (type) header.push(`#类型：${type}`);
-        return `${header.join('\n')}\n${stripped}`;
-      }
-    };
-    const getRequirementDisplayName = reqCore.getRequirementDisplayName || function() { return getRequirementLabel(true); };
-    const getSafeRequirementSlug = reqCore.getSafeRequirementSlug || function() {
-      return (getRequirementLabel(true) || 'requirement').replace(/[\\/:*?"<>|]/g, '_');
-    };
-
-    async function notifyFeishuCoverageFailure() {
-      if (!state.autoRunning || !getFeishuWebhookUrl()) return;
-      await postFeishuMessage(`需求：${getRequirementDisplayName()}，清洗覆盖率不足100%，需手动重新清洗。`);
+    if (!requirementCoreModule) {
+      throw new Error('requirementCore 未加载');
     }
-
-    async function notifyFeishuWorkflowSuccess() {
-      if (!getFeishuWebhookUrl()) return;
-      await postFeishuMessage('全流程执行成功，请前往工具查看结果！！！');
-    }
-
-    async function notifyFeishuClarificationNeeded() {
-      if (!state.autoRunning || !state.autoRequireClarifications) return;
-      if (!getFeishuWebhookUrl()) return;
-      await postFeishuMessage('请前往工具，进行需求澄清，确认澄清结果后可继续执行。');
-    }
+    const requirementApi = requirementCoreModule;
+    const {
+      normalizeRequirementName,
+      stripRequirementHeader,
+      setRequirementLabel,
+      getRequirementLabel,
+      buildRequirementPrompt,
+      ensureRequirementLabel,
+      promptRequirementLabel,
+      promptTempExecRequirement,
+      formatCompactTimestamp,
+      wrapDataWithRequirement,
+      unwrapRequirementPayload,
+      extractRequirementLabelFromText,
+      wrapTextWithRequirement,
+      getRequirementDisplayName,
+      getSafeRequirementSlug,
+    } = requirementApi;
 
     const splitCore = window.app && window.app.splitCore && typeof window.app.splitCore.init === 'function'
       ? window.app.splitCore.init({ moduleFieldAliases, normalizeRequirementName, unwrapRequirementPayload })
@@ -412,18 +334,6 @@
       renderAutoRawInfo();
       renderCleanRawView(state.cleanViewSelection);
       updateFlowStatus();
-    }
-
-    function getNestedValue(source, path) {
-      if (!path || !path.length) return source;
-      let current = source;
-      for (let i = 0; i < path.length; i += 1) {
-        if (current === undefined || current === null) {
-          return undefined;
-        }
-        current = current[path[i]];
-      }
-      return current;
     }
     const modelClientService = window.app && window.app.services && window.app.services.modelClient;
 
@@ -996,97 +906,64 @@
         },
       })
       : null;
-    const clampCoveragePercent = compareCore && compareCore.clampCoveragePercent
-      ? compareCore.clampCoveragePercent
-      : function(value) {
-        const num = Number(value);
-        if (!Number.isFinite(num)) return null;
-        return Math.max(0, Math.min(100, Math.round(num)));
+    const compareApi = compareCore || {};
+    const clampCoveragePercent = compareApi.clampCoveragePercent || function(value) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return null;
+      return Math.max(0, Math.min(100, Math.round(num)));
+    };
+    const buildSingleModulePayload = compareApi.buildSingleModulePayload || function(module, idx) {
+      return {
+        json: '',
+        title: module && module.title ? module.title : `模块${idx + 1}`,
       };
-    const buildSingleModulePayload = compareCore && compareCore.buildSingleModulePayload
-      ? compareCore.buildSingleModulePayload
-      : function(module, idx) {
-        const title = module && module.title ? module.title : `模块${idx + 1}`;
-        const scenarios = module && Array.isArray(module.scenarios) ? module.scenarios : [];
-        const points = module && Array.isArray(module.points) ? module.points : [];
-        const coupled = module && Array.isArray(module.coupled) ? module.coupled : [];
-        return {
-          json: JSON.stringify([{
-            module: title,
-            key_scenarios: scenarios,
-            test_points: points,
-            coupled_modules: coupled,
-          }], null, 2),
-          title,
-        };
-      };
-    const aggregateModuleCompareResults = compareCore && compareCore.aggregateModuleCompareResults
-      ? compareCore.aggregateModuleCompareResults
-      : function() { return { coverage: null, missing: [], extra: [] }; };
-    const parseModuleCompareResponse = compareCore && compareCore.parseModuleCompareResponse
-      ? compareCore.parseModuleCompareResponse
-      : function(content, moduleTitle) {
-        const rawContent = stripCodeFence(content);
-        const jsonOnly = extractJsonPayload(rawContent);
-        const payload = jsonOnly || rawContent;
-        const data = JSON.parse(payload);
-        return { module: moduleTitle, coverage: clampCoveragePercent(data.coverage), missing: data.missing || [], extra: data.extra || [] };
-      };
-    const formatMissingRequirement = compareCore && compareCore.formatMissingRequirement
-      ? compareCore.formatMissingRequirement
-      : function(item) {
-        if (item === undefined || item === null) return '-';
-        if (typeof item === 'string') return item.trim() || '-';
-        if (typeof item === 'object') {
-          try {
-            if (item.module || item.title) {
-              const parts = [];
-              if (item.module || item.title) parts.push(`模块：${item.module || item.title}`);
-              if (Array.isArray(item.key_scenarios) && item.key_scenarios.length) parts.push(`场景：${item.key_scenarios.join('，')}`);
-              if (Array.isArray(item.test_points) && item.test_points.length) parts.push(`要点：${item.test_points.join('，')}`);
-              if (Array.isArray(item.coupled_modules) && item.coupled_modules.length) parts.push(`耦合：${item.coupled_modules.join('，')}`);
-              return parts.join('；') || JSON.stringify(item);
-            }
-            return JSON.stringify(item);
-          } catch (err) {
-            return String(item);
-          }
-        }
-        return String(item);
-      };
-    const isCoveragePayload = compareCore && compareCore.isCoveragePayload
-      ? compareCore.isCoveragePayload
-      : function(data) {
-        if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
-        const hasCoverage = Object.prototype.hasOwnProperty.call(data, 'coverage');
-        const hasMissing = Object.prototype.hasOwnProperty.call(data, 'missing');
-        const hasExtra = Object.prototype.hasOwnProperty.call(data, 'extra');
-        return hasCoverage && (hasMissing || hasExtra);
-      };
-    const parseMissingModules = compareCore && compareCore.parseMissingModules
-      ? compareCore.parseMissingModules
-      : function() { return []; };
-    const buildMissingRows = compareCore && compareCore.buildMissingRows
-      ? compareCore.buildMissingRows
-      : function() { return []; };
-    const pickMissingSelections = compareCore && compareCore.pickMissingSelections
-      ? compareCore.pickMissingSelections
-      : function() { return []; };
-    if (compareCore) {
-      if (compareCore.refreshMissingSmartFillButton) refreshMissingSmartFillButton = compareCore.refreshMissingSmartFillButton;
-      if (compareCore.updateMissingView) updateMissingView = compareCore.updateMissingView;
-      if (compareCore.toggleMissingView) toggleMissingView = compareCore.toggleMissingView;
-      if (compareCore.refreshMissingSelectionUI) refreshMissingSelectionUI = compareCore.refreshMissingSelectionUI;
-      if (compareCore.copyMissingJson) copyMissingJson = compareCore.copyMissingJson;
-      if (compareCore.exportCasesCoverage) exportCasesCoverage = compareCore.exportCasesCoverage;
-      if (compareCore.importCasesCoverage) importCasesCoverage = compareCore.importCasesCoverage;
-      if (compareCore.exportCompareResult) exportCompareResult = compareCore.exportCompareResult;
-      if (compareCore.importCompareResult) importCompareResult = compareCore.importCompareResult;
-      if (compareCore.compareCoverage) compareCoverage = compareCore.compareCoverage;
-      if (compareCore.compareCasesCoverage) compareCasesCoverage = compareCore.compareCasesCoverage;
-      if (compareCore.extractCompareResultData) extractCompareResultData = compareCore.extractCompareResultData;
-      if (compareCore.extractCoverageFromCompareResult) extractCoverageFromCompareResult = compareCore.extractCoverageFromCompareResult;
-    }
+    };
+    const aggregateModuleCompareResults = compareApi.aggregateModuleCompareResults || function() { return { coverage: null, missing: [], extra: [] }; };
+    const parseModuleCompareResponse = compareApi.parseModuleCompareResponse || function(content, moduleTitle) {
+      const payload = extractJsonPayload(stripCodeFence(content));
+      const data = payload ? JSON.parse(payload) : {};
+      return { module: moduleTitle, coverage: clampCoveragePercent(data.coverage), missing: data.missing || [], extra: data.extra || [] };
+    };
+    const formatMissingRequirement = compareApi.formatMissingRequirement || function(item) {
+      if (item === undefined || item === null) return '-';
+      if (typeof item === 'string') return item.trim() || '-';
+      return String(item);
+    };
+    const isCoveragePayload = compareApi.isCoveragePayload || function(data) {
+      return !!(data && typeof data === 'object' && Object.prototype.hasOwnProperty.call(data, 'coverage'));
+    };
+    const parseMissingModules = compareApi.parseMissingModules || emptyArr;
+    const buildMissingRows = compareApi.buildMissingRows || emptyArr;
+    const pickMissingSelections = compareApi.pickMissingSelections || emptyArr;
+    ({
+      refreshMissingSmartFillButton,
+      updateMissingView,
+      toggleMissingView,
+      refreshMissingSelectionUI,
+      copyMissingJson,
+      exportCasesCoverage,
+      importCasesCoverage,
+      exportCompareResult,
+      importCompareResult,
+      compareCoverage,
+      compareCasesCoverage,
+      extractCompareResultData,
+      extractCoverageFromCompareResult,
+    } = Object.assign({
+      refreshMissingSmartFillButton,
+      updateMissingView,
+      toggleMissingView,
+      refreshMissingSelectionUI,
+      copyMissingJson,
+      exportCasesCoverage,
+      importCasesCoverage,
+      exportCompareResult,
+      importCompareResult,
+      compareCoverage,
+      compareCasesCoverage,
+      extractCompareResultData,
+      extractCoverageFromCompareResult,
+    }, compareApi));
 
     const debugCore = window.app && window.app.debugCore && typeof window.app.debugCore.init === 'function'
       ? window.app.debugCore.init({

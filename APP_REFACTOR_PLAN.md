@@ -637,3 +637,19 @@
   - app.js 行数：2193  
   - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 提权后全量 22/22 通过（需确保 8090 端口无残留 http.server）  
   - 其他备注：新增 `scripts/core/flowCore.js`、`scripts/core/tempexecDefaults.js`，修复 `getAssignedModel`/`scrollElementIntoView` TDZ 导致的初始化失败；提醒提前清理占用 8090 端口；`python3 notify_feishu.py` 因 DNS 失败，已尝试发送  
+- 日期：2025-12-03 22:24  
+  - 子目标：核心迁移阶段5（fallback 精简与核心对齐）  
+  - 影响范围：需求标识封装、对比模块默认解析与缺失视图依赖、飞书通知占位逻辑  
+  - 子目标进度：10%  
+  - 最终目标进度：91%  
+  - app.js 行数：2154  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 提权后全量 22/22 通过（首轮因 http.server 端口权限失败重跑）；飞书通知首次因 DNS 失败，提权后 `python3 notify_feishu.py` 返回 200 成功  
+  - 其他备注：需求/对比 fallback 依赖改为复用 requirementCore/compareCore，移除未用的 getNestedValue；通知需在具备外网的环境下执行或提权  
+- 日期：2025-12-03 22:34  
+  - 子目标：核心迁移阶段5（需求核心依赖收敛）  
+  - 影响范围：需求标识/封装/解包全量依赖 requirementCore，删除 app.js 内冗余 fallback；行数继续压缩  
+  - 子目标进度：20%  
+  - 最终目标进度：92%  
+  - app.js 行数：2070  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 首次因端口权限失败，提权后全量 22/22 通过；`python3 notify_feishu.py` 提权后 HTTP 200 成功  
+  - 其他备注：requirementCore 缺失时直接报错，避免继续维护多套需求 fallback；通知发送需确保外网或提权环境  
