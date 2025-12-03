@@ -15,8 +15,7 @@
       t = setTimeout(function run() { fn.apply(ctx, args); }, delay);
     };
   }
-  function downloadText(filename, text) {
-    var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  function downloadBlob(filename, blob) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
@@ -25,6 +24,10 @@
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+  function downloadText(filename, text) {
+    var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    downloadBlob(filename, blob);
   }
   function stripCodeFence(text) {
     if (!text) return '';
@@ -247,6 +250,7 @@
   window.app.utils = {
     setStatus: setStatus,
     debounce: debounce,
+    downloadBlob: downloadBlob,
     downloadText: downloadText,
     stripCodeFence: stripCodeFence,
     extractJsonPayload: extractJsonPayload,

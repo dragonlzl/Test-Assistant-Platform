@@ -71,6 +71,7 @@
           + pad(now.getSeconds());
       };
     var downloadText = deps && deps.downloadText ? deps.downloadText : function() {};
+    var downloadBlob = deps && deps.downloadBlob ? deps.downloadBlob : function() {};
     var scrollElementIntoView = deps && deps.scrollElementIntoView ? deps.scrollElementIntoView : function() {};
     var tempExecResultOptions = deps && deps.tempExecResultOptions ? deps.tempExecResultOptions : ['未执行', '通过', '失败', '阻塞', '不适用'];
     var deriveCaseListFromText = deps && deps.deriveCaseListFromText ? deps.deriveCaseListFromText : function() { return []; };
@@ -85,6 +86,10 @@
         var input = window.prompt('请输入需求标识', base);
         return input ? normalizeRequirementName(input) : '';
       };
+    var ensureRequirementLabel = deps && deps.ensureRequirementLabel ? deps.ensureRequirementLabel : function() {
+      return normalizeRequirementName(getRequirementLabel());
+    };
+    var buildTempExecXmindPackage = deps && deps.buildTempExecXmindPackage ? deps.buildTempExecXmindPackage : null;
     var ensureTempExecReplacement = deps && deps.ensureTempExecReplacement
       ? function(entry, pendingList) { return deps.ensureTempExecReplacement(entry, pendingList || []); }
       : function(entry, pendingList) {
@@ -1417,10 +1422,12 @@
       if (!file || !caseItem) return '未执行';
       if (!file.reuseEnabled) return caseItem.actual || '未执行';
       var aggregate = aggregateReuseDetails(caseItem.reuseDetails);
+      var total = aggregate.passed + aggregate.failed + aggregate.blocked + aggregate.unspecified + aggregate.pending;
+      if (!total) return '未执行';
+      if (aggregate.failed || aggregate.blocked) return '失败';
+      if (aggregate.pending) return '未执行';
       if (aggregate.passed) return '通过';
-      if (aggregate.failed) return '失败';
-      if (aggregate.blocked) return '阻塞';
-      if (aggregate.unspecified) return '不适用';
+      if (aggregate.unspecified && !aggregate.passed) return '不适用';
       return '未执行';
     }
 
@@ -1456,23 +1463,18 @@
     }
 
     function mapStatusToClass(status) {
-      if (status === '通过') return 'ok';
-      if (status === '失败') return 'err';
-      if (status === '阻塞') return 'warn';
-      if (status === '不适用') return 'info';
-      return '';
+      if (status === '通过') return 'passed';
+      if (status === '失败') return 'failed';
+      if (status === '阻塞') return 'blocked';
+      if (status === '不适用') return 'unspecified';
+      return 'pending';
     }
 
     function getCaseExecutionDisplay(file, caseItem) {
       var status = getCaseExecutionStatus(file, caseItem);
-      var map = {
-        通过: { label: '通过', className: 'status-ok' },
-        失败: { label: '失败', className: 'status-err' },
-        阻塞: { label: '阻塞', className: 'status-warn' },
-        不适用: { label: '不适用', className: 'status-info' },
-        未执行: { label: '未执行', className: 'status-pending' },
-      };
-      return map[status] || { label: status, className: 'status-pending' };
+      var className = mapStatusToClass(status);
+      var label = status || '未执行';
+      return { label: label, className: className || 'pending' };
     }
 
     function renderTempExecOverview() {
@@ -1797,6 +1799,35 @@
     function getTempExecFile(fileId) {
       if (!fileId) return null;
       return state.tempExecFiles.find(function(item) { return item.id === fileId; }) || null;
+    }
+
+    async function exportTempExecToXmind() {
+      var active = getTempExecFile(state.tempExecActiveId);
+      if (!active) {
+        if (tempExecStatus) setStatus(tempExecStatus, '请选择需要导出的执行用例', 'warn');
+        return;
+      }
+      var requirement = normalizeRequirementName(active.requirement) || normalizeRequirementName(getRequirementLabel(true));
+      if (!requirement) requirement = ensureRequirementLabel('请输入需求标识后再导出执行 XMind');
+      if (!requirement) {
+        if (tempExecStatus) setStatus(tempExecStatus, '已取消导出（需求标识为空）', 'warn');
+        return;
+      }
+      active.requirement = active.requirement || requirement;
+      if (!state.requirementLabel && requirement) {
+        setRequirementLabel(requirement, 'tempexec-export');
+      }
+      try {
+        if (!buildTempExecXmindPackage) throw new Error('缺少 XMind 导出依赖');
+        var result = await buildTempExecXmindPackage(active, requirement);
+        if (result && downloadBlob && result.blob) {
+          downloadBlob(result.fileName, result.blob);
+        }
+        if (tempExecStatus) setStatus(tempExecStatus, '已导出 ' + (result && result.count ? result.count : 0) + ' 条执行用例为 XMind', 'ok');
+      } catch (err) {
+        console.error(err);
+        if (tempExecStatus) setStatus(tempExecStatus, 'XMind 导出失败：' + err.message, 'err');
+      }
     }
 
     function getTempExecFilesByRequirement(req) {
@@ -2811,6 +2842,7 @@
       importTempExecSnapshot: importTempExecSnapshot,
       applyTempExecSnapshot: applyTempExecSnapshot,
       createTempExecFile: createTempExecFile,
+      exportTempExecToXmind: exportTempExecToXmind,
       loadTempExecState: loadTempExecState,
       importTempExecFiles: importTempExecFiles,
       ensureTempExecPlacement: ensureTempExecPlacement,

@@ -30,7 +30,9 @@
     var ensureRequirementLabel = handlers.ensureRequirementLabel || function() { return ''; };
     var getRequirementLabel = handlers.getRequirementLabel || function() { return ''; };
     var getCleanedTextForModel = handlers.getCleanedTextForModel || function() { return ''; };
-    var getModuleSuggestion = handlers.getModuleSuggestion || function() { return ''; };
+    var getModuleSuggestion = handlers.getModuleSuggestion || function(moduleId) {
+      return (state.caseGenSuggestions && state.caseGenSuggestions[moduleId]) ? state.caseGenSuggestions[moduleId].trim() : '';
+    };
     var getAssignedModel = handlers.getAssignedModel || function() { throw new Error('缺少模型'); };
     var getReasoningForType = handlers.getReasoningForType || function() { return ''; };
     var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
@@ -59,9 +61,34 @@
     var markAllCaseProgressGroups = handlers.markAllCaseProgressGroups || function() {};
     var setCaseModuleRunning = handlers.setCaseModuleRunning || function() {};
     var isCaseModuleRunning = handlers.isCaseModuleRunning || function() { return false; };
-    var setCaseModuleStatus = handlers.setCaseModuleStatus || function() {};
-    var clearCaseModuleStatus = handlers.clearCaseModuleStatus || function() {};
-    var syncCaseModuleStatus = handlers.syncCaseModuleStatus || function() {};
+    function ensureCaseModuleStatusState() {
+      if (!state.caseGenModuleStatus || typeof state.caseGenModuleStatus !== 'object') {
+        state.caseGenModuleStatus = {};
+      }
+      return state.caseGenModuleStatus;
+    }
+    var syncCaseModuleStatus = handlers.syncCaseModuleStatus || function(moduleId) {
+      if (!casesGenerationContainer || !moduleId) return;
+      var el = casesGenerationContainer.querySelector('[data-case-status="' + moduleId + '"]');
+      var statusInfo = ensureCaseModuleStatusState()[moduleId];
+      if (!el) return;
+      var text = statusInfo ? statusInfo.text : '';
+      var type = statusInfo ? statusInfo.type : '';
+      setStatus(el, text, type);
+    };
+    var setCaseModuleStatus = handlers.setCaseModuleStatus || function(moduleId, text, type) {
+      if (!moduleId) return;
+      ensureCaseModuleStatusState()[moduleId] = { text: text, type: type || '' };
+      syncCaseModuleStatus(moduleId);
+      renderCaseGenProgressBoard();
+    };
+    var clearCaseModuleStatus = handlers.clearCaseModuleStatus || function(moduleId) {
+      if (!moduleId) return;
+      var statusMap = ensureCaseModuleStatusState();
+      delete statusMap[moduleId];
+      syncCaseModuleStatus(moduleId);
+      renderCaseGenProgressBoard();
+    };
     var refreshExportCaseGenButton = handlers.refreshExportCaseGenButton || function() {};
     var setCaseViewHint = handlers.setCaseViewHint || function() {};
     var parseCaseList = handlers.parseCaseList || function() { return []; };

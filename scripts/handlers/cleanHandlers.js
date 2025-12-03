@@ -218,9 +218,6 @@
       setStatus(casesCoverageStatus, '', '');
       setStatus(caseGenStatus, '', '');
       refreshMissingSmartFillButton();
-      if (typeof splitResultEl.dispatchEvent === 'function') {
-        splitResultEl.dispatchEvent(new Event('input'));
-      }
     }
 
     function handleCaseTextInput() {

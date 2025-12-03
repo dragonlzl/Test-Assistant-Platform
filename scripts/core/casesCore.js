@@ -19,6 +19,7 @@
     var setStatus = handlers.setStatus || function() {};
     var updateFlowStatus = handlers.updateFlowStatus || function() {};
     var refreshImportedCaseView = handlers.refreshImportedCaseView || function() {};
+    var renderCaseTable = handlers.renderCaseTable || function() { return ''; };
     var caseFileListEl = dom.caseFileListEl;
     var autoCaseFileListEl = dom.autoCaseFileListEl;
     var caseTextEl = dom.caseTextEl;
@@ -270,6 +271,42 @@
       }
     }
 
+    function refreshImportedCaseViewInternal() {
+      if (!caseViewContainer || !caseViewContainer.classList.contains('visible')) return;
+      var list = getCombinedCaseList();
+      if (!list.length) {
+        resetImportedCaseView();
+        return;
+      }
+      caseViewContainer.innerHTML = renderCaseTable(null, list);
+    }
+    refreshImportedCaseView = refreshImportedCaseViewInternal;
+
+    function toggleImportedCaseView() {
+      if (!caseViewContainer || !caseViewBtn) return;
+      if (caseViewContainer.classList.contains('visible')) {
+        resetImportedCaseView();
+        return;
+      }
+      if (!hasCaseSource()) {
+        setStatus(dom.caseStatus, '请先上传或输入 XMind 测试用例', 'warn');
+        setCaseViewHint('请先上传或输入 XMind 测试用例');
+        return;
+      }
+      var list = getCombinedCaseList();
+      if (!list.length) {
+        setStatus(dom.caseStatus, '无法解析当前用例，请检查格式', 'warn');
+        setCaseViewHint('请先上传或输入 XMind 测试用例');
+        return;
+      }
+      caseViewContainer.innerHTML = renderCaseTable(null, list);
+      caseViewContainer.classList.remove('hidden');
+      caseViewContainer.classList.add('visible');
+      caseViewBtn.textContent = '收起用例视图';
+      setCaseViewHint('');
+      setStatus(dom.caseStatus, '', '');
+    }
+
     function addImportedCase(name, text, list) {
       if (list === void 0) list = [];
       var entry = {
@@ -324,13 +361,15 @@
       hasImportedCases: hasImportedCases,
       hasCaseSource: hasCaseSource,
       getCombinedCaseList: getCombinedCaseList,
-      getCombinedCaseText: getCombinedCaseText,
-      syncCaseTextWithImports: syncCaseTextWithImports,
-      getImportedCaseObjects: getImportedCaseObjects,
-      resetImportedCaseView: resetImportedCaseView,
-      buildCasesComparePayload: buildCasesComparePayload,
-      importCaseFiles: importCaseFiles,
-    };
+        getCombinedCaseText: getCombinedCaseText,
+        syncCaseTextWithImports: syncCaseTextWithImports,
+        getImportedCaseObjects: getImportedCaseObjects,
+        resetImportedCaseView: resetImportedCaseView,
+        refreshImportedCaseView: refreshImportedCaseViewInternal,
+        toggleImportedCaseView: toggleImportedCaseView,
+        buildCasesComparePayload: buildCasesComparePayload,
+        importCaseFiles: importCaseFiles,
+      };
   }
 
   window.app = window.app || {};

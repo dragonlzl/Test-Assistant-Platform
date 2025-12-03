@@ -156,9 +156,11 @@
     hasCaseSource = falseFn,
     getCombinedCaseList = emptyArr,
     getCombinedCaseText = emptyStr,
+    getImportedCaseObjects = emptyArr,
     syncCaseTextWithImports = noop,
     buildCasesComparePayload = defaultCasesPayload,
     resetImportedCaseView = noop,
+    refreshImportedCaseView = noop,
     handleCaseFiles = noop,
     resetAutoMissingView = noop,
     refreshAutoMissingSelectionUI = noop,
@@ -184,8 +186,11 @@
     refreshCaseSelectionUI = noop,
     updateSupplementButtons = noop,
     getCaseListForModule = emptyArr,
+    toggleImportedCaseView = noop,
     compareCoverage = noop,
     compareCasesCoverage = noop,
+    extractCompareResultData = function extractCompareResultDataFallback() { return null; },
+    extractCoverageFromCompareResult = function extractCoverageFromCompareResultFallback() { return null; },
     goToCaseGeneration = noop,
     goCasesGenAndScroll = noop,
     runCleaning = asyncNoop,
@@ -215,11 +220,7 @@
       return Math.min(maxModelTimeoutSec, Math.max(minModelTimeoutSec, num));
     }
 
-    const setStatus = appUtils.setStatus || function setStatus(el, text, type = '') {
-      if (!el) return;
-      el.textContent = text || '';
-      el.className = ['status', type].filter(Boolean).join(' ');
-    };
+    const setStatus = appUtils.setStatus;
 
     function updateModelTiming(el, durationMs) {
       if (!el) return;
@@ -230,108 +231,18 @@
       }
     }
 
-    const debounce = appUtils.debounce || function debounce(fn, wait = 200) {
-      let t;
-      return function debounced() {
-        if (t) clearTimeout(t);
-        const args = arguments;
-        const ctx = this;
-        t = setTimeout(() => fn.apply(ctx, args), wait);
-      };
-    };
+    const debounce = appUtils.debounce;
 
-    function downloadBlob(filename, blob) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-
-    const downloadText = appUtils.downloadText || function downloadTextFallback(filename, text) {
-      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-      downloadBlob(filename, blob);
-    };
-
-    const stripCodeFence = appUtils.stripCodeFence || function stripCodeFence(text) {
-      if (!text) return '';
-      const trimmed = text.trim();
-      const fenceRegex = /^(```|'''|"""|‵‵‵)([\w-]*)?\n?([\s\S]*?)\1$/i;
-      const directMatch = trimmed.match(fenceRegex);
-      if (directMatch) {
-        return (directMatch[3] || '').trim();
-      }
-      const normalized = trimmed
-        .replace(/[\u2018\u2019]/g, "'")
-        .replace(/[\u201c\u201d]/g, '"')
-        .replace(/[\u2032\u2035]/g, '`');
-      if (normalized !== trimmed) {
-        const normalizedMatch = normalized.match(fenceRegex);
-        if (normalizedMatch) {
-          return (normalizedMatch[3] || '').trim();
-        }
-      }
-      return trimmed;
-    };
-    const extractJsonPayload = appUtils.extractJsonPayload || function extractJsonPayloadFallback(rawText) {
-      return appUtils.extractJsonPayload ? appUtils.extractJsonPayload(rawText) : '';
-    };
-    const formatJsonOrText = appUtils.formatJsonOrText || function formatJsonOrTextFallback(text) {
-      return text ? text.trim() : '';
-    };
-
-    if (!appUtils.setStatus) {
-      window.app = window.app || {};
-      window.app.utils = appUtils;
-      appUtils.setStatus = setStatus;
-    }
-    if (!appUtils.debounce) appUtils.debounce = debounce;
-    if (!appUtils.downloadText) appUtils.downloadText = downloadText;
-    if (!appUtils.stripCodeFence) appUtils.stripCodeFence = stripCodeFence;
-    if (!appUtils.extractJsonPayload) appUtils.extractJsonPayload = extractJsonPayload;
-    if (!appUtils.formatJsonOrText) appUtils.formatJsonOrText = formatJsonOrText;
-    const extractJsonObjects = appUtils.extractJsonObjects || function extractJsonObjectsFallback(text) {
-      return appUtils.extractJsonObjects ? appUtils.extractJsonObjects(text) : [];
-    };
-    if (!appUtils.extractJsonObjects) appUtils.extractJsonObjects = extractJsonObjects;
-    const sanitizeCasesForExport = appUtils.sanitizeCasesForExport || function sanitizeCasesForExportFallback(list) {
-      const arr = Array.isArray(list) ? list : [];
-      return arr.map(function(item) {
-        if (!item || typeof item !== 'object') return item;
-        const clone = {};
-        Object.keys(item).forEach(function(key) {
-          if (key === 'remark') return;
-          clone[key] = item[key];
-        });
-        return clone;
-      });
-    };
-    if (!appUtils.sanitizeCasesForExport) appUtils.sanitizeCasesForExport = sanitizeCasesForExport;
-    const escapeHtml = appUtils.escapeHtml || function escapeHtmlFallback(text) {
-      return appUtils.escapeHtml ? appUtils.escapeHtml(text) : '';
-    };
-    const escapeHtmlPreserve = appUtils.escapeHtmlPreserve || function escapeHtmlPreserveFallback(text) {
-      return appUtils.escapeHtmlPreserve ? appUtils.escapeHtmlPreserve(text) : '';
-    };
-    const runConcurrent = appUtils.runConcurrent || async function runConcurrentFallback(items, concurrency, handler) {
-      if (!Array.isArray(items) || !items.length) return [];
-      const limit = Math.max(1, Number(concurrency) || 1);
-      const results = new Array(items.length);
-      let index = 0;
-      async function worker() {
-        while (index < items.length) {
-          const currentIndex = index;
-          index += 1;
-          results[currentIndex] = await handler(items[currentIndex], currentIndex);
-        }
-      }
-      const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
-      await Promise.all(workers);
-      return results;
-    };
+    const downloadBlob = appUtils.downloadBlob;
+    const downloadText = appUtils.downloadText;
+    const stripCodeFence = appUtils.stripCodeFence;
+    const extractJsonPayload = appUtils.extractJsonPayload;
+    const formatJsonOrText = appUtils.formatJsonOrText;
+    const extractJsonObjects = appUtils.extractJsonObjects;
+    const sanitizeCasesForExport = appUtils.sanitizeCasesForExport;
+    const escapeHtml = appUtils.escapeHtml;
+    const escapeHtmlPreserve = appUtils.escapeHtmlPreserve;
+    const runConcurrent = appUtils.runConcurrent;
 
     const assignHandlersModule = window.app.assignHandlers && typeof window.app.assignHandlers.init === 'function'
       ? window.app.assignHandlers.init({
@@ -485,22 +396,6 @@
       await postFeishuMessage('请前往工具，进行需求澄清，确认澄清结果后可继续执行。');
     }
 
-    function looksLikeCoverageSummary(data) {
-      if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
-      const hasCoverage = Object.prototype.hasOwnProperty.call(data, 'coverage');
-      const hasMissing = Object.prototype.hasOwnProperty.call(data, 'missing');
-      const hasExtra = Object.prototype.hasOwnProperty.call(data, 'extra');
-      if (hasCoverage && (hasMissing || hasExtra)) return true;
-      const nestedKeys = ['result', 'summary', 'data', 'payload'];
-      for (let i = 0; i < nestedKeys.length; i += 1) {
-        const nested = data[nestedKeys[i]];
-        if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
-          if (looksLikeCoverageSummary(nested)) return true;
-        }
-      }
-      return false;
-    }
-
     const splitCore = window.app && window.app.splitCore && typeof window.app.splitCore.init === 'function'
       ? window.app.splitCore.init({ moduleFieldAliases, normalizeRequirementName, unwrapRequirementPayload })
       : null;
@@ -588,23 +483,6 @@
       renderAutoRawInfo();
       renderCleanRawView(state.cleanViewSelection);
       updateFlowStatus();
-    }
-
-    function extractCompareResultData() {
-      const raw = compareResultEl.value.trim();
-      if (!raw) return null;
-      const result = unwrapRequirementPayload(raw);
-      if (result.type && result.type !== 'compare') {
-        setStatus(compareStatus, '导入内容类型不匹配（非对比完整性结果）', 'warn');
-        return null;
-      }
-      const payload = typeof result.payload === 'string' ? result.payload : result.payload;
-      try {
-        return typeof payload === 'string' ? JSON.parse(payload) : payload;
-      } catch (err) {
-        console.warn('对比结果解析失败', err);
-        return null;
-      }
     }
 
     function getNestedValue(source, path) {
@@ -1202,6 +1080,8 @@
       if (compareCore.importCompareResult) importCompareResult = compareCore.importCompareResult;
       if (compareCore.compareCoverage) compareCoverage = compareCore.compareCoverage;
       if (compareCore.compareCasesCoverage) compareCasesCoverage = compareCore.compareCasesCoverage;
+      if (compareCore.extractCompareResultData) extractCompareResultData = compareCore.extractCompareResultData;
+      if (compareCore.extractCoverageFromCompareResult) extractCoverageFromCompareResult = compareCore.extractCoverageFromCompareResult;
     }
 
     const debugCore = window.app && window.app.debugCore && typeof window.app.debugCore.init === 'function'
@@ -1277,7 +1157,6 @@
           promptRequirementLabel,
           stripRequirementHeader,
           isCoveragePayload,
-          looksLikeCoverageSummary,
           downloadText,
           getSafeRequirementSlug,
           updateFlowStatus,
@@ -1340,16 +1219,6 @@
     [reviewTimingEl, cleanTimingEl, compareTimingEl, splitTimingEl, casesTimingEl, caseGenTimingEl].forEach(el => updateModelTiming(el));
 
     // 清洗与对比
-    function extractXmindTopicsFromXml(xmlText) {
-      try {
-        const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
-        const titles = Array.from(doc.getElementsByTagName('title'));
-        return titles.map(t => `- ${t.textContent.trim()}`).join('\n');
-      } catch (err) {
-        console.warn('XMind XML 解析失败', err);
-        return xmlText;
-      }
-    }
     function parseSplitModules() {
       if (!splitResultEl || !splitResultEl.value.trim()) return [];
       if (splitCore && splitCore.parseSplitModules) {
@@ -1421,23 +1290,11 @@
       }
     }
 
-    function extractCoverageFromCompareResult() {
-      const data = extractCompareResultData();
-      if (!data) return null;
-      const value = data.coverage;
-      return clampCoveragePercent(value);
-    }
-
     const defaultScrollOffset = 200;
-    function scrollElementIntoView(el, behavior = 'smooth', offset = defaultScrollOffset) {
+    const scrollElementIntoView = function(el, behavior, offset) {
       if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const scrollTop = rect.top + window.scrollY - offset;
-      window.scrollTo({
-        top: Math.max(scrollTop, 0),
-        behavior,
-      });
-    }
+      appUtils.scrollElementIntoView(el, behavior || 'smooth', offset === undefined ? defaultScrollOffset : offset);
+    };
 
     function scrollToSection(target, options = {}) {
       const behavior = options.behavior || 'smooth';
@@ -1517,6 +1374,7 @@
           setCaseViewHint,
           updateFlowStatus,
           refreshImportedCaseView,
+          renderCaseTable,
           setStepInProgress,
           clearStepInProgress,
           ensureRequirementLabel,
@@ -1551,55 +1409,20 @@
       if (casesCore.syncCaseTextWithImports) syncCaseTextWithImports = casesCore.syncCaseTextWithImports;
       if (casesCore.getImportedCaseObjects) getImportedCaseObjects = casesCore.getImportedCaseObjects;
       if (casesCore.resetImportedCaseView) resetImportedCaseView = casesCore.resetImportedCaseView;
+      if (casesCore.refreshImportedCaseView) refreshImportedCaseView = casesCore.refreshImportedCaseView;
+      if (casesCore.toggleImportedCaseView) toggleImportedCaseView = casesCore.toggleImportedCaseView;
       if (casesCore.buildCasesComparePayload) buildCasesComparePayload = casesCore.buildCasesComparePayload;
       if (casesCore.importCaseFiles) handleCaseFiles = casesCore.importCaseFiles;
     }
 
-    const generateTempExecId = appUtils.generateTempExecId || function generateTempExecIdFallback() {
-      return `tempexec-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 6)}`;
-    };
+    const generateTempExecId = appUtils.generateTempExecId;
+    const generateTempVersionId = appUtils.generateTempVersionId;
+    const normalizeTempExecName = appUtils.normalizeTempExecName;
+    const stringifyCaseField = appUtils.stringifyCaseField;
+    const removePendingTempExecByName = appUtils.removePendingTempExecByName;
 
-    const generateTempVersionId = appUtils.generateTempVersionId || function generateTempVersionIdFallback() {
-      return `tempver-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 6)}`;
-    };
-
-    const normalizeTempExecName = appUtils.normalizeTempExecName || function normalizeTempExecNameFallback(name) {
-      return (name || '').trim().toLowerCase();
-    };
-
-    const stringifyCaseField = appUtils.stringifyCaseField || function stringifyCaseFieldFallback(value) {
-      if (Array.isArray(value)) {
-        return value
-          .map(v => {
-            const base = v === undefined || v === null ? '' : v;
-            return base.toString().trim();
-          })
-          .filter(Boolean)
-          .join(' / ');
-      }
-      if (value && typeof value === 'object') {
-        try {
-          return JSON.stringify(value);
-        } catch (err) {
-          return '';
-        }
-      }
-      if (value === undefined || value === null) return '';
-      return value.toString().trim();
-    };
-
-    const removePendingTempExecByName = appUtils.removePendingTempExecByName || function removePendingTempExecByNameFallback(pendingList, name) {
-      const normalized = normalizeTempExecName(name);
-      for (let i = pendingList.length - 1; i >= 0; i -= 1) {
-        const item = pendingList[i];
-        if (normalizeTempExecName(item && item.name) === normalized) {
-          pendingList.splice(i, 1);
-        }
-      }
-    };
-
-    const ensureTempExecReplacement = appUtils.ensureTempExecReplacement
-      ? function ensureTempExecReplacementProxy(entry, pendingList) {
+    const ensureTempExecReplacement = function ensureTempExecReplacementProxy(entry, pendingList) {
+      if (appUtils.ensureTempExecReplacement) {
         return appUtils.ensureTempExecReplacement(entry, {
           existingList: state.tempExecFiles,
           pendingList: pendingList || [],
@@ -1609,18 +1432,18 @@
           confirmFn: window.confirm,
         });
       }
-      : function ensureTempExecReplacementFallback(entry, pendingList = []) {
-        const normalized = normalizeTempExecName(entry && entry.name);
-        const duplicates = state.tempExecFiles.filter(file => normalizeTempExecName(file && file.name) === normalized);
-        const pendingDuplicates = pendingList.filter(item => normalizeTempExecName(item && item.name) === normalized);
-        if (duplicates.length || pendingDuplicates.length) {
-          const confirmMsg = `检测到名称为【${entry ? entry.name : ''}】的用例已存在，替换将清除原有执行结果，是否继续？`;
-          if (!window.confirm(confirmMsg)) return false;
-          duplicates.forEach(file => removeTempExecFile(file && file.id));
-          removePendingTempExecByName(pendingList, entry && entry.name);
-        }
-        return true;
-      };
+      const normalized = normalizeTempExecName(entry && entry.name);
+      const pending = pendingList || [];
+      const duplicates = state.tempExecFiles.filter(file => normalizeTempExecName(file && file.name) === normalized);
+      const pendingDuplicates = pending.filter(item => normalizeTempExecName(item && item.name) === normalized);
+      if (duplicates.length || pendingDuplicates.length) {
+        const confirmMsg = `检测到名称为【${entry ? entry.name : ''}】的用例已存在，替换将清除原有执行结果，是否继续？`;
+        if (!window.confirm(confirmMsg)) return false;
+        duplicates.forEach(file => removeTempExecFile(file && file.id));
+        removePendingTempExecByName(pending, entry && entry.name);
+      }
+      return true;
+    };
 
     const autoCoreModule = window.app && window.app.autoCore && typeof window.app.autoCore.init === 'function'
       ? window.app.autoCore.init({
@@ -1735,7 +1558,6 @@
           ensureRequirementLabel,
           getRequirementLabel,
           getCleanedTextForModel,
-          getModuleSuggestion,
           getAssignedModel,
           getReasoningForType,
           callModelWithConfig,
@@ -1768,9 +1590,6 @@
           markAllCaseProgressGroups: function(moduleId, stateVal) { return markAllCaseProgressGroups(moduleId, stateVal); },
           setCaseModuleRunning: function(moduleId, running) { return setCaseModuleRunning(moduleId, running); },
           isCaseModuleRunning: function(moduleId) { return isCaseModuleRunning(moduleId); },
-          setCaseModuleStatus: function(moduleId, text, type) { return setCaseModuleStatus(moduleId, text, type); },
-          clearCaseModuleStatus: function(moduleId) { return clearCaseModuleStatus(moduleId); },
-          syncCaseModuleStatus: function(moduleId) { return syncCaseModuleStatus(moduleId); },
           refreshExportCaseGenButton,
           setCaseViewHint,
           parseCaseList,
@@ -1818,12 +1637,25 @@
         ? extractRequirementLabelFromText(text)
         : '';
     };
+    const lazyBuildTempExecXmindPackage = function(file, requirement) {
+      const builder = window.app && (
+        (window.app.xmindCoreApi && typeof window.app.xmindCoreApi.buildTempExecXmindPackage === 'function'
+          ? window.app.xmindCoreApi.buildTempExecXmindPackage
+          : null)
+        || (window.app.xmindCore && typeof window.app.xmindCore.buildTempExecXmindPackage === 'function'
+          ? window.app.xmindCore.buildTempExecXmindPackage
+          : null)
+      );
+      if (!builder) return Promise.reject(new Error('缺少 XMind 导出依赖'));
+      return builder(file, requirement);
+    };
 
     const tempexecCore = window.app && window.app.tempexecCore && typeof window.app.tempexecCore.init === 'function'
       ? window.app.tempexecCore.init({
         setStatus,
         normalizeRequirementName,
         getRequirementLabel,
+        ensureRequirementLabel,
         defaultTempExecColumns,
         defaultPlacement,
         state,
@@ -1837,6 +1669,7 @@
         stringifyCaseField,
         deriveCaseListFromText,
         parseXmindFile: lazyParseXmindFile,
+        buildTempExecXmindPackage: lazyBuildTempExecXmindPackage,
         extractRequirementLabelFromText: lazyExtractRequirementLabel,
         promptTempExecRequirement,
         ensureTempExecReplacement,
@@ -1847,6 +1680,7 @@
         persistSettings,
         formatCompactTimestamp,
         downloadText,
+        downloadBlob,
         scrollElementIntoView,
         tempExecResultOptions,
         dom: {
@@ -1931,44 +1765,6 @@
     renderTempExecView = tempExecApi.renderTempExecView;
     applyTempExecPageSize = tempExecApi.applyTempExecPageSize;
 
-    function refreshImportedCaseView() {
-      if (!caseViewContainer || !caseViewContainer.classList.contains('visible')) return;
-      const list = getCombinedCaseList();
-      if (!list.length) {
-        resetImportedCaseView();
-        return;
-      }
-      caseViewContainer.innerHTML = renderCaseTable(null, list);
-    }
-
-    function getModuleSuggestion(moduleId) {
-      return (state.caseGenSuggestions[moduleId] || '').trim();
-    }
-
-    function syncCaseModuleStatus(moduleId) {
-      if (!casesGenerationContainer || !moduleId) return;
-      const el = casesGenerationContainer.querySelector(`[data-case-status="${moduleId}"]`);
-      const statusInfo = state.caseGenModuleStatus[moduleId];
-      if (!el) return;
-      const text = statusInfo ? statusInfo.text : '';
-      const type = statusInfo ? statusInfo.type : '';
-      setStatus(el, text, type);
-    }
-
-    function setCaseModuleStatus(moduleId, text, type = '') {
-      if (!moduleId) return;
-      state.caseGenModuleStatus[moduleId] = { text, type };
-      syncCaseModuleStatus(moduleId);
-      renderCaseGenProgressBoard();
-    }
-
-    function clearCaseModuleStatus(moduleId) {
-      if (!moduleId) return;
-      delete state.caseGenModuleStatus[moduleId];
-      syncCaseModuleStatus(moduleId);
-      renderCaseGenProgressBoard();
-    }
-
     const xmindCore = window.app && window.app.xmindCore && typeof window.app.xmindCore.init === 'function'
       ? window.app.xmindCore.init({
         formatCompactTimestamp,
@@ -1987,78 +1783,15 @@
       : function buildCaseFieldsForXmindFallback(item, fallbackModule) {
         return [(item && item.module) || fallbackModule || '模块'];
       };
-
-    function toggleImportedCaseView() {
-      if (!caseViewContainer || !caseViewBtn) return;
-      if (caseViewContainer.classList.contains('visible')) {
-        resetImportedCaseView();
-        return;
-      }
-      if (!hasCaseSource()) {
-        setStatus(caseStatus, '请先上传或输入 XMind 测试用例', 'warn');
-        setCaseViewHint('请先上传或输入 XMind 测试用例');
-        return;
-      }
-      const list = getCombinedCaseList();
-      if (!list.length) {
-        setStatus(caseStatus, '无法解析当前用例，请检查格式', 'warn');
-        setCaseViewHint('请先上传或输入 XMind 测试用例');
-        return;
-      }
-      caseViewContainer.innerHTML = renderCaseTable(null, list);
-      caseViewContainer.classList.remove('hidden');
-      caseViewContainer.classList.add('visible');
-      caseViewBtn.textContent = '收起用例视图';
-      setCaseViewHint('');
-      setStatus(caseStatus, '', '');
-    }
-
-    function normalizeTempExecNodeText(text) {
-      if (text === undefined || text === null) return '';
-      const str = text.toString().trim();
-      if (!str) return '';
-      return str;
-    }
-
     const buildXmindPackageFromCases = xmindCore && xmindCore.buildXmindPackageFromCases
       ? xmindCore.buildXmindPackageFromCases
       : null;
-    const buildTempExecXmindPackage = xmindCore && xmindCore.buildTempExecXmindPackage
-      ? xmindCore.buildTempExecXmindPackage
-      : null;
+    if (xmindCore) {
+      window.app.xmindCoreApi = xmindCore;
+    }
     const parseXmindFile = xmindCore && xmindCore.parseXmindFile
       ? xmindCore.parseXmindFile
       : async function parseXmindFileFallback() { return { text: '', list: [] }; };
-
-    async function exportTempExecToXmind() {
-      const getActiveFile = tempExecApi && typeof tempExecApi.getTempExecFile === 'function'
-        ? tempExecApi.getTempExecFile
-        : function() { return null; };
-      const active = getActiveFile(state.tempExecActiveId);
-      if (!active) {
-        if (tempExecStatus) setStatus(tempExecStatus, '请选择需要导出的执行用例', 'warn');
-        return;
-      }
-      const requirement = normalizeRequirementName(active.requirement) || ensureRequirementLabel('请输入需求标识后再导出执行 XMind');
-      if (!requirement) {
-        if (tempExecStatus) setStatus(tempExecStatus, '已取消导出（需求标识为空）', 'warn');
-        return;
-      }
-      active.requirement = active.requirement || requirement;
-      if (!state.requirementLabel && requirement) {
-        setRequirementLabel(requirement, 'tempexec-export');
-      }
-      try {
-        if (!buildTempExecXmindPackage) throw new Error('缺少 XMind 导出依赖');
-        const { blob, fileName, count } = await buildTempExecXmindPackage(active, requirement);
-        downloadBlob(fileName, blob);
-        if (tempExecStatus) setStatus(tempExecStatus, `已导出 ${count} 条执行用例为 XMind`, 'ok');
-      } catch (err) {
-        console.error(err);
-        if (tempExecStatus) setStatus(tempExecStatus, `XMind 导出失败：${err.message}`, 'err');
-      }
-    }
-
 
     function setStepInProgress(step) {
       state.inProgressStep = step || '';
@@ -2462,7 +2195,6 @@
       testModel,
     };
     window.app.core = core;
-    tempExecApi.exportTempExecToXmind = exportTempExecToXmind;
     const casesGenApi = {
       goToCaseGeneration,
       generateCasesForModule,

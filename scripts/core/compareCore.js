@@ -197,6 +197,23 @@
       return hasCoverage && (hasMissing || hasExtra);
     }
 
+    function extractCompareResultData() {
+      var raw = compareResultEl && compareResultEl.value ? compareResultEl.value.trim() : '';
+      if (!raw) return null;
+      var result = unwrapRequirementPayload(raw);
+      if (result.type && result.type !== 'compare') {
+        setStatus(compareStatus, '导入内容类型不匹配（非对比完整性结果）', 'warn');
+        return null;
+      }
+      var payload = typeof result.payload === 'string' ? result.payload : result.payload;
+      try {
+        return typeof payload === 'string' ? JSON.parse(payload) : payload;
+      } catch (err) {
+        console.warn('对比结果解析失败', err);
+        return null;
+      }
+    }
+
     function formatMissingRequirement(item) {
       if (item === undefined || item === null) return '-';
       if (typeof item === 'string') return item.trim() || '-';
@@ -841,6 +858,12 @@
       }
     }
 
+    function extractCoverageFromCompareResult() {
+      var data = extractCompareResultData();
+      if (!data) return null;
+      return clampCoveragePercent(data.coverage);
+    }
+
     return {
       clampCoveragePercent: clampCoveragePercent,
       buildSingleModulePayload: buildSingleModulePayload,
@@ -863,6 +886,8 @@
       handleMissingSelectionChange: handleMissingSelectionChange,
       handleMissingSelectAll: handleMissingSelectAll,
       copyMissingJson: copyMissingJson,
+      extractCompareResultData: extractCompareResultData,
+      extractCoverageFromCompareResult: extractCoverageFromCompareResult,
       exportCasesCoverage: exportCasesCoverage,
       importCasesCoverage: importCasesCoverage,
       exportCompareResult: exportCompareResult,

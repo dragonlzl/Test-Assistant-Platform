@@ -27,7 +27,6 @@
     var promptRequirementLabel = handlers.promptRequirementLabel || function() { return ''; };
     var stripRequirementHeader = handlers.stripRequirementHeader || function(text) { return text; };
     var isCoveragePayload = handlers.isCoveragePayload || function() { return false; };
-    var looksLikeCoverageSummary = handlers.looksLikeCoverageSummary || function() { return false; };
     var downloadText = handlers.downloadText || function() {};
     var getSafeRequirementSlug = handlers.getSafeRequirementSlug || function() { return 'requirement'; };
     var updateFlowStatus = handlers.updateFlowStatus || function() {};
@@ -53,6 +52,22 @@
     if (!(state.reviewClarifications instanceof Map)) state.reviewClarifications = new Map();
     if (!(state.reviewSelections instanceof Set)) state.reviewSelections = new Set();
     if (!(state.reviewExpanded instanceof Set)) state.reviewExpanded = new Set();
+
+    function looksLikeCoverageSummary(data) {
+      if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+      var hasCoverage = Object.prototype.hasOwnProperty.call(data, 'coverage');
+      var hasMissing = Object.prototype.hasOwnProperty.call(data, 'missing');
+      var hasExtra = Object.prototype.hasOwnProperty.call(data, 'extra');
+      if (hasCoverage && (hasMissing || hasExtra)) return true;
+      var nestedKeys = ['result', 'summary', 'data', 'payload'];
+      for (var i = 0; i < nestedKeys.length; i += 1) {
+        var nested = data[nestedKeys[i]];
+        if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+          if (looksLikeCoverageSummary(nested)) return true;
+        }
+      }
+      return false;
+    }
 
     function updateAutoClarifyVisibility(forceOpen) {
       if (forceOpen === void 0) forceOpen = false;

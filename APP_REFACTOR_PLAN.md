@@ -557,6 +557,30 @@
   - app.js 行数：2709  
   - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；未重复跑 UI（仅重构 fallback 声明，核心逻辑未变），如需可复用上次全量 21/21 结果  
   - 其他备注：更新后再次可直接运行 `python3 notify_feishu.py` 发送通知（需允许外网）  
+- 日期：2025-12-03 15:36  
+  - 子目标：核心迁移阶段4（对比结果解析下沉 + utils 收敛）  
+  - 影响范围：覆盖对比结果解析/覆盖率提取（下沉 compareCore）、评审导入类型判定、执行/下载等工具依赖统一使用 base utils；移除未用 XMind XML 解析占位  
+  - 子目标进度：78%  
+  - 最终目标进度：85%  
+  - app.js 行数：2541  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（21/21，需本地 8090 端口，首轮因端口权限失败后提权重跑通过）  
+  - 其他备注：`python3 notify_feishu.py` 因 DNS/外网限制发送失败（已按流程先行尝试后再提权跑测试）；compareCore 新增 `extractCompareResultData/extractCoverageFromCompareResult` 提供自动流程依赖，app.js 大量 fallback 改为复用 utils 减行  
+- 日期：2025-12-03 15:48  
+  - 子目标：核心迁移阶段4（下载工具下沉 utils、冗余函数清理）  
+  - 影响范围：用例导出/执行导出共用基础 downloadBlob；去除 app.js 内重复的格式化函数与覆盖率解析留在核心  
+  - 子目标进度：79%  
+  - 最终目标进度：86%  
+  - app.js 行数：2531  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（21/21，需本地 8090 端口，提权执行）；`python3 notify_feishu.py` 仍因 DNS/外网限制发送失败（已尝试）  
+  - 其他备注：downloadBlob 收敛到 `utils` 并向核心/handlers 透传；app.js 冗余格式化函数移除，为后续继续瘦身留出空间  
+- 日期：2025-12-03 16:37  
+  - 子目标：核心迁移阶段4（临时执行导出下沉/用例生成状态收敛）  
+  - 影响范围：临时执行 XMind 导出迁入 tempexecCore 并通过 xmindCore API 提供依赖；用例生成模块状态/建议获取逻辑下沉 casesGenCore，app.js 去除冗余状态函数  
+  - 子目标进度：80%  
+  - 最终目标进度：87%  
+  - app.js 行数：2463  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 首次因缺少 XMind 导出依赖失败，修复后提权重跑 21/21 通过（需本地 8090 端口）；  
+  - 其他备注：新增 `window.app.xmindCoreApi` 供导出懒加载，修复临时执行导出缺少依赖导致的超时；`python3 notify_feishu.py` 已在提权后发送成功  
 - 日期：2025-12-03 15:05  
   - 子目标：核心迁移阶段4（滚动遮挡修复+fallback 收敛补充）  
   - 影响范围：用例执行卡片“常用用例模版”下拉层级调整，避免覆盖一键执行步骤；fallback 公共默认合并为单行声明以继续瘦身  
@@ -565,3 +589,27 @@
   - app.js 行数：2709  
   - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；UI 未重跑（CSS 层级与 fallback 收敛变更，未改交互逻辑，可复用前次 21/21 结果）  
   - 其他备注：调整 `.template-dropdown`/`.template-menu` z-index，模板按钮随滚动不再遮挡顶部步骤；按流程已运行 `python3 notify_feishu.py`（需外网）  
+- 日期：2025-12-03 18:19  
+  - 子目标：核心迁移阶段4（用例生成/临时执行状态收敛 & 初始化修复）  
+  - 影响范围：用例生成模块状态/建议获取下沉 casesGenCore；临时执行 XMind 导出迁入 tempexecCore 并惰性依赖 xmindCore；导入用例视图刷新/切换下沉 casesCore；清洗拆分输入递归触发修复；缺失占位函数补齐防止初始化断言  
+  - 子目标进度：83%  
+  - 最终目标进度：88%  
+  - app.js 行数：2441  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 提权后全量 21/21 通过（需确保 8090 端口无残留 http.server）  
+  - 其他备注：修复 `handleSplitInput` 递归导致的栈溢出、未声明的 refreshImportedCaseView/getImportedCaseObjects 报错；测试前需先清理残留 python http.server 进程以避免 ERR_EMPTY_RESPONSE；按要求未触发 notify，待阶段完成后调用  
+- 日期：2025-12-03 18:32  
+  - 子目标：核心迁移阶段4（临时执行复用状态配色修复 + 用例覆盖）  
+  - 影响范围：复用模式下执行状态按钮/下拉的样式 class 映射修复（匹配 pending/passed/failed/blocked/unspecified），确保复用视图颜色随状态变化；新增复用状态配色 UI 自动化  
+  - 子目标进度：84%  
+  - 最终目标进度：88%  
+  - app.js 行数：2441  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 提权后全量 22/22 通过（含新增复用配色用例，需确保 8090 端口空闲）  
+  - 其他备注：按要求未触发 notify，待阶段性汇总后调用；复用状态颜色修复同时保证 xmindCore 导出依赖不受影响  
+- 日期：2025-12-03 19:37  
+  - 子目标：核心迁移阶段4（复用状态配色回归验证）  
+  - 影响范围：临时执行复用状态聚合/配色展示；UI 自动化回归  
+  - 子目标进度：84%（本次未改代码，补跑全量用例确认）  
+  - 最终目标进度：88%  
+  - app.js 行数：2441  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（22/22，需本地 8090 端口）  
+  - 其他备注：按要求暂未调用 notify_feishu，待阶段性结论后统一发送  

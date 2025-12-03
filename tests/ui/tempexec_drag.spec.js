@@ -203,4 +203,39 @@ test.describe('执行视图导入导出与拖拽', () => {
     const versionOrderAfter = await page.$$eval('#tempVersionGrid [data-temp-version] .title', (nodes) => nodes.map((n) => (n.textContent || '').trim()));
     expect(versionOrderAfter).toEqual(versionOrderBefore);
   });
+
+  test('用例复用状态选择展示颜色', async ({ page }) => {
+    await page.click('[data-tab-btn="tempexec"]');
+    const execFile = {
+      name: 'reuse.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify([
+        { module: '模块A', title: '登录', steps: '步骤1', expected: '成功' },
+      ], null, 2)),
+    };
+    await page.setInputFiles('#tempExecInput', [execFile]);
+    await expect(page.locator('#tempExecStatus')).toContainText('已导入');
+
+    const reuseToggle = page.locator('[data-temp-reuse-toggle]').first();
+    await reuseToggle.check();
+
+    const reuseBtn = page.locator('[data-temp-reuse-panel]').first();
+    await reuseBtn.click();
+    const reuseAddBtn = page.locator('[data-temp-reuse-add]').first();
+    await reuseAddBtn.click();
+    await reuseAddBtn.click();
+
+    const statusSelect = page.locator('[data-temp-reuse-status]').first();
+    const statusSelectSecond = page.locator('[data-temp-reuse-status]').nth(1);
+    await expect(statusSelect).toHaveClass(/pending/);
+    await statusSelect.selectOption('通过');
+    await statusSelectSecond.selectOption('不适用');
+    const statusBtn = page.locator('[data-temp-reuse-panel]').first();
+    await expect(statusBtn).toHaveClass(/passed/);
+    await expect(statusBtn).toContainText('通过');
+
+    await statusSelectSecond.selectOption('失败');
+    await expect(statusBtn).toHaveClass(/failed/);
+    await expect(statusBtn).toContainText('失败');
+  });
 });
