@@ -198,88 +198,15 @@
   let renderCleanView = function renderCleanViewFallback() {};
   let locateCleanRawSelection = function locateCleanRawSelectionFallback() {};
   let jumpToCleanHighlightView = function jumpToCleanHighlightViewFallback() {};
-  let ensureTempExecPlacement = function ensureTempExecPlacementFallback() { return {}; };
-  let ensureRequirementOrder = function ensureRequirementOrderFallback() { return []; };
-  let ensureFileOrder = function ensureFileOrderFallback() { return []; };
-  let ensureVersionOrder = function ensureVersionOrderFallback() { return []; };
-  let reorderRequirementOrder = function reorderRequirementOrderFallback() {};
-  let updateVersionOrder = function updateVersionOrderFallback() {};
-  let removeFileFromOrder = function removeFileFromOrderFallback() {};
-  let insertFileIntoOrder = function insertFileIntoOrderFallback() {};
-  let syncTempExecPlacement = function syncTempExecPlacementFallback() {};
-  let moveTempExecFileToRequirement = function moveTempExecFileToRequirementFallback() {};
-  let clampTempExecPageSize = function clampTempExecPageSizeFallback(value) { return value; };
-  let loadTempExecPageSizeSetting = function loadTempExecPageSizeSettingFallback() { return defaultTempExecPageSize; };
-  let saveTempExecPageSizeSetting = function saveTempExecPageSizeSettingFallback() {};
-  let ensureTempExecPageIndex = function ensureTempExecPageIndexFallback() { return 0; };
-  let resetTempExecPages = function resetTempExecPagesFallback() {};
-  let setTempExecPage = function setTempExecPageFallback() {};
-  let changeTempExecPage = function changeTempExecPageFallback() {};
-  let applyTempExecPageSize = function applyTempExecPageSizeFallback(value) { return { size: value, changed: false }; };
-  let getTempExecPageSize = function getTempExecPageSizeFallback() { return defaultTempExecPageSize; };
-  let getTempExecFile = function getTempExecFileFallback() { return null; };
-  let getTempExecFilesByRequirement = function getTempExecFilesByRequirementFallback() { return []; };
-  let persistTempExecState = function persistTempExecStateFallback() {};
-  let renderTempExecNav = function renderTempExecNavFallback() {};
   let renderTempExecView = function renderTempExecViewFallback() {};
-  let renderTempVersionGrid = function renderTempVersionGridFallback() {};
-  let renderTempExecTable = function renderTempExecTableFallback() { return ''; };
-  let renderTempExecOverview = function renderTempExecOverviewFallback() {};
-  let renderTempFocusZone = function renderTempFocusZoneFallback() {};
-  let scrollTempExecViewTop = function scrollTempExecViewTopFallback() {};
-  let ensureReusePresets = function ensureReusePresetsFallback(file) {
-    if (!file) return [];
-    if (!Array.isArray(file.reusePresets)) file.reusePresets = [];
-    return file.reusePresets;
-  };
-  let startTempExecPresetDraft = function startTempExecPresetDraftFallback() {};
-  let cancelTempExecPresetDraft = function cancelTempExecPresetDraftFallback() {};
-  let updateTempExecPresetDraft = function updateTempExecPresetDraftFallback() {};
-  let confirmTempExecPresetDraft = function confirmTempExecPresetDraftFallback() {};
-  let removeTempExecPreset = function removeTempExecPresetFallback() {};
-  let toggleTempExecReusePanel = function toggleTempExecReusePanelFallback() {};
-  let addTempExecReuseEntry = function addTempExecReuseEntryFallback() {};
-  let removeTempExecReuseEntry = function removeTempExecReuseEntryFallback() {};
-  let updateTempExecReuseStatus = function updateTempExecReuseStatusFallback() {};
-  let updateTempExecReuseText = function updateTempExecReuseTextFallback() {};
-  let updateTempExecReuseNote = function updateTempExecReuseNoteFallback() {};
-  let handleTempExecReuseToggle = function handleTempExecReuseToggleFallback() {};
-  let getCaseExecutionDisplay = function getCaseExecutionDisplayFallback() { return ''; };
-  let applyTempExecSearch = function applyTempExecSearchFallback(fileId, term, raw) {
-    state.tempExecSearch = { fileId: fileId || '', term: (term || '').trim().toLowerCase(), raw: raw || '' };
-    if (typeof renderTempExecView === 'function') renderTempExecView();
-  };
-  let loadTempExecFocus = function loadTempExecFocusFallback() {};
-  let saveTempExecFocus = function saveTempExecFocusFallback() {};
-  let syncTempExecFocus = function syncTempExecFocusFallback() {};
-  let addTempExecFocus = function addTempExecFocusFallback() {};
-  let removeTempExecFocus = function removeTempExecFocusFallback() {};
-  let prioritizeTempExecUnassignedRequirements = function prioritizeTempExecUnassignedRequirementsFallback() {};
-  let addTempExecDefectLink = function addTempExecDefectLinkFallback() {};
-  let removeTempExecDefectLink = function removeTempExecDefectLinkFallback() {};
-  let updateTempExecDefectLink = function updateTempExecDefectLinkFallback() {};
-  let openTempExecDefectLink = function openTempExecDefectLinkFallback() {};
-  let toggleTempExecDefectPanel = function toggleTempExecDefectPanelFallback() {};
+  let applyTempExecPageSize = function applyTempExecPageSizeFallback(value) { return { size: value, changed: false }; };
   let createTempExecFile = function createTempExecFileFallback() { return null; };
-  let loadTempExecState = function loadTempExecStateFallback() {};
-  let importTempExecFiles = async function importTempExecFilesFallback() {};
+  let syncTempExecFocus = function syncTempExecFocusFallback() {};
+  let persistTempExecState = function persistTempExecStateFallback() {};
   let setTempExecActive = function setTempExecActiveFallback() {};
-  let updateTempExecResult = function updateTempExecResultFallback() {};
-  let updateTempExecRemark = function updateTempExecRemarkFallback() {};
-  let pushTempExecUndo = function pushTempExecUndoFallback() { return 0; };
-  let clearTempExecUndo = function clearTempExecUndoFallback() {};
-  let restoreTempExecUndo = function restoreTempExecUndoFallback() { return false; };
-  let cleanupTempExecUndoUI = function cleanupTempExecUndoUIFallback() {};
-  let startTempExecUndoTimer = function startTempExecUndoTimerFallback() {};
-  let insertTempExecCase = function insertTempExecCaseFallback() {};
-  let removeTempExecCase = function removeTempExecCaseFallback() {};
-  let updateTempExecCaseField = function updateTempExecCaseFieldFallback() {};
-  let toggleTempExecSelection = function toggleTempExecSelectionFallback() {};
-  let toggleTempExecSelectAll = function toggleTempExecSelectAllFallback() {};
   let removeTempExecFile = function removeTempExecFileFallback() {};
-  let reorderTempRequirement = function reorderTempRequirementFallback() {};
+  let getCaseExecutionDisplay = function getCaseExecutionDisplayFallback() { return ''; };
     let debugNodes;
-    state.tempExecPageSize = loadTempExecPageSizeSetting();
 
     function clampTimeoutSeconds(value) {
       const num = Math.round(Number(value));
@@ -1937,265 +1864,70 @@
         },
       })
       : null;
-    const normalizeReusePresets = tempexecCore && tempexecCore.normalizeReusePresets ? tempexecCore.normalizeReusePresets : function(list) { return Array.isArray(list) ? list : []; };
-    const normalizeTempExecCases = tempexecCore && tempexecCore.normalizeTempExecCases
-      ? tempexecCore.normalizeTempExecCases
-      : function(list, fileId) { return []; };
-    const normalizeTempExecPlacement = tempexecCore && tempexecCore.normalizeTempExecPlacement
-      ? tempexecCore.normalizeTempExecPlacement
-      : function() { return defaultPlacement; };
-    const serializeTempExecFiles = tempexecCore && tempexecCore.serializeTempExecFiles
-      ? function() { return tempexecCore.serializeTempExecFiles(state); }
-      : function() { return []; };
-    const serializeTempExecVersionsFn = tempexecCore && tempexecCore.serializeTempExecVersions
-      ? function() { return tempexecCore.serializeTempExecVersions(state); }
-      : function() { return []; };
-    const serializeTempExecSnapshot = tempexecCore && tempexecCore.serializeTempExecSnapshot
-      ? function() { return tempexecCore.serializeTempExecSnapshot(state, getTempExecPageSize, state.settings.tempExecColumns || { ...defaultTempExecColumns }); }
-      : function() { return {}; };
-    const exportTempExecSnapshot = tempexecCore && tempexecCore.exportTempExecSnapshot
-      ? tempexecCore.exportTempExecSnapshot
-      : function() {
-        if (tempExecStatus) setStatus(tempExecStatus, '当前环境暂不支持导出执行页面配置', 'warn');
-      };
-    const importTempExecSnapshot = tempexecCore && tempexecCore.importTempExecSnapshot
-      ? tempexecCore.importTempExecSnapshot
-      : async function() {
-        if (tempExecStatus) setStatus(tempExecStatus, '当前环境暂不支持导入执行页面配置', 'warn');
-      };
-    const applyTempExecSnapshot = tempexecCore && tempexecCore.applyTempExecSnapshot
-      ? tempexecCore.applyTempExecSnapshot
-      : function() {};
-    const serializeSingleTempExecFile = tempexecCore && tempexecCore.serializeSingleTempExecFile
-      ? tempexecCore.serializeSingleTempExecFile
-      : function(file) { return file || null; };
-    const ensureTempExecSelection = tempexecCore && tempexecCore.ensureTempExecSelection
-      ? tempexecCore.ensureTempExecSelection
-      : function(fileId) {
-        if (!state.tempExecSelections || typeof state.tempExecSelections !== 'object') state.tempExecSelections = {};
-        if (!fileId) return new Set();
-        if (!state.tempExecSelections[fileId]) state.tempExecSelections[fileId] = new Set();
-        return state.tempExecSelections[fileId];
-      };
-    const resetTempExecSelections = tempexecCore && tempexecCore.resetTempExecSelections
-      ? tempexecCore.resetTempExecSelections
-      : function(fileId) {
-        if (!state.tempExecSelections || typeof state.tempExecSelections !== 'object') state.tempExecSelections = {};
-        if (!fileId) {
-          state.tempExecSelections = {};
-          return;
-        }
-        state.tempExecSelections[fileId] = new Set();
-      };
-    const ensureTempExecRemarkOpen = tempexecCore && tempexecCore.ensureTempExecRemarkOpen
-      ? tempexecCore.ensureTempExecRemarkOpen
-      : function(fileId) {
-        if (!state.tempExecRemarkOpen || typeof state.tempExecRemarkOpen !== 'object') state.tempExecRemarkOpen = {};
-        if (!fileId) return new Set();
-        if (!state.tempExecRemarkOpen[fileId]) state.tempExecRemarkOpen[fileId] = new Set();
-        return state.tempExecRemarkOpen[fileId];
-      };
-    const resetTempExecRemarkOpen = tempexecCore && tempexecCore.resetTempExecRemarkOpen
-      ? tempexecCore.resetTempExecRemarkOpen
-      : function(fileId) {
-        if (!state.tempExecRemarkOpen || typeof state.tempExecRemarkOpen !== 'object') state.tempExecRemarkOpen = {};
-        if (!fileId) {
-          state.tempExecRemarkOpen = {};
-          return;
-        }
-        state.tempExecRemarkOpen[fileId] = new Set();
-      };
-    const ensureTempExecReuseOpen = tempexecCore && tempexecCore.ensureTempExecReuseOpen
-      ? tempexecCore.ensureTempExecReuseOpen
-      : function(fileId) {
-        if (!state.tempExecReuseOpen || typeof state.tempExecReuseOpen !== 'object') state.tempExecReuseOpen = {};
-        if (!fileId) return new Set();
-        if (!state.tempExecReuseOpen[fileId]) state.tempExecReuseOpen[fileId] = new Set();
-        return state.tempExecReuseOpen[fileId];
-      };
-    const resetTempExecReuseOpen = tempexecCore && tempexecCore.resetTempExecReuseOpen
-      ? tempexecCore.resetTempExecReuseOpen
-      : function(fileId) {
-        if (!state.tempExecReuseOpen || typeof state.tempExecReuseOpen !== 'object') state.tempExecReuseOpen = {};
-        if (!fileId) {
-          state.tempExecReuseOpen = {};
-          return;
-        }
-        state.tempExecReuseOpen[fileId] = new Set();
-      };
-    const ensureTempExecDefectOpen = tempexecCore && tempexecCore.ensureTempExecDefectOpen
-      ? tempexecCore.ensureTempExecDefectOpen
-      : function(fileId) {
-        if (!state.tempExecDefectOpen || typeof state.tempExecDefectOpen !== 'object') state.tempExecDefectOpen = {};
-        if (!fileId) return new Set();
-        if (!state.tempExecDefectOpen[fileId]) state.tempExecDefectOpen[fileId] = new Set();
-        return state.tempExecDefectOpen[fileId];
-      };
-    const resetTempExecDefectOpen = tempexecCore && tempexecCore.resetTempExecDefectOpen
-      ? tempexecCore.resetTempExecDefectOpen
-      : function(fileId) {
-        if (!state.tempExecDefectOpen || typeof state.tempExecDefectOpen !== 'object') state.tempExecDefectOpen = {};
-        if (!fileId) {
-          state.tempExecDefectOpen = {};
-          return;
-        }
-        state.tempExecDefectOpen[fileId] = new Set();
-      };
-    const clearTempExecCaseStates = tempexecCore && tempexecCore.clearTempExecCaseStates
-      ? tempexecCore.clearTempExecCaseStates
-      : function(fileId) {
-        if (!fileId) return;
-        ensureTempExecSelection(fileId).clear();
-        ensureTempExecRemarkOpen(fileId).clear();
-        ensureTempExecReuseOpen(fileId).clear();
-        ensureTempExecDefectOpen(fileId).clear();
-      };
-    const ensureDefectLinks = tempexecCore && tempexecCore.ensureDefectLinks
-      ? tempexecCore.ensureDefectLinks
-      : function(caseItem) {
-        if (!caseItem) return [];
-        if (!Array.isArray(caseItem.defectLinks)) caseItem.defectLinks = [];
-        return caseItem.defectLinks;
-      };
-    addTempExecDefectLink = tempexecCore && tempexecCore.addTempExecDefectLink
-      ? tempexecCore.addTempExecDefectLink
-      : addTempExecDefectLink;
-    removeTempExecDefectLink = tempexecCore && tempexecCore.removeTempExecDefectLink
-      ? tempexecCore.removeTempExecDefectLink
-      : removeTempExecDefectLink;
-    updateTempExecDefectLink = tempexecCore && tempexecCore.updateTempExecDefectLink
-      ? tempexecCore.updateTempExecDefectLink
-      : updateTempExecDefectLink;
-    openTempExecDefectLink = tempexecCore && tempexecCore.openTempExecDefectLink
-      ? tempexecCore.openTempExecDefectLink
-      : openTempExecDefectLink;
-    toggleTempExecDefectPanel = tempexecCore && tempexecCore.toggleTempExecDefectPanel
-      ? tempexecCore.toggleTempExecDefectPanel
-      : toggleTempExecDefectPanel;
-    const ensureTempVersionList = tempexecCore && tempexecCore.ensureTempVersionList
-      ? tempexecCore.ensureTempVersionList
-      : function() {};
-    const getTempVersion = tempexecCore && tempexecCore.getTempVersion
-      ? tempexecCore.getTempVersion
-      : function() { return null; };
-    const applyVersionAssignments = tempexecCore && tempexecCore.applyVersionAssignments
-      ? tempexecCore.applyVersionAssignments
-      : function() {};
-    const isVersionNameDuplicate = tempexecCore && tempexecCore.isVersionNameDuplicate
-      ? tempexecCore.isVersionNameDuplicate
-      : function() { return false; };
-    const createTempVersion = tempexecCore && tempexecCore.createTempVersion
-      ? tempexecCore.createTempVersion
-      : function() { return null; };
-    const removeTempExecFromVersion = tempexecCore && tempexecCore.removeTempExecFromVersion
-      ? tempexecCore.removeTempExecFromVersion
-      : function() {};
-    const removeTempGroupFromVersion = tempexecCore && tempexecCore.removeTempGroupFromVersion
-      ? tempexecCore.removeTempGroupFromVersion
-      : function() {};
-    const moveTempExecToVersion = tempexecCore && tempexecCore.moveTempExecToVersion
-      ? tempexecCore.moveTempExecToVersion
-      : function() {};
-    const moveTempExecFileWithinVersion = tempexecCore && tempexecCore.moveTempExecFileWithinVersion
-      ? tempexecCore.moveTempExecFileWithinVersion
-      : function() {};
-    const getVersionRequirementBlocks = tempexecCore && tempexecCore.getVersionRequirementBlocks
-      ? tempexecCore.getVersionRequirementBlocks
-      : function() { return []; };
-    const parseReqPayload = tempexecCore && tempexecCore.parseReqPayload
-      ? tempexecCore.parseReqPayload
-      : function() { return { req: '', key: '', fromVersion: '' }; };
-    const reorderVersionRequirement = tempexecCore && tempexecCore.reorderVersionRequirement
-      ? tempexecCore.reorderVersionRequirement
-      : function() {};
-    const moveRequirementToVersion = tempexecCore && tempexecCore.moveRequirementToVersion
-      ? tempexecCore.moveRequirementToVersion
-      : function() {};
-    const moveRequirementOutOfVersion = tempexecCore && tempexecCore.moveRequirementOutOfVersion
-      ? tempexecCore.moveRequirementOutOfVersion
-      : function() {};
-    const removeTempVersion = tempexecCore && tempexecCore.removeTempVersion
-      ? tempexecCore.removeTempVersion
-      : function() {};
-    const reorderTempVersion = tempexecCore && tempexecCore.reorderTempVersion
-      ? tempexecCore.reorderTempVersion
-      : function() {};
-    const renameTempVersion = tempexecCore && tempexecCore.renameTempVersion
-      ? tempexecCore.renameTempVersion
-      : function() {};
-    const getTempVersionName = tempexecCore && tempexecCore.getTempVersionName
-      ? tempexecCore.getTempVersionName
-      : function() { return ''; };
-    if (tempexecCore) {
-      ensureTempExecPlacement = tempexecCore.ensureTempExecPlacement || ensureTempExecPlacement;
-      ensureRequirementOrder = tempexecCore.ensureRequirementOrder || ensureRequirementOrder;
-      ensureFileOrder = tempexecCore.ensureFileOrder || ensureFileOrder;
-      ensureVersionOrder = tempexecCore.ensureVersionOrder || ensureVersionOrder;
-      reorderRequirementOrder = tempexecCore.reorderRequirementOrder || reorderRequirementOrder;
-      updateVersionOrder = tempexecCore.updateVersionOrder || updateVersionOrder;
-      removeFileFromOrder = tempexecCore.removeFileFromOrder || removeFileFromOrder;
-      insertFileIntoOrder = tempexecCore.insertFileIntoOrder || insertFileIntoOrder;
-      syncTempExecPlacement = tempexecCore.syncTempExecPlacement || syncTempExecPlacement;
-      moveTempExecFileToRequirement = tempexecCore.moveTempExecFileToRequirement || moveTempExecFileToRequirement;
-      clampTempExecPageSize = tempexecCore.clampTempExecPageSize || clampTempExecPageSize;
-      loadTempExecPageSizeSetting = tempexecCore.loadTempExecPageSizeSetting || loadTempExecPageSizeSetting;
-      saveTempExecPageSizeSetting = tempexecCore.saveTempExecPageSizeSetting || saveTempExecPageSizeSetting;
-      ensureTempExecPageIndex = tempexecCore.ensureTempExecPageIndex || ensureTempExecPageIndex;
-      getTempExecPageSize = tempexecCore.getTempExecPageSize || getTempExecPageSize;
-      resetTempExecPages = tempexecCore.resetTempExecPages || resetTempExecPages;
-      setTempExecPage = tempexecCore.setTempExecPage || setTempExecPage;
-      changeTempExecPage = tempexecCore.changeTempExecPage || changeTempExecPage;
-      applyTempExecPageSize = tempexecCore.applyTempExecPageSize || applyTempExecPageSize;
-      getTempExecFile = tempexecCore.getTempExecFile || getTempExecFile;
-      getTempExecFilesByRequirement = tempexecCore.getTempExecFilesByRequirement || getTempExecFilesByRequirement;
-      createTempExecFile = tempexecCore.createTempExecFile || createTempExecFile;
-      loadTempExecState = tempexecCore.loadTempExecState || loadTempExecState;
-      importTempExecFiles = tempexecCore.importTempExecFiles || importTempExecFiles;
-      setTempExecActive = tempexecCore.setTempExecActive || setTempExecActive;
-      persistTempExecState = tempexecCore.persistTempExecState || persistTempExecState;
-      renderTempExecNav = tempexecCore.renderTempExecNav || renderTempExecNav;
-      renderTempExecView = tempexecCore.renderTempExecView || renderTempExecView;
-      renderTempVersionGrid = tempexecCore.renderTempVersionGrid || renderTempVersionGrid;
-      renderTempExecTable = tempexecCore.renderTempExecTable || renderTempExecTable;
-      renderTempExecOverview = tempexecCore.renderTempExecOverview || renderTempExecOverview;
-      renderTempFocusZone = tempexecCore.renderTempFocusZone || renderTempFocusZone;
-      scrollTempExecViewTop = tempexecCore.scrollTempExecViewTop || scrollTempExecViewTop;
-      ensureReusePresets = tempexecCore.ensureReusePresets || ensureReusePresets;
-      startTempExecPresetDraft = tempexecCore.startTempExecPresetDraft || startTempExecPresetDraft;
-      cancelTempExecPresetDraft = tempexecCore.cancelTempExecPresetDraft || cancelTempExecPresetDraft;
-      updateTempExecPresetDraft = tempexecCore.updateTempExecPresetDraft || updateTempExecPresetDraft;
-      confirmTempExecPresetDraft = tempexecCore.confirmTempExecPresetDraft || confirmTempExecPresetDraft;
-      removeTempExecPreset = tempexecCore.removeTempExecPreset || removeTempExecPreset;
-      toggleTempExecReusePanel = tempexecCore.toggleTempExecReusePanel || toggleTempExecReusePanel;
-      addTempExecReuseEntry = tempexecCore.addTempExecReuseEntry || addTempExecReuseEntry;
-      removeTempExecReuseEntry = tempexecCore.removeTempExecReuseEntry || removeTempExecReuseEntry;
-      updateTempExecReuseStatus = tempexecCore.updateTempExecReuseStatus || updateTempExecReuseStatus;
-      updateTempExecReuseText = tempexecCore.updateTempExecReuseText || updateTempExecReuseText;
-      updateTempExecReuseNote = tempexecCore.updateTempExecReuseNote || updateTempExecReuseNote;
-      handleTempExecReuseToggle = tempexecCore.handleTempExecReuseToggle || handleTempExecReuseToggle;
-      getCaseExecutionDisplay = tempexecCore.getCaseExecutionDisplay || getCaseExecutionDisplay;
-      applyTempExecSearch = tempexecCore.applyTempExecSearch || applyTempExecSearch;
-      loadTempExecFocus = tempexecCore.loadTempExecFocus || loadTempExecFocus;
-      saveTempExecFocus = tempexecCore.saveTempExecFocus || saveTempExecFocus;
-      syncTempExecFocus = tempexecCore.syncTempExecFocus || syncTempExecFocus;
-      addTempExecFocus = tempexecCore.addTempExecFocus || addTempExecFocus;
-      removeTempExecFocus = tempexecCore.removeTempExecFocus || removeTempExecFocus;
-      prioritizeTempExecUnassignedRequirements = tempexecCore.prioritizeTempExecUnassignedRequirements || prioritizeTempExecUnassignedRequirements;
-      updateTempExecResult = tempexecCore.updateTempExecResult || updateTempExecResult;
-      updateTempExecRemark = tempexecCore.updateTempExecRemark || updateTempExecRemark;
-      pushTempExecUndo = tempexecCore.pushTempExecUndo || pushTempExecUndo;
-      clearTempExecUndo = tempexecCore.clearTempExecUndo || clearTempExecUndo;
-      restoreTempExecUndo = tempexecCore.restoreTempExecUndo || restoreTempExecUndo;
-      cleanupTempExecUndoUI = tempexecCore.cleanupTempExecUndoUI || cleanupTempExecUndoUI;
-      startTempExecUndoTimer = tempexecCore.startTempExecUndoTimer || startTempExecUndoTimer;
-      insertTempExecCase = tempexecCore.insertTempExecCase || insertTempExecCase;
-      removeTempExecCase = tempexecCore.removeTempExecCase || removeTempExecCase;
-      updateTempExecCaseField = tempexecCore.updateTempExecCaseField || updateTempExecCaseField;
-      toggleTempExecSelection = tempexecCore.toggleTempExecSelection || toggleTempExecSelection;
-      toggleTempExecSelectAll = tempexecCore.toggleTempExecSelectAll || toggleTempExecSelectAll;
-      removeTempExecFile = tempexecCore.removeTempExecFile || removeTempExecFile;
-      reorderTempRequirement = tempexecCore.reorderTempRequirement || reorderTempRequirement;
-    }
+    const tempExecApi = tempexecCore ? { ...tempexecCore } : {};
+    const normalizeReusePresets = tempexecCore && tempexecCore.normalizeReusePresets
+      ? tempexecCore.normalizeReusePresets
+      : function(list) { return Array.isArray(list) ? list : []; };
+    const ensureTempExecSelection = (tempExecApi && tempExecApi.ensureTempExecSelection) || function(fileId) {
+      if (!state.tempExecSelections || typeof state.tempExecSelections !== 'object') state.tempExecSelections = {};
+      if (!fileId) return new Set();
+      if (!state.tempExecSelections[fileId]) state.tempExecSelections[fileId] = new Set();
+      return state.tempExecSelections[fileId];
+    };
+    const ensureTempExecRemarkOpen = (tempExecApi && tempExecApi.ensureTempExecRemarkOpen) || function(fileId) {
+      if (!state.tempExecRemarkOpen || typeof state.tempExecRemarkOpen !== 'object') state.tempExecRemarkOpen = {};
+      if (!fileId) return new Set();
+      if (!state.tempExecRemarkOpen[fileId]) state.tempExecRemarkOpen[fileId] = new Set();
+      return state.tempExecRemarkOpen[fileId];
+    };
+    const ensureTempExecReuseOpen = (tempExecApi && tempExecApi.ensureTempExecReuseOpen) || function(fileId) {
+      if (!state.tempExecReuseOpen || typeof state.tempExecReuseOpen !== 'object') state.tempExecReuseOpen = {};
+      if (!fileId) return new Set();
+      if (!state.tempExecReuseOpen[fileId]) state.tempExecReuseOpen[fileId] = new Set();
+      return state.tempExecReuseOpen[fileId];
+    };
+    const ensureTempExecDefectOpen = (tempExecApi && tempExecApi.ensureTempExecDefectOpen) || function(fileId) {
+      if (!state.tempExecDefectOpen || typeof state.tempExecDefectOpen !== 'object') state.tempExecDefectOpen = {};
+      if (!fileId) return new Set();
+      if (!state.tempExecDefectOpen[fileId]) state.tempExecDefectOpen[fileId] = new Set();
+      return state.tempExecDefectOpen[fileId];
+    };
+    tempExecApi.ensureTempExecSelection = ensureTempExecSelection;
+    tempExecApi.ensureTempExecRemarkOpen = ensureTempExecRemarkOpen;
+    tempExecApi.ensureTempExecReuseOpen = ensureTempExecReuseOpen;
+    tempExecApi.ensureTempExecDefectOpen = ensureTempExecDefectOpen;
+    tempExecApi.normalizeReusePresets = normalizeReusePresets;
+    tempExecApi.ensureTempExecReplacement = ensureTempExecReplacement;
+    tempExecApi.generateTempExecId = generateTempExecId;
+    tempExecApi.renderTempExecView = tempExecApi.renderTempExecView || function() {};
+    tempExecApi.renderTempVersionGrid = tempExecApi.renderTempVersionGrid || function() {};
+    tempExecApi.renderTempExecNav = tempExecApi.renderTempExecNav || function() {};
+    tempExecApi.getTempExecFile = tempExecApi.getTempExecFile || function() { return null; };
+    tempExecApi.serializeSingleTempExecFile = tempExecApi.serializeSingleTempExecFile || function(file) { return file || null; };
+    tempExecApi.getTempExecPageSize = tempExecApi.getTempExecPageSize || function() { return defaultTempExecPageSize; };
+    tempExecApi.applyTempExecSearch = tempExecApi.applyTempExecSearch || function(fileId, term, raw) {
+      state.tempExecSearch = { fileId: fileId || '', term: (term || '').trim().toLowerCase(), raw: raw || '' };
+      if (typeof tempExecApi.renderTempExecView === 'function') tempExecApi.renderTempExecView();
+    };
+    tempExecApi.applyTempExecPageSize = tempExecApi.applyTempExecPageSize || function(value) {
+      return { size: value, changed: false };
+    };
+    tempExecApi.exportTempExecSnapshot = tempExecApi.exportTempExecSnapshot || function() {
+      if (tempExecStatus) setStatus(tempExecStatus, '当前环境暂不支持导出执行页面配置', 'warn');
+    };
+    tempExecApi.importTempExecSnapshot = tempExecApi.importTempExecSnapshot || async function() {
+      if (tempExecStatus) setStatus(tempExecStatus, '当前环境暂不支持导入执行页面配置', 'warn');
+    };
+    tempExecApi.setTempExecActive = tempExecApi.setTempExecActive || function() {};
+    state.tempExecPageSize = tempExecApi.getTempExecPageSize();
+    createTempExecFile = tempExecApi.createTempExecFile || createTempExecFile;
+    syncTempExecFocus = tempExecApi.syncTempExecFocus || syncTempExecFocus;
+    persistTempExecState = tempExecApi.persistTempExecState || persistTempExecState;
+    setTempExecActive = tempExecApi.setTempExecActive || setTempExecActive;
+    removeTempExecFile = tempExecApi.removeTempExecFile || removeTempExecFile;
+    getCaseExecutionDisplay = tempExecApi.getCaseExecutionDisplay || getCaseExecutionDisplay;
+    renderTempExecView = tempExecApi.renderTempExecView;
+    applyTempExecPageSize = tempExecApi.applyTempExecPageSize;
 
     function refreshImportedCaseView() {
       if (!caseViewContainer || !caseViewContainer.classList.contains('visible')) return;
@@ -2297,7 +2029,10 @@
       : async function parseXmindFileFallback() { return { text: '', list: [] }; };
 
     async function exportTempExecToXmind() {
-      const active = getTempExecFile(state.tempExecActiveId);
+      const getActiveFile = tempExecApi && typeof tempExecApi.getTempExecFile === 'function'
+        ? tempExecApi.getTempExecFile
+        : function() { return null; };
+      const active = getActiveFile(state.tempExecActiveId);
       if (!active) {
         if (tempExecStatus) setStatus(tempExecStatus, '请选择需要导出的执行用例', 'warn');
         return;
@@ -2725,77 +2460,7 @@
       testModel,
     };
     window.app.core = core;
-    const tempExecApi = {
-      loadTempExecState,
-      importTempExecFiles,
-      addTempExecFocus,
-      removeTempExecFocus,
-      removeTempExecFile,
-      getTempExecFile,
-      setTempExecActive,
-      renderTempExecNav,
-      renderTempExecView,
-      serializeSingleTempExecFile,
-      exportTempExecToXmind,
-      exportTempExecSnapshot,
-      importTempExecSnapshot,
-      moveTempExecFileToRequirement,
-      reorderTempRequirement,
-      reorderTempVersion,
-      reorderVersionRequirement,
-      moveRequirementToVersion,
-      moveRequirementOutOfVersion,
-      createTempExecFile,
-      getTempVersion,
-      getVersionRequirementBlocks,
-      ensureTempExecReplacement,
-      syncTempExecFocus,
-      persistTempExecState,
-      ensureTempExecSelection,
-      ensureTempExecRemarkOpen,
-      ensureTempExecReuseOpen,
-      ensureTempExecDefectOpen,
-      toggleTempExecDefectPanel,
-      addTempExecDefectLink,
-      openTempExecDefectLink,
-      removeTempExecDefectLink,
-      toggleTempExecReusePanel,
-      addTempExecReuseEntry,
-      removeTempExecReuseEntry,
-      updateTempExecReuseStatus,
-      updateTempExecReuseText,
-      updateTempExecReuseNote,
-      updateTempExecResult,
-      updateTempExecRemark,
-      insertTempExecCase,
-      removeTempExecCase,
-      updateTempExecDefectLink,
-      updateTempExecCaseField,
-      handleTempExecReuseToggle,
-      changeTempExecPage,
-      setTempExecPage,
-      scrollTempExecViewTop,
-      toggleTempExecSelection,
-      toggleTempExecSelectAll,
-      startTempExecPresetDraft,
-      cancelTempExecPresetDraft,
-      confirmTempExecPresetDraft,
-      updateTempExecPresetDraft,
-      removeTempExecPreset,
-      applyTempExecPageSize,
-      applyTempExecSearch,
-      getTempExecPageSize,
-      generateTempExecId,
-      createTempVersion,
-      removeTempVersion,
-      removeTempGroupFromVersion,
-      renameTempVersion,
-      renderTempVersionGrid,
-      moveTempExecToVersion,
-      removeTempExecFromVersion,
-      moveRequirementToVersion,
-      moveTempExecFileWithinVersion,
-    };
+    tempExecApi.exportTempExecToXmind = exportTempExecToXmind;
     const casesGenApi = {
       goToCaseGeneration,
       generateCasesForModule,
