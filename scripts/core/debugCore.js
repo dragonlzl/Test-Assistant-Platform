@@ -28,6 +28,18 @@
     var casesCoverageStatus = dom.casesCoverageStatus;
     var caseGenStatus = dom.caseGenStatus;
     var splitResultEl = dom.splitResultEl;
+    var saveRawDebugBtn = dom.saveRawDebugBtn;
+    var importRawDebugBtn = dom.importRawDebugBtn;
+    var rawDebugFileInput = dom.rawDebugFileInput;
+    var saveCleanDebugBtn = dom.saveCleanDebugBtn;
+    var importCleanDebugBtn = dom.importCleanDebugBtn;
+    var cleanDebugFileInput = dom.cleanDebugFileInput;
+    var saveSplitDebugBtn = dom.saveSplitDebugBtn;
+    var importSplitDebugBtn = dom.importSplitDebugBtn;
+    var splitDebugFileInput = dom.splitDebugFileInput;
+    var saveCaseDebugBtn = dom.saveCaseDebugBtn;
+    var importCaseDebugBtn = dom.importCaseDebugBtn;
+    var caseDebugFileInput = dom.caseDebugFileInput;
 
     function normalizeResponseContent(value) {
       if (value === null || value === undefined) return '';
@@ -178,6 +190,15 @@
         });
       }
     }
+
+    [
+      { type: 'raw', saveBtn: saveRawDebugBtn, importBtn: importRawDebugBtn, fileInput: rawDebugFileInput },
+      { type: 'cleaned', saveBtn: saveCleanDebugBtn, importBtn: importCleanDebugBtn, fileInput: cleanDebugFileInput },
+      { type: 'split', saveBtn: saveSplitDebugBtn, importBtn: importSplitDebugBtn, fileInput: splitDebugFileInput },
+      { type: 'cases', saveBtn: saveCaseDebugBtn, importBtn: importCaseDebugBtn, fileInput: caseDebugFileInput },
+    ].forEach(function(cfg) {
+      if (cfg && cfg.type) bindDebugControls(cfg.type, cfg.saveBtn, cfg.importBtn, cfg.fileInput);
+    });
 
     return {
       saveDebugText: saveDebugText,

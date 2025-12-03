@@ -613,3 +613,27 @@
   - app.js 行数：2441  
   - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（22/22，需本地 8090 端口）  
   - 其他备注：按要求暂未调用 notify_feishu，待阶段性结论后统一发送  
+- 日期：2025-12-03 19:52  
+  - 子目标：核心迁移阶段4（按钮事件下沉模块化）  
+  - 影响范围：模型管理表单、默认提示词与调试导入导出事件绑定由各自模块承担，app.js 精简；compare 导入导出继续由 compare 模块统一处理  
+  - 子目标进度：85%  
+  - 最终目标进度：88%  
+  - app.js 行数：2419  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（22/22，全量 UI，用 8090 端口）  
+  - 其他备注：notify_feishu 按要求暂未触发，待阶段结论统一发送  
+- 日期：2025-12-03 19:59  
+  - 子目标：核心迁移阶段4（布局跳转/标签事件下沉）  
+  - 影响范围：标签切换与页面内跳转事件交由 layoutHandlers 处理，app.js 继续瘦身  
+  - 子目标进度：86%  
+  - 最终目标进度：88%  
+  - app.js 行数：2414  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 通过（22/22，全量 UI，用 8090 端口）  
+  - 其他备注：按要求未触发 notify_feishu，待阶段性结论统一发送  
+- 日期：2025-12-03 21:55  
+  - 子目标：核心迁移阶段4（flow/layout 状态下沉 & 临时执行默认收敛）  
+  - 影响范围：导航滚动/流程状态与用例提示下沉 flowCore；拆分执行接入 splitCore runtime；临时执行默认 API 收敛至 tempexecDefaults；核心脚本加载顺序新增 flowCore/tempexecDefaults  
+  - 子目标进度：100%（阶段目标 2200 行达成）  
+  - 最终目标进度：90%  
+  - app.js 行数：2193  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 提权后全量 22/22 通过（需确保 8090 端口无残留 http.server）  
+  - 其他备注：新增 `scripts/core/flowCore.js`、`scripts/core/tempexecDefaults.js`，修复 `getAssignedModel`/`scrollElementIntoView` TDZ 导致的初始化失败；提醒提前清理占用 8090 端口；`python3 notify_feishu.py` 因 DNS 失败，已尝试发送  

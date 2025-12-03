@@ -526,6 +526,23 @@
       }
     }
 
+    if (modelProviderEl) {
+      modelProviderEl.addEventListener('change', () => applyProviderPreset(modelProviderEl, modelBaseUrlEl, modelIdentifierEl));
+    }
+    if (createModelBtn) {
+      createModelBtn.addEventListener('click', () => {
+        if (modelFormTitle) modelFormTitle.textContent = '新增模型';
+        if (modelFormWrapper) modelFormWrapper.classList.remove('hidden');
+        resetModelForm();
+      });
+    }
+    if (saveModelBtn) {
+      saveModelBtn.addEventListener('click', saveModel);
+    }
+    if (resetModelFormBtn) {
+      resetModelFormBtn.addEventListener('click', () => resetModelForm(true));
+    }
+
     return {
       loadModels,
       saveModels,

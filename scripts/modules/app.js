@@ -124,6 +124,12 @@
   let setCaseProgressGroupState = function setCaseProgressGroupStateFallback() {};
   let setCaseProgressStep = function setCaseProgressStepFallback() {};
   let markAllCaseProgressGroups = function markAllCaseProgressGroupsFallback() {};
+  let updateFlowStatus = function updateFlowStatusFallback() {};
+  let scrollToSection = function scrollToSectionFallback() {};
+  let refreshExportCaseGenButton = function refreshExportCaseGenButtonFallback() {};
+  let setCaseViewHint = function setCaseViewHintFallback() {};
+  let splitModules = async function splitModulesFallback() {};
+  let ensureCaseGenModulesFromSplit = function ensureCaseGenModulesFromSplitFallback() { return false; };
   const noop = function() {}, asyncNoop = async function() {}, falseFn = function() { return false; }, emptyArr = function() { return []; }, emptyStr = function() { return ''; }, defaultParsedCases = function() { return { parsed: [], normalized: '', hadRecovery: false }; }, defaultCasesPayload = function() { return { text: '', isJson: false }; };
   let reviewRequirements = function reviewRequirementsFallback() { return Promise.resolve(); };
   let copyReviewResult = noop,
@@ -277,26 +283,17 @@
       : null;
     const reqCore = requirementCoreModule || {};
 
-    const normalizeRequirementName = reqCore.normalizeRequirementName || function normalizeRequirementNameFallback(name) {
+    const normalizeRequirementName = reqCore.normalizeRequirementName || function(name) {
       if (!name) return '';
       return String(name).trim();
     };
-
-    const stripRequirementHeader = reqCore.stripRequirementHeader || function stripRequirementHeaderFallback(text) {
+    const stripRequirementHeader = reqCore.stripRequirementHeader || function(text) {
       if (!text) return '';
-      const lines = text.split(/\r?\n/);
+      const lines = String(text).split(/\r?\n/);
       if (lines.length && /^#需求标识：/.test(lines[0].trim())) return lines.slice(1).join('\n');
-      return text;
+      return String(text);
     };
-
-    const getRequirementLabel = reqCore.getRequirementLabel || function getRequirementLabelFallback(allowFallback) {
-      const label = state.requirementLabel || normalizeRequirementName(state.lastRawImportName);
-      if (label) return label;
-      if (allowFallback === false) return '';
-      return '当前需求';
-    };
-
-    const setRequirementLabel = reqCore.setRequirementLabel || function setRequirementLabelFallback(label, source) {
+    const setRequirementLabel = reqCore.setRequirementLabel || function(label, source) {
       const normalized = normalizeRequirementName(label);
       if (!normalized) return '';
       state.requirementLabel = normalized;
@@ -304,28 +301,30 @@
       renderAutoRawInfo();
       return normalized;
     };
-
-    const buildRequirementPrompt = reqCore.buildRequirementPrompt || function buildRequirementPromptFallback(text) {
-      const suffix = '请填写本次需求名称，作为需求标识（不可为空）';
-      return text ? `${text}\n${suffix}` : suffix;
+    const getRequirementLabel = reqCore.getRequirementLabel || function(allowFallback) {
+      const label = state.requirementLabel || normalizeRequirementName(state.lastRawImportName);
+      if (label) return label;
+      if (allowFallback === false) return '';
+      return '当前需求';
     };
-
-    const ensureRequirementLabel = reqCore.ensureRequirementLabel || function ensureRequirementLabelFallback(promptText) {
+    const buildRequirementPrompt = reqCore.buildRequirementPrompt || function(text) {
+      const suffix = '请填写本次需求名称，作为需求标识（不可为空）';
+      return text && text.trim() ? `${text}\n${suffix}` : suffix;
+    };
+    const ensureRequirementLabel = reqCore.ensureRequirementLabel || function(promptText) {
       const existing = getRequirementLabel(false);
       if (existing) return existing;
       const text = window.prompt(buildRequirementPrompt(promptText));
       if (!text) return '';
       return setRequirementLabel(text, 'manual');
     };
-
-    const promptRequirementLabel = reqCore.promptRequirementLabel || function promptRequirementLabelFallback(promptText) {
+    const promptRequirementLabel = reqCore.promptRequirementLabel || function(promptText) {
       const current = getRequirementLabel(false);
       const text = window.prompt(buildRequirementPrompt(promptText), current || '');
       if (!text) return '';
       return setRequirementLabel(text, 'manual');
     };
-
-    const promptTempExecRequirement = reqCore.promptTempExecRequirement || function promptTempExecRequirementFallback(fileName, fallbackLabel) {
+    const promptTempExecRequirement = reqCore.promptTempExecRequirement || function(fileName, fallbackLabel) {
       const base = normalizeRequirementName(fallbackLabel || '')
         || normalizeRequirementName(getRequirementLabel(false))
         || normalizeRequirementName((fileName || '').replace(/\.[^.]+$/, ''))
@@ -334,14 +333,12 @@
       if (!input) return '';
       return setRequirementLabel(normalizeRequirementName(input), 'import');
     };
-
-    const formatCompactTimestamp = reqCore.formatCompactTimestamp || function formatCompactTimestampFallback() {
+    const formatCompactTimestamp = reqCore.formatCompactTimestamp || function() {
       const d = new Date();
       const pad = function(n) { return n.toString().padStart(2, '0'); };
       return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
     };
-
-    const wrapDataWithRequirement = reqCore.wrapDataWithRequirement || function wrapDataWithRequirementFallback(data, type) {
+    const wrapDataWithRequirement = reqCore.wrapDataWithRequirement || function(data, type) {
       const wrapped = { requirement: getRequirementLabel(true), data };
       if (data && typeof data === 'object' && !Array.isArray(data) && Object.prototype.hasOwnProperty.call(data, 'data')) {
         wrapped.data = data.data;
@@ -349,15 +346,12 @@
       if (type) wrapped.type = type;
       return wrapped;
     };
-
-    const unwrapRequirementPayload = reqCore.unwrapRequirementPayload || function unwrapRequirementPayloadFallback(rawText) {
+    const unwrapRequirementPayload = reqCore.unwrapRequirementPayload || function(rawText) {
       const stripped = stripCodeFence(rawText || '').trim();
       return { payload: stripped, requirement: '', type: '' };
     };
-
-    const extractRequirementLabelFromText = reqCore.extractRequirementLabelFromText || function extractRequirementLabelFromTextFallback() { return ''; };
-
-    const wrapTextWithRequirement = reqCore.wrapTextWithRequirement || function wrapTextWithRequirementFallback(text, type) {
+    const extractRequirementLabelFromText = reqCore.extractRequirementLabelFromText || function() { return ''; };
+    const wrapTextWithRequirement = reqCore.wrapTextWithRequirement || function(text, type) {
       const stripped = stripCodeFence(stripRequirementHeader(text || ''));
       if (!stripped) return '';
       try {
@@ -369,16 +363,10 @@
         return `${header.join('\n')}\n${stripped}`;
       }
     };
-
-    const getRequirementDisplayName = requirementCoreModule && requirementCoreModule.getRequirementDisplayName
-      ? requirementCoreModule.getRequirementDisplayName
-      : function getRequirementDisplayNameFallback() { return getRequirementLabel(true); };
-
-    const getSafeRequirementSlug = requirementCoreModule && requirementCoreModule.getSafeRequirementSlug
-      ? requirementCoreModule.getSafeRequirementSlug
-      : function getSafeRequirementSlugFallback() {
-        return (getRequirementLabel(true) || 'requirement').replace(/[\\/:*?"<>|]/g, '_');
-      };
+    const getRequirementDisplayName = reqCore.getRequirementDisplayName || function() { return getRequirementLabel(true); };
+    const getSafeRequirementSlug = reqCore.getSafeRequirementSlug || function() {
+      return (getRequirementLabel(true) || 'requirement').replace(/[\\/:*?"<>|]/g, '_');
+    };
 
     async function notifyFeishuCoverageFailure() {
       if (!state.autoRunning || !getFeishuWebhookUrl()) return;
@@ -399,68 +387,9 @@
     const splitCore = window.app && window.app.splitCore && typeof window.app.splitCore.init === 'function'
       ? window.app.splitCore.init({ moduleFieldAliases, normalizeRequirementName, unwrapRequirementPayload })
       : null;
-    const pickFirstString = splitCore && splitCore.pickFirstString ? splitCore.pickFirstString : function pickFirstStringFallback(source, aliases) {
-      if (!source) return '';
-      if (Array.isArray(source)) {
-        for (let i = 0; i < source.length; i += 1) {
-          const val = pickFirstStringFallback(source[i], aliases);
-          if (val) return val;
-        }
-        return '';
-      }
-      if (typeof source === 'object') {
-        for (let i = 0; i < aliases.length; i += 1) {
-          const alias = aliases[i];
-          const value = source[alias];
-          if (typeof value === 'string' && value.trim()) return value.trim();
-        }
-      }
-      return '';
-    };
-    const pickFirstValue = splitCore && splitCore.pickFirstValue ? splitCore.pickFirstValue : function pickFirstValueFallback(source, aliases) {
-      if (!source) return undefined;
-      if (Array.isArray(source)) {
-        for (let i = 0; i < source.length; i += 1) {
-          const val = pickFirstValueFallback(source[i], aliases);
-          if (val !== undefined) return val;
-        }
-        return undefined;
-      }
-      if (typeof source === 'object') {
-        for (let i = 0; i < aliases.length; i += 1) {
-          const alias = aliases[i];
-          if (Object.prototype.hasOwnProperty.call(source, alias)) {
-            const value = source[alias];
-            if (value !== undefined) return value;
-          }
-        }
-      }
-      return undefined;
-    };
-    const pickFirstArray = splitCore && splitCore.pickFirstArray ? splitCore.pickFirstArray : function pickFirstArrayFallback(source, aliases) {
-      if (!source) return [];
-      if (Array.isArray(source)) {
-        for (let i = 0; i < source.length; i += 1) {
-          const item = source[i];
-          if (Array.isArray(item)) {
-            if (item.length && typeof item[0] === 'string') return item;
-          }
-          if (item && typeof item === 'object') {
-            const nested = pickFirstArrayFallback(item, aliases);
-            if (nested && nested.length) return nested;
-          }
-        }
-        return [];
-      }
-      if (typeof source === 'object') {
-        for (let i = 0; i < aliases.length; i += 1) {
-          const alias = aliases[i];
-          const val = source[alias];
-          if (Array.isArray(val)) return val;
-        }
-      }
-      return [];
-    };
+    const pickFirstString = splitCore && splitCore.pickFirstString ? splitCore.pickFirstString : function pickFirstStringFallback() { return ''; };
+    const pickFirstValue = splitCore && splitCore.pickFirstValue ? splitCore.pickFirstValue : function pickFirstValueFallback() { return undefined; };
+    const pickFirstArray = splitCore && splitCore.pickFirstArray ? splitCore.pickFirstArray : function pickFirstArrayFallback() { return []; };
 
     const cleanCore = window.app && window.app.cleanCore && typeof window.app.cleanCore.init === 'function'
       ? window.app.cleanCore.init({
@@ -742,6 +671,10 @@
     assignPromptDom.caseGenPromptEl = caseGenPromptEl;
     assignPromptDom.caseFilterPromptEl = caseFilterPromptEl;
     assignPromptDom.defaultPromptStatus = defaultPromptStatus;
+    assignPromptDom.saveDefaultPromptsBtn = saveDefaultPromptsBtn;
+    assignPromptDom.exportDefaultPromptsBtn = exportDefaultPromptsBtn;
+    assignPromptDom.importDefaultPromptsBtn = importDefaultPromptsBtn;
+    assignPromptDom.importDefaultPromptsFile = importDefaultPromptsFile;
 
     const settingsModule = window.app.settings && typeof window.app.settings.init === 'function'
       ? window.app.settings.init({
@@ -807,6 +740,12 @@
       ensureTempExecColumns: function fallbackEnsure() { return { ...defaultTempExecColumns }; },
     };
     loadSettings();
+
+    const defaultScrollOffset = 200;
+    const scrollElementIntoView = function(el, behavior, offset) {
+      if (!el) return;
+      appUtils.scrollElementIntoView(el, behavior || 'smooth', offset === undefined ? defaultScrollOffset : offset);
+    };
 
     const modelsModule = window.app.models && typeof window.app.models.init === 'function'
       ? window.app.models.init({
@@ -887,6 +826,71 @@
       testModel,
       saveModel,
     } = modelsModule || {};
+
+    const parseSplitModules = function() {
+      if (splitCore && splitCore.parseSplitModules) {
+        return splitCore.parseSplitModules(splitResultEl.value, setRequirementLabel);
+      }
+      return [];
+    };
+
+    const splitRuntime = splitCore && splitCore.createSplitRuntime
+      ? splitCore.createSplitRuntime({
+        state,
+        config: { defaultPrompts },
+        dom: {
+          splitResultEl,
+          splitStatus,
+          splitBtnEl,
+          splitTimingEl,
+          casesCoverageStatus,
+        },
+        handlers: {
+          setStatus,
+          setStepInProgress,
+          clearStepInProgress,
+          updateFlowStatus,
+          ensureRequirementLabel,
+          getCleanedTextForModel,
+          getAssignedModel,
+          getReasoningForType,
+          callModelWithConfig,
+          updateModelTiming,
+          parseSplitModules: function() { return parseSplitModules(); },
+          refreshMissingSmartFillButton,
+          renderCaseGenProgressBoard,
+        },
+      })
+      : null;
+    if (splitRuntime && splitRuntime.splitModules) splitModules = splitRuntime.splitModules;
+    if (splitRuntime && splitRuntime.ensureCaseGenModulesFromSplit) ensureCaseGenModulesFromSplit = splitRuntime.ensureCaseGenModulesFromSplit;
+
+    const flowCore = window.app.flowCore && typeof window.app.flowCore.init === 'function'
+      ? window.app.flowCore.init({
+        state,
+        dom: {
+          rawText,
+          reviewResultEl,
+          cleanedTextEl,
+          splitResultEl,
+          casesCompareResultEl,
+          flowNavSteps,
+          runReviewBtn,
+          caseViewHint,
+          exportCaseGenBtn,
+        },
+        handlers: {
+          switchTab: function(name) { return switchTab(name); },
+          scrollElementIntoView,
+          hasCaseSource,
+        },
+      })
+      : null;
+    if (flowCore && flowCore.updateFlowStatus) updateFlowStatus = flowCore.updateFlowStatus;
+    if (flowCore && flowCore.scrollToSection) scrollToSection = flowCore.scrollToSection;
+    if (flowCore && flowCore.refreshExportCaseGenButton) refreshExportCaseGenButton = flowCore.refreshExportCaseGenButton;
+    if (flowCore && flowCore.setCaseViewHint) setCaseViewHint = flowCore.setCaseViewHint;
+
     const assignModule = window.app.assign && typeof window.app.assign.init === 'function'
       ? window.app.assign.init({
         state,
@@ -1092,6 +1096,18 @@
           casesCoverageStatus,
           caseGenStatus,
           splitResultEl,
+          saveRawDebugBtn,
+          importRawDebugBtn,
+          rawDebugFileInput,
+          saveCleanDebugBtn,
+          importCleanDebugBtn,
+          cleanDebugFileInput,
+          saveSplitDebugBtn,
+          importSplitDebugBtn,
+          splitDebugFileInput,
+          saveCaseDebugBtn,
+          importCaseDebugBtn,
+          caseDebugFileInput,
         },
         handlers: {
           setStatus,
@@ -1217,141 +1233,6 @@
       })
       : null;
     [reviewTimingEl, cleanTimingEl, compareTimingEl, splitTimingEl, casesTimingEl, caseGenTimingEl].forEach(el => updateModelTiming(el));
-
-    // 清洗与对比
-    function parseSplitModules() {
-      if (!splitResultEl || !splitResultEl.value.trim()) return [];
-      if (splitCore && splitCore.parseSplitModules) {
-        return splitCore.parseSplitModules(splitResultEl.value, setRequirementLabel);
-      }
-      return [];
-    }
-
-    function ensureCaseGenModulesFromSplit() {
-      if (state.caseGenModules.length) return false;
-      if (!splitResultEl.value.trim()) return false;
-      const modules = parseSplitModules();
-      if (!modules.length) return false;
-      state.caseGenModules = modules;
-      state.caseGenResults = {};
-      state.caseSelections = {};
-      state.caseGenSuggestions = {};
-      state.caseGenSource = splitResultEl.value.trim();
-      state.caseGenModuleStatus = {};
-      state.caseGenProgress = {};
-      state.caseGenRunning = new Set();
-      refreshMissingSmartFillButton();
-      renderCaseGenProgressBoard();
-      return true;
-    }
-
-    async function splitModules() {
-      const cleaned = getCleanedTextForModel();
-      if (!cleaned) {
-        setStatus(splitStatus, '请先完成清洗，获取基础内容', 'warn');
-        return;
-      }
-      const requirementLabel = ensureRequirementLabel('请输入本次需求标识后再进行测试模块拆分');
-      if (!requirementLabel) {
-        setStatus(splitStatus, '已取消测试模块拆分（需求标识为空）', 'warn');
-        return;
-      }
-      if (splitBtnEl) splitBtnEl.setAttribute('disabled', 'disabled');
-      let model;
-      try {
-        model = getAssignedModel('split');
-      } catch (err) {
-        setStatus(splitStatus, err.message, 'warn');
-        updateModelTiming(splitTimingEl);
-        if (splitBtnEl) splitBtnEl.removeAttribute('disabled');
-        return;
-      }
-      splitResultEl.value = '';
-      setStepInProgress('split');
-      setStatus(splitStatus, '正在拆分测试模块...', '');
-      try {
-        const splitPrompt = state.assignments.splitPrompt ? state.assignments.splitPrompt.trim() : '';
-        const prompt = splitPrompt || defaultPrompts.split;
-        const reasoning = getReasoningForType('split');
-        const startTime = Date.now();
-          const content = await callModelWithConfig(model, cleaned, prompt, reasoning);
-          updateModelTiming(splitTimingEl, Date.now() - startTime);
-          splitResultEl.value = content;
-          setStatus(splitStatus, '拆分完成', 'ok');
-          setStatus(casesCoverageStatus, '', '');
-        } catch (err) {
-        console.error(err);
-        updateModelTiming(splitTimingEl);
-        setStatus(splitStatus, `拆分失败：${err.message}`, 'err');
-      } finally {
-        clearStepInProgress('split');
-        updateFlowStatus();
-        if (splitBtnEl) splitBtnEl.removeAttribute('disabled');
-      }
-    }
-
-    const defaultScrollOffset = 200;
-    const scrollElementIntoView = function(el, behavior, offset) {
-      if (!el) return;
-      appUtils.scrollElementIntoView(el, behavior || 'smooth', offset === undefined ? defaultScrollOffset : offset);
-    };
-
-    function scrollToSection(target, options = {}) {
-      const behavior = options.behavior || 'smooth';
-      if (target === 'cases') {
-        ['cases-upload', 'cases'].forEach(id => {
-          const sectionEl = document.querySelector(`[data-section-id="${id}"]`);
-          if (sectionEl) sectionEl.classList.remove('collapsed');
-        });
-        switchTab('clean');
-        const sectionCoverage = document.querySelector('[data-section-id="cases"]');
-        if (sectionCoverage) {
-          scrollElementIntoView(sectionCoverage, behavior);
-          return;
-        }
-      }
-      if (target === 'cases-upload') {
-        switchTab('clean');
-        const sectionUpload = document.querySelector('[data-section-id="cases-upload"]');
-        if (sectionUpload) {
-          sectionUpload.classList.remove('collapsed');
-          sectionUpload.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        return;
-      }
-      if (target === 'casesgen') {
-        switchTab('casesgen');
-        const caseGenSection = document.querySelector('[data-section-id="casesgen"]');
-        if (caseGenSection) {
-          caseGenSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        return;
-      }
-      if (target === 'auto-import') {
-        switchTab('auto');
-        const autoSection = document.querySelector('[data-section-id="auto-import"]');
-        if (autoSection) {
-          autoSection.classList.remove('collapsed');
-          scrollElementIntoView(autoSection, behavior, 240);
-        }
-        return;
-      }
-      const section = document.querySelector(`[data-section-id="${target}"]`);
-      if (section) {
-        switchTab('clean');
-        section.classList.remove('collapsed');
-        scrollElementIntoView(section, behavior);
-      }
-    }
-
-    function refreshExportCaseGenButton() {
-      if (!exportCaseGenBtn) return;
-      const hasResult = Array.isArray(state.caseGenModules) && state.caseGenModules.some((mod) => {
-        const content = (state.caseGenResults[mod.id] || '').trim();
-        return Boolean(content && !/^\[\s*\]$/.test(content));
-      });
-      exportCaseGenBtn.disabled = !hasResult;
-    }
 
     if (exportCaseGenBtn) exportCaseGenBtn.disabled = true;
 
@@ -1700,70 +1581,39 @@
       })
       : null;
     const tempExecApi = tempexecCore ? { ...tempexecCore } : {};
-    const tempExecDefaults = {
-      normalizeReusePresets: function(list) { return Array.isArray(list) ? list : []; },
-      ensureTempExecSelection: function(fileId) {
-        if (!state.tempExecSelections || typeof state.tempExecSelections !== 'object') state.tempExecSelections = {};
-        if (!fileId) return new Set();
-        if (!state.tempExecSelections[fileId]) state.tempExecSelections[fileId] = new Set();
-        return state.tempExecSelections[fileId];
-      },
-      ensureTempExecRemarkOpen: function(fileId) {
-        if (!state.tempExecRemarkOpen || typeof state.tempExecRemarkOpen !== 'object') state.tempExecRemarkOpen = {};
-        if (!fileId) return new Set();
-        if (!state.tempExecRemarkOpen[fileId]) state.tempExecRemarkOpen[fileId] = new Set();
-        return state.tempExecRemarkOpen[fileId];
-      },
-      ensureTempExecReuseOpen: function(fileId) {
-        if (!state.tempExecReuseOpen || typeof state.tempExecReuseOpen !== 'object') state.tempExecReuseOpen = {};
-        if (!fileId) return new Set();
-        if (!state.tempExecReuseOpen[fileId]) state.tempExecReuseOpen[fileId] = new Set();
-        return state.tempExecReuseOpen[fileId];
-      },
-      ensureTempExecDefectOpen: function(fileId) {
-        if (!state.tempExecDefectOpen || typeof state.tempExecDefectOpen !== 'object') state.tempExecDefectOpen = {};
-        if (!fileId) return new Set();
-        if (!state.tempExecDefectOpen[fileId]) state.tempExecDefectOpen[fileId] = new Set();
-        return state.tempExecDefectOpen[fileId];
-      },
-      ensureTempExecReplacement: ensureTempExecReplacement,
-      generateTempExecId: generateTempExecId,
-      renderTempExecView: function() {},
-      renderTempVersionGrid: function() {},
-      renderTempExecNav: function() {},
-      getTempExecFile: function() { return null; },
-      serializeSingleTempExecFile: function(file) { return file || null; },
-      getTempExecPageSize: function() { return defaultTempExecPageSize; },
-      applyTempExecSearch: function(fileId, term, raw) {
-        state.tempExecSearch = { fileId: fileId || '', term: (term || '').trim().toLowerCase(), raw: raw || '' };
-        if (typeof tempExecApi.renderTempExecView === 'function') tempExecApi.renderTempExecView();
-      },
-      applyTempExecPageSize: function(value) { return { size: value, changed: false }; },
-      exportTempExecSnapshot: function() {
-        if (tempExecStatus) setStatus(tempExecStatus, '当前环境暂不支持导出执行页面配置', 'warn');
-      },
-      importTempExecSnapshot: async function() {
-        if (tempExecStatus) setStatus(tempExecStatus, '当前环境暂不支持导入执行页面配置', 'warn');
-      },
-      setTempExecActive: function() {},
-      createTempExecFile: function() { return null; },
-      syncTempExecFocus: function() {},
-      persistTempExecState: function() {},
-      removeTempExecFile: function() {},
-      getCaseExecutionDisplay: function() { return ''; },
-    };
+    const tempExecDefaults = window.app.tempexecDefaults && typeof window.app.tempexecDefaults.create === 'function'
+      ? window.app.tempexecDefaults.create({
+        state,
+        defaultTempExecPageSize,
+        tempExecStatus,
+        setStatus,
+        normalizeTempExecName,
+        removePendingTempExecByName,
+        removeTempExecFile: function(id) {
+          if (tempExecApi.removeTempExecFile) return tempExecApi.removeTempExecFile(id);
+          return undefined;
+        },
+        renderTempExecView: function() {
+          if (typeof tempExecApi.renderTempExecView === 'function') tempExecApi.renderTempExecView();
+        },
+        generateTempExecId,
+        generateTempVersionId,
+        stringifyCaseField,
+      })
+      : {};
     Object.keys(tempExecDefaults).forEach(function(key) {
       if (!tempExecApi[key]) tempExecApi[key] = tempExecDefaults[key];
     });
-    state.tempExecPageSize = tempExecApi.getTempExecPageSize();
-    createTempExecFile = tempExecApi.createTempExecFile;
-    syncTempExecFocus = tempExecApi.syncTempExecFocus;
-    persistTempExecState = tempExecApi.persistTempExecState;
-    setTempExecActive = tempExecApi.setTempExecActive;
-    removeTempExecFile = tempExecApi.removeTempExecFile;
-    getCaseExecutionDisplay = tempExecApi.getCaseExecutionDisplay;
-    renderTempExecView = tempExecApi.renderTempExecView;
-    applyTempExecPageSize = tempExecApi.applyTempExecPageSize;
+    const getTempExecPageSizeFn = tempExecApi.getTempExecPageSize || function() { return defaultTempExecPageSize; };
+    state.tempExecPageSize = getTempExecPageSizeFn();
+    createTempExecFile = tempExecApi.createTempExecFile || createTempExecFile;
+    syncTempExecFocus = tempExecApi.syncTempExecFocus || syncTempExecFocus;
+    persistTempExecState = tempExecApi.persistTempExecState || persistTempExecState;
+    setTempExecActive = tempExecApi.setTempExecActive || setTempExecActive;
+    removeTempExecFile = tempExecApi.removeTempExecFile || removeTempExecFile;
+    getCaseExecutionDisplay = tempExecApi.getCaseExecutionDisplay || getCaseExecutionDisplay;
+    renderTempExecView = tempExecApi.renderTempExecView || renderTempExecView;
+    applyTempExecPageSize = tempExecApi.applyTempExecPageSize || function(value) { return { size: value, changed: false }; };
 
     const xmindCore = window.app && window.app.xmindCore && typeof window.app.xmindCore.init === 'function'
       ? window.app.xmindCore.init({
@@ -1803,34 +1653,6 @@
         state.inProgressStep = '';
         updateFlowStatus();
       }
-    }
-
-    function updateFlowStatus() {
-      const stateMap = {
-        import: rawText.value.trim().length > 0,
-        review: reviewResultEl ? reviewResultEl.value.trim().length > 0 : false,
-        clean: cleanedTextEl.value.trim().length > 0,
-        split: splitResultEl.value.trim().length > 0,
-        'cases-upload': hasCaseSource(),
-        cases: casesCompareResultEl.value.trim().length > 0,
-      };
-      if (state.inProgressStep) stateMap[state.inProgressStep] = false;
-      const order = ['import', 'review', 'clean', 'split', 'cases-upload', 'cases'];
-      const next = state.inProgressStep || order.find(key => !stateMap[key]) || 'cases';
-      if (runReviewBtn) {
-        const rawReady = stateMap.import;
-        runReviewBtn.disabled = !rawReady || state.inProgressStep === 'review';
-      }
-      flowNavSteps.forEach(step => {
-        const target = step.dataset.target;
-        step.classList.remove('done', 'active');
-        if (target === state.inProgressStep) {
-          step.classList.add('active');
-          return;
-        }
-        if (stateMap[target]) step.classList.add('done');
-        if (target === next) step.classList.add('active');
-      });
     }
 
     const uploadModule = window.app.upload && typeof window.app.upload.init === 'function'
@@ -1971,7 +1793,6 @@
       if (cleanHandlersModule.copyCleaned) copyCleaned = cleanHandlersModule.copyCleaned;
     }
 
-    if (toggleSplitViewBtn) toggleSplitViewBtn.addEventListener('click', toggleSplitView);
     const cleanModule = window.app.clean && typeof window.app.clean.init === 'function'
       ? window.app.clean.init({
         state,
@@ -2044,57 +1865,7 @@
       })
       : null;
 
-    tabButtons.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tabBtn)));
-
-    modelProviderEl.addEventListener('change', () => applyProviderPreset(modelProviderEl, modelBaseUrlEl, modelIdentifierEl));
-    createModelBtn.addEventListener('click', () => {
-      modelFormTitle.textContent = '新增模型';
-      modelFormWrapper.classList.remove('hidden');
-      resetModelForm();
-    });
-    saveModelBtn.addEventListener('click', saveModel);
-    resetModelFormBtn.addEventListener('click', () => resetModelForm(true));
     if (caseViewBtn) caseViewBtn.addEventListener('click', toggleImportedCaseView);
-    document.querySelectorAll('[data-jump]').forEach((link) => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const target = link.dataset.jump;
-        if (!target) return;
-        switchTab(target);
-        const section = document.querySelector(`[data-tab-section=\"${target}\"]`);
-        if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    });
-    if (saveDefaultPromptsBtn && saveDefaultPrompts) {
-      saveDefaultPromptsBtn.addEventListener('click', () => saveDefaultPrompts());
-    }
-    if (exportDefaultPromptsBtn && exportDefaultPrompts) {
-      exportDefaultPromptsBtn.addEventListener('click', () => exportDefaultPrompts());
-    }
-    if (importDefaultPromptsBtn && importDefaultPromptsFile && importDefaultPrompts) {
-      importDefaultPromptsBtn.addEventListener('click', () => importDefaultPromptsFile.click());
-      importDefaultPromptsFile.addEventListener('change', async (event) => {
-        const file = event.target.files && event.target.files[0];
-        event.target.value = '';
-        if (file) await importDefaultPrompts(file);
-      });
-    }
-    bindDebugControls('raw', saveRawDebugBtn, importRawDebugBtn, rawDebugFileInput);
-    bindDebugControls('cleaned', saveCleanDebugBtn, importCleanDebugBtn, cleanDebugFileInput);
-    bindDebugControls('split', saveSplitDebugBtn, importSplitDebugBtn, splitDebugFileInput);
-    bindDebugControls('cases', saveCaseDebugBtn, importCaseDebugBtn, caseDebugFileInput);
-
-    if (exportCompareResultBtn && exportCompareResult) {
-      exportCompareResultBtn.addEventListener('click', () => exportCompareResult());
-    }
-    if (importCompareResultBtn && compareImportFileInput && importCompareResult) {
-      importCompareResultBtn.addEventListener('click', () => compareImportFileInput.click());
-      compareImportFileInput.addEventListener('change', async (e) => {
-        const file = e.target.files && e.target.files[0];
-        e.target.value = '';
-        if (file) await importCompareResult(file);
-      });
-    }
 
     function switchTab(name) {
       state.activeTab = name;
@@ -2138,34 +1909,6 @@
     }
   }
 
-    if (xmindStructureToggle && xmindStructureCard) {
-      const labelEl = xmindStructureToggle.querySelector('span:last-child');
-      const collapseCard = () => {
-        xmindStructureCard.classList.add('collapsed-card');
-        xmindStructureToggle.classList.remove('active');
-        if (labelEl) labelEl.textContent = 'XMind 用例结构';
-      };
-      const expandCard = () => {
-        xmindStructureCard.classList.remove('collapsed-card');
-        xmindStructureToggle.classList.add('active');
-        if (labelEl) labelEl.textContent = '收起 XMind 用例结构';
-        requestAnimationFrame(() => {
-          const target = xmindStructureCard;
-          const rect = target.getBoundingClientRect();
-          const offset = Math.max(120, (window.innerHeight / 2) - (rect.height / 2));
-          scrollElementIntoView(target, 'smooth', offset);
-        });
-      };
-      collapseCard();
-      xmindStructureToggle.addEventListener('click', () => {
-        const collapsed = xmindStructureCard.classList.contains('collapsed-card');
-        if (collapsed) {
-          expandCard();
-        } else {
-          collapseCard();
-        }
-      });
-    }
     const core = {
       state,
       config: window.app.config,
@@ -2286,7 +2029,23 @@
         ? window.app.layoutHandlers.init({
           updateFlowStatus,
           scrollToSection,
-          dom: { flowNavSteps, scrollTopBtn, scrollBottomBtn },
+          switchTab,
+          handlers: {
+            toggleSplitView,
+            toggleImportedCaseView,
+            scrollElementIntoView,
+          },
+          dom: {
+            flowNavSteps,
+            scrollTopBtn,
+            scrollBottomBtn,
+            tabButtons,
+            toggleSplitViewBtn,
+            caseViewBtn,
+            xmindStructureToggle,
+            xmindStructureCard,
+            jumpLinks: document.querySelectorAll('[data-jump]'),
+          },
       })
       : null;
     const casegenProgressModule = window.app.casegenProgress && typeof window.app.casegenProgress.init === 'function'
@@ -2330,13 +2089,6 @@
     }
     window.app = window.app || {};
     window.app.init = initApp;
-
-    function setCaseViewHint(text) {
-      if (caseViewHint) {
-        caseViewHint.textContent = text;
-        caseViewHint.classList.toggle('hidden', !text);
-      }
-    }
 
     renderCaseGenProgressBoard();
 

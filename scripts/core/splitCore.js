@@ -126,11 +126,111 @@
       return [];
     }
 
+    function createSplitRuntime(ctx) {
+      ctx = ctx || {};
+      var state = ctx.state || {};
+      var dom = ctx.dom || {};
+      var handlers = ctx.handlers || {};
+      var config = ctx.config || {};
+      var defaultPrompts = config.defaultPrompts || {};
+
+      var splitResultEl = dom.splitResultEl;
+      var splitStatus = dom.splitStatus;
+      var splitBtnEl = dom.splitBtnEl;
+      var splitTimingEl = dom.splitTimingEl;
+      var casesCoverageStatus = dom.casesCoverageStatus;
+
+      var parseSplitModulesFn = handlers.parseSplitModules || function() { return []; };
+      var refreshMissingSmartFillButton = handlers.refreshMissingSmartFillButton || function() {};
+      var renderCaseGenProgressBoard = handlers.renderCaseGenProgressBoard || function() {};
+
+      function ensureCaseGenModulesFromSplit() {
+        if (state.caseGenModules && state.caseGenModules.length) return false;
+        var splitText = splitResultEl && splitResultEl.value ? splitResultEl.value.trim() : '';
+        if (!splitText) return false;
+        var modules = parseSplitModulesFn();
+        if (!modules.length) return false;
+        state.caseGenModules = modules;
+        state.caseGenResults = {};
+        state.caseSelections = {};
+        state.caseGenSuggestions = {};
+        state.caseGenSource = splitText;
+        state.caseGenModuleStatus = {};
+        state.caseGenProgress = {};
+        state.caseGenRunning = new Set();
+        refreshMissingSmartFillButton();
+        renderCaseGenProgressBoard();
+        return true;
+      }
+
+      var setStatus = handlers.setStatus || function() {};
+      var setStepInProgress = handlers.setStepInProgress || function() {};
+      var clearStepInProgress = handlers.clearStepInProgress || function() {};
+      var updateFlowStatus = handlers.updateFlowStatus || function() {};
+      var ensureRequirementLabel = handlers.ensureRequirementLabel || function() { return ''; };
+      var getCleanedTextForModel = handlers.getCleanedTextForModel || function() { return ''; };
+      var getAssignedModel = handlers.getAssignedModel || function() { throw new Error('缺少模型'); };
+      var getReasoningForType = handlers.getReasoningForType || function() { return ''; };
+      var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
+      var updateModelTiming = handlers.updateModelTiming || function() {};
+
+      async function splitModules() {
+        var cleaned = getCleanedTextForModel();
+        if (!cleaned) {
+          setStatus(splitStatus, '请先完成清洗，获取基础内容', 'warn');
+          return;
+        }
+        var requirementLabel = ensureRequirementLabel('请输入本次需求标识后再进行测试模块拆分');
+        if (!requirementLabel) {
+          setStatus(splitStatus, '已取消测试模块拆分（需求标识为空）', 'warn');
+          return;
+        }
+        if (splitBtnEl) splitBtnEl.setAttribute('disabled', 'disabled');
+        var model;
+        try {
+          model = getAssignedModel('split');
+        } catch (err) {
+          setStatus(splitStatus, err.message, 'warn');
+          updateModelTiming(splitTimingEl);
+          if (splitBtnEl) splitBtnEl.removeAttribute('disabled');
+          return;
+        }
+        if (splitResultEl) splitResultEl.value = '';
+        setStepInProgress('split');
+        setStatus(splitStatus, '正在拆分测试模块...', '');
+        try {
+          var splitPrompt = state.assignments && state.assignments.splitPrompt ? state.assignments.splitPrompt.trim() : '';
+          var prompt = splitPrompt || (defaultPrompts.split || '');
+          var reasoning = getReasoningForType('split');
+          var startTime = Date.now();
+          var content = await callModelWithConfig(model, cleaned, prompt, reasoning);
+          updateModelTiming(splitTimingEl, Date.now() - startTime);
+          if (splitResultEl) splitResultEl.value = content;
+          setStatus(splitStatus, '拆分完成', 'ok');
+          if (casesCoverageStatus) setStatus(casesCoverageStatus, '', '');
+        } catch (err) {
+          console.error(err);
+          updateModelTiming(splitTimingEl);
+          setStatus(splitStatus, '拆分失败：' + err.message, 'err');
+        } finally {
+          clearStepInProgress('split');
+          updateFlowStatus();
+          if (splitBtnEl) splitBtnEl.removeAttribute('disabled');
+        }
+      }
+
+      return {
+        splitModules: splitModules,
+        ensureCaseGenModulesFromSplit: ensureCaseGenModulesFromSplit,
+      };
+    }
+
     return {
       pickFirstString: pickFirstString,
       pickFirstValue: pickFirstValue,
       pickFirstArray: pickFirstArray,
       parseSplitModules: parseSplitModules,
+      createSplitRuntime: createSplitRuntime,
     };
   }
 

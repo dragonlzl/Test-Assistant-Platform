@@ -2,12 +2,23 @@
   function init(ctx) {
     if (!ctx) return {};
     var dom = ctx.dom || {};
+    var handlers = ctx.handlers || {};
     var updateFlowStatus = ctx.updateFlowStatus || function() {};
     var scrollToSection = ctx.scrollToSection || function() {};
+    var switchTab = ctx.switchTab || function() {};
+    var toggleSplitView = handlers.toggleSplitView || function() {};
+    var toggleImportedCaseView = handlers.toggleImportedCaseView || function() {};
+    var scrollElementIntoView = handlers.scrollElementIntoView || function() {};
 
     var flowNavSteps = dom.flowNavSteps || document.querySelectorAll('#flowNav .step');
     var scrollTopBtn = dom.scrollTopBtn;
     var scrollBottomBtn = dom.scrollBottomBtn;
+    var tabButtons = dom.tabButtons || [];
+    var jumpLinks = dom.jumpLinks || document.querySelectorAll('[data-jump]');
+    var toggleSplitViewBtn = dom.toggleSplitViewBtn;
+    var caseViewBtn = dom.caseViewBtn;
+    var xmindStructureToggle = dom.xmindStructureToggle;
+    var xmindStructureCard = dom.xmindStructureCard;
 
     document.querySelectorAll('section.card').forEach(function(card) {
       var header = card.querySelector('h2');
@@ -37,6 +48,61 @@
     if (scrollBottomBtn) {
       scrollBottomBtn.addEventListener('click', function() {
         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      });
+    }
+
+    if (toggleSplitViewBtn) {
+      toggleSplitViewBtn.addEventListener('click', toggleSplitView);
+    }
+
+    if (caseViewBtn) {
+      caseViewBtn.addEventListener('click', toggleImportedCaseView);
+    }
+
+    if (tabButtons && typeof tabButtons.forEach === 'function') {
+      tabButtons.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          if (btn.dataset && btn.dataset.tabBtn) switchTab(btn.dataset.tabBtn);
+        });
+      });
+    }
+
+    if (jumpLinks && typeof jumpLinks.forEach === 'function') {
+      jumpLinks.forEach(function(link) {
+        link.addEventListener('click', function(e) {
+          if (link.dataset && link.dataset.jump) {
+            e.preventDefault();
+            switchTab(link.dataset.jump);
+            var section = document.querySelector('[data-tab-section="' + link.dataset.jump + '"]');
+            if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        });
+      });
+    }
+
+    if (xmindStructureToggle && xmindStructureCard) {
+      var labelEl = xmindStructureToggle.querySelector('span:last-child');
+      var collapseCard = function() {
+        xmindStructureCard.classList.add('collapsed-card');
+        xmindStructureToggle.classList.remove('active');
+        if (labelEl) labelEl.textContent = 'XMind 用例结构';
+      };
+      var expandCard = function() {
+        xmindStructureCard.classList.remove('collapsed-card');
+        xmindStructureToggle.classList.add('active');
+        if (labelEl) labelEl.textContent = '收起 XMind 用例结构';
+        requestAnimationFrame(function() {
+          var target = xmindStructureCard;
+          var rect = target.getBoundingClientRect();
+          var offset = Math.max(120, (window.innerHeight / 2) - (rect.height / 2));
+          scrollElementIntoView(target, 'smooth', offset);
+        });
+      };
+      collapseCard();
+      xmindStructureToggle.addEventListener('click', function() {
+        var collapsed = xmindStructureCard.classList.contains('collapsed-card');
+        if (collapsed) expandCard();
+        else collapseCard();
       });
     }
 

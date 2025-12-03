@@ -7,6 +7,10 @@
     var setStatus = ctx.setStatus || function noopSetStatus() {};
     var downloadText = ctx.downloadText || function noopDownload() {};
     var dom = ctx.dom || {};
+    var saveDefaultPromptsBtn = dom.saveDefaultPromptsBtn;
+    var exportDefaultPromptsBtn = dom.exportDefaultPromptsBtn;
+    var importDefaultPromptsBtn = dom.importDefaultPromptsBtn;
+    var importDefaultPromptsFile = dom.importDefaultPromptsFile;
     if (!state.assignments || typeof state.assignments !== 'object') {
       state.assignments = {};
     }
@@ -139,6 +143,21 @@
         console.error(err);
         setStatus(getStatusEl(), '导入失败：' + (err && err.message ? err.message : '未知错误'), 'err');
       }
+    }
+
+    if (saveDefaultPromptsBtn && typeof saveDefaultPrompts === 'function') {
+      saveDefaultPromptsBtn.addEventListener('click', function() { saveDefaultPrompts(); });
+    }
+    if (exportDefaultPromptsBtn && typeof exportDefaultPrompts === 'function') {
+      exportDefaultPromptsBtn.addEventListener('click', function() { exportDefaultPrompts(); });
+    }
+    if (importDefaultPromptsBtn && importDefaultPromptsFile && typeof importDefaultPrompts === 'function') {
+      importDefaultPromptsBtn.addEventListener('click', function() { importDefaultPromptsFile.click(); });
+      importDefaultPromptsFile.addEventListener('change', async function(event) {
+        var file = event.target && event.target.files && event.target.files[0];
+        event.target.value = '';
+        if (file) await importDefaultPrompts(file);
+      });
     }
 
     return {
