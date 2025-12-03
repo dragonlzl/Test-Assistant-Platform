@@ -549,3 +549,19 @@
   - app.js 行数：2708  
   - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 提权后全量 21/21 通过  
   - 其他备注：权限操作前已尝试运行 `python3 notify_feishu.py`（网络受限发送失败），测试需本地 8090 端口  
+- 日期：2025-12-03 14:50  
+  - 子目标：核心迁移阶段4（fallback 合并精简）  
+  - 影响范围：临时执行/用例生成等的 fallback 声明合并为公用默认函数，减少重复代码行；功能保持不变  
+  - 子目标进度：71%（app.js 行数 2709，继续向 2200 行目标推进）  
+  - 最终目标进度：82%  
+  - app.js 行数：2709  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；未重复跑 UI（仅重构 fallback 声明，核心逻辑未变），如需可复用上次全量 21/21 结果  
+  - 其他备注：更新后再次可直接运行 `python3 notify_feishu.py` 发送通知（需允许外网）  
+- 日期：2025-12-03 15:05  
+  - 子目标：核心迁移阶段4（滚动遮挡修复+fallback 收敛补充）  
+  - 影响范围：用例执行卡片“常用用例模版”下拉层级调整，避免覆盖一键执行步骤；fallback 公共默认合并为单行声明以继续瘦身  
+  - 子目标进度：72%（app.js 行数 2709，CSS 微调）  
+  - 最终目标进度：83%  
+  - app.js 行数：2709  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；UI 未重跑（CSS 层级与 fallback 收敛变更，未改交互逻辑，可复用前次 21/21 结果）  
+  - 其他备注：调整 `.template-dropdown`/`.template-menu` z-index，模板按钮随滚动不再遮挡顶部步骤；按流程已运行 `python3 notify_feishu.py`（需外网）  
