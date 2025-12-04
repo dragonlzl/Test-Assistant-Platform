@@ -15,12 +15,23 @@
     var updateAutoMissingCard = handlers.updateAutoMissingCard || function() {};
     var updateFlowStatus = handlers.updateFlowStatus || function() {};
     var setStatus = handlers.setStatus || function() {};
+    var renderCleanRawView = handlers.renderCleanRawView || function() {};
     var rawText = dom.rawText;
     var fileName = dom.fileName;
     var parseStatus = dom.parseStatus;
     var state = ctx.state || {};
     var handleCaseFiles = handlers.handleCaseFiles;
-    var clearRawInput = handlers.clearRawInput;
+    var clearRawInput = handlers.clearRawInput || function() {
+      if (rawText) rawText.value = '';
+      if (fileName) fileName.textContent = '未选择文件';
+      state.lastRawImportName = '';
+      state.requirementLabel = '';
+      state.requirementLabelSource = '';
+      setStatus(parseStatus, '', '');
+      renderAutoRawInfo();
+      renderCleanRawView(state.cleanViewSelection);
+      updateFlowStatus();
+    };
     var removeImportedCase = handlers.removeImportedCase;
 
     var fileInput = dom.fileInput;

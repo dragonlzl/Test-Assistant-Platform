@@ -32,12 +32,12 @@
           cleanViewContainer.classList.remove('hidden');
           cleanViewContainer.classList.add('visible');
           toggleCleanViewBtn.textContent = '收起视图';
+          renderCleanView(false);
         } else {
           cleanViewContainer.classList.add('hidden');
           cleanViewContainer.classList.remove('visible');
           toggleCleanViewBtn.textContent = '展开视图';
         }
-        renderCleanView(false);
       });
     }
     if (toggleCleanRawViewBtn && cleanRawView && typeof renderCleanRawView === 'function') {

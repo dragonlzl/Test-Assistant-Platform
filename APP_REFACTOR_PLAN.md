@@ -653,3 +653,19 @@
   - app.js 行数：2070  
   - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 首次因端口权限失败，提权后全量 22/22 通过；`python3 notify_feishu.py` 提权后 HTTP 200 成功  
   - 其他备注：requirementCore 缺失时直接报错，避免继续维护多套需求 fallback；通知发送需确保外网或提权环境  
+- 日期：2025-12-03 23:23  
+  - 子目标：核心迁移阶段5（上传清空下沉与分页设置对齐 tempexec）  
+  - 影响范围：upload 模块内建清空原文逻辑（移出 app.js）；设置页分页保存复用 tempexec 核心 clamp/apply，避免重复绑定；清洗视图折叠渲染修正；测试端口残留清理  
+  - 子目标进度：25%  
+  - 最终目标进度：93%  
+  - app.js 行数：2062  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 提权后 22/22 通过（首次跑因残留 python http.server 8090 导致超时，清理进程后复跑通过）  
+  - 其他备注：`clearRawInput` 下沉 upload 并传入 `renderCleanRawView`；分页设置仅由 tempexec 处理，避免双重状态；清洗视图切换只在展开时重渲染；已提权运行 `python3 notify_feishu.py` 返回 200；跑 UI 前确认无残留 8090 端口占用  
+- 日期：2025-12-04 09:35  
+  - 子目标：核心迁移阶段5（DOM 自取与 app.js 瘦身）  
+  - 影响范围：模型管理/指派/默认提示词/设置模块的 DOM 绑定改为模块内自取；tab 切换状态清理改为按 ID 查找；保持功能逻辑不变  
+  - 子目标进度：35%  
+  - 最终目标进度：94%  
+  - app.js 行数：1883  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 首次因端口权限失败，提权后 22/22 通过  
+  - 其他备注：`python3 notify_feishu.py` 首次因 DNS 失败，提权后 HTTP 200 成功；后续可继续下沉剩余初始化/编排以压缩至 1200 行目标  

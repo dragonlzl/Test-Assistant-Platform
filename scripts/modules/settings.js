@@ -17,23 +17,20 @@
     };
     var renderTempExecView = ctx.renderTempExecView || function noopRender() {};
     var dom = ctx.dom || {};
-    var modelTimeoutInput = dom.modelTimeoutInput;
-    var modelTimeoutStatus = dom.modelTimeoutStatus;
-    var feishuWebhookInput = dom.feishuWebhookInput;
-    var feishuMentionInput = dom.feishuMentionInput;
-    var feishuWebhookStatus = dom.feishuWebhookStatus;
-    var tempExecColumnForm = dom.tempExecColumnForm;
-    var tempExecColumnStatus = dom.tempExecColumnStatus;
-    var saveModelTimeoutBtn = dom.saveModelTimeoutBtn;
-    var saveFeishuWebhookBtn = dom.saveFeishuWebhookBtn;
-    var testFeishuWebhookBtn = dom.testFeishuWebhookBtn;
-    var saveTempExecColumnsBtn = dom.saveTempExecColumnsBtn;
-    var tempExecPageSizeInput = dom.tempExecPageSizeInput;
-    var saveTempExecPageSizeBtn = dom.saveTempExecPageSizeBtn;
-    var tempExecPageSizeStatus = dom.tempExecPageSizeStatus;
-    var applyTempExecPageSize = typeof ctx.applyTempExecPageSize === 'function'
-      ? ctx.applyTempExecPageSize
-      : function noopApply() { return { changed: false }; };
+    var modelTimeoutInput = dom.modelTimeoutInput || document.getElementById('modelTimeoutInput');
+    var modelTimeoutStatus = dom.modelTimeoutStatus || document.getElementById('modelTimeoutStatus');
+    var feishuWebhookInput = dom.feishuWebhookInput || document.getElementById('feishuWebhook');
+    var feishuMentionInput = dom.feishuMentionInput || document.getElementById('feishuNotifyUser');
+    var feishuWebhookStatus = dom.feishuWebhookStatus || document.getElementById('feishuWebhookStatus');
+    var tempExecColumnForm = dom.tempExecColumnForm || document.getElementById('tempExecColumnForm');
+    var tempExecColumnStatus = dom.tempExecColumnStatus || document.getElementById('tempExecColumnStatus');
+    var saveModelTimeoutBtn = dom.saveModelTimeoutBtn || document.getElementById('saveModelTimeout');
+    var saveFeishuWebhookBtn = dom.saveFeishuWebhookBtn || document.getElementById('saveFeishuWebhook');
+    var testFeishuWebhookBtn = dom.testFeishuWebhookBtn || document.getElementById('testFeishuWebhook');
+    var saveTempExecColumnsBtn = dom.saveTempExecColumnsBtn || document.getElementById('saveTempExecColumns');
+    var tempExecPageSizeInput = dom.tempExecPageSizeInput || document.getElementById('tempExecPageSizeInput');
+    var saveTempExecPageSizeBtn = dom.saveTempExecPageSizeBtn || document.getElementById('saveTempExecPageSize');
+    var tempExecPageSizeStatus = dom.tempExecPageSizeStatus || document.getElementById('tempExecPageSizeStatus');
 
     var defaultSettings = config.defaultSettings || {};
     var defaultTempExecColumns = config.defaultTempExecColumns || {};
@@ -41,6 +38,20 @@
     var settingsKey = config.settingsKey || 'usecase-settings-v1';
     var minModelTimeoutSec = config.minModelTimeoutSec || 30;
     var maxModelTimeoutSec = config.maxModelTimeoutSec || 1800;
+    var clampTempExecPageSize = typeof ctx.clampTempExecPageSize === 'function'
+      ? ctx.clampTempExecPageSize
+      : function(value) {
+          var num = Math.round(Number(value));
+          if (!Number.isFinite(num) || num <= 0) return defaultTempExecPageSize;
+          return num;
+        };
+    var applyTempExecPageSize = typeof ctx.applyTempExecPageSize === 'function'
+      ? ctx.applyTempExecPageSize
+      : function(value) {
+          var size = clampTempExecPageSize(value);
+          state.tempExecPageSize = size;
+          return { size: size, changed: true };
+        };
 
     function isRequiredTempExecColumn(key) {
       return key === 'select' || key === 'title' || key === 'actual' || key === 'remark' || key === 'defect' || key === 'ops';
@@ -285,7 +296,6 @@
       if (feishuWebhookInput) feishuWebhookInput.addEventListener('input', function() { setStatus(feishuWebhookStatus, '', ''); });
       if (feishuMentionInput) feishuMentionInput.addEventListener('input', function() { setStatus(feishuWebhookStatus, '', ''); });
       if (saveTempExecColumnsBtn) saveTempExecColumnsBtn.addEventListener('click', saveTempExecColumnsSetting);
-      if (saveTempExecPageSizeBtn) saveTempExecPageSizeBtn.addEventListener('click', saveTempExecPageSize);
     }
 
     bindEvents();
@@ -299,7 +309,6 @@
       saveFeishuWebhookConfig: saveFeishuWebhookConfig,
       testFeishuWebhookConfig: testFeishuWebhookConfig,
       saveTempExecColumnsSetting: saveTempExecColumnsSetting,
-      saveTempExecPageSize: saveTempExecPageSize,
       getFeishuWebhookUrl: getFeishuWebhookUrl,
       getFeishuMentionId: getFeishuMentionId,
       postFeishuMessage: postFeishuMessage,

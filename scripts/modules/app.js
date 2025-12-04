@@ -1,17 +1,3 @@
-    // 模型管理表单
-    const modelDisplayNameEl = document.getElementById('modelDisplayName');
-    const modelProviderEl = document.getElementById('modelProvider');
-    const modelBaseUrlEl = document.getElementById('modelBaseUrl');
-    const modelApiKeyEl = document.getElementById('modelApiKey');
-    const modelIdentifierEl = document.getElementById('modelIdentifier');
-    const modelMaxTokensEl = document.getElementById('modelMaxTokens');
-    const modelFormStatus = document.getElementById('modelFormStatus');
-    const modelListEl = document.getElementById('modelList');
-    const createModelBtn = document.getElementById('createModelBtn');
-    const modelFormWrapper = document.getElementById('modelFormWrapper');
-    const modelFormTitle = document.getElementById('modelFormTitle');
-    const saveModelBtn = document.getElementById('saveModelBtn');
-    const resetModelFormBtn = document.getElementById('resetModelForm');
     window.app = window.app || {};
     const appUtils = window.app.utils || {};
     const appConfig = window.app.config || {};
@@ -49,7 +35,6 @@
       feishuMention: '',
       tempExecColumns: { ...defaultTempExecColumns },
     };
-    const assignPromptDom = {};
     const settingsKey = appConfig.settingsKey || 'usecase-settings-v1';
     const minModelTimeoutSec = Number(appConfig.minModelTimeoutSec) || 30;
     const maxModelTimeoutSec = Number(appConfig.maxModelTimeoutSec) || 1800;
@@ -215,6 +200,11 @@
     jumpToCleanHighlightView = noop,
     renderTempExecView = noop,
     applyTempExecPageSize = function applyTempExecPageSizeFallback(value) { return { size: value, changed: false }; },
+    clampTempExecPageSize = function clampTempExecPageSizeFallback(value) {
+      const num = Math.round(Number(value));
+      if (!Number.isFinite(num) || num <= 0) return defaultTempExecPageSize;
+      return num;
+    },
     createTempExecFile = function createTempExecFileFallback() { return null; },
     syncTempExecFocus = noop,
     persistTempExecState = noop,
@@ -260,7 +250,6 @@
         storageKey: defaultPromptsKey,
         setStatus,
         downloadText,
-        dom: assignPromptDom,
       })
       : null;
     const assignHandlersFallback = {
@@ -324,17 +313,6 @@
       })
         : null;
 
-    function clearRawInput() {
-      rawText.value = '';
-      fileName.textContent = '未选择文件';
-      state.lastRawImportName = '';
-      state.requirementLabel = '';
-      state.requirementLabelSource = '';
-      setStatus(parseStatus, '', '');
-      renderAutoRawInfo();
-      renderCleanRawView(state.cleanViewSelection);
-      updateFlowStatus();
-    }
     const modelClientService = window.app && window.app.services && window.app.services.modelClient;
 
     function getConfiguredTimeoutSec() {
@@ -484,6 +462,12 @@
     const casesModuleProgress = document.getElementById('casesModuleProgress');
     const exportCaseGenBtn = document.getElementById('exportCaseGen');
     const toSplitFromCaseGenBtn = document.getElementById('toSplitFromCaseGen');
+    const cleanTimingEl = document.getElementById('cleanTiming');
+    const reviewTimingEl = document.getElementById('reviewTiming');
+    const compareTimingEl = document.getElementById('compareTiming');
+    const splitTimingEl = document.getElementById('splitTiming');
+    const casesTimingEl = document.getElementById('casesTiming');
+    const caseGenTimingEl = document.getElementById('caseGenTiming');
     const saveRawDebugBtn = document.getElementById('saveRawDebug');
     const importRawDebugBtn = document.getElementById('importRawDebug');
     const rawDebugFileInput = document.getElementById('rawDebugFile');
@@ -503,25 +487,6 @@
       cases: { textarea: caseTextEl, status: caseStatus, label: '测试用例', tag: 'CASES' },
     };
     const flowNavSteps = document.querySelectorAll('#flowNav .step');
-    const saveDefaultPromptsBtn = document.getElementById('saveDefaultPrompts');
-    const exportDefaultPromptsBtn = document.getElementById('exportDefaultPrompts');
-    const importDefaultPromptsBtn = document.getElementById('importDefaultPrompts');
-    const importDefaultPromptsFile = document.getElementById('importDefaultPromptsFile');
-    const defaultPromptStatus = document.getElementById('defaultPromptStatus');
-    const modelTimeoutInput = document.getElementById('modelTimeoutInput');
-    const saveModelTimeoutBtn = document.getElementById('saveModelTimeout');
-    const modelTimeoutStatus = document.getElementById('modelTimeoutStatus');
-    const feishuWebhookInput = document.getElementById('feishuWebhook');
-    const feishuMentionInput = document.getElementById('feishuNotifyUser');
-    const saveFeishuWebhookBtn = document.getElementById('saveFeishuWebhook');
-    const testFeishuWebhookBtn = document.getElementById('testFeishuWebhook');
-    const feishuWebhookStatus = document.getElementById('feishuWebhookStatus');
-    const tempExecPageSizeInput = document.getElementById('tempExecPageSizeInput');
-    const saveTempExecPageSizeBtn = document.getElementById('saveTempExecPageSize');
-    const tempExecPageSizeStatus = document.getElementById('tempExecPageSizeStatus');
-    const tempExecColumnForm = document.getElementById('tempExecColumnForm');
-    const saveTempExecColumnsBtn = document.getElementById('saveTempExecColumns');
-    const tempExecColumnStatus = document.getElementById('tempExecColumnStatus');
     const scrollTopBtn = document.getElementById('scrollTopBtn');
     const scrollBottomBtn = document.getElementById('scrollBottomBtn');
 
@@ -529,62 +494,6 @@
     const tabSections = document.querySelectorAll('[data-tab-section]');
     const xmindStructureToggle = document.getElementById('xmindStructureToggle');
     const xmindStructureCard = document.getElementById('xmindStructureCard');
-
-    // 功能指派
-    const cleanModelSelect = document.getElementById('cleanModelSelect');
-    const compareModelSelect = document.getElementById('compareModelSelect');
-    const splitModelSelect = document.getElementById('splitModelSelect');
-    const casesModelSelect = document.getElementById('casesModelSelect');
-    const caseGenModelSelect = document.getElementById('caseGenModelSelect');
-    const caseFilterModelSelect = document.getElementById('caseFilterModelSelect');
-    const cleanAssignStatus = document.getElementById('cleanAssignStatus');
-    const reviewModelSelect = document.getElementById('reviewModelSelect');
-    const reviewAssignStatus = document.getElementById('reviewAssignStatus');
-    const compareAssignStatus = document.getElementById('compareAssignStatus');
-    const splitAssignStatus = document.getElementById('splitAssignStatus');
-    const casesAssignStatus = document.getElementById('casesAssignStatus');
-    const caseGenAssignStatus = document.getElementById('caseGenAssignStatus');
-    const caseFilterAssignStatus = document.getElementById('caseFilterAssignStatus');
-    const cleanTimingEl = document.getElementById('cleanTiming');
-    const reviewTimingEl = document.getElementById('reviewTiming');
-    const compareTimingEl = document.getElementById('compareTiming');
-    const splitTimingEl = document.getElementById('splitTiming');
-    const casesTimingEl = document.getElementById('casesTiming');
-    const caseGenTimingEl = document.getElementById('caseGenTiming');
-    const saveAssignmentsBtn = document.getElementById('saveAssignments');
-    const testCleanModelBtn = document.getElementById('testCleanModel');
-    const testReviewModelBtn = document.getElementById('testReviewModel');
-    const testCompareModelBtn = document.getElementById('testCompareModel');
-    const testSplitModelBtn = document.getElementById('testSplitModel');
-    const testCasesModelBtn = document.getElementById('testCasesModel');
-    const testCaseGenModelBtn = document.getElementById('testCaseGenModel');
-    const testCaseFilterModelBtn = document.getElementById('testCaseFilterModel');
-    const cleanPromptEl = document.getElementById('cleanPrompt');
-    const reviewPromptEl = document.getElementById('reviewPrompt');
-    const comparePromptEl = document.getElementById('comparePrompt');
-    const splitPromptEl = document.getElementById('splitPrompt');
-    const casesPromptEl = document.getElementById('casesPrompt');
-    const caseGenPromptEl = document.getElementById('caseGenPrompt');
-    const caseFilterPromptEl = document.getElementById('caseFilterPrompt');
-    const cleanReasoningSelect = document.getElementById('cleanReasoning');
-    const reviewReasoningSelect = document.getElementById('reviewReasoning');
-    const compareReasoningSelect = document.getElementById('compareReasoning');
-    const splitReasoningSelect = document.getElementById('splitReasoning');
-    const casesReasoningSelect = document.getElementById('casesReasoning');
-    const caseGenReasoningSelect = document.getElementById('caseGenReasoning');
-    const caseFilterReasoningSelect = document.getElementById('caseFilterReasoning');
-    assignPromptDom.cleanPromptEl = cleanPromptEl;
-    assignPromptDom.reviewPromptEl = reviewPromptEl;
-    assignPromptDom.comparePromptEl = comparePromptEl;
-    assignPromptDom.splitPromptEl = splitPromptEl;
-    assignPromptDom.casesPromptEl = casesPromptEl;
-    assignPromptDom.caseGenPromptEl = caseGenPromptEl;
-    assignPromptDom.caseFilterPromptEl = caseFilterPromptEl;
-    assignPromptDom.defaultPromptStatus = defaultPromptStatus;
-    assignPromptDom.saveDefaultPromptsBtn = saveDefaultPromptsBtn;
-    assignPromptDom.exportDefaultPromptsBtn = exportDefaultPromptsBtn;
-    assignPromptDom.importDefaultPromptsBtn = importDefaultPromptsBtn;
-    assignPromptDom.importDefaultPromptsFile = importDefaultPromptsFile;
 
     const settingsModule = window.app.settings && typeof window.app.settings.init === 'function'
       ? window.app.settings.init({
@@ -600,24 +509,9 @@
         utils: appUtils,
         setStatus,
         clampTimeoutSeconds,
+        clampTempExecPageSize: function(value) { return clampTempExecPageSize(value); },
         renderTempExecView,
-        dom: {
-          modelTimeoutInput,
-          modelTimeoutStatus,
-          feishuWebhookInput,
-          feishuMentionInput,
-          feishuWebhookStatus,
-          tempExecColumnForm,
-          tempExecColumnStatus,
-          saveModelTimeoutBtn,
-          saveFeishuWebhookBtn,
-          testFeishuWebhookBtn,
-          saveTempExecColumnsBtn,
-          tempExecPageSizeInput,
-          saveTempExecPageSizeBtn,
-          tempExecPageSizeStatus,
-        },
-        applyTempExecPageSize,
+        applyTempExecPageSize: function(value) { return applyTempExecPageSize(value); },
       })
       : null;
     const {
@@ -629,7 +523,6 @@
       saveFeishuWebhookConfig,
       testFeishuWebhookConfig,
       saveTempExecColumnsSetting,
-      saveTempExecPageSize,
       getFeishuWebhookUrl,
       getFeishuMentionId,
       postFeishuMessage,
@@ -643,7 +536,6 @@
       saveFeishuWebhookConfig: function noopSaveFeishu() {},
       testFeishuWebhookConfig: function noopTestFeishu() {},
       saveTempExecColumnsSetting: function noopSaveCols() {},
-      saveTempExecPageSize: function noopSavePage() {},
       getFeishuWebhookUrl: function noopGetWebhook() { return ''; },
       getFeishuMentionId: function noopGetMention() { return ''; },
       postFeishuMessage: async function noopPost() { return { ok: false, reason: 'settings module missing' }; },
@@ -673,49 +565,6 @@
           legacyCompareKey,
         },
         setStatus,
-        dom: {
-          modelDisplayNameEl,
-          modelProviderEl,
-          modelBaseUrlEl,
-          modelApiKeyEl,
-          modelIdentifierEl,
-          modelMaxTokensEl,
-          modelFormStatus,
-          modelListEl,
-          createModelBtn,
-          modelFormWrapper,
-          modelFormTitle,
-          saveModelBtn,
-          resetModelFormBtn,
-          cleanModelSelect,
-          reviewModelSelect,
-          compareModelSelect,
-          splitModelSelect,
-          casesModelSelect,
-          caseGenModelSelect,
-          caseFilterModelSelect,
-          cleanAssignStatus,
-          reviewAssignStatus,
-          compareAssignStatus,
-          splitAssignStatus,
-          casesAssignStatus,
-          caseGenAssignStatus,
-          caseFilterAssignStatus,
-          cleanPromptEl,
-          reviewPromptEl,
-          comparePromptEl,
-          splitPromptEl,
-          casesPromptEl,
-          caseGenPromptEl,
-          caseFilterPromptEl,
-          cleanReasoningSelect,
-          reviewReasoningSelect,
-          compareReasoningSelect,
-          splitReasoningSelect,
-          casesReasoningSelect,
-          caseGenReasoningSelect,
-          caseFilterReasoningSelect,
-        },
       })
       : null;
 
@@ -813,44 +662,6 @@
         saveAssignments,
         testModel,
         updateFlowStatus,
-        dom: {
-          cleanModelSelect,
-          reviewModelSelect,
-          compareModelSelect,
-          splitModelSelect,
-          casesModelSelect,
-          caseGenModelSelect,
-          caseFilterModelSelect,
-          cleanAssignStatus,
-          reviewAssignStatus,
-          compareAssignStatus,
-          splitAssignStatus,
-          casesAssignStatus,
-          caseGenAssignStatus,
-          caseFilterAssignStatus,
-          cleanPromptEl,
-          reviewPromptEl,
-          comparePromptEl,
-          splitPromptEl,
-          casesPromptEl,
-          caseGenPromptEl,
-          caseFilterPromptEl,
-          cleanReasoningSelect,
-          reviewReasoningSelect,
-          compareReasoningSelect,
-          splitReasoningSelect,
-          casesReasoningSelect,
-          caseGenReasoningSelect,
-          caseFilterReasoningSelect,
-          saveAssignmentsBtn,
-          testCleanModelBtn,
-          testReviewModelBtn,
-          testCompareModelBtn,
-          testSplitModelBtn,
-          testCasesModelBtn,
-          testCaseGenModelBtn,
-          testCaseFilterModelBtn,
-        },
       })
       : null;
     const compareCore = window.app && window.app.compareCore && typeof window.app.compareCore.init === 'function'
@@ -1490,6 +1301,7 @@
     removeTempExecFile = tempExecApi.removeTempExecFile || removeTempExecFile;
     getCaseExecutionDisplay = tempExecApi.getCaseExecutionDisplay || getCaseExecutionDisplay;
     renderTempExecView = tempExecApi.renderTempExecView || renderTempExecView;
+    clampTempExecPageSize = tempExecApi.clampTempExecPageSize || clampTempExecPageSize;
     applyTempExecPageSize = tempExecApi.applyTempExecPageSize || function(value) { return { size: value, changed: false }; };
 
     const xmindCore = window.app && window.app.xmindCore && typeof window.app.xmindCore.init === 'function'
@@ -1532,12 +1344,16 @@
       }
     }
 
+    function clearStatusById(id) {
+      const el = document.getElementById(id);
+      if (el) setStatus(el, '', '');
+    }
+
     const uploadModule = window.app.upload && typeof window.app.upload.init === 'function'
       ? window.app.upload.init({
         state,
         handlers: {
           handleCaseFiles,
-          clearRawInput,
           removeImportedCase,
           setStepInProgress,
           clearStepInProgress,
@@ -1547,6 +1363,7 @@
           updateAutoMissingCard,
           updateFlowStatus,
           setStatus,
+          renderCleanRawView,
           parseDocx: xmindCore && xmindCore.parseDocx ? function(file) { return xmindCore.parseDocx(file); } : null,
         },
         dom: {
@@ -1742,8 +1559,6 @@
       })
       : null;
 
-    if (caseViewBtn) caseViewBtn.addEventListener('click', toggleImportedCaseView);
-
     function switchTab(name) {
       state.activeTab = name;
       tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tabBtn === name));
@@ -1755,13 +1570,11 @@
         const shouldShow = state.autoRequireClarifications && name === 'auto';
         autoClarifySection.classList.toggle('hidden', !shouldShow);
       }
-      if (name === 'models') setStatus(modelFormStatus, '', '');
+      if (name === 'models') clearStatusById('modelFormStatus');
       if (name === 'assign') {
         renderAssignmentsSelect();
-        setStatus(cleanAssignStatus, '', '');
-        setStatus(compareAssignStatus, '', '');
-        setStatus(splitAssignStatus, '', '');
-        setStatus(casesAssignStatus, '', '');
+        ['reviewAssignStatus', 'cleanAssignStatus', 'compareAssignStatus', 'splitAssignStatus', 'casesAssignStatus', 'caseGenAssignStatus', 'caseFilterAssignStatus']
+          .forEach(clearStatusById);
       }
       if (name === 'casesgen') {
         const autoFilled = ensureCaseGenModulesFromSplit();
@@ -1780,11 +1593,11 @@
         syncAutoCompareStatus();
         updateAutoMissingCard();
       }
-    if (name === 'settings') {
-      renderSettingsUI();
-      if (feishuWebhookStatus) setStatus(feishuWebhookStatus, '', '');
+      if (name === 'settings') {
+        renderSettingsUI();
+        clearStatusById('feishuWebhookStatus');
+      }
     }
-  }
 
     const core = {
       state,

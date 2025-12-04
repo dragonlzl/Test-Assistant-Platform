@@ -15,49 +15,49 @@
       legacyCompareKey,
     } = config || {};
 
-    const {
-      modelDisplayNameEl,
-      modelProviderEl,
-      modelBaseUrlEl,
-      modelApiKeyEl,
-      modelIdentifierEl,
-      modelMaxTokensEl,
-      modelFormStatus,
-      modelListEl,
-      createModelBtn,
-      modelFormWrapper,
-      modelFormTitle,
-      saveModelBtn,
-      resetModelFormBtn,
-      cleanModelSelect,
-      reviewModelSelect,
-      compareModelSelect,
-      splitModelSelect,
-      casesModelSelect,
-      caseGenModelSelect,
-      caseFilterModelSelect,
-      cleanAssignStatus,
-      reviewAssignStatus,
-      compareAssignStatus,
-      splitAssignStatus,
-      casesAssignStatus,
-      caseGenAssignStatus,
-      caseFilterAssignStatus,
-      cleanPromptEl,
-      reviewPromptEl,
-      comparePromptEl,
-      splitPromptEl,
-      casesPromptEl,
-      caseGenPromptEl,
-      caseFilterPromptEl,
-      cleanReasoningSelect,
-      reviewReasoningSelect,
-      compareReasoningSelect,
-      splitReasoningSelect,
-      casesReasoningSelect,
-      caseGenReasoningSelect,
-      caseFilterReasoningSelect,
-    } = dom || {};
+    const domRefs = dom || {};
+    const pickEl = function(key, id) { return domRefs[key] || document.getElementById(id); };
+    const modelDisplayNameEl = pickEl('modelDisplayNameEl', 'modelDisplayName');
+    const modelProviderEl = pickEl('modelProviderEl', 'modelProvider');
+    const modelBaseUrlEl = pickEl('modelBaseUrlEl', 'modelBaseUrl');
+    const modelApiKeyEl = pickEl('modelApiKeyEl', 'modelApiKey');
+    const modelIdentifierEl = pickEl('modelIdentifierEl', 'modelIdentifier');
+    const modelMaxTokensEl = pickEl('modelMaxTokensEl', 'modelMaxTokens');
+    const modelFormStatus = pickEl('modelFormStatus', 'modelFormStatus');
+    const modelListEl = pickEl('modelListEl', 'modelList');
+    const createModelBtn = pickEl('createModelBtn', 'createModelBtn');
+    const modelFormWrapper = pickEl('modelFormWrapper', 'modelFormWrapper');
+    const modelFormTitle = pickEl('modelFormTitle', 'modelFormTitle');
+    const saveModelBtn = pickEl('saveModelBtn', 'saveModelBtn');
+    const resetModelFormBtn = pickEl('resetModelFormBtn', 'resetModelForm');
+    const cleanModelSelect = pickEl('cleanModelSelect', 'cleanModelSelect');
+    const reviewModelSelect = pickEl('reviewModelSelect', 'reviewModelSelect');
+    const compareModelSelect = pickEl('compareModelSelect', 'compareModelSelect');
+    const splitModelSelect = pickEl('splitModelSelect', 'splitModelSelect');
+    const casesModelSelect = pickEl('casesModelSelect', 'casesModelSelect');
+    const caseGenModelSelect = pickEl('caseGenModelSelect', 'caseGenModelSelect');
+    const caseFilterModelSelect = pickEl('caseFilterModelSelect', 'caseFilterModelSelect');
+    const cleanAssignStatus = pickEl('cleanAssignStatus', 'cleanAssignStatus');
+    const reviewAssignStatus = pickEl('reviewAssignStatus', 'reviewAssignStatus');
+    const compareAssignStatus = pickEl('compareAssignStatus', 'compareAssignStatus');
+    const splitAssignStatus = pickEl('splitAssignStatus', 'splitAssignStatus');
+    const casesAssignStatus = pickEl('casesAssignStatus', 'casesAssignStatus');
+    const caseGenAssignStatus = pickEl('caseGenAssignStatus', 'caseGenAssignStatus');
+    const caseFilterAssignStatus = pickEl('caseFilterAssignStatus', 'caseFilterAssignStatus');
+    const cleanPromptEl = pickEl('cleanPromptEl', 'cleanPrompt');
+    const reviewPromptEl = pickEl('reviewPromptEl', 'reviewPrompt');
+    const comparePromptEl = pickEl('comparePromptEl', 'comparePrompt');
+    const splitPromptEl = pickEl('splitPromptEl', 'splitPrompt');
+    const casesPromptEl = pickEl('casesPromptEl', 'casesPrompt');
+    const caseGenPromptEl = pickEl('caseGenPromptEl', 'caseGenPrompt');
+    const caseFilterPromptEl = pickEl('caseFilterPromptEl', 'caseFilterPrompt');
+    const cleanReasoningSelect = pickEl('cleanReasoningSelect', 'cleanReasoning');
+    const reviewReasoningSelect = pickEl('reviewReasoningSelect', 'reviewReasoning');
+    const compareReasoningSelect = pickEl('compareReasoningSelect', 'compareReasoning');
+    const splitReasoningSelect = pickEl('splitReasoningSelect', 'splitReasoning');
+    const casesReasoningSelect = pickEl('casesReasoningSelect', 'casesReasoning');
+    const caseGenReasoningSelect = pickEl('caseGenReasoningSelect', 'caseGenReasoning');
+    const caseFilterReasoningSelect = pickEl('caseFilterReasoningSelect', 'caseFilterReasoning');
 
     const legacyCleanStorageKey = legacyCleanKey || 'cleaner-config-v1';
     const legacyCompareStorageKey = legacyCompareKey || 'cleaner-compare-config-v1';
