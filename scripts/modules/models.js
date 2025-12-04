@@ -554,8 +554,10 @@
 
     function updateTabNotices() {
       const hasModels = Array.isArray(state.models) && state.models.length > 0;
-      const missingAssignments = ['cleanId', 'reviewId', 'compareId', 'splitId', 'casesId', 'caseGenId'].some(function(key) {
-        return !state.assignments[key];
+      const hasSavedAssignments = Boolean(localStorage.getItem(assignmentKey));
+      const missingAssignments = !hasSavedAssignments || ['cleanId', 'reviewId', 'compareId', 'splitId', 'casesId', 'caseGenId'].some(function(key) {
+        const assignedId = state.assignments[key];
+        return !assignedId || !getModelById(assignedId);
       });
       setTabNotice('models', hasModels ? '' : '未配置模型');
       setTabNotice('assign', hasModels ? (missingAssignments ? '未指派模型' : '') : '未配置模型');

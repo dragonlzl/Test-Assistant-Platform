@@ -9,6 +9,11 @@ test.describe('模型管理与全局设置', () => {
       }
       return route.abort();
     });
+    await page.addInitScript(() => {
+      ['cleaner-models-v1', 'cleaner-assignment-v1', 'usecase-settings-v1'].forEach((key) => {
+        window.localStorage.removeItem(key);
+      });
+    });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
     await page.waitForFunction(() => window.app && window.app._inited === true);
@@ -58,5 +63,46 @@ test.describe('模型管理与全局设置', () => {
     await page.fill('#tempExecPageSizeInput', '25');
     await page.click('#saveTempExecPageSize');
     await expect(page.locator('#tempExecPageSizeStatus')).toContainText('已更新');
+  });
+
+  test('模型缺失提示与 deepseek token 推荐提醒', async ({ page }) => {
+    const modelsTab = page.locator('[data-tab-btn="models"]');
+    const assignTab = page.locator('[data-tab-btn="assign"]');
+    await expect(modelsTab.locator('.tab-notice')).toContainText('未配置模型');
+    await expect(assignTab.locator('.tab-notice')).toContainText('未配置模型');
+
+    await page.click('[data-tab-btn="models"]');
+    await page.click('#createModelBtn');
+    await page.fill('#modelDisplayName', 'Reasoner 模型');
+    await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
+    await page.fill('#modelApiKey', 'sk-test');
+    await page.fill('#modelIdentifier', 'deepseek-reasoner');
+    await page.fill('#modelMaxTokens', '1024');
+    await page.click('#saveModelBtn');
+    await expect(page.locator('#modelFormStatus')).toContainText('模型已保存');
+    await expect(modelsTab.locator('.tab-notice')).toHaveCount(0);
+    await expect(assignTab.locator('.tab-notice')).toContainText('未指派模型');
+
+    const tokenHint = page.locator('#deepseekTokenHint');
+    await expect(tokenHint).toBeVisible();
+    await expect(tokenHint).toContainText('1024');
+    await tokenHint.click();
+    await expect(page.locator('#modelFormWrapper')).not.toHaveClass(/hidden/);
+    await expect(page.locator('#modelIdentifier')).toHaveValue(/deepseek-reasoner/);
+    await page.fill('#modelMaxTokens', '20000');
+    await page.click('#saveModelBtn');
+    await expect(tokenHint).toHaveClass(/hidden/);
+
+    await page.click('[data-tab-btn="assign"]');
+    const modelId = await page.evaluate(() => {
+      const models = JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]');
+      return models[0]?.id || '';
+    });
+    const selects = ['cleanModelSelect', 'reviewModelSelect', 'compareModelSelect', 'splitModelSelect', 'casesModelSelect', 'caseGenModelSelect'];
+    for (const sel of selects) {
+      await page.selectOption(`#${sel}`, modelId);
+    }
+    await page.click('#saveAssignments');
+    await expect(assignTab.locator('.tab-notice')).toHaveCount(0);
   });
 });

@@ -1522,6 +1522,10 @@
         tempExecOverview.innerHTML = '<p class="hint">暂无用例执行数据</p>';
         return;
       }
+      var currentFile = getTempExecFile(state.tempExecActiveId);
+      var currentBlock = currentFile
+        ? '<div class="temp-overview-grid two-cols">' + renderTempExecOverviewEntry(currentFile) + '</div>'
+        : '<p class="hint">暂无正在执行的用例</p>';
       var versionMap = new Map();
       files.forEach(function(file) {
         var verName = getTempVersionName(file.versionId) || '未分配版本';
@@ -1539,6 +1543,10 @@
       var unassigned = versionList.find(function(group) { return group.name === '未分配版本'; });
       var unassignedBlock = unassigned ? renderTempExecOverviewUnassigned(unassigned.list) : '<p class="hint">暂无未分配的用例</p>';
       tempExecOverview.innerHTML = (
+        '<div class="temp-overview-section temp-overview-current">' +
+          '<h3 class="temp-overview-section-title">当前执行区</h3>' +
+          currentBlock +
+        '</div>' +
         '<div class="temp-overview-section">' +
           '<h3 class="temp-overview-section-title">版本区</h3>' +
           '<div class="temp-overview-version-grid">' + versionBlock + '</div>' +

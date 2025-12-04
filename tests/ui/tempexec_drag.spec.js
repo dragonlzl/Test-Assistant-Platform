@@ -124,7 +124,11 @@ test.describe('执行视图导入导出与拖拽', () => {
 
     await page.click('#tempExecOverviewBtn');
     await expect(page.locator('#tempExecOverview')).toContainText('执行进度');
-    await expect(page.locator('#tempExecOverview [data-temp-file]')).toHaveCount(2);
+    await expect(page.locator('.temp-overview-section-title', { hasText: '当前执行区' })).toBeVisible();
+    const overviewCount = await page.locator('#tempExecOverview .temp-overview-entry').count();
+    expect(overviewCount).toBeGreaterThanOrEqual(2);
+    const fileCount = await page.locator('#tempExecOverview [data-temp-file]').count();
+    expect(fileCount).toBeGreaterThanOrEqual(2);
     await page.click('#tempExecBackBtn');
 
     const snapshot = await page.evaluate(() => JSON.stringify({
