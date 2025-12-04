@@ -12,6 +12,7 @@ module.exports = defineConfig({
     headless: process.env.PLAYWRIGHT_HEADED ? false : true,
     actionTimeout: 10 * 1000,
     navigationTimeout: 15 * 1000,
+    acceptDownloads: true,
     trace: 'retain-on-failure',
   },
   projects: [

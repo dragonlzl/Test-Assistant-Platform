@@ -6,6 +6,7 @@
     var dom = ctx.dom || {};
     var handlers = ctx.handlers || {};
     var utils = ctx.utils || {};
+    var skipAutoBind = ctx.skipAutoBind;
 
     var setStatus = handlers.setStatus || utils.setStatus || function() {};
     var downloadText = utils.downloadText || function() {};
@@ -191,14 +192,16 @@
       }
     }
 
-    [
-      { type: 'raw', saveBtn: saveRawDebugBtn, importBtn: importRawDebugBtn, fileInput: rawDebugFileInput },
-      { type: 'cleaned', saveBtn: saveCleanDebugBtn, importBtn: importCleanDebugBtn, fileInput: cleanDebugFileInput },
-      { type: 'split', saveBtn: saveSplitDebugBtn, importBtn: importSplitDebugBtn, fileInput: splitDebugFileInput },
-      { type: 'cases', saveBtn: saveCaseDebugBtn, importBtn: importCaseDebugBtn, fileInput: caseDebugFileInput },
-    ].forEach(function(cfg) {
-      if (cfg && cfg.type) bindDebugControls(cfg.type, cfg.saveBtn, cfg.importBtn, cfg.fileInput);
-    });
+    if (!skipAutoBind) {
+      [
+        { type: 'raw', saveBtn: saveRawDebugBtn, importBtn: importRawDebugBtn, fileInput: rawDebugFileInput },
+        { type: 'cleaned', saveBtn: saveCleanDebugBtn, importBtn: importCleanDebugBtn, fileInput: cleanDebugFileInput },
+        { type: 'split', saveBtn: saveSplitDebugBtn, importBtn: importSplitDebugBtn, fileInput: splitDebugFileInput },
+        { type: 'cases', saveBtn: saveCaseDebugBtn, importBtn: importCaseDebugBtn, fileInput: caseDebugFileInput },
+      ].forEach(function(cfg) {
+        if (cfg && cfg.type) bindDebugControls(cfg.type, cfg.saveBtn, cfg.importBtn, cfg.fileInput);
+      });
+    }
 
     return {
       saveDebugText: saveDebugText,

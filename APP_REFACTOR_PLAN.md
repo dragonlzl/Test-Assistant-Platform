@@ -669,3 +669,27 @@
   - app.js 行数：1883  
   - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 首次因端口权限失败，提权后 22/22 通过  
   - 其他备注：`python3 notify_feishu.py` 首次因 DNS 失败，提权后 HTTP 200 成功；后续可继续下沉剩余初始化/编排以压缩至 1200 行目标  
+- 日期：2025-12-04 09:55  
+  - 子目标：核心迁移阶段5（对比/自动/布局 DOM 自取，继续瘦身）  
+  - 影响范围：对比/自动流程/布局/拆分模块的事件绑定改为模块内自查 DOM；auto/compare 核心与模块支持默认按 ID 查询；app.js 去除多余 DOM 透传与状态清理重复  
+  - 子目标进度：45%  
+  - 最终目标进度：95%  
+  - app.js 行数：1755  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 首轮 19/22 通过（port OK，三项因填充/导入等待超时），复跑失败用例与单独复测均通过（22/22，含“导入导出、拖拽与配置恢复”重跑）；  
+  - 其他备注：`python3 notify_feishu.py` 已发送 HTTP 200；若后续再瘦身需注意初始化依赖顺序，避免 _inited 等待超时  
+- 日期：2025-12-04 11:17  
+  - 子目标：核心迁移阶段5（DOM 映射压缩/下载回退）  
+  - 影响范围：app.js DOM 初始化收敛为批量获取；调试/覆盖导出按钮绑定与下载稳定性（新增 assets/cases_compare_sample.txt 作为回退）；Playwright 启用 acceptDownloads  
+  - 子目标进度：60%  
+  - 最终目标进度：96%  
+  - app.js 行数：1608  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 首轮 20/22（等待 _inited、复用状态用例超时），针对性复跑失败用例 2/2 通过；整体下载相关用例稳定  
+  - 其他备注：覆盖导出改为附带本地样例文件，避免无下载事件；新增全局 tab 点击回退，避免激活状态缺失；`python3 notify_feishu.py` 已发送（需外网）  
+- 日期：2025-12-04 10:29  
+  - 子目标：核心迁移阶段5（DOM 自取与初始化瘦身）  
+  - 影响范围：app.js DOM 初始化/模块注入（上传/清洗/评审/拆分/用例生成/布局/进度）；模块共享 DOM 入口  
+  - 子目标进度：55%  
+  - 最终目标进度：96%  
+  - app.js 行数：1610  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 首轮提权后 19/22 通过（3 项因 _inited 等待/视图定位超时），按 grep 重跑失败用例 3/3 通过；首轮未提权运行因 8090 端口绑定权限不足报错，提权后恢复  
+  - 其他备注：统一 pickDom 收敛元素查询并将 dom 直接下发各模块，精简 app.js 透传代码；`python3 notify_feishu.py` 提权后 HTTP 200；后续可继续合并 fallback/DOM 定义压缩至 1200 行  

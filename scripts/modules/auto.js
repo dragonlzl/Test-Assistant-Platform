@@ -24,22 +24,28 @@
     var executeAutoWorkflowSteps = handlers.executeAutoWorkflowSteps || function() { return Promise.resolve(); };
 
     var dom = ctx.dom || {};
-    var autoWorkflowBtn = dom.autoWorkflowBtn;
-    var autoRecleanBtn = dom.autoRecleanBtn;
-    var autoIgnoreCoverageBtn = dom.autoIgnoreCoverageBtn;
-    var autoMissingToggle = dom.autoMissingToggle;
-    var autoMissingCopy = dom.autoMissingCopy;
-    var autoMissingSmartFillBtn = dom.autoMissingSmartFillBtn;
-    var autoMissingView = dom.autoMissingView;
-    var autoCompareMissing = dom.autoCompareMissing;
-    var autoCompareSuggestionInput = dom.autoCompareSuggestionInput;
-    var autoFillCleanBtn = dom.autoFillCleanBtn;
-    var autoJumpCleanViewBtn = dom.autoJumpCleanViewBtn;
-    var autoRecleanStatus = dom.autoRecleanStatus;
-    var autoCompareStatus = dom.autoCompareStatus;
-    var autoWorkflowStatus = dom.autoWorkflowStatus;
-    var autoClarifyToggle = dom.autoClarifyToggle;
-    var autoClarifySection = dom.autoClarifySection;
+    var pickEl = function(el, id, selector) {
+      if (el) return el;
+      if (selector && typeof document !== 'undefined') return document.querySelector(selector);
+      if (id && typeof document !== 'undefined') return document.getElementById(id);
+      return null;
+    };
+    var autoWorkflowBtn = pickEl(dom.autoWorkflowBtn, 'runAutoWorkflow');
+    var autoRecleanBtn = pickEl(dom.autoRecleanBtn, 'autoRecleanBtn');
+    var autoIgnoreCoverageBtn = pickEl(dom.autoIgnoreCoverageBtn, 'autoIgnoreCoverageBtn');
+    var autoMissingToggle = pickEl(dom.autoMissingToggle, 'autoMissingToggle');
+    var autoMissingCopy = pickEl(dom.autoMissingCopy, 'autoMissingCopy');
+    var autoMissingSmartFillBtn = pickEl(dom.autoMissingSmartFillBtn, 'autoMissingSmartFill');
+    var autoMissingView = pickEl(dom.autoMissingView, 'autoMissingView');
+    var autoCompareMissing = pickEl(dom.autoCompareMissing, 'autoCompareMissing');
+    var autoCompareSuggestionInput = pickEl(dom.autoCompareSuggestionInput, 'autoCompareSuggestion');
+    var autoFillCleanBtn = pickEl(dom.autoFillCleanBtn, 'autoFillCleanBtn');
+    var autoJumpCleanViewBtn = pickEl(dom.autoJumpCleanViewBtn, 'autoJumpCleanView');
+    var autoRecleanStatus = pickEl(dom.autoRecleanStatus, 'autoRecleanStatus');
+    var autoCompareStatus = pickEl(dom.autoCompareStatus, 'autoCompareStatus');
+    var autoWorkflowStatus = pickEl(dom.autoWorkflowStatus, 'autoWorkflowStatus');
+    var autoClarifyToggle = pickEl(dom.autoClarifyToggle, 'autoNeedClarify');
+    var autoClarifySection = pickEl(dom.autoClarifySection, null, '[data-section-id=\"auto-clarify\"]');
 
     if (!state.autoCompareSelections) state.autoCompareSelections = new Set();
     if (!state.autoCompareMissingList) state.autoCompareMissingList = [];

@@ -3,17 +3,23 @@
     ctx = ctx || {};
     var state = ctx.state || {};
     var dom = ctx.dom || {};
+    var pickEl = function(el, id, selector) {
+      if (el) return el;
+      if (selector && typeof document !== 'undefined') return document.querySelector(selector);
+      if (typeof document !== 'undefined' && id) return document.getElementById(id);
+      return null;
+    };
     var handlers = ctx.handlers || {};
 
-    var rawText = dom.rawText;
-    var reviewResultEl = dom.reviewResultEl;
-    var cleanedTextEl = dom.cleanedTextEl;
-    var splitResultEl = dom.splitResultEl;
-    var casesCompareResultEl = dom.casesCompareResultEl;
-    var flowNavSteps = dom.flowNavSteps || [];
-    var runReviewBtn = dom.runReviewBtn;
-    var caseViewHint = dom.caseViewHint;
-    var exportCaseGenBtn = dom.exportCaseGenBtn;
+    var rawText = pickEl(dom.rawText, 'rawText');
+    var reviewResultEl = pickEl(dom.reviewResultEl, 'reviewResult');
+    var cleanedTextEl = pickEl(dom.cleanedTextEl, 'cleanedText');
+    var splitResultEl = pickEl(dom.splitResultEl, 'splitResult');
+    var casesCompareResultEl = pickEl(dom.casesCompareResultEl, 'casesCompareResult');
+    var flowNavSteps = dom.flowNavSteps || (typeof document !== 'undefined' ? document.querySelectorAll('#flowNav .step') : []);
+    var runReviewBtn = pickEl(dom.runReviewBtn, 'runReview');
+    var caseViewHint = pickEl(dom.caseViewHint, 'caseViewHint');
+    var exportCaseGenBtn = pickEl(dom.exportCaseGenBtn, 'exportCaseGen');
 
     var switchTab = handlers.switchTab || function() {};
     var scrollElementIntoView = handlers.scrollElementIntoView || function() {};
