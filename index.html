@@ -560,6 +560,11 @@
 <label for="cleanPrompt">提示词</label>
 <textarea class="small-textarea" id="cleanPrompt" placeholder="为空则使用默认清洗提示词"></textarea>
 </div>
+<div class="row">
+<label for="cleanTemperature">Temperature</label>
+<input id="cleanTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
 <div class="row hidden" data-reasoning="clean">
 <label for="cleanReasoning">Reasoning Effort</label>
 <select id="cleanReasoning">
@@ -584,6 +589,11 @@
 <div class="row column">
 <label for="reviewPrompt">提示词</label>
 <textarea class="small-textarea" id="reviewPrompt" placeholder="为空则使用默认评审提示词"></textarea>
+</div>
+<div class="row">
+<label for="reviewTemperature">Temperature</label>
+<input id="reviewTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
 </div>
 <div class="row hidden" data-reasoning="review">
 <label for="reviewReasoning">Reasoning Effort</label>
@@ -611,6 +621,11 @@
 <label for="comparePrompt">提示词</label>
 <textarea class="small-textarea" id="comparePrompt" placeholder="为空则使用默认对比提示词"></textarea>
 </div>
+<div class="row">
+<label for="compareTemperature">Temperature</label>
+<input id="compareTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
 <div class="row hidden" data-reasoning="compare">
 <label for="compareReasoning">Reasoning Effort</label>
 <select id="compareReasoning">
@@ -635,6 +650,11 @@
 <div class="row column">
 <label for="splitPrompt">提示词</label>
 <textarea class="small-textarea" id="splitPrompt" placeholder="为空则使用默认拆分提示词"></textarea>
+</div>
+<div class="row">
+<label for="splitTemperature">Temperature</label>
+<input id="splitTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
 </div>
 <div class="row hidden" data-reasoning="split">
 <label for="splitReasoning">Reasoning Effort</label>
@@ -661,6 +681,11 @@
 <label for="casesPrompt">提示词</label>
 <textarea class="small-textarea" id="casesPrompt" placeholder="为空则使用默认覆盖对比提示词"></textarea>
 </div>
+<div class="row">
+<label for="casesTemperature">Temperature</label>
+<input id="casesTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
 <div class="row hidden" data-reasoning="cases">
 <label for="casesReasoning">Reasoning Effort</label>
 <select id="casesReasoning">
@@ -686,6 +711,11 @@
 <label for="caseGenPrompt">提示词</label>
 <textarea class="small-textarea" id="caseGenPrompt" placeholder="为空则使用默认用例生成提示词"></textarea>
 </div>
+<div class="row">
+<label for="caseGenTemperature">Temperature</label>
+<input id="caseGenTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
 <div class="row hidden" data-reasoning="casegen">
 <label for="caseGenReasoning">Reasoning Effort</label>
 <select id="caseGenReasoning">
@@ -710,6 +740,11 @@
 <div class="row column">
 <label for="caseFilterPrompt">提示词</label>
 <textarea class="small-textarea" id="caseFilterPrompt" placeholder="为空则使用默认相似度对比提示词"></textarea>
+</div>
+<div class="row">
+<label for="caseFilterTemperature">Temperature</label>
+<input id="caseFilterTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
 </div>
 <div class="row hidden" data-reasoning="casefilter">
 <label for="caseFilterReasoning">Reasoning Effort</label>

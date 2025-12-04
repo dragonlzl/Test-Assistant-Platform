@@ -35,6 +35,7 @@
     };
     var getAssignedModel = handlers.getAssignedModel || function() { throw new Error('缺少模型'); };
     var getReasoningForType = handlers.getReasoningForType || function() { return ''; };
+    var getTemperatureForType = handlers.getTemperatureForType || function() { return 0.2; };
     var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
     var updateModelTiming = handlers.updateModelTiming || function() {};
     var runConcurrent = handlers.runConcurrent || function(items, concurrency, worker) {
@@ -303,6 +304,7 @@
         ? state.assignments.caseFilterPrompt.trim()
         : (defaultPrompts.casefilter || '');
       var reasoning = getReasoningForType('casefilter');
+      var temperature = getTemperatureForType('casefilter');
       var baseCases = sanitizeCasesForExport(importedList);
       var baseJson = JSON.stringify(baseCases, null, 2);
       var groups = chunkArray(cases, 5);
@@ -318,7 +320,7 @@
         if (moduleId) setCaseProgressGroupState(moduleId, idx, 'running');
         var candidateJson = JSON.stringify(sanitizeCasesForExport(group), null, 2);
         var userContent = '模块：' + moduleTitle + '\n\n导入用例(JSON)：' + baseJson + '\n\n生成用例候选(JSON)：' + candidateJson + '\n\n请删除与导入用例重复或高度相似的候选，仅返回保留的候选 JSON 数组，不需要解释或额外文本。';
-        return callModelWithConfig(model, userContent, prompt, reasoning).then(function(content) {
+        return callModelWithConfig(model, userContent, prompt, reasoning, temperature).then(function(content) {
           var parsed = parseGeneratedCases(content).parsed;
           if (moduleId) setCaseProgressGroupState(moduleId, idx, 'done');
           return parsed.length ? parsed : [];
@@ -440,8 +442,9 @@
           : '测试模块信息（JSON）：' + JSON.stringify(ref);
         var userContent = baseContext + suggestionText + '\n请输出符合提示词要求的 JSON 数组。';
         var reasoning = getReasoningForType('casegen');
+        var temperature = getTemperatureForType('casegen');
         var startTime = Date.now();
-        var content = await callModelWithConfig(model, userContent, prompt, reasoning);
+        var content = await callModelWithConfig(model, userContent, prompt, reasoning, temperature);
         updateModelTiming(caseGenTimingEl, Date.now() - startTime);
         var parsedInfo = parseGeneratedCases(content);
         var parsed = parsedInfo.parsed;
@@ -579,8 +582,9 @@
         var suggestionText = suggestion ? '\n\n额外要求：' + suggestion : '';
         var userContent = baseContext + '\n\n已有用例(JSON)：' + existingJson + '\n请在不重复的前提下补充新的测试用例，仅返回新增用例的 JSON 数组。' + suggestionText;
         var reasoning = getReasoningForType('casegen');
+        var temperature = getTemperatureForType('casegen');
         var startTime = Date.now();
-        var content = await callModelWithConfig(model, userContent, prompt, reasoning);
+        var content = await callModelWithConfig(model, userContent, prompt, reasoning, temperature);
         updateModelTiming(caseGenTimingEl, Date.now() - startTime);
         var parsedInfo = parseGeneratedCases(content);
         var parsed = parsedInfo.parsed;

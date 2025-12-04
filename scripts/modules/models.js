@@ -15,6 +15,8 @@
       legacyCompareKey,
     } = config || {};
 
+    const defaultTemperature = 0.2;
+
     const domRefs = dom || {};
     const pickEl = function(key, id) { return domRefs[key] || document.getElementById(id); };
     const modelDisplayNameEl = pickEl('modelDisplayNameEl', 'modelDisplayName');
@@ -58,6 +60,13 @@
     const casesReasoningSelect = pickEl('casesReasoningSelect', 'casesReasoning');
     const caseGenReasoningSelect = pickEl('caseGenReasoningSelect', 'caseGenReasoning');
     const caseFilterReasoningSelect = pickEl('caseFilterReasoningSelect', 'caseFilterReasoning');
+    const cleanTemperatureEl = pickEl('cleanTemperatureEl', 'cleanTemperature');
+    const reviewTemperatureEl = pickEl('reviewTemperatureEl', 'reviewTemperature');
+    const compareTemperatureEl = pickEl('compareTemperatureEl', 'compareTemperature');
+    const splitTemperatureEl = pickEl('splitTemperatureEl', 'splitTemperature');
+    const casesTemperatureEl = pickEl('casesTemperatureEl', 'casesTemperature');
+    const caseGenTemperatureEl = pickEl('caseGenTemperatureEl', 'caseGenTemperature');
+    const caseFilterTemperatureEl = pickEl('caseFilterTemperatureEl', 'caseFilterTemperature');
 
     const legacyCleanStorageKey = legacyCleanKey || 'cleaner-config-v1';
     const legacyCompareStorageKey = legacyCompareKey || 'cleaner-compare-config-v1';
@@ -146,6 +155,15 @@
         btn.appendChild(badge);
       }
       badge.textContent = text;
+    }
+
+    function normalizeTemperature(value) {
+      if (value === undefined || value === null || value === '') return defaultTemperature;
+      var num = Number(value);
+      if (!Number.isFinite(num)) return defaultTemperature;
+      if (num < 0) return 0;
+      if (num > 1) return 1;
+      return Number(num.toFixed(2));
     }
 
     function renderModels() {
@@ -290,6 +308,13 @@
       state.assignments.casesReasoning = state.assignments.casesReasoning || '';
       state.assignments.caseGenReasoning = state.assignments.caseGenReasoning || '';
       state.assignments.caseFilterReasoning = state.assignments.caseFilterReasoning || '';
+      state.assignments.cleanTemperature = normalizeTemperature(state.assignments.cleanTemperature);
+      state.assignments.reviewTemperature = normalizeTemperature(state.assignments.reviewTemperature);
+      state.assignments.compareTemperature = normalizeTemperature(state.assignments.compareTemperature);
+      state.assignments.splitTemperature = normalizeTemperature(state.assignments.splitTemperature);
+      state.assignments.casesTemperature = normalizeTemperature(state.assignments.casesTemperature);
+      state.assignments.caseGenTemperature = normalizeTemperature(state.assignments.caseGenTemperature);
+      state.assignments.caseFilterTemperature = normalizeTemperature(state.assignments.caseFilterTemperature);
       if (!state.assignments.casesPrompt) {
         state.assignments.casesPrompt = defaultPrompts.cases;
       } else if (state.assignments.casesPrompt === legacyCasesPrompt) {
@@ -327,6 +352,13 @@
       if (casesReasoningSelect) state.assignments.casesReasoning = casesReasoningSelect.value || '';
       if (caseGenReasoningSelect) state.assignments.caseGenReasoning = caseGenReasoningSelect.value || '';
       if (caseFilterReasoningSelect) state.assignments.caseFilterReasoning = caseFilterReasoningSelect.value || '';
+      if (cleanTemperatureEl) state.assignments.cleanTemperature = normalizeTemperature(cleanTemperatureEl.value);
+      if (reviewTemperatureEl) state.assignments.reviewTemperature = normalizeTemperature(reviewTemperatureEl.value);
+      if (compareTemperatureEl) state.assignments.compareTemperature = normalizeTemperature(compareTemperatureEl.value);
+      if (splitTemperatureEl) state.assignments.splitTemperature = normalizeTemperature(splitTemperatureEl.value);
+      if (casesTemperatureEl) state.assignments.casesTemperature = normalizeTemperature(casesTemperatureEl.value);
+      if (caseGenTemperatureEl) state.assignments.caseGenTemperature = normalizeTemperature(caseGenTemperatureEl.value);
+      if (caseFilterTemperatureEl) state.assignments.caseFilterTemperature = normalizeTemperature(caseFilterTemperatureEl.value);
       localStorage.setItem(assignmentKey, JSON.stringify(state.assignments));
       updateAssignmentStatuses();
       setStatus(cleanAssignStatus, '指派已保存', 'ok');
@@ -368,6 +400,13 @@
         if (casesPromptEl) casesPromptEl.value = state.assignments.casesPrompt || defaultPrompts.cases;
         if (caseGenPromptEl) caseGenPromptEl.value = state.assignments.caseGenPrompt || defaultPrompts.casegen;
         if (caseFilterPromptEl) caseFilterPromptEl.value = state.assignments.caseFilterPrompt || defaultPrompts.casefilter;
+        if (cleanTemperatureEl) cleanTemperatureEl.value = state.assignments.cleanTemperature;
+        if (reviewTemperatureEl) reviewTemperatureEl.value = state.assignments.reviewTemperature;
+        if (compareTemperatureEl) compareTemperatureEl.value = state.assignments.compareTemperature;
+        if (splitTemperatureEl) splitTemperatureEl.value = state.assignments.splitTemperature;
+        if (casesTemperatureEl) casesTemperatureEl.value = state.assignments.casesTemperature;
+        if (caseGenTemperatureEl) caseGenTemperatureEl.value = state.assignments.caseGenTemperature;
+        if (caseFilterTemperatureEl) caseFilterTemperatureEl.value = state.assignments.caseFilterTemperature;
         updateAssignmentStatuses();
         ['clean', 'review', 'compare', 'split', 'cases', 'casegen', 'casefilter'].forEach(updateReasoningVisibility);
         return;
@@ -410,6 +449,13 @@
       if (casesPromptEl) casesPromptEl.value = state.assignments.casesPrompt || defaultPrompts.cases;
       if (caseGenPromptEl) caseGenPromptEl.value = state.assignments.caseGenPrompt || defaultPrompts.casegen;
       if (caseFilterPromptEl) caseFilterPromptEl.value = state.assignments.caseFilterPrompt || defaultPrompts.casefilter;
+      if (cleanTemperatureEl) cleanTemperatureEl.value = state.assignments.cleanTemperature;
+      if (reviewTemperatureEl) reviewTemperatureEl.value = state.assignments.reviewTemperature;
+      if (compareTemperatureEl) compareTemperatureEl.value = state.assignments.compareTemperature;
+      if (splitTemperatureEl) splitTemperatureEl.value = state.assignments.splitTemperature;
+      if (casesTemperatureEl) casesTemperatureEl.value = state.assignments.casesTemperature;
+      if (caseGenTemperatureEl) caseGenTemperatureEl.value = state.assignments.caseGenTemperature;
+      if (caseFilterTemperatureEl) caseFilterTemperatureEl.value = state.assignments.caseFilterTemperature;
 
       updateAssignmentStatuses();
       ['clean', 'review', 'compare', 'split', 'cases', 'casegen', 'casefilter'].forEach(updateReasoningVisibility);
@@ -452,6 +498,15 @@
       casegen: 'caseGenReasoning',
       casefilter: 'caseFilterReasoning',
     };
+    const temperatureKeys = {
+      clean: 'cleanTemperature',
+      review: 'reviewTemperature',
+      compare: 'compareTemperature',
+      split: 'splitTemperature',
+      cases: 'casesTemperature',
+      casegen: 'caseGenTemperature',
+      casefilter: 'caseFilterTemperature',
+    };
 
     function getAssignmentKeyPrefix(type) {
       if (type === 'casegen') return 'caseGen';
@@ -482,6 +537,12 @@
       const model = getModelById(state.assignments[idKey]);
       if (!modelIsR1(model)) return '';
       return state.assignments[reasoningKeys[type]] || '';
+    }
+
+    function getTemperatureForType(type) {
+      const key = temperatureKeys[type];
+      if (!key) return defaultTemperature;
+      return normalizeTemperature(state.assignments[key]);
     }
 
     function getAssignedModel(type) {
@@ -624,6 +685,7 @@
       saveAssignments,
       updateReasoningVisibility,
       getReasoningForType,
+      getTemperatureForType,
       getAssignedModel,
       testModel,
       saveModel,

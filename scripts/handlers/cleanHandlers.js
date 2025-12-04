@@ -22,6 +22,7 @@
     var buildReviewClarificationContext = handlers.buildReviewClarificationContext || function() { return ''; };
     var getAssignedModel = handlers.getAssignedModel || function() { throw new Error('缺少模型'); };
     var getReasoningForType = handlers.getReasoningForType || function() { return ''; };
+    var getTemperatureForType = handlers.getTemperatureForType || function() { return 0.2; };
     var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
     var updateModelTiming = handlers.updateModelTiming || function() {};
     var extractJsonPayload = handlers.extractJsonPayload || function(text) { return text; };
@@ -567,6 +568,7 @@
           var cleanedPrompt = state.assignments && state.assignments.cleanPrompt ? state.assignments.cleanPrompt.trim() : '';
           var prompt = cleanedPrompt || (defaultPrompts.system || '');
           var reasoning = getReasoningForType('clean');
+          var temperature = getTemperatureForType('clean');
           var reviewContext = buildReviewClarificationContext();
           var modeInstruction = describeCleanMode(extraContext && extraContext.mode ? String(extraContext.mode) : '');
           var payloadSections = ['【原始需求】\n' + text];
@@ -576,7 +578,7 @@
           if (extraContext && extraContext.suggestion) payloadSections.push('【用户补充说明】\n' + extraContext.suggestion);
           var payload = payloadSections.join('\n\n');
           var startTime = Date.now();
-          cleaned = await callModelWithConfig(model, payload, prompt, reasoning);
+          cleaned = await callModelWithConfig(model, payload, prompt, reasoning, temperature);
           updateModelTiming(cleanTimingEl, Date.now() - startTime);
           var structured = extractJsonPayload(cleaned);
           if (structured) cleaned = structured;

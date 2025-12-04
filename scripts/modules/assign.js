@@ -42,6 +42,13 @@
     var casesReasoningSelect = pick(dom.casesReasoningSelect, 'casesReasoning');
     var caseGenReasoningSelect = pick(dom.caseGenReasoningSelect, 'caseGenReasoning');
     var caseFilterReasoningSelect = pick(dom.caseFilterReasoningSelect, 'caseFilterReasoning');
+    var cleanTemperatureEl = pick(dom.cleanTemperatureEl, 'cleanTemperature');
+    var reviewTemperatureEl = pick(dom.reviewTemperatureEl, 'reviewTemperature');
+    var compareTemperatureEl = pick(dom.compareTemperatureEl, 'compareTemperature');
+    var splitTemperatureEl = pick(dom.splitTemperatureEl, 'splitTemperature');
+    var casesTemperatureEl = pick(dom.casesTemperatureEl, 'casesTemperature');
+    var caseGenTemperatureEl = pick(dom.caseGenTemperatureEl, 'caseGenTemperature');
+    var caseFilterTemperatureEl = pick(dom.caseFilterTemperatureEl, 'caseFilterTemperature');
     var saveAssignmentsBtn = pick(dom.saveAssignmentsBtn, 'saveAssignments');
     var testCleanModelBtn = pick(dom.testCleanModelBtn, 'testCleanModel');
     var testReviewModelBtn = pick(dom.testReviewModelBtn, 'testReviewModel');
@@ -81,6 +88,22 @@
       });
     }
 
+    function normalizeTemperature(value) {
+      if (value === undefined || value === null || value === '') return 0.2;
+      var num = Number(value);
+      if (!Number.isFinite(num)) return 0.2;
+      if (num < 0) return 0;
+      if (num > 1) return 1;
+      return Number(num.toFixed(2));
+    }
+
+    function bindTemperatureInput(el, key) {
+      if (!el) return;
+      el.addEventListener('input', function() {
+        state.assignments[key] = normalizeTemperature(el.value);
+      });
+    }
+
     bindModelSelect(cleanModelSelect, 'cleanId', 'clean', cleanAssignStatus);
     bindModelSelect(reviewModelSelect, 'reviewId', 'review', reviewAssignStatus);
     bindModelSelect(compareModelSelect, 'compareId', 'compare', compareAssignStatus);
@@ -104,6 +127,13 @@
     bindReasoningSelect(casesReasoningSelect, 'casesReasoning');
     bindReasoningSelect(caseGenReasoningSelect, 'caseGenReasoning');
     bindReasoningSelect(caseFilterReasoningSelect, 'caseFilterReasoning');
+    bindTemperatureInput(cleanTemperatureEl, 'cleanTemperature');
+    bindTemperatureInput(reviewTemperatureEl, 'reviewTemperature');
+    bindTemperatureInput(compareTemperatureEl, 'compareTemperature');
+    bindTemperatureInput(splitTemperatureEl, 'splitTemperature');
+    bindTemperatureInput(casesTemperatureEl, 'casesTemperature');
+    bindTemperatureInput(caseGenTemperatureEl, 'caseGenTemperature');
+    bindTemperatureInput(caseFilterTemperatureEl, 'caseFilterTemperature');
 
     if (saveAssignmentsBtn) {
       saveAssignmentsBtn.addEventListener('click', function() {

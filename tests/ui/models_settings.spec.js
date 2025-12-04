@@ -94,6 +94,10 @@ test.describe('模型管理与全局设置', () => {
     await expect(tokenHint).toHaveClass(/hidden/);
 
     await page.click('[data-tab-btn="assign"]');
+    await expect(page.locator('#cleanTemperature')).toHaveValue('0.2');
+    await expect(page.locator('#compareTemperature')).toHaveValue('0.2');
+    await page.fill('#cleanTemperature', '0.6');
+    await page.fill('#compareTemperature', '0.3');
     const modelId = await page.evaluate(() => {
       const models = JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]');
       return models[0]?.id || '';
@@ -104,5 +108,9 @@ test.describe('模型管理与全局设置', () => {
     }
     await page.click('#saveAssignments');
     await expect(assignTab.locator('.tab-notice')).toHaveCount(0);
+    const assignment = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-assignment-v1') || '{}'));
+    expect(assignment.cleanTemperature).toBeCloseTo(0.6);
+    expect(assignment.compareTemperature).toBeCloseTo(0.3);
+
   });
 });

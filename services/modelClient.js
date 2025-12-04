@@ -59,7 +59,7 @@
           return apiKey ? { Authorization: 'Bearer ' + apiKey } : {};
         };
 
-    async function callModelWithConfig(model, userText, promptText, reasoningEffort) {
+    async function callModelWithConfig(model, userText, promptText, reasoningEffort, temperature) {
       if (!model || !model.baseUrl || !model.model) {
         throw new Error('模型配置不完整');
       }
@@ -68,13 +68,15 @@
       }
       var prompt = promptText && promptText.trim() ? promptText.trim() : (defaultPrompts.system || '');
       var maxTokens = model.maxTokens || defaultMaxTokens;
+      var tempValue = Number(temperature);
+      var safeTemperature = Number.isFinite(tempValue) ? Math.min(1, Math.max(0, tempValue)) : 0.2;
       var body = {
         model: model.model,
         messages: [
           { role: 'system', content: prompt },
           { role: 'user', content: userText }
         ],
-        temperature: 0.2,
+        temperature: safeTemperature,
         max_tokens: maxTokens,
       };
       if (reasoningEffort && modelIsR1(model)) {

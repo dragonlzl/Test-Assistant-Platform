@@ -16,6 +16,7 @@
     var ensureRequirementLabel = handlers.ensureRequirementLabel || function() { return ''; };
     var getAssignedModel = handlers.getAssignedModel || function() { throw new Error('未配置模型'); };
     var getReasoningForType = handlers.getReasoningForType || function() { return ''; };
+    var getTemperatureForType = handlers.getTemperatureForType || function() { return 0.2; };
     var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
     var updateModelTiming = handlers.updateModelTiming || function() {};
     var wrapTextWithRequirement = handlers.wrapTextWithRequirement || function(text) { return text; };
@@ -621,8 +622,9 @@
         var reviewPrompt = state.assignments && state.assignments.reviewPrompt ? state.assignments.reviewPrompt.trim() : '';
         var prompt = reviewPrompt || defaultPrompts.review;
         var reasoning = getReasoningForType('review');
+        var temperature = getTemperatureForType('review');
         var startTime = Date.now();
-        var content = await callModelWithConfig(model, raw, prompt, reasoning);
+        var content = await callModelWithConfig(model, raw, prompt, reasoning, temperature);
         updateModelTiming(reviewTimingEl, Date.now() - startTime);
         reviewResultEl.value = wrapTextWithRequirement(formatJsonOrText(stripCodeFence(content)));
         syncReviewViewFromResult();

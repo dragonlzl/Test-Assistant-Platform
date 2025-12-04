@@ -54,6 +54,7 @@
     var getCleanedTextForModel = handlers.getCleanedTextForModel || function() { return ''; };
     var getAssignedModel = handlers.getAssignedModel || function() { throw new Error('缺少模型配置'); };
     var getReasoningForType = handlers.getReasoningForType || function() { return ''; };
+    var getTemperatureForType = handlers.getTemperatureForType || function() { return 0.2; };
     var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
     var updateModelTiming = handlers.updateModelTiming || function() {};
     var formatJsonOrText = handlers.formatJsonOrText || function(text) { return text; };
@@ -757,12 +758,14 @@
         var comparePrompt = state.assignments && state.assignments.comparePrompt ? state.assignments.comparePrompt.trim() : '';
         var prompt = comparePrompt || defaultPrompts.compare;
         var reasoning = getReasoningForType('compare');
+        var temperature = getTemperatureForType('compare');
         var startTime = Date.now();
         var content = await callModelWithConfig(
           model,
           '原始需求：\n' + raw + '\n\n清洗后的需求：\n' + cleaned,
           prompt,
-          reasoning
+          reasoning,
+          temperature
         );
         updateModelTiming(compareTimingEl, Date.now() - startTime);
         var formatted = formatJsonOrText(stripCodeFence(content));
@@ -780,13 +783,13 @@
       }
     }
 
-    async function compareSingleModuleWithCases(module, idx, casesPayload, isJson, model, prompt, reasoning) {
+    async function compareSingleModuleWithCases(module, idx, casesPayload, isJson, model, prompt, reasoning, temperature) {
       var payload = buildSingleModulePayload(module, idx);
       var label = isJson ? '测试用例列表（JSON）' : '测试用例内容';
       var userText = '仅针对以下单个模块进行覆盖对比，请返回 {coverage, missing, extra} JSON：\n' + payload.json + '\n\n' + label + '：\n' + casesPayload;
       var content;
       try {
-        content = await callModelWithConfig(model, userText, prompt, reasoning);
+        content = await callModelWithConfig(model, userText, prompt, reasoning, temperature);
       } catch (err) {
         throw new Error('模块「' + payload.title + '」对比失败：' + (err && err.message ? err.message : err));
       }
@@ -829,13 +832,14 @@
       var casesPrompt = state.assignments && state.assignments.casesPrompt ? state.assignments.casesPrompt.trim() : '';
       var prompt = casesPrompt || defaultPrompts.cases;
       var reasoning = getReasoningForType('cases');
+      var temperature = getTemperatureForType('cases');
       var startTime = Date.now();
       try {
         var states = parsedModules.map(function() { return 'pending'; });
         var perModule = await runConcurrent(parsedModules, concurrency, function(module, idx) {
           states[idx] = 'running';
           renderCasesModuleProgress(parsedModules, states);
-          return compareSingleModuleWithCases(module, idx, casesPayload, isJson, model, prompt, reasoning)
+          return compareSingleModuleWithCases(module, idx, casesPayload, isJson, model, prompt, reasoning, temperature)
             .then(function(result) {
               states[idx] = 'done';
               renderCasesModuleProgress(parsedModules, states);

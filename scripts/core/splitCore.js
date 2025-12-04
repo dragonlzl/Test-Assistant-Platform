@@ -171,6 +171,7 @@
       var getCleanedTextForModel = handlers.getCleanedTextForModel || function() { return ''; };
       var getAssignedModel = handlers.getAssignedModel || function() { throw new Error('缺少模型'); };
       var getReasoningForType = handlers.getReasoningForType || function() { return ''; };
+      var getTemperatureForType = handlers.getTemperatureForType || function() { return 0.2; };
       var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
       var updateModelTiming = handlers.updateModelTiming || function() {};
 
@@ -202,8 +203,9 @@
           var splitPrompt = state.assignments && state.assignments.splitPrompt ? state.assignments.splitPrompt.trim() : '';
           var prompt = splitPrompt || (defaultPrompts.split || '');
           var reasoning = getReasoningForType('split');
+          var temperature = getTemperatureForType('split');
           var startTime = Date.now();
-          var content = await callModelWithConfig(model, cleaned, prompt, reasoning);
+          var content = await callModelWithConfig(model, cleaned, prompt, reasoning, temperature);
           updateModelTiming(splitTimingEl, Date.now() - startTime);
           if (splitResultEl) splitResultEl.value = content;
           setStatus(splitStatus, '拆分完成', 'ok');
