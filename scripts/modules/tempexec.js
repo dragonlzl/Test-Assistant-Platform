@@ -28,6 +28,8 @@
     var tempExecStatus = document.getElementById('tempExecStatus');
     var tempExecNav = document.getElementById('tempExecNav');
     var tempVersionGrid = document.getElementById('tempVersionGrid');
+    var toggleTempReqBtn = document.getElementById('toggleTempReq');
+    var toggleTempVersionBtn = document.getElementById('toggleTempVersion');
     var caseTemplateDropdown = document.getElementById('caseTemplateDropdown');
     var caseTemplateToggle = document.getElementById('caseTemplateToggle');
     var caseTemplateMenu = document.getElementById('caseTemplateMenu');
@@ -457,6 +459,17 @@
         if (!caseTemplateDropdown) return;
         if (caseTemplateDropdown.contains(e.target)) return;
         closeTemplateDropdown();
+      });
+    }
+
+    if (toggleTempReqBtn && typeof api.toggleTempExecRequirementZone === 'function') {
+      toggleTempReqBtn.addEventListener('click', function() {
+        api.toggleTempExecRequirementZone();
+      });
+    }
+    if (toggleTempVersionBtn && typeof api.toggleTempExecVersionZone === 'function') {
+      toggleTempVersionBtn.addEventListener('click', function() {
+        api.toggleTempExecVersionZone();
       });
     }
 

@@ -2,13 +2,14 @@
   window.app = window.app || {};
   window.app.domConfig = {
     ids: [
-      'fileInput', 'dropZone', 'fileName', 'rawText', 'parseStatus', 'reviewStatus', 'reviewViewContainer', 'splitViewContainer',
+      'fileInput', 'dropZone', 'fileName', 'rawText', 'parseStatus', 'reviewStatus', 'clarifyStatus', 'reviewViewContainer', 'splitViewContainer',
       'cleanViewContainer', 'cleanHighlightAllBtn', 'toggleCleanViewBtn', 'cleanRawView', 'toggleCleanRawViewBtn', 'cleanRawLocateBtn',
       'caseStatus', 'caseViewBtn', 'caseViewContainer', 'caseViewHint', 'autoRawDropZone', 'autoCaseDropZone', 'tempExecDropZone',
       'tempExecInput', 'tempExecStatus', 'tempExecNav', 'tempFocusBlock', 'tempVersionGrid', 'createTempVersionBtn', 'tempExecView',
       'tempExecMindContainer', 'exportTempExecBtn', 'exportTempExecConfigBtn', 'importTempExecBtn', 'exportTempExecXmindBtn',
       'importTempExecConfigBtn', 'tempExecMindBtn', 'tempExecOverviewBtn', 'tempExecOverview', 'tempExecBackBtn', 'importTempExecFile',
       'importTempExecConfigFile', 'autoClarifyContainer', 'autoClarifyStatus', 'autoClarifyToggleBtn', 'goUsecaseGenBtn',
+      'toggleTempReq', 'toggleTempVersion',
       'casesGoUsecaseGenBtn', 'casesGenerationContainer', 'caseGenProgressPanel', 'caseGenProgressList', 'cleanStatus', 'compareStatus',
       'splitStatus', 'casesCoverageStatus', 'caseGenStatus', 'autoWorkflowStatus', 'casesModuleProgress', 'exportCaseGenBtn',
       'toSplitFromCaseGenBtn', 'saveRawDebugBtn', 'importRawDebugBtn', 'saveCleanDebugBtn', 'importCleanDebugBtn', 'saveSplitDebugBtn',

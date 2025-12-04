@@ -35,6 +35,7 @@
 
     var rawText = dom.rawText;
     var reviewStatus = dom.reviewStatus;
+    var clarifyStatus = dom.clarifyStatus;
     var reviewResultEl = dom.reviewResultEl;
     var reviewViewContainer = dom.reviewViewContainer;
     var toggleReviewViewBtn = dom.toggleReviewViewBtn;
@@ -52,6 +53,11 @@
     if (!(state.reviewClarifications instanceof Map)) state.reviewClarifications = new Map();
     if (!(state.reviewSelections instanceof Set)) state.reviewSelections = new Set();
     if (!(state.reviewExpanded instanceof Set)) state.reviewExpanded = new Set();
+
+    function setClarifyStatus(text, type) {
+      setStatus(reviewStatus, text, type);
+      if (clarifyStatus) setStatus(clarifyStatus, text, type);
+    }
 
     function looksLikeCoverageSummary(data) {
       if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
@@ -459,7 +465,7 @@
     function confirmClarifications() {
       var list = parseReviewList(reviewResultEl && reviewResultEl.value ? reviewResultEl.value : '');
       if (!list.length) {
-        setStatus(reviewStatus, '当前没有可写入的评审结果', 'warn');
+        setClarifyStatus('当前没有可写入的评审结果', 'warn');
         return;
       }
       var updated = list.map(function(item, idx) {
@@ -471,12 +477,12 @@
       });
       try {
         reviewResultEl.value = JSON.stringify(updated, null, 2);
-        setStatus(reviewStatus, '澄清结果已写入评审 JSON', 'ok');
+        setClarifyStatus('澄清结果已写入评审 JSON', 'ok');
         syncReviewViewFromResult();
         updateFlowStatus();
       } catch (err) {
         console.warn('澄清结果写入失败', err);
-        setStatus(reviewStatus, '澄清结果写入失败，请检查内容', 'warn');
+        setClarifyStatus('澄清结果写入失败，请检查内容', 'warn');
       }
     }
 

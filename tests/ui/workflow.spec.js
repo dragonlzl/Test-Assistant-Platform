@@ -83,6 +83,35 @@ test.describe('工作流关键交互', () => {
     await expect(recleanBtn).toBeDisabled();
   });
 
+  test('需求澄清确认有提示', async ({ page }) => {
+    await page.click('[data-tab-btn="clean"]');
+    await page.evaluate(() => {
+      const review = document.getElementById('reviewResult');
+      if (review) {
+        review.removeAttribute('readonly');
+        review.value = JSON.stringify([{ '不明确的需求点': '接口定义不清' }], null, 2);
+      }
+      if (window.app && window.app.state) {
+        window.app.state.reviewClarifications = new Map([[0, '已与产品确认']]);
+        window.app.state.reviewRows = [{
+          index: 0,
+          source: { '不明确的需求点': '接口定义不清' },
+          category: '',
+          point: '接口定义不清',
+          reason: '',
+          branch: '',
+          clarification: '',
+        }];
+      }
+      const toggle = document.getElementById('toggleReviewView');
+      if (toggle) toggle.disabled = false;
+      const confirmBtn = document.getElementById('confirmClarifications');
+      if (confirmBtn) confirmBtn.disabled = false;
+    });
+    await page.click('#confirmClarifications');
+    await expect(page.locator('#clarifyStatus')).toContainText('澄清结果已写入评审 JSON');
+  });
+
   test('自动流程覆盖率不足时按钮可用', async ({ page }) => {
     await page.evaluate(() => {
       const payload = { coverage: 80, missing: ['缺少需求点'] };

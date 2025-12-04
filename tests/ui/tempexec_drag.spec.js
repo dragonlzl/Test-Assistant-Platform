@@ -238,4 +238,24 @@ test.describe('执行视图导入导出与拖拽', () => {
     await expect(statusBtn).toHaveClass(/failed/);
     await expect(statusBtn).toContainText('失败');
   });
+
+  test('需求区与版本区支持收起展开', async ({ page }) => {
+    await page.click('[data-tab-btn="tempexec"]');
+    const reqToggle = page.locator('#toggleTempReq');
+    const versionToggle = page.locator('#toggleTempVersion');
+    await expect(reqToggle).toBeVisible();
+    await expect(versionToggle).toBeVisible();
+
+    await reqToggle.click();
+    await expect(page.locator('#tempExecNav')).toHaveClass(/collapsed/);
+    await expect(page.locator('#tempExecNav')).toContainText('已收起');
+    await reqToggle.click();
+    await expect(page.locator('#tempExecNav')).not.toHaveClass(/collapsed/);
+
+    await versionToggle.click();
+    await expect(page.locator('#tempVersionGrid')).toHaveClass(/collapsed/);
+    await expect(page.locator('#tempVersionGrid')).toContainText('已收起');
+    await versionToggle.click();
+    await expect(page.locator('#tempVersionGrid')).not.toHaveClass(/collapsed/);
+  });
 });

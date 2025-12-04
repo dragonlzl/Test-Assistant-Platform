@@ -113,6 +113,8 @@
       tempExecDefectOpen: {},
       tempExecUndoStack: [],
       tempExecSearch: { fileId: '', term: '', raw: '' },
+      tempExecReqCollapsed: false,
+      tempExecVersionCollapsed: false,
       autoExpandMissing: false,
       requirementLabel: '',
       requirementLabelSource: '',

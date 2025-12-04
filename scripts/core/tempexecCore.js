@@ -34,6 +34,9 @@
     var tempFocusZone = deps && deps.dom && deps.dom.tempFocusZone ? deps.dom.tempFocusZone : null;
     var tempExecOverview = deps && deps.dom && deps.dom.tempExecOverview ? deps.dom.tempExecOverview : null;
     var tempExecView = deps && deps.dom && deps.dom.tempExecView ? deps.dom.tempExecView : null;
+    var tempReqToggleBtn = deps && deps.dom && deps.dom.toggleTempReq ? deps.dom.toggleTempReq : null;
+    var tempVersionToggleBtn = deps && deps.dom && deps.dom.toggleTempVersion ? deps.dom.toggleTempVersion : null;
+    var createTempVersionBtn = deps && deps.dom && deps.dom.createTempVersionBtn ? deps.dom.createTempVersionBtn : null;
     var tempExecViewSection = deps && deps.dom && deps.dom.tempExecViewSection ? deps.dom.tempExecViewSection : null;
     var tempExecMindContainer = deps && deps.dom && deps.dom.tempExecMindContainer ? deps.dom.tempExecMindContainer : null;
     var tempExecMindBtn = deps && deps.dom && deps.dom.tempExecMindBtn ? deps.dom.tempExecMindBtn : null;
@@ -114,6 +117,23 @@
     var tempExecUndoTimer = null;
     var tempExecUndoInterval = null;
     var tempExecUndoEl = null;
+    function syncTempSectionToggleButtons() {
+      if (tempReqToggleBtn) {
+        tempReqToggleBtn.classList.toggle('collapsed', Boolean(state.tempExecReqCollapsed));
+        var reqLabel = state.tempExecReqCollapsed ? '展开需求区' : '收起需求区';
+        tempReqToggleBtn.setAttribute('aria-label', reqLabel);
+        tempReqToggleBtn.setAttribute('title', reqLabel);
+      }
+      if (tempVersionToggleBtn) {
+        tempVersionToggleBtn.classList.toggle('collapsed', Boolean(state.tempExecVersionCollapsed));
+        var verLabel = state.tempExecVersionCollapsed ? '展开版本区' : '收起版本区';
+        tempVersionToggleBtn.setAttribute('aria-label', verLabel);
+        tempVersionToggleBtn.setAttribute('title', verLabel);
+      }
+      if (createTempVersionBtn) {
+        createTempVersionBtn.classList.toggle('hidden', Boolean(state.tempExecVersionCollapsed));
+      }
+    }
 
     function normalizeReuseDetails(list) {
       if (!Array.isArray(list)) return [];
@@ -1240,6 +1260,13 @@
     function renderTempVersionGrid() {
       if (!tempVersionGrid) return;
       ensureTempVersionList();
+      syncTempSectionToggleButtons();
+      if (state.tempExecVersionCollapsed) {
+        tempVersionGrid.classList.add('collapsed');
+        tempVersionGrid.innerHTML = '<span class="hint">版本区已收起，点击“展开版本区”查看</span>';
+        return;
+      }
+      tempVersionGrid.classList.remove('collapsed');
       if (!state.tempExecVersions.length) {
         tempVersionGrid.innerHTML = '<span class="hint">暂无版本，点击“新建版本”创建</span>';
         return;
@@ -1625,7 +1652,20 @@
 
     function renderTempExecNav() {
       if (!tempExecNav) return;
+      syncTempSectionToggleButtons();
       var focusSet = new Set(state.tempExecFocus || []);
+      if (state.tempExecReqCollapsed) {
+        tempExecNav.classList.add('collapsed');
+        tempExecNav.innerHTML = '<span class="hint temp-req-empty">需求区已收起，点击“展开需求区”查看</span>';
+        if (exportTempExecBtn) exportTempExecBtn.disabled = !state.tempExecActiveId;
+        if (exportTempExecConfigBtn) exportTempExecConfigBtn.disabled = !state.tempExecFiles.length;
+        if (exportTempExecXmindBtn) exportTempExecXmindBtn.disabled = !state.tempExecActiveId;
+        if (tempExecMindBtn) tempExecMindBtn.disabled = !state.tempExecActiveId;
+        renderTempExecOverview();
+        renderTempFocusZone();
+        return;
+      }
+      tempExecNav.classList.remove('collapsed');
       var files = state.tempExecFiles
         .filter(function(file) { return !file.versionId; })
         .slice()
@@ -1717,6 +1757,16 @@
       renderTempExecOverview();
       renderTempFocusZone();
       enforceTempFileDraggable(tempExecNav);
+    }
+
+    function toggleTempExecRequirementZone() {
+      state.tempExecReqCollapsed = !state.tempExecReqCollapsed;
+      renderTempExecNav();
+    }
+
+    function toggleTempExecVersionZone() {
+      state.tempExecVersionCollapsed = !state.tempExecVersionCollapsed;
+      renderTempVersionGrid();
     }
 
     function prioritizeTempExecUnassignedRequirements() {
@@ -2922,6 +2972,8 @@
       renderTempExecTable: renderTempExecTable,
       renderTempExecOverview: renderTempExecOverview,
       renderTempFocusZone: renderTempFocusZone,
+      toggleTempExecRequirementZone: toggleTempExecRequirementZone,
+      toggleTempExecVersionZone: toggleTempExecVersionZone,
       scrollTempExecViewTop: scrollTempExecViewTop,
       ensureReusePresets: ensureReusePresets,
       startTempExecPresetDraft: startTempExecPresetDraft,
