@@ -816,6 +816,7 @@
 <button class="secondary" disabled="" id="exportTempExecBtn">导出本次执行JSON</button>
 <button class="secondary" id="importTempExecBtn">导入执行JSON</button>
 <button class="secondary" disabled="" id="exportTempExecXmindBtn">导出执行XMind</button>
+<button class="secondary" disabled="" id="exportTempExecCasesXmindBtn">导出用例XMind（无结果）</button>
 
 <input accept=".json,.txt" hidden="" id="importTempExecFile" type="file"/>
 </div>
@@ -843,7 +844,7 @@
   <h3>推荐配置</h3>
   <ul>
     <li>优先指派 <strong>DeepSeek-R1</strong>，输出质量更好。</li>
-    <li>请将 <code>Max Tokens</code> 设置为 <strong>16384</strong> 或更高，避免长回复被截断。</li>
+    <li>请将 <code>Max Tokens</code> 设置为 <strong>16384</strong> 或更高，避免长回复被截断。<span class="token-hint hidden" id="deepseekTokenHint"></span></li>
     <li>为每个功能统一指派此模型，保持行为一致。</li>
   </ul>
 </div>

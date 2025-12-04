@@ -30,6 +30,7 @@
     var tempVersionGrid = document.getElementById('tempVersionGrid');
     var toggleTempReqBtn = document.getElementById('toggleTempReq');
     var toggleTempVersionBtn = document.getElementById('toggleTempVersion');
+    var exportTempExecCasesXmindBtn = document.getElementById('exportTempExecCasesXmindBtn');
     var caseTemplateDropdown = document.getElementById('caseTemplateDropdown');
     var caseTemplateToggle = document.getElementById('caseTemplateToggle');
     var caseTemplateMenu = document.getElementById('caseTemplateMenu');
@@ -1428,6 +1429,11 @@
     if (exportTempExecXmindBtn && api.exportTempExecToXmind) {
       exportTempExecXmindBtn.addEventListener('click', function() {
         api.exportTempExecToXmind();
+      });
+    }
+    if (exportTempExecCasesXmindBtn && api.exportTempExecCasesToXmind) {
+      exportTempExecCasesXmindBtn.addEventListener('click', function() {
+        api.exportTempExecCasesToXmind();
       });
     }
 

@@ -132,10 +132,28 @@
       renderAssignmentsSelect();
     }
 
+    function setTabNotice(tabName, text) {
+      const btn = document.querySelector('[data-tab-btn="' + tabName + '"]');
+      if (!btn) return;
+      let badge = btn.querySelector('.tab-notice');
+      if (!text) {
+        if (badge && badge.parentNode) badge.parentNode.removeChild(badge);
+        return;
+      }
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'tab-notice';
+        btn.appendChild(badge);
+      }
+      badge.textContent = text;
+    }
+
     function renderModels() {
       if (!modelListEl) return;
       if (!state.models.length) {
         modelListEl.innerHTML = '<p class="hint">尚未配置模型，请先创建。</p>';
+        updateDeepseekTokenHint();
+        updateTabNotices();
         return;
       }
       modelListEl.innerHTML = state.models.map(m => `
@@ -159,6 +177,8 @@
       modelListEl.querySelectorAll('[data-delete]').forEach(btn => {
         btn.addEventListener('click', () => deleteModel(btn.dataset.delete));
       });
+      updateDeepseekTokenHint();
+      updateTabNotices();
     }
 
     function resetModelForm(hide = false) {
@@ -416,6 +436,7 @@
       setStatus(casesAssignStatus, casesModel ? `当前覆盖对比模型：${casesModel.name}` : '尚未指派覆盖对比模型', casesModel ? 'ok' : 'warn');
       setStatus(caseGenAssignStatus, caseGenModel ? `当前用例生成功能模型：${caseGenModel.name}` : '尚未指派用例生产模型', caseGenModel ? 'ok' : 'warn');
       setStatus(caseFilterAssignStatus, caseFilterModel ? `当前用例相似对比模型：${caseFilterModel.name}` : '尚未指派用例相似对比模型', caseFilterModel ? 'ok' : 'warn');
+      updateTabNotices();
     }
 
     function getModelById(id) {
@@ -493,6 +514,51 @@
       const model = getModelById(id);
       if (!model) throw new Error(`未找到${label}模型，请先在功能指派中选择`);
       return model;
+    }
+
+    function findDeepseekReasoner() {
+      return state.models.find(m => {
+        const modelId = (m && m.model ? m.model : '').toLowerCase();
+        return modelId.indexOf('deepseek-reasoner') !== -1;
+      });
+    }
+
+    function updateDeepseekTokenHint() {
+      const hint = document.getElementById('deepseekTokenHint');
+      if (!hint) return;
+      const target = findDeepseekReasoner();
+      const recommend = 16384;
+      if (!target) {
+        hint.textContent = '';
+        hint.classList.add('hidden');
+        hint.onclick = null;
+        return;
+      }
+      const current = Number(target.maxTokens) || 0;
+      if (current >= recommend) {
+        hint.textContent = '';
+        hint.classList.add('hidden');
+        hint.onclick = null;
+        return;
+      }
+      hint.classList.remove('hidden');
+      hint.textContent = '当前配置 ' + current + ' < 推荐配置 ' + recommend + '（点击调整）';
+      hint.onclick = function() {
+        if (typeof fillModelForm === 'function') fillModelForm(target.id);
+        const card = modelListEl && modelListEl.querySelector('[data-id="' + target.id + '"]');
+        if (card && card.scrollIntoView) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      };
+    }
+
+    function updateTabNotices() {
+      const hasModels = Array.isArray(state.models) && state.models.length > 0;
+      const missingAssignments = ['cleanId', 'reviewId', 'compareId', 'splitId', 'casesId', 'caseGenId'].some(function(key) {
+        return !state.assignments[key];
+      });
+      setTabNotice('models', hasModels ? '' : '未配置模型');
+      setTabNotice('assign', hasModels ? (missingAssignments ? '未指派模型' : '') : '未配置模型');
     }
 
     async function testModel(id, statusEl) {

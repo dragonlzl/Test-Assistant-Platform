@@ -930,6 +930,18 @@
       if (!builder) return Promise.reject(new Error('缺少 XMind 导出依赖'));
       return builder(file, requirement);
     };
+    const lazyBuildCasesXmindPackage = function(cases, moduleTitle, requirement) {
+      const builder = window.app && (
+        (window.app.xmindCoreApi && typeof window.app.xmindCoreApi.buildXmindPackageFromCases === 'function'
+          ? window.app.xmindCoreApi.buildXmindPackageFromCases
+          : null)
+        || (window.app.xmindCore && typeof window.app.xmindCore.buildXmindPackageFromCases === 'function'
+          ? window.app.xmindCore.buildXmindPackageFromCases
+          : null)
+      );
+      if (!builder) return Promise.reject(new Error('缺少 XMind 导出依赖'));
+      return builder(cases, moduleTitle, requirement);
+    };
 
     const tempexecCore = window.app && window.app.tempexecCore && typeof window.app.tempexecCore.init === 'function'
       ? window.app.tempexecCore.init({
@@ -964,6 +976,7 @@
         downloadBlob,
         scrollElementIntoView,
         tempExecResultOptions,
+        buildXmindPackageFromCases: lazyBuildCasesXmindPackage,
         dom,
       })
       : null;

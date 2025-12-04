@@ -43,6 +43,7 @@
     var exportTempExecBtn = deps && deps.dom && deps.dom.exportTempExecBtn ? deps.dom.exportTempExecBtn : null;
     var exportTempExecConfigBtn = deps && deps.dom && deps.dom.exportTempExecConfigBtn ? deps.dom.exportTempExecConfigBtn : null;
     var exportTempExecXmindBtn = deps && deps.dom && deps.dom.exportTempExecXmindBtn ? deps.dom.exportTempExecXmindBtn : null;
+    var exportTempExecCasesXmindBtn = deps && deps.dom && deps.dom.exportTempExecCasesXmindBtn ? deps.dom.exportTempExecCasesXmindBtn : null;
     var escapeHtml = deps && deps.escapeHtml ? deps.escapeHtml : function(text) {
       if (text === null || text === undefined) return '';
       return String(text)
@@ -93,6 +94,7 @@
       return normalizeRequirementName(getRequirementLabel());
     };
     var buildTempExecXmindPackage = deps && deps.buildTempExecXmindPackage ? deps.buildTempExecXmindPackage : null;
+    var buildXmindPackageFromCases = deps && deps.buildXmindPackageFromCases ? deps.buildXmindPackageFromCases : null;
     var ensureTempExecReplacement = deps && deps.ensureTempExecReplacement
       ? function(entry, pendingList) { return deps.ensureTempExecReplacement(entry, pendingList || []); }
       : function(entry, pendingList) {
@@ -1662,6 +1664,7 @@
         if (exportTempExecBtn) exportTempExecBtn.disabled = !state.tempExecActiveId;
         if (exportTempExecConfigBtn) exportTempExecConfigBtn.disabled = !state.tempExecFiles.length;
         if (exportTempExecXmindBtn) exportTempExecXmindBtn.disabled = !state.tempExecActiveId;
+        if (exportTempExecCasesXmindBtn) exportTempExecCasesXmindBtn.disabled = !state.tempExecActiveId;
         if (tempExecMindBtn) tempExecMindBtn.disabled = !state.tempExecActiveId;
         renderTempExecOverview();
         renderTempFocusZone();
@@ -1755,6 +1758,7 @@
       if (exportTempExecBtn) exportTempExecBtn.disabled = !state.tempExecActiveId;
       if (exportTempExecConfigBtn) exportTempExecConfigBtn.disabled = !state.tempExecFiles.length;
       if (exportTempExecXmindBtn) exportTempExecXmindBtn.disabled = !state.tempExecActiveId;
+      if (exportTempExecCasesXmindBtn) exportTempExecCasesXmindBtn.disabled = !state.tempExecActiveId;
       if (tempExecMindBtn) tempExecMindBtn.disabled = !state.tempExecActiveId;
       renderTempExecOverview();
       renderTempFocusZone();
@@ -1844,6 +1848,7 @@
       }
       if (exportTempExecBtn) exportTempExecBtn.disabled = false;
       if (exportTempExecXmindBtn) exportTempExecXmindBtn.disabled = false;
+      if (exportTempExecCasesXmindBtn) exportTempExecCasesXmindBtn.disabled = false;
       if (tempExecMindBtn) tempExecMindBtn.disabled = false;
       renderTempExecOverview();
     }
@@ -1879,6 +1884,42 @@
       } catch (err) {
         console.error(err);
         if (tempExecStatus) setStatus(tempExecStatus, 'XMind 导出失败：' + err.message, 'err');
+      }
+    }
+
+    async function exportTempExecCasesToXmind() {
+      var active = getTempExecFile(state.tempExecActiveId);
+      if (!active) {
+        if (tempExecStatus) setStatus(tempExecStatus, '请选择需要导出的执行用例', 'warn');
+        return;
+      }
+      var requirement = normalizeRequirementName(active.requirement) || normalizeRequirementName(getRequirementLabel(true));
+      if (!requirement) requirement = ensureRequirementLabel('请输入需求标识后再导出用例 XMind');
+      if (!requirement) {
+        if (tempExecStatus) setStatus(tempExecStatus, '已取消导出（需求标识为空）', 'warn');
+        return;
+      }
+      var strippedCases = (active.cases || []).map(function(item) {
+        var copy = {};
+        Object.keys(item || {}).forEach(function(key) { copy[key] = item[key]; });
+        delete copy.actual;
+        delete copy.remark;
+        delete copy.defectLinks;
+        delete copy.reuseDetails;
+        delete copy.reuseEnabled;
+        delete copy.result;
+        delete copy.actual_result;
+        return copy;
+      });
+      try {
+        var pkg = await buildXmindPackageFromCases(strippedCases, active.name || '用例', requirement);
+        if (pkg && downloadBlob && pkg.blob) {
+          downloadBlob(pkg.fileName, pkg.blob);
+        }
+        if (tempExecStatus) setStatus(tempExecStatus, '已导出用例 XMind（不含执行结果）', 'ok');
+      } catch (err) {
+        console.error(err);
+        if (tempExecStatus) setStatus(tempExecStatus, '用例 XMind 导出失败：' + err.message, 'err');
       }
     }
 
@@ -2895,6 +2936,7 @@
       applyTempExecSnapshot: applyTempExecSnapshot,
       createTempExecFile: createTempExecFile,
       exportTempExecToXmind: exportTempExecToXmind,
+      exportTempExecCasesToXmind: exportTempExecCasesToXmind,
       loadTempExecState: loadTempExecState,
       importTempExecFiles: importTempExecFiles,
       ensureTempExecPlacement: ensureTempExecPlacement,

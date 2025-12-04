@@ -70,6 +70,11 @@ test.describe('执行视图导入导出与拖拽', () => {
       page.click('#exportTempExecXmindBtn'),
     ]);
     expect(await xmindDownload.suggestedFilename()).toMatch(/\.xmind$/);
+    const [plainXmindDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.click('#exportTempExecCasesXmindBtn'),
+    ]);
+    expect(await plainXmindDownload.suggestedFilename()).toMatch(/\.xmind$/);
 
     page.__promptAnswers.push('版本A');
     await page.click('#createTempVersionBtn');
