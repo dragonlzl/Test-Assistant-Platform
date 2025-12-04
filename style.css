@@ -1211,56 +1211,22 @@
       justify-content: space-between;
       gap: 20px;
     }
-    .temp-header-actions {
-      display: inline-flex;
-      align-items: center;
-    }
-    .icon-toggle {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      border: none;
-      background: transparent;
-      box-shadow: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      color: #4b5563;
-      position: relative;
-    }
-    .icon-toggle:hover {
-      color: #111827;
-      transform: none;
-    }
-    .chevron-stack {
-      position: relative;
-      width: 14px;
-      height: 16px;
-      display: block;
-      transform: translateY(1px);
-    }
-    .chevron-stack::before,
-    .chevron-stack::after {
-      content: '';
-      position: absolute;
-      width: 10px;
-      height: 10px;
-      border-left: 2px solid currentColor;
-      border-bottom: 2px solid currentColor;
-      transform: translate(-50%, -50%) rotate(-45deg);
-      left: 50%;
-    }
-    .chevron-stack::before {
-      top: 38%;
-    }
-    .chevron-stack::after {
-      top: 72%;
-    }
-    .icon-toggle.collapsed .chevron-stack {
-      transform: rotate(180deg) translateY(-1px);
-    }
+.temp-header-actions {
+  display: inline-flex;
+  align-items: center;
+}
+.link-toggle {
+  background: transparent;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 4px 8px;
+}
+.link-toggle:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
     .pill {
       border-radius: 999px;
       padding: 8px 20px;

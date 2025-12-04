@@ -123,12 +123,14 @@
         var reqLabel = state.tempExecReqCollapsed ? '展开需求区' : '收起需求区';
         tempReqToggleBtn.setAttribute('aria-label', reqLabel);
         tempReqToggleBtn.setAttribute('title', reqLabel);
+        tempReqToggleBtn.textContent = reqLabel;
       }
       if (tempVersionToggleBtn) {
         tempVersionToggleBtn.classList.toggle('collapsed', Boolean(state.tempExecVersionCollapsed));
         var verLabel = state.tempExecVersionCollapsed ? '展开版本区' : '收起版本区';
         tempVersionToggleBtn.setAttribute('aria-label', verLabel);
         tempVersionToggleBtn.setAttribute('title', verLabel);
+        tempVersionToggleBtn.textContent = verLabel;
       }
       if (createTempVersionBtn) {
         createTempVersionBtn.classList.toggle('hidden', Boolean(state.tempExecVersionCollapsed));
