@@ -733,3 +733,11 @@
   - app.js 行数：1557  
   - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 在提权/非提权环境均失败（22/22），`webServer` 启动 python http.server 报 PermissionError/ERR_EMPTY_RESPONSE，页面未完成 `_inited`；已在调试时手动启动 http.server 但 Playwright 仍因沙箱端口限制无法复用  
   - 其他备注：新增 `config/domConfig.js`、`scripts/core/appInitHelpers.js`，app.js 通过统一 proxy 访问回退函数；`python3 notify_feishu.py` 因 DNS 解析失败未发送成功（已尝试）；后续跑 UI 用例需先解决 8090 端口绑定/复用权限  
+- 日期：2025-12-04 16:30  
+  - 子目标：收尾与瘦身（最终完成）  
+  - 影响范围：覆盖导入绑定下沉、临时执行拖拽/专注区回退增强，最终全量回归  
+  - 子目标进度：100%  
+  - 最终目标进度：100%（app.js 瘦身目标达成）  
+  - app.js 行数：1209  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui` 提权后 22/22 通过（含覆盖导入、临时执行导入导出与拖拽场景）  
+  - 其他备注：本地 http.server 8090 需提权启动；当前未执行 `python3 notify_feishu.py`（会话未开外网，可按需补发）  

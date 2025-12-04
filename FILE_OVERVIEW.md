@@ -13,6 +13,8 @@
 - `scripts/handlers/*.js`：事件与布局交互（功能指派、拆分、清洗、用例生成、布局等）。
 - `scripts/modules/*.js`：模块入口与编排（`app.js` 主逻辑、`assign.js` 功能指派、`review.js` 评审、`clean.js` 清洗、`compare.js` 覆盖对比、`split.js` 拆分、`casesgen.js` 用例生成、`tempexec.js` 执行视图、`auto.js` 一键执行、`upload.js` 上传、`settings.js` 设置、`models.js` 模型管理、`casegenProgress.js` 进度面板、`bootstrap.js` 启动）。
 - `services/storage.js`、`services/modelClient.js`：存储和模型请求封装。
+- `FEATURE_DEV_GUIDE.md`：新增功能开发必读规范，包含复用要求、测试/通知流程、记录与回报清单。
+- `FEATURE_LOG.md`：新增功能需求登记文档，记录功能描述/操作方式/效果/新增内容及后续变更。
 
 ## 未被入口引用（可选/备份/素材）
 - `default_prompts_2025-11-25-07-16-38.json`：默认提示词导出示例，可做参考或备份。
