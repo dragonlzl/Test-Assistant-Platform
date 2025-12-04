@@ -54,6 +54,7 @@ test.describe('工作流关键交互', () => {
 
   test('用例执行拖拽占位可响应', async ({ page }) => {
     await page.click('[data-tab-btn="tempexec"]');
+    await page.click('#openTempExecDrawerBtn');
     const dropZone = page.locator('#tempExecDropZone');
     const data = await page.evaluateHandle(() => {
       const dt = new DataTransfer();
@@ -64,6 +65,7 @@ test.describe('工作流关键交互', () => {
     await dropZone.dispatchEvent('dragover', { dataTransfer: data });
     await dropZone.dispatchEvent('drop', { dataTransfer: data });
     await expect(dropZone).toBeVisible();
+    await page.click('#tempExecDrawer .drawer-mask');
   });
 
   test('自动流程缺失视图与按钮默认状态', async ({ page }) => {

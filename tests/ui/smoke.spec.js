@@ -34,7 +34,9 @@ test.describe('用例助手基础冒烟', () => {
     const tab = page.locator('[data-tab-btn="tempexec"]');
     await tab.click();
     await expect(tab).toHaveClass(/active/);
+    await page.click('#openTempExecDrawerBtn');
     await expect(page.locator('#tempExecDropZone')).toBeVisible();
+    await page.click('#tempExecDrawer .drawer-mask');
   });
 
   test('所有页签与顶部步骤可点击', async ({ page }) => {

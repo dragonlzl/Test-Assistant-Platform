@@ -195,9 +195,13 @@ test.describe('文件导入导出与布局视图', () => {
     const tabNames = await page.$$eval('[data-tab-btn]', (nodes) => nodes.map((el) => el.dataset.tabBtn));
     for (const name of tabNames) {
       await page.click(`[data-tab-btn="${name}"]`);
-      const sections = page.locator(`[data-tab-section="${name}"]`);
-      if (await sections.count()) {
-        await expect(sections.first()).toBeVisible();
+      if (name === 'tempexec') {
+        await expect(page.locator('#tempexecFlowNav')).toBeVisible();
+      } else {
+        const sections = page.locator(`[data-tab-section="${name}"]`);
+        if (await sections.count()) {
+          await expect(sections.first()).toBeVisible();
+        }
       }
     }
 
@@ -209,8 +213,11 @@ test.describe('文件导入导出与布局视图', () => {
     await expect(page.locator('[data-section-id="casesgen"]')).toBeVisible();
 
     await page.click('[data-tab-btn="tempexec"]');
+    await page.click('#openTempExecDrawerBtn');
     await expect(page.locator('#tempExecDropZone')).toBeVisible();
     await expect(page.locator('#tempVersionGrid')).toBeVisible();
+    await page.click('#tempExecDrawer .drawer-mask');
+    await expect(page.locator('#tempExecDrawer')).not.toHaveClass(/open/);
 
     await page.click('[data-tab-btn="auto"]');
     await expect(page.locator('#runAutoWorkflow')).toBeVisible();

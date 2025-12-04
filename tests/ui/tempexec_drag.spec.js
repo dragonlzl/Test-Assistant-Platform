@@ -1,6 +1,15 @@
 const { test, expect } = require('@playwright/test');
 
 test.describe('执行视图导入导出与拖拽', () => {
+  async function openTempExecDrawer(page) {
+    await page.click('#openTempExecDrawerBtn');
+    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+  }
+  async function closeTempExecDrawer(page) {
+    await page.click('#closeTempExecDrawerBtn');
+    await expect(page.locator('#tempExecDrawer')).not.toHaveClass(/open/);
+  }
+
   test.beforeEach(async ({ page }) => {
     page.__promptAnswers = [];
     await page.route('**/*', (route) => {
@@ -29,6 +38,7 @@ test.describe('执行视图导入导出与拖拽', () => {
       window.app.state.requirementLabel = 'UI执行需求';
       window.app.state.requirementLabelSource = 'ui-test';
     });
+    await openTempExecDrawer(page);
 
     const execFileA = {
       name: 'execA.json',
@@ -51,30 +61,31 @@ test.describe('执行视图导入导出与拖拽', () => {
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
     const reqCount = await page.locator('#tempExecNav [data-temp-req]').count();
     expect(reqCount).toBeGreaterThanOrEqual(2);
-
+    const [cfgDownload] = await Promise.all([
+      page.waitForEvent('download', { timeout: 20000 }),
+      page.click('#exportTempExecConfigBtn'),
+    ]);
+    expect(await cfgDownload.suggestedFilename()).toMatch(/tempexec_full/i);
+    await closeTempExecDrawer(page);
+    await expect(page.locator('#exportTempExecBtn')).toBeEnabled();
     const [jsonDownload] = await Promise.all([
-      page.waitForEvent('download'),
+      page.waitForEvent('download', { timeout: 20000 }),
       page.click('#exportTempExecBtn'),
     ]);
     const jsonName = await jsonDownload.suggestedFilename();
     expect(jsonName).toMatch(/\.json$/);
 
-    const [cfgDownload] = await Promise.all([
-      page.waitForEvent('download'),
-      page.click('#exportTempExecConfigBtn'),
-    ]);
-    expect(await cfgDownload.suggestedFilename()).toMatch(/tempexec_full/i);
-
     const [xmindDownload] = await Promise.all([
-      page.waitForEvent('download'),
+      page.waitForEvent('download', { timeout: 20000 }),
       page.click('#exportTempExecXmindBtn'),
     ]);
     expect(await xmindDownload.suggestedFilename()).toMatch(/\.xmind$/);
     const [plainXmindDownload] = await Promise.all([
-      page.waitForEvent('download'),
+      page.waitForEvent('download', { timeout: 20000 }),
       page.click('#exportTempExecCasesXmindBtn'),
     ]);
     expect(await plainXmindDownload.suggestedFilename()).toMatch(/\.xmind$/);
+    await openTempExecDrawer(page);
 
     page.__promptAnswers.push('版本A');
     await page.click('#createTempVersionBtn');
@@ -129,6 +140,7 @@ test.describe('执行视图导入导出与拖拽', () => {
     expect(overviewCount).toBeGreaterThanOrEqual(2);
     const fileCount = await page.locator('#tempExecOverview [data-temp-file]').count();
     expect(fileCount).toBeGreaterThanOrEqual(2);
+    await closeTempExecDrawer(page);
     await page.click('#tempExecBackBtn');
 
     const snapshot = await page.evaluate(() => JSON.stringify({
@@ -150,6 +162,7 @@ test.describe('执行视图导入导出与拖拽', () => {
     await page.reload();
     await page.waitForFunction(() => window.app && window.app._inited === true);
     await page.click('[data-tab-btn="tempexec"]');
+    await openTempExecDrawer(page);
     await expect(page.locator('#tempExecNav .temp-req-row[data-temp-file]')).toHaveCount(0);
 
     await page.setInputFiles('#importTempExecConfigFile', {
@@ -175,6 +188,7 @@ test.describe('执行视图导入导出与拖拽', () => {
       window.app.state.requirementLabel = '版本排序需求';
       window.app.state.requirementLabelSource = 'ui-test';
     });
+    await openTempExecDrawer(page);
 
     const execFile = {
       name: 'req-sort.json',
@@ -186,6 +200,7 @@ test.describe('执行视图导入导出与拖拽', () => {
     };
     await page.setInputFiles('#tempExecInput', execFile);
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
+    await expect(page.locator('#exportTempExecBtn')).toBeEnabled();
     const navReqList = page.locator('#tempExecNav [data-temp-req]');
     expect(await navReqList.count()).toBeGreaterThan(0);
 
@@ -215,6 +230,7 @@ test.describe('执行视图导入导出与拖拽', () => {
 
   test('用例复用状态选择展示颜色', async ({ page }) => {
     await page.click('[data-tab-btn="tempexec"]');
+    await openTempExecDrawer(page);
     const execFile = {
       name: 'reuse.json',
       mimeType: 'application/json',
@@ -224,6 +240,8 @@ test.describe('执行视图导入导出与拖拽', () => {
     };
     await page.setInputFiles('#tempExecInput', [execFile]);
     await expect(page.locator('#tempExecStatus')).toContainText('已导入');
+    await expect(page.locator('#exportTempExecBtn')).toBeEnabled();
+    await page.click('#closeTempExecDrawerBtn');
 
     const reuseToggle = page.locator('[data-temp-reuse-toggle]').first();
     await reuseToggle.check();
@@ -250,6 +268,7 @@ test.describe('执行视图导入导出与拖拽', () => {
 
   test('需求区与版本区支持收起展开', async ({ page }) => {
     await page.click('[data-tab-btn="tempexec"]');
+    await openTempExecDrawer(page);
     const reqToggle = page.locator('#toggleTempReq');
     const versionToggle = page.locator('#toggleTempVersion');
     await expect(reqToggle).toBeVisible();

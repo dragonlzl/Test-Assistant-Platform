@@ -156,6 +156,12 @@
         const shouldShow = state.autoRequireClarifications && name === 'auto';
         dom.autoClarifySection.classList.toggle('hidden', !shouldShow);
       }
+      if (dom.flowNav) {
+        dom.flowNav.classList.toggle('hidden', name === 'tempexec');
+      }
+      if (dom.tempexecFlowNav) {
+        dom.tempexecFlowNav.classList.toggle('hidden', name !== 'tempexec');
+      }
       if (name === 'models') clearStatusById('modelFormStatus');
       if (name === 'assign') {
         renderAssignmentsSelect();

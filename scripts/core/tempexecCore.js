@@ -1831,7 +1831,7 @@
       if (!tempExecView) return;
       var active = getTempExecFile(state.tempExecActiveId);
       if (!active) {
-        tempExecView.innerHTML = '<div class="temp-case-empty">请先在上方导入测试用例或点击历史用例</div>';
+        tempExecView.innerHTML = '<div class="temp-case-empty">暂无执行用例，请在“用例导入&分配”中导入或选择历史记录</div>';
         if (tempExecMindContainer) tempExecMindContainer.classList.add('hidden');
         state.tempExecMindMode = false;
         if (exportTempExecBtn) exportTempExecBtn.disabled = true;

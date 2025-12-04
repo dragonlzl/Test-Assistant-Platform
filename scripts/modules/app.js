@@ -329,6 +329,8 @@
     dom.tempExecOverviewSection = document.querySelector('[data-section-id="tempexec-overview"]');
     dom.tempExecViewSection = document.querySelector('[data-section-id="tempexec-view"]');
     dom.autoClarifySection = document.querySelector('[data-section-id="auto-clarify"]');
+    dom.flowNav = document.getElementById('flowNav');
+    dom.tempexecFlowNav = document.getElementById('tempexecFlowNav');
     dom.flowNavSteps = document.querySelectorAll('#flowNav .step');
     dom.tabButtons = document.querySelectorAll('[data-tab-btn]');
     dom.tabSections = document.querySelectorAll('[data-tab-section]');

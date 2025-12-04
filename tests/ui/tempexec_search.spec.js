@@ -29,6 +29,7 @@ test.describe('临时执行搜索功能', () => {
 
   test('执行视图搜索与清空', async ({ page }) => {
     await page.click('[data-tab-btn="tempexec"]');
+    await page.click('#openTempExecDrawerBtn');
     await page.evaluate(() => {
       window.app.state.requirementLabel = '搜索需求';
       window.app.state.requirementLabelSource = 'ui-test';
@@ -49,6 +50,7 @@ test.describe('临时执行搜索功能', () => {
 
     await expect(page.locator('#tempExecNav button[data-temp-file]')).toHaveCount(1, { timeout: 5000 });
     await page.click('#tempExecNav button[data-temp-file]');
+    await page.click('#closeTempExecDrawerBtn');
     const caseRows = page.locator('#tempExecView table tbody tr').filter({ has: page.locator('[data-temp-case-remove]') });
     await expect(caseRows.first()).toBeVisible({ timeout: 15000 });
     await expect(caseRows).toHaveCount(3, { timeout: 15000 });
