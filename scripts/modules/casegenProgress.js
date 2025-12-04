@@ -49,6 +49,12 @@
       return { state: 'pending', text: (statusInfo && statusInfo.text) || '未生成' };
     }
 
+    var defaultContainer = dom.casesGenerationContainer;
+
+    function pickContainer(root) {
+      return root || defaultContainer || null;
+    }
+
     function renderCaseGenProgressBoard() {
       if (!caseGenProgressPanel || !caseGenProgressList) return;
       var modules = Array.isArray(state.caseGenModules) ? state.caseGenModules : [];
@@ -122,8 +128,9 @@
     }
 
     function updateCaseProgressView(moduleId, containerRoot) {
-      if (!containerRoot || !moduleId) return;
-      var container = containerRoot.querySelector('[data-progress="' + moduleId + '"]');
+      var root = pickContainer(containerRoot);
+      if (!root || !moduleId) return;
+      var container = root.querySelector('[data-progress="' + moduleId + '"]');
       if (!container) return;
       container.innerHTML = renderCaseModuleProgress(moduleId);
     }

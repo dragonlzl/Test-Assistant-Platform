@@ -795,9 +795,25 @@
             return;
           }
         }
+        if (window.app && window.app.tempDragContext && window.app.tempDragContext.type === 'req' && window.app.tempDragContext.req) {
+          if (typeof api.moveRequirementToVersion === 'function') {
+            api.moveRequirementToVersion(window.app.tempDragContext.req, card.dataset.tempVersion, '');
+            setTempDragContext(null);
+            return;
+          }
+        }
         var ids = dataTransfer ? dataTransfer.getData('text/plain') : '';
         if (!ids && window.app && window.app.tempDragContext && window.app.tempDragContext.type === 'file') {
           ids = window.app.tempDragContext.fileId || '';
+        }
+        if (!payloadText && !reqMove && !reqKeyMove && !ids && tempExecNav) {
+          var navReq = tempExecNav.querySelector('[data-temp-req]');
+          var navReqName = navReq && navReq.dataset ? navReq.dataset.tempReq : '';
+          if (navReqName && typeof api.moveRequirementToVersion === 'function') {
+            api.moveRequirementToVersion(navReqName, card.dataset.tempVersion, '');
+            setTempDragContext(null);
+            return;
+          }
         }
         if (ids) {
           var resolvedReq = reqBox && reqBox.dataset.tempReq ? reqBox.dataset.tempReq : resolveVersionTargetReq(card, e.clientY).req;
@@ -980,6 +996,10 @@
         var fileId = e.dataTransfer.getData('text/plain');
         if (!fileId && window.app && window.app.tempDragContext && window.app.tempDragContext.type === 'file') {
           fileId = window.app.tempDragContext.fileId || '';
+        }
+        if (!fileId && tempExecNav) {
+          var navFile = tempExecNav.querySelector('[data-temp-file]');
+          fileId = navFile && navFile.dataset ? navFile.dataset.tempFile : '';
         }
         if (!fileId) return;
         api.addTempExecFocus(fileId);

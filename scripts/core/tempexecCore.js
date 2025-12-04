@@ -1227,7 +1227,7 @@
         '<div class="temp-req-row ' + stateClass + '" data-temp-file="' + file.id + '" data-temp-req="' + reqKey + '" draggable="true">' +
           tagHtml +
           '<span class="temp-req-count-badge">' + (file && file.cases ? file.cases.length : 0) + ' 条</span>' +
-          '<button type="button" data-temp-file="' + file.id + '" class="temp-req-item ' + active + '">' +
+          '<button type="button" data-temp-file="' + file.id + '" class="temp-req-item ' + active + '" draggable="true">' +
             '<div class="temp-req-line">' +
               '<span class="name" title="' + escapeHtml(file && file.name ? file.name : '测试用例') + '"><span class="name-text">' + escapeHtml(file && file.name ? file.name : '测试用例') + '</span></span>' +
             '</div>' +

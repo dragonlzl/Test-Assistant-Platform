@@ -72,150 +72,130 @@
           defaultTempExecPageSize,
         })
       : (window.app.state || {});
-  window.app.state = state;
-  if (!state.requirementLabel) {
-    state.requirementLabel = '当前需求';
-    state.requirementLabelSource = state.requirementLabelSource || 'default';
-  }
-  let resetAutoCompareMissingView = function resetAutoCompareMissingViewFallback() {};
-  let resetAutoCompareUserInputs = function resetAutoCompareUserInputsFallback() {};
-  let renderAutoCompareMissingView = function renderAutoCompareMissingViewFallback() {};
-  let buildFilteredComparePayload = function buildFilteredComparePayloadFallback() { return ''; };
-  let updateAutoCompareActions = function updateAutoCompareActionsFallback() {};
-  let syncAutoCompareStatus = function syncAutoCompareStatusFallback() { return null; };
-  let runAutoWorkflow = function runAutoWorkflowFallback() {};
-  let runAutoWorkflowFromClean = function runAutoWorkflowFromCleanFallback() {};
-  let continueAutoWorkflowAfterCoverage = function continueAutoWorkflowAfterCoverageFallback() {};
-  let executeAutoWorkflowSteps = function executeAutoWorkflowStepsFallback() { return Promise.resolve(); };
-  let enforceAutoCoverageRequirement = function enforceAutoCoverageRequirementFallback() { return Promise.resolve(); };
-  let exportCasesCoverage = function exportCasesCoverageFallback() {};
-  let importCasesCoverage = async function importCasesCoverageFallback() {};
-  let exportCompareResult = function exportCompareResultFallback() {};
-  let importCompareResult = async function importCompareResultFallback() {};
-  let saveDebugText = function saveDebugTextFallback() {};
-  let importDebugText = async function importDebugTextFallback() {};
-  let bindDebugControls = function bindDebugControlsFallback() {};
-  let handleRawInput = function handleRawInputFallback() {};
-  let handleCleanInput = function handleCleanInputFallback() {};
-  let handleSplitInput = function handleSplitInputFallback() {};
-  let handleCaseTextInput = function handleCaseTextInputFallback() {};
-  let wrapCleanedText = function wrapCleanedTextFallback(text) { return text; };
-  let renderAutoRawInfo = function renderAutoRawInfoFallback() {};
-  let renderCleanRawView = function renderCleanRawViewFallback() {};
-  let collectEntryRanges = function collectEntryRangesFallback() { return []; };
-  let renderCaseGenProgressBoard = function renderCaseGenProgressBoardFallback() {};
-  let setCaseModuleRunning = function setCaseModuleRunningFallback() {};
-  let isCaseModuleRunning = function isCaseModuleRunningFallback() { return false; };
-  let renderCaseModuleProgress = function renderCaseModuleProgressFallback() { return ''; };
-  let updateCaseProgressView = function updateCaseProgressViewFallback() {};
-  let clearCaseProgress = function clearCaseProgressFallback() {};
-  let initCaseProgress = function initCaseProgressFallback() {};
-  let setCaseProgressGroupState = function setCaseProgressGroupStateFallback() {};
-  let setCaseProgressStep = function setCaseProgressStepFallback() {};
-  let markAllCaseProgressGroups = function markAllCaseProgressGroupsFallback() {};
-  let updateFlowStatus = function updateFlowStatusFallback() {};
-  let scrollToSection = function scrollToSectionFallback() {};
-  let refreshExportCaseGenButton = function refreshExportCaseGenButtonFallback() {};
-  let setCaseViewHint = function setCaseViewHintFallback() {};
-  let splitModules = async function splitModulesFallback() {};
-  let ensureCaseGenModulesFromSplit = function ensureCaseGenModulesFromSplitFallback() { return false; };
-  const noop = function() {}, asyncNoop = async function() {}, falseFn = function() { return false; }, emptyArr = function() { return []; }, emptyStr = function() { return ''; }, defaultParsedCases = function() { return { parsed: [], normalized: '', hadRecovery: false }; }, defaultCasesPayload = function() { return { text: '', isJson: false }; };
-  let reviewRequirements = function reviewRequirementsFallback() { return Promise.resolve(); };
-  let copyReviewResult = noop,
-    exportReviewResult = noop,
-    importReviewResult = asyncNoop,
-    toggleReviewView = noop,
-    confirmClarifications = noop,
-    handleClarifyClickEvent = noop,
-    handleClarifyChangeEvent = noop,
-    handleClarifyInputEvent = noop,
-    updateAutoClarifyVisibility = noop,
-    renderAutoClarifyView = noop,
-    openAutoClarifyPanel = noop,
-    handleAutoClarifyConfirm = noop,
-    waitForAutoClarification = function waitForAutoClarificationFallback() { return Promise.resolve(true); },
-    refreshMissingSmartFillButton = noop,
-    updateMissingView = noop,
-    toggleMissingView = noop,
-    refreshMissingSelectionUI = noop,
-    copyMissingJson = noop,
-    syncReviewViewFromResult = noop,
-    buildReviewClarificationContext = function buildReviewClarificationContextFallback() { return ''; },
-    renderCaseGeneration = noop,
-    renderCaseTable = function renderCaseTableFallback() { return ''; },
-    parseGeneratedCases = defaultParsedCases,
-    renderImportedCaseList = noop,
-    addImportedCase = noop,
-    removeImportedCase = noop,
-    hasImportedCases = falseFn,
-    hasCaseSource = falseFn,
-    getCombinedCaseList = emptyArr,
-    getCombinedCaseText = emptyStr,
-    getImportedCaseObjects = emptyArr,
-    syncCaseTextWithImports = noop,
-    buildCasesComparePayload = defaultCasesPayload,
-    resetImportedCaseView = noop,
-    refreshImportedCaseView = noop,
-    handleCaseFiles = noop,
-    resetAutoMissingView = noop,
-    refreshAutoMissingSelectionUI = noop,
-    updateAutoMissingCard = noop,
-    toggleAutoMissingView = noop,
-    ensureAutoMissingViewVisible = noop,
-    copyAutoMissingJson = noop,
-    handleMissingSelectionChange = noop,
-    handleMissingSelectAll = noop,
-    smartFillMissingSuggestions = noop,
-    notifyFeishuWorkflowSuccess = noop,
-    notifyFeishuCoverageFailure = noop,
-    notifyFeishuClarificationNeeded = noop,
-    generateCasesForModule = asyncNoop,
-    topUpCasesForModule = asyncNoop,
-    exportCaseGenerationResults = noop,
-    exportModuleCases = noop,
-    importModuleCases = noop,
-    transferModuleToTempExec = asyncNoop,
-    clearModuleCases = noop,
-    toggleCaseView = noop,
-    handleCaseSelectionChange = noop,
-    handleCaseSelectAll = noop,
-    exportSelectedCases = noop,
-    exportSelectedCasesToXmind = asyncNoop,
-    refreshCaseSelectionUI = noop,
-    updateSupplementButtons = noop,
-    getCaseListForModule = emptyArr,
-    toggleImportedCaseView = noop,
-    compareCoverage = noop,
-    compareCasesCoverage = noop,
-    extractCompareResultData = function extractCompareResultDataFallback() { return null; },
-    extractCoverageFromCompareResult = function extractCoverageFromCompareResultFallback() { return null; },
-    goToCaseGeneration = noop,
-    goCasesGenAndScroll = noop,
-    runCleaning = asyncNoop,
-    copyCleaned = asyncNoop,
-    syncSplitView = noop,
-    toggleSplitView = noop,
-    shouldExpectCleanJson = falseFn,
-    getCleanedEntries = emptyArr,
-    getCleanedRequirementText = emptyStr,
-    getCleanedTextForModel = emptyStr,
-    renderCleanView = noop,
-    locateCleanRawSelection = noop,
-    jumpToCleanHighlightView = noop,
-    renderTempExecView = noop,
-    applyTempExecPageSize = function applyTempExecPageSizeFallback(value) { return { size: value, changed: false }; },
-    clampTempExecPageSize = function clampTempExecPageSizeFallback(value) {
-      const num = Math.round(Number(value));
-      if (!Number.isFinite(num) || num <= 0) return defaultTempExecPageSize;
-      return num;
-    },
-    createTempExecFile = function createTempExecFileFallback() { return null; },
-    syncTempExecFocus = noop,
-    persistTempExecState = noop,
-    setTempExecActive = noop,
-    removeTempExecFile = noop,
-    getCaseExecutionDisplay = emptyStr;
+    window.app.state = state;
+    if (!state.requirementLabel) {
+      state.requirementLabel = '当前需求';
+      state.requirementLabelSource = state.requirementLabelSource || 'default';
+    }
+    const appInitHelpers = window.app.appInitHelpers || {};
+    if (!appInitHelpers.createFallbacks) {
+      throw new Error('appInitHelpers 未加载');
+    }
+    const appApi = appInitHelpers.createFallbacks({ defaultTempExecPageSize });
+    const api = appApi;
+    const proxyApi = function(name) {
+      const wrapper = function() {
+        if (api && typeof api[name] === 'function') {
+          return api[name].apply(null, arguments);
+        }
+        return api ? api[name] : undefined;
+      };
+      wrapper.__appProxy = name;
+      return wrapper;
+    };
+    const apiProxy = new Proxy({}, {
+      get: function(_, prop) {
+        return proxyApi(prop);
+      },
+    });
+    const {
+      refreshMissingSmartFillButton,
+      updateMissingView,
+      toggleMissingView,
+      copyMissingJson,
+      syncReviewViewFromResult,
+      renderCaseGeneration,
+      renderCaseTable,
+      renderAutoRawInfo,
+      renderCleanRawView,
+      renderImportedCaseList,
+      removeImportedCase,
+      hasImportedCases,
+      hasCaseSource,
+      getImportedCaseObjects,
+      syncCaseTextWithImports,
+      toggleImportedCaseView,
+      buildCasesComparePayload,
+      buildReviewClarificationContext,
+      resetImportedCaseView,
+      refreshImportedCaseView,
+      handleCaseFiles,
+      updateAutoCompareActions,
+      updateAutoMissingCard,
+      syncAutoCompareStatus,
+      exportCompareResult,
+      importCompareResult,
+      handleMissingSelectionChange,
+      handleMissingSelectAll,
+      smartFillMissingSuggestions,
+      updateAutoClarifyVisibility,
+      ensureCaseGenModulesFromSplit,
+      exportCasesCoverage,
+      importCasesCoverage,
+      compareCoverage,
+      compareCasesCoverage,
+      extractCompareResultData,
+      extractCoverageFromCompareResult,
+      goCasesGenAndScroll,
+      runCleaning,
+      copyCleaned,
+      syncSplitView,
+      toggleSplitView,
+      shouldExpectCleanJson,
+      getCleanedTextForModel,
+      renderCleanView,
+      locateCleanRawSelection,
+      jumpToCleanHighlightView,
+      renderTempExecView,
+      applyTempExecPageSize,
+      clampTempExecPageSize,
+      createTempExecFile,
+      syncTempExecFocus,
+      persistTempExecState,
+      setTempExecActive,
+      removeTempExecFile,
+      getCaseExecutionDisplay,
+      renderCaseGenProgressBoard,
+      setCaseModuleRunning,
+      isCaseModuleRunning,
+      renderCaseModuleProgress,
+      updateCaseProgressView,
+      clearCaseProgress,
+      initCaseProgress,
+      setCaseProgressGroupState,
+      setCaseProgressStep,
+      markAllCaseProgressGroups,
+      updateFlowStatus,
+      scrollToSection,
+      refreshExportCaseGenButton,
+      setCaseViewHint,
+    } = apiProxy;
+    const buildDom = appInitHelpers.buildDom || function(ids, alias) {
+      const result = {};
+      (ids || []).forEach(function(id) { result[id] = document.getElementById(id); });
+      (alias || []).forEach(function(item) {
+        if (item && item.name) result[item.name] = document.getElementById(item.id || item.name);
+      });
+      return result;
+    };
+    const assignIfPresent = appInitHelpers.assignIfPresent || function(target, source, keys) {
+      if (!target || !source) return target;
+      (keys || []).forEach(function(key) {
+        const val = source && source[key];
+        if (!val || (val && val.__appProxy && val.__appProxy === key)) return;
+        target[key] = val;
+      });
+      return target;
+    };
+    const initModule = appInitHelpers.initModule || function(name, args) {
+      const mod = window.app && window.app[name];
+      return mod && typeof mod.init === 'function' ? mod.init(args || {}) : null;
+    };
     let debugNodes;
+    let switchTab = function(name) {
+      if (api && typeof api.switchTab === 'function') return api.switchTab(name);
+      return null;
+    };
 
     function clampTimeoutSeconds(value) {
       const num = Math.round(Number(value));
@@ -247,15 +227,13 @@
     const escapeHtmlPreserve = appUtils.escapeHtmlPreserve;
     const runConcurrent = appUtils.runConcurrent;
 
-    const assignHandlersModule = window.app.assignHandlers && typeof window.app.assignHandlers.init === 'function'
-      ? window.app.assignHandlers.init({
-        state,
-        defaultPrompts,
-        storageKey: defaultPromptsKey,
-        setStatus,
-        downloadText,
-      })
-      : null;
+    const assignHandlersModule = initModule('assignHandlers', {
+      state,
+      defaultPrompts,
+      storageKey: defaultPromptsKey,
+      setStatus,
+      downloadText,
+    });
     const assignHandlersFallback = {
       loadCustomDefaultPrompts: function noopLoadPrompts() {},
       saveDefaultPrompts: function noopSavePrompts() {},
@@ -263,20 +241,18 @@
       importDefaultPrompts: async function noopImportPrompts() {},
     };
     const {
-    loadCustomDefaultPrompts,
-    saveDefaultPrompts,
-    exportDefaultPrompts,
-    importDefaultPrompts,
-  } = assignHandlersModule || assignHandlersFallback;
-  loadCustomDefaultPrompts();
+      loadCustomDefaultPrompts,
+      saveDefaultPrompts,
+      exportDefaultPrompts,
+      importDefaultPrompts,
+    } = assignHandlersModule || assignHandlersFallback;
+    loadCustomDefaultPrompts();
 
-  const requirementCoreModule = window.app.requirementCore && typeof window.app.requirementCore.init === 'function'
-    ? window.app.requirementCore.init({
+    const requirementCoreModule = initModule('requirementCore', {
       state,
       utils: { stripCodeFence },
       handlers: { renderAutoRawInfo: function renderAutoRawInfoProxy() { renderAutoRawInfo(); } },
-    })
-      : null;
+    });
     if (!requirementCoreModule) {
       throw new Error('requirementCore 未加载');
     }
@@ -347,77 +323,8 @@
         throw new Error('模型客户端不可用，请刷新页面后重试');
       };
 
-    function buildDom(ids, alias) {
-      const result = {};
-      (ids || []).forEach(function(id) {
-        result[id] = document.getElementById(id);
-      });
-      (alias || []).forEach(function(item) {
-        if (item && item.name) {
-          result[item.name] = document.getElementById(item.id || item.name);
-        }
-      });
-      return result;
-    }
-
-    const dom = buildDom([
-      'fileInput', 'dropZone', 'fileName', 'rawText', 'parseStatus', 'reviewStatus', 'reviewViewContainer', 'splitViewContainer',
-      'cleanViewContainer', 'cleanHighlightAllBtn', 'toggleCleanViewBtn', 'cleanRawView', 'toggleCleanRawViewBtn', 'cleanRawLocateBtn',
-      'caseStatus', 'caseViewBtn', 'caseViewContainer', 'caseViewHint', 'autoRawDropZone', 'autoCaseDropZone', 'tempExecDropZone',
-      'tempExecInput', 'tempExecStatus', 'tempExecNav', 'tempFocusBlock', 'tempVersionGrid', 'createTempVersionBtn', 'tempExecView',
-      'tempExecMindContainer', 'exportTempExecBtn', 'exportTempExecConfigBtn', 'importTempExecBtn', 'exportTempExecXmindBtn',
-      'importTempExecConfigBtn', 'tempExecMindBtn', 'tempExecOverviewBtn', 'tempExecOverview', 'tempExecBackBtn', 'importTempExecFile',
-      'importTempExecConfigFile', 'autoClarifyContainer', 'autoClarifyStatus', 'autoClarifyToggleBtn', 'goUsecaseGenBtn',
-      'casesGoUsecaseGenBtn', 'casesGenerationContainer', 'caseGenProgressPanel', 'caseGenProgressList', 'cleanStatus', 'compareStatus',
-      'splitStatus', 'casesCoverageStatus', 'caseGenStatus', 'autoWorkflowStatus', 'casesModuleProgress', 'exportCaseGenBtn',
-      'toSplitFromCaseGenBtn', 'saveRawDebugBtn', 'importRawDebugBtn', 'saveCleanDebugBtn', 'importCleanDebugBtn', 'saveSplitDebugBtn',
-      'importSplitDebugBtn', 'saveCaseDebugBtn', 'importCaseDebugBtn', 'scrollTopBtn', 'scrollBottomBtn', 'xmindStructureToggle',
-      'xmindStructureCard', 'caseFileInput', 'caseDropZone', 'caseStatus', 'caseViewBtn', 'caseViewContainer', 'caseViewHint'
-    ], [
-      { name: 'runReviewBtn', id: 'runReview' },
-      { name: 'reviewResultEl', id: 'reviewResult' },
-      { name: 'copyReviewResultBtn', id: 'copyReviewResult' },
-      { name: 'exportReviewResultBtn', id: 'exportReviewResult' },
-      { name: 'importReviewResultBtn', id: 'importReviewResult' },
-      { name: 'reviewImportFileInput', id: 'reviewImportFile' },
-      { name: 'toggleReviewViewBtn', id: 'toggleReviewView' },
-      { name: 'confirmClarificationsBtn', id: 'confirmClarifications' },
-      { name: 'toggleSplitViewBtn', id: 'toggleSplitView' },
-      { name: 'runCleanBtn', id: 'runClean' },
-      { name: 'copyBtn', id: 'copyCleaned' },
-      { name: 'cleanedTextEl', id: 'cleanedText' },
-      { name: 'compareResultEl', id: 'compareResult' },
-      { name: 'splitResultEl', id: 'splitResult' },
-      { name: 'caseFileListEl', id: 'caseFileList' },
-      { name: 'caseTextEl', id: 'caseText' },
-      { name: 'autoRawInput', id: 'autoRawFile' },
-      { name: 'autoRawListEl', id: 'autoRawFileList' },
-      { name: 'autoRawClearBtn', id: 'autoRawClear' },
-      { name: 'autoCaseInput', id: 'autoCaseFile' },
-      { name: 'autoCaseFileListEl', id: 'autoCaseFileList' },
-      { name: 'autoWorkflowBtn', id: 'runAutoWorkflow' },
-      { name: 'autoClarifyToggle', id: 'autoNeedClarify' },
-      { name: 'autoClarifyConfirmBtn', id: 'autoClarifyConfirm' },
-      { name: 'autoMissingGoUsecaseBtn', id: 'autoMissingGoUsecase' },
-      { name: 'cleanTimingEl', id: 'cleanTiming' },
-      { name: 'reviewTimingEl', id: 'reviewTiming' },
-      { name: 'compareTimingEl', id: 'compareTiming' },
-      { name: 'splitTimingEl', id: 'splitTiming' },
-      { name: 'casesTimingEl', id: 'casesTiming' },
-      { name: 'caseGenTimingEl', id: 'caseGenTiming' },
-      { name: 'rawDebugFileInput', id: 'rawDebugFile' },
-      { name: 'cleanDebugFileInput', id: 'cleanDebugFile' },
-      { name: 'splitDebugFileInput', id: 'splitDebugFile' },
-      { name: 'caseDebugFileInput', id: 'caseDebugFile' },
-      { name: 'saveRawDebugBtn', id: 'saveRawDebug' },
-      { name: 'importRawDebugBtn', id: 'importRawDebug' },
-      { name: 'saveCleanDebugBtn', id: 'saveCleanDebug' },
-      { name: 'importCleanDebugBtn', id: 'importCleanDebug' },
-      { name: 'saveSplitDebugBtn', id: 'saveSplitDebug' },
-      { name: 'importSplitDebugBtn', id: 'importSplitDebug' },
-      { name: 'saveCaseDebugBtn', id: 'saveCaseDebug' },
-      { name: 'importCaseDebugBtn', id: 'importCaseDebug' },
-    ]);
+    const domConfig = window.app.domConfig || {};
+    const dom = buildDom(domConfig.ids, domConfig.alias);
     dom.tempFocusZone = dom.tempFocusBlock ? dom.tempFocusBlock.querySelector('[data-temp-focus-zone]') : null;
     dom.tempExecOverviewSection = document.querySelector('[data-section-id="tempexec-overview"]');
     dom.tempExecViewSection = document.querySelector('[data-section-id="tempexec-view"]');
@@ -434,25 +341,23 @@
       cases: { textarea: dom.caseTextEl, status: dom.caseStatus, label: '测试用例', tag: 'CASES' },
     };
 
-    const settingsModule = window.app.settings && typeof window.app.settings.init === 'function'
-      ? window.app.settings.init({
-        state,
-        config: {
-          defaultSettings,
-          defaultTempExecColumns,
-          defaultTempExecPageSize,
-          settingsKey,
-          minModelTimeoutSec,
-          maxModelTimeoutSec,
-        },
-        utils: appUtils,
-        setStatus,
-        clampTimeoutSeconds,
-        clampTempExecPageSize: function(value) { return clampTempExecPageSize(value); },
-        renderTempExecView,
-        applyTempExecPageSize: function(value) { return applyTempExecPageSize(value); },
-      })
-      : null;
+    const settingsModule = initModule('settings', {
+      state,
+      config: {
+        defaultSettings,
+        defaultTempExecColumns,
+        defaultTempExecPageSize,
+        settingsKey,
+        minModelTimeoutSec,
+        maxModelTimeoutSec,
+      },
+      utils: appUtils,
+      setStatus,
+      clampTimeoutSeconds,
+      clampTempExecPageSize: function(value) { return api.clampTempExecPageSize(value); },
+      renderTempExecView: proxyApi('renderTempExecView'),
+      applyTempExecPageSize: function(value) { return api.applyTempExecPageSize(value); },
+    });
     const {
       loadSettings,
       persistSettings,
@@ -541,21 +446,21 @@
           setStatus,
           setStepInProgress,
           clearStepInProgress,
-          updateFlowStatus,
+          updateFlowStatus: proxyApi('updateFlowStatus'),
           ensureRequirementLabel,
-          getCleanedTextForModel,
+          getCleanedTextForModel: proxyApi('getCleanedTextForModel'),
           getAssignedModel,
           getReasoningForType,
           callModelWithConfig,
           updateModelTiming,
           parseSplitModules: function() { return parseSplitModules(); },
-          refreshMissingSmartFillButton,
-          renderCaseGenProgressBoard,
+          refreshMissingSmartFillButton: proxyApi('refreshMissingSmartFillButton'),
+          renderCaseGenProgressBoard: proxyApi('renderCaseGenProgressBoard'),
         },
       })
       : null;
-    if (splitRuntime && splitRuntime.splitModules) splitModules = splitRuntime.splitModules;
-    if (splitRuntime && splitRuntime.ensureCaseGenModulesFromSplit) ensureCaseGenModulesFromSplit = splitRuntime.ensureCaseGenModulesFromSplit;
+    if (splitRuntime && splitRuntime.splitModules) api.splitModules = splitRuntime.splitModules;
+    if (splitRuntime && splitRuntime.ensureCaseGenModulesFromSplit) api.ensureCaseGenModulesFromSplit = splitRuntime.ensureCaseGenModulesFromSplit;
 
     const flowCore = window.app.flowCore && typeof window.app.flowCore.init === 'function'
       ? window.app.flowCore.init({
@@ -563,14 +468,14 @@
         handlers: {
           switchTab: function(name) { return switchTab(name); },
           scrollElementIntoView,
-          hasCaseSource,
+          hasCaseSource: function() { return api.hasCaseSource(); },
         },
       })
       : null;
-    if (flowCore && flowCore.updateFlowStatus) updateFlowStatus = flowCore.updateFlowStatus;
-    if (flowCore && flowCore.scrollToSection) scrollToSection = flowCore.scrollToSection;
-    if (flowCore && flowCore.refreshExportCaseGenButton) refreshExportCaseGenButton = flowCore.refreshExportCaseGenButton;
-    if (flowCore && flowCore.setCaseViewHint) setCaseViewHint = flowCore.setCaseViewHint;
+    if (flowCore && flowCore.updateFlowStatus) api.updateFlowStatus = flowCore.updateFlowStatus;
+    if (flowCore && flowCore.scrollToSection) api.scrollToSection = flowCore.scrollToSection;
+    if (flowCore && flowCore.refreshExportCaseGenButton) api.refreshExportCaseGenButton = flowCore.refreshExportCaseGenButton;
+    if (flowCore && flowCore.setCaseViewHint) api.setCaseViewHint = flowCore.setCaseViewHint;
 
     const assignModule = window.app.assign && typeof window.app.assign.init === 'function'
       ? window.app.assign.init({
@@ -583,7 +488,7 @@
         renderAssignmentsSelect,
         saveAssignments,
         testModel,
-        updateFlowStatus,
+        updateFlowStatus: proxyApi('updateFlowStatus'),
       })
       : null;
     const compareCore = window.app && window.app.compareCore && typeof window.app.compareCore.init === 'function'
@@ -596,25 +501,25 @@
         config: { defaultPrompts },
         utils: { escapeHtml },
         handlers: {
-          updateAutoMissingCard,
+          updateAutoMissingCard: proxyApi('updateAutoMissingCard'),
           ensureRequirementLabel,
           getSafeRequirementSlug,
           downloadText,
           wrapTextWithRequirement,
           promptRequirementLabel,
           setRequirementLabel,
-          updateFlowStatus,
+          updateFlowStatus: proxyApi('updateFlowStatus'),
           wrapDataWithRequirement,
           extractRequirementLabelFromText,
-          resetAutoCompareUserInputs,
-          syncAutoCompareStatus,
-          getCleanedTextForModel,
+          resetAutoCompareUserInputs: proxyApi('resetAutoCompareUserInputs'),
+          syncAutoCompareStatus: proxyApi('syncAutoCompareStatus'),
+          getCleanedTextForModel: proxyApi('getCleanedTextForModel'),
           getAssignedModel,
           getReasoningForType,
           callModelWithConfig,
           updateModelTiming,
           formatJsonOrText,
-          buildCasesComparePayload,
+          buildCasesComparePayload: proxyApi('buildCasesComparePayload'),
           parseSplitModules,
           setStepInProgress,
           clearStepInProgress,
@@ -648,38 +553,24 @@
     const isCoveragePayload = compareApi.isCoveragePayload || function(data) {
       return !!(data && typeof data === 'object' && Object.prototype.hasOwnProperty.call(data, 'coverage'));
     };
-    const parseMissingModules = compareApi.parseMissingModules || emptyArr;
-    const buildMissingRows = compareApi.buildMissingRows || emptyArr;
-    const pickMissingSelections = compareApi.pickMissingSelections || emptyArr;
-    ({
-      refreshMissingSmartFillButton,
-      updateMissingView,
-      toggleMissingView,
-      refreshMissingSelectionUI,
-      copyMissingJson,
-      exportCasesCoverage,
-      importCasesCoverage,
-      exportCompareResult,
-      importCompareResult,
-      compareCoverage,
-      compareCasesCoverage,
-      extractCompareResultData,
-      extractCoverageFromCompareResult,
-    } = Object.assign({
-      refreshMissingSmartFillButton,
-      updateMissingView,
-      toggleMissingView,
-      refreshMissingSelectionUI,
-      copyMissingJson,
-      exportCasesCoverage,
-      importCasesCoverage,
-      exportCompareResult,
-      importCompareResult,
-      compareCoverage,
-      compareCasesCoverage,
-      extractCompareResultData,
-      extractCoverageFromCompareResult,
-    }, compareApi));
+    const parseMissingModules = compareApi.parseMissingModules || api.emptyArr;
+    const buildMissingRows = compareApi.buildMissingRows || api.emptyArr;
+    const pickMissingSelections = compareApi.pickMissingSelections || api.emptyArr;
+    assignIfPresent(api, compareApi, [
+      'refreshMissingSmartFillButton',
+      'updateMissingView',
+      'toggleMissingView',
+      'refreshMissingSelectionUI',
+      'copyMissingJson',
+      'exportCasesCoverage',
+      'importCasesCoverage',
+      'exportCompareResult',
+      'importCompareResult',
+      'compareCoverage',
+      'compareCasesCoverage',
+      'extractCompareResultData',
+      'extractCoverageFromCompareResult',
+    ]);
 
     const debugCore = window.app && window.app.debugCore && typeof window.app.debugCore.init === 'function'
       ? window.app.debugCore.init({
@@ -693,29 +584,27 @@
           promptRequirementLabel,
           setRequirementLabel,
           wrapTextWithRequirement,
-          renderAutoRawInfo,
-          renderCleanView,
-          renderCleanRawView,
-          renderCaseGeneration,
-          renderCaseGenProgressBoard,
-          refreshMissingSmartFillButton,
-          syncCaseTextWithImports,
-          renderImportedCaseList,
-          resetImportedCaseView,
-          setCaseViewHint,
-          updateFlowStatus,
+          renderAutoRawInfo: proxyApi('renderAutoRawInfo'),
+          renderCleanView: proxyApi('renderCleanView'),
+          renderCleanRawView: proxyApi('renderCleanRawView'),
+          renderCaseGeneration: proxyApi('renderCaseGeneration'),
+          renderCaseGenProgressBoard: proxyApi('renderCaseGenProgressBoard'),
+          refreshMissingSmartFillButton: proxyApi('refreshMissingSmartFillButton'),
+          syncCaseTextWithImports: proxyApi('syncCaseTextWithImports'),
+          renderImportedCaseList: proxyApi('renderImportedCaseList'),
+          resetImportedCaseView: proxyApi('resetImportedCaseView'),
+          setCaseViewHint: proxyApi('setCaseViewHint'),
+          updateFlowStatus: proxyApi('updateFlowStatus'),
         },
         utils: { downloadText },
       })
       : null;
     if (debugCore) {
-      if (debugCore.saveDebugText) saveDebugText = debugCore.saveDebugText;
-      if (debugCore.importDebugText) importDebugText = debugCore.importDebugText;
-      if (debugCore.bindDebugControls) bindDebugControls = debugCore.bindDebugControls;
-      bindDebugControls('raw', dom.saveRawDebugBtn, dom.importRawDebugBtn, dom.rawDebugFileInput);
-      bindDebugControls('cleaned', dom.saveCleanDebugBtn, dom.importCleanDebugBtn, dom.cleanDebugFileInput);
-      bindDebugControls('split', dom.saveSplitDebugBtn, dom.importSplitDebugBtn, dom.splitDebugFileInput);
-      bindDebugControls('cases', dom.saveCaseDebugBtn, dom.importCaseDebugBtn, dom.caseDebugFileInput);
+      assignIfPresent(api, debugCore, ['saveDebugText', 'importDebugText', 'bindDebugControls']);
+      api.bindDebugControls('raw', dom.saveRawDebugBtn, dom.importRawDebugBtn, dom.rawDebugFileInput);
+      api.bindDebugControls('cleaned', dom.saveCleanDebugBtn, dom.importCleanDebugBtn, dom.cleanDebugFileInput);
+      api.bindDebugControls('split', dom.saveSplitDebugBtn, dom.importSplitDebugBtn, dom.splitDebugFileInput);
+      api.bindDebugControls('cases', dom.saveCaseDebugBtn, dom.importCaseDebugBtn, dom.caseDebugFileInput);
     }
     const reviewCoreModule = window.app.reviewCore && typeof window.app.reviewCore.init === 'function'
       ? window.app.reviewCore.init({
@@ -748,40 +637,40 @@
         },
       })
       : null;
-    if (reviewCoreModule) {
-      if (reviewCoreModule.reviewRequirements) reviewRequirements = reviewCoreModule.reviewRequirements;
-      if (reviewCoreModule.copyReviewResult) copyReviewResult = reviewCoreModule.copyReviewResult;
-      if (reviewCoreModule.exportReviewResult) exportReviewResult = reviewCoreModule.exportReviewResult;
-      if (reviewCoreModule.importReviewResult) importReviewResult = reviewCoreModule.importReviewResult;
-      if (reviewCoreModule.toggleReviewView) toggleReviewView = reviewCoreModule.toggleReviewView;
-      if (reviewCoreModule.confirmClarifications) confirmClarifications = reviewCoreModule.confirmClarifications;
-      if (reviewCoreModule.handleClarifyClickEvent) handleClarifyClickEvent = reviewCoreModule.handleClarifyClickEvent;
-      if (reviewCoreModule.handleClarifyChangeEvent) handleClarifyChangeEvent = reviewCoreModule.handleClarifyChangeEvent;
-      if (reviewCoreModule.handleClarifyInputEvent) handleClarifyInputEvent = reviewCoreModule.handleClarifyInputEvent;
-      if (reviewCoreModule.updateAutoClarifyVisibility) updateAutoClarifyVisibility = reviewCoreModule.updateAutoClarifyVisibility;
-      if (reviewCoreModule.renderAutoClarifyView) renderAutoClarifyView = reviewCoreModule.renderAutoClarifyView;
-      if (reviewCoreModule.openAutoClarifyPanel) openAutoClarifyPanel = reviewCoreModule.openAutoClarifyPanel;
-      if (reviewCoreModule.handleAutoClarifyConfirm) handleAutoClarifyConfirm = reviewCoreModule.handleAutoClarifyConfirm;
-      if (reviewCoreModule.waitForAutoClarification) waitForAutoClarification = reviewCoreModule.waitForAutoClarification;
-      if (reviewCoreModule.syncReviewViewFromResult) syncReviewViewFromResult = reviewCoreModule.syncReviewViewFromResult;
-      if (reviewCoreModule.buildReviewClarificationContext) buildReviewClarificationContext = reviewCoreModule.buildReviewClarificationContext;
-    }
+    assignIfPresent(api, reviewCoreModule, [
+      'reviewRequirements',
+      'copyReviewResult',
+      'exportReviewResult',
+      'importReviewResult',
+      'toggleReviewView',
+      'confirmClarifications',
+      'handleClarifyClickEvent',
+      'handleClarifyChangeEvent',
+      'handleClarifyInputEvent',
+      'updateAutoClarifyVisibility',
+      'renderAutoClarifyView',
+      'openAutoClarifyPanel',
+      'handleAutoClarifyConfirm',
+      'waitForAutoClarification',
+      'syncReviewViewFromResult',
+      'buildReviewClarificationContext',
+    ]);
     const reviewModule = window.app.review && typeof window.app.review.init === 'function'
       ? window.app.review.init({
         state,
         handlers: {
-          reviewRequirements,
-          copyReviewResult,
-          exportReviewResult,
-          importReviewResult,
-          toggleReviewView,
-          confirmClarifications,
-          handleClarifyClickEvent,
-          handleClarifyChangeEvent,
-          handleClarifyInputEvent,
-          updateAutoClarifyVisibility,
-          openAutoClarifyPanel,
-          handleAutoClarifyConfirm,
+          reviewRequirements: proxyApi('reviewRequirements'),
+          copyReviewResult: proxyApi('copyReviewResult'),
+          exportReviewResult: proxyApi('exportReviewResult'),
+          importReviewResult: proxyApi('importReviewResult'),
+          toggleReviewView: proxyApi('toggleReviewView'),
+          confirmClarifications: proxyApi('confirmClarifications'),
+          handleClarifyClickEvent: proxyApi('handleClarifyClickEvent'),
+          handleClarifyChangeEvent: proxyApi('handleClarifyChangeEvent'),
+          handleClarifyInputEvent: proxyApi('handleClarifyInputEvent'),
+          updateAutoClarifyVisibility: proxyApi('updateAutoClarifyVisibility'),
+          openAutoClarifyPanel: proxyApi('openAutoClarifyPanel'),
+          handleAutoClarifyConfirm: proxyApi('handleAutoClarifyConfirm'),
         },
         dom,
       })
@@ -797,10 +686,10 @@
         dom,
         handlers: {
           setStatus,
-          setCaseViewHint,
-          updateFlowStatus,
-          refreshImportedCaseView,
-          renderCaseTable,
+          setCaseViewHint: proxyApi('setCaseViewHint'),
+          updateFlowStatus: proxyApi('updateFlowStatus'),
+          refreshImportedCaseView: proxyApi('refreshImportedCaseView'),
+          renderCaseTable: proxyApi('renderCaseTable'),
           setStepInProgress,
           clearStepInProgress,
           ensureRequirementLabel,
@@ -824,22 +713,22 @@
     const deriveCaseListFromText = casesCore && casesCore.deriveCaseListFromText
       ? casesCore.deriveCaseListFromText
       : function missingDeriveCaseList() { throw new Error('casesCore.deriveCaseListFromText 不可用'); };
-    if (casesCore) {
-      if (casesCore.renderImportedCaseList) renderImportedCaseList = casesCore.renderImportedCaseList;
-      if (casesCore.addImportedCase) addImportedCase = casesCore.addImportedCase;
-      if (casesCore.removeImportedCase) removeImportedCase = casesCore.removeImportedCase;
-      if (casesCore.hasImportedCases) hasImportedCases = casesCore.hasImportedCases;
-      if (casesCore.hasCaseSource) hasCaseSource = casesCore.hasCaseSource;
-      if (casesCore.getCombinedCaseList) getCombinedCaseList = casesCore.getCombinedCaseList;
-      if (casesCore.getCombinedCaseText) getCombinedCaseText = casesCore.getCombinedCaseText;
-      if (casesCore.syncCaseTextWithImports) syncCaseTextWithImports = casesCore.syncCaseTextWithImports;
-      if (casesCore.getImportedCaseObjects) getImportedCaseObjects = casesCore.getImportedCaseObjects;
-      if (casesCore.resetImportedCaseView) resetImportedCaseView = casesCore.resetImportedCaseView;
-      if (casesCore.refreshImportedCaseView) refreshImportedCaseView = casesCore.refreshImportedCaseView;
-      if (casesCore.toggleImportedCaseView) toggleImportedCaseView = casesCore.toggleImportedCaseView;
-      if (casesCore.buildCasesComparePayload) buildCasesComparePayload = casesCore.buildCasesComparePayload;
-      if (casesCore.importCaseFiles) handleCaseFiles = casesCore.importCaseFiles;
-    }
+    assignIfPresent(api, casesCore, [
+      'renderImportedCaseList',
+      'addImportedCase',
+      'removeImportedCase',
+      'hasImportedCases',
+      'hasCaseSource',
+      'getCombinedCaseList',
+      'getCombinedCaseText',
+      'getImportedCaseObjects',
+      'syncCaseTextWithImports',
+      'resetImportedCaseView',
+      'refreshImportedCaseView',
+      'toggleImportedCaseView',
+      'buildCasesComparePayload',
+      'importCaseFiles',
+    ]);
 
     const generateTempExecId = appUtils.generateTempExecId;
     const generateTempVersionId = appUtils.generateTempVersionId;
@@ -853,7 +742,7 @@
           existingList: state.tempExecFiles,
           pendingList: pendingList || [],
           normalizeName: normalizeTempExecName,
-          removeExisting: removeTempExecFile,
+          removeExisting: proxyApi('removeTempExecFile'),
           removePending: removePendingTempExecByName,
           confirmFn: window.confirm,
         });
@@ -865,7 +754,7 @@
       if (duplicates.length || pendingDuplicates.length) {
         const confirmMsg = `检测到名称为【${entry ? entry.name : ''}】的用例已存在，替换将清除原有执行结果，是否继续？`;
         if (!window.confirm(confirmMsg)) return false;
-        duplicates.forEach(file => removeTempExecFile(file && file.id));
+        duplicates.forEach(file => api.removeTempExecFile(file && file.id));
         removePendingTempExecByName(pending, entry && entry.name);
       }
       return true;
@@ -885,51 +774,51 @@
           getRequirementLabel,
           getFeishuWebhookUrl,
           postFeishuMessage,
-          reviewRequirements,
-          runCleaning,
-          compareCoverage,
-          splitModules,
-          compareCasesCoverage,
-          extractCoverageFromCompareResult,
-          extractCompareResultData,
+          reviewRequirements: proxyApi('reviewRequirements'),
+          runCleaning: proxyApi('runCleaning'),
+          compareCoverage: proxyApi('compareCoverage'),
+          splitModules: proxyApi('splitModules'),
+          compareCasesCoverage: proxyApi('compareCasesCoverage'),
+          extractCoverageFromCompareResult: proxyApi('extractCoverageFromCompareResult'),
+          extractCompareResultData: proxyApi('extractCompareResultData'),
           formatMissingRequirement,
-          shouldExpectCleanJson,
-          hasCaseSource,
-          scrollToSection,
-          renderAutoClarifyView,
-          openAutoClarifyPanel,
-          waitForAutoClarification,
-          updateAutoClarifyVisibility,
-          jumpToCleanHighlightView,
+          shouldExpectCleanJson: proxyApi('shouldExpectCleanJson'),
+          hasCaseSource: proxyApi('hasCaseSource'),
+          scrollToSection: proxyApi('scrollToSection'),
+          renderAutoClarifyView: proxyApi('renderAutoClarifyView'),
+          openAutoClarifyPanel: proxyApi('openAutoClarifyPanel'),
+          waitForAutoClarification: proxyApi('waitForAutoClarification'),
+          updateAutoClarifyVisibility: proxyApi('updateAutoClarifyVisibility'),
+          jumpToCleanHighlightView: proxyApi('jumpToCleanHighlightView'),
         },
         utils: { escapeHtml },
       })
       : null;
-    if (autoCoreModule) {
-      if (autoCoreModule.notifyFeishuWorkflowSuccess) notifyFeishuWorkflowSuccess = autoCoreModule.notifyFeishuWorkflowSuccess;
-      if (autoCoreModule.notifyFeishuCoverageFailure) notifyFeishuCoverageFailure = autoCoreModule.notifyFeishuCoverageFailure;
-      if (autoCoreModule.notifyFeishuClarificationNeeded) notifyFeishuClarificationNeeded = autoCoreModule.notifyFeishuClarificationNeeded;
-      if (autoCoreModule.resetAutoMissingView) resetAutoMissingView = autoCoreModule.resetAutoMissingView;
-      if (autoCoreModule.refreshAutoMissingSelectionUI) refreshAutoMissingSelectionUI = autoCoreModule.refreshAutoMissingSelectionUI;
-      if (autoCoreModule.updateAutoMissingCard) updateAutoMissingCard = autoCoreModule.updateAutoMissingCard;
-      if (autoCoreModule.toggleAutoMissingView) toggleAutoMissingView = autoCoreModule.toggleAutoMissingView;
-      if (autoCoreModule.ensureAutoMissingViewVisible) ensureAutoMissingViewVisible = autoCoreModule.ensureAutoMissingViewVisible;
-      if (autoCoreModule.copyAutoMissingJson) copyAutoMissingJson = autoCoreModule.copyAutoMissingJson;
-      if (autoCoreModule.handleMissingSelectionChange) handleMissingSelectionChange = autoCoreModule.handleMissingSelectionChange;
-      if (autoCoreModule.handleMissingSelectAll) handleMissingSelectAll = autoCoreModule.handleMissingSelectAll;
-      if (autoCoreModule.smartFillMissingSuggestions) smartFillMissingSuggestions = autoCoreModule.smartFillMissingSuggestions;
-      if (autoCoreModule.resetAutoCompareMissingView) resetAutoCompareMissingView = autoCoreModule.resetAutoCompareMissingView;
-      if (autoCoreModule.resetAutoCompareUserInputs) resetAutoCompareUserInputs = autoCoreModule.resetAutoCompareUserInputs;
-      if (autoCoreModule.renderAutoCompareMissingView) renderAutoCompareMissingView = autoCoreModule.renderAutoCompareMissingView;
-      if (autoCoreModule.buildFilteredComparePayload) buildFilteredComparePayload = autoCoreModule.buildFilteredComparePayload;
-      if (autoCoreModule.updateAutoCompareActions) updateAutoCompareActions = autoCoreModule.updateAutoCompareActions;
-      if (autoCoreModule.syncAutoCompareStatus) syncAutoCompareStatus = autoCoreModule.syncAutoCompareStatus;
-      if (autoCoreModule.executeAutoWorkflowSteps) executeAutoWorkflowSteps = autoCoreModule.executeAutoWorkflowSteps;
-      if (autoCoreModule.enforceAutoCoverageRequirement) enforceAutoCoverageRequirement = autoCoreModule.enforceAutoCoverageRequirement;
-      if (autoCoreModule.runAutoWorkflow) runAutoWorkflow = autoCoreModule.runAutoWorkflow;
-      if (autoCoreModule.runAutoWorkflowFromClean) runAutoWorkflowFromClean = autoCoreModule.runAutoWorkflowFromClean;
-      if (autoCoreModule.continueAutoWorkflowAfterCoverage) continueAutoWorkflowAfterCoverage = autoCoreModule.continueAutoWorkflowAfterCoverage;
-    }
+    assignIfPresent(api, autoCoreModule, [
+      'notifyFeishuWorkflowSuccess',
+      'notifyFeishuCoverageFailure',
+      'notifyFeishuClarificationNeeded',
+      'resetAutoMissingView',
+      'refreshAutoMissingSelectionUI',
+      'updateAutoMissingCard',
+      'toggleAutoMissingView',
+      'ensureAutoMissingViewVisible',
+      'copyAutoMissingJson',
+      'handleMissingSelectionChange',
+      'handleMissingSelectAll',
+      'smartFillMissingSuggestions',
+      'resetAutoCompareMissingView',
+      'resetAutoCompareUserInputs',
+      'renderAutoCompareMissingView',
+      'buildFilteredComparePayload',
+      'updateAutoCompareActions',
+      'syncAutoCompareStatus',
+      'executeAutoWorkflowSteps',
+      'enforceAutoCoverageRequirement',
+      'runAutoWorkflow',
+      'runAutoWorkflowFromClean',
+      'continueAutoWorkflowAfterCoverage',
+    ]);
     const casesGenCoreModule = window.app && window.app.casesGenCore && typeof window.app.casesGenCore.init === 'function'
       ? window.app.casesGenCore.init({
         state,
@@ -949,14 +838,14 @@
           setRequirementLabel,
           ensureRequirementLabel,
           getRequirementLabel,
-          getCleanedTextForModel,
+          getCleanedTextForModel: proxyApi('getCleanedTextForModel'),
           getAssignedModel,
           getReasoningForType,
           callModelWithConfig,
           updateModelTiming,
           runConcurrent,
-          hasImportedCases,
-          getImportedCaseObjects,
+          hasImportedCases: proxyApi('hasImportedCases'),
+          getImportedCaseObjects: proxyApi('getImportedCaseObjects'),
           deriveCaseListFromText,
           buildXmindPackageFromCases: function() {
             const impl = window.app && window.app.xmindCore && window.app.xmindCore.buildXmindPackageFromCases
@@ -965,25 +854,25 @@
             if (!impl) return null;
             return impl.apply(null, arguments);
           },
-          createTempExecFile,
+          createTempExecFile: proxyApi('createTempExecFile'),
           ensureTempExecReplacement,
-          syncTempExecFocus,
-          persistTempExecState,
-          setTempExecActive,
+          syncTempExecFocus: proxyApi('syncTempExecFocus'),
+          persistTempExecState: proxyApi('persistTempExecState'),
+          setTempExecActive: proxyApi('setTempExecActive'),
           switchTab,
           scrollElementIntoView,
-          renderCaseGenProgressBoard: function() { return renderCaseGenProgressBoard.apply(null, arguments); },
-          renderCaseModuleProgress: function() { return renderCaseModuleProgress.apply(null, arguments); },
-          updateCaseProgressView: function(moduleId) { return updateCaseProgressView(moduleId); },
-          clearCaseProgress: function(moduleId) { return clearCaseProgress(moduleId); },
-          initCaseProgress: function(moduleId, groups) { return initCaseProgress(moduleId, groups); },
-          setCaseProgressGroupState: function(moduleId, idx, stateVal) { return setCaseProgressGroupState(moduleId, idx, stateVal); },
-          setCaseProgressStep: function(moduleId, step, stateVal) { return setCaseProgressStep(moduleId, step, stateVal); },
-          markAllCaseProgressGroups: function(moduleId, stateVal) { return markAllCaseProgressGroups(moduleId, stateVal); },
-          setCaseModuleRunning: function(moduleId, running) { return setCaseModuleRunning(moduleId, running); },
-          isCaseModuleRunning: function(moduleId) { return isCaseModuleRunning(moduleId); },
-          refreshExportCaseGenButton,
-          setCaseViewHint,
+          renderCaseGenProgressBoard: proxyApi('renderCaseGenProgressBoard'),
+          renderCaseModuleProgress: proxyApi('renderCaseModuleProgress'),
+          updateCaseProgressView: function(moduleId) { return api.updateCaseProgressView(moduleId); },
+          clearCaseProgress: function(moduleId) { return api.clearCaseProgress(moduleId); },
+          initCaseProgress: function(moduleId, groups) { return api.initCaseProgress(moduleId, groups); },
+          setCaseProgressGroupState: function(moduleId, idx, stateVal) { return api.setCaseProgressGroupState(moduleId, idx, stateVal); },
+          setCaseProgressStep: function(moduleId, step, stateVal) { return api.setCaseProgressStep(moduleId, step, stateVal); },
+          markAllCaseProgressGroups: function(moduleId, stateVal) { return api.markAllCaseProgressGroups(moduleId, stateVal); },
+          setCaseModuleRunning: function(moduleId, running) { return api.setCaseModuleRunning(moduleId, running); },
+          isCaseModuleRunning: function(moduleId) { return api.isCaseModuleRunning(moduleId); },
+          refreshExportCaseGenButton: proxyApi('refreshExportCaseGenButton'),
+          setCaseViewHint: proxyApi('setCaseViewHint'),
           parseCaseList,
           extractJsonObjects,
         },
@@ -995,26 +884,26 @@
         formatCompactTimestamp,
       })
       : null;
-    if (casesGenCoreModule) {
-      if (casesGenCoreModule.renderCaseGeneration) renderCaseGeneration = casesGenCoreModule.renderCaseGeneration;
-      if (casesGenCoreModule.renderCaseTable) renderCaseTable = casesGenCoreModule.renderCaseTable;
-      if (casesGenCoreModule.parseGeneratedCases) parseGeneratedCases = casesGenCoreModule.parseGeneratedCases;
-      if (casesGenCoreModule.generateCasesForModule) generateCasesForModule = casesGenCoreModule.generateCasesForModule;
-      if (casesGenCoreModule.topUpCasesForModule) topUpCasesForModule = casesGenCoreModule.topUpCasesForModule;
-      if (casesGenCoreModule.exportCaseGenerationResults) exportCaseGenerationResults = casesGenCoreModule.exportCaseGenerationResults;
-      if (casesGenCoreModule.exportModuleCases) exportModuleCases = casesGenCoreModule.exportModuleCases;
-      if (casesGenCoreModule.importModuleCases) importModuleCases = casesGenCoreModule.importModuleCases;
-      if (casesGenCoreModule.transferModuleToTempExec) transferModuleToTempExec = casesGenCoreModule.transferModuleToTempExec;
-      if (casesGenCoreModule.clearModuleCases) clearModuleCases = casesGenCoreModule.clearModuleCases;
-      if (casesGenCoreModule.toggleCaseView) toggleCaseView = casesGenCoreModule.toggleCaseView;
-      if (casesGenCoreModule.handleCaseSelectionChange) handleCaseSelectionChange = casesGenCoreModule.handleCaseSelectionChange;
-      if (casesGenCoreModule.handleCaseSelectAll) handleCaseSelectAll = casesGenCoreModule.handleCaseSelectAll;
-      if (casesGenCoreModule.exportSelectedCases) exportSelectedCases = casesGenCoreModule.exportSelectedCases;
-      if (casesGenCoreModule.exportSelectedCasesToXmind) exportSelectedCasesToXmind = casesGenCoreModule.exportSelectedCasesToXmind;
-      if (casesGenCoreModule.refreshCaseSelectionUI) refreshCaseSelectionUI = casesGenCoreModule.refreshCaseSelectionUI;
-      if (casesGenCoreModule.updateSupplementButtons) updateSupplementButtons = casesGenCoreModule.updateSupplementButtons;
-      if (casesGenCoreModule.getCaseListForModule) getCaseListForModule = casesGenCoreModule.getCaseListForModule;
-    }
+    assignIfPresent(api, casesGenCoreModule, [
+      'renderCaseGeneration',
+      'renderCaseTable',
+      'parseGeneratedCases',
+      'generateCasesForModule',
+      'topUpCasesForModule',
+      'exportCaseGenerationResults',
+      'exportModuleCases',
+      'importModuleCases',
+      'transferModuleToTempExec',
+      'clearModuleCases',
+      'toggleCaseView',
+      'handleCaseSelectionChange',
+      'handleCaseSelectAll',
+      'exportSelectedCases',
+      'exportSelectedCasesToXmind',
+      'refreshCaseSelectionUI',
+      'updateSupplementButtons',
+      'getCaseListForModule',
+    ]);
 
     const lazyParseXmindFile = function(file) {
       const parser = typeof parseXmindFile === 'function'
@@ -1104,15 +993,15 @@
     });
     const getTempExecPageSizeFn = tempExecApi.getTempExecPageSize || function() { return defaultTempExecPageSize; };
     state.tempExecPageSize = getTempExecPageSizeFn();
-    createTempExecFile = tempExecApi.createTempExecFile || createTempExecFile;
-    syncTempExecFocus = tempExecApi.syncTempExecFocus || syncTempExecFocus;
-    persistTempExecState = tempExecApi.persistTempExecState || persistTempExecState;
-    setTempExecActive = tempExecApi.setTempExecActive || setTempExecActive;
-    removeTempExecFile = tempExecApi.removeTempExecFile || removeTempExecFile;
-    getCaseExecutionDisplay = tempExecApi.getCaseExecutionDisplay || getCaseExecutionDisplay;
-    renderTempExecView = tempExecApi.renderTempExecView || renderTempExecView;
-    clampTempExecPageSize = tempExecApi.clampTempExecPageSize || clampTempExecPageSize;
-    applyTempExecPageSize = tempExecApi.applyTempExecPageSize || function(value) { return { size: value, changed: false }; };
+    api.createTempExecFile = tempExecApi.createTempExecFile || api.createTempExecFile;
+    api.syncTempExecFocus = tempExecApi.syncTempExecFocus || api.syncTempExecFocus;
+    api.persistTempExecState = tempExecApi.persistTempExecState || api.persistTempExecState;
+    api.setTempExecActive = tempExecApi.setTempExecActive || api.setTempExecActive;
+    api.removeTempExecFile = tempExecApi.removeTempExecFile || api.removeTempExecFile;
+    api.getCaseExecutionDisplay = tempExecApi.getCaseExecutionDisplay || api.getCaseExecutionDisplay;
+    api.renderTempExecView = tempExecApi.renderTempExecView || api.renderTempExecView;
+    api.clampTempExecPageSize = tempExecApi.clampTempExecPageSize || api.clampTempExecPageSize;
+    api.applyTempExecPageSize = tempExecApi.applyTempExecPageSize || function(value) { return { size: value, changed: false }; };
 
     const xmindCore = window.app && window.app.xmindCore && typeof window.app.xmindCore.init === 'function'
       ? window.app.xmindCore.init({
@@ -1154,11 +1043,6 @@
       }
     }
 
-    function clearStatusById(id) {
-      const el = document.getElementById(id);
-      if (el) setStatus(el, '', '');
-    }
-
     const uploadModule = window.app.upload && typeof window.app.upload.init === 'function'
       ? window.app.upload.init({
         state,
@@ -1195,10 +1079,7 @@
         dom,
       })
       : null;
-    if (splitHandlersModule) {
-      if (splitHandlersModule.syncSplitView) syncSplitView = splitHandlersModule.syncSplitView;
-      if (splitHandlersModule.toggleSplitView) toggleSplitView = splitHandlersModule.toggleSplitView;
-    }
+    assignIfPresent(api, splitHandlersModule, ['syncSplitView', 'toggleSplitView']);
 
     const cleanHandlersModule = window.app.cleanHandlers && typeof window.app.cleanHandlers.init === 'function'
       ? window.app.cleanHandlers.init({
@@ -1239,370 +1120,90 @@
         dom,
       })
       : null;
-    if (cleanHandlersModule) {
-      if (cleanHandlersModule.renderAutoRawInfo) renderAutoRawInfo = cleanHandlersModule.renderAutoRawInfo;
-      if (cleanHandlersModule.handleRawInput) handleRawInput = cleanHandlersModule.handleRawInput;
-      if (cleanHandlersModule.handleCleanInput) handleCleanInput = cleanHandlersModule.handleCleanInput;
-      if (cleanHandlersModule.handleSplitInput) handleSplitInput = cleanHandlersModule.handleSplitInput;
-      if (cleanHandlersModule.handleCaseTextInput) handleCaseTextInput = cleanHandlersModule.handleCaseTextInput;
-      if (cleanHandlersModule.wrapCleanedText) wrapCleanedText = cleanHandlersModule.wrapCleanedText;
-      if (cleanHandlersModule.renderCleanRawView) renderCleanRawView = cleanHandlersModule.renderCleanRawView;
-      if (cleanHandlersModule.collectEntryRanges) collectEntryRanges = cleanHandlersModule.collectEntryRanges;
-      if (cleanHandlersModule.shouldExpectCleanJson) shouldExpectCleanJson = cleanHandlersModule.shouldExpectCleanJson;
-      if (cleanHandlersModule.getCleanedEntries) getCleanedEntries = cleanHandlersModule.getCleanedEntries;
-      if (cleanHandlersModule.getCleanedRequirementText) getCleanedRequirementText = cleanHandlersModule.getCleanedRequirementText;
-      if (cleanHandlersModule.getCleanedTextForModel) getCleanedTextForModel = cleanHandlersModule.getCleanedTextForModel;
-      if (cleanHandlersModule.renderCleanView) renderCleanView = cleanHandlersModule.renderCleanView;
-      if (cleanHandlersModule.locateCleanRawSelection) locateCleanRawSelection = cleanHandlersModule.locateCleanRawSelection;
-      if (cleanHandlersModule.jumpToCleanHighlightView) jumpToCleanHighlightView = cleanHandlersModule.jumpToCleanHighlightView;
-      if (cleanHandlersModule.runCleaning) runCleaning = cleanHandlersModule.runCleaning;
-      if (cleanHandlersModule.copyCleaned) copyCleaned = cleanHandlersModule.copyCleaned;
-    }
+    assignIfPresent(api, cleanHandlersModule, [
+      'renderAutoRawInfo',
+      'handleRawInput',
+      'handleCleanInput',
+      'handleSplitInput',
+      'handleCaseTextInput',
+      'wrapCleanedText',
+      'renderCleanRawView',
+      'collectEntryRanges',
+      'shouldExpectCleanJson',
+      'getCleanedEntries',
+      'getCleanedRequirementText',
+      'getCleanedTextForModel',
+      'renderCleanView',
+      'locateCleanRawSelection',
+      'jumpToCleanHighlightView',
+      'runCleaning',
+      'copyCleaned',
+    ]);
 
-    const cleanModule = window.app.clean && typeof window.app.clean.init === 'function'
-      ? window.app.clean.init({
+    const runtime = window.app.appRuntime && typeof window.app.appRuntime.init === 'function'
+      ? window.app.appRuntime.init({
         state,
+        dom,
+        api,
+        appUtils,
+        assignIfPresent,
+        tempExecApi,
+        setStatus,
+        renderAssignmentsSelect,
+        ensureCaseGenModulesFromSplit,
+        renderCaseGeneration,
+        updateAutoClarifyVisibility,
+        syncAutoCompareStatus,
+        updateAutoMissingCard,
+        renderSettingsUI,
+        updateMissingView,
+        toggleSplitView,
         shouldExpectCleanJson,
-        handlers: {
-          runCleaning,
-          copyCleaned,
-          renderCleanView,
-          renderCleanRawView,
-          locateCleanRawSelection,
-        },
-        dom,
-      })
-      : null;
-    const compareModule = window.app.compare && typeof window.app.compare.init === 'function'
-      ? window.app.compare.init({
-        handlers: {
-          compareCoverage,
-          compareCasesCoverage,
-          exportCompareResult,
-          importCompareResult,
-          toggleMissingView,
-          copyMissingJson,
-          handleMissingSelectionChange,
-          handleMissingSelectAll,
-          smartFillMissingSuggestions,
-          exportCasesCoverage,
-          importCasesCoverage,
-          handleCasesCompareInput: () => {
-            updateMissingView();
-            updateFlowStatus();
-          },
-        },
-      })
-      : null;
-    const exportCasesCoverageBtnEl = document.getElementById('exportCasesCoverage');
-    if (exportCasesCoverageBtnEl) {
-      exportCasesCoverageBtnEl.addEventListener('click', function() {
-        exportCasesCoverageBtnEl.dataset.clicked = '1';
-        if (typeof exportCasesCoverage === 'function') {
-          exportCasesCoverage();
-        }
-        const target = document.getElementById('casesCompareResult');
-        const content = target && target.value ? target.value.trim() : '{}';
-        const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
-        const slug = typeof getSafeRequirementSlug === 'function' ? getSafeRequirementSlug() : 'requirement';
-        setTimeout(function() {
-          const btn = document.getElementById('exportCasesCoverage');
-          const triggerDownload = function() {
-            const link = document.createElement('a');
-            link.id = 'exportCasesCoverage';
-            link.className = btn ? btn.className : '';
-            link.textContent = btn ? btn.textContent : '导出对比结果';
-            link.download = 'cases_compare_' + slug + '_' + stamp + '.txt';
-            link.href = 'assets/cases_compare_sample.txt';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-          };
-          triggerDownload();
-        }, 0);
-      });
-    }
-    const splitModule = window.app.split && typeof window.app.split.init === 'function'
-      ? window.app.split.init({
-        handlers: {
-          splitModules,
-          toggleSplitView,
-        },
-      })
-      : null;
-
-    function switchTab(name) {
-      state.activeTab = name;
-      dom.tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tabBtn === name));
-      dom.tabSections.forEach(sec => {
-        const match = sec.dataset.tabSection === name;
-        sec.classList.toggle('hidden', !match);
-      });
-      if (dom.autoClarifySection) {
-        const shouldShow = state.autoRequireClarifications && name === 'auto';
-        dom.autoClarifySection.classList.toggle('hidden', !shouldShow);
-      }
-      if (name === 'models') clearStatusById('modelFormStatus');
-      if (name === 'assign') {
-        renderAssignmentsSelect();
-        ['reviewAssignStatus', 'cleanAssignStatus', 'compareAssignStatus', 'splitAssignStatus', 'casesAssignStatus', 'caseGenAssignStatus', 'caseFilterAssignStatus']
-          .forEach(clearStatusById);
-      }
-      if (name === 'casesgen') {
-        const autoFilled = ensureCaseGenModulesFromSplit();
-        if (autoFilled) {
-          setStatus(dom.caseGenStatus, '', '');
-          renderCaseGeneration();
-        } else if (state.caseGenModules.length) {
-          renderCaseGeneration();
-        }
-        if (dom.toSplitFromCaseGenBtn && dom.splitResultEl) {
-          dom.toSplitFromCaseGenBtn.classList.toggle('hidden', Boolean(dom.splitResultEl.value.trim()));
-        }
-      }
-      if (name === 'auto') {
-        updateAutoClarifyVisibility();
-        syncAutoCompareStatus();
-        updateAutoMissingCard();
-      }
-      if (name === 'settings') {
-        renderSettingsUI();
-        clearStatusById('feishuWebhookStatus');
-      }
-    }
-    document.addEventListener('click', function(e) {
-      const tabBtn = e && e.target && e.target.closest ? e.target.closest('[data-tab-btn]') : null;
-      if (tabBtn && tabBtn.dataset && tabBtn.dataset.tabBtn) {
-        switchTab(tabBtn.dataset.tabBtn);
-      }
-    });
-
-    const core = {
-      state,
-      config: window.app.config,
-      utils: appUtils,
-      setStatus,
-      switchTab,
-      scrollToSection,
-      hasCaseSource,
-      getCombinedCaseList,
-      getCombinedCaseText,
-      deriveCaseListFromText,
-      parseCaseList,
-      renderCaseTable,
-      formatCompactTimestamp,
-      escapeHtml,
-      escapeHtmlPreserve,
-      updateFlowStatus,
-      callModelWithConfig,
-      getAssignedModel,
-      updateModelTiming,
-      setCaseViewHint,
-      downloadBlob,
-      parseXmindFile,
-      scrollElementIntoView,
-      updateAssignmentStatuses,
-      updateReasoningVisibility,
-      testModel,
-    };
-    window.app.core = core;
-    const casesGenApi = {
-      goToCaseGeneration,
-      generateCasesForModule,
-      toggleCaseView,
-      exportModuleCases,
-      exportSelectedCases,
-      exportSelectedCasesToXmind,
-      transferModuleToTempExec,
-      importModuleCases,
-      clearModuleCases,
-      topUpCasesForModule,
-      handleCaseSelectionChange,
-      handleCaseSelectAll,
-      exportCaseGenerationResults,
-      ensureCaseGenModulesFromSplit,
-      renderCaseGeneration,
-    };
-
-    function initApp() {
-      if (window.app && window.app._inited) return;
-      if (!window.app) window.app = {};
-      window.app._inited = true;
-      loadModels();
-      loadAssignments();
-      renderModels();
-      renderAssignmentsSelect();
-      renderSettingsUI();
-      renderCaseGeneration();
-      renderImportedCaseList();
-      renderAutoRawInfo();
-      renderCleanView();
-      renderCleanRawView(null);
-      updateAutoClarifyVisibility();
-      updateAutoMissingCard();
-      syncReviewViewFromResult();
-      syncSplitView();
-      resetModelForm();
-      switchTab('auto');
-      scrollToSection('auto-import', { behavior: 'instant' });
-      const casegenCoreModule = window.app.casegenCore && typeof window.app.casegenCore.init === 'function'
-        ? window.app.casegenCore.init({
-          state,
-          handlers: {
-            renderCaseGeneration,
-            ensureCaseGenModulesFromSplit,
-            exportCaseGenerationResults,
-            scrollToSection,
-            updateFlowStatus,
-            switchTab,
-            scrollElementIntoView,
-            parseSplitModules,
-            refreshMissingSmartFillButton,
-            syncSplitView,
-            updateMissingView,
-          },
-          setStatus,
-          dom,
-        })
-        : null;
-      if (casegenCoreModule) {
-        if (casegenCoreModule.goToCaseGeneration) goToCaseGeneration = casegenCoreModule.goToCaseGeneration;
-        if (casegenCoreModule.goCasesGenAndScroll) goCasesGenAndScroll = casegenCoreModule.goCasesGenAndScroll;
-      }
-      const casegenHandlersModule = window.app.casegenHandlers && typeof window.app.casegenHandlers.init === 'function'
-        ? window.app.casegenHandlers.init({
-          handlers: {
-            goCasesGenAndScroll,
-            scrollToSection,
-          },
-          dom,
-        })
-        : null;
-      const layoutHandlersModule = window.app.layoutHandlers && typeof window.app.layoutHandlers.init === 'function'
-        ? window.app.layoutHandlers.init({
-          updateFlowStatus,
-          scrollToSection,
-          switchTab,
-          handlers: {
-            toggleSplitView,
-            toggleImportedCaseView,
-            scrollElementIntoView,
-          },
-          dom,
-      })
-      : null;
-    const casegenProgressModule = window.app.casegenProgress && typeof window.app.casegenProgress.init === 'function'
-      ? window.app.casegenProgress.init({
-        state,
-        dom,
-        utils: appUtils,
-        escapeHtml,
-      })
-      : null;
-    if (casegenProgressModule) {
-      if (casegenProgressModule.renderCaseGenProgressBoard) renderCaseGenProgressBoard = casegenProgressModule.renderCaseGenProgressBoard;
-      if (casegenProgressModule.setCaseModuleRunning) setCaseModuleRunning = casegenProgressModule.setCaseModuleRunning;
-      if (casegenProgressModule.isCaseModuleRunning) isCaseModuleRunning = casegenProgressModule.isCaseModuleRunning;
-      if (casegenProgressModule.renderCaseModuleProgress) renderCaseModuleProgress = casegenProgressModule.renderCaseModuleProgress;
-      if (casegenProgressModule.updateCaseProgressView) updateCaseProgressView = function(moduleId) {
-        casegenProgressModule.updateCaseProgressView(moduleId, dom.casesGenerationContainer);
-      };
-      if (casegenProgressModule.clearCaseProgress) clearCaseProgress = function(moduleId) {
-        casegenProgressModule.clearCaseProgress(moduleId, dom.casesGenerationContainer);
-      };
-      if (casegenProgressModule.initCaseProgress) initCaseProgress = function(moduleId, groups) {
-        casegenProgressModule.initCaseProgress(moduleId, groups, dom.casesGenerationContainer);
-      };
-      if (casegenProgressModule.setCaseProgressGroupState) setCaseProgressGroupState = function(moduleId, idx, stateVal) {
-        casegenProgressModule.setCaseProgressGroupState(moduleId, idx, stateVal, dom.casesGenerationContainer);
-      };
-      if (casegenProgressModule.setCaseProgressStep) setCaseProgressStep = function(moduleId, step, stateVal) {
-        casegenProgressModule.setCaseProgressStep(moduleId, step, stateVal, dom.casesGenerationContainer);
-      };
-      if (casegenProgressModule.markAllCaseProgressGroups) markAllCaseProgressGroups = function(moduleId, stateVal) {
-        casegenProgressModule.markAllCaseProgressGroups(moduleId, stateVal, dom.casesGenerationContainer);
-      };
-    }
-      setCaseViewHint('请先上传或输入 XMind 测试用例');
-      updateFlowStatus();
-      return { casegenHandlersModule, casegenCoreModule, layoutHandlersModule };
-    }
-    window.app = window.app || {};
-    window.app.init = initApp;
-
-    renderCaseGenProgressBoard();
-
-    const moduleContext = { state, config: window.app.config, utils: appUtils, core, tempExecApi, casesGenApi };
-    const autoContext = {
-      state,
-      config: window.app.config,
-      utils: appUtils,
-      core,
-      setStatus,
-      tempExecApi,
-      casesGenApi,
-      handlers: {
-        toggleAutoMissingView,
-        copyAutoMissingJson,
-        smartFillMissingSuggestions,
+        runCleaning,
+        copyCleaned,
+        renderCleanView,
+        renderCleanRawView,
+        locateCleanRawSelection,
+        toggleMissingView,
+        compareCoverage,
+        compareCasesCoverage,
+        exportCompareResult,
+        importCompareResult,
+        copyMissingJson,
         handleMissingSelectionChange,
         handleMissingSelectAll,
-        resetAutoCompareMissingView,
-        resetAutoCompareUserInputs,
-        renderAutoCompareMissingView,
-        buildFilteredComparePayload,
-        updateAutoCompareActions,
-        syncAutoCompareStatus,
-        runAutoWorkflow,
-        runAutoWorkflowFromClean,
-        continueAutoWorkflowAfterCoverage,
-        executeAutoWorkflowSteps,
-        enforceAutoCoverageRequirement,
-        reviewRequirements,
-        runCleaning,
-        compareCoverage,
-        splitModules,
-        compareCasesCoverage,
-        extractCoverageFromCompareResult,
-        extractCompareResultData,
-        formatMissingRequirement,
-        shouldExpectCleanJson,
-        hasCaseSource,
-        switchTab,
+        smartFillMissingSuggestions,
+        exportCasesCoverage,
+        importCasesCoverage,
+        getSafeRequirementSlug,
+        parseSplitModules,
         scrollToSection,
-        resetAutoMissingView,
-        ensureAutoMissingViewVisible,
-        updateAutoMissingCard,
+        scrollElementIntoView,
+        goCasesGenAndScroll,
+        refreshMissingSmartFillButton,
         updateFlowStatus,
-        updateAutoClarifyVisibility,
-        renderAutoClarifyView,
-        openAutoClarifyPanel,
-        waitForAutoClarification,
-        notifyFeishuWorkflowSuccess,
-        notifyFeishuCoverageFailure,
-        notifyFeishuClarificationNeeded,
-        jumpToCleanHighlightView,
-      },
-    };
-    if (window.app.auto && typeof window.app.auto.init === 'function') {
-      const autoModule = window.app.auto.init(autoContext) || {};
-      if (autoModule.resetAutoCompareMissingView) resetAutoCompareMissingView = autoModule.resetAutoCompareMissingView;
-      if (autoModule.resetAutoCompareUserInputs) resetAutoCompareUserInputs = autoModule.resetAutoCompareUserInputs;
-      if (autoModule.renderAutoCompareMissingView) renderAutoCompareMissingView = autoModule.renderAutoCompareMissingView;
-      if (autoModule.buildFilteredComparePayload) buildFilteredComparePayload = autoModule.buildFilteredComparePayload;
-      if (autoModule.updateAutoCompareActions) updateAutoCompareActions = autoModule.updateAutoCompareActions;
-      if (autoModule.syncAutoCompareStatus) syncAutoCompareStatus = autoModule.syncAutoCompareStatus;
-    }
-    syncAutoCompareStatus();
-    if (window.app.casesgen && typeof window.app.casesgen.init === 'function') {
-      window.app.casesgen.init(moduleContext);
-    }
-    if (window.app.tempexec && typeof window.app.tempexec.init === 'function') {
-      window.app.tempexec.init(moduleContext);
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initApp);
-    } else {
-      initApp();
-    }
+        setCaseViewHint,
+        renderCaseGenProgressBoard,
+        loadModels,
+        loadAssignments,
+        renderModels,
+        renderImportedCaseList,
+        renderAutoRawInfo,
+        syncReviewViewFromResult,
+        syncSplitView,
+        resetModelForm,
+        toggleImportedCaseView,
+        escapeHtml,
+        escapeHtmlPreserve,
+        formatCompactTimestamp,
+        callModelWithConfig,
+        getAssignedModel,
+        updateModelTiming,
+        downloadBlob,
+        parseXmindFile,
+        updateAssignmentStatuses,
+        updateReasoningVisibility,
+        testModel,
+      })
+      : null;
+    if (runtime && runtime.switchTab) switchTab = runtime.switchTab;

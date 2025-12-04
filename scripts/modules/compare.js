@@ -66,13 +66,24 @@
     if (missingSmartFillBtn && typeof handlers.smartFillMissingSuggestions === 'function') {
       missingSmartFillBtn.addEventListener('click', handlers.smartFillMissingSuggestions);
     }
-    if (exportCasesCoverageBtn && typeof handlers.exportCasesCoverage === 'function') {
-      exportCasesCoverageBtn.addEventListener('click', handlers.exportCasesCoverage);
+    if (exportCasesCoverageBtn && (handlers.exportCasesCoverage || handlers.triggerCoverageSampleDownload)) {
+      exportCasesCoverageBtn.addEventListener('click', function() {
+        exportCasesCoverageBtn.dataset.clicked = '1';
+        if (typeof handlers.exportCasesCoverage === 'function') {
+          handlers.exportCasesCoverage();
+        }
+        if (typeof handlers.triggerCoverageSampleDownload === 'function') {
+          handlers.triggerCoverageSampleDownload(exportCasesCoverageBtn);
+        }
+      });
     }
-    if (importCasesCoverageBtn && importCasesCoverageFile && typeof handlers.importCasesCoverage === 'function') {
+    if (importCasesCoverageBtn && importCasesCoverageFile) {
       importCasesCoverageBtn.addEventListener('click', function() {
         importCasesCoverageFile.click();
       });
+    }
+    if (importCasesCoverageFile && typeof handlers.importCasesCoverage === 'function' && !importCasesCoverageFile.dataset.boundImport) {
+      importCasesCoverageFile.dataset.boundImport = '1';
       importCasesCoverageFile.addEventListener('change', function(e) {
         var file = e.target && e.target.files && e.target.files[0];
         if (file) handlers.importCasesCoverage(file);

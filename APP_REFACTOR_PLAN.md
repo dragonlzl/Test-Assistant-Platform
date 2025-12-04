@@ -693,3 +693,43 @@
   - app.js 行数：1610  
   - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 首轮提权后 19/22 通过（3 项因 _inited 等待/视图定位超时），按 grep 重跑失败用例 3/3 通过；首轮未提权运行因 8090 端口绑定权限不足报错，提权后恢复  
   - 其他备注：统一 pickDom 收敛元素查询并将 dom 直接下发各模块，精简 app.js 透传代码；`python3 notify_feishu.py` 提权后 HTTP 200；后续可继续合并 fallback/DOM 定义压缩至 1200 行  
+- 日期：2025-12-04 13:12  
+  - 子目标：核心迁移阶段5（代理递归修复与通知处理）  
+  - 影响范围：app.js 初始化代理/回退收敛、auto 比对回写、DOM 配置加载顺序；避免 proxy 递归导致页面崩溃  
+  - 子目标进度：75%  
+  - 最终目标进度：97%  
+  - app.js 行数：1563  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 提权后 22/22 通过（复用本地 http.server 8090）；`python3 notify_feishu.py` 因 DNS 未解析失败（已尝试）  
+  - 其他备注：新增 assignIfPresent proxy 检查防止 handler 回写递归；`config/domConfig.js`/`appInitHelpers.js` 已接入；测试前需确保 8090 可绑定或先手动起 http.server；清理了残留 http.server 进程  
+- 日期：2025-12-04 13:25  
+  - 子目标：核心迁移阶段5（casegen 进度接线瘦身）  
+  - 影响范围：用例生成进度模块默认容器绑定，app.js 去除进度回调包装；代理回写保持一致  
+  - 子目标进度：80%  
+  - 最终目标进度：98%  
+  - app.js 行数：1550  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 提权后 22/22 通过（本地 http.server 8090，完成后已关闭）；`python3 notify_feishu.py` 仍因 DNS 失败（已尝试）  
+  - 其他备注：casegenProgress 接口内部兜底 dom 容器，无需 app.js 包装；后续继续压缩初始化/编排以逼近 1200 行目标  
+- 日期：2025-12-04 13:35  
+  - 子目标：核心迁移阶段5（compare 导出回调下沉）  
+  - 影响范围：覆盖导出按钮回调收敛至 compare 模块，app.js 精简  
+  - 子目标进度：82%  
+  - 最终目标进度：98%  
+  - app.js 行数：1539  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 提权后 22/22 通过（本地 http.server 8090，完成后已关闭）；`python3 notify_feishu.py` 仍因 DNS 失败  
+  - 其他备注：compare 模块支持导出回调触发样例下载，避免 app.js 事件绑行数；通知脚本需外网  
+- 日期：2025-12-04 13:45  
+  - 子目标：核心迁移阶段5（core/casesGenApi 收敛）  
+  - 影响范围：app.js core/casesGenApi 构建改用 assignIfPresent 收敛；compare 导出回调模块化  
+  - 子目标进度：83%  
+  - 最终目标进度：98%  
+  - app.js 行数：1550  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 提权后 22/22 通过（本地 http.server 8090，已关闭）；`python3 notify_feishu.py` 仍因 DNS 未解析失败（已尝试）  
+  - 其他备注：core/casesGenApi 构建去除手写对象字面量，保持现有功能；通知依然需外网支持  
+- 日期：2025-12-04 12:22  
+  - 子目标：核心迁移阶段5（初始化代理与 DOM 配置抽离）  
+  - 影响范围：app.js 初始化/回退代理、DOM 映射配置；模块加载依赖的占位/回退收敛  
+  - 子目标进度：70%  
+  - 最终目标进度：97%  
+  - app.js 行数：1557  
+  - 自测点与结果：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js` 通过；`npm run test:ui -- --workers=1` 在提权/非提权环境均失败（22/22），`webServer` 启动 python http.server 报 PermissionError/ERR_EMPTY_RESPONSE，页面未完成 `_inited`；已在调试时手动启动 http.server 但 Playwright 仍因沙箱端口限制无法复用  
+  - 其他备注：新增 `config/domConfig.js`、`scripts/core/appInitHelpers.js`，app.js 通过统一 proxy 访问回退函数；`python3 notify_feishu.py` 因 DNS 解析失败未发送成功（已尝试）；后续跑 UI 用例需先解决 8090 端口绑定/复用权限  
