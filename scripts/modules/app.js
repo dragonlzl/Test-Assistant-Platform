@@ -277,7 +277,7 @@
     } = requirementApi;
 
     const splitCore = window.app && window.app.splitCore && typeof window.app.splitCore.init === 'function'
-      ? window.app.splitCore.init({ moduleFieldAliases, normalizeRequirementName, unwrapRequirementPayload })
+      ? window.app.splitCore.init({ moduleFieldAliases, normalizeRequirementName, unwrapRequirementPayload, stripCodeFence })
       : null;
     const pickFirstString = splitCore && splitCore.pickFirstString ? splitCore.pickFirstString : function pickFirstStringFallback() { return ''; };
     const pickFirstValue = splitCore && splitCore.pickFirstValue ? splitCore.pickFirstValue : function pickFirstValueFallback() { return undefined; };
@@ -315,6 +315,7 @@
         clampTimeoutSeconds,
         getTimeoutSec: getConfiguredTimeoutSec,
         modelIsR1: isR1Model,
+        stripCodeFence,
       })
       : null;
 

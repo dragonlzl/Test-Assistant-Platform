@@ -20,6 +20,16 @@
     var runReviewBtn = pickEl(dom.runReviewBtn, 'runReview');
     var caseViewHint = pickEl(dom.caseViewHint, 'caseViewHint');
     var exportCaseGenBtn = pickEl(dom.exportCaseGenBtn, 'exportCaseGen');
+    var stepStatusText = {
+      pending: '未开始',
+      running: '执行中',
+      done: '执行完成',
+    };
+    var stepStatusIcon = {
+      pending: '•',
+      running: '↻',
+      done: '✓',
+    };
 
     var switchTab = handlers.switchTab || function() {};
     var scrollElementIntoView = handlers.scrollElementIntoView || function() {};
@@ -50,6 +60,22 @@
       exportCaseGenBtn.disabled = !hasResult;
     }
 
+    function syncStepStatus(stepEl, status) {
+      if (!stepEl) return;
+      var statusEl = stepEl.querySelector ? stepEl.querySelector('.step-status') : null;
+      if (!statusEl) return;
+      statusEl.setAttribute('data-status', status);
+      statusEl.textContent = stepStatusIcon[status] || '';
+      var label = stepStatusText[status] || '';
+      if (label) {
+        statusEl.setAttribute('title', label);
+        statusEl.setAttribute('aria-label', label);
+      } else {
+        statusEl.removeAttribute('title');
+        statusEl.removeAttribute('aria-label');
+      }
+    }
+
     function updateFlowStatus() {
       var stateMap = {
         import: rawText && rawText.value.trim().length > 0,
@@ -70,12 +96,17 @@
         flowNavSteps.forEach(function(step) {
           var target = step.dataset ? step.dataset.target : '';
           step.classList.remove('done', 'active');
+          var status = 'pending';
           if (target === state.inProgressStep) {
             step.classList.add('active');
+            status = 'running';
+            syncStepStatus(step, status);
             return;
           }
           if (stateMap[target]) step.classList.add('done');
           if (target === next) step.classList.add('active');
+          if (stateMap[target]) status = 'done';
+          syncStepStatus(step, status);
         });
       }
     }

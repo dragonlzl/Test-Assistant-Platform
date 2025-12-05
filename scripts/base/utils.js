@@ -31,9 +31,28 @@
   }
   function stripCodeFence(text) {
     if (!text) return '';
-    var trimmed = text.trim();
-    var match = trimmed.match(/^```[\w-]*\n?([\s\S]*?)```$/i);
-    return match ? match[1].trim() : trimmed;
+    var trimmed = String(text).trim();
+    if (trimmed.indexOf('#NODE:') === 0) {
+      var newline = trimmed.indexOf('\n');
+      trimmed = newline !== -1 ? trimmed.slice(newline + 1).trim() : '';
+    }
+    var fenceMatch = trimmed.match(/^([`'"’“]{3})([\w-]*)?\s*\n?([\s\S]*?)\1\s*$/i);
+    if (fenceMatch && fenceMatch[3]) {
+      return (fenceMatch[3] || '').trim();
+    }
+    var inlineFence = trimmed.match(/^([`'"’“]{3})([\w-]*)?([\s\S]*?)([`'"’“]{3})\s*$/i);
+    if (inlineFence && inlineFence[3]) {
+      return (inlineFence[3] || '').trim();
+    }
+    if (/^([`'"’“]{3})/.test(trimmed)) {
+      var parts = trimmed.split('\n');
+      if (parts.length > 1) {
+        var last = parts[parts.length - 1].trim();
+        var body = parts.slice(1, last.match(/^([`'"’“]{3})$/) ? -1 : undefined).join('\n');
+        return body.trim();
+      }
+    }
+    return trimmed;
   }
   function escapeHtml(text) {
     if (text === null || text === undefined) return '';

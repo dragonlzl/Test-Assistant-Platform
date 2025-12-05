@@ -12,6 +12,39 @@
     return cur;
   }
 
+  function resolveStripCodeFence(options) {
+    var candidate = options && typeof options.stripCodeFence === 'function' ? options.stripCodeFence : null;
+    if (!candidate && window.app && window.app.utils && typeof window.app.utils.stripCodeFence === 'function') {
+      candidate = window.app.utils.stripCodeFence;
+    }
+    if (candidate) {
+      return function stripViaCandidate(text) {
+        return candidate(text);
+      };
+    }
+    return function fallbackStrip(text) {
+      if (!text) return '';
+      var trimmed = String(text).trim();
+      if (trimmed.indexOf('#NODE:') === 0) {
+        var newline = trimmed.indexOf('\n');
+        trimmed = newline !== -1 ? trimmed.slice(newline + 1).trim() : '';
+      }
+      var fenceMatch = trimmed.match(/^([`'"\u2019\u201c]{3})([\w-]*)?\s*\n?([\s\S]*?)\1\s*$/i);
+      if (fenceMatch && fenceMatch[3]) return (fenceMatch[3] || '').trim();
+      var inlineFence = trimmed.match(/^([`'"\u2019\u201c]{3})([\w-]*)?([\s\S]*?)([`'"\u2019\u201c]{3})\s*$/i);
+      if (inlineFence && inlineFence[3]) return (inlineFence[3] || '').trim();
+      if (/^([`'"\u2019\u201c]{3})/.test(trimmed)) {
+        var parts = trimmed.split('\n');
+        if (parts.length > 1) {
+          var last = parts[parts.length - 1].trim();
+          var body = parts.slice(1, last.match(/^([`'"\u2019\u201c]{3})$/) ? -1 : undefined).join('\n');
+          return body.trim();
+        }
+      }
+      return trimmed;
+    };
+  }
+
   function normalizeResponseContent(content) {
     if (content === null || content === undefined) return '';
     if (typeof content === 'string') return content.trim();
@@ -58,6 +91,7 @@
       : function getAuthHeader(apiKey) {
           return apiKey ? { Authorization: 'Bearer ' + apiKey } : {};
         };
+    var stripCodeFence = resolveStripCodeFence(options);
 
     async function callModelWithConfig(model, userText, promptText, reasoningEffort, temperature) {
       if (!model || !model.baseUrl || !model.model) {
@@ -123,7 +157,10 @@
           data = JSON.parse(rawBody);
         } catch (err) {
           var trimmed = rawBody.trim();
-          if (trimmed) return trimmed;
+          if (trimmed) {
+            var sanitizedRaw = stripCodeFence(trimmed);
+            return sanitizedRaw || trimmed;
+          }
         }
       }
       if (!data) {
@@ -133,16 +170,21 @@
         var errMsg = data.error.message || data.error.code || (typeof data.error === 'string' ? data.error : JSON.stringify(data.error));
         throw new Error(errMsg);
       }
+      function normalizeAndStrip(value) {
+        var normalized = normalizeResponseContent(value);
+        if (!normalized) return '';
+        return stripCodeFence(normalized);
+      }
       var content =
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'message', 'content'])) ||
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'message', 'reasoning_content'])) ||
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'delta', 'content'])) ||
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'delta', 'reasoning_content'])) ||
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'content'])) ||
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'text'])) ||
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'message', 'responses'])) ||
-        normalizeResponseContent(getNestedValue(data, ['data', 0, 'contents', 0, 'text'])) ||
-        normalizeResponseContent(getNestedValue(data, ['output_text']));
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'reasoning_content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'delta', 'content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'delta', 'reasoning_content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'text'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'responses'])) ||
+        normalizeAndStrip(getNestedValue(data, ['data', 0, 'contents', 0, 'text'])) ||
+        normalizeAndStrip(getNestedValue(data, ['output_text']));
       if (!content) {
         var preview = rawBody ? (rawBody.length > 400 ? rawBody.slice(0, 400) + '...' : rawBody) : '';
         var extra = preview ? '（响应片段：' + preview + '）' : '';

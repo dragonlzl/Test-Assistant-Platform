@@ -3,6 +3,7 @@
     var moduleFieldAliases = deps && deps.moduleFieldAliases ? deps.moduleFieldAliases : {};
     var normalizeRequirementName = deps && deps.normalizeRequirementName ? deps.normalizeRequirementName : function(text) { return text || ''; };
     var unwrapRequirementPayload = deps && deps.unwrapRequirementPayload ? deps.unwrapRequirementPayload : function(text) { return { payload: text }; };
+    var stripCodeFence = deps && deps.stripCodeFence ? deps.stripCodeFence : function(text) { return text || ''; };
 
     function pickFirstString(source, aliases) {
       if (!source) return '';
@@ -97,9 +98,9 @@
     }
 
     function parseSplitModules(rawText, setRequirementLabel) {
-      var unwrap = unwrapRequirementPayload(rawText || '');
+      var unwrap = unwrapRequirementPayload(stripCodeFence(rawText || ''));
       var payload = unwrap.payload;
-      var raw = typeof payload === 'string' ? payload.trim() : payload ? JSON.stringify(payload, null, 2) : '';
+      var raw = typeof payload === 'string' ? stripCodeFence(payload).trim() : payload ? JSON.stringify(payload, null, 2) : '';
       if (!raw) return [];
       var labelFromPayload = unwrap.requirement ? normalizeRequirementName(unwrap.requirement) : '';
       if (labelFromPayload && typeof setRequirementLabel === 'function') setRequirementLabel(labelFromPayload, 'import');
@@ -207,7 +208,8 @@
           var startTime = Date.now();
           var content = await callModelWithConfig(model, cleaned, prompt, reasoning, temperature);
           updateModelTiming(splitTimingEl, Date.now() - startTime);
-          if (splitResultEl) splitResultEl.value = content;
+          var sanitized = stripCodeFence(content);
+          if (splitResultEl) splitResultEl.value = sanitized;
           setStatus(splitStatus, '拆分完成', 'ok');
           if (casesCoverageStatus) setStatus(casesCoverageStatus, '', '');
         } catch (err) {

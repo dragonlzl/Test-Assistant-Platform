@@ -96,6 +96,42 @@ test.describe('工作流关键交互', () => {
     await expect(recleanBtn).toBeDisabled();
   });
 
+  test('步骤状态显示待执行/执行中/完成图标', async ({ page }) => {
+    const getStatusMap = async () => {
+      return page.evaluate(() => {
+        const result = {};
+        document.querySelectorAll('#flowNav .step').forEach((step) => {
+          const key = step.dataset ? step.dataset.target : '';
+          const text = (step.querySelector('.step-status') || {}).textContent || '';
+          if (key) result[key] = text.trim();
+        });
+        return result;
+      });
+    };
+
+    const initial = await getStatusMap();
+    expect(initial.import).toBe('•');
+
+    await page.evaluate(() => {
+      const raw = document.getElementById('rawText');
+      if (raw) {
+        raw.value = '原始需求内容';
+        raw.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (window.app && window.app.state) {
+        window.app.state.inProgressStep = 'clean';
+      }
+      if (raw) {
+        raw.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+
+    const updated = await getStatusMap();
+    expect(updated.import).toBe('✓');
+    expect(updated.clean).toBe('↻');
+    expect(updated.split).toBe('•');
+  });
+
   test('需求澄清确认有提示', async ({ page }) => {
     await page.click('[data-tab-btn="clean"]');
     await page.evaluate(() => {
