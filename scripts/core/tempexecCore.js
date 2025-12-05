@@ -26,6 +26,8 @@
     var tempExecStorageKey = deps && deps.tempExecStorageKey ? deps.tempExecStorageKey : 'usecase-temp-exec-v1';
     var tempExecFocusStorageKey = deps && deps.tempExecFocusStorageKey ? deps.tempExecFocusStorageKey : 'tempexec-focus-v1';
     var tempExecPageSizeStorageKey = deps && deps.tempExecPageSizeStorageKey ? deps.tempExecPageSizeStorageKey : 'tempexec-page-size';
+    var modelsStorageKey = deps && deps.modelsKey ? deps.modelsKey : 'cleaner-models-v1';
+    var assignmentStorageKey = deps && deps.assignmentKey ? deps.assignmentKey : 'cleaner-assignment-v1';
     var navPrefersUnassigned = false;
     var defaultTempExecPageSize = deps && deps.defaultTempExecPageSize ? deps.defaultTempExecPageSize : 20;
     var tempExecStatus = deps && deps.dom && deps.dom.tempExecStatus ? deps.dom.tempExecStatus : null;
@@ -314,6 +316,58 @@
         .filter(Boolean);
     }
 
+    function serializeModelList(list) {
+      if (!Array.isArray(list)) return [];
+      return list
+        .map(function(item) {
+          if (!item || typeof item !== 'object') return null;
+          var model = {};
+          Object.keys(item).forEach(function(key) {
+            var val = item[key];
+            if (val === undefined || typeof val === 'function') return;
+            model[key] = val;
+          });
+          if (!model.id) {
+            model.id = 'model-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6);
+          }
+          return model;
+        })
+        .filter(Boolean);
+    }
+
+    function serializeAssignments(raw) {
+      if (!raw || typeof raw !== 'object') return {};
+      var result = {};
+      Object.keys(raw).forEach(function(key) {
+        var val = raw[key];
+        if (val === undefined || typeof val === 'function') return;
+        result[key] = val;
+      });
+      return result;
+    }
+
+    function applyImportedModels(list) {
+      var models = serializeModelList(list);
+      if (!models.length) return;
+      state.models = models;
+      try {
+        localStorage.setItem(modelsStorageKey, JSON.stringify(models));
+      } catch (err) {
+        console.warn('保存模型配置失败', err);
+      }
+    }
+
+    function applyImportedAssignments(assignments) {
+      if (!assignments || typeof assignments !== 'object') return;
+      var merged = Object.assign({}, state.assignments || {}, serializeAssignments(assignments));
+      state.assignments = merged;
+      try {
+        localStorage.setItem(assignmentStorageKey, JSON.stringify(merged));
+      } catch (err) {
+        console.warn('保存模型指派失败', err);
+      }
+    }
+
     function serializeTempExecSnapshot(state, getPageSize, columns) {
       return {
         type: 'tempexec_snapshot_v1',
@@ -326,6 +380,8 @@
         columns: columns || {},
         activeId: state.tempExecActiveId || '',
         placement: state.tempExecPlacement || defaultPlacement,
+        models: serializeModelList(state.models || []),
+        assignments: serializeAssignments(state.assignments || {}),
       };
     }
 
@@ -378,6 +434,12 @@
 
     function applyTempExecSnapshot(snapshot) {
       if (!snapshot || typeof snapshot !== 'object') throw new Error('导入内容为空或格式不正确');
+      if (snapshot.models) {
+        applyImportedModels(snapshot.models);
+      }
+      if (snapshot.assignments && typeof snapshot.assignments === 'object') {
+        applyImportedAssignments(snapshot.assignments);
+      }
       var filesRaw = Array.isArray(snapshot.files) ? snapshot.files : [];
       var versionsRaw = Array.isArray(snapshot.versions) ? snapshot.versions : [];
       var usedIds = new Set();

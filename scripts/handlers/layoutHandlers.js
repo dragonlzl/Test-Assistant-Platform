@@ -82,28 +82,48 @@
 
     if (xmindStructureToggle && xmindStructureCard) {
       var labelEl = xmindStructureToggle.querySelector('span:last-child');
-      var collapseCard = function() {
-        xmindStructureCard.classList.add('collapsed-card');
-        xmindStructureToggle.classList.remove('active');
-        if (labelEl) labelEl.textContent = 'XMind 用例结构';
-      };
-      var expandCard = function() {
-        xmindStructureCard.classList.remove('collapsed-card');
-        xmindStructureToggle.classList.add('active');
-        if (labelEl) labelEl.textContent = '收起 XMind 用例结构';
-        requestAnimationFrame(function() {
-          var target = xmindStructureCard;
-          var rect = target.getBoundingClientRect();
-          var offset = Math.max(120, (window.innerHeight / 2) - (rect.height / 2));
-          scrollElementIntoView(target, 'smooth', offset);
+      var drawer = window.app && window.app.drawer && typeof window.app.drawer.createDrawer === 'function'
+        ? window.app.drawer.createDrawer({
+            drawerId: 'xmindStructureDrawer',
+            openButtons: ['xmindStructureToggle'],
+            closeButtons: ['closeXmindStructureDrawerBtn'],
+            onOpen: function() {
+              xmindStructureToggle.classList.add('active');
+              if (labelEl) labelEl.textContent = '收起 XMind 用例结构';
+            },
+            onClose: function() {
+              xmindStructureToggle.classList.remove('active');
+              if (labelEl) labelEl.textContent = 'XMind 用例结构';
+            },
+          })
+        : null;
+      if (!drawer) {
+        var collapseCard = function() {
+          xmindStructureCard.classList.add('collapsed-card');
+          xmindStructureToggle.classList.remove('active');
+          if (labelEl) labelEl.textContent = 'XMind 用例结构';
+        };
+        var expandCard = function() {
+          xmindStructureCard.classList.remove('collapsed-card');
+          xmindStructureToggle.classList.add('active');
+          if (labelEl) labelEl.textContent = '收起 XMind 用例结构';
+          requestAnimationFrame(function() {
+            var target = xmindStructureCard;
+            var rect = target.getBoundingClientRect();
+            var offset = Math.max(120, (window.innerHeight / 2) - (rect.height / 2));
+            scrollElementIntoView(target, 'smooth', offset);
+          });
+        };
+        collapseCard();
+        xmindStructureToggle.addEventListener('click', function() {
+          var collapsed = xmindStructureCard.classList.contains('collapsed-card');
+          if (collapsed) expandCard();
+          else collapseCard();
         });
-      };
-      collapseCard();
-      xmindStructureToggle.addEventListener('click', function() {
-        var collapsed = xmindStructureCard.classList.contains('collapsed-card');
-        if (collapsed) expandCard();
-        else collapseCard();
-      });
+      } else {
+        if (labelEl) labelEl.textContent = 'XMind 用例结构';
+        xmindStructureToggle.classList.remove('active');
+      }
     }
 
     return {};

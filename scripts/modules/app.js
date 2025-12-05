@@ -962,6 +962,8 @@
         tempExecStorageKey,
         tempExecFocusStorageKey,
         tempExecPageSizeStorageKey,
+        modelsKey,
+        assignmentKey,
         defaultTempExecPageSize,
         escapeHtml,
         escapeHtmlPreserve,

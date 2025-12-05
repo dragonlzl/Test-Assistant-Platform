@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const fs = require('fs');
 
 test.describe('执行视图导入导出与拖拽', () => {
   async function openTempExecDrawer(page) {
@@ -61,11 +62,39 @@ test.describe('执行视图导入导出与拖拽', () => {
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
     const reqCount = await page.locator('#tempExecNav [data-temp-req]').count();
     expect(reqCount).toBeGreaterThanOrEqual(2);
+    await page.evaluate(() => {
+      window.app.state.models = [{
+        id: 'model-export-ui',
+        name: 'UI模型',
+        provider: 'custom',
+        baseUrl: 'http://localhost/mock',
+        apiKey: 'mock-key',
+        model: 'mock-model',
+        maxTokens: 2048,
+      }];
+      localStorage.setItem('cleaner-models-v1', JSON.stringify(window.app.state.models));
+      window.app.state.assignments = Object.assign({}, window.app.state.assignments, {
+        cleanPrompt: 'clean-prompt-ui',
+        cleanTemperature: 0.4,
+        cleanReasoning: 'medium',
+      });
+      localStorage.setItem('cleaner-assignment-v1', JSON.stringify(window.app.state.assignments));
+    });
     const [cfgDownload] = await Promise.all([
       page.waitForEvent('download', { timeout: 20000 }),
       page.click('#exportTempExecConfigBtn'),
     ]);
     expect(await cfgDownload.suggestedFilename()).toMatch(/tempexec_full/i);
+    const cfgPath = await cfgDownload.path();
+    if (cfgPath) {
+      const cfgContent = fs.readFileSync(cfgPath, 'utf-8');
+      const cfgJson = JSON.parse(cfgContent);
+      expect(Array.isArray(cfgJson.models)).toBeTruthy();
+      expect(cfgJson.models[0] && cfgJson.models[0].model).toBe('mock-model');
+      expect(cfgJson.assignments && cfgJson.assignments.cleanPrompt).toBe('clean-prompt-ui');
+      expect(cfgJson.assignments && cfgJson.assignments.cleanTemperature).toBe(0.4);
+      expect(cfgJson.assignments && cfgJson.assignments.cleanReasoning).toBe('medium');
+    }
     await closeTempExecDrawer(page);
     await expect(page.locator('#exportTempExecBtn')).toBeEnabled();
     const [jsonDownload] = await Promise.all([

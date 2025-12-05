@@ -205,7 +205,15 @@
 </div>
 </div>
 </section>
-<section class="card hidden structure-card collapsed-card" data-tab-section="help" id="xmindStructureCard">
+<div class="drawer" id="xmindStructureDrawer" data-tab-section="help">
+<div class="drawer-mask" data-drawer-close="xmindStructureDrawer"></div>
+<div class="drawer-panel">
+<div class="drawer-header">
+<h3>XMind 用例结构</h3>
+<button class="link-toggle" id="closeXmindStructureDrawerBtn" data-drawer-close="xmindStructureDrawer">收起</button>
+</div>
+<div class="drawer-body">
+<section class="card structure-card" data-tab-section="help" id="xmindStructureCard">
 <h3 style="margin:0 0 10px;">XMind 用例层级要求</h3>
 <p class="hint" style="margin:0 0 12px;">请严格按照“需求（根节点） → 模块 → 用例标题 → 优先级 → 前置条件 → 操作步骤 → 预期结果”七层结构填写。少任一层都会影响字段解析。</p>
 <div class="structure-diagram">
@@ -252,6 +260,9 @@
 <p style="margin-top:8px;">同一根节点下可以继续添加其他模块与用例；若缺少根节点或其中某层，系统会降级为普通文本或字段缺失，建议严格遵循此结构，或直接上传拥有相同字段的 JSON/文本文件。</p>
 </div>
 </section>
+</div>
+</div>
+</div>
 <section class="card hidden" data-section-id="auto-import" data-tab-section="auto">
 <h2>导入数据</h2>
 <div class="card-body">
