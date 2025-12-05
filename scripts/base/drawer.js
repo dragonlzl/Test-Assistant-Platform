@@ -8,18 +8,29 @@
     var panel = drawer.querySelector('.drawer-panel');
     var mask = drawer.querySelector('.drawer-mask');
     var body = document.body;
+    var root = document.documentElement;
     var openButtons = Array.isArray(options.openButtons) ? options.openButtons : [];
     var closeButtons = Array.isArray(options.closeButtons) ? options.closeButtons : [];
 
+    function applyBodyLock() {
+      if (body) body.classList.add('drawer-open');
+      if (root) root.classList.add('drawer-open');
+    }
+    function releaseBodyLock() {
+      var otherOpen = document.querySelector && document.querySelector('.drawer.open');
+      if (otherOpen) return;
+      if (body) body.classList.remove('drawer-open');
+      if (root) root.classList.remove('drawer-open');
+    }
     function open() {
       drawer.classList.add('open');
       if (drawer.classList.contains('hidden')) drawer.classList.remove('hidden');
-      if (body) body.classList.add('drawer-open');
+      applyBodyLock();
       if (typeof options.onOpen === 'function') options.onOpen();
     }
     function close() {
       drawer.classList.remove('open');
-      if (body) body.classList.remove('drawer-open');
+      releaseBodyLock();
       if (typeof options.onClose === 'function') options.onClose();
     }
     function toggle() {

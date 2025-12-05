@@ -2030,6 +2030,9 @@
 body.drawer-open {
   overflow: hidden !important;
 }
+html.drawer-open {
+  overflow: hidden !important;
+}
 .drawer {
   position: fixed;
   inset: 0;
@@ -2041,6 +2044,7 @@ body.drawer-open {
   z-index: 120;
   overflow: hidden;
   transition: visibility 0s linear 0.28s;
+  overscroll-behavior: contain;
 }
 .drawer.open {
   visibility: visible;
@@ -2078,6 +2082,7 @@ body.drawer-open {
   transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.35s ease;
   display: flex;
   flex-direction: column;
+  overscroll-behavior: contain;
 }
 .drawer.open .drawer-panel {
   pointer-events: auto;
@@ -2095,6 +2100,7 @@ body.drawer-open {
   padding: 14px 16px 24px;
   overflow-y: auto;
   height: calc(100vh - 60px);
+  overscroll-behavior: contain;
 }
 @media (max-width: 900px) {
   .drawer .drawer-panel {
