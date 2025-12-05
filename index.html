@@ -938,7 +938,15 @@
 </div>
 
 </div></section>
-<section class="card hidden" data-section-id="tempexec-overview" data-tab-section="tempexec">
+<div class="drawer" id="tempExecOverviewDrawer" data-tab-section="tempexec">
+<div class="drawer-mask" data-drawer-close="tempExecOverviewDrawer"></div>
+<div class="drawer-panel">
+<div class="drawer-header">
+<h3>用例执行总览</h3>
+<button class="link-toggle" id="closeTempExecOverviewDrawerBtn" data-drawer-close="tempExecOverviewDrawer">收起</button>
+</div>
+<div class="drawer-body">
+<section class="card" data-section-id="tempexec-overview" data-tab-section="tempexec">
 <h2>用例执行总览</h2>
 <div class="card-body">
 <p class="hint">按文件汇总执行进度（当前导入与历史导入），颜色区分不同执行状态。</p>
@@ -950,6 +958,9 @@
 </div>
 </div>
 </section>
+</div>
+</div>
+</div>
 <section class="card hidden" data-tab-section="models">
 <h2>模型管理</h2>
 <div class="card-body">

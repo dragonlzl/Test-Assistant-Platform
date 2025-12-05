@@ -104,8 +104,9 @@ test.describe('临时执行进度视图', () => {
     await expect(page.locator('#tempExecOverview')).toContainText('版本一');
     await expect(page.locator('#tempExecOverview')).toContainText('需求区（未分配版本）');
 
-    await page.click('#closeTempExecDrawerBtn');
+    await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
     await page.click('#tempExecBackBtn');
+    await expect(page.locator('#tempExecOverviewDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#tempExecView')).toBeVisible();
     await page.click('#openTempExecDrawerBtn');
 

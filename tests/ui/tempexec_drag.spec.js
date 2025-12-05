@@ -140,8 +140,9 @@ test.describe('执行视图导入导出与拖拽', () => {
     expect(overviewCount).toBeGreaterThanOrEqual(2);
     const fileCount = await page.locator('#tempExecOverview [data-temp-file]').count();
     expect(fileCount).toBeGreaterThanOrEqual(2);
-    await closeTempExecDrawer(page);
+    await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
     await page.click('#tempExecBackBtn');
+    await expect(page.locator('#tempExecOverviewDrawer')).not.toHaveClass(/open/);
 
     const snapshot = await page.evaluate(() => JSON.stringify({
       type: 'tempexec_snapshot_v1',

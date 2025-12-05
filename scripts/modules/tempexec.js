@@ -31,11 +31,13 @@
     var toggleTempReqBtn = document.getElementById('toggleTempReq');
     var toggleTempVersionBtn = document.getElementById('toggleTempVersion');
     var tempExecDrawerEl = document.getElementById('tempExecDrawer');
+    var tempExecOverviewDrawerEl = document.getElementById('tempExecOverviewDrawer');
     var openTempExecDrawerBtn = document.getElementById('openTempExecDrawerBtn');
     var openTempExecViewNavBtn = document.getElementById('openTempExecViewNavBtn');
     var openTempExecOverviewNavBtn = document.getElementById('openTempExecOverviewNavBtn');
     var openTempExecBackupNavBtn = document.getElementById('openTempExecBackupNavBtn');
     var closeTempExecDrawerBtn = document.getElementById('closeTempExecDrawerBtn');
+    var closeTempExecOverviewDrawerBtn = document.getElementById('closeTempExecOverviewDrawerBtn');
     var exportTempExecCasesXmindBtn = document.getElementById('exportTempExecCasesXmindBtn');
     var caseTemplateDropdown = document.getElementById('caseTemplateDropdown');
     var caseTemplateToggle = document.getElementById('caseTemplateToggle');
@@ -179,18 +181,25 @@
       closeButtons: ['closeTempExecDrawerBtn'],
       onClose: closeTemplateDropdown,
     });
+    var tempExecOverviewDrawer = window.app.drawer && window.app.drawer.createDrawer({
+      drawerId: 'tempExecOverviewDrawer',
+      openButtons: ['openTempExecOverviewNavBtn', 'tempExecOverviewBtn'],
+      closeButtons: ['closeTempExecOverviewDrawerBtn'],
+    });
     if (tempExecDrawer) {
       var tabButtons = document.querySelectorAll('[data-tab-btn]');
       tabButtons.forEach(function(btn) {
         btn.addEventListener('click', function() {
           if (btn && btn.dataset && btn.dataset.tabBtn !== 'tempexec') {
             tempExecDrawer.close();
+            if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
           }
         });
       });
     }
     function showTempExecView() {
       switchTab('tempexec');
+      if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
       if (tempExecDrawer) tempExecDrawer.close();
       if (tempExecViewSection) {
         tempExecViewSection.classList.remove('hidden');
@@ -200,6 +209,7 @@
     function showTempExecOverview() {
       switchTab('tempexec');
       if (tempExecDrawer) tempExecDrawer.close();
+      if (tempExecOverviewDrawer) tempExecOverviewDrawer.open();
       if (tempExecOverviewSection) {
         tempExecOverviewSection.classList.remove('hidden');
         scrollElementIntoView(tempExecOverviewSection, 'smooth', 140);
@@ -1083,11 +1093,7 @@
 
     if (tempExecOverviewBtn) {
       tempExecOverviewBtn.addEventListener('click', function() {
-        switchTab('tempexec');
-        if (tempExecOverviewSection) {
-          tempExecOverviewSection.classList.remove('hidden');
-          scrollElementIntoView(tempExecOverviewSection, 'smooth', 140);
-        }
+        showTempExecOverview();
       });
     }
     if (tempExecOverview && api.setTempExecActive) {
@@ -1108,6 +1114,8 @@
           api.prioritizeTempExecUnassignedRequirements();
         }
         switchTab('tempexec');
+        if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
+        if (tempExecDrawer) tempExecDrawer.close();
         if (tempExecViewSection) {
           tempExecViewSection.classList.remove('hidden');
           scrollElementIntoView(tempExecViewSection, 'smooth', 140);
