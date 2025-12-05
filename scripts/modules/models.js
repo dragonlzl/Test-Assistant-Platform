@@ -627,10 +627,11 @@
       const hasSavedAssignments = state.hasSavedAssignments !== undefined
         ? state.hasSavedAssignments
         : Boolean(localStorage.getItem(assignmentKey));
-      const missingAssignments = !hasSavedAssignments || requiredAssignmentKeys.some(function(key) {
+      const assignedAll = requiredAssignmentKeys.every(function(key) {
         const assignedId = state.assignments[key];
-        return !assignedId || !getModelById(assignedId);
+        return Boolean(assignedId && getModelById(assignedId));
       });
+      const missingAssignments = !hasSavedAssignments || !assignedAll;
       setTabNotice('models', hasModels ? '' : '未配置模型');
       setTabNotice('assign', hasModels ? (missingAssignments ? '未指派模型' : '') : '未配置模型');
     }

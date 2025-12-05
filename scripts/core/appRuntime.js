@@ -4,6 +4,7 @@
     var state = ctx.state || {};
     var dom = ctx.dom || {};
     var api = ctx.api || {};
+    var activeTabKey = ctx.activeTabKey || 'usecase-active-tab';
     var appUtils = ctx.appUtils || {};
     var assignIfPresent = ctx.assignIfPresent || function(target) { return target; };
     var tempExecApi = ctx.tempExecApi || {};
@@ -145,6 +146,13 @@
 
     function switchTab(name) {
       state.activeTab = name;
+      if (activeTabKey && typeof localStorage !== 'undefined') {
+        try {
+          localStorage.setItem(activeTabKey, name);
+        } catch (err) {
+          // ignore
+        }
+      }
       dom.tabButtons.forEach(function(btn) {
         btn.classList.toggle('active', btn.dataset && btn.dataset.tabBtn === name);
       });
@@ -266,6 +274,30 @@
       if (window.app && window.app._inited) return;
       if (!window.app) window.app = {};
       window.app._inited = true;
+      function resolveInitialTab() {
+        var defaultTab = 'auto';
+        var saved = '';
+        if (activeTabKey && typeof localStorage !== 'undefined') {
+          try {
+            saved = localStorage.getItem(activeTabKey) || '';
+          } catch (err) {
+            saved = '';
+          }
+        }
+        var tabs = [];
+        if (dom.tabButtons && dom.tabButtons.length) {
+          dom.tabButtons.forEach(function(btn) {
+            if (btn && btn.dataset && btn.dataset.tabBtn) {
+              tabs.push(btn.dataset.tabBtn);
+            }
+          });
+        }
+        var isValidSaved = saved && tabs.indexOf(saved) !== -1;
+        if (isValidSaved) return saved;
+        var hasDefault = tabs.indexOf(defaultTab) !== -1;
+        if (hasDefault) return defaultTab;
+        return tabs.length ? tabs[0] : defaultTab;
+      }
       loadModels();
       loadAssignments();
       renderModels();
@@ -281,8 +313,11 @@
       syncReviewViewFromResult();
       syncSplitView();
       resetModelForm();
-      switchTab('auto');
-      scrollToSection('auto-import', { behavior: 'instant' });
+      var initialTab = resolveInitialTab();
+      switchTab(initialTab);
+      if (initialTab === 'auto') {
+        scrollToSection('auto-import', { behavior: 'instant' });
+      }
       const casegenCoreModule = window.app.casegenCore && typeof window.app.casegenCore.init === 'function'
         ? window.app.casegenCore.init({
           state: state,

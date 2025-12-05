@@ -212,14 +212,17 @@
         });
       });
     }
-    function showTempExecView() {
+    function showTempExecView(options) {
+      var shouldScroll = !options || options.scroll !== false;
       switchTab('tempexec');
       updateTempExecToolbarOffset();
       if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
       if (tempExecDrawer) tempExecDrawer.close();
       if (tempExecViewSection) {
         tempExecViewSection.classList.remove('hidden');
-        scrollElementIntoView(tempExecViewSection, 'smooth', 140);
+        if (shouldScroll) {
+          scrollElementIntoView(tempExecViewSection, 'smooth', 140);
+        }
       }
     }
     function showTempExecOverview() {
@@ -635,7 +638,7 @@
         if (fileId !== state.tempExecActiveId) {
           api.setTempExecActive(fileId);
         }
-        showTempExecView();
+        showTempExecView({ scroll: false });
       });
       tempExecNav.addEventListener('dragstart', function(e) {
         var targetFile = e.target.closest('[data-temp-file]');

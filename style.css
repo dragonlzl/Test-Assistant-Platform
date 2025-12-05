@@ -1911,29 +1911,47 @@
       box-shadow: var(--shadow);
       min-width: 120px;
     }
-    .tabs.vertical button {
-      width: 100%;
-      text-align: left;
-      padding: 10px 12px;
-      background: rgba(255,255,255,0.85);
-      border-radius: 10px;
-      transition: transform 0.1s ease, box-shadow 0.15s ease;
-      min-width: auto;
-    }
-    .tabs.vertical button:hover {
-      transform: translateX(2px);
-      box-shadow: 0 8px 18px rgba(37,99,235,0.12);
-    }
-    .tabs.vertical button.active {
-      transform: translateX(2px);
-      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 70%, #0ea5e9 100%);
-      box-shadow: 0 10px 22px rgba(37,99,235,0.18);
-    }
-    .tabs button.active {
-      background: var(--primary);
-      color: #fff;
-      border-color: var(--primary);
-    }
+.tabs.vertical button {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  background: linear-gradient(120deg, #f8fbff 0%, #eef3ff 52%, #ffffff 100%);
+  border-radius: 12px;
+  transition: transform 0.1s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  min-width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.tabs.vertical button:hover {
+  transform: translateX(2px);
+  box-shadow: 0 10px 20px rgba(37,99,235,0.16);
+  border-color: #c7d7ff;
+}
+.tabs.vertical button.active {
+  transform: translateX(2px);
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 70%, #0ea5e9 100%);
+  box-shadow: 0 12px 26px rgba(37,99,235,0.22);
+  color: #fff;
+  border-color: #1d4ed8;
+}
+.tabs button.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.tabs.vertical button::before {
+  content: '◆';
+  font-size: 10px;
+  color: currentColor;
+  opacity: 0.6;
+}
     .tab-notice {
       display: inline-block;
       margin-left: 8px;

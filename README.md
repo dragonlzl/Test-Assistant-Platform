@@ -1,10 +1,10 @@
 # Test Assistant Platform
 
 ## 简介
-静态前端工具，完成需求清洗、拆分、覆盖对比、用例生成与执行的一站式流程，支持版本分组、专注区、拖拽和导入导出等能力，全部逻辑在浏览器本地运行。
+静态前端工具，覆盖需求清洗、拆分、覆盖对比、用例生成与执行全流程。内置“AI一键需求&用例评审”串联评审→清洗→拆分→覆盖对比；执行侧支持版本分组、专注区、拖拽、配置快照导入导出、用例执行总览等，全部逻辑在浏览器本地运行。
 
 ## 目录结构
-- `index.html`：单页入口，按依赖顺序 defer 加载脚本。
+- `index.html`：单页入口，按依赖顺序 defer 加载脚本；侧边页签支持刷新后保持上次停留的功能页。
 - `style.css`：全局样式。
 - `config/constants.js`：默认配置/键名/列显示等常量。
 - `scripts/`
@@ -21,7 +21,7 @@
 ## 开发与验证
 - 本地预览：`python3 -m http.server 8090` 后访问 `http://127.0.0.1:8090/index.html`。
 - 语法检查：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js`。
-- UI 自动化：`npm run test:ui`（如遇拖拽类偶发失败，可使用 `npm run test:ui -- --workers=1` 单线程重跑）。
+- UI 自动化：`npm run test:ui`（如遇拖拽类偶发失败，可使用 `npm run test:ui -- --workers=1` 单线程重跑）。核心覆盖：模型/指派提示、工作流导入、执行抽屉与总览、页签持久化等。
 - 权限申请：如需请求提权/联网等人工确认，发起请求前先运行 `python3 notify_feishu.py` 向群里提醒（需联网）。
 
 ## 约定

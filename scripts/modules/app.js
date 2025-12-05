@@ -11,6 +11,7 @@
     const legacyCompareKey = appConfig.legacyCompareKey || 'cleaner-compare-config-v1';
     const modelsKey = appConfig.modelsKey || 'cleaner-models-v1';
     const assignmentKey = appConfig.assignmentKey || 'cleaner-assignment-v1';
+    const activeTabKey = appConfig.activeTabKey || 'usecase-active-tab';
     const tempExecStorageKey = appConfig.tempExecStorageKey || 'usecase-temp-exec-v1';
     const tempExecFocusStorageKey = appConfig.tempExecFocusStorageKey || 'tempexec-focus-v1';
     const tempExecPageSizeStorageKey = appConfig.tempExecPageSizeStorageKey || 'tempexec-page-size';
@@ -1175,6 +1176,7 @@
         dom,
         api,
         appUtils,
+        activeTabKey,
         assignIfPresent,
         tempExecApi,
         setStatus,

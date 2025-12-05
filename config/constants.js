@@ -47,6 +47,7 @@
     legacyCompareKey: 'cleaner-compare-config-v1',
     modelsKey: 'cleaner-models-v1',
     assignmentKey: 'cleaner-assignment-v1',
+    activeTabKey: 'usecase-active-tab',
     tempExecStorageKey: 'usecase-temp-exec-v1',
     tempExecFocusStorageKey: 'tempexec-focus-v1',
     tempExecPageSizeStorageKey: 'tempexec-page-size',
