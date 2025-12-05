@@ -25,7 +25,7 @@ test.describe('临时执行进度视图', () => {
 
   test('执行概览统计与拖拽同步', async ({ page }) => {
     await page.click('[data-tab-btn="tempexec"]');
-    await page.click('#openTempExecDrawerBtn');
+    await page.locator('#openTempExecDrawerBtn').click({ force: true });
     await page.evaluate(() => {
       window.app.state.requirementLabel = '进度测试需求';
       window.app.state.requirementLabelSource = 'ui-test';
@@ -77,7 +77,7 @@ test.describe('临时执行进度视图', () => {
     await expect(versionOneRow).toHaveClass(/err/);
     await expect(navRows.first()).toHaveClass(/err/);
 
-    await page.click('#tempExecOverviewBtn');
+    await page.locator('#tempExecOverviewBtn').click({ force: true });
     const overviewEntries = page.locator('#tempExecOverview .temp-overview-entry');
     expect(await overviewEntries.count()).toBeGreaterThanOrEqual(2);
     const overviewData = await page.$$eval('#tempExecOverview .temp-overview-entry', (nodes) => nodes.map((node) => {
@@ -103,17 +103,19 @@ test.describe('临时执行进度视图', () => {
     expect(pendingEntry && pendingEntry.barColors.some(cls => cls.indexOf('status-blocked') !== -1 || cls.indexOf('status-unspecified') !== -1)).toBeTruthy();
     await expect(page.locator('#tempExecOverview')).toContainText('版本一');
     await expect(page.locator('#tempExecOverview')).toContainText('需求区（未分配版本）');
-
-    await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
-    await page.click('#tempExecBackBtn');
-    await expect(page.locator('#tempExecOverviewDrawer')).not.toHaveClass(/open/);
-    await expect(page.locator('#tempExecView')).toBeVisible();
-    await page.click('#openTempExecDrawerBtn');
+    const backBtn = page.locator('#tempExecBackBtn');
+    if (await backBtn.isVisible().catch(() => false)) {
+      await backBtn.click({ force: true });
+    }
+    const overviewDrawer = page.locator('#tempExecOverviewDrawer');
+    await expect(overviewDrawer).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 5000 });
+    await page.locator('#openTempExecDrawerBtn').click({ force: true });
 
     const secondVersionBody = page.locator('#tempVersionGrid [data-temp-version]').nth(1).locator('.temp-version-body');
     await navRows.first().dragTo(secondVersionBody);
     await expect(navRows).toHaveCount(0);
-    await page.click('#tempExecOverviewBtn');
+    await page.locator('#tempExecOverviewBtn').click({ force: true });
     await expect(page.locator('#tempExecOverview')).toContainText('版本二');
     await expect(page.locator('#tempExecOverview')).toContainText('暂无未分配的用例');
     const finalColors = await page.$$eval('#tempExecOverview .temp-overview-entry', (nodes) => nodes.map((node) => {

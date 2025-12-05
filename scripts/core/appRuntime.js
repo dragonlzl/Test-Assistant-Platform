@@ -216,9 +216,7 @@
         } else if (state.caseGenModules.length) {
           renderCaseGeneration();
         }
-        if (dom.toSplitFromCaseGenBtn && dom.splitResultEl) {
-          dom.toSplitFromCaseGenBtn.classList.toggle('hidden', Boolean(dom.splitResultEl.value && dom.splitResultEl.value.trim()));
-        }
+        if (dom.toSplitFromCaseGenBtn) dom.toSplitFromCaseGenBtn.classList.remove('hidden');
       }
       if (name === 'auto') {
         updateAutoClarifyVisibility();
@@ -237,6 +235,27 @@
         switchTab(tabBtn.dataset.tabBtn);
       }
     });
+    if (dom.toSplitFromCaseGenBtn) {
+      dom.toSplitFromCaseGenBtn.addEventListener('click', function() {
+        switchTab('clean');
+        if (dom.tabButtons && typeof dom.tabButtons.forEach === 'function') {
+          dom.tabButtons.forEach(function(btn) {
+            btn.classList.toggle('active', btn.dataset && btn.dataset.tabBtn === 'clean');
+          });
+        }
+        if (dom.tabSections && typeof dom.tabSections.forEach === 'function') {
+          dom.tabSections.forEach(function(sec) {
+            var match = sec.dataset && sec.dataset.tabSection === 'clean';
+            sec.classList.toggle('hidden', !match);
+          });
+        }
+        if (typeof scrollToSection === 'function') {
+          scrollToSection('split');
+        } else if (dom.splitResultEl) {
+          scrollElementIntoView(dom.splitResultEl, 'smooth', 140);
+        }
+      });
+    }
 
     function clearStatusById(id) {
       const el = document.getElementById(id);
@@ -377,6 +396,7 @@
           handlers: {
             goCasesGenAndScroll: api.goCasesGenAndScroll || goCasesGenAndScroll,
             scrollToSection: scrollToSection,
+            switchTab: switchTab,
           },
           dom: dom,
         })

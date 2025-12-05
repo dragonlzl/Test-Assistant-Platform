@@ -22,6 +22,7 @@
     var switchTab = handlers.switchTab || function() {};
     var scrollElementIntoView = handlers.scrollElementIntoView || function() {};
     var parseSplitModules = handlers.parseSplitModules || function() { return []; };
+    var scrollToSection = handlers.scrollToSection;
 
     function goToCaseGeneration(trigger) {
       var splitText = splitResultEl && splitResultEl.value ? splitResultEl.value.trim() : '';
@@ -77,8 +78,20 @@
       }
     }
 
-    if (toSplitFromCaseGenBtn && typeof handlers.scrollToSection === 'function') {
-      toSplitFromCaseGenBtn.addEventListener('click', function() { handlers.scrollToSection('split'); });
+    function jumpToSplit() {
+      if (typeof switchTab === 'function') switchTab('clean');
+      if (typeof scrollToSection === 'function') {
+        scrollToSection('split');
+        return;
+      }
+      var section = document.querySelector('[data-section-id="split"]');
+      if (section) {
+        if (typeof scrollElementIntoView === 'function') scrollElementIntoView(section, 'smooth', 140);
+        else if (section.scrollIntoView) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+    if (toSplitFromCaseGenBtn) {
+      toSplitFromCaseGenBtn.addEventListener('click', jumpToSplit);
     }
     if (exportCaseGenBtn && typeof handlers.exportCaseGenerationResults === 'function') {
       exportCaseGenBtn.addEventListener('click', handlers.exportCaseGenerationResults);

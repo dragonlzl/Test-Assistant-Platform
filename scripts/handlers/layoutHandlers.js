@@ -79,6 +79,41 @@
     var caseViewBtn = dom.caseViewBtn;
     var xmindStructureToggle = dom.xmindStructureToggle;
     var xmindStructureCard = dom.xmindStructureCard;
+    var tempexecFlowNav = dom.tempexecFlowNav || document.getElementById('tempexecFlowNav');
+    var rootEl = document.documentElement;
+    var tempexecNavTimer;
+
+    function setCssVar(name, value) {
+      if (!name || !rootEl || !rootEl.style) return;
+      rootEl.style.setProperty(name, value);
+    }
+
+    function syncTempexecNavHeight() {
+      var nav = tempexecFlowNav || document.getElementById('tempexecFlowNav');
+      if (!nav || nav.classList.contains('hidden')) return;
+      var rect = nav.getBoundingClientRect();
+      var height = Math.round((rect && rect.height) || nav.offsetHeight || 0);
+      if (height > 0) setCssVar('--tempexec-nav-height', height + 'px');
+    }
+
+    function scheduleSyncTempexecNavHeight() {
+      if (tempexecNavTimer) clearTimeout(tempexecNavTimer);
+      tempexecNavTimer = setTimeout(syncTempexecNavHeight, 120);
+    }
+    if (tempexecFlowNav && typeof MutationObserver !== 'undefined') {
+      var tempexecObserver = new MutationObserver(function(mutations) {
+        var needSync = false;
+        mutations.forEach(function(mutation) {
+          if (mutation && mutation.type === 'attributes' && mutation.attributeName === 'class') {
+            needSync = true;
+          }
+        });
+        if (needSync && !tempexecFlowNav.classList.contains('hidden')) {
+          scheduleSyncTempexecNavHeight();
+        }
+      });
+      tempexecObserver.observe(tempexecFlowNav, { attributes: true });
+    }
 
     document.querySelectorAll('section.card').forEach(function(card) {
       var header = card.querySelector('h2');
@@ -125,6 +160,7 @@
       tabButtons.forEach(function(btn) {
         btn.addEventListener('click', function() {
           if (btn.dataset && btn.dataset.tabBtn) switchTab(btn.dataset.tabBtn);
+          if (btn.dataset && btn.dataset.tabBtn === 'tempexec') scheduleSyncTempexecNavHeight();
         });
       });
     }
@@ -187,6 +223,9 @@
         xmindStructureToggle.classList.remove('active');
       }
     }
+
+    scheduleSyncTempexecNavHeight();
+    window.addEventListener('resize', scheduleSyncTempexecNavHeight);
 
     return {};
   }

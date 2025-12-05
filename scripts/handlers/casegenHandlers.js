@@ -9,6 +9,19 @@
     var autoMissingGoUsecaseBtn = dom.autoMissingGoUsecaseBtn;
     var goCasesGenAndScroll = handlers.goCasesGenAndScroll;
     var scrollToSection = handlers.scrollToSection;
+    var switchTab = handlers.switchTab;
+
+    function jumpToSplit() {
+      if (typeof switchTab === 'function') switchTab('clean');
+      if (typeof scrollToSection === 'function') {
+        scrollToSection('split');
+        return;
+      }
+      var section = document.querySelector('[data-section-id="split"]');
+      if (section && section.scrollIntoView) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
 
     if (caseGenProgressList && typeof goCasesGenAndScroll === 'function') {
       caseGenProgressList.addEventListener('click', function(e) {
@@ -26,8 +39,8 @@
       });
     }
 
-    if (toSplitFromCaseGenBtn && typeof scrollToSection === 'function') {
-      toSplitFromCaseGenBtn.addEventListener('click', function() { scrollToSection('split'); });
+    if (toSplitFromCaseGenBtn) {
+      toSplitFromCaseGenBtn.addEventListener('click', jumpToSplit);
     }
     if (autoMissingGoUsecaseBtn && typeof goCasesGenAndScroll === 'function') {
       autoMissingGoUsecaseBtn.addEventListener('click', function() { goCasesGenAndScroll(''); });

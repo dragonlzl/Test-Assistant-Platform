@@ -11,14 +11,20 @@
       --warn: #c2410c;
       --error: #b91c1c;
       --shadow: 0 10px 30px rgba(37,99,235,0.08), 0 4px 10px rgba(15,23,42,0.05);
+      --tempexec-nav-height: 140px;
+      --sticky-offset: 12px;
+      --tempexec-offset: 0px;
+      --flow-offset: var(--sticky-offset, 12px);
     }
     html {
       scroll-behavior: smooth;
       scroll-padding-top: 220px;
-    }
-    html, body {
       min-height: 100%;
-      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    body {
+      min-height: 100%;
+      overflow: visible;
     }
     * { box-sizing: border-box; }
     body {
@@ -40,7 +46,7 @@
     }
     .sidebar {
       position: sticky;
-      top: 12px;
+      top: var(--sticky-offset, 12px);
       align-self: start;
       background: linear-gradient(145deg, #eef2ff 0%, #ffffff 45%, #f8fafc 100%);
       border: 1px solid #e5e7eb;
@@ -50,6 +56,8 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
+      max-height: calc(100vh - 2 * var(--sticky-offset, 12px));
+      overflow: visible;
     }
     .sidebar-header {
       display: flex;
@@ -72,16 +80,30 @@
       transform: translateY(-2px);
       box-shadow: 0 10px 20px rgba(37,99,235,0.16);
     }
-    .content-shell {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      width: 100%;
-    }
+.content-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding-top: var(--sticky-offset, 12px);
+  position: relative;
+  background: var(--bg);
+  isolation: isolate;
+}
+.content-shell::before {
+  content: '';
+  position: sticky;
+  top: 0;
+  height: var(--sticky-offset, 12px);
+  display: block;
+  background: var(--bg);
+  z-index: 85;
+  pointer-events: none;
+}
     .top-shell {
       position: sticky;
       top: 0;
-      z-index: 40;
+      z-index: 120;
       background: var(--bg);
       padding: 8px 0 10px;
       box-shadow: 0 8px 18px rgba(15,23,42,0.08);
@@ -1268,31 +1290,35 @@
 }
 .tempexec-head {
   position: sticky;
-  top: 0;
-  z-index: 70;
+  top: var(--tempexec-offset, var(--sticky-offset, 12px));
+  z-index: 120;
   background: linear-gradient(180deg, #f8fbff 0%, #ffffff 80%);
   padding: 8px 8px 12px;
   margin: 0 0 14px;
   box-shadow: 0 6px 16px rgba(15,23,42,0.06);
   border: 1px solid #e5e7eb;
   border-radius: 14px;
+  overflow: hidden;
 }
 .tempexec-head .flow {
-  position: static;
+  position: sticky;
+  top: var(--tempexec-offset, var(--sticky-offset, 12px));
   margin: 0;
   border-radius: 12px;
+  z-index: 130;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 90%);
 }
 .tempexec-head .temp-exec-toolbar-card {
-  position: static;
-  top: auto;
+  position: sticky;
+  top: calc(var(--tempexec-offset, var(--sticky-offset, 12px)) + var(--tempexec-nav-height, 140px) + 8px);
   margin: 10px 0 0;
-  z-index: 1;
+  z-index: 110;
   border-radius: 12px;
 }
 .temp-exec-toolbar-card {
   position: sticky;
-  top: calc(var(--tempexec-nav-height, 120px) + 12px);
-  z-index: 80;
+  top: calc(var(--tempexec-offset, var(--sticky-offset, 12px)) + var(--tempexec-nav-height, 140px) + 10px);
+  z-index: 110;
   margin-bottom: 12px;
 }
 .temp-exec-toolbar {
@@ -1924,6 +1950,11 @@
       flex-direction: column;
       align-items: stretch;
       padding: 0;
+      position: sticky;
+      top: var(--sticky-offset, 12px);
+      z-index: 140;
+      background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.8));
+      border-radius: 10px;
     }
     .tabs button {
       background: rgba(255,255,255,0.9);
@@ -1997,7 +2028,7 @@
   text-decoration-style: dashed;
 }
 body.drawer-open {
-  overflow: hidden;
+  overflow: hidden !important;
 }
 .drawer {
   position: fixed;
@@ -2091,9 +2122,9 @@ body.drawer-open {
       width: 100%;
       margin: 0 0 12px;
       position: sticky;
-      top: 0;
+      top: var(--flow-offset, 0px);
       padding-top: 18px;
-      z-index: 30;
+      z-index: 90;
     }
     .flow-title {
       font-weight: 800;

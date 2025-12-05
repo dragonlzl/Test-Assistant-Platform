@@ -50,18 +50,21 @@ test.describe('临时执行搜索功能', () => {
 
     await expect(page.locator('#tempExecNav button[data-temp-file]')).toHaveCount(1, { timeout: 5000 });
     await page.click('#tempExecNav button[data-temp-file]');
-    await page.click('#closeTempExecDrawerBtn');
+    await page.locator('#closeTempExecDrawerBtn').click({ force: true });
+    await page.click('#openTempExecViewNavBtn');
+    await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 15000 });
     const caseRows = page.locator('#tempExecView table tbody tr').filter({ has: page.locator('[data-temp-case-remove]') });
     await expect(caseRows.first()).toBeVisible({ timeout: 15000 });
     await expect(caseRows).toHaveCount(3, { timeout: 15000 });
 
-    const searchInput = page.locator('#tempExecView input[placeholder="搜索用例关键字"]');
+    const searchInput = page.locator('#tempExecToolbar input[placeholder="搜索用例关键字"]');
+    await expect(searchInput).toBeVisible({ timeout: 20000 });
     await searchInput.fill('登录');
-    await page.click('#tempExecView button:has-text("搜索")');
+    await page.click('#tempExecToolbar button:has-text("搜索")');
     await expect(caseRows).toHaveCount(1, { timeout: 15000 });
     await expect(caseRows.first()).toContainText('登录');
 
-    await page.click('#tempExecView button:has-text("清除")');
+    await page.click('#tempExecToolbar button:has-text("清除")');
     await expect(caseRows).toHaveCount(3);
   });
 });

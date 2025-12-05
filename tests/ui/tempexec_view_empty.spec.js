@@ -19,7 +19,7 @@ test.describe('执行视图空态与样式', () => {
     await page.click('#openTempExecViewNavBtn');
 
     const emptyHint = page.locator('#tempExecView .temp-case-empty');
-    await expect(emptyHint).toHaveText('暂无执行用例，请在“用例导入&分配”中导入或选择历史记录');
+    await expect(emptyHint).toHaveText('暂无执行用例，请通过“用例导入&分配”抽屉导入或选择历史记录');
 
     const positions = await page.evaluate(() => {
       var host = document.createElement('div');

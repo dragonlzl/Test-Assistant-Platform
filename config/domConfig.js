@@ -14,11 +14,12 @@
       'openTempExecDrawerBtn', 'closeTempExecDrawerBtn', 'tempExecDrawer',
       'casesGoUsecaseGenBtn', 'casesGenerationContainer', 'caseGenProgressPanel', 'caseGenProgressList', 'cleanStatus', 'compareStatus',
       'splitStatus', 'casesCoverageStatus', 'caseGenStatus', 'autoWorkflowStatus', 'casesModuleProgress', 'exportCaseGenBtn',
-      'toSplitFromCaseGenBtn', 'saveRawDebugBtn', 'importRawDebugBtn', 'saveCleanDebugBtn', 'importCleanDebugBtn', 'saveSplitDebugBtn',
+      'toSplitFromCaseGen', 'saveRawDebugBtn', 'importRawDebugBtn', 'saveCleanDebugBtn', 'importCleanDebugBtn', 'saveSplitDebugBtn',
       'importSplitDebugBtn', 'saveCaseDebugBtn', 'importCaseDebugBtn', 'scrollTopBtn', 'scrollBottomBtn', 'xmindStructureToggle',
       'xmindStructureCard', 'caseFileInput', 'caseDropZone', 'caseStatus', 'caseViewBtn', 'caseViewContainer', 'caseViewHint',
     ],
     alias: [
+      { name: 'toSplitFromCaseGenBtn', id: 'toSplitFromCaseGen' },
       { name: 'runReviewBtn', id: 'runReview' },
       { name: 'reviewResultEl', id: 'reviewResult' },
       { name: 'copyReviewResultBtn', id: 'copyReviewResult' },
