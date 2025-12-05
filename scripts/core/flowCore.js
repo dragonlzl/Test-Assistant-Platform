@@ -31,6 +31,16 @@
       caseViewHint.classList.toggle('hidden', !text);
     }
 
+    function persistCardExpanded(section) {
+      if (!section) return;
+      section.classList.remove('collapsed');
+      var store = window.app && window.app.cardCollapseStore;
+      if (store && typeof store.setBySectionId === 'function') {
+        var key = section.dataset && section.dataset.sectionId ? section.dataset.sectionId : '';
+        if (key) store.setBySectionId(key, false);
+      }
+    }
+
     function refreshExportCaseGenButton() {
       if (!exportCaseGenBtn) return;
       var hasResult = Array.isArray(state.caseGenModules) && state.caseGenModules.some(function(mod) {
@@ -75,7 +85,7 @@
       if (target === 'cases') {
         ['cases-upload', 'cases'].forEach(function(id) {
           var sectionEl = document.querySelector('[data-section-id="' + id + '"]');
-          if (sectionEl) sectionEl.classList.remove('collapsed');
+          persistCardExpanded(sectionEl);
         });
         switchTab('clean');
         var sectionCoverage = document.querySelector('[data-section-id="cases"]');
@@ -88,7 +98,7 @@
         switchTab('clean');
         var sectionUpload = document.querySelector('[data-section-id="cases-upload"]');
         if (sectionUpload) {
-          sectionUpload.classList.remove('collapsed');
+          persistCardExpanded(sectionUpload);
           sectionUpload.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
         return;
@@ -105,7 +115,7 @@
         switchTab('auto');
         var autoSection = document.querySelector('[data-section-id="auto-import"]');
         if (autoSection) {
-          autoSection.classList.remove('collapsed');
+          persistCardExpanded(autoSection);
           scrollElementIntoView(autoSection, behavior, 240);
         }
         return;
@@ -113,7 +123,7 @@
       var section = document.querySelector('[data-section-id="' + target + '"]');
       if (section) {
         switchTab('clean');
-        section.classList.remove('collapsed');
+        persistCardExpanded(section);
         scrollElementIntoView(section, behavior);
       }
     }

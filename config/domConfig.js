@@ -10,6 +10,7 @@
       'importTempExecConfigBtn', 'tempExecMindBtn', 'tempExecOverviewBtn', 'tempExecOverview', 'tempExecBackBtn', 'importTempExecFile',
       'importTempExecConfigFile', 'autoClarifyContainer', 'autoClarifyStatus', 'autoClarifyToggleBtn', 'goUsecaseGenBtn',
       'toggleTempReq', 'toggleTempVersion',
+      'tempExecToolbarCard', 'tempExecToolbar',
       'openTempExecDrawerBtn', 'closeTempExecDrawerBtn', 'tempExecDrawer',
       'casesGoUsecaseGenBtn', 'casesGenerationContainer', 'caseGenProgressPanel', 'caseGenProgressList', 'cleanStatus', 'compareStatus',
       'splitStatus', 'casesCoverageStatus', 'caseGenStatus', 'autoWorkflowStatus', 'casesModuleProgress', 'exportCaseGenBtn',

@@ -735,6 +735,11 @@
       'buildCasesComparePayload',
       'importCaseFiles',
     ]);
+    if (api.importCaseFiles) {
+      api.handleCaseFiles = function handleCaseFilesProxy() {
+        return api.importCaseFiles.apply(null, arguments);
+      };
+    }
 
     const generateTempExecId = appUtils.generateTempExecId;
     const generateTempVersionId = appUtils.generateTempVersionId;

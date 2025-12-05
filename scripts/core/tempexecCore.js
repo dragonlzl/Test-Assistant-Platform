@@ -36,6 +36,8 @@
     var tempFocusZone = deps && deps.dom && deps.dom.tempFocusZone ? deps.dom.tempFocusZone : null;
     var tempExecOverview = deps && deps.dom && deps.dom.tempExecOverview ? deps.dom.tempExecOverview : null;
     var tempExecView = deps && deps.dom && deps.dom.tempExecView ? deps.dom.tempExecView : null;
+    var tempExecToolbar = deps && deps.dom && deps.dom.tempExecToolbar ? deps.dom.tempExecToolbar : null;
+    var tempExecToolbarCard = deps && deps.dom && deps.dom.tempExecToolbarCard ? deps.dom.tempExecToolbarCard : null;
     var tempReqToggleBtn = deps && deps.dom && deps.dom.toggleTempReq ? deps.dom.toggleTempReq : null;
     var tempVersionToggleBtn = deps && deps.dom && deps.dom.toggleTempVersion ? deps.dom.toggleTempVersion : null;
     var createTempVersionBtn = deps && deps.dom && deps.dom.createTempVersionBtn ? deps.dom.createTempVersionBtn : null;
@@ -1556,6 +1558,36 @@
       return summary;
     }
 
+    function renderTempExecToolbar(file) {
+      if (!tempExecToolbar || !tempExecToolbarCard) return;
+      if (!file) {
+        tempExecToolbar.innerHTML = '';
+        tempExecToolbarCard.classList.add('hidden');
+        return;
+      }
+      var summary = buildTempExecSummary(file);
+      var statusFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
+      var activeFilter = statusFilter.fileId === file.id ? statusFilter.status : '';
+      var searchState = state.tempExecSearch || { fileId: '', term: '', raw: '' };
+      var searchRaw = searchState.fileId === file.id ? (searchState.raw || '') : '';
+      var toolbarHtml = [
+        '<div class="toolbar-file">当前文件：<strong>' + escapeHtml(file.name) + '</strong></div>',
+        '<span class="summary-pill executed ' + (activeFilter === 'executed' ? 'active' : '') + '" data-temp-status-filter="executed" data-temp-status-file="' + file.id + '">已执行 ' + summary.executed + '</span>',
+        '<span class="summary-pill pending ' + (activeFilter === 'pending' ? 'active' : '') + '" data-temp-status-filter="pending" data-temp-status-file="' + file.id + '">未执行 ' + summary.pending + '</span>',
+        '<span class="summary-pill passed ' + (activeFilter === 'passed' ? 'active' : '') + '" data-temp-status-filter="passed" data-temp-status-file="' + file.id + '">通过 ' + summary.passed + '</span>',
+        '<span class="summary-pill failed ' + (activeFilter === 'failed' ? 'active' : '') + '" data-temp-status-filter="failed" data-temp-status-file="' + file.id + '">失败 ' + summary.failed + '</span>',
+        '<span class="summary-pill blocked ' + (activeFilter === 'blocked' ? 'active' : '') + '" data-temp-status-filter="blocked" data-temp-status-file="' + file.id + '">阻塞 ' + summary.blocked + '</span>',
+        '<span class="summary-pill unspecified ' + (activeFilter === 'unspecified' ? 'active' : '') + '" data-temp-status-filter="unspecified" data-temp-status-file="' + file.id + '">不适用 ' + summary.unspecified + '</span>',
+        '<div class="toolbar-search">',
+          '<input class="temp-search-input" data-temp-search-input="' + file.id + '" value="' + escapeHtml(searchRaw) + '" placeholder="搜索用例关键字">',
+          '<button type="button" class="pill secondary" data-temp-search-btn="' + file.id + '">搜索</button>',
+          '<button type="button" class="pill secondary" data-temp-search-clear="' + file.id + '">清除</button>',
+        '</div>',
+      ].join('');
+      tempExecToolbar.innerHTML = toolbarHtml;
+      tempExecToolbarCard.classList.remove('hidden');
+    }
+
     function mapFilterToStatus(matchKey, status) {
       if (matchKey === 'executed') return status !== '未执行';
       if (matchKey === 'pending') return status === '未执行';
@@ -1858,11 +1890,13 @@
 
     function toggleTempExecRequirementZone() {
       state.tempExecReqCollapsed = !state.tempExecReqCollapsed;
+      persistTempExecState();
       renderTempExecNav();
     }
 
     function toggleTempExecVersionZone() {
       state.tempExecVersionCollapsed = !state.tempExecVersionCollapsed;
+      persistTempExecState();
       renderTempVersionGrid();
     }
 
@@ -1912,9 +1946,28 @@
 
     function renderTempExecView() {
       if (!tempExecView) return;
+      var preserveScroll = Boolean(state.tempExecPreserveScrollOnce);
+      var scrollSnapshot = null;
+      if (preserveScroll && typeof window !== 'undefined' && tempExecView.getBoundingClientRect) {
+        scrollSnapshot = {
+          top: tempExecView.getBoundingClientRect().top,
+          scrollY: window.pageYOffset || document.documentElement.scrollTop || 0,
+        };
+      }
+      var restoreScroll = function() {
+        if (!preserveScroll) return;
+        state.tempExecPreserveScrollOnce = false;
+        if (!scrollSnapshot || !tempExecView.getBoundingClientRect) return;
+        var afterTop = tempExecView.getBoundingClientRect().top;
+        var delta = afterTop - scrollSnapshot.top;
+        if (Math.abs(delta) > 1 && typeof window !== 'undefined' && window.scrollTo) {
+          window.scrollTo(0, scrollSnapshot.scrollY + delta);
+        }
+      };
       var active = getTempExecFile(state.tempExecActiveId);
       if (!active) {
-        tempExecView.innerHTML = '<div class="temp-case-empty">暂无执行用例，请在“用例导入&分配”中导入或选择历史记录</div>';
+        renderTempExecToolbar(null);
+        tempExecView.innerHTML = '<div class="temp-case-empty">暂无执行用例，请通过“用例导入&分配”抽屉导入或选择历史记录</div>';
         if (tempExecMindContainer) tempExecMindContainer.classList.add('hidden');
         state.tempExecMindMode = false;
         if (exportTempExecBtn) exportTempExecBtn.disabled = true;
@@ -1924,8 +1977,10 @@
           tempExecMindBtn.textContent = '切换思维导图视图';
         }
         tempExecView.classList.remove('hidden');
+        restoreScroll();
         return;
       }
+      renderTempExecToolbar(active);
       tempExecView.innerHTML = renderTempExecTable(active);
       if (state.tempExecMindMode && tempExecMindContainer) {
         tempExecMindContainer.innerHTML = '';
@@ -1942,6 +1997,7 @@
       if (exportTempExecCasesXmindBtn) exportTempExecCasesXmindBtn.disabled = false;
       if (tempExecMindBtn) tempExecMindBtn.disabled = false;
       renderTempExecOverview();
+      restoreScroll();
     }
 
     function getTempExecFile(fileId) {
@@ -2028,6 +2084,11 @@
           files: serializeTempExecFiles(state),
           versions: serializeTempExecVersions(state),
           placement: state.tempExecPlacement || defaultPlacement,
+          collapsed: {
+            req: Boolean(state.tempExecReqCollapsed),
+            version: Boolean(state.tempExecVersionCollapsed),
+          },
+          activeId: state.tempExecActiveId || '',
         };
         localStorage.setItem(tempExecStorageKey, JSON.stringify(payload));
       } catch (err) {
@@ -2070,12 +2131,16 @@
       var savedFiles = [];
       var savedVersions = [];
       var savedPlacement = null;
+      var savedActiveId = '';
+      var savedCollapsed = null;
       if (Array.isArray(savedRaw)) {
         savedFiles = savedRaw;
       } else if (savedRaw && typeof savedRaw === 'object') {
         savedFiles = Array.isArray(savedRaw.files) ? savedRaw.files : [];
         savedVersions = Array.isArray(savedRaw.versions) ? savedRaw.versions : [];
         savedPlacement = savedRaw.placement && typeof savedRaw.placement === 'object' ? savedRaw.placement : null;
+        savedCollapsed = savedRaw.collapsed && typeof savedRaw.collapsed === 'object' ? savedRaw.collapsed : null;
+        if (savedRaw.activeId) savedActiveId = String(savedRaw.activeId);
       }
       var usedIds = new Set();
       state.tempExecFiles = savedFiles
@@ -2103,7 +2168,12 @@
         .filter(Boolean);
       applyVersionAssignments(savedVersions);
       state.tempExecPlacement = normalizeTempExecPlacement(savedPlacement);
-      state.tempExecActiveId = '';
+      state.tempExecReqCollapsed = savedCollapsed && savedCollapsed.req ? true : false;
+      state.tempExecVersionCollapsed = savedCollapsed && savedCollapsed.version ? true : false;
+      var firstId = state.tempExecFiles.length ? state.tempExecFiles[0].id : '';
+      state.tempExecActiveId = (savedActiveId && state.tempExecFiles.some(function(f) { return f.id === savedActiveId; }))
+        ? savedActiveId
+        : firstId;
       state.tempExecSelections = {};
       state.tempExecRemarkOpen = {};
       state.tempExecReuseOpen = {};
@@ -2262,6 +2332,7 @@
       if (state.tempExecPresetDraft && state.tempExecPresetDraft.fileId !== state.tempExecActiveId) {
         state.tempExecPresetDraft = null;
       }
+      persistTempExecState();
       renderTempExecNav();
       renderTempExecView();
       renderTempVersionGrid();
@@ -2462,6 +2533,7 @@
       } else {
         selection.delete(index);
       }
+      state.tempExecPreserveScrollOnce = true;
       renderTempExecView();
     }
 
@@ -2474,6 +2546,7 @@
         ? indexes
         : file.cases.map(function(_, idx) { return idx; });
       if (checked) targets.forEach(function(idx) { selection.add(idx); });
+      state.tempExecPreserveScrollOnce = true;
       renderTempExecView();
     }
 
@@ -2855,16 +2928,6 @@
       );
       var presetPanel = reuseEnabled ? renderReusePresetPanel(file) : '';
       var paginationBlock = buildTempExecPagination(file, totalCases, pageIndex, totalPages, start, end);
-      var searchRaw = searchState.fileId === file.id ? (searchState.raw || '') : '';
-      var statusFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
-      var activeFilter = statusFilter.fileId === file.id ? statusFilter.status : '';
-      var searchBar = (
-        '<div class="temp-search-bar">' +
-          '<input class="temp-search-input" data-temp-search-input="' + file.id + '" value="' + escapeHtml(searchRaw) + '" placeholder="搜索用例关键字">' +
-          '<button type="button" class="pill secondary" data-temp-search-btn="' + file.id + '">搜索</button>' +
-          '<button type="button" class="pill secondary" data-temp-search-clear="' + file.id + '">清除</button>' +
-        '</div>'
-      );
       var headerCells = [];
       if (headerCheckbox) headerCells.push(headerCheckbox);
       if (show('index')) headerCells.push('<th class="index">编号</th>');
@@ -2881,18 +2944,6 @@
       return (
         reuseToggle +
         presetPanel +
-        '<div class="temp-case-summary-row">' +
-          '<div class="temp-case-summary">' +
-            '当前文件：<strong>' + escapeHtml(file.name) + '</strong>' +
-            '<span class="summary-pill executed ' + (activeFilter === 'executed' ? 'active' : '') + '" data-temp-status-filter="executed" data-temp-status-file="' + file.id + '">已执行 ' + summary.executed + '</span>' +
-            '<span class="summary-pill pending ' + (activeFilter === 'pending' ? 'active' : '') + '" data-temp-status-filter="pending" data-temp-status-file="' + file.id + '">未执行 ' + summary.pending + '</span>' +
-            '<span class="summary-pill passed ' + (activeFilter === 'passed' ? 'active' : '') + '" data-temp-status-filter="passed" data-temp-status-file="' + file.id + '">通过 ' + summary.passed + '</span>' +
-            '<span class="summary-pill failed ' + (activeFilter === 'failed' ? 'active' : '') + '" data-temp-status-filter="failed" data-temp-status-file="' + file.id + '">失败 ' + summary.failed + '</span>' +
-            '<span class="summary-pill blocked ' + (activeFilter === 'blocked' ? 'active' : '') + '" data-temp-status-filter="blocked" data-temp-status-file="' + file.id + '">阻塞 ' + summary.blocked + '</span>' +
-            '<span class="summary-pill unspecified ' + (activeFilter === 'unspecified' ? 'active' : '') + '" data-temp-status-filter="unspecified" data-temp-status-file="' + file.id + '">不适用 ' + summary.unspecified + '</span>' +
-          '</div>' +
-          searchBar +
-        '</div>' +
         paginationBlock +
         '<table data-resizable-id="temp-exec-' + escapeHtml(file.id) + '" data-resizable-label="执行视图 - ' + escapeHtml(file.name || '测试用例') + '">' +
           '<thead>' +

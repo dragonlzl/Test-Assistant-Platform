@@ -39,6 +39,17 @@ test.describe('工作流关键交互', () => {
     await expect(page.locator('#fileName')).toContainText('未选择');
   });
 
+  test('功能工作流可导入测试用例文件', async ({ page }) => {
+    await page.click('[data-tab-btn="clean"]');
+    await page.setInputFiles('#caseFileInput', {
+      name: 'cases.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from('[{"module":"登录","title":"用例1"}]'),
+    });
+    await expect(page.locator('#caseFileList')).toContainText('cases.json');
+    await expect(page.locator('#caseStatus')).toContainText('已导入');
+  });
+
   test('导入/导出控件默认状态与用例视图按钮可点击', async ({ page }) => {
     const exportCaseGen = page.locator('#exportCaseGen');
     await expect(exportCaseGen).toBeDisabled();

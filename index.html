@@ -21,7 +21,7 @@
 <button class="scroll-top-btn" type="button" id="scrollTopBtn">回到顶部</button>
 <button class="scroll-top-btn" type="button" id="scrollBottomBtn">跳到底部</button>
 <nav class="tabs vertical">
-<button class="active" data-tab-btn="auto">一键执行</button>
+<button class="active" data-tab-btn="auto">AI一键需求&用例评审</button>
 <button data-tab-btn="clean">功能工作流</button>
 <button data-tab-btn="casesgen">用例生成</button>
 <button data-tab-btn="tempexec">用例执行</button>
@@ -41,7 +41,7 @@
 </aside>
 <div class="content-shell">
 <div class="flow" id="flowNav">
-  <div class="flow-title">一键执行操作步骤</div>
+  <div class="flow-title">AI一键需求&用例评审步骤</div>
   <div class="flow-steps">
     <div class="step active" data-target="import"><span class="badge">1</span> 导入</div>
     <div class="progress-line"></div>
@@ -56,72 +56,79 @@
     <div class="step" data-target="cases"><span class="badge">6</span> 覆盖对比</div>
   </div>
 </div>
-<div class="flow hidden" id="tempexecFlowNav">
-  <div class="flow-title">功能导航</div>
-  <p class="hint" style="margin:0 0 6px;">用例执行相关入口汇总于此，点击卡片快速打开。</p>
-  <div class="nav-entry-grid">
-    <button class="nav-entry-card nav-entry-import" id="openTempExecDrawerBtn" type="button">
-      <span class="nav-entry-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-          <path d="M12 3v9"></path>
-          <path d="M9.5 9.5 12 12l2.5-2.5"></path>
-          <rect x="5" y="13" width="14" height="6" rx="2"></rect>
-          <path d="M9 16h6"></path>
-        </svg>
-      </span>
-      <span class="nav-entry-text">
-        <span class="nav-entry-title">用例导入&分配</span>
-        <span class="nav-entry-desc">导入/分配用例并备份配置</span>
-      </span>
-    </button>
-    <button class="nav-entry-card nav-entry-view" id="openTempExecViewNavBtn" type="button">
-      <span class="nav-entry-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-          <rect x="7" y="5" width="10" height="14" rx="2.2"></rect>
-          <path d="M10 7h4"></path>
-          <path d="M11 10h5"></path>
-          <path d="M11 13h5"></path>
-          <path d="M11 16h4"></path>
-          <circle class="fill" cx="9" cy="10" r="1.1"></circle>
-          <circle class="fill" cx="9" cy="13" r="1.1"></circle>
-          <circle class="fill" cx="9" cy="16" r="1.1"></circle>
-        </svg>
-      </span>
-      <span class="nav-entry-text">
-        <span class="nav-entry-title">执行视图</span>
-        <span class="nav-entry-desc">查看并记录执行结果</span>
-      </span>
-    </button>
-    <button class="nav-entry-card nav-entry-overview" id="openTempExecOverviewNavBtn" type="button">
-      <span class="nav-entry-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-          <rect class="fill" x="4.5" y="12.5" width="3.5" height="5" rx="1.2"></rect>
-          <rect class="fill" x="10.25" y="9" width="3.5" height="8.5" rx="1.2"></rect>
-          <rect class="fill" x="16" y="6" width="3.5" height="11.5" rx="1.2"></rect>
-          <path d="M4.5 18.5h15"></path>
-        </svg>
-      </span>
-      <span class="nav-entry-text">
-        <span class="nav-entry-title">执行总览</span>
-        <span class="nav-entry-desc">一键查看执行进度</span>
-      </span>
-    </button>
-    <button class="nav-entry-card nav-entry-backup" id="openTempExecBackupNavBtn" type="button">
-      <span class="nav-entry-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-          <ellipse cx="12" cy="6.5" rx="5.5" ry="2.5"></ellipse>
-          <path d="M6.5 6.5v6c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5v-6"></path>
-          <path d="M6.5 12.5v6c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5v-6"></path>
-          <path d="M12 11.5v6"></path>
-          <path d="M10.3 16.8 12 18.5l1.7-1.7"></path>
-        </svg>
-      </span>
-      <span class="nav-entry-text">
-        <span class="nav-entry-title">配置备份</span>
-        <span class="nav-entry-desc">导出/导入执行页面配置</span>
-      </span>
-    </button>
+<div class="tempexec-head hidden" data-tab-section="tempexec">
+  <div class="flow" id="tempexecFlowNav">
+    <div class="flow-title">功能导航</div>
+    <p class="hint" style="margin:0 0 6px;">用例执行相关入口汇总于此，点击卡片快速打开。</p>
+    <div class="nav-entry-grid">
+      <button class="nav-entry-card nav-entry-import" id="openTempExecDrawerBtn" type="button">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <path d="M12 3v9"></path>
+            <path d="M9.5 9.5 12 12l2.5-2.5"></path>
+            <rect x="5" y="13" width="14" height="6" rx="2"></rect>
+            <path d="M9 16h6"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">用例导入&分配</span>
+          <span class="nav-entry-desc">导入/分配用例并备份配置</span>
+        </span>
+      </button>
+      <button class="nav-entry-card nav-entry-view" id="openTempExecViewNavBtn" type="button">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <rect x="7" y="5" width="10" height="14" rx="2.2"></rect>
+            <path d="M10 7h4"></path>
+            <path d="M11 10h5"></path>
+            <path d="M11 13h5"></path>
+            <path d="M11 16h4"></path>
+            <circle class="fill" cx="9" cy="10" r="1.1"></circle>
+            <circle class="fill" cx="9" cy="13" r="1.1"></circle>
+            <circle class="fill" cx="9" cy="16" r="1.1"></circle>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">执行视图</span>
+          <span class="nav-entry-desc">查看并记录执行结果</span>
+        </span>
+      </button>
+      <button class="nav-entry-card nav-entry-overview" id="openTempExecOverviewNavBtn" type="button">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <rect class="fill" x="4.5" y="12.5" width="3.5" height="5" rx="1.2"></rect>
+            <rect class="fill" x="10.25" y="9" width="3.5" height="8.5" rx="1.2"></rect>
+            <rect class="fill" x="16" y="6" width="3.5" height="11.5" rx="1.2"></rect>
+            <path d="M4.5 18.5h15"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">执行总览</span>
+          <span class="nav-entry-desc">一键查看执行进度</span>
+        </span>
+      </button>
+      <button class="nav-entry-card nav-entry-backup" id="openTempExecBackupNavBtn" type="button">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <ellipse cx="12" cy="6.5" rx="5.5" ry="2.5"></ellipse>
+            <path d="M6.5 6.5v6c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5v-6"></path>
+            <path d="M6.5 12.5v6c0 1.4 2.5 2.5 5.5 2.5s5.5-1.1 5.5-2.5v-6"></path>
+            <path d="M12 11.5v6"></path>
+            <path d="M10.3 16.8 12 18.5l1.7-1.7"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">配置备份</span>
+          <span class="nav-entry-desc">导出/导入执行页面配置</span>
+        </span>
+      </button>
+    </div>
   </div>
+  <section class="card hidden temp-exec-toolbar-card" id="tempExecToolbarCard" data-tab-section="tempexec">
+    <div class="card-body">
+      <div class="temp-exec-toolbar" id="tempExecToolbar"></div>
+    </div>
+  </section>
 </div>
 <main>
 <section class="card hidden" data-section-id="help" data-tab-section="help">
@@ -159,7 +166,7 @@
 <li>完成清洗后查看“清洗结果视图”与原文高亮，确认结构化字段及定位按钮是否准确。</li>
 <li>运行“对比完整性”→“测试模块拆分”→“XMind 覆盖对比”，根据覆盖率决定补全或重洗。</li>
 <li>当覆盖率达标后，进入“用例生成/用例补全”卡片，为拆分模块批量生成高质量测试用例。</li>
-<li>若需要省时，可在“一键执行”页直接串联上述流程，并使用补全/重新清洗按钮修复缺口。</li>
+<li>若需要省时，可在“AI一键需求&用例评审”页直接串联上述流程，并使用补全/重新清洗按钮修复缺口。</li>
 </ul>
 <div class="help-grid">
 <article class="help-card">
@@ -168,7 +175,7 @@
 </article>
 <article class="help-card">
 <h3>需求评审</h3>
-<p>点击“分析需求模糊点”即可输出模型评审 JSON，必要时手工补写澄清结果，在一键执行模式下会强制确认后继续。</p>
+<p>点击“分析需求模糊点”即可输出模型评审 JSON，必要时手工补写澄清结果，在 AI 一键模式下会强制确认后继续。</p>
 </article>
 <article class="help-card">
 <h3>需求清洗</h3>
@@ -191,7 +198,7 @@
 <p>导入 XMind/JSON 用例即可直接执行，结果实时保存。可切换当前/历史文件、批量更新执行状态，并在“用例执行情况总览”中查看彩色进度条。</p>
 </article>
 <article class="help-card">
-<h3>一键执行</h3>
+<h3>AI一键需求&用例评审</h3>
 <p>在“自动执行工作流”卡片配置启动选项，一次性跑通评审→清洗→对比→拆分→覆盖的链路。失败时卡片会提示需要补齐的步骤。</p>
 </article>
 <article class="help-card">
@@ -200,7 +207,7 @@
 </article>
 <article class="help-card">
 <h3>其他配置 / 通知</h3>
-<p>在“其他配置”里填写飞书 Webhook 或其它偏好。一键执行完成或失败都会自动推送通知，方便团队成员第一时间了解结果。</p>
+<p>在“其他配置”里填写飞书 Webhook 或其它偏好。AI 一键流程完成或失败都会自动推送通知，方便团队成员第一时间了解结果。</p>
 </article>
 </div>
 </div>
@@ -310,7 +317,7 @@
 <span>需要人工确认需求澄清后再继续自动流程</span>
 </label>
 <div class="actions">
-<button id="runAutoWorkflow">一键执行</button>
+<button id="runAutoWorkflow">AI一键需求&用例评审</button>
 </div>
 <p class="status" id="autoWorkflowStatus"></p>
 </div>
@@ -318,7 +325,7 @@
 <section class="card hidden" data-section-id="auto-clarify" data-tab-section="auto">
 <h2>需求澄清（人工确认）</h2>
 <div class="card-body">
-<p class="hint">当勾选“需要人工确认”后，一键执行会在需求评审后暂停，请展开下方视图编辑澄清结果，再点“确认澄清”继续。</p>
+<p class="hint">当勾选“需要人工确认”后，AI 一键流程会在需求评审后暂停，请展开下方视图编辑澄清结果，再点“确认澄清”继续。</p>
 <div class="actions">
 <button class="secondary" disabled="" id="autoClarifyToggleBtn">展开澄清视图</button>
 </div>
@@ -1042,7 +1049,7 @@
 <section class="card hidden" data-tab-section="settings">
 <h2>飞书通知配置</h2>
 <div class="card-body">
-<p class="hint">仅“一键执行”流程会触发通知：覆盖率不足 100% 会推送失败提醒，完整执行成功会推送成功提醒。</p>
+<p class="hint">仅“AI一键需求&用例评审”流程会触发通知：覆盖率不足 100% 会推送失败提醒，完整执行成功会推送成功提醒。</p>
 <div class="row column">
 <label>飞书机器人</label>
 <div class="row" style="align-items:center; gap:8px; max-width:520px;">

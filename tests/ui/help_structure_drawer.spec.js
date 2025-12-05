@@ -12,6 +12,9 @@ test.describe('使用帮助 XMind 结构抽屉', () => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
     await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.evaluate(() => {
+      localStorage.removeItem('usecase-card-collapse-v1');
+    });
   });
 
   test('点击按钮展开/收起抽屉', async ({ page }) => {

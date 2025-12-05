@@ -7,8 +7,11 @@ test.describe('执行视图导入导出与拖拽', () => {
     await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
   }
   async function closeTempExecDrawer(page) {
-    await page.click('#closeTempExecDrawerBtn');
-    await expect(page.locator('#tempExecDrawer')).not.toHaveClass(/open/);
+    const drawer = page.locator('#tempExecDrawer');
+    const isOpen = await drawer.evaluate((el) => el.classList.contains('open'));
+    if (!isOpen) return;
+    await page.click('#closeTempExecDrawerBtn', { trial: false });
+    await expect(drawer).not.toHaveClass(/open/);
   }
 
   test.beforeEach(async ({ page }) => {
@@ -31,6 +34,9 @@ test.describe('执行视图导入导出与拖拽', () => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
     await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.evaluate(() => {
+      localStorage.removeItem('usecase-card-collapse-v1');
+    });
   });
 
   test('导入导出、拖拽与配置恢复', async ({ page }) => {
@@ -158,8 +164,8 @@ test.describe('执行视图导入导出与拖拽', () => {
     const firstNavButton = page.locator('#tempExecNav button[data-temp-file]').first();
     const activeNavName = (await firstNavButton.locator('.name-text').textContent()) || '';
     await firstNavButton.click();
-    await expect(page.locator('#tempExecView')).toContainText('当前文件');
-    await expect(page.locator('#tempExecView')).toContainText(activeNavName.trim());
+    await expect(page.locator('#tempExecToolbar')).toContainText('当前文件');
+    await expect(page.locator('#tempExecToolbar')).toContainText(activeNavName.trim());
     const resultSelect = page.locator('#tempExecView select[data-temp-result]').first();
     await resultSelect.selectOption('通过');
     await page.locator('#tempExecView select[data-temp-result]').nth(1).selectOption('失败');
@@ -176,9 +182,10 @@ test.describe('执行视图导入导出与拖拽', () => {
     const restoredRows = await page.locator('#tempExecView .case-row').count();
     expect(restoredRows).toBeGreaterThanOrEqual(2);
 
-    await openTempExecDrawer(page);
-    await page.locator('#tempExecOverviewBtn').scrollIntoViewIfNeeded();
-    await page.click('#tempExecOverviewBtn');
+    await closeTempExecDrawer(page);
+    const overviewNav = page.locator('#openTempExecOverviewNavBtn');
+    await overviewNav.scrollIntoViewIfNeeded();
+    await overviewNav.click();
     await expect(page.locator('#tempExecOverview')).toContainText('执行进度');
     await expect(page.locator('.temp-overview-section-title', { hasText: '当前执行区' })).toBeVisible();
     const overviewCount = await page.locator('#tempExecOverview .temp-overview-entry').count();

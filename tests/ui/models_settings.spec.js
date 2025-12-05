@@ -113,4 +113,36 @@ test.describe('模型管理与全局设置', () => {
     expect(assignment.compareTemperature).toBeCloseTo(0.3);
 
   });
+
+  test('已保存指派后刷新仍不提示缺失', async ({ page }) => {
+    await page.click('[data-tab-btn="models"]');
+    await page.click('#createModelBtn');
+    await page.fill('#modelDisplayName', '重载校验模型');
+    await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
+    await page.fill('#modelApiKey', 'sk-test');
+    await page.fill('#modelIdentifier', 'deepseek-chat');
+    await page.fill('#modelMaxTokens', '2048');
+    await page.click('#saveModelBtn');
+    const modelId = await page.evaluate(() => {
+      const models = JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]');
+      return models[0]?.id || '';
+    });
+    await page.click('[data-tab-btn="assign"]');
+    const selectIds = ['cleanModelSelect', 'reviewModelSelect', 'compareModelSelect', 'splitModelSelect', 'casesModelSelect', 'caseGenModelSelect'];
+    for (const sel of selectIds) {
+      await page.selectOption(`#${sel}`, modelId);
+    }
+    await page.click('#saveAssignments');
+    await expect(page.locator('[data-tab-btn="assign"]').locator('.tab-notice')).toHaveCount(0);
+
+    const storedModels = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]'));
+    const storedAssignments = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-assignment-v1') || '{}'));
+    await page.addInitScript(({ models, assignments }) => {
+      window.localStorage.setItem('cleaner-models-v1', JSON.stringify(models || []));
+      window.localStorage.setItem('cleaner-assignment-v1', JSON.stringify(assignments || {}));
+    }, { models: storedModels, assignments: storedAssignments });
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await expect(page.locator('[data-tab-btn="assign"]').locator('.tab-notice')).toHaveCount(0);
+  });
 });

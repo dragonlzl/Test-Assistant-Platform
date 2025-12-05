@@ -273,13 +273,21 @@
       renderAssignmentsSelect();
     }
 
+    const requiredAssignmentKeys = ['cleanId', 'reviewId', 'compareId', 'splitId', 'casesId', 'caseGenId'];
+
     function loadAssignments() {
       let migrated = false;
+      let savedAssignmentsRaw = '';
       try {
-        state.assignments = JSON.parse(localStorage.getItem(assignmentKey) || '{}');
+        savedAssignmentsRaw = localStorage.getItem(assignmentKey) || '';
+        state.assignments = JSON.parse(savedAssignmentsRaw || '{}') || {};
       } catch (e) {
         state.assignments = {};
       }
+      const savedHasIds = requiredAssignmentKeys.concat(['caseFilterId']).some(function(key) {
+        return state.assignments && state.assignments[key];
+      });
+      state.hasSavedAssignments = Boolean(savedAssignmentsRaw && savedHasIds);
       state.assignments.cleanId = state.assignments.cleanId || '';
       state.assignments.reviewId = state.assignments.reviewId || '';
       state.assignments.compareId = state.assignments.compareId || '';
@@ -360,6 +368,7 @@
       if (caseGenTemperatureEl) state.assignments.caseGenTemperature = normalizeTemperature(caseGenTemperatureEl.value);
       if (caseFilterTemperatureEl) state.assignments.caseFilterTemperature = normalizeTemperature(caseFilterTemperatureEl.value);
       localStorage.setItem(assignmentKey, JSON.stringify(state.assignments));
+      state.hasSavedAssignments = true;
       updateAssignmentStatuses();
       setStatus(cleanAssignStatus, '指派已保存', 'ok');
       setStatus(reviewAssignStatus, '指派已保存', 'ok');
@@ -615,8 +624,10 @@
 
     function updateTabNotices() {
       const hasModels = Array.isArray(state.models) && state.models.length > 0;
-      const hasSavedAssignments = Boolean(localStorage.getItem(assignmentKey));
-      const missingAssignments = !hasSavedAssignments || ['cleanId', 'reviewId', 'compareId', 'splitId', 'casesId', 'caseGenId'].some(function(key) {
+      const hasSavedAssignments = state.hasSavedAssignments !== undefined
+        ? state.hasSavedAssignments
+        : Boolean(localStorage.getItem(assignmentKey));
+      const missingAssignments = !hasSavedAssignments || requiredAssignmentKeys.some(function(key) {
         const assignedId = state.assignments[key];
         return !assignedId || !getModelById(assignedId);
       });

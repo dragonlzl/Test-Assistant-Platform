@@ -28,6 +28,9 @@
     var tempExecStatus = document.getElementById('tempExecStatus');
     var tempExecNav = document.getElementById('tempExecNav');
     var tempVersionGrid = document.getElementById('tempVersionGrid');
+    var tempExecToolbar = document.getElementById('tempExecToolbar');
+    var tempExecToolbarCard = document.getElementById('tempExecToolbarCard');
+    var tempexecFlowNav = document.getElementById('tempexecFlowNav');
     var toggleTempReqBtn = document.getElementById('toggleTempReq');
     var toggleTempVersionBtn = document.getElementById('toggleTempVersion');
     var tempExecDrawerEl = document.getElementById('tempExecDrawer');
@@ -64,6 +67,18 @@
     }
     var navHoverFileId = '';
     var navHoverReqName = '';
+    var debounce = utils.debounce || function(fn, wait) {
+      var delay = Number(wait) || 150;
+      var t = null;
+      return function() {
+        var args = arguments;
+        var ctxThis = this;
+        clearTimeout(t);
+        t = setTimeout(function() {
+          fn.apply(ctxThis, args);
+        }, delay);
+      };
+    };
     function normalizeTemplateName(raw) {
       if (!raw) return '';
       var clean = raw.split('?')[0] || '';
@@ -199,6 +214,7 @@
     }
     function showTempExecView() {
       switchTab('tempexec');
+      updateTempExecToolbarOffset();
       if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
       if (tempExecDrawer) tempExecDrawer.close();
       if (tempExecViewSection) {
@@ -208,6 +224,7 @@
     }
     function showTempExecOverview() {
       switchTab('tempexec');
+      updateTempExecToolbarOffset();
       if (tempExecDrawer) tempExecDrawer.close();
       if (tempExecOverviewDrawer) tempExecOverviewDrawer.open();
       if (tempExecOverviewSection) {
@@ -218,8 +235,10 @@
     function focusTempExecBackup() {
       switchTab('tempexec');
       if (tempExecDrawer) tempExecDrawer.open();
-      if (exportTempExecConfigBtn) {
-        scrollElementIntoView(exportTempExecConfigBtn, 'smooth', 140);
+      var drawerBody = tempExecDrawerEl && tempExecDrawerEl.querySelector('.drawer-body');
+      if (drawerBody) drawerBody.scrollTop = 0;
+      if (exportTempExecConfigBtn && typeof exportTempExecConfigBtn.focus === 'function') {
+        exportTempExecConfigBtn.focus({ preventScroll: true });
       }
     }
     if (openTempExecViewNavBtn) {
@@ -237,6 +256,21 @@
         focusTempExecBackup();
       });
     }
+
+    var lastToolbarNavHeight = 0;
+    function updateTempExecToolbarOffset() {
+      if (!tempexecFlowNav) return;
+      var rect = tempexecFlowNav.getBoundingClientRect ? tempexecFlowNav.getBoundingClientRect() : null;
+      var height = rect && rect.height ? rect.height : (tempexecFlowNav.scrollHeight || 0);
+      if (!height && tempexecFlowNav.classList && tempexecFlowNav.classList.contains('hidden')) return;
+      var resolved = height && height > 0 ? height : 120;
+      if (Math.abs(resolved - lastToolbarNavHeight) < 1) return;
+      lastToolbarNavHeight = resolved;
+      document.documentElement.style.setProperty('--tempexec-nav-height', Math.round(resolved) + 'px');
+    }
+    var updateToolbarOffsetDebounced = debounce(updateTempExecToolbarOffset, 200);
+    window.addEventListener('resize', updateToolbarOffsetDebounced);
+    setTimeout(updateTempExecToolbarOffset, 80);
     async function importLocalTemplate(name) {
       if (!name || !localTemplateHandles[name]) return;
       try {
@@ -531,6 +565,33 @@
         if (!caseTemplateDropdown) return;
         if (caseTemplateDropdown.contains(e.target)) return;
         closeTemplateDropdown();
+      });
+    }
+
+    if (tempExecToolbar) {
+      tempExecToolbar.addEventListener('click', function(e) {
+        var statusPill = e.target.closest('[data-temp-status-filter]');
+        if (statusPill && api.setTempExecStatusFilter) {
+          var sfFileId = statusPill.dataset.tempStatusFile;
+          var sfStatus = statusPill.dataset.tempStatusFilter;
+          api.setTempExecStatusFilter(sfFileId, sfStatus);
+          return;
+        }
+        var searchBtn = e.target.closest('[data-temp-search-btn]');
+        if (searchBtn && api.applyTempExecSearch) {
+          var sbFileId = searchBtn.dataset.tempSearchBtn;
+          var input = document.querySelector('[data-temp-search-input=\"' + sbFileId + '\"]');
+          var val = input ? input.value : '';
+          api.applyTempExecSearch(sbFileId, val, val);
+          return;
+        }
+        var searchClear = e.target.closest('[data-temp-search-clear]');
+        if (searchClear && api.applyTempExecSearch) {
+          var scFileId = searchClear.dataset.tempSearchClear;
+          var inputClear = document.querySelector('[data-temp-search-input=\"' + scFileId + '\"]');
+          if (inputClear) inputClear.value = '';
+          api.applyTempExecSearch(scFileId, '', '');
+        }
       });
     }
 
@@ -940,11 +1001,6 @@
           if (fileId && api.getTempExecFile && api.getTempExecFile(fileId)) {
             api.setTempExecActive(fileId);
             switchTab('tempexec');
-            if (scrollElementIntoView && tempExecViewSection) {
-              scrollElementIntoView(tempExecViewSection, 'smooth', 120);
-            } else if (tempExecViewSection && tempExecViewSection.scrollIntoView) {
-              tempExecViewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
           }
         }
       });
@@ -1053,9 +1109,6 @@
         if (!api.getTempExecFile(fileId)) return;
         api.setTempExecActive(fileId);
         switchTab('tempexec');
-        if (scrollElementIntoView && tempExecViewSection) {
-          scrollElementIntoView(tempExecViewSection, 'smooth', 120);
-        }
       });
       tempFocusBlock.addEventListener('dragstart', function(e) {
         var btn = e.target.closest('button[data-temp-file]');

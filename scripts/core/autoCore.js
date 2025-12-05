@@ -498,12 +498,12 @@
       setStatus(autoWorkflowStatus, '正在执行完整工作流，请勿关闭页面', '');
       try {
         await executeAutoWorkflowSteps(0);
-        setStatus(autoWorkflowStatus, '一键执行完成，可切换至“功能工作流”查看详情', 'ok');
+        setStatus(autoWorkflowStatus, 'AI 一键需求&用例评审完成，可切换至“功能工作流”查看详情', 'ok');
         state.autoExpandMissing = true;
         await notifyFeishuWorkflowSuccess();
       } catch (err) {
         console.error(err);
-        setStatus(autoWorkflowStatus, '一键执行中断：' + err.message, 'err');
+        setStatus(autoWorkflowStatus, 'AI 一键需求&用例评审中断：' + err.message, 'err');
       } finally {
         state.autoRunning = false;
         if (autoWorkflowBtn) autoWorkflowBtn.disabled = false;
@@ -548,7 +548,7 @@
       var successMessage = options.successMessage || '重新执行完成';
       var workflowSuccessMessage = options.workflowSuccessMessage || '重新执行完成，可切换至“功能工作流”查看详情';
       var failureMessage = options.failureMessage || '重新执行中断';
-      var workflowFailureMessage = options.workflowFailureMessage || '一键执行中断';
+      var workflowFailureMessage = options.workflowFailureMessage || 'AI 一键需求&用例评审中断';
       var startTone = options.startTone || '';
       var workflowStartTone = options.workflowStartTone || '';
       var successTone = options.successTone || 'ok';

@@ -43,6 +43,34 @@ test.describe('临时执行入口导航', () => {
     await expect(drawer).not.toHaveClass(/open/);
   });
 
+  test('配置备份抽屉遮罩覆盖且不会导致页面滚动', async ({ page }) => {
+    await page.click('[data-tab-btn="tempexec"]');
+    const initialScroll = await page.evaluate(() => window.scrollY);
+    await page.click('#openTempExecBackupNavBtn');
+    const maskMetrics = await page.$eval('#tempExecDrawer .drawer-mask', (mask) => {
+      const rect = mask.getBoundingClientRect();
+      return {
+        width: rect.width,
+        height: rect.height,
+        left: rect.left,
+        top: rect.top,
+        vw: window.innerWidth || document.documentElement.clientWidth || 0,
+        vh: window.innerHeight || document.documentElement.clientHeight || 0,
+      };
+    });
+    expect(maskMetrics.width).toBeGreaterThanOrEqual(maskMetrics.vw - 2);
+    expect(maskMetrics.height).toBeGreaterThanOrEqual(maskMetrics.vh - 2);
+    expect(maskMetrics.left).toBeLessThanOrEqual(1);
+    expect(maskMetrics.top).toBeLessThanOrEqual(1);
+    await page.click('#tempExecDrawer .drawer-mask', { position: { x: 10, y: 10 } });
+    const afterFirstClose = await page.evaluate(() => window.scrollY);
+    await page.click('#openTempExecBackupNavBtn');
+    await page.click('#tempExecDrawer .drawer-mask', { position: { x: 10, y: 10 } });
+    const finalScroll = await page.evaluate(() => window.scrollY);
+    expect(Math.abs(finalScroll - initialScroll)).toBeLessThanOrEqual(2);
+    expect(Math.abs(finalScroll - afterFirstClose)).toBeLessThanOrEqual(2);
+  });
+
   test('执行总览抽屉展开', async ({ page }) => {
     await page.click('[data-tab-btn="tempexec"]');
     await page.click('#openTempExecOverviewNavBtn');
