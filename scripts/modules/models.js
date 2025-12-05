@@ -46,6 +46,8 @@
     const casesAssignStatus = pickEl('casesAssignStatus', 'casesAssignStatus');
     const caseGenAssignStatus = pickEl('caseGenAssignStatus', 'caseGenAssignStatus');
     const caseFilterAssignStatus = pickEl('caseFilterAssignStatus', 'caseFilterAssignStatus');
+    const saveAssignmentsTopBtn = pickEl('saveAssignmentsTopBtn', 'saveAssignmentsTop');
+    const assignSaveBar = pickEl('assignSaveBar', 'assignSaveBar');
     const cleanPromptEl = pickEl('cleanPromptEl', 'cleanPrompt');
     const reviewPromptEl = pickEl('reviewPromptEl', 'reviewPrompt');
     const comparePromptEl = pickEl('comparePromptEl', 'comparePrompt');
@@ -377,6 +379,7 @@
       setStatus(casesAssignStatus, '指派已保存', 'ok');
       setStatus(caseGenAssignStatus, '指派已保存', 'ok');
       setStatus(caseFilterAssignStatus, '指派已保存', 'ok');
+      if (assignSaveBar) assignSaveBar.classList.add('hidden');
     }
 
     function renderAssignmentsSelect() {
@@ -632,8 +635,12 @@
         return Boolean(assignedId && getModelById(assignedId));
       });
       const missingAssignments = !hasSavedAssignments || !assignedAll;
+      state.assignmentsMissing = hasModels ? missingAssignments : false;
       setTabNotice('models', hasModels ? '' : '未配置模型');
-      setTabNotice('assign', hasModels ? (missingAssignments ? '未指派模型' : '') : '未配置模型');
+      setTabNotice('assign', hasModels ? (missingAssignments ? '未保存指派模型' : '') : '未配置模型');
+      if (assignSaveBar) {
+        assignSaveBar.classList.toggle('hidden', !(hasModels && missingAssignments));
+      }
     }
 
     async function testModel(id, statusEl) {
@@ -682,6 +689,9 @@
     }
     if (resetModelFormBtn) {
       resetModelFormBtn.addEventListener('click', () => resetModelForm(true));
+    }
+    if (saveAssignmentsTopBtn) {
+      saveAssignmentsTopBtn.addEventListener('click', saveAssignments);
     }
 
     return {

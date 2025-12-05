@@ -144,6 +144,37 @@
       })
       : null;
 
+    function focusAssignSaveIfNeeded() {
+      var assignBtn = document.querySelector('[data-tab-btn="assign"]');
+      var badge = assignBtn && assignBtn.querySelector('.tab-notice');
+      var needScroll = Boolean(state && state.assignmentsMissing);
+      if (!needScroll) {
+        needScroll = badge && typeof badge.textContent === 'string' && badge.textContent.indexOf('未保存指派模型') !== -1;
+      }
+      if (!needScroll) return;
+      var saveBar = document.getElementById('assignSaveBar');
+      var saveBtn = document.getElementById('saveAssignments');
+      if (saveBar) saveBar.classList.remove('hidden');
+      var target = saveBar || saveBtn;
+      if (!target) return;
+      function scrollToSave() {
+        if (target.scrollIntoView) {
+          target.scrollIntoView({ behavior: 'auto', block: 'start' });
+        } else if (typeof scrollElementIntoView === 'function') {
+          scrollElementIntoView(target, 'auto', 140);
+        }
+      }
+      setTimeout(scrollToSave, 0);
+      setTimeout(scrollToSave, 200);
+      setTimeout(scrollToSave, 400);
+    }
+
+    (function bindAssignTabClick() {
+      var assignBtn = document.querySelector('[data-tab-btn="assign"]');
+      if (!assignBtn) return;
+      assignBtn.addEventListener('click', focusAssignSaveIfNeeded);
+    })();
+
     function switchTab(name) {
       state.activeTab = name;
       if (activeTabKey && typeof localStorage !== 'undefined') {
@@ -175,6 +206,7 @@
         renderAssignmentsSelect();
         ['reviewAssignStatus', 'cleanAssignStatus', 'compareAssignStatus', 'splitAssignStatus', 'casesAssignStatus', 'caseGenAssignStatus', 'caseFilterAssignStatus']
           .forEach(clearStatusById);
+        focusAssignSaveIfNeeded();
       }
       if (name === 'casesgen') {
         const autoFilled = ensureCaseGenModulesFromSplit();

@@ -81,7 +81,7 @@ test.describe('模型管理与全局设置', () => {
     await page.click('#saveModelBtn');
     await expect(page.locator('#modelFormStatus')).toContainText('模型已保存');
     await expect(modelsTab.locator('.tab-notice')).toHaveCount(0);
-    await expect(assignTab.locator('.tab-notice')).toContainText('未指派模型');
+    await expect(assignTab.locator('.tab-notice')).toContainText('未保存指派模型');
 
     const tokenHint = page.locator('#deepseekTokenHint');
     await expect(tokenHint).toBeVisible();
@@ -112,6 +112,29 @@ test.describe('模型管理与全局设置', () => {
     expect(assignment.cleanTemperature).toBeCloseTo(0.6);
     expect(assignment.compareTemperature).toBeCloseTo(0.3);
 
+  });
+
+  test('未指派提示点击页签自动定位到保存按钮', async ({ page }) => {
+    const assignTab = page.locator('[data-tab-btn="assign"]');
+    await page.click('[data-tab-btn="models"]');
+    await page.click('#createModelBtn');
+    await page.fill('#modelDisplayName', '定位测试模型');
+    await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
+    await page.fill('#modelApiKey', 'sk-test');
+    await page.fill('#modelIdentifier', 'deepseek-chat');
+    await page.fill('#modelMaxTokens', '1024');
+    await page.click('#saveModelBtn');
+    await expect(assignTab.locator('.tab-notice')).toContainText('未保存指派模型');
+
+    await page.click('[data-tab-btn="assign"]');
+    await page.waitForTimeout(300);
+    const topBtn = page.locator('#saveAssignmentsTop');
+    await expect(topBtn).toBeVisible();
+    const topPos = await topBtn.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      return rect.top;
+    });
+    expect(topPos).toBeLessThan(320);
   });
 
   test('已保存指派后刷新仍不提示缺失', async ({ page }) => {

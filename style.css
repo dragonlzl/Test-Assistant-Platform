@@ -16,6 +16,10 @@
       scroll-behavior: smooth;
       scroll-padding-top: 220px;
     }
+    html, body {
+      min-height: 100%;
+      overflow-y: auto;
+    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -197,6 +201,26 @@
     }
     .card.collapsed .card-body {
       display: none;
+    }
+    .assign-save-bar {
+      position: sticky;
+      top: 96px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      margin: 6px 0 12px;
+      border: 1px solid #fecaca;
+      border-radius: 12px;
+      background: linear-gradient(120deg, #fff7ed 0%, #fff1f2 50%, #fff7ed 100%);
+      box-shadow: 0 10px 24px rgba(249,115,22,0.12);
+    }
+    .assign-save-text {
+      color: #b91c1c;
+      font-weight: 700;
+      flex: 1;
     }
     .card h3 {
       margin: 16px 0 8px;
