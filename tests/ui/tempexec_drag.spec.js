@@ -125,6 +125,7 @@ test.describe('执行视图导入导出与拖拽', () => {
     const firstReq = page.locator('#tempExecNav [data-temp-req]').first();
     const firstVersion = page.locator('#tempVersionGrid [data-temp-version]').first();
     const firstVersionBody = firstVersion.locator('.temp-version-body');
+    await firstVersionBody.scrollIntoViewIfNeeded();
     await firstReq.dragTo(firstVersionBody);
     await expect(firstVersion.locator('[data-temp-req-key]')).toHaveCount(1);
 
@@ -161,7 +162,22 @@ test.describe('执行视图导入导出与拖拽', () => {
     await expect(page.locator('#tempExecView')).toContainText(activeNavName.trim());
     const resultSelect = page.locator('#tempExecView select[data-temp-result]').first();
     await resultSelect.selectOption('通过');
+    await page.locator('#tempExecView select[data-temp-result]').nth(1).selectOption('失败');
 
+    const summaryPassed = page.locator('[data-temp-status-filter="passed"]');
+    await summaryPassed.scrollIntoViewIfNeeded();
+    await summaryPassed.click({ force: true });
+    const filterState = await page.evaluate(() => window.app.state && window.app.state.tempExecStatusFilter ? window.app.state.tempExecStatusFilter.status : '');
+    expect(filterState).toBe('passed');
+    const filteredRows = await page.locator('#tempExecView .case-row').count();
+    expect(filteredRows).toBe(1);
+    await expect(summaryPassed).toHaveClass(/active/);
+    await summaryPassed.click();
+    const restoredRows = await page.locator('#tempExecView .case-row').count();
+    expect(restoredRows).toBeGreaterThanOrEqual(2);
+
+    await openTempExecDrawer(page);
+    await page.locator('#tempExecOverviewBtn').scrollIntoViewIfNeeded();
     await page.click('#tempExecOverviewBtn');
     await expect(page.locator('#tempExecOverview')).toContainText('执行进度');
     await expect(page.locator('.temp-overview-section-title', { hasText: '当前执行区' })).toBeVisible();

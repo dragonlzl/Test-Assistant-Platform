@@ -1019,6 +1019,7 @@
     api.syncTempExecFocus = tempExecApi.syncTempExecFocus || api.syncTempExecFocus;
     api.persistTempExecState = tempExecApi.persistTempExecState || api.persistTempExecState;
     api.setTempExecActive = tempExecApi.setTempExecActive || api.setTempExecActive;
+    api.setTempExecStatusFilter = tempExecApi.setTempExecStatusFilter || api.setTempExecStatusFilter;
     api.removeTempExecFile = tempExecApi.removeTempExecFile || api.removeTempExecFile;
     api.getCaseExecutionDisplay = tempExecApi.getCaseExecutionDisplay || api.getCaseExecutionDisplay;
     api.renderTempExecView = tempExecApi.renderTempExecView || api.renderTempExecView;

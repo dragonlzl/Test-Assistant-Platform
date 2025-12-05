@@ -1238,12 +1238,25 @@
   margin-bottom: 10px;
   font-weight: 600;
 }
+.card[data-section-id="tempexec-view"] {
+  position: relative;
+  z-index: 20;
+}
+.temp-case-view {
+  position: relative;
+  z-index: 2;
+}
 .temp-case-summary-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #fff;
+  padding: 4px 0;
 }
 .temp-search-bar {
   display: inline-flex;
@@ -1557,7 +1570,11 @@
       font-size: 12px;
       font-weight: 600;
       margin-left: 8px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.12s ease;
     }
+    .summary-pill.active { border-color: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,0.2); }
     .summary-pill.executed {
       background: #e0e7ff;
       color: #3730a3;

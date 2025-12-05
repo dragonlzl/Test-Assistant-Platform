@@ -120,6 +120,7 @@
       tempExecDefectOpen: {},
       tempExecUndoStack: [],
       tempExecSearch: { fileId: '', term: '', raw: '' },
+      tempExecStatusFilter: { fileId: '', status: '' },
       tempExecReqCollapsed: false,
       tempExecVersionCollapsed: false,
       autoExpandMissing: false,

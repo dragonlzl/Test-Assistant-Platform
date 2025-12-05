@@ -569,13 +569,12 @@
         var btn = e.target.closest('button[data-temp-file]');
         if (!btn) return;
         var fileId = btn.dataset.tempFile;
-        if (!fileId || fileId === state.tempExecActiveId) return;
+        if (!fileId) return;
         if (!api.getTempExecFile(fileId)) return;
-        api.setTempExecActive(fileId);
-        switchTab('tempexec');
-        if (scrollElementIntoView && tempExecViewSection) {
-          scrollElementIntoView(tempExecViewSection, 'smooth', 120);
+        if (fileId !== state.tempExecActiveId) {
+          api.setTempExecActive(fileId);
         }
+        showTempExecView();
       });
       tempExecNav.addEventListener('dragstart', function(e) {
         var targetFile = e.target.closest('[data-temp-file]');
@@ -1201,6 +1200,25 @@
           var rcFileId = removeCaseBtn.dataset.tempCaseRemove;
           var rcIdx = Number(removeCaseBtn.dataset.index);
           if (!Number.isNaN(rcIdx)) api.removeTempExecCase(rcFileId, rcIdx);
+          return;
+        }
+        var statusPill = e.target.closest('[data-temp-status-filter]');
+        if (statusPill && api.setTempExecStatusFilter) {
+          var sfFileId = statusPill.dataset.tempStatusFile;
+          var sfStatus = statusPill.dataset.tempStatusFilter;
+          api.setTempExecStatusFilter(sfFileId, sfStatus);
+          return;
+        }
+        if (statusPill) {
+          var sfFileIdFallback = statusPill.dataset.tempStatusFile;
+          var sfStatusFallback = statusPill.dataset.tempStatusFilter;
+          var currentFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
+          var nextFilter = { fileId: '', status: '' };
+          if (sfFileIdFallback && sfStatusFallback && (currentFilter.fileId !== sfFileIdFallback || currentFilter.status !== sfStatusFallback)) {
+            nextFilter = { fileId: sfFileIdFallback, status: sfStatusFallback };
+          }
+          state.tempExecStatusFilter = nextFilter;
+          if (api.renderTempExecView) api.renderTempExecView();
           return;
         }
         var insertCaseBtn = e.target.closest('[data-temp-case-insert]');

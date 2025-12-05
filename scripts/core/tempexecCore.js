@@ -474,6 +474,7 @@
       state.tempExecReuseOpen = {};
       state.tempExecDefectOpen = {};
       state.tempExecPresetDraft = null;
+      state.tempExecStatusFilter = { fileId: '', status: '' };
       resetTempExecPages();
       state.tempExecMindMode = false;
       var focusList = Array.isArray(snapshot.focus) ? snapshot.focus : [];
@@ -1553,6 +1554,26 @@
         else summary.pending += 1;
       });
       return summary;
+    }
+
+    function mapFilterToStatus(matchKey, status) {
+      if (matchKey === 'executed') return status !== '未执行';
+      if (matchKey === 'pending') return status === '未执行';
+      if (matchKey === 'passed') return status === '通过';
+      if (matchKey === 'failed') return status === '失败';
+      if (matchKey === 'blocked') return status === '阻塞';
+      if (matchKey === 'unspecified') return status === '不适用';
+      return true;
+    }
+
+    function setTempExecStatusFilter(fileId, filterKey) {
+      var current = state.tempExecStatusFilter || { fileId: '', status: '' };
+      var next = { fileId: '', status: '' };
+      if (fileId && filterKey && (current.fileId !== fileId || current.status !== filterKey)) {
+        next = { fileId: fileId, status: filterKey };
+      }
+      state.tempExecStatusFilter = next;
+      renderTempExecView();
     }
 
     function mapStatusToClass(status) {
@@ -2664,7 +2685,11 @@
     function renderTempExecTable(file) {
       var searchState = state.tempExecSearch || { fileId: '', term: '', raw: '' };
       var searchTerm = searchState.fileId === file.id ? (searchState.term || '') : '';
+      var statusFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
+      var hasFilter = statusFilter.fileId === file.id && statusFilter.status;
       var matches = file.cases.map(function(item, idx) { return { item: item, idx: idx }; }).filter(function(entry) {
+        var status = getCaseExecutionStatus(file, entry.item);
+        if (hasFilter && !mapFilterToStatus(statusFilter.status, status)) return false;
         if (!searchTerm) return true;
         var target = [
           entry.item.module,
@@ -2792,7 +2817,7 @@
             '</tr>'
           : '';
         return (
-          '<tr>' +
+          '<tr class="case-row">' +
             cells.join('') +
           '</tr>' +
           reuseRow +
@@ -2831,6 +2856,8 @@
       var presetPanel = reuseEnabled ? renderReusePresetPanel(file) : '';
       var paginationBlock = buildTempExecPagination(file, totalCases, pageIndex, totalPages, start, end);
       var searchRaw = searchState.fileId === file.id ? (searchState.raw || '') : '';
+      var statusFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
+      var activeFilter = statusFilter.fileId === file.id ? statusFilter.status : '';
       var searchBar = (
         '<div class="temp-search-bar">' +
           '<input class="temp-search-input" data-temp-search-input="' + file.id + '" value="' + escapeHtml(searchRaw) + '" placeholder="搜索用例关键字">' +
@@ -2857,12 +2884,12 @@
         '<div class="temp-case-summary-row">' +
           '<div class="temp-case-summary">' +
             '当前文件：<strong>' + escapeHtml(file.name) + '</strong>' +
-            '<span class="summary-pill executed">已执行 ' + summary.executed + '</span>' +
-            '<span class="summary-pill pending">未执行 ' + summary.pending + '</span>' +
-            '<span class="summary-pill passed">通过 ' + summary.passed + '</span>' +
-            '<span class="summary-pill failed">失败 ' + summary.failed + '</span>' +
-            '<span class="summary-pill blocked">阻塞 ' + summary.blocked + '</span>' +
-            '<span class="summary-pill unspecified">不适用 ' + summary.unspecified + '</span>' +
+            '<span class="summary-pill executed ' + (activeFilter === 'executed' ? 'active' : '') + '" data-temp-status-filter="executed" data-temp-status-file="' + file.id + '">已执行 ' + summary.executed + '</span>' +
+            '<span class="summary-pill pending ' + (activeFilter === 'pending' ? 'active' : '') + '" data-temp-status-filter="pending" data-temp-status-file="' + file.id + '">未执行 ' + summary.pending + '</span>' +
+            '<span class="summary-pill passed ' + (activeFilter === 'passed' ? 'active' : '') + '" data-temp-status-filter="passed" data-temp-status-file="' + file.id + '">通过 ' + summary.passed + '</span>' +
+            '<span class="summary-pill failed ' + (activeFilter === 'failed' ? 'active' : '') + '" data-temp-status-filter="failed" data-temp-status-file="' + file.id + '">失败 ' + summary.failed + '</span>' +
+            '<span class="summary-pill blocked ' + (activeFilter === 'blocked' ? 'active' : '') + '" data-temp-status-filter="blocked" data-temp-status-file="' + file.id + '">阻塞 ' + summary.blocked + '</span>' +
+            '<span class="summary-pill unspecified ' + (activeFilter === 'unspecified' ? 'active' : '') + '" data-temp-status-filter="unspecified" data-temp-status-file="' + file.id + '">不适用 ' + summary.unspecified + '</span>' +
           '</div>' +
           searchBar +
         '</div>' +
@@ -3062,6 +3089,7 @@
       openTempExecDefectLink: openTempExecDefectLink,
       toggleTempExecDefectPanel: toggleTempExecDefectPanel,
       applyTempExecSearch: applyTempExecSearch,
+      setTempExecStatusFilter: setTempExecStatusFilter,
       getTempExecFile: getTempExecFile,
       getTempExecFilesByRequirement: getTempExecFilesByRequirement,
       setTempExecActive: setTempExecActive,
