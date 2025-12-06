@@ -568,6 +568,8 @@
       'updateMissingView',
       'toggleMissingView',
       'refreshMissingSelectionUI',
+      'handleMissingSelectionChange',
+      'handleMissingSelectAll',
       'copyMissingJson',
       'exportCasesCoverage',
       'importCasesCoverage',

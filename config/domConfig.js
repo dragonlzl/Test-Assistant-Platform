@@ -48,6 +48,7 @@
       { name: 'cleanTimingEl', id: 'cleanTiming' },
       { name: 'reviewTimingEl', id: 'reviewTiming' },
       { name: 'compareTimingEl', id: 'compareTiming' },
+      { name: 'splitBtnEl', id: 'splitBtn' },
       { name: 'splitTimingEl', id: 'splitTiming' },
       { name: 'casesTimingEl', id: 'casesTiming' },
       { name: 'caseGenTimingEl', id: 'caseGenTiming' },

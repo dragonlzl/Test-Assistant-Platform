@@ -52,27 +52,30 @@
     if (copyMissingBtn && typeof handlers.copyMissingJson === 'function') {
       copyMissingBtn.addEventListener('click', handlers.copyMissingJson);
     }
+    function bindMissingViewChange(e) {
+      var target = e && e.target;
+      if (!target) return;
+      if (target.dataset.missingIndex !== undefined) {
+        handlers.handleMissingSelectionChange(Number(target.dataset.missingIndex), target.checked);
+      } else if (target.dataset.missingSelectAll !== undefined) {
+        handlers.handleMissingSelectAll(target.checked);
+      }
+    }
     if (missingViewContainer && typeof handlers.handleMissingSelectionChange === 'function' && typeof handlers.handleMissingSelectAll === 'function') {
-      missingViewContainer.addEventListener('change', function(e) {
-        var target = e.target;
-        if (!target) return;
-        if (target.dataset.missingIndex !== undefined) {
-          handlers.handleMissingSelectionChange(Number(target.dataset.missingIndex), target.checked);
-        } else if (target.dataset.missingSelectAll !== undefined) {
-          handlers.handleMissingSelectAll(target.checked);
-        }
-      });
+      missingViewContainer.addEventListener('change', bindMissingViewChange);
+      missingViewContainer.addEventListener('click', bindMissingViewChange);
     }
     if (missingSmartFillBtn && typeof handlers.smartFillMissingSuggestions === 'function') {
       missingSmartFillBtn.addEventListener('click', handlers.smartFillMissingSuggestions);
     }
     if (exportCasesCoverageBtn && (handlers.exportCasesCoverage || handlers.triggerCoverageSampleDownload)) {
       exportCasesCoverageBtn.addEventListener('click', function() {
+        var hasPayload = casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim();
         exportCasesCoverageBtn.dataset.clicked = '1';
         if (typeof handlers.exportCasesCoverage === 'function') {
           handlers.exportCasesCoverage();
         }
-        if (typeof handlers.triggerCoverageSampleDownload === 'function') {
+        if (!hasPayload && typeof handlers.triggerCoverageSampleDownload === 'function') {
           handlers.triggerCoverageSampleDownload(exportCasesCoverageBtn);
         }
       });

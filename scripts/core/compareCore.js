@@ -34,6 +34,7 @@
     var casesTimingEl = pickEl(dom.casesTimingEl, 'casesTiming');
     var casesCompareBtnEl = pickEl(dom.casesCompareBtnEl, 'casesCompareBtn');
     var casesModuleProgress = pickEl(dom.casesModuleProgress, 'casesModuleProgress');
+    var casesGoUsecaseGenBtn = pickEl(dom.casesGoUsecaseGenBtn, 'casesGoUsecaseGen');
     var compareResultEl = pickEl(dom.compareResultEl, 'compareResult');
     var compareStatus = pickEl(dom.compareStatus, 'compareStatus');
     var compareTimingEl = pickEl(dom.compareTimingEl, 'compareTiming');
@@ -468,6 +469,17 @@
       if (!Array.isArray(state.caseGenModules)) state.caseGenModules = [];
     }
 
+    function syncCasesGoUsecaseGenButton() {
+      if (!casesGoUsecaseGenBtn) return;
+      var hasSplit = Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim());
+      casesGoUsecaseGenBtn.disabled = !hasSplit;
+    }
+
+    if (splitResultEl && typeof splitResultEl.addEventListener === 'function') {
+      splitResultEl.addEventListener('input', syncCasesGoUsecaseGenButton);
+    }
+    syncCasesGoUsecaseGenButton();
+
     function refreshMissingSmartFillButton() {
       if (!missingSmartFillBtn) return;
       ensureMissingState();
@@ -491,6 +503,23 @@
       }
     }
 
+    function bindMissingViewCheckboxEvents() {
+      if (!missingViewContainer) return;
+      var header = missingViewContainer.querySelector('input[data-missing-select-all]');
+      if (header) {
+        header.addEventListener('change', function(e) {
+          handleMissingSelectAll(e && e.target ? e.target.checked : false);
+        });
+      }
+      var rows = missingViewContainer.querySelectorAll('input[data-missing-index]');
+      rows.forEach(function(cb) {
+        cb.addEventListener('change', function(e) {
+          var target = e && e.target ? e.target : cb;
+          handleMissingSelectionChange(Number(target.dataset.missingIndex), target.checked);
+        });
+      });
+    }
+
     function updateMissingView() {
       if (!missingViewBtn || !copyMissingBtn || !missingViewContainer || !casesCompareResultEl) return;
       ensureMissingState();
@@ -503,10 +532,12 @@
       var hasRawText = Boolean(casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim());
       missingViewBtn.disabled = !hasData && !hasRawText;
       copyMissingBtn.disabled = !hasData;
+      syncCasesGoUsecaseGenButton();
       refreshMissingSmartFillButton();
       if (!hasData) {
         if (hasRawText && missingViewContainer.classList.contains('visible')) {
           missingViewContainer.innerHTML = buildMissingViewHtml(state);
+          bindMissingViewCheckboxEvents();
           refreshMissingSelectionUI();
         } else {
           missingViewContainer.classList.add('hidden');
@@ -516,6 +547,7 @@
         }
       } else if (missingViewContainer.classList.contains('visible')) {
         missingViewContainer.innerHTML = buildMissingViewHtml(state);
+        bindMissingViewCheckboxEvents();
         refreshMissingSelectionUI();
       }
       if (typeof updateAutoMissingCard === 'function') updateAutoMissingCard();
@@ -529,6 +561,7 @@
       state.missingRowCache = buildMissingRows(list);
       var rowLength = state.missingRowCache.length;
       state.missingSelections = new Set(Array.from(state.missingSelections).filter(function(idx) { return idx < rowLength; }));
+      syncCasesGoUsecaseGenButton();
       refreshMissingSmartFillButton();
       var visible = missingViewContainer.classList.contains('visible');
       if (visible) {
@@ -541,6 +574,7 @@
         missingViewContainer.classList.add('visible');
         missingViewContainer.classList.remove('hidden');
         missingViewBtn.textContent = '收起缺失视图';
+        bindMissingViewCheckboxEvents();
         refreshMissingSelectionUI();
       }
     }
@@ -556,9 +590,18 @@
 
     function handleMissingSelectAll(checked) {
       ensureMissingState();
-      state.missingSelections.clear();
-      if (checked) {
-        state.missingRowCache.forEach(function(_, idx) { state.missingSelections.add(idx); });
+      if (missingViewContainer) {
+        var nodes = missingViewContainer.querySelectorAll('input[data-missing-index]');
+        state.missingSelections.clear();
+        nodes.forEach(function(cb) {
+          var idx = Number(cb.dataset.missingIndex);
+          if (checked) state.missingSelections.add(idx);
+          cb.checked = checked;
+        });
+        if (missingViewContainer.classList.contains('visible')) {
+          missingViewContainer.innerHTML = buildMissingViewHtml(state);
+          bindMissingViewCheckboxEvents();
+        }
       }
       refreshMissingSelectionUI();
       refreshMissingSmartFillButton();

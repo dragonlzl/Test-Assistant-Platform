@@ -208,6 +208,11 @@
           setStatus(splitStatus, '已取消测试模块拆分（需求标识为空）', 'warn');
           return;
         }
+        if (state.isSplitting) {
+          setStatus(splitStatus, '正在拆分测试模块，请稍候', 'warn');
+          return;
+        }
+        state.isSplitting = true;
         if (splitBtnEl) splitBtnEl.setAttribute('disabled', 'disabled');
         var model;
         try {
@@ -215,6 +220,7 @@
         } catch (err) {
           setStatus(splitStatus, err.message, 'warn');
           updateModelTiming(splitTimingEl);
+          state.isSplitting = false;
           if (splitBtnEl) splitBtnEl.removeAttribute('disabled');
           return;
         }
@@ -238,6 +244,7 @@
           updateModelTiming(splitTimingEl);
           setStatus(splitStatus, '拆分失败：' + err.message, 'err');
         } finally {
+          state.isSplitting = false;
           clearStepInProgress('split');
           updateFlowStatus();
           if (splitBtnEl) splitBtnEl.removeAttribute('disabled');
