@@ -28,6 +28,15 @@
 - 测试与验证：`npm run test:ui -- tests/ui/cases_missing_view.spec.js tests/ui/cases_export_and_split.spec.js`（通过）。  
 - 更新记录：无  
 
+- 功能名称：拆分结果生成用例跳转恢复  
+- 功能描述：修复功能工作流“测试模块拆分”卡片中，已有拆分结果时点击“生成用例”不跳转的情况，保证可直接进入用例生成页。  
+- 操作方式：在“测试模块拆分”生成或导入拆分 JSON 后点击“生成用例”，页面自动切换到“用例生成”页签并渲染拆分模块。  
+- 使用效果：拆分结果与用例生成联动恢复正常，无需二次刷新即可跳转。  
+- 新增内容/接口/组件：同步 casesGenApi 的生成用例跳转函数绑定，新增 UI 自动化用例 `tests/ui/split_go_usecase_nav.spec.js` 覆盖跳转路径。  
+- 复用说明：复用既有跳转与模块解析逻辑，仅补充 API 绑定时机，未新增接口。  
+- 测试与验证：`npx playwright test tests/ui/workflow.spec.js tests/ui/split_go_usecase_nav.spec.js --config tests/playwright.config.js`（通过，需本地 http.server 权限）。  
+- 更新记录：无  
+
 - 功能名称：缺失模块视图刷新修复  
 - 功能描述：修复测试用例覆盖对比结果导入或生成后，缺失模块视图因函数被占位覆盖而不再刷新，无法展示 missing 列表的问题。  
 - 操作方式：正常执行“测试用例覆盖对比”或点击“导入对比结果”选择覆盖对比文件，导入后点击“缺失模块视图”即可展开缺失点列表。  

@@ -390,6 +390,12 @@
         })
         : null;
       assignIfPresent(api, casegenCoreModule, ['goToCaseGeneration', 'goCasesGenAndScroll']);
+      if (typeof api.goToCaseGeneration === 'function') {
+        casesGenApi.goToCaseGeneration = api.goToCaseGeneration;
+      }
+      if (typeof api.goCasesGenAndScroll === 'function') {
+        casesGenApi.goCasesGenAndScroll = api.goCasesGenAndScroll;
+      }
 
       const casegenHandlersModule = window.app.casegenHandlers && typeof window.app.casegenHandlers.init === 'function'
         ? window.app.casegenHandlers.init({
