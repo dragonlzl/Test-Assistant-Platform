@@ -61,6 +61,7 @@
     var formatJsonOrText = handlers.formatJsonOrText || function(text) { return text; };
     var buildCasesComparePayload = handlers.buildCasesComparePayload || function() { return { text: '', isJson: false }; };
     var parseSplitModules = handlers.parseSplitModules || function() { return []; };
+    var ensureCaseGenModulesFromSplit = handlers.ensureCaseGenModulesFromSplit || function() { return false; };
     var setStepInProgress = handlers.setStepInProgress || function() {};
     var clearStepInProgress = handlers.clearStepInProgress || function() {};
     var runConcurrent = handlers.runConcurrent || function(items, concurrency, worker) {
@@ -483,6 +484,9 @@
     function refreshMissingSmartFillButton() {
       if (!missingSmartFillBtn) return;
       ensureMissingState();
+      if (!state.caseGenModules.length && typeof ensureCaseGenModulesFromSplit === 'function') {
+        ensureCaseGenModulesFromSplit();
+      }
       var hasMissing = state.missingLastList.length > 0;
       missingSmartFillBtn.disabled = !hasMissing || !state.caseGenModules.length;
     }

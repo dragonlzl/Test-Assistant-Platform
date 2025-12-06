@@ -96,3 +96,27 @@ test('无拆分结果时生成用例按钮禁用，填入拆分结果后可用',
   });
   await expect(genBtn).toBeEnabled();
 });
+
+test('导入拆分与覆盖对比后智能生成填充按钮自动可用', async ({ page }) => {
+  await page.goto('/');
+  await page.click('[data-tab-btn="clean"]');
+
+  const splitPayload = '#NODE:SPLIT\n[{"module":"登录","key_scenarios":["输入账号密码登录"],"test_points":["验证成功登录"],"coupled_modules":[]}]';
+  await page.setInputFiles('#splitDebugFile', {
+    name: 'split_debug.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(splitPayload),
+  });
+  await expect(page.locator('#splitStatus')).toContainText('已从调试 TXT 导入拆分结果');
+
+  const coveragePath = path.join(__dirname, '..', 'fixtures', 'cases_compare_missing_view.txt');
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.click('#importCasesCoverage'),
+  ]);
+  await chooser.setFiles(coveragePath);
+  await expect(page.locator('#casesCoverageStatus')).toContainText('已导入覆盖对比结果');
+
+  const smartFillBtn = page.locator('#missingSmartFillBtn');
+  await expect(smartFillBtn).toBeEnabled();
+});

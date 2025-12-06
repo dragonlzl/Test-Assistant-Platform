@@ -531,6 +531,7 @@
           setStepInProgress,
           clearStepInProgress,
           runConcurrent,
+          ensureCaseGenModulesFromSplit: api.ensureCaseGenModulesFromSplit,
         },
       })
       : null;

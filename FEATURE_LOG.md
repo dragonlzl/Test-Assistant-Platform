@@ -37,6 +37,15 @@
 - 测试与验证：`npx playwright test tests/ui/workflow.spec.js tests/ui/split_go_usecase_nav.spec.js --config tests/playwright.config.js`（通过，需本地 http.server 权限）。  
 - 更新记录：无  
 
+- 功能名称：缺失模块智能填充按钮即时可用  
+- 功能描述：修复先导入拆分数据再导入覆盖对比数据时，“智能生成填充”按钮仍灰置的问题，无需再切换页面即可使用。  
+- 操作方式：在“功能工作流”导入拆分调试 TXT（或直接填充拆分结果），再点击“导入对比结果”选择用例覆盖对比文件，导入完成后按钮自动可点击。  
+- 使用效果：满足有缺失模块且存在拆分数据时，智能填充按钮即时启用，减少额外跳转。  
+- 新增内容/接口/组件：缺失视图按钮刷新时自动回填拆分模块引用；新增 UI 用例覆盖导入拆分+覆盖后按钮可用场景 `tests/ui/cases_missing_view.spec.js`。  
+- 复用说明：复用原有拆分解析与缺失视图刷新逻辑，仅补充 CaseGen 模块自动同步。  
+- 测试与验证：`npx playwright test tests/ui/cases_missing_view.spec.js tests/ui/split_go_usecase_nav.spec.js --config tests/playwright.config.js`（通过，需本地 http.server 权限）。  
+- 更新记录：无  
+
 - 功能名称：缺失模块视图刷新修复  
 - 功能描述：修复测试用例覆盖对比结果导入或生成后，缺失模块视图因函数被占位覆盖而不再刷新，无法展示 missing 列表的问题。  
 - 操作方式：正常执行“测试用例覆盖对比”或点击“导入对比结果”选择覆盖对比文件，导入后点击“缺失模块视图”即可展开缺失点列表。  
