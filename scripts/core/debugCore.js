@@ -118,11 +118,19 @@
       var normalized = stripCodeFence(stripRequirementHeader(trimmed));
       try {
         var parsed = JSON.parse(normalized);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.prototype.hasOwnProperty.call(parsed, 'requirement') && Object.prototype.hasOwnProperty.call(parsed, 'data')) {
+          if (wrapType) parsed.type = wrapType;
+          return JSON.stringify(parsed, null, 2);
+        }
         return JSON.stringify({ requirement: ensured, data: parsed, type: wrapType }, null, 2);
       } catch (err) {
         try {
           var patchedNormalized = normalized.replace(/}\\s*,\\s*\"/g, '],\n  \"');
           var patchedParsed = JSON.parse(patchedNormalized);
+          if (patchedParsed && typeof patchedParsed === 'object' && !Array.isArray(patchedParsed) && Object.prototype.hasOwnProperty.call(patchedParsed, 'requirement') && Object.prototype.hasOwnProperty.call(patchedParsed, 'data')) {
+            if (wrapType) patchedParsed.type = wrapType;
+            return JSON.stringify(patchedParsed, null, 2);
+          }
           return JSON.stringify({ requirement: ensured, data: patchedParsed, type: wrapType }, null, 2);
         } catch (err2) {
           // ignore and fall back

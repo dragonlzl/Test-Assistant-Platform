@@ -139,11 +139,15 @@
         : unwrap.payload
         ? JSON.stringify(unwrap.payload, null, 2)
         : '';
+      normalized = (normalized || '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/&nbsp;/gi, ' ');
       var parsed = [];
       var hadRecovery = false;
       try {
         parsed = JSON.parse(normalized || '[]');
         if (!Array.isArray(parsed)) parsed = [];
+        if (parsed.length) normalized = JSON.stringify(parsed, null, 2);
       } catch (err) {
         parsed = extractJsonObjects(normalized);
         if (parsed.length) {
@@ -357,7 +361,8 @@
         var moduleBusy = isCaseModuleRunning(mod.id);
         var transferDisabled = !hasResult || moduleBusy;
         var generateLabel = moduleBusy ? '生成中...' : '生成用例';
-        var resultText = escapeHtmlPreserve(state.caseGenResults[mod.id] || '');
+        var resultInfo = parseGeneratedCases(state.caseGenResults[mod.id] || '');
+        var resultText = resultInfo.normalized || '';
         return '' +
         '<div class="usecase-card" data-module-id="' + mod.id + '">' +
           '<h3>' + (idx + 1) + '. ' + mod.title + '</h3>' +
@@ -747,6 +752,8 @@
           return;
         }
         var normalized = stripCodeFence(payload);
+        var parsedInfo = parseGeneratedCases(normalized);
+        normalized = parsedInfo.normalized || normalized;
         state.caseGenResults[moduleId] = normalized;
         state.caseSelections[moduleId] = new Set();
         var textarea = casesGenerationContainer && casesGenerationContainer.querySelector('textarea[data-result="' + moduleId + '"]');

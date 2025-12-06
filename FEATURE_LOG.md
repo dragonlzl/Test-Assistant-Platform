@@ -46,6 +46,24 @@
 - 测试与验证：`npx playwright test tests/ui/cases_missing_view.spec.js tests/ui/split_go_usecase_nav.spec.js --config tests/playwright.config.js`（通过，需本地 http.server 权限）。  
 - 更新记录：无  
 
+- 功能名称：用例生成结果展示格式美化  
+- 功能描述：生成或导入的用例结果在展示框中不再出现 `<br/>` 乱码，自动格式化为可读 JSON，避免内容拥挤。  
+- 操作方式：正常生成或通过“导入json”导入用例结果后，展示框内自动展示排版后的 JSON，包含换行缩进。  
+- 使用效果：用例结果可直接阅读/复制，无需手工替换 `<br/>` 或重新排版。  
+- 新增内容/接口/组件：用例结果解析时替换 `<br/>`、`&nbsp;` 并统一格式化；新增 UI 用例 `tests/ui/casegen_display_format.spec.js` 验证展示格式。  
+- 复用说明：复用原有用例生成解析逻辑，仅在渲染与导入时增加格式化与清洗。  
+- 测试与验证：`npx playwright test tests/ui/casegen_display_format.spec.js --config tests/playwright.config.js`（通过，需本地 http.server 权限）。  
+- 更新记录：无  
+
+- 功能名称：拆分调试文件需求标识去重  
+- 功能描述：导入已包含 requirement 的拆分调试 TXT 后再次保存不会重复包裹需求字段，避免 requirement/data 嵌套。  
+- 操作方式：导入带 requirement 的拆分调试文件后直接点击“保存调试TXT”，输出与原需求标识一致、不重复写入。  
+- 使用效果：调试文件往返导入/保存保持结构稳定，避免重复字段导致解析异常。  
+- 新增内容/接口/组件：调试保存时检测已包裹的 requirement/data 结构并跳过二次封装；新增 UI 用例 `tests/ui/debug_split_wrap.spec.js` 验证无重复包裹。  
+- 复用说明：复用原有调试保存逻辑，仅增加包裹检测。  
+- 测试与验证：`npx playwright test tests/ui/debug_split_wrap.spec.js --config tests/playwright.config.js`（通过，需本地 http.server 权限）。  
+- 更新记录：无  
+
 - 功能名称：缺失模块视图刷新修复  
 - 功能描述：修复测试用例覆盖对比结果导入或生成后，缺失模块视图因函数被占位覆盖而不再刷新，无法展示 missing 列表的问题。  
 - 操作方式：正常执行“测试用例覆盖对比”或点击“导入对比结果”选择覆盖对比文件，导入后点击“缺失模块视图”即可展开缺失点列表。  
