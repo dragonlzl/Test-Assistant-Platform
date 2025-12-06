@@ -17,9 +17,10 @@
       --flow-offset: var(--sticky-offset, 12px);
     }
     .flow .step.active .step-status {
-      background: rgba(255,255,255,0.16);
-      border-color: rgba(255,255,255,0.4);
-      color: #e5edff;
+      background: #fff;
+      border-color: rgba(37,99,235,0.5);
+      color: #2563eb;
+      box-shadow: 0 4px 12px rgba(37,99,235,0.16);
     }
     html {
       scroll-behavior: smooth;
@@ -2165,9 +2166,10 @@ html.drawer-open {
       padding: 10px 12px;
       border-radius: 12px;
       border: 1px solid var(--border);
-      background: linear-gradient(120deg, rgba(37,99,235,0.08), rgba(59,130,246,0.12));
+      background: linear-gradient(120deg, rgba(37,99,235,0.06), rgba(59,130,246,0.1));
       box-shadow: 0 6px 14px rgba(37,99,235,0.12);
       font-weight: 700;
+      color: var(--text);
     }
     .flow .step .step-label {
       display: inline-flex;
@@ -2196,12 +2198,13 @@ html.drawer-open {
       border-color: #cbd5e1;
     }
     .flow .step .step-status[data-status="running"] {
-      background: transparent;
-      border-color: rgba(59,130,246,0.45);
-      border-top-color: #2563eb;
+      background: #fff !important;
+      background-image: none !important;
+      border: 2px solid #bfdbfe !important;
+      border-top-color: #2563eb !important;
       animation: flow-step-spin 0.9s linear infinite;
-      box-shadow: 0 6px 14px rgba(37,99,235,0.25);
-      color: #2563eb;
+      box-shadow: 0 6px 14px rgba(37,99,235,0.25), 0 0 0 1px rgba(37,99,235,0.14);
+      color: #1d4ed8;
     }
     .flow .step .step-status[data-status="done"] {
       background: linear-gradient(135deg, #22c55e, #16a34a);
@@ -2215,10 +2218,10 @@ html.drawer-open {
       to { transform: rotate(360deg); }
     }
     .flow .step.active {
-      border-color: var(--primary);
-      color: #fff;
-      background: linear-gradient(135deg, #2563eb, #1d4ed8);
-      box-shadow: 0 10px 22px rgba(37,99,235,0.2);
+      border-color: #2563eb;
+      color: #1d4ed8;
+      background: #fff;
+      box-shadow: 0 10px 22px rgba(37,99,235,0.16), 0 0 0 2px rgba(37,99,235,0.16);
     }
     .flow .step.done {
       border-color: var(--success);

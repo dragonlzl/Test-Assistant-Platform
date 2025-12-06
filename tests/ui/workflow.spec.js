@@ -110,7 +110,7 @@ test.describe('工作流关键交互', () => {
     };
 
     const initial = await getStatusMap();
-    expect(initial.import).toBe('•');
+    expect(initial.import).toBe('▶');
 
     await page.evaluate(() => {
       const raw = document.getElementById('rawText');
@@ -129,7 +129,45 @@ test.describe('工作流关键交互', () => {
     const updated = await getStatusMap();
     expect(updated.import).toBe('✓');
     expect(updated.clean).toBe('↻');
-    expect(updated.split).toBe('•');
+    expect(updated.split).toBe('▶');
+  });
+
+  test('执行中步骤使用描边高亮而非全蓝填充', async ({ page }) => {
+    await page.evaluate(() => {
+      if (window.app && window.app.state) {
+        window.app.state.inProgressStep = 'review';
+      }
+      var raw = document.getElementById('rawText');
+      if (raw) {
+        raw.value = '原始需求内容';
+        raw.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (window.app && window.app.flow && typeof window.app.flow.updateFlowStatus === 'function') {
+        window.app.flow.updateFlowStatus();
+      }
+    });
+    const activeStep = page.locator('#flowNav .step.active');
+    await expect(activeStep).toHaveCount(1);
+    const styles = await activeStep.evaluate((node) => {
+      var computed = window.getComputedStyle(node);
+      var status = node.querySelector('.step-status');
+      return {
+        backgroundColor: computed.backgroundColor,
+        boxShadow: computed.boxShadow,
+        borderColor: computed.borderColor,
+        textColor: computed.color,
+        statusData: status ? status.getAttribute('data-status') : '',
+        statusInline: status ? status.getAttribute('style') || '' : '',
+      };
+    });
+    expect(styles.backgroundColor).toBe('rgb(255, 255, 255)');
+    expect(styles.borderColor).toContain('37, 99, 235');
+    expect(styles.boxShadow).toContain('37, 99, 235');
+    expect(styles.textColor).toContain('29, 78, 216');
+    expect(styles.statusData).toBe('running');
+    expect(styles.statusInline).toContain('border-width: 2px');
+    expect(styles.statusInline).toContain('rgb(37, 99, 235)');
+    expect(styles.statusInline).toContain('background: rgb(255, 255, 255)');
   });
 
   test('需求澄清确认有提示', async ({ page }) => {

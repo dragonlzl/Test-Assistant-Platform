@@ -26,7 +26,7 @@
       done: '执行完成',
     };
     var stepStatusIcon = {
-      pending: '•',
+      pending: '▶',
       running: '↻',
       done: '✓',
     };
@@ -73,6 +73,30 @@
       } else {
         statusEl.removeAttribute('title');
         statusEl.removeAttribute('aria-label');
+      }
+      statusEl.style.background = '';
+      statusEl.style.backgroundImage = '';
+      statusEl.style.borderColor = '';
+      statusEl.style.borderTopColor = '';
+      statusEl.style.borderWidth = '';
+      statusEl.style.boxShadow = '';
+      statusEl.style.color = '';
+      if (status === 'running') {
+        statusEl.style.background = '#fff';
+        statusEl.style.borderWidth = '2px';
+        statusEl.style.borderColor = '#bfdbfe';
+        statusEl.style.borderTopColor = '#2563eb';
+        statusEl.style.boxShadow = '0 6px 14px rgba(37,99,235,0.25), 0 0 0 1px rgba(37,99,235,0.14)';
+        statusEl.style.color = '#1d4ed8';
+      } else if (status === 'pending') {
+        statusEl.style.background = 'linear-gradient(135deg, #f8fafc, #e2e8f0)';
+        statusEl.style.borderColor = '#cbd5e1';
+        statusEl.style.color = '#94a3b8';
+      } else if (status === 'done') {
+        statusEl.style.background = 'linear-gradient(135deg, #22c55e, #16a34a)';
+        statusEl.style.borderColor = 'transparent';
+        statusEl.style.boxShadow = '0 6px 14px rgba(34,197,94,0.3)';
+        statusEl.style.color = '#fff';
       }
     }
 
