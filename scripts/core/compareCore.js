@@ -88,7 +88,6 @@
       var workers = Array.from({ length: Math.min(limit, items.length) }, function() { return workerLoop(); });
       return Promise.all(workers).then(function() { return results; });
     };
-    var updateMissingView = handlers.updateMissingView || function() {};
 
     function clampCoveragePercent(value) {
       var num = Number(value);
@@ -345,13 +344,37 @@
       return normalized.module || normalized.points.length ? normalized : null;
     }
 
+    function pickCoveragePayload(data) {
+      if (!data || typeof data !== 'object') return null;
+      if (isCoveragePayload(data)) return data;
+      if (data && typeof data === 'object' && !Array.isArray(data) && isCoveragePayload(data.data)) {
+        return data.data;
+      }
+      var stack = [];
+      Object.keys(data).forEach(function(key) {
+        var value = data[key];
+        if (value && typeof value === 'object') stack.push(value);
+      });
+      while (stack.length) {
+        var current = stack.pop();
+        if (!current || typeof current !== 'object') continue;
+        if (isCoveragePayload(current)) return current;
+        Object.keys(current).forEach(function(key) {
+          var value = current[key];
+          if (value && typeof value === 'object') stack.push(value);
+        });
+      }
+      return null;
+    }
+
     function parseMissingModules(jsonText) {
       var result = unwrapRequirementPayload(jsonText || '');
       var payload = typeof result.payload === 'string' ? result.payload : result.payload;
       if (!payload) return [];
       try {
         var data = typeof payload === 'string' ? JSON.parse(payload) : payload;
-        var missing = data && Array.isArray(data.missing) ? data.missing : [];
+        var coverage = pickCoveragePayload(data);
+        var missing = coverage && Array.isArray(coverage.missing) ? coverage.missing : [];
         return missing.map(function(entry) { return normalizeMissingModule(entry); }).filter(Boolean);
       } catch (err) {
         console.warn('缺失模块 JSON 解析失败', err);
@@ -477,14 +500,20 @@
       var rowLength = state.missingRowCache.length;
       state.missingSelections = new Set(Array.from(state.missingSelections).filter(function(idx) { return idx < rowLength; }));
       var hasData = list.length > 0;
-      missingViewBtn.disabled = !hasData;
+      var hasRawText = Boolean(casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim());
+      missingViewBtn.disabled = !hasData && !hasRawText;
       copyMissingBtn.disabled = !hasData;
       refreshMissingSmartFillButton();
       if (!hasData) {
-        missingViewContainer.classList.add('hidden');
-        missingViewContainer.classList.remove('visible');
-        missingViewContainer.innerHTML = '';
-        missingViewBtn.textContent = '缺失模块视图';
+        if (hasRawText && missingViewContainer.classList.contains('visible')) {
+          missingViewContainer.innerHTML = buildMissingViewHtml(state);
+          refreshMissingSelectionUI();
+        } else {
+          missingViewContainer.classList.add('hidden');
+          missingViewContainer.classList.remove('visible');
+          missingViewContainer.innerHTML = '';
+          missingViewBtn.textContent = '缺失模块视图';
+        }
       } else if (missingViewContainer.classList.contains('visible')) {
         missingViewContainer.innerHTML = buildMissingViewHtml(state);
         refreshMissingSelectionUI();
@@ -501,7 +530,6 @@
       var rowLength = state.missingRowCache.length;
       state.missingSelections = new Set(Array.from(state.missingSelections).filter(function(idx) { return idx < rowLength; }));
       refreshMissingSmartFillButton();
-      if (!list.length) return;
       var visible = missingViewContainer.classList.contains('visible');
       if (visible) {
         missingViewContainer.classList.remove('visible');

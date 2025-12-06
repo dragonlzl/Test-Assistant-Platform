@@ -122,7 +122,28 @@
           }).filter(Boolean);
         }
       } catch (err) {
-        console.warn('拆分结果解析失败', err);
+        try {
+          var patched = raw.replace(/}\\s*,\\s*\"/g, '],\n  \"');
+          var patchedData = JSON.parse(patched);
+          var modulesFieldPatched = patchedData && patchedData.modules;
+          var dataFieldPatched = patchedData && patchedData.data;
+          var arrPatched = Array.isArray(patchedData)
+            ? patchedData
+            : Array.isArray(modulesFieldPatched)
+            ? modulesFieldPatched
+            : Array.isArray(dataFieldPatched)
+            ? dataFieldPatched
+            : null;
+          if (arrPatched) return arrPatched.map(normalizeModuleObject).filter(Boolean);
+          if (patchedData && typeof patchedData === 'object') {
+            return Object.entries(patchedData).map(function(pair, idx) {
+              return normalizeModuleBlocks(pair[0], pair[1], idx);
+            }).filter(Boolean);
+          }
+          console.warn('拆分结果解析失败', err);
+        } catch (err2) {
+          console.warn('拆分结果解析失败', err2);
+        }
       }
       return [];
     }

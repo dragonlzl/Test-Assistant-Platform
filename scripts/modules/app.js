@@ -589,7 +589,9 @@
           setStatus,
           extractRequirementLabelFromText,
           promptRequirementLabel,
+          getRequirementLabel,
           setRequirementLabel,
+          stripRequirementHeader,
           wrapTextWithRequirement,
           renderAutoRawInfo: proxyApi('renderAutoRawInfo'),
           renderCleanView: proxyApi('renderCleanView'),
@@ -603,7 +605,7 @@
           setCaseViewHint: proxyApi('setCaseViewHint'),
           updateFlowStatus: proxyApi('updateFlowStatus'),
         },
-        utils: { downloadText },
+        utils: { downloadText, stripCodeFence },
       })
       : null;
     if (debugCore) {

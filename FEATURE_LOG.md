@@ -19,6 +19,24 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：缺失模块视图刷新修复  
+- 功能描述：修复测试用例覆盖对比结果导入或生成后，缺失模块视图因函数被占位覆盖而不再刷新，无法展示 missing 列表的问题。  
+- 操作方式：正常执行“测试用例覆盖对比”或点击“导入对比结果”选择覆盖对比文件，导入后点击“缺失模块视图”即可展开缺失点列表。  
+- 使用效果：无论是新生成的覆盖对比结果还是带需求标识/type 字段的导入文件，缺失模块视图都能即时解析并展示行列表，可继续复制或智能填充。  
+- 新增内容/接口/组件：修正 compareCore 缺失视图刷新逻辑；新增 UI 自动化用例 `tests/ui/cases_missing_view.spec.js`（新增需求标识覆盖场景）与示例数据 `tests/fixtures/cases_compare_missing_view_wrapped.txt`。  
+- 复用说明：复用原有覆盖对比解析与渲染流程，仅去除占位函数覆盖。  
+- 测试与验证：`npm run test:ui -- tests/ui/cases_missing_view.spec.js`（通过，需本地 8090 端口 http.server 权限）。  
+- 更新记录：无  
+
+- 功能名称：覆盖对比缺失视图解析修复  
+- 功能描述：导入用例覆盖对比结果时，兼容 data 内再包一层 data 的格式，缺失模块视图可正常解析并展示用户提供的对比结果。  
+- 操作方式：点击“导入对比结果”选择覆盖对比文件，导入后点击“缺失模块视图”可展开并看到缺失行列表。  
+- 使用效果：即便覆盖对比结果被额外 data 包裹，也能成功解析 missing 列表并展开视图。  
+- 新增内容/接口/组件：覆盖对比解析兜底逻辑、缺失视图 UI 自动化用例 `tests/ui/cases_missing_view.spec.js`、用例覆盖对比示例数据 `tests/fixtures/cases_compare_missing_view.txt`。  
+- 复用说明：复用原有覆盖对比解析与视图渲染流程，仅补充 data 包裹兜底。  
+- 测试与验证：新增 UI 用例 `npm run test:ui -- tests/ui/cases_missing_view.spec.js`（本地 Playwright 浏览器因系统权限限制无法启动，未能实跑，需在可运行浏览器的环境补测）。  
+- 更新记录：无  
+
 - 功能名称：AI 一键步骤状态图标完善  
 - 功能描述：在“AI一键需求&用例评审”步骤卡片，为待执行、执行中状态补充明显的图标展示，运行中采用旋转渐变描边与“↻”标识，未开始显示灰色圆点，与完成态的“✓”一致呈现。  
 - 操作方式：正常执行评审/清洗/对比/拆分等动作时，顶部步骤按钮会分别显示灰点（未开始）、旋转箭头（执行中）、绿色对勾（完成），无需额外交互。  
@@ -34,7 +52,7 @@
 - 使用效果：拆分测试模块等功能在收到带代码块标记的模型结果时仍能正常解析、展示与后续处理。  
 - 新增内容/接口/组件：模型客户端 stripCodeFence 兼容逻辑；新增 UI 自动化用例 `tests/ui/model_response_strip.spec.js` 覆盖代码块剥离。  
 - 复用说明：复用现有 stripCodeFence 方法，在模型客户端统一处理，减少各功能重复兼容。  
-- 测试与验证：`npm run test:ui -- tests/ui/model_response_strip.spec.js`（当前环境启动本地 http.server 8090 报 PermissionError: [Errno 1] Operation not permitted，未实跑；需具备端口权限后重试）。  
+- 测试与验证：`npm run test:ui -- tests/ui/model_response_strip.spec.js`（本地提权启动 `python3 -m http.server 8090` 后通过）。  
 - 更新记录：无  
 
 - 功能名称：AI一键/功能工作流步骤状态指示  

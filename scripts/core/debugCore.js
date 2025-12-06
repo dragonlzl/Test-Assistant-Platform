@@ -25,6 +25,16 @@
     var setCaseViewHint = handlers.setCaseViewHint || function() {};
     var updateFlowStatus = handlers.updateFlowStatus || function() {};
     var setRequirementLabel = handlers.setRequirementLabel || function() {};
+    var getRequirementLabel = handlers.getRequirementLabel || function() { return ''; };
+    var stripRequirementHeader = handlers.stripRequirementHeader || function(text) {
+      if (!text) return '';
+      var lines = text.split(/\r?\n/);
+      if (lines.length && /^#需求标识：/.test(lines[0].trim())) {
+        return lines.slice(1).join('\n');
+      }
+      return text;
+    };
+    var stripCodeFence = utils.stripCodeFence || function(text) { return text || ''; };
 
     var casesCoverageStatus = dom.casesCoverageStatus;
     var caseGenStatus = dom.caseGenStatus;
@@ -84,6 +94,44 @@
       return '#NODE:' + tag + '\n' + body;
     }
 
+    function ensureRequirementLabelForDebug(promptText) {
+      var current = typeof getRequirementLabel === 'function' ? getRequirementLabel(false) : '';
+      if (current) return current;
+      if (typeof promptRequirementLabel === 'function') {
+        var prompted = promptRequirementLabel(promptText || '请输入本次需求标识后再导入数据');
+        if (prompted) return prompted;
+      }
+      return '';
+    }
+
+    function wrapWithRequirementIfNeeded(type, text) {
+      var trimmed = text && text.trim ? text.trim() : '';
+      if (!trimmed) return '';
+      var needsWrap = type === 'cleaned' || type === 'split' || type === 'cases';
+      if (!needsWrap) return trimmed;
+      var ensured = ensureRequirementLabelForDebug('请输入本次需求标识后再保存调试数据');
+      if (!ensured) return '';
+      if (typeof setRequirementLabel === 'function') {
+        setRequirementLabel(ensured, 'debug-save');
+      }
+      var wrapType = type === 'cleaned' ? 'clean' : type;
+      var normalized = stripCodeFence(stripRequirementHeader(trimmed));
+      try {
+        var parsed = JSON.parse(normalized);
+        return JSON.stringify({ requirement: ensured, data: parsed, type: wrapType }, null, 2);
+      } catch (err) {
+        try {
+          var patchedNormalized = normalized.replace(/}\\s*,\\s*\"/g, '],\n  \"');
+          var patchedParsed = JSON.parse(patchedNormalized);
+          return JSON.stringify({ requirement: ensured, data: patchedParsed, type: wrapType }, null, 2);
+        } catch (err2) {
+          // ignore and fall back
+        }
+      }
+      if (typeof wrapTextWithRequirement !== 'function') return trimmed;
+      return wrapTextWithRequirement(trimmed, wrapType);
+    }
+
     function saveDebugText(type) {
       var cfg = debugNodes[type];
       if (!cfg) return;
@@ -91,6 +139,13 @@
       if (!text) {
         setStatus(cfg.status, cfg.label + '为空，无法保存调试文件', 'warn');
         return;
+      }
+      if (type === 'cleaned' || type === 'split' || type === 'cases') {
+        text = wrapWithRequirementIfNeeded(type, text);
+        if (!text) {
+          setStatus(cfg.status, '已取消保存（需求标识为空）', 'warn');
+          return;
+        }
       }
       var stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
       downloadText('debug_' + cfg.tag + '_' + stamp + '.txt', buildDebugContent(cfg.tag, text));
@@ -116,21 +171,20 @@
         }
         var payload = rest.join('\n');
         var requirementFromPayload = extractRequirementLabelFromText(payload);
+        var candidateRequirement = requirementFromPayload || ensureRequirementLabelForDebug('请输入本次需求标识后再导入数据');
+        if (!candidateRequirement) {
+          setStatus(cfg.status, '已取消导入（需求标识为空）', 'warn');
+          return;
+        }
         if (type === 'cleaned' || type === 'split' || type === 'cases') {
           if (requirementFromPayload) {
             setRequirementLabel(requirementFromPayload, 'import');
-          } else {
-            var ensured = promptRequirementLabel('请输入本次需求标识后再导入数据');
-            if (!ensured) {
-              setStatus(cfg.status, '已取消导入（需求标识为空）', 'warn');
-              return;
-            }
+          } else if (typeof setRequirementLabel === 'function') {
+            setRequirementLabel(candidateRequirement, 'import');
           }
         }
-        cfg.textarea.value = type === 'cleaned'
-          ? wrapTextWithRequirement(payload)
-          : type === 'split'
-          ? wrapTextWithRequirement(payload)
+        cfg.textarea.value = type === 'cleaned' || type === 'split' || type === 'cases'
+          ? wrapWithRequirementIfNeeded(type, payload)
           : payload.trim();
         if (type === 'raw') {
           state.lastRawImportName = '';
