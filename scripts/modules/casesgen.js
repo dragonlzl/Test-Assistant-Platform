@@ -16,6 +16,7 @@
     var casesGoUsecaseGenBtn = document.getElementById('casesGoUsecaseGen');
     var casesGenerationContainer = document.getElementById('casesGenerationContainer');
     var caseGenStatus = document.getElementById('caseGenStatus');
+    var caseGenViewDrawerBody = document.getElementById('caseGenViewDrawerBody');
     var caseGenModelSelect = document.getElementById('caseGenModelSelect');
     var caseGenAssignStatus = document.getElementById('caseGenAssignStatus');
     var caseGenPromptEl = document.getElementById('caseGenPrompt');
@@ -36,56 +37,54 @@
 
     function bindContainerEvents() {
       if (!casesGenerationContainer) return;
-      if (api.generateCasesForModule) {
-        casesGenerationContainer.addEventListener('click', function(e) {
-          var targetGenerate = e.target.closest('[data-generate]');
-          if (targetGenerate) {
-            api.generateCasesForModule(targetGenerate.dataset.generate);
-            return;
-          }
-          var targetView = e.target.closest('[data-view]');
-          if (targetView && api.toggleCaseView) {
-            api.toggleCaseView(targetView.dataset.view);
-            return;
-          }
-          var targetExport = e.target.closest('[data-export]');
-          if (targetExport && api.exportModuleCases) {
-            api.exportModuleCases(targetExport.dataset.export);
-            return;
-          }
-          var targetExportSelected = e.target.closest('[data-export-selected]');
-          if (targetExportSelected && api.exportSelectedCases) {
-            api.exportSelectedCases(targetExportSelected.dataset.exportSelected);
-            return;
-          }
-          var targetXmind = e.target.closest('[data-xmind-selected]');
-          if (targetXmind && api.exportSelectedCasesToXmind) {
-            api.exportSelectedCasesToXmind(targetXmind.dataset.xmindSelected);
-            return;
-          }
-          var targetTempExec = e.target.closest('[data-tempexec]');
-          if (targetTempExec && api.transferModuleToTempExec) {
-            api.transferModuleToTempExec(targetTempExec.dataset.tempexec);
-            return;
-          }
-          var targetImport = e.target.closest('[data-import]');
-          if (targetImport && api.importModuleCases) {
-            var input = casesGenerationContainer.querySelector('input[data-import-input="' + targetImport.dataset.import + '"]');
-            if (input) input.click();
-            return;
-          }
-          var targetClear = e.target.closest('[data-clear]');
-          if (targetClear && api.clearModuleCases) {
-            api.clearModuleCases(targetClear.dataset.clear);
-            return;
-          }
-          var targetTopup = e.target.closest('[data-topup]');
-          if (targetTopup && api.topUpCasesForModule) {
-            api.topUpCasesForModule(targetTopup.dataset.topup);
-          }
-        });
+      function handleCaseGenClick(e) {
+        var targetGenerate = e.target.closest('[data-generate]');
+        if (targetGenerate && api.generateCasesForModule) {
+          api.generateCasesForModule(targetGenerate.dataset.generate);
+          return;
+        }
+        var targetView = e.target.closest('[data-view]');
+        if (targetView && api.toggleCaseView) {
+          api.toggleCaseView(targetView.dataset.view);
+          return;
+        }
+        var targetExport = e.target.closest('[data-export]');
+        if (targetExport && api.exportModuleCases) {
+          api.exportModuleCases(targetExport.dataset.export);
+          return;
+        }
+        var targetExportSelected = e.target.closest('[data-export-selected]');
+        if (targetExportSelected && api.exportSelectedCases) {
+          api.exportSelectedCases(targetExportSelected.dataset.exportSelected);
+          return;
+        }
+        var targetXmind = e.target.closest('[data-xmind-selected]');
+        if (targetXmind && api.exportSelectedCasesToXmind) {
+          api.exportSelectedCasesToXmind(targetXmind.dataset.xmindSelected);
+          return;
+        }
+        var targetTempExec = e.target.closest('[data-tempexec]');
+        if (targetTempExec && api.transferModuleToTempExec) {
+          api.transferModuleToTempExec(targetTempExec.dataset.tempexec);
+          return;
+        }
+        var targetImport = e.target.closest('[data-import]');
+        if (targetImport && api.importModuleCases) {
+          var input = casesGenerationContainer.querySelector('input[data-import-input="' + targetImport.dataset.import + '"]');
+          if (input) input.click();
+          return;
+        }
+        var targetClear = e.target.closest('[data-clear]');
+        if (targetClear && api.clearModuleCases) {
+          api.clearModuleCases(targetClear.dataset.clear);
+          return;
+        }
+        var targetTopup = e.target.closest('[data-topup]');
+        if (targetTopup && api.topUpCasesForModule) {
+          api.topUpCasesForModule(targetTopup.dataset.topup);
+        }
       }
-      casesGenerationContainer.addEventListener('change', function(e) {
+      function handleCaseGenChange(e) {
         var input = e.target;
         if (!input) return;
         if (input.dataset.caseSelect && api.handleCaseSelectionChange) {
@@ -102,13 +101,20 @@
           if (file) api.importModuleCases(input.dataset.importInput, file);
           input.value = '';
         }
-      });
-      casesGenerationContainer.addEventListener('input', function(e) {
+      }
+      function handleCaseGenInput(e) {
         var area = e.target.closest('textarea[data-suggestion]');
         if (area) {
           state.caseGenSuggestions[area.dataset.suggestion] = area.value;
         }
-      });
+      }
+      casesGenerationContainer.addEventListener('click', handleCaseGenClick);
+      casesGenerationContainer.addEventListener('change', handleCaseGenChange);
+      casesGenerationContainer.addEventListener('input', handleCaseGenInput);
+      if (caseGenViewDrawerBody) {
+        caseGenViewDrawerBody.addEventListener('click', handleCaseGenClick);
+        caseGenViewDrawerBody.addEventListener('change', handleCaseGenChange);
+      }
     }
 
     function bindModelSelectors() {

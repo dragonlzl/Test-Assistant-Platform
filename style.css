@@ -2401,6 +2401,13 @@ html.drawer-open {
     .usecase-card textarea {
       min-height: 160px;
     }
+    .usecase-card .actions.module-actions {
+      align-items: center;
+    }
+    .usecase-card .case-view-btn {
+      margin-left: auto;
+      min-width: 108px;
+    }
     .caseview {
       margin-top: 10px;
       border: 1px solid var(--border);
@@ -2412,6 +2419,10 @@ html.drawer-open {
     }
     .caseview.visible {
       display: block;
+    }
+    .drawer-body .caseview.drawer-view {
+      display: block;
+      margin-top: 0;
     }
     .caseview table {
       width: 100%;

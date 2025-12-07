@@ -17,6 +17,7 @@
       'toSplitFromCaseGen', 'appendToExistingCases', 'appendTargetSelect', 'saveRawDebugBtn', 'importRawDebugBtn', 'saveCleanDebugBtn', 'importCleanDebugBtn', 'saveSplitDebugBtn',
       'importSplitDebugBtn', 'saveCaseDebugBtn', 'importCaseDebugBtn', 'scrollTopBtn', 'scrollBottomBtn', 'xmindStructureToggle',
       'xmindStructureCard', 'caseFileInput', 'caseDropZone', 'caseStatus', 'caseViewBtn', 'caseViewContainer', 'caseViewHint',
+      'caseGenViewDrawer', 'caseGenViewDrawerBody', 'caseGenViewDrawerTitle', 'closeCaseGenViewDrawerBtn',
     ],
     alias: [
       { name: 'toSplitFromCaseGenBtn', id: 'toSplitFromCaseGen' },

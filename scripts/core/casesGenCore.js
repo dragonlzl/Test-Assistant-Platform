@@ -20,6 +20,10 @@
     var tempExecStatus = dom.tempExecStatus;
     var appendToExistingCasesBtn = dom.appendToExistingCasesBtn || dom.appendToExistingCases;
     var appendTargetSelect = dom.appendTargetSelect;
+    var caseGenViewDrawerBody = dom.caseGenViewDrawerBody;
+    var caseGenViewDrawerTitle = dom.caseGenViewDrawerTitle;
+    var caseGenViewDrawer = null;
+    var activeCaseViewModuleId = '';
 
     var setStatus = ctx.setStatus || function() {};
     var downloadText = handlers.downloadText || function() {};
@@ -133,6 +137,43 @@
         map[moduleId] = durationMs;
       }
       syncCaseModuleTiming(moduleId);
+    }
+
+    function ensureCaseGenDrawer() {
+      if (caseGenViewDrawer) return caseGenViewDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      caseGenViewDrawer = window.app.drawer.createDrawer({
+        drawerId: 'caseGenViewDrawer',
+        closeButtons: ['closeCaseGenViewDrawerBtn'],
+        onClose: function() {
+          if (activeCaseViewModuleId) resetCaseViewButton(activeCaseViewModuleId);
+          activeCaseViewModuleId = '';
+          if (caseGenViewDrawerBody) caseGenViewDrawerBody.innerHTML = '';
+          if (caseGenViewDrawerTitle) caseGenViewDrawerTitle.textContent = '用例视图';
+        },
+      });
+      return caseGenViewDrawer;
+    }
+
+    function resetCaseViewButton(moduleId) {
+      if (!casesGenerationContainer) return;
+      var btn = casesGenerationContainer.querySelector('[data-view="' + moduleId + '"]');
+      if (btn) btn.textContent = '用例视图';
+    }
+
+    function closeCaseViewIfActive(moduleId) {
+      if (!activeCaseViewModuleId) return;
+      if (moduleId && activeCaseViewModuleId !== moduleId) return;
+      var drawer = ensureCaseGenDrawer();
+      if (drawer) drawer.close();
+    }
+
+    function getCaseViewContainer(moduleId) {
+      var selector = '[data-view-container="' + moduleId + '"]';
+      var container = caseGenViewDrawerBody && caseGenViewDrawerBody.querySelector(selector);
+      if (!container && casesGenerationContainer) container = casesGenerationContainer.querySelector(selector);
+      if (!container && typeof document !== 'undefined') container = document.querySelector(selector);
+      return container;
     }
 
     var escapeHtml = utils.escapeHtml || function(text) {
@@ -469,8 +510,7 @@
     }
 
     function refreshCaseSelectionUI(moduleId) {
-      if (!casesGenerationContainer) return;
-      var container = casesGenerationContainer.querySelector('[data-view-container="' + moduleId + '"]');
+      var container = getCaseViewContainer(moduleId);
       if (!container) return;
       var selection = ensureCaseSelectionSet(moduleId);
       var rowCheckboxes = container.querySelectorAll('input[data-case-select="' + moduleId + '"]');
@@ -640,7 +680,6 @@
         var rawResult = (state.caseGenResults[mod.id] || '').trim();
         var hasResult = Boolean(rawResult && !/^\[\s*\]$/.test(rawResult));
         var moduleBusy = isCaseModuleRunning(mod.id);
-        var transferDisabled = !hasResult || moduleBusy;
         var generateLabel = moduleBusy ? '生成中...' : '生成用例';
         var resultInfo = parseGeneratedCases(state.caseGenResults[mod.id] || '');
         var resultText = resultInfo.normalized || '';
@@ -649,20 +688,18 @@
         return '' +
         '<div class="usecase-card" data-module-id="' + mod.id + '">' +
           '<h3>' + (idx + 1) + '. ' + mod.title + '</h3>' +
-          '<div class="actions">' +
+          '<div class="actions module-actions">' +
             '<button class="secondary" data-generate="' + mod.id + '" ' + (moduleBusy ? 'disabled' : '') + '>' + generateLabel + '</button>' +
-            '<button class="secondary" data-view="' + mod.id + '" ' + (hasResult ? '' : 'disabled') + '>用例视图</button>' +
             '<button class="secondary" data-export="' + mod.id + '" ' + (hasResult ? '' : 'disabled') + '>导出json</button>' +
-            '<button class="pill primary" data-tempexec="' + mod.id + '" ' + (transferDisabled ? 'disabled' : '') + '>转到用例执行</button>' +
             '<button class="secondary" data-import="' + mod.id + '">导入json</button>' +
             '<button class="secondary" data-clear="' + mod.id + '" ' + (hasResult ? '' : 'disabled') + '>清除用例</button>' +
+            '<button class="pill primary case-view-btn" data-view="' + mod.id + '" ' + (hasResult ? '' : 'disabled') + ' style="margin-left:auto;">用例视图</button>' +
           '</div>' +
           '<p class="hint timing" data-case-timing="' + mod.id + '">模型用时：<strong data-case-timing-value="' + mod.id + '">' + timingText + '</strong> 秒</p>' +
           '<p class="status" data-case-status="' + mod.id + '"></p>' +
           '<div class="case-progress" data-progress="' + mod.id + '">' + renderCaseModuleProgress(mod.id) + '</div>' +
           '<textarea data-result="' + mod.id + '" placeholder="JSON 测试用例输出..." readonly>' + resultText + '</textarea>' +
           '<input type="file" data-import-input="' + mod.id + '" accept=".txt,.json" hidden>' +
-          '<div class="caseview hidden" data-view-container="' + mod.id + '"></div>' +
           '<div class="suggestion-panel">' +
             '<label>生成建议</label>' +
             '<textarea data-suggestion="' + mod.id + '" placeholder="可输入补充说明/限制条件...">' + escapeHtml(state.caseGenSuggestions[mod.id] || '') + '</textarea>' +
@@ -679,6 +716,10 @@
         var rawResult = (state.caseGenResults[mod.id] || '').trim();
         var hasResult = Boolean(rawResult && !/^\[\s*\]$/.test(rawResult));
         updateSupplementButtons(mod.id, hasResult);
+        var viewBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-view="' + mod.id + '"]');
+        if (viewBtn && activeCaseViewModuleId === mod.id && caseGenViewDrawer && caseGenViewDrawer.element && caseGenViewDrawer.element.classList.contains('open')) {
+          viewBtn.textContent = '收起用例视图';
+        }
       });
       refreshExportCaseGenButton();
       renderCaseGenProgressBoard();
@@ -800,13 +841,8 @@
           viewBtn.disabled = !hasResult;
           viewBtn.textContent = '用例视图';
         }
-        var viewContainer = casesGenerationContainer && casesGenerationContainer.querySelector('[data-view-container="' + moduleId + '"]');
-        if (viewContainer) {
-          viewContainer.classList.remove('visible');
-          viewContainer.classList.add('hidden');
-          viewContainer.innerHTML = '';
-          refreshCaseSelectionUI(moduleId);
-        }
+        closeCaseViewIfActive(moduleId);
+        refreshCaseSelectionUI(moduleId);
         var exportBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-export="' + moduleId + '"]');
         if (exportBtn) exportBtn.disabled = !hasResult;
         var clearBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-clear="' + moduleId + '"]');
@@ -934,13 +970,8 @@
               hadRecovery ? parts.join('，') + '（检测到结构异常，已保留有效条目）' : parts.join('，'),
               hadRecovery || dedupInfo.hadError ? 'warn' : 'ok'
             );
-            var viewContainer = casesGenerationContainer && casesGenerationContainer.querySelector('[data-view-container="' + moduleId + '"]');
-            if (viewContainer) {
-              viewContainer.classList.remove('visible');
-              viewContainer.classList.add('hidden');
-              viewContainer.innerHTML = '';
-              refreshCaseSelectionUI(moduleId);
-            }
+            closeCaseViewIfActive(moduleId);
+            refreshCaseSelectionUI(moduleId);
             setCaseProgressStep(moduleId, 'finalize', 'done');
             updateSupplementButtons(moduleId, true);
           }
@@ -1062,12 +1093,7 @@
         if (exportBtn) exportBtn.disabled = false;
         var clearBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-clear="' + moduleId + '"]');
         if (clearBtn) clearBtn.disabled = false;
-        var viewContainer = casesGenerationContainer && casesGenerationContainer.querySelector('[data-view-container="' + moduleId + '"]');
-        if (viewContainer) {
-          viewContainer.classList.remove('visible');
-          viewContainer.classList.add('hidden');
-          viewContainer.innerHTML = '';
-        }
+        closeCaseViewIfActive(moduleId);
         updateSupplementButtons(moduleId, true);
         setCaseModuleStatus(moduleId, '已导入【' + moduleTitle + '】的用例', 'ok');
         refreshAppendExistingButton();
@@ -1391,12 +1417,7 @@
       if (exportBtn) exportBtn.disabled = true;
       var clearBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-clear="' + moduleId + '"]');
       if (clearBtn) clearBtn.disabled = true;
-      var viewContainer = casesGenerationContainer && casesGenerationContainer.querySelector('[data-view-container="' + moduleId + '"]');
-      if (viewContainer) {
-        viewContainer.classList.remove('visible');
-        viewContainer.classList.add('hidden');
-        viewContainer.innerHTML = '';
-      }
+      closeCaseViewIfActive(moduleId);
       updateSupplementButtons(moduleId, false);
       clearCaseModuleStatus(moduleId);
       clearCaseProgress(moduleId);
@@ -1407,14 +1428,13 @@
 
     function toggleCaseView(moduleId) {
       if (!casesGenerationContainer) return;
-      var container = casesGenerationContainer.querySelector('[data-view-container="' + moduleId + '"]');
       var viewBtn = casesGenerationContainer.querySelector('[data-view="' + moduleId + '"]');
-      if (!container || !viewBtn) return;
-      if (container.classList.contains('visible')) {
-        container.classList.remove('visible');
-        container.classList.add('hidden');
-        container.innerHTML = '';
-        viewBtn.textContent = '用例视图';
+      var drawer = ensureCaseGenDrawer();
+      if (!viewBtn || !drawer || !caseGenViewDrawerBody) return;
+      var drawerEl = drawer.element;
+      var isOpenCurrent = drawerEl && drawerEl.classList.contains('open') && activeCaseViewModuleId === moduleId;
+      if (isOpenCurrent) {
+        drawer.close();
         return;
       }
       var content = state.caseGenResults[moduleId];
@@ -1428,10 +1448,20 @@
         return;
       }
       var mod = state.caseGenModules.find(function(m) { return m.id === moduleId; });
-      container.innerHTML = renderCaseTable(mod, list, { selectable: true, moduleId: moduleId, showRemark: true });
-      container.classList.remove('hidden');
-      container.classList.add('visible');
+      var moduleTitle = resolveModuleTitle(mod && (mod.title || mod.module));
+      caseGenViewDrawerBody.innerHTML = '' +
+        '<div class="caseview drawer-view visible" data-view-container="' + moduleId + '">' +
+          renderCaseTable(mod, list, { selectable: true, moduleId: moduleId, showRemark: true }) +
+        '</div>';
+      if (caseGenViewDrawerTitle) {
+        caseGenViewDrawerTitle.textContent = '用例视图 - ' + moduleTitle;
+      }
+      if (activeCaseViewModuleId && activeCaseViewModuleId !== moduleId) {
+        resetCaseViewButton(activeCaseViewModuleId);
+      }
+      activeCaseViewModuleId = moduleId;
       viewBtn.textContent = '收起用例视图';
+      drawer.open();
       refreshCaseSelectionUI(moduleId);
     }
 
@@ -1444,8 +1474,7 @@
     }
 
     function handleCaseSelectAll(moduleId, checked) {
-      if (!casesGenerationContainer) return;
-      var container = casesGenerationContainer.querySelector('[data-view-container="' + moduleId + '"]');
+      var container = getCaseViewContainer(moduleId);
       if (!container) return;
       var selection = ensureCaseSelectionSet(moduleId);
       selection.clear();
