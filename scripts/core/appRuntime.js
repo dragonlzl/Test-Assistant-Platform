@@ -80,6 +80,7 @@
     var importModuleCases = api.importModuleCases || function() {};
     var clearModuleCases = api.clearModuleCases || function() {};
     var topUpCasesForModule = api.topUpCasesForModule || function() {};
+    var appendSelectedCasesToImported = api.appendSelectedCasesToImported || function() {};
     var handleCaseSelectionChange = api.handleCaseSelectionChange || function() {};
     var handleCaseSelectAll = api.handleCaseSelectAll || function() {};
     var exportCaseGenerationResults = api.exportCaseGenerationResults || function() {};
@@ -290,11 +291,13 @@
       updateAssignmentStatuses: updateAssignmentStatuses,
       updateReasoningVisibility: updateReasoningVisibility,
       testModel: testModel,
+      renderCaseGeneration: renderCaseGeneration,
     }, Object.keys({
       state: 1, config: 1, utils: 1, setStatus: 1, switchTab: 1, scrollToSection: 1, hasCaseSource: 1, getCombinedCaseList: 1,
       getCombinedCaseText: 1, deriveCaseListFromText: 1, parseCaseList: 1, renderCaseTable: 1, formatCompactTimestamp: 1, escapeHtml: 1,
       escapeHtmlPreserve: 1, updateFlowStatus: 1, callModelWithConfig: 1, getAssignedModel: 1, updateModelTiming: 1, setCaseViewHint: 1,
       downloadBlob: 1, parseXmindFile: 1, scrollElementIntoView: 1, updateAssignmentStatuses: 1, updateReasoningVisibility: 1, testModel: 1,
+      renderCaseGeneration: 1,
     }));
     window.app.core = core;
 
@@ -310,6 +313,7 @@
       importModuleCases: importModuleCases,
       clearModuleCases: clearModuleCases,
       topUpCasesForModule: topUpCasesForModule,
+      appendSelectedCasesToImported: appendSelectedCasesToImported,
       handleCaseSelectionChange: handleCaseSelectionChange,
       handleCaseSelectAll: handleCaseSelectAll,
       exportCaseGenerationResults: exportCaseGenerationResults,
@@ -318,8 +322,10 @@
     }, Object.keys({
       goToCaseGeneration: 1, generateCasesForModule: 1, toggleCaseView: 1, exportModuleCases: 1, exportSelectedCases: 1,
       exportSelectedCasesToXmind: 1, transferModuleToTempExec: 1, importModuleCases: 1, clearModuleCases: 1, topUpCasesForModule: 1,
+      appendSelectedCasesToImported: 1,
       handleCaseSelectionChange: 1, handleCaseSelectAll: 1, exportCaseGenerationResults: 1, ensureCaseGenModulesFromSplit: 1, renderCaseGeneration: 1,
     }));
+    window.app.casesGenApi = casesGenApi;
 
     function initApp() {
       if (window.app && window.app._inited) return;

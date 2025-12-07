@@ -22,6 +22,7 @@
     var caseGenReasoningSelect = document.getElementById('caseGenReasoning');
     var exportCaseGenBtn = document.getElementById('exportCaseGen');
     var testCaseGenModelBtn = document.getElementById('testCaseGenModel');
+    var appendToExistingCasesBtn = document.getElementById('appendToExistingCases');
 
     function bindGoButtons() {
       if (goUsecaseGenBtn && api.goToCaseGeneration) {
@@ -140,6 +141,12 @@
       }
     }
 
+    function bindAppendButton() {
+      if (appendToExistingCasesBtn && api.appendSelectedCasesToImported) {
+        appendToExistingCasesBtn.addEventListener('click', api.appendSelectedCasesToImported);
+      }
+    }
+
     // 初始渲染：进入用例生成时自动补模块
     if (typeof api.ensureCaseGenModulesFromSplit === 'function') {
       api.ensureCaseGenModulesFromSplit();
@@ -149,6 +156,7 @@
     bindContainerEvents();
     bindModelSelectors();
     bindExportButtons();
+    bindAppendButton();
   }
 
   window.app = window.app || {};

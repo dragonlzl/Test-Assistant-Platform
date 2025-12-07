@@ -856,17 +856,18 @@
 </section>
 <section class="card hidden" data-section-id="casesgen" data-tab-section="casesgen">
 <h2>用例生成</h2>
-<div class="card-body">
-<p class="hint">根据测试模块拆分的结果生成结构化测试用例，每个模块可单独调用模型生成 JSON 格式用例。</p>
-<div class="actions">
-<button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
-<button class="secondary" id="toSplitFromCaseGen">前往测试模块拆分</button>
-</div>
-<div class="usecase-modules" id="casesGenerationContainer"></div>
-<p class="status" id="caseGenStatus"></p>
-<p class="hint timing">模型用时：<strong><span id="caseGenTiming">--</span> 秒</strong></p>
-</div>
-</section>
+  <div class="card-body">
+  <p class="hint">根据测试模块拆分的结果生成结构化测试用例，每个模块可单独调用模型生成 JSON 格式用例。</p>
+  <div class="actions">
+  <button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
+  <button class="secondary" id="toSplitFromCaseGen">前往测试模块拆分</button>
+  <button class="pill primary" disabled id="appendToExistingCases">新增到已有用例</button>
+  </div>
+  <p class="status" id="caseGenStatus"></p>
+  <div class="usecase-modules" id="casesGenerationContainer"></div>
+  <p class="hint timing">模型用时：<strong><span id="caseGenTiming">--</span> 秒</strong></p>
+  </div>
+  </section>
 <div class="drawer" id="tempExecDrawer" data-tab-section="tempexec">
 <div class="drawer-mask" data-drawer-close="tempExecDrawer"></div>
 <div class="drawer-panel">

@@ -841,6 +841,7 @@
       ? window.app.casesGenCore.init({
         state,
         dom,
+        setStatus,
         utils: {
           escapeHtml,
           escapeHtmlPreserve,
@@ -865,6 +866,10 @@
           runConcurrent,
           hasImportedCases: proxyApi('hasImportedCases'),
           getImportedCaseObjects: proxyApi('getImportedCaseObjects'),
+          addImportedCase: proxyApi('addImportedCase'),
+          renderImportedCaseList: proxyApi('renderImportedCaseList'),
+          refreshImportedCaseView: proxyApi('refreshImportedCaseView'),
+          syncCaseTextWithImports: proxyApi('syncCaseTextWithImports'),
           deriveCaseListFromText,
           buildXmindPackageFromCases: function() {
             const impl = window.app && window.app.xmindCore && window.app.xmindCore.buildXmindPackageFromCases
@@ -922,6 +927,7 @@
       'refreshCaseSelectionUI',
       'updateSupplementButtons',
       'getCaseListForModule',
+      'appendSelectedCasesToImported',
     ]);
 
     const lazyParseXmindFile = function(file) {
