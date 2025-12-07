@@ -2288,6 +2288,7 @@
             setRequirementLabel(requirementLabel, 'import');
           }
           var entry = createTempExecFile(file && file.name, list, 'current', null, null, requirementLabel);
+          if (entry) entry.fromImport = true;
           if (entry && ensureTempExecReplacement(entry, added)) {
             added.push(entry);
           }

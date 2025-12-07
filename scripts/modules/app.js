@@ -870,6 +870,13 @@
           renderImportedCaseList: proxyApi('renderImportedCaseList'),
           refreshImportedCaseView: proxyApi('refreshImportedCaseView'),
           syncCaseTextWithImports: proxyApi('syncCaseTextWithImports'),
+          getTempExecFiles: function() { return state.tempExecFiles || []; },
+          normalizeTempExecCases: function(list, fileId) {
+            if (tempExecApi && typeof tempExecApi.normalizeTempExecCases === 'function') {
+              return tempExecApi.normalizeTempExecCases(list, fileId);
+            }
+            return list;
+          },
           deriveCaseListFromText,
           buildXmindPackageFromCases: function() {
             const impl = window.app && window.app.xmindCore && window.app.xmindCore.buildXmindPackageFromCases
@@ -883,6 +890,7 @@
           syncTempExecFocus: proxyApi('syncTempExecFocus'),
           persistTempExecState: proxyApi('persistTempExecState'),
           setTempExecActive: proxyApi('setTempExecActive'),
+          renderTempExecView: proxyApi('renderTempExecView'),
           switchTab,
           scrollElementIntoView,
           renderCaseGenProgressBoard: proxyApi('renderCaseGenProgressBoard'),
@@ -911,6 +919,7 @@
     assignIfPresent(api, casesGenCoreModule, [
       'renderCaseGeneration',
       'renderCaseTable',
+      'renderAppendTargetOptions',
       'parseGeneratedCases',
       'generateCasesForModule',
       'topUpCasesForModule',
@@ -926,6 +935,8 @@
       'exportSelectedCasesToXmind',
       'refreshCaseSelectionUI',
       'updateSupplementButtons',
+      'refreshAppendExistingButton',
+      'renderAppendTargetOptions',
       'getCaseListForModule',
       'appendSelectedCasesToImported',
     ]);

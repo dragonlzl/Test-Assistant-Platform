@@ -314,6 +314,8 @@
       clearModuleCases: clearModuleCases,
       topUpCasesForModule: topUpCasesForModule,
       appendSelectedCasesToImported: appendSelectedCasesToImported,
+      refreshAppendExistingButton: api.refreshAppendExistingButton || function() {},
+      renderAppendTargetOptions: api.renderAppendTargetOptions || function() {},
       handleCaseSelectionChange: handleCaseSelectionChange,
       handleCaseSelectAll: handleCaseSelectAll,
       exportCaseGenerationResults: exportCaseGenerationResults,
@@ -323,7 +325,9 @@
       goToCaseGeneration: 1, generateCasesForModule: 1, toggleCaseView: 1, exportModuleCases: 1, exportSelectedCases: 1,
       exportSelectedCasesToXmind: 1, transferModuleToTempExec: 1, importModuleCases: 1, clearModuleCases: 1, topUpCasesForModule: 1,
       appendSelectedCasesToImported: 1,
+      refreshAppendExistingButton: 1,
       handleCaseSelectionChange: 1, handleCaseSelectAll: 1, exportCaseGenerationResults: 1, ensureCaseGenModulesFromSplit: 1, renderCaseGeneration: 1,
+      renderAppendTargetOptions: 1,
     }));
     window.app.casesGenApi = casesGenApi;
 

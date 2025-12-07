@@ -10,7 +10,11 @@ test.describe('用例生成追加到已有用例', () => {
       return route.abort();
     });
     page.on('dialog', async (dialog) => {
-      await dialog.accept();
+      if (dialog.type() === 'prompt') {
+        await dialog.accept('1');
+      } else {
+        await dialog.accept();
+      }
     });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
@@ -48,7 +52,9 @@ test.describe('用例生成追加到已有用例', () => {
       }];
       state.caseGenResults[mod.id] = JSON.stringify(cases, null, 2);
       state.caseSelections[mod.id] = new Set();
-      if (window.app.core && typeof window.app.core.renderCaseGeneration === 'function') {
+      if (window.app.casesGenApi && typeof window.app.casesGenApi.renderCaseGeneration === 'function') {
+        window.app.casesGenApi.renderCaseGeneration();
+      } else if (window.app.core && typeof window.app.core.renderCaseGeneration === 'function') {
         window.app.core.renderCaseGeneration();
       }
     });
@@ -64,7 +70,7 @@ test.describe('用例生成追加到已有用例', () => {
       var statusEl = document.getElementById('caseGenStatus');
       return statusEl ? statusEl.textContent : '';
     });
-    await expect(page.locator('#caseGenStatus')).toContainText('请先在“功能工作流”导入', { timeout: 5000 });
+    await expect(page.locator('#caseGenStatus')).toContainText('请先在“功能工作流”或“用例执行”导入用例', { timeout: 5000 });
   });
 
   test('已导入用例时追加并跳过重复标题', async ({ page }) => {
@@ -97,10 +103,13 @@ test.describe('用例生成追加到已有用例', () => {
       ];
       state.caseGenResults[mod.id] = JSON.stringify(cases, null, 2);
       state.caseSelections[mod.id] = new Set();
-      if (window.app.core && typeof window.app.core.renderCaseGeneration === 'function') {
+      if (window.app.casesGenApi && typeof window.app.casesGenApi.renderCaseGeneration === 'function') {
+        window.app.casesGenApi.renderCaseGeneration();
+      } else if (window.app.core && typeof window.app.core.renderCaseGeneration === 'function') {
         window.app.core.renderCaseGeneration();
       }
     });
+    await page.selectOption('#appendTargetSelect', 'workflow');
     const statusText = await page.evaluate(async () => {
       var state = window.app.state;
       var mod = state.caseGenModules && state.caseGenModules[0];
@@ -127,8 +136,8 @@ test.describe('用例生成追加到已有用例', () => {
       var entry = window.app.state.tempExecFiles && window.app.state.tempExecFiles[window.app.state.tempExecFiles.length - 1];
       return entry && Array.isArray(entry.cases) ? entry.cases.length : 0;
     });
+    await expect(page.locator('#caseGenStatus')).toContainText('成功新增到【功能工作流导入用例】', { timeout: 5000 });
     await expect(page.locator('#caseGenStatus')).toContainText('含 1 条重复已跳过', { timeout: 5000 });
-    await expect(page.locator('#caseGenStatus')).toContainText('同步到用例执行', { timeout: 5000 });
     expect(importedCount).toBe(2);
     expect(execCount).toBe(2);
   });
@@ -162,10 +171,13 @@ test.describe('用例生成追加到已有用例', () => {
       ];
       state.caseGenResults[mod.id] = JSON.stringify(cases, null, 2);
       state.caseSelections[mod.id] = new Set();
-      if (window.app.core && typeof window.app.core.renderCaseGeneration === 'function') {
+      if (window.app.casesGenApi && typeof window.app.casesGenApi.renderCaseGeneration === 'function') {
+        window.app.casesGenApi.renderCaseGeneration();
+      } else if (window.app.core && typeof window.app.core.renderCaseGeneration === 'function') {
         window.app.core.renderCaseGeneration();
       }
     });
+    await page.selectOption('#appendTargetSelect', 'workflow');
     const statusText = await page.evaluate(async () => {
       var state = window.app.state;
       var mod = state.caseGenModules && state.caseGenModules[0];
@@ -179,5 +191,153 @@ test.describe('用例生成追加到已有用例', () => {
       return statusEl ? statusEl.textContent : '';
     });
     await expect(page.locator('#caseGenStatus')).toHaveText(/用例已经包含将要导入的用例，无需重复新增/, { timeout: 5000 });
+  });
+
+  test('工作流为空时追加到执行历史用例', async ({ page }) => {
+    await page.evaluate(() => {
+      window.app.state.importedCases = [];
+      window.app.state.tempExecFiles = [{
+        id: 'exec-1',
+        name: '历史执行用例',
+        requirement: 'UI自动化需求',
+        fromImport: true,
+        reuseEnabled: false,
+        cases: [{
+          id: 'exec-1-0',
+          module: '登录',
+          title: '已有用例',
+          priority: 'P1',
+          preconditions: '前置',
+          steps: '旧步骤',
+          expected: '旧预期',
+          actual: '通过',
+          remark: '旧备注',
+          reuseDetails: [],
+          defectLinks: [],
+        }],
+      }];
+      window.app.state.tempExecPages = {};
+    });
+    const splitPayload = JSON.stringify([{ module: '登录', key_scenarios: [], test_points: [], coupled_modules: [] }]);
+    await page.evaluate((text) => {
+      var el = document.getElementById('splitResult');
+      if (!el) return;
+      el.removeAttribute('readonly');
+      el.value = text;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, splitPayload);
+    await page.click('#goUsecaseGen');
+    await page.waitForSelector('#casesGenerationContainer [data-module-id]', { timeout: 5000 });
+    await page.evaluate(() => {
+      var state = window.app.state;
+      var mod = state.caseGenModules[0];
+      var cases = [
+        { module: '登录', title: '已有用例', priority: 'P1', preconditions: '', steps: ['重复'], expected: '重复预期' },
+        { module: '登录', title: '新增用例B', priority: 'P2', preconditions: '', steps: ['新步骤'], expected: '新预期' },
+      ];
+      state.caseGenResults[mod.id] = JSON.stringify(cases, null, 2);
+      state.caseSelections[mod.id] = new Set([0, 1]);
+      if (window.app.casesGenApi && typeof window.app.casesGenApi.renderCaseGeneration === 'function') {
+        window.app.casesGenApi.renderCaseGeneration();
+      } else if (window.app.core && typeof window.app.core.renderCaseGeneration === 'function') {
+        window.app.core.renderCaseGeneration();
+      }
+    });
+    const selectValue = await page.evaluate(() => {
+      var opt = document.querySelector('#appendTargetSelect option[value^="exec:"]');
+      return opt ? opt.value : '';
+    });
+    if (selectValue) {
+      await page.selectOption('#appendTargetSelect', selectValue);
+    }
+    await page.evaluate(async () => {
+      await window.app.casesGenApi.appendSelectedCasesToImported();
+    });
+    const execData = await page.evaluate(() => {
+      var file = window.app.state.tempExecFiles[0];
+      var found = file.cases.find(function(c) { return c.title === '已有用例'; });
+      return {
+        count: file.cases.length,
+        titles: file.cases.map(function(c) { return c.title; }),
+        actual: found ? found.actual : '',
+      };
+    });
+    expect(execData.count).toBe(2);
+    expect(execData.titles).toEqual(expect.arrayContaining(['已有用例', '新增用例B']));
+    expect(execData.actual).toBe('通过');
+  });
+
+  test('相同需求下同步执行记录并追加', async ({ page }) => {
+    const importedCases = '[{"module":"登录","title":"已有用例","priority":"P1","preconditions":"前置","steps":["旧步骤"],"expected":"旧预期"}]';
+    await page.setInputFiles('#caseFileInput', {
+      name: 'imported_cases.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(importedCases),
+    });
+    await page.evaluate(() => {
+      window.app.state.tempExecFiles = [{
+        id: 'exec-2',
+        name: '执行用例-同需求',
+        requirement: 'UI自动化需求',
+        fromImport: true,
+        reuseEnabled: true,
+        cases: [{
+          id: 'exec-2-0',
+          module: '登录',
+          title: '已有用例',
+          priority: 'P1',
+          preconditions: '前置',
+          steps: '旧步骤',
+          expected: '旧预期',
+          actual: '通过',
+          remark: '保留备注',
+          reuseDetails: [{ id: 'reuse-1', text: '复用数据' }],
+          defectLinks: [],
+        }],
+      }];
+    });
+    const splitPayload = JSON.stringify([{ module: '登录', key_scenarios: [], test_points: [], coupled_modules: [] }]);
+    await page.evaluate((text) => {
+      var el = document.getElementById('splitResult');
+      if (!el) return;
+      el.removeAttribute('readonly');
+      el.value = text;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, splitPayload);
+    await page.click('#goUsecaseGen');
+    await page.waitForSelector('#casesGenerationContainer [data-module-id]', { timeout: 5000 });
+    await page.evaluate(() => {
+      var state = window.app.state;
+      var mod = state.caseGenModules[0];
+      var cases = [
+        { module: '登录', title: '已有用例', priority: 'P1', preconditions: '前置', steps: ['重复'], expected: '重复预期' },
+        { module: '登录', title: '新增用例C', priority: 'P2', preconditions: '', steps: ['新步骤'], expected: '新预期' },
+      ];
+      state.caseGenResults[mod.id] = JSON.stringify(cases, null, 2);
+      state.caseSelections[mod.id] = new Set([0, 1]);
+      if (window.app.casesGenApi && typeof window.app.casesGenApi.renderCaseGeneration === 'function') {
+        window.app.casesGenApi.renderCaseGeneration();
+      } else if (window.app.core && typeof window.app.core.renderCaseGeneration === 'function') {
+        window.app.core.renderCaseGeneration();
+      }
+    });
+    await page.selectOption('#appendTargetSelect', 'workflow');
+    await page.evaluate(async () => {
+      await window.app.casesGenApi.appendSelectedCasesToImported();
+    });
+    const execInfo = await page.evaluate(() => {
+      var file = window.app.state.tempExecFiles.find(function(f) { return f.id === 'exec-2'; });
+      var hit = file.cases.find(function(c) { return c.title === '已有用例'; });
+      return {
+        reuseEnabled: file.reuseEnabled,
+        titles: file.cases.map(function(c) { return c.title; }),
+        actual: hit ? hit.actual : '',
+        remark: hit ? hit.remark : '',
+      };
+    });
+    expect(execInfo.reuseEnabled).toBe(true);
+    expect(execInfo.titles).toEqual(expect.arrayContaining(['已有用例', '新增用例C']));
+    expect(execInfo.actual).toBe('通过');
+    expect(execInfo.remark).toBe('保留备注');
   });
 });

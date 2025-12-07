@@ -19,6 +19,7 @@
     var caseGenTimingEl = dom.caseGenTimingEl;
     var tempExecStatus = dom.tempExecStatus;
     var appendToExistingCasesBtn = dom.appendToExistingCasesBtn || dom.appendToExistingCases;
+    var appendTargetSelect = dom.appendTargetSelect;
 
     var setStatus = ctx.setStatus || function() {};
     var downloadText = handlers.downloadText || function() {};
@@ -48,6 +49,8 @@
     var renderImportedCaseList = handlers.renderImportedCaseList || function() {};
     var refreshImportedCaseView = handlers.refreshImportedCaseView || function() {};
     var syncCaseTextWithImports = handlers.syncCaseTextWithImports || function() {};
+    var getTempExecFiles = handlers.getTempExecFiles || function() { return state.tempExecFiles || []; };
+    var normalizeTempExecCases = handlers.normalizeTempExecCases || null;
     var deriveCaseListFromText = handlers.deriveCaseListFromText || function() { return []; };
     var buildXmindPackageFromCases = handlers.buildXmindPackageFromCases || null;
     var createTempExecFile = handlers.createTempExecFile || function() { return null; };
@@ -55,6 +58,7 @@
     var syncTempExecFocus = handlers.syncTempExecFocus || function() {};
     var persistTempExecState = handlers.persistTempExecState || function() {};
     var setTempExecActive = handlers.setTempExecActive || function() {};
+    var renderTempExecView = handlers.renderTempExecView || function() {};
     var switchTab = handlers.switchTab || function() {};
     var scrollElementIntoView = handlers.scrollElementIntoView || function() {};
     var renderCaseGenProgressBoard = handlers.renderCaseGenProgressBoard || function() {};
@@ -166,6 +170,178 @@
     function normalizeCaseTitle(title) {
       var text = stringifyCaseField(title || '');
       return text ? text.toLowerCase() : '';
+    }
+
+    function normalizeCaseListWithModules(list) {
+      var normalized = [];
+      var buckets = {};
+      if (!Array.isArray(list)) return { normalized: normalized, buckets: buckets };
+      list.forEach(function(item) {
+        if (!item || typeof item !== 'object') return;
+        var moduleTitle = resolveModuleTitle(item.module || item.module_name || item['模块']);
+        var moduleKey = normalizeModuleKey(moduleTitle);
+        var cloned = Object.assign({}, item);
+        cloned.module = moduleTitle;
+        normalized.push(cloned);
+        if (!buckets[moduleKey]) buckets[moduleKey] = { title: moduleTitle, list: [] };
+        buckets[moduleKey].list.push(cloned);
+      });
+      return { normalized: normalized, buckets: buckets };
+    }
+
+    function computeAppendTargetOptions() {
+      var options = [{ value: '', label: '未选择' }];
+      var requirementLabel = getRequirementLabel(true) || '';
+      var targetName = stringifyCaseField(requirementLabel).toLowerCase();
+      var importedList = sanitizeCasesForExport(getImportedCaseObjects());
+      var hasWorkflowCases = importedList.length > 0;
+      var execCandidates = (getTempExecFiles() || []).filter(function(file) {
+        return file && Array.isArray(file.cases) && file.cases.length;
+      });
+      if (!hasWorkflowCases) {
+        var importedExec = execCandidates.filter(function(file) { return file && file.fromImport === true; });
+        execCandidates = importedExec.length ? importedExec : execCandidates;
+        if (!execCandidates.length) return options;
+      }
+      if (hasWorkflowCases) {
+        var workflowName = '功能工作流导入用例';
+        if (state.importedCases && state.importedCases.length) {
+          var first = state.importedCases[0];
+          workflowName = stringifyCaseField(first && first.name) || workflowName;
+        }
+        options.push({ value: 'workflow', label: workflowName });
+        return options;
+      }
+      if (!execCandidates.length) return options;
+      var exact = [];
+      var similar = [];
+      execCandidates.forEach(function(file) {
+        var name = stringifyCaseField(file && file.name);
+        var normName = name.toLowerCase();
+        if (targetName && normName === targetName) {
+          exact.push(file);
+        } else if (targetName && (normName.indexOf(targetName) !== -1 || targetName.indexOf(normName) !== -1)) {
+          similar.push(file);
+        }
+      });
+      var chosen = exact.length ? exact : (similar.length ? similar : execCandidates);
+      chosen.forEach(function(file) {
+        options.push({
+          value: 'exec:' + file.id,
+          label: stringifyCaseField(file.name) || '执行用例',
+        });
+      });
+      return options;
+    }
+
+    function hasValidAppendTargetSelection() {
+      if (!appendTargetSelect) return false;
+      var val = appendTargetSelect.value || '';
+      var opts = appendTargetSelect.options || [];
+      if (!opts.length) return false;
+      if (!val) return false;
+      return true;
+    }
+
+    function renderAppendTargetOptions() {
+      if (!appendTargetSelect) return;
+      var opts = computeAppendTargetOptions();
+      appendTargetSelect.innerHTML = opts.map(function(opt) {
+        return '<option value="' + escapeHtml(opt.value) + '">' + escapeHtml(opt.label) + '</option>';
+      }).join('');
+      var desired = state.caseGenAppendTarget || '';
+      var hasDesired = opts.some(function(opt) { return opt.value === desired; });
+      appendTargetSelect.value = hasDesired ? desired : '';
+      state.caseGenAppendTarget = appendTargetSelect.value || '';
+      refreshAppendExistingButton();
+    }
+
+    function collectAdditionsForBuckets(buckets, selectedEntries) {
+      var additions = [];
+      var duplicateCount = 0;
+      var moduleCount = 0;
+      selectedEntries.forEach(function(entry) {
+        var bucketKey = entry.moduleKey;
+        var bucket = buckets[bucketKey];
+        if (!bucket) {
+          bucket = { title: entry.moduleTitle, list: [] };
+          buckets[bucketKey] = bucket;
+        }
+        moduleCount += 1;
+        var existingTitleSet = new Set();
+        bucket.list.forEach(function(item) {
+          var key = normalizeCaseTitle(item.title || item.case_title || item['用例标题']);
+          if (key) existingTitleSet.add(key);
+        });
+        entry.cases.forEach(function(item) {
+          var titleKey = normalizeCaseTitle(item.title || item.case_title || item['用例标题']);
+          if (titleKey && existingTitleSet.has(titleKey)) {
+            duplicateCount += 1;
+            return;
+          }
+          var mergedItem = Object.assign({}, item);
+          mergedItem.module = resolveModuleTitle(bucket.title || entry.moduleTitle);
+          additions.push(mergedItem);
+          bucket.list.push(mergedItem);
+          if (titleKey) existingTitleSet.add(titleKey);
+        });
+      });
+      return { additions: additions, duplicateCount: duplicateCount, moduleCount: moduleCount };
+    }
+
+    function promptTempExecTarget(candidates) {
+      if (!candidates || !candidates.length) return null;
+      var lines = candidates.map(function(file, idx) {
+        var req = normalizeRequirementName(file && file.requirement) || '未标识需求';
+        var count = file && file.cases && file.cases.length ? file.cases.length : 0;
+        return (idx + 1) + '：' + (file && file.name ? file.name : '用例') + '（需求：' + req + '，' + count + ' 条）';
+      });
+      var input = window.prompt('请选择要追加的用例执行文件编号：\n' + lines.join('\n'), '1');
+      if (input === null) return null;
+      var index = Number(input);
+      if (!Number.isFinite(index) || index < 1 || index > candidates.length) return null;
+      return candidates[index - 1];
+    }
+
+    function normalizeExecCaseList(list, fileId) {
+      if (typeof normalizeTempExecCases === 'function') {
+        return normalizeTempExecCases(list, fileId);
+      }
+      return list;
+    }
+
+    function hasExecutionData(file) {
+      if (!file || !Array.isArray(file.cases)) return false;
+      return file.cases.some(function(item) {
+        if (!item) return false;
+        var actual = item.actual || '';
+        var remark = item.remark || '';
+        var hasDefect = item.defectLinks && item.defectLinks.length;
+        var hasReuse = item.reuseDetails && item.reuseDetails.length;
+        return (actual && actual !== '未执行') || remark || hasDefect || hasReuse;
+      });
+    }
+
+    function convertCaseForExec(item, fileId, idx, existing) {
+      var merged = Object.assign({}, item || {});
+      merged.module = resolveModuleTitle(merged.module || (existing && existing.module));
+      if (existing && existing.id) {
+        merged.id = existing.id;
+      } else {
+        merged.id = merged.id || (fileId ? (fileId + '-' + idx) : ('case-' + idx));
+      }
+      if (existing) {
+        merged.actual = existing.actual || '未执行';
+        merged.remark = existing.remark || '';
+        merged.reuseDetails = Array.isArray(existing.reuseDetails) ? existing.reuseDetails.slice() : [];
+        merged.defectLinks = Array.isArray(existing.defectLinks) ? existing.defectLinks.slice() : [];
+      } else {
+        merged.actual = merged.actual || '未执行';
+        merged.remark = merged.remark || '';
+        merged.reuseDetails = Array.isArray(merged.reuseDetails) ? merged.reuseDetails : [];
+        merged.defectLinks = Array.isArray(merged.defectLinks) ? merged.defectLinks : [];
+      }
+      return merged;
     }
 
     function chunkArray(list, size) {
@@ -333,7 +509,8 @@
 
     function refreshAppendExistingButton() {
       if (!appendToExistingCasesBtn) return;
-      appendToExistingCasesBtn.disabled = !hasSelectedGeneratedCases();
+      var disabled = !hasSelectedGeneratedCases() || !hasValidAppendTargetSelection();
+      appendToExistingCasesBtn.disabled = disabled;
     }
 
     function collectSelectedCaseEntries() {
@@ -506,6 +683,7 @@
       refreshExportCaseGenButton();
       renderCaseGenProgressBoard();
       refreshAppendExistingButton();
+      renderAppendTargetOptions();
     }
 
     async function generateCasesForModule(moduleId) {
@@ -906,126 +1084,217 @@
         refreshAppendExistingButton();
         return;
       }
-      if (!hasImportedCases()) {
-        setStatus(caseGenStatus, '请先在“功能工作流”导入 XMind/JSON 测试用例后再追加', 'warn');
-        return;
-      }
       var requirementLabel = ensureRequirementLabel('请输入需求标识后再追加到已有用例');
       if (!requirementLabel) {
         setStatus(caseGenStatus, '已取消追加（需求标识为空）', 'warn');
         return;
       }
       var importedList = sanitizeCasesForExport(getImportedCaseObjects());
-      if (!importedList.length) {
-        setStatus(caseGenStatus, '未获取到已导入的用例内容，请重新导入后再试', 'warn');
+      var hasWorkflowCases = importedList.length > 0;
+      var execCandidates = (getTempExecFiles() || []).filter(function(file) {
+        return file && Array.isArray(file.cases) && file.cases.length;
+      });
+      if (!hasWorkflowCases && !execCandidates.length) {
+        setStatus(caseGenStatus, '请先在“功能工作流”或“用例执行”导入用例后再追加', 'warn');
         return;
       }
-      var normalizedImported = [];
-      var moduleBuckets = {};
-      importedList.forEach(function(item) {
-        var moduleTitle = resolveModuleTitle(item.module || item.module_name || item['模块']);
-        var key = normalizeModuleKey(moduleTitle);
-        var cloned = Object.assign({}, item);
-        cloned.module = cloned.module || moduleTitle;
-        normalizedImported.push(cloned);
-        if (!moduleBuckets[key]) moduleBuckets[key] = { title: moduleTitle, list: [] };
-        moduleBuckets[key].list.push(cloned);
-      });
+      var targetValue = appendTargetSelect ? appendTargetSelect.value : '';
+      var targetOptions = computeAppendTargetOptions();
+      var targetItem = targetOptions.find(function(opt) { return opt.value === targetValue; });
+      if (!targetItem || !targetValue) {
+        setStatus(caseGenStatus, '请选择目标用例后再确认新增', 'warn');
+        return;
+      }
 
-      var additions = [];
-      var duplicateCount = 0;
-      var moduleCount = 0;
-      selectedEntries.forEach(function(entry) {
-        var bucketKey = entry.moduleKey;
-        var bucket = moduleBuckets[bucketKey];
-        if (!bucket) {
-          bucket = { title: entry.moduleTitle, list: [] };
-          moduleBuckets[bucketKey] = bucket;
+      async function appendToTempExecOnly(targetFile) {
+        var execInfo = normalizeCaseListWithModules(targetFile && targetFile.cases ? targetFile.cases : []);
+        var additionInfo = collectAdditionsForBuckets(execInfo.buckets, selectedEntries);
+        if (!additionInfo.additions.length) {
+          var emptyMsgExec = additionInfo.duplicateCount
+            ? '用例已经包含将要导入的用例，无需重复新增'
+            : '未找到可追加的用例，请重新选择';
+          setStatus(caseGenStatus, emptyMsgExec, 'warn');
+          return;
         }
-        moduleCount += 1;
-        var existingTitleSet = new Set();
-        bucket.list.forEach(function(item) {
-          var key = normalizeCaseTitle(item.title || item.case_title || item['用例标题']);
-          if (key) existingTitleSet.add(key);
+        var confirmPartsExec = ['将向【' + (targetFile.name || '用例') + '】追加 ' + additionInfo.additions.length + ' 条用例'];
+        if (additionInfo.moduleCount) confirmPartsExec.push('涉及 ' + additionInfo.moduleCount + ' 个模块');
+        if (additionInfo.duplicateCount) confirmPartsExec.push('其余 ' + additionInfo.duplicateCount + ' 条因标题重复将跳过');
+        var confirmedExec = window.confirm(confirmPartsExec.join('，') + '，是否继续？');
+        if (!confirmedExec) {
+          setStatus(caseGenStatus, '已取消追加到用例执行', 'warn');
+          return;
+        }
+        var mergedCasesRaw = execInfo.normalized.slice();
+        var startIdx = mergedCasesRaw.length;
+        additionInfo.additions.forEach(function(item, idx) {
+          mergedCasesRaw.push(convertCaseForExec(item, targetFile.id, startIdx + idx));
         });
-        entry.cases.forEach(function(item) {
-          var titleKey = normalizeCaseTitle(item.title || item.case_title || item['用例标题']);
-          if (titleKey && existingTitleSet.has(titleKey)) {
-            duplicateCount += 1;
-            return;
-          }
-          var mergedItem = Object.assign({}, item);
-          mergedItem.module = resolveModuleTitle(bucket.title || entry.moduleTitle);
-          additions.push(mergedItem);
-          bucket.list.push(mergedItem);
-          if (titleKey) existingTitleSet.add(titleKey);
-        });
-      });
+        var normalizedCases = normalizeExecCaseList(mergedCasesRaw, targetFile.id);
+        targetFile.cases = normalizedCases;
+        targetFile.requirement = targetFile.requirement || requirementLabel;
+        persistTempExecState();
+        setTempExecActive(targetFile.id);
+        syncTempExecFocus();
+        renderTempExecView();
+        if (tempExecStatus) {
+          setStatus(tempExecStatus, '【' + (targetFile.name || '用例') + '】已追加 ' + additionInfo.additions.length + ' 条用例', 'ok');
+        }
+        var statusExec = ['成功新增到【' + (targetFile.name || '用例') + '】'];
+        if (additionInfo.duplicateCount) statusExec.push('含 ' + additionInfo.duplicateCount + ' 条重复已跳过');
+        setStatus(caseGenStatus, statusExec.join('，'), additionInfo.duplicateCount ? 'warn' : 'ok');
+        switchTab('tempexec');
+        var tempSection = document.querySelector('[data-section-id="tempexec-view"]');
+        if (tempSection) scrollElementIntoView(tempSection, 'smooth', 140);
+      }
 
-      if (!additions.length) {
-        var emptyMsg = duplicateCount
+      var normRequirement = normalizeRequirementName(requirementLabel);
+      if (!hasWorkflowCases) {
+        if (targetValue.indexOf('exec:') !== 0) {
+          setStatus(caseGenStatus, '请选择执行页用例后再追加', 'warn');
+          return;
+        }
+        var targetExecOnly = execCandidates.find(function(file) { return ('exec:' + file.id) === targetValue; });
+        if (!targetExecOnly) {
+          setStatus(caseGenStatus, '未找到选择的执行用例，请重新选择', 'warn');
+          renderAppendTargetOptions();
+          return;
+        }
+        await appendToTempExecOnly(targetExecOnly);
+        if (appendTargetSelect) appendTargetSelect.value = '';
+        state.caseGenAppendTarget = '';
+        renderAppendTargetOptions();
+        return;
+      }
+      if (targetValue !== 'workflow') {
+        setStatus(caseGenStatus, '当前仅支持追加到功能工作流已导入的用例', 'warn');
+        return;
+      }
+
+      var workflowInfo = normalizeCaseListWithModules(importedList);
+      var additionInfoWorkflow = collectAdditionsForBuckets(workflowInfo.buckets, selectedEntries);
+      if (!additionInfoWorkflow.additions.length) {
+        var emptyMsg = additionInfoWorkflow.duplicateCount
           ? '用例已经包含将要导入的用例，无需重复新增'
           : '未找到可追加的用例，请重新选择';
         setStatus(caseGenStatus, emptyMsg, 'warn');
         return;
       }
 
-      var confirmParts = ['将向已有用例追加 ' + additions.length + ' 条新用例'];
-      if (moduleCount) confirmParts.push('涉及 ' + moduleCount + ' 个模块');
-      if (duplicateCount) confirmParts.push('其余 ' + duplicateCount + ' 条因标题重复将跳过');
+      var confirmParts = ['将向已有用例追加 ' + additionInfoWorkflow.additions.length + ' 条新用例'];
+      if (additionInfoWorkflow.moduleCount) confirmParts.push('涉及 ' + additionInfoWorkflow.moduleCount + ' 个模块');
+      if (additionInfoWorkflow.duplicateCount) confirmParts.push('其余 ' + additionInfoWorkflow.duplicateCount + ' 条因标题重复将跳过');
       var confirmed = window.confirm(confirmParts.join('，') + '，是否继续？');
       if (!confirmed) {
         setStatus(caseGenStatus, '已取消追加到已有用例', 'warn');
         return;
       }
 
-      var mergedList = normalizedImported.concat(additions);
+      var mergedList = workflowInfo.normalized.concat(additionInfoWorkflow.additions);
       var appendedName = requirementLabel ? '追加用例-' + requirementLabel : '追加用例';
       try {
         var additionsText = '';
         try {
-          additionsText = JSON.stringify(wrapDataWithRequirement(additions), null, 2);
+          additionsText = JSON.stringify(wrapDataWithRequirement(additionInfoWorkflow.additions), null, 2);
         } catch (errWrap) {
-          additionsText = JSON.stringify(additions, null, 2);
+          additionsText = JSON.stringify(additionInfoWorkflow.additions, null, 2);
         }
         if (addImportedCase) {
-          addImportedCase(appendedName, additionsText, additions);
+          addImportedCase(appendedName, additionsText, additionInfoWorkflow.additions);
         } else {
           if (!state.importedCases) state.importedCases = [];
           state.importedCases.push({
             id: 'case-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2),
             name: appendedName,
             text: additionsText,
-            list: additions.slice(),
+            list: additionInfoWorkflow.additions.slice(),
           });
           renderImportedCaseList();
           syncCaseTextWithImports();
           refreshImportedCaseView();
         }
-        var entryName = requirementLabel ? '导入用例-' + requirementLabel : '导入用例';
-        var entry = createTempExecFile(entryName, mergedList, 'current', null, null, requirementLabel);
-        if (!entry) {
-          setStatus(caseGenStatus, '未构建出可同步的用例，请检查数据格式', 'err');
-          return;
+
+        var execTarget = null;
+        var sameRequirementExec = execCandidates.filter(function(file) {
+          return normalizeRequirementName(file && file.requirement) === normRequirement;
+        });
+        if (sameRequirementExec && sameRequirementExec.length) {
+          execTarget = sameRequirementExec[0];
         }
-        if (!ensureTempExecReplacement(entry)) {
-          setStatus(caseGenStatus, '已取消转到用例执行', 'warn');
-          return;
-        }
-        state.tempExecFiles.push(entry);
-        syncTempExecFocus();
-        state.tempExecPages[entry.id] = 0;
-        persistTempExecState();
-        setTempExecActive(entry.id);
+
+        if (execTarget) {
+          var existingCases = Array.isArray(execTarget.cases) ? execTarget.cases.slice() : [];
+          var existingMap = new Map();
+          existingCases.forEach(function(item) {
+            if (!item) return;
+            var mKey = normalizeModuleKey(item.module || item.module_name || item['模块']);
+            var tKey = normalizeCaseTitle(item.title || item.case_title || item['用例标题']);
+            var key = mKey + '::' + tKey;
+            if (!existingMap.has(key)) existingMap.set(key, item);
+          });
+          var usedKeys = new Set();
+          var mergedExec = mergedList.map(function(item, idx) {
+            var mKey = normalizeModuleKey(item.module || item.module_name || item['模块']);
+            var tKey = normalizeCaseTitle(item.title || item.case_title || item['用例标题']);
+            var key = mKey + '::' + tKey;
+            var existing = existingMap.get(key);
+            usedKeys.add(key);
+            return convertCaseForExec(item, execTarget.id, idx, existing);
+          });
+          existingCases.forEach(function(item) {
+            if (!item) return;
+            var mKey = normalizeModuleKey(item.module || item.module_name || item['模块']);
+            var tKey = normalizeCaseTitle(item.title || item.case_title || item['用例标题']);
+            var key = mKey + '::' + tKey;
+            if (usedKeys.has(key)) return;
+            mergedExec.push(convertCaseForExec(item, execTarget.id, mergedExec.length, item));
+          });
+          execTarget.cases = normalizeExecCaseList(mergedExec, execTarget.id);
+          execTarget.requirement = execTarget.requirement || requirementLabel;
+          execTarget.reuseEnabled = Boolean(execTarget.reuseEnabled);
+          persistTempExecState();
+          setTempExecActive(execTarget.id);
+          syncTempExecFocus();
+          renderTempExecView();
         if (tempExecStatus) {
-          setStatus(tempExecStatus, '【' + entry.name + '】已同步 ' + entry.cases.length + ' 条用例', 'ok');
+          var execMsg = hasExecutionData(execTarget)
+            ? '【' + (execTarget.name || '用例') + '】已同步新用例并保留执行记录'
+            : '【' + (execTarget.name || '用例') + '】已同步新用例';
+          setStatus(tempExecStatus, execMsg, 'ok');
         }
-        var statusParts = ['已追加 ' + additions.length + ' 条用例并同步到用例执行'];
-        if (duplicateCount) statusParts.push('含 ' + duplicateCount + ' 条重复已跳过');
-        setStatus(caseGenStatus, statusParts.join('，'), duplicateCount ? 'warn' : 'ok');
+        var statusParts = ['成功新增到【功能工作流导入用例】并同步到执行'];
+        if (additionInfoWorkflow.duplicateCount) statusParts.push('含 ' + additionInfoWorkflow.duplicateCount + ' 条重复已跳过');
+        setStatus(caseGenStatus, statusParts.join('，'), additionInfoWorkflow.duplicateCount ? 'warn' : 'ok');
+      } else {
+        var entryName = requirementLabel ? '导入用例-' + requirementLabel : '导入用例';
+          var entry = createTempExecFile(entryName, mergedList, 'current', null, null, requirementLabel);
+          if (!entry) {
+            setStatus(caseGenStatus, '未构建出可同步的用例，请检查数据格式', 'err');
+            return;
+          }
+          entry.fromCaseGen = true;
+          if (!ensureTempExecReplacement(entry)) {
+            setStatus(caseGenStatus, '已取消转到用例执行', 'warn');
+            return;
+          }
+          state.tempExecFiles.push(entry);
+          syncTempExecFocus();
+          state.tempExecPages[entry.id] = 0;
+          persistTempExecState();
+          setTempExecActive(entry.id);
+          if (tempExecStatus) {
+            setStatus(tempExecStatus, '【' + entry.name + '】已同步 ' + entry.cases.length + ' 条用例', 'ok');
+          }
+          var statusNew = ['成功新增到【功能工作流导入用例】并同步到执行'];
+          if (additionInfoWorkflow.duplicateCount) statusNew.push('含 ' + additionInfoWorkflow.duplicateCount + ' 条重复已跳过');
+          setStatus(caseGenStatus, statusNew.join('，'), additionInfoWorkflow.duplicateCount ? 'warn' : 'ok');
+        }
+
         switchTab('tempexec');
         var tempViewSection = document.querySelector('[data-section-id="tempexec-view"]');
         if (tempViewSection) scrollElementIntoView(tempViewSection, 'smooth', 140);
+        if (appendTargetSelect) appendTargetSelect.value = '';
+        state.caseGenAppendTarget = '';
+        renderAppendTargetOptions();
       } catch (err) {
         console.error(err);
         setStatus(caseGenStatus, '追加失败：' + err.message, 'err');
@@ -1313,6 +1582,8 @@
       parseGeneratedCases: parseGeneratedCases,
       refreshCaseSelectionUI: refreshCaseSelectionUI,
       updateSupplementButtons: updateSupplementButtons,
+      refreshAppendExistingButton: refreshAppendExistingButton,
+      renderAppendTargetOptions: renderAppendTargetOptions,
       getCaseListForModule: getCaseListForModule,
       exportSelectedCasesData: exportSelectedCasesData,
       exportAllModulesData: exportAllModulesData,
