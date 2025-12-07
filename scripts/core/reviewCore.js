@@ -41,6 +41,9 @@
     var reviewViewContainer = dom.reviewViewContainer;
     var toggleReviewViewBtn = dom.toggleReviewViewBtn;
     var confirmClarificationsBtn = dom.confirmClarificationsBtn;
+    var reviewViewDrawerBody = dom.reviewViewDrawerBody;
+    var reviewViewDrawerTitle = dom.reviewViewDrawerTitle;
+    var reviewViewDrawer = null;
     var runReviewBtn = dom.runReviewBtn;
     var reviewTimingEl = dom.reviewTimingEl;
     var autoClarifyContainer = dom.autoClarifyContainer;
@@ -54,6 +57,24 @@
     if (!(state.reviewClarifications instanceof Map)) state.reviewClarifications = new Map();
     if (!(state.reviewSelections instanceof Set)) state.reviewSelections = new Set();
     if (!(state.reviewExpanded instanceof Set)) state.reviewExpanded = new Set();
+
+    function ensureReviewDrawer() {
+      if (reviewViewDrawer) return reviewViewDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      reviewViewDrawer = window.app.drawer.createDrawer({
+        drawerId: 'reviewViewDrawer',
+        closeButtons: ['closeReviewViewDrawerBtn'],
+        onClose: function() {
+          if (reviewViewContainer) {
+            reviewViewContainer.classList.add('hidden');
+            reviewViewContainer.classList.remove('visible');
+            reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“展开澄清视图”查看详情</p>';
+          }
+          if (toggleReviewViewBtn) toggleReviewViewBtn.textContent = '展开澄清视图';
+        },
+      });
+      return reviewViewDrawer;
+    }
 
     function setClarifyStatus(text, type) {
       setStatus(reviewStatus, text, type);
@@ -437,6 +458,8 @@
         reviewViewContainer.classList.add('hidden');
         reviewViewContainer.classList.remove('visible');
         reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">暂无评审数据，请先完成需求评审</p>';
+        var drawer = ensureReviewDrawer();
+        if (drawer) drawer.close();
       } else if (reviewViewContainer.classList.contains('visible')) {
         reviewViewContainer.innerHTML = renderReviewView();
       } else {
@@ -449,18 +472,20 @@
         setStatus(reviewStatus, '当前没有可展示的澄清数据，请先完成评审', 'warn');
         return;
       }
-      var visible = reviewViewContainer.classList.contains('visible');
-      if (visible) {
-        reviewViewContainer.classList.remove('visible');
-        reviewViewContainer.classList.add('hidden');
-        reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“展开澄清视图”查看详情</p>';
-        if (toggleReviewViewBtn) toggleReviewViewBtn.textContent = '展开澄清视图';
-      } else {
-        reviewViewContainer.innerHTML = renderReviewView();
-        reviewViewContainer.classList.add('visible');
-        reviewViewContainer.classList.remove('hidden');
-        if (toggleReviewViewBtn) toggleReviewViewBtn.textContent = '收起澄清视图';
+      var drawer = ensureReviewDrawer();
+      if (!drawer) return;
+      var drawerEl = drawer.element;
+      var isOpen = drawerEl && drawerEl.classList.contains('open');
+      if (isOpen) {
+        drawer.close();
+        return;
       }
+      reviewViewContainer.innerHTML = renderReviewView();
+      reviewViewContainer.classList.add('visible');
+      reviewViewContainer.classList.remove('hidden');
+      if (reviewViewDrawerTitle) reviewViewDrawerTitle.textContent = '需求澄清点视图';
+      if (toggleReviewViewBtn) toggleReviewViewBtn.textContent = '收起澄清视图';
+      drawer.open();
     }
 
     function confirmClarifications() {
@@ -604,6 +629,13 @@
         setStatus(reviewStatus, '已取消需求评审（需求标识为空）', 'warn');
         return;
       }
+      if (reviewResultEl) reviewResultEl.value = '';
+      if (reviewViewContainer) {
+        reviewViewContainer.classList.add('hidden');
+        reviewViewContainer.classList.remove('visible');
+        reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“展开澄清视图”查看详情</p>';
+      }
+      updateFlowStatus();
       if (runReviewBtn) runReviewBtn.disabled = true;
       setStepInProgress('review');
       setStatus(reviewStatus, '正在分析需求模糊点...', '');

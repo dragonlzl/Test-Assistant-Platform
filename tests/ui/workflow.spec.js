@@ -60,6 +60,8 @@ test.describe('工作流关键交互', () => {
     const caseViewBtn = page.locator('#caseViewBtn');
     if (await caseViewBtn.isVisible()) {
       await caseViewBtn.click();
+      const closeBtn = page.locator('#closeCaseViewDrawerBtn');
+      if (await closeBtn.isVisible()) await closeBtn.click();
     }
   });
 
@@ -119,7 +121,8 @@ test.describe('工作流关键交互', () => {
         raw.dispatchEvent(new Event('input', { bubbles: true }));
       }
       if (window.app && window.app.state) {
-        window.app.state.inProgressStep = 'clean';
+        window.app.state.inProgressSteps = { clean: true };
+        window.app.state.inProgressStep = '';
       }
       if (raw) {
         raw.dispatchEvent(new Event('input', { bubbles: true }));
@@ -135,7 +138,8 @@ test.describe('工作流关键交互', () => {
   test('执行中步骤使用描边高亮而非全蓝填充', async ({ page }) => {
     await page.evaluate(() => {
       if (window.app && window.app.state) {
-        window.app.state.inProgressStep = 'review';
+        window.app.state.inProgressSteps = { review: true };
+        window.app.state.inProgressStep = '';
       }
       var raw = document.getElementById('rawText');
       if (raw) {
@@ -147,8 +151,9 @@ test.describe('工作流关键交互', () => {
       }
     });
     const activeStep = page.locator('#flowNav .step.active');
-    await expect(activeStep).toHaveCount(1);
-    const styles = await activeStep.evaluate((node) => {
+    const activeCount = await activeStep.count();
+    expect(activeCount).toBeGreaterThan(0);
+    const styles = await page.locator('#flowNav .step[data-target="review"]').evaluate((node) => {
       var computed = window.getComputedStyle(node);
       var status = node.querySelector('.step-status');
       return {
@@ -195,7 +200,9 @@ test.describe('工作流关键交互', () => {
       const confirmBtn = document.getElementById('confirmClarifications');
       if (confirmBtn) confirmBtn.disabled = false;
     });
+    await page.click('#toggleReviewView');
     await page.click('#confirmClarifications');
+    await page.click('#closeReviewViewDrawerBtn');
     await expect(page.locator('#clarifyStatus')).toContainText('澄清结果已写入评审 JSON');
   });
 

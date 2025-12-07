@@ -29,6 +29,9 @@
     var copyMissingBtn = pickEl(dom.copyMissingBtn, 'copyMissingBtn');
     var missingViewContainer = pickEl(dom.missingViewContainer, 'missingViewContainer');
     var missingSmartFillBtn = pickEl(dom.missingSmartFillBtn, 'missingSmartFillBtn');
+    var missingViewDrawerBody = pickEl(dom.missingViewDrawerBody, 'missingViewDrawerBody');
+    var missingViewDrawerTitle = pickEl(dom.missingViewDrawerTitle, 'missingViewDrawerTitle');
+    var missingViewDrawer = null;
     var casesCompareResultEl = pickEl(dom.casesCompareResultEl, 'casesCompareResult');
     var casesCoverageStatus = pickEl(dom.casesCoverageStatus, 'casesCoverageStatus');
     var casesTimingEl = pickEl(dom.casesTimingEl, 'casesTiming');
@@ -470,6 +473,24 @@
       if (!Array.isArray(state.caseGenModules)) state.caseGenModules = [];
     }
 
+    function ensureMissingDrawer() {
+      if (missingViewDrawer) return missingViewDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      missingViewDrawer = window.app.drawer.createDrawer({
+        drawerId: 'missingViewDrawer',
+        closeButtons: ['closeMissingViewDrawerBtn'],
+        onClose: function() {
+          if (missingViewContainer) {
+            missingViewContainer.classList.add('hidden');
+            missingViewContainer.classList.remove('visible');
+            missingViewContainer.innerHTML = '';
+          }
+          if (missingViewBtn) missingViewBtn.textContent = '缺失模块视图';
+        },
+      });
+      return missingViewDrawer;
+    }
+
     function syncCasesGoUsecaseGenButton() {
       if (!casesGoUsecaseGenBtn) return;
       var hasSplit = Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim());
@@ -548,6 +569,8 @@
           missingViewContainer.classList.remove('visible');
           missingViewContainer.innerHTML = '';
           missingViewBtn.textContent = '缺失模块视图';
+          var drawer = missingViewDrawer || ensureMissingDrawer();
+          if (drawer && drawer.element && drawer.element.classList.contains('open')) drawer.close();
         }
       } else if (missingViewContainer.classList.contains('visible')) {
         missingViewContainer.innerHTML = buildMissingViewHtml(state);
@@ -559,6 +582,13 @@
 
     function toggleMissingView() {
       if (!missingViewContainer || !missingViewBtn || missingViewBtn.disabled || !casesCompareResultEl) return;
+      var drawer = ensureMissingDrawer();
+      if (!drawer) return;
+      var isOpen = drawer.element && drawer.element.classList.contains('open');
+      if (isOpen) {
+        drawer.close();
+        return;
+      }
       ensureMissingState();
       var list = parseMissingModules(casesCompareResultEl.value || '');
       state.missingLastList = list;
@@ -567,20 +597,14 @@
       state.missingSelections = new Set(Array.from(state.missingSelections).filter(function(idx) { return idx < rowLength; }));
       syncCasesGoUsecaseGenButton();
       refreshMissingSmartFillButton();
-      var visible = missingViewContainer.classList.contains('visible');
-      if (visible) {
-        missingViewContainer.classList.remove('visible');
-        missingViewContainer.classList.add('hidden');
-        missingViewContainer.innerHTML = '';
-        missingViewBtn.textContent = '缺失模块视图';
-      } else {
-        missingViewContainer.innerHTML = buildMissingViewHtml(state);
-        missingViewContainer.classList.add('visible');
-        missingViewContainer.classList.remove('hidden');
-        missingViewBtn.textContent = '收起缺失视图';
-        bindMissingViewCheckboxEvents();
-        refreshMissingSelectionUI();
-      }
+      missingViewContainer.innerHTML = buildMissingViewHtml(state);
+      missingViewContainer.classList.add('visible');
+      missingViewContainer.classList.remove('hidden');
+      missingViewBtn.textContent = '收起缺失视图';
+      if (missingViewDrawerTitle) missingViewDrawerTitle.textContent = '缺失模块视图';
+      bindMissingViewCheckboxEvents();
+      refreshMissingSelectionUI();
+      drawer.open();
     }
 
     function handleMissingSelectionChange(index, checked) {
@@ -889,19 +913,21 @@
         setStatus(casesCoverageStatus, '拆分结果解析失败，请先重新运行“测试模块拆分”', 'warn');
         return;
       }
+      if (casesCompareResultEl) casesCompareResultEl.value = '';
       if (casesCompareBtnEl) casesCompareBtnEl.setAttribute('disabled', 'disabled');
+      renderCasesModuleProgress(parsedModules, parsedModules.map(function() { return 'pending'; }));
+      setStepInProgress('cases');
       var model;
       try {
         model = getAssignedModel('cases');
       } catch (err) {
         setStatus(casesCoverageStatus, err && err.message ? err.message : '未配置模型', 'warn');
         updateModelTiming(casesTimingEl);
+        clearStepInProgress('cases');
+        updateFlowStatus();
         if (casesCompareBtnEl) casesCompareBtnEl.removeAttribute('disabled');
         return;
       }
-      if (casesCompareResultEl) casesCompareResultEl.value = '';
-      renderCasesModuleProgress(parsedModules, parsedModules.map(function() { return 'pending'; }));
-      setStepInProgress('cases');
       var concurrency = resolveCasesCompareConcurrency(parsedModules.length);
       setStatus(casesCoverageStatus, '正在并发对比 ' + parsedModules.length + ' 个模块（并发上限 ' + concurrency + '）...', '');
       var casesPrompt = state.assignments && state.assignments.casesPrompt ? state.assignments.casesPrompt.trim() : '';

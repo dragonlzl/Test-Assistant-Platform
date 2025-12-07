@@ -25,6 +25,7 @@
     var testCaseGenModelBtn = document.getElementById('testCaseGenModel');
     var appendToExistingCasesBtn = document.getElementById('appendToExistingCases');
     var appendTargetSelect = document.getElementById('appendTargetSelect');
+    var transferSelectedToExecBtn = document.getElementById('transferSelectedToExec');
 
     function bindGoButtons() {
       if (goUsecaseGenBtn && api.goToCaseGeneration) {
@@ -161,6 +162,9 @@
           api.refreshAppendExistingButton();
         }
       });
+    }
+    if (transferSelectedToExecBtn && api.transferSelectedCasesToExec) {
+      transferSelectedToExecBtn.addEventListener('click', api.transferSelectedCasesToExec);
     }
   }
 

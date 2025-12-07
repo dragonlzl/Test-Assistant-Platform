@@ -939,6 +939,7 @@
       'renderAppendTargetOptions',
       'getCaseListForModule',
       'appendSelectedCasesToImported',
+      'transferSelectedCasesToExec',
     ]);
 
     const lazyParseXmindFile = function(file) {
@@ -1083,16 +1084,30 @@
       ? xmindCore.parseXmindFile
       : async function parseXmindFileFallback() { return { text: '', list: [] }; };
 
+    function ensureInProgressMap() {
+      if (!state.inProgressSteps || typeof state.inProgressSteps !== 'object') {
+        state.inProgressSteps = {};
+      }
+      if (state.inProgressStep && !state.inProgressSteps[state.inProgressStep]) {
+        state.inProgressSteps[state.inProgressStep] = true;
+      }
+      return state.inProgressSteps;
+    }
+
     function setStepInProgress(step) {
-      state.inProgressStep = step || '';
+      var map = ensureInProgressMap();
+      if (step) map[step] = true;
+      state.inProgressStep = '';
       updateFlowStatus();
     }
 
     function clearStepInProgress(step) {
+      var map = ensureInProgressMap();
+      if (step && map[step]) delete map[step];
       if (state.inProgressStep === step) {
         state.inProgressStep = '';
-        updateFlowStatus();
       }
+      updateFlowStatus();
     }
 
     const uploadModule = window.app.upload && typeof window.app.upload.init === 'function'

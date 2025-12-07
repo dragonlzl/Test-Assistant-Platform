@@ -218,12 +218,14 @@
         try {
           model = getAssignedModel('split');
         } catch (err) {
-          setStatus(splitStatus, err.message, 'warn');
-          updateModelTiming(splitTimingEl);
-          state.isSplitting = false;
-          if (splitBtnEl) splitBtnEl.removeAttribute('disabled');
-          return;
-        }
+        setStatus(splitStatus, err.message, 'warn');
+        updateModelTiming(splitTimingEl);
+        state.isSplitting = false;
+        if (splitBtnEl) splitBtnEl.removeAttribute('disabled');
+        clearStepInProgress('split');
+        updateFlowStatus();
+        return;
+      }
         if (splitResultEl) splitResultEl.value = '';
         setStepInProgress('split');
         setStatus(splitStatus, '正在拆分测试模块...', '');

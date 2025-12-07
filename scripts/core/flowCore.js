@@ -109,26 +109,28 @@
         'cases-upload': hasCaseSource(),
         cases: casesCompareResultEl && casesCompareResultEl.value.trim().length > 0,
       };
-      if (state.inProgressStep) stateMap[state.inProgressStep] = false;
+      var runningMap = (state && state.inProgressSteps && typeof state.inProgressSteps === 'object') ? state.inProgressSteps : {};
+      if (state.inProgressStep) runningMap[state.inProgressStep] = true;
+      if (state) state.inProgressSteps = runningMap;
       var order = ['import', 'review', 'clean', 'split', 'cases-upload', 'cases'];
-      var next = state.inProgressStep || order.find(function(key) { return !stateMap[key]; }) || 'cases';
+      var nextPending = order.find(function(key) { return !stateMap[key] && !runningMap[key]; }) || 'cases';
       if (runReviewBtn) {
         var rawReady = stateMap.import;
-        runReviewBtn.disabled = !rawReady || state.inProgressStep === 'review';
+        runReviewBtn.disabled = !rawReady || runningMap.review;
       }
       if (flowNavSteps && typeof flowNavSteps.forEach === 'function') {
         flowNavSteps.forEach(function(step) {
           var target = step.dataset ? step.dataset.target : '';
           step.classList.remove('done', 'active');
           var status = 'pending';
-          if (target === state.inProgressStep) {
+          if (runningMap[target]) {
             step.classList.add('active');
             status = 'running';
             syncStepStatus(step, status);
             return;
           }
           if (stateMap[target]) step.classList.add('done');
-          if (target === next) step.classList.add('active');
+          if (!stateMap[target] && target === nextPending) step.classList.add('active');
           if (stateMap[target]) status = 'done';
           syncStepStatus(step, status);
         });

@@ -424,10 +424,8 @@
 <h2>需求澄清点视图</h2>
 <div class="card-body">
 <p class="hint">汇总所有评审中发现的不明确点，可逐条补充澄清结果并同步回评审 JSON。</p>
-<div class="review-view hidden" id="reviewViewContainer"></div>
 <div class="actions">
 <button class="secondary" disabled="" id="toggleReviewView">展开澄清视图</button>
-<button class="secondary" disabled="" id="confirmClarifications">确认澄清</button>
 </div>
 <p class="status" id="clarifyStatus"></p>
 </div>
@@ -459,27 +457,9 @@
 <section class="card" data-section-id="clean-view" data-tab-section="clean">
 <h2>清洗结果视图</h2>
 <div class="card-body">
-<div class="clean-view-header">
 <p class="hint">列表展示清洗条目，可点击定位相关原始需求段落，快速核对清洗准确性。</p>
-<div class="clean-view-actions">
-<button class="secondary" id="toggleCleanViewBtn">收起视图</button>
-<button class="secondary" disabled="" id="cleanHighlightAllBtn">全部高亮</button>
-</div>
-</div>
-<div class="review-view visible" id="cleanViewContainer">
-<p class="hint" style="padding:12px;">暂无清洗数据，请先完成需求清洗</p>
-</div>
-<div class="clean-raw-panel">
-<div class="clean-raw-header">
-<p class="hint">原始需求全文将在下方展示，点击上方条目或选择文字后反向定位。</p>
-<div class="clean-view-actions">
-<button class="secondary" id="toggleCleanRawViewBtn">收起原文</button>
-<button class="secondary" disabled="" id="cleanRawLocateBtn">反向定位到条目</button>
-</div>
-</div>
-<div class="review-view visible clean-raw-view" id="cleanRawView">
-<p class="hint" style="padding:12px;">暂无原始需求，请先导入或填写</p>
-</div>
+<div class="actions">
+<button class="secondary" id="toggleCleanViewBtn">展开视图</button>
 </div>
 </div>
 </section>
@@ -538,7 +518,6 @@
 <div class="actions">
 <button class="secondary" disabled="" id="toggleSplitView">展开拆分视图</button>
 </div>
-<div class="review-view hidden" id="splitViewContainer"></div>
 </div>
 </section>
 <section class="card" data-section-id="cases-upload" data-tab-section="clean">
@@ -575,10 +554,9 @@
 <div class="card-body">
 <p class="hint">基于当前 XMind/文本内容渲染列表视图，可快速查看模块、用例标题、优先级等字段。</p>
 <div class="actions">
-<button class="secondary" id="caseViewBtn">刷新视图</button>
+<button class="secondary" id="caseViewBtn">打开用例视图</button>
 <span class="hint" id="caseViewHint" style="margin:0;">请先上传或输入 XMind 测试用例</span>
 </div>
-<div class="caseview hidden" id="caseViewContainer"></div>
 </div>
 </section>
 <section class="card" data-section-id="cases" data-tab-section="clean">
@@ -612,14 +590,98 @@
 <p class="hint">运行“测试用例覆盖对比”后，可在此查看缺失模块详情，并复制 <code>missing</code> 字段 JSON。</p>
 <div class="actions" style="margin-bottom:8px;">
 <button class="secondary" disabled="" id="missingViewBtn">缺失模块视图</button>
-<button class="secondary" disabled="" id="copyMissingBtn">复制缺失模块JSON</button>
-<button class="secondary" disabled="" id="missingSmartFillBtn">智能生成填充</button>
 <button class="secondary" id="casesGoUsecaseGen">生成用例</button>
 </div>
 <p class="status" id="missingViewStatus"></p>
-<div class="missing-view hidden" id="missingViewContainer"></div>
 </div>
 </section>
+<div class="drawer" id="reviewViewDrawer" data-tab-section="clean">
+  <div class="drawer-mask" data-drawer-close="reviewViewDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="reviewViewDrawerTitle">需求澄清点视图</h3>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="secondary" disabled id="confirmClarifications">确认澄清</button>
+        <button class="link-toggle" id="closeReviewViewDrawerBtn" data-drawer-close="reviewViewDrawer">收起</button>
+      </div>
+    </div>
+    <div class="drawer-body" id="reviewViewDrawerBody">
+      <div class="review-view hidden" id="reviewViewContainer"></div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="cleanViewDrawer" data-tab-section="clean">
+  <div class="drawer-mask" data-drawer-close="cleanViewDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="cleanViewDrawerTitle">清洗结果视图</h3>
+      <button class="link-toggle" id="closeCleanViewDrawerBtn" data-drawer-close="cleanViewDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="cleanViewDrawerBody">
+      <div class="clean-view-header">
+        <p class="hint">列表展示清洗条目，可点击定位相关原始需求段落，快速核对清洗准确性。</p>
+        <div class="clean-view-actions">
+          <button class="secondary" disabled id="cleanHighlightAllBtn">全部高亮</button>
+        </div>
+      </div>
+      <div class="review-view visible" id="cleanViewContainer">
+        <p class="hint" style="padding:12px;">暂无清洗数据，请先完成需求清洗</p>
+      </div>
+      <div class="clean-raw-panel">
+        <div class="clean-raw-header">
+          <p class="hint">原始需求全文将在下方展示，点击上方条目或选择文字后反向定位。</p>
+          <div class="clean-view-actions">
+            <button class="secondary" id="toggleCleanRawViewBtn">收起原文</button>
+            <button class="secondary" disabled id="cleanRawLocateBtn">反向定位到条目</button>
+          </div>
+        </div>
+        <div class="review-view visible clean-raw-view" id="cleanRawView">
+          <p class="hint" style="padding:12px;">暂无原始需求，请先导入或填写</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="splitViewDrawer" data-tab-section="clean">
+  <div class="drawer-mask" data-drawer-close="splitViewDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="splitViewDrawerTitle">拆分视图</h3>
+      <button class="link-toggle" id="closeSplitViewDrawerBtn" data-drawer-close="splitViewDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="splitViewDrawerBody">
+      <div class="review-view hidden" id="splitViewContainer"></div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseViewDrawer" data-tab-section="clean">
+  <div class="drawer-mask" data-drawer-close="caseViewDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseViewDrawerTitle">测试用例视图</h3>
+      <button class="link-toggle" id="closeCaseViewDrawerBtn" data-drawer-close="caseViewDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="caseViewDrawerBody">
+      <div class="caseview hidden" id="caseViewContainer"></div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="missingViewDrawer" data-tab-section="clean">
+  <div class="drawer-mask" data-drawer-close="missingViewDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="missingViewDrawerTitle">缺失模块视图</h3>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="secondary" disabled id="copyMissingBtn">复制缺失模块JSON</button>
+        <button class="secondary" disabled id="missingSmartFillBtn">智能生成填充</button>
+        <button class="link-toggle" id="closeMissingViewDrawerBtn" data-drawer-close="missingViewDrawer">收起</button>
+      </div>
+    </div>
+    <div class="drawer-body" id="missingViewDrawerBody">
+      <div class="missing-view hidden" id="missingViewContainer"></div>
+    </div>
+  </div>
+</div>
 <section class="card hidden" data-tab-section="assign">
 <h2>功能指派</h2>
 <div class="card-body">
@@ -862,6 +924,7 @@
     <div class="action-left" style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
       <button class="secondary" id="toSplitFromCaseGen">前往测试模块拆分</button>
+      <button class="pill success" id="transferSelectedToExec">勾选用例到执行页</button>
     </div>
     <div class="action-right" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <span>用例视图中勾选用例，新增 到</span>

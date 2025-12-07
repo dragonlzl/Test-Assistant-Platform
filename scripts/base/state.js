@@ -101,6 +101,7 @@
       missingLastList: [],
       activeTab: 'clean',
       inProgressStep: '',
+      inProgressSteps: {},
       autoRunning: false,
       lastRawImportName: '',
       autoRequireClarifications: false,

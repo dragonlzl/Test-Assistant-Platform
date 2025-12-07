@@ -558,6 +558,14 @@
         setStatus(cleanStatus, '已取消需求清洗（需求标识为空）', 'warn');
         return;
       }
+      if (cleanedTextEl) cleanedTextEl.value = '';
+      state.cleanEntries = [];
+      state.cleanViewSelection = -1;
+      state.cleanHighlightAll = false;
+      state.cleanActiveHighlights = {};
+      renderCleanView(false);
+      renderCleanRawView(null);
+      updateFlowStatus();
       if (runCleanBtn) runCleanBtn.disabled = true;
       setStepInProgress('clean');
       setStatus(cleanStatus, '正在清洗（若接口未配置将使用本地规则粗洗）...', '');

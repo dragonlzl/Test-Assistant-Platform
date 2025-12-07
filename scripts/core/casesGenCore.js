@@ -20,6 +20,7 @@
     var tempExecStatus = dom.tempExecStatus;
     var appendToExistingCasesBtn = dom.appendToExistingCasesBtn || dom.appendToExistingCases;
     var appendTargetSelect = dom.appendTargetSelect;
+    var transferSelectedToExecBtn = dom.transferSelectedToExecBtn || dom.transferSelectedToExec;
     var caseGenViewDrawerBody = dom.caseGenViewDrawerBody;
     var caseGenViewDrawerTitle = dom.caseGenViewDrawerTitle;
     var caseGenViewDrawer = null;
@@ -234,8 +235,20 @@
       var options = [{ value: '', label: '未选择' }];
       var requirementLabel = getRequirementLabel(true) || '';
       var targetName = stringifyCaseField(requirementLabel).toLowerCase();
-      var importedList = sanitizeCasesForExport(getImportedCaseObjects());
-      var hasWorkflowCases = importedList.length > 0;
+      var workflowEntries = Array.isArray(state.importedCases) ? state.importedCases : [];
+      var workflowOptions = [];
+      workflowEntries.forEach(function(entry, idx) {
+        var list = Array.isArray(entry && entry.list) ? entry.list : [];
+        if (!list.length && deriveCaseListFromText && entry && entry.text) {
+          list = deriveCaseListFromText(entry.text);
+        }
+        if (!list || !list.length) return;
+        workflowOptions.push({
+          value: 'workflow:' + (entry.id || entry.name || ('wf-' + idx)),
+          label: stringifyCaseField(entry.name) || '功能工作流导入用例',
+        });
+      });
+      var hasWorkflowCases = workflowOptions.length > 0;
       var execCandidates = (getTempExecFiles() || []).filter(function(file) {
         return file && Array.isArray(file.cases) && file.cases.length;
       });
@@ -245,13 +258,8 @@
         if (!execCandidates.length) return options;
       }
       if (hasWorkflowCases) {
-        var workflowName = '功能工作流导入用例';
-        if (state.importedCases && state.importedCases.length) {
-          var first = state.importedCases[0];
-          workflowName = stringifyCaseField(first && first.name) || workflowName;
-        }
-        options.push({ value: 'workflow', label: workflowName });
-        return options;
+        workflowOptions.forEach(function(opt) { options.push(opt); });
+        if (options.length > 1) return options;
       }
       if (!execCandidates.length) return options;
       var exact = [];
@@ -548,9 +556,14 @@
     }
 
     function refreshAppendExistingButton() {
-      if (!appendToExistingCasesBtn) return;
-      var disabled = !hasSelectedGeneratedCases() || !hasValidAppendTargetSelection();
-      appendToExistingCasesBtn.disabled = disabled;
+      var hasSelection = hasSelectedGeneratedCases();
+      if (appendToExistingCasesBtn) {
+        var disabled = !hasSelection || !hasValidAppendTargetSelection();
+        appendToExistingCasesBtn.disabled = disabled;
+      }
+      if (transferSelectedToExecBtn) {
+        transferSelectedToExecBtn.disabled = false;
+      }
     }
 
     function collectSelectedCaseEntries() {
@@ -1115,8 +1128,21 @@
         setStatus(caseGenStatus, '已取消追加（需求标识为空）', 'warn');
         return;
       }
-      var importedList = sanitizeCasesForExport(getImportedCaseObjects());
-      var hasWorkflowCases = importedList.length > 0;
+      var workflowEntries = Array.isArray(state.importedCases) ? state.importedCases : [];
+      var workflowTargets = [];
+      workflowEntries.forEach(function(entry, idx) {
+        var list = Array.isArray(entry && entry.list) ? entry.list : [];
+        if (!list.length && deriveCaseListFromText && entry && entry.text) {
+          list = deriveCaseListFromText(entry.text);
+        }
+        if (!list || !list.length) return;
+        workflowTargets.push({
+          entry: entry,
+          list: list,
+          value: 'workflow:' + (entry.id || entry.name || ('wf-' + idx)),
+        });
+      });
+      var hasWorkflowCases = workflowTargets.length > 0;
       var execCandidates = (getTempExecFiles() || []).filter(function(file) {
         return file && Array.isArray(file.cases) && file.cases.length;
       });
@@ -1191,12 +1217,18 @@
         renderAppendTargetOptions();
         return;
       }
-      if (targetValue !== 'workflow') {
+      if (targetValue.indexOf('workflow:') !== 0) {
         setStatus(caseGenStatus, '当前仅支持追加到功能工作流已导入的用例', 'warn');
         return;
       }
+      var targetWorkflow = workflowTargets.find(function(item) { return item.value === targetValue; });
+      if (!targetWorkflow) {
+        setStatus(caseGenStatus, '未找到匹配的功能工作流用例，请重新选择', 'warn');
+        renderAppendTargetOptions();
+        return;
+      }
 
-      var workflowInfo = normalizeCaseListWithModules(importedList);
+      var workflowInfo = normalizeCaseListWithModules(targetWorkflow.list);
       var additionInfoWorkflow = collectAdditionsForBuckets(workflowInfo.buckets, selectedEntries);
       if (!additionInfoWorkflow.additions.length) {
         var emptyMsg = additionInfoWorkflow.duplicateCount
@@ -1206,7 +1238,8 @@
         return;
       }
 
-      var confirmParts = ['将向已有用例追加 ' + additionInfoWorkflow.additions.length + ' 条新用例'];
+      var targetWorkflowName = stringifyCaseField(targetWorkflow.entry && targetWorkflow.entry.name) || '功能工作流导入用例';
+      var confirmParts = ['将向【' + targetWorkflowName + '】追加 ' + additionInfoWorkflow.additions.length + ' 条新用例'];
       if (additionInfoWorkflow.moduleCount) confirmParts.push('涉及 ' + additionInfoWorkflow.moduleCount + ' 个模块');
       if (additionInfoWorkflow.duplicateCount) confirmParts.push('其余 ' + additionInfoWorkflow.duplicateCount + ' 条因标题重复将跳过');
       var confirmed = window.confirm(confirmParts.join('，') + '，是否继续？');
@@ -1216,28 +1249,18 @@
       }
 
       var mergedList = workflowInfo.normalized.concat(additionInfoWorkflow.additions);
-      var appendedName = requirementLabel ? '追加用例-' + requirementLabel : '追加用例';
       try {
-        var additionsText = '';
+        var mergedText = '';
         try {
-          additionsText = JSON.stringify(wrapDataWithRequirement(additionInfoWorkflow.additions), null, 2);
+          mergedText = JSON.stringify(wrapDataWithRequirement(mergedList), null, 2);
         } catch (errWrap) {
-          additionsText = JSON.stringify(additionInfoWorkflow.additions, null, 2);
+          mergedText = JSON.stringify(mergedList, null, 2);
         }
-        if (addImportedCase) {
-          addImportedCase(appendedName, additionsText, additionInfoWorkflow.additions);
-        } else {
-          if (!state.importedCases) state.importedCases = [];
-          state.importedCases.push({
-            id: 'case-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2),
-            name: appendedName,
-            text: additionsText,
-            list: additionInfoWorkflow.additions.slice(),
-          });
-          renderImportedCaseList();
-          syncCaseTextWithImports();
-          refreshImportedCaseView();
-        }
+        targetWorkflow.entry.list = mergedList;
+        targetWorkflow.entry.text = mergedText;
+        renderImportedCaseList();
+        syncCaseTextWithImports();
+        refreshImportedCaseView();
 
         var execTarget = null;
         var sameRequirementExec = execCandidates.filter(function(file) {
@@ -1281,17 +1304,17 @@
           setTempExecActive(execTarget.id);
           syncTempExecFocus();
           renderTempExecView();
-        if (tempExecStatus) {
-          var execMsg = hasExecutionData(execTarget)
-            ? '【' + (execTarget.name || '用例') + '】已同步新用例并保留执行记录'
-            : '【' + (execTarget.name || '用例') + '】已同步新用例';
-          setStatus(tempExecStatus, execMsg, 'ok');
-        }
-        var statusParts = ['成功新增到【功能工作流导入用例】并同步到执行'];
-        if (additionInfoWorkflow.duplicateCount) statusParts.push('含 ' + additionInfoWorkflow.duplicateCount + ' 条重复已跳过');
-        setStatus(caseGenStatus, statusParts.join('，'), additionInfoWorkflow.duplicateCount ? 'warn' : 'ok');
-      } else {
-        var entryName = requirementLabel ? '导入用例-' + requirementLabel : '导入用例';
+          if (tempExecStatus) {
+            var execMsg = hasExecutionData(execTarget)
+              ? '【' + (execTarget.name || '用例') + '】已同步新用例并保留执行记录'
+              : '【' + (execTarget.name || '用例') + '】已同步新用例';
+            setStatus(tempExecStatus, execMsg, 'ok');
+          }
+          var statusParts = ['成功新增到【' + targetWorkflowName + '】并同步到执行'];
+          if (additionInfoWorkflow.duplicateCount) statusParts.push('含 ' + additionInfoWorkflow.duplicateCount + ' 条重复已跳过');
+          setStatus(caseGenStatus, statusParts.join('，'), additionInfoWorkflow.duplicateCount ? 'warn' : 'ok');
+        } else {
+          var entryName = requirementLabel ? '导入用例-' + requirementLabel : '导入用例';
           var entry = createTempExecFile(entryName, mergedList, 'current', null, null, requirementLabel);
           if (!entry) {
             setStatus(caseGenStatus, '未构建出可同步的用例，请检查数据格式', 'err');
@@ -1310,7 +1333,7 @@
           if (tempExecStatus) {
             setStatus(tempExecStatus, '【' + entry.name + '】已同步 ' + entry.cases.length + ' 条用例', 'ok');
           }
-          var statusNew = ['成功新增到【功能工作流导入用例】并同步到执行'];
+          var statusNew = ['成功新增到【' + targetWorkflowName + '】并同步到执行'];
           if (additionInfoWorkflow.duplicateCount) statusNew.push('含 ' + additionInfoWorkflow.duplicateCount + ' 条重复已跳过');
           setStatus(caseGenStatus, statusNew.join('，'), additionInfoWorkflow.duplicateCount ? 'warn' : 'ok');
         }
@@ -1325,6 +1348,82 @@
         console.error(err);
         setStatus(caseGenStatus, '追加失败：' + err.message, 'err');
       }
+    }
+
+    async function transferSelectedCasesToExec() {
+      if (!state.caseGenModules || !state.caseGenModules.length) {
+        setStatus(caseGenStatus, '请先前往“测试模块拆分”完成拆分后再转到执行页', 'warn');
+        return;
+      }
+      var hasGenerated = state.caseGenModules.some(function(mod) {
+        var list = getCaseListForModule(mod.id);
+        return list && list.length;
+      });
+      if (!hasGenerated) {
+        setStatus(caseGenStatus, '当前尚未生成用例，请先生成用例后再转到执行页', 'warn');
+        return;
+      }
+      var selectedEntries = collectSelectedCaseEntries();
+      if (!selectedEntries.length) {
+        setStatus(caseGenStatus, '请到各个模块的用例视图中勾选用例（点击右侧“用例视图”按钮）', 'warn');
+        refreshAppendExistingButton();
+        return;
+      }
+      var requirementLabel = ensureRequirementLabel('请输入需求标识后再转到用例执行');
+      if (!requirementLabel) {
+        setStatus(caseGenStatus, '已取消转到执行页（需求标识为空）', 'warn');
+        return;
+      }
+      var hasWorkflow = hasImportedCases && hasImportedCases();
+      var execFiles = getTempExecFiles() || [];
+      var hasExec = execFiles && execFiles.length > 0;
+      if (hasWorkflow || hasExec) {
+        var confirmed = window.confirm('可进行用例合并，确认不进行合并直接使用所选用例？');
+        if (!confirmed) {
+          setStatus(caseGenStatus, '已取消直接转到执行页，请在上方选择目标用例后再试', 'warn');
+          try {
+            if (typeof window !== 'undefined' && window.scrollTo) {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          } catch (errScroll) {
+            // ignore
+          }
+          return;
+        }
+      }
+      var combinedCases = [];
+      selectedEntries.forEach(function(entry) {
+        if (entry && Array.isArray(entry.cases)) combinedCases = combinedCases.concat(entry.cases);
+      });
+      var sanitized = sanitizeCasesForExport(combinedCases);
+      if (!sanitized.length) {
+        setStatus(caseGenStatus, '未找到可转移的用例，请重新选择', 'warn');
+        return;
+      }
+      var entryName = requirementLabel ? '勾选用例-' + requirementLabel : '勾选用例';
+      var entry = createTempExecFile(entryName, sanitized, 'current', null, null, requirementLabel);
+      if (!entry) {
+        setStatus(caseGenStatus, '未生成可执行的用例，请检查数据格式', 'err');
+        return;
+      }
+      entry.fromCaseGen = true;
+      if (!ensureTempExecReplacement(entry)) {
+        setStatus(caseGenStatus, '已取消转到用例执行', 'warn');
+        return;
+      }
+      state.tempExecFiles.push(entry);
+      syncTempExecFocus();
+      state.tempExecPages[entry.id] = 0;
+      persistTempExecState();
+      setTempExecActive(entry.id);
+      if (tempExecStatus) {
+        setStatus(tempExecStatus, '【' + (entry.name || '用例') + '】已导入 ' + entry.cases.length + ' 条用例', 'ok');
+      }
+      setStatus(caseGenStatus, '已将 ' + entry.cases.length + ' 条勾选用例转到执行页', 'ok');
+      switchTab('tempexec');
+      var tempViewSection = document.querySelector('[data-section-id="tempexec-view"]');
+      if (tempViewSection) scrollElementIntoView(tempViewSection, 'smooth', 140);
+      refreshAppendExistingButton();
     }
 
     async function transferModuleToTempExec(moduleId) {
@@ -1619,6 +1718,7 @@
       exportSingleModuleData: exportSingleModuleData,
       filterCasesAgainstImported: filterCasesAgainstImported,
       appendSelectedCasesToImported: appendSelectedCasesToImported,
+      transferSelectedCasesToExec: transferSelectedCasesToExec,
     };
   }
 
