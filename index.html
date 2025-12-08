@@ -356,13 +356,13 @@
   <div class="drawer-panel">
     <div class="drawer-header">
       <h3 id="autoClarifyDrawerTitle">需求澄清视图</h3>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <button class="secondary" disabled="" id="autoClarifyConfirm">确认澄清</button>
-        <button class="link-toggle" id="closeAutoClarifyDrawerBtn" data-drawer-close="autoClarifyDrawer">收起</button>
-      </div>
+      <button class="link-toggle" id="closeAutoClarifyDrawerBtn" data-drawer-close="autoClarifyDrawer">收起</button>
     </div>
     <div class="drawer-body" id="autoClarifyDrawerBody">
       <div class="review-view hidden" id="autoClarifyContainer"></div>
+      <div class="actions" style="margin-top:12px; justify-content:flex-end;">
+        <button class="pill primary" disabled="" id="autoClarifyConfirm">确认澄清</button>
+      </div>
     </div>
   </div>
 </div>
@@ -639,13 +639,13 @@
   <div class="drawer-panel">
     <div class="drawer-header">
       <h3 id="reviewViewDrawerTitle">需求澄清点视图</h3>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="secondary" disabled id="confirmClarifications">确认澄清</button>
-        <button class="link-toggle" id="closeReviewViewDrawerBtn" data-drawer-close="reviewViewDrawer">收起</button>
-      </div>
+      <button class="link-toggle" id="closeReviewViewDrawerBtn" data-drawer-close="reviewViewDrawer">收起</button>
     </div>
     <div class="drawer-body" id="reviewViewDrawerBody">
       <div class="review-view hidden" id="reviewViewContainer"></div>
+      <div class="actions" style="margin-top:12px; justify-content:flex-end;">
+        <button class="pill primary" disabled id="confirmClarifications">确认澄清</button>
+      </div>
     </div>
   </div>
 </div>
