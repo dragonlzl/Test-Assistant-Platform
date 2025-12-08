@@ -26,7 +26,6 @@
       resetAutoCompareMissingView: noop,
       resetAutoCompareUserInputs: noop,
       renderAutoCompareMissingView: noop,
-      toggleAutoCompareMissingView: noop,
       buildFilteredComparePayload: function() { return ''; },
       updateAutoCompareActions: noop,
       syncAutoCompareStatus: noop,

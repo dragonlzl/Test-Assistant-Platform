@@ -14,7 +14,6 @@
     var handleMissingSelectionChange = handlers.handleMissingSelectionChange || function() {};
     var handleMissingSelectAll = handlers.handleMissingSelectAll || function() {};
     var renderAutoCompareMissingView = handlers.renderAutoCompareMissingView || function() {};
-    var toggleAutoCompareMissingView = handlers.toggleAutoCompareMissingView || function() {};
     var buildFilteredComparePayload = handlers.buildFilteredComparePayload || function() { return null; };
     var updateAutoCompareActions = handlers.updateAutoCompareActions || function() {};
     var syncAutoCompareStatus = handlers.syncAutoCompareStatus || function() { return null; };
@@ -39,7 +38,6 @@
     var autoMissingSmartFillBtn = pickEl(dom.autoMissingSmartFillBtn, 'autoMissingSmartFill');
     var autoMissingView = pickEl(dom.autoMissingView, 'autoMissingView');
     var autoCompareMissing = pickEl(dom.autoCompareMissing, 'autoCompareMissing');
-    var autoCompareMissingToggle = pickEl(dom.autoCompareMissingToggle, 'autoCompareMissingToggle');
     var autoCompareSuggestionInput = pickEl(dom.autoCompareSuggestionInput, 'autoCompareSuggestion');
     var autoFillCleanBtn = pickEl(dom.autoFillCleanBtn, 'autoFillCleanBtn');
     var autoJumpCleanViewBtn = pickEl(dom.autoJumpCleanViewBtn, 'autoJumpCleanView');
@@ -94,11 +92,6 @@
             cb.checked = target.checked;
           });
         }
-      });
-    }
-    if (autoCompareMissingToggle) {
-      autoCompareMissingToggle.addEventListener('click', function() {
-        toggleAutoCompareMissingView();
       });
     }
     if (autoCompareMissing) {

@@ -30,7 +30,6 @@
     var handleClarifyInputEvent = handlers.handleClarifyInputEvent;
     var updateAutoClarifyVisibility = handlers.updateAutoClarifyVisibility;
     var openAutoClarifyPanel = handlers.openAutoClarifyPanel;
-    var closeAutoClarifyPanel = handlers.closeAutoClarifyPanel;
     var handleAutoClarifyConfirm = handlers.handleAutoClarifyConfirm;
 
     if (runReviewBtn && typeof reviewRequirements === 'function') {
@@ -90,13 +89,9 @@
         if (hidden) {
           if (typeof openAutoClarifyPanel === 'function') openAutoClarifyPanel();
         } else {
-          if (typeof closeAutoClarifyPanel === 'function') {
-            closeAutoClarifyPanel();
-          } else {
-            autoClarifyContainer.classList.add('hidden');
-            autoClarifyContainer.classList.remove('visible');
-            autoClarifyToggleBtn.textContent = '展开澄清视图';
-          }
+          autoClarifyContainer.classList.add('hidden');
+          autoClarifyContainer.classList.remove('visible');
+          autoClarifyToggleBtn.textContent = '展开澄清视图';
         }
       });
     }

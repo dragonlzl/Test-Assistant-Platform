@@ -52,8 +52,6 @@
     var autoClarifyConfirmBtn = dom.autoClarifyConfirmBtn;
     var autoClarifySection = dom.autoClarifySection;
     var autoClarifyStatus = dom.autoClarifyStatus;
-    var autoClarifyDrawerTitle = dom.autoClarifyDrawerTitle;
-    var autoClarifyDrawer = null;
 
     if (!Array.isArray(state.reviewRows)) state.reviewRows = [];
     if (!(state.reviewClarifications instanceof Map)) state.reviewClarifications = new Map();
@@ -78,27 +76,6 @@
       return reviewViewDrawer;
     }
 
-    function drawerIsOpen(drawer) {
-      return Boolean(drawer && drawer.element && drawer.element.classList && drawer.element.classList.contains('open'));
-    }
-
-    function ensureAutoClarifyDrawer() {
-      if (autoClarifyDrawer) return autoClarifyDrawer;
-      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
-      autoClarifyDrawer = window.app.drawer.createDrawer({
-        drawerId: 'autoClarifyDrawer',
-        closeButtons: ['closeAutoClarifyDrawerBtn'],
-        onClose: function() {
-          if (autoClarifyContainer) {
-            autoClarifyContainer.classList.add('hidden');
-            autoClarifyContainer.classList.remove('visible');
-          }
-          if (autoClarifyToggleBtn) autoClarifyToggleBtn.textContent = '展开澄清视图';
-        },
-      });
-      return autoClarifyDrawer;
-    }
-
     function setClarifyStatus(text, type) {
       setStatus(reviewStatus, text, type);
       if (clarifyStatus) setStatus(clarifyStatus, text, type);
@@ -120,17 +97,6 @@
       return false;
     }
 
-    function closeAutoClarifyPanel() {
-      if (drawerIsOpen(autoClarifyDrawer) && autoClarifyDrawer && typeof autoClarifyDrawer.close === 'function') {
-        autoClarifyDrawer.close();
-      }
-      if (autoClarifyContainer) {
-        autoClarifyContainer.classList.add('hidden');
-        autoClarifyContainer.classList.remove('visible');
-      }
-      if (autoClarifyToggleBtn) autoClarifyToggleBtn.textContent = '展开澄清视图';
-    }
-
     function updateAutoClarifyVisibility(forceOpen) {
       if (forceOpen === void 0) forceOpen = false;
       var enabled = Boolean(autoClarifyToggle && autoClarifyToggle.checked);
@@ -144,7 +110,6 @@
           autoClarifyContainer.classList.add('hidden');
           autoClarifyContainer.innerHTML = '<p class="hint" style="padding:12px;">未启用需求澄清</p>';
         }
-        closeAutoClarifyPanel();
         if (autoClarifyConfirmBtn) autoClarifyConfirmBtn.disabled = true;
         if (autoClarifyToggleBtn) {
           autoClarifyToggleBtn.disabled = true;
@@ -158,8 +123,9 @@
       } else {
         if (autoClarifyToggleBtn) {
           autoClarifyToggleBtn.disabled = false;
-          var open = drawerIsOpen(autoClarifyDrawer) || (autoClarifyContainer && !autoClarifyContainer.classList.contains('hidden'));
-          autoClarifyToggleBtn.textContent = open ? '收起澄清视图' : '展开澄清视图';
+          autoClarifyToggleBtn.textContent = autoClarifyContainer && !autoClarifyContainer.classList.contains('hidden')
+            ? '收起澄清视图'
+            : '展开澄清视图';
         }
         renderAutoClarifyView();
         if (forceOpen) openAutoClarifyPanel();
@@ -708,12 +674,9 @@
 
     function openAutoClarifyPanel() {
       if (!autoClarifyContainer) return;
-      var drawer = ensureAutoClarifyDrawer();
       renderAutoClarifyView();
       autoClarifyContainer.classList.remove('hidden');
       if (autoClarifyToggleBtn) autoClarifyToggleBtn.textContent = '收起澄清视图';
-      if (autoClarifyDrawerTitle) autoClarifyDrawerTitle.textContent = '澄清视图';
-      if (drawer) drawer.open();
     }
 
     return {
@@ -729,7 +692,6 @@
       updateAutoClarifyVisibility: updateAutoClarifyVisibility,
       renderAutoClarifyView: renderAutoClarifyView,
       openAutoClarifyPanel: openAutoClarifyPanel,
-      closeAutoClarifyPanel: closeAutoClarifyPanel,
       handleAutoClarifyConfirm: handleAutoClarifyConfirm,
       waitForAutoClarification: waitForAutoClarification,
       syncReviewViewFromResult: syncReviewViewFromResult,
