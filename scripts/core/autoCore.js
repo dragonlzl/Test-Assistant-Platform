@@ -50,6 +50,8 @@
     var autoMissingCopy = pickEl(dom.autoMissingCopy, 'autoMissingCopy');
     var autoMissingSmartFillBtn = pickEl(dom.autoMissingSmartFillBtn, 'autoMissingSmartFill');
     var autoMissingView = pickEl(dom.autoMissingView, 'autoMissingView');
+    var autoMissingDrawerTitle = pickEl(dom.autoMissingDrawerTitle, 'autoMissingDrawerTitle');
+    var autoMissingDrawer = null;
     var autoMissingStatus = pickEl(dom.autoMissingStatus, 'autoMissingStatus');
     var autoMissingGoUsecaseBtn = pickEl(dom.autoMissingGoUsecaseBtn, 'autoMissingGoUsecase');
     var casesCompareResultEl = pickEl(dom.casesCompareResultEl, 'casesCompareResult');
@@ -60,6 +62,9 @@
     var autoRecleanBtn = pickEl(dom.autoRecleanBtn, 'autoRecleanBtn');
     var autoIgnoreCoverageBtn = pickEl(dom.autoIgnoreCoverageBtn, 'autoIgnoreCoverageBtn');
     var autoCompareMissing = pickEl(dom.autoCompareMissing, 'autoCompareMissing');
+    var autoCompareMissingToggle = pickEl(dom.autoCompareMissingToggle, 'autoCompareMissingToggle');
+    var autoCompareDrawerTitle = pickEl(dom.autoCompareDrawerTitle, 'autoCompareDrawerTitle');
+    var autoCompareDrawer = null;
     var autoCompareSuggestionInput = pickEl(dom.autoCompareSuggestionInput, 'autoCompareSuggestion');
     var autoFillCleanBtn = pickEl(dom.autoFillCleanBtn, 'autoFillCleanBtn');
     var autoJumpCleanViewBtn = pickEl(dom.autoJumpCleanViewBtn, 'autoJumpCleanView');
@@ -104,6 +109,45 @@
       await postFeishuMessage('请前往工具，进行需求澄清，确认澄清结果后可继续执行。');
     }
 
+    function isDrawerOpen(drawer) {
+      return Boolean(drawer && drawer.element && drawer.element.classList && drawer.element.classList.contains('open'));
+    }
+
+    function ensureAutoMissingDrawer() {
+      if (autoMissingDrawer) return autoMissingDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      autoMissingDrawer = window.app.drawer.createDrawer({
+        drawerId: 'autoMissingDrawer',
+        closeButtons: ['closeAutoMissingDrawerBtn'],
+        onClose: function() {
+          if (autoMissingView) {
+            autoMissingView.classList.add('hidden');
+            autoMissingView.classList.remove('visible');
+          }
+          if (autoMissingToggle) autoMissingToggle.textContent = '缺失模块视图';
+          setMissingStatus('', '');
+        },
+      });
+      return autoMissingDrawer;
+    }
+
+    function ensureAutoCompareDrawer() {
+      if (autoCompareDrawer) return autoCompareDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      autoCompareDrawer = window.app.drawer.createDrawer({
+        drawerId: 'autoCompareDrawer',
+        closeButtons: ['closeAutoCompareDrawerBtn'],
+        onClose: function() {
+          if (autoCompareMissing) {
+            autoCompareMissing.classList.add('hidden');
+            autoCompareMissing.classList.remove('visible');
+          }
+          if (autoCompareMissingToggle) autoCompareMissingToggle.textContent = '覆盖缺失列表';
+        },
+      });
+      return autoCompareDrawer;
+    }
+
     function renderAutoMissingTable() {
       if (!state.missingRowCache.length) {
         return '<p class="hint" style="padding:12px;">暂无缺失测试点</p>';
@@ -135,7 +179,8 @@
       autoMissingView.innerHTML = '';
       autoMissingView.classList.add('hidden');
       autoMissingView.classList.remove('visible');
-      if (autoMissingToggle) autoMissingToggle.textContent = '展开缺失视图';
+      if (isDrawerOpen(autoMissingDrawer)) autoMissingDrawer.close();
+      if (autoMissingToggle) autoMissingToggle.textContent = '缺失模块视图';
     }
 
     function refreshAutoMissingSelectionUI() {
@@ -166,6 +211,9 @@
         setMissingStatus('', '');
         return;
       }
+      if (autoMissingToggle) {
+        autoMissingToggle.textContent = isDrawerOpen(autoMissingDrawer) ? '收起缺失视图' : '缺失模块视图';
+      }
       if (autoMissingView.classList.contains('visible')) {
         autoMissingView.innerHTML = renderAutoMissingTable();
       }
@@ -177,17 +225,22 @@
         setMissingStatus('当前没有缺失测试点', 'warn');
         return;
       }
-      var visible = autoMissingView.classList.contains('visible');
-      if (visible) {
-        resetAutoMissingView();
-        setMissingStatus('', '');
-      } else {
-        autoMissingView.innerHTML = renderAutoMissingTable();
-        autoMissingView.classList.remove('hidden');
-        autoMissingView.classList.add('visible');
-        autoMissingToggle.textContent = '收起缺失视图';
-        refreshAutoMissingSelectionUI();
+      var drawer = ensureAutoMissingDrawer();
+      if (!drawer) return;
+      var open = isDrawerOpen(drawer);
+      if (open) {
+        drawer.close();
+        return;
       }
+      autoMissingView.innerHTML = renderAutoMissingTable();
+      autoMissingView.classList.remove('hidden');
+      autoMissingView.classList.add('visible');
+      if (autoMissingDrawerTitle) {
+        autoMissingDrawerTitle.textContent = '缺失模块视图（' + state.missingRowCache.length + '）';
+      }
+      autoMissingToggle.textContent = '收起缺失视图';
+      refreshAutoMissingSelectionUI();
+      drawer.open();
     }
 
     function ensureAutoMissingViewVisible(scrollIntoCenter) {
@@ -299,6 +352,8 @@
       autoCompareMissing.innerHTML = '';
       autoCompareMissing.classList.add('hidden');
       autoCompareMissing.classList.remove('visible');
+      if (isDrawerOpen(autoCompareDrawer)) autoCompareDrawer.close();
+      if (autoCompareMissingToggle) autoCompareMissingToggle.textContent = '覆盖缺失列表';
       updateAutoCompareActions(extractCoverageFromCompareResult());
     }
 
@@ -348,14 +403,30 @@
           '<tr>' +
             '<th class="check"><input type="checkbox" data-auto-compare-select-all ' + (allSelected ? 'checked' : '') + '></th>' +
             '<th class="index">编号</th>' +
-            '<th>缺少需求点</th>' +
-          '</tr>' +
-        '</thead>' +
-        '<tbody>' + rows + '</tbody>' +
-      '</table>';
+          '<th>缺少需求点</th>' +
+        '</tr>' +
+      '</thead>' +
+      '<tbody>' + rows + '</tbody>' +
+    '</table>';
       autoCompareMissing.classList.remove('hidden');
       autoCompareMissing.classList.add('visible');
+      if (autoCompareDrawerTitle) autoCompareDrawerTitle.textContent = '覆盖缺失列表（' + list.length + '）';
+      if (autoCompareMissingToggle) autoCompareMissingToggle.textContent = '收起缺失列表';
+      var drawer = ensureAutoCompareDrawer();
+      if (drawer) drawer.open();
       updateAutoCompareActions(coverage);
+    }
+
+    function toggleAutoCompareMissingView() {
+      if (!autoCompareMissingToggle || autoCompareMissingToggle.disabled) return;
+      if (!state.autoCompareMissingList || !state.autoCompareMissingList.length) return;
+      var drawer = ensureAutoCompareDrawer();
+      if (!drawer) return;
+      if (isDrawerOpen(drawer)) {
+        drawer.close();
+        return;
+      }
+      renderAutoCompareMissingView(state.autoCompareMissingList, extractCoverageFromCompareResult(), true);
     }
 
     function getSelectedAutoCompareMissing() {
@@ -386,6 +457,11 @@
       var selected = getSelectedAutoCompareMissing();
       var suggestion = state.autoCompareSuggestion ? state.autoCompareSuggestion.trim() : '';
       if (autoFillCleanBtn) autoFillCleanBtn.disabled = Boolean(state.autoRunning) || !(selected.length || suggestion);
+      var hasMissing = Array.isArray(state.autoCompareMissingList) && state.autoCompareMissingList.length && typeof coverage === 'number' && coverage < 100;
+      if (autoCompareMissingToggle) {
+        autoCompareMissingToggle.disabled = !hasMissing || state.autoRunning;
+        autoCompareMissingToggle.textContent = hasMissing && isDrawerOpen(autoCompareDrawer) ? '收起缺失列表' : '覆盖缺失列表';
+      }
     }
 
     function syncAutoCompareStatus() {
@@ -663,6 +739,7 @@
       resetAutoCompareMissingView: resetAutoCompareMissingView,
       resetAutoCompareUserInputs: resetAutoCompareUserInputs,
       renderAutoCompareMissingView: renderAutoCompareMissingView,
+      toggleAutoCompareMissingView: toggleAutoCompareMissingView,
       buildFilteredComparePayload: buildFilteredComparePayload,
       updateAutoCompareActions: updateAutoCompareActions,
       syncAutoCompareStatus: syncAutoCompareStatus,

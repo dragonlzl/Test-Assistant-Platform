@@ -23,6 +23,10 @@
       'splitViewDrawer', 'splitViewDrawerBody', 'splitViewDrawerTitle', 'closeSplitViewDrawerBtn',
       'caseViewDrawer', 'caseViewDrawerBody', 'caseViewDrawerTitle', 'closeCaseViewDrawerBtn',
       'missingViewDrawer', 'missingViewDrawerBody', 'missingViewDrawerTitle', 'closeMissingViewDrawerBtn',
+      'autoClarifyDrawer', 'autoClarifyDrawerBody', 'autoClarifyDrawerTitle', 'closeAutoClarifyDrawerBtn',
+      'autoCompareDrawer', 'autoCompareDrawerBody', 'autoCompareDrawerTitle', 'closeAutoCompareDrawerBtn',
+      'autoMissingDrawer', 'autoMissingDrawerBody', 'autoMissingDrawerTitle', 'closeAutoMissingDrawerBtn',
+      'autoCompareMissingToggle',
     ],
     alias: [
       { name: 'toSplitFromCaseGenBtn', id: 'toSplitFromCaseGen' },

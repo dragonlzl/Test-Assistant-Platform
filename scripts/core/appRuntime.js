@@ -479,6 +479,7 @@
         resetAutoCompareMissingView: api.resetAutoCompareMissingView,
         resetAutoCompareUserInputs: api.resetAutoCompareUserInputs,
         renderAutoCompareMissingView: api.renderAutoCompareMissingView,
+        toggleAutoCompareMissingView: api.toggleAutoCompareMissingView,
         buildFilteredComparePayload: api.buildFilteredComparePayload,
         updateAutoCompareActions: api.updateAutoCompareActions,
         syncAutoCompareStatus: api.syncAutoCompareStatus,

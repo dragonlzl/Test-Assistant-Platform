@@ -329,10 +329,6 @@
 <div class="actions">
 <button class="secondary" disabled="" id="autoClarifyToggleBtn">展开澄清视图</button>
 </div>
-<div class="review-view hidden" id="autoClarifyContainer"></div>
-<div class="actions">
-<button class="secondary" disabled="" id="autoClarifyConfirm">确认澄清</button>
-</div>
 <p class="status" id="autoClarifyStatus"></p>
 </div>
 </section>
@@ -341,12 +337,12 @@
 <div class="card-body">
 <p class="hint">展示“对比完整性”步骤返回的覆盖率；低于 100% 表示清洗结果缺失，需要重新清洗并修正。</p>
 <div class="status" id="autoCompareStatus">尚未执行</div>
-<div class="review-view hidden" id="autoCompareMissing"></div>
 <div class="auto-compare-suggestion">
 <p class="hint">可输入对缺失项的补充说明（选填）。</p>
 <textarea class="small-textarea" id="autoCompareSuggestion" placeholder="如需说明额外上下文，可在此输入"></textarea>
 </div>
 <div class="actions">
+<button class="secondary" disabled="" id="autoCompareMissingToggle">覆盖缺失列表</button>
 <button class="secondary" disabled="" id="autoFillCleanBtn">补全清洗并继续</button>
 <button class="secondary" disabled="" id="autoRecleanBtn">重新清洗并继续</button>
 <button class="secondary" disabled="" id="autoIgnoreCoverageBtn">忽略覆盖率继续</button>
@@ -366,9 +362,56 @@
 <button class="secondary" disabled="" id="autoMissingGoUsecase">生成用例</button>
 </div>
 <p class="status" id="autoMissingStatus"></p>
-<div class="missing-view hidden" id="autoMissingView"></div>
 </div>
 </section>
+<div class="drawer" id="autoClarifyDrawer" data-tab-section="auto">
+  <div class="drawer-mask" data-drawer-close="autoClarifyDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <div>
+        <p class="drawer-subtitle">需求澄清</p>
+        <h3 id="autoClarifyDrawerTitle">澄清视图</h3>
+      </div>
+      <button class="link-toggle" id="closeAutoClarifyDrawerBtn" data-drawer-close="autoClarifyDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="autoClarifyDrawerBody">
+      <div class="review-view hidden" id="autoClarifyContainer"></div>
+      <div class="actions" style="margin-top:12px;">
+        <button class="secondary" disabled="" id="autoClarifyConfirm">确认澄清</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="autoCompareDrawer" data-tab-section="auto">
+  <div class="drawer-mask" data-drawer-close="autoCompareDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <div>
+        <p class="drawer-subtitle">覆盖缺失列表</p>
+        <h3 id="autoCompareDrawerTitle">清洗后需求覆盖率</h3>
+      </div>
+      <button class="link-toggle" id="closeAutoCompareDrawerBtn" data-drawer-close="autoCompareDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="autoCompareDrawerBody">
+      <div class="review-view hidden" id="autoCompareMissing"></div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="autoMissingDrawer" data-tab-section="auto">
+  <div class="drawer-mask" data-drawer-close="autoMissingDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <div>
+        <p class="drawer-subtitle">用例缺失测试点</p>
+        <h3 id="autoMissingDrawerTitle">缺失模块视图</h3>
+      </div>
+      <button class="link-toggle" id="closeAutoMissingDrawerBtn" data-drawer-close="autoMissingDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="autoMissingDrawerBody">
+      <div class="missing-view hidden" id="autoMissingView"></div>
+    </div>
+  </div>
+</div>
 <section class="card" data-section-id="import" data-tab-section="clean">
 <h2>导入需求文档</h2>
 <div class="card-body">
