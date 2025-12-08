@@ -22,16 +22,16 @@
       color: #2563eb;
       box-shadow: 0 4px 12px rgba(37,99,235,0.16);
     }
-    html {
-      scroll-behavior: smooth;
-      scroll-padding-top: 220px;
-      min-height: 100%;
-      overflow-x: hidden;
-    }
-    body {
-      min-height: 100%;
-      overflow: visible;
-    }
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 220px;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+body {
+  min-height: 100%;
+  overflow: visible;
+}
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -2032,12 +2032,6 @@
   cursor: pointer;
   text-decoration: underline;
   text-decoration-style: dashed;
-}
-body.drawer-open {
-  overflow: hidden !important;
-}
-html.drawer-open {
-  overflow: hidden !important;
 }
 .drawer {
   position: fixed;
