@@ -14,6 +14,7 @@
     var rawText = pickEl(dom.rawText, 'rawText');
     var reviewResultEl = pickEl(dom.reviewResultEl, 'reviewResult');
     var cleanedTextEl = pickEl(dom.cleanedTextEl, 'cleanedText');
+    var compareResultEl = pickEl(dom.compareResultEl, 'compareResult');
     var splitResultEl = pickEl(dom.splitResultEl, 'splitResult');
     var casesCompareResultEl = pickEl(dom.casesCompareResultEl, 'casesCompareResult');
     var flowNavSteps = dom.flowNavSteps || (typeof document !== 'undefined' ? document.querySelectorAll('#flowNav .step') : []);
@@ -105,6 +106,7 @@
         import: rawText && rawText.value.trim().length > 0,
         review: reviewResultEl ? reviewResultEl.value.trim().length > 0 : false,
         clean: cleanedTextEl && cleanedTextEl.value.trim().length > 0,
+        compare: compareResultEl && compareResultEl.value.trim().length > 0,
         split: splitResultEl && splitResultEl.value.trim().length > 0,
         'cases-upload': hasCaseSource(),
         cases: casesCompareResultEl && casesCompareResultEl.value.trim().length > 0,
@@ -112,7 +114,7 @@
       var runningMap = (state && state.inProgressSteps && typeof state.inProgressSteps === 'object') ? state.inProgressSteps : {};
       if (state.inProgressStep) runningMap[state.inProgressStep] = true;
       if (state) state.inProgressSteps = runningMap;
-      var order = ['import', 'review', 'clean', 'split', 'cases-upload', 'cases'];
+      var order = ['import', 'review', 'clean', 'compare', 'split', 'cases-upload', 'cases'];
       var nextPending = order.find(function(key) { return !stateMap[key] && !runningMap[key]; }) || 'cases';
       if (runReviewBtn) {
         var rawReady = stateMap.import;

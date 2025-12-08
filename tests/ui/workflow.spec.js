@@ -113,6 +113,7 @@ test.describe('工作流关键交互', () => {
 
     const initial = await getStatusMap();
     expect(initial.import).toBe('▶');
+    expect(initial.compare).toBe('▶');
 
     await page.evaluate(() => {
       const raw = document.getElementById('rawText');
@@ -132,6 +133,7 @@ test.describe('工作流关键交互', () => {
     const updated = await getStatusMap();
     expect(updated.import).toBe('✓');
     expect(updated.clean).toBe('↻');
+    expect(updated.compare).toBe('▶');
     expect(updated.split).toBe('▶');
   });
 
