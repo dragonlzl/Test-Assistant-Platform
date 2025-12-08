@@ -481,14 +481,14 @@
         closeButtons: ['closeMissingViewDrawerBtn'],
         onClose: function() {
           if (missingViewContainer) {
-            missingViewContainer.classList.add('hidden');
-            missingViewContainer.classList.remove('visible');
-            missingViewContainer.innerHTML = '';
-          }
-          if (missingViewBtn) missingViewBtn.textContent = '缺失模块视图';
-        },
-      });
-      return missingViewDrawer;
+          missingViewContainer.classList.add('hidden');
+          missingViewContainer.classList.remove('visible');
+          missingViewContainer.innerHTML = '';
+        }
+        if (missingViewBtn) missingViewBtn.textContent = '前往勾选缺失模块生成缺失用例';
+      },
+    });
+    return missingViewDrawer;
     }
 
     function syncCasesGoUsecaseGenButton() {
@@ -568,7 +568,7 @@
           missingViewContainer.classList.add('hidden');
           missingViewContainer.classList.remove('visible');
           missingViewContainer.innerHTML = '';
-          missingViewBtn.textContent = '缺失模块视图';
+          missingViewBtn.textContent = '前往勾选缺失模块生成缺失用例';
           var drawer = missingViewDrawer || ensureMissingDrawer();
           if (drawer && drawer.element && drawer.element.classList.contains('open')) drawer.close();
         }

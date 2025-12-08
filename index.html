@@ -349,7 +349,7 @@
 <div class="card-body">
 <p class="hint">同步显示“测试用例覆盖对比”后的缺失模块详情，与功能工作流中的“缺失模块视图”一致，点击右侧抽屉查看并处理。</p>
 <div class="actions" style="margin-bottom:8px;">
-<button class="secondary" disabled="" id="autoMissingToggle">缺失模块视图</button>
+<button class="secondary" disabled="" id="autoMissingToggle">前往勾选缺失模块生成缺失用例</button>
 </div>
 </div>
 </section>
@@ -397,16 +397,16 @@
   <div class="drawer-panel">
     <div class="drawer-header">
       <h3 id="autoMissingDrawerTitle">缺失模块视图</h3>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <button class="secondary" disabled="" id="autoMissingCopy">复制缺失模块JSON</button>
-        <button class="secondary" disabled="" id="autoMissingSmartFill">智能生成填充</button>
-        <button class="secondary" disabled="" id="autoMissingGoUsecase">生成用例</button>
-        <button class="link-toggle" id="closeAutoMissingDrawerBtn" data-drawer-close="autoMissingDrawer">收起</button>
-      </div>
+      <button class="link-toggle" id="closeAutoMissingDrawerBtn" data-drawer-close="autoMissingDrawer">收起</button>
     </div>
     <div class="drawer-body" id="autoMissingDrawerBody">
       <p class="status" id="autoMissingStatus"></p>
       <div class="missing-view hidden" id="autoMissingView"></div>
+      <div class="actions" style="margin-top:12px; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+        <button class="secondary" disabled="" id="autoMissingCopy">复制缺失模块JSON</button>
+        <button class="pill primary" disabled="" id="autoMissingSmartFill">智能生成填充</button>
+        <button class="secondary" disabled="" id="autoMissingGoUsecase">生成用例</button>
+      </div>
     </div>
   </div>
 </div>
@@ -630,8 +630,7 @@
 <div class="card-body">
 <p class="hint">运行“测试用例覆盖对比”后，可在此查看缺失模块详情，并复制 <code>missing</code> 字段 JSON。</p>
 <div class="actions" style="margin-bottom:8px;">
-<button class="secondary" disabled="" id="missingViewBtn">缺失模块视图</button>
-<button class="secondary" id="casesGoUsecaseGen">生成用例</button>
+<button class="secondary" disabled="" id="missingViewBtn">前往勾选缺失模块生成缺失用例</button>
 </div>
 <p class="status" id="missingViewStatus"></p>
 </div>
@@ -712,14 +711,15 @@
   <div class="drawer-panel">
     <div class="drawer-header">
       <h3 id="missingViewDrawerTitle">缺失模块视图</h3>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="secondary" disabled id="copyMissingBtn">复制缺失模块JSON</button>
-        <button class="secondary" disabled id="missingSmartFillBtn">智能生成填充</button>
-        <button class="link-toggle" id="closeMissingViewDrawerBtn" data-drawer-close="missingViewDrawer">收起</button>
-      </div>
+      <button class="link-toggle" id="closeMissingViewDrawerBtn" data-drawer-close="missingViewDrawer">收起</button>
     </div>
     <div class="drawer-body" id="missingViewDrawerBody">
       <div class="missing-view hidden" id="missingViewContainer"></div>
+      <div class="actions" style="margin-top:12px; justify-content:flex-end; gap:8px;">
+        <button class="secondary" disabled id="copyMissingBtn">复制缺失模块JSON</button>
+        <button class="pill primary" disabled id="missingSmartFillBtn">智能生成填充</button>
+        <button class="secondary" id="casesGoUsecaseGen">生成用例</button>
+      </div>
     </div>
   </div>
 </div>

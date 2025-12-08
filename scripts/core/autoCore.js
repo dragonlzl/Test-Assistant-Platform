@@ -109,7 +109,7 @@
 
     function setAutoMissingToggleLabel(open) {
       if (!autoMissingToggle) return;
-      autoMissingToggle.textContent = open ? '收起缺失视图' : '缺失模块视图';
+      autoMissingToggle.textContent = open ? '收起缺失视图' : '前往勾选缺失模块生成缺失用例';
     }
 
     async function notifyFeishuCoverageFailure() {
