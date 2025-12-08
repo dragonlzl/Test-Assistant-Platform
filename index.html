@@ -1109,14 +1109,14 @@
 <section class="card hidden" data-tab-section="models">
 <h2>模型管理</h2>
 <div class="card-body">
-<div class="notice-card highlight" style="margin: 0 0 12px;">
-  <h3>推荐配置</h3>
-  <ul>
-    <li>优先指派 <strong>DeepSeek-R1</strong>，输出质量更好。</li>
-    <li>请将 <code>Max Tokens</code> 设置为 <strong>16384</strong> 或更高，避免长回复被截断。<span class="token-hint hidden" id="deepseekTokenHint"></span></li>
-    <li>为每个功能统一指派此模型，保持行为一致。</li>
-  </ul>
-</div>
+  <div class="notice-card highlight" style="margin: 0 0 12px;">
+    <h3>推荐配置</h3>
+    <ul>
+      <li>优先指派 <strong>DeepSeek-R1</strong>（模型 ID：<code>deepseek-reasoner</code>），输出质量更好。</li>
+      <li>请将 <code>Max Tokens</code> 设置为 <strong>16384</strong> 或更高，避免长回复被截断。<span class="token-hint hidden" id="deepseekTokenHint"></span></li>
+      <li>为每个功能统一指派此模型，保持行为一致。</li>
+    </ul>
+  </div>
 <p class="hint">为不同供应商配置多个模型，可随时分配给清洗或对比任务。API Key 等敏感信息仅保存在本地浏览器。</p>
 <div class="actions">
 <button id="createModelBtn">新增模型</button>
