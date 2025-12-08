@@ -52,6 +52,9 @@
     var autoClarifyConfirmBtn = dom.autoClarifyConfirmBtn;
     var autoClarifySection = dom.autoClarifySection;
     var autoClarifyStatus = dom.autoClarifyStatus;
+    var autoClarifyDrawerBody = dom.autoClarifyDrawerBody;
+    var autoClarifyDrawerTitle = dom.autoClarifyDrawerTitle;
+    var autoClarifyDrawer = null;
 
     if (!Array.isArray(state.reviewRows)) state.reviewRows = [];
     if (!(state.reviewClarifications instanceof Map)) state.reviewClarifications = new Map();
@@ -74,6 +77,28 @@
         },
       });
       return reviewViewDrawer;
+    }
+
+    function ensureAutoClarifyDrawer() {
+      if (autoClarifyDrawer) return autoClarifyDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      autoClarifyDrawer = window.app.drawer.createDrawer({
+        drawerId: 'autoClarifyDrawer',
+        closeButtons: ['closeAutoClarifyDrawerBtn'],
+        onClose: function() {
+          if (autoClarifyContainer) {
+            autoClarifyContainer.classList.add('hidden');
+            autoClarifyContainer.classList.remove('visible');
+          }
+          setAutoClarifyToggleLabel(false);
+        },
+      });
+      return autoClarifyDrawer;
+    }
+
+    function setAutoClarifyToggleLabel(open) {
+      if (!autoClarifyToggleBtn) return;
+      autoClarifyToggleBtn.textContent = open ? '收起澄清视图' : '展开澄清视图';
     }
 
     function setClarifyStatus(text, type) {
@@ -113,22 +138,21 @@
         if (autoClarifyConfirmBtn) autoClarifyConfirmBtn.disabled = true;
         if (autoClarifyToggleBtn) {
           autoClarifyToggleBtn.disabled = true;
-          autoClarifyToggleBtn.textContent = '展开澄清视图';
+          setAutoClarifyToggleLabel(false);
         }
         setStatus(autoClarifyStatus, '', '');
         if (state.autoClarifyResolver) {
           state.autoClarifyResolver(true);
           state.autoClarifyResolver = null;
         }
+        var drawer = autoClarifyDrawer || ensureAutoClarifyDrawer();
+        if (drawer && drawer.element && drawer.element.classList.contains('open')) drawer.close();
       } else {
         if (autoClarifyToggleBtn) {
           autoClarifyToggleBtn.disabled = false;
-          autoClarifyToggleBtn.textContent = autoClarifyContainer && !autoClarifyContainer.classList.contains('hidden')
-            ? '收起澄清视图'
-            : '展开澄清视图';
+          setAutoClarifyToggleLabel(autoClarifyDrawer && autoClarifyDrawer.element && autoClarifyDrawer.element.classList.contains('open'));
         }
         renderAutoClarifyView();
-        if (forceOpen) openAutoClarifyPanel();
       }
     }
 
@@ -139,21 +163,21 @@
         autoClarifyContainer.classList.add('hidden');
         autoClarifyContainer.classList.remove('visible');
         if (autoClarifyConfirmBtn) autoClarifyConfirmBtn.disabled = true;
-        if (autoClarifyToggleBtn) autoClarifyToggleBtn.textContent = '展开澄清视图';
+        setAutoClarifyToggleLabel(false);
         return;
       }
       if (!state.reviewRows.length) {
         autoClarifyContainer.innerHTML = '<p class="hint" style="padding:12px;">暂无评审结果，请先运行需求评审</p>';
         autoClarifyContainer.classList.remove('hidden');
         autoClarifyContainer.classList.add('visible');
-        if (autoClarifyToggleBtn) autoClarifyToggleBtn.textContent = '收起澄清视图';
         if (autoClarifyConfirmBtn) autoClarifyConfirmBtn.disabled = true;
+        setAutoClarifyToggleLabel(autoClarifyDrawer && autoClarifyDrawer.element && autoClarifyDrawer.element.classList.contains('open'));
         return;
       }
       autoClarifyContainer.innerHTML = renderReviewView();
       autoClarifyContainer.classList.remove('hidden');
       autoClarifyContainer.classList.add('visible');
-      if (autoClarifyToggleBtn) autoClarifyToggleBtn.textContent = '收起澄清视图';
+      setAutoClarifyToggleLabel(autoClarifyDrawer && autoClarifyDrawer.element && autoClarifyDrawer.element.classList.contains('open'));
       if (autoClarifyConfirmBtn) autoClarifyConfirmBtn.disabled = false;
     }
 
@@ -163,14 +187,13 @@
         return Promise.reject(new Error('暂无可澄清的数据，请先完成需求评审'));
       }
       renderAutoClarifyView();
-      openAutoClarifyPanel();
       return new Promise(function(resolve) {
+        setStatus(autoClarifyStatus, '请补充澄清结果并点击“确认澄清”继续', 'warn');
         state.autoClarifyResolver = function(value) {
           if (value === void 0) value = true;
           state.autoClarifyResolver = null;
           resolve(value);
         };
-        setStatus(autoClarifyStatus, '请补充澄清结果并点击“确认澄清”继续', 'warn');
       });
     }
 
@@ -674,9 +697,29 @@
 
     function openAutoClarifyPanel() {
       if (!autoClarifyContainer) return;
+      var drawer = ensureAutoClarifyDrawer();
+      if (!drawer) return;
       renderAutoClarifyView();
       autoClarifyContainer.classList.remove('hidden');
-      if (autoClarifyToggleBtn) autoClarifyToggleBtn.textContent = '收起澄清视图';
+      autoClarifyContainer.classList.add('visible');
+      if (autoClarifyDrawerBody) autoClarifyDrawerBody.scrollTop = 0;
+      if (autoClarifyDrawerTitle) autoClarifyDrawerTitle.textContent = '需求澄清视图';
+      setAutoClarifyToggleLabel(true);
+      drawer.open();
+    }
+
+    function closeAutoClarifyPanel() {
+      var drawer = autoClarifyDrawer || ensureAutoClarifyDrawer();
+      if (drawer) drawer.close();
+      else setAutoClarifyToggleLabel(false);
+    }
+
+    function toggleAutoClarifyPanel() {
+      var drawer = autoClarifyDrawer || ensureAutoClarifyDrawer();
+      if (!drawer) return;
+      var isOpen = drawer.element && drawer.element.classList.contains('open');
+      if (isOpen) closeAutoClarifyPanel();
+      else openAutoClarifyPanel();
     }
 
     return {
@@ -692,6 +735,8 @@
       updateAutoClarifyVisibility: updateAutoClarifyVisibility,
       renderAutoClarifyView: renderAutoClarifyView,
       openAutoClarifyPanel: openAutoClarifyPanel,
+      closeAutoClarifyPanel: closeAutoClarifyPanel,
+      toggleAutoClarifyPanel: toggleAutoClarifyPanel,
       handleAutoClarifyConfirm: handleAutoClarifyConfirm,
       waitForAutoClarification: waitForAutoClarification,
       syncReviewViewFromResult: syncReviewViewFromResult,

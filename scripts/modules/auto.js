@@ -14,6 +14,7 @@
     var handleMissingSelectionChange = handlers.handleMissingSelectionChange || function() {};
     var handleMissingSelectAll = handlers.handleMissingSelectAll || function() {};
     var renderAutoCompareMissingView = handlers.renderAutoCompareMissingView || function() {};
+    var toggleAutoCompareView = handlers.toggleAutoCompareView || function() {};
     var buildFilteredComparePayload = handlers.buildFilteredComparePayload || function() { return null; };
     var updateAutoCompareActions = handlers.updateAutoCompareActions || function() {};
     var syncAutoCompareStatus = handlers.syncAutoCompareStatus || function() { return null; };
@@ -37,6 +38,7 @@
     var autoMissingCopy = pickEl(dom.autoMissingCopy, 'autoMissingCopy');
     var autoMissingSmartFillBtn = pickEl(dom.autoMissingSmartFillBtn, 'autoMissingSmartFill');
     var autoMissingView = pickEl(dom.autoMissingView, 'autoMissingView');
+    var autoCompareToggleBtn = pickEl(dom.autoCompareToggleBtn, 'autoCompareToggleBtn');
     var autoCompareMissing = pickEl(dom.autoCompareMissing, 'autoCompareMissing');
     var autoCompareSuggestionInput = pickEl(dom.autoCompareSuggestionInput, 'autoCompareSuggestion');
     var autoFillCleanBtn = pickEl(dom.autoFillCleanBtn, 'autoFillCleanBtn');
@@ -80,6 +82,11 @@
         smartFillMissingSuggestions();
       });
     }
+    if (autoCompareToggleBtn) {
+      autoCompareToggleBtn.addEventListener('click', function() {
+        toggleAutoCompareView();
+      });
+    }
     if (autoMissingView) {
       autoMissingView.addEventListener('change', function(e) {
         var target = e.target;
@@ -104,7 +111,7 @@
           state.autoCompareSelections = checked
             ? new Set((state.autoCompareMissingList || []).map(function(_, idx) { return idx; }))
             : new Set();
-          renderAutoCompareMissingView(state.autoCompareMissingList, undefined, true);
+          renderAutoCompareMissingView(state.autoCompareMissingList, undefined, true, false);
           return;
         }
         if (target.dataset.autoCompareIndex !== undefined) {
@@ -116,7 +123,7 @@
           } else {
             state.autoCompareSelections.delete(idx);
           }
-          renderAutoCompareMissingView(state.autoCompareMissingList, undefined, true);
+          renderAutoCompareMissingView(state.autoCompareMissingList, undefined, true, false);
         }
       });
     }
@@ -166,6 +173,7 @@
       resetAutoCompareMissingView: resetAutoCompareMissingView,
       resetAutoCompareUserInputs: resetAutoCompareUserInputs,
       renderAutoCompareMissingView: renderAutoCompareMissingView,
+      toggleAutoCompareView: toggleAutoCompareView,
       buildFilteredComparePayload: buildFilteredComparePayload,
       updateAutoCompareActions: updateAutoCompareActions,
       syncAutoCompareStatus: syncAutoCompareStatus,

@@ -60,6 +60,8 @@
     var autoRecleanBtn = pickEl(dom.autoRecleanBtn, 'autoRecleanBtn');
     var autoIgnoreCoverageBtn = pickEl(dom.autoIgnoreCoverageBtn, 'autoIgnoreCoverageBtn');
     var autoCompareMissing = pickEl(dom.autoCompareMissing, 'autoCompareMissing');
+    var autoCompareToggleBtn = pickEl(dom.autoCompareToggleBtn, 'autoCompareToggleBtn');
+    var autoCompareStatusSummary = pickEl(dom.autoCompareStatusSummary, 'autoCompareStatusSummary');
     var autoCompareSuggestionInput = pickEl(dom.autoCompareSuggestionInput, 'autoCompareSuggestion');
     var autoFillCleanBtn = pickEl(dom.autoFillCleanBtn, 'autoFillCleanBtn');
     var autoJumpCleanViewBtn = pickEl(dom.autoJumpCleanViewBtn, 'autoJumpCleanView');
@@ -73,6 +75,13 @@
     var splitResultEl = pickEl(dom.splitResultEl, 'splitResult');
     var autoClarifyToggle = pickEl(dom.autoClarifyToggle, 'autoNeedClarify');
     var autoClarifySection = dom.autoClarifySection || (typeof document !== 'undefined' ? document.querySelector('[data-section-id="auto-clarify"]') : null);
+    var autoCompareDrawerTitle = pickEl(dom.autoCompareDrawerTitle, 'autoCompareDrawerTitle');
+    var autoCompareDrawerBody = pickEl(dom.autoCompareDrawerBody, 'autoCompareDrawerBody');
+    var autoMissingDrawerTitle = pickEl(dom.autoMissingDrawerTitle, 'autoMissingDrawerTitle');
+    var autoMissingDrawerBody = pickEl(dom.autoMissingDrawerBody, 'autoMissingDrawerBody');
+
+    var autoCompareDrawer = null;
+    var autoMissingDrawer = null;
 
     if (!state.autoCompareSelections) state.autoCompareSelections = new Set();
     if (!state.autoCompareMissingList) state.autoCompareMissingList = [];
@@ -86,6 +95,21 @@
       if (type === void 0) type = '';
       if (missingViewStatus) setStatus(missingViewStatus, text, type);
       if (autoMissingStatus) setStatus(autoMissingStatus, text, type);
+    }
+
+    function setAutoCompareStatusText(text) {
+      if (autoCompareStatus) autoCompareStatus.textContent = text;
+      if (autoCompareStatusSummary) autoCompareStatusSummary.textContent = text;
+    }
+
+    function setAutoCompareToggleLabel(open) {
+      if (!autoCompareToggleBtn) return;
+      autoCompareToggleBtn.textContent = open ? '收起覆盖缺失视图' : '覆盖缺失视图';
+    }
+
+    function setAutoMissingToggleLabel(open) {
+      if (!autoMissingToggle) return;
+      autoMissingToggle.textContent = open ? '收起缺失视图' : '缺失模块视图';
     }
 
     async function notifyFeishuCoverageFailure() {
@@ -102,6 +126,42 @@
       if (!state.autoRunning || !state.autoRequireClarifications) return;
       if (!getFeishuWebhookUrl()) return;
       await postFeishuMessage('请前往工具，进行需求澄清，确认澄清结果后可继续执行。');
+    }
+
+    function ensureAutoCompareDrawer() {
+      if (autoCompareDrawer) return autoCompareDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      autoCompareDrawer = window.app.drawer.createDrawer({
+        drawerId: 'autoCompareDrawer',
+        closeButtons: ['closeAutoCompareDrawerBtn'],
+        onClose: function() {
+          if (autoCompareMissing) {
+            autoCompareMissing.classList.add('hidden');
+            autoCompareMissing.classList.remove('visible');
+            autoCompareMissing.innerHTML = '';
+          }
+          setAutoCompareToggleLabel(false);
+        },
+      });
+      return autoCompareDrawer;
+    }
+
+    function ensureAutoMissingDrawer() {
+      if (autoMissingDrawer) return autoMissingDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      autoMissingDrawer = window.app.drawer.createDrawer({
+        drawerId: 'autoMissingDrawer',
+        closeButtons: ['closeAutoMissingDrawerBtn'],
+        onClose: function() {
+          if (autoMissingView) {
+            autoMissingView.classList.add('hidden');
+            autoMissingView.classList.remove('visible');
+            autoMissingView.innerHTML = '';
+          }
+          setAutoMissingToggleLabel(false);
+        },
+      });
+      return autoMissingDrawer;
     }
 
     function renderAutoMissingTable() {
@@ -131,11 +191,14 @@
     }
 
     function resetAutoMissingView() {
-      if (!autoMissingView) return;
-      autoMissingView.innerHTML = '';
-      autoMissingView.classList.add('hidden');
-      autoMissingView.classList.remove('visible');
-      if (autoMissingToggle) autoMissingToggle.textContent = '展开缺失视图';
+      if (autoMissingView) {
+        autoMissingView.innerHTML = '';
+        autoMissingView.classList.add('hidden');
+        autoMissingView.classList.remove('visible');
+      }
+      setAutoMissingToggleLabel(false);
+      var drawer = autoMissingDrawer || ensureAutoMissingDrawer();
+      if (drawer && drawer.element && drawer.element.classList.contains('open')) drawer.close();
     }
 
     function refreshAutoMissingSelectionUI() {
@@ -161,6 +224,7 @@
       autoMissingCopy.disabled = disabled;
       if (autoMissingSmartFillBtn) autoMissingSmartFillBtn.disabled = disabled;
       if (autoMissingGoUsecaseBtn) autoMissingGoUsecaseBtn.disabled = disabled;
+      setAutoMissingToggleLabel(autoMissingDrawer && autoMissingDrawer.element && autoMissingDrawer.element.classList.contains('open'));
       if (!hasData) {
         resetAutoMissingView();
         setMissingStatus('', '');
@@ -177,28 +241,44 @@
         setMissingStatus('当前没有缺失测试点', 'warn');
         return;
       }
-      var visible = autoMissingView.classList.contains('visible');
-      if (visible) {
-        resetAutoMissingView();
+      var drawer = ensureAutoMissingDrawer();
+      if (!drawer) return;
+      var isOpen = drawer.element && drawer.element.classList.contains('open');
+      if (isOpen) {
+        drawer.close();
         setMissingStatus('', '');
-      } else {
-        autoMissingView.innerHTML = renderAutoMissingTable();
-        autoMissingView.classList.remove('hidden');
-        autoMissingView.classList.add('visible');
-        autoMissingToggle.textContent = '收起缺失视图';
-        refreshAutoMissingSelectionUI();
+        return;
       }
+      autoMissingView.innerHTML = renderAutoMissingTable();
+      autoMissingView.classList.remove('hidden');
+      autoMissingView.classList.add('visible');
+      setAutoMissingToggleLabel(true);
+      refreshAutoMissingSelectionUI();
+      if (autoMissingDrawerTitle) autoMissingDrawerTitle.textContent = '缺失模块视图';
+      if (autoMissingDrawerBody) autoMissingDrawerBody.scrollTop = 0;
+      drawer.open();
     }
 
     function ensureAutoMissingViewVisible(scrollIntoCenter) {
       if (scrollIntoCenter === void 0) scrollIntoCenter = false;
       if (!autoMissingView || !autoMissingToggle || autoMissingToggle.disabled) return;
+      var drawer = ensureAutoMissingDrawer();
+      if (!drawer) return;
+      var isOpen = drawer.element && drawer.element.classList.contains('open');
       if (!autoMissingView.classList.contains('visible')) {
-        toggleAutoMissingView();
+        autoMissingView.innerHTML = renderAutoMissingTable();
+        autoMissingView.classList.remove('hidden');
+        autoMissingView.classList.add('visible');
+        refreshAutoMissingSelectionUI();
+      }
+      if (!isOpen) {
+        setAutoMissingToggleLabel(true);
+        if (autoMissingDrawerBody) autoMissingDrawerBody.scrollTop = 0;
+        drawer.open();
       }
       if (scrollIntoCenter) {
-        var section = (dom.autoMissingSectionSelector && document.querySelector(dom.autoMissingSectionSelector)) || (autoMissingView.closest && autoMissingView.closest('.card'));
-        if (section) scrollElementIntoView(section, 'smooth', 160);
+        var target = drawer.element || (dom.autoMissingSectionSelector && document.querySelector(dom.autoMissingSectionSelector)) || (autoMissingView.closest && autoMissingView.closest('.card'));
+        if (target) scrollElementIntoView(target, 'smooth', 160);
       }
     }
 
@@ -295,10 +375,14 @@
     }
 
     function resetAutoCompareMissingView() {
-      if (!autoCompareMissing) return;
-      autoCompareMissing.innerHTML = '';
-      autoCompareMissing.classList.add('hidden');
-      autoCompareMissing.classList.remove('visible');
+      if (autoCompareMissing) {
+        autoCompareMissing.innerHTML = '';
+        autoCompareMissing.classList.add('hidden');
+        autoCompareMissing.classList.remove('visible');
+      }
+      setAutoCompareToggleLabel(false);
+      var drawer = autoCompareDrawer || ensureAutoCompareDrawer();
+      if (drawer && drawer.element && drawer.element.classList.contains('open')) drawer.close();
       updateAutoCompareActions(extractCoverageFromCompareResult());
     }
 
@@ -311,9 +395,10 @@
       }
     }
 
-    function renderAutoCompareMissingView(list, coverage, preserveSelection) {
+    function renderAutoCompareMissingView(list, coverage, preserveSelection, shouldOpenDrawer) {
       if (preserveSelection === void 0) preserveSelection = false;
       if (coverage === void 0) coverage = extractCoverageFromCompareResult();
+      if (shouldOpenDrawer === void 0) shouldOpenDrawer = true;
       if (!autoCompareMissing) return;
       var shouldShow = Array.isArray(list) && list.length && typeof coverage === 'number' && coverage < 100;
       if (!shouldShow) {
@@ -324,6 +409,8 @@
         updateAutoCompareActions(coverage);
         return;
       }
+      var drawer = ensureAutoCompareDrawer();
+      if (!drawer) return;
       state.autoCompareMissingList = list.slice();
       if (!preserveSelection) {
         state.autoCompareSelections.clear();
@@ -355,7 +442,28 @@
       '</table>';
       autoCompareMissing.classList.remove('hidden');
       autoCompareMissing.classList.add('visible');
+      if (shouldOpenDrawer) {
+        setAutoCompareToggleLabel(true);
+        if (autoCompareDrawerTitle) autoCompareDrawerTitle.textContent = '覆盖缺失视图';
+        if (autoCompareDrawerBody) autoCompareDrawerBody.scrollTop = 0;
+        drawer.open();
+      }
+      if (autoCompareToggleBtn) autoCompareToggleBtn.disabled = Boolean(state.autoRunning);
       updateAutoCompareActions(coverage);
+    }
+
+    function toggleAutoCompareView() {
+      if (!autoCompareMissing || !autoCompareToggleBtn || autoCompareToggleBtn.disabled) return;
+      if (!state.autoCompareMissingList.length) return;
+      var drawer = ensureAutoCompareDrawer();
+      if (!drawer) return;
+      var isOpen = drawer.element && drawer.element.classList.contains('open');
+      if (isOpen) {
+        drawer.close();
+        setAutoCompareToggleLabel(false);
+        return;
+      }
+      renderAutoCompareMissingView(state.autoCompareMissingList, extractCoverageFromCompareResult(), true);
     }
 
     function getSelectedAutoCompareMissing() {
@@ -386,15 +494,18 @@
       var selected = getSelectedAutoCompareMissing();
       var suggestion = state.autoCompareSuggestion ? state.autoCompareSuggestion.trim() : '';
       if (autoFillCleanBtn) autoFillCleanBtn.disabled = Boolean(state.autoRunning) || !(selected.length || suggestion);
+      if (autoCompareToggleBtn) {
+        var hasMissing = state.autoCompareMissingList && state.autoCompareMissingList.length;
+        autoCompareToggleBtn.disabled = Boolean(state.autoRunning) || !hasMissing;
+        if (!hasMissing) setAutoCompareToggleLabel(false);
+      }
     }
 
     function syncAutoCompareStatus() {
       var coverage = extractCoverageFromCompareResult();
       var data = extractCompareResultData();
       var missing = data && Array.isArray(data.missing) ? data.missing : [];
-      if (autoCompareStatus) {
-        autoCompareStatus.textContent = coverage === null ? '覆盖率：--' : '覆盖率：' + coverage + '%';
-      }
+      setAutoCompareStatusText(coverage === null ? '覆盖率：--' : '覆盖率：' + coverage + '%');
       updateAutoCompareActions(coverage);
       if (autoRecleanStatus && !(coverage !== null && coverage < 100)) setStatus(autoRecleanStatus, '', '');
       if (!(coverage !== null && coverage < 100) && autoWorkflowStatus) setStatus(autoWorkflowStatus, '', '');
@@ -461,7 +572,6 @@
       switchTab('auto');
       if (autoClarifySection) autoClarifySection.classList.remove('hidden');
       renderAutoClarifyView();
-      openAutoClarifyPanel();
       await notifyFeishuClarificationNeeded();
       await waitForAutoClarification();
     }
@@ -483,7 +593,7 @@
       state.autoRunning = true;
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = true;
       if (autoClarifyToggle) autoClarifyToggle.disabled = true;
-      if (autoCompareStatus) autoCompareStatus.textContent = '等待对比结果';
+      setAutoCompareStatusText('等待对比结果');
       resetAutoCompareMissingView();
       if (autoRecleanBtn) autoRecleanBtn.disabled = true;
       if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = true;
@@ -558,7 +668,7 @@
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = true;
       if (autoClarifyToggle) autoClarifyToggle.disabled = true;
       if (autoRecleanBtn) autoRecleanBtn.disabled = true;
-      if (autoCompareStatus) autoCompareStatus.textContent = '等待对比结果';
+        setAutoCompareStatusText('等待对比结果');
       resetAutoCompareMissingView();
       resetAutoMissingView();
       if (autoMissingToggle) autoMissingToggle.disabled = true;
@@ -663,6 +773,7 @@
       resetAutoCompareMissingView: resetAutoCompareMissingView,
       resetAutoCompareUserInputs: resetAutoCompareUserInputs,
       renderAutoCompareMissingView: renderAutoCompareMissingView,
+      toggleAutoCompareView: toggleAutoCompareView,
       buildFilteredComparePayload: buildFilteredComparePayload,
       updateAutoCompareActions: updateAutoCompareActions,
       syncAutoCompareStatus: syncAutoCompareStatus,
