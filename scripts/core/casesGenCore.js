@@ -18,9 +18,14 @@
     var caseGenStatus = dom.caseGenStatus;
     var caseGenTimingEl = dom.caseGenTimingEl;
     var tempExecStatus = dom.tempExecStatus;
+    var exportCaseGenBtn = dom.exportCaseGenBtn || dom.exportCaseGen;
+    if (!exportCaseGenBtn && typeof document !== 'undefined') {
+      exportCaseGenBtn = document.getElementById('exportCaseGen');
+    }
     var appendToExistingCasesBtn = dom.appendToExistingCasesBtn || dom.appendToExistingCases;
     var appendTargetSelect = dom.appendTargetSelect;
     var transferSelectedToExecBtn = dom.transferSelectedToExecBtn || dom.transferSelectedToExec;
+    var exportCaseGenXmindBtn = dom.exportCaseGenXmindBtn || dom.exportCaseGenXmind;
     var caseGenViewDrawerBody = dom.caseGenViewDrawerBody;
     var caseGenViewDrawerTitle = dom.caseGenViewDrawerTitle;
     var caseGenViewDrawer = null;
@@ -104,7 +109,31 @@
       syncCaseModuleStatus(moduleId);
       renderCaseGenProgressBoard();
     };
-    var refreshExportCaseGenButton = handlers.refreshExportCaseGenButton || function() {};
+    var refreshExportCaseGenButton = handlers.refreshExportCaseGenButton || function() {
+      if (!exportCaseGenBtn) return;
+      var hasResult = false;
+      if (state.caseGenResults && typeof state.caseGenResults === 'object') {
+        for (var key in state.caseGenResults) {
+          if (!Object.prototype.hasOwnProperty.call(state.caseGenResults, key)) continue;
+          var val = (state.caseGenResults[key] || '').trim();
+          if (val && !/^\[\s*\]$/.test(val)) {
+            hasResult = true;
+            break;
+          }
+        }
+      }
+      if (!hasResult && Array.isArray(state.caseGenModules)) {
+        hasResult = state.caseGenModules.some(function(mod) {
+          var content = (state.caseGenResults[mod.id] || '').trim();
+          return Boolean(content && !/^\[\s*\]$/.test(content));
+        });
+      }
+      exportCaseGenBtn.disabled = !hasResult;
+    };
+    var refreshExportCaseGenXmindButton = function() {
+      if (!exportCaseGenXmindBtn) return;
+      exportCaseGenXmindBtn.disabled = !hasSelectedGeneratedCases();
+    };
     var setCaseViewHint = handlers.setCaseViewHint || function() {};
     var parseCaseList = handlers.parseCaseList || function() { return []; };
     var extractJsonObjects = handlers.extractJsonObjects || function() { return []; };
@@ -536,6 +565,7 @@
       var xmindBtn = container.querySelector('button[data-xmind-selected="' + moduleId + '"]');
       if (xmindBtn) xmindBtn.disabled = selection.size === 0;
       refreshAppendExistingButton();
+      refreshExportCaseGenXmindButton();
     }
 
     function hasSelectedGeneratedCases() {
@@ -545,12 +575,17 @@
         var selection = state.caseSelections[mod.id];
         if (!selection || !selection.size) continue;
         var list = getCaseListForModule(mod.id);
-        if (!list.length) continue;
-        var matched = false;
-        selection.forEach(function(idx) {
-          if (!matched && list[idx]) matched = true;
-        });
-        if (matched) return true;
+        var raw = state.caseGenResults && state.caseGenResults[mod.id];
+        var trimmed = raw && raw.trim ? raw.trim() : '';
+        if (list.length) {
+          var matched = false;
+          selection.forEach(function(idx) {
+            if (!matched && list[idx]) matched = true;
+          });
+          if (matched) return true;
+        } else if (trimmed) {
+          return true;
+        }
       }
       return false;
     }
@@ -564,6 +599,7 @@
       if (transferSelectedToExecBtn) {
         transferSelectedToExecBtn.disabled = false;
       }
+      refreshExportCaseGenXmindButton();
     }
 
     function collectSelectedCaseEntries() {
@@ -686,6 +722,7 @@
       if (!state.caseGenModules.length) {
         casesGenerationContainer.innerHTML = '<p class="hint">请先在“测试模块拆分”中生成模块（JSON），然后点击“生成用例”进入本页。</p>';
         refreshExportCaseGenButton();
+        refreshExportCaseGenXmindButton();
         refreshAppendExistingButton();
         return;
       }
@@ -735,6 +772,7 @@
         }
       });
       refreshExportCaseGenButton();
+      refreshExportCaseGenXmindButton();
       renderCaseGenProgressBoard();
       refreshAppendExistingButton();
       renderAppendTargetOptions();
@@ -1117,6 +1155,7 @@
         state.caseSelections[moduleId] = new Set();
         var textarea = casesGenerationContainer && casesGenerationContainer.querySelector('textarea[data-result="' + moduleId + '"]');
         if (textarea) textarea.value = normalized;
+        if (exportCaseGenBtn) exportCaseGenBtn.disabled = false;
         var viewBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-view="' + moduleId + '"]');
         if (viewBtn) {
           viewBtn.disabled = false;
@@ -1543,6 +1582,7 @@
       setCaseModuleStatus(moduleId, '已清除【' + mod.title + '】的用例', 'ok');
       refreshExportCaseGenButton();
       refreshAppendExistingButton();
+      refreshExportCaseGenXmindButton();
     }
 
     function toggleCaseView(moduleId) {
@@ -1665,6 +1705,41 @@
       }
     }
 
+    async function exportSelectedModulesToXmind() {
+      var selectedEntries = collectSelectedCaseEntries();
+      if (!selectedEntries.length) {
+        setStatus(caseGenStatus, '请先在用例视图勾选需要导出的用例', 'warn');
+        return;
+      }
+      var requirementLabel = ensureRequirementLabel('请输入需求标识后再导出所选 XMind 用例');
+      if (!requirementLabel) {
+        setStatus(caseGenStatus, '已取消导出（需求标识为空）', 'warn');
+        return;
+      }
+      var aggregated = [];
+      selectedEntries.forEach(function(entry) {
+        var moduleTitle = resolveModuleTitle(entry && entry.moduleTitle);
+        (entry.cases || []).forEach(function(item) {
+          var clone = Object.assign({}, item);
+          if (!clone.module) clone.module = moduleTitle;
+          aggregated.push(clone);
+        });
+      });
+      if (!aggregated.length) {
+        setStatus(caseGenStatus, '未找到可导出的用例，请检查勾选内容', 'warn');
+        return;
+      }
+      try {
+        if (!buildXmindPackageFromCases) throw new Error('缺少 XMind 导出依赖');
+        var exported = await buildXmindPackageFromCases(aggregated, requirementLabel, requirementLabel);
+        downloadBlob(exported.fileName, exported.blob);
+        setStatus(caseGenStatus, '已导出选中用例为 XMind（' + exported.count + ' 条）', 'ok');
+      } catch (err) {
+        console.error(err);
+        setStatus(caseGenStatus, 'XMind 导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+      }
+    }
+
     function exportSelectedCasesData(selection, list, moduleTitle, requirementLabel) {
       if (!selection || !selection.size) throw new Error('未选中用例');
       if (!Array.isArray(list) || !list.length) throw new Error('当前模块没有可导出的用例');
@@ -1726,6 +1801,7 @@
       handleCaseSelectAll: handleCaseSelectAll,
       exportSelectedCases: exportSelectedCases,
       exportSelectedCasesToXmind: exportSelectedCasesToXmind,
+      exportSelectedModulesToXmind: exportSelectedModulesToXmind,
       renderCaseTable: renderCaseTable,
       parseGeneratedCases: parseGeneratedCases,
       refreshCaseSelectionUI: refreshCaseSelectionUI,
@@ -1739,6 +1815,7 @@
       filterCasesAgainstImported: filterCasesAgainstImported,
       appendSelectedCasesToImported: appendSelectedCasesToImported,
       transferSelectedCasesToExec: transferSelectedCasesToExec,
+      refreshExportCaseGenXmindButton: refreshExportCaseGenXmindButton,
     };
   }
 
