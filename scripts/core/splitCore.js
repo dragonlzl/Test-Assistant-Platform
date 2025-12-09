@@ -165,6 +165,7 @@
       var parseSplitModulesFn = handlers.parseSplitModules || function() { return []; };
       var refreshMissingSmartFillButton = handlers.refreshMissingSmartFillButton || function() {};
       var renderCaseGenProgressBoard = handlers.renderCaseGenProgressBoard || function() {};
+      var syncSplitView = handlers.syncSplitView || function() {};
 
       function ensureCaseGenModulesFromSplit() {
         if (state.caseGenModules && state.caseGenModules.length) return false;
@@ -183,6 +184,19 @@
         refreshMissingSmartFillButton();
         renderCaseGenProgressBoard();
         return true;
+      }
+
+      function applySplitResultText(text) {
+        if (!splitResultEl) return;
+        splitResultEl.value = text || '';
+        if (typeof splitResultEl.dispatchEvent === 'function') {
+          try {
+            splitResultEl.dispatchEvent(new Event('input', { bubbles: true }));
+          } catch (err) {
+            splitResultEl.dispatchEvent(new Event('input'));
+          }
+        }
+        syncSplitView();
       }
 
       var setStatus = handlers.setStatus || function() {};
@@ -226,7 +240,7 @@
         updateFlowStatus();
         return;
       }
-        if (splitResultEl) splitResultEl.value = '';
+        applySplitResultText('');
         setStepInProgress('split');
         setStatus(splitStatus, '正在拆分测试模块...', '');
         try {
@@ -238,7 +252,7 @@
           var content = await callModelWithConfig(model, cleaned, prompt, reasoning, temperature);
           updateModelTiming(splitTimingEl, Date.now() - startTime);
           var sanitized = stripCodeFence(content);
-          if (splitResultEl) splitResultEl.value = sanitized;
+          applySplitResultText(sanitized);
           setStatus(splitStatus, '拆分完成', 'ok');
           if (casesCoverageStatus) setStatus(casesCoverageStatus, '', '');
         } catch (err) {
@@ -256,6 +270,7 @@
       return {
         splitModules: splitModules,
         ensureCaseGenModulesFromSplit: ensureCaseGenModulesFromSplit,
+        applySplitResultText: applySplitResultText,
       };
     }
 

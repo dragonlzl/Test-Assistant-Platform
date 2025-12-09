@@ -467,11 +467,16 @@
           parseSplitModules: function() { return parseSplitModules(); },
           refreshMissingSmartFillButton: proxyApi('refreshMissingSmartFillButton'),
           renderCaseGenProgressBoard: proxyApi('renderCaseGenProgressBoard'),
+          syncSplitView: proxyApi('syncSplitView'),
         },
       })
       : null;
     if (splitRuntime && splitRuntime.splitModules) api.splitModules = splitRuntime.splitModules;
     if (splitRuntime && splitRuntime.ensureCaseGenModulesFromSplit) api.ensureCaseGenModulesFromSplit = splitRuntime.ensureCaseGenModulesFromSplit;
+    if (splitRuntime && splitRuntime.applySplitResultText) {
+      api.applySplitResultText = splitRuntime.applySplitResultText;
+      window.app.applySplitResultText = splitRuntime.applySplitResultText;
+    }
 
     const flowCore = window.app.flowCore && typeof window.app.flowCore.init === 'function'
       ? window.app.flowCore.init({
