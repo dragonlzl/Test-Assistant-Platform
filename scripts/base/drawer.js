@@ -71,6 +71,24 @@
     }
   }
 
+  function closeAllDrawers() {
+    if (typeof document === 'undefined') return;
+    var body = document.body;
+    var root = document.documentElement;
+    var openDrawers = document.querySelectorAll ? document.querySelectorAll('.drawer.open') : [];
+    if (openDrawers && typeof openDrawers.forEach === 'function') {
+      openDrawers.forEach(function(drawer) {
+        var closer = drawer.querySelector('[data-drawer-close]') || drawer.querySelector('.drawer-mask');
+        if (closer && typeof closer.click === 'function') {
+          closer.click();
+        } else {
+          drawer.classList.remove('open');
+        }
+      });
+    }
+    unlockBodyScroll(body, root);
+  }
+
   function createDrawer(options) {
     options = options || {};
     var drawerId = options.drawerId || '';
@@ -138,5 +156,6 @@
   window.app = window.app || {};
   window.app.drawer = {
     createDrawer: createDrawer,
+    closeAllDrawers: closeAllDrawers,
   };
 })();

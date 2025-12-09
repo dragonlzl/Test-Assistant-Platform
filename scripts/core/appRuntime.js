@@ -179,6 +179,9 @@
     })();
 
     function switchTab(name) {
+      if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+        window.app.drawer.closeAllDrawers();
+      }
       state.activeTab = name;
       if (activeTabKey && typeof localStorage !== 'undefined') {
         try {

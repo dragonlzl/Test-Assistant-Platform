@@ -322,6 +322,26 @@
       refreshAutoMissingSelectionUI();
     }
 
+    function closeMissingDrawersAfterFill() {
+      var autoDrawer = autoMissingDrawer || ensureAutoMissingDrawer();
+      if (autoDrawer && autoDrawer.element && autoDrawer.element.classList.contains('open')) {
+        autoDrawer.close();
+      }
+      if (typeof document === 'undefined') return;
+      var missingDrawer = document.getElementById('missingViewDrawer');
+      if (missingDrawer && missingDrawer.classList.contains('open')) {
+        var closeTrigger = missingDrawer.querySelector('[data-drawer-close="missingViewDrawer"]') || missingDrawer.querySelector('.drawer-mask');
+        if (closeTrigger && typeof closeTrigger.click === 'function') {
+          closeTrigger.click();
+        } else if (window.app && window.app.drawer && typeof window.app.drawer.createDrawer === 'function') {
+          var tempDrawer = window.app.drawer.createDrawer({ drawerId: 'missingViewDrawer', closeButtons: ['closeMissingViewDrawerBtn'] });
+          if (tempDrawer && typeof tempDrawer.close === 'function') tempDrawer.close();
+        } else {
+          missingDrawer.classList.remove('open');
+        }
+      }
+    }
+
     function smartFillMissingSuggestions() {
       if (!state.caseGenModules.length) {
         setMissingStatus('请先完成测试模块拆分，才能智能填充建议', 'warn');
@@ -378,6 +398,7 @@
       } else {
         setMissingStatus('已将 ' + updatedCount + ' 个缺失模块的建议同步至用例生成', 'ok');
       }
+      closeMissingDrawersAfterFill();
       switchTab('casesgen');
     }
 
