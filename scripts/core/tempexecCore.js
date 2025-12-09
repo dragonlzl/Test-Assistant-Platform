@@ -808,6 +808,61 @@
       });
     }
 
+    function buildTempExecCasesFromXmindPaths(paths) {
+      var map = new Map();
+      var hasResult = false;
+      var reuseFound = false;
+      if (!Array.isArray(paths) || !paths.length) return { cases: [], hasResult: false, reuseEnabled: false };
+      paths.forEach(function(path) {
+        if (!Array.isArray(path)) return;
+        var clean = path.filter(Boolean);
+        if (clean.length < 7) return;
+        var trimmed = clean.slice(0);
+        if (trimmed.length > 0) trimmed = trimmed.slice(1);
+        if (trimmed.length < 6) trimmed = clean.slice(clean.length - 6);
+        if (!trimmed || trimmed.length < 6) return;
+        var base = trimmed.slice(0, 6);
+        var extras = trimmed.slice(6);
+        var key = base.join('||');
+        if (!map.has(key)) {
+          map.set(key, {
+            module: base[0] || '',
+            title: base[1] || '',
+            priority: base[2] || '',
+            preconditions: base[3] || '',
+            steps: base[4] || '',
+            expected: base[5] || '',
+            actual: '',
+            remark: '',
+            reuseDetails: [],
+            defectLinks: [],
+          });
+        }
+        var entry = map.get(key);
+        if (extras && extras.length) {
+          hasResult = true;
+          if (extras.length > 1) {
+            reuseFound = true;
+            entry.reuseDetails = entry.reuseDetails || [];
+            entry.reuseDetails.push({
+              id: generateReuseDetailId(),
+              text: extras[0] || '',
+              note: extras.length > 2 ? extras.slice(2).join('；') : '',
+              status: extras[1] || '未执行',
+              presetId: '',
+            });
+          } else if (!entry.reuseDetails || !entry.reuseDetails.length) {
+            entry.actual = extras[0] || entry.actual || '';
+          }
+        }
+      });
+      return {
+        cases: Array.from(map.values()),
+        hasResult: hasResult,
+        reuseEnabled: reuseFound,
+      };
+    }
+
     function createTempVersion(name) {
       ensureTempVersionList();
       var trimmed = (name || '').trim();
@@ -2230,10 +2285,23 @@
           var text = '';
           var list = [];
           var requirementFromContent = '';
+          var inferredReuse = false;
+          var hasResult = false;
           if (ext === 'xmind') {
             var parsed = await parseXmindFile(file);
             text = parsed && parsed.text ? parsed.text : '';
             list = parsed && Array.isArray(parsed.list) ? parsed.list : [];
+            var paths = parsed && Array.isArray(parsed.paths) ? parsed.paths : [];
+            var xmindRootTitle = parsed && parsed.rootTitle ? normalizeRequirementName(parsed.rootTitle) : '';
+            if (paths && paths.length) {
+              var parsedExec = buildTempExecCasesFromXmindPaths(paths);
+              if (parsedExec && parsedExec.hasResult && Array.isArray(parsedExec.cases) && parsedExec.cases.length) {
+                list = parsedExec.cases;
+                hasResult = true;
+              }
+              inferredReuse = Boolean(parsedExec && parsedExec.reuseEnabled);
+              if (!requirementFromContent && xmindRootTitle) requirementFromContent = xmindRootTitle;
+            }
           } else if (ext === 'json') {
             text = (await file.text()).trim();
             var requirementRegex = /"requir[e]?ment"\s*:\s*"([^"]+)"/i;
@@ -2308,6 +2376,10 @@
             setRequirementLabel(requirementLabel, 'import');
           }
           var entry = createTempExecFile(file && file.name, list, 'current', null, null, requirementLabel);
+          if (hasResult && entry && Array.isArray(list)) {
+            entry.cases = list;
+          }
+          if (inferredReuse) entry.reuseEnabled = true;
           if (entry) entry.fromImport = true;
           if (entry && ensureTempExecReplacement(entry, added)) {
             added.push(entry);

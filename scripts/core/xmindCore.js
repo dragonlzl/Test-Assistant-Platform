@@ -209,7 +209,7 @@
       };
     }
 
-    function buildCaseListFromXmindJson(json) {
+    function collectXmindLeafPaths(json) {
       var sheets = [];
       if (Array.isArray(json)) sheets.push.apply(sheets, json);
       if (json && Array.isArray(json.sheets)) sheets.push.apply(sheets, json.sheets);
@@ -231,6 +231,11 @@
       sheets.forEach(function(sheet) {
         if (sheet && sheet.rootTopic) walk(sheet.rootTopic, []);
       });
+      return paths;
+    }
+
+    function buildCaseListFromXmindJson(json) {
+      var paths = collectXmindLeafPaths(json);
       return paths.map(normalizeXmindPath).filter(Boolean);
     }
 
@@ -254,11 +259,16 @@
         try {
           var json = JSON.parse(await jsonEntry.async('string'));
           var cases = buildCaseListFromXmindJson(json);
+          var leafPaths = collectXmindLeafPaths(json);
+          var rootTitle = '';
+          if (Array.isArray(json) && json.length && json[0] && json[0].rootTopic) rootTitle = getXmindTitle(json[0].rootTopic);
+          else if (json && Array.isArray(json.sheets) && json.sheets.length && json.sheets[0] && json.sheets[0].rootTopic) rootTitle = getXmindTitle(json.sheets[0].rootTopic);
+          else if (json && json.rootTopic) rootTitle = getXmindTitle(json.rootTopic);
           if (cases.length) {
-            return { text: JSON.stringify(cases, null, 2), list: cases };
+            return { text: JSON.stringify(cases, null, 2), list: cases, paths: leafPaths, rootTitle: rootTitle };
           }
           var outline = buildXmindOutlineFromJson(json);
-          return { text: outline, list: deriveCaseListFromText(outline) };
+          return { text: outline, list: deriveCaseListFromText(outline), paths: leafPaths, rootTitle: rootTitle };
         } catch (err) {
           console.warn('XMind JSON 解析失败', err);
         }

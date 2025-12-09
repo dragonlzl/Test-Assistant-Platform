@@ -28,6 +28,15 @@
 - 测试与验证：`npx playwright test --config tests/playwright.config.js tests/ui/cases_missing_view.spec.js --reporter list`（首次等待初始化超时，单例重跑通过）。  
 - 更新记录：补充切换 Tab 前统一收起抽屉，修复生成用例等跳转后的滚动锁定。  
 
+- 功能名称：执行页导入结果型 XMind 并识别复用  
+- 功能描述：用例执行页支持导入带执行结果的 XMind，自动根据根节点到叶子路径长度判定是否包含结果，并区分复用/非复用类型，复用子项与状态会同步到执行列表。  
+- 操作方式：在“用例导入&分配”直接导入执行 XMind，普通 6 层路径视为无结果，存在更深层节点则判为结果型；含子项路径自动开启复用模式。  
+- 使用效果：导入带结果的 XMind 时，执行状态/备注/复用子项自动落表；无结果的 XMind 仍按原有用例导入。  
+- 新增内容/接口/组件：XMind 叶子路径收集与结果解析、执行导入复用检测；UI 用例 `tests/ui/tempexec_import_xmind.spec.js` 覆盖无结果/带结果/复用导入。  
+- 复用说明：复用既有 XMind 解析与执行文件结构，仅新增路径分析与复用标记处理。  
+- 测试与验证：`npx playwright test --config tests/playwright.config.js tests/ui/tempexec_import_xmind.spec.js --reporter list`。  
+- 更新记录：无  
+
 - 功能名称：一键执行导航失败态标红完善  
 - 功能描述：AI 一键需求&用例评审顶部导航在评审/清洗/对比/拆分/覆盖对比结果校验失败时会描边变红并显示红色叉号，生成或导入的不合法数据会自动暴露。  
 - 操作方式：运行自动流程或手工导入结果，当评审/清洗/对比/拆分/覆盖对比结果非预期 JSON/缺少内容时，导航按钮自动切换为失败态；修复数据并更新后自动恢复正常。  
