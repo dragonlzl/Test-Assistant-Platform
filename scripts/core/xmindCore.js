@@ -127,8 +127,9 @@
         );
         var compactTs = formatCompactTimestamp();
         var requirement = normalizeRequirementName(requirementLabel) || getRequirementLabel(true);
-        var cleanedRoot = stripTimestampSuffix(requirement || baseModuleName || 'module');
-        var rootTitle = cleanedRoot || (baseModuleName + '_' + compactTs);
+        var rootBase = moduleTitle || baseModuleName || requirement || 'module';
+        var cleanedRoot = stripTimestampSuffix(rootBase);
+        var rootTitle = cleanedRoot || (rootBase + '_' + compactTs);
         var paths = sanitized.map(function(item) { return buildCaseFieldsForXmind(item, baseModuleName); });
         if (!paths.length) {
           reject(new Error('未找到可转换的字段'));
@@ -326,7 +327,8 @@
           return;
         }
         var requirement = normalizeRequirementName(requirementLabel || file.requirement || getRequirementLabel(true)) || '';
-        var rootTitle = requirement || (file.name || '用例执行');
+        var rootTitleBase = stripTimestampSuffix(file && file.name);
+        var rootTitle = rootTitleBase || (file && file.name) || requirement || '用例执行';
         var rootTopic = createXmindNode(rootTitle);
         var compactTs = formatCompactTimestamp();
         var safeName = getSafeFileBaseName(file && file.name, requirement || 'temp_exec');

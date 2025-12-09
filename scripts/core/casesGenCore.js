@@ -12,6 +12,24 @@
     var getSafeRequirementSlug = ctx.getSafeRequirementSlug || function() { return 'requirement'; };
     var normalizeRequirementName = ctx.normalizeRequirementName || function(text) { return text || ''; };
     var formatCompactTimestamp = ctx.formatCompactTimestamp || function() { return Date.now().toString(); };
+    var getSafeFileBaseName = ctx.getSafeFileBaseName || function(name, fallback) {
+      var raw = '';
+      if (typeof name === 'string') {
+        raw = name;
+      } else if (name && typeof name.toString === 'function') {
+        raw = name.toString();
+      }
+      var trimmed = raw.trim();
+      var withoutExt = trimmed.replace(/\.[^.]+$/, '');
+      var pattern = /(_result)?_\d{8}(?:_?\d{6})?$/i;
+      var stripped = withoutExt || trimmed;
+      while (pattern.test(stripped)) {
+        stripped = stripped.replace(pattern, '');
+      }
+      var candidate = stripped || withoutExt || trimmed || (fallback || '');
+      if (!candidate) candidate = 'usecase';
+      return candidate.replace(/[\\/:*?"<>|]/g, '_') || 'usecase';
+    };
     var defaultPrompts = config.defaultPrompts || {};
 
     var casesGenerationContainer = dom.casesGenerationContainer;
@@ -1373,7 +1391,13 @@
           if (additionInfoWorkflow.duplicateCount) statusParts.push('含 ' + additionInfoWorkflow.duplicateCount + ' 条重复已跳过');
           setStatus(caseGenStatus, statusParts.join('，'), additionInfoWorkflow.duplicateCount ? 'warn' : 'ok');
         } else {
-          var entryName = requirementLabel ? '导入用例-' + requirementLabel : '导入用例';
+          var fallbackName = targetWorkflowName || '导入用例';
+          var baseName = getSafeFileBaseName(
+            targetWorkflow.entry && (targetWorkflow.entry.name || targetWorkflow.entry.fileName || fallbackName),
+            fallbackName
+          );
+          var compactTs = formatCompactTimestamp ? formatCompactTimestamp() : '';
+          var entryName = baseName + (compactTs ? ('_' + compactTs) : '');
           var entry = createTempExecFile(entryName, mergedList, 'current', null, null, requirementLabel);
           if (!entry) {
             setStatus(caseGenStatus, '未构建出可同步的用例，请检查数据格式', 'err');
