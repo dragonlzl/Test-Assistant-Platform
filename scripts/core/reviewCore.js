@@ -71,9 +71,9 @@
           if (reviewViewContainer) {
             reviewViewContainer.classList.add('hidden');
             reviewViewContainer.classList.remove('visible');
-            reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“展开澄清视图”查看详情</p>';
+            reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“前往视图确认澄清”查看详情</p>';
           }
-          if (toggleReviewViewBtn) toggleReviewViewBtn.textContent = '展开澄清视图';
+          if (toggleReviewViewBtn) toggleReviewViewBtn.textContent = '前往视图确认澄清';
         },
       });
       return reviewViewDrawer;
@@ -109,7 +109,7 @@
 
     function setAutoClarifyToggleLabel(open) {
       if (!autoClarifyToggleBtn) return;
-      autoClarifyToggleBtn.textContent = open ? '收起澄清视图' : '展开澄清视图';
+      autoClarifyToggleBtn.textContent = open ? '收起澄清视图' : '前往视图确认澄清';
     }
 
     function setClarifyStatus(text, type) {
@@ -482,7 +482,7 @@
       if (toggleReviewViewBtn) {
         toggleReviewViewBtn.disabled = !hasData;
         var viewVisible = reviewViewContainer && reviewViewContainer.classList.contains('visible');
-        toggleReviewViewBtn.textContent = hasData && viewVisible ? '收起澄清视图' : '展开澄清视图';
+        toggleReviewViewBtn.textContent = hasData && viewVisible ? '收起澄清视图' : '前往视图确认澄清';
       }
       if (state.autoRequireClarifications) {
         renderAutoClarifyView();
@@ -497,7 +497,7 @@
       } else if (reviewViewContainer.classList.contains('visible')) {
         reviewViewContainer.innerHTML = renderReviewView();
       } else {
-        reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“展开澄清视图”查看详情</p>';
+        reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“前往视图确认澄清”查看详情</p>';
       }
     }
 
@@ -668,7 +668,7 @@
       if (reviewViewContainer) {
         reviewViewContainer.classList.add('hidden');
         reviewViewContainer.classList.remove('visible');
-        reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“展开澄清视图”查看详情</p>';
+        reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“前往视图确认澄清”查看详情</p>';
       }
       updateFlowStatus();
       if (runReviewBtn) runReviewBtn.disabled = true;
