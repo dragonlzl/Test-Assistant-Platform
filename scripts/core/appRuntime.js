@@ -76,7 +76,6 @@
     var exportModuleCases = api.exportModuleCases || function() {};
     var exportSelectedCases = api.exportSelectedCases || function() {};
     var exportSelectedCasesToXmind = api.exportSelectedCasesToXmind || function() {};
-    var exportSelectedModulesToXmind = api.exportSelectedModulesToXmind || function() {};
     var transferModuleToTempExec = api.transferModuleToTempExec || function() {};
     var transferSelectedCasesToExec = api.transferSelectedCasesToExec || function() {};
     var importModuleCases = api.importModuleCases || function() {};
@@ -311,7 +310,6 @@
       exportModuleCases: exportModuleCases,
       exportSelectedCases: exportSelectedCases,
       exportSelectedCasesToXmind: exportSelectedCasesToXmind,
-      exportSelectedModulesToXmind: exportSelectedModulesToXmind,
       transferModuleToTempExec: transferModuleToTempExec,
       transferSelectedCasesToExec: transferSelectedCasesToExec,
       importModuleCases: importModuleCases,
@@ -325,12 +323,11 @@
       exportCaseGenerationResults: exportCaseGenerationResults,
       ensureCaseGenModulesFromSplit: ensureCaseGenModulesFromSplit,
       renderCaseGeneration: renderCaseGeneration,
-      refreshExportCaseGenXmindButton: api.refreshExportCaseGenXmindButton || function() {},
     }, Object.keys({
       goToCaseGeneration: 1, generateCasesForModule: 1, toggleCaseView: 1, exportModuleCases: 1, exportSelectedCases: 1,
-      exportSelectedCasesToXmind: 1, exportSelectedModulesToXmind: 1, transferModuleToTempExec: 1, importModuleCases: 1, clearModuleCases: 1, topUpCasesForModule: 1,
+      exportSelectedCasesToXmind: 1, transferModuleToTempExec: 1, importModuleCases: 1, clearModuleCases: 1, topUpCasesForModule: 1,
       appendSelectedCasesToImported: 1, transferSelectedCasesToExec: 1,
-      refreshAppendExistingButton: 1, refreshExportCaseGenXmindButton: 1,
+      refreshAppendExistingButton: 1,
       handleCaseSelectionChange: 1, handleCaseSelectAll: 1, exportCaseGenerationResults: 1, ensureCaseGenModulesFromSplit: 1, renderCaseGeneration: 1,
       renderAppendTargetOptions: 1,
     }));

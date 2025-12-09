@@ -20,13 +20,12 @@
     var caseGenModelSelect = document.getElementById('caseGenModelSelect');
     var caseGenAssignStatus = document.getElementById('caseGenAssignStatus');
     var caseGenPromptEl = document.getElementById('caseGenPrompt');
-  var caseGenReasoningSelect = document.getElementById('caseGenReasoning');
-  var exportCaseGenBtn = document.getElementById('exportCaseGen');
-  var exportCaseGenXmindBtn = document.getElementById('exportCaseGenXmind');
-  var testCaseGenModelBtn = document.getElementById('testCaseGenModel');
-  var appendToExistingCasesBtn = document.getElementById('appendToExistingCases');
-  var appendTargetSelect = document.getElementById('appendTargetSelect');
-  var transferSelectedToExecBtn = document.getElementById('transferSelectedToExec');
+    var caseGenReasoningSelect = document.getElementById('caseGenReasoning');
+    var exportCaseGenBtn = document.getElementById('exportCaseGen');
+    var testCaseGenModelBtn = document.getElementById('testCaseGenModel');
+    var appendToExistingCasesBtn = document.getElementById('appendToExistingCases');
+    var appendTargetSelect = document.getElementById('appendTargetSelect');
+    var transferSelectedToExecBtn = document.getElementById('transferSelectedToExec');
 
     function bindGoButtons() {
       if (goUsecaseGenBtn && api.goToCaseGeneration) {
@@ -144,14 +143,11 @@
       }
     }
 
-  function bindExportButtons() {
-    if (exportCaseGenBtn && api.exportCaseGenerationResults) {
-      exportCaseGenBtn.addEventListener('click', api.exportCaseGenerationResults);
+    function bindExportButtons() {
+      if (exportCaseGenBtn && api.exportCaseGenerationResults) {
+        exportCaseGenBtn.addEventListener('click', api.exportCaseGenerationResults);
+      }
     }
-    if (exportCaseGenXmindBtn && api.exportSelectedModulesToXmind) {
-      exportCaseGenXmindBtn.addEventListener('click', api.exportSelectedModulesToXmind);
-    }
-  }
 
   function bindAppendButton() {
     if (appendToExistingCasesBtn && api.appendSelectedCasesToImported) {
