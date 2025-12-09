@@ -48,6 +48,7 @@ test.describe('一键执行等待状态', () => {
       if (compareEl) compareEl.value = JSON.stringify({ coverage: 80, missing: [] });
       if (window.app && window.app.state) {
         window.app.state.waitingSteps = {};
+        window.app.state.autoRequireClarifications = true;
       }
       var core = window.app && window.app.core;
       try {
@@ -72,6 +73,42 @@ test.describe('一键执行等待状态', () => {
       return window.getComputedStyle(el).borderColor;
     });
     expect(border).toBe('rgb(249, 115, 22)');
+  });
+
+  test('澄清等待时导航跳转到一键执行澄清区', async ({ page }) => {
+    await page.evaluate(() => {
+      var clarifySection = document.querySelector('[data-section-id="auto-clarify"]');
+      if (clarifySection) clarifySection.classList.remove('hidden');
+      if (window.app && window.app.state) {
+        window.app.state.waitingSteps = { review: true };
+        window.app.state.autoRequireClarifications = true;
+      }
+      var core = window.app && window.app.core;
+      if (core && typeof core.updateFlowStatus === 'function') core.updateFlowStatus();
+    });
+    await page.locator('#flowNav .step[data-target="review"]').click();
+    const autoTab = page.locator('[data-tab-btn="auto"]');
+    await expect(autoTab).toHaveClass(/active/);
+    const clarifyCard = page.locator('[data-section-id="auto-clarify"]');
+    await expect(clarifyCard).not.toHaveClass(/hidden/);
+  });
+
+  test('覆盖率不足等待时导航跳转到一键执行对比区', async ({ page }) => {
+    await page.evaluate(() => {
+      var compareSection = document.querySelector('[data-section-id="auto-compare"]');
+      if (compareSection) compareSection.classList.remove('hidden');
+      if (window.app && window.app.state) {
+        window.app.state.waitingSteps = { compare: true };
+        window.app.state.autoRequireClarifications = true;
+      }
+      var core = window.app && window.app.core;
+      if (core && typeof core.updateFlowStatus === 'function') core.updateFlowStatus();
+    });
+    await page.locator('#flowNav .step[data-target="compare"]').click();
+    const autoTab = page.locator('[data-tab-btn="auto"]');
+    await expect(autoTab).toHaveClass(/active/);
+    const compareCard = page.locator('[data-section-id="auto-compare"]');
+    await expect(compareCard).not.toHaveClass(/hidden/);
   });
 
   test('数据不合法时显示失败状态', async ({ page }) => {

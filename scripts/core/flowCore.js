@@ -197,6 +197,27 @@
 
     function scrollToSection(target, options) {
       var behavior = options && options.behavior ? options.behavior : 'smooth';
+      var waitingMap = (state && state.waitingSteps && typeof state.waitingSteps === 'object') ? state.waitingSteps : {};
+      if (target === 'review' && waitingMap.review) {
+        switchTab('auto');
+        var clarifySection = document.querySelector('[data-section-id="auto-clarify"]');
+        if (clarifySection) {
+          clarifySection.classList.remove('hidden');
+          persistCardExpanded(clarifySection);
+          scrollElementIntoView(clarifySection, behavior, 240);
+        }
+        return;
+      }
+      if (target === 'compare' && waitingMap.compare) {
+        switchTab('auto');
+        var autoCompareSection = document.querySelector('[data-section-id="auto-compare"]');
+        if (autoCompareSection) {
+          autoCompareSection.classList.remove('hidden');
+          persistCardExpanded(autoCompareSection);
+          scrollElementIntoView(autoCompareSection, behavior, 240);
+        }
+        return;
+      }
       if (target === 'cases') {
         ['cases-upload', 'cases'].forEach(function(id) {
           var sectionEl = document.querySelector('[data-section-id="' + id + '"]');
