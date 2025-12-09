@@ -338,6 +338,11 @@
     dom.tabSections = document.querySelectorAll('[data-tab-section]');
     dom.jumpLinks = document.querySelectorAll('[data-jump]');
     dom.autoMissingSectionSelector = '[data-section-id="auto-cases-missing"]';
+    var reviewResultEl = dom.reviewResultEl;
+    var cleanedTextEl = dom.cleanedTextEl;
+    var compareResultEl = dom.compareResultEl;
+    var splitResultEl = dom.splitResultEl;
+    var casesCompareResultEl = dom.casesCompareResultEl;
     debugNodes = {
       raw: { textarea: dom.rawText, status: dom.parseStatus, label: '原始需求', tag: 'RAW' },
       cleaned: { textarea: dom.cleanedTextEl, status: dom.cleanStatus, label: '清洗结果', tag: 'CLEANED' },
@@ -478,7 +483,12 @@
         },
       })
       : null;
-    if (flowCore && flowCore.updateFlowStatus) api.updateFlowStatus = flowCore.updateFlowStatus;
+    const renderFlowStatus = flowCore && flowCore.updateFlowStatus ? flowCore.updateFlowStatus : function noopFlowStatus() {};
+    function updateFlowStatusWithValidation() {
+      validateFlowData();
+      renderFlowStatus();
+    }
+    if (flowCore && flowCore.updateFlowStatus) api.updateFlowStatus = updateFlowStatusWithValidation;
     if (flowCore && flowCore.scrollToSection) api.scrollToSection = flowCore.scrollToSection;
     if (flowCore && flowCore.refreshExportCaseGenButton) api.refreshExportCaseGenButton = flowCore.refreshExportCaseGenButton;
     if (flowCore && flowCore.setCaseViewHint) api.setCaseViewHint = flowCore.setCaseViewHint;
@@ -789,6 +799,9 @@
           setStepWaiting,
           clearStepWaiting,
           clearAllWaitingSteps,
+          setStepFailed,
+          clearStepFailed,
+          clearAllFailedSteps,
           updateFlowStatus,
           parseMissingModules,
           buildMissingRows,
@@ -1110,17 +1123,39 @@
       return state.waitingSteps;
     }
 
+    function ensureFailedMap() {
+      if (!state.failedSteps || typeof state.failedSteps !== 'object') {
+        state.failedSteps = {};
+      }
+      return state.failedSteps;
+    }
+
+    function ensureValidationFailedMap() {
+      if (!state.validationFailedSteps || typeof state.validationFailedSteps !== 'object') {
+        state.validationFailedSteps = {};
+      }
+      return state.validationFailedSteps;
+    }
+
+    function triggerUpdateFlowStatus() {
+      if (api && typeof api.updateFlowStatus === 'function') {
+        api.updateFlowStatus();
+      } else if (typeof updateFlowStatusWithValidation === 'function') {
+        updateFlowStatusWithValidation();
+      }
+    }
+
     function setStepWaiting(step) {
       var map = ensureWaitingMap();
       if (step) map[step] = true;
-      updateFlowStatus();
+      triggerUpdateFlowStatus();
     }
 
     function clearStepWaiting(step) {
       var map = ensureWaitingMap();
       if (!step || !map[step]) return;
       delete map[step];
-      updateFlowStatus();
+      triggerUpdateFlowStatus();
     }
 
     function clearAllWaitingSteps() {
@@ -1128,15 +1163,47 @@
       var keys = Object.keys(map);
       if (!keys.length) return;
       keys.forEach(function(key) { delete map[key]; });
-      updateFlowStatus();
+      triggerUpdateFlowStatus();
+    }
+
+    function setStepFailed(step) {
+      var map = ensureFailedMap();
+      if (step) map[step] = true;
+      triggerUpdateFlowStatus();
+    }
+
+    function clearStepFailed(step) {
+      var map = ensureFailedMap();
+      var validationMap = ensureValidationFailedMap();
+      var touched = false;
+      if (step && map[step]) {
+        delete map[step];
+        touched = true;
+      }
+      if (step && validationMap[step]) {
+        delete validationMap[step];
+        touched = true;
+      }
+      if (touched) triggerUpdateFlowStatus();
+    }
+
+    function clearAllFailedSteps() {
+      var map = ensureFailedMap();
+      var validationMap = ensureValidationFailedMap();
+      var keys = Object.keys(map).concat(Object.keys(validationMap));
+      if (!keys.length) return;
+      Object.keys(map).forEach(function(key) { delete map[key]; });
+      Object.keys(validationMap).forEach(function(key) { delete validationMap[key]; });
+      triggerUpdateFlowStatus();
     }
 
     function setStepInProgress(step) {
       var map = ensureInProgressMap();
       clearStepWaiting(step);
+      clearStepFailed(step);
       if (step) map[step] = true;
       state.inProgressStep = '';
-      updateFlowStatus();
+      triggerUpdateFlowStatus();
     }
 
     function clearStepInProgress(step) {
@@ -1145,12 +1212,190 @@
       if (state.inProgressStep === step) {
         state.inProgressStep = '';
       }
-      updateFlowStatus();
+      triggerUpdateFlowStatus();
+    }
+
+    function isStepLocked(step) {
+      var waiting = ensureWaitingMap();
+      var running = ensureInProgressMap();
+      return Boolean(waiting[step] || running[step]);
+    }
+
+    function pickCoveragePayload(data) {
+      if (!data || typeof data !== 'object') return null;
+      if (isCoveragePayload(data)) return data;
+      if (Array.isArray(data)) {
+        for (var i = 0; i < data.length; i += 1) {
+          var found = pickCoveragePayload(data[i]);
+          if (found) return found;
+        }
+        return null;
+      }
+      if (data && typeof data === 'object') {
+        if (data.data && typeof data.data === 'object') {
+          var nested = pickCoveragePayload(data.data);
+          if (nested) return nested;
+        }
+        var keys = Object.keys(data);
+        for (var j = 0; j < keys.length; j += 1) {
+          var child = data[keys[j]];
+          if (child && typeof child === 'object') {
+            var inner = pickCoveragePayload(child);
+            if (inner) return inner;
+          }
+        }
+      }
+      return null;
+    }
+
+    function parseCoveragePayloadFromText(text, expectedType) {
+      var content = text && text.trim ? text.trim() : '';
+      if (!content) return null;
+      try {
+        var unwrap = unwrapRequirementPayload ? unwrapRequirementPayload(content) : { payload: content };
+        if (expectedType && unwrap.type && unwrap.type !== expectedType) return null;
+        var payload = typeof unwrap.payload === 'string' ? unwrap.payload : unwrap.payload;
+        if (!payload) return null;
+        var parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        return pickCoveragePayload(parsed);
+      } catch (err) {
+        console.warn('覆盖数据解析失败', err);
+        return null;
+      }
+    }
+
+    function applyValidationFailure(step, failed) {
+      var map = ensureValidationFailedMap();
+      var changed = false;
+      if (failed) {
+        if (!map[step]) {
+          map[step] = true;
+          changed = true;
+        }
+      } else if (map[step]) {
+        delete map[step];
+        changed = true;
+      }
+      return changed;
+    }
+
+    function validateReviewResult() {
+      var targetEl = reviewResultEl || (typeof document !== 'undefined' ? document.getElementById('reviewResult') : null);
+      if (!targetEl || isStepLocked('review')) return false;
+      var text = targetEl.value ? targetEl.value.trim() : '';
+      if (!text) return applyValidationFailure('review', false);
+      var payloadObj = unwrapRequirementPayload ? unwrapRequirementPayload(text) : { payload: text };
+      var basePayload = Object.prototype.hasOwnProperty.call(payloadObj, 'payload') ? payloadObj.payload : text;
+      var parsed = null;
+      if (Array.isArray(basePayload)) {
+        parsed = basePayload;
+      } else if (basePayload && typeof basePayload === 'object' && Array.isArray(basePayload.data)) {
+        parsed = basePayload.data;
+      } else {
+        try {
+          parsed = typeof basePayload === 'string' ? JSON.parse(basePayload) : basePayload;
+        } catch (err) {
+          parsed = null;
+        }
+        if (parsed && parsed.data && Array.isArray(parsed.data)) {
+          parsed = parsed.data;
+        }
+      }
+      var valid = Array.isArray(parsed);
+      return applyValidationFailure('review', !valid);
+    }
+
+    function validateCleanResult() {
+      var targetEl = cleanedTextEl || (typeof document !== 'undefined' ? document.getElementById('cleanedText') : null);
+      if (!targetEl || isStepLocked('clean')) return false;
+      var text = targetEl.value ? targetEl.value.trim() : '';
+      if (!text) return applyValidationFailure('clean', false);
+      var expectJson = typeof shouldExpectCleanJson === 'function' ? shouldExpectCleanJson() : false;
+      if (!expectJson) return applyValidationFailure('clean', false);
+      var payloadObj = unwrapRequirementPayload ? unwrapRequirementPayload(text) : { payload: text };
+      var basePayload = Object.prototype.hasOwnProperty.call(payloadObj, 'payload') ? payloadObj.payload : text;
+      var parsed = null;
+      if (Array.isArray(basePayload)) {
+        parsed = basePayload;
+      } else if (basePayload && typeof basePayload === 'object') {
+        parsed = basePayload;
+      } else {
+        var raw = typeof basePayload === 'string' ? basePayload : '';
+        if (stripRequirementHeader && raw) raw = stripRequirementHeader(raw);
+        try {
+          parsed = raw ? JSON.parse(raw) : null;
+        } catch (err) {
+          parsed = null;
+        }
+        if (parsed && parsed.payload && typeof parsed.payload === 'object' && !Array.isArray(parsed.payload)) {
+          parsed = parsed.payload;
+        }
+      }
+      var valid = parsed && (Array.isArray(parsed) || typeof parsed === 'object');
+      return applyValidationFailure('clean', !valid);
+    }
+
+    function validateCompareResult() {
+      var targetEl = compareResultEl || (typeof document !== 'undefined' ? document.getElementById('compareResult') : null);
+      if (!targetEl || isStepLocked('compare')) return false;
+      var text = targetEl.value ? targetEl.value.trim() : '';
+      if (!text) return applyValidationFailure('compare', false);
+      var payload = parseCoveragePayloadFromText(text, 'compare');
+      var valid = Boolean(payload) && isCoveragePayload(payload) && clampCoveragePercent(payload.coverage) !== null;
+      return applyValidationFailure('compare', !valid);
+    }
+
+    function validateSplitResult() {
+      var targetEl = splitResultEl || (typeof document !== 'undefined' ? document.getElementById('splitResult') : null);
+      if (!targetEl || isStepLocked('split')) return false;
+      var text = targetEl.value ? targetEl.value.trim() : '';
+      if (!text) return applyValidationFailure('split', false);
+      var modules = parseSplitModules();
+      var valid = Array.isArray(modules) && modules.length > 0;
+      return applyValidationFailure('split', !valid);
+    }
+
+    function validateCasesResult() {
+      var targetEl = casesCompareResultEl || (typeof document !== 'undefined' ? document.getElementById('casesCompareResult') : null);
+      if (!targetEl || isStepLocked('cases')) return false;
+      var text = targetEl.value ? targetEl.value.trim() : '';
+      if (!text) return applyValidationFailure('cases', false);
+      var payload = parseCoveragePayloadFromText(text, 'cases_compare');
+      var valid = Boolean(payload) && isCoveragePayload(payload) && clampCoveragePercent(payload.coverage) !== null;
+      return applyValidationFailure('cases', !valid);
+    }
+
+    function validateCaseSource() {
+      if (isStepLocked('cases-upload')) return false;
+      var hasSource = false;
+      if (typeof api.hasCaseSource === 'function') {
+        hasSource = api.hasCaseSource();
+      } else if (typeof hasCaseSource === 'function') {
+        hasSource = hasCaseSource();
+      }
+      if (!hasSource) return applyValidationFailure('cases-upload', false);
+      var list = typeof api.getCombinedCaseList === 'function' ? api.getCombinedCaseList() : [];
+      var valid = Array.isArray(list) && list.length > 0;
+      return applyValidationFailure('cases-upload', !valid);
+    }
+
+    function validateFlowData() {
+      var changed = false;
+      changed = validateReviewResult() || changed;
+      changed = validateCleanResult() || changed;
+      changed = validateCompareResult() || changed;
+      changed = validateSplitResult() || changed;
+      changed = validateCaseSource() || changed;
+      changed = validateCasesResult() || changed;
+      return changed;
     }
 
     api.setStepWaiting = setStepWaiting;
     api.clearStepWaiting = clearStepWaiting;
     api.clearAllWaitingSteps = clearAllWaitingSteps;
+    api.setStepFailed = setStepFailed;
+    api.clearStepFailed = clearStepFailed;
+    api.clearAllFailedSteps = clearAllFailedSteps;
 
     const uploadModule = window.app.upload && typeof window.app.upload.init === 'function'
       ? window.app.upload.init({
@@ -1292,7 +1537,7 @@
         scrollElementIntoView,
         goCasesGenAndScroll,
         refreshMissingSmartFillButton,
-        updateFlowStatus,
+        updateFlowStatus: triggerUpdateFlowStatus,
         setCaseViewHint,
         renderCaseGenProgressBoard,
         loadModels,

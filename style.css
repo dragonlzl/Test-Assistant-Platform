@@ -2213,6 +2213,12 @@ body {
       color: #c2410c;
       box-shadow: 0 6px 14px rgba(251,146,60,0.25);
     }
+    .flow .step .step-status[data-status="failed"] {
+      background: linear-gradient(135deg, #fee2e2, #fecdd3);
+      border-color: #ef4444;
+      color: #991b1b;
+      box-shadow: 0 6px 14px rgba(248,113,113,0.28);
+    }
     @keyframes flow-step-spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
@@ -2233,6 +2239,12 @@ body {
       color: #c2410c;
       background: linear-gradient(135deg, rgba(251,146,60,0.12), rgba(251,146,60,0.18));
       box-shadow: 0 10px 22px rgba(251,146,60,0.18), 0 0 0 2px rgba(249,115,22,0.18);
+    }
+    .flow .step.failed {
+      border-color: #ef4444;
+      color: #b91c1c;
+      background: linear-gradient(135deg, rgba(248,113,113,0.16), rgba(248,113,113,0.2));
+      box-shadow: 0 10px 22px rgba(248,113,113,0.2), 0 0 0 2px rgba(239,68,68,0.22);
     }
     .flow .step .badge {
       background: #1d4ed8;

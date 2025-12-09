@@ -12,6 +12,9 @@
     var utils = ctx.utils || {};
 
     var setStatus = ctx.setStatus || handlers.setStatus || function() {};
+    var setStepFailed = handlers.setStepFailed || function() {};
+    var clearStepFailed = handlers.clearStepFailed || function() {};
+    var clearAllFailedSteps = handlers.clearAllFailedSteps || function() {};
     var setStepWaiting = handlers.setStepWaiting || function() {};
     var clearStepWaiting = handlers.clearStepWaiting || function() {};
     var clearAllWaitingSteps = handlers.clearAllWaitingSteps || function() {};
@@ -521,15 +524,16 @@
     function buildAutoWorkflowSteps() {
       return [
         {
+          key: 'review',
           label: '需求评审',
           run: function() { return reviewRequirements(); },
           validate: function() { return Boolean(reviewResultEl && reviewResultEl.value && reviewResultEl.value.trim().length > 0); },
           after: function() { return handleAutoClarifyAfterReview(); },
         },
-        { label: '需求清洗', run: function(ctx) { return runCleaning(ctx); }, validate: function() { return Boolean(cleanedTextEl && cleanedTextEl.value && cleanedTextEl.value.trim().length > 0); } },
-        { label: '对比完整性', run: function() { return compareCoverage(); }, validate: function() { return Boolean(compareResultEl && compareResultEl.value && compareResultEl.value.trim().length > 0); }, after: function() { return enforceAutoCoverageRequirement(); } },
-        { label: '测试模块拆分', run: function() { return splitModules(); }, validate: function() { return Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim().length > 0); } },
-        { label: '覆盖对比', run: function() { return compareCasesCoverage(); }, validate: function() { return Boolean(casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim().length > 0); } },
+        { key: 'clean', label: '需求清洗', run: function(ctx) { return runCleaning(ctx); }, validate: function() { return Boolean(cleanedTextEl && cleanedTextEl.value && cleanedTextEl.value.trim().length > 0); } },
+        { key: 'compare', label: '对比完整性', run: function() { return compareCoverage(); }, validate: function() { return Boolean(compareResultEl && compareResultEl.value && compareResultEl.value.trim().length > 0); }, after: function() { return enforceAutoCoverageRequirement(); } },
+        { key: 'split', label: '测试模块拆分', run: function() { return splitModules(); }, validate: function() { return Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim().length > 0); } },
+        { key: 'cases', label: '覆盖对比', run: function() { return compareCasesCoverage(); }, validate: function() { return Boolean(casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim().length > 0); } },
       ];
     }
 
@@ -539,24 +543,36 @@
       var steps = buildAutoWorkflowSteps();
       for (var i = startIndex; i < steps.length; i += 1) {
         var step = steps[i];
-        await step.run(context);
-        if (!step.validate()) {
-          throw new Error(step.label + '未产生有效输出，请检查模型配置或稍后重试');
-        }
-        if (step.after) {
-          await step.after();
+        if (step && step.key) clearStepFailed(step.key);
+        try {
+          await step.run(context);
+          if (!step.validate()) {
+            setStepFailed(step.key);
+            updateFlowStatus();
+            throw new Error(step.label + '未产生有效输出，请检查模型配置或稍后重试');
+          }
+          if (step.after) {
+            await step.after();
+          }
+        } catch (err) {
+          if (step && step.key) setStepFailed(step.key);
+          updateFlowStatus();
+          throw err;
         }
       }
     }
 
     async function enforceAutoCoverageRequirement() {
       var coverage = syncAutoCompareStatus();
+       clearStepFailed('compare');
       clearStepWaiting('compare');
       if (coverage === null) {
         setStatus(autoWorkflowStatus, '无法解析对比完整性结果，自动流程已暂停', 'warn');
         if (autoRecleanBtn) autoRecleanBtn.disabled = false;
         if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = true;
         if (autoRecleanStatus) setStatus(autoRecleanStatus, '请修正并重新清洗', 'warn');
+        setStepFailed('compare');
+        updateFlowStatus();
         throw new Error('未解析到对比覆盖率');
       }
       if (coverage < 100) {
@@ -605,6 +621,7 @@
         return;
       }
       clearAllWaitingSteps();
+      clearAllFailedSteps();
       state.autoRunning = true;
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = true;
       if (autoClarifyToggle) autoClarifyToggle.disabled = true;
@@ -669,6 +686,7 @@
         return;
       }
       clearAllWaitingSteps();
+      clearAllFailedSteps();
       var startMessage = options.startMessage || '重新执行中（从需求清洗开始）...';
       var workflowStartMessage = options.workflowStartMessage || '正在重新执行剩余步骤，请勿关闭页面';
       var successMessage = options.successMessage || '重新执行完成';
@@ -739,6 +757,7 @@
         return;
       }
       clearAllWaitingSteps();
+      clearAllFailedSteps();
       state.autoRunning = true;
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = true;
       if (autoClarifyToggle) autoClarifyToggle.disabled = true;

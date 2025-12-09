@@ -731,6 +731,8 @@
       } catch (err) {
         console.error(err);
         setStatus(casesCoverageStatus, '导入失败：' + err.message, 'err');
+      } finally {
+        updateFlowStatus();
       }
     }
 
@@ -799,6 +801,8 @@
       } catch (err) {
         console.error(err);
         setStatus(compareStatus, '导入失败：' + err.message, 'err');
+      } finally {
+        updateFlowStatus();
       }
     }
 

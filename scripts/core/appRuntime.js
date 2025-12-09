@@ -307,6 +307,9 @@
       'setStepWaiting',
       'clearStepWaiting',
       'clearAllWaitingSteps',
+      'setStepFailed',
+      'clearStepFailed',
+      'clearAllFailedSteps',
       'syncAutoCompareStatus',
     ]);
     window.app.core = core;

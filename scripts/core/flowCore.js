@@ -26,12 +26,14 @@
       running: '执行中',
       done: '执行完成',
       waiting: '等待确认',
+      failed: '数据异常',
     };
     var stepStatusIcon = {
       pending: '▶',
       running: '↻',
       done: '✓',
       waiting: '!',
+      failed: 'X',
     };
 
     var switchTab = handlers.switchTab || function() {};
@@ -96,6 +98,11 @@
         statusEl.style.borderColor = '#fb923c';
         statusEl.style.color = '#c2410c';
         statusEl.style.boxShadow = '0 6px 14px rgba(251,146,60,0.25)';
+      } else if (status === 'failed') {
+        statusEl.style.background = 'linear-gradient(135deg, #fee2e2, #fecdd3)';
+        statusEl.style.borderColor = '#ef4444';
+        statusEl.style.color = '#991b1b';
+        statusEl.style.boxShadow = '0 6px 14px rgba(248,113,113,0.28)';
       } else if (status === 'pending') {
         statusEl.style.background = 'linear-gradient(135deg, #f8fafc, #e2e8f0)';
         statusEl.style.borderColor = '#cbd5e1';
@@ -120,15 +127,34 @@
       };
       var runningMap = (state && state.inProgressSteps && typeof state.inProgressSteps === 'object') ? state.inProgressSteps : {};
       var waitingMap = (state && state.waitingSteps && typeof state.waitingSteps === 'object') ? state.waitingSteps : {};
+      var failedMap = (state && state.failedSteps && typeof state.failedSteps === 'object') ? state.failedSteps : {};
+      var validationFailedMap = (state && state.validationFailedSteps && typeof state.validationFailedSteps === 'object')
+        ? state.validationFailedSteps
+        : {};
       if (state.inProgressStep) runningMap[state.inProgressStep] = true;
       if (state) state.inProgressSteps = runningMap;
       if (state && (!state.waitingSteps || typeof state.waitingSteps !== 'object')) state.waitingSteps = waitingMap;
+      if (state && (!state.failedSteps || typeof state.failedSteps !== 'object')) state.failedSteps = failedMap;
+      if (state && (!state.validationFailedSteps || typeof state.validationFailedSteps !== 'object')) state.validationFailedSteps = validationFailedMap;
       Object.keys(waitingMap).forEach(function(key) {
         stateMap[key] = false;
       });
+      Object.keys(failedMap).forEach(function(key) {
+        stateMap[key] = false;
+      });
+      Object.keys(validationFailedMap).forEach(function(key) {
+        stateMap[key] = false;
+      });
+      var mergedFailedMap = {};
+      [failedMap, validationFailedMap].forEach(function(map) {
+        Object.keys(map).forEach(function(key) {
+          mergedFailedMap[key] = true;
+        });
+      });
       var order = ['import', 'review', 'clean', 'compare', 'split', 'cases-upload', 'cases'];
+      var failedStep = order.find(function(key) { return mergedFailedMap[key]; }) || '';
       var waitingStep = order.find(function(key) { return waitingMap[key]; }) || '';
-      var nextPending = waitingStep || order.find(function(key) { return !stateMap[key] && !runningMap[key]; }) || 'cases';
+      var nextPending = failedStep || waitingStep || order.find(function(key) { return !stateMap[key] && !runningMap[key]; }) || 'cases';
       if (runReviewBtn) {
         var rawReady = stateMap.import;
         runReviewBtn.disabled = !rawReady || runningMap.review;
@@ -139,7 +165,8 @@
           var status = 'pending';
           var isRunning = Boolean(runningMap[target]);
           var isWaiting = Boolean(waitingMap[target]);
-          step.classList.remove('done', 'active', 'waiting');
+          var isFailed = Boolean(mergedFailedMap[target]);
+          step.classList.remove('done', 'active', 'waiting', 'failed');
           if (isRunning) {
             step.classList.add('active');
             status = 'running';
@@ -150,6 +177,13 @@
             step.classList.add('active');
             step.classList.add('waiting');
             status = 'waiting';
+            syncStepStatus(step, status);
+            return;
+          }
+          if (isFailed) {
+            step.classList.add('active');
+            step.classList.add('failed');
+            status = 'failed';
             syncStepStatus(step, status);
             return;
           }

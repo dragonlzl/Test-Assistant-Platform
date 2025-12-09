@@ -73,4 +73,66 @@ test.describe('一键执行等待状态', () => {
     });
     expect(border).toBe('rgb(249, 115, 22)');
   });
+
+  test('数据不合法时显示失败状态', async ({ page }) => {
+    await page.evaluate(() => {
+      var core = window.app && window.app.core;
+      if (core && typeof core.clearAllFailedSteps === 'function') core.clearAllFailedSteps();
+      if (core && typeof core.setStepFailed === 'function') {
+        core.setStepFailed('compare');
+      } else if (window.app && window.app.state) {
+        window.app.state.failedSteps = { compare: true };
+        if (core && typeof core.updateFlowStatus === 'function') core.updateFlowStatus();
+      }
+    });
+    const compareStep = page.locator('#flowNav .step[data-target="compare"]');
+    await expect(compareStep).toHaveClass(/failed/);
+    await expect(compareStep.locator('.step-status')).toHaveAttribute('data-status', 'failed');
+    const border = await compareStep.evaluate(function(el) {
+      return window.getComputedStyle(el).borderColor;
+    });
+    expect(border).toBe('rgb(239, 68, 68)');
+  });
+
+  test('评审或清洗结果无效时显示失败状态', async ({ page }) => {
+    await page.evaluate(() => {
+      var core = window.app && window.app.core;
+      if (core && typeof core.clearAllFailedSteps === 'function') core.clearAllFailedSteps();
+      var review = document.getElementById('reviewResult');
+      var cleaned = document.getElementById('cleanedText');
+      if (review) review.value = 'not a json array';
+      if (cleaned) cleaned.value = '{invalid json';
+      if (core && typeof core.updateFlowStatus === 'function') core.updateFlowStatus();
+    });
+    const reviewStep = page.locator('#flowNav .step[data-target="review"]');
+    const cleanStep = page.locator('#flowNav .step[data-target="clean"]');
+    const validation = await page.evaluate(() => (window.app && window.app.state) ? window.app.state.validationFailedSteps : {});
+    expect(validation.review).toBe(true);
+    expect(validation.clean).toBe(true);
+    await expect(reviewStep).toHaveClass(/failed/);
+    await expect(cleanStep).toHaveClass(/failed/);
+    await expect(reviewStep.locator('.step-status')).toHaveAttribute('data-status', 'failed');
+    await expect(cleanStep.locator('.step-status')).toHaveAttribute('data-status', 'failed');
+  });
+
+  test('导入无效结果时自动标红', async ({ page }) => {
+    await page.evaluate(() => {
+      var compare = document.getElementById('compareResult');
+      var split = document.getElementById('splitResult');
+      if (compare) compare.value = 'not json coverage';
+      if (split) split.value = '[]invalid{}';
+      var core = window.app && window.app.core;
+      if (core && typeof core.clearAllFailedSteps === 'function') core.clearAllFailedSteps();
+      if (core && typeof core.updateFlowStatus === 'function') core.updateFlowStatus();
+    });
+    const compareStep = page.locator('#flowNav .step[data-target="compare"]');
+    const splitStep = page.locator('#flowNav .step[data-target="split"]');
+    const validation = await page.evaluate(() => (window.app && window.app.state) ? window.app.state.validationFailedSteps : {});
+    expect(validation.compare).toBe(true);
+    expect(validation.split).toBe(true);
+    await expect(compareStep).toHaveClass(/failed/);
+    await expect(splitStep).toHaveClass(/failed/);
+    await expect(compareStep.locator('.step-status')).toHaveAttribute('data-status', 'failed');
+    await expect(splitStep.locator('.step-status')).toHaveAttribute('data-status', 'failed');
+  });
 });
