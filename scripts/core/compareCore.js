@@ -846,12 +846,15 @@
         return;
       }
       if (compareBtnEl) compareBtnEl.setAttribute('disabled', 'disabled');
+      setStepInProgress('compare');
       var model;
       try {
         model = getAssignedModel('compare');
       } catch (err) {
         setStatus(compareStatus, err && err.message ? err.message : '未配置模型', 'warn');
         updateModelTiming(compareTimingEl);
+        clearStepInProgress('compare');
+        updateFlowStatus();
         if (compareBtnEl) compareBtnEl.removeAttribute('disabled');
         return;
       }
@@ -882,6 +885,8 @@
         updateModelTiming(compareTimingEl);
         setStatus(compareStatus, '对比失败：' + (err && err.message ? err.message : '请重试'), 'err');
       } finally {
+        clearStepInProgress('compare');
+        updateFlowStatus();
         if (compareBtnEl) compareBtnEl.removeAttribute('disabled');
       }
     }
