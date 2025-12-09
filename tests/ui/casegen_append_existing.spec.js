@@ -98,7 +98,12 @@ test.describe('用例生成追加到已有用例', () => {
       }
     });
     await page.click('#transferSelectedToExec');
-    await expect(page.locator('#caseGenStatus')).toContainText('请到各个模块的用例视图中勾选用例', { timeout: 3000 });
+    await expect(page.locator('#caseGenStatus')).toContainText('请先勾选用例后再转到执行页', { timeout: 3000 });
+    const isDrawerOpen = await page.evaluate(() => {
+      var drawer = document.querySelector('#caseGenViewDrawer');
+      return drawer && drawer.classList.contains('open');
+    });
+    expect(isDrawerOpen).toBe(true);
   });
 
   test('已导入用例时追加并跳过重复标题', async ({ page }) => {

@@ -1448,7 +1448,19 @@
       }
       var selectedEntries = collectSelectedCaseEntries();
       if (!selectedEntries.length) {
-        setStatus(caseGenStatus, '请到各个模块的用例视图中勾选用例（点击右侧“用例视图”按钮）', 'warn');
+        var autoOpened = false;
+        state.caseGenModules.some(function(mod) {
+          var list = getCaseListForModule(mod.id);
+          if (!list || !list.length) return false;
+          toggleCaseView(mod.id);
+          autoOpened = true;
+          return true;
+        });
+        setStatus(
+          caseGenStatus,
+          autoOpened ? '请先勾选用例后再转到执行页（已自动打开首个模块）' : '请到各个模块的用例视图中勾选用例（点击右侧“用例视图”按钮）',
+          'warn'
+        );
         refreshAppendExistingButton();
         return;
       }
