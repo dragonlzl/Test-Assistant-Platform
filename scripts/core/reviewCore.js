@@ -96,6 +96,17 @@
       return autoClarifyDrawer;
     }
 
+    function closeClarifyDrawers() {
+      var reviewDrawer = reviewViewDrawer || ensureReviewDrawer();
+      if (reviewDrawer && reviewDrawer.element && reviewDrawer.element.classList.contains('open')) {
+        reviewDrawer.close();
+      }
+      var clarifyDrawer = autoClarifyDrawer || ensureAutoClarifyDrawer();
+      if (clarifyDrawer && clarifyDrawer.element && clarifyDrawer.element.classList.contains('open')) {
+        clarifyDrawer.close();
+      }
+    }
+
     function setAutoClarifyToggleLabel(open) {
       if (!autoClarifyToggleBtn) return;
       autoClarifyToggleBtn.textContent = open ? '收起澄清视图' : '展开澄清视图';
@@ -529,6 +540,7 @@
         setClarifyStatus('澄清结果已写入评审 JSON', 'ok');
         syncReviewViewFromResult();
         updateFlowStatus();
+        closeClarifyDrawers();
       } catch (err) {
         console.warn('澄清结果写入失败', err);
         setClarifyStatus('澄清结果写入失败，请检查内容', 'warn');

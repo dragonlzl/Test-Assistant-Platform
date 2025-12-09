@@ -204,7 +204,9 @@ test.describe('工作流关键交互', () => {
     });
     await page.click('#toggleReviewView');
     await page.click('#confirmClarifications');
-    await page.click('#closeReviewViewDrawerBtn');
+    const drawer = page.locator('#reviewViewDrawer');
+    await expect(drawer).toHaveClass(/drawer/);
+    await expect(drawer).not.toHaveClass(/open/);
     await expect(page.locator('#clarifyStatus')).toContainText('澄清结果已写入评审 JSON');
   });
 
