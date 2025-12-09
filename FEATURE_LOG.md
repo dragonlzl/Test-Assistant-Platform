@@ -19,6 +19,15 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 导出文件名去重与依赖修复  
+- 功能描述：导出执行/用例 XMind 时会先清除已有的 `_result_年月日时分秒` 或 `_年月日时分秒` 标识，避免时间戳叠加；同时修复执行页导出按钮因依赖未初始化导致无响应的问题。  
+- 操作方式：在执行页点击“导出执行XMind”或“导出用例Xmind（无结果）”，或在用例生成/模块导出 XMind 时，导出文件名自动去除旧标识后再追加最新时间戳。  
+- 使用效果：多次导入/导出、在结果与无结果之间切换时，文件名仅保留一次时间戳/结果标识，导出按钮恢复可用。  
+- 新增内容/接口/组件：文件名清理方法 `stripTimestampSuffix` 复用于 xmindCore 与 tempexecCore，暴露安全文件名前缀获取；新增 UI 用例 `tests/ui/xmind_filename_sanitize.spec.js`，扩展执行导入用例 `tests/ui/tempexec_import_xmind.spec.js`。  
+- 复用说明：复用既有 XMind 构建/导出与执行导入逻辑，仅补充文件名清理与依赖顺序修复。  
+- 测试与验证：`npm run test:ui -- tests/ui/xmind_filename_sanitize.spec.js tests/ui/tempexec_import_xmind.spec.js`（通过，需 http.server 提权）。  
+- 更新记录：修复 app.js 初始化顺序，避免 `getSafeFileBaseName`/`buildTempExecCasesFromXmindPaths` 未定义导致导出/导入失效。  
+
 - 功能名称：智能填充后关闭缺失抽屉恢复滚动  
 - 功能描述：智能填充缺失模块建议后自动关闭缺失模块抽屉与智能缺失抽屉，避免遮罩残留导致后续页面无法滚动。  
 - 操作方式：在清洗页导入拆分与覆盖对比结果，点击“缺失模块视图”后使用“智能填充”同步建议，抽屉会在填充完毕后自动收起。  

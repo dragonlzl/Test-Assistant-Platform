@@ -52,6 +52,16 @@
       return 'id-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 10);
     }
 
+    function stripTimestampSuffix(text) {
+      var base = typeof text === 'string' ? text : (text && text.toString ? text.toString() : '');
+      var pattern = /(_result)?_\d{8}(?:_?\d{6})?$/i;
+      var next = base;
+      while (pattern.test(next)) {
+        next = next.replace(pattern, '');
+      }
+      return next;
+    }
+
     function getSafeFileBaseName(name, fallback) {
       var raw = '';
       if (typeof name === 'string') {
@@ -61,7 +71,8 @@
       }
       var trimmed = raw.trim();
       var withoutExt = trimmed.replace(/\.[^.]+$/, '');
-      var candidate = withoutExt || trimmed || (fallback || '');
+      var stripped = stripTimestampSuffix(withoutExt || trimmed);
+      var candidate = stripped || withoutExt || trimmed || (fallback || '');
       if (!candidate) candidate = 'usecase';
       var safe = candidate.replace(/[\\/:*?"<>|]/g, '_');
       return safe || 'usecase';
@@ -116,7 +127,8 @@
         );
         var compactTs = formatCompactTimestamp();
         var requirement = normalizeRequirementName(requirementLabel) || getRequirementLabel(true);
-        var rootTitle = requirement || (baseModuleName + '_' + compactTs);
+        var cleanedRoot = stripTimestampSuffix(requirement || baseModuleName || 'module');
+        var rootTitle = cleanedRoot || (baseModuleName + '_' + compactTs);
         var paths = sanitized.map(function(item) { return buildCaseFieldsForXmind(item, baseModuleName); });
         if (!paths.length) {
           reject(new Error('未找到可转换的字段'));
@@ -149,7 +161,7 @@
         zip.file('metadata.json', JSON.stringify(metadata, null, 2));
         zip.file('manifest.json', JSON.stringify(manifest, null, 2));
         zip.generateAsync({ type: 'blob' }).then(function(blob) {
-          var safeRoot = (requirement || baseModuleName || 'module').replace(/[\\/:*?"<>|]/g, '_');
+          var safeRoot = (cleanedRoot || baseModuleName || 'module').replace(/[\\/:*?"<>|]/g, '_');
           resolve({
             blob: blob,
             fileName: safeRoot + '_' + compactTs + '.xmind',
@@ -415,21 +427,22 @@
       });
     }
 
-    return {
-      formatXmindNodeValue: formatXmindNodeValue,
-      buildCaseFieldsForXmind: buildCaseFieldsForXmind,
-      generateXmindId: generateXmindId,
-      createXmindNode: createXmindNode,
-      getOrCreateChildNode: getOrCreateChildNode,
-      finalizeXmindNode: finalizeXmindNode,
-      buildXmindPackageFromCases: buildXmindPackageFromCases,
-      buildTempExecXmindPackage: buildTempExecXmindPackage,
-      parseXmindFile: parseXmindFile,
-      buildXmindOutlineFromJson: buildXmindOutlineFromJson,
-      buildCaseListFromXmindJson: buildCaseListFromXmindJson,
-      getSafeFileBaseName: getSafeFileBaseName,
-    };
-  }
+  return {
+    formatXmindNodeValue: formatXmindNodeValue,
+    buildCaseFieldsForXmind: buildCaseFieldsForXmind,
+    generateXmindId: generateXmindId,
+    createXmindNode: createXmindNode,
+    getOrCreateChildNode: getOrCreateChildNode,
+    finalizeXmindNode: finalizeXmindNode,
+    buildXmindPackageFromCases: buildXmindPackageFromCases,
+    buildTempExecXmindPackage: buildTempExecXmindPackage,
+    parseXmindFile: parseXmindFile,
+    buildXmindOutlineFromJson: buildXmindOutlineFromJson,
+    buildCaseListFromXmindJson: buildCaseListFromXmindJson,
+    getSafeFileBaseName: getSafeFileBaseName,
+    stripTimestampSuffix: stripTimestampSuffix,
+  };
+}
 
   window.app = window.app || {};
   window.app.xmindCore = { init: init };

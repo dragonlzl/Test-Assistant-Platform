@@ -99,13 +99,14 @@
     };
     var buildTempExecXmindPackage = deps && deps.buildTempExecXmindPackage ? deps.buildTempExecXmindPackage : null;
     var buildXmindPackageFromCases = deps && deps.buildXmindPackageFromCases ? deps.buildXmindPackageFromCases : null;
+    var stripTimestampSuffix = deps && deps.stripTimestampSuffix ? deps.stripTimestampSuffix : function(text) { return text || ''; };
     var getSafeFileBaseName = deps && deps.getSafeFileBaseName
       ? deps.getSafeFileBaseName
       : function(name, fallback) {
         var raw = typeof name === 'string' ? name : (name && name.toString ? name.toString() : '');
         var trimmed = raw.trim();
         var withoutExt = trimmed.replace(/\.[^.]+$/, '');
-        var candidate = withoutExt || trimmed || (fallback || '');
+        var candidate = stripTimestampSuffix(withoutExt || trimmed) || withoutExt || trimmed || (fallback || '');
         if (!candidate) candidate = 'temp_exec';
         var safe = candidate.replace(/[\\/:*?"<>|]/g, '_');
         return safe || 'temp_exec';
@@ -2084,7 +2085,7 @@
         if (tempExecStatus) setStatus(tempExecStatus, '请选择需要导出的执行用例', 'warn');
         return;
       }
-      var requirement = normalizeRequirementName(active.requirement) || normalizeRequirementName(getRequirementLabel(true));
+      var requirement = stripTimestampSuffix(normalizeRequirementName(active.requirement) || normalizeRequirementName(getRequirementLabel(true)));
       if (!requirement) requirement = ensureRequirementLabel('请输入需求标识后再导出执行 XMind');
       if (!requirement) {
         if (tempExecStatus) setStatus(tempExecStatus, '已取消导出（需求标识为空）', 'warn');
@@ -2113,7 +2114,7 @@
         if (tempExecStatus) setStatus(tempExecStatus, '请选择需要导出的执行用例', 'warn');
         return;
       }
-      var requirement = normalizeRequirementName(active.requirement) || normalizeRequirementName(getRequirementLabel(true));
+      var requirement = stripTimestampSuffix(normalizeRequirementName(active.requirement) || normalizeRequirementName(getRequirementLabel(true)));
       if (!requirement) requirement = ensureRequirementLabel('请输入需求标识后再导出用例 XMind');
       if (!requirement) {
         if (tempExecStatus) setStatus(tempExecStatus, '已取消导出（需求标识为空）', 'warn');

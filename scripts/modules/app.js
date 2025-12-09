@@ -964,6 +964,42 @@
       'refreshExportCaseGenXmindButton',
     ]);
 
+    let tempExecApi = {};
+    const getCaseExecutionDisplayProxy = function(file, item) {
+      if (tempExecApi && typeof tempExecApi.getCaseExecutionDisplay === 'function') {
+        return tempExecApi.getCaseExecutionDisplay(file, item);
+      }
+      return { label: '' };
+    };
+
+    const xmindCore = window.app && window.app.xmindCore && typeof window.app.xmindCore.init === 'function'
+      ? window.app.xmindCore.init({
+        formatCompactTimestamp,
+        normalizeRequirementName,
+        getRequirementLabel,
+        getCaseExecutionDisplay: getCaseExecutionDisplayProxy,
+        deriveCaseListFromText,
+        JSZip: window.JSZip,
+      })
+      : null;
+    const formatXmindNodeValue = xmindCore && xmindCore.formatXmindNodeValue
+      ? xmindCore.formatXmindNodeValue
+      : function formatXmindNodeValueFallback(val) { return (val || '').toString(); };
+    const buildCaseFieldsForXmind = xmindCore && xmindCore.buildCaseFieldsForXmind
+      ? xmindCore.buildCaseFieldsForXmind
+      : function buildCaseFieldsForXmindFallback(item, fallbackModule) {
+        return [(item && item.module) || fallbackModule || '模块'];
+      };
+    const buildXmindPackageFromCases = xmindCore && xmindCore.buildXmindPackageFromCases
+      ? xmindCore.buildXmindPackageFromCases
+      : null;
+    if (xmindCore) {
+      window.app.xmindCoreApi = xmindCore;
+    }
+    const parseXmindFile = xmindCore && xmindCore.parseXmindFile
+      ? xmindCore.parseXmindFile
+      : async function parseXmindFileFallback() { return { text: '', list: [] }; };
+
     const lazyParseXmindFile = function(file) {
       const parser = typeof parseXmindFile === 'function'
         ? parseXmindFile
@@ -1008,6 +1044,8 @@
         normalizeRequirementName,
         getRequirementLabel,
         ensureRequirementLabel,
+        stripTimestampSuffix: xmindCore && xmindCore.stripTimestampSuffix,
+        getSafeFileBaseName: xmindCore && xmindCore.getSafeFileBaseName,
         defaultTempExecColumns,
         defaultPlacement,
         state,
@@ -1041,7 +1079,7 @@
         dom,
       })
       : null;
-    const tempExecApi = tempexecCore ? { ...tempexecCore } : {};
+    tempExecApi = tempexecCore ? { ...tempexecCore } : {};
     const tempExecDefaults = window.app.tempexecDefaults && typeof window.app.tempexecDefaults.create === 'function'
       ? window.app.tempexecDefaults.create({
         state,
@@ -1077,34 +1115,6 @@
     api.renderTempExecView = tempExecApi.renderTempExecView || api.renderTempExecView;
     api.clampTempExecPageSize = tempExecApi.clampTempExecPageSize || api.clampTempExecPageSize;
     api.applyTempExecPageSize = tempExecApi.applyTempExecPageSize || function(value) { return { size: value, changed: false }; };
-
-    const xmindCore = window.app && window.app.xmindCore && typeof window.app.xmindCore.init === 'function'
-      ? window.app.xmindCore.init({
-        formatCompactTimestamp,
-        normalizeRequirementName,
-        getRequirementLabel,
-        getCaseExecutionDisplay,
-        deriveCaseListFromText,
-        JSZip: window.JSZip,
-      })
-      : null;
-    const formatXmindNodeValue = xmindCore && xmindCore.formatXmindNodeValue
-      ? xmindCore.formatXmindNodeValue
-      : function formatXmindNodeValueFallback(val) { return (val || '').toString(); };
-    const buildCaseFieldsForXmind = xmindCore && xmindCore.buildCaseFieldsForXmind
-      ? xmindCore.buildCaseFieldsForXmind
-      : function buildCaseFieldsForXmindFallback(item, fallbackModule) {
-        return [(item && item.module) || fallbackModule || '模块'];
-      };
-    const buildXmindPackageFromCases = xmindCore && xmindCore.buildXmindPackageFromCases
-      ? xmindCore.buildXmindPackageFromCases
-      : null;
-    if (xmindCore) {
-      window.app.xmindCoreApi = xmindCore;
-    }
-    const parseXmindFile = xmindCore && xmindCore.parseXmindFile
-      ? xmindCore.parseXmindFile
-      : async function parseXmindFileFallback() { return { text: '', list: [] }; };
 
     function ensureInProgressMap() {
       if (!state.inProgressSteps || typeof state.inProgressSteps !== 'object') {
