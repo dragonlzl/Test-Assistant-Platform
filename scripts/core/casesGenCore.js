@@ -1021,9 +1021,29 @@
           setStatus(caseGenStatus, '已取消导出（需求标识为空）', 'warn');
           return;
         }
-        var exported = exportAllModulesData(state.caseGenModules, state.caseGenResults, requirementLabel);
-        downloadText(exported.fileName, JSON.stringify(exported.payload, null, 2));
-        setStatus(caseGenStatus, '已导出 ' + exported.count + ' 个模块用例', 'ok');
+        if (!buildXmindPackageFromCases) throw new Error('缺少 XMind 导出依赖');
+        var allCases = [];
+        state.caseGenModules.forEach(function(mod) {
+          var list = getCaseListForModule(mod.id);
+          if (!Array.isArray(list) || !list.length) return;
+          var moduleTitle = resolveModuleTitle(mod && (mod.title || mod.module));
+          list.forEach(function(item) {
+            var clone = Object.assign({}, item);
+            if (!clone.module) clone.module = moduleTitle;
+            allCases.push(clone);
+          });
+        });
+        if (!allCases.length) {
+          setStatus(caseGenStatus, '未找到可导出的用例，请先生成用例', 'warn');
+          return;
+        }
+        var sanitized = sanitizeCasesForExport(allCases);
+        buildXmindPackageFromCases(sanitized, requirementLabel, requirementLabel).then(function(exported) {
+          downloadBlob(exported.fileName, exported.blob);
+          setStatus(caseGenStatus, '已导出 ' + exported.count + ' 条用例为 XMind', 'ok');
+        }).catch(function(err) {
+          setStatus(caseGenStatus, err && err.message ? err.message : '导出失败', 'err');
+        });
       } catch (err) {
         setStatus(caseGenStatus, err.message || '导出失败', 'err');
       }

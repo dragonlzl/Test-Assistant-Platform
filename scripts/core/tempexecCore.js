@@ -93,12 +93,23 @@
           || normalizeRequirementName((fileName || '').replace(/\.[^.]+$/, ''));
         var input = window.prompt('请输入需求标识', base);
         return input ? normalizeRequirementName(input) : '';
-      };
+    };
     var ensureRequirementLabel = deps && deps.ensureRequirementLabel ? deps.ensureRequirementLabel : function() {
       return normalizeRequirementName(getRequirementLabel());
     };
     var buildTempExecXmindPackage = deps && deps.buildTempExecXmindPackage ? deps.buildTempExecXmindPackage : null;
     var buildXmindPackageFromCases = deps && deps.buildXmindPackageFromCases ? deps.buildXmindPackageFromCases : null;
+    var getSafeFileBaseName = deps && deps.getSafeFileBaseName
+      ? deps.getSafeFileBaseName
+      : function(name, fallback) {
+        var raw = typeof name === 'string' ? name : (name && name.toString ? name.toString() : '');
+        var trimmed = raw.trim();
+        var withoutExt = trimmed.replace(/\.[^.]+$/, '');
+        var candidate = withoutExt || trimmed || (fallback || '');
+        if (!candidate) candidate = 'temp_exec';
+        var safe = candidate.replace(/[\\/:*?"<>|]/g, '_');
+        return safe || 'temp_exec';
+      };
     var ensureTempExecReplacement = deps && deps.ensureTempExecReplacement
       ? function(entry, pendingList) { return deps.ensureTempExecReplacement(entry, pendingList || []); }
       : function(entry, pendingList) {
@@ -182,6 +193,13 @@
           return { id: id, url: url };
         })
         .filter(Boolean);
+    }
+
+    function getTempExecFileBaseName(file, requirementLabel) {
+      var requirement = normalizeRequirementName(requirementLabel) || '';
+      var name = file && file.name ? file.name : '';
+      var fallback = requirement || 'temp_exec';
+      return getSafeFileBaseName(name, fallback);
     }
 
     function normalizeTempExecCase(item, fileId, idx) {
@@ -2060,8 +2078,10 @@
       });
       try {
         var pkg = await buildXmindPackageFromCases(strippedCases, active.name || '用例', requirement);
+        var baseFileName = getTempExecFileBaseName(active, requirement);
+        var plainXmindName = baseFileName + '_' + formatCompactTimestamp() + '.xmind';
         if (pkg && downloadBlob && pkg.blob) {
-          downloadBlob(pkg.fileName, pkg.blob);
+          downloadBlob(plainXmindName, pkg.blob);
         }
         if (tempExecStatus) setStatus(tempExecStatus, '已导出用例 XMind（不含执行结果）', 'ok');
       } catch (err) {

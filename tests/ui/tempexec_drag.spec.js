@@ -110,16 +110,30 @@ test.describe('执行视图导入导出与拖拽', () => {
     const jsonName = await jsonDownload.suggestedFilename();
     expect(jsonName).toMatch(/\.json$/);
 
+    const activeFileName = await page.evaluate(() => {
+      const state = window.app && window.app.state ? window.app.state : null;
+      const activeId = state && state.tempExecActiveId ? state.tempExecActiveId : '';
+      const files = state && Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      const target = files.find((item) => item && item.id === activeId);
+      return target && target.name ? target.name : '';
+    });
+    const baseName = activeFileName ? activeFileName.replace(/\.[^.]+$/, '') : 'temp_exec';
+    const safeBase = baseName.replace(/[\\/:*?"<>|]/g, '_') || 'temp_exec';
+    const escapedBase = safeBase.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+
     const [xmindDownload] = await Promise.all([
       page.waitForEvent('download', { timeout: 20000 }),
       page.click('#exportTempExecXmindBtn'),
     ]);
-    expect(await xmindDownload.suggestedFilename()).toMatch(/\.xmind$/);
+    const resultName = await xmindDownload.suggestedFilename();
+    expect(resultName).toMatch(new RegExp(`^${escapedBase}_result_\\d{14}\\.xmind$`));
+
     const [plainXmindDownload] = await Promise.all([
       page.waitForEvent('download', { timeout: 20000 }),
       page.click('#exportTempExecCasesXmindBtn'),
     ]);
-    expect(await plainXmindDownload.suggestedFilename()).toMatch(/\.xmind$/);
+    const plainName = await plainXmindDownload.suggestedFilename();
+    expect(plainName).toMatch(new RegExp(`^${escapedBase}_\\d{14}\\.xmind$`));
     await openTempExecDrawer(page);
 
     page.__promptAnswers.push('版本A');

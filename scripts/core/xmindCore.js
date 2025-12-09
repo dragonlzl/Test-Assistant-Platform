@@ -52,6 +52,21 @@
       return 'id-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 10);
     }
 
+    function getSafeFileBaseName(name, fallback) {
+      var raw = '';
+      if (typeof name === 'string') {
+        raw = name;
+      } else if (name && typeof name.toString === 'function') {
+        raw = name.toString();
+      }
+      var trimmed = raw.trim();
+      var withoutExt = trimmed.replace(/\.[^.]+$/, '');
+      var candidate = withoutExt || trimmed || (fallback || '');
+      if (!candidate) candidate = 'usecase';
+      var safe = candidate.replace(/[\\/:*?"<>|]/g, '_');
+      return safe || 'usecase';
+    }
+
     function createXmindNode(title) {
       return {
         id: generateXmindId(),
@@ -292,8 +307,7 @@
         var rootTitle = requirement || (file.name || '用例执行');
         var rootTopic = createXmindNode(rootTitle);
         var compactTs = formatCompactTimestamp();
-        var safeReq = (requirement || 'temp_exec').replace(/[\\/:*?"<>|]/g, '_');
-        var safeName = (file.name || 'usecase').replace(/[\\/:*?"<>|]/g, '_');
+        var safeName = getSafeFileBaseName(file && file.name, requirement || 'temp_exec');
         var ensurePath = function(segments) {
           if (!segments || !segments.length) return;
           var cursor = rootTopic;
@@ -384,7 +398,7 @@
         zip.generateAsync({ type: 'blob' }).then(function(blob) {
           resolve({
             blob: blob,
-            fileName: 'tempexec_' + safeReq + '_' + safeName + '_' + compactTs + '.xmind',
+            fileName: safeName + '_result_' + compactTs + '.xmind',
             count: file.cases.length,
           });
         }).catch(reject);
@@ -403,6 +417,7 @@
       parseXmindFile: parseXmindFile,
       buildXmindOutlineFromJson: buildXmindOutlineFromJson,
       buildCaseListFromXmindJson: buildCaseListFromXmindJson,
+      getSafeFileBaseName: getSafeFileBaseName,
     };
   }
 
