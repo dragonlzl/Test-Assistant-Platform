@@ -301,6 +301,14 @@
       downloadBlob: 1, parseXmindFile: 1, scrollElementIntoView: 1, updateAssignmentStatuses: 1, updateReasoningVisibility: 1, testModel: 1,
       renderCaseGeneration: 1,
     }));
+    assignIfPresent(core, api, [
+      'waitForAutoClarification',
+      'enforceAutoCoverageRequirement',
+      'setStepWaiting',
+      'clearStepWaiting',
+      'clearAllWaitingSteps',
+      'syncAutoCompareStatus',
+    ]);
     window.app.core = core;
 
     const casesGenApi = {};

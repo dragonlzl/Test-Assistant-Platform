@@ -102,6 +102,7 @@
       activeTab: 'clean',
       inProgressStep: '',
       inProgressSteps: {},
+      waitingSteps: {},
       autoRunning: false,
       lastRawImportName: '',
       autoRequireClarifications: false,

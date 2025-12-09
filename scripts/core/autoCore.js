@@ -12,6 +12,10 @@
     var utils = ctx.utils || {};
 
     var setStatus = ctx.setStatus || handlers.setStatus || function() {};
+    var setStepWaiting = handlers.setStepWaiting || function() {};
+    var clearStepWaiting = handlers.clearStepWaiting || function() {};
+    var clearAllWaitingSteps = handlers.clearAllWaitingSteps || function() {};
+    var updateFlowStatus = handlers.updateFlowStatus || function() {};
     var parseMissingModules = handlers.parseMissingModules || function() { return []; };
     var buildMissingRows = handlers.buildMissingRows || function(list) { return list || []; };
     var pickMissingSelections = handlers.pickMissingSelections || function() { return []; };
@@ -509,6 +513,7 @@
       updateAutoCompareActions(coverage);
       if (autoRecleanStatus && !(coverage !== null && coverage < 100)) setStatus(autoRecleanStatus, '', '');
       if (!(coverage !== null && coverage < 100) && autoWorkflowStatus) setStatus(autoWorkflowStatus, '', '');
+      if (!(coverage !== null && coverage < 100)) clearStepWaiting('compare');
       renderAutoCompareMissingView(missing, coverage);
       return coverage;
     }
@@ -546,6 +551,7 @@
 
     async function enforceAutoCoverageRequirement() {
       var coverage = syncAutoCompareStatus();
+      clearStepWaiting('compare');
       if (coverage === null) {
         setStatus(autoWorkflowStatus, '无法解析对比完整性结果，自动流程已暂停', 'warn');
         if (autoRecleanBtn) autoRecleanBtn.disabled = false;
@@ -558,6 +564,8 @@
         if (autoRecleanBtn) autoRecleanBtn.disabled = false;
         if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = false;
         if (autoRecleanStatus) setStatus(autoRecleanStatus, '覆盖率不足，点击“重新清洗并继续”以重跑流程', 'warn');
+        setStepWaiting('compare');
+        updateFlowStatus();
         await notifyFeishuCoverageFailure();
         throw new Error('对比覆盖率不足100%');
       }
@@ -572,8 +580,14 @@
       switchTab('auto');
       if (autoClarifySection) autoClarifySection.classList.remove('hidden');
       renderAutoClarifyView();
-      await notifyFeishuClarificationNeeded();
-      await waitForAutoClarification();
+      setStepWaiting('review');
+      updateFlowStatus();
+      try {
+        await notifyFeishuClarificationNeeded();
+        await waitForAutoClarification();
+      } finally {
+        clearStepWaiting('review');
+      }
     }
 
     async function runAutoWorkflow() {
@@ -590,6 +604,7 @@
         setStatus(autoWorkflowStatus, '正在执行，请稍候……', 'warn');
         return;
       }
+      clearAllWaitingSteps();
       state.autoRunning = true;
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = true;
       if (autoClarifyToggle) autoClarifyToggle.disabled = true;
@@ -653,6 +668,7 @@
         setStatus(autoRecleanStatus, '当前已有执行任务，请稍候', 'warn');
         return;
       }
+      clearAllWaitingSteps();
       var startMessage = options.startMessage || '重新执行中（从需求清洗开始）...';
       var workflowStartMessage = options.workflowStartMessage || '正在重新执行剩余步骤，请勿关闭页面';
       var successMessage = options.successMessage || '重新执行完成';
@@ -722,6 +738,7 @@
         setStatus(autoRecleanStatus, '当前已有执行任务，请稍候', 'warn');
         return;
       }
+      clearAllWaitingSteps();
       state.autoRunning = true;
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = true;
       if (autoClarifyToggle) autoClarifyToggle.disabled = true;

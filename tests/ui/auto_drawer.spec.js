@@ -88,6 +88,10 @@ test.describe('一键执行抽屉视图', () => {
     });
     await expect(page.locator('#autoCompareToggleBtn')).toBeEnabled();
     const compareDrawer = page.locator('#autoCompareDrawer');
+    const opened = await compareDrawer.getAttribute('class');
+    if (opened && opened.indexOf('open') !== -1) {
+      await page.click('#closeAutoCompareDrawerBtn');
+    }
     await page.click('#autoCompareToggleBtn');
     await expect(compareDrawer).toHaveClass(/open/);
     await expect(page.locator('#autoCompareMissing')).toBeVisible();

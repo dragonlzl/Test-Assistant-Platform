@@ -25,11 +25,13 @@
       pending: '未开始',
       running: '执行中',
       done: '执行完成',
+      waiting: '等待确认',
     };
     var stepStatusIcon = {
       pending: '▶',
       running: '↻',
       done: '✓',
+      waiting: '!',
     };
 
     var switchTab = handlers.switchTab || function() {};
@@ -89,6 +91,11 @@
         statusEl.style.borderTopColor = '#2563eb';
         statusEl.style.boxShadow = '0 6px 14px rgba(37,99,235,0.25), 0 0 0 1px rgba(37,99,235,0.14)';
         statusEl.style.color = '#1d4ed8';
+      } else if (status === 'waiting') {
+        statusEl.style.background = 'linear-gradient(135deg, #ffedd5, #fed7aa)';
+        statusEl.style.borderColor = '#fb923c';
+        statusEl.style.color = '#c2410c';
+        statusEl.style.boxShadow = '0 6px 14px rgba(251,146,60,0.25)';
       } else if (status === 'pending') {
         statusEl.style.background = 'linear-gradient(135deg, #f8fafc, #e2e8f0)';
         statusEl.style.borderColor = '#cbd5e1';
@@ -112,10 +119,16 @@
         cases: casesCompareResultEl && casesCompareResultEl.value.trim().length > 0,
       };
       var runningMap = (state && state.inProgressSteps && typeof state.inProgressSteps === 'object') ? state.inProgressSteps : {};
+      var waitingMap = (state && state.waitingSteps && typeof state.waitingSteps === 'object') ? state.waitingSteps : {};
       if (state.inProgressStep) runningMap[state.inProgressStep] = true;
       if (state) state.inProgressSteps = runningMap;
+      if (state && (!state.waitingSteps || typeof state.waitingSteps !== 'object')) state.waitingSteps = waitingMap;
+      Object.keys(waitingMap).forEach(function(key) {
+        stateMap[key] = false;
+      });
       var order = ['import', 'review', 'clean', 'compare', 'split', 'cases-upload', 'cases'];
-      var nextPending = order.find(function(key) { return !stateMap[key] && !runningMap[key]; }) || 'cases';
+      var waitingStep = order.find(function(key) { return waitingMap[key]; }) || '';
+      var nextPending = waitingStep || order.find(function(key) { return !stateMap[key] && !runningMap[key]; }) || 'cases';
       if (runReviewBtn) {
         var rawReady = stateMap.import;
         runReviewBtn.disabled = !rawReady || runningMap.review;
@@ -123,11 +136,20 @@
       if (flowNavSteps && typeof flowNavSteps.forEach === 'function') {
         flowNavSteps.forEach(function(step) {
           var target = step.dataset ? step.dataset.target : '';
-          step.classList.remove('done', 'active');
           var status = 'pending';
-          if (runningMap[target]) {
+          var isRunning = Boolean(runningMap[target]);
+          var isWaiting = Boolean(waitingMap[target]);
+          step.classList.remove('done', 'active', 'waiting');
+          if (isRunning) {
             step.classList.add('active');
             status = 'running';
+            syncStepStatus(step, status);
+            return;
+          }
+          if (isWaiting) {
+            step.classList.add('active');
+            step.classList.add('waiting');
+            status = 'waiting';
             syncStepStatus(step, status);
             return;
           }

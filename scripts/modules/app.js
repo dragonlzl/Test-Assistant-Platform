@@ -786,6 +786,10 @@
         dom,
         handlers: {
           setStatus,
+          setStepWaiting,
+          clearStepWaiting,
+          clearAllWaitingSteps,
+          updateFlowStatus,
           parseMissingModules,
           buildMissingRows,
           pickMissingSelections,
@@ -1099,8 +1103,37 @@
       return state.inProgressSteps;
     }
 
+    function ensureWaitingMap() {
+      if (!state.waitingSteps || typeof state.waitingSteps !== 'object') {
+        state.waitingSteps = {};
+      }
+      return state.waitingSteps;
+    }
+
+    function setStepWaiting(step) {
+      var map = ensureWaitingMap();
+      if (step) map[step] = true;
+      updateFlowStatus();
+    }
+
+    function clearStepWaiting(step) {
+      var map = ensureWaitingMap();
+      if (!step || !map[step]) return;
+      delete map[step];
+      updateFlowStatus();
+    }
+
+    function clearAllWaitingSteps() {
+      var map = ensureWaitingMap();
+      var keys = Object.keys(map);
+      if (!keys.length) return;
+      keys.forEach(function(key) { delete map[key]; });
+      updateFlowStatus();
+    }
+
     function setStepInProgress(step) {
       var map = ensureInProgressMap();
+      clearStepWaiting(step);
       if (step) map[step] = true;
       state.inProgressStep = '';
       updateFlowStatus();
@@ -1114,6 +1147,10 @@
       }
       updateFlowStatus();
     }
+
+    api.setStepWaiting = setStepWaiting;
+    api.clearStepWaiting = clearStepWaiting;
+    api.clearAllWaitingSteps = clearAllWaitingSteps;
 
     const uploadModule = window.app.upload && typeof window.app.upload.init === 'function'
       ? window.app.upload.init({
