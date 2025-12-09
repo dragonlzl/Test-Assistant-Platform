@@ -962,11 +962,12 @@
   <div class="card-body">
   <p class="hint">根据测试模块拆分的结果生成结构化测试用例，每个模块可单独调用模型生成 JSON 格式用例。</p>
   <div class="actions" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-    <div class="action-left" style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
-      <button class="secondary" id="toSplitFromCaseGen">前往测试模块拆分</button>
-      <button class="pill success" id="transferSelectedToExec">勾选用例到执行页</button>
-    </div>
+      <div class="action-left" style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
+        <button class="secondary" id="exportCaseGenXmind">导出全部勾选用例XMind</button>
+        <button class="secondary" id="toSplitFromCaseGen">前往测试模块拆分</button>
+        <button class="pill success" id="transferSelectedToExec">勾选用例到执行页</button>
+      </div>
     <div class="action-right" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <span>用例视图中勾选用例，新增 到</span>
       <select id="appendTargetSelect" style="min-width:200px;padding:6px 10px;border-radius:6px;border:1px solid #d0d5dd;box-shadow:inset 0 1px 2px rgba(0,0,0,0.04);background:#fff;">

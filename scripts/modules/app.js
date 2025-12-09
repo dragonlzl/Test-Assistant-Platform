@@ -927,6 +927,7 @@
       'generateCasesForModule',
       'topUpCasesForModule',
       'exportCaseGenerationResults',
+      'exportSelectedModulesToXmind',
       'exportModuleCases',
       'importModuleCases',
       'transferModuleToTempExec',
@@ -943,6 +944,7 @@
       'getCaseListForModule',
       'appendSelectedCasesToImported',
       'transferSelectedCasesToExec',
+      'refreshExportCaseGenXmindButton',
     ]);
 
     const lazyParseXmindFile = function(file) {
