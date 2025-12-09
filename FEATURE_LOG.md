@@ -26,7 +26,7 @@
 - 新增内容/接口/组件：追加到工作流的同步执行逻辑新增文件名前缀去标识与重新命名；XMind 导出根节点优先使用执行文件名；新增 UI 用例 `tests/ui/casegen_workflow_exec_name.spec.js` 校验命名。  
 - 复用说明：复用文件名清理与时间戳生成规则（getSafeFileBaseName、formatCompactTimestamp），未引入新接口。  
 - 测试与验证：`npm run test:ui -- tests/ui/casegen_workflow_exec_name.spec.js`（通过，需本地 python3 http.server 提权）。  
-- 更新记录：无  
+- 更新记录：补充“勾选用例转执行”生成的执行文件去除“勾选用例-”前缀并沿用需求标识；导出用例 XMind 根节点同步执行文件名。  
 
 - 功能名称：一键执行等待跳转定位
 - 功能描述：开启“需要人工确认需求澄清后再继续自动流程”时，澄清等待或覆盖率不足的导航点击将直接跳转到一键执行页对应澄清/对比区，而非功能工作流卡片。

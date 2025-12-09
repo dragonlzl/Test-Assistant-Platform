@@ -509,11 +509,14 @@ test.describe('用例生成追加到已有用例', () => {
         count: files.length,
         latestCount: latest && latest.cases ? latest.cases.length : 0,
         activeId: window.app.state.tempExecActiveId || '',
+        latestName: latest && latest.name ? latest.name : '',
       };
     });
     expect(execData.count).toBe(1);
     expect(execData.latestCount).toBe(2);
     expect(execData.activeId).not.toBe('');
+    expect(execData.latestName.indexOf('勾选用例-')).toBe(-1);
+    expect(execData.latestName).toBe('UI自动化需求');
   });
 
   test('存在导入时勾选用例直接转到执行页需确认', async ({ page }) => {

@@ -1483,7 +1483,7 @@
         setStatus(caseGenStatus, '未找到可转移的用例，请重新选择', 'warn');
         return;
       }
-      var entryName = requirementLabel ? '勾选用例-' + requirementLabel : '勾选用例';
+      var entryName = getSafeFileBaseName(requirementLabel || '勾选用例', '勾选用例');
       var entry = createTempExecFile(entryName, sanitized, 'current', null, null, requirementLabel);
       if (!entry) {
         setStatus(caseGenStatus, '未生成可执行的用例，请检查数据格式', 'err');
