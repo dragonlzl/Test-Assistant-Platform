@@ -10,6 +10,15 @@
 <body>
 <div class="app-layout">
 <aside class="sidebar">
+<div class="user-banner" id="userBanner">
+<span class="user-prefix">当前用户</span>
+<strong id="currentUsername">未登录</strong>
+<span class="user-role" id="currentUserRole"></span>
+<button class="pill-btn" id="userMenuToggle" type="button" aria-label="用户菜单">设置</button>
+<div class="user-menu" id="userMenu">
+<button class="ghost-btn" id="logoutBtn" type="button">登出</button>
+</div>
+</div>
 <div class="sidebar-header">
 <h1>用例助手</h1>
 <button class="help-pill" data-tab-btn="help" type="button">
@@ -23,6 +32,10 @@
 <button data-tab-btn="clean">功能工作流</button>
 <button data-tab-btn="casesgen">用例生成</button>
 <button data-tab-btn="tempexec">用例执行</button>
+<button data-tab-btn="case-library">用例库</button>
+<button class="hidden" data-tab-btn="project-admin" data-role="admin-only">项目管理</button>
+<button class="hidden" data-tab-btn="user-admin" data-role="admin-only">人员管理</button>
+<button class="hidden" data-tab-btn="ops-log" data-role="admin-only">操作记录</button>
 <button data-tab-btn="assign">功能指派</button>
 <button data-tab-btn="models">模型管理</button>
 <button data-tab-btn="settings">其他配置</button>
@@ -1240,6 +1253,30 @@
 <p class="status" id="tempExecPageSizeStatus"></p>
 </div>
 </section>
+<section class="card hidden" data-tab-section="case-library">
+<h2>用例库</h2>
+<div class="card-body">
+<p class="hint">登录后可导入/编辑用例库。后续将接入项目/版本选择、同名校验与转执行操作。</p>
+</div>
+</section>
+<section class="card hidden" data-tab-section="project-admin" data-role="admin-only">
+<h2>项目管理</h2>
+<div class="card-body">
+<p class="hint">管理员入口。后续将支持项目列表、描述修改、版本管理与删除操作。</p>
+</div>
+</section>
+<section class="card hidden" data-tab-section="user-admin" data-role="admin-only">
+<h2>人员管理</h2>
+<div class="card-body">
+<p class="hint">管理员入口。后续将支持新增/删除人员、权限与项目分配、重置密码等操作。</p>
+</div>
+</section>
+<section class="card hidden" data-tab-section="ops-log" data-role="admin-only">
+<h2>操作记录</h2>
+<div class="card-body">
+<p class="hint">管理员入口。后续将展示登录/登出及增删改操作日志。</p>
+</div>
+</section>
 </main>
 </div>
 </div>
@@ -1268,6 +1305,7 @@
 <script src="./scripts/modules/settings.js" defer></script>
 <script src="./services/storage.js" defer></script>
 <script src="./services/modelClient.js" defer></script>
+<script src="./services/apiClient.js" defer></script>
 <script src="./scripts/modules/models.js" defer></script>
 <script src="./scripts/handlers/assignHandlers.js" defer></script>
 <script src="./scripts/modules/assign.js" defer></script>
@@ -1284,6 +1322,7 @@
 <script src="./scripts/modules/auto.js" defer></script>
 <script src="./scripts/modules/casesgen.js" defer></script>
 <script src="./scripts/modules/tempexec.js" defer></script>
+<script src="./scripts/modules/authGuard.js" defer></script>
 <script src="./scripts/modules/app.js" defer></script>
 <script src="./scripts/modules/bootstrap.js" defer></script>
 </body>

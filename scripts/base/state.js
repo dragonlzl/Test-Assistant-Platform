@@ -42,6 +42,10 @@
       settingsCopy.tempExecColumns = Object.assign({}, defaultSettings.tempExecColumns);
     }
     return {
+      authToken: '',
+      currentUser: null,
+      userProjects: [],
+      projectList: [],
       models: [],
       assignments: {
         cleanId: '',

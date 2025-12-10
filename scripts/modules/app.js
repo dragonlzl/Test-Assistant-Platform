@@ -1578,3 +1578,4 @@
       })
       : null;
     if (runtime && runtime.switchTab) switchTab = runtime.switchTab;
+    window.app.switchTab = switchTab;
