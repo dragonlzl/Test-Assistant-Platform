@@ -261,6 +261,12 @@
       return text ? text.toLowerCase() : '';
     }
 
+    function normalizeExpectedResult(expected) {
+      var text = stringifyCaseField(expected || '');
+      if (!text) return '';
+      return text.replace(/\s+/g, ' ').toLowerCase();
+    }
+
     function normalizeCaseListWithModules(list) {
       var normalized = [];
       var buckets = {};
@@ -1354,14 +1360,16 @@
             if (!item) return;
             var mKey = normalizeModuleKey(item.module || item.module_name || item['模块']);
             var tKey = normalizeCaseTitle(item.title || item.case_title || item['用例标题']);
-            var key = mKey + '::' + tKey;
+            var eKey = normalizeExpectedResult(item.expected || item.result || item['预期结果'] || item['期望']);
+            var key = mKey + '::' + tKey + '::' + eKey;
             if (!existingMap.has(key)) existingMap.set(key, item);
           });
           var usedKeys = new Set();
           var mergedExec = mergedList.map(function(item, idx) {
             var mKey = normalizeModuleKey(item.module || item.module_name || item['模块']);
             var tKey = normalizeCaseTitle(item.title || item.case_title || item['用例标题']);
-            var key = mKey + '::' + tKey;
+            var eKey = normalizeExpectedResult(item.expected || item.result || item['预期结果'] || item['期望']);
+            var key = mKey + '::' + tKey + '::' + eKey;
             var existing = existingMap.get(key);
             usedKeys.add(key);
             return convertCaseForExec(item, execTarget.id, idx, existing);
@@ -1370,7 +1378,8 @@
             if (!item) return;
             var mKey = normalizeModuleKey(item.module || item.module_name || item['模块']);
             var tKey = normalizeCaseTitle(item.title || item.case_title || item['用例标题']);
-            var key = mKey + '::' + tKey;
+            var eKey = normalizeExpectedResult(item.expected || item.result || item['预期结果'] || item['期望']);
+            var key = mKey + '::' + tKey + '::' + eKey;
             if (usedKeys.has(key)) return;
             mergedExec.push(convertCaseForExec(item, execTarget.id, mergedExec.length, item));
           });
