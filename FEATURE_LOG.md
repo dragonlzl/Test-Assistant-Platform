@@ -19,6 +19,69 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：项目管理非管理员可见性修复与接口放行  
+- 功能描述：非管理员访问“管理-项目管理”不再空白，按所属项目展示列表；保留管理员全量可见，成员仅能查看/维护自己项目版本。  
+- 操作方式：以普通成员或组长登录后展开“管理”菜单，点击“项目管理”即可看到所属项目；管理员入口与操作保持不变。  
+- 使用效果：成员/组长能直接查看所属项目与版本，避免权限屏蔽导致页面空白；接口返回自身项目分配供前端过滤。  
+- 新增内容/接口/组件：调整 authGuard 角色可见性以放开项目管理入口；`/api/users/{user_id}/projects` 支持用户自查所属项目；新增 API 用例 `tests/api/non_admin_projects.spec.js`，更新 `tests/ui/project_admin_drawer.spec.js` 覆盖可见性。  
+- 复用说明：复用既有导航切换与项目列表过滤逻辑，仅补充权限判断与接口校验。  
+- 测试与验证：`npx playwright test --config tests/api/playwright.api.config.js tests/api/admin_entities.spec.js tests/api/non_admin_projects.spec.js`（通过，API_BASE_URL=http://127.0.0.1:9000）；`npm run test:ui -- tests/ui/project_admin_drawer.spec.js`（通过，使用本地 8090 静态服）。  
+- 更新记录：已执行 `python3 notify_feishu.py` 发送完成通知。  
+
+- 功能名称：项目管理权限细化（管理员/组员/组长）与导航可见性  
+- 功能描述：非管理员按级别差异化可见与可操作范围：组员/组长可见“管理-项目管理”，仅显示自身所属项目；组员仅能新增/删除版本，组长额外可编辑项目，删除/新建项目仅管理员可用；无可见子入口时一级菜单自动隐藏。  
+- 操作方式：登录后，组员/组长展开左侧“管理”，点击“项目管理”进入；仅能看到自己项目的版本操作按钮，管理员保持原有全量可见可改。  
+- 使用效果：降低非管理员越权风险，导航不再出现空的“管理”入口，成员只看到并操作自己的项目范围。  
+- 新增内容/接口/组件：authGuard 根据角色+级别重新计算可见 tabs；admin.js 按 currentUserProjects 过滤项目列表并限制动作权限；新增 currentUser/currentUserProjects 缓存。  
+- 复用说明：复用既有 API 客户端与 tab 切换逻辑，未新增接口。  
+- 测试与验证：`node --check scripts/modules/admin.js scripts/modules/authGuard.js`（通过）；尝试 `npx playwright test tests/ui/project_admin_drawer.spec.js`，因 Chrome headless 在当前沙箱下触发 macOS mach_port 权限拒绝未能跑通（chromium/crashpad 被拒绝写入），需在允许的环境复跑。  
+- 更新记录：2025-12-12 支持中文级别（组长/组员）也能正确识别权限并显示项目管理入口；当前端未拿到分配项目列表时，按接口返回的项目补全当前用户可见集，避免组长页面为空；所属项目 ID 兼容 `project_id/projectId/id/字符串`，防止过滤后空表。  
+
+- 功能名称：项目管理列表排版与按钮居中优化  
+- 功能描述：版本区域完整展示多行版本不滚动，“暂无版本”垂直居中；操作按钮固定高度/内边距，文本不换行且居中；项目名列宽缩半并给版本列让宽，版本列去掉底部线；项目名/描述/时间在版本换行时仍保持单行显示。  
+- 操作方式：进入项目管理列表查看版本较多的项目，观察按钮位置与各字段展示。  
+- 使用效果：多行版本时操作列不再被拉高，按钮与文字对齐美观；项目字段宽度稳定，不受版本换行干扰。  
+- 新增内容/接口/组件：调整项目管理表格布局（table-layout: fixed、列宽/最小宽度）、按钮样式、版本区样式。  
+- 复用说明：仅样式与现有渲染逻辑调整，无新增组件。  
+- 测试与验证：同上，UI 自动化因浏览器权限限制未跑通；需在具备 Chromium 运行权限的环境复验项目管理相关用例。  
+- 更新记录：无  
+
+- 功能名称：项目管理空版本提示居中
+- 功能描述：项目管理表格中，当项目还没有版本时，“暂无版本”提示垂直居中显示，行内容对齐不再显得偏高。
+- 操作方式：进入“管理-项目管理”，在无版本的项目行查看“版本”列提示。
+- 使用效果：空版本提示与表格其它字段保持同一垂直中心，对齐一致，行高度更整齐。
+- 新增内容/接口/组件：样式调整（style.css `.admin-table td` 垂直居中、`.version-empty` 尺寸与内边距优化）；UI 用例增加空态位置校验（tests/ui/project_admin_drawer.spec.js）。
+- 复用说明：复用既有表格结构与提示文案，仅优化样式与现有测试。
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/project_admin_drawer.spec.js`（通过）。
+- 更新记录：无
+
+- 功能名称：项目管理操作区不换行、版本列去线
+- 功能描述：项目管理表格中“操作”列按钮保持一行排列不再换行；“版本”列底部边线去除，视觉更干净。
+- 操作方式：进入“管理-项目管理”，查看项目列表的操作按钮与版本区域。
+- 使用效果：操作按钮集中一行更易点击，版本列空态或多标签下不再出现多余分割线。
+- 新增内容/接口/组件：项目表格定向样式（style.css `#projectAdmin .admin-table .actions`、`#projectAdmin .admin-table td.project-versions`），UI 用例增加布局校验（tests/ui/project_admin_drawer.spec.js）。
+- 复用说明：复用既有表格与按钮结构，仅调整样式与测试校验。
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/project_admin_drawer.spec.js`（通过）。
+- 更新记录：保持版本完整展示不滚动；操作区高度固定并居中，避免随版本行高拉伸；操作按钮文本保持单行居中不换行；项目名/描述/创建时间保持单行不换行、固定列宽，版本换行不再挤压这些字段；项目名宽度缩小一半并让出空间给版本列。
+
+- 功能名称：无可见二级入口时隐藏一级菜单
+- 功能描述：当某一级导航下所有二级入口因权限不可见时，自动隐藏对应的一级按钮，避免出现无法点击的空菜单。
+- 操作方式：权限不足用户登录后，侧边导航仅显示有权限的一级按钮；管理员保持不变。
+- 使用效果：非管理员看不到空的“管理”等一级入口，导航更简洁。
+- 新增内容/接口/组件：权限可见性计算与一级菜单隐藏逻辑（scripts/modules/authGuard.js），导航用例覆盖无权限场景（tests/ui/sidebar_menu.spec.js）。
+- 复用说明：复用现有角色标记与 tab 切换逻辑，仅增加可见性判定。
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/sidebar_menu.spec.js`（通过）。
+- 更新记录：无
+
+- 功能名称：人员管理项目分配改为勾选
+- 功能描述：人员管理抽屉的“所属项目”改为平铺勾选项，无项目时显示“暂无项目”，多个项目自动换行，勾选即为分配。
+- 操作方式：进入“管理-人员管理”打开新增/编辑抽屉，按需勾选项目；无可用项目时看到“暂无项目”提示。
+- 使用效果：项目分配入口直观可视，支持多行展示，空态清晰。
+- 新增内容/接口/组件：项目勾选容器与样式（index.html#userProjectsSelect，style.css `.user-projects-select/.project-checkbox/.project-checkbox-empty`），表单收集逻辑更新（scripts/modules/admin.js），UI 用例覆盖勾选状态与空态（tests/ui/user_admin_drawer.spec.js）。
+- 复用说明：复用原有项目数据与分配接口，仅调整前端展示与选择方式。
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/user_admin_drawer.spec.js`（通过）。
+- 更新记录：无
+
 - 功能名称：抽屉开启时禁用侧边导航点击  
 - 功能描述：抽屉打开后左侧导航（含二级菜单与用户菜单）保持可见但不再响应点击或切换，避免遮罩下误触。  
 - 操作方式：任意页面打开抽屉后，侧边一级/二级菜单、用户菜单与侧边工具按钮点击无效，需先收起抽屉再切换页签；抽屉关闭后恢复原有操作。  
@@ -53,7 +116,7 @@
 - 新增内容/接口/组件：表格 DOM（`index.html#userTableBody`）、抽屉容器 `#userDrawer`；样式 `.admin-table*`（style.css）；前端逻辑更新（scripts/modules/admin.js）支持表格渲染、抽屉开关、状态提示。  
 - 复用说明：复用现有抽屉组件与状态提示方法，沿用既有用户/项目接口。  
 - 测试与验证：新增 UI 用例 `tests/ui/user_admin_drawer.spec.js` 覆盖表格渲染与抽屉开关；未执行（本地缺少 Playwright 浏览器二进制），需先运行 `npx playwright install` 后执行 `npx playwright test tests/ui/user_admin_drawer.spec.js`。  
-- 更新记录：无  
+- 更新记录：2025-12-11 列表级别改为中文展示（组长/组员），与抽屉选择一致。  
 
 - 功能名称：侧边导航分级与悬浮子菜单  
 - 功能描述：左侧页签按“AI 功能/用例相关/管理/设置”分级，二级入口通过悬浮菜单展示，避免按钮拥挤且保持布局稳定。  

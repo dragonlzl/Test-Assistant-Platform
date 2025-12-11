@@ -5,6 +5,7 @@
     projects: [],
     users: [],
     userProjects: {},
+    currentUserProjects: [],
     editingProjectId: null,
     editingUserId: null,
   };
@@ -40,6 +41,33 @@
   };
   var userDrawer;
   var projectDrawer;
+
+  function resolveProjectId(item) {
+    if (item === null || item === undefined) return null;
+    if (typeof item === 'number') return item;
+    if (typeof item === 'string') {
+      var num = Number(item);
+      return isNaN(num) ? null : num;
+    }
+    if (item.project_id !== undefined) {
+      var pid = Number(item.project_id);
+      return isNaN(pid) ? null : pid;
+    }
+    if (item.projectId !== undefined) {
+      var camel = Number(item.projectId);
+      return isNaN(camel) ? null : camel;
+    }
+    if (item.id !== undefined) {
+      var id = Number(item.id);
+      return isNaN(id) ? null : id;
+    }
+    return null;
+  }
+
+  function normalizeProjectIds(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(function(item) { return resolveProjectId(item); }).filter(function(id) { return id !== null; });
+  }
 
   function setStatus(el, text, type) {
     if (!el) return;
@@ -112,6 +140,7 @@
   function showUserForm(editing) {
     state.editingUserId = editing ? editing.id : null;
     setStatus(dom.userFormStatus, '', '');
+    buildProjectOptions();
     if (dom.userDrawerTitle) {
       dom.userDrawerTitle.textContent = editing ? '编辑人员' : '新增人员';
     }
@@ -139,7 +168,6 @@
     if (drawerInstance && typeof drawerInstance.open === 'function') {
       drawerInstance.open();
     }
-    enhanceProjectsSelectDropdown();
   }
 
   function hideUserForm() {
@@ -152,86 +180,101 @@
     }
   }
 
-  function selectUserProjects(ids) {
-    const select = dom.userProjectsSelect;
-    if (!select) return;
-    const set = new Set(ids || []);
-    var chosen = 0;
-    Array.prototype.forEach.call(select.options, function(opt) {
-      if (opt.dataset && opt.dataset.placeholder === 'projects') {
-        opt.selected = false;
-        return;
+  function getCurrentUser() {
+    var globalState = window.app && window.app.state ? window.app.state : {};
+    return globalState && globalState.currentUser ? globalState.currentUser : null;
+  }
+
+  function normalizeLevel(level) {
+    if (!level && level !== 0) return '';
+    var lower = String(level).toLowerCase();
+    if (lower === '组长') return 'leader';
+    if (lower === '组员') return 'member';
+    return lower;
+  }
+
+  function ensureCurrentUserReady() {
+    var user = getCurrentUser();
+    if (user) return Promise.resolve(user);
+    if (api && typeof api.getCurrentUser === 'function') {
+      return api.getCurrentUser().then(function(u) {
+        if (u) u.level = normalizeLevel(u.level);
+        if (window.app && window.app.state) {
+          window.app.state.currentUser = u;
+        }
+        return u;
+      }).catch(function() { return null; });
+    }
+    return Promise.resolve(null);
+  }
+
+  function isAdmin() {
+    var user = getCurrentUser();
+    return user && user.role === 'admin';
+  }
+
+  function isLeader() {
+    var user = getCurrentUser();
+    var level = user && user.level ? user.level : '';
+    return normalizeLevel(level) === 'leader';
+  }
+
+  function belongsToCurrentUser(projectId) {
+    if (isAdmin()) return true;
+    var set = normalizeProjectIds(state.currentUserProjects);
+    state.currentUserProjects = set;
+    return set.indexOf(Number(projectId)) !== -1;
+  }
+
+  function ensureCurrentUserProjects() {
+    if (isAdmin()) return Promise.resolve([]);
+    var user = getCurrentUser();
+    if (!user || !user.id) return Promise.resolve([]);
+    return api.getUserProjects(user.id).then(function(list) {
+      var ids = normalizeProjectIds(list);
+      state.currentUserProjects = ids;
+      if (window.app && window.app.state) {
+        window.app.state.currentUserProjects = ids;
       }
-      var picked = set.has(Number(opt.value));
-      opt.selected = picked;
-      if (picked) chosen += 1;
+      return ids;
+    }).catch(function() {
+      state.currentUserProjects = [];
+      return [];
     });
-    toggleProjectsPlaceholder(chosen);
-    collapseProjectsSelect();
+  }
+
+  function selectUserProjects(ids) {
+    const container = dom.userProjectsSelect;
+    if (!container || !container.querySelectorAll) return;
+    const set = new Set(ids || []);
+    var boxes = container.querySelectorAll('input[type="checkbox"]');
+    if (!boxes || typeof boxes.length !== 'number') return;
+    Array.prototype.forEach.call(boxes, function(box) {
+      box.checked = set.has(Number(box.value));
+    });
   }
 
   function buildProjectOptions() {
     if (!dom.userProjectsSelect) return;
     dom.userProjectsSelect.innerHTML = '';
-    var placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = '未选择';
-    placeholder.dataset.placeholder = 'projects';
-    placeholder.selected = true;
-    dom.userProjectsSelect.appendChild(placeholder);
+    if (!state.projects.length) {
+      var empty = document.createElement('p');
+      empty.className = 'hint project-checkbox-empty';
+      empty.textContent = '暂无项目';
+      dom.userProjectsSelect.appendChild(empty);
+      return;
+    }
     state.projects.forEach(function(p) {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = p.name;
-      dom.userProjectsSelect.appendChild(opt);
-    });
-    collapseProjectsSelect();
-  }
-
-  function collapseProjectsSelect() {
-    if (!dom.userProjectsSelect) return;
-    dom.userProjectsSelect.size = 1;
-  }
-
-  function expandProjectsSelect() {
-    if (!dom.userProjectsSelect) return;
-    var count = dom.userProjectsSelect.options && dom.userProjectsSelect.options.length
-      ? Array.prototype.filter.call(dom.userProjectsSelect.options, function(opt) {
-          return !(opt.dataset && opt.dataset.placeholder === 'projects');
-        }).length
-      : 0;
-    var desired = Math.min(Math.max(count, 1), 6);
-    dom.userProjectsSelect.size = desired;
-  }
-
-  function toggleProjectsPlaceholder(selectedCount) {
-    if (!dom.userProjectsSelect) return;
-    var placeholder = dom.userProjectsSelect.querySelector('option[data-placeholder="projects"]');
-    if (!placeholder) return;
-    var hasSelection = selectedCount > 0;
-    placeholder.selected = !hasSelection;
-    placeholder.hidden = hasSelection;
-  }
-
-  function enhanceProjectsSelectDropdown() {
-    var select = dom.userProjectsSelect;
-    if (!select || select._dropdownBound) return;
-    select._dropdownBound = true;
-    collapseProjectsSelect();
-    select.addEventListener('focus', expandProjectsSelect);
-    select.addEventListener('click', expandProjectsSelect);
-    select.addEventListener('blur', collapseProjectsSelect);
-    select.addEventListener('keydown', function(e) {
-      if (e && e.key === 'Escape') {
-        collapseProjectsSelect();
-      }
-    });
-    select.addEventListener('change', function() {
-      var selectedCount = Array.prototype.filter.call(select.options || [], function(opt) {
-        return opt.selected && !(opt.dataset && opt.dataset.placeholder === 'projects');
-      }).length;
-      toggleProjectsPlaceholder(selectedCount);
-      collapseProjectsSelect();
+      var label = document.createElement('label');
+      label.className = 'project-checkbox';
+      var input = document.createElement('input');
+      input.type = 'checkbox';
+      input.value = p.id;
+      label.appendChild(input);
+      var text = document.createElement('span');
+      text.textContent = p.name;
+      label.appendChild(text);
+      dom.userProjectsSelect.appendChild(label);
     });
   }
 
@@ -243,25 +286,37 @@
       return;
     }
     const rows = state.projects.map(function(p) {
+      var belongs = belongsToCurrentUser(p.id);
+      var canManageVersions = isAdmin() || belongs;
+      var canEditProject = isAdmin() || (isLeader() && belongs);
+      var canDeleteProject = isAdmin();
       const versions = Array.isArray(p.versions) ? p.versions : [];
       const versionTags = versions.length
         ? versions.map(function(v) {
-            return '<span class="tag muted">' + v.name + '</span>' +
-              '<button class="ghost-btn" data-action="delete-version" data-project-id="' + p.id + '" data-version-id="' + v.id + '">删除</button>';
+            var delBtn = canManageVersions
+              ? '<button class="ghost-btn slim" data-action="delete-version" data-project-id="' + p.id + '" data-version-id="' + v.id + '">删除</button>'
+              : '';
+            return '<span class="version-chip"><span class="tag muted">' + v.name + '</span>' + delBtn + '</span>';
           }).join(' ')
-        : '<span class="hint">暂无版本</span>';
+        : '<span class="hint version-empty">暂无版本</span>';
+      var actions = '<div class="actions">';
+      if (canEditProject) {
+        actions += '<button class="secondary" data-action="edit-project" data-id="' + p.id + '">编辑</button>';
+      }
+      if (canManageVersions) {
+        actions += '<button class="secondary" data-action="add-version" data-id="' + p.id + '">新增版本</button>';
+      }
+      if (canDeleteProject) {
+        actions += '<button class="danger ghost-btn" data-action="delete-project" data-id="' + p.id + '">删除</button>';
+      }
+      actions += '</div>';
       return (
         '<tr data-project-id="' + p.id + '">' +
-        '<td><strong>' + (p.name || '') + '</strong></td>' +
-        '<td>' + (p.description || '—') + '</td>' +
-        '<td class="project-versions">' + versionTags +
-        ' <button class="secondary" data-action="add-version" data-id="' + p.id + '">新增版本</button>' +
-        '</td>' +
-        '<td>' + formatTime(p.created_at) + '</td>' +
-        '<td><div class="actions">' +
-        '<button class="secondary" data-action="edit-project" data-id="' + p.id + '">编辑</button>' +
-        '<button class="danger ghost-btn" data-action="delete-project" data-id="' + p.id + '">删除</button>' +
-        '</div></td>' +
+        '<td class="project-name"><span class="project-name-text">' + (p.name || '') + '</span></td>' +
+        '<td class="project-desc"><span class="project-desc-text">' + (p.description || '—') + '</span></td>' +
+        '<td class="project-versions"><div class="version-list">' + versionTags + '</div></td>' +
+        '<td class="project-created"><span class="project-created-text">' + formatTime(p.created_at) + '</span></td>' +
+        '<td>' + actions + '</td>' +
         '</tr>'
       );
     }).join('');
@@ -288,7 +343,9 @@
           }).join('')
         : '<span class="hint">未分配项目</span>';
       const roleLabel = u.role === 'admin' ? '管理员' : '用户';
-      const levelLabel = u.level || '未设级别';
+      var levelLabel = '未设级别';
+      if (u.level === 'leader') levelLabel = '组长';
+      if (u.level === 'member') levelLabel = '组员';
       const statusLabel = u.is_active === false ? '停用' : '启用';
       return (
         '<tr data-user-id="' + u.id + '">' +
@@ -316,20 +373,41 @@
     const role = dom.userRoleSelect.value;
     const level = dom.userLevelSelect.value;
     const isActive = dom.userActiveCheckbox.checked;
-    const projects = Array.prototype.filter.call(dom.userProjectsSelect.options || [], function(opt) {
-      if (!opt || !opt.selected) return false;
-      if (opt.dataset && opt.dataset.placeholder === 'projects') return false;
-      return opt.value !== '';
-    }).map(function(opt) { return Number(opt.value); });
+    const projects = Array.prototype.filter.call(dom.userProjectsSelect.querySelectorAll('input[type="checkbox"]') || [], function(box) {
+      return box && box.checked;
+    }).map(function(box) { return Number(box.value); });
     return { username: username, password: password, role: role, level: level, is_active: isActive, project_ids: projects };
   }
 
   function loadProjects() {
     setStatus(dom.projectStatus, '加载项目...', '');
-    return api.listProjects().then(function(list) {
-      state.projects = Array.isArray(list) ? list : [];
+    var prepare = ensureCurrentUserReady().then(function() {
+      return ensureCurrentUserProjects();
+    });
+    return prepare.then(function() {
+      return api.listProjects();
+    }).then(function(list) {
+      var user = getCurrentUser();
+      if (dom.projectCreateBtn) {
+        var canCreate = user && user.role === 'admin';
+        dom.projectCreateBtn.classList.toggle('hidden', !canCreate);
+      }
+      var projects = Array.isArray(list) ? list : [];
+      if (!isAdmin()) {
+        var allowedIds = normalizeProjectIds(state.currentUserProjects);
+        state.currentUserProjects = allowedIds;
+        if (allowedIds.length) {
+          var allowed = new Set(allowedIds);
+          projects = projects.filter(function(p) { return allowed.has(Number(p.id)); });
+        } else if (projects.length) {
+          state.currentUserProjects = projects.map(function(p) { return Number(p.id); });
+          if (window.app && window.app.state) {
+            window.app.state.currentUserProjects = state.currentUserProjects;
+          }
+        }
+      }
+      state.projects = projects;
       buildProjectOptions();
-      enhanceProjectsSelectDropdown();
       renderProjectList();
       setStatus(dom.projectStatus, '已加载 ' + state.projects.length + ' 个项目', 'ok');
     }).catch(function(err) {
@@ -343,9 +421,7 @@
       state.users = Array.isArray(list) ? list : [];
       return Promise.all(state.users.map(function(u) {
         return api.getUserProjects(u.id).then(function(projects) {
-          var ids = Array.isArray(projects)
-            ? projects.map(function(item) { return item.project_id !== undefined ? item.project_id : item; })
-            : [];
+          var ids = normalizeProjectIds(projects);
           state.userProjects[u.id] = ids;
         }).catch(function() {
           state.userProjects[u.id] = [];
@@ -354,7 +430,6 @@
     }).then(function() {
       renderUserList();
       setStatus(dom.userStatus, '已加载 ' + state.users.length + ' 人', 'ok');
-      enhanceProjectsSelectDropdown();
     }).catch(function(err) {
       setStatus(dom.userStatus, err && err.message ? err.message : '加载失败', 'err');
     });
@@ -423,17 +498,25 @@
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
     const action = btn.dataset.action;
+    var pid = Number(btn.dataset.projectId || btn.dataset.id);
+    var belongs = belongsToCurrentUser(pid);
+    var canManageVersions = isAdmin() || belongs;
+    var canEditProject = isAdmin() || (isLeader() && belongs);
+    var canDeleteProject = isAdmin();
     if (action === 'edit-project') {
+      if (!canEditProject) return;
       const id = Number(btn.dataset.id);
       const proj = state.projects.find(function(p) { return p.id === id; });
       if (proj) showProjectForm(proj);
     } else if (action === 'delete-project') {
+      if (!canDeleteProject) return;
       const id = Number(btn.dataset.id);
       if (!confirm('确认删除该项目？相关版本将被删除。')) return;
       api.deleteProject(id).then(loadProjects).catch(function(err) {
         setStatus(dom.projectStatus, err && err.message ? err.message : '删除失败', 'err');
       });
     } else if (action === 'add-version') {
+      if (!canManageVersions) return;
       const id = Number(btn.dataset.id);
       const name = prompt('请输入新版本名称');
       if (!name) return;
@@ -441,6 +524,7 @@
         setStatus(dom.projectStatus, err && err.message ? err.message : '新增版本失败', 'err');
       });
     } else if (action === 'delete-version') {
+      if (!canManageVersions) return;
       const pid = Number(btn.dataset.projectId);
       const vid = Number(btn.dataset.versionId);
       if (!confirm('确认删除该版本？')) return;
@@ -479,7 +563,10 @@
 
   function bindEvents() {
     if (dom.projectRefreshBtn) dom.projectRefreshBtn.addEventListener('click', loadProjects);
-    if (dom.projectCreateBtn) dom.projectCreateBtn.addEventListener('click', function() { showProjectForm(null); });
+    if (dom.projectCreateBtn) dom.projectCreateBtn.addEventListener('click', function() {
+      if (!isAdmin()) return;
+      showProjectForm(null);
+    });
     if (dom.projectSaveBtn) dom.projectSaveBtn.addEventListener('click', saveProject);
     if (dom.projectTableBody) dom.projectTableBody.addEventListener('click', handleProjectListClick);
 

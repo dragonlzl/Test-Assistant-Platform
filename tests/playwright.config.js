@@ -10,6 +10,14 @@ module.exports = defineConfig({
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090',
     headless: process.env.PLAYWRIGHT_HEADED ? false : true,
+    launchOptions: {
+      args: [
+        '--disable-crashpad',
+        '--disable-features=Crashpad',
+        '--no-sandbox',
+      ],
+      chromiumSandbox: false,
+    },
     actionTimeout: 10 * 1000,
     navigationTimeout: 15 * 1000,
     acceptDownloads: true,

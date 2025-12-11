@@ -97,4 +97,24 @@ test.describe('侧边分级菜单', () => {
   const afterForcedClick = await page.evaluate(() => window.app && window.app.state ? window.app.state.activeTab : '');
   expect(afterForcedClick).toBe(beforeState.active);
   });
+
+  test('无可见二级入口时隐藏对应一级菜单', async ({ page }) => {
+    await page.unroute('**/api/users/me');
+    await page.route('**/api/users/me', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ username: 'normal_user', role: 'user' }),
+      });
+    });
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
+
+    const manageBtn = page.locator('.tab-group-btn[data-group="manage"]');
+    await expect(manageBtn).toBeHidden();
+    const activeTab = await page.evaluate(() => window.app && window.app.state ? window.app.state.activeTab : '');
+    expect(activeTab).not.toBe('project-admin');
+    expect(activeTab).not.toBe('user-admin');
+    expect(activeTab).not.toBe('ops-log');
+  });
 });

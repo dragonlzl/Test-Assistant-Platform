@@ -171,10 +171,11 @@ def assign_projects(
 @router.get("/{user_id}/projects", response_model=List[schemas.UserProjectBrief])
 def list_user_projects(
     user_id: int,
-    admin: models.User = Depends(require_admin),
+    requester: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _ = admin  # admin校验
+    if requester.role != "admin" and requester.id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权限查看该用户项目")
     records = (
         db.query(models.UserProject, models.Project)
         .join(models.Project, models.Project.id == models.UserProject.project_id)

@@ -105,6 +105,11 @@ test.describe('人员管理列表与抽屉', () => {
     await expect(drawer).toHaveClass(/open/);
     await expect(page.locator('#userDrawerTitle')).toContainText('编辑');
     await expect(page.locator('#userNameInput')).toBeDisabled();
+    const projectChoices = page.locator('#userProjectsSelect .project-checkbox');
+    await expect(projectChoices).toHaveCount(2);
+    await expect(projectChoices.nth(0)).toContainText('Alpha');
+    await expect(projectChoices.nth(0).locator('input')).toBeChecked();
+    await expect(projectChoices.nth(1).locator('input')).not.toBeChecked();
   });
 
   test('抽屉遮罩覆盖侧边导航不可点击', async ({ page }) => {
@@ -121,5 +126,20 @@ test.describe('人员管理列表与抽屉', () => {
       return el && el.className ? el.className.toString() : '';
     }, center);
     expect(topElement).toMatch(/drawer-mask/);
+  });
+
+  test('所属项目为空时展示暂无项目', async ({ page }) => {
+    await page.unroute('**/api/projects');
+    await page.route('**/api/projects', (route) => {
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    });
+    await page.reload();
+
+    const manageBtn = page.locator('.tab-group-btn', { hasText: '管理' });
+    await manageBtn.click();
+    await page.locator('[data-group-menu="manage"] [data-tab-btn="user-admin"]').click();
+    await page.locator('#userCreateBtn').click();
+    const emptyHint = page.locator('#userProjectsSelect .project-checkbox-empty');
+    await expect(emptyHint).toContainText('暂无项目');
   });
 });

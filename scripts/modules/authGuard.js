@@ -8,6 +8,14 @@
   var userMenu = null;
   var userMenuToggle = null;
 
+  function normalizeLevel(level) {
+    if (!level && level !== 0) return '';
+    var lower = String(level).toLowerCase();
+    if (lower === '组长') return 'leader';
+    if (lower === '组员') return 'member';
+    return lower;
+  }
+
   function drawerIsOpen() {
     return window.app && typeof window.app.isDrawerOpen === 'function' && window.app.isDrawerOpen();
   }
@@ -23,24 +31,89 @@
     window.location.replace(target);
   }
 
-  function applyRoleVisibility(role) {
+  function applyRoleVisibility(user) {
+    var role = user && user.role ? user.role : 'user';
+    var level = user && user.level ? user.level : '';
+    var levelNorm = normalizeLevel(level);
+    var allowProjectTab = role === 'admin' || levelNorm === 'leader' || levelNorm === 'member';
     var adminOnly = document.querySelectorAll('[data-role="admin-only"]');
     adminOnly.forEach(function(node) {
-      if (role !== 'admin') {
+      var tabName = '';
+      if (node.dataset) {
+        tabName = node.dataset.tabBtn || node.dataset.tabSection || '';
+      }
+      var isProjectTab = tabName === 'project-admin';
+      var shouldShowProject = isProjectTab && allowProjectTab;
+      if (role !== 'admin' && !shouldShowProject) {
         node.classList.add('role-hidden');
         node.classList.add('hidden');
       } else {
         node.classList.remove('role-hidden');
-        if (node.dataset && node.dataset.tabBtn) {
+        if (node.dataset && (node.dataset.tabBtn || node.dataset.tabSection)) {
           node.classList.remove('hidden');
         }
       }
     });
-    var currentTab = state.activeTab || 'auto';
-    var adminTabs = ['project-admin', 'user-admin', 'ops-log'];
-    if (role !== 'admin' && adminTabs.indexOf(currentTab) !== -1) {
-      switchToTab('auto');
+    if (allowProjectTab) {
+      var projectTabBtn = document.querySelector('[data-tab-btn="project-admin"]');
+      if (projectTabBtn && projectTabBtn.classList) {
+        projectTabBtn.classList.remove('hidden');
+        projectTabBtn.classList.remove('role-hidden');
+      }
+      var projectTabSection = document.querySelector('[data-tab-section="project-admin"]');
+      if (projectTabSection && projectTabSection.classList) {
+        projectTabSection.classList.remove('role-hidden');
+      }
     }
+    var currentTab = state.activeTab || 'auto';
+    var restrictedTabs = ['user-admin', 'ops-log'];
+    if (!allowProjectTab) restrictedTabs.push('project-admin');
+    if (role !== 'admin' && restrictedTabs.indexOf(currentTab) !== -1) {
+      currentTab = 'auto';
+    }
+    var firstVisible = updateGroupVisibility();
+    var currentBtn = document.querySelector('[data-tab-btn="' + currentTab + '"]');
+    var currentVisible = currentBtn && !currentBtn.classList.contains('hidden') && !currentBtn.classList.contains('role-hidden');
+    var currentGroup = currentBtn ? currentBtn.closest('.tab-group') : null;
+    if (currentGroup && currentGroup.classList.contains('hidden')) {
+      currentVisible = false;
+    }
+    if (!currentVisible) {
+      var fallback = firstVisible || 'auto';
+      switchToTab(fallback);
+      return;
+    }
+    switchToTab(currentTab);
+  }
+
+  function updateGroupVisibility() {
+    var groups = document.querySelectorAll('.tab-group');
+    var firstVisibleTab = null;
+    groups.forEach(function(group) {
+      var submenu = group.querySelector('.tab-submenu');
+      var btns = submenu ? submenu.querySelectorAll('[data-tab-btn]') : [];
+      var hasVisible = false;
+      Array.prototype.forEach.call(btns, function(btn) {
+        var hidden = btn.classList.contains('hidden') || btn.classList.contains('role-hidden');
+        if (!hidden) {
+          hasVisible = true;
+          if (!firstVisibleTab && btn.dataset && btn.dataset.tabBtn) {
+            firstVisibleTab = btn.dataset.tabBtn;
+          }
+        }
+      });
+      var groupBtn = group.querySelector('.tab-group-btn');
+      if (hasVisible) {
+        group.classList.remove('hidden');
+        if (groupBtn) groupBtn.classList.remove('hidden');
+        if (submenu) submenu.classList.add('hidden');
+      } else {
+        group.classList.add('hidden');
+        if (groupBtn) groupBtn.classList.add('hidden');
+        if (submenu) submenu.classList.add('hidden');
+      }
+    });
+    return firstVisibleTab;
   }
 
   function updateUserDisplay() {
@@ -108,9 +181,12 @@
     apiClient.setToken(stored);
     state.authToken = stored;
     apiClient.getCurrentUser().then(function(user) {
+      if (user) {
+        user.level = normalizeLevel(user.level);
+      }
       state.currentUser = user;
       updateUserDisplay();
-      applyRoleVisibility(user && user.role ? user.role : 'user');
+      applyRoleVisibility(user);
       // 刷新后重新应用当前页签以恢复可见状态
       var tab = state.activeTab || 'auto';
       state.activeTab = tab;
