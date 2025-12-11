@@ -49,6 +49,61 @@
     return false;
   }
 
+  function handleChangePassword(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    var oldInput = document.getElementById('oldPassword');
+    var newInput = document.getElementById('newPassword');
+    var confirmInput = document.getElementById('newPasswordConfirm');
+    var usernameInput = document.getElementById('loginUsername');
+    var statusEl = document.getElementById('changePasswordStatus');
+    if (!apiClient || typeof apiClient.changePassword !== 'function') {
+      setText(statusEl, '修改密码服务未就绪');
+      return false;
+    }
+    var username = usernameInput && usernameInput.value ? usernameInput.value.trim() : '';
+    var oldPwd = oldInput && oldInput.value ? oldInput.value : '';
+    var newPwd = newInput && newInput.value ? newInput.value : '';
+    var confirmPwd = confirmInput && confirmInput.value ? confirmInput.value : '';
+    if (!username || !oldPwd || !newPwd || !confirmPwd) {
+      setText(statusEl, '请填写账号及全部密码字段');
+      return false;
+    }
+    if (newPwd !== confirmPwd) {
+      setText(statusEl, '两次新密码不一致');
+      return false;
+    }
+    if (newPwd.length < 8) {
+      setText(statusEl, '新密码至少 8 位');
+      return false;
+    }
+    setText(statusEl, '提交中...');
+    // 先用账号+旧密码获取临时 token，再调用修改密码
+    apiClient.login(username, oldPwd).then(function(loginRes) {
+      if (!loginRes || !loginRes.access_token) {
+        throw new Error('账号或旧密码错误');
+      }
+      return apiClient.changePassword(oldPwd, newPwd);
+    }).then(function(res) {
+      if (apiClient && typeof apiClient.clearToken === 'function') {
+        apiClient.clearToken();
+      }
+      setText(statusEl, res && res.detail ? res.detail : '密码已更新，请使用新密码登录');
+      setTimeout(function() {
+        window.location.replace(getRedirectTarget());
+      }, 500);
+    }).catch(function(err) {
+      var msg = err && err.message ? err.message : '修改失败';
+      setText(statusEl, msg);
+    });
+    return false;
+  }
+
+  function toggleChangePassword() {
+    var panel = document.getElementById('changePasswordPanel');
+    if (!panel) return;
+    panel.classList.toggle('hidden');
+  }
+
   function bindEvents() {
     var form = document.getElementById('loginForm');
     var submitBtn = document.getElementById('loginSubmit');
@@ -58,16 +113,20 @@
     if (submitBtn) {
       submitBtn.addEventListener('click', handleSubmit);
     }
+    var openChangeBtn = document.getElementById('openChangePassword');
+    var submitChangeBtn = document.getElementById('submitChangePassword');
+    if (openChangeBtn) {
+      openChangeBtn.addEventListener('click', toggleChangePassword);
+    }
+    if (submitChangeBtn) {
+      submitChangeBtn.addEventListener('click', handleChangePassword);
+    }
   }
 
   function init() {
-    if (apiClient && typeof apiClient.getStoredToken === 'function') {
-      var stored = apiClient.getStoredToken();
-      if (stored) {
-        apiClient.setToken(stored);
-        window.location.replace(getRedirectTarget());
-        return;
-      }
+    // 如果有残留 token，先清空避免循环跳转
+    if (apiClient && typeof apiClient.clearToken === 'function') {
+      apiClient.clearToken();
     }
     bindEvents();
   }

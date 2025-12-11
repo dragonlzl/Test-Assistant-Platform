@@ -96,6 +96,7 @@
       updateUserDisplay();
       applyRoleVisibility(user && user.role ? user.role : 'user');
     }).catch(function() {
+      apiClient.clearToken();
       redirectToLogin();
     });
   }

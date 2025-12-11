@@ -86,6 +86,14 @@
     }).then(function(res) { return handleResponse(res); });
   }
 
+  function changePassword(oldPassword, newPassword) {
+    return fetch('/api/auth/password', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+    }).then(function(res) { return handleResponse(res); });
+  }
+
   window.app = window.app || {};
   window.app.apiClient = {
     setToken: setToken,
@@ -94,5 +102,6 @@
     login: login,
     logout: logout,
     getCurrentUser: getCurrentUser,
+    changePassword: changePassword,
   };
 })();

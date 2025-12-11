@@ -2338,6 +2338,32 @@ body {
   font-weight: 600;
 }
 
+.login-card .link-btn {
+  align-self: center;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  color: #1f6feb;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none;
+  outline: none;
+}
+
+.change-password {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+
+.change-password input {
+  border-radius: 8px;
+}
+
 .login-card .status {
   min-height: 18px;
   color: #d14343;

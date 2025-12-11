@@ -12,12 +12,16 @@
 - 若需可视化调试：
   - `npm run test:ui:headed`
 - 可用环境变量 `PLAYWRIGHT_BASE_URL` 覆盖默认地址（默认 `http://localhost:8080`）。
+- 后端 API 测试（需先启动 FastAPI 服务，默认 `http://127.0.0.1:8080`）：
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/auth_change_password.spec.js`
+  - 可用环境变量：`API_BASE_URL`、`ADMIN_USER`、`ADMIN_PASS`。
 
 ## 覆盖范围
 - 冒烟用例：页面可加载、主导航可见、切换“功能工作流”“用例执行”标签后对应区域可见（`tests/ui/smoke.spec.js`）。
 - 工作流必跑：原始需求上传、导入导出默认状态、顶部步骤与用例执行拖拽占位、自动流程按钮状态等（`tests/ui/workflow.spec.js`）。
 - 文件/布局：校验评审/清洗/对比调试文件导入导出、各标签布局与按钮状态、流程步骤联动（`tests/ui/files_layout.spec.js`）。
 - 执行视图：临时执行用例导入导出、版本/需求盒子拖拽、专注区、进度总览与配置快照恢复（`tests/ui/tempexec_drag.spec.js`）。
+- API：管理员改密往返校验（`tests/api/auth_change_password.spec.js`，默认使用 admin/chillytest_admin，改为临时密码后再改回）。
 
 ## 说明
 - 所有测试用 ES2019 兼容语法，位于 `tests/ui/`。如需扩展用例，保持选择器与业务文案同步。  
