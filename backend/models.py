@@ -188,6 +188,7 @@ class ExecCase(Base):
     remark = Column(Text, nullable=True)
     status = Column(String(32), nullable=False, default="pending")
     order_no = Column(Integer, default=0, nullable=False)
+    executor_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
@@ -211,6 +212,25 @@ class ExecCaseHistory(Base):
     new_value = Column(Text, nullable=True)
     changed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     changed_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+
+
+class ExecOverviewStats(Base):
+    __tablename__ = "exec_overview_stats"
+    __table_args__ = (
+        Index("ix_exec_overview_proj_ver_user", "project_id", "version_id", "user_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    version_id = Column(Integer, ForeignKey("project_versions.id", ondelete="SET NULL"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    total = Column(Integer, default=0, nullable=False)
+    pending = Column(Integer, default=0, nullable=False)
+    passed = Column(Integer, default=0, nullable=False)
+    failed = Column(Integer, default=0, nullable=False)
+    blocked = Column(Integer, default=0, nullable=False)
+    not_applicable = Column(Integer, default=0, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False)
 
 
 class Setting(Base):

@@ -178,6 +178,140 @@
       assignBtn.addEventListener('click', focusAssignSaveIfNeeded);
     })();
 
+    function getGroupNameForTab(tabName) {
+      var menus = Array.prototype.slice.call(document.querySelectorAll('.tab-submenu'));
+      for (var i = 0; i < menus.length; i++) {
+        var menu = menus[i];
+        if (!menu) continue;
+        var match = menu.querySelector('[data-tab-btn="' + tabName + '"]');
+        if (match && menu.dataset && menu.dataset.groupMenu) {
+          return menu.dataset.groupMenu;
+        }
+      }
+      return '';
+    }
+
+    function showTabGroup(name, opts) {
+      opts = opts || {};
+      var keepTabActive = Boolean(opts.keepTabActive);
+      if (!window.app) window.app = {};
+      window.app.lastTabGroup = name || '';
+      window.app.lastShowRan = true;
+      var menus = Array.prototype.slice.call(document.querySelectorAll('.tab-submenu'));
+      menus.forEach(function(menu) {
+        var group = menu.closest('.tab-group');
+        if (group && group.classList) group.classList.remove('open');
+        menu.classList.add('hidden');
+        menu.style.display = 'none';
+        var btn = group && group.querySelector('.tab-group-btn');
+        if (btn && btn.setAttribute) btn.setAttribute('aria-expanded', 'false');
+      });
+      if (!name) return;
+      var target = document.querySelector('[data-group-menu="' + name + '"]');
+      if (!target) return;
+      var targetGroup = target.closest('.tab-group');
+      target.classList.remove('hidden');
+      target.style.display = 'flex';
+      if (targetGroup && targetGroup.classList) targetGroup.classList.add('open');
+      var tBtn = targetGroup && targetGroup.querySelector('.tab-group-btn');
+      if (tBtn && tBtn.setAttribute) tBtn.setAttribute('aria-expanded', 'true');
+      // 高亮当前一级按钮，其余取消
+      var btns = Array.prototype.slice.call(document.querySelectorAll('.tab-group-btn'));
+      btns.forEach(function(b) {
+        b.classList.toggle('active', b === tBtn);
+      });
+      if (keepTabActive) {
+        var activeTabName = state && state.activeTab;
+        if (activeTabName) {
+          var tabBtns = Array.prototype.slice.call(document.querySelectorAll('[data-tab-btn]'));
+          tabBtns.forEach(function(tb) {
+            var isActive = tb.dataset && tb.dataset.tabBtn === activeTabName;
+            tb.classList.toggle('active', isActive);
+          });
+        }
+      }
+    }
+
+    function markActiveTabGroup(tabName) {
+      var activeGroup = '';
+      if (dom.tabSubmenus && typeof dom.tabSubmenus.forEach === 'function') {
+        dom.tabSubmenus.forEach(function(menu) {
+          var hasBtn = menu && menu.querySelector && menu.querySelector('[data-tab-btn=\"' + tabName + '\"]');
+          if (hasBtn && menu.dataset && menu.dataset.groupMenu) {
+            activeGroup = menu.dataset.groupMenu;
+          }
+        });
+      }
+      if (dom.tabGroupButtons && typeof dom.tabGroupButtons.forEach === 'function') {
+        dom.tabGroupButtons.forEach(function(btn) {
+          var match = btn.dataset && btn.dataset.group === activeGroup;
+          btn.classList.toggle('active', Boolean(match));
+        });
+      }
+    }
+
+    (function bindTabGroups() {
+      var buttons = dom.tabGroupButtons;
+      if (!buttons || typeof buttons.forEach !== 'function' || !buttons.length) {
+        dom.tabGroups = document.querySelectorAll('.tab-group');
+        dom.tabSubmenus = document.querySelectorAll('.tab-submenu');
+        buttons = document.querySelectorAll('.tab-group-btn');
+        dom.tabGroupButtons = buttons;
+      }
+      if (!buttons || typeof buttons.forEach !== 'function') return;
+      if (!window.app) window.app = {};
+      window.app.tabGroupBound = true;
+      if (dom.tabGroups && typeof dom.tabGroups.forEach === 'function') {
+        dom.tabGroups.forEach(function(group) {
+          var btn = group.querySelector('.tab-group-btn');
+          var name = btn && btn.dataset ? btn.dataset.group : '';
+          group.addEventListener('mouseenter', function() {
+            showTabGroup(name);
+          });
+        });
+      }
+      buttons.forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          if (!window.app) window.app = {};
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+          var name = btn.dataset && btn.dataset.group;
+          window.app.lastTabClick = name || '';
+          window.app.lastShowCall = 'pending';
+          if (!name) return;
+          showTabGroup(name);
+          window.app.lastShowCall = 'force-open-' + name;
+        });
+        btn.addEventListener('mouseenter', function() {
+          var name = btn.dataset && btn.dataset.group;
+          if (!name) return;
+          showTabGroup(name);
+        });
+        btn.addEventListener('focus', function() {
+          var name = btn.dataset && btn.dataset.group;
+          if (!name) return;
+          showTabGroup(name);
+        });
+      });
+      document.addEventListener('click', function(e) {
+        var insideGroup = e && e.target && e.target.closest && e.target.closest('.tab-group');
+        if (!insideGroup) showTabGroup('');
+      });
+      var sidebar = document.querySelector('.sidebar');
+      if (sidebar) {
+        sidebar.addEventListener('mouseleave', function() { showTabGroup(''); });
+      }
+      document.addEventListener('click', function(ev) {
+        var btn = ev && ev.target && ev.target.closest ? ev.target.closest('.tab-group-btn') : null;
+        if (!btn) return;
+        var name = btn.dataset ? btn.dataset.group : '';
+        if (!name) return;
+        if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+        if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+        showTabGroup(name);
+      });
+    })();
+
     function switchTab(name) {
       if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
         window.app.drawer.closeAllDrawers();
@@ -233,6 +367,9 @@
         renderSettingsUI();
         clearStatusById('feishuWebhookStatus');
       }
+      markActiveTabGroup(name);
+      var grp = getGroupNameForTab(name);
+      showTabGroup(grp, { keepTabActive: true });
     }
     api.switchTab = switchTab;
     document.addEventListener('click', function(e) {

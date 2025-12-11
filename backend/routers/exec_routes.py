@@ -9,6 +9,7 @@ from ..audit import log_operation
 from ..db import get_db
 from ..dependencies import get_current_user
 from ..utils import ensure_project_access, ensure_version_in_project
+from sqlalchemy import func, case
 
 
 router = APIRouter(prefix="/exec", tags=["execution"])
@@ -116,11 +117,7 @@ def add_cases_from_library(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="用例项目与执行集不一致"
             )
-    existing = (
-        db.query(models.ExecCase)
-        .filter(models.ExecCase.exec_set_id == exec_set.id)
-        .all()
-    )
+    existing = db.query(models.ExecCase).filter(models.ExecCase.exec_set_id == exec_set.id).all()
     existing_keys = set((c.module, c.title) for c in existing)
     new_cases = []
     order_base = len(existing) + 1
@@ -142,6 +139,7 @@ def add_cases_from_library(
             remark=item.remark,
             status="pending",
             order_no=order_base + idx,
+            executor_id=user.id,
             created_by=user.id,
             updated_by=user.id,
             created_at=datetime.now(timezone.utc),
@@ -174,7 +172,16 @@ def update_exec_case(
     if not exec_case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="执行用例不存在")
     _ensure_exec_set_access(db, user, exec_case.exec_set_id)
-    fields = ["module", "title", "expected", "actual_result", "defect_link", "remark", "status"]
+    fields = [
+        "module",
+        "title",
+        "expected",
+        "actual_result",
+        "defect_link",
+        "remark",
+        "status",
+        "executor_id",
+    ]
     changed = False
     for field in fields:
         value = getattr(payload, field, None)
@@ -205,3 +212,57 @@ def update_exec_case(
         db.commit()
         db.refresh(exec_case)
     return exec_case
+
+
+@router.get("/overview", response_model=List[schemas.ExecOverviewOut])
+def get_execution_overview(
+    project_id: int,
+    version_id: int = None,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_project_access(db, user, project_id)
+    query = (
+        db.query(
+            models.ExecSet.project_id.label("project_id"),
+            models.ExecSet.version_id.label("version_id"),
+            func.coalesce(models.ExecCase.executor_id, models.ExecCase.updated_by, models.ExecCase.created_by).label(
+                "user_id"
+            ),
+            func.count(models.ExecCase.id).label("total"),
+            func.sum(case((models.ExecCase.status == "pending", 1), else_=0)).label("pending"),
+            func.sum(case((models.ExecCase.status == "通过", 1), else_=0)).label("passed_cn"),
+            func.sum(case((models.ExecCase.status == "failed", 1), else_=0)).label("failed_en"),
+            func.sum(case((models.ExecCase.status == "失败", 1), else_=0)).label("failed_cn"),
+            func.sum(case((models.ExecCase.status == "blocked", 1), else_=0)).label("blocked_en"),
+            func.sum(case((models.ExecCase.status == "阻塞", 1), else_=0)).label("blocked_cn"),
+            func.sum(case((models.ExecCase.status == "不适用", 1), else_=0)).label("na_cn"),
+            func.sum(case((models.ExecCase.status == "not_applicable", 1), else_=0)).label("na_en"),
+        )
+        .join(models.ExecCase, models.ExecCase.exec_set_id == models.ExecSet.id)
+        .filter(models.ExecSet.project_id == project_id)
+    )
+    if version_id is not None:
+        query = query.filter(models.ExecSet.version_id == version_id)
+    query = query.group_by("project_id", "version_id", "user_id")
+    rows = query.all()
+    result = []
+    for row in rows:
+        total_failed = (row.failed_en or 0) + (row.failed_cn or 0)
+        total_blocked = (row.blocked_en or 0) + (row.blocked_cn or 0)
+        total_na = (row.na_en or 0) + (row.na_cn or 0)
+        passed = (row.passed_cn or 0)
+        result.append(
+            schemas.ExecOverviewOut(
+                project_id=row.project_id,
+                version_id=row.version_id,
+                user_id=row.user_id,
+                total=row.total or 0,
+                pending=row.pending or 0,
+                passed=passed,
+                failed=total_failed,
+                blocked=total_blocked,
+                not_applicable=total_na,
+            )
+        )
+    return result

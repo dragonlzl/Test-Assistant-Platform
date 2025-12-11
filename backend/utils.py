@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from . import models
+from datetime import datetime, timezone
 
 
 def clean_case_file_name(name: str) -> str:
@@ -53,3 +54,13 @@ def ensure_version_in_project(
     if not version:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="项目版本不存在")
     return version
+
+
+def get_executor_for_case(user: models.User, case: models.ExecCase) -> int:
+    if case.executor_id:
+        return case.executor_id
+    if case.updated_by:
+        return case.updated_by
+    if case.created_by:
+        return case.created_by
+    return user.id

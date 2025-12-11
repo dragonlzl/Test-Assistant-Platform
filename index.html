@@ -28,17 +28,38 @@
 </div>
 <p class="sub">上传需求与测试用例，清洗、拆分、覆盖对比、生成、执行一站式完成，版本分组+总览直观掌握进度。</p>
 <nav class="tabs vertical">
+<div class="tab-group">
+<button class="tab-group-btn" data-group="ai">AI 功能</button>
+<div class="tab-submenu hidden" data-group-menu="ai">
 <button class="active" data-tab-btn="auto">AI一键需求&用例评审</button>
 <button data-tab-btn="clean">功能工作流</button>
 <button data-tab-btn="casesgen">用例生成</button>
+<button data-tab-btn="assign">功能指派</button>
+<button data-tab-btn="models">模型管理</button>
+</div>
+</div>
+<div class="tab-group">
+<button class="tab-group-btn" data-group="cases">用例相关</button>
+<div class="tab-submenu hidden" data-group-menu="cases">
 <button data-tab-btn="tempexec">用例执行</button>
 <button data-tab-btn="case-library">用例库</button>
+<button data-tab-btn="exec-overview">执行总览</button>
+</div>
+</div>
+<div class="tab-group">
+<button class="tab-group-btn" data-group="manage">管理</button>
+<div class="tab-submenu hidden" data-group-menu="manage">
 <button class="hidden" data-tab-btn="project-admin" data-role="admin-only">项目管理</button>
 <button class="hidden" data-tab-btn="user-admin" data-role="admin-only">人员管理</button>
 <button class="hidden" data-tab-btn="ops-log" data-role="admin-only">操作记录</button>
-<button data-tab-btn="assign">功能指派</button>
-<button data-tab-btn="models">模型管理</button>
+</div>
+</div>
+<div class="tab-group">
+<button class="tab-group-btn" data-group="settings">设置</button>
+<div class="tab-submenu hidden" data-group-menu="settings">
 <button data-tab-btn="settings">其他配置</button>
+</div>
+</div>
 </nav>
 <button class="scroll-top-btn" type="button" id="scrollTopBtn">回到顶部</button>
 <button class="scroll-top-btn" type="button" id="scrollBottomBtn">跳到底部</button>
@@ -1275,6 +1296,12 @@
 <h2>操作记录</h2>
 <div class="card-body">
 <p class="hint">管理员入口。后续将展示登录/登出及增删改操作日志。</p>
+</div>
+</section>
+<section class="card hidden" data-tab-section="exec-overview">
+<h2>执行总览</h2>
+<div class="card-body">
+<p class="hint">登录后查看所属项目的用例执行概览。后续将按项目卡片展示版本/需求分区，并按人员分组显示执行进度与列表。</p>
 </div>
 </section>
 </main>

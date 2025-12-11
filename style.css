@@ -64,6 +64,7 @@ body {
       gap: 10px;
       max-height: calc(100vh - 2 * var(--sticky-offset, 12px));
       overflow: visible;
+      z-index: 200;
     }
     .sidebar-header {
       display: flex;
@@ -1946,32 +1947,39 @@ body {
       font-size: 12px;
       color: var(--primary);
     }
-    .tabs {
-      display: flex;
-      gap: 12px;
-      padding: 0 12px 14px;
-      flex-wrap: wrap;
-    }
-    .tabs.vertical {
-      flex-direction: column;
-      align-items: stretch;
-      padding: 0;
-      position: sticky;
-      top: var(--sticky-offset, 12px);
-      z-index: 140;
-      background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.8));
-      border-radius: 10px;
-    }
-    .tabs button {
-      background: rgba(255,255,255,0.9);
-      color: var(--muted);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 10px 16px;
-      font-size: 14px;
-      box-shadow: var(--shadow);
-      min-width: 120px;
-    }
+.tabs {
+  display: flex;
+  gap: 12px;
+  padding: 0 12px 14px;
+  flex-wrap: wrap;
+}
+.tabs.vertical {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  position: sticky;
+  top: var(--sticky-offset, 12px);
+  z-index: 140;
+  background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,255,255,0.8));
+  border-radius: 10px;
+  overflow: visible;
+}
+.tab-group {
+  position: relative;
+}
+.tab-group + .tab-group {
+  margin-top: 8px;
+}
+.tabs button {
+  background: rgba(255,255,255,0.9);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 14px;
+  box-shadow: var(--shadow);
+  min-width: 120px;
+}
 .tabs.vertical button {
   width: 100%;
   text-align: left;
@@ -2013,12 +2021,43 @@ body {
   color: currentColor;
   opacity: 0.6;
 }
-    .tab-notice {
-      display: inline-block;
-      margin-left: 8px;
-      padding: 2px 6px;
-      font-size: 12px;
-      color: #b91c1c;
+.tab-group-btn::before {
+  display: none;
+}
+.tab-submenu {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 10px);
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 14px 28px rgba(15,23,42,0.18);
+  min-width: 220px;
+  z-index: 320;
+}
+.tab-group.open > .tab-submenu {
+  display: flex;
+}
+.tab-submenu.hidden {
+  display: none !important;
+}
+.tab-group:focus-within > .tab-submenu,
+.tab-group:hover > .tab-submenu {
+  display: flex;
+}
+.tab-submenu button {
+  min-width: 200px;
+}
+.tab-notice {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 12px;
+  color: #b91c1c;
       background: #fee2e2;
       border: 1px solid #fecaca;
       border-radius: 999px;

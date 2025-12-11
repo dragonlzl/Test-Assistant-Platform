@@ -336,6 +336,9 @@
     dom.flowNavSteps = document.querySelectorAll('#flowNav .step');
     dom.tabButtons = document.querySelectorAll('[data-tab-btn]');
     dom.tabSections = document.querySelectorAll('[data-tab-section]');
+    dom.tabGroups = document.querySelectorAll('.tab-group');
+    dom.tabGroupButtons = document.querySelectorAll('.tab-group-btn');
+    dom.tabSubmenus = document.querySelectorAll('.tab-submenu');
     dom.jumpLinks = document.querySelectorAll('[data-jump]');
     dom.autoMissingSectionSelector = '[data-section-id="auto-cases-missing"]';
     var reviewResultEl = dom.reviewResultEl;

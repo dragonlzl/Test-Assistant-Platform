@@ -127,15 +127,7 @@
       var withinToggle = userMenuToggle.contains(target);
       if (!withinMenu && !withinToggle) closeMenu();
     });
-    var banner = document.getElementById('userBanner');
-    // 悬停显示菜单
-    if (banner) {
-      banner.addEventListener('mouseenter', function() {
-        if (state && state.currentUser) {
-          userMenu.classList.add('menu-open');
-        }
-      });
-    }
+    // 仅点击设置按钮才展开，移除悬停触发
     if (userMenu) {
       userMenu.addEventListener('mouseleave', function() {
         closeMenu();

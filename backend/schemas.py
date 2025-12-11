@@ -171,6 +171,7 @@ class ExecCaseOut(BaseModel):
     remark: Optional[str]
     status: str
     order_no: int
+    executor_id: Optional[int]
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
@@ -184,3 +185,16 @@ class ExecCaseUpdate(BaseModel):
     defect_link: Optional[str] = None
     remark: Optional[str] = None
     status: Optional[str] = None
+    executor_id: Optional[int] = None
+
+
+class ExecOverviewOut(BaseModel):
+    project_id: int
+    version_id: Optional[int]
+    user_id: Optional[int]
+    total: int
+    pending: int
+    passed: int
+    failed: int
+    blocked: int
+    not_applicable: int

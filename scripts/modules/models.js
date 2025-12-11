@@ -159,6 +159,22 @@
       badge.textContent = text;
     }
 
+    function setGroupNotice(groupName, text) {
+      const btn = document.querySelector('.tab-group-btn[data-group="' + groupName + '"]');
+      if (!btn) return;
+      let badge = btn.querySelector('.tab-notice');
+      if (!text) {
+        if (badge && badge.parentNode) badge.parentNode.removeChild(badge);
+        return;
+      }
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'tab-notice';
+        btn.appendChild(badge);
+      }
+      badge.textContent = text;
+    }
+
     function normalizeTemperature(value) {
       if (value === undefined || value === null || value === '') return defaultTemperature;
       var num = Number(value);
@@ -638,6 +654,8 @@
       state.assignmentsMissing = hasModels ? missingAssignments : false;
       setTabNotice('models', hasModels ? '' : '未配置模型');
       setTabNotice('assign', hasModels ? (missingAssignments ? '未保存指派模型' : '') : '未配置模型');
+      const needAiNotice = !hasModels || missingAssignments;
+      setGroupNotice('ai', needAiNotice ? '需先配置模型/指派' : '');
       if (assignSaveBar) {
         assignSaveBar.classList.toggle('hidden', !(hasModels && missingAssignments));
       }
