@@ -26,7 +26,7 @@
 - 新增内容/接口/组件：调整 authGuard 角色可见性以放开项目管理入口；`/api/users/{user_id}/projects` 支持用户自查所属项目；新增 API 用例 `tests/api/non_admin_projects.spec.js`，更新 `tests/ui/project_admin_drawer.spec.js` 覆盖可见性。  
 - 复用说明：复用既有导航切换与项目列表过滤逻辑，仅补充权限判断与接口校验。  
 - 测试与验证：`npx playwright test --config tests/api/playwright.api.config.js tests/api/admin_entities.spec.js tests/api/non_admin_projects.spec.js`（通过，API_BASE_URL=http://127.0.0.1:9000）；`npm run test:ui -- tests/ui/project_admin_drawer.spec.js`（通过，使用本地 8090 静态服）。  
-- 更新记录：已执行 `python3 notify_feishu.py` 发送完成通知。  
+- 更新记录：已执行 `python3 notify_feishu.py` 发送完成通知；2025-12-12 补充后端项目描述编辑权限（仅所属项目的组长/Admin），新增权限校验 API 用例。  
 
 - 功能名称：项目管理权限细化（管理员/组员/组长）与导航可见性  
 - 功能描述：非管理员按级别差异化可见与可操作范围：组员/组长可见“管理-项目管理”，仅显示自身所属项目；组员仅能新增/删除版本，组长额外可编辑项目，删除/新建项目仅管理员可用；无可见子入口时一级菜单自动隐藏。  

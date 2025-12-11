@@ -73,16 +73,36 @@ def create_project(
     return project
 
 
+def _is_leader(user: models.User) -> bool:
+    if not user or not user.level:
+        return False
+    return str(user.level).lower() == "leader"
+
+
 @router.patch("/{project_id}", response_model=schemas.ProjectOut)
 def update_project(
     project_id: int,
     payload: schemas.ProjectUpdate,
-    admin: models.User = Depends(require_admin),
+    user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="项目不存在")
+    is_admin = user.role == "admin"
+    if not is_admin:
+        membership = (
+            db.query(models.UserProject)
+            .filter(
+                models.UserProject.project_id == project_id,
+                models.UserProject.user_id == user.id,
+            )
+            .first()
+        )
+        if not membership or not _is_leader(user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="无权限修改该项目"
+            )
     if payload.description is not None:
         project.description = payload.description
     db.add(project)
@@ -90,7 +110,7 @@ def update_project(
     db.refresh(project)
     log_operation(
         db=db,
-        user_id=admin.id,
+        user_id=user.id,
         action="update_project",
         target_type="project",
         target_id=project.id,

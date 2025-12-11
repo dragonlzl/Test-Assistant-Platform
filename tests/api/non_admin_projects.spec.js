@@ -66,4 +66,73 @@ test.describe('非管理员项目可见性', () => {
     const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers: adminHeaders });
     expect([200, 404]).toContain(delProj.status());
   });
+
+  test('组长可编辑所属项目描述，普通成员被拒绝', async () => {
+    const ctx = await request.newContext();
+    const adminToken = await login(ctx, adminUser, adminPass);
+    const adminHeaders = { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' };
+
+    const projectName = 'leader-proj-' + Date.now();
+    const leaderName = 'leader_' + Date.now();
+    const memberName = 'member_' + Date.now();
+    const userPassword = 'Pwd123456';
+
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers: adminHeaders,
+      data: { name: projectName, description: 'before' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projBody = await createProj.json();
+    const projectId = projBody.id;
+
+    const createLeader = await ctx.post(`${apiBase}/api/users`, {
+      headers: adminHeaders,
+      data: { username: leaderName, password: userPassword, role: 'user', level: 'leader', is_active: true },
+    });
+    expect(createLeader.status()).toBe(201);
+    const leaderId = (await createLeader.json()).id;
+
+    const createMember = await ctx.post(`${apiBase}/api/users`, {
+      headers: adminHeaders,
+      data: { username: memberName, password: userPassword, role: 'user', level: 'member', is_active: true },
+    });
+    expect(createMember.status()).toBe(201);
+    const memberId = (await createMember.json()).id;
+
+    const assignLeader = await ctx.post(`${apiBase}/api/users/assign-projects`, {
+      headers: adminHeaders,
+      data: { user_id: leaderId, project_ids: [projectId] },
+    });
+    expect(assignLeader.status()).toBe(200);
+    const assignMember = await ctx.post(`${apiBase}/api/users/assign-projects`, {
+      headers: adminHeaders,
+      data: { user_id: memberId, project_ids: [projectId] },
+    });
+    expect(assignMember.status()).toBe(200);
+
+    const leaderToken = await login(ctx, leaderName, userPassword);
+    const leaderHeaders = { Authorization: `Bearer ${leaderToken}`, 'Content-Type': 'application/json' };
+    const leaderUpdate = await ctx.patch(`${apiBase}/api/projects/${projectId}`, {
+      headers: leaderHeaders,
+      data: { description: 'leader-updated' },
+    });
+    expect(leaderUpdate.status()).toBe(200);
+    const updatedBody = await leaderUpdate.json();
+    expect(updatedBody.description).toBe('leader-updated');
+
+    const memberToken = await login(ctx, memberName, userPassword);
+    const memberHeaders = { Authorization: `Bearer ${memberToken}`, 'Content-Type': 'application/json' };
+    const memberUpdate = await ctx.patch(`${apiBase}/api/projects/${projectId}`, {
+      headers: memberHeaders,
+      data: { description: 'member-should-fail' },
+    });
+    expect(memberUpdate.status()).toBe(403);
+
+    const delMember = await ctx.delete(`${apiBase}/api/users/${memberId}`, { headers: adminHeaders });
+    expect([200, 404]).toContain(delMember.status());
+    const delLeader = await ctx.delete(`${apiBase}/api/users/${leaderId}`, { headers: adminHeaders });
+    expect([200, 404]).toContain(delLeader.status());
+    const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers: adminHeaders });
+    expect([200, 404]).toContain(delProj.status());
+  });
 });
