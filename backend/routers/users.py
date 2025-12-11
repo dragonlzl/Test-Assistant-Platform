@@ -166,3 +166,23 @@ def assign_projects(
     )
     db.commit()
     return {"detail": "项目分配已更新"}
+
+
+@router.get("/{user_id}/projects", response_model=List[schemas.UserProjectBrief])
+def list_user_projects(
+    user_id: int,
+    admin: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = admin  # admin校验
+    records = (
+        db.query(models.UserProject, models.Project)
+        .join(models.Project, models.Project.id == models.UserProject.project_id)
+        .filter(models.UserProject.user_id == user_id)
+        .all()
+    )
+    result = []
+    for record in records:
+        up, proj = record
+        result.append(schemas.UserProjectBrief(project_id=up.project_id, project_name=proj.name))
+    return result

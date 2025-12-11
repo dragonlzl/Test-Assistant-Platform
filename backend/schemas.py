@@ -89,6 +89,12 @@ class UserProjectAssignment(BaseModel):
     project_ids: List[int]
 
 
+class UserProjectBrief(BaseModel):
+    project_id: int
+    project_name: str
+    model_config = ConfigDict(from_attributes=True)
+
+
 TokenResponse.update_forward_refs()
 ProjectOut.update_forward_refs()
 

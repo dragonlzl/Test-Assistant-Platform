@@ -94,6 +94,103 @@
     }).then(function(res) { return handleResponse(res); });
   }
 
+  function listUsers() {
+    return fetch('/api/users', {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function createUser(payload) {
+    return fetch('/api/users', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }).then(handleResponse);
+  }
+
+  function updateUser(userId, payload) {
+    return fetch('/api/users/' + userId, {
+      method: 'PATCH',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }).then(handleResponse);
+  }
+
+  function deleteUser(userId) {
+    return fetch('/api/users/' + userId, {
+      method: 'DELETE',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function resetUserPassword(userId) {
+    return fetch('/api/users/' + userId + '/reset_password', {
+      method: 'POST',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function assignUserProjects(userId, projectIds) {
+    return fetch('/api/users/assign-projects', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify({ user_id: userId, project_ids: projectIds || [] }),
+    }).then(handleResponse);
+  }
+
+  function getUserProjects(userId) {
+    return fetch('/api/users/' + userId + '/projects', {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function listProjects() {
+    return fetch('/api/projects', {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function createProject(payload) {
+    return fetch('/api/projects', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }).then(handleResponse);
+  }
+
+  function updateProject(id, payload) {
+    return fetch('/api/projects/' + id, {
+      method: 'PATCH',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }).then(handleResponse);
+  }
+
+  function deleteProject(id) {
+    return fetch('/api/projects/' + id, {
+      method: 'DELETE',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function createVersion(projectId, payload) {
+    return fetch('/api/projects/' + projectId + '/versions', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload),
+    }).then(handleResponse);
+  }
+
+  function deleteVersion(projectId, versionId) {
+    return fetch('/api/projects/' + projectId + '/versions/' + versionId, {
+      method: 'DELETE',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
   window.app = window.app || {};
   window.app.apiClient = {
     setToken: setToken,
@@ -103,5 +200,18 @@
     logout: logout,
     getCurrentUser: getCurrentUser,
     changePassword: changePassword,
+    listUsers: listUsers,
+    createUser: createUser,
+    updateUser: updateUser,
+    deleteUser: deleteUser,
+    resetUserPassword: resetUserPassword,
+    assignUserProjects: assignUserProjects,
+    getUserProjects: getUserProjects,
+    listProjects: listProjects,
+    createProject: createProject,
+    updateProject: updateProject,
+    deleteProject: deleteProject,
+    createVersion: createVersion,
+    deleteVersion: deleteVersion,
   };
 })();

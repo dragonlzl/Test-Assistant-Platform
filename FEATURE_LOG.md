@@ -19,13 +19,40 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：抽屉开启时禁用侧边导航点击  
+- 功能描述：抽屉打开后左侧导航（含二级菜单与用户菜单）保持可见但不再响应点击或切换，避免遮罩下误触。  
+- 操作方式：任意页面打开抽屉后，侧边一级/二级菜单、用户菜单与侧边工具按钮点击无效，需先收起抽屉再切换页签；抽屉关闭后恢复原有操作。  
+- 使用效果：遮罩出现时不会误切换页签或展开菜单，现有二级菜单设计与样式保持不变。  
+- 新增内容/接口/组件：抽屉状态检测与侧边事件阻断（scripts/core/appRuntime.js），用户菜单在抽屉开启时自动关闭/忽略点击（scripts/modules/authGuard.js）；新增 UI 场景 `tests/ui/sidebar_menu.spec.js` 覆盖抽屉下导航禁用。  
+- 复用说明：复用既有抽屉组件与页签切换逻辑，仅新增 isDrawerOpen 判定与事件阻断，不改动 DOM/样式结构。  
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/sidebar_menu.spec.js`（通过，需确保 8090 端口空闲）。  
+- 更新记录：2025-12-11 调整抽屉 z-index 与 content-shell 层级，确保遮罩覆盖导航；侧边栏键盘事件也被阻断。  
+
+- 功能名称：人员管理列表视图与抽屉编辑  
+- 功能描述：人员管理改为表格列表展示，适配多人场景；新增/编辑人员在右侧抽屉完成，字段集中且可滚动。  
+- 操作方式：在“管理-人员管理”进入后查看表格，点击“新增人员”或行内“编辑/分配项目”打开抽屉，填写账号、角色、级别、状态、项目并保存。  
+- 使用效果：大量用户时仍可快速浏览与筛查，编辑时不挤占主界面；抽屉关闭后列表自动刷新。  
+- 新增内容/接口/组件：表格 DOM（`index.html#userTableBody`）、抽屉容器 `#userDrawer`；样式 `.admin-table*`（style.css）；前端逻辑更新（scripts/modules/admin.js）支持表格渲染、抽屉开关、状态提示。  
+- 复用说明：复用现有抽屉组件与状态提示方法，沿用既有用户/项目接口。  
+- 测试与验证：新增 UI 用例 `tests/ui/user_admin_drawer.spec.js` 覆盖表格渲染与抽屉开关；未执行（本地缺少 Playwright 浏览器二进制），需先运行 `npx playwright install` 后执行 `npx playwright test tests/ui/user_admin_drawer.spec.js`。  
+- 更新记录：无  
+
 - 功能名称：侧边导航分级与悬浮子菜单  
 - 功能描述：左侧页签按“AI 功能/用例相关/管理/设置”分级，二级入口通过悬浮菜单展示，避免按钮拥挤且保持布局稳定。  
 - 操作方式：点击一级按钮在右侧弹出悬浮菜单，选择对应二级按钮切换页面，点击空白处即可收起。  
 - 使用效果：导航更清晰，二级入口不再挤占侧边栏空间，切换时保留原有高亮与布局。  
 - 新增内容/接口/组件：侧边导航分组 DOM（index.html）、样式 `.tab-group/.tab-submenu` 与层级样式（style.css）、分组展开/收起逻辑与激活高亮（scripts/core/appRuntime.js）。  
 - 复用说明：复用原有 tab 切换与高亮机制，仅新增分组容器与悬浮层展示。  
-- 测试与验证：手工在主界面验证四个一级菜单的展开/收起、二级按钮点击切换、点击空白收起；建议在 Chrome/Safari 走一遍核心流程。新增 UI 自动化用例 `tests/ui/sidebar_menu.spec.js` 覆盖展开/关闭与切换（2025-… 最新运行通过）。  
+- 测试与验证：手工在主界面验证四个一级菜单的展开/收起、二级按钮点击切换、点击空白收起；建议在 Chrome/Safari 走一遍核心流程。新增 UI 自动化用例 `tests/ui/sidebar_menu.spec.js` 覆盖展开/关闭与切换（2025-XX-XX 最新运行通过）。  
+- 更新记录：无  
+
+- 功能名称：人员/项目管理前端与接口接入  
+- 功能描述：管理员可在“管理”分组下完成项目与版本增删改、人员增删改、项目分配及密码重置。  
+- 操作方式：项目管理卡片支持刷新/新建/编辑/删项目及新增/删除版本；人员管理卡片支持新增/编辑用户、分配项目、重置密码和删除；点击对应一级菜单后显示二级按钮，再进入卡片操作。  
+- 使用效果：基础权限与项目成员关系可在前端直接配置，后端自动写入/校验，后续用例库/执行等功能可依赖项目与人员数据。  
+- 新增内容/接口/组件：前端新增 `scripts/modules/admin.js`、项目/人员表单与列表（index.html）、样式块（style.css）；API 客户端扩展用户/项目 CRUD 与分配方法；后端新增用户项目列表接口 `/api/users/{id}/projects`；新增接口用例 `tests/api/admin_entities.spec.js`。  
+- 复用说明：复用现有卡片样式与状态提示；接口复用既有鉴权与操作日志逻辑。  
+- 测试与验证：`npm run test:ui -- tests/ui/sidebar_menu.spec.js`（通过，需 http.server 提权）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/admin_entities.spec.js`（需本地运行 FastAPI 服务）。  
 - 更新记录：无  
 
 - 功能名称：当前迭代计划（DB 接入与权限改造）

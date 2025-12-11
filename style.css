@@ -50,22 +50,28 @@ body {
       margin: 0;
       padding: 4px 8px 0;
     }
-    .sidebar {
-      position: sticky;
-      top: var(--sticky-offset, 12px);
-      align-self: start;
-      background: linear-gradient(145deg, #eef2ff 0%, #ffffff 45%, #f8fafc 100%);
+.sidebar {
+  position: sticky;
+  top: var(--sticky-offset, 12px);
+  align-self: start;
+  background: linear-gradient(145deg, #eef2ff 0%, #ffffff 45%, #f8fafc 100%);
       border: 1px solid #e5e7eb;
       border-radius: 12px;
       padding: 12px 10px;
       box-shadow: 0 12px 26px rgba(15,23,42,0.07);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      max-height: calc(100vh - 2 * var(--sticky-offset, 12px));
-      overflow: visible;
-      z-index: 200;
-    }
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(100vh - 2 * var(--sticky-offset, 12px));
+  overflow: visible;
+  z-index: 360;
+}
+.drawer-open .sidebar {
+  pointer-events: none;
+}
+.drawer-open .sidebar * {
+  pointer-events: none !important;
+}
     .sidebar-header {
       display: flex;
       align-items: center;
@@ -96,6 +102,10 @@ body {
   position: relative;
   background: var(--bg);
   isolation: isolate;
+  z-index: 0;
+}
+.drawer-open .content-shell {
+  z-index: 2000;
 }
 .content-shell::before {
   content: '';
@@ -2037,7 +2047,7 @@ body {
   border-radius: 12px;
   box-shadow: 0 14px 28px rgba(15,23,42,0.18);
   min-width: 220px;
-  z-index: 320;
+  z-index: 480;
 }
 .tab-group.open > .tab-submenu {
   display: flex;
@@ -2080,7 +2090,7 @@ body {
   align-items: stretch;
   pointer-events: none;
   visibility: hidden;
-  z-index: 120;
+  z-index: 1600;
   overflow: hidden;
   transition: visibility 0s linear 0.28s;
   overscroll-behavior: contain;
@@ -2101,14 +2111,14 @@ body {
   opacity: 0;
   transition: opacity 0.28s ease;
   pointer-events: none;
-  z-index: 1;
+  z-index: 2;
 }
 .drawer.open .drawer-mask {
   opacity: 1;
   pointer-events: auto;
 }
 .drawer .drawer-panel {
-  z-index: 2;
+  z-index: 3;
   position: relative;
   margin-left: auto;
   width: 66vw;
@@ -2154,7 +2164,117 @@ body {
 .hidden {
   display: none !important;
 }
+.role-hidden {
+  display: none !important;
+}
 
+.admin-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.admin-form {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f8fafc;
+  margin-bottom: 12px;
+}
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.form-row label {
+  min-width: 80px;
+  color: #374151;
+  font-weight: 600;
+}
+.form-row input,
+.form-row select {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.form-row .inline {
+  font-weight: 400;
+}
+.admin-list .card-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(15,23,42,0.06);
+}
+
+.admin-table-wrapper {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(15,23,42,0.06);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #111827;
+}
+
+.admin-table th {
+  background: #f8fafc;
+  font-weight: 700;
+  color: #334155;
+}
+
+.admin-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.admin-table .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.admin-table .ghost-btn {
+  width: auto;
+  padding: 6px 10px;
+}
+.admin-list .meta {
+  font-size: 13px;
+  color: #4b5563;
+  margin: 4px 0;
+}
+.tag {
+  display: inline-block;
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  margin-right: 6px;
+}
+.tag.muted {
+  background: #e5e7eb;
+  color: #374151;
+}
 .sidebar-user {
   margin: 6px 0 10px;
   padding: 8px 10px;

@@ -1282,16 +1282,109 @@
 </section>
 <section class="card hidden" data-tab-section="project-admin" data-role="admin-only">
 <h2>项目管理</h2>
-<div class="card-body">
-<p class="hint">管理员入口。后续将支持项目列表、描述修改、版本管理与删除操作。</p>
+<div class="card-body" id="projectAdmin">
+<div class="admin-toolbar">
+<div class="actions">
+<button class="primary" id="projectRefreshBtn" type="button">刷新项目</button>
+<button class="secondary" id="projectCreateBtn" type="button">新建项目</button>
+</div>
+<p class="status" id="projectStatus"></p>
+</div>
+<div class="admin-form hidden" id="projectForm">
+<div class="form-row">
+<label>项目名称</label>
+<input id="projectNameInput" type="text" placeholder="请输入项目名称"/>
+</div>
+<div class="form-row">
+<label>项目描述</label>
+<input id="projectDescInput" type="text" placeholder="可选：项目描述"/>
+</div>
+<div class="actions">
+<button class="primary" id="projectSaveBtn" type="button">保存</button>
+<button class="ghost-btn" id="projectCancelBtn" type="button">取消</button>
+</div>
+</div>
+<div id="projectList" class="admin-list">
+<p class="hint">暂无项目，请先新建。</p>
+</div>
 </div>
 </section>
 <section class="card hidden" data-tab-section="user-admin" data-role="admin-only">
 <h2>人员管理</h2>
-<div class="card-body">
-<p class="hint">管理员入口。后续将支持新增/删除人员、权限与项目分配、重置密码等操作。</p>
+<div class="card-body" id="userAdmin">
+  <div class="admin-toolbar">
+    <div class="actions">
+      <button class="primary" id="userRefreshBtn" type="button">刷新人员</button>
+      <button class="secondary" id="userCreateBtn" type="button">新增人员</button>
+    </div>
+    <p class="status" id="userStatus"></p>
+  </div>
+  <div class="admin-table-wrapper">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>账号</th>
+          <th>角色</th>
+          <th>级别</th>
+          <th>状态</th>
+          <th>所属项目</th>
+          <th>创建时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="userTableBody">
+        <tr><td colspan="7"><p class="hint">暂无人员，请先新增。</p></td></tr>
+      </tbody>
+    </table>
+  </div>
 </div>
 </section>
+<div class="drawer" id="userDrawer" data-tab-section="user-admin">
+  <div class="drawer-mask" data-drawer-close="userDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="userDrawerTitle">新增人员</h3>
+      <button class="link-toggle" data-drawer-close="userDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="userForm">
+      <div class="form-row">
+        <label>账号</label>
+        <input id="userNameInput" type="text" placeholder="请输入账号"/>
+      </div>
+      <div class="form-row" id="userPasswordRow">
+        <label>初始密码</label>
+        <input id="userPasswordInput" type="password" placeholder="可填留空使用默认"/>
+      </div>
+      <div class="form-row">
+        <label>角色</label>
+        <select id="userRoleSelect">
+          <option value="admin">管理员</option>
+          <option value="user" selected>普通用户</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>级别</label>
+        <select id="userLevelSelect">
+          <option value="leader">组长</option>
+          <option value="member" selected>组员</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>状态</label>
+        <label class="inline"><input id="userActiveCheckbox" type="checkbox" checked/> 启用</label>
+      </div>
+      <div class="form-row">
+        <label>所属项目</label>
+        <select id="userProjectsSelect" multiple size="6"></select>
+      </div>
+      <div class="actions">
+        <button class="primary" id="userSaveBtn" type="button">保存</button>
+        <button class="ghost-btn" data-drawer-close="userDrawer" type="button">取消</button>
+      </div>
+      <p class="status" id="userFormStatus"></p>
+    </div>
+  </div>
+</div>
 <section class="card hidden" data-tab-section="ops-log" data-role="admin-only">
 <h2>操作记录</h2>
 <div class="card-body">
@@ -1349,6 +1442,7 @@
 <script src="./scripts/modules/auto.js" defer></script>
 <script src="./scripts/modules/casesgen.js" defer></script>
 <script src="./scripts/modules/tempexec.js" defer></script>
+<script src="./scripts/modules/admin.js" defer></script>
 <script src="./scripts/modules/authGuard.js" defer></script>
 <script src="./scripts/modules/app.js" defer></script>
 <script src="./scripts/modules/bootstrap.js" defer></script>

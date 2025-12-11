@@ -8,6 +8,10 @@
   var userMenu = null;
   var userMenuToggle = null;
 
+  function drawerIsOpen() {
+    return window.app && typeof window.app.isDrawerOpen === 'function' && window.app.isDrawerOpen();
+  }
+
   function setText(el, text) {
     if (!el) return;
     el.textContent = text;
@@ -22,7 +26,15 @@
   function applyRoleVisibility(role) {
     var adminOnly = document.querySelectorAll('[data-role="admin-only"]');
     adminOnly.forEach(function(node) {
-      node.classList.toggle('hidden', role !== 'admin');
+      if (role !== 'admin') {
+        node.classList.add('role-hidden');
+        node.classList.add('hidden');
+      } else {
+        node.classList.remove('role-hidden');
+        if (node.dataset && node.dataset.tabBtn) {
+          node.classList.remove('hidden');
+        }
+      }
     });
     var currentTab = state.activeTab || 'auto';
     var adminTabs = ['project-admin', 'user-admin', 'ops-log'];
@@ -52,6 +64,10 @@
 
   function toggleMenu() {
     if (!userMenu) return;
+    if (drawerIsOpen()) {
+      closeMenu();
+      return;
+    }
     userMenu.classList.toggle('menu-open');
   }
 
@@ -95,6 +111,10 @@
       state.currentUser = user;
       updateUserDisplay();
       applyRoleVisibility(user && user.role ? user.role : 'user');
+      // 刷新后重新应用当前页签以恢复可见状态
+      var tab = state.activeTab || 'auto';
+      state.activeTab = tab;
+      switchToTab(tab);
     }).catch(function() {
       apiClient.clearToken();
       redirectToLogin();
@@ -116,6 +136,12 @@
     }
     if (userMenuToggle) {
       userMenuToggle.addEventListener('click', function(event) {
+        if (drawerIsOpen()) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeMenu();
+          return;
+        }
         event.stopPropagation();
         toggleMenu();
       });

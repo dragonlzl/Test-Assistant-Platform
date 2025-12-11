@@ -86,6 +86,7 @@
     var handleCaseSelectionChange = api.handleCaseSelectionChange || function() {};
     var handleCaseSelectAll = api.handleCaseSelectAll || function() {};
     var exportCaseGenerationResults = api.exportCaseGenerationResults || function() {};
+    var sidebarBlockersBound = false;
 
     const cleanModule = window.app.clean && typeof window.app.clean.init === 'function'
       ? window.app.clean.init({
@@ -178,6 +179,38 @@
       assignBtn.addEventListener('click', focusAssignSaveIfNeeded);
     })();
 
+    function isDrawerOpen() {
+      var body = document.body;
+      var root = document.documentElement;
+      var bodyHas = body && body.classList && body.classList.contains('drawer-open');
+      var rootHas = root && root.classList && root.classList.contains('drawer-open');
+      if (bodyHas || rootHas) return true;
+      var openDrawer = document.querySelector ? document.querySelector('.drawer.open') : null;
+      return Boolean(openDrawer);
+    }
+
+    function blockSidebarIfDrawerOpen(e) {
+      if (!isDrawerOpen()) return false;
+      var target = e && e.target && e.target.closest ? e.target.closest('.sidebar') : null;
+      if (!target) return false;
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      return true;
+    }
+
+    function ensureSidebarBlockers() {
+      var alreadyBound = sidebarBlockersBound || (window.app && window.app.sidebarBlockersBound);
+      if (alreadyBound) return;
+      document.addEventListener('pointerdown', blockSidebarIfDrawerOpen, true);
+      document.addEventListener('click', blockSidebarIfDrawerOpen, true);
+      document.addEventListener('keydown', blockSidebarIfDrawerOpen, true);
+      sidebarBlockersBound = true;
+      if (!window.app) window.app = {};
+      window.app.sidebarBlockersBound = true;
+    }
+    if (!window.app) window.app = {};
+    window.app.isDrawerOpen = isDrawerOpen;
+
     function getGroupNameForTab(tabName) {
       var menus = Array.prototype.slice.call(document.querySelectorAll('.tab-submenu'));
       for (var i = 0; i < menus.length; i++) {
@@ -194,6 +227,7 @@
     function showTabGroup(name, opts) {
       opts = opts || {};
       var keepTabActive = Boolean(opts.keepTabActive);
+      var expand = opts.expand !== false; // 默认展开
       if (!window.app) window.app = {};
       window.app.lastTabGroup = name || '';
       window.app.lastShowRan = true;
@@ -205,16 +239,18 @@
         menu.style.display = 'none';
         var btn = group && group.querySelector('.tab-group-btn');
         if (btn && btn.setAttribute) btn.setAttribute('aria-expanded', 'false');
+        if (btn && btn.classList) btn.classList.remove('active');
       });
       if (!name) return;
       var target = document.querySelector('[data-group-menu="' + name + '"]');
-      if (!target) return;
-      var targetGroup = target.closest('.tab-group');
-      target.classList.remove('hidden');
-      target.style.display = 'flex';
-      if (targetGroup && targetGroup.classList) targetGroup.classList.add('open');
-      var tBtn = targetGroup && targetGroup.querySelector('.tab-group-btn');
-      if (tBtn && tBtn.setAttribute) tBtn.setAttribute('aria-expanded', 'true');
+      var targetGroup = target && target.closest ? target.closest('.tab-group') : null;
+      var tBtn = targetGroup && targetGroup.querySelector ? targetGroup.querySelector('.tab-group-btn') : null;
+      if (expand && target && targetGroup) {
+        target.classList.remove('hidden');
+        target.style.display = 'flex';
+        targetGroup.classList.add('open');
+        if (tBtn && tBtn.setAttribute) tBtn.setAttribute('aria-expanded', 'true');
+      }
       // 高亮当前一级按钮，其余取消
       var btns = Array.prototype.slice.call(document.querySelectorAll('.tab-group-btn'));
       btns.forEach(function(b) {
@@ -251,6 +287,9 @@
     }
 
     (function bindTabGroups() {
+      ensureSidebarBlockers();
+      if (!window.app) window.app = {};
+      window.app.isDrawerOpen = isDrawerOpen;
       var buttons = dom.tabGroupButtons;
       if (!buttons || typeof buttons.forEach !== 'function' || !buttons.length) {
         dom.tabGroups = document.querySelectorAll('.tab-group');
@@ -259,19 +298,20 @@
         dom.tabGroupButtons = buttons;
       }
       if (!buttons || typeof buttons.forEach !== 'function') return;
-      if (!window.app) window.app = {};
       window.app.tabGroupBound = true;
       if (dom.tabGroups && typeof dom.tabGroups.forEach === 'function') {
         dom.tabGroups.forEach(function(group) {
           var btn = group.querySelector('.tab-group-btn');
           var name = btn && btn.dataset ? btn.dataset.group : '';
           group.addEventListener('mouseenter', function() {
+            if (isDrawerOpen()) return;
             showTabGroup(name);
           });
         });
       }
       buttons.forEach(function(btn) {
         btn.addEventListener('click', function(e) {
+          if (blockSidebarIfDrawerOpen(e)) return;
           if (!window.app) window.app = {};
           if (e && typeof e.preventDefault === 'function') e.preventDefault();
           if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
@@ -283,17 +323,20 @@
           window.app.lastShowCall = 'force-open-' + name;
         });
         btn.addEventListener('mouseenter', function() {
+          if (isDrawerOpen()) return;
           var name = btn.dataset && btn.dataset.group;
           if (!name) return;
           showTabGroup(name);
         });
         btn.addEventListener('focus', function() {
+          if (isDrawerOpen()) return;
           var name = btn.dataset && btn.dataset.group;
           if (!name) return;
           showTabGroup(name);
         });
       });
       document.addEventListener('click', function(e) {
+        if (isDrawerOpen()) return;
         var insideGroup = e && e.target && e.target.closest && e.target.closest('.tab-group');
         if (!insideGroup) showTabGroup('');
       });
@@ -302,6 +345,7 @@
         sidebar.addEventListener('mouseleave', function() { showTabGroup(''); });
       }
       document.addEventListener('click', function(ev) {
+        if (blockSidebarIfDrawerOpen(ev)) return;
         var btn = ev && ev.target && ev.target.closest ? ev.target.closest('.tab-group-btn') : null;
         if (!btn) return;
         var name = btn.dataset ? btn.dataset.group : '';
@@ -369,10 +413,11 @@
       }
       markActiveTabGroup(name);
       var grp = getGroupNameForTab(name);
-      showTabGroup(grp, { keepTabActive: true });
+      showTabGroup(grp, { keepTabActive: true, expand: false });
     }
     api.switchTab = switchTab;
     document.addEventListener('click', function(e) {
+      if (blockSidebarIfDrawerOpen(e)) return;
       const tabBtn = e && e.target && e.target.closest ? e.target.closest('[data-tab-btn]') : null;
       if (tabBtn && tabBtn.dataset && tabBtn.dataset.tabBtn) {
         switchTab(tabBtn.dataset.tabBtn);

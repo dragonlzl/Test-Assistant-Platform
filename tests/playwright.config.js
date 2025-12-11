@@ -14,11 +14,16 @@ module.exports = defineConfig({
     navigationTimeout: 15 * 1000,
     acceptDownloads: true,
     trace: 'retain-on-failure',
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
   },
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: undefined,
+        executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+      },
     },
   ],
   webServer: {

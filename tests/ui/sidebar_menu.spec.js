@@ -63,4 +63,38 @@ test.describe('侧边分级菜单', () => {
     await page.locator('main').click();
     await expect(submenu).toBeHidden();
   });
+
+  test('抽屉打开时侧边导航不可点击', async ({ page }) => {
+    await page.click('.tab-group-btn[data-group="ai"]');
+    await page.click('[data-tab-btn="clean"]');
+    await page.waitForSelector('#toggleCleanViewBtn');
+    await page.click('#toggleCleanViewBtn');
+    const drawer = page.locator('#cleanViewDrawer');
+    await expect(drawer).toHaveClass(/open/);
+
+    const beforeState = await page.evaluate(() => ({
+      active: window.app && window.app.state ? window.app.state.activeTab : '',
+      lastTabClick: window.app ? window.app.lastTabClick : '',
+    }));
+
+    const afterProgrammatic = await page.evaluate(() => {
+      var target = document.querySelector('[data-tab-btn="casesgen"]');
+      if (target && typeof target.click === 'function') target.click();
+      return {
+        active: window.app && window.app.state ? window.app.state.activeTab : '',
+      lastTabClick: window.app ? window.app.lastTabClick : '',
+      drawerOpen: document.body && document.body.classList.contains('drawer-open'),
+      sidebarEvents: getComputedStyle(document.querySelector('aside.sidebar')).pointerEvents,
+    };
+  });
+  expect(afterProgrammatic.active).toBe(beforeState.active);
+  expect(afterProgrammatic.lastTabClick).toBe(beforeState.lastTabClick);
+  expect(afterProgrammatic.drawerOpen).toBeTruthy();
+  expect(afterProgrammatic.sidebarEvents).toBe('none');
+
+  const groupBtn = page.locator('.tab-group-btn', { hasText: '用例相关' });
+  await groupBtn.click({ force: true });
+  const afterForcedClick = await page.evaluate(() => window.app && window.app.state ? window.app.state.activeTab : '');
+  expect(afterForcedClick).toBe(beforeState.active);
+  });
 });
