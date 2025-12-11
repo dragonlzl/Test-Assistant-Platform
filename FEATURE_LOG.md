@@ -28,6 +28,24 @@
 - 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/sidebar_menu.spec.js`（通过，需确保 8090 端口空闲）。  
 - 更新记录：2025-12-11 调整抽屉 z-index 与 content-shell 层级，确保遮罩覆盖导航；侧边栏键盘事件也被阻断。  
 
+- 功能名称：人员管理抽屉表单优化  
+- 功能描述：人员抽屉的“所属项目”改为紧凑下拉多选，整体更轻量；抽屉按钮排版收紧，取消按钮不再占满整行。  
+- 操作方式：在“管理-人员管理”点击“新增/编辑”打开抽屉，项目选择为小型多选列表，可滚动选择；保存/取消按钮紧凑排列。  
+- 使用效果：表单占用空间更少，视觉更整洁，避免巨型列表和宽幅取消按钮。  
+- 新增内容/接口/组件：项目多选样式 `user-projects-select`、抽屉按钮布局类 `user-form-actions`（style.css/index.html）。  
+- 复用说明：复用现有抽屉与表单逻辑，仅调整样式与标记。  
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/user_admin_drawer.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：项目管理抽屉化与表格视图  
+- 功能描述：“项目管理”改为表格列表展示，包含项目名/描述/版本/创建时间；新增与编辑项目在右侧抽屉完成，保持与人员管理一致的交互。  
+- 操作方式：进入“管理-项目管理”查看表格，点击“新建项目”或行内“编辑”在抽屉填写名称/描述保存；版本仍可在表格行内新增/删除。  
+- 使用效果：项目列表信息更集中易读，抽屉交互统一且不占主界面空间。  
+- 新增内容/接口/组件：项目表格 DOM `#projectTableBody`、项目抽屉 `#projectDrawer` 与标题 `#projectDrawerTitle`，版本展示按钮布局（index.html/style.css），项目交互逻辑抽屉化（scripts/modules/admin.js）。  
+- 复用说明：复用已有抽屉组件与状态提示，沿用项目/版本接口。  
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/project_admin_drawer.spec.js`（通过）。  
+- 更新记录：无  
+
 - 功能名称：人员管理列表视图与抽屉编辑  
 - 功能描述：人员管理改为表格列表展示，适配多人场景；新增/编辑人员在右侧抽屉完成，字段集中且可滚动。  
 - 操作方式：在“管理-人员管理”进入后查看表格，点击“新增人员”或行内“编辑/分配项目”打开抽屉，填写账号、角色、级别、状态、项目并保存。  

@@ -1290,25 +1290,47 @@
 </div>
 <p class="status" id="projectStatus"></p>
 </div>
-<div class="admin-form hidden" id="projectForm">
-<div class="form-row">
-<label>项目名称</label>
-<input id="projectNameInput" type="text" placeholder="请输入项目名称"/>
-</div>
-<div class="form-row">
-<label>项目描述</label>
-<input id="projectDescInput" type="text" placeholder="可选：项目描述"/>
-</div>
-<div class="actions">
-<button class="primary" id="projectSaveBtn" type="button">保存</button>
-<button class="ghost-btn" id="projectCancelBtn" type="button">取消</button>
-</div>
-</div>
-<div id="projectList" class="admin-list">
-<p class="hint">暂无项目，请先新建。</p>
+<div class="admin-table-wrapper">
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>项目名称</th>
+        <th>描述</th>
+        <th>版本</th>
+        <th>创建时间</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="projectTableBody">
+      <tr><td colspan="5"><p class="hint">暂无项目，请先新建。</p></td></tr>
+    </tbody>
+  </table>
 </div>
 </div>
 </section>
+<div class="drawer" id="projectDrawer" data-tab-section="project-admin">
+  <div class="drawer-mask" data-drawer-close="projectDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="projectDrawerTitle">新建项目</h3>
+      <button class="link-toggle" data-drawer-close="projectDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="projectForm">
+      <div class="form-row">
+        <label>项目名称</label>
+        <input id="projectNameInput" type="text" placeholder="请输入项目名称"/>
+      </div>
+      <div class="form-row">
+        <label>项目描述</label>
+        <input id="projectDescInput" type="text" placeholder="可选：项目描述"/>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="primary" id="projectSaveBtn" type="button">保存</button>
+        <button class="ghost-btn" data-drawer-close="projectDrawer" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
 <section class="card hidden" data-tab-section="user-admin" data-role="admin-only">
 <h2>人员管理</h2>
 <div class="card-body" id="userAdmin">
@@ -1375,9 +1397,9 @@
       </div>
       <div class="form-row">
         <label>所属项目</label>
-        <select id="userProjectsSelect" multiple size="6"></select>
+        <select id="userProjectsSelect" class="user-projects-select" multiple size="1"></select>
       </div>
-      <div class="actions">
+      <div class="actions user-form-actions">
         <button class="primary" id="userSaveBtn" type="button">保存</button>
         <button class="ghost-btn" data-drawer-close="userDrawer" type="button">取消</button>
       </div>

@@ -14,11 +14,12 @@
     projectRefreshBtn: document.getElementById('projectRefreshBtn'),
     projectCreateBtn: document.getElementById('projectCreateBtn'),
     projectSaveBtn: document.getElementById('projectSaveBtn'),
-    projectCancelBtn: document.getElementById('projectCancelBtn'),
+    projectDrawerTitle: document.getElementById('projectDrawerTitle'),
+    projectTableBody: document.getElementById('projectTableBody'),
     projectNameInput: document.getElementById('projectNameInput'),
     projectDescInput: document.getElementById('projectDescInput'),
     projectForm: document.getElementById('projectForm'),
-    projectList: document.getElementById('projectList'),
+    projectDrawer: document.getElementById('projectDrawer'),
     userStatus: document.getElementById('userStatus'),
     userRefreshBtn: document.getElementById('userRefreshBtn'),
     userCreateBtn: document.getElementById('userCreateBtn'),
@@ -38,6 +39,7 @@
     userList: document.getElementById('userList'),
   };
   var userDrawer;
+  var projectDrawer;
 
   function setStatus(el, text, type) {
     if (!el) return;
@@ -56,6 +58,10 @@
 
   function showProjectForm(editing) {
     state.editingProjectId = editing ? editing.id : null;
+    setStatus(dom.projectStatus, '', '');
+    if (dom.projectDrawerTitle) {
+      dom.projectDrawerTitle.textContent = editing ? '编辑项目' : '新建项目';
+    }
     if (editing) {
       dom.projectNameInput.value = editing.name || '';
       dom.projectDescInput.value = editing.description || '';
@@ -64,6 +70,10 @@
       dom.projectDescInput.value = '';
     }
     dom.projectForm.classList.remove('hidden');
+    var drawerInstance = ensureProjectDrawer();
+    if (drawerInstance && typeof drawerInstance.open === 'function') {
+      drawerInstance.open();
+    }
   }
 
   function hideProjectForm() {
@@ -71,6 +81,10 @@
     dom.projectForm.classList.add('hidden');
     dom.projectNameInput.value = '';
     dom.projectDescInput.value = '';
+    var drawerInstance = ensureProjectDrawer();
+    if (drawerInstance && typeof drawerInstance.close === 'function') {
+      drawerInstance.close();
+    }
   }
 
   function ensureUserDrawer() {
@@ -82,6 +96,17 @@
       closeButtons: [],
     });
     return userDrawer;
+  }
+
+  function ensureProjectDrawer() {
+    if (projectDrawer) return projectDrawer;
+    if (!window.app || !window.app.drawer) return null;
+    projectDrawer = window.app.drawer.createDrawer({
+      drawerId: 'projectDrawer',
+      openButtons: [],
+      closeButtons: [],
+    });
+    return projectDrawer;
   }
 
   function showUserForm(editing) {
@@ -114,6 +139,7 @@
     if (drawerInstance && typeof drawerInstance.open === 'function') {
       drawerInstance.open();
     }
+    enhanceProjectsSelectDropdown();
   }
 
   function hideUserForm() {
@@ -130,51 +156,116 @@
     const select = dom.userProjectsSelect;
     if (!select) return;
     const set = new Set(ids || []);
+    var chosen = 0;
     Array.prototype.forEach.call(select.options, function(opt) {
-      opt.selected = set.has(Number(opt.value));
+      if (opt.dataset && opt.dataset.placeholder === 'projects') {
+        opt.selected = false;
+        return;
+      }
+      var picked = set.has(Number(opt.value));
+      opt.selected = picked;
+      if (picked) chosen += 1;
     });
+    toggleProjectsPlaceholder(chosen);
+    collapseProjectsSelect();
   }
 
   function buildProjectOptions() {
     if (!dom.userProjectsSelect) return;
     dom.userProjectsSelect.innerHTML = '';
+    var placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '未选择';
+    placeholder.dataset.placeholder = 'projects';
+    placeholder.selected = true;
+    dom.userProjectsSelect.appendChild(placeholder);
     state.projects.forEach(function(p) {
       const opt = document.createElement('option');
       opt.value = p.id;
       opt.textContent = p.name;
       dom.userProjectsSelect.appendChild(opt);
     });
+    collapseProjectsSelect();
+  }
+
+  function collapseProjectsSelect() {
+    if (!dom.userProjectsSelect) return;
+    dom.userProjectsSelect.size = 1;
+  }
+
+  function expandProjectsSelect() {
+    if (!dom.userProjectsSelect) return;
+    var count = dom.userProjectsSelect.options && dom.userProjectsSelect.options.length
+      ? Array.prototype.filter.call(dom.userProjectsSelect.options, function(opt) {
+          return !(opt.dataset && opt.dataset.placeholder === 'projects');
+        }).length
+      : 0;
+    var desired = Math.min(Math.max(count, 1), 6);
+    dom.userProjectsSelect.size = desired;
+  }
+
+  function toggleProjectsPlaceholder(selectedCount) {
+    if (!dom.userProjectsSelect) return;
+    var placeholder = dom.userProjectsSelect.querySelector('option[data-placeholder="projects"]');
+    if (!placeholder) return;
+    var hasSelection = selectedCount > 0;
+    placeholder.selected = !hasSelection;
+    placeholder.hidden = hasSelection;
+  }
+
+  function enhanceProjectsSelectDropdown() {
+    var select = dom.userProjectsSelect;
+    if (!select || select._dropdownBound) return;
+    select._dropdownBound = true;
+    collapseProjectsSelect();
+    select.addEventListener('focus', expandProjectsSelect);
+    select.addEventListener('click', expandProjectsSelect);
+    select.addEventListener('blur', collapseProjectsSelect);
+    select.addEventListener('keydown', function(e) {
+      if (e && e.key === 'Escape') {
+        collapseProjectsSelect();
+      }
+    });
+    select.addEventListener('change', function() {
+      var selectedCount = Array.prototype.filter.call(select.options || [], function(opt) {
+        return opt.selected && !(opt.dataset && opt.dataset.placeholder === 'projects');
+      }).length;
+      toggleProjectsPlaceholder(selectedCount);
+      collapseProjectsSelect();
+    });
   }
 
   function renderProjectList() {
-    const container = dom.projectList;
-    if (!container) return;
+    const tbody = dom.projectTableBody;
+    if (!tbody) return;
     if (!state.projects.length) {
-      container.innerHTML = '<p class="hint">暂无项目，请先新建。</p>';
+      tbody.innerHTML = '<tr><td colspan="5"><p class="hint">暂无项目，请先新建。</p></td></tr>';
       return;
     }
-    container.innerHTML = state.projects.map(function(p) {
+    const rows = state.projects.map(function(p) {
       const versions = Array.isArray(p.versions) ? p.versions : [];
-      const versionTags = versions.map(function(v) {
-        return '<span class="tag muted">' + v.name + '</span>';
-      }).join('') || '<span class="hint">暂无版本</span>';
+      const versionTags = versions.length
+        ? versions.map(function(v) {
+            return '<span class="tag muted">' + v.name + '</span>' +
+              '<button class="ghost-btn" data-action="delete-version" data-project-id="' + p.id + '" data-version-id="' + v.id + '">删除</button>';
+          }).join(' ')
+        : '<span class="hint">暂无版本</span>';
       return (
-        '<div class="card-item" data-project-id="' + p.id + '">' +
-        '<div class="meta"><strong>' + (p.name || '') + '</strong></div>' +
-        '<div class="meta">描述：' + (p.description || '—') + '</div>' +
-        '<div class="meta">版本：' + versionTags + '</div>' +
-        '<div class="meta">创建时间：' + formatTime(p.created_at) + '</div>' +
-        '<div class="actions">' +
+        '<tr data-project-id="' + p.id + '">' +
+        '<td><strong>' + (p.name || '') + '</strong></td>' +
+        '<td>' + (p.description || '—') + '</td>' +
+        '<td class="project-versions">' + versionTags +
+        ' <button class="secondary" data-action="add-version" data-id="' + p.id + '">新增版本</button>' +
+        '</td>' +
+        '<td>' + formatTime(p.created_at) + '</td>' +
+        '<td><div class="actions">' +
         '<button class="secondary" data-action="edit-project" data-id="' + p.id + '">编辑</button>' +
-        '<button class="secondary" data-action="add-version" data-id="' + p.id + '">新增版本</button>' +
         '<button class="danger ghost-btn" data-action="delete-project" data-id="' + p.id + '">删除</button>' +
-        '</div>' +
-        '<div class="meta">版本操作：' + versions.map(function(v) {
-          return '<button class="ghost-btn" data-action="delete-version" data-project-id="' + p.id + '" data-version-id="' + v.id + '">删除 ' + v.name + '</button>';
-        }).join(' ') + '</div>' +
-        '</div>'
+        '</div></td>' +
+        '</tr>'
       );
     }).join('');
+    tbody.innerHTML = rows;
   }
 
   function renderUserList() {
@@ -226,7 +317,9 @@
     const level = dom.userLevelSelect.value;
     const isActive = dom.userActiveCheckbox.checked;
     const projects = Array.prototype.filter.call(dom.userProjectsSelect.options || [], function(opt) {
-      return opt.selected;
+      if (!opt || !opt.selected) return false;
+      if (opt.dataset && opt.dataset.placeholder === 'projects') return false;
+      return opt.value !== '';
     }).map(function(opt) { return Number(opt.value); });
     return { username: username, password: password, role: role, level: level, is_active: isActive, project_ids: projects };
   }
@@ -236,6 +329,7 @@
     return api.listProjects().then(function(list) {
       state.projects = Array.isArray(list) ? list : [];
       buildProjectOptions();
+      enhanceProjectsSelectDropdown();
       renderProjectList();
       setStatus(dom.projectStatus, '已加载 ' + state.projects.length + ' 个项目', 'ok');
     }).catch(function(err) {
@@ -260,6 +354,7 @@
     }).then(function() {
       renderUserList();
       setStatus(dom.userStatus, '已加载 ' + state.users.length + ' 人', 'ok');
+      enhanceProjectsSelectDropdown();
     }).catch(function(err) {
       setStatus(dom.userStatus, err && err.message ? err.message : '加载失败', 'err');
     });
@@ -385,9 +480,8 @@
   function bindEvents() {
     if (dom.projectRefreshBtn) dom.projectRefreshBtn.addEventListener('click', loadProjects);
     if (dom.projectCreateBtn) dom.projectCreateBtn.addEventListener('click', function() { showProjectForm(null); });
-    if (dom.projectCancelBtn) dom.projectCancelBtn.addEventListener('click', hideProjectForm);
     if (dom.projectSaveBtn) dom.projectSaveBtn.addEventListener('click', saveProject);
-    if (dom.projectList) dom.projectList.addEventListener('click', handleProjectListClick);
+    if (dom.projectTableBody) dom.projectTableBody.addEventListener('click', handleProjectListClick);
 
     if (dom.userRefreshBtn) dom.userRefreshBtn.addEventListener('click', function() {
       loadProjects().then(loadUsers);

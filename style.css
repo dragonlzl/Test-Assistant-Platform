@@ -2201,6 +2201,34 @@ body {
   border-radius: 8px;
   font-size: 14px;
 }
+.user-projects-select {
+  min-height: 44px;
+  max-height: 160px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #f7f9ff 0%, #ffffff 70%);
+  box-shadow: inset 0 1px 2px rgba(15,23,42,0.08);
+}
+.user-projects-select option {
+  padding: 6px 8px;
+}
+.project-versions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.user-form-actions {
+  justify-content: flex-start;
+}
+.user-form-actions button {
+  flex: 0 0 auto;
+}
+.drawer .actions .ghost-btn {
+  width: auto;
+  text-align: center;
+  min-width: 88px;
+}
 .form-row .inline {
   font-weight: 400;
 }
