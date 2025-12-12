@@ -420,16 +420,27 @@
           }
           return;
         }
-        var userId = state && state.currentUser ? state.currentUser.id : null;
-        var chosen = null;
+        // owner_id 可能是 number 或 string；并且 authReady 时 currentUser 可能暂未填充。
+        var userId = null;
+        if (state && state.currentUser && (state.currentUser.id || state.currentUser.id === 0)) {
+          var parsedUserId = Number(state.currentUser.id);
+          if (Number.isFinite(parsedUserId)) userId = parsedUserId;
+        }
+        var chosenUser = null;
+        var chosenGlobal = null;
         assignments.forEach(function(item) {
           if (!item) return;
-          if (userId && item.owner_id === userId) {
-            chosen = item;
-          } else if (!chosen && (item.owner_id === null || item.owner_id === undefined)) {
-            chosen = item;
+          var ownerId = item.owner_id;
+          if (ownerId === null || ownerId === undefined) {
+            if (!chosenGlobal) chosenGlobal = item;
+            return;
+          }
+          var ownerNum = Number(ownerId);
+          if (userId === null || ownerNum === userId) {
+            chosenUser = item;
           }
         });
+        var chosen = chosenUser || chosenGlobal;
         if (chosen && chosen.config_json) {
           var baseAssignments = state.assignments && typeof state.assignments === 'object' ? state.assignments : {};
           var normalized = normalizeAssignmentsObject(chosen.config_json, { base: baseAssignments });

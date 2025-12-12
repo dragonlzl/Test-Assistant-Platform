@@ -56,6 +56,16 @@
           }
           return { size: size, changed: true };
         };
+    var lastFetchAt = 0;
+    var minRefreshIntervalMs = config.minSettingsRefreshIntervalMs || 1500;
+    var visibilityRefreshBound = false;
+    var dirtyDrafts = {
+      timeoutSec: false,
+      feishuWebhook: false,
+      feishuMention: false,
+      tempExecColumns: false,
+      tempExecPageSize: false,
+    };
 
     function isRequiredTempExecColumn(key) {
       return key === 'select' || key === 'title' || key === 'actual' || key === 'remark' || key === 'defect' || key === 'ops';
@@ -79,7 +89,12 @@
     }
 
     function mergeServerSettings(list) {
-      var userId = state.currentUser && state.currentUser.id;
+      // owner_id 可能是 number 或 string；同时在 authReady 时序下 currentUser 可能暂未填充。
+      var userId = null;
+      if (state.currentUser && (state.currentUser.id || state.currentUser.id === 0)) {
+        var parsedUserId = Number(state.currentUser.id);
+        if (Number.isFinite(parsedUserId)) userId = parsedUserId;
+      }
       var merged = {};
       (list || []).forEach(function(item) {
         if (!item || !item.key) return;
@@ -88,8 +103,13 @@
         if (isGlobal && merged[item.key] === undefined) {
           merged[item.key] = item.value_json;
         }
-        if (isUser && item.owner_id === userId) {
-          merged[item.key] = item.value_json;
+        if (isUser) {
+          if (userId === null || userId === undefined) {
+            // list 已由后端按当前用户过滤，当前用户未知时直接采用 user scoped 设置。
+            merged[item.key] = item.value_json;
+          } else if (Number(item.owner_id) === userId) {
+            merged[item.key] = item.value_json;
+          }
         }
       });
       if (!state.settings || typeof state.settings !== 'object') {
@@ -118,10 +138,17 @@
         state.settings.tempExecPageSize = size;
       }
       ensureTempExecColumns();
+      // 如果执行页已打开，主动刷新以应用远端列/分页设置。
+      try {
+        renderTempExecView();
+      } catch (err) {
+        // ignore render failures
+      }
     }
 
     function fetchSettingsFromServer() {
       if (!api || typeof api.listSettings !== 'function') return;
+      lastFetchAt = Date.now();
       if (typeof api.getStoredToken === 'function' && typeof api.setToken === 'function') {
         var stored = api.getStoredToken();
         if (stored) api.setToken(stored);
@@ -140,11 +167,59 @@
       });
     }
 
-    function collectSettingItems() {
+    function requestSettingsRefresh(reason) {
+      var ready = state.authReady || (window.app && window.app.authReady);
+      if (!ready) return;
+      var now = Date.now();
+      if (now - lastFetchAt < minRefreshIntervalMs) return;
+      lastFetchAt = now;
+      fetchSettingsFromServer();
+    }
+
+    function bindVisibilityRefresh() {
+      if (visibilityRefreshBound) return;
+      visibilityRefreshBound = true;
+      try {
+        window.addEventListener('focus', function() {
+          try {
+            if (typeof document !== 'undefined' && document.hidden) return;
+          } catch (err) {
+            // ignore
+          }
+          requestSettingsRefresh('focus');
+        });
+      } catch (err) {
+        // ignore
+      }
+      try {
+        if (typeof document !== 'undefined' && document.addEventListener) {
+          document.addEventListener('visibilitychange', function() {
+            try {
+              if (document.hidden) return;
+            } catch (err) {
+              // ignore
+            }
+            requestSettingsRefresh('visibility');
+          });
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function collectSettingItems(keys) {
       var items = [];
+      var onlyKeys = Array.isArray(keys) && keys.length
+        ? keys.map(function(k) { return String(k); })
+        : null;
+      function shouldInclude(key) {
+        if (!onlyKeys) return true;
+        return onlyKeys.indexOf(key) !== -1;
+      }
       if (state.settings && typeof state.settings === 'object') {
         Object.keys(state.settings).forEach(function(key) {
           if (!key) return;
+          if (!shouldInclude(key)) return;
           var val = state.settings[key];
           if (val === undefined) return;
           if (typeof val === 'function') return;
@@ -152,20 +227,37 @@
         });
       }
       // Backward compatibility: ensure page size is saved even if only stored on state.tempExecPageSize
-      var hasPageSize = items.some(function(it) { return it.key === 'tempExecPageSize'; });
-      if (!hasPageSize) {
-        items.push({ key: 'tempExecPageSize', value_json: state.tempExecPageSize || defaultTempExecPageSize });
+      var needPageSize = !onlyKeys || onlyKeys.indexOf('tempExecPageSize') !== -1;
+      if (needPageSize) {
+        var hasPageSize = items.some(function(it) { return it.key === 'tempExecPageSize'; });
+        if (!hasPageSize) {
+          items.push({
+            key: 'tempExecPageSize',
+            value_json: state.tempExecPageSize || defaultTempExecPageSize,
+          });
+        }
       }
       return items;
     }
 
-    function persistSettingsRemote() {
+    function persistSettingsRemote(keys) {
       if (!api || typeof api.saveSettings !== 'function') return;
       if (typeof api.getStoredToken === 'function' && typeof api.setToken === 'function') {
         var stored = api.getStoredToken();
         if (stored) api.setToken(stored);
       }
-      api.saveSettings('user', collectSettingItems()).catch(function(err) {
+      var items = collectSettingItems(keys);
+      if (!items.length) return;
+      api.saveSettings('user', items).then(function(savedList) {
+        try {
+          if (Array.isArray(savedList) && savedList.length) {
+            mergeServerSettings(savedList);
+            renderSettingsUI();
+          }
+        } catch (err) {
+          // ignore merge failures; local already updated
+        }
+      }).catch(function(err) {
         console.warn('保存设置到后端失败', err);
       });
     }
@@ -184,20 +276,33 @@
       if (!state.settings || typeof state.settings !== 'object') {
         state.settings = Object.assign({}, defaultSettings);
       }
-      var saved = {};
+      // DB-first：当检测到已登录（本地有 token 且后端设置接口可用）时，不使用本地缓存覆盖，
+      // 以避免多端同号时出现本地旧值抢占；无登录/无后端时继续使用 localStorage 作为回退。
+      var shouldUseLocal = true;
       try {
-        saved = JSON.parse(localStorage.getItem(settingsKey) || '{}') || {};
+        if (api && typeof api.listSettings === 'function' && typeof api.getStoredToken === 'function') {
+          var token = api.getStoredToken();
+          if (token) shouldUseLocal = false;
+        }
       } catch (err) {
-        console.warn('调用设置加载失败', err);
-        saved = {};
+        shouldUseLocal = true;
       }
-      if (saved && typeof saved === 'object') {
-        Object.keys(saved).forEach(function(key) {
-          if (!Object.prototype.hasOwnProperty.call(saved, key)) return;
-          var val = saved[key];
-          if (val === undefined) return;
-          state.settings[key] = val;
-        });
+      if (shouldUseLocal) {
+        var saved = {};
+        try {
+          saved = JSON.parse(localStorage.getItem(settingsKey) || '{}') || {};
+        } catch (err) {
+          console.warn('调用设置加载失败', err);
+          saved = {};
+        }
+        if (saved && typeof saved === 'object') {
+          Object.keys(saved).forEach(function(key) {
+            if (!Object.prototype.hasOwnProperty.call(saved, key)) return;
+            var val = saved[key];
+            if (val === undefined) return;
+            state.settings[key] = val;
+          });
+        }
       }
 
       // Known fields normalization
@@ -228,17 +333,18 @@
       ensureTempExecColumns();
     }
 
-    function persistSettings() {
+    function persistSettings(keys) {
       try {
         localStorage.setItem(settingsKey, JSON.stringify(state.settings));
       } catch (err) {
         console.warn('调用设置保存失败', err);
       }
-      persistSettingsRemote();
+      persistSettingsRemote(keys);
     }
 
     function renderTempExecColumnSettings() {
       if (!tempExecColumnForm) return;
+      if (dirtyDrafts.tempExecColumns) return;
       var cols = ensureTempExecColumns();
       var inputs = tempExecColumnForm.querySelectorAll('input[data-temp-exec-col]');
       inputs.forEach(function(input) {
@@ -253,16 +359,24 @@
 
     function renderSettingsUI() {
       if (modelTimeoutInput) {
-        modelTimeoutInput.value = state.settings.timeoutSec;
+        if (!dirtyDrafts.timeoutSec) {
+          modelTimeoutInput.value = state.settings.timeoutSec;
+        }
       }
       if (feishuWebhookInput) {
-        feishuWebhookInput.value = state.settings.feishuWebhook || '';
+        if (!dirtyDrafts.feishuWebhook) {
+          feishuWebhookInput.value = state.settings.feishuWebhook || '';
+        }
       }
       if (feishuMentionInput) {
-        feishuMentionInput.value = state.settings.feishuMention || '';
+        if (!dirtyDrafts.feishuMention) {
+          feishuMentionInput.value = state.settings.feishuMention || '';
+        }
       }
       if (tempExecPageSizeInput) {
-        tempExecPageSizeInput.value = state.tempExecPageSize || defaultTempExecPageSize || '';
+        if (!dirtyDrafts.tempExecPageSize) {
+          tempExecPageSizeInput.value = state.tempExecPageSize || defaultTempExecPageSize || '';
+        }
       }
       renderTempExecColumnSettings();
     }
@@ -279,7 +393,8 @@
         modelTimeoutInput.value = sec;
       }
       state.settings.timeoutSec = sec;
-      persistSettings();
+      dirtyDrafts.timeoutSec = false;
+      persistSettings(['timeoutSec']);
       setStatus(modelTimeoutStatus, '模型调用超时已更新为 ' + sec + ' 秒', 'ok');
     }
 
@@ -288,7 +403,9 @@
       var mention = feishuMentionInput ? feishuMentionInput.value.trim() : '';
       state.settings.feishuWebhook = webhook;
       state.settings.feishuMention = mention;
-      persistSettings();
+      dirtyDrafts.feishuWebhook = false;
+      dirtyDrafts.feishuMention = false;
+      persistSettings(['feishuWebhook', 'feishuMention']);
       return webhook;
     }
 
@@ -393,7 +510,8 @@
       });
       state.settings.tempExecColumns = nextCols;
       ensureTempExecColumns();
-      persistSettings();
+      dirtyDrafts.tempExecColumns = false;
+      persistSettings(['tempExecColumns']);
       renderTempExecView();
       setStatus(tempExecColumnStatus, '列显示设置已保存', 'ok');
     }
@@ -412,7 +530,8 @@
       if (state.settings && typeof state.settings === 'object') {
         state.settings.tempExecPageSize = size;
       }
-      persistSettings();
+      dirtyDrafts.tempExecPageSize = false;
+      persistSettings(['tempExecPageSize']);
       if (result.changed) {
         setStatus(tempExecPageSizeStatus, '分页设置已更新', 'ok');
       } else {
@@ -422,13 +541,30 @@
 
     function bindEvents() {
       if (saveModelTimeoutBtn) saveModelTimeoutBtn.addEventListener('click', saveTimeoutSetting);
-      if (modelTimeoutInput) modelTimeoutInput.addEventListener('input', function() { setStatus(modelTimeoutStatus, '', ''); });
+      if (modelTimeoutInput) modelTimeoutInput.addEventListener('input', function() {
+        dirtyDrafts.timeoutSec = true;
+        setStatus(modelTimeoutStatus, '', '');
+      });
       if (saveFeishuWebhookBtn) saveFeishuWebhookBtn.addEventListener('click', saveFeishuWebhookConfig);
       if (testFeishuWebhookBtn) testFeishuWebhookBtn.addEventListener('click', testFeishuWebhookConfig);
-      if (feishuWebhookInput) feishuWebhookInput.addEventListener('input', function() { setStatus(feishuWebhookStatus, '', ''); });
-      if (feishuMentionInput) feishuMentionInput.addEventListener('input', function() { setStatus(feishuWebhookStatus, '', ''); });
+      if (feishuWebhookInput) feishuWebhookInput.addEventListener('input', function() {
+        dirtyDrafts.feishuWebhook = true;
+        setStatus(feishuWebhookStatus, '', '');
+      });
+      if (feishuMentionInput) feishuMentionInput.addEventListener('input', function() {
+        dirtyDrafts.feishuMention = true;
+        setStatus(feishuWebhookStatus, '', '');
+      });
+      if (tempExecColumnForm) tempExecColumnForm.addEventListener('change', function() {
+        dirtyDrafts.tempExecColumns = true;
+        setStatus(tempExecColumnStatus, '', '');
+      });
       if (saveTempExecColumnsBtn) saveTempExecColumnsBtn.addEventListener('click', saveTempExecColumnsSetting);
       if (saveTempExecPageSizeBtn) saveTempExecPageSizeBtn.addEventListener('click', saveTempExecPageSize);
+      if (tempExecPageSizeInput) tempExecPageSizeInput.addEventListener('input', function() {
+        dirtyDrafts.tempExecPageSize = true;
+        setStatus(tempExecPageSizeStatus, '', '');
+      });
     }
 
     bindEvents();
@@ -436,6 +572,7 @@
     renderSettingsUI();
     fetchSettingsFromServer();
     bindAuthReady();
+    bindVisibilityRefresh();
 
     return {
       loadSettings: loadSettings,

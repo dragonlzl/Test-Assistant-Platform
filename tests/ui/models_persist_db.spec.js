@@ -2,7 +2,8 @@ const { test, expect } = require('@playwright/test');
 
 test.describe('跨设备模型/指派/设置持久化', () => {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  const user = { id: 3001, username: 'persist_user', role: 'admin', level: 'leader' };
+  // 使用 string 类型 id 模拟真实环境可能出现的类型差异，验证合并逻辑的鲁棒性。
+  const user = { id: '3001', username: 'persist_user', role: 'admin', level: 'leader' };
 
   function createApiHandler(serverState) {
     let modelSeq = 1;
@@ -113,18 +114,22 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     };
   }
 
-  async function setupPage(context, apiHandler) {
+  async function setupPage(context, apiHandler, options) {
+    const opts = options || {};
     const page = await context.newPage();
-    await page.addInitScript(() => {
+    await page.addInitScript((init) => {
       try {
         ['cleaner-models-v1', 'cleaner-assignment-v1', 'usecase-settings-v1', 'tempexec-page-size'].forEach((key) => {
           window.localStorage.removeItem(key);
         });
         window.localStorage.setItem('tap-auth-token', 'persist-token');
+        if (init && init.localSettings) {
+          window.localStorage.setItem('usecase-settings-v1', JSON.stringify(init.localSettings));
+        }
       } catch (err) {
         // ignore
       }
-    });
+    }, { localSettings: opts.localSettings || null });
     await page.route('**/*', (route) => {
       const target = route.request().url();
       if (target.startsWith('http://localhost') || target.startsWith('http://127.0.0.1') || target.startsWith('file:')) {
@@ -134,8 +139,9 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     });
     await page.route('**/api/**', apiHandler);
     await page.goto(base + '/index.html');
-    await page.waitForSelector('#currentUsername', { timeout: 20000 });
-    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
+    await page.waitForLoadState('domcontentloaded');
+    // 等待核心全局对象就绪即可，避免依赖 bootstrap/initApp 时序造成测试波动。
+    await page.waitForFunction(() => window.app && window.app.state && window.app.apiClient, null, { timeout: 20000 });
     await page.evaluate(() => {
       document.querySelectorAll('.tab-group .tab-submenu').forEach(function(menu) {
         menu.classList.remove('hidden');
@@ -195,30 +201,14 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await expect.poll(() => serverState.features.length).toBe(1);
 
     await pageA.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
-    await pageA.evaluate(() => {
-      try {
-        if (window.app && window.app.state && window.app.state.settings) {
-          window.app.state.settings.otherSettingsDemo = { enabled: true };
-        }
-      } catch (err) {
-        // ignore
-      }
-    });
+    await pageA.fill('#feishuWebhook', 'https://example.com/hook');
+    await pageA.fill('#feishuNotifyUser', 'ou_123456');
+    await pageA.click('#saveFeishuWebhook');
     const priorityCheckboxA = pageA.locator('input[data-temp-exec-col="priority"]');
     await priorityCheckboxA.uncheck();
     await pageA.click('#saveTempExecColumns');
     await pageA.fill('#tempExecPageSizeInput', '33');
     await pageA.click('#saveTempExecPageSize');
-    await expect.poll(() => serverState.settingsCalls || 0, { timeout: 10000 }).toBeGreaterThanOrEqual(2);
-    const lastPayload = serverState.lastSettingsPayload || {};
-    const lastPageSizeItem = (lastPayload.items || []).find((item) => item.key === 'tempExecPageSize');
-    expect(lastPageSizeItem && Number(lastPageSizeItem.value_json)).toBe(33);
-    const lastOtherItem = (lastPayload.items || []).find((item) => item.key === 'otherSettingsDemo');
-    expect(lastOtherItem && lastOtherItem.value_json && lastOtherItem.value_json.enabled).toBe(true);
-    const pageSizeSetting = serverState.settings.find((item) => item.key === 'tempExecPageSize');
-    if (pageSizeSetting && lastPageSizeItem) {
-      pageSizeSetting.value_json = Number(lastPageSizeItem.value_json);
-    }
     await expect.poll(() => {
       const pageSize = serverState.settings.find((item) => item.key === 'tempExecPageSize');
       return pageSize ? Number(pageSize.value_json) : null;
@@ -227,6 +217,14 @@ test.describe('跨设备模型/指派/设置持久化', () => {
       const cols = serverState.settings.find((item) => item.key === 'tempExecColumns');
       return cols && cols.value_json ? cols.value_json.priority : null;
     }, { timeout: 10000 }).toBe(false);
+    await expect.poll(() => {
+      const webhook = serverState.settings.find((item) => item.key === 'feishuWebhook');
+      return webhook ? webhook.value_json : null;
+    }, { timeout: 10000 }).toBe('https://example.com/hook');
+    await expect.poll(() => {
+      const mention = serverState.settings.find((item) => item.key === 'feishuMention');
+      return mention ? mention.value_json : null;
+    }, { timeout: 10000 }).toBe('ou_123456');
     expect(serverState.features[0].config_json.cleanId).toBe(remoteModelId);
     expect(serverState.features[0].config_json.cleanTemperature).toBeCloseTo(0.6);
     expect(serverState.features[0].config_json.compareTemperature).toBeCloseTo(0.3);
@@ -244,19 +242,132 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await expect(pageB.locator('#compareTemperature')).toHaveValue(/0\.3/);
     await pageB.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
     await expect(pageB.locator('#tempExecPageSizeInput')).toHaveValue('33', { timeout: 20000 });
+    await expect(pageB.locator('#feishuWebhook')).toHaveValue('https://example.com/hook');
+    await expect(pageB.locator('#feishuNotifyUser')).toHaveValue('ou_123456');
     const priorityCheckboxB = pageB.locator('input[data-temp-exec-col="priority"]');
     await expect(priorityCheckboxB).not.toBeChecked();
-    const otherValue = await pageB.evaluate(() => {
+
+    await contextB.close();
+  });
+
+  test('登录态忽略本地缓存并以最后保存为准（含未保存草稿回退）', async ({ browser }) => {
+    const serverState = { models: [], features: [], settings: [] };
+    const apiHandler = createApiHandler(serverState);
+
+    const contextA = await browser.newContext();
+    const pageA = await setupPage(contextA, apiHandler);
+    await pageA.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await pageA.fill('#tempExecPageSizeInput', '31');
+    await pageA.click('#saveTempExecPageSize');
+    await expect.poll(() => {
+      const pageSize = serverState.settings.find((item) => item.key === 'tempExecPageSize');
+      return pageSize ? Number(pageSize.value_json) : null;
+    }, { timeout: 10000 }).toBe(31);
+
+    // B 带着本地旧缓存登录，但因有 token，应忽略本地并加载服务器 31。
+    const contextB = await browser.newContext();
+    const pageB = await setupPage(contextB, apiHandler, {
+      localSettings: { tempExecPageSize: 22 },
+    });
+    await pageB.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(pageB.locator('#tempExecPageSizeInput')).toHaveValue('31', { timeout: 20000 });
+
+    // A 在未保存的情况下修改为 40，不应入库。
+    await pageA.fill('#tempExecPageSizeInput', '40');
+
+    // B 保存为 50，后端变为 50。
+    await pageB.fill('#tempExecPageSizeInput', '50');
+    await pageB.click('#saveTempExecPageSize');
+    await expect.poll(() => {
+      const pageSize = serverState.settings.find((item) => item.key === 'tempExecPageSize');
+      return pageSize ? Number(pageSize.value_json) : null;
+    }, { timeout: 10000 }).toBe(50);
+
+    // A 刷新（草稿丢弃）后应看到 50。
+    await pageA.reload();
+    await pageA.waitForLoadState('domcontentloaded');
+    await pageA.waitForFunction(() => window.app && window.app.state && window.app.apiClient, null, { timeout: 20000 });
+    await pageA.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(pageA.locator('#tempExecPageSizeInput')).toHaveValue('50', { timeout: 20000 });
+
+    await contextA.close();
+    await contextB.close();
+  });
+
+  test('保存单项设置不会覆盖其他设置（避免跨设备互相回退）', async ({ browser }) => {
+    const serverState = { models: [], features: [], settings: [] };
+    const apiHandler = createApiHandler(serverState);
+
+    const contextA = await browser.newContext();
+    const contextB = await browser.newContext();
+    const pageA = await setupPage(contextA, apiHandler);
+    const pageB = await setupPage(contextB, apiHandler);
+
+    await pageA.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await pageA.fill('#tempExecPageSizeInput', '31');
+    await pageA.click('#saveTempExecPageSize');
+    await expect.poll(() => {
+      const pageSize = serverState.settings.find((item) => item.key === 'tempExecPageSize');
+      return pageSize ? Number(pageSize.value_json) : null;
+    }, { timeout: 10000 }).toBe(31);
+
+    // 模拟 B 本地页容量仍是旧值，但只保存“列显示”，不应把页容量覆盖回去。
+    await pageB.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await pageB.fill('#tempExecPageSizeInput', '20');
+    const priorityCheckboxB = pageB.locator('input[data-temp-exec-col="priority"]');
+    await priorityCheckboxB.uncheck();
+    await pageB.click('#saveTempExecColumns');
+
+    await expect.poll(() => {
+      const pageSize = serverState.settings.find((item) => item.key === 'tempExecPageSize');
+      return pageSize ? Number(pageSize.value_json) : null;
+    }, { timeout: 10000 }).toBe(31);
+    await expect.poll(() => {
+      const cols = serverState.settings.find((item) => item.key === 'tempExecColumns');
+      return cols && cols.value_json ? cols.value_json.priority : null;
+    }, { timeout: 10000 }).toBe(false);
+
+    await contextA.close();
+    await contextB.close();
+  });
+
+  test('已登录会话在重新获得焦点时刷新远端设置', async ({ browser }) => {
+    const serverState = { models: [], features: [], settings: [] };
+    const apiHandler = createApiHandler(serverState);
+
+    const contextA = await browser.newContext();
+    const contextB = await browser.newContext();
+    const pageA = await setupPage(contextA, apiHandler);
+    const pageB = await setupPage(contextB, apiHandler);
+
+    await pageA.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await pageA.fill('#tempExecPageSizeInput', '31');
+    await pageA.click('#saveTempExecPageSize');
+    await expect.poll(() => {
+      const pageSize = serverState.settings.find((item) => item.key === 'tempExecPageSize');
+      return pageSize ? Number(pageSize.value_json) : null;
+    }, { timeout: 10000 }).toBe(31);
+
+    await pageB.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await pageB.fill('#tempExecPageSizeInput', '55');
+    await pageB.click('#saveTempExecPageSize');
+    await expect.poll(() => {
+      const pageSize = serverState.settings.find((item) => item.key === 'tempExecPageSize');
+      return pageSize ? Number(pageSize.value_json) : null;
+    }, { timeout: 10000 }).toBe(55);
+
+    // 模拟电脑 A 回到页面获得焦点后自动拉取远端最新设置
+    await pageA.waitForTimeout(1600);
+    await pageA.evaluate(() => {
       try {
-        return window.app && window.app.state && window.app.state.settings
-          ? window.app.state.settings.otherSettingsDemo
-          : null;
+        window.dispatchEvent(new Event('focus'));
       } catch (err) {
-        return null;
+        // ignore
       }
     });
-    expect(otherValue && otherValue.enabled).toBe(true);
+    await expect(pageA.locator('#tempExecPageSizeInput')).toHaveValue('55', { timeout: 20000 });
 
+    await contextA.close();
     await contextB.close();
   });
 
@@ -295,9 +406,10 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     });
 
     await expect.poll(() => serverState.settingsCalls || 0, { timeout: 10000 }).toBeGreaterThanOrEqual(1);
-    const lastPayload = serverState.lastSettingsPayload || {};
-    const lastPageSizeItem = (lastPayload.items || []).find((item) => item.key === 'tempExecPageSize');
-    expect(lastPageSizeItem && Number(lastPageSizeItem.value_json)).toBe(44);
+    await expect.poll(() => {
+      const pageSize = serverState.settings.find((item) => item.key === 'tempExecPageSize');
+      return pageSize ? Number(pageSize.value_json) : null;
+    }, { timeout: 10000 }).toBe(44);
 
     await contextA.close();
 

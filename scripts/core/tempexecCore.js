@@ -510,7 +510,8 @@
         state.settings = state.settings || {};
         state.settings.tempExecColumns = columns;
         ensureTempExecColumns();
-        persistSettings();
+        // 仅持久化列设置，避免覆盖其他设备的设置项。
+        persistSettings(['tempExecColumns']);
       }
       if (Number.isFinite(Number(snapshot.pageSize))) {
         applyTempExecPageSize(Number(snapshot.pageSize));
@@ -759,7 +760,8 @@
       if (state.settings && typeof state.settings === 'object') {
         state.settings.tempExecPageSize = size;
         try {
-          persistSettings();
+          // 仅持久化分页设置，避免覆盖其他设备的设置项。
+          persistSettings(['tempExecPageSize']);
         } catch (err) {
           // ignore persistence failures here; UI layer will show status if needed
         }

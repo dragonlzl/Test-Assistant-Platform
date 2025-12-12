@@ -622,6 +622,15 @@
 - 测试与验证：`npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_models.spec.js`（通过，本地 FastAPI 服务）；`PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/models_persist_db.spec.js`（通过，本地静态服+Mock API）。  
 - 更新记录：补充功能指派 Temperature 字段跨设备持久化与刷新不回退修复；修复模型保存重复创建远端记录的问题；修复执行页导入配置/执行视图分页调整未落库导致跨设备不同步；修复不同账号间本地缓存与远端合并导致的配置串用，现按账号隔离。  
 
+- 功能名称：其他设置跨设备同步修复（用户设置合并鲁棒性）  
+- 功能描述：修复“其他设置/设置页”保存后跨设备不生效/互相覆盖的问题：远端 user scoped 设置合并时不再依赖 currentUser.id 的严格类型/时序，支持 id 为字符串或未就绪的情况；登录态改为 DB-first（有 token 时忽略本地 settings 缓存，避免多端同号本地旧值抢占）；已登录会话在重新获得焦点/从后台返回时会自动拉取远端最新设置；每个保存按钮仅提交对应设置项，避免不同设备的旧值覆盖最新配置；未点击保存的草稿在 UI 保留但不生效，刷新页面会回退到最后保存数据。  
+- 操作方式：两台电脑同号登录后，在“设置/其他设置”中修改分页/列显示并点击对应保存按钮；另一端重新登录或刷新/回到页面后，会以最后一次点击保存的数据为准；未点击保存的修改不会入库，刷新后回到原配置。  
+- 使用效果：设置项稳定落库并跨设备一致，最后保存优先；草稿不影响生效配置且不会被远端刷新立即清空。  
+- 新增内容/接口/组件：调整 `scripts/modules/settings.js` 的 settings 加载策略（DB-first）与草稿脏态保护；设置保存改为按 key 粒度提交；`scripts/core/tempexecCore.js` 按 key 粒度持久化分页/列；更新跨设备持久化 UI 用例 `tests/ui/models_persist_db.spec.js` 增加“登录态忽略本地缓存”“未保存草稿刷新回退”“回到页面刷新远端设置”“单项保存不覆盖其他项”等场景。  
+- 复用说明：复用现有 `/api/settings`、`/api/features` 接口与前端持久化入口，仅增强合并与渲染时序。  
+- 测试与验证：`node --check scripts/modules/settings.js scripts/modules/models.js`（通过）；`npx playwright test tests/ui/models_persist_db.spec.js -c tests/playwright.config.js`（通过）。  
+- 更新记录：修复设置页保存后跨设备不同步问题；增强用户设置/指派合并容错；补充已登录会话回到页面自动刷新远端设置；修复跨设备交替保存导致的旧值覆盖。  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  
