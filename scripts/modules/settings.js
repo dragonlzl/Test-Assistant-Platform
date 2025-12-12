@@ -81,7 +81,6 @@
     function mergeServerSettings(list) {
       var userId = state.currentUser && state.currentUser.id;
       var merged = {};
-      var firstUserValues = {};
       (list || []).forEach(function(item) {
         if (!item || !item.key) return;
         var isUser = item.scope === 'user';
@@ -91,12 +90,7 @@
         }
         if (isUser && item.owner_id === userId) {
           merged[item.key] = item.value_json;
-        } else if (isUser && firstUserValues[item.key] === undefined) {
-          firstUserValues[item.key] = item.value_json;
         }
-      });
-      Object.keys(firstUserValues).forEach(function(key) {
-        if (merged[key] === undefined) merged[key] = firstUserValues[key];
       });
       if (!state.settings || typeof state.settings !== 'object') {
         state.settings = Object.assign({}, defaultSettings);

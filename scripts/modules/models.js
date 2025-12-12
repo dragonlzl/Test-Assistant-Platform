@@ -270,10 +270,23 @@
       }
       api.listModelConfigs('all', ownerId).then(function(data) {
         var remoteModels = mapRemoteModels(data || []);
-        if (!remoteModels.length) return;
+        if (!remoteModels.length) {
+          if (state.userJustSwitched) {
+            state.models = [];
+            persistModelsLocal();
+            renderModels();
+            renderAssignmentsSelect();
+            updateAssignmentStatuses();
+            state.userModelsReset = true;
+          }
+          return;
+        }
         state.models = remoteModels;
         persistModelsLocal();
         syncAssignmentsWithModels({ pushRemote: true });
+        renderModels();
+        renderAssignmentsSelect();
+        updateAssignmentStatuses();
       }).catch(function(err) {
         console.warn('加载远端模型失败', err);
       });
@@ -393,21 +406,30 @@
       }
       api.listFeatureAssignments('all', ownerId).then(function(list) {
         var assignments = list || [];
-        if (!assignments.length) return;
+        if (!assignments.length) {
+          if (state.userJustSwitched) {
+            var emptyNormalized = normalizeAssignmentsObject({}, { base: {} });
+            state.assignments = emptyNormalized.assignments;
+            state.assignmentRemoteId = null;
+            state.hasSavedAssignments = false;
+            persistAssignmentsLocal();
+            renderAssignmentsSelect();
+            updateAssignmentStatuses();
+            state.userJustSwitched = false;
+            state.userModelsReset = false;
+          }
+          return;
+        }
         var userId = state && state.currentUser ? state.currentUser.id : null;
         var chosen = null;
-        var firstUser = null;
         assignments.forEach(function(item) {
           if (!item) return;
           if (userId && item.owner_id === userId) {
             chosen = item;
-          } else if (item.owner_id !== null && item.owner_id !== undefined && !firstUser) {
-            firstUser = item;
           } else if (!chosen && (item.owner_id === null || item.owner_id === undefined)) {
             chosen = item;
           }
         });
-        if (!chosen && firstUser) chosen = firstUser;
         if (chosen && chosen.config_json) {
           var baseAssignments = state.assignments && typeof state.assignments === 'object' ? state.assignments : {};
           var normalized = normalizeAssignmentsObject(chosen.config_json, { base: baseAssignments });
@@ -418,6 +440,10 @@
           syncAssignmentsWithModels({ pushRemote: true });
           renderAssignmentsSelect();
           updateAssignmentStatuses();
+        }
+        if (state.userJustSwitched) {
+          state.userJustSwitched = false;
+          state.userModelsReset = false;
         }
       }).catch(function(err) {
         console.warn('加载功能指派失败', err);

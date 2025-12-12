@@ -135,7 +135,7 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await page.route('**/api/**', apiHandler);
     await page.goto(base + '/index.html');
     await page.waitForSelector('#currentUsername', { timeout: 20000 });
-    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
     await page.evaluate(() => {
       document.querySelectorAll('.tab-group .tab-submenu').forEach(function(menu) {
         menu.classList.remove('hidden');
@@ -256,6 +256,55 @@ test.describe('跨设备模型/指派/设置持久化', () => {
       }
     });
     expect(otherValue && otherValue.enabled).toBe(true);
+
+    await contextB.close();
+  });
+
+  test('执行页导入配置触发分页设置落库并跨会话恢复', async ({ browser }) => {
+    const serverState = { models: [], features: [], settings: [] };
+    const apiHandler = createApiHandler(serverState);
+
+    const contextA = await browser.newContext();
+    const pageA = await setupPage(contextA, apiHandler);
+    pageA.on('dialog', (dialog) => dialog.accept());
+    await pageA.waitForSelector('#importTempExecConfigFile', { state: 'attached' });
+
+    const snapshot = {
+      type: 'tempexec_snapshot_v1',
+      requirement: 'demo',
+      files: [{ id: 'file-1', name: 'demo-file', cases: [{}] }],
+      versions: [],
+      focus: [],
+      pageSize: 44,
+      columns: {},
+    };
+    await pageA.setInputFiles('#importTempExecConfigFile', {
+      name: 'tempexec_snapshot.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(snapshot)),
+    });
+    await pageA.evaluate(() => {
+      var input = document.getElementById('importTempExecConfigFile');
+      if (input) {
+        try {
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch (err) {
+          // ignore
+        }
+      }
+    });
+
+    await expect.poll(() => serverState.settingsCalls || 0, { timeout: 10000 }).toBeGreaterThanOrEqual(1);
+    const lastPayload = serverState.lastSettingsPayload || {};
+    const lastPageSizeItem = (lastPayload.items || []).find((item) => item.key === 'tempExecPageSize');
+    expect(lastPageSizeItem && Number(lastPageSizeItem.value_json)).toBe(44);
+
+    await contextA.close();
+
+    const contextB = await browser.newContext();
+    const pageB = await setupPage(contextB, apiHandler);
+    await pageB.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(pageB.locator('#tempExecPageSizeInput')).toHaveValue('44', { timeout: 20000 });
 
     await contextB.close();
   });

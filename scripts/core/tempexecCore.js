@@ -754,6 +754,16 @@
       var size = clampTempExecPageSize(value);
       var changed = state.tempExecPageSize !== size;
       state.tempExecPageSize = size;
+      // Keep settings in sync so cross-device persistence works even when page size
+      // is changed from the execution view.
+      if (state.settings && typeof state.settings === 'object') {
+        state.settings.tempExecPageSize = size;
+        try {
+          persistSettings();
+        } catch (err) {
+          // ignore persistence failures here; UI layer will show status if needed
+        }
+      }
       saveTempExecPageSizeSetting(size);
       resetTempExecPages();
       if (changed) renderTempExecView();

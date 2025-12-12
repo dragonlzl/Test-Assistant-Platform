@@ -620,7 +620,7 @@
 - 新增内容/接口/组件：更新模型/指派持久化逻辑（`scripts/modules/models.js`）、补充分页保存事件绑定（`scripts/modules/settings.js`）、扩展后端设置用例（`tests/api/settings_models.spec.js`）、新增跨设备持久化 UI 用例（`tests/ui/models_persist_db.spec.js`）。  
 - 复用说明：复用现有 API 客户端与后端接口，补充 ID 正常化、指派映射与事件绑定，无新增外部依赖。  
 - 测试与验证：`npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_models.spec.js`（通过，本地 FastAPI 服务）；`PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/models_persist_db.spec.js`（通过，本地静态服+Mock API）。  
-- 更新记录：补充功能指派 Temperature 字段跨设备持久化与刷新不回退修复；修复模型保存重复创建远端记录的问题。  
+- 更新记录：补充功能指派 Temperature 字段跨设备持久化与刷新不回退修复；修复模型保存重复创建远端记录的问题；修复执行页导入配置/执行视图分页调整未落库导致跨设备不同步；修复不同账号间本地缓存与远端合并导致的配置串用，现按账号隔离。  
 
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
