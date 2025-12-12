@@ -135,6 +135,7 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await page.route('**/api/**', apiHandler);
     await page.goto(base + '/index.html');
     await page.waitForSelector('#currentUsername', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app._inited === true);
     await page.evaluate(() => {
       document.querySelectorAll('.tab-group .tab-submenu').forEach(function(menu) {
         menu.classList.remove('hidden');
@@ -194,6 +195,15 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await expect.poll(() => serverState.features.length).toBe(1);
 
     await pageA.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await pageA.evaluate(() => {
+      try {
+        if (window.app && window.app.state && window.app.state.settings) {
+          window.app.state.settings.otherSettingsDemo = { enabled: true };
+        }
+      } catch (err) {
+        // ignore
+      }
+    });
     const priorityCheckboxA = pageA.locator('input[data-temp-exec-col="priority"]');
     await priorityCheckboxA.uncheck();
     await pageA.click('#saveTempExecColumns');
@@ -203,6 +213,8 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     const lastPayload = serverState.lastSettingsPayload || {};
     const lastPageSizeItem = (lastPayload.items || []).find((item) => item.key === 'tempExecPageSize');
     expect(lastPageSizeItem && Number(lastPageSizeItem.value_json)).toBe(33);
+    const lastOtherItem = (lastPayload.items || []).find((item) => item.key === 'otherSettingsDemo');
+    expect(lastOtherItem && lastOtherItem.value_json && lastOtherItem.value_json.enabled).toBe(true);
     const pageSizeSetting = serverState.settings.find((item) => item.key === 'tempExecPageSize');
     if (pageSizeSetting && lastPageSizeItem) {
       pageSizeSetting.value_json = Number(lastPageSizeItem.value_json);
@@ -234,6 +246,16 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await expect(pageB.locator('#tempExecPageSizeInput')).toHaveValue('33', { timeout: 20000 });
     const priorityCheckboxB = pageB.locator('input[data-temp-exec-col="priority"]');
     await expect(priorityCheckboxB).not.toBeChecked();
+    const otherValue = await pageB.evaluate(() => {
+      try {
+        return window.app && window.app.state && window.app.state.settings
+          ? window.app.state.settings.otherSettingsDemo
+          : null;
+      } catch (err) {
+        return null;
+      }
+    });
+    expect(otherValue && otherValue.enabled).toBe(true);
 
     await contextB.close();
   });

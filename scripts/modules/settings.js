@@ -51,6 +51,9 @@
       : function(value) {
           var size = clampTempExecPageSize(value);
           state.tempExecPageSize = size;
+          if (state.settings && typeof state.settings === 'object') {
+            state.settings.tempExecPageSize = size;
+          }
           return { size: size, changed: true };
         };
 
@@ -95,12 +98,31 @@
       Object.keys(firstUserValues).forEach(function(key) {
         if (merged[key] === undefined) merged[key] = firstUserValues[key];
       });
-      if (!state.settings) state.settings = {};
-      if (merged.timeoutSec !== undefined) state.settings.timeoutSec = merged.timeoutSec;
-      if (merged.feishuWebhook !== undefined) state.settings.feishuWebhook = merged.feishuWebhook;
-      if (merged.feishuMention !== undefined) state.settings.feishuMention = merged.feishuMention;
-      if (merged.tempExecColumns !== undefined) state.settings.tempExecColumns = merged.tempExecColumns;
-      if (merged.tempExecPageSize !== undefined) state.tempExecPageSize = merged.tempExecPageSize;
+      if (!state.settings || typeof state.settings !== 'object') {
+        state.settings = Object.assign({}, defaultSettings);
+      }
+      Object.keys(merged).forEach(function(key) {
+        state.settings[key] = merged[key];
+      });
+
+      // Known fields normalization
+      state.settings.timeoutSec = clampTimeoutSeconds(state.settings.timeoutSec);
+      if (typeof state.settings.feishuWebhook === 'string') {
+        state.settings.feishuWebhook = state.settings.feishuWebhook.trim();
+      }
+      if (typeof state.settings.feishuMention === 'string') {
+        state.settings.feishuMention = state.settings.feishuMention.trim();
+      } else if (state.settings.feishuMention === null || state.settings.feishuMention === undefined) {
+        state.settings.feishuMention = '';
+      }
+      if (state.settings.tempExecColumns && typeof state.settings.tempExecColumns === 'object') {
+        state.settings.tempExecColumns = Object.assign({}, defaultTempExecColumns, state.settings.tempExecColumns);
+      }
+      if (state.settings.tempExecPageSize !== undefined && state.settings.tempExecPageSize !== null) {
+        var size = clampTempExecPageSize(state.settings.tempExecPageSize);
+        state.tempExecPageSize = size;
+        state.settings.tempExecPageSize = size;
+      }
       ensureTempExecColumns();
     }
 
@@ -125,13 +147,22 @@
     }
 
     function collectSettingItems() {
-      return [
-        { key: 'timeoutSec', value_json: state.settings.timeoutSec },
-        { key: 'feishuWebhook', value_json: state.settings.feishuWebhook },
-        { key: 'feishuMention', value_json: state.settings.feishuMention },
-        { key: 'tempExecColumns', value_json: state.settings.tempExecColumns },
-        { key: 'tempExecPageSize', value_json: state.tempExecPageSize || defaultTempExecPageSize },
-      ];
+      var items = [];
+      if (state.settings && typeof state.settings === 'object') {
+        Object.keys(state.settings).forEach(function(key) {
+          if (!key) return;
+          var val = state.settings[key];
+          if (val === undefined) return;
+          if (typeof val === 'function') return;
+          items.push({ key: key, value_json: val });
+        });
+      }
+      // Backward compatibility: ensure page size is saved even if only stored on state.tempExecPageSize
+      var hasPageSize = items.some(function(it) { return it.key === 'tempExecPageSize'; });
+      if (!hasPageSize) {
+        items.push({ key: 'tempExecPageSize', value_json: state.tempExecPageSize || defaultTempExecPageSize });
+      }
+      return items;
     }
 
     function persistSettingsRemote() {
@@ -156,29 +187,49 @@
     }
 
     function loadSettings() {
+      if (!state.settings || typeof state.settings !== 'object') {
+        state.settings = Object.assign({}, defaultSettings);
+      }
+      var saved = {};
       try {
-        var saved = JSON.parse(localStorage.getItem(settingsKey) || '{}');
-        if (saved && typeof saved === 'object') {
-          var sec = clampTimeoutSeconds(saved.timeoutSec);
-          state.settings.timeoutSec = sec;
-          if (typeof saved.feishuWebhook === 'string') {
-            state.settings.feishuWebhook = saved.feishuWebhook.trim();
-          }
-          if (typeof saved.feishuMention === 'string') {
-            state.settings.feishuMention = saved.feishuMention.trim();
-          }
-          if (saved.tempExecColumns && typeof saved.tempExecColumns === 'object') {
-            state.settings.tempExecColumns = Object.assign({}, defaultTempExecColumns, saved.tempExecColumns);
-          }
-        }
+        saved = JSON.parse(localStorage.getItem(settingsKey) || '{}') || {};
       } catch (err) {
         console.warn('调用设置加载失败', err);
-        state.settings.timeoutSec = defaultSettings.timeoutSec || 300;
-        state.settings.feishuWebhook = defaultSettings.feishuWebhook || '';
-        state.settings.feishuMention = defaultSettings.feishuMention || '';
+        saved = {};
       }
-      if (typeof state.settings.feishuMention !== 'string') {
+      if (saved && typeof saved === 'object') {
+        Object.keys(saved).forEach(function(key) {
+          if (!Object.prototype.hasOwnProperty.call(saved, key)) return;
+          var val = saved[key];
+          if (val === undefined) return;
+          state.settings[key] = val;
+        });
+      }
+
+      // Known fields normalization
+      state.settings.timeoutSec = clampTimeoutSeconds(state.settings.timeoutSec);
+      if (typeof state.settings.feishuWebhook === 'string') {
+        state.settings.feishuWebhook = state.settings.feishuWebhook.trim();
+      } else if (state.settings.feishuWebhook === null || state.settings.feishuWebhook === undefined) {
+        state.settings.feishuWebhook = defaultSettings.feishuWebhook || '';
+      }
+      if (typeof state.settings.feishuMention === 'string') {
+        state.settings.feishuMention = state.settings.feishuMention.trim();
+      } else {
         state.settings.feishuMention = '';
+      }
+      if (state.settings.tempExecColumns && typeof state.settings.tempExecColumns === 'object') {
+        state.settings.tempExecColumns = Object.assign({}, defaultTempExecColumns, state.settings.tempExecColumns);
+      }
+      if (state.settings.tempExecPageSize !== undefined && state.settings.tempExecPageSize !== null) {
+        var size = clampTempExecPageSize(state.settings.tempExecPageSize);
+        state.tempExecPageSize = size;
+        state.settings.tempExecPageSize = size;
+      } else if (state.tempExecPageSize !== undefined && state.tempExecPageSize !== null) {
+        state.settings.tempExecPageSize = state.tempExecPageSize;
+      } else {
+        state.tempExecPageSize = defaultTempExecPageSize;
+        state.settings.tempExecPageSize = defaultTempExecPageSize;
       }
       ensureTempExecColumns();
     }
@@ -364,6 +415,9 @@
       var result = applyTempExecPageSize(size);
       tempExecPageSizeInput.value = size;
       state.tempExecPageSize = size;
+      if (state.settings && typeof state.settings === 'object') {
+        state.settings.tempExecPageSize = size;
+      }
       persistSettings();
       if (result.changed) {
         setStatus(tempExecPageSizeStatus, '分页设置已更新', 'ok');

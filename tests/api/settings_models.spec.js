@@ -68,6 +68,7 @@ test.describe('settings/models/features + ops api', () => {
         items: [
           { key: 'tempExecColumns', value_json: { select: true, module: true, priority: false, steps: true } },
           { key: 'tempExecPageSize', value_json: 33 },
+          { key: 'otherSettingsDemo', value_json: { enabled: true } },
         ],
       },
     });
@@ -80,6 +81,8 @@ test.describe('settings/models/features + ops api', () => {
     expect(pageSizeSetting.value_json).toBe(33);
     const columnsSetting = execSettingsBody.find((item) => item.key === 'tempExecColumns' && item.owner_id === userId);
     expect(columnsSetting.value_json && columnsSetting.value_json.priority).toBe(false);
+    const otherSetting = execSettingsBody.find((item) => item.key === 'otherSettingsDemo' && item.owner_id === userId);
+    expect(otherSetting && otherSetting.value_json && otherSetting.value_json.enabled).toBe(true);
 
     // model configs
     const createUserModel = await ctx.post(`${apiBase}/api/models`, {

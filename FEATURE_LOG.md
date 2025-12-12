@@ -31,7 +31,7 @@
 - 新增内容/接口/组件：后端新增路由 `backend/routers/configs.py`、`backend/routers/ops.py`、`ModelConfig` 唯一性约束；`services/apiClient.js` 补充对应 API 封装；前端新增操作记录表格与刷新逻辑（`index.html`、`scripts/modules/opsLog.js`、`style.css`）；前端设置/模型/指派加载顺序调整并接入后端持久化（`scripts/modules/settings.js`、`scripts/modules/models.js`、`index.html`）；新增 API 用例 `tests/api/settings_models.spec.js`。  
 - 复用说明：复用统一鉴权与操作日志写入逻辑，权限依赖现有角色/级别校验；前端复用 admin 样式与全局状态。  
 - 测试与验证：`python -m compileall backend`（通过）；`node --check scripts/modules/settings.js scripts/modules/models.js scripts/modules/opsLog.js`（通过）；`API_BASE_URL=http://127.0.0.1:9000 ADMIN_USER=admin ADMIN_PASS=chillytest_admin npx playwright test --config tests/api/playwright.api.config.js --workers=1 tests/api/admin_entities.spec.js tests/api/auth_change_password.spec.js tests/api/non_admin_projects.spec.js tests/api/settings_models.spec.js`（通过）；已执行 `python3 notify_feishu.py`。  
-- 更新记录：无  
+- 更新记录：设置模块改为按 `state.settings` 全量键值落库/同步（含“其他设置”页新增字段自动生效），补充 API/UI 用例覆盖自定义设置键。  
 
 - 功能名称：项目管理非管理员可见性修复与接口放行  
 - 功能描述：非管理员访问“管理-项目管理”不再空白，按所属项目展示列表；保留管理员全量可见，成员仅能查看/维护自己项目版本。  

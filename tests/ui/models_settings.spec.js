@@ -39,8 +39,10 @@ test.describe('模型管理与全局设置', () => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('models'); });
     const formWrapper = page.locator('#modelFormWrapper');
     await expect(formWrapper).toHaveClass(/hidden/);
+    await page.waitForSelector('#createModelBtn', { state: 'visible' });
+    await page.locator('#createModelBtn').scrollIntoViewIfNeeded();
     await page.click('#createModelBtn');
-    await expect(formWrapper).not.toHaveClass(/hidden/);
+    await expect(formWrapper).toBeVisible();
     await page.fill('#modelDisplayName', 'UI自动化模型');
     await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
     await page.fill('#modelApiKey', 'sk-test');
