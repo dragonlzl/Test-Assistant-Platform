@@ -45,7 +45,9 @@ test.describe('项目管理列表与抽屉', () => {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(projects) });
       }
       if (route.request().method().toUpperCase() === 'POST') {
-        return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ id: 3, name: 'Gamma', description: '新增', created_at: new Date().toISOString(), versions: [] }) });
+        const body = { id: projects.length + 1, name: 'Gamma', description: '新增', created_at: new Date().toISOString(), versions: [] };
+        projects.push(body);
+        return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(body) });
       }
       return route.continue();
     });
@@ -132,6 +134,8 @@ test.describe('项目管理列表与抽屉', () => {
     await page.fill('#projectDescInput', '新增');
     await page.click('#projectSaveBtn');
     await expect(drawer).not.toHaveClass(/open/);
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(2)).toContainText('Gamma');
 
     await page.locator('[data-action="edit-project"]').first().click();
     await expect(drawer).toHaveClass(/open/);

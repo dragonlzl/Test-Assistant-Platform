@@ -69,6 +69,16 @@
     return list.map(function(item) { return resolveProjectId(item); }).filter(function(id) { return id !== null; });
   }
 
+  function sortProjectsAsc(list) {
+    if (!Array.isArray(list)) return [];
+    return list.slice().sort(function(a, b) {
+      var idA = resolveProjectId(a);
+      var idB = resolveProjectId(b);
+      if (idA === null || idB === null) return 0;
+      return idA - idB;
+    });
+  }
+
   function setStatus(el, text, type) {
     if (!el) return;
     el.textContent = text || '';
@@ -406,7 +416,7 @@
           }
         }
       }
-      state.projects = projects;
+      state.projects = sortProjectsAsc(projects);
       buildProjectOptions();
       renderProjectList();
       setStatus(dom.projectStatus, '已加载 ' + state.projects.length + ' 个项目', 'ok');
