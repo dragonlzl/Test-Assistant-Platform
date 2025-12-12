@@ -19,6 +19,20 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+
+- 功能名称：设置/模型/功能指派持久化 API 与操作日志查询  
+- 功能描述：新增设置、模型配置、功能指派的持久化接口，支持用户级/全局双作用域；操作日志提供管理员可查列表。  
+- 操作方式：  
+  - 设置：`GET /api/settings?scope=all|user|global&owner_id=`，`PUT /api/settings`（items 列表）。  
+  - 模型：`GET /api/models?scope=all|user|global&owner_id=`，`POST /api/models` 创建（scope 支持 user/global），`PATCH /api/models/{id}` 更新。  
+  - 功能指派：`GET /api/features?...`，`POST /api/features`，`PATCH /api/features/{id}`；全局写入仅管理员。  
+  - 操作日志：管理员访问 `GET /api/ops?limit=&offset=&user_id=` 查看最新日志。  
+- 使用效果：设置/模型/指派数据落库并按权限隔离，非管理员仅能写入/修改自己的数据，全局配置需管理员；操作日志可按需审计最近动作。  
+- 新增内容/接口/组件：后端新增路由 `backend/routers/configs.py`、`backend/routers/ops.py`、`ModelConfig` 唯一性约束；`services/apiClient.js` 补充对应 API 封装；新增 API 用例 `tests/api/settings_models.spec.js`。  
+- 复用说明：复用统一鉴权与操作日志写入逻辑，权限依赖现有角色/级别校验。  
+- 测试与验证：`python -m compileall backend`（通过）；API 自动化待运行 `API_BASE_URL=http://127.0.0.1:8080 ADMIN_USER=admin ADMIN_PASS=chillytest_admin npx playwright test --config tests/api/playwright.api.config.js tests/api/*.spec.js`，当前因未安装 uvicorn（网络受限）暂未完成，需安装 requirements 后复跑。  
+- 更新记录：无  
+
 - 功能名称：项目管理非管理员可见性修复与接口放行  
 - 功能描述：非管理员访问“管理-项目管理”不再空白，按所属项目展示列表；保留管理员全量可见，成员仅能查看/维护自己项目版本。  
 - 操作方式：以普通成员或组长登录后展开“管理”菜单，点击“项目管理”即可看到所属项目；管理员入口与操作保持不变。  
@@ -450,6 +464,7 @@
 - 复用说明：复用现有卡片结构与折叠交互，仅增加状态持久化与跳转同步。  
 - 测试与验证：`npm run test:ui -- tests/ui/layout_persistence.spec.js tests/ui/help_structure_drawer.spec.js tests/ui/tempexec_drag.spec.js`（通过，需本地 HTTP 服务权限）。  
 - 更新记录：无  
+
 - 功能名称：XMind 用例结构抽屉化  
 - 功能描述：使用帮助页的“XMind 用例结构”从折叠卡改为右侧抽屉，支持遮罩点击收起，内容保持不变。  
 - 操作方式：点击侧边“使用帮助”中的“XMind 用例结构”按钮，抽屉从右侧展开查看；点击遮罩或“收起”关闭。  

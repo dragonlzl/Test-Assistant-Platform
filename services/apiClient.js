@@ -191,6 +191,97 @@
     }).then(handleResponse);
   }
 
+  function listSettings(scope, ownerId) {
+    var query = [];
+    if (scope) query.push('scope=' + encodeURIComponent(scope));
+    if (ownerId || ownerId === 0) query.push('owner_id=' + encodeURIComponent(ownerId));
+    var url = '/api/settings';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function saveSettings(scope, items) {
+    return fetch('/api/settings', {
+      method: 'PUT',
+      headers: buildHeaders(),
+      body: JSON.stringify({ scope: scope || 'user', items: items || [] }),
+    }).then(handleResponse);
+  }
+
+  function listModelConfigs(scope, ownerId) {
+    var query = [];
+    if (scope) query.push('scope=' + encodeURIComponent(scope));
+    if (ownerId || ownerId === 0) query.push('owner_id=' + encodeURIComponent(ownerId));
+    var url = '/api/models';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function createModelConfig(payload) {
+    return fetch('/api/models', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function updateModelConfig(configId, payload) {
+    return fetch('/api/models/' + configId, {
+      method: 'PATCH',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function listFeatureAssignments(scope, ownerId) {
+    var query = [];
+    if (scope) query.push('scope=' + encodeURIComponent(scope));
+    if (ownerId || ownerId === 0) query.push('owner_id=' + encodeURIComponent(ownerId));
+    var url = '/api/features';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function createFeatureAssignment(payload) {
+    return fetch('/api/features', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function updateFeatureAssignment(assignmentId, payload) {
+    return fetch('/api/features/' + assignmentId, {
+      method: 'PATCH',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function listOperationLogs(params) {
+    var query = [];
+    if (params && params.limit) query.push('limit=' + encodeURIComponent(params.limit));
+    if (params && params.offset) query.push('offset=' + encodeURIComponent(params.offset));
+    if (params && (params.user_id || params.user_id === 0)) {
+      query.push('user_id=' + encodeURIComponent(params.user_id));
+    }
+    var url = '/api/ops';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
   window.app = window.app || {};
   window.app.apiClient = {
     setToken: setToken,
@@ -213,5 +304,14 @@
     deleteProject: deleteProject,
     createVersion: createVersion,
     deleteVersion: deleteVersion,
+    listSettings: listSettings,
+    saveSettings: saveSettings,
+    listModelConfigs: listModelConfigs,
+    createModelConfig: createModelConfig,
+    updateModelConfig: updateModelConfig,
+    listFeatureAssignments: listFeatureAssignments,
+    createFeatureAssignment: createFeatureAssignment,
+    updateFeatureAssignment: updateFeatureAssignment,
+    listOperationLogs: listOperationLogs,
   };
 })();

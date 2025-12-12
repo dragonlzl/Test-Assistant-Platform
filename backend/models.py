@@ -107,6 +107,7 @@ class OperationLog(Base):
     result = Column(String(16), nullable=False, default="success")
     detail = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    user = relationship("User")
 
 
 class CaseFile(Base):
@@ -249,6 +250,7 @@ class Setting(Base):
 
 class ModelConfig(Base):
     __tablename__ = "model_configs"
+    __table_args__ = (UniqueConstraint("owner_id", "name", name="uq_model_config_name"),)
 
     id = Column(Integer, primary_key=True, index=True)
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
@@ -273,6 +275,7 @@ class FeatureAssignment(Base):
     updated_at = Column(
         DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
     )
+    user = relationship("User")
 
 
 class Attachment(Base):

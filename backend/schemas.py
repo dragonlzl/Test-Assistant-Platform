@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -204,3 +204,82 @@ class ExecOverviewOut(BaseModel):
     failed: int
     blocked: int
     not_applicable: int
+
+
+class SettingItem(BaseModel):
+    key: str
+    value_json: Optional[Any] = None
+
+
+class SettingsUpdateRequest(BaseModel):
+    scope: str = "user"
+    items: List[SettingItem]
+
+
+class SettingOut(BaseModel):
+    id: int
+    scope: str
+    owner_id: Optional[int]
+    key: str
+    value_json: Optional[Any] = None
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ModelConfigBase(BaseModel):
+    name: str
+    config_json: Optional[Any] = None
+    is_active: bool = True
+
+
+class ModelConfigCreate(ModelConfigBase):
+    scope: str = "user"
+
+
+class ModelConfigUpdate(BaseModel):
+    name: Optional[str] = None
+    config_json: Optional[Any] = None
+    is_active: Optional[bool] = None
+
+
+class ModelConfigOut(ModelConfigBase):
+    id: int
+    owner_id: Optional[int]
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FeatureAssignmentBase(BaseModel):
+    name: str
+    config_json: Optional[Any] = None
+
+
+class FeatureAssignmentCreate(FeatureAssignmentBase):
+    scope: str = "user"
+
+
+class FeatureAssignmentUpdate(BaseModel):
+    name: Optional[str] = None
+    config_json: Optional[Any] = None
+
+
+class FeatureAssignmentOut(FeatureAssignmentBase):
+    id: int
+    owner_id: Optional[int]
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class OperationLogOut(BaseModel):
+    id: int
+    user_id: Optional[int]
+    username: Optional[str] = None
+    action: str
+    target_type: Optional[str] = None
+    target_id: Optional[int] = None
+    result: str
+    detail: Optional[Any] = None
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
