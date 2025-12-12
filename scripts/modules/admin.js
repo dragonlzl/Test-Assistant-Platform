@@ -292,7 +292,12 @@
     const tbody = dom.projectTableBody;
     if (!tbody) return;
     if (!state.projects.length) {
-      tbody.innerHTML = '<tr><td colspan="5"><p class="hint">暂无项目，请先新建。</p></td></tr>';
+      var emptyText = '暂无项目，请先新建。';
+      var user = getCurrentUser();
+      if (user && user.role !== 'admin') {
+        emptyText = '联系管理员指派项目。';
+      }
+      tbody.innerHTML = '<tr><td colspan="5"><p class="hint">' + emptyText + '</p></td></tr>';
       return;
     }
     const rows = state.projects.map(function(p) {

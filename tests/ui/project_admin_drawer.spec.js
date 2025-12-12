@@ -258,4 +258,28 @@ test.describe('项目管理列表与抽屉', () => {
     await expect(rows.first().locator('[data-action="add-version"]')).toBeVisible();
     await expect(rows.first().locator('[data-action="delete-version"]')).toBeVisible();
   });
+
+  test('无分配项目时提示联系管理员', async ({ page }) => {
+    await page.unroute('**/api/users/me');
+    await page.route('**/api/users/me', (route) => {
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 10, username: 'member3', role: 'user', level: 'member' }) });
+    });
+    await page.unroute('**/api/projects');
+    await page.route('**/api/projects', (route) => {
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    });
+    await page.route('**/api/users/10/projects', (route) => {
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    });
+    await page.reload();
+    await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
+
+    await page.click('.tab-group-btn[data-group="manage"]');
+    const projectTabBtn4 = page.locator('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
+    await expect(projectTabBtn4).toBeVisible();
+    await projectTabBtn4.click();
+
+    const emptyHint = page.locator('#projectTableBody .hint');
+    await expect(emptyHint).toHaveText(/联系管理员指派项目/);
+  });
 });
