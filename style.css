@@ -2396,6 +2396,15 @@ body {
   border-bottom: 0;
 }
 
+#opsLogLimit {
+  margin: 0 6px;
+}
+
+.ops-log-table td.mono {
+  font-family: monospace;
+  word-break: break-all;
+}
+
 .admin-table .ghost-btn {
   width: auto;
   padding: 6px 10px;

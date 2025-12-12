@@ -6,6 +6,7 @@
     var state = ctx.state || {};
     var config = ctx.config || {};
     var utils = ctx.utils || {};
+    var api = window.app && window.app.apiClient;
     var setStatus = ctx.setStatus || utils.setStatus || function noop() {};
     var clampTimeoutSeconds = ctx.clampTimeoutSeconds || function clampTimeoutSeconds(value) {
       var num = Math.round(Number(value));
@@ -74,6 +75,86 @@
       return cols;
     }
 
+    function mergeServerSettings(list) {
+      var userId = state.currentUser && state.currentUser.id;
+      var merged = {};
+      var firstUserValues = {};
+      (list || []).forEach(function(item) {
+        if (!item || !item.key) return;
+        var isUser = item.scope === 'user';
+        var isGlobal = item.scope === 'global';
+        if (isGlobal && merged[item.key] === undefined) {
+          merged[item.key] = item.value_json;
+        }
+        if (isUser && item.owner_id === userId) {
+          merged[item.key] = item.value_json;
+        } else if (isUser && firstUserValues[item.key] === undefined) {
+          firstUserValues[item.key] = item.value_json;
+        }
+      });
+      Object.keys(firstUserValues).forEach(function(key) {
+        if (merged[key] === undefined) merged[key] = firstUserValues[key];
+      });
+      if (!state.settings) state.settings = {};
+      if (merged.timeoutSec !== undefined) state.settings.timeoutSec = merged.timeoutSec;
+      if (merged.feishuWebhook !== undefined) state.settings.feishuWebhook = merged.feishuWebhook;
+      if (merged.feishuMention !== undefined) state.settings.feishuMention = merged.feishuMention;
+      if (merged.tempExecColumns !== undefined) state.settings.tempExecColumns = merged.tempExecColumns;
+      if (merged.tempExecPageSize !== undefined) state.tempExecPageSize = merged.tempExecPageSize;
+      ensureTempExecColumns();
+    }
+
+    function fetchSettingsFromServer() {
+      if (!api || typeof api.listSettings !== 'function') return;
+      if (typeof api.getStoredToken === 'function' && typeof api.setToken === 'function') {
+        var stored = api.getStoredToken();
+        if (stored) api.setToken(stored);
+      }
+      var ownerId = state.currentUser && state.currentUser.id;
+      var ready = state.authReady || (window.app && window.app.authReady);
+      if (!ownerId && !ready) {
+        setTimeout(fetchSettingsFromServer, 200);
+        return;
+      }
+      api.listSettings('all', ownerId).then(function(list) {
+        mergeServerSettings(list || []);
+        renderSettingsUI();
+      }).catch(function(err) {
+        console.warn('加载设置失败', err);
+      });
+    }
+
+    function collectSettingItems() {
+      return [
+        { key: 'timeoutSec', value_json: state.settings.timeoutSec },
+        { key: 'feishuWebhook', value_json: state.settings.feishuWebhook },
+        { key: 'feishuMention', value_json: state.settings.feishuMention },
+        { key: 'tempExecColumns', value_json: state.settings.tempExecColumns },
+        { key: 'tempExecPageSize', value_json: state.tempExecPageSize || defaultTempExecPageSize },
+      ];
+    }
+
+    function persistSettingsRemote() {
+      if (!api || typeof api.saveSettings !== 'function') return;
+      if (typeof api.getStoredToken === 'function' && typeof api.setToken === 'function') {
+        var stored = api.getStoredToken();
+        if (stored) api.setToken(stored);
+      }
+      api.saveSettings('user', collectSettingItems()).catch(function(err) {
+        console.warn('保存设置到后端失败', err);
+      });
+    }
+
+    function bindAuthReady() {
+      try {
+        window.addEventListener('app-auth-ready', function() {
+          fetchSettingsFromServer();
+        });
+      } catch (err) {
+        // ignore
+      }
+    }
+
     function loadSettings() {
       try {
         var saved = JSON.parse(localStorage.getItem(settingsKey) || '{}');
@@ -108,6 +189,7 @@
       } catch (err) {
         console.warn('调用设置保存失败', err);
       }
+      persistSettingsRemote();
     }
 
     function renderTempExecColumnSettings() {
@@ -281,6 +363,8 @@
       }
       var result = applyTempExecPageSize(size);
       tempExecPageSizeInput.value = size;
+      state.tempExecPageSize = size;
+      persistSettings();
       if (result.changed) {
         setStatus(tempExecPageSizeStatus, '分页设置已更新', 'ok');
       } else {
@@ -296,9 +380,14 @@
       if (feishuWebhookInput) feishuWebhookInput.addEventListener('input', function() { setStatus(feishuWebhookStatus, '', ''); });
       if (feishuMentionInput) feishuMentionInput.addEventListener('input', function() { setStatus(feishuWebhookStatus, '', ''); });
       if (saveTempExecColumnsBtn) saveTempExecColumnsBtn.addEventListener('click', saveTempExecColumnsSetting);
+      if (saveTempExecPageSizeBtn) saveTempExecPageSizeBtn.addEventListener('click', saveTempExecPageSize);
     }
 
     bindEvents();
+    loadSettings();
+    renderSettingsUI();
+    fetchSettingsFromServer();
+    bindAuthReady();
 
     return {
       loadSettings: loadSettings,
@@ -313,6 +402,7 @@
       getFeishuMentionId: getFeishuMentionId,
       postFeishuMessage: postFeishuMessage,
       ensureTempExecColumns: ensureTempExecColumns,
+      saveTempExecPageSize: saveTempExecPageSize,
     };
   }
 

@@ -124,7 +124,7 @@ def list_model_configs(
     db: Session = Depends(get_db),
 ):
     scope_norm = _normalize_scope(scope, allow_all=True)
-    query = db.query(models.ModelConfig)
+    query = db.query(models.ModelConfig).filter(models.ModelConfig.is_active.is_(True))
     if owner_id is not None:
         if user.role != "admin" and owner_id != user.id:
             raise HTTPException(

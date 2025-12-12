@@ -21,16 +21,16 @@
 
 
 - 功能名称：设置/模型/功能指派持久化 API 与操作日志查询  
-- 功能描述：新增设置、模型配置、功能指派的持久化接口，支持用户级/全局双作用域；操作日志提供管理员可查列表。  
+- 功能描述：新增设置、模型配置、功能指派的持久化接口，支持用户级/全局双作用域；操作日志提供管理员可查列表，前端“操作记录”页可刷新查看登录/增删改等记录。  
 - 操作方式：  
   - 设置：`GET /api/settings?scope=all|user|global&owner_id=`，`PUT /api/settings`（items 列表）。  
   - 模型：`GET /api/models?scope=all|user|global&owner_id=`，`POST /api/models` 创建（scope 支持 user/global），`PATCH /api/models/{id}` 更新。  
   - 功能指派：`GET /api/features?...`，`POST /api/features`，`PATCH /api/features/{id}`；全局写入仅管理员。  
-  - 操作日志：管理员访问 `GET /api/ops?limit=&offset=&user_id=` 查看最新日志。  
-- 使用效果：设置/模型/指派数据落库并按权限隔离，非管理员仅能写入/修改自己的数据，全局配置需管理员；操作日志可按需审计最近动作。  
-- 新增内容/接口/组件：后端新增路由 `backend/routers/configs.py`、`backend/routers/ops.py`、`ModelConfig` 唯一性约束；`services/apiClient.js` 补充对应 API 封装；新增 API 用例 `tests/api/settings_models.spec.js`。  
-- 复用说明：复用统一鉴权与操作日志写入逻辑，权限依赖现有角色/级别校验。  
-- 测试与验证：`python -m compileall backend`（通过）；API 自动化待运行 `API_BASE_URL=http://127.0.0.1:8080 ADMIN_USER=admin ADMIN_PASS=chillytest_admin npx playwright test --config tests/api/playwright.api.config.js tests/api/*.spec.js`，当前因未安装 uvicorn（网络受限）暂未完成，需安装 requirements 后复跑。  
+  - 操作日志：管理员访问 `GET /api/ops?limit=&offset=&user_id=` 或前端“管理-操作记录”页的刷新按钮查看最新日志。  
+- 使用效果：设置/模型/指派数据落库并按权限隔离，非管理员仅能写入/修改自己的数据，全局配置需管理员；操作日志可按需审计最近动作，前端提供表格视图与分页条数选择。  
+- 新增内容/接口/组件：后端新增路由 `backend/routers/configs.py`、`backend/routers/ops.py`、`ModelConfig` 唯一性约束；`services/apiClient.js` 补充对应 API 封装；前端新增操作记录表格与刷新逻辑（`index.html`、`scripts/modules/opsLog.js`、`style.css`）；前端设置/模型/指派加载顺序调整并接入后端持久化（`scripts/modules/settings.js`、`scripts/modules/models.js`、`index.html`）；新增 API 用例 `tests/api/settings_models.spec.js`。  
+- 复用说明：复用统一鉴权与操作日志写入逻辑，权限依赖现有角色/级别校验；前端复用 admin 样式与全局状态。  
+- 测试与验证：`python -m compileall backend`（通过）；`node --check scripts/modules/settings.js scripts/modules/models.js scripts/modules/opsLog.js`（通过）；`API_BASE_URL=http://127.0.0.1:9000 ADMIN_USER=admin ADMIN_PASS=chillytest_admin npx playwright test --config tests/api/playwright.api.config.js --workers=1 tests/api/admin_entities.spec.js tests/api/auth_change_password.spec.js tests/api/non_admin_projects.spec.js tests/api/settings_models.spec.js`（通过）；已执行 `python3 notify_feishu.py`。  
 - 更新记录：无  
 
 - 功能名称：项目管理非管理员可见性修复与接口放行  
@@ -528,7 +528,7 @@
 - 新增内容/接口/组件：新增 temperature 输入控件、指派存储字段、模型调用温度参数。  
 - 复用说明：复用原有指派保存/加载与模型调用流程，仅增加温度参数注入和存储。  
 - 测试与验证：`npm run test:ui -- tests/ui/models_settings.spec.js`（通过）。  
-- 更新记录：无  
+- 更新记录：修复后端指派拉取时覆盖本地 Temperature 的问题，刷新后保持已保存值；跨设备持久化 UI 用例已补充 Temperature 覆盖（`tests/ui/models_persist_db.spec.js`）。  
 - 功能名称：执行视图状态汇总筛选与抽屉联动优化  
 - 功能描述：执行视图顶部状态汇总（已执行/未执行/通过/失败/阻塞/不适用）支持点击筛选列表，再次点击可取消；选中态绿色描边。点击导航区用例文件会自动收起“用例导入&分配”抽屉并滚动到执行视图，避免抽屉遮挡交互。  
 - 操作方式：在执行视图点击任一状态汇总圆角块即可按状态过滤当前文件用例；再点一次恢复。需要重新查看导入区或“执行总览”时可重新打开抽屉后点击对应按钮。执行列表上方的进度工具条固定在功能导航下方，实时展示当前文件与汇总状态，并提供搜索框。  
@@ -613,6 +613,14 @@
 - 复用说明：保留原渲染与交互逻辑，仅更换承载容器与开关方式。  
 - 测试与验证：`npm run test:ui -- tests/ui/workflow.spec.js`（通过）。  
 - 更新记录：无  
+- 功能名称：模型/指派/设置跨设备持久化修复  
+- 功能描述：模型保存后写入后端 ID 并同步功能指派，设置面板的列显示/分页配置落库，多端登录自动加载已保存的模型指派与执行视图配置。  
+- 操作方式：正常在模型管理/功能指派/设置页保存，换设备登录后模型列表、指派选择、执行视图列与分页会从后端恢复；分页保存按钮已可用。  
+- 使用效果：模型与功能指派稳定跨设备复用，执行视图列与分页不再依赖浏览器缓存。  
+- 新增内容/接口/组件：更新模型/指派持久化逻辑（`scripts/modules/models.js`）、补充分页保存事件绑定（`scripts/modules/settings.js`）、扩展后端设置用例（`tests/api/settings_models.spec.js`）、新增跨设备持久化 UI 用例（`tests/ui/models_persist_db.spec.js`）。  
+- 复用说明：复用现有 API 客户端与后端接口，补充 ID 正常化、指派映射与事件绑定，无新增外部依赖。  
+- 测试与验证：`npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_models.spec.js`（通过，本地 FastAPI 服务）；`PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/models_persist_db.spec.js`（通过，本地静态服+Mock API）。  
+- 更新记录：补充功能指派 Temperature 字段跨设备持久化与刷新不回退修复；修复模型保存重复创建远端记录的问题。  
 
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  

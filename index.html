@@ -1410,7 +1410,36 @@
 <section class="card hidden" data-tab-section="ops-log" data-role="admin-only">
 <h2>操作记录</h2>
 <div class="card-body">
-<p class="hint">管理员入口。后续将展示登录/登出及增删改操作日志。</p>
+  <div class="toolbar">
+    <button class="secondary" id="opsLogRefresh">刷新</button>
+    <label class="inline">
+      每页
+      <select id="opsLogLimit">
+        <option value="50">50</option>
+        <option value="100" selected>100</option>
+        <option value="200">200</option>
+        <option value="500">500</option>
+      </select>
+      条
+    </label>
+    <span class="status" id="opsLogStatus"></span>
+  </div>
+  <div class="table-wrapper">
+    <table class="admin-table ops-log-table">
+      <thead>
+        <tr>
+          <th>时间</th>
+          <th>人员</th>
+          <th>操作</th>
+          <th>对象</th>
+          <th>结果</th>
+          <th>详情</th>
+        </tr>
+      </thead>
+      <tbody id="opsLogTableBody"></tbody>
+    </table>
+    <p class="hint hidden" id="opsLogEmpty">暂无操作记录</p>
+  </div>
 </div>
 </section>
 <section class="card hidden" data-tab-section="exec-overview">
@@ -1444,10 +1473,10 @@
 <script src="./scripts/base/state.js" defer></script>
 <script src="./scripts/base/utils.js" defer></script>
 <script src="./scripts/base/drawer.js" defer></script>
-<script src="./scripts/modules/settings.js" defer></script>
 <script src="./services/storage.js" defer></script>
 <script src="./services/modelClient.js" defer></script>
 <script src="./services/apiClient.js" defer></script>
+<script src="./scripts/modules/settings.js" defer></script>
 <script src="./scripts/modules/models.js" defer></script>
 <script src="./scripts/handlers/assignHandlers.js" defer></script>
 <script src="./scripts/modules/assign.js" defer></script>
@@ -1464,6 +1493,7 @@
 <script src="./scripts/modules/auto.js" defer></script>
 <script src="./scripts/modules/casesgen.js" defer></script>
 <script src="./scripts/modules/tempexec.js" defer></script>
+<script src="./scripts/modules/opsLog.js" defer></script>
 <script src="./scripts/modules/admin.js" defer></script>
 <script src="./scripts/modules/authGuard.js" defer></script>
 <script src="./scripts/modules/app.js" defer></script>

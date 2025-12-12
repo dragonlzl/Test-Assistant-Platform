@@ -61,6 +61,26 @@ test.describe('settings/models/features + ops api', () => {
     expect(hasGlobal).toBeTruthy();
     expect(hasUser).toBeTruthy();
 
+    const saveExecSettings = await ctx.put(`${apiBase}/api/settings`, {
+      headers: userHeaders,
+      data: {
+        scope: 'user',
+        items: [
+          { key: 'tempExecColumns', value_json: { select: true, module: true, priority: false, steps: true } },
+          { key: 'tempExecPageSize', value_json: 33 },
+        ],
+      },
+    });
+    expect(saveExecSettings.status()).toBe(200);
+
+    const listExecSettings = await ctx.get(`${apiBase}/api/settings?scope=all`, { headers: userHeaders });
+    expect(listExecSettings.status()).toBe(200);
+    const execSettingsBody = await listExecSettings.json();
+    const pageSizeSetting = execSettingsBody.find((item) => item.key === 'tempExecPageSize' && item.owner_id === userId);
+    expect(pageSizeSetting.value_json).toBe(33);
+    const columnsSetting = execSettingsBody.find((item) => item.key === 'tempExecColumns' && item.owner_id === userId);
+    expect(columnsSetting.value_json && columnsSetting.value_json.priority).toBe(false);
+
     // model configs
     const createUserModel = await ctx.post(`${apiBase}/api/models`, {
       headers: userHeaders,
