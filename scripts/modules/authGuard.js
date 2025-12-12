@@ -1,6 +1,8 @@
 (function() {
   var TOKEN_KEY = 'tap-auth-token';
   var LAST_USER_KEY = 'tap-last-user-id';
+  var LOGIN_SEQ_KEY = 'tap-login-seq';
+  var TAB_SEQ_KEY = 'tap-active-tab-login-seq';
   var state = window.app && window.app.state ? window.app.state : {};
   var apiClient = window.app && window.app.apiClient ? window.app.apiClient : null;
   var logoutBtn = null;
@@ -62,6 +64,17 @@
       // ignore
     }
     return fallback;
+  }
+
+  function getLoginSeq() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        return localStorage.getItem(LOGIN_SEQ_KEY) || '';
+      }
+    } catch (err) {
+      // ignore
+    }
+    return '';
   }
 
   // Clear user-scoped local caches when switching accounts to avoid leakage across users.
@@ -148,7 +161,61 @@
     el.textContent = text;
   }
 
-  function redirectToLogin() {
+  function getSavedActiveTab() {
+    var saved = '';
+    try {
+      var activeTabKey = getConfigValue('activeTabKey', 'usecase-active-tab');
+      if (activeTabKey && typeof sessionStorage !== 'undefined') {
+        saved = sessionStorage.getItem(activeTabKey) || '';
+      }
+    } catch (err) {
+      saved = '';
+    }
+    if (!saved) return '';
+    // 只在同一次登录会话内恢复页签：避免“登出/重新登录”仍回到旧页签。
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        var tabSeq = sessionStorage.getItem(TAB_SEQ_KEY) || '';
+        var loginSeq = getLoginSeq();
+        // 若已有 loginSeq 但页签未标记 seq，补写一次，避免“第一次切页后刷新不生效需要第二次”的体验问题。
+        if (loginSeq && !tabSeq) {
+          sessionStorage.setItem(TAB_SEQ_KEY, loginSeq);
+          tabSeq = loginSeq;
+        }
+        if (loginSeq && tabSeq && tabSeq !== loginSeq) {
+          var activeTabKey2 = getConfigValue('activeTabKey', 'usecase-active-tab');
+          if (activeTabKey2) sessionStorage.removeItem(activeTabKey2);
+          sessionStorage.removeItem(TAB_SEQ_KEY);
+          return '';
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
+    // Only accept tabs that exist in the current DOM; role/visibility will be handled later.
+    var btn = document.querySelector('[data-tab-btn="' + saved + '"]');
+    if (!btn) return '';
+    return saved;
+  }
+
+  function redirectToLogin(options) {
+    // Re-login should start from default tab (session-level persistence only).
+    try {
+      var activeTabKey = getConfigValue('activeTabKey', 'usecase-active-tab');
+      if (activeTabKey && typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem(activeTabKey);
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem(TAB_SEQ_KEY);
+      }
+    } catch (err) {
+      // ignore
+    }
+    var keepRedirect = !(options && options.keepRedirect === false);
+    if (!keepRedirect) {
+      window.location.replace('login.html');
+      return;
+    }
     var redirect = window.location.pathname + window.location.search + window.location.hash;
     var target = 'login.html?redirect=' + encodeURIComponent(redirect);
     window.location.replace(target);
@@ -284,8 +351,20 @@
     var liveState = ensureStateInstance();
     liveState.activeTab = name;
     try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(TOKEN_KEY + '-active-tab', name);
+      // Match appRuntime behavior: session-level persistence only.
+      var activeTabKey = getConfigValue('activeTabKey', 'usecase-active-tab');
+      if (activeTabKey && typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem(activeTabKey, name);
+        var loginSeq = getLoginSeq();
+        if (loginSeq) sessionStorage.setItem(TAB_SEQ_KEY, loginSeq);
+      }
+    } catch (err) {
+      // ignore
+    }
+    // 兼容 appRuntime 未就绪时的页签恢复：派发统一事件，供模块在激活时加载数据。
+    try {
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('app-tab-activated', { detail: { tab: name } }));
       }
     } catch (err) {
       // ignore
@@ -294,6 +373,44 @@
 
   function ensureSession() {
     var liveState = ensureStateInstance();
+    // Refresh should restore current tab within the same browser session.
+    // Login / logout flows clear this key so re-login starts from default.
+    var forceDefaultTab = false;
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        forceDefaultTab = sessionStorage.getItem('tap-force-default-tab') === '1';
+        if (forceDefaultTab) sessionStorage.removeItem('tap-force-default-tab');
+      }
+    } catch (err) {
+      forceDefaultTab = false;
+    }
+    // 兼容某些浏览器/跳转链路 sessionStorage 不稳定：同时支持 localStorage 标记。
+    // 注意：即便 sessionStorage 已读到 force 标记，也要清掉 localStorage，避免“首次刷新仍被强制回主页，需要第二次才正常”的问题。
+    try {
+      if (typeof localStorage !== 'undefined') {
+        var localForce = localStorage.getItem('tap-force-default-tab') === '1';
+        if (localForce) localStorage.removeItem('tap-force-default-tab');
+        if (localForce) forceDefaultTab = true;
+      }
+    } catch (err) {
+      // ignore
+    }
+    if (forceDefaultTab) {
+      // 显式登出后的下一次登录：无条件回到主页(auto)，避免任何残留页签影响。
+      try {
+        var activeTabKey = getConfigValue('activeTabKey', 'usecase-active-tab');
+        if (activeTabKey && typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem(activeTabKey);
+        }
+      } catch (err) {
+        // ignore
+      }
+      liveState.activeTab = 'auto';
+    } else {
+      var savedTab = getSavedActiveTab();
+      // 无保存页签时统一回到主页(auto)，避免重登落到旧默认(clean)。
+      liveState.activeTab = savedTab || 'auto';
+    }
     if (isE2ESkipAuth()) {
       liveState.currentUser = liveState.currentUser || {
         id: 0,
@@ -328,6 +445,18 @@
       return;
     }
     apiClient.setToken(stored);
+    // 兼容旧数据：如果已有 token 但还没有 loginSeq，补一个基准值用于“同会话刷新恢复页签”。
+    try {
+      if (typeof localStorage !== 'undefined') {
+        var seq = localStorage.getItem(LOGIN_SEQ_KEY) || '';
+        if (!seq) {
+          var rand = Math.random().toString(16).slice(2);
+          localStorage.setItem(LOGIN_SEQ_KEY, String(Date.now()) + '-' + rand);
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
     liveState.authToken = stored;
     apiClient.getCurrentUser().then(function(user) {
       if (user) {
@@ -361,10 +490,31 @@
         if (apiClient && typeof apiClient.logout === 'function') {
           apiClient.logout().finally(function() {
             apiClient.clearToken();
-            redirectToLogin();
+            // 显式登出：重登应回到主页，不再保留退出时的页面 URL。
+            try {
+              if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('tap-force-default-tab', '1');
+            } catch (err) {
+              // ignore
+            }
+            try {
+              if (typeof localStorage !== 'undefined') localStorage.setItem('tap-force-default-tab', '1');
+            } catch (err) {
+              // ignore
+            }
+            redirectToLogin({ keepRedirect: false });
           });
         } else {
-          redirectToLogin();
+          try {
+            if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('tap-force-default-tab', '1');
+          } catch (err) {
+            // ignore
+          }
+          try {
+            if (typeof localStorage !== 'undefined') localStorage.setItem('tap-force-default-tab', '1');
+          } catch (err) {
+            // ignore
+          }
+          redirectToLogin({ keepRedirect: false });
         }
       });
     }

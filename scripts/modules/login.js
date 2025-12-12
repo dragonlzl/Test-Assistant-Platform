@@ -40,6 +40,23 @@
     apiClient.login(username, password).then(function() {
       setText(statusEl, '');
       form.classList.remove('loading');
+      // Re-login should start from default tab; refresh within index.html is handled by sessionStorage.
+      try {
+        if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('usecase-active-tab');
+      } catch (err) {
+        // ignore
+      }
+      // 标记一次“刚完成登录”，让 index.html 无条件回到主页（避免任何残留页签/redirect 恢复到旧页面）。
+      try {
+        if (typeof sessionStorage !== 'undefined') sessionStorage.setItem('tap-force-default-tab', '1');
+      } catch (err) {
+        // ignore
+      }
+      try {
+        if (typeof localStorage !== 'undefined') localStorage.removeItem('usecase-active-tab');
+      } catch (err) {
+        // ignore
+      }
       window.location.href = getRedirectTarget();
     }).catch(function(err) {
       var msg = err && err.message ? err.message : '登录失败';
@@ -127,6 +144,12 @@
     // 如果有残留 token，先清空避免循环跳转
     if (apiClient && typeof apiClient.clearToken === 'function') {
       apiClient.clearToken();
+    }
+    // Ensure a fresh login always starts from default tab.
+    try {
+      if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('usecase-active-tab');
+    } catch (err) {
+      // ignore
     }
     bindEvents();
   }

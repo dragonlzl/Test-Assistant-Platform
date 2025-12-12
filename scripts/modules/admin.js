@@ -406,6 +406,8 @@
       if (dom.projectCreateBtn) {
         var canCreate = user && user.role === 'admin';
         dom.projectCreateBtn.classList.toggle('hidden', !canCreate);
+        // 同步 hidden 属性：即使样式未加载，浏览器也会按默认规则隐藏该按钮。
+        dom.projectCreateBtn.hidden = !canCreate;
       }
       var projects = Array.isArray(list) ? list : [];
       if (!isAdmin()) {
@@ -593,23 +595,75 @@
     });
     if (dom.userSaveBtn) dom.userSaveBtn.addEventListener('click', saveUser);
     if (dom.userTableBody) dom.userTableBody.addEventListener('click', handleUserListClick);
+  }
 
+  function isAuthReady() {
+    if (window.app && window.app.authReady === true) return true;
+    var globalState = window.app && window.app.state ? window.app.state : null;
+    return Boolean(globalState && globalState.currentUser);
+  }
+
+  var pendingTab = '';
+
+  function handleTabActivated(tabName) {
+    // 刷新后用户可能在鉴权未就绪前就点到管理页签：先挂起，等 app-auth-ready 再补加载，避免首次进入空列表。
+    if (!isAuthReady()) {
+      pendingTab = tabName || '';
+      if (tabName === 'project-admin') setStatus(dom.projectStatus, '登录信息加载中...', '');
+      if (tabName === 'user-admin') setStatus(dom.userStatus, '登录信息加载中...', '');
+      return;
+    }
+    if (tabName === 'project-admin') {
+      loadProjects();
+    } else if (tabName === 'user-admin') {
+      loadProjects().then(loadUsers);
+    }
+  }
+
+  function bindTabActivation() {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+    window.addEventListener('app-tab-activated', function(e) {
+      var tabName = e && e.detail ? e.detail.tab : '';
+      handleTabActivated(tabName);
+    });
+  }
+
+  function bindTabButtonFallbacks() {
+    // 兜底：某些时序/浏览器下可能没收到 app-tab-activated（例如脚本尚未完全就绪）。
     var projectTab = document.querySelector('[data-tab-btn="project-admin"]');
     if (projectTab) {
       projectTab.addEventListener('click', function() {
-        loadProjects();
+        setTimeout(function() { handleTabActivated('project-admin'); }, 0);
       });
     }
     var userTab = document.querySelector('[data-tab-btn="user-admin"]');
     if (userTab) {
       userTab.addEventListener('click', function() {
-        loadProjects().then(loadUsers);
+        setTimeout(function() { handleTabActivated('user-admin'); }, 0);
       });
     }
   }
 
+  function bindAuthReady() {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+    window.addEventListener('app-auth-ready', function() {
+      var globalState = window.app && window.app.state ? window.app.state : {};
+      var tabName = pendingTab || (globalState && globalState.activeTab ? globalState.activeTab : '');
+      pendingTab = '';
+      if (tabName) handleTabActivated(tabName);
+    });
+  }
+
   function init() {
+    bindTabActivation();
+    bindTabButtonFallbacks();
+    bindAuthReady();
     bindEvents();
+    // 如果初始化时页签已可见（例如刷新后恢复），补一次数据加载。
+    var visibleProject = document.querySelector('section[data-tab-section="project-admin"]:not(.hidden)');
+    var visibleUser = document.querySelector('section[data-tab-section="user-admin"]:not(.hidden)');
+    if (visibleProject) handleTabActivated('project-admin');
+    else if (visibleUser) handleTabActivated('user-admin');
   }
 
   if (document.readyState === 'loading') {

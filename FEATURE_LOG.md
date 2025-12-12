@@ -631,6 +631,24 @@
 - 测试与验证：`node --check scripts/modules/settings.js scripts/modules/models.js`（通过）；`npx playwright test tests/ui/models_persist_db.spec.js -c tests/playwright.config.js`（通过）。  
 - 更新记录：修复设置页保存后跨设备不同步问题；增强用户设置/指派合并容错；补充已登录会话回到页面自动刷新远端设置；修复跨设备交替保存导致的旧值覆盖。  
 
+- 功能名称：登录态刷新保持当前页签（会话级）  
+- 功能描述：在已登录状态下刷新 `index.html` 会恢复到刷新前最后一次打开的页签；登出/重新登录后不再沿用旧页签，回到系统默认页签。该页签状态仅在当前浏览器会话内生效，不入库。  
+- 操作方式：登录后切换到任意页签（如“用例执行”）→刷新页面，仍停留在该页签；点击“登出”后重新登录，页面回到默认页签。  
+- 使用效果：刷新不打断当前工作上下文；重新登录保持一致的默认入口，避免跨账号/跨会话的页签残留。  
+- 新增内容/接口/组件：`scripts/core/appRuntime.js` 切换页签时写入/初始化时读取 `sessionStorage(usecase-active-tab)`；`scripts/modules/authGuard.js` 登录态初始化优先读取 sessionStorage 以恢复页签；`scripts/modules/login.js` 登录与登录页初始化时清理该 key；新增 UI 用例 `tests/ui/tab_persistence.spec.js`、`tests/ui/login_tab_reset.spec.js` 覆盖刷新保持/重登回默认。  
+- 复用说明：复用现有页签切换与鉴权流程，仅调整持久化介质为 sessionStorage 并补充初始化读取。  
+- 测试与验证：`node --check scripts/core/appRuntime.js scripts/modules/authGuard.js scripts/modules/login.js`（通过）；`npx playwright test tests/ui/tab_persistence.spec.js tests/ui/login_tab_reset.spec.js -c tests/playwright.config.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：刷新恢复页签时自动加载“管理类”页面数据（项目/人员/操作记录）  
+- 功能描述：修复“登录态刷新后虽然停留在项目管理/人员管理/操作记录页签，但列表数据为空，需要再点一次页签才加载”的问题：页签恢复/切换时统一派发 `app-tab-activated` 事件，管理类模块在激活时自动拉取数据；同时登出后跳转登录页不再携带退出时 URL，保证重登必回主页(auto)。  
+- 操作方式：登录后进入“项目管理/人员管理/操作记录”任一页签→刷新页面，仍停留在该页签且列表会自动加载；点击“登出”→重新登录，默认回到主页(auto)。  
+- 使用效果：刷新不需要二次点击即可恢复页面数据；登出重登不再残留上次页签/页面 URL。  
+- 新增内容/接口/组件：`scripts/core/appRuntime.js` 与 `scripts/modules/authGuard.js` 在页签切换时派发 `CustomEvent(app-tab-activated)`；`scripts/modules/admin.js`、`scripts/modules/opsLog.js` 监听该事件并在激活时加载数据（并补充 `app-auth-ready` 兜底触发）；`scripts/modules/authGuard.js` 默认页签策略统一为 `auto` 且登出跳转不携带 redirect；新增 UI 用例 `tests/ui/project_admin_refresh_restore.spec.js`，并增强 `tests/ui/project_admin_drawer.spec.js`、`tests/ui/login_tab_reset.spec.js` 的等待条件以降低时序抖动。  
+- 复用说明：复用既有 `switchTab`/鉴权流程，不新增业务 API，仅补充统一事件钩子让已有页面逻辑在“恢复页签”场景下也能触发加载。  
+- 测试与验证：`node --check scripts/core/appRuntime.js scripts/modules/authGuard.js scripts/modules/admin.js scripts/modules/opsLog.js scripts/base/state.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/project_admin_refresh_restore.spec.js tests/ui/login_tab_reset.spec.js tests/ui/project_admin_drawer.spec.js --workers=1`（通过）。  
+- 更新记录：改为“登录会话隔离”策略：引入 `localStorage(tap-login-seq)` 与 `sessionStorage(tap-active-tab-login-seq)`，仅在同一次登录会话内恢复页签；显式登出同时写入 local/session `tap-force-default-tab` 强制下一次进入回主页；并修复刷新后在鉴权未就绪前进入“项目管理/人员管理/操作记录”导致首次空列表的问题（鉴权就绪后自动补加载）；后端静态资源增加 `Cache-Control: no-store`，避免浏览器/代理缓存旧 JS 导致“已更新但仍像旧版本”；修复 `tap-force-default-tab` 在 sessionStorage 已命中时未同步清理 localStorage，导致“重新登录后第一次切页刷新仍回主页，需要第二次才正常”的问题；更新 UI 用例 `tests/ui/login_tab_reset.spec.js` 覆盖该回归。  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  

@@ -103,7 +103,7 @@
       missingSelections: new Set(),
       missingRowCache: [],
       missingLastList: [],
-      activeTab: 'clean',
+      activeTab: 'auto',
       inProgressStep: '',
       inProgressSteps: {},
       failedSteps: {},

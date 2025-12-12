@@ -64,11 +64,13 @@ test.describe('项目管理列表与抽屉', () => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
   });
 
   test('列表渲染且抽屉开关正常', async ({ page }) => {
     const manageBtn = page.locator('.tab-group-btn', { hasText: '管理' });
     await manageBtn.click();
+    await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
     await page.click('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
 
     const rows = page.locator('#projectTableBody tr');
@@ -169,8 +171,10 @@ test.describe('项目管理列表与抽屉', () => {
     await page.route('**/api/projects/*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
     await page.reload();
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
 
     await page.click('.tab-group-btn[data-group="manage"]');
+    await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
     const projectTabBtn = page.locator('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
     await projectTabBtn.click();
     await expect(page.locator('section[data-tab-section="project-admin"]')).toBeVisible();
@@ -208,8 +212,10 @@ test.describe('项目管理列表与抽屉', () => {
     await page.route('**/api/projects/*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
     await page.reload();
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
 
     await page.click('.tab-group-btn[data-group="manage"]');
+    await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
     const projectTabBtn2 = page.locator('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
     await expect(projectTabBtn2).toBeVisible();
     await projectTabBtn2.click();
@@ -242,8 +248,10 @@ test.describe('项目管理列表与抽屉', () => {
     });
     await page.reload();
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
 
     await page.click('.tab-group-btn[data-group="manage"]');
+    await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
     const projectTabBtn3 = page.locator('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
     await expect(projectTabBtn3).toBeVisible();
     await projectTabBtn3.click();
@@ -273,8 +281,10 @@ test.describe('项目管理列表与抽屉', () => {
     });
     await page.reload();
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
 
     await page.click('.tab-group-btn[data-group="manage"]');
+    await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
     const projectTabBtn4 = page.locator('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
     await expect(projectTabBtn4).toBeVisible();
     await projectTabBtn4.click();

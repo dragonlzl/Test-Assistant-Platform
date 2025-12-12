@@ -13,6 +13,7 @@
     tabSection: document.querySelector('[data-tab-section="ops-log"]'),
   };
   var loading = false;
+  var pendingAuth = false;
 
   function setStatus(text, type) {
     if (!dom.statusEl) return;
@@ -98,8 +99,25 @@
     if (dom.limitSelect) {
       dom.limitSelect.addEventListener('change', refreshLogs);
     }
-    if (dom.tabBtn) {
-      dom.tabBtn.addEventListener('click', refreshLogs);
+    // 页签切换由统一事件驱动，避免“刷新后恢复页签但不加载数据”的问题。
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('app-tab-activated', function(e) {
+        var tabName = e && e.detail ? e.detail.tab : '';
+        if (tabName !== 'ops-log') return;
+        if (window.app && window.app.authReady !== true) {
+          pendingAuth = true;
+          setStatus('登录信息加载中...', '');
+          return;
+        }
+        refreshLogs();
+      });
+      window.addEventListener('app-auth-ready', function() {
+        if (!pendingAuth) return;
+        pendingAuth = false;
+        // 仅在当前页签可见时补一次刷新，避免无意义请求。
+        var visible = dom.tabSection && !dom.tabSection.classList.contains('hidden');
+        if (visible) refreshLogs();
+      });
     }
   }
 

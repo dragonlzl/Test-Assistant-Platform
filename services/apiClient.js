@@ -1,15 +1,33 @@
 (function() {
   var tokenKey = 'tap-auth-token';
+  var loginSeqKey = 'tap-login-seq';
   var authToken = '';
+
+  function generateLoginSeq() {
+    // ES2019 兼容：用时间戳 + 随机数即可区分每次登录会话。
+    var rand = Math.random().toString(16).slice(2);
+    return String(Date.now()) + '-' + rand;
+  }
 
   function setToken(token) {
     authToken = token || '';
     if (typeof localStorage !== 'undefined') {
       try {
         if (authToken) {
+          var prevToken = '';
+          try {
+            prevToken = localStorage.getItem(tokenKey) || '';
+          } catch (e) {
+            prevToken = '';
+          }
           localStorage.setItem(tokenKey, authToken);
+          // 仅当 token 发生变化（通常是重新登录）才生成新的 loginSeq。
+          if (prevToken !== authToken) {
+            localStorage.setItem(loginSeqKey, generateLoginSeq());
+          }
         } else {
           localStorage.removeItem(tokenKey);
+          localStorage.removeItem(loginSeqKey);
         }
       } catch (err) {
         // ignore
@@ -28,6 +46,16 @@
 
   function clearToken() {
     setToken('');
+    // 顺带清理与页签恢复相关的 session 标记，避免残留影响“重新登录回主页”。
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('tap-active-tab-login-seq');
+        sessionStorage.removeItem('usecase-active-tab');
+        sessionStorage.removeItem('tap-force-default-tab');
+      }
+    } catch (err) {
+      // ignore
+    }
   }
 
   function buildHeaders() {

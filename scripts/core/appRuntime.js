@@ -356,18 +356,45 @@
       });
     })();
 
+    function getLoginSeq() {
+      try {
+        if (typeof localStorage !== 'undefined') {
+          return localStorage.getItem('tap-login-seq') || '';
+        }
+      } catch (err) {
+        // ignore
+      }
+      return '';
+    }
+
+    function persistActiveTabForSession(name) {
+      if (!name) return;
+      if (!activeTabKey || typeof sessionStorage === 'undefined') return;
+      try {
+        sessionStorage.setItem(activeTabKey, name);
+        var seq = getLoginSeq();
+        if (seq) sessionStorage.setItem('tap-active-tab-login-seq', seq);
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function getActiveTabFromDom() {
+      // 兜底：如果某些路径未走 switchTab，也尽量从 DOM 推断当前可见页签并持久化。
+      var btn = document.querySelector('[data-tab-btn].active');
+      var tab = btn && btn.dataset ? btn.dataset.tabBtn : '';
+      return tab || (state && state.activeTab ? state.activeTab : '');
+    }
+
     function switchTab(name) {
       if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
         window.app.drawer.closeAllDrawers();
       }
       state.activeTab = name;
-      if (activeTabKey && typeof localStorage !== 'undefined') {
-        try {
-          localStorage.setItem(activeTabKey, name);
-        } catch (err) {
-          // ignore
-        }
-      }
+      // Only persist within the current tab session:
+      // - refresh should restore the current tab
+      // - re-login should go back to default (login flow clears sessionStorage)
+      persistActiveTabForSession(name);
       dom.tabButtons.forEach(function(btn) {
         btn.classList.toggle('active', btn.dataset && btn.dataset.tabBtn === name);
       });
@@ -414,8 +441,31 @@
       markActiveTabGroup(name);
       var grp = getGroupNameForTab(name);
       showTabGroup(grp, { keepTabActive: true, expand: false });
+      // 给各业务模块一个统一的“页签激活”钩子：用于刷新后恢复页签时也能自动拉取数据。
+      try {
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+          window.dispatchEvent(new CustomEvent('app-tab-activated', { detail: { tab: name } }));
+        }
+      } catch (err) {
+        // ignore
+      }
     }
     api.switchTab = switchTab;
+    // 兜底：页面刷新/关闭前再写一次 activeTab，避免少数情况下首次切页后未落到 sessionStorage 的问题。
+    try {
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('beforeunload', function() {
+          persistActiveTabForSession(getActiveTabFromDom());
+        });
+        window.addEventListener('visibilitychange', function() {
+          if (document && document.visibilityState === 'hidden') {
+            persistActiveTabForSession(getActiveTabFromDom());
+          }
+        });
+      }
+    } catch (err) {
+      // ignore
+    }
     document.addEventListener('click', function(e) {
       if (blockSidebarIfDrawerOpen(e)) return;
       const tabBtn = e && e.target && e.target.closest ? e.target.closest('[data-tab-btn]') : null;
@@ -539,12 +589,30 @@
       function resolveInitialTab() {
         var defaultTab = 'auto';
         var saved = '';
-        if (activeTabKey && typeof localStorage !== 'undefined') {
+        if (activeTabKey && typeof sessionStorage !== 'undefined') {
           try {
-            saved = localStorage.getItem(activeTabKey) || '';
+            saved = sessionStorage.getItem(activeTabKey) || '';
           } catch (err) {
             saved = '';
           }
+        }
+        // 仅在同一次登录会话内恢复页签（避免登出/重新登录回到旧页签）。
+        try {
+          if (saved && typeof sessionStorage !== 'undefined') {
+            var tabSeq = sessionStorage.getItem('tap-active-tab-login-seq') || '';
+            var loginSeq = '';
+            if (typeof localStorage !== 'undefined') loginSeq = localStorage.getItem('tap-login-seq') || '';
+            if (loginSeq && !tabSeq) {
+              // 补写一次，避免首次切页后刷新不生效需要第二次。
+              sessionStorage.setItem('tap-active-tab-login-seq', loginSeq);
+              tabSeq = loginSeq;
+            }
+            if (loginSeq && tabSeq && tabSeq !== loginSeq) {
+              saved = '';
+            }
+          }
+        } catch (err) {
+          // ignore
         }
         var tabs = [];
         if (dom.tabButtons && dom.tabButtons.length) {

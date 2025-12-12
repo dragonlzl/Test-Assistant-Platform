@@ -21,6 +21,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def disable_static_cache(request, call_next):
+    # 避免浏览器缓存旧的静态资源导致“逻辑已更新但页面仍表现为旧版本”。
+    # API 请求不受影响。
+    response = await call_next(request)
+    path = request.url.path or ""
+    if path.startswith("/api/"):
+        return response
+    if path == "/" or path.endswith((".html", ".js", ".css")):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
 
 def _run_startup_tasks() -> None:
     Base.metadata.create_all(bind=engine)
