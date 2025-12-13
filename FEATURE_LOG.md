@@ -701,7 +701,16 @@
 - 新增内容/接口/组件：新增执行总览顶部导航 DOM（`index.html`），项目按钮容器 `#execOverviewNavProjects`；执行总览改为在顶部渲染项目按钮并绑定切换逻辑（`scripts/modules/execOverview.js`）；页签切换时隐藏默认 `#flowNav`（`scripts/core/appRuntime.js`）；补充样式 `display: contents` 以便项目按钮与导航卡片同排展示（`style.css`）；更新 UI 用例覆盖“两项目按钮/切换项目/版本筛选/用例明细”（`tests/ui/exec_overview.spec.js`）。  
 - 复用说明：复用现有 `listProjects/listProjectVersions/getExecutionOverview` 接口与导航卡片样式 `nav-entry-card`，仅调整渲染位置与交互入口。  
 - 测试与验证：`npm run test:ui -- tests/ui/exec_overview.spec.js tests/ui/project_admin_drawer.spec.js tests/ui/user_admin_drawer.spec.js`（3 workers 并发通过）。  
-- 更新记录：无  
+- 更新记录：美化执行总览版本选择框样式（`style.css`）。  
+
+- 功能名称：用例库导入/编辑/转执行全链路（DB 接入）  
+- 功能描述：用例库页新增独立顶部导航卡片（导入用例/编辑用例&转到执行/选择用例执行）取代默认“AI 一键步骤”；用例库接入后端 DB：导入需选项目+版本（同名校验按“项目+版本”，文件名清洗去导出标识与后缀并记录导入人）；编辑抽屉按项目拉取文件列表（展示导入人/导入时间/最近更新人/更新时间）；进入编辑后在页内“用例编辑视图卡片”复用执行视图样式与交互（无缺陷链接），支持搜索/分页/内容编辑与增删撤回（超时入库）；支持一键“转到执行”，同名覆盖提示并按“模块+标题+预期”保留执行结果字段。  
+- 操作方式：进入“用例相关 → 用例库”→顶部点“导入用例”选择文件→选择项目→选择版本→确认入库；点“编辑用例&转到执行”选择项目→确认→列表点“编辑”进入页内编辑卡片→直接点表格内容修改/点＋/−增删（可 8s 撤回）→点“转到执行”；点“选择用例执行”选择项目与版本→确认→列表点“转到执行”。  
+- 使用效果：用例库入口聚合到顶部导航，导入/维护更聚焦；用例条目可持续入库维护，并可快速转入执行页且尽量保留已有执行结果。  
+- 新增内容/接口/组件：用例库导航/抽屉/编辑卡片与样式（`index.html`、`style.css`）；用例库交互模块（`scripts/modules/caseLibrary.js`）；暴露执行页能力供用例库复用（`scripts/modules/app.js`）；切页时隐藏默认 `#flowNav`（`scripts/core/appRuntime.js`）；后端文件名清洗（`backend/utils.py`）；用例文件列表补充导入人与最近更新人字段（`backend/schemas.py`、`backend/routers/cases.py`）；新增用例条目增删接口并支持可选字段置空入库（`backend/routers/cases.py`、`services/apiClient.js`）；执行集追加接口批次内去重保护（`backend/routers/exec_routes.py`）；健康检查返回 DB 文件名（`backend/api.py`）；新增自动化（`tests/ui/case_library.spec.js`、`tests/api/case_library.spec.js`、`tests/fixtures/case_library_import.json`）。  
+- 复用说明：复用现有抽屉组件 `window.app.drawer`、执行视图样式/分页设置（`state.tempExecPageSize`）、以及执行页文件结构创建能力（`window.app.tempExecApi.createTempExecFile`），仅在用例库侧封装“同名覆盖/保留结果/增删撤回入库”的流程。  
+- 测试与验证：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js scripts/modules/caseLibrary.js services/apiClient.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）；API：`APP_DB_FILE=apitest.db python3.9 -m uvicorn backend.main:app --host 127.0.0.1 --port 18081` 启动测试服务后执行 `API_BASE_URL=http://127.0.0.1:18081 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过，健康检查断言使用测试库）。  
+- 更新记录：美化用例库项目/版本选择框样式，并为项目选择框设置最小宽度确保 6 个中文项目名完整展示（`style.css`）。  
 
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  

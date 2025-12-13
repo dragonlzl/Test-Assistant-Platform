@@ -177,6 +177,57 @@
 	    </div>
 	  </div>
 	</div>
+  <div class="tempexec-head hidden" data-tab-section="case-library" id="caseLibraryHead">
+    <div class="flow" id="caseLibraryFlowNav">
+      <div class="flow-title">用例库导航</div>
+      <p class="hint" style="margin:0 0 6px;">用例库相关入口汇总于此，点击卡片快速打开。</p>
+      <div class="nav-entry-grid">
+        <button class="nav-entry-card nav-entry-import" id="openCaseLibraryImportDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M12 3v9"></path>
+              <path d="M9.5 9.5 12 12l2.5-2.5"></path>
+              <rect x="5" y="13" width="14" height="6" rx="2"></rect>
+              <path d="M9 16h6"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">导入用例</span>
+            <span class="nav-entry-desc">选择文件并入库（需选项目/版本）</span>
+          </span>
+        </button>
+        <button class="nav-entry-card nav-entry-view" id="openCaseLibraryEditDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M4 20h4"></path>
+              <path d="M13.5 6.5 17.5 10.5"></path>
+              <path d="M6 18 14.5 9.5l4 4L10 22H6z"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">编辑用例&转到执行</span>
+            <span class="nav-entry-desc">编辑用例库并一键转到执行页</span>
+          </span>
+        </button>
+        <button class="nav-entry-card nav-entry-overview" id="openCaseLibrarySelectExecDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M8 5h8"></path>
+              <path d="M8 9h5"></path>
+              <path d="M8 13h8"></path>
+              <path d="M8 17h5"></path>
+              <path d="M18 8v8"></path>
+              <path d="M15.5 10.5 18 8l2.5 2.5"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">选择用例执行</span>
+            <span class="nav-entry-desc">从用例库选择用例并转到执行页</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
 	<div class="tempexec-head hidden" data-tab-section="tempexec">
 	  <div class="flow" id="tempexecFlowNav">
 	    <div class="flow-title">功能导航</div>
@@ -1362,9 +1413,160 @@
 <section class="card hidden" data-tab-section="case-library">
 <h2>用例库</h2>
 <div class="card-body">
-<p class="hint">登录后可导入/编辑用例库。后续将接入项目/版本选择、同名校验与转执行操作。</p>
+<div class="case-library" id="caseLibrary">
+  <p class="hint">提示：请使用顶部导航进行导入、编辑或选择用例转到执行。</p>
+  <p class="status" id="caseLibraryStatus"></p>
+
+  <div class="card hidden" id="caseLibraryEditCard">
+    <h3 id="caseLibraryEditCardTitle">用例编辑视图</h3>
+    <div class="card-body">
+      <div class="case-library-drawer-meta">
+        <div class="meta-line">
+          <span class="label">项目</span>
+          <span class="value" id="caseLibraryEditProject">--</span>
+        </div>
+        <div class="meta-line">
+          <span class="label">版本</span>
+          <span class="value" id="caseLibraryEditVersion">--</span>
+        </div>
+        <div class="meta-line">
+          <span class="label">用例名</span>
+          <span class="value" id="caseLibraryEditFileName">--</span>
+        </div>
+      </div>
+      <div class="case-library-drawer-toolbar">
+        <input id="caseLibraryEditSearchInput" type="text" placeholder="搜索模块/标题/预期/步骤/备注"/>
+        <div class="case-library-drawer-actions">
+          <button class="secondary" id="caseLibraryEditClearSearchBtn" type="button">清空</button>
+          <button class="primary" id="caseLibraryEditToExecBtn" type="button">转到执行</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibraryEditStatus"></p>
+      <div class="temp-case-view" id="caseLibraryEditView"></div>
+    </div>
+  </div>
+</div>
 </div>
 </section>
+<div class="drawer" id="caseLibraryImportDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryImportDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>导入用例</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryImportDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">拖拽或选择文件后，还需要选择项目与版本，点击确认才会入库。</p>
+      <label class="zone" id="caseLibraryImportDropZone">
+        <input accept=".xmind,.json,.txt,.csv" hidden="" id="caseLibraryImportInput" multiple="" type="file"/>
+        <div class="zone-line"><strong>拖拽</strong><span>用例文件到此处，或点击选择</span></div>
+        <p class="hint" id="caseLibraryImportFileHint">未选择文件</p>
+      </label>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryImportProjectSelect">项目</label>
+          <select id="caseLibraryImportProjectSelect"></select>
+          <label class="case-library-label" for="caseLibraryImportVersionSelect">版本</label>
+          <select id="caseLibraryImportVersionSelect" disabled></select>
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="primary" id="caseLibraryImportConfirmBtn" type="button" disabled>确认入库</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibraryImportStatus"></p>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibraryImportDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseLibraryEditDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryEditDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>编辑用例&转到执行</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryEditDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryEditProjectSelect">项目</label>
+          <select id="caseLibraryEditProjectSelect"></select>
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="primary" id="caseLibraryEditConfirmBtn" type="button">确认</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibraryEditDrawerStatus"></p>
+      <div class="admin-table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>所属项目</th>
+              <th>版本</th>
+              <th>用例名</th>
+              <th>导入人员</th>
+              <th>导入时间</th>
+              <th>最近更新人员</th>
+              <th>更新时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryEditListBody">
+            <tr><td colspan="8"><p class="hint">请选择项目后点击确认。</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibraryEditDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseLibrarySelectExecDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibrarySelectExecDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>选择用例执行</h3>
+      <button class="link-toggle" data-drawer-close="caseLibrarySelectExecDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibrarySelectProjectSelect">项目</label>
+          <select id="caseLibrarySelectProjectSelect"></select>
+          <label class="case-library-label" for="caseLibrarySelectVersionSelect">版本</label>
+          <select id="caseLibrarySelectVersionSelect" disabled></select>
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="primary" id="caseLibrarySelectConfirmBtn" type="button">确认</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibrarySelectDrawerStatus"></p>
+      <div class="admin-table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>所属项目</th>
+              <th>版本</th>
+              <th>用例名</th>
+              <th>导入人员</th>
+              <th>导入时间</th>
+              <th>更新时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibrarySelectListBody">
+            <tr><td colspan="7"><p class="hint">请选择项目后点击确认。</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibrarySelectExecDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
 <section class="card hidden" data-tab-section="project-admin" data-role="admin-only">
 <h2>项目管理</h2>
 <div class="card-body" id="projectAdmin">
@@ -1608,6 +1810,7 @@
 <script src="./scripts/modules/auto.js" defer></script>
 <script src="./scripts/modules/casesgen.js" defer></script>
 <script src="./scripts/modules/tempexec.js" defer></script>
+<script src="./scripts/modules/caseLibrary.js" defer></script>
 <script src="./scripts/modules/execOverview.js" defer></script>
 <script src="./scripts/modules/opsLog.js" defer></script>
 <script src="./scripts/modules/admin.js" defer></script>

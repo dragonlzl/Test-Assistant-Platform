@@ -149,6 +149,8 @@ def add_cases_from_library(
         )
         db.add(exec_case)
         new_cases.append(exec_case)
+        # 防止同一批次请求中出现重复模块+标题，导致执行集写入重复用例。
+        existing_keys.add(key)
     log_operation(
         db=db,
         user_id=user.id,

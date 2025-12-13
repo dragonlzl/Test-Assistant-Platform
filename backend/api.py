@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from .routers import auth, users, projects, cases, exec_routes, configs, ops
+from .config import settings
 
 
 api_router = APIRouter(prefix="/api")
@@ -15,4 +16,4 @@ api_router.include_router(ops.router)
 
 @api_router.get("/health", tags=["health"])
 def health_check():
-    return {"status": "ok"}
+    return {"status": "ok", "db_file": settings.db_file}

@@ -219,6 +219,89 @@
     }).then(handleResponse);
   }
 
+  function listCaseFiles(projectId) {
+    var query = [];
+    if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
+    var url = '/api/case-files';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function importCaseFile(payload) {
+    return fetch('/api/case-files/import', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function listCaseItems(caseFileId) {
+    return fetch('/api/case-files/' + caseFileId + '/items', {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function updateCaseItem(caseItemId, payload) {
+    return fetch('/api/case-files/items/' + caseItemId, {
+      method: 'PATCH',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function createCaseItem(caseFileId, payload) {
+    return fetch('/api/case-files/' + caseFileId + '/items', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function deleteCaseItem(caseItemId) {
+    return fetch('/api/case-files/items/' + caseItemId, {
+      method: 'DELETE',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function listExecSets(projectId) {
+    var query = [];
+    if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
+    var url = '/api/exec/sets';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function createExecSet(payload) {
+    return fetch('/api/exec/sets', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function listExecCases(execSetId) {
+    return fetch('/api/exec/sets/' + execSetId + '/cases', {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function addExecCasesFromLibrary(execSetId, caseItemIds) {
+    return fetch('/api/exec/sets/' + execSetId + '/cases/from-library', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify({ case_item_ids: caseItemIds || [] }),
+    }).then(handleResponse);
+  }
+
   function deleteVersion(projectId, versionId) {
     return fetch('/api/projects/' + projectId + '/versions/' + versionId, {
       method: 'DELETE',
@@ -367,6 +450,16 @@
     createVersion: createVersion,
     listProjectVersions: listProjectVersions,
     deleteVersion: deleteVersion,
+    listCaseFiles: listCaseFiles,
+    importCaseFile: importCaseFile,
+    listCaseItems: listCaseItems,
+    updateCaseItem: updateCaseItem,
+    createCaseItem: createCaseItem,
+    deleteCaseItem: deleteCaseItem,
+    listExecSets: listExecSets,
+    createExecSet: createExecSet,
+    listExecCases: listExecCases,
+    addExecCasesFromLibrary: addExecCasesFromLibrary,
     listSettings: listSettings,
     saveSettings: saveSettings,
     listModelConfigs: listModelConfigs,

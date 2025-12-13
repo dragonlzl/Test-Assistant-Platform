@@ -1111,6 +1111,8 @@
     Object.keys(tempExecDefaults).forEach(function(key) {
       if (!tempExecApi[key]) tempExecApi[key] = tempExecDefaults[key];
     });
+    // 供用例库等独立模块复用执行页能力（转到执行/保留结果等）
+    window.app.tempExecApi = tempExecApi;
     const getTempExecPageSizeFn = tempExecApi.getTempExecPageSize || function() { return defaultTempExecPageSize; };
     state.tempExecPageSize = getTempExecPageSizeFn();
     api.createTempExecFile = tempExecApi.createTempExecFile || api.createTempExecFile;

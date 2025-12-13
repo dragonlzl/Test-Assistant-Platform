@@ -11,10 +11,18 @@ from datetime import datetime, timezone
 
 def clean_case_file_name(name: str) -> str:
     """Strip导出标识/后缀，返回干净的用例文件名基线。"""
-    base = os.path.basename(name or "")
-    base = re.sub(r"\.(xmind|json|txt|csv)$", "", base, flags=re.IGNORECASE)
-    base = re.sub(r"(?:_result)?_\d{14}$", "", base)
-    base = re.sub(r"^勾选用例[-_]*", "", base)
+    base = os.path.basename(name or "").strip()
+    # 去除后缀（不限扩展名，避免导出/二次命名带来的非预期扩展名残留）
+    base = re.sub(r"\.[^.]+$", "", base)
+    # 去除导出/导出 XMind 的时间戳标识（支持多次导出导致的重复后缀）
+    # 兼容两种格式：
+    # - _YYYYMMDDHHMMSS（14 位）
+    # - _YYYYMMDD_HHMMSS（8+6，中间可有下划线）
+    ts_pattern = re.compile(r"(_result)?_\d{8}(?:_?\d{6})?$", flags=re.IGNORECASE)
+    while ts_pattern.search(base):
+        base = ts_pattern.sub("", base)
+    # 去除“勾选用例”前缀（用例生成/导出默认命名）
+    base = re.sub(r"^勾选用例[-_]*", "", base, flags=re.IGNORECASE)
     base = base.strip().strip("_- ")
     return base or "case"
 

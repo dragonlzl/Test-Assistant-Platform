@@ -123,8 +123,11 @@ class CaseFileOut(BaseModel):
     version_id: Optional[int]
     file_name_clean: str
     importer_id: Optional[int]
+    importer_name: Optional[str] = None
     imported_at: datetime
     updated_at: datetime
+    last_updated_by: Optional[int] = None
+    last_updated_by_name: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 

@@ -3761,6 +3761,171 @@ body {
 .exec-overview-nav-projects {
   display: contents;
 }
+
+.case-library-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.case-library-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.case-library-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.case-library-filters select,
+.case-library-filters input {
+  min-height: 34px;
+}
+
+.case-library-filters select,
+#execOverviewVersionSelect {
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 8px 34px 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px 16px;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.2;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+
+.case-library-filters select:hover:not(:disabled),
+#execOverviewVersionSelect:hover:not(:disabled) {
+  border-color: #cbd5e1;
+}
+
+.case-library-filters select:focus,
+#execOverviewVersionSelect:focus {
+  outline: none;
+  border-color: rgba(37, 99, 235, 0.55);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.case-library-filters select:disabled,
+#execOverviewVersionSelect:disabled {
+  cursor: not-allowed;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  background-color: #f8fafc;
+  box-shadow: none;
+}
+
+.exec-overview-detail-head label.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#execOverviewVersionSelect {
+  min-width: 9em;
+}
+
+/* 项目名最长 6 个中文，确保下拉选择框可完整展示 */
+#caseLibraryImportProjectSelect,
+#caseLibraryEditProjectSelect,
+#caseLibrarySelectProjectSelect {
+  min-width: 11em;
+}
+
+#caseLibraryImportVersionSelect,
+#caseLibrarySelectVersionSelect {
+  min-width: 9em;
+}
+
+.case-library-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.case-library-pagination {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.case-library-drawer-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.case-library-drawer-meta .meta-line {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.case-library-drawer-meta .label {
+  color: var(--muted);
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.case-library-drawer-meta .value {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.case-library-drawer-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 0;
+}
+
+.case-library-drawer-toolbar input {
+  min-height: 34px;
+}
+
+.case-library-drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.case-library-drawer-actions input {
+  width: min(320px, 60vw);
+}
+
+.case-library-items-table th.check,
+.case-library-items-table td.check {
+  width: 44px;
+  text-align: center;
+}
 .exec-overview-toolbar {
   display: flex;
   align-items: center;
