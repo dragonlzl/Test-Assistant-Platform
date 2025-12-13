@@ -198,12 +198,24 @@ class ExecOverviewOut(BaseModel):
     project_id: int
     version_id: Optional[int]
     user_id: Optional[int]
+    username: Optional[str] = None
     total: int
     pending: int
     passed: int
     failed: int
     blocked: int
     not_applicable: int
+
+
+class ExecOverviewCaseOut(BaseModel):
+    exec_case_id: int
+    exec_set_id: int
+    exec_set_name: str
+    version_id: Optional[int]
+    module: str
+    title: str
+    status: str
+    updated_at: datetime
 
 
 class SettingItem(BaseModel):

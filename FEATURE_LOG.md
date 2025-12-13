@@ -649,6 +649,33 @@
 - 测试与验证：`node --check scripts/core/appRuntime.js scripts/modules/authGuard.js scripts/modules/admin.js scripts/modules/opsLog.js scripts/base/state.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/project_admin_refresh_restore.spec.js tests/ui/login_tab_reset.spec.js tests/ui/project_admin_drawer.spec.js --workers=1`（通过）。  
 - 更新记录：改为“登录会话隔离”策略：引入 `localStorage(tap-login-seq)` 与 `sessionStorage(tap-active-tab-login-seq)`，仅在同一次登录会话内恢复页签；显式登出同时写入 local/session `tap-force-default-tab` 强制下一次进入回主页；并修复刷新后在鉴权未就绪前进入“项目管理/人员管理/操作记录”导致首次空列表的问题（鉴权就绪后自动补加载）；后端静态资源增加 `Cache-Control: no-store`，避免浏览器/代理缓存旧 JS 导致“已更新但仍像旧版本”；修复 `tap-force-default-tab` 在 sessionStorage 已命中时未同步清理 localStorage，导致“重新登录后第一次切页刷新仍回主页，需要第二次才正常”的问题；更新 UI 用例 `tests/ui/login_tab_reset.spec.js` 覆盖该回归。  
 
+- 功能名称：执行总览页接入后端聚合接口（项目卡片/版本筛选/人员汇总/用例明细）  
+- 功能描述：补齐“执行总览”页签的 DB 接入能力：登录后展示所属项目卡片；选择项目后可按版本筛选，按人员展示执行统计，并支持展开查看用例明细列表（最多 200 条）。  
+- 操作方式：登录 → 进入“执行总览” → 选择项目 →（可选）选择版本 → 查看人员统计 → 点击“查看用例”展开明细。  
+- 使用效果：无需依赖浏览器缓存即可查看项目/版本维度的执行进度，且能快速定位到具体用例明细。  
+- 新增内容/接口/组件：新增前端模块 `scripts/modules/execOverview.js` 与执行总览 DOM/样式（`index.html`、`style.css`）；扩展 `services/apiClient.js`（`listProjectVersions/getExecutionOverview/listExecutionOverviewCases`）；后端扩展 `/api/exec/overview` 返回 `username`，并新增 `/api/exec/overview/cases` 明细接口（`backend/routers/exec_routes.py`、`backend/schemas.py`）。  
+- 复用说明：复用既有鉴权/项目权限校验、`app-tab-activated/app-auth-ready` 事件钩子与 API client 封装方式；后端复用现有 exec_set/exec_case 数据结构，仅补齐总览读取接口。  
+- 测试与验证：`node --check services/apiClient.js scripts/modules/execOverview.js`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_overview.spec.js`（通过，本地 FastAPI 服务）。  
+- 更新记录：补充 SQLite 轻量迁移：启动时自动为历史库给 `exec_cases` 增加缺失的 `executor_id` 列，避免出现 `no such column: exec_cases.executor_id` 导致的 500（`backend/migrations.py`、`backend/main.py`）。  
+
+- 功能名称：项目管理同名项目错误提示显示在抽屉内  
+- 功能描述：修复“新建项目时项目名已存在，但错误提示显示在列表页顶部，用户在抽屉内难以发现”的问题：同名/校验类错误统一展示在项目抽屉内。  
+- 操作方式：进入“项目管理”→“新建项目”→输入已存在的项目名→点击保存；错误提示出现在抽屉内。  
+- 使用效果：用户无需视线跳转即可在当前抽屉内看到失败原因，减少误以为无响应。  
+- 新增内容/接口/组件：项目抽屉新增状态位 `#projectFormStatus`（`index.html`），并调整 `scripts/modules/admin.js` 的项目保存提示位置；新增 UI 用例 `tests/ui/project_admin_duplicate_error_in_drawer.spec.js`。  
+- 复用说明：复用现有状态提示 `setStatus` 与抽屉交互逻辑，仅调整提示展示容器。  
+- 测试与验证：`node --check scripts/modules/admin.js`（通过）；`npm run test:ui -- tests/ui/project_admin_duplicate_error_in_drawer.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：模型管理新增模型同名校验与删除二次确认  
+- 功能描述：新增模型保存时做名称同名校验（避免重复模型名导致指派混乱/远端保存失败）；删除模型需二次确认后才会执行删除。  
+- 操作方式：在“模型管理”新增模型时输入与已有模型相同的模型名称并保存，会在表单内提示“模型名称已存在”；删除模型时会弹出两次确认。  
+- 使用效果：避免重复模型名引发误选/覆盖；删除操作更安全，降低误删概率。  
+- 新增内容/接口/组件：`scripts/modules/models.js` 增加 `normalizeModelName/hasDuplicateModelName` 校验逻辑；新增 UI 用例 `tests/ui/models_name_duplicate_and_delete_confirm.spec.js`。  
+- 复用说明：复用现有模型表单与状态提示 `setStatus`、列表删除入口，仅增加校验与确认。  
+- 测试与验证：`node --check scripts/modules/models.js`（通过）；`npm run test:ui -- tests/ui/models_name_duplicate_and_delete_confirm.spec.js`（通过）。  
+- 更新记录：无  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  

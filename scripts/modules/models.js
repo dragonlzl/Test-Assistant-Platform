@@ -87,6 +87,25 @@
       return String(stable);
     }
 
+    function normalizeModelName(name) {
+      if (name === undefined || name === null) return '';
+      return String(name).trim().toLowerCase();
+    }
+
+    function hasDuplicateModelName(model) {
+      if (!model) return false;
+      var targetId = getStableModelId(model);
+      var targetName = normalizeModelName(model.name);
+      if (!targetName) return false;
+      if (!Array.isArray(state.models)) return false;
+      return state.models.some(function(m) {
+        if (!m) return false;
+        var id = getStableModelId(m);
+        if (id && targetId && id === targetId) return false;
+        return normalizeModelName(m.name) === targetName;
+      });
+    }
+
     function findModelByAnyId(value) {
       var target = value === undefined || value === null ? '' : String(value);
       if (!target) return null;
@@ -636,6 +655,10 @@
       };
       if (!model.baseUrl || !model.apiKey || !model.model) {
         setStatus(modelFormStatus, '请至少填写接口、API Key、模型 ID', 'warn');
+        return;
+      }
+      if (hasDuplicateModelName(model)) {
+        setStatus(modelFormStatus, '模型名称已存在，请换一个名称', 'warn');
         return;
       }
       const exists = state.models.findIndex(m => getStableModelId(m) === model.id);

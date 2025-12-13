@@ -9,6 +9,7 @@ from .api import api_router
 from .config import BASE_DIR, settings
 from .db import Base, SessionLocal, engine
 from .initial_data import init_db
+from .migrations import apply_migrations
 
 
 app = FastAPI(title=settings.app_name)
@@ -36,6 +37,8 @@ async def disable_static_cache(request, call_next):
 
 
 def _run_startup_tasks() -> None:
+    # 先做增量迁移，再 create_all，避免历史库缺列导致启动后接口 500。
+    apply_migrations(engine)
     Base.metadata.create_all(bind=engine)
     db: Session = SessionLocal()
     try:

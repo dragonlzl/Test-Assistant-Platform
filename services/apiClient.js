@@ -212,6 +212,13 @@
     }).then(handleResponse);
   }
 
+  function listProjectVersions(projectId) {
+    return fetch('/api/projects/' + projectId + '/versions', {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
   function deleteVersion(projectId, versionId) {
     return fetch('/api/projects/' + projectId + '/versions/' + versionId, {
       method: 'DELETE',
@@ -310,6 +317,33 @@
     }).then(handleResponse);
   }
 
+  function getExecutionOverview(projectId, versionId) {
+    var query = [];
+    if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
+    if (versionId || versionId === 0) query.push('version_id=' + encodeURIComponent(versionId));
+    var url = '/api/exec/overview';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function listExecutionOverviewCases(params) {
+    var query = [];
+    if (params && (params.project_id || params.project_id === 0)) query.push('project_id=' + encodeURIComponent(params.project_id));
+    if (params && (params.version_id || params.version_id === 0)) query.push('version_id=' + encodeURIComponent(params.version_id));
+    if (params && (params.user_id || params.user_id === 0)) query.push('user_id=' + encodeURIComponent(params.user_id));
+    if (params && (params.limit || params.limit === 0)) query.push('limit=' + encodeURIComponent(params.limit));
+    if (params && (params.offset || params.offset === 0)) query.push('offset=' + encodeURIComponent(params.offset));
+    var url = '/api/exec/overview/cases';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
   window.app = window.app || {};
   window.app.apiClient = {
     setToken: setToken,
@@ -331,6 +365,7 @@
     updateProject: updateProject,
     deleteProject: deleteProject,
     createVersion: createVersion,
+    listProjectVersions: listProjectVersions,
     deleteVersion: deleteVersion,
     listSettings: listSettings,
     saveSettings: saveSettings,
@@ -341,5 +376,7 @@
     createFeatureAssignment: createFeatureAssignment,
     updateFeatureAssignment: updateFeatureAssignment,
     listOperationLogs: listOperationLogs,
+    getExecutionOverview: getExecutionOverview,
+    listExecutionOverviewCases: listExecutionOverviewCases,
   };
 })();

@@ -44,6 +44,8 @@ def create_exec_set(
         updated_at=datetime.now(timezone.utc),
     )
     db.add(exec_set)
+    # 先 flush，确保 log 里能拿到 exec_set.id
+    db.flush()
     log_operation(
         db=db,
         user_id=user.id,
@@ -246,6 +248,14 @@ def get_execution_overview(
         query = query.filter(models.ExecSet.version_id == version_id)
     query = query.group_by("project_id", "version_id", "user_id")
     rows = query.all()
+    user_ids = [row.user_id for row in rows if row.user_id is not None]
+    usernames = {}
+    if user_ids:
+        # 执行总览需要展示“人员”，这里一次性批量取 username，避免 N+1。
+        for uid, uname in db.query(models.User.id, models.User.username).filter(
+            models.User.id.in_(list(set(user_ids)))
+        ):
+            usernames[uid] = uname
     result = []
     for row in rows:
         total_failed = (row.failed_en or 0) + (row.failed_cn or 0)
@@ -257,12 +267,62 @@ def get_execution_overview(
                 project_id=row.project_id,
                 version_id=row.version_id,
                 user_id=row.user_id,
+                username=usernames.get(row.user_id) if row.user_id is not None else None,
                 total=row.total or 0,
                 pending=row.pending or 0,
                 passed=passed,
                 failed=total_failed,
                 blocked=total_blocked,
                 not_applicable=total_na,
+            )
+        )
+    return result
+
+
+@router.get("/overview/cases", response_model=List[schemas.ExecOverviewCaseOut])
+def list_execution_overview_cases(
+    project_id: int,
+    version_id: int = None,
+    user_id: int = None,
+    limit: int = 200,
+    offset: int = 0,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_project_access(db, user, project_id)
+    safe_limit = max(1, min(int(limit or 200), 1000))
+    safe_offset = max(0, int(offset or 0))
+
+    assigned_user = func.coalesce(
+        models.ExecCase.executor_id, models.ExecCase.updated_by, models.ExecCase.created_by
+    )
+    query = (
+        db.query(models.ExecCase, models.ExecSet)
+        .join(models.ExecSet, models.ExecSet.id == models.ExecCase.exec_set_id)
+        .filter(models.ExecSet.project_id == project_id)
+    )
+    if version_id is not None:
+        query = query.filter(models.ExecSet.version_id == version_id)
+    if user_id is not None:
+        query = query.filter(assigned_user == user_id)
+    rows = (
+        query.order_by(models.ExecCase.updated_at.desc(), models.ExecCase.id.desc())
+        .offset(safe_offset)
+        .limit(safe_limit)
+        .all()
+    )
+    result: List[schemas.ExecOverviewCaseOut] = []
+    for exec_case, exec_set in rows:
+        result.append(
+            schemas.ExecOverviewCaseOut(
+                exec_case_id=exec_case.id,
+                exec_set_id=exec_set.id,
+                exec_set_name=exec_set.name,
+                version_id=exec_set.version_id,
+                module=exec_case.module,
+                title=exec_case.title,
+                status=exec_case.status,
+                updated_at=exec_case.updated_at,
             )
         )
     return result

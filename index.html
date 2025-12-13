@@ -1328,6 +1328,7 @@
         <button class="primary" id="projectSaveBtn" type="button">保存</button>
         <button class="ghost-btn" data-drawer-close="projectDrawer" type="button">取消</button>
       </div>
+      <p class="status" id="projectFormStatus"></p>
     </div>
   </div>
 </div>
@@ -1444,8 +1445,46 @@
 </section>
 <section class="card hidden" data-tab-section="exec-overview">
 <h2>执行总览</h2>
-<div class="card-body">
-<p class="hint">登录后查看所属项目的用例执行概览。后续将按项目卡片展示版本/需求分区，并按人员分组显示执行进度与列表。</p>
+<div class="card-body" id="execOverview">
+  <div class="toolbar exec-overview-toolbar">
+    <button class="secondary" id="execOverviewRefreshBtn" type="button">刷新</button>
+    <span class="status" id="execOverviewStatus"></span>
+  </div>
+  <div class="exec-overview-project-grid" id="execOverviewProjects"></div>
+  <p class="hint hidden" id="execOverviewEmptyProjects">暂无可用项目</p>
+  <div class="exec-overview-detail hidden" id="execOverviewDetail">
+    <div class="exec-overview-detail-head">
+      <button class="ghost-btn" id="execOverviewBackBtn" type="button">返回项目列表</button>
+      <h3 id="execOverviewProjectTitle">项目</h3>
+      <label class="inline">
+        版本
+        <select id="execOverviewVersionSelect"></select>
+      </label>
+    </div>
+    <div class="exec-overview-user-grid" id="execOverviewUserCards"></div>
+    <p class="hint hidden" id="execOverviewEmptyUsers">暂无执行数据</p>
+    <div class="exec-overview-cases hidden" id="execOverviewCasesPanel">
+      <div class="exec-overview-cases-head">
+        <h4 id="execOverviewCasesTitle">用例明细</h4>
+        <button class="ghost-btn" id="execOverviewCasesClose" type="button">收起</button>
+      </div>
+      <div class="table-wrapper">
+        <table class="admin-table exec-overview-cases-table">
+          <thead>
+            <tr>
+              <th>执行集</th>
+              <th>模块</th>
+              <th>用例标题</th>
+              <th>状态</th>
+              <th>更新时间</th>
+            </tr>
+          </thead>
+          <tbody id="execOverviewCasesTableBody"></tbody>
+        </table>
+        <p class="hint hidden" id="execOverviewEmptyCases">暂无用例</p>
+      </div>
+    </div>
+  </div>
 </div>
 </section>
 </main>
@@ -1493,6 +1532,7 @@
 <script src="./scripts/modules/auto.js" defer></script>
 <script src="./scripts/modules/casesgen.js" defer></script>
 <script src="./scripts/modules/tempexec.js" defer></script>
+<script src="./scripts/modules/execOverview.js" defer></script>
 <script src="./scripts/modules/opsLog.js" defer></script>
 <script src="./scripts/modules/admin.js" defer></script>
 <script src="./scripts/modules/authGuard.js" defer></script>

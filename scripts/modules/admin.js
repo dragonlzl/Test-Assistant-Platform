@@ -20,6 +20,7 @@
     projectNameInput: document.getElementById('projectNameInput'),
     projectDescInput: document.getElementById('projectDescInput'),
     projectForm: document.getElementById('projectForm'),
+    projectFormStatus: document.getElementById('projectFormStatus'),
     projectDrawer: document.getElementById('projectDrawer'),
     userStatus: document.getElementById('userStatus'),
     userRefreshBtn: document.getElementById('userRefreshBtn'),
@@ -97,6 +98,7 @@
   function showProjectForm(editing) {
     state.editingProjectId = editing ? editing.id : null;
     setStatus(dom.projectStatus, '', '');
+    setStatus(dom.projectFormStatus, '', '');
     if (dom.projectDrawerTitle) {
       dom.projectDrawerTitle.textContent = editing ? '编辑项目' : '新建项目';
     }
@@ -119,6 +121,7 @@
     dom.projectForm.classList.add('hidden');
     dom.projectNameInput.value = '';
     dom.projectDescInput.value = '';
+    setStatus(dom.projectFormStatus, '', '');
     var drawerInstance = ensureProjectDrawer();
     if (drawerInstance && typeof drawerInstance.close === 'function') {
       drawerInstance.close();
@@ -456,10 +459,11 @@
     const name = dom.projectNameInput.value.trim();
     const desc = dom.projectDescInput.value.trim();
     if (!name) {
-      setStatus(dom.projectStatus, '项目名称不能为空', 'warn');
+      setStatus(dom.projectFormStatus, '项目名称不能为空', 'warn');
       return;
     }
-    setStatus(dom.projectStatus, '保存中...', '');
+    // “新建/编辑项目”的错误提示统一展示在抽屉内，避免用户误以为是列表操作提示。
+    setStatus(dom.projectFormStatus, '保存中...', '');
     const action = state.editingProjectId
       ? api.updateProject(state.editingProjectId, { description: desc })
       : api.createProject({ name: name, description: desc });
@@ -467,7 +471,7 @@
       hideProjectForm();
       return loadProjects();
     }).catch(function(err) {
-      setStatus(dom.projectStatus, err && err.message ? err.message : '保存失败', 'err');
+      setStatus(dom.projectFormStatus, err && err.message ? err.message : '保存失败', 'err');
     });
   }
 
