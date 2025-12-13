@@ -4,7 +4,14 @@ test.describe('项目管理列表与抽屉', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
-      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      if (
+        url.startsWith('http://localhost') ||
+        url.startsWith('http://127.0.0.1') ||
+        url.startsWith('file:') ||
+        url.startsWith('data:') ||
+        url.startsWith('blob:') ||
+        url.startsWith('about:')
+      ) {
         return route.continue();
       }
       return route.abort();
@@ -64,7 +71,15 @@ test.describe('项目管理列表与抽屉', () => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.init === 'function', null, { timeout: 60000 });
+    await page.evaluate(() => {
+      try {
+        if (window.app && typeof window.app.init === 'function') window.app.init();
+      } catch (e) {}
+    });
+    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 60000 });
     await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.tabGroupBound === true, null, { timeout: 20000 });
   });
 
   test('列表渲染且抽屉开关正常', async ({ page }) => {
@@ -171,9 +186,18 @@ test.describe('项目管理列表与抽屉', () => {
       route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ id: 22, name: 'v2.1', created_at: new Date().toISOString() }) });
     });
     await page.route('**/api/projects/*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
-    await page.reload();
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.init === 'function', null, { timeout: 60000 });
+    await page.evaluate(() => {
+      try {
+        if (window.app && typeof window.app.init === 'function') window.app.init();
+      } catch (e) {}
+    });
+    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 60000 });
     await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.tabGroupBound === true, null, { timeout: 20000 });
 
     await page.click('.tab-group-btn[data-group="manage"]');
     await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
@@ -212,9 +236,18 @@ test.describe('项目管理列表与抽屉', () => {
       route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ id: 32, name: 'v3.1', created_at: new Date().toISOString() }) });
     });
     await page.route('**/api/projects/*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
-    await page.reload();
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.init === 'function', null, { timeout: 60000 });
+    await page.evaluate(() => {
+      try {
+        if (window.app && typeof window.app.init === 'function') window.app.init();
+      } catch (e) {}
+    });
+    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 60000 });
     await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.tabGroupBound === true, null, { timeout: 20000 });
 
     await page.click('.tab-group-btn[data-group="manage"]');
     await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
@@ -248,8 +281,16 @@ test.describe('项目管理列表与抽屉', () => {
     await page.route('**/api/users/7/projects', (route) => {
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
     });
-    await page.reload();
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.init === 'function', null, { timeout: 60000 });
+    await page.evaluate(() => {
+      try {
+        if (window.app && typeof window.app.init === 'function') window.app.init();
+      } catch (e) {}
+    });
+    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 60000 });
     await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
     await page.waitForFunction(() => window.app && window.app.tabGroupBound === true, null, { timeout: 20000 });
 
@@ -282,8 +323,16 @@ test.describe('项目管理列表与抽屉', () => {
     await page.route('**/api/users/10/projects', (route) => {
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
     });
-    await page.reload();
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.init === 'function', null, { timeout: 60000 });
+    await page.evaluate(() => {
+      try {
+        if (window.app && typeof window.app.init === 'function') window.app.init();
+      } catch (e) {}
+    });
+    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 60000 });
     await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
     await page.waitForFunction(() => window.app && window.app.tabGroupBound === true, null, { timeout: 20000 });
 

@@ -2,24 +2,25 @@
   var api = window.app && window.app.apiClient;
   if (!api) return;
 
-  var dom = {
-    root: document.getElementById('execOverview'),
-    status: document.getElementById('execOverviewStatus'),
-    refreshBtn: document.getElementById('execOverviewRefreshBtn'),
-    projectList: document.getElementById('execOverviewProjects'),
-    detail: document.getElementById('execOverviewDetail'),
-    backBtn: document.getElementById('execOverviewBackBtn'),
-    projectTitle: document.getElementById('execOverviewProjectTitle'),
-    versionSelect: document.getElementById('execOverviewVersionSelect'),
-    userCards: document.getElementById('execOverviewUserCards'),
-    casesPanel: document.getElementById('execOverviewCasesPanel'),
-    casesTitle: document.getElementById('execOverviewCasesTitle'),
-    casesClose: document.getElementById('execOverviewCasesClose'),
-    casesTableBody: document.getElementById('execOverviewCasesTableBody'),
-    emptyProjects: document.getElementById('execOverviewEmptyProjects'),
-    emptyUsers: document.getElementById('execOverviewEmptyUsers'),
-    emptyCases: document.getElementById('execOverviewEmptyCases'),
-  };
+	  var dom = {
+	    root: document.getElementById('execOverview'),
+	    status: document.getElementById('execOverviewStatus'),
+	    refreshBtn: document.getElementById('execOverviewRefreshBtn'),
+	    navProjects: document.getElementById('execOverviewNavProjects'),
+	    projectList: document.getElementById('execOverviewProjects'),
+	    detail: document.getElementById('execOverviewDetail'),
+	    backBtn: document.getElementById('execOverviewBackBtn'),
+	    projectTitle: document.getElementById('execOverviewProjectTitle'),
+	    versionSelect: document.getElementById('execOverviewVersionSelect'),
+	    userCards: document.getElementById('execOverviewUserCards'),
+	    casesPanel: document.getElementById('execOverviewCasesPanel'),
+	    casesTitle: document.getElementById('execOverviewCasesTitle'),
+	    casesClose: document.getElementById('execOverviewCasesClose'),
+	    casesTableBody: document.getElementById('execOverviewCasesTableBody'),
+	    emptyProjects: document.getElementById('execOverviewEmptyProjects'),
+	    emptyUsers: document.getElementById('execOverviewEmptyUsers'),
+	    emptyCases: document.getElementById('execOverviewEmptyCases'),
+	  };
 
   var state = {
     projects: [],
@@ -65,16 +66,16 @@
     return isNaN(n) ? null : n;
   }
 
-  function showProjectList() {
-    state.currentProject = null;
-    state.currentVersionId = null;
-    state.versions = [];
-    state.overviewRows = [];
-    if (dom.detail) dom.detail.classList.add('hidden');
-    if (dom.projectList) dom.projectList.classList.remove('hidden');
-    if (dom.projectTitle) dom.projectTitle.textContent = '';
-    hideCasesPanel();
-  }
+	  function showProjectList() {
+	    state.currentProject = null;
+	    state.currentVersionId = null;
+	    state.versions = [];
+	    state.overviewRows = [];
+	    if (dom.detail) dom.detail.classList.add('hidden');
+	    if (dom.projectList) dom.projectList.classList.add('hidden');
+	    if (dom.projectTitle) dom.projectTitle.textContent = '';
+	    hideCasesPanel();
+	  }
 
   function showProjectDetail(project) {
     state.currentProject = project || null;
@@ -90,32 +91,44 @@
     if (dom.emptyCases) dom.emptyCases.classList.add('hidden');
   }
 
-  function renderProjects() {
-    if (!dom.projectList) return;
-    var list = Array.isArray(state.projects) ? state.projects : [];
-    if (!list.length) {
-      dom.projectList.innerHTML = '';
-      if (dom.emptyProjects) dom.emptyProjects.classList.remove('hidden');
-      return;
-    }
-    if (dom.emptyProjects) dom.emptyProjects.classList.add('hidden');
-    dom.projectList.innerHTML = list
-      .map(function(p) {
-        var name = p && p.name ? p.name : '未命名项目';
-        var desc = p && p.description ? p.description : '';
-        return (
-          '<button type="button" class="exec-overview-project-card" data-project-id="' +
-          escapeHtml(p.id) +
-          '">' +
-          '<div class="title">' +
-          escapeHtml(name) +
-          '</div>' +
-          (desc ? '<div class="desc">' + escapeHtml(desc) + '</div>' : '') +
-          '</button>'
-        );
-      })
-      .join('');
-  }
+	  function renderProjects() {
+	    var list = Array.isArray(state.projects) ? state.projects : [];
+	    if (!list.length) {
+	      if (dom.projectList) dom.projectList.innerHTML = '';
+	      if (dom.navProjects) dom.navProjects.innerHTML = '';
+	      if (dom.emptyProjects) dom.emptyProjects.classList.remove('hidden');
+	      return;
+	    }
+	    if (dom.emptyProjects) dom.emptyProjects.classList.add('hidden');
+	    if (dom.navProjects) {
+	      dom.navProjects.innerHTML = list
+	        .map(function(p) {
+	          var name = p && p.name ? p.name : '未命名项目';
+	          var desc = p && p.description ? p.description : '';
+	          return (
+	            '<button type="button" class="nav-entry-card nav-entry-overview" data-project-id="' +
+	            escapeHtml(p.id) +
+	            '">' +
+	            '<span class="nav-entry-icon" aria-hidden="true">' +
+	            '<svg viewBox="0 0 24 24" role="presentation" focusable="false">' +
+	            '<path d="M3 6h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"></path>' +
+	            '</svg>' +
+	            '</span>' +
+	            '<span class="nav-entry-text">' +
+	            '<span class="nav-entry-title">' +
+	            escapeHtml(name) +
+	            '</span>' +
+	            '<span class="nav-entry-desc">' +
+	            escapeHtml(desc || '进入项目执行总览') +
+	            '</span>' +
+	            '</span>' +
+	            '</button>'
+	          );
+	        })
+	        .join('');
+	    }
+	    if (dom.projectList) dom.projectList.innerHTML = '';
+	  }
 
   function renderVersionSelect() {
     if (!dom.versionSelect) return;
@@ -334,32 +347,60 @@
     loadVersions(project.id).then(loadOverview);
   }
 
-  function bindEvents() {
-    if (dom.refreshBtn) {
-      dom.refreshBtn.addEventListener('click', function() {
-        if (state.currentProject) {
-          loadOverview();
-        } else {
-          loadProjects();
-        }
-      });
-    }
-    if (dom.projectList) {
-      dom.projectList.addEventListener('click', function(e) {
-        var btn = e && e.target && e.target.closest ? e.target.closest('[data-project-id]') : null;
-        if (!btn) return;
-        var pid = btn.getAttribute('data-project-id');
-        openProjectById(pid);
-      });
-    }
-    if (dom.backBtn) {
-      dom.backBtn.addEventListener('click', function() {
-        showProjectList();
-      });
-    }
-    if (dom.versionSelect) {
-      dom.versionSelect.addEventListener('change', function() {
-        state.currentVersionId = normalizeVersionId(dom.versionSelect.value);
+	  function bindEvents() {
+	    if (dom.refreshBtn) {
+	      dom.refreshBtn.addEventListener('click', function() {
+	        var currentId = state.currentProject && state.currentProject.id ? state.currentProject.id : null;
+	        setStatus('刷新中...', '');
+	        loadProjects().then(function() {
+	          if (!currentId && currentId !== 0) {
+	            showProjectList();
+	            setStatus('', '');
+	            return;
+	          }
+	          var found = null;
+	          var list = Array.isArray(state.projects) ? state.projects : [];
+	          list.some(function(p) {
+	            if (!p) return false;
+	            if (String(p.id) === String(currentId)) {
+	              found = p;
+	              return true;
+	            }
+	            return false;
+	          });
+	          if (!found) {
+	            showProjectList();
+	            setStatus('', '');
+	            return;
+	          }
+	          showProjectDetail(found);
+	          state.currentVersionId = null;
+	          renderVersionSelect();
+	          loadVersions(found.id).then(loadOverview).finally(function() {
+	            setStatus('', '');
+	          });
+	        });
+	      });
+	    }
+	    if (dom.navProjects) {
+	      dom.navProjects.addEventListener('click', function(e) {
+	        var btn = e && e.target && e.target.closest ? e.target.closest('[data-project-id]') : null;
+	        if (!btn) return;
+	        var pid = btn.getAttribute('data-project-id');
+	        openProjectById(pid);
+	      });
+	    }
+	    if (dom.backBtn) {
+	      dom.backBtn.addEventListener('click', function() {
+	        showProjectList();
+	        if (dom.navProjects && typeof dom.navProjects.scrollIntoView === 'function') {
+	          dom.navProjects.scrollIntoView({ behavior: 'auto', block: 'start' });
+	        }
+	      });
+	    }
+	    if (dom.versionSelect) {
+	      dom.versionSelect.addEventListener('change', function() {
+	        state.currentVersionId = normalizeVersionId(dom.versionSelect.value);
         hideCasesPanel();
         loadOverview();
       });
@@ -440,4 +481,3 @@
     init();
   }
 })();
-

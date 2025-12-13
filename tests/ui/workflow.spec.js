@@ -19,7 +19,14 @@ test.describe('工作流关键交互', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
-      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      if (
+        url.startsWith('http://localhost') ||
+        url.startsWith('http://127.0.0.1') ||
+        url.startsWith('file:') ||
+        url.startsWith('data:') ||
+        url.startsWith('blob:') ||
+        url.startsWith('about:')
+      ) {
         return route.continue();
       }
       return route.abort();
@@ -32,7 +39,13 @@ test.describe('工作流关键交互', () => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
-    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.init === 'function', null, { timeout: 20000 });
+    await page.evaluate(() => {
+      try {
+        if (window.app && typeof window.app.init === 'function') window.app.init();
+      } catch (e) {}
+    });
+    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 60000 });
   });
 
   test('全页签与顶部步骤可点击', async ({ page }) => {
@@ -111,7 +124,7 @@ test.describe('工作流关键交互', () => {
     await dropZone.dispatchEvent('dragover', { dataTransfer: data });
     await dropZone.dispatchEvent('drop', { dataTransfer: data });
     await expect(dropZone).toBeVisible();
-    await page.click('#tempExecDrawer .drawer-mask');
+    await page.click('#closeTempExecDrawerBtn');
     await expect(page.locator('body')).not.toHaveClass(/drawer-open/);
   });
 

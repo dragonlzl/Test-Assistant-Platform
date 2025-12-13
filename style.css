@@ -3758,6 +3758,9 @@ body {
     }
 
 /* 执行总览 */
+.exec-overview-nav-projects {
+  display: contents;
+}
 .exec-overview-toolbar {
   display: flex;
   align-items: center;

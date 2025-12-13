@@ -694,6 +694,15 @@
 - 测试与验证：`npm run test:ui -- tests/ui/project_admin_drawer.spec.js tests/ui/user_admin_drawer.spec.js tests/ui/workflow.spec.js`（3 workers 并发通过）。  
 - 更新记录：无  
 
+- 功能名称：执行总览页面独立顶部导航（项目按钮上移）  
+- 功能描述：进入“执行总览”时不再展示默认的“AI 一键步骤”导航栏，改为执行总览自己的顶部导航栏；顶部导航按“当前用户可访问/所属项目”动态渲染项目按钮（例如战魂铭人、元气骑士），点击即可进入对应项目总览；并保留“刷新”入口以重新拉取项目/总览数据。  
+- 操作方式：进入“用例相关 → 执行总览”→顶部展示所属项目按钮列表→点击项目按钮进入详情→可切换项目/返回列表/按版本筛选/查看用例明细；点击“刷新”会更新项目列表并刷新当前详情数据。  
+- 使用效果：执行总览的入口更聚焦且更快，减少在页面内寻找项目卡片的成本，符合执行页导航卡片的一致交互。  
+- 新增内容/接口/组件：新增执行总览顶部导航 DOM（`index.html`），项目按钮容器 `#execOverviewNavProjects`；执行总览改为在顶部渲染项目按钮并绑定切换逻辑（`scripts/modules/execOverview.js`）；页签切换时隐藏默认 `#flowNav`（`scripts/core/appRuntime.js`）；补充样式 `display: contents` 以便项目按钮与导航卡片同排展示（`style.css`）；更新 UI 用例覆盖“两项目按钮/切换项目/版本筛选/用例明细”（`tests/ui/exec_overview.spec.js`）。  
+- 复用说明：复用现有 `listProjects/listProjectVersions/getExecutionOverview` 接口与导航卡片样式 `nav-entry-card`，仅调整渲染位置与交互入口。  
+- 测试与验证：`npm run test:ui -- tests/ui/exec_overview.spec.js tests/ui/project_admin_drawer.spec.js tests/ui/user_admin_drawer.spec.js`（3 workers 并发通过）。  
+- 更新记录：无  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  
