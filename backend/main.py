@@ -1,4 +1,5 @@
 from pathlib import Path
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +12,7 @@ from .db import Base, SessionLocal, engine
 from .initial_data import init_db
 from .migrations import apply_migrations
 
+logger = logging.getLogger("tap")
 
 app = FastAPI(title=settings.app_name)
 
@@ -37,6 +39,7 @@ async def disable_static_cache(request, call_next):
 
 
 def _run_startup_tasks() -> None:
+    logger.info("SQLite DB: %s (APP_DB_FILE=%s)", settings.sqlite_url, settings.db_file)
     # 先做增量迁移，再 create_all，避免历史库缺列导致启动后接口 500。
     apply_migrations(engine)
     Base.metadata.create_all(bind=engine)

@@ -676,6 +676,15 @@
 - 测试与验证：`node --check scripts/modules/models.js`（通过）；`npm run test:ui -- tests/ui/models_name_duplicate_and_delete_confirm.spec.js`（通过）。  
 - 更新记录：无  
 
+- 功能名称：项目管理/人员管理页面使用独立顶部导航栏  
+- 功能描述：进入“项目管理/人员管理”时不再展示默认的“AI 一键步骤”导航栏，改为各自页面的顶部导航栏；并将“新建/新增、刷新”等操作按钮移入顶部导航栏，样式与执行页导航卡片一致。  
+- 操作方式：进入“管理 → 项目管理/人员管理”，顶部显示本页导航卡片按钮；点击“新建项目/新增人员”在抽屉内新增，点击“刷新”重新拉取列表。  
+- 使用效果：管理页顶部区域更聚焦于当前页面操作，减少与 AI 工作流导航的混淆；按钮位置统一且更易发现。  
+- 新增内容/接口/组件：新增 `#projectAdminHead/#userAdminHead` 顶部导航 DOM（`index.html`），并调整页签切换时隐藏默认 `#flowNav`（`scripts/core/appRuntime.js`）；为稳定自动化用例补充管理模块就绪标记 `window.app.adminBound`（`scripts/modules/admin.js`）；更新 UI 用例（`tests/ui/project_admin_drawer.spec.js`、`tests/ui/user_admin_drawer.spec.js`）。  
+- 复用说明：复用现有 `projectRefreshBtn/projectCreateBtn/userRefreshBtn/userCreateBtn` 事件绑定与权限控制逻辑，仅调整 DOM 位置与展示方式。  
+- 测试与验证：`npm run test:ui -- tests/ui/project_admin_drawer.spec.js`（通过）；`npm run test:ui -- tests/ui/user_admin_drawer.spec.js`（通过）。  
+- 更新记录：无  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  

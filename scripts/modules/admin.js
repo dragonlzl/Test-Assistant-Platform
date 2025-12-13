@@ -668,6 +668,8 @@
     var visibleUser = document.querySelector('section[data-tab-section="user-admin"]:not(.hidden)');
     if (visibleProject) handleTabActivated('project-admin');
     else if (visibleUser) handleTabActivated('user-admin');
+    if (!window.app) window.app = {};
+    window.app.adminBound = true;
   }
 
   if (document.readyState === 'loading') {

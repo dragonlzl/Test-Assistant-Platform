@@ -78,7 +78,11 @@ test.describe('人员管理列表与抽屉', () => {
 
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
+    await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
     await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.tabGroupBound === true, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.adminBound === true, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.authReady === true, { timeout: 20000 });
   });
 
   test('表格渲染且抽屉打开关闭正常', async ({ page }) => {
@@ -86,6 +90,8 @@ test.describe('人员管理列表与抽屉', () => {
     await manageBtn.click();
     const userTabBtn = page.locator('[data-group-menu="manage"] [data-tab-btn="user-admin"]');
     await userTabBtn.click();
+    await expect(page.locator('#flowNav')).toBeHidden();
+    await expect(page.locator('#userAdminHead')).toBeVisible();
     const userSection = page.locator('section[data-tab-section="user-admin"]');
     await expect(userSection).toBeVisible();
 
@@ -94,7 +100,9 @@ test.describe('人员管理列表与抽屉', () => {
     await expect(tableRows.nth(0)).toContainText('alice');
     await expect(tableRows.nth(1)).toContainText('bob');
 
-    await page.locator('#userCreateBtn').click();
+    const createBtn = page.locator('#userCreateBtn');
+    await createBtn.scrollIntoViewIfNeeded();
+    await createBtn.click();
     const drawer = page.locator('#userDrawer');
     await expect(drawer).toHaveClass(/open/);
     await expect(page.locator('#userDrawerTitle')).toContainText('新增');
@@ -116,7 +124,9 @@ test.describe('人员管理列表与抽屉', () => {
     const manageBtn = page.locator('.tab-group-btn', { hasText: '管理' });
     await manageBtn.click();
     await page.locator('[data-group-menu=\"manage\"] [data-tab-btn=\"user-admin\"]').click();
-    await page.locator('#userCreateBtn').click();
+    const createBtn = page.locator('#userCreateBtn');
+    await createBtn.scrollIntoViewIfNeeded();
+    await createBtn.click();
     const drawer = page.locator('#userDrawer');
     await expect(drawer).toHaveClass(/open/);
     const btnBox = await manageBtn.boundingBox();
@@ -133,12 +143,20 @@ test.describe('人员管理列表与抽屉', () => {
     await page.route('**/api/projects', (route) => {
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
     });
-    await page.reload();
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.tabGroupBound === true, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.adminBound === true, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.authReady === true, { timeout: 20000 });
 
     const manageBtn = page.locator('.tab-group-btn', { hasText: '管理' });
     await manageBtn.click();
     await page.locator('[data-group-menu="manage"] [data-tab-btn="user-admin"]').click();
-    await page.locator('#userCreateBtn').click();
+    const createBtn = page.locator('#userCreateBtn');
+    await createBtn.scrollIntoViewIfNeeded();
+    await createBtn.click();
     const emptyHint = page.locator('#userProjectsSelect .project-checkbox-empty');
     await expect(emptyHint).toContainText('暂无项目');
   });

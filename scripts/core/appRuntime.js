@@ -407,7 +407,11 @@
         dom.autoClarifySection.classList.toggle('hidden', !shouldShow);
       }
       if (dom.flowNav) {
-        dom.flowNav.classList.toggle('hidden', name === 'tempexec');
+        // 管理类页面/执行页需要自己的顶部导航，隐藏默认“AI一键步骤”导航栏。
+        dom.flowNav.classList.toggle(
+          'hidden',
+          name === 'tempexec' || name === 'project-admin' || name === 'user-admin'
+        );
       }
       if (dom.tempexecFlowNav) {
         dom.tempexecFlowNav.classList.toggle('hidden', name !== 'tempexec');

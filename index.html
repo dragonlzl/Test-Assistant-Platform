@@ -92,6 +92,70 @@
       <div class="step" data-target="cases"><span class="badge">7</span><span class="step-label">覆盖对比</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
     </div>
   </div>
+<div class="tempexec-head hidden" data-tab-section="project-admin" id="projectAdminHead">
+  <div class="flow" id="projectAdminFlowNav">
+    <div class="flow-title">项目管理导航</div>
+    <p class="hint" style="margin:0 0 6px;">项目与版本维护入口汇总，点击卡片快速操作。</p>
+    <div class="nav-entry-grid">
+      <button class="nav-entry-card nav-entry-import" id="projectRefreshBtn" type="button">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <path d="M20 12a8 8 0 1 1-2.3-5.7"></path>
+            <path d="M20 4v6h-6"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">刷新项目</span>
+          <span class="nav-entry-desc">拉取最新项目与版本</span>
+        </span>
+      </button>
+      <button class="nav-entry-card nav-entry-view" id="projectCreateBtn" type="button">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <path d="M12 5v14"></path>
+            <path d="M5 12h14"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">新建项目</span>
+          <span class="nav-entry-desc">创建新项目并配置版本</span>
+        </span>
+      </button>
+    </div>
+  </div>
+</div>
+<div class="tempexec-head hidden" data-tab-section="user-admin" id="userAdminHead">
+  <div class="flow" id="userAdminFlowNav">
+    <div class="flow-title">人员管理导航</div>
+    <p class="hint" style="margin:0 0 6px;">人员与权限维护入口汇总，点击卡片快速操作。</p>
+    <div class="nav-entry-grid">
+      <button class="nav-entry-card nav-entry-import" id="userRefreshBtn" type="button">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <path d="M20 12a8 8 0 1 1-2.3-5.7"></path>
+            <path d="M20 4v6h-6"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">刷新人员</span>
+          <span class="nav-entry-desc">拉取最新人员与归属</span>
+        </span>
+      </button>
+      <button class="nav-entry-card nav-entry-view" id="userCreateBtn" type="button">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <path d="M12 5v14"></path>
+            <path d="M5 12h14"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">新增人员</span>
+          <span class="nav-entry-desc">创建账号并分配项目</span>
+        </span>
+      </button>
+    </div>
+  </div>
+</div>
 <div class="tempexec-head hidden" data-tab-section="tempexec">
   <div class="flow" id="tempexecFlowNav">
     <div class="flow-title">功能导航</div>
@@ -1284,10 +1348,6 @@
 <h2>项目管理</h2>
 <div class="card-body" id="projectAdmin">
 <div class="admin-toolbar">
-<div class="actions">
-<button class="primary" id="projectRefreshBtn" type="button">刷新项目</button>
-<button class="secondary" id="projectCreateBtn" type="button">新建项目</button>
-</div>
 <p class="status" id="projectStatus"></p>
 </div>
 <div class="admin-table-wrapper">
@@ -1336,10 +1396,6 @@
 <h2>人员管理</h2>
 <div class="card-body" id="userAdmin">
   <div class="admin-toolbar">
-    <div class="actions">
-      <button class="primary" id="userRefreshBtn" type="button">刷新人员</button>
-      <button class="secondary" id="userCreateBtn" type="button">新增人员</button>
-    </div>
     <p class="status" id="userStatus"></p>
   </div>
   <div class="admin-table-wrapper">

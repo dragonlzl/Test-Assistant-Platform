@@ -72,6 +72,8 @@ test.describe('项目管理列表与抽屉', () => {
     await manageBtn.click();
     await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
     await page.click('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
+    await expect(page.locator('#flowNav')).toBeHidden();
+    await expect(page.locator('#projectAdminHead')).toBeVisible();
 
     const rows = page.locator('#projectTableBody tr');
     await expect(rows).toHaveCount(2);
@@ -249,6 +251,7 @@ test.describe('项目管理列表与抽屉', () => {
     await page.reload();
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
     await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.tabGroupBound === true, null, { timeout: 20000 });
 
     await page.click('.tab-group-btn[data-group="manage"]');
     await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
@@ -282,6 +285,7 @@ test.describe('项目管理列表与抽屉', () => {
     await page.reload();
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
     await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.tabGroupBound === true, null, { timeout: 20000 });
 
     await page.click('.tab-group-btn[data-group="manage"]');
     await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
