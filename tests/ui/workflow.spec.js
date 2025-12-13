@@ -1,6 +1,21 @@
 const { test, expect } = require('@playwright/test');
 
 test.describe('工作流关键交互', () => {
+  async function openGroup(page, groupName) {
+    await page.click('.tab-group-btn[data-group="' + groupName + '"]');
+    await expect(page.locator('[data-group-menu="' + groupName + '"]')).toBeVisible();
+  }
+
+  async function openAiTab(page, tabName) {
+    await openGroup(page, 'ai');
+    await page.click('[data-group-menu="ai"] [data-tab-btn="' + tabName + '"]');
+  }
+
+  async function openCasesTab(page, tabName) {
+    await openGroup(page, 'cases');
+    await page.click('[data-group-menu="cases"] [data-tab-btn="' + tabName + '"]');
+  }
+
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
@@ -9,16 +24,34 @@ test.describe('工作流关键交互', () => {
       }
       return route.abort();
     });
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tap-e2e-skip-auth', '1');
+      } catch (_) {}
+    });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 20000 });
   });
 
   test('全页签与顶部步骤可点击', async ({ page }) => {
-    const tabs = await page.$$('[data-tab-btn]');
-    for (const tab of tabs) {
-      await tab.click();
-    }
+    await openAiTab(page, 'auto');
+    await openAiTab(page, 'clean');
+    await openAiTab(page, 'casesgen');
+    await openAiTab(page, 'assign');
+    await openAiTab(page, 'models');
+
+    await openCasesTab(page, 'tempexec');
+    await openCasesTab(page, 'case-library');
+    await openCasesTab(page, 'exec-overview');
+
+    await openGroup(page, 'settings');
+    await page.click('[data-group-menu="settings"] [data-tab-btn="settings"]');
+
+    await page.click('[data-tab-btn="help"]');
+    await openAiTab(page, 'auto');
+
     const steps = await page.$$('#flowNav .step');
     for (const step of steps) {
       await step.click();
@@ -40,7 +73,7 @@ test.describe('工作流关键交互', () => {
   });
 
   test('功能工作流可导入测试用例文件', async ({ page }) => {
-    await page.click('[data-tab-btn="clean"]');
+    await openAiTab(page, 'clean');
     await page.setInputFiles('#caseFileInput', {
       name: 'cases.json',
       mimeType: 'application/json',
@@ -66,7 +99,7 @@ test.describe('工作流关键交互', () => {
   });
 
   test('用例执行拖拽占位可响应', async ({ page }) => {
-    await page.click('[data-tab-btn="tempexec"]');
+    await openCasesTab(page, 'tempexec');
     await page.click('#openTempExecDrawerBtn');
     const dropZone = page.locator('#tempExecDropZone');
     const data = await page.evaluateHandle(() => {
@@ -79,6 +112,7 @@ test.describe('工作流关键交互', () => {
     await dropZone.dispatchEvent('drop', { dataTransfer: data });
     await expect(dropZone).toBeVisible();
     await page.click('#tempExecDrawer .drawer-mask');
+    await expect(page.locator('body')).not.toHaveClass(/drawer-open/);
   });
 
   test('自动流程缺失视图与按钮默认状态', async ({ page }) => {
@@ -178,7 +212,7 @@ test.describe('工作流关键交互', () => {
   });
 
   test('需求澄清确认有提示', async ({ page }) => {
-    await page.click('[data-tab-btn="clean"]');
+    await openAiTab(page, 'clean');
     await page.evaluate(() => {
       const review = document.getElementById('reviewResult');
       if (review) {
@@ -220,8 +254,8 @@ test.describe('工作流关键交互', () => {
         window.app.state.autoCompareMissingList = [];
       }
     });
-    await page.click('[data-tab-btn="clean"]');
-    await page.click('[data-tab-btn="auto"]');
+    await openAiTab(page, 'clean');
+    await openAiTab(page, 'auto');
     const recleanBtn = page.locator('#autoRecleanBtn');
     const ignoreBtn = page.locator('#autoIgnoreCoverageBtn');
     await expect(recleanBtn).toBeEnabled();

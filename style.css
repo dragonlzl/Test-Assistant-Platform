@@ -2106,6 +2106,11 @@ body {
   pointer-events: auto;
   transition-delay: 0s;
 }
+.drawer.closing {
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
 .drawer .drawer-mask {
   position: absolute;
   inset: 0;
@@ -2121,6 +2126,9 @@ body {
 }
 .drawer.open .drawer-mask {
   opacity: 1;
+  pointer-events: auto;
+}
+.drawer.closing .drawer-mask {
   pointer-events: auto;
 }
 .drawer .drawer-panel {
@@ -2142,6 +2150,9 @@ body {
 .drawer.open .drawer-panel {
   pointer-events: auto;
   transform: translateX(0);
+}
+.drawer.closing .drawer-panel {
+  pointer-events: auto;
 }
 .drawer .drawer-header {
   display: flex;

@@ -685,6 +685,15 @@
 - 测试与验证：`npm run test:ui -- tests/ui/project_admin_drawer.spec.js`（通过）；`npm run test:ui -- tests/ui/user_admin_drawer.spec.js`（通过）。  
 - 更新记录：无  
 
+- 功能名称：抽屉收起时遮罩同步优化  
+- 功能描述：修复“收起抽屉瞬间侧边栏先解除遮罩/可交互，主区域稍后才结束过渡”导致的突兀体验：关闭抽屉时增加 closing 过渡状态，直到遮罩/面板过渡结束后再统一解除 `drawer-open` 与交互阻断。  
+- 操作方式：打开任意抽屉（执行抽屉/管理抽屉/视图抽屉等）→点击遮罩或“收起”关闭；侧边栏与主区域会在同一时刻结束遮罩与交互阻断。  
+- 使用效果：关闭动画期间整体遮罩保持一致，不出现“侧边栏先亮起来”的视觉跳变。  
+- 新增内容/接口/组件：抽屉组件新增 `.closing` 状态与关闭过渡结束后再解锁逻辑（`scripts/base/drawer.js`、`style.css`）；补齐 DOM 映射 `exportCaseGen`（`config/domConfig.js`）；更新并加固 UI 用例等待与菜单展开逻辑（`tests/ui/user_admin_drawer.spec.js`、`tests/ui/workflow.spec.js`）。  
+- 复用说明：复用现有抽屉 DOM/CSS 结构与 `drawer-open` 机制，仅增加 closing 状态以同步关闭时序。  
+- 测试与验证：`npm run test:ui -- tests/ui/project_admin_drawer.spec.js tests/ui/user_admin_drawer.spec.js tests/ui/workflow.spec.js`（3 workers 并发通过）。  
+- 更新记录：无  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  

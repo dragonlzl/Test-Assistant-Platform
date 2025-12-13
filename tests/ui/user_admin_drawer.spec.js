@@ -79,10 +79,10 @@ test.describe('人员管理列表与抽屉', () => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
-    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
-    await page.waitForFunction(() => window.app && window.app.tabGroupBound === true, { timeout: 20000 });
-    await page.waitForFunction(() => window.app && window.app.adminBound === true, { timeout: 20000 });
-    await page.waitForFunction(() => window.app && window.app.authReady === true, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.tabGroupBound === true, null, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.adminBound === true, null, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
   });
 
   test('表格渲染且抽屉打开关闭正常', async ({ page }) => {
@@ -146,10 +146,10 @@ test.describe('人员管理列表与抽屉', () => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
     await page.waitForSelector('.tab-group-btn', { timeout: 20000 });
-    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
-    await page.waitForFunction(() => window.app && window.app.tabGroupBound === true, { timeout: 20000 });
-    await page.waitForFunction(() => window.app && window.app.adminBound === true, { timeout: 20000 });
-    await page.waitForFunction(() => window.app && window.app.authReady === true, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.tabGroupBound === true, null, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.adminBound === true, null, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout: 20000 });
 
     const manageBtn = page.locator('.tab-group-btn', { hasText: '管理' });
     await manageBtn.click();

@@ -7,7 +7,7 @@
     var node = target;
     while (node) {
       if (node.classList && node.classList.contains('drawer')) {
-        return node.classList.contains('open');
+        return node.classList.contains('open') || node.classList.contains('closing');
       }
       node = node.parentNode;
     }
@@ -51,7 +51,7 @@
   }
 
   function unlockBodyScroll(body, root) {
-    var otherOpen = document.querySelector && document.querySelector('.drawer.open');
+    var otherOpen = document.querySelector && document.querySelector('.drawer.open, .drawer.closing');
     if (otherOpen) return;
     if (root && root.classList) root.classList.remove('drawer-open');
     if (body && body.classList) body.classList.remove('drawer-open');
@@ -75,7 +75,7 @@
     if (typeof document === 'undefined') return;
     var body = document.body;
     var root = document.documentElement;
-    var openDrawers = document.querySelectorAll ? document.querySelectorAll('.drawer.open') : [];
+    var openDrawers = document.querySelectorAll ? document.querySelectorAll('.drawer.open, .drawer.closing') : [];
     if (openDrawers && typeof openDrawers.forEach === 'function') {
       openDrawers.forEach(function(drawer) {
         var closer = drawer.querySelector('[data-drawer-close]') || drawer.querySelector('.drawer-mask');
@@ -101,6 +101,8 @@
     var root = document.documentElement;
     var openButtons = Array.isArray(options.openButtons) ? options.openButtons : [];
     var closeButtons = Array.isArray(options.closeButtons) ? options.closeButtons : [];
+    var closeToken = 0;
+    var closeFinalizeTimer = 0;
 
     function applyBodyLock() {
       lockBodyScroll(body, root);
@@ -109,15 +111,61 @@
       unlockBodyScroll(body, root);
     }
     function open() {
+      closeToken += 1;
+      if (closeFinalizeTimer) {
+        clearTimeout(closeFinalizeTimer);
+        closeFinalizeTimer = 0;
+      }
+      if (drawer.classList.contains('closing')) drawer.classList.remove('closing');
       drawer.classList.add('open');
       if (drawer.classList.contains('hidden')) drawer.classList.remove('hidden');
       applyBodyLock();
       if (typeof options.onOpen === 'function') options.onOpen();
     }
-    function close() {
-      drawer.classList.remove('open');
+    function finalizeClose(token) {
+      if (token !== closeToken) return;
+      if (closeFinalizeTimer) {
+        clearTimeout(closeFinalizeTimer);
+        closeFinalizeTimer = 0;
+      }
+      drawer.classList.remove('closing');
       releaseBodyLock();
       if (typeof options.onClose === 'function') options.onClose();
+    }
+    function close() {
+      if (!drawer.classList.contains('open') && !drawer.classList.contains('closing')) return;
+      closeToken += 1;
+      var token = closeToken;
+      if (closeFinalizeTimer) clearTimeout(closeFinalizeTimer);
+      drawer.classList.add('closing');
+      drawer.classList.remove('open');
+
+      var pending = 0;
+      var resolved = false;
+      function tryFinalize() {
+        if (resolved) return;
+        if (pending > 0) return;
+        resolved = true;
+        finalizeClose(token);
+      }
+      function track(el, prop) {
+        if (!el || typeof el.addEventListener !== 'function') return;
+        pending += 1;
+        var handler = function(e) {
+          if (!e || e.propertyName !== prop) return;
+          el.removeEventListener('transitionend', handler);
+          pending -= 1;
+          tryFinalize();
+        };
+        el.addEventListener('transitionend', handler);
+      }
+      track(mask, 'opacity');
+      track(panel, 'transform');
+      closeFinalizeTimer = setTimeout(function() {
+        pending = 0;
+        tryFinalize();
+      }, 450);
+      setTimeout(tryFinalize, 0);
     }
     function toggle() {
       if (drawer.classList.contains('open')) {
