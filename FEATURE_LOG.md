@@ -802,6 +802,24 @@
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 编辑抽屉`（通过）。  
 - 更新记录：无  
 
+- 功能名称：用例导入同名差异对比抽屉（Git 风格 Diff）  
+- 功能描述：用例库导入时，若后端返回“同名用例已存在”，会自动关闭导入抽屉并打开新的“差异对比”抽屉：左侧展示本次导入解析结果，右侧展示库中同名用例；新增/删除/差异行分别以绿色/红色标记，字段差异单元格高亮；不展示/不对比“实际结果”“备注”。  
+- 操作方式：进入“用例相关 → 用例库”→点“导入用例”选择文件并选项目/版本→点击“确认入库”→若同名被拒绝则自动进入差异对比抽屉查看导入与库中内容差异。  
+- 使用效果：同名冲突时无需反复删除/重试导入，可直接快速定位差异（包括条目数不一致、字段变化、新增/删除）。  
+- 新增内容/接口/组件：Diff 抽屉 DOM（`index.html`）；Diff 样式（`style.css`）；差异计算与渲染（`scripts/modules/caseLibrary.js`）。  
+- 复用说明：复用现有文件名清洗与 `listCaseFiles/listCaseItems` 获取数据能力，在前端做轻量 Diff 渲染；不引入新依赖。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库导入容错增强（允许“同标题不同预期”）  
+- 功能描述：用例库导入入库逻辑增强：同一份导入文件内重复条目会自动去重；同时兼容历史数据库唯一键不包含 `expected` 的情况（迁移修复），保证“同一分支/同标题但预期结果不同”可作为不同用例正常入库；导入失败时返回更明确的数据库约束错误信息，避免统一误报为“存在重复条目”。  
+- 操作方式：导入用例并确认入库；若用例标题相同但预期结果不同，将作为两条不同用例写入；历史库升级后无需手动清库。  
+- 使用效果：解决“库为空仍导入失败：存在重复条目”的阻断问题，导入流程更稳健且错误提示更可定位。  
+- 新增内容/接口/组件：导入接口插入逻辑增强（`backend/routers/cases.py`）；历史库迁移 v5（`backend/migrations.py`）；API 用例补充“同标题不同预期”导入断言（`tests/api/case_library.spec.js`）。  
+- 复用说明：复用既有导入接口与唯一键规则，仅补充 SQLite 容错插入与轻量迁移逻辑。  
+- 测试与验证：API：启动后端（`APP_DB_FILE=apitest.db .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080`）后执行 `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  

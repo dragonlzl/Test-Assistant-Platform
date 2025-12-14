@@ -199,6 +199,26 @@ test.describe('case library api', () => {
     const dupItems = await dupItemsRes.json();
     expect(dupItems.length).toBe(1);
 
+    const sameTitleDifferentExpectedRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '同标题不同预期.json',
+        source: 'apitest',
+        items: [
+          { module: '登录', title: '同一分支', expected: '预期 A', steps: '1. 点击按钮' },
+          { module: '登录', title: '同一分支', expected: '预期 B', steps: '1. 点击按钮' },
+        ],
+      },
+    });
+    expect(sameTitleDifferentExpectedRes.status()).toBe(201);
+    const sameTitleDifferentExpected = await sameTitleDifferentExpectedRes.json();
+    const sItemsRes = await ctx.get(`${apiBase}/api/case-files/${sameTitleDifferentExpected.id}/items`, { headers });
+    expect(sItemsRes.status()).toBe(200);
+    const sItems = await sItemsRes.json();
+    expect(sItems.length).toBe(2);
+
     const deleteTargetRes = await ctx.post(`${apiBase}/api/case-files/import`, {
       headers,
       data: {

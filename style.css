@@ -2148,6 +2148,11 @@ body {
   flex-direction: column;
   overscroll-behavior: contain;
 }
+.drawer .drawer-panel.drawer-panel-wide {
+  width: min(96vw, 1200px);
+  max-width: 1200px;
+  min-width: 520px;
+}
 .drawer.open .drawer-panel {
   pointer-events: auto;
   transform: translateX(0);
@@ -2175,9 +2180,56 @@ body {
     max-width: 92vw;
     min-width: auto;
   }
+  .drawer .drawer-panel.drawer-panel-wide {
+    width: 92vw;
+    max-width: 92vw;
+    min-width: auto;
+  }
   .nav-entry-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.case-library-diff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 980px) {
+  .case-library-diff {
+    grid-template-columns: 1fr;
+  }
+}
+
+.case-library-diff-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.diff-table td, .diff-table th {
+  vertical-align: top;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-row-added td {
+  background: rgba(46, 204, 113, 0.14);
+}
+
+.diff-row-removed td {
+  background: rgba(231, 76, 60, 0.12);
+}
+
+.diff-row-changed td {
+  background: rgba(231, 76, 60, 0.08);
+}
+
+.diff-cell-changed {
+  background: rgba(231, 76, 60, 0.14) !important;
 }
 .hidden {
   display: none !important;

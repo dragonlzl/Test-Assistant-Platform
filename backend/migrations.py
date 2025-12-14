@@ -121,3 +121,117 @@ def apply_migrations(engine: Engine) -> None:
                         )
                     )
             _mark_applied(conn, 4)
+
+        # v5: 用例条目唯一键升级为 “case_file_id + module + title + expected”。
+        # 兼容历史库：早期可能只按 (case_file_id,module,title) 判重，导致“同标题不同预期”无法导入。
+        if not _is_applied(conn, 5):
+            if "case_items" in tables:
+                idx_rows = conn.execute(text("PRAGMA index_list('case_items')")).fetchall()
+                unique_indexes = []
+                for row in idx_rows or []:
+                    # row: (seq, name, unique, origin, partial)
+                    name = row[1] if len(row) > 1 else None
+                    is_unique = bool(row[2]) if len(row) > 2 else False
+                    origin = row[3] if len(row) > 3 else ""
+                    if not name or not is_unique:
+                        continue
+                    unique_indexes.append({"name": name, "origin": origin})
+
+                def _index_cols(index_name: str) -> list[str]:
+                    info = conn.execute(
+                        text("PRAGMA index_info('" + str(index_name).replace("'", "''") + "')")
+                    ).fetchall()
+                    cols = []
+                    for r in info or []:
+                        # r: (seqno, cid, name)
+                        if len(r) >= 3 and r[2]:
+                            cols.append(str(r[2]))
+                    return cols
+
+                desired = ["case_file_id", "module", "title", "expected"]
+                desired_set = set(desired)
+                has_desired = False
+                for idx in unique_indexes:
+                    cols = _index_cols(idx["name"])
+                    if set(cols) == desired_set:
+                        has_desired = True
+                        break
+
+                if not has_desired:
+                    # SQLite 无法删除 autoindex（来自表内 UNIQUE 约束），需要重建表。
+                    cols = set([c["name"] for c in insp.get_columns("case_items")])
+                    if "expected" not in cols:
+                        # 兜底：极老库缺 expected 列，先补齐（NOT NULL 需带默认）。
+                        conn.execute(
+                            text("ALTER TABLE case_items ADD COLUMN expected TEXT NOT NULL DEFAULT ''")
+                        )
+                        cols.add("expected")
+
+                    conn.execute(text("PRAGMA foreign_keys=OFF"))
+                    conn.execute(text("ALTER TABLE case_items RENAME TO case_items_old"))
+                    conn.execute(
+                        text(
+                            """
+                            CREATE TABLE case_items (
+                              id INTEGER NOT NULL PRIMARY KEY,
+                              case_file_id INTEGER NOT NULL,
+                              module VARCHAR(255) NOT NULL,
+                              title VARCHAR(255) NOT NULL,
+                              priority VARCHAR(32),
+                              precondition TEXT,
+                              steps TEXT,
+                              expected TEXT NOT NULL,
+                              remark TEXT,
+                              created_by INTEGER,
+                              updated_by INTEGER,
+                              created_at DATETIME NOT NULL,
+                              updated_at DATETIME NOT NULL,
+                              CONSTRAINT uq_case_item_key UNIQUE (case_file_id, module, title, expected),
+                              FOREIGN KEY(case_file_id) REFERENCES case_files (id) ON DELETE CASCADE,
+                              FOREIGN KEY(created_by) REFERENCES users (id) ON DELETE SET NULL,
+                              FOREIGN KEY(updated_by) REFERENCES users (id) ON DELETE SET NULL
+                            )
+                            """
+                        )
+                    )
+                    # 复制旧数据：缺失字段以 NULL/当前时间兜底。
+                    select_parts = []
+                    target_cols = [
+                        "id",
+                        "case_file_id",
+                        "module",
+                        "title",
+                        "priority",
+                        "precondition",
+                        "steps",
+                        "expected",
+                        "remark",
+                        "created_by",
+                        "updated_by",
+                        "created_at",
+                        "updated_at",
+                    ]
+                    for c in target_cols:
+                        if c in cols:
+                            select_parts.append(c)
+                        elif c == "expected":
+                            select_parts.append("'' AS expected")
+                        elif c in ("created_at", "updated_at"):
+                            select_parts.append("datetime('now') AS " + c)
+                        else:
+                            select_parts.append("NULL AS " + c)
+                    conn.execute(
+                        text(
+                            "INSERT INTO case_items (" + ", ".join(target_cols) + ")\n"
+                            "SELECT " + ", ".join(select_parts) + " FROM case_items_old"
+                        )
+                    )
+                    conn.execute(text("DROP TABLE case_items_old"))
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_case_items_case_file_id ON case_items(case_file_id)"
+                        )
+                    )
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_case_items_id ON case_items(id)"))
+                    conn.execute(text("PRAGMA foreign_keys=ON"))
+            _mark_applied(conn, 5)

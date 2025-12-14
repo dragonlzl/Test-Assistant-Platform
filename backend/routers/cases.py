@@ -4,6 +4,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, aliased
 
 from .. import models, schemas
@@ -72,23 +73,38 @@ def import_case_file(
     db.add(case_file)
     db.flush()
     now = datetime.now(timezone.utc)
+    values = []
     for item in unique_items:
-        db.add(
-            models.CaseItem(
-                case_file_id=case_file.id,
-                module=item.module,
-                title=item.title,
-                priority=item.priority,
-                precondition=item.precondition,
-                steps=item.steps,
-                expected=item.expected,
-                remark=item.remark,
-                created_by=user.id,
-                updated_by=user.id,
-                created_at=now,
-                updated_at=now,
-            )
+        values.append(
+            {
+                "case_file_id": case_file.id,
+                "module": item.module,
+                "title": item.title,
+                "priority": item.priority,
+                "precondition": item.precondition,
+                "steps": item.steps,
+                "expected": item.expected,
+                "remark": item.remark,
+                "created_by": user.id,
+                "updated_by": user.id,
+                "created_at": now,
+                "updated_at": now,
+            }
         )
+    # 使用 SQLite OR IGNORE：确保“存在重复条目”等唯一约束冲突不会导致整份导入失败；
+    # 同时保留项目级同名用例文件拒绝逻辑（在上方已提前拦截）。
+    if values:
+        db.execute(sqlite_insert(models.CaseItem).values(values).prefix_with("OR IGNORE"))
+    item_count = (
+        db.query(func.count(models.CaseItem.id))
+        .filter(models.CaseItem.case_file_id == case_file.id)
+        .scalar()
+        or 0
+    )
+    if item_count <= 0:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用例为空")
+    skipped_db_conflicts = max(0, int(len(unique_items)) - int(item_count))
     log_operation(
         db=db,
         user_id=user.id,
@@ -99,19 +115,27 @@ def import_case_file(
             "project_id": project.id,
             "file_name": clean_name,
             "item_total": len(payload.items),
-            "item_imported": len(unique_items),
-            "item_skipped_duplicates": duplicate_count,
+            "item_unique": len(unique_items),
+            "item_imported": int(item_count),
+            "item_skipped_payload_duplicates": duplicate_count,
+            "item_skipped_db_conflicts": skipped_db_conflicts,
         },
     )
     try:
         db.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用例导入失败：存在重复条目")
+        msg = str(getattr(e, "orig", "") or str(e) or "").strip()
+        if msg:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="用例导入失败：" + msg,
+            )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用例导入失败：数据库约束冲突")
     db.refresh(case_file)
     # 给前端即时展示用例条目数（不新增 DB 字段）。
     try:
-        setattr(case_file, "item_count", len(unique_items))
+        setattr(case_file, "item_count", int(item_count))
     except Exception:
         pass
     return case_file

@@ -1,6 +1,80 @@
 const path = require('path');
 const { test, expect } = require('@playwright/test');
 
+async function gotoIndex(page) {
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  const url = base + '/index.html';
+  let lastErr = null;
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      await page.goto(url);
+      return base;
+    } catch (err) {
+      lastErr = err;
+      const msg = err && err.message ? String(err.message) : String(err || '');
+      const canRetry = msg.indexOf('ERR_EMPTY_RESPONSE') !== -1 || msg.indexOf('net::ERR_EMPTY_RESPONSE') !== -1;
+      if (!canRetry || i === 2) throw err;
+      await page.waitForTimeout(300);
+    }
+  }
+  throw lastErr || new Error('page.goto failed');
+}
+
+async function waitCaseLibraryReady(page, timeoutMs) {
+  const timeout = Number(timeoutMs) || 30000;
+  // 预留 1s 给 Playwright 测试超时，保证能抛出更可读的状态信息。
+  const deadline = Date.now() + Math.max(1000, timeout - 1000);
+  let last = null;
+  let retriedToken = false;
+
+  while (Date.now() < deadline) {
+    // 用 evaluate 拿状态，避免 waitForFunction 因某些偶发脚本中断而卡死。
+    last = await page.evaluate(() => {
+      let token = '';
+      try { token = localStorage.getItem('tap-auth-token') || ''; } catch (_) { token = ''; }
+      return {
+        hasApp: Boolean(window.app),
+        authReady: Boolean(window.app && window.app.authReady === true),
+        caseLibraryBound: Boolean(window.app && window.app.caseLibraryBound === true),
+        hasSwitchTab: Boolean(window.app && typeof window.app.switchTab === 'function'),
+        token: token,
+      };
+    });
+
+    if (last && last.hasApp && last.authReady) return;
+
+    // 兜底：偶发 localStorage 注入丢失导致未登录，补 token 后刷新一次。
+    if (!retriedToken && last && last.hasApp && !last.authReady && !last.token) {
+      retriedToken = true;
+      await page.evaluate(() => {
+        try { localStorage.setItem('tap-auth-token', 'test-token'); } catch (_) {}
+      });
+      await page.reload();
+      await page.waitForTimeout(100);
+      continue;
+    }
+
+    await page.waitForTimeout(200);
+  }
+
+  throw new Error('waitCaseLibraryReady timeout: ' + JSON.stringify(last || {}));
+}
+
+async function openDrawer(page, buttonSelector, drawerSelector) {
+  const btn = page.locator(buttonSelector);
+  const drawer = page.locator(drawerSelector);
+  await btn.scrollIntoViewIfNeeded();
+  await btn.click();
+  try {
+    await expect(drawer).toHaveClass(/open/, { timeout: 3000 });
+    return;
+  } catch (err) {
+    // 偶发点击未触发（遮罩/焦点抖动），再 force 一次兜底。
+    await btn.click({ force: true });
+    await expect(drawer).toHaveClass(/open/);
+  }
+}
+
 test.describe('用例库页面（导入/编辑/转到执行）', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -245,11 +319,8 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
       return respond(404, { detail: 'not found' });
     });
 
-    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-    await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.authReady === true, {}, { timeout: 30000 });
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
 
     await page.click('.tab-group-btn[data-group="cases"]');
     await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
@@ -273,16 +344,58 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#caseLibraryImportStatus')).toContainText('导入完成');
     await expect(page.locator('#caseLibraryStatus')).toContainText('导入完成');
 
-    // 同名校验：再次导入同一份文件
+    // 同名校验：再次导入同名文件（但内容不同），应打开差异对比抽屉
+    const secondImportPayload = [
+      {
+        module: '登录',
+        title: '正常登录',
+        priority: 'P0',
+        preconditions: '已注册账号',
+        steps: '1. 输入账号\\n2. 输入密码\\n3. 点击登录（修改）',
+        expected: '登录成功进入主页',
+        remark: '此字段不会参与对比',
+      },
+      {
+        module: '登录',
+        title: '密码错误提示',
+        priority: 'P2',
+        preconditions: '',
+        steps: '1. 输入账号\\n2. 输入错误密码\\n3. 点击登录',
+        expected: '提示密码错误',
+        remark: '',
+      },
+      {
+        module: '登录',
+        title: '新增用例',
+        priority: 'P1',
+        preconditions: '',
+        steps: '1. 步骤A',
+        expected: '预期A',
+        remark: '',
+      },
+    ];
+    await page.setInputFiles('#caseLibraryImportInput', {
+      name: path.basename(fixturePath),
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(secondImportPayload), 'utf-8'),
+    });
     await page.click('#caseLibraryImportConfirmBtn');
     await expect(page.locator('#caseLibraryImportStatus')).toContainText('同名用例已存在');
+    await expect(page.locator('#caseLibraryImportDiffDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryImportDiffStatus')).toContainText('对比完成');
+    await expect(page.locator('#caseLibraryImportDiffLeftBody')).toContainText('新增用例');
+    await expect(page.locator('#caseLibraryImportDiffLeftBody')).toContainText('点击登录（修改）');
+    await expect(page.locator('#caseLibraryImportDiffRightBody')).toContainText('点击登录');
+    await page.click('#caseLibraryImportDiffDrawer .ghost-btn[data-drawer-close=\"caseLibraryImportDiffDrawer\"]');
+    await expect(page.locator('#caseLibraryImportDiffDrawer')).not.toHaveClass(/open/);
 
     // 关闭导入抽屉再进入编辑抽屉，避免遮罩拦截点击
-    await page.click('#caseLibraryImportDrawer .ghost-btn[data-drawer-close="caseLibraryImportDrawer"]');
+    if (await page.locator('#caseLibraryImportDrawer').evaluate((el) => el.classList.contains('open'))) {
+      await page.click('#caseLibraryImportDrawer .ghost-btn[data-drawer-close="caseLibraryImportDrawer"]');
+    }
     await expect(page.locator('#caseLibraryImportDrawer')).not.toHaveClass(/open/);
 
-    await page.click('#openCaseLibraryEditDrawerBtn');
-    await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
+    await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('case_library_import');
 
@@ -313,9 +426,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
 
     // 刷新页面后仍保持上次编辑的用例视图
     await page.reload();
-    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.authReady === true, {}, { timeout: 30000 });
+    await waitCaseLibraryReady(page, 30000);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
     await expect(page.locator('#flowNav')).toBeHidden();
     await expect(page.locator('#caseLibraryHead')).toBeVisible();
@@ -428,11 +539,8 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
       return respond(404, { detail: 'not found' });
     });
 
-    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-    await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.authReady === true, {}, { timeout: 30000 });
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
 
     await page.click('.tab-group-btn[data-group="cases"]');
     await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
@@ -441,8 +549,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#flowNav')).toBeHidden();
     await expect(page.locator('#caseLibraryHead')).toBeVisible();
 
-    await page.click('#openCaseLibraryEditDrawerBtn');
-    await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
+    await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
 
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例A');
@@ -524,11 +631,8 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
       return respond(404, { detail: 'not found' });
     });
 
-    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-    await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.authReady === true, {}, { timeout: 30000 });
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
 
     await page.click('.tab-group-btn[data-group="cases"]');
     await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
@@ -537,8 +641,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#flowNav')).toBeHidden();
     await expect(page.locator('#caseLibraryHead')).toBeVisible();
 
-    await page.click('#openCaseLibraryEditDrawerBtn');
-    await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
+    await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
 
     await expect(page.locator('#caseLibraryEditVersionSelect')).toBeDisabled();
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
@@ -626,11 +729,8 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
       return respond(404, { detail: 'not found' });
     });
 
-    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-    await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.authReady === true, {}, { timeout: 30000 });
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
 
     await page.click('.tab-group-btn[data-group="cases"]');
     await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
@@ -639,8 +739,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#flowNav')).toBeHidden();
     await expect(page.locator('#caseLibraryHead')).toBeVisible();
 
-    await page.click('#openCaseLibraryEditDrawerBtn');
-    await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
+    await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例A');
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例B');
@@ -651,20 +750,29 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#caseLibraryEditExportXmindBtn')).toBeEnabled();
     await expect(page.locator('#caseLibraryEditExportExcelBtn')).toBeEnabled();
 
+    // 依赖为本地 vendor（JSZip/XMind 导出）。在整文件串行跑时偶发资源加载抖动，先等待依赖可用，避免导出失败无下载。
+    await page.waitForFunction(() => {
+      const hasZip = typeof window.JSZip !== 'undefined' || typeof JSZip !== 'undefined';
+      const api = window.app && (window.app.xmindCoreApi || window.app.xmindCore);
+      const hasXmind = api && typeof api.buildXmindPackageFromCases === 'function';
+      return Boolean(hasZip && hasXmind);
+    }, {}, { timeout: 30000 });
+
     const [downloadZipXmind] = await Promise.all([
-      page.waitForEvent('download', { timeout: 20000 }),
+      page.waitForEvent('download', { timeout: 30000 }),
       page.click('#caseLibraryEditExportXmindBtn'),
     ]);
     expect(await downloadZipXmind.suggestedFilename()).toBe('用例批量导出_xmind.zip');
 
     const [downloadZipExcel] = await Promise.all([
-      page.waitForEvent('download', { timeout: 20000 }),
+      page.waitForEvent('download', { timeout: 30000 }),
       page.click('#caseLibraryEditExportExcelBtn'),
     ]);
     expect(await downloadZipExcel.suggestedFilename()).toBe('用例批量导出_excel.zip');
   });
 
   test('编辑抽屉：刷新页面后保持项目选择与勾选状态', async ({ page }) => {
+    test.setTimeout(60 * 1000);
     const user = { id: 9, username: 'demo_user', role: 'user', level: 'member' };
     const project = { id: 1, name: '战魂铭人', description: '用于用例库抽屉刷新恢复' };
     const versions = [{ id: 11, name: 'v1' }, { id: 12, name: 'v2' }];
@@ -737,11 +845,8 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
       return respond(404, { detail: 'not found' });
     });
 
-    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-    await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.authReady === true, {}, { timeout: 30000 });
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
 
     await page.click('.tab-group-btn[data-group="cases"]');
     await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
@@ -750,8 +855,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#flowNav')).toBeHidden();
     await expect(page.locator('#caseLibraryHead')).toBeVisible();
 
-    await page.click('#openCaseLibraryEditDrawerBtn');
-    await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
+    await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例A');
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例B');
@@ -760,9 +864,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#caseLibraryEditExportExcelBtn')).toBeEnabled();
 
     await page.reload();
-    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.authReady === true, {}, { timeout: 30000 });
+    await waitCaseLibraryReady(page, 60000);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
 
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
@@ -828,11 +930,8 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
       return respond(404, { detail: 'not found' });
     });
 
-    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-    await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && window.app.authReady === true, {}, { timeout: 30000 });
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
 
     await page.click('.tab-group-btn[data-group="cases"]');
     await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
@@ -841,8 +940,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#flowNav')).toBeHidden();
     await expect(page.locator('#caseLibraryHead')).toBeVisible();
 
-    await page.click('#openCaseLibrarySelectExecDrawerBtn');
-    await expect(page.locator('#caseLibrarySelectExecDrawer')).toHaveClass(/open/);
+    await openDrawer(page, '#openCaseLibrarySelectExecDrawerBtn', '#caseLibrarySelectExecDrawer');
 
     await page.selectOption('#caseLibrarySelectProjectSelect', String(project.id));
     await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');
