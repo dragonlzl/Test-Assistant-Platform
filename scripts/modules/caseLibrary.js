@@ -19,8 +19,6 @@
     editFileName: document.getElementById('caseLibraryEditFileName'),
     editSearchInput: document.getElementById('caseLibraryEditSearchInput'),
     editClearSearchBtn: document.getElementById('caseLibraryEditClearSearchBtn'),
-    exportXmindBtn: document.getElementById('caseLibraryExportXmindBtn'),
-    exportExcelBtn: document.getElementById('caseLibraryExportExcelBtn'),
     editToExecBtn: document.getElementById('caseLibraryEditToExecBtn'),
     editStatus: document.getElementById('caseLibraryEditStatus'),
     editView: document.getElementById('caseLibraryEditView'),
@@ -36,6 +34,8 @@
     editDrawerProjectSelect: document.getElementById('caseLibraryEditProjectSelect'),
     editDrawerVersionSelect: document.getElementById('caseLibraryEditVersionSelect'),
     editDrawerConfirmBtn: document.getElementById('caseLibraryEditConfirmBtn'),
+    editDrawerExportXmindBtn: document.getElementById('caseLibraryEditExportXmindBtn'),
+    editDrawerExportExcelBtn: document.getElementById('caseLibraryEditExportExcelBtn'),
     editDrawerDeleteBtn: document.getElementById('caseLibraryEditDeleteBtn'),
     editDrawerSelectAll: document.getElementById('caseLibraryEditSelectAll'),
     editDrawerStatus: document.getElementById('caseLibraryEditDrawerStatus'),
@@ -353,6 +353,8 @@
       dom.editDrawerVersionSelect.innerHTML = '<option value=\"\">全部版本</option>';
       dom.editDrawerVersionSelect.value = '';
     }
+    if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = true;
+    if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = true;
     if (dom.editDrawerListBody) {
       dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"10\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
     }
@@ -639,6 +641,8 @@
       dom.editDrawerVersionSelect.innerHTML = '<option value=\"\">全部版本</option>';
       dom.editDrawerVersionSelect.value = '';
     }
+    if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = true;
+    if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = true;
     if (dom.editDrawerListBody) {
       dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"10\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
     }
@@ -652,6 +656,146 @@
     syncEditDrawerControls();
   }
 
+  function getSelectedEditDrawerCaseFiles() {
+    var selection = state.editDrawer.selection instanceof Set ? state.editDrawer.selection : new Set();
+    state.editDrawer.selection = selection;
+    if (!selection.size) return [];
+    var list = Array.isArray(state.editDrawer.files) ? state.editDrawer.files : [];
+    return list.filter(function(f) { return f && f.id !== null && f.id !== undefined && selection.has(String(f.id)); });
+  }
+
+  function exportEditDrawerSelectionToXmind() {
+    if (state.editDrawer.loading) return;
+    var files = getSelectedEditDrawerCaseFiles();
+    if (!files.length) {
+      setStatus(dom.editDrawerStatus, '请先勾选要导出的用例文件', 'warn');
+      return;
+    }
+    var builder = getXmindBuilder();
+    if (!builder) {
+      setStatus(dom.editDrawerStatus, '缺少 XMind 导出依赖', 'err');
+      return;
+    }
+    if (!apiClient || typeof apiClient.listCaseItems !== 'function') {
+      setStatus(dom.editDrawerStatus, '后端用例条目接口未就绪', 'err');
+      return;
+    }
+    var downloadBlob = getDownloadBlob();
+    var zipCtor = (typeof JSZip !== 'undefined' ? JSZip : (window.JSZip ? window.JSZip : null));
+    var isBatch = files.length > 1;
+    var zip = isBatch && zipCtor ? new zipCtor() : null;
+    var success = 0;
+    var fail = 0;
+    if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = true;
+    setStatus(dom.editDrawerStatus, (isBatch ? ('批量导出 XMind（' + files.length + '份）...') : '正在导出 XMind...'), '');
+
+    var chain = Promise.resolve();
+    files.forEach(function(f) {
+      chain = chain.then(function() {
+        var baseName = f && f.file_name_clean ? String(f.file_name_clean) : ('用例#' + (f && f.id ? f.id : ''));
+        return apiClient
+          .listCaseItems(f.id)
+          .then(function(items) { return builder(items || [], baseName, ''); })
+          .then(function(pkg) {
+            if (!pkg || !pkg.blob) throw new Error('无导出内容');
+            var fileName = sanitizeDownloadName(baseName, '.xmind');
+            if (zip) {
+              zip.file(fileName, pkg.blob);
+            } else {
+              downloadBlob(fileName, pkg.blob);
+            }
+            success += 1;
+          })
+          .catch(function(err) {
+            fail += 1;
+            console.error(err);
+          });
+      });
+    });
+    chain
+      .then(function() {
+        if (zip) {
+          if (!success) throw new Error('全部导出失败');
+          return zip.generateAsync({ type: 'blob' }).then(function(blob) {
+            downloadBlob('用例批量导出_xmind.zip', blob);
+          });
+        }
+        return null;
+      })
+      .then(function() {
+        setStatus(dom.editDrawerStatus, '导出完成：成功 ' + success + ' 份，失败 ' + fail + ' 份', fail ? 'warn' : 'ok');
+      })
+      .catch(function(err) {
+        setStatus(dom.editDrawerStatus, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+      })
+      .finally(function() {
+        if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = false;
+      });
+  }
+
+  function exportEditDrawerSelectionToExcel() {
+    if (state.editDrawer.loading) return;
+    var files = getSelectedEditDrawerCaseFiles();
+    if (!files.length) {
+      setStatus(dom.editDrawerStatus, '请先勾选要导出的用例文件', 'warn');
+      return;
+    }
+    if (!apiClient || typeof apiClient.listCaseItems !== 'function') {
+      setStatus(dom.editDrawerStatus, '后端用例条目接口未就绪', 'err');
+      return;
+    }
+    var downloadBlob = getDownloadBlob();
+    var zipCtor = (typeof JSZip !== 'undefined' ? JSZip : (window.JSZip ? window.JSZip : null));
+    var isBatch = files.length > 1;
+    var zip = isBatch && zipCtor ? new zipCtor() : null;
+    var success = 0;
+    var fail = 0;
+    if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = true;
+    setStatus(dom.editDrawerStatus, (isBatch ? ('批量导出 Excel（' + files.length + '份）...') : '正在导出 Excel...'), '');
+
+    var chain = Promise.resolve();
+    files.forEach(function(f) {
+      chain = chain.then(function() {
+        var baseName = f && f.file_name_clean ? String(f.file_name_clean) : ('用例#' + (f && f.id ? f.id : ''));
+        return apiClient
+          .listCaseItems(f.id)
+          .then(function(items) { return buildCaseLibraryExcelBlob(items || [], baseName); })
+          .then(function(blob) {
+            var fileName = sanitizeDownloadName(baseName, '.xlsx');
+            if (zip) {
+              zip.file(fileName, blob);
+            } else {
+              downloadBlob(fileName, blob);
+            }
+            success += 1;
+          })
+          .catch(function(err) {
+            fail += 1;
+            console.error(err);
+          });
+      });
+    });
+    chain
+      .then(function() {
+        if (zip) {
+          if (!success) throw new Error('全部导出失败');
+          return zip.generateAsync({ type: 'blob' }).then(function(blob) {
+            downloadBlob('用例批量导出_excel.zip', blob);
+          });
+        }
+        return null;
+      })
+      .then(function() {
+        setStatus(dom.editDrawerStatus, '导出完成：成功 ' + success + ' 份，失败 ' + fail + ' 份', fail ? 'warn' : 'ok');
+      })
+      .catch(function(err) {
+        setStatus(dom.editDrawerStatus, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+      })
+      .finally(function() {
+        if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = false;
+      });
+  }
+
   function handleEditDrawerProjectChange() {
     var projectId = normalizeId(dom.editDrawerProjectSelect ? dom.editDrawerProjectSelect.value : '');
     state.editDrawer.projectId = projectId;
@@ -663,6 +807,8 @@
       dom.editDrawerVersionSelect.innerHTML = '<option value=\"\">全部版本</option>';
       dom.editDrawerVersionSelect.value = '';
     }
+    if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = true;
+    if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = true;
     renderEditDrawerList();
     if (!projectId) {
       setStatus(dom.editDrawerStatus, '请先选择项目', 'warn');
@@ -690,13 +836,13 @@
     if (dom.editDrawerDeleteBtn) {
       dom.editDrawerDeleteBtn.disabled = !canDelete || Boolean(state.editDrawer.loading) || selection.size === 0;
     }
+    if (dom.editDrawerExportXmindBtn) {
+      dom.editDrawerExportXmindBtn.disabled = Boolean(state.editDrawer.loading) || selection.size === 0;
+    }
+    if (dom.editDrawerExportExcelBtn) {
+      dom.editDrawerExportExcelBtn.disabled = Boolean(state.editDrawer.loading) || selection.size === 0;
+    }
     if (dom.editDrawerSelectAll) {
-      if (!canDelete) {
-        dom.editDrawerSelectAll.checked = false;
-        dom.editDrawerSelectAll.indeterminate = false;
-        dom.editDrawerSelectAll.disabled = true;
-        return;
-      }
       if (!list.length) {
         dom.editDrawerSelectAll.checked = false;
         dom.editDrawerSelectAll.indeterminate = false;
@@ -744,10 +890,7 @@
       var itemCount = (f && (f.item_count || f.item_count === 0)) ? String(f.item_count) : '--';
       var fileId = f && f.id !== null && f.id !== undefined ? String(f.id) : '';
       var checked = Boolean(fileId && state.editDrawer.selection && state.editDrawer.selection.has(fileId));
-      var selectCell = '';
-      if (canDelete) {
-        selectCell = '<td><input type=\"checkbox\" data-case-lib-edit-select=\"' + escapeHtml(fileId) + '\"' + (checked ? ' checked' : '') + ' /></td>';
-      }
+      var selectCell = '<td><input type=\"checkbox\" data-case-lib-edit-select=\"' + escapeHtml(fileId) + '\"' + (checked ? ' checked' : '') + ' /></td>';
       return (
         '<tr>' +
           selectCell +
@@ -907,17 +1050,6 @@
     if (!dom.editCard) return;
     if (show) dom.editCard.classList.remove('hidden');
     else dom.editCard.classList.add('hidden');
-    if (!show) {
-      if (dom.exportXmindBtn) dom.exportXmindBtn.disabled = true;
-      if (dom.exportExcelBtn) dom.exportExcelBtn.disabled = true;
-    }
-  }
-
-  function getEditorExportBaseName() {
-    var file = state.editor.caseFile;
-    if (file && file.file_name_clean) return String(file.file_name_clean);
-    if (file && file.id) return '用例#' + file.id;
-    return '用例';
   }
 
   function getXmindBuilder() {
@@ -926,47 +1058,6 @@
     var coreApi = window.app && window.app.xmindCore ? window.app.xmindCore : null;
     if (coreApi && typeof coreApi.buildXmindPackageFromCases === 'function') return coreApi.buildXmindPackageFromCases;
     return null;
-  }
-
-  function exportEditorToXmind() {
-    var file = state.editor.caseFile;
-    if (!file) {
-      setStatus(dom.editStatus, '请先选择用例', 'warn');
-      return;
-    }
-    var items = Array.isArray(state.editor.items) ? state.editor.items : [];
-    if (!items.length) {
-      setStatus(dom.editStatus, '当前用例为空，无法导出', 'warn');
-      return;
-    }
-    var builder = getXmindBuilder();
-    if (!builder) {
-      setStatus(dom.editStatus, '缺少 XMind 导出依赖', 'err');
-      return;
-    }
-    var downloadBlob = getDownloadBlob();
-    var baseName = getEditorExportBaseName();
-    var fileName = sanitizeDownloadName(baseName, '.xmind');
-    if (dom.exportXmindBtn) dom.exportXmindBtn.disabled = true;
-    setStatus(dom.editStatus, '正在导出 XMind...', '');
-    Promise.resolve()
-      .then(function() {
-        return builder(items, baseName, '');
-      })
-      .then(function(result) {
-        if (result && result.blob) {
-          downloadBlob(fileName, result.blob);
-          setStatus(dom.editStatus, '已导出 XMind：' + fileName, 'ok');
-        } else {
-          setStatus(dom.editStatus, 'XMind 导出失败：无导出内容', 'err');
-        }
-      })
-      .catch(function(err) {
-        setStatus(dom.editStatus, 'XMind 导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
-      })
-      .finally(function() {
-        if (dom.exportXmindBtn) dom.exportXmindBtn.disabled = false;
-      });
   }
 
   function buildCaseLibraryExcelBlob(items, sheetName) {
@@ -1048,34 +1139,6 @@
     return zip.generateAsync({ type: 'blob', compression: 'STORE' });
   }
 
-  function exportEditorToExcel() {
-    var file = state.editor.caseFile;
-    if (!file) {
-      setStatus(dom.editStatus, '请先选择用例', 'warn');
-      return;
-    }
-    var items = Array.isArray(state.editor.items) ? state.editor.items : [];
-    if (!items.length) {
-      setStatus(dom.editStatus, '当前用例为空，无法导出', 'warn');
-      return;
-    }
-    var downloadBlob = getDownloadBlob();
-    var baseName = getEditorExportBaseName();
-    var fileName = sanitizeDownloadName(baseName, '.xlsx');
-    if (dom.exportExcelBtn) dom.exportExcelBtn.disabled = true;
-    setStatus(dom.editStatus, '正在导出 Excel...', '');
-    buildCaseLibraryExcelBlob(items, baseName)
-      .then(function(blob) {
-        downloadBlob(fileName, blob);
-        setStatus(dom.editStatus, '已导出 Excel：' + fileName, 'ok');
-      })
-      .catch(function(err) {
-        setStatus(dom.editStatus, 'Excel 导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
-      })
-      .finally(function() {
-        if (dom.exportExcelBtn) dom.exportExcelBtn.disabled = false;
-      });
-  }
 
   function applyEditorFilter() {
     var items = Array.isArray(state.editor.items) ? state.editor.items : [];
@@ -1231,8 +1294,6 @@
     if (dom.editVersion) dom.editVersion.textContent = versionName;
     if (dom.editFileName) dom.editFileName.textContent = file.file_name_clean || ('文件#' + file.id);
     if (dom.editCardTitle) dom.editCardTitle.textContent = '用例编辑视图：' + (file.file_name_clean || ('#' + file.id));
-    if (dom.exportXmindBtn) dom.exportXmindBtn.disabled = false;
-    if (dom.exportExcelBtn) dom.exportExcelBtn.disabled = false;
     renderEditorTable();
   }
 
@@ -1909,13 +1970,11 @@
         renderEditorTable();
       });
     }
-    if (dom.exportXmindBtn) {
-      dom.exportXmindBtn.disabled = true;
-      dom.exportXmindBtn.addEventListener('click', exportEditorToXmind);
+    if (dom.editDrawerExportXmindBtn) {
+      dom.editDrawerExportXmindBtn.addEventListener('click', exportEditDrawerSelectionToXmind);
     }
-    if (dom.exportExcelBtn) {
-      dom.exportExcelBtn.disabled = true;
-      dom.exportExcelBtn.addEventListener('click', exportEditorToExcel);
+    if (dom.editDrawerExportExcelBtn) {
+      dom.editDrawerExportExcelBtn.addEventListener('click', exportEditDrawerSelectionToExcel);
     }
     if (dom.editToExecBtn) {
       dom.editToExecBtn.addEventListener('click', function() {

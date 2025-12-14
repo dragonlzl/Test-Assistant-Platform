@@ -766,12 +766,12 @@
 - 测试与验证：UI：`npm run test:ui -- tests/ui/case_library.spec.js tests/ui/tempexec_import_confirm.spec.js`（通过）；API：`APP_DB_FILE=apitest.db python3.9 -m uvicorn backend.main:app --host 127.0.0.1 --port 18082` 后执行 `API_BASE_URL=http://127.0.0.1:18082 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
 - 更新记录：无  
 
-- 功能名称：用例库编辑视图导出 XMind/Excel（不含执行结果、原名导出）  
-- 功能描述：“编辑用例&转到执行”的用例编辑视图增加“导出XMind”“导出Excel”按钮：导出内容与编辑视图字段一致且不包含执行结果；导出文件名使用用例原名（不再追加时间戳/额外后缀）。  
-- 操作方式：进入“用例相关 → 用例库”→编辑任一用例文件→点击“导出XMind”或“导出Excel”，下载文件名为“用例名.xmind / 用例名.xlsx”。  
-- 使用效果：用例库可直接导出标准用例文件用于复用/沉淀，不混入执行态字段；导出文件名更符合预期，便于覆盖/查找。  
-- 新增内容/接口/组件：新增导出按钮（`index.html`）；用例库侧复用 XMind 导出并覆盖下载名；新增 Excel（xlsx）导出（首行字段：模块/用例标题/优先级/前提条件/操作步骤/预期结果）（`scripts/modules/caseLibrary.js`）；UI 用例新增下载名断言（`tests/ui/case_library.spec.js`）。  
-- 复用说明：XMind 复用 `xmindCoreApi.buildXmindPackageFromCases` 生成逻辑，仅调整下载文件名；Excel 复用本地 `JSZip` 生成 xlsx，无新增外部依赖。  
+- 功能名称：用例库编辑抽屉批量导出 XMind/Excel（不含执行结果、原名导出）  
+- 功能描述：“编辑用例&转到执行”抽屉内增加“导出XMind”“导出Excel”按钮，所有角色均可勾选用例文件并批量导出；导出内容与用例库字段一致且不包含执行结果；单份导出文件名使用用例原名（不追加时间戳/额外后缀），多份导出打包为 zip。  
+- 操作方式：进入“用例相关 → 用例库”→点“编辑用例&转到执行”→选择项目后在列表勾选 1 份或多份→点击“导出XMind”或“导出Excel”；单份下载“用例名.xmind / 用例名.xlsx”，多份下载“用例批量导出_xmind.zip / 用例批量导出_excel.zip”。  
+- 使用效果：非管理员也可按需勾选导出；批量导出避免重复下载与命名混乱；导出文件不混入执行态字段。  
+- 新增内容/接口/组件：导出按钮移动到编辑抽屉并常驻（`index.html`）；编辑抽屉列表对所有角色展示勾选框（删除仍仅管理员可见/可用）；批量导出逻辑（XMind 复用 `xmindCoreApi.buildXmindPackageFromCases`，Excel 生成 xlsx，批量打包 zip）（`scripts/modules/caseLibrary.js`）；UI 用例新增“非管理员批量导出”覆盖（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用现有 `listCaseItems`、XMind 生成逻辑与本地 `JSZip`，未新增外部依赖。  
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
 - 更新记录：无  
 

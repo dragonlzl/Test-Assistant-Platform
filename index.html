@@ -1450,8 +1450,6 @@
         <input id="caseLibraryEditSearchInput" type="text" placeholder="搜索模块/标题/预期/步骤/备注"/>
         <div class="case-library-drawer-actions">
           <button class="secondary" id="caseLibraryEditClearSearchBtn" type="button">清空</button>
-          <button class="secondary" id="caseLibraryExportXmindBtn" type="button">导出XMind</button>
-          <button class="secondary" id="caseLibraryExportExcelBtn" type="button">导出Excel</button>
           <button class="primary" id="caseLibraryEditToExecBtn" type="button">转到执行</button>
         </div>
       </div>
@@ -1511,6 +1509,8 @@
         </div>
         <div class="case-library-drawer-actions">
           <button class="primary" id="caseLibraryEditConfirmBtn" type="button">刷新</button>
+          <button class="secondary" id="caseLibraryEditExportXmindBtn" type="button" disabled>导出XMind</button>
+          <button class="secondary" id="caseLibraryEditExportExcelBtn" type="button" disabled>导出Excel</button>
           <button class="secondary" id="caseLibraryEditDeleteBtn" data-role="admin-only" type="button" disabled>删除所选</button>
         </div>
       </div>
@@ -1519,7 +1519,7 @@
         <table class="admin-table">
           <thead>
             <tr>
-              <th data-role="admin-only"><input type="checkbox" id="caseLibraryEditSelectAll" aria-label="全选/全不选"/></th>
+              <th><input type="checkbox" id="caseLibraryEditSelectAll" aria-label="全选/全不选"/></th>
               <th>所属项目</th>
               <th>版本</th>
               <th>用例名</th>
