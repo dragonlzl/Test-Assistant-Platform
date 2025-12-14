@@ -838,6 +838,33 @@
 - 测试与验证：API：启动后端（`APP_DB_FILE=apitest.db .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080`）后执行 `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
 - 更新记录：无  
 
+- 功能名称：用例库导入抽屉默认回填最近项目/版本  
+- 功能描述：在已登录状态下，用例库“导入用例”抽屉会记住最近一次选择的项目与版本；导入完成后再次打开导入抽屉，会自动回填并默认选中上次的项目/版本，减少重复选择。  
+- 操作方式：进入“用例相关 → 用例库”→打开“导入用例”并选择项目/版本导入完成→关闭抽屉→再次打开“导入用例”→项目/版本自动回填。  
+- 使用效果：连续导入多份用例时更省操作，避免反复选择项目/版本。  
+- 新增内容/接口/组件：导入抽屉状态持久化（localStorage：`tap-case-library-import-drawer`，含 `project_id/version_id`）（`scripts/modules/caseLibrary.js`）；UI 用例新增“关闭后再次打开默认回填”覆盖（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用既有项目/版本加载与鉴权就绪判断，仅新增轻量持久化与恢复逻辑。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库删除用例文件后同步清空编辑视图  
+- 功能描述：管理员在“编辑用例&转到执行”抽屉中删除用例文件后，若该用例文件当前正在右侧“用例编辑视图”中打开，则会自动清空并隐藏编辑视图，同时清理刷新恢复缓存，避免出现“已删除仍可编辑”的误导。  
+- 操作方式：打开某个用例文件的编辑视图→回到“编辑用例&转到执行”抽屉勾选并删除该用例文件→删除完成后编辑视图自动消失。  
+- 使用效果：删除操作与编辑视图状态一致，避免继续编辑已删除数据。  
+- 新增内容/接口/组件：删除完成后校验并清空编辑视图（`scripts/modules/caseLibrary.js`）；UI 用例补充“打开编辑视图后删除应清空”断言（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用现有删除流程与编辑视图渲染，仅在删除收尾阶段增加同步清理。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库导入成功后自动清空文件选择（防重复导入）  
+- 功能描述：用例库“导入用例”确认入库全部成功后，会自动清空已选择的导入文件（不清空项目/版本默认项），并禁用“确认入库”按钮，避免用户误点导致同一批文件被重复导入。  
+- 操作方式：导入用例并点击“确认入库”成功后，文件提示恢复为“未选择文件”，再次点击“确认入库”需重新选择文件。  
+- 使用效果：防止重复导入/重复冲突提示，导入流程更符合预期。  
+- 新增内容/接口/组件：导入完成收尾清理文件选择与 input 值（`scripts/modules/caseLibrary.js`）；UI 用例新增“导入完成后确认按钮禁用/文件提示重置”断言（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用既有导入流程与状态提示，仅在成功分支补充轻量清理。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入`（通过）。  
+- 更新记录：无  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  

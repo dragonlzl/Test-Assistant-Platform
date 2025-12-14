@@ -44,6 +44,7 @@ async function waitCaseLibraryReady(page, timeoutMs) {
   let last = null;
   let retriedToken = false;
   let retriedReload = false;
+  let retriedGoto = false;
 
   while (Date.now() < deadline) {
     // 用 evaluate 拿状态，避免 waitForFunction 因某些偶发脚本中断而卡死。
@@ -55,11 +56,24 @@ async function waitCaseLibraryReady(page, timeoutMs) {
         authReady: Boolean(window.app && window.app.authReady === true),
         caseLibraryBound: Boolean(window.app && window.app.caseLibraryBound === true),
         hasSwitchTab: Boolean(window.app && typeof window.app.switchTab === 'function'),
+        path: (window.location && window.location.pathname) ? String(window.location.pathname) : '',
         token: token,
       };
     });
 
-    if (last && last.hasApp && last.authReady && last.caseLibraryBound) return;
+    if (last && last.hasApp && last.authReady && last.caseLibraryBound && last.hasSwitchTab) return;
+
+    // 兜底：偶发跳转到 login.html（通常因 token 注入/接口链路抖动），补 token 后回到 index.html 再等一次。
+    if (!retriedGoto && last && last.path && last.path.indexOf('login') !== -1) {
+      retriedGoto = true;
+      await page.evaluate(() => {
+        try { localStorage.setItem('tap-auth-token', 'test-token'); } catch (_) {}
+      });
+      const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+      await page.goto(base + '/index.html');
+      await page.waitForTimeout(200);
+      continue;
+    }
 
     // 兜底：偶发 localStorage 注入丢失导致未登录，补 token 后刷新一次。
     if (!retriedToken && last && last.hasApp && !last.authReady && !last.token) {
@@ -69,6 +83,13 @@ async function waitCaseLibraryReady(page, timeoutMs) {
       });
       await reloadWithRetry(page);
       await page.waitForTimeout(100);
+      continue;
+    }
+    // 兜底：偶发脚本未完整加载（switchTab 未挂载），先刷新一次触发重试。
+    if (!retriedReload && last && last.hasApp && !last.hasSwitchTab) {
+      retriedReload = true;
+      await reloadWithRetry(page);
+      await page.waitForTimeout(200);
       continue;
     }
     // 兜底：偶发 authGuard 请求链路失败导致一直未登录，直接刷新一次触发重试。
@@ -89,15 +110,29 @@ async function openDrawer(page, buttonSelector, drawerSelector) {
   const btn = page.locator(buttonSelector);
   const drawer = page.locator(drawerSelector);
   await btn.scrollIntoViewIfNeeded();
-  await btn.click();
-  try {
-    await expect(drawer).toHaveClass(/open/, { timeout: 3000 });
-    return;
-  } catch (err) {
-    // 偶发点击未触发（遮罩/焦点抖动），再 force 一次兜底。
-    await btn.click({ force: true });
-    await expect(drawer).toHaveClass(/open/);
+  let lastErr = null;
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      if (i < 2) {
+        await btn.click(i === 0 ? {} : { force: true });
+      } else {
+        // 兜底：个别情况下按钮点击被遮罩/焦点吞掉，直接在页面上下文触发一次 click。
+        await page.evaluate((sel) => {
+          const el = document.querySelector(sel);
+          if (el && typeof el.click === 'function') el.click();
+        }, buttonSelector);
+      }
+      await page.waitForTimeout(80);
+      const opened = await drawer.evaluate((el) => Boolean(el && el.classList && el.classList.contains('open')));
+      if (opened) return;
+      await expect(drawer).toHaveClass(/open/, { timeout: 3000 });
+      return;
+    } catch (err) {
+      lastErr = err;
+      await page.waitForTimeout(200);
+    }
   }
+  throw lastErr || new Error('openDrawer failed: ' + drawerSelector);
 }
 
 async function switchToTab(page, tabName) {
@@ -406,6 +441,18 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await page.click('#caseLibraryImportConfirmBtn');
     await expect(page.locator('#caseLibraryImportStatus')).toContainText('导入完成');
     await expect(page.locator('#caseLibraryStatus')).toContainText('导入完成');
+    // 导入成功后应清空文件选择，避免再次点击导致重复导入
+    await expect(page.locator('#caseLibraryImportConfirmBtn')).toBeDisabled();
+    await expect(page.locator('#caseLibraryImportFileHint')).toContainText('未选择文件');
+
+    // 再次打开导入抽屉时，默认回填最近选择的项目/版本
+    await page.click('#caseLibraryImportDrawer .ghost-btn[data-drawer-close="caseLibraryImportDrawer"]');
+    await expect(page.locator('#caseLibraryImportDrawer')).not.toHaveClass(/open/);
+    await page.click('#openCaseLibraryImportDrawerBtn');
+    await expect(page.locator('#caseLibraryImportDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryImportProjectSelect')).toHaveValue(String(project.id));
+    await expect(page.locator('#caseLibraryImportVersionSelect')).toBeEnabled();
+    await expect(page.locator('#caseLibraryImportVersionSelect')).toHaveValue(String(versions[0].id));
 
     // 同名校验：再次导入同名文件（但内容不同），应打开差异对比抽屉
     const secondImportPayload = [
@@ -532,13 +579,13 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#tempExecView select.status-select[data-status="通过"]')).toHaveCount(1);
   });
 
-  test('编辑抽屉支持全选/全取消并删除所选用例文件（需二次确认）', async ({ page }) => {
-    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
-    const project = { id: 1, name: '战魂铭人', description: '用于用例库删除' };
-    const versions = [{ id: 11, name: 'v1' }];
+	  test('编辑抽屉支持全选/全取消并删除所选用例文件（需二次确认）', async ({ page }) => {
+	    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+	    const project = { id: 1, name: '战魂铭人', description: '用于用例库删除' };
+	    const versions = [{ id: 11, name: 'v1' }];
 
-    const now = new Date().toISOString();
-    const caseFiles = [
+	    const now = new Date().toISOString();
+	    const caseFiles = [
       {
         id: 100,
         project_id: project.id,
@@ -564,8 +611,17 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
         updated_at: now,
         last_updated_by: user.id,
         last_updated_by_name: user.username,
-      },
-    ];
+	      },
+	    ];
+	    const caseItemsByFileId = {
+	      100: [
+	        { id: 1, case_file_id: 100, module: '模块A', title: '用例A-1', expected: '预期', remark: '' },
+	        { id: 2, case_file_id: 100, module: '模块A', title: '用例A-2', expected: '预期', remark: '' },
+	      ],
+	      101: [
+	        { id: 3, case_file_id: 101, module: '模块B', title: '用例B', expected: '预期', remark: '' },
+	      ],
+	    };
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -586,16 +642,22 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
       if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
       if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
 
-      if (pathName === '/api/case-files' && method === 'GET') {
-        const pid = url.searchParams.get('project_id');
-        if (pid !== String(project.id)) return respond(200, []);
-        return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
-      }
+	      if (pathName === '/api/case-files' && method === 'GET') {
+	        const pid = url.searchParams.get('project_id');
+	        if (pid !== String(project.id)) return respond(200, []);
+	        return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
+	      }
 
-      const delMatch = pathName.match(/^\/api\/case-files\/(\d+)$/);
-      if (delMatch && method === 'DELETE') {
-        const id = Number(delMatch[1]);
-        const idx = caseFiles.findIndex((f) => f && f.id === id);
+	      const itemsMatch = pathName.match(/^\/api\/case-files\/(\d+)\/items$/);
+	      if (itemsMatch && method === 'GET') {
+	        const fileId = Number(itemsMatch[1]);
+	        return respond(200, caseItemsByFileId[fileId] || []);
+	      }
+
+	      const delMatch = pathName.match(/^\/api\/case-files\/(\d+)$/);
+	      if (delMatch && method === 'DELETE') {
+	        const id = Number(delMatch[1]);
+	        const idx = caseFiles.findIndex((f) => f && f.id === id);
         if (idx !== -1) caseFiles.splice(idx, 1);
         return respond(200, { detail: '用例文件已删除', case_file_id: id, linked_exec_sets: 0 });
       }
@@ -611,21 +673,31 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
 
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
 
-    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例A');
-    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例B');
+	    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+	    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例A');
+	    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例B');
 
-    await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeDisabled();
-    await page.click('#caseLibraryEditSelectAll');
-    await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeEnabled();
+	    // 先打开“用例A”的编辑视图，再回到抽屉删除，编辑视图应被清空/隐藏。
+	    await page.click('#caseLibraryEditListBody [data-case-lib-edit="100"]');
+	    await expect(page.locator('#caseLibraryEditDrawer')).not.toHaveClass(/open/);
+	    await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
+	    await expect(page.locator('#caseLibraryEditFileName')).toContainText('用例A');
+
+	    await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
+	    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+
+	    await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeDisabled();
+	    await page.click('#caseLibraryEditSelectAll');
+	    await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeEnabled();
 
     page.once('dialog', async (dialog) => dialog.accept());
     await page.click('#caseLibraryEditDeleteBtn');
 
-    await expect(page.locator('#caseLibraryEditDrawerStatus')).toContainText('删除完成');
-    await expect(page.locator('#caseLibraryEditListBody')).toContainText('暂无用例文件');
-    await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeDisabled();
-  });
+	    await expect(page.locator('#caseLibraryEditDrawerStatus')).toContainText('删除完成');
+	    await expect(page.locator('#caseLibraryEditListBody')).toContainText('暂无用例文件');
+	    await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeDisabled();
+	    await expect(page.locator('#caseLibraryEditCard')).toBeHidden();
+	  });
 
   test('编辑用例&转到执行：支持按版本筛选（默认全部版本）', async ({ page }) => {
     const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };

@@ -601,6 +601,102 @@
     writeEditorPersistedState(null);
   }
 
+  var importDrawerPersistKey = 'tap-case-library-import-drawer';
+
+  function readImportDrawerPersistedState() {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      var raw = localStorage.getItem(importDrawerPersistKey);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function writeImportDrawerPersistedState(payload) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      if (!payload) {
+        localStorage.removeItem(importDrawerPersistKey);
+        return;
+      }
+      localStorage.setItem(importDrawerPersistKey, JSON.stringify(payload));
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function persistImportDrawerState(nextProjectId, nextVersionId) {
+    var userId = getCurrentUserId();
+    if (!userId) return;
+    // 若传入为空，默认不覆盖旧值，避免误把“初始化空值”写回导致无法恢复。
+    var persisted = readImportDrawerPersistedState();
+    if (persisted && String(persisted.user_id || '') !== String(userId)) {
+      persisted = null;
+    }
+    var projectId = nextProjectId || (persisted ? normalizeId(persisted.project_id) : null);
+    var versionId = nextVersionId || (persisted ? normalizeId(persisted.version_id) : null);
+    if (!projectId) return;
+    writeImportDrawerPersistedState({
+      user_id: userId,
+      project_id: projectId || '',
+      version_id: versionId || '',
+      saved_at: Date.now(),
+    });
+  }
+
+  function restoreImportDrawerFromPersistedState() {
+    if (!isAuthReady()) return Promise.resolve(false);
+    var persisted = readImportDrawerPersistedState();
+    if (!persisted) return Promise.resolve(false);
+    var userId = getCurrentUserId();
+    if (!userId || String(persisted.user_id || '') !== String(userId)) return Promise.resolve(false);
+
+    var projectId = normalizeId(persisted.project_id);
+    var versionId = normalizeId(persisted.version_id);
+    if (!projectId) return Promise.resolve(false);
+
+    var hasProject = (state.projects || []).some(function(p) { return p && String(p.id) === String(projectId); });
+    if (!hasProject) return Promise.resolve(false);
+
+    state.importDrawer.projectId = projectId;
+    state.importDrawer.versionId = null;
+    if (dom.importProjectSelect) dom.importProjectSelect.value = String(projectId);
+
+    if (!dom.importVersionSelect) {
+      syncImportConfirmEnabled();
+      return Promise.resolve(true);
+    }
+
+    dom.importVersionSelect.disabled = true;
+    dom.importVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
+    dom.importVersionSelect.value = '';
+    syncImportConfirmEnabled();
+
+    return loadVersions(projectId)
+      .then(function() {
+        syncVersionOptions(dom.importVersionSelect, projectId, '请选择版本');
+        dom.importVersionSelect.disabled = false;
+        if (versionId) {
+          // 仅当版本存在于下拉选项时才回填。
+          var ok = (state.versionsByProject[projectId] || []).some(function(v) { return v && String(v.id) === String(versionId); });
+          if (ok) {
+            dom.importVersionSelect.value = String(versionId);
+            state.importDrawer.versionId = versionId;
+          }
+        }
+        syncImportConfirmEnabled();
+        return true;
+      })
+      .catch(function() {
+        // 恢复失败不影响抽屉使用
+        return false;
+      });
+  }
+
   function persistEditorSelection(caseFile) {
     if (!caseFile || caseFile.id === null || caseFile.id === undefined) return;
     var userId = getCurrentUserId();
@@ -1020,6 +1116,7 @@
       dom.importVersionSelect.value = '';
     }
     syncImportConfirmEnabled();
+    return restoreImportDrawerFromPersistedState();
   }
 
   function handleImportFiles(files) {
@@ -1033,6 +1130,7 @@
     var projectId = normalizeId(dom.importProjectSelect ? dom.importProjectSelect.value : '');
     state.importDrawer.projectId = projectId;
     state.importDrawer.versionId = null;
+    if (projectId) persistImportDrawerState(projectId, null);
     syncImportConfirmEnabled();
     if (!dom.importVersionSelect) return;
     dom.importVersionSelect.disabled = true;
@@ -1052,6 +1150,9 @@
 
   function handleImportVersionChange() {
     state.importDrawer.versionId = normalizeId(dom.importVersionSelect ? dom.importVersionSelect.value : '');
+    if (state.importDrawer.projectId && state.importDrawer.versionId) {
+      persistImportDrawerState(state.importDrawer.projectId, state.importDrawer.versionId);
+    }
     syncImportConfirmEnabled();
   }
 
@@ -1207,6 +1308,18 @@
       setStatus(dom.status, msg, failCount ? 'warn' : 'ok');
     }).finally(function() {
       s.loading = false;
+      // 防止重复导入：当本次导入全部成功后，自动清空文件选择（保留项目/版本默认值）。
+      if (successCount > 0 && failCount === 0 && diffOpened !== true) {
+        s.files = [];
+        renderImportFileHint();
+        if (dom.importInput) {
+          try {
+            dom.importInput.value = '';
+          } catch (e) {
+            // ignore
+          }
+        }
+      }
       syncImportConfirmEnabled();
     });
   }
@@ -1570,6 +1683,21 @@
           if (!f || f.id === null || f.id === undefined) return true;
           return !deletedSet.has(String(f.id));
         });
+        // 若当前编辑视图正在编辑被删除的用例文件，需立即清空视图，避免误以为仍可编辑。
+        var editorFile = state.editor && state.editor.caseFile ? state.editor.caseFile : null;
+        if (editorFile && editorFile.id !== null && editorFile.id !== undefined) {
+          if (deletedSet.has(String(editorFile.id))) {
+            state.editor.caseFile = null;
+            state.editor.items = [];
+            state.editor.searchText = '';
+            state.editor.pageIndex = 0;
+            state.editor.selection = new Set();
+            state.editor.remarkOpen = new Set();
+            showEditorCard(false);
+            clearEditorPersistedState();
+            setStatus(dom.editStatus, '当前编辑用例已被删除', 'warn');
+          }
+        }
       }
       renderEditDrawerList();
       syncEditDrawerControls();
