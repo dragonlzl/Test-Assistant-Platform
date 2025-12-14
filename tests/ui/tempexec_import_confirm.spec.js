@@ -2,6 +2,48 @@ const fs = require('fs');
 const path = require('path');
 const { test, expect } = require('@playwright/test');
 
+async function waitAppInited(page, timeoutMs) {
+  const timeout = Number(timeoutMs) || 30000;
+  const deadline = Date.now() + Math.max(1000, timeout - 1000);
+  let retriedReload = false;
+  let retriedGoto = false;
+  let last = null;
+
+  while (Date.now() < deadline) {
+    last = await page.evaluate(() => {
+      let token = '';
+      try { token = localStorage.getItem('tap-auth-token') || ''; } catch (_) { token = ''; }
+      return {
+        hasApp: Boolean(window.app),
+        inited: Boolean(window.app && window.app._inited === true),
+        hasSwitchTab: Boolean(window.app && typeof window.app.switchTab === 'function'),
+        path: (window.location && window.location.pathname) ? String(window.location.pathname) : '',
+        token: token,
+      };
+    });
+
+    if (last && last.hasApp && last.inited && last.hasSwitchTab) return;
+
+    if (!retriedGoto && last && last.path && last.path.indexOf('login') !== -1) {
+      retriedGoto = true;
+      const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+      await page.goto(base + '/index.html');
+      await page.waitForTimeout(200);
+      continue;
+    }
+
+    if (!retriedReload && last && last.hasApp && (!last.inited || !last.hasSwitchTab)) {
+      retriedReload = true;
+      await page.reload();
+      await page.waitForTimeout(200);
+      continue;
+    }
+
+    await page.waitForTimeout(200);
+  }
+  throw new Error('waitAppInited timeout: ' + JSON.stringify(last || {}));
+}
+
 test.describe('用例执行-导入需确认入库', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -194,7 +236,7 @@ test.describe('用例执行-导入需确认入库', () => {
 
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
+    await waitAppInited(page, 30000);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 
     await page.click('#openTempExecDrawerBtn');
@@ -401,7 +443,7 @@ test.describe('用例执行-导入需确认入库', () => {
 
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
+    await waitAppInited(page, 30000);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 
     await page.click('#openTempExecDrawerBtn');
@@ -619,7 +661,7 @@ test.describe('用例执行-导入需确认入库', () => {
 
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
+    await waitAppInited(page, 30000);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 
     await page.click('#openTempExecDrawerBtn');

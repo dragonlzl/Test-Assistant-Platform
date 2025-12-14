@@ -19,6 +19,20 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行结果按个人隔离（每人一份执行集）
+- 功能描述：同一份用例文件（case_file）在执行页的执行结果不再共享；执行集（exec_set）按创建人隔离，避免多人同时执行时实际结果/状态互相覆盖或串写。非管理员默认只能看到/访问自己创建的执行集；管理员可通过参数查看全量用于排查。
+- 操作方式：
+  - 多人分别登录后，对同一份用例文件执行“从用例库转到执行”或“执行页导入并确认入库”，每个人会生成并维护自己的执行集与执行记录。
+  - 执行页切换到“用例执行”或登录完成后，会自动刷新并加载当前账号的历史执行集。
+- 使用效果：同名/同 case_file 的执行结果按个人隔离，多人并行执行不再互相影响；同时避免非管理员误访问他人的执行集数据。
+- 新增内容/接口/组件：
+  - 后端：`backend/routers/exec_routes.py`（exec_set 查询按 `created_by` 过滤；新增 exec_set 访问权限校验；`GET /api/exec/sets` 增加 `all_users` 参数供管理员按需查看全量）。
+  - 前端：`scripts/modules/tempexec.js`（在 `app-auth-ready` 与 `tempexec` 页签激活时触发 `api.loadTempExecState()` 刷新个人执行集）。
+  - 测试：`tests/api/exec_persistence.spec.js`（新增两用户同 case_file 创建不同 exec_set、互不可见/不可访问断言）；`tests/ui/tempexec_personal_exec_set.spec.js`（UI 层验证两用户只加载各自执行集）；`tests/ui/tempexec_import_confirm.spec.js`（增强 app 初始化等待，降低静态资源偶发空响应导致的测试不稳定）。
+- 复用说明：复用既有 exec_set/exec_cases 数据结构与 upsert 流程，仅在查询与鉴权层增加按用户隔离的最小增量逻辑。
+- 测试与验证：`python3 -m compileall backend`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/tempexec_import_confirm.spec.js tests/ui/tempexec_personal_exec_set.spec.js`（通过）；启动测试服务后 `API_BASE_URL=http://127.0.0.1:9000 npx playwright test --config tests/api/playwright.api.config.js --workers=1 tests/api/exec_persistence.spec.js`（通过）。
+- 更新记录：无
+
 - 功能名称：用例库“编辑用例”改名 + 选择执行支持批量转到执行  
 - 功能描述：用例库顶部导航“编辑用例&转到执行”入口改为“编辑用例”（更聚焦编辑/导出/删除）；“选择用例执行”抽屉新增复选框、全选与“批量转到执行”，可一次勾选多份用例文件转入执行页。为降低本地静态资源偶发空响应导致的关键能力缺失（如 drawer/switchTab/xmindCore）概率，增加轻量兜底：缺关键对象时自动刷新恢复，同时在用例库模块内对抽屉与导出依赖做补拉/降级处理。  
 - 操作方式：  

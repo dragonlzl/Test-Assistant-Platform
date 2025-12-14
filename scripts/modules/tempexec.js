@@ -775,9 +775,17 @@
         var tabName = e && e.detail ? e.detail.tab : '';
         if (tabName !== 'tempexec') return;
         ensureImportProjects();
+        // DB 模式下：切到“用例执行”时刷新个人历史执行集，避免多人/多账号切换后展示不一致。
+        if (typeof api.loadTempExecState === 'function') {
+          api.loadTempExecState();
+        }
       });
       window.addEventListener('app-auth-ready', function() {
         ensureImportProjects();
+        // authReady 后 DB 能力才完整可用：补一次加载，确保“历史执行记录/个人执行集”能立即展示。
+        if (typeof api.loadTempExecState === 'function') {
+          api.loadTempExecState();
+        }
       });
       window.addEventListener('app-projects-updated', function() {
         invalidateImportProjectsCache();

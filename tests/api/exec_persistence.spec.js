@@ -75,6 +75,52 @@ test.describe('exec persistence api', () => {
     expect(execSet.status).toBe('active');
     const execSetId = execSet.id;
 
+    // 执行集按用户隔离：同一个 case_file，不同用户应各自拥有一份 exec_set，且互不可访问/覆盖。
+    const otherUsername = 'exec-user-' + Date.now();
+    const createUserRes = await ctx.post(`${apiBase}/api/users`, {
+      headers,
+      data: { username: otherUsername, role: 'user', level: 'member' },
+    });
+    expect(createUserRes.status()).toBe(201);
+    const otherUser = await createUserRes.json();
+    expect(otherUser && otherUser.id).toBeTruthy();
+
+    const assignRes = await ctx.post(`${apiBase}/api/users/assign-projects`, {
+      headers,
+      data: { user_id: otherUser.id, project_ids: [projectId] },
+    });
+    expect(assignRes.status()).toBe(200);
+
+    const otherToken = await login(ctx, otherUsername, '12345678');
+    const otherHeaders = { Authorization: `Bearer ${otherToken}`, 'Content-Type': 'application/json' };
+
+    const otherUpsertRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers: otherHeaders,
+      data: { case_file_id: caseFileId, mode: 'replace', prefer_result_source: 'db' },
+    });
+    expect(otherUpsertRes.status()).toBe(200);
+    const otherExecSet = await otherUpsertRes.json();
+    expect(otherExecSet && otherExecSet.id).toBeTruthy();
+    expect(otherExecSet.id).not.toBe(execSetId);
+    expect(otherExecSet.case_file_id).toBe(caseFileId);
+
+    const listMineRes = await ctx.get(`${apiBase}/api/exec/sets?project_id=${projectId}`, { headers });
+    expect(listMineRes.status()).toBe(200);
+    const mineSets = await listMineRes.json();
+    expect(Array.isArray(mineSets)).toBeTruthy();
+    expect(mineSets.some((s) => s && s.id === execSetId)).toBeTruthy();
+    expect(mineSets.some((s) => s && s.id === otherExecSet.id)).toBeFalsy();
+
+    const listOtherRes = await ctx.get(`${apiBase}/api/exec/sets?project_id=${projectId}`, { headers: otherHeaders });
+    expect(listOtherRes.status()).toBe(200);
+    const otherSets = await listOtherRes.json();
+    expect(Array.isArray(otherSets)).toBeTruthy();
+    expect(otherSets.some((s) => s && s.id === otherExecSet.id)).toBeTruthy();
+    expect(otherSets.some((s) => s && s.id === execSetId)).toBeFalsy();
+
+    const forbiddenRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers: otherHeaders });
+    expect(forbiddenRes.status()).toBe(403);
+
     const listExecCasesRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers });
     expect(listExecCasesRes.status()).toBe(200);
     const execCases = await listExecCasesRes.json();
@@ -232,5 +278,9 @@ test.describe('exec persistence api', () => {
 
     const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
     expect([200, 404]).toContain(delProj.status());
+
+    // cleanup other user
+    const delUser = await ctx.delete(`${apiBase}/api/users/${otherUser.id}`, { headers });
+    expect([200, 404]).toContain(delUser.status());
   });
 });

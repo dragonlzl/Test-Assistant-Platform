@@ -24,6 +24,11 @@ def _ensure_exec_set_access(
     if not exec_set:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="执行集不存在")
     ensure_project_access(db, user, exec_set.project_id)
+    # 执行结果按“个人”隔离：非管理员只能访问自己创建的执行集，避免多人执行结果互相覆盖。
+    if user.role != "admin":
+        owner_id = exec_set.created_by
+        if not owner_id or int(owner_id) != int(user.id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权限访问该执行集")
     return exec_set
 
 
@@ -125,9 +130,13 @@ def upsert_exec_set_from_case_file(
     if prefer_source not in ("db", "import"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="prefer_result_source 仅支持 db/import")
 
+    # 按用户隔离：同一份 case_file，每个用户各自维护一份 exec_set/exec_cases。
     exec_set = (
         db.query(models.ExecSet)
-        .filter(models.ExecSet.case_file_id == case_file.id)
+        .filter(
+            models.ExecSet.case_file_id == case_file.id,
+            models.ExecSet.created_by == user.id,
+        )
         .order_by(models.ExecSet.id.desc())
         .first()
     )
@@ -281,6 +290,7 @@ def upsert_exec_set_from_case_file(
 @router.get("/sets", response_model=List[schemas.ExecSetOut])
 def list_exec_sets(
     project_id: int = None,
+    all_users: bool = False,
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -289,9 +299,16 @@ def list_exec_sets(
         ensure_project_access(db, user, project_id)
         query = query.filter(models.ExecSet.project_id == project_id)
     elif user.role != "admin":
+        # 非管理员：仍需限制为“当前可访问的项目范围”，避免用户被移出项目后仍能看到历史执行集。
         query = query.join(models.Project).join(models.UserProject).filter(
             models.UserProject.user_id == user.id
         )
+
+    # 默认仅返回“当前用户”的执行集，保证执行结果不串；管理员可用 all_users=true 拉全量（用于排查/管理）。
+    if user.role != "admin":
+        query = query.filter(models.ExecSet.created_by == user.id)
+    elif not all_users:
+        query = query.filter(models.ExecSet.created_by == user.id)
     return query.order_by(models.ExecSet.id.desc()).all()
 
 
