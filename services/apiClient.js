@@ -245,6 +245,13 @@
     }).then(handleResponse);
   }
 
+  function deleteCaseFile(caseFileId) {
+    return fetch('/api/case-files/' + caseFileId, {
+      method: 'DELETE',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
   function updateCaseItem(caseItemId, payload) {
     return fetch('/api/case-files/items/' + caseItemId, {
       method: 'PATCH',
@@ -492,6 +499,7 @@
     listCaseFiles: listCaseFiles,
     importCaseFile: importCaseFile,
     listCaseItems: listCaseItems,
+    deleteCaseFile: deleteCaseFile,
     updateCaseItem: updateCaseItem,
     createCaseItem: createCaseItem,
     deleteCaseItem: deleteCaseItem,

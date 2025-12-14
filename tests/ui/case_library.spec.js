@@ -6,7 +6,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
       if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
-        return route.continue();
+        return route.fallback();
       }
       return route.abort();
     });
@@ -66,6 +66,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
           project_id: payload.project_id,
           version_id: payload.version_id,
           file_name_clean: clean,
+          item_count: Array.isArray(payload.items) ? payload.items.length : 0,
           importer_id: user.id,
           importer_name: user.username,
           imported_at: now,
@@ -248,8 +249,10 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await page.goto(base + '/index.html');
     await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', { timeout: 20000 });
     await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.authReady === true, { timeout: 20000 });
 
     await page.click('.tab-group-btn[data-group="cases"]');
+    await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
     await page.click('[data-group-menu="cases"] [data-tab-btn="case-library"]');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
 
@@ -281,7 +284,6 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click('#caseLibraryEditConfirmBtn');
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('case_library_import');
     await page.click('#caseLibraryEditListBody [data-case-lib-edit]');
 
@@ -325,5 +327,186 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#tempexecFlowNav')).toBeVisible();
     await expect(page.locator('#tempExecView')).toContainText('正常登录');
     await expect(page.locator('#tempExecView select.status-select[data-status="通过"]')).toHaveCount(1);
+  });
+
+  test('编辑抽屉支持全选/全取消并删除所选用例文件（需二次确认）', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '战魂铭人', description: '用于用例库删除' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    const now = new Date().toISOString();
+    const caseFiles = [
+      {
+        id: 100,
+        project_id: project.id,
+        version_id: versions[0].id,
+        file_name_clean: '用例A',
+        item_count: 2,
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+        last_updated_by: user.id,
+        last_updated_by_name: user.username,
+      },
+      {
+        id: 101,
+        project_id: project.id,
+        version_id: versions[0].id,
+        file_name_clean: '用例B',
+        item_count: 1,
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+        last_updated_by: user.id,
+        last_updated_by_name: user.username,
+      },
+    ];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/case-files' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
+      }
+
+      const delMatch = pathName.match(/^\/api\/case-files\/(\d+)$/);
+      if (delMatch && method === 'DELETE') {
+        const id = Number(delMatch[1]);
+        const idx = caseFiles.findIndex((f) => f && f.id === id);
+        if (idx !== -1) caseFiles.splice(idx, 1);
+        return respond(200, { detail: '用例文件已删除', case_file_id: id, linked_exec_sets: 0 });
+      }
+
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.authReady === true, { timeout: 20000 });
+
+    await page.click('.tab-group-btn[data-group="cases"]');
+    await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
+    await page.click('[data-group-menu="cases"] [data-tab-btn="case-library"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
+
+    await page.click('#openCaseLibraryEditDrawerBtn');
+    await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
+
+    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例A');
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例B');
+
+    await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeDisabled();
+    await page.click('#caseLibraryEditSelectAll');
+    await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeEnabled();
+
+    page.once('dialog', async (dialog) => dialog.accept());
+    await page.click('#caseLibraryEditDeleteBtn');
+
+    await expect(page.locator('#caseLibraryEditDrawerStatus')).toContainText('删除完成');
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('暂无用例文件');
+    await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeDisabled();
+  });
+
+  test('选择用例执行：选择项目后自动加载列表，选择版本后自动过滤', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '战魂铭人', description: '用于选择执行' };
+    const versions = [{ id: 11, name: 'v1' }, { id: 12, name: 'v2' }];
+    const now = new Date().toISOString();
+    const caseFiles = [
+      {
+        id: 100,
+        project_id: project.id,
+        version_id: versions[0].id,
+        file_name_clean: '用例v1',
+        item_count: 1,
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+      },
+      {
+        id: 101,
+        project_id: project.id,
+        version_id: versions[1].id,
+        file_name_clean: '用例v2',
+        item_count: 1,
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+      },
+    ];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
+      }
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.authReady === true, { timeout: 20000 });
+
+    await page.click('.tab-group-btn[data-group="cases"]');
+    await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
+    await page.click('[data-group-menu="cases"] [data-tab-btn="case-library"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
+
+    await page.click('#openCaseLibrarySelectExecDrawerBtn');
+    await expect(page.locator('#caseLibrarySelectExecDrawer')).toHaveClass(/open/);
+
+    await page.selectOption('#caseLibrarySelectProjectSelect', String(project.id));
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v2');
+
+    await page.selectOption('#caseLibrarySelectVersionSelect', String(versions[0].id));
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');
+    await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('用例v2');
   });
 });

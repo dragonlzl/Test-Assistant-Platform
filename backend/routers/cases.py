@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, aliased
 from .. import models, schemas
 from ..audit import log_operation
 from ..db import get_db
-from ..dependencies import get_current_user
+from ..dependencies import get_current_user, require_admin
 from ..utils import clean_case_file_name, ensure_project_access, ensure_version_in_project
 
 
@@ -110,6 +110,11 @@ def import_case_file(
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用例导入失败：存在重复条目")
     db.refresh(case_file)
+    # 给前端即时展示用例条目数（不新增 DB 字段）。
+    try:
+        setattr(case_file, "item_count", len(unique_items))
+    except Exception:
+        pass
     return case_file
 
 
@@ -144,6 +149,14 @@ def list_case_files(
         )
         .subquery()
     )
+    item_count_sq = (
+        db.query(
+            models.CaseItem.case_file_id.label("case_file_id"),
+            func.count(models.CaseItem.id).label("item_count"),
+        )
+        .group_by(models.CaseItem.case_file_id)
+        .subquery()
+    )
 
     rows = (
         base_query.with_entities(
@@ -151,6 +164,7 @@ def list_case_files(
             importer.username.label("importer_name"),
             last_item_sq.c.last_updated_by.label("last_updated_by"),
             updater.username.label("last_updated_by_name"),
+            item_count_sq.c.item_count.label("item_count"),
         )
         .outerjoin(importer, importer.id == models.CaseFile.importer_id)
         .outerjoin(
@@ -158,19 +172,21 @@ def list_case_files(
             (last_item_sq.c.case_file_id == models.CaseFile.id) & (last_item_sq.c.rn == 1),
         )
         .outerjoin(updater, updater.id == last_item_sq.c.last_updated_by)
+        .outerjoin(item_count_sq, item_count_sq.c.case_file_id == models.CaseFile.id)
         .order_by(models.CaseFile.id.desc())
         .all()
     )
 
     result = []
     for row in rows:
-        case_file, importer_name, last_updated_by, last_updated_by_name = row
+        case_file, importer_name, last_updated_by, last_updated_by_name, item_count = row
         result.append(
             {
                 "id": case_file.id,
                 "project_id": case_file.project_id,
                 "version_id": case_file.version_id,
                 "file_name_clean": case_file.file_name_clean,
+                "item_count": int(item_count or 0),
                 "importer_id": case_file.importer_id,
                 "importer_name": importer_name,
                 "imported_at": case_file.imported_at,
@@ -196,6 +212,41 @@ def list_case_items(
         .all()
     )
     return items
+
+
+@router.delete("/{case_file_id}")
+def delete_case_file(
+    case_file_id: int,
+    admin: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    case_file = _ensure_case_access(db, admin, case_file_id)
+    linked_exec_sets = (
+        db.query(func.count(models.ExecSet.id))
+        .filter(models.ExecSet.case_file_id == case_file.id)
+        .scalar()
+        or 0
+    )
+    db.delete(case_file)
+    log_operation(
+        db=db,
+        user_id=admin.id,
+        action="delete_case_file",
+        target_type="case_file",
+        target_id=case_file_id,
+        detail={
+            "project_id": case_file.project_id,
+            "version_id": case_file.version_id,
+            "file_name": case_file.file_name_clean,
+            "linked_exec_sets": int(linked_exec_sets),
+        },
+    )
+    db.commit()
+    return {
+        "detail": "用例文件已删除",
+        "case_file_id": case_file_id,
+        "linked_exec_sets": int(linked_exec_sets),
+    }
 
 
 @router.patch("/items/{case_item_id}", response_model=schemas.CaseItemOut)

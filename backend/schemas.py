@@ -122,6 +122,7 @@ class CaseFileOut(BaseModel):
     project_id: int
     version_id: Optional[int]
     file_name_clean: str
+    item_count: Optional[int] = None
     importer_id: Optional[int]
     importer_name: Optional[str] = None
     imported_at: datetime

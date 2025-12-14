@@ -199,6 +199,29 @@ test.describe('case library api', () => {
     const dupItems = await dupItemsRes.json();
     expect(dupItems.length).toBe(1);
 
+    const deleteTargetRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '删除测试.json',
+        source: 'apitest',
+        items: [
+          { module: '删除', title: '删除用例文件', expected: 'ok' },
+        ],
+      },
+    });
+    expect(deleteTargetRes.status()).toBe(201);
+    const deleteTarget = await deleteTargetRes.json();
+    const deleteRes = await ctx.delete(`${apiBase}/api/case-files/${deleteTarget.id}`, { headers });
+    expect(deleteRes.status()).toBe(200);
+    const deleteBody = await deleteRes.json();
+    expect(deleteBody && deleteBody.case_file_id).toBe(deleteTarget.id);
+    const listAfterDeleteRes = await ctx.get(`${apiBase}/api/case-files?project_id=${projectId}`, { headers });
+    expect(listAfterDeleteRes.status()).toBe(200);
+    const listAfterDelete = await listAfterDeleteRes.json();
+    expect(listAfterDelete.some((f) => f.id === deleteTarget.id)).toBeFalsy();
+
     const patchRes = await ctx.patch(`${apiBase}/api/case-files/items/${caseItemId}`, {
       headers,
       data: { title: '正常登录（已更新）', module: '登录', expected: items[0].expected },

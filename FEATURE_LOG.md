@@ -36,7 +36,7 @@
   - 语法检查：`node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js scripts/modules/caseLibrary.js services/apiClient.js`（通过）；`python3 -m compileall backend`（通过）。
   - UI：`npm run test:ui -- tests/ui/case_library.spec.js tests/ui/tempexec_import_confirm.spec.js tests/ui/drawer_nav_visibility.spec.js tests/ui/admin_visibility.spec.js`（通过）。
   - API：`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --port 9000` 后执行 `API_BASE_URL=http://127.0.0.1:9000 npx playwright test --config tests/api/playwright.api.config.js --workers=1 tests/api/case_library.spec.js tests/api/exec_persistence.spec.js`（通过）。
-- 更新记录：2025-12-14 补充执行页“导入需确认入库”UI 用例（`tests/ui/tempexec_import_confirm.spec.js`）与执行入库 API 用例（`tests/api/exec_persistence.spec.js`）；修复抽屉遮罩 UI 用例登录注入（`tests/ui/drawer_nav_visibility.spec.js`）；修复后端文件名清洗未覆盖“勾选用例 ”带空格前缀导致执行页确认入库出现“成功 0，失败 1”，并在前端导入匹配中兼容历史 `file_name_clean`；新增 UI 用例覆盖该场景，API 用例补充带空格前缀清洗断言（`tests/ui/tempexec_import_confirm.spec.js`、`tests/api/case_library.spec.js`）；扩展“勾选用例”前缀清洗支持全角空格/多种短横线，避免特定文件名仍触发“成功 0，失败 1”，并补充对应 UI/API 用例覆盖（`tests/ui/tempexec_import_confirm.spec.js`、`tests/api/case_library.spec.js`）；修复用例库/执行页导入遇到“文件内重复条目（模块+标题+预期相同）”时整份导入失败：后端导入前自动去重并记录跳过数量，API 用例补充覆盖（`backend/routers/cases.py`、`tests/api/case_library.spec.js`）；修复项目管理增删版本/新增项目后，用例库与用例执行导入区“项目/版本”下拉不刷新：项目管理变更后广播 `app-projects-updated`，导入模块清理缓存并在页签激活时重拉；新增 UI 用例覆盖（`scripts/modules/admin.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`、`tests/ui/project_changes_refresh_import_selects.spec.js`）。
+- 更新记录：2025-12-14 补充执行页“导入需确认入库”UI 用例（`tests/ui/tempexec_import_confirm.spec.js`）与执行入库 API 用例（`tests/api/exec_persistence.spec.js`）；修复抽屉遮罩 UI 用例登录注入（`tests/ui/drawer_nav_visibility.spec.js`）；修复后端文件名清洗未覆盖“勾选用例 ”带空格前缀导致执行页确认入库出现“成功 0，失败 1”，并在前端导入匹配中兼容历史 `file_name_clean`；新增 UI 用例覆盖该场景，API 用例补充带空格前缀清洗断言（`tests/ui/tempexec_import_confirm.spec.js`、`tests/api/case_library.spec.js`）；扩展“勾选用例”前缀清洗支持全角空格/多种短横线，避免特定文件名仍触发“成功 0，失败 1”，并补充对应 UI/API 用例覆盖（`tests/ui/tempexec_import_confirm.spec.js`、`tests/api/case_library.spec.js`）；修复用例库/执行页导入遇到“文件内重复条目（模块+标题+预期相同）”时整份导入失败：后端导入前自动去重并记录跳过数量，API 用例补充覆盖（`backend/routers/cases.py`、`tests/api/case_library.spec.js`）；用例库“编辑用例&转到执行”列表新增展示“用例条目数”（接口聚合返回，不新增 DB 字段）（`backend/routers/cases.py`、`backend/schemas.py`、`scripts/modules/caseLibrary.js`、`index.html`）；用例库“编辑用例&转到执行”支持全选/全取消并批量删除所选用例文件（需二次确认），后端新增 `DELETE /api/case-files/{id}` 并补齐 UI/API 用例覆盖（`backend/routers/cases.py`、`services/apiClient.js`、`scripts/modules/caseLibrary.js`、`index.html`、`tests/ui/case_library.spec.js`、`tests/api/case_library.spec.js`）（仅管理员可删除，确认弹窗文案改为“用例名，x条”列表格式）；用例库“编辑用例&转到执行/选择用例执行”抽屉选择项目后自动刷新列表，无需点击确认（`scripts/modules/caseLibrary.js`、`index.html`、`tests/ui/case_library.spec.js`）；修复项目管理增删版本/新增项目后，用例库与用例执行导入区“项目/版本”下拉不刷新：项目管理变更后广播 `app-projects-updated`，导入模块清理缓存并在页签激活时重拉；新增 UI 用例覆盖（`scripts/modules/admin.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`、`tests/ui/project_changes_refresh_import_selects.spec.js`）。
 
 - 功能名称：设置/模型/功能指派持久化 API 与操作日志查询  
 - 功能描述：新增设置、模型配置、功能指派的持久化接口，支持用户级/全局双作用域；操作日志提供管理员可查列表，前端“操作记录”页可刷新查看登录/增删改等记录。  
@@ -729,6 +729,15 @@
 - 复用说明：复用现有抽屉组件 `window.app.drawer`、执行视图样式/分页设置（`state.tempExecPageSize`）、以及执行页文件结构创建能力（`window.app.tempExecApi.createTempExecFile`），仅在用例库侧封装“同名覆盖/保留结果/增删撤回入库”的流程。  
 - 测试与验证：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js scripts/modules/caseLibrary.js services/apiClient.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）；API：`APP_DB_FILE=apitest.db python3.9 -m uvicorn backend.main:app --host 127.0.0.1 --port 18081` 启动测试服务后执行 `API_BASE_URL=http://127.0.0.1:18081 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过，健康检查断言使用测试库）。  
 - 更新记录：美化用例库项目/版本选择框样式，并为项目选择框设置最小宽度确保 6 个中文项目名完整展示（`style.css`）。  
+
+- 功能名称：用例库选择项目自动刷新（免确认）  
+- 功能描述：用例库的“编辑用例&转到执行”抽屉与“选择用例执行”抽屉，在选择项目后自动加载用例文件列表并同步版本下拉；选择版本后立即过滤列表；原“确认”按钮保留为可选“刷新”。  
+- 操作方式：进入“用例相关 → 用例库”→打开对应抽屉→选择项目后列表自动刷新；（可选）选择版本过滤；如需手动重拉，点“刷新”。  
+- 使用效果：减少一次无意义点击，项目/版本选择的反馈更及时。  
+- 新增内容/接口/组件：选择执行抽屉加载状态渲染修复与自动加载逻辑（`scripts/modules/caseLibrary.js`）；按钮文案调整（`index.html`）。  
+- 复用说明：复用现有 `listCaseFiles/listProjectVersions` 接口与抽屉组件，未新增新接口。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）；回归 `npm run test:ui -- tests/ui/project_changes_refresh_import_selects.spec.js`（通过）。  
+- 更新记录：无  
 
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
