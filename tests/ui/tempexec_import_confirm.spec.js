@@ -471,9 +471,8 @@ test.describe('用例执行-导入需确认入库', () => {
     await expect(page.locator('#tempExecImportConfirmBtn')).toBeEnabled();
     await page.click('#tempExecImportConfirmBtn');
 
-    await expect.poll(() => page.evaluate(() => (window.app && window.app.state && window.app.state.tempExecFiles ? window.app.state.tempExecFiles.length : -1)), {
-      timeout: 10000,
-    }).toBe(1);
+    await expect(page.locator('#tempExecImportDiffDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#tempExecImportDiffTitle')).toContainText('登录');
     expect(importCallCount).toBe(0);
   });
 
@@ -683,7 +682,8 @@ test.describe('用例执行-导入需确认入库', () => {
     await expect(page.locator('#tempExecImportConfirmBtn')).toBeEnabled();
     await page.click('#tempExecImportConfirmBtn');
 
-    await expect(page.locator('#tempExecStatus')).toContainText('入库完成：成功 1');
+    await expect(page.locator('#tempExecImportDiffDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#tempExecImportDiffTitle')).toContainText('全角空格测试');
     expect(importEndpointCalled).toBe(0);
   });
 });

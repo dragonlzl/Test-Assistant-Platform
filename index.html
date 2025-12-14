@@ -1199,7 +1199,7 @@
 <div class="temp-case-layout">
 <div class="pane">
 <label class="zone" id="tempExecDropZone">
-<input accept=".xmind,.txt,.md,.json" hidden="" id="tempExecInput" multiple="" type="file"/>
+<input accept=".xmind,.txt,.md,.json,.xlsx" hidden="" id="tempExecInput" multiple="" type="file"/>
 <div class="zone-line">
 <strong>测试用例</strong>
 <span>拖拽或点击选择</span>
@@ -1249,6 +1249,79 @@
 </div>
 </div>
 </section>
+</div>
+</div>
+</div>
+<div class="drawer" id="tempExecImportDiffDrawer" data-tab-section="tempexec">
+<div class="drawer-mask" data-drawer-close="tempExecImportDiffDrawer"></div>
+<div class="drawer-panel drawer-panel-wide">
+<div class="drawer-header">
+<h3 id="tempExecImportDiffTitle">同名用例差异对比</h3>
+<button class="link-toggle" data-drawer-close="tempExecImportDiffDrawer">收起</button>
+</div>
+<div class="drawer-body">
+<p class="hint">左侧为本次导入解析结果，右侧为当前账号执行中的同名用例。绿色表示新增，红色表示差异或将被覆盖/移除。</p>
+<p class="status" id="tempExecImportDiffStatus"></p>
+<div class="case-library-diff">
+<div class="case-library-diff-col">
+<div class="case-library-diff-head">
+<h4 id="tempExecImportDiffLeftTitle">导入用例（待入库）</h4>
+<p class="hint" id="tempExecImportDiffLeftMeta"></p>
+</div>
+<div class="admin-table-wrapper">
+<table class="admin-table diff-table">
+<thead>
+<tr>
+<th>#</th>
+<th>模块</th>
+<th>用例标题</th>
+<th>优先级</th>
+<th>前提条件</th>
+<th>操作步骤</th>
+<th>预期结果</th>
+<th data-tempexec-diff-result>实际结果</th>
+<th data-tempexec-diff-result>备注</th>
+<th data-tempexec-diff-result>缺陷链接</th>
+</tr>
+</thead>
+<tbody id="tempExecImportDiffLeftBody">
+<tr><td colspan="10"><p class="hint">暂无数据</p></td></tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="case-library-diff-col">
+<div class="case-library-diff-head">
+<h4 id="tempExecImportDiffRightTitle">执行中用例（已存在）</h4>
+<p class="hint" id="tempExecImportDiffRightMeta"></p>
+</div>
+<div class="admin-table-wrapper">
+<table class="admin-table diff-table">
+<thead>
+<tr>
+<th>#</th>
+<th>模块</th>
+<th>用例标题</th>
+<th>优先级</th>
+<th>前提条件</th>
+<th>操作步骤</th>
+<th>预期结果</th>
+<th data-tempexec-diff-result>实际结果</th>
+<th data-tempexec-diff-result>备注</th>
+<th data-tempexec-diff-result>缺陷链接</th>
+</tr>
+</thead>
+<tbody id="tempExecImportDiffRightBody">
+<tr><td colspan="10"><p class="hint">暂无数据</p></td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div class="actions user-form-actions">
+<button class="primary" id="tempExecImportDiffOverwriteBtn" type="button">确认覆盖导入</button>
+<button class="ghost-btn" data-drawer-close="tempExecImportDiffDrawer" type="button">关闭</button>
+</div>
 </div>
 </div>
 </div>
@@ -1878,6 +1951,7 @@
 <script src="./scripts/core/casesCore.js" defer></script>
 <script src="./scripts/core/autoCore.js" defer></script>
 <script src="./scripts/core/xmindCore.js" defer></script>
+<script src="./scripts/core/xlsxCore.js" defer></script>
 <script src="./scripts/core/tempexecDefaults.js" defer></script>
 <script src="./scripts/core/tempexecCore.js" defer></script>
 <script src="./scripts/core/casesGenCore.js" defer></script>

@@ -129,6 +129,7 @@ def upsert_exec_set_from_case_file(
     prefer_source = (payload.prefer_result_source or "db").strip().lower()
     if prefer_source not in ("db", "import"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="prefer_result_source 仅支持 db/import")
+    preserve_results = True if payload.preserve_results is None else bool(payload.preserve_results)
 
     # 按用户隔离：同一份 case_file，每个用户各自维护一份 exec_set/exec_cases。
     exec_set = (
@@ -185,6 +186,13 @@ def upsert_exec_set_from_case_file(
         .order_by(models.ExecCase.order_no.asc(), models.ExecCase.id.asc())
         .all()
     )
+    if mode == "replace" and not preserve_results and existing_cases:
+        # 覆盖导入等场景：强制“完全替换”，避免旧条目残留导致前端展示为追加/合并。
+        # 注意：这会删除执行集中所有旧用例（包含未绑定 case_item 的临时用例）。
+        db.query(models.ExecCase).filter(models.ExecCase.exec_set_id == exec_set.id).delete(
+            synchronize_session=False
+        )
+        existing_cases = []
     existing_by_item_id = {}
     for item in existing_cases:
         if item.case_item_id:

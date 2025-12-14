@@ -19,6 +19,18 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例执行支持 Excel（xlsx）导入（可带执行结果）+ 同名差异对比覆盖  
+- 功能描述：用例执行页“用例导入&分配”支持导入 `.xlsx`；Excel 表头与导出对齐时可解析入库，支持两种格式：  
+  - 不带结果：表头包含“模块/用例标题/优先级/前提条件/操作步骤/预期结果”。  
+  - 带结果：在不带结果基础上增加“实际结果/备注/缺陷链接”三列；若使用“复用子项行”，子项行要求“模块/用例标题/优先级/前提条件/操作步骤/缺陷链接”为空，预期结果=子项文本，实际结果=子项状态，备注=子项备注；且主行“实际结果”需与子项汇总一致，否则提示“结果格式不对无法导入”。  
+  当导入用例与当前项目/版本下已入库同名用例冲突时，会打开差异对比抽屉（左导入、右执行中同名用例），按红/绿标记差异并提供“确认覆盖导入”；若覆盖会替换或清空执行结果（实际结果/备注/缺陷链接），会二次确认。覆盖成功后会自动清空已选择文件，避免重复导入。  
+- 操作方式：进入“用例相关 → 用例执行”→打开“用例导入&分配”→选择 `.xlsx`→选择项目/版本→点击“确认入库”；同名时在差异抽屉中点击“确认覆盖导入”并按提示二次确认。  
+- 使用效果：支持 Excel 作为执行用例/执行结果交付格式；同名冲突可视化对比后再覆盖，减少误覆盖与重复导入带来的失败/冲突。  
+- 新增内容/接口/组件：`scripts/core/xlsxCore.js`（新增 Excel 解析）；`index.html`（执行导入 accept 增加 `.xlsx`、新增差异对比抽屉、core 脚本加载插入 xlsxCore）；`scripts/core/tempexecCore.js`（DB 入库新增 `.xlsx` 解析分支、结果/复用格式强校验、同名用例抛出 `duplicate_case_file` 供 UI 打开 diff）；`scripts/modules/tempexec.js`（新增执行页同名 diff 抽屉渲染与覆盖导入交互）；UI 用例新增 `tests/ui/tempexec_import_excel_diff.spec.js`，并更新 `tests/ui/tempexec_import_confirm.spec.js`（同名改为打开 diff 预期）、`tests/ui/tempexec_import_xmind.spec.js`（补充 e2e skip auth）。  
+- 复用说明：复用既有 JSZip 依赖与用例入库/执行集 upsert 接口（`/api/case-files/import?overwrite=1`、`/api/exec/sets/from-case-file`），仅新增前端解析与差异对比 UI。  
+- 测试与验证：`node --check scripts/core/xlsxCore.js scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/tempexec_import_excel_diff.spec.js tests/ui/tempexec_import_confirm.spec.js tests/ui/tempexec_import_xmind.spec.js`（通过，需 8090 http.server 权限）。  
+- 更新记录：2025-12-14 Excel 导入会自动忽略数据区重复表头行，避免“表头被当成用例条目”导致 diff 行数/差异不准确（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_import_excel_diff.spec.js`）；覆盖导入同名用例时执行集改为“先清空再重建”的完全替换（`preserve_results=false`），避免旧 exec_cases 残留导致执行页展示为追加/合并（`backend/routers/exec_routes.py`、`scripts/modules/tempexec.js`、`tests/api/exec_persistence.spec.js`）。  
+
 - 功能名称：执行结果按个人隔离（每人一份执行集）
 - 功能描述：同一份用例文件（case_file）在执行页的执行结果不再共享；执行集（exec_set）按创建人隔离，避免多人同时执行时实际结果/状态互相覆盖或串写。非管理员默认只能看到/访问自己创建的执行集；管理员可通过参数查看全量用于排查。
 - 操作方式：

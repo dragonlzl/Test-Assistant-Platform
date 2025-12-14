@@ -39,6 +39,16 @@
     var toggleTempVersionBtn = document.getElementById('toggleTempVersion');
     var tempExecDrawerEl = document.getElementById('tempExecDrawer');
     var tempExecOverviewDrawerEl = document.getElementById('tempExecOverviewDrawer');
+    var tempExecImportDiffDrawerEl = document.getElementById('tempExecImportDiffDrawer');
+    var tempExecImportDiffTitle = document.getElementById('tempExecImportDiffTitle');
+    var tempExecImportDiffStatus = document.getElementById('tempExecImportDiffStatus');
+    var tempExecImportDiffLeftTitle = document.getElementById('tempExecImportDiffLeftTitle');
+    var tempExecImportDiffLeftMeta = document.getElementById('tempExecImportDiffLeftMeta');
+    var tempExecImportDiffLeftBody = document.getElementById('tempExecImportDiffLeftBody');
+    var tempExecImportDiffRightTitle = document.getElementById('tempExecImportDiffRightTitle');
+    var tempExecImportDiffRightMeta = document.getElementById('tempExecImportDiffRightMeta');
+    var tempExecImportDiffRightBody = document.getElementById('tempExecImportDiffRightBody');
+    var tempExecImportDiffOverwriteBtn = document.getElementById('tempExecImportDiffOverwriteBtn');
     var openTempExecDrawerBtn = document.getElementById('openTempExecDrawerBtn');
     var openTempExecViewNavBtn = document.getElementById('openTempExecViewNavBtn');
     var openTempExecOverviewNavBtn = document.getElementById('openTempExecOverviewNavBtn');
@@ -204,6 +214,11 @@
       drawerId: 'tempExecOverviewDrawer',
       openButtons: ['openTempExecOverviewNavBtn', 'tempExecOverviewBtn'],
       closeButtons: ['closeTempExecOverviewDrawerBtn'],
+    });
+    var tempExecImportDiffDrawer = window.app.drawer && window.app.drawer.createDrawer({
+      drawerId: 'tempExecImportDiffDrawer',
+      openButtons: [],
+      closeButtons: [],
     });
     if (tempExecDrawer) {
       var tabButtons = document.querySelectorAll('[data-tab-btn]');
@@ -527,6 +542,518 @@
       loading: false,
       projectsLoaded: false,
     };
+    var importDiffState = {
+      loading: false,
+      fileName: '',
+      cleanName: '',
+      projectId: null,
+      importVersionId: null,
+      dbVersionId: null,
+      ext: '',
+      source: '',
+      importItems: [],
+      importExecCases: [],
+      importHasResult: false,
+      importReuseEnabled: false,
+      requirement: '',
+      dbCaseFileId: null,
+      dbItems: [],
+      dbExecSetId: null,
+      dbExecCases: [],
+      dbReuseEnabled: false,
+      dbHasResult: false,
+      showResultFields: false,
+      rows: [],
+    };
+
+    function normalizeDiffText(value) {
+      if (value === null || value === undefined) return '';
+      return String(value).replace(/\r\n/g, '\n').trim();
+    }
+
+    function normalizeKeyText(value) {
+      return normalizeDiffText(value).toLowerCase();
+    }
+
+    function buildCaseKey(moduleName, title, expected) {
+      return normalizeKeyText(moduleName) + '::' + normalizeKeyText(title) + '::' + normalizeKeyText(expected);
+    }
+
+    function joinDefectLinks(list) {
+      var links = Array.isArray(list) ? list : [];
+      var out = [];
+      links.forEach(function(link) {
+        if (!link) return;
+        var url = link.url !== undefined && link.url !== null ? String(link.url).trim() : '';
+        if (!url) return;
+        out.push(url);
+      });
+      return out.join('\n');
+    }
+
+    function detectExecCasesHasResult(execCases, reuseEnabled) {
+      var rows = Array.isArray(execCases) ? execCases : [];
+      if (!rows.length) return false;
+      if (reuseEnabled) {
+        return rows.some(function(row) {
+          var details = row && Array.isArray(row.reuse_details) ? row.reuse_details : [];
+          return details.some(function(d) {
+            var st = d && d.status ? String(d.status) : '未执行';
+            var note = d && d.note ? String(d.note) : '';
+            return (st && st !== '未执行') || (note && note.trim());
+          });
+        });
+      }
+      return rows.some(function(row2) {
+        var st2 = row2 && row2.status ? String(row2.status) : '未执行';
+        var remark2 = row2 && row2.remark ? String(row2.remark) : '';
+        var defects2 = row2 && Array.isArray(row2.defect_links) ? row2.defect_links : [];
+        return (st2 && st2 !== '未执行') || (remark2 && remark2.trim()) || defects2.length;
+      });
+    }
+
+    function buildExecCaseMapByItemId(execCases) {
+      var rows = Array.isArray(execCases) ? execCases : [];
+      var map = {};
+      rows.forEach(function(row) {
+        if (!row) return;
+        var id = row.case_item_id || row.caseItemId || null;
+        if (!id) return;
+        map[String(id)] = row;
+      });
+      return map;
+    }
+
+    function buildImportExecCaseMapByKey(execCases) {
+      var rows = Array.isArray(execCases) ? execCases : [];
+      var map = {};
+      rows.forEach(function(row) {
+        if (!row) return;
+        var key = buildCaseKey(row.module, row.title, row.expected);
+        if (!key) return;
+        map[key] = row;
+      });
+      return map;
+    }
+
+    function flattenDiffRows(items, execCaseMap, opts) {
+      var options = opts && typeof opts === 'object' ? opts : {};
+      var reuseEnabled = options.reuseEnabled === true;
+      var includeResult = options.includeResult === true;
+      var list = Array.isArray(items) ? items : [];
+      var out = [];
+      var reuseIndexByParent = {};
+
+      list.forEach(function(it) {
+        if (!it) return;
+        var moduleName = it.module || '';
+        var title = it.title || '';
+        var expected = it.expected || '';
+        var priority = it.priority || '';
+        var preconditions = it.precondition || it.preconditions || '';
+        var steps = it.steps || '';
+        var parentKey = buildCaseKey(moduleName, title, expected);
+        var rowKey = 'main::' + parentKey;
+
+        var execRow = null;
+        if (options.matchBy === 'itemId') {
+          var cid = it.id || it.case_item_id || it.caseItemId || null;
+          if (cid !== null && cid !== undefined) {
+            execRow = execCaseMap ? execCaseMap[String(cid)] : null;
+          }
+        } else {
+          execRow = execCaseMap ? execCaseMap[parentKey] : null;
+        }
+        var status = execRow && execRow.status ? String(execRow.status) : '未执行';
+        var remark = execRow && execRow.remark ? String(execRow.remark) : '';
+        var defectLinks = execRow && Array.isArray(execRow.defect_links) ? execRow.defect_links : [];
+        var reuseDetails = execRow && Array.isArray(execRow.reuse_details) ? execRow.reuse_details : [];
+
+        out.push({
+          key: rowKey,
+          module: moduleName,
+          title: title,
+          priority: priority,
+          preconditions: preconditions,
+          steps: steps,
+          expected: expected,
+          actual: includeResult ? status : '',
+          remark: includeResult ? remark : '',
+          defect: includeResult ? joinDefectLinks(defectLinks) : '',
+          reuseDetails: reuseEnabled ? reuseDetails : [],
+          parentKey: parentKey,
+          kind: 'main',
+        });
+
+        if (reuseEnabled && Array.isArray(reuseDetails) && reuseDetails.length) {
+          if (!reuseIndexByParent[parentKey]) reuseIndexByParent[parentKey] = 0;
+          reuseDetails.forEach(function(detail) {
+            reuseIndexByParent[parentKey] += 1;
+            var idx = reuseIndexByParent[parentKey];
+            var text = detail && detail.text ? String(detail.text) : '';
+            var note = detail && detail.note ? String(detail.note) : '';
+            var st3 = detail && detail.status ? String(detail.status) : '未执行';
+            out.push({
+              key: 'reuse::' + parentKey + '::' + normalizeKeyText(text) + '::' + idx,
+              module: '',
+              title: '',
+              priority: '',
+              preconditions: '',
+              steps: '',
+              expected: text,
+              actual: includeResult ? st3 : '',
+              remark: includeResult ? note : '',
+              defect: '',
+              reuseDetails: [],
+              parentKey: parentKey,
+              kind: 'reuse',
+            });
+          });
+        }
+      });
+
+      return out;
+    }
+
+    function compareRowFields(left, right, includeResult) {
+      var diff = {
+        module: false,
+        title: false,
+        priority: false,
+        preconditions: false,
+        steps: false,
+        expected: false,
+        actual: false,
+        remark: false,
+        defect: false,
+      };
+      if (!left || !right) return diff;
+      diff.module = normalizeDiffText(left.module) !== normalizeDiffText(right.module);
+      diff.title = normalizeDiffText(left.title) !== normalizeDiffText(right.title);
+      diff.priority = normalizeDiffText(left.priority) !== normalizeDiffText(right.priority);
+      diff.preconditions = normalizeDiffText(left.preconditions) !== normalizeDiffText(right.preconditions);
+      diff.steps = normalizeDiffText(left.steps) !== normalizeDiffText(right.steps);
+      diff.expected = normalizeDiffText(left.expected) !== normalizeDiffText(right.expected);
+      if (includeResult) {
+        diff.actual = normalizeDiffText(left.actual) !== normalizeDiffText(right.actual);
+        diff.remark = normalizeDiffText(left.remark) !== normalizeDiffText(right.remark);
+        diff.defect = normalizeDiffText(left.defect) !== normalizeDiffText(right.defect);
+      }
+      return diff;
+    }
+
+    function buildDiffRows(leftRows, rightRows, includeResult) {
+      var leftList = Array.isArray(leftRows) ? leftRows : [];
+      var rightList = Array.isArray(rightRows) ? rightRows : [];
+      var leftMap = {};
+      var rightMap = {};
+      var keyList = [];
+      leftList.forEach(function(row) {
+        if (!row || !row.key) return;
+        leftMap[row.key] = row;
+        keyList.push(row.key);
+      });
+      rightList.forEach(function(row) {
+        if (!row || !row.key) return;
+        rightMap[row.key] = row;
+        if (!leftMap[row.key]) keyList.push(row.key);
+      });
+      return keyList.map(function(key) {
+        var left = leftMap[key] || null;
+        var right = rightMap[key] || null;
+        var type = 'unchanged';
+        var diff = null;
+        if (left && !right) type = 'added';
+        else if (!left && right) type = 'removed';
+        else if (left && right) {
+          diff = compareRowFields(left, right, includeResult);
+          var changed = Object.keys(diff).some(function(k) { return diff[k]; });
+          if (changed) type = 'changed';
+        }
+        return { key: key, type: type, left: left, right: right, diff: diff };
+      });
+    }
+
+    function setDiffResultFieldsVisible(visible) {
+      if (!tempExecImportDiffDrawerEl || !tempExecImportDiffDrawerEl.querySelectorAll) return;
+      var nodes = tempExecImportDiffDrawerEl.querySelectorAll('[data-tempexec-diff-result]');
+      nodes.forEach(function(node) {
+        if (!node || !node.classList) return;
+        if (visible) node.classList.remove('hidden');
+        else node.classList.add('hidden');
+      });
+    }
+
+    function renderDiffTableBody(bodyEl, side, rows, includeResult) {
+      if (!bodyEl) return;
+      var list = Array.isArray(rows) ? rows : [];
+      if (!list.length) {
+        bodyEl.innerHTML = '<tr><td colspan="' + (includeResult ? '10' : '7') + '"><p class="hint">暂无数据</p></td></tr>';
+        return;
+      }
+      bodyEl.innerHTML = list.map(function(row, idx) {
+        var item = side === 'left' ? row.left : row.right;
+        var other = side === 'left' ? row.right : row.left;
+        var isPlaceholder = !item;
+        var rowCls = '';
+        if (row.type === 'added' && side === 'left') rowCls = 'diff-row-added';
+        if (row.type === 'removed' && side === 'right') rowCls = 'diff-row-removed';
+        if (row.type === 'changed') rowCls = 'diff-row-changed';
+
+        var module = item ? (item.module || '') : '';
+        var title = item ? (item.title || '') : '';
+        var expected = item ? (item.expected || '') : '';
+        var priority = item ? (item.priority || '') : '';
+        var preconditions = item ? (item.preconditions || '') : '';
+        var steps = item ? (item.steps || '') : '';
+        var actual = item ? (item.actual || '') : '';
+        var remark = item ? (item.remark || '') : '';
+        var defect = item ? (item.defect || '') : '';
+
+        var priorityCls = '';
+        var preCls = '';
+        var stepsCls = '';
+        var actualCls = '';
+        var remarkCls = '';
+        var defectCls = '';
+        if (!isPlaceholder && other && row.type === 'changed' && row.diff) {
+          if (row.diff.priority) priorityCls = 'diff-cell-changed';
+          if (row.diff.preconditions) preCls = 'diff-cell-changed';
+          if (row.diff.steps) stepsCls = 'diff-cell-changed';
+          if (includeResult && row.diff.actual) actualCls = 'diff-cell-changed';
+          if (includeResult && row.diff.remark) remarkCls = 'diff-cell-changed';
+          if (includeResult && row.diff.defect) defectCls = 'diff-cell-changed';
+        }
+
+        var hint = isPlaceholder ? '<p class="hint">（无对应项）</p>' : '';
+        var resultCells = includeResult
+          ? (
+              '<td data-tempexec-diff-result class="' + escapeHtml(actualCls) + '">' + escapeHtml(actual) + '</td>' +
+              '<td data-tempexec-diff-result class="' + escapeHtml(remarkCls) + '">' + escapeHtml(remark) + '</td>' +
+              '<td data-tempexec-diff-result class="' + escapeHtml(defectCls) + '">' + escapeHtml(defect) + '</td>'
+            )
+          : '';
+        return (
+          '<tr class="' + escapeHtml(rowCls) + '">' +
+            '<td>' + escapeHtml(String(idx + 1)) + '</td>' +
+            '<td>' + escapeHtml(module) + '</td>' +
+            '<td>' + escapeHtml(title) + hint + '</td>' +
+            '<td class="' + escapeHtml(priorityCls) + '">' + escapeHtml(priority) + '</td>' +
+            '<td class="' + escapeHtml(preCls) + '">' + escapeHtml(preconditions) + '</td>' +
+            '<td class="' + escapeHtml(stepsCls) + '">' + escapeHtml(steps) + '</td>' +
+            '<td>' + escapeHtml(expected) + '</td>' +
+            resultCells +
+          '</tr>'
+        );
+      }).join('');
+    }
+
+    function syncImportDiffControls() {
+      if (!tempExecImportDiffOverwriteBtn) return;
+      var can = Boolean(
+        !importDiffState.loading &&
+        importDiffState.projectId &&
+        importDiffState.importVersionId &&
+        importDiffState.dbCaseFileId &&
+        importDiffState.cleanName &&
+        Array.isArray(importDiffState.importItems) &&
+        importDiffState.importItems.length
+      );
+      tempExecImportDiffOverwriteBtn.disabled = !can;
+    }
+
+    function openImportDiffDrawerLoading(payload) {
+      payload = payload || {};
+      importDiffState.loading = true;
+      importDiffState.fileName = payload.fileName || '';
+      importDiffState.cleanName = payload.cleanName || '';
+      importDiffState.projectId = payload.projectId || null;
+      importDiffState.importVersionId = payload.importVersionId || null;
+      importDiffState.dbVersionId = payload.dbVersionId || null;
+      importDiffState.ext = payload.ext || '';
+      importDiffState.source = payload.source || '';
+      importDiffState.importItems = Array.isArray(payload.importItems) ? payload.importItems : [];
+      importDiffState.importExecCases = Array.isArray(payload.importExecCases) ? payload.importExecCases : [];
+      importDiffState.importHasResult = payload.importHasResult === true;
+      importDiffState.importReuseEnabled = payload.importReuseEnabled === true;
+      importDiffState.requirement = payload.requirement || '';
+      importDiffState.dbCaseFileId = payload.dbCaseFileId || null;
+      importDiffState.dbItems = [];
+      importDiffState.dbExecSetId = null;
+      importDiffState.dbExecCases = [];
+      importDiffState.dbReuseEnabled = false;
+      importDiffState.dbHasResult = false;
+      importDiffState.showResultFields = false;
+      importDiffState.rows = [];
+
+      if (tempExecImportDiffTitle) {
+        tempExecImportDiffTitle.textContent = '同名用例差异对比：' + (importDiffState.cleanName || importDiffState.fileName || '用例');
+      }
+      if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '正在加载差异对比...', '');
+      if (tempExecImportDiffLeftMeta) tempExecImportDiffLeftMeta.textContent = '';
+      if (tempExecImportDiffRightMeta) tempExecImportDiffRightMeta.textContent = '';
+      if (tempExecImportDiffLeftBody) tempExecImportDiffLeftBody.innerHTML = '<tr><td colspan="10"><p class="hint">加载中...</p></td></tr>';
+      if (tempExecImportDiffRightBody) tempExecImportDiffRightBody.innerHTML = '<tr><td colspan="10"><p class="hint">加载中...</p></td></tr>';
+      setDiffResultFieldsVisible(true);
+      syncImportDiffControls();
+      if (tempExecDrawer) tempExecDrawer.close();
+      if (tempExecImportDiffDrawer && typeof tempExecImportDiffDrawer.open === 'function') {
+        tempExecImportDiffDrawer.open();
+      } else if (tempExecImportDiffDrawerEl && tempExecImportDiffDrawerEl.classList) {
+        tempExecImportDiffDrawerEl.classList.add('open');
+        tempExecImportDiffDrawerEl.classList.remove('hidden');
+      }
+    }
+
+    function openImportDiffDrawer(payload) {
+      payload = payload || {};
+      importDiffState.loading = false;
+      importDiffState.dbItems = Array.isArray(payload.dbItems) ? payload.dbItems : [];
+      importDiffState.dbExecSetId = payload.dbExecSetId || null;
+      importDiffState.dbExecCases = Array.isArray(payload.dbExecCases) ? payload.dbExecCases : [];
+      importDiffState.dbReuseEnabled = payload.dbReuseEnabled === true;
+      importDiffState.dbHasResult = payload.dbHasResult === true;
+      importDiffState.importHasResult = payload.importHasResult === true;
+      importDiffState.showResultFields = Boolean(importDiffState.importHasResult || importDiffState.dbHasResult);
+
+      var importExecMap = buildImportExecCaseMapByKey(importDiffState.importExecCases || []);
+      var importRows = flattenDiffRows(importDiffState.importItems || [], importExecMap, {
+        includeResult: importDiffState.showResultFields,
+        reuseEnabled: importDiffState.importReuseEnabled,
+        matchBy: 'key',
+      });
+      var dbExecMap = buildExecCaseMapByItemId(importDiffState.dbExecCases || []);
+      var dbRows = flattenDiffRows(importDiffState.dbItems || [], dbExecMap, {
+        includeResult: importDiffState.showResultFields,
+        reuseEnabled: importDiffState.dbReuseEnabled,
+        matchBy: 'itemId',
+      });
+      importDiffState.rows = buildDiffRows(importRows, dbRows, importDiffState.showResultFields);
+
+      if (tempExecImportDiffLeftMeta) {
+        tempExecImportDiffLeftMeta.textContent = (importRows.length || 0) + ' 行';
+        tempExecImportDiffLeftMeta.classList.toggle('warn', importRows.length !== dbRows.length);
+      }
+      if (tempExecImportDiffRightMeta) {
+        tempExecImportDiffRightMeta.textContent = (dbRows.length || 0) + ' 行';
+        tempExecImportDiffRightMeta.classList.toggle('warn', importRows.length !== dbRows.length);
+      }
+      setDiffResultFieldsVisible(importDiffState.showResultFields);
+      renderDiffTableBody(tempExecImportDiffLeftBody, 'left', importDiffState.rows, importDiffState.showResultFields);
+      renderDiffTableBody(tempExecImportDiffRightBody, 'right', importDiffState.rows, importDiffState.showResultFields);
+      if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '', '');
+      syncImportDiffControls();
+    }
+
+    function confirmOverwriteImportFromDiff() {
+      if (importDiffState.loading) return;
+      if (!apiClient || typeof apiClient.importCaseFile !== 'function' || typeof apiClient.upsertExecSetFromCaseFile !== 'function') {
+        if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '后端入库接口未就绪', 'err');
+        return;
+      }
+      var cleanName = importDiffState.cleanName || importDiffState.fileName || '用例';
+      var ok = window.confirm('是否确认覆盖导入用例：' + cleanName + '？');
+      if (!ok) return;
+
+      var needSecondConfirm = false;
+      var secondMsg = '';
+      if (importDiffState.dbHasResult && importDiffState.importHasResult) {
+        needSecondConfirm = true;
+        secondMsg = '覆盖后将替换现有执行结果（实际结果/备注/缺陷链接），是否继续？';
+      } else if (importDiffState.dbHasResult && !importDiffState.importHasResult) {
+        needSecondConfirm = true;
+        secondMsg = '覆盖后将清空现有执行结果（实际结果/备注/缺陷链接），是否继续？';
+      }
+      if (needSecondConfirm) {
+        var ok2 = window.confirm(secondMsg);
+        if (!ok2) return;
+      }
+
+      var ext = importDiffState.ext || (String(importDiffState.fileName || '').split('.').pop() || 'xmind');
+      ext = String(ext || '').toLowerCase();
+      if (!ext || ext === String(importDiffState.fileName || '').toLowerCase()) ext = 'xmind';
+      var overwriteFileName = String(importDiffState.cleanName || cleanName || 'case') + '.' + ext;
+
+      importDiffState.loading = true;
+      syncImportDiffControls();
+      if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '覆盖导入中...', '');
+      setStatus(tempExecStatus, '覆盖导入中...', '');
+
+      var shouldImportResult = Boolean(importDiffState.importHasResult);
+      var shouldClearResult = Boolean(importDiffState.dbHasResult && !importDiffState.importHasResult);
+      var importCases = null;
+      var preferSource = 'db';
+      if (shouldImportResult) {
+        importCases = Array.isArray(importDiffState.importExecCases) ? importDiffState.importExecCases : [];
+        preferSource = 'import';
+      } else if (shouldClearResult) {
+        importCases = (Array.isArray(importDiffState.importExecCases) ? importDiffState.importExecCases : []).map(function(row) {
+          if (!row) return null;
+          return Object.assign({}, row, { status: '未执行', remark: '', defect_links: [], reuse_details: [] });
+        }).filter(Boolean);
+        preferSource = 'import';
+      }
+
+      apiClient
+        .importCaseFile(
+          {
+            project_id: importDiffState.projectId,
+            version_id: importDiffState.importVersionId,
+            file_name: overwriteFileName,
+            source: importDiffState.source || 'tempexec',
+            items: importDiffState.importItems,
+          },
+          { overwrite: true }
+        )
+        .then(function(caseFile) {
+          if (!caseFile || !caseFile.id) throw new Error('覆盖入库失败：未返回用例文件');
+          return apiClient.upsertExecSetFromCaseFile({
+            case_file_id: caseFile.id,
+            mode: 'replace',
+            preserve_results: false,
+            prefer_result_source: preferSource,
+            import_cases: importCases && importCases.length ? importCases : null,
+            requirement: importDiffState.requirement || '',
+            reuse_enabled: importDiffState.importReuseEnabled ? true : false,
+            reuse_presets: null,
+          });
+        })
+        .then(function(execSet) {
+          if (!execSet || !execSet.id) throw new Error('执行集更新失败');
+          var chain = Promise.resolve();
+          if (api && typeof api.loadTempExecState === 'function') {
+            chain = chain.then(function() { return api.loadTempExecState(); });
+          }
+          return chain.then(function() {
+            if (api && typeof api.setTempExecActive === 'function') {
+              api.setTempExecActive(String(execSet.id));
+            }
+            return execSet;
+          });
+        })
+        .then(function() {
+          var msg = '覆盖导入成功：' + cleanName;
+          if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, msg, 'ok');
+          setStatus(tempExecStatus, msg, 'ok');
+          importState.pendingFiles = [];
+          renderImportFileHint();
+          syncImportConfirmState();
+          if (tempExecImportDiffDrawer && typeof tempExecImportDiffDrawer.close === 'function') {
+            tempExecImportDiffDrawer.close();
+          } else if (tempExecImportDiffDrawerEl && tempExecImportDiffDrawerEl.classList) {
+            tempExecImportDiffDrawerEl.classList.remove('open');
+          }
+        })
+        .catch(function(err) {
+          var msg = err && err.message ? err.message : '覆盖导入失败';
+          if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '覆盖导入失败：' + msg, 'err');
+          setStatus(tempExecStatus, '覆盖导入失败：' + msg, 'err');
+        })
+        .finally(function() {
+          importDiffState.loading = false;
+          syncImportDiffControls();
+        });
+    }
 
     function invalidateImportProjectsCache() {
       importState.projectsLoaded = false;
@@ -724,6 +1251,87 @@
             syncImportConfirmState();
           })
           .catch(function(err) {
+            if (err && err.code === 'duplicate_case_file' && err.duplicate) {
+              var dup = err.duplicate || {};
+              var payload = err && err.payload ? err.payload : null;
+              var existingId = payload && payload.existing_case_file_id ? payload.existing_case_file_id : null;
+              var matchedCleanName = payload && payload.existing_file_name_clean ? String(payload.existing_file_name_clean) : (dup.clean_name || '');
+              var dbVersionId = payload && (payload.existing_version_id || payload.existing_version_id === 0) ? payload.existing_version_id : null;
+              if (!existingId) {
+                setStatus(tempExecStatus, '打开差异对比失败：未找到同名用例 ID', 'err');
+                return;
+              }
+              openImportDiffDrawerLoading({
+                fileName: dup.file_name || '',
+                cleanName: matchedCleanName || dup.clean_name || '',
+                projectId: dup.project_id || importState.projectId,
+                importVersionId: dup.version_id || importState.versionId,
+                dbVersionId: dbVersionId,
+                ext: dup.ext || '',
+                source: dup.source || '',
+                importItems: Array.isArray(dup.items) ? dup.items : [],
+                importExecCases: Array.isArray(dup.exec_cases) ? dup.exec_cases : [],
+                importHasResult: dup.has_result === true,
+                importReuseEnabled: dup.reuse_enabled === true,
+                requirement: dup.requirement || '',
+                dbCaseFileId: existingId,
+              });
+
+              var projectId = dup.project_id || importState.projectId;
+              Promise.all([
+                apiClient && typeof apiClient.listCaseItems === 'function' ? apiClient.listCaseItems(existingId) : Promise.resolve([]),
+                apiClient && typeof apiClient.listExecSets === 'function' ? apiClient.listExecSets(projectId) : Promise.resolve([]),
+              ])
+                .then(function(res2) {
+                  var dbItems = Array.isArray(res2 && res2[0]) ? res2[0] : [];
+                  var execSets = Array.isArray(res2 && res2[1]) ? res2[1] : [];
+                  var matchedSet = execSets
+                    .filter(function(s) { return s && Number(s.case_file_id) === Number(existingId); })
+                    .sort(function(a, b) { return Number(b.id || 0) - Number(a.id || 0); })[0] || null;
+                  var reuseEnabled = Boolean(matchedSet && matchedSet.reuse_enabled);
+                  if (!matchedSet || !matchedSet.id || !apiClient || typeof apiClient.listExecCases !== 'function') {
+                    openImportDiffDrawer({
+                      dbItems: dbItems,
+                      dbExecSetId: null,
+                      dbExecCases: [],
+                      dbReuseEnabled: reuseEnabled,
+                      dbHasResult: false,
+                      importHasResult: dup.has_result === true,
+                    });
+                    return;
+                  }
+                  return apiClient.listExecCases(matchedSet.id).then(function(execCases) {
+                    var list = Array.isArray(execCases) ? execCases : [];
+                    openImportDiffDrawer({
+                      dbItems: dbItems,
+                      dbExecSetId: matchedSet.id,
+                      dbExecCases: list,
+                      dbReuseEnabled: reuseEnabled,
+                      dbHasResult: detectExecCasesHasResult(list, reuseEnabled),
+                      importHasResult: dup.has_result === true,
+                    });
+                  }).catch(function() {
+                    openImportDiffDrawer({
+                      dbItems: dbItems,
+                      dbExecSetId: matchedSet.id,
+                      dbExecCases: [],
+                      dbReuseEnabled: reuseEnabled,
+                      dbHasResult: false,
+                      importHasResult: dup.has_result === true,
+                    });
+                  });
+                })
+                .catch(function(e) {
+                  var msg = e && e.message ? e.message : '打开差异对比失败';
+                  if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, msg, 'err');
+                  setStatus(tempExecStatus, msg, 'err');
+                })
+                .finally(function() {
+                  importState.loading = false;
+                  syncImportConfirmState();
+                });
+              return;
+            }
             setStatus(tempExecStatus, err && err.message ? err.message : '入库失败', 'err');
           })
           .finally(function() {
@@ -731,6 +1339,10 @@
             syncImportConfirmState();
           });
       });
+    }
+
+    if (tempExecImportDiffOverwriteBtn) {
+      tempExecImportDiffOverwriteBtn.addEventListener('click', confirmOverwriteImportFromDiff);
     }
 
     if (tempExecInput && tempExecDropZone && typeof api.importTempExecFiles === 'function') {

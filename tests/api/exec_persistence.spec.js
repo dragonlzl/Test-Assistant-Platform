@@ -253,6 +253,38 @@ test.describe('exec persistence api', () => {
     expect(autoBound.module).toBe('模块Z');
     expect(autoBound.title).toBe('临时用例');
 
+    // 覆盖导入（case_file overwrite）后：replace + preserve_results=false 应彻底替换执行集用例，避免残留旧 exec_cases 造成“追加合并”。
+    const overwriteRes = await ctx.post(`${apiBase}/api/case-files/import?overwrite=1`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '勾选用例-执行入库_result_20251213121212.json',
+        source: 'apitest',
+        items: [
+          { module: '模块A', title: '覆盖后用例1', expected: 'ok', priority: 'P0', precondition: '', steps: '', remark: '' },
+        ],
+      },
+    });
+    expect(overwriteRes.status()).toBe(200);
+    const overwrittenFile = await overwriteRes.json();
+    expect(overwrittenFile && overwrittenFile.id).toBe(caseFileId);
+
+    const hardReplaceRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: { case_file_id: caseFileId, mode: 'replace', preserve_results: false, prefer_result_source: 'db' },
+    });
+    expect(hardReplaceRes.status()).toBe(200);
+    const hardSet = await hardReplaceRes.json();
+    expect(hardSet.id).toBe(execSetId);
+
+    const hardCasesRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers });
+    expect(hardCasesRes.status()).toBe(200);
+    const hardCases = await hardCasesRes.json();
+    expect(Array.isArray(hardCases)).toBeTruthy();
+    expect(hardCases.length).toBe(1);
+    expect(hardCases[0].title).toBe('覆盖后用例1');
+
     const foreignImportRes = await ctx.post(`${apiBase}/api/case-files/import`, {
       headers,
       data: {

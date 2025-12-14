@@ -1,5 +1,8 @@
 const { test, expect } = require('@playwright/test');
 test('执行页可区分无结果与带结果/复用的 XMind 导入', async ({ page }) => {
+  await page.addInitScript(() => {
+    try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
+  });
   await page.goto('/');
   await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
   await page.evaluate(async () => {

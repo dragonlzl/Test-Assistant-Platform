@@ -1069,6 +1069,9 @@
         stringifyCaseField,
         deriveCaseListFromText,
         parseXmindFile: lazyParseXmindFile,
+        parseXlsxFileToRows: (window.app && window.app.xlsxCoreApi && typeof window.app.xlsxCoreApi.parseXlsxFileToRows === 'function')
+          ? window.app.xlsxCoreApi.parseXlsxFileToRows
+          : null,
         buildTempExecXmindPackage: lazyBuildTempExecXmindPackage,
         extractRequirementLabelFromText: lazyExtractRequirementLabel,
         promptTempExecRequirement,

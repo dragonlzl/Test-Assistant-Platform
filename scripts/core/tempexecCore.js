@@ -84,6 +84,7 @@
     var tempExecResultOptions = deps && deps.tempExecResultOptions ? deps.tempExecResultOptions : ['未执行', '通过', '失败', '阻塞', '不适用'];
     var deriveCaseListFromText = deps && deps.deriveCaseListFromText ? deps.deriveCaseListFromText : function() { return []; };
     var parseXmindFile = deps && deps.parseXmindFile ? deps.parseXmindFile : function() { return Promise.resolve({ text: '', list: [] }); };
+    var parseXlsxFileToRows = deps && deps.parseXlsxFileToRows ? deps.parseXlsxFileToRows : null;
     var extractRequirementLabelFromText = deps && deps.extractRequirementLabelFromText ? deps.extractRequirementLabelFromText : function() { return ''; };
     var promptTempExecRequirement = deps && deps.promptTempExecRequirement
       ? deps.promptTempExecRequirement
@@ -1738,14 +1739,7 @@
     function getCaseExecutionStatus(file, caseItem) {
       if (!file || !caseItem) return '未执行';
       if (!file.reuseEnabled) return caseItem.actual || '未执行';
-      var aggregate = aggregateReuseDetails(caseItem.reuseDetails);
-      var total = aggregate.passed + aggregate.failed + aggregate.blocked + aggregate.unspecified + aggregate.pending;
-      if (!total) return '未执行';
-      if (aggregate.failed || aggregate.blocked) return '失败';
-      if (aggregate.pending) return '未执行';
-      if (aggregate.passed) return '通过';
-      if (aggregate.unspecified && !aggregate.passed) return '不适用';
-      return '未执行';
+      return resolveReuseAggregateStatus(caseItem.reuseDetails);
     }
 
     function aggregateReuseDetails(details) {
@@ -1761,6 +1755,18 @@
         else stats.pending += 1;
       });
       return stats;
+    }
+
+    function resolveReuseAggregateStatus(details) {
+      var aggregate = aggregateReuseDetails(details);
+      var total = aggregate.passed + aggregate.failed + aggregate.blocked + aggregate.unspecified + aggregate.pending;
+      if (!total) return '未执行';
+      if (aggregate.failed) return '失败';
+      if (aggregate.blocked) return '阻塞';
+      if (aggregate.pending) return '未执行';
+      if (aggregate.passed) return '通过';
+      if (aggregate.unspecified && !aggregate.passed) return '不适用';
+      return '未执行';
     }
 
     function buildTempExecSummary(file) {
@@ -2589,6 +2595,13 @@
               inferredReuse = Boolean(parsedExec && parsedExec.reuseEnabled);
               if (!requirementFromContent && xmindRootTitle) requirementFromContent = xmindRootTitle;
             }
+          } else if (ext === 'xlsx') {
+            if (typeof parseXlsxFileToRows !== 'function') throw new Error('缺少 Excel 解析能力');
+            var rows = await parseXlsxFileToRows(file);
+            var parsedXlsx = buildTempExecCasesFromXlsxRows(rows || []);
+            list = parsedXlsx.cases;
+            inferredReuse = Boolean(parsedXlsx.reuseEnabled);
+            hasResult = Boolean(parsedXlsx.hasResult);
           } else if (ext === 'json') {
             text = (await file.text()).trim();
             var requirementRegex = /"requir[e]?ment"\s*:\s*"([^"]+)"/i;
@@ -2716,14 +2729,239 @@
       };
     }
 
-    function buildExecImportPayloadFromTempCase(item) {
+    function buildExecImportPayloadFromTempCase(item, reuseEnabled) {
       if (!item) return null;
       var base = buildCaseItemPayloadFromTempCase(item);
       if (!base) return null;
-      base.status = item.actual ? String(item.actual) : '未执行';
+      if (reuseEnabled) {
+        base.status = resolveReuseAggregateStatus(Array.isArray(item.reuseDetails) ? item.reuseDetails : []);
+      } else {
+        base.status = item.actual ? String(item.actual) : '未执行';
+      }
       base.reuse_details = Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
       base.defect_links = Array.isArray(item.defectLinks) ? item.defectLinks : [];
       return base;
+    }
+
+    function buildTempExecCasesFromXlsxRows(rows) {
+      var list = Array.isArray(rows) ? rows : [];
+      if (!list.length) throw new Error('Excel 解析失败：缺少数据行');
+      var headerRow = list[0] || [];
+      var headerIndex = {};
+      var headerMap = {
+        '模块': 'module',
+        '用例标题': 'title',
+        '优先级': 'priority',
+        '前提条件': 'preconditions',
+        '操作步骤': 'steps',
+        '预期结果': 'expected',
+        '实际结果': 'actual',
+        '备注': 'remark',
+        '缺陷链接': 'defect',
+      };
+      var headerLabelByKey = {
+        module: '模块',
+        title: '用例标题',
+        priority: '优先级',
+        preconditions: '前提条件',
+        steps: '操作步骤',
+        expected: '预期结果',
+        actual: '实际结果',
+        remark: '备注',
+        defect: '缺陷链接',
+      };
+      for (var i = 0; i < headerRow.length; i += 1) {
+        var text = headerRow[i] !== undefined && headerRow[i] !== null ? String(headerRow[i]).trim() : '';
+        if (!text) continue;
+        if (headerMap[text]) headerIndex[headerMap[text]] = i;
+      }
+      var hasBaseHeader = Boolean(
+        headerIndex.module !== undefined &&
+        headerIndex.title !== undefined &&
+        headerIndex.expected !== undefined
+      );
+      if (!hasBaseHeader) throw new Error('Excel 格式不对：缺少表头（模块/用例标题/预期结果）');
+
+      var hasResultHeader = (
+        headerIndex.actual !== undefined ||
+        headerIndex.remark !== undefined ||
+        headerIndex.defect !== undefined
+      );
+      if (hasResultHeader) {
+        if (headerIndex.actual === undefined || headerIndex.remark === undefined || headerIndex.defect === undefined) {
+          throw new Error('结果格式不对：带结果 Excel 需包含（实际结果/备注/缺陷链接）三列');
+        }
+      }
+
+      function pick(row, key) {
+        if (!row) return '';
+        var idx = headerIndex[key];
+        if (idx === undefined) return '';
+        var val = row[idx];
+        return val === undefined || val === null ? '' : String(val);
+      }
+
+      // 兼容用户复制/粘贴导致的数据区重复表头：将“看起来像表头”的行当作表头跳过，避免误当用例条目影响 diff。
+      function isHeaderLikeRow(row) {
+        if (!row) return false;
+        var module0 = pick(row, 'module').trim();
+        var title0 = pick(row, 'title').trim();
+        var expected0 = pick(row, 'expected').trim();
+        if (module0 !== headerLabelByKey.module) return false;
+        if (title0 !== headerLabelByKey.title) return false;
+        if (expected0 !== headerLabelByKey.expected) return false;
+        var keys = Object.keys(headerIndex || {});
+        for (var k = 0; k < keys.length; k += 1) {
+          var key = keys[k];
+          if (!key) continue;
+          var label = headerLabelByKey[key] ? String(headerLabelByKey[key]) : '';
+          if (!label) continue;
+          var cell = pick(row, key).trim();
+          if (!cell) continue;
+          if (cell !== label) return false;
+        }
+        return true;
+      }
+
+      function normalizeStatusInput(value) {
+        var text2 = value === null || value === undefined ? '' : String(value).trim();
+        if (!text2) return '未执行';
+        if (tempExecResultOptions.indexOf(text2) !== -1) return text2;
+        if (text2 === 'pending') return '未执行';
+        return null;
+      }
+
+      function parseDefectLinks(text3) {
+        var raw = text3 === null || text3 === undefined ? '' : String(text3);
+        raw = raw.replace(/\r\n/g, '\n');
+        var parts = raw.split(/[\s\n,;，；]+/).map(function(s) { return String(s || '').trim(); }).filter(Boolean);
+        var out = [];
+        var seen = {};
+        parts.forEach(function(url) {
+          if (!url) return;
+          if (seen[url]) return;
+          seen[url] = true;
+          out.push({ id: generateDefectLinkId(), url: url });
+        });
+        return out;
+      }
+
+      function detectHasExecResult(cases, reuseEnabled) {
+        var list2 = Array.isArray(cases) ? cases : [];
+        if (!list2.length) return false;
+        if (reuseEnabled) {
+          return list2.some(function(item) {
+            var details = item && Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
+            return details.some(function(d) {
+              var st = d && d.status ? String(d.status) : '未执行';
+              var note = d && d.note ? String(d.note) : '';
+              return (st && st !== '未执行') || (note && note.trim());
+            });
+          });
+        }
+        return list2.some(function(item2) {
+          var st2 = item2 && item2.actual ? String(item2.actual) : '未执行';
+          var remark2 = item2 && item2.remark ? String(item2.remark) : '';
+          var defects2 = item2 && Array.isArray(item2.defectLinks) ? item2.defectLinks : [];
+          return (st2 && st2 !== '未执行') || (remark2 && remark2.trim()) || defects2.length;
+        });
+      }
+
+      var out = [];
+      var reuseEnabled = false;
+      var current = null;
+      for (var r = 1; r < list.length; r += 1) {
+        var row = list[r] || [];
+        var module = pick(row, 'module').trim();
+        var title = pick(row, 'title').trim();
+        var priority = pick(row, 'priority').trim();
+        var preconditions = pick(row, 'preconditions').trim();
+        var steps = pick(row, 'steps').trim();
+        var expected = pick(row, 'expected').trim();
+        var actualRaw = pick(row, 'actual').trim();
+        var remark = pick(row, 'remark');
+        var defectRaw = pick(row, 'defect');
+
+        var allText = String(module || '') + String(title || '') + String(priority || '') + String(preconditions || '') + String(steps || '') + String(expected || '') + String(actualRaw || '') + String(remark || '') + String(defectRaw || '');
+        if (!allText.trim()) continue;
+
+        if (isHeaderLikeRow(row)) continue;
+
+        var isReuseDetailRow = Boolean(
+          !module &&
+          !title &&
+          !priority &&
+          !preconditions &&
+          !steps &&
+          expected
+        );
+        if (isReuseDetailRow) {
+          if (!hasResultHeader) throw new Error('结果格式不对：复用子项行仅允许出现在带结果的 Excel 中');
+          if (!current) throw new Error('结果格式不对：复用子项行前缺少主用例行');
+          if (defectRaw && String(defectRaw).trim()) throw new Error('结果格式不对：复用子项行“缺陷链接”必须为空');
+          var childStatus = normalizeStatusInput(actualRaw);
+          if (!childStatus) throw new Error('结果格式不对：复用子项行“实际结果”不合法');
+          reuseEnabled = true;
+          current.reuseDetails = Array.isArray(current.reuseDetails) ? current.reuseDetails : [];
+          current.reuseDetails.push({
+            id: generateReuseDetailId(),
+            text: expected,
+            note: remark || '',
+            status: childStatus,
+          });
+          continue;
+        }
+
+        if (!module || !title || !expected) {
+          throw new Error('Excel 格式不对：第 ' + (r + 1) + ' 行缺少必填字段（模块/用例标题/预期结果）');
+        }
+        var status = '未执行';
+        var defectLinks = [];
+        if (hasResultHeader) {
+          var st4 = normalizeStatusInput(actualRaw);
+          if (!st4) throw new Error('结果格式不对：第 ' + (r + 1) + ' 行“实际结果”不合法');
+          status = st4;
+          defectLinks = parseDefectLinks(defectRaw);
+        }
+        current = {
+          module: module,
+          title: title,
+          priority: priority || '',
+          preconditions: preconditions || '',
+          steps: steps || '',
+          expected: expected,
+          actual: status,
+          remark: remark || '',
+          reuseDetails: [],
+          defectLinks: defectLinks,
+        };
+        out.push(current);
+      }
+
+      if (!out.length) throw new Error('Excel 解析失败：未解析到有效用例');
+
+      if (reuseEnabled) {
+        out.forEach(function(item3) {
+          if (!item3 || !Array.isArray(item3.reuseDetails) || !item3.reuseDetails.length) return;
+          var expectedAggregate = resolveReuseAggregateStatus(item3.reuseDetails);
+          if (!item3.actual || String(item3.actual).trim() === '') {
+            throw new Error('结果格式不对：复用用例主行“实际结果”不能为空（' + (item3.title || '') + '）');
+          }
+          if (String(item3.actual) !== String(expectedAggregate)) {
+            throw new Error('结果格式不对：复用用例主行“实际结果”需与子项汇总一致（' + (item3.title || '') + '）');
+          }
+        });
+        out.forEach(function(item4) {
+          if (!item4) return;
+          if (Array.isArray(item4.reuseDetails) && item4.reuseDetails.length) {
+            item4.actual = resolveReuseAggregateStatus(item4.reuseDetails);
+          } else {
+            item4.actual = '未执行';
+          }
+        });
+      }
+
+      return { cases: out, reuseEnabled: reuseEnabled, hasResult: detectHasExecResult(out, reuseEnabled) };
     }
 
     async function importTempExecFilesToDb(fileList, projectId, versionId) {
@@ -2769,6 +3007,8 @@
         } else {
           cleaned = base.replace(/\.[^.]+$/, '');
         }
+        // 兼容 Excel/JSON 等扩展名：无论 getSafeFileBaseName 是否已处理，都再兜底剥离一次后缀。
+        cleaned = String(cleaned || '').replace(/\.[^.]+$/, '');
         cleaned = String(cleaned || '').replace(/^勾选用例[\s_\-\u2010-\u2015\u2212\uFE63\uFF0D]*/i, '');
         cleaned = cleaned.trim().replace(/^[_-]+|[_-]+$/g, '');
         return cleaned || 'case';
@@ -2855,6 +3095,13 @@
               inferredReuse = Boolean(parsedExec && parsedExec.reuseEnabled);
               if (!requirementFromContent && xmindRootTitle) requirementFromContent = xmindRootTitle;
             }
+          } else if (ext === 'xlsx') {
+            if (typeof parseXlsxFileToRows !== 'function') throw new Error('缺少 Excel 解析能力');
+            var rows = await parseXlsxFileToRows(file);
+            var parsedXlsx = buildTempExecCasesFromXlsxRows(rows || []);
+            list = parsedXlsx.cases;
+            inferredReuse = Boolean(parsedXlsx.reuseEnabled);
+            hasResult = Boolean(parsedXlsx.hasResult);
           } else if (ext === 'json') {
             text = (await file.text()).trim();
             var requirementRegex = /"requir[e]?ment"\s*:\s*"([^"]+)"/i;
@@ -2933,10 +3180,20 @@
           var extractedRequirement = requirementFromContent || extractRequirementLabelFromText(text) || '';
           var requirementLabel = extractedRequirement;
           if (!requirementLabel) {
-            requirementLabel = promptTempExecRequirement(fileName, extractedRequirement || fileName);
-            if (!requirementLabel) {
-              failures.push({ file: fileName, reason: '已取消导入（需求标识为空）' });
-              continue;
+            var existingLabel = state && state.requirementLabel ? normalizeRequirementName(state.requirementLabel) : '';
+            if (existingLabel) {
+              requirementLabel = existingLabel;
+            } else {
+              var fallbackLabel = cleanImportFileName(fileName);
+              if (fallbackLabel) {
+                requirementLabel = fallbackLabel;
+              } else {
+                requirementLabel = promptTempExecRequirement(fileName, extractedRequirement || fileName);
+                if (!requirementLabel) {
+                  failures.push({ file: fileName, reason: '已取消导入（需求标识为空）' });
+                  continue;
+                }
+              }
             }
           }
           if (requirementLabel && !state.requirementLabel) {
@@ -3001,48 +3258,85 @@
           var normalizedName = normText(cleanName);
           var existingCaseFile = caseFileByName[normalizedName] || null;
 
-          var preferResultSource = hasResult ? 'import' : 'db';
-          if (existingCaseFile && hasResult && execSetByCaseFileId[existingCaseFile.id]) {
-            var choice = window.prompt(
-              '检测到同名用例在库中已有历史执行记录：\\n' +
-                '1 = 以导入为准（覆盖同名用例的结果/备注/缺陷等）\\n' +
-                '2 = 以数据库为准（保留历史执行结果）\\n' +
-                '取消/其他 = 放弃本次导入\\n\\n' +
-                '用例：' + cleanName,
-              '2'
-            );
-            if (choice === null) {
-              failures.push({ file: fileName, reason: '已取消导入（未选择合并结果策略）' });
-              continue;
-            }
-            choice = String(choice || '').trim();
-            if (choice === '1') preferResultSource = 'import';
-            else if (choice === '2') preferResultSource = 'db';
-            else {
-              failures.push({ file: fileName, reason: '已取消导入（未选择有效的合并结果策略）' });
-              continue;
-            }
+          // 用例执行导入与用例库导入对齐：遇到同名用例先走差异对比抽屉，再由用户确认是否覆盖导入。
+          if (existingCaseFile && existingCaseFile.id) {
+            var importExecCasesAll = casesList
+              .map(function(item) { return buildExecImportPayloadFromTempCase(item, inferredReuse); })
+              .filter(Boolean);
+            var dupErr = new Error('同名用例已存在');
+            dupErr.code = 'duplicate_case_file';
+            dupErr.payload = {
+              existing_case_file_id: existingCaseFile.id,
+              existing_file_name_clean: existingCaseFile.file_name_clean || cleanName,
+              existing_version_id: existingCaseFile.version_id || null,
+            };
+            dupErr.duplicate = {
+              file_name: fileName,
+              clean_name: cleanName,
+              project_id: pid,
+              version_id: vid,
+              source: (file && file.type) ? file.type : (ext ? ('file:' + ext) : 'file'),
+              ext: ext || '',
+              items: caseItemPayload,
+              exec_cases: importExecCasesAll,
+              has_result: Boolean(hasResult),
+              reuse_enabled: Boolean(inferredReuse),
+              requirement: requirementLabel || '',
+            };
+            throw dupErr;
           }
 
           var execSet = null;
           if (!existingCaseFile) {
-            var caseFile = await client.importCaseFile({
-              project_id: pid,
-              version_id: vid,
-              file_name: fileName || 'case',
-              source: 'tempexec',
-              items: caseItemPayload,
-            });
+            var caseFile = null;
+            try {
+              caseFile = await client.importCaseFile({
+                project_id: pid,
+                version_id: vid,
+                file_name: fileName || 'case',
+                source: 'tempexec',
+                items: caseItemPayload,
+              });
+            } catch (errImport) {
+              var msgImport = errImport && errImport.message ? String(errImport.message) : '';
+              if (msgImport.indexOf('同名') !== -1) {
+                var importExecCasesAll2 = casesList
+                  .map(function(item2) { return buildExecImportPayloadFromTempCase(item2, inferredReuse); })
+                  .filter(Boolean);
+                var dupErr2 = new Error(msgImport || '同名用例已存在');
+                dupErr2.code = 'duplicate_case_file';
+                dupErr2.payload = errImport && errImport.payload ? errImport.payload : null;
+                dupErr2.duplicate = {
+                  file_name: fileName,
+                  clean_name: cleanName,
+                  project_id: pid,
+                  version_id: vid,
+                  source: (file && file.type) ? file.type : (ext ? ('file:' + ext) : 'file'),
+                  ext: ext || '',
+                  items: caseItemPayload,
+                  exec_cases: importExecCasesAll2,
+                  has_result: Boolean(hasResult),
+                  reuse_enabled: Boolean(inferredReuse),
+                  requirement: requirementLabel || '',
+                };
+                throw dupErr2;
+              }
+              throw errImport;
+            }
             caseFileByName[normText(caseFile.file_name_clean || cleanName)] = caseFile;
             existingCaseFile = caseFile;
 
             var importCases = null;
-            if (hasResult) importCases = casesList.map(buildExecImportPayloadFromTempCase).filter(Boolean);
+            if (hasResult || inferredReuse) {
+              importCases = casesList
+                .map(function(item3) { return buildExecImportPayloadFromTempCase(item3, inferredReuse); })
+                .filter(Boolean);
+            }
             execSet = await client.upsertExecSetFromCaseFile({
               case_file_id: caseFile.id,
               mode: 'replace',
-              prefer_result_source: hasResult ? 'import' : 'db',
-              import_cases: importCases,
+              prefer_result_source: importCases && importCases.length ? 'import' : 'db',
+              import_cases: importCases && importCases.length ? importCases : null,
               requirement: requirementLabel || '',
               reuse_enabled: inferredReuse ? true : false,
               reuse_presets: null,
@@ -3117,7 +3411,9 @@
 
           var importCases2 = null;
           if (hasResult && preferResultSource === 'import') {
-            importCases2 = casesList.map(buildExecImportPayloadFromTempCase).filter(Boolean);
+            importCases2 = casesList
+              .map(function(item) { return buildExecImportPayloadFromTempCase(item, inferredReuse); })
+              .filter(Boolean);
           }
           execSet = await client.upsertExecSetFromCaseFile({
             case_file_id: existingCaseFile.id,
@@ -3200,6 +3496,9 @@
             }
           }
         } catch (err3) {
+          if (err3 && err3.code === 'duplicate_case_file') {
+            throw err3;
+          }
           console.warn('执行用例入库失败', err3);
           failures.push({ file: fileName, reason: err3 && err3.message ? err3.message : '入库失败' });
         }
