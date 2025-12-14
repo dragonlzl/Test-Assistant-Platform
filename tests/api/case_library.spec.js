@@ -157,13 +157,13 @@ test.describe('case library api', () => {
         items: [
           {
             module: '登录',
-            title: '跨版本允许同名',
+            title: '跨版本同名应拦截',
             expected: 'ok',
           },
         ],
       },
     });
-    expect(crossVerRes.status()).toBe(201);
+    expect(crossVerRes.status()).toBe(400);
 
     const listFilesRes = await ctx.get(`${apiBase}/api/case-files?project_id=${projectId}`, { headers });
     expect(listFilesRes.status()).toBe(200);

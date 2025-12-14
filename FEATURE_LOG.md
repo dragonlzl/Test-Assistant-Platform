@@ -722,7 +722,7 @@
 - 更新记录：美化执行总览版本选择框样式（`style.css`）。  
 
 - 功能名称：用例库导入/编辑/转执行全链路（DB 接入）  
-- 功能描述：用例库页新增独立顶部导航卡片（导入用例/编辑用例&转到执行/选择用例执行）取代默认“AI 一键步骤”；用例库接入后端 DB：导入需选项目+版本（同名校验按“项目+版本”，文件名清洗去导出标识与后缀并记录导入人）；编辑抽屉按项目拉取文件列表（展示导入人/导入时间/最近更新人/更新时间）；进入编辑后在页内“用例编辑视图卡片”复用执行视图样式与交互（无缺陷链接），支持搜索/分页/内容编辑与增删撤回（超时入库）；支持一键“转到执行”，同名覆盖提示并按“模块+标题+预期”保留执行结果字段。  
+- 功能描述：用例库页新增独立顶部导航卡片（导入用例/编辑用例&转到执行/选择用例执行）取代默认“AI 一键步骤”；用例库接入后端 DB：导入需选项目+版本（同名校验按“项目级”，同一项目跨版本不允许同名；文件名清洗去导出标识与后缀并记录导入人）；编辑抽屉按项目拉取文件列表（展示导入人/导入时间/最近更新人/更新时间）；进入编辑后在页内“用例编辑视图卡片”复用执行视图样式与交互（无缺陷链接），支持搜索/分页/内容编辑与增删撤回（超时入库）；支持一键“转到执行”，同名覆盖提示并按“模块+标题+预期”保留执行结果字段。  
 - 操作方式：进入“用例相关 → 用例库”→顶部点“导入用例”选择文件→选择项目→选择版本→确认入库；点“编辑用例&转到执行”选择项目→确认→列表点“编辑”进入页内编辑卡片→直接点表格内容修改/点＋/−增删（可 8s 撤回）→点“转到执行”；点“选择用例执行”选择项目与版本→确认→列表点“转到执行”。  
 - 使用效果：用例库入口聚合到顶部导航，导入/维护更聚焦；用例条目可持续入库维护，并可快速转入执行页且尽量保留已有执行结果。  
 - 新增内容/接口/组件：用例库导航/抽屉/编辑卡片与样式（`index.html`、`style.css`）；用例库交互模块（`scripts/modules/caseLibrary.js`）；暴露执行页能力供用例库复用（`scripts/modules/app.js`）；切页时隐藏默认 `#flowNav`（`scripts/core/appRuntime.js`）；后端文件名清洗（`backend/utils.py`）；用例文件列表补充导入人与最近更新人字段（`backend/schemas.py`、`backend/routers/cases.py`）；新增用例条目增删接口并支持可选字段置空入库（`backend/routers/cases.py`、`services/apiClient.js`）；执行集追加接口批次内去重保护（`backend/routers/exec_routes.py`）；健康检查返回 DB 文件名（`backend/api.py`）；新增自动化（`tests/ui/case_library.spec.js`、`tests/api/case_library.spec.js`、`tests/fixtures/case_library_import.json`）。  
@@ -754,6 +754,24 @@
 - 使用效果：用例库视图更贴近“标准用例库”的定位，不与执行页面字段混淆。  
 - 新增内容/接口/组件：移除编辑视图表头与行内“实际结果”列（`scripts/modules/caseLibrary.js`）；UI 用例增加断言确保不出现该列（`tests/ui/case_library.spec.js`）。  
 - 复用说明：复用既有编辑表格结构，仅删除与执行态相关的展示列。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例导入同名限制升级为项目级（跨版本拦截）  
+- 功能描述：用例导入时同名校验从“项目+版本”调整为“项目级”：同一项目下，不同版本若存在同名用例文件也会提示“同名用例已存在”并拒绝导入。  
+- 操作方式：导入用例时选择项目/版本→若该项目任意版本已存在同名用例文件，则导入直接失败并提示“同名用例已存在”。  
+- 使用效果：避免同一项目内不同版本出现同名用例文件导致检索/复用歧义。  
+- 新增内容/接口/组件：后端导入接口按项目级校验（`backend/routers/cases.py`）；新库/迁移补充项目级唯一索引（`backend/models.py`、`backend/migrations.py`）；同步 UI 测试桩逻辑（`tests/ui/case_library.spec.js`、`tests/ui/tempexec_import_confirm.spec.js`）与 API 用例（`tests/api/case_library.spec.js`）。  
+- 复用说明：复用现有导入流程与错误提示，调整同名判定维度；DB 侧用唯一索引增强约束。  
+- 测试与验证：UI：`npm run test:ui -- tests/ui/case_library.spec.js tests/ui/tempexec_import_confirm.spec.js`（通过）；API：`APP_DB_FILE=apitest.db python3.9 -m uvicorn backend.main:app --host 127.0.0.1 --port 18082` 后执行 `API_BASE_URL=http://127.0.0.1:18082 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库编辑视图导出 XMind/Excel（不含执行结果、原名导出）  
+- 功能描述：“编辑用例&转到执行”的用例编辑视图增加“导出XMind”“导出Excel”按钮：导出内容与编辑视图字段一致且不包含执行结果；导出文件名使用用例原名（不再追加时间戳/额外后缀）。  
+- 操作方式：进入“用例相关 → 用例库”→编辑任一用例文件→点击“导出XMind”或“导出Excel”，下载文件名为“用例名.xmind / 用例名.xlsx”。  
+- 使用效果：用例库可直接导出标准用例文件用于复用/沉淀，不混入执行态字段；导出文件名更符合预期，便于覆盖/查找。  
+- 新增内容/接口/组件：新增导出按钮（`index.html`）；用例库侧复用 XMind 导出并覆盖下载名；新增 Excel（xlsx）导出（首行字段：模块/用例标题/优先级/前提条件/操作步骤/预期结果）（`scripts/modules/caseLibrary.js`）；UI 用例新增下载名断言（`tests/ui/case_library.spec.js`）。  
+- 复用说明：XMind 复用 `xmindCoreApi.buildXmindPackageFromCases` 生成逻辑，仅调整下载文件名；Excel 复用本地 `JSZip` 生成 xlsx，无新增外部依赖。  
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
 - 更新记录：无  
 

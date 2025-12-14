@@ -56,7 +56,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
         const tsPattern = /(_result)?_\d{8}(?:_?\d{6})?$/i;
         while (tsPattern.test(clean)) clean = clean.replace(tsPattern, '');
         clean = clean.replace(/^勾选用例[\s_\-\u2010-\u2015\u2212\uFE63\uFF0D]*/i, '').trim();
-        if (caseFiles.some((f) => f.file_name_clean === clean && String(f.version_id || '') === String(payload.version_id || ''))) {
+        if (caseFiles.some((f) => f.file_name_clean === clean)) {
           return respond(400, { detail: '同名用例已存在' });
         }
         const id = nextCaseFileId++;
@@ -291,6 +291,18 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await expect(page.locator('#caseLibraryEditView th', { hasText: '实际结果' })).toHaveCount(0);
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
+
+    const [xmindDownload] = await Promise.all([
+      page.waitForEvent('download', { timeout: 20000 }),
+      page.click('#caseLibraryExportXmindBtn'),
+    ]);
+    expect(await xmindDownload.suggestedFilename()).toBe('case_library_import.xmind');
+
+    const [excelDownload] = await Promise.all([
+      page.waitForEvent('download', { timeout: 20000 }),
+      page.click('#caseLibraryExportExcelBtn'),
+    ]);
+    expect(await excelDownload.suggestedFilename()).toBe('case_library_import.xlsx');
 
     await page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]').click();
     await page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]').fill('正常登录（已更新）');

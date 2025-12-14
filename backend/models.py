@@ -113,7 +113,7 @@ class OperationLog(Base):
 class CaseFile(Base):
     __tablename__ = "case_files"
     __table_args__ = (
-        UniqueConstraint("project_id", "version_id", "file_name_clean", name="uq_case_file_name"),
+        UniqueConstraint("project_id", "file_name_clean", name="uq_case_file_name"),
     )
 
     id = Column(Integer, primary_key=True, index=True)

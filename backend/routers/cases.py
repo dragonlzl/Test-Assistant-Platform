@@ -55,7 +55,6 @@ def import_case_file(
         db.query(models.CaseFile)
         .filter(
             models.CaseFile.project_id == project.id,
-            models.CaseFile.version_id == payload.version_id,
             models.CaseFile.file_name_clean == clean_name,
         )
         .first()

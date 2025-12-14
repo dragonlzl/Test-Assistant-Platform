@@ -69,7 +69,7 @@ test.describe('用例执行-导入需确认入库', () => {
         if (payload.project_id !== project.id) return respond(400, { detail: 'bad project' });
         if (!payload.version_id) return respond(400, { detail: 'bad version' });
         const cleanName = normalizeCleanName(payload.file_name || '');
-        if (caseFiles.some((f) => f.file_name_clean === cleanName && String(f.version_id || '') === String(payload.version_id || ''))) {
+        if (caseFiles.some((f) => f.file_name_clean === cleanName)) {
           return respond(400, { detail: '同名用例已存在' });
         }
         const now = new Date().toISOString();

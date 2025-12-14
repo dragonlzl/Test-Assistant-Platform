@@ -19,6 +19,8 @@
     editFileName: document.getElementById('caseLibraryEditFileName'),
     editSearchInput: document.getElementById('caseLibraryEditSearchInput'),
     editClearSearchBtn: document.getElementById('caseLibraryEditClearSearchBtn'),
+    exportXmindBtn: document.getElementById('caseLibraryExportXmindBtn'),
+    exportExcelBtn: document.getElementById('caseLibraryExportExcelBtn'),
     editToExecBtn: document.getElementById('caseLibraryEditToExecBtn'),
     editStatus: document.getElementById('caseLibraryEditStatus'),
     editView: document.getElementById('caseLibraryEditView'),
@@ -163,6 +165,37 @@
   function extFromFileName(name) {
     var ext = (String(name || '').split('.').pop() || '').toLowerCase();
     return ext ? ('file:' + ext) : 'file';
+  }
+
+  function getDownloadBlob() {
+    if (utils && typeof utils.downloadBlob === 'function') return utils.downloadBlob;
+    var coreApi = getCore();
+    if (coreApi && typeof coreApi.downloadBlob === 'function') return coreApi.downloadBlob;
+    return function() {};
+  }
+
+  function sanitizeDownloadName(base, ext) {
+    var name = String(base || '').trim() || '用例';
+    name = name.replace(/\.[^.]+$/, '');
+    name = name.replace(/[\\/:*?"<>|]/g, '_').trim();
+    if (!name) name = '用例';
+    return name + (ext || '');
+  }
+
+  function escapeXmlText(text) {
+    if (text === null || text === undefined) return '';
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  function escapeXmlTextPreserve(text) {
+    var escaped = escapeXmlText(text);
+    escaped = escaped.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    return escaped.replace(/\n/g, '&#10;');
   }
 
   function isAuthReady() {
@@ -874,6 +907,174 @@
     if (!dom.editCard) return;
     if (show) dom.editCard.classList.remove('hidden');
     else dom.editCard.classList.add('hidden');
+    if (!show) {
+      if (dom.exportXmindBtn) dom.exportXmindBtn.disabled = true;
+      if (dom.exportExcelBtn) dom.exportExcelBtn.disabled = true;
+    }
+  }
+
+  function getEditorExportBaseName() {
+    var file = state.editor.caseFile;
+    if (file && file.file_name_clean) return String(file.file_name_clean);
+    if (file && file.id) return '用例#' + file.id;
+    return '用例';
+  }
+
+  function getXmindBuilder() {
+    var api = window.app && window.app.xmindCoreApi ? window.app.xmindCoreApi : null;
+    if (api && typeof api.buildXmindPackageFromCases === 'function') return api.buildXmindPackageFromCases;
+    var coreApi = window.app && window.app.xmindCore ? window.app.xmindCore : null;
+    if (coreApi && typeof coreApi.buildXmindPackageFromCases === 'function') return coreApi.buildXmindPackageFromCases;
+    return null;
+  }
+
+  function exportEditorToXmind() {
+    var file = state.editor.caseFile;
+    if (!file) {
+      setStatus(dom.editStatus, '请先选择用例', 'warn');
+      return;
+    }
+    var items = Array.isArray(state.editor.items) ? state.editor.items : [];
+    if (!items.length) {
+      setStatus(dom.editStatus, '当前用例为空，无法导出', 'warn');
+      return;
+    }
+    var builder = getXmindBuilder();
+    if (!builder) {
+      setStatus(dom.editStatus, '缺少 XMind 导出依赖', 'err');
+      return;
+    }
+    var downloadBlob = getDownloadBlob();
+    var baseName = getEditorExportBaseName();
+    var fileName = sanitizeDownloadName(baseName, '.xmind');
+    if (dom.exportXmindBtn) dom.exportXmindBtn.disabled = true;
+    setStatus(dom.editStatus, '正在导出 XMind...', '');
+    Promise.resolve()
+      .then(function() {
+        return builder(items, baseName, '');
+      })
+      .then(function(result) {
+        if (result && result.blob) {
+          downloadBlob(fileName, result.blob);
+          setStatus(dom.editStatus, '已导出 XMind：' + fileName, 'ok');
+        } else {
+          setStatus(dom.editStatus, 'XMind 导出失败：无导出内容', 'err');
+        }
+      })
+      .catch(function(err) {
+        setStatus(dom.editStatus, 'XMind 导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+      })
+      .finally(function() {
+        if (dom.exportXmindBtn) dom.exportXmindBtn.disabled = false;
+      });
+  }
+
+  function buildCaseLibraryExcelBlob(items, sheetName) {
+    var JSZipCtor = typeof JSZip !== 'undefined' ? JSZip : (window.JSZip ? window.JSZip : null);
+    if (!JSZipCtor) return Promise.reject(new Error('缺少 JSZip 依赖，无法导出 Excel'));
+    var header = ['模块', '用例标题', '优先级', '前提条件', '操作步骤', '预期结果'];
+    var rows = [header].concat((items || []).map(function(it) {
+      var item = it || {};
+      return [
+        item.module || '',
+        item.title || '',
+        item.priority || '',
+        item.precondition || '',
+        item.steps || '',
+        item.expected || '',
+      ];
+    }));
+
+    var letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+    var sheetRowsXml = rows.map(function(row, rIdx) {
+      var r = rIdx + 1;
+      var cells = letters.map(function(col, cIdx) {
+        var ref = col + r;
+        var value = row && row.length > cIdx ? row[cIdx] : '';
+        var text = escapeXmlTextPreserve(value);
+        return (
+          '<c r=\"' + ref + '\" t=\"inlineStr\">' +
+            '<is><t xml:space=\"preserve\">' + text + '</t></is>' +
+          '</c>'
+        );
+      }).join('');
+      return '<row r=\"' + r + '\">' + cells + '</row>';
+    }).join('');
+
+    var worksheetXml =
+      '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>' +
+      '<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" ' +
+        'xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">' +
+        '<sheetData>' + sheetRowsXml + '</sheetData>' +
+      '</worksheet>';
+
+    var workbookXml =
+      '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>' +
+      '<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" ' +
+        'xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">' +
+        '<sheets>' +
+          '<sheet name=\"' + escapeXmlText(sheetName || '用例') + '\" sheetId=\"1\" r:id=\"rId1\"/>' +
+        '</sheets>' +
+      '</workbook>';
+
+    var contentTypesXml =
+      '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>' +
+      '<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">' +
+        '<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>' +
+        '<Default Extension=\"xml\" ContentType=\"application/xml\"/>' +
+        '<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>' +
+        '<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>' +
+      '</Types>';
+
+    var relsXml =
+      '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>' +
+      '<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">' +
+        '<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/>' +
+      '</Relationships>';
+
+    var workbookRelsXml =
+      '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>' +
+      '<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">' +
+        '<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>' +
+      '</Relationships>';
+
+    var zip = new JSZipCtor();
+    zip.file('[Content_Types].xml', contentTypesXml);
+    zip.folder('_rels').file('.rels', relsXml);
+    var xl = zip.folder('xl');
+    xl.file('workbook.xml', workbookXml);
+    xl.folder('_rels').file('workbook.xml.rels', workbookRelsXml);
+    xl.folder('worksheets').file('sheet1.xml', worksheetXml);
+    return zip.generateAsync({ type: 'blob', compression: 'STORE' });
+  }
+
+  function exportEditorToExcel() {
+    var file = state.editor.caseFile;
+    if (!file) {
+      setStatus(dom.editStatus, '请先选择用例', 'warn');
+      return;
+    }
+    var items = Array.isArray(state.editor.items) ? state.editor.items : [];
+    if (!items.length) {
+      setStatus(dom.editStatus, '当前用例为空，无法导出', 'warn');
+      return;
+    }
+    var downloadBlob = getDownloadBlob();
+    var baseName = getEditorExportBaseName();
+    var fileName = sanitizeDownloadName(baseName, '.xlsx');
+    if (dom.exportExcelBtn) dom.exportExcelBtn.disabled = true;
+    setStatus(dom.editStatus, '正在导出 Excel...', '');
+    buildCaseLibraryExcelBlob(items, baseName)
+      .then(function(blob) {
+        downloadBlob(fileName, blob);
+        setStatus(dom.editStatus, '已导出 Excel：' + fileName, 'ok');
+      })
+      .catch(function(err) {
+        setStatus(dom.editStatus, 'Excel 导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+      })
+      .finally(function() {
+        if (dom.exportExcelBtn) dom.exportExcelBtn.disabled = false;
+      });
   }
 
   function applyEditorFilter() {
@@ -1030,6 +1231,8 @@
     if (dom.editVersion) dom.editVersion.textContent = versionName;
     if (dom.editFileName) dom.editFileName.textContent = file.file_name_clean || ('文件#' + file.id);
     if (dom.editCardTitle) dom.editCardTitle.textContent = '用例编辑视图：' + (file.file_name_clean || ('#' + file.id));
+    if (dom.exportXmindBtn) dom.exportXmindBtn.disabled = false;
+    if (dom.exportExcelBtn) dom.exportExcelBtn.disabled = false;
     renderEditorTable();
   }
 
@@ -1705,6 +1908,14 @@
         if (dom.editSearchInput) dom.editSearchInput.value = '';
         renderEditorTable();
       });
+    }
+    if (dom.exportXmindBtn) {
+      dom.exportXmindBtn.disabled = true;
+      dom.exportXmindBtn.addEventListener('click', exportEditorToXmind);
+    }
+    if (dom.exportExcelBtn) {
+      dom.exportExcelBtn.disabled = true;
+      dom.exportExcelBtn.addEventListener('click', exportEditorToExcel);
     }
     if (dom.editToExecBtn) {
       dom.editToExecBtn.addEventListener('click', function() {

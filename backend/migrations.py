@@ -98,3 +98,26 @@ def apply_migrations(engine: Engine) -> None:
                 if "defect_links" not in cols:
                     conn.execute(text("ALTER TABLE exec_cases ADD COLUMN defect_links TEXT"))
             _mark_applied(conn, 3)
+
+        # v4: 用例文件同名约束升级为“项目级”（同一项目下跨版本不允许同名）。
+        # SQLite 无法直接 ALTER UNIQUE CONSTRAINT，这里用唯一索引实现；若历史数据已存在重复，则跳过创建以避免启动失败。
+        if not _is_applied(conn, 4):
+            if "case_files" in tables:
+                dup = conn.execute(
+                    text(
+                        """
+                        SELECT project_id, file_name_clean, COUNT(*) AS cnt
+                        FROM case_files
+                        GROUP BY project_id, file_name_clean
+                        HAVING cnt > 1
+                        LIMIT 1
+                        """
+                    )
+                ).fetchone()
+                if not dup:
+                    conn.execute(
+                        text(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS uq_case_file_name_project ON case_files(project_id, file_name_clean)"
+                        )
+                    )
+            _mark_applied(conn, 4)
