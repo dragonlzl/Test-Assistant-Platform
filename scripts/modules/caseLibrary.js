@@ -1982,6 +1982,7 @@
       if (dom.editSearchInput) dom.editSearchInput.value = '';
       persistEditorSelection(caseFile);
       renderEditorCard();
+      syncEditorSearchControls();
       if (editDrawerInstance && typeof editDrawerInstance.close === 'function') editDrawerInstance.close();
     }).catch(function(err) {
       setStatus(dom.editDrawerStatus, err && err.message ? err.message : '加载用例失败', 'err');
@@ -2285,6 +2286,14 @@
     renderEditorTable();
   }
 
+  function syncEditorSearchControls() {
+    if (!dom.editClearSearchBtn) return;
+    var val = '';
+    if (dom.editSearchInput) val = String(dom.editSearchInput.value || '');
+    var term = String(state.editor && state.editor.searchText ? state.editor.searchText : '') || val;
+    dom.editClearSearchBtn.disabled = !term.trim();
+  }
+
   function restoreEditorFromPersistedState() {
     if (!isAuthReady()) return Promise.resolve(false);
     if (state.editor.restoring === true) return Promise.resolve(false);
@@ -2320,6 +2329,7 @@
           state.editor.selection = new Set();
           state.editor.remarkOpen = new Set();
           renderEditorCard();
+          syncEditorSearchControls();
           return true;
         });
       })
@@ -3008,14 +3018,31 @@
         state.editor.searchText = dom.editSearchInput.value || '';
         state.editor.pageIndex = 0;
         renderEditorTable();
+        syncEditorSearchControls();
       });
     }
     if (dom.editClearSearchBtn) {
       dom.editClearSearchBtn.addEventListener('click', function() {
+        var prev = String(state.editor && state.editor.searchText ? state.editor.searchText : '');
         state.editor.searchText = '';
         state.editor.pageIndex = 0;
-        if (dom.editSearchInput) dom.editSearchInput.value = '';
+        if (dom.editSearchInput) {
+          dom.editSearchInput.value = '';
+          // 兼容输入法组合状态：强制结束当前输入并触发一次 input，使 UI 一定更新。
+          try { dom.editSearchInput.blur(); } catch (_) {}
+          try { dom.editSearchInput.dispatchEvent(new Event('input', { bubbles: true })); } catch (_) {}
+        }
         renderEditorTable();
+        syncEditorSearchControls();
+        if (prev && prev.trim()) {
+          setStatus(dom.editStatus, '已清空搜索', 'ok');
+          setTimeout(function() {
+            // 避免覆盖其它流程提示：仅在仍为本次清空提示时再清理。
+            if (dom.editStatus && String(dom.editStatus.textContent || '') === '已清空搜索') {
+              setStatus(dom.editStatus, '', '');
+            }
+          }, 1400);
+        }
       });
     }
     if (dom.editDrawerExportXmindBtn) {

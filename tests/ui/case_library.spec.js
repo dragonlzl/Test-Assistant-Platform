@@ -532,9 +532,21 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#caseLibraryEditView th', { hasText: '实际结果' })).toHaveCount(0);
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
 
+    // 搜索过滤 + 清空搜索应恢复全量
+    await expect(page.locator('#caseLibraryEditClearSearchBtn')).toBeDisabled();
+    await page.fill('#caseLibraryEditSearchInput', '密码错误');
+    await expect(page.locator('#caseLibraryEditClearSearchBtn')).toBeEnabled();
+    await expect(page.locator('#caseLibraryEditView')).toContainText('密码错误提示');
+    await expect(page.locator('#caseLibraryEditView')).not.toContainText('正常登录');
+    await page.click('#caseLibraryEditClearSearchBtn');
+    await expect(page.locator('#caseLibraryEditSearchInput')).toHaveValue('');
+    await expect(page.locator('#caseLibraryEditClearSearchBtn')).toBeDisabled();
+    await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
+
     await page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]').click();
     await page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]').fill('正常登录（已更新）');
-    await page.click('#caseLibraryEditClearSearchBtn');
+    // 保存依赖 focusout，这里点击标题触发 blur（清空按钮在无搜索时会禁用）
+    await page.click('#caseLibraryEditCardTitle');
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录（已更新）');
 
     // 刷新页面后仍保持上次编辑的用例视图

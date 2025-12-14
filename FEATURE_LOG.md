@@ -892,6 +892,15 @@
 - 测试与验证：手工在 Chrome/Safari 验证搜索框样式与筛选交互；`node --check scripts/modules/caseLibrary.js`（通过）。  
 - 更新记录：无  
 
+- 功能名称：用例库编辑视图“清空搜索”按钮修复（禁用态更明确）  
+- 功能描述：用例库编辑视图的“清空”按钮用于清除当前搜索过滤；当搜索为空时按钮会自动置灰禁用，避免“点击无反应”的困惑；清空时会强制触发一次输入更新并短暂提示“已清空搜索”。  
+- 操作方式：在编辑视图搜索框输入关键字后，点击“清空”即可恢复显示全部用例条目；未输入搜索时按钮为禁用态。  
+- 使用效果：按钮行为更符合直觉，清空操作更明确且对输入法场景更稳。  
+- 新增内容/接口/组件：清空按钮状态同步与清空逻辑增强（`scripts/modules/caseLibrary.js`）；UI 用例新增“搜索过滤后清空恢复全量/按钮禁用态”断言（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用既有筛选渲染 `renderEditorTable`，仅补充控件状态同步。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入\\ \\-\\>`（通过）。  
+- 更新记录：按钮文案从“清空”调整为“清空搜索”（`index.html`）。  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  
