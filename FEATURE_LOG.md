@@ -20,6 +20,24 @@
 ```
 
 
+- 功能名称：用例执行数据入库（执行视图 DB 持久化 + 导入确认入库 + 同步用例库）
+- 功能描述：用例执行页的执行数据不再依赖浏览器缓存，改为落库到 SQLite；导入/分配改为“先选文件→再选项目/版本→确认入库”；执行中编辑除“实际结果/缺陷链接”外的字段会实时同步到用例库（case_items），并记录执行历史。
+- 操作方式：
+  - 用例执行页导入：打开“用例导入&分配”抽屉 → 拖拽/选择 XMind/JSON → 在下方选择“项目/版本”（仅自身所属项目）→ 点击“确认入库”。
+  - 执行数据自动保存：在“执行视图”中修改用例内容/结果后自动写入数据库；删除需求区用例会将对应执行集归档，后续同名导入/从用例库转入会恢复历史执行记录。
+  - 用例库转到执行：用例库选择用例文件“转到执行”会走 DB 执行集 upsert；同名覆盖时可按规则保留历史执行结果（标题+预期相同则保留执行结果/备注/缺陷等）。
+- 使用效果：执行数据可跨浏览器/缓存持久化；导入过程更可控（避免误入库）；执行编辑与用例库保持一致，历史执行记录可恢复与合并追加。
+- 新增内容/接口/组件：
+  - 前端：`scripts/core/tempexecCore.js`（DB 读写执行集/执行用例、导入入库/合并追加、删除归档恢复）、`scripts/modules/tempexec.js`（导入确认入库 UI/交互）、`scripts/modules/caseLibrary.js`（转到执行走 DB）、`services/apiClient.js`（补 exec 相关 API）、`index.html`（导入区新增项目/版本/确认控件）、`style.css`（项目/版本选择框美化与最小宽度）。
+  - 后端：`backend/routers/exec_routes.py`（`POST /api/exec/sets/from-case-file`、`PATCH /api/exec/cases/{id}` 同步 case_items 与 history、`POST /api/exec/sets/{id}/cases` 支持 case_item_id）、`backend/schemas.py`（ExecCaseCreate 增加 case_item_id）、`backend/models.py`/`backend/migrations.py`（字段/约束增量）。
+  - 数据：执行页 UI 状态以 settings 键 `tempexec_ui_v1` 持久化（当前激活、布局、折叠、分页等）。
+- 复用说明：复用既有执行视图渲染/解析逻辑与统一鉴权/项目可见性；仅在必要处新增“DB 模式”分支与接口扩展，静态模式保持原行为。
+- 测试与验证：
+  - 语法检查：`node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js scripts/modules/caseLibrary.js services/apiClient.js`（通过）；`python3 -m compileall backend`（通过）。
+  - UI：`npm run test:ui -- tests/ui/case_library.spec.js tests/ui/tempexec_import_confirm.spec.js tests/ui/drawer_nav_visibility.spec.js tests/ui/admin_visibility.spec.js`（通过）。
+  - API：`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --port 9000` 后执行 `API_BASE_URL=http://127.0.0.1:9000 npx playwright test --config tests/api/playwright.api.config.js --workers=1 tests/api/case_library.spec.js tests/api/exec_persistence.spec.js`（通过）。
+- 更新记录：2025-12-14 补充执行页“导入需确认入库”UI 用例（`tests/ui/tempexec_import_confirm.spec.js`）与执行入库 API 用例（`tests/api/exec_persistence.spec.js`）；修复抽屉遮罩 UI 用例登录注入（`tests/ui/drawer_nav_visibility.spec.js`）；修复后端文件名清洗未覆盖“勾选用例 ”带空格前缀导致执行页确认入库出现“成功 0，失败 1”，并在前端导入匹配中兼容历史 `file_name_clean`；新增 UI 用例覆盖该场景，API 用例补充带空格前缀清洗断言（`tests/ui/tempexec_import_confirm.spec.js`、`tests/api/case_library.spec.js`）；修复项目管理增删版本/新增项目后，用例库与用例执行导入区“项目/版本”下拉不刷新：项目管理变更后广播 `app-projects-updated`，导入模块清理缓存并在页签激活时重拉；新增 UI 用例覆盖（`scripts/modules/admin.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`、`tests/ui/project_changes_refresh_import_selects.spec.js`）。
+
 - 功能名称：设置/模型/功能指派持久化 API 与操作日志查询  
 - 功能描述：新增设置、模型配置、功能指派的持久化接口，支持用户级/全局双作用域；操作日志提供管理员可查列表，前端“操作记录”页可刷新查看登录/增删改等记录。  
 - 操作方式：  

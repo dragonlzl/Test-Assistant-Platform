@@ -65,6 +65,26 @@ test.describe('case library api', () => {
     expect(caseFile.file_name_clean).toBe('登录');
     const caseFileId = caseFile.id;
 
+    const importSpaceRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '勾选用例 账号登录_result_20251213121212.json',
+        source: 'apitest',
+        items: [
+          {
+            module: '登录',
+            title: '账号登录',
+            expected: 'ok',
+          },
+        ],
+      },
+    });
+    expect(importSpaceRes.status()).toBe(201);
+    const caseFileSpace = await importSpaceRes.json();
+    expect(caseFileSpace.file_name_clean).toBe('账号登录');
+
     const importRes2 = await ctx.post(`${apiBase}/api/case-files/import`, {
       headers,
       data: {

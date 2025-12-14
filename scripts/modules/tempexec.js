@@ -25,6 +25,10 @@
 
     var tempExecDropZone = document.getElementById('tempExecDropZone');
     var tempExecInput = document.getElementById('tempExecInput');
+    var tempExecImportFileHint = document.getElementById('tempExecImportFileHint');
+    var tempExecImportProjectSelect = document.getElementById('tempExecImportProjectSelect');
+    var tempExecImportVersionSelect = document.getElementById('tempExecImportVersionSelect');
+    var tempExecImportConfirmBtn = document.getElementById('tempExecImportConfirmBtn');
     var tempExecStatus = document.getElementById('tempExecStatus');
     var tempExecNav = document.getElementById('tempExecNav');
     var tempVersionGrid = document.getElementById('tempVersionGrid');
@@ -514,14 +518,234 @@
     var tempFocusBlock = document.getElementById('tempFocusBlock');
     var tempFocusZone = tempFocusBlock ? tempFocusBlock.querySelector('[data-temp-focus-zone]') : null;
 
+    var apiClient = window.app && window.app.apiClient ? window.app.apiClient : null;
+    var importState = {
+      pendingFiles: [],
+      projectId: '',
+      versionId: '',
+      versionsByProject: {},
+      loading: false,
+      projectsLoaded: false,
+    };
+
+    function invalidateImportProjectsCache() {
+      importState.projectsLoaded = false;
+      importState.versionsByProject = {};
+      importState.projectId = '';
+      importState.versionId = '';
+      if (tempExecImportProjectSelect) {
+        tempExecImportProjectSelect.innerHTML = '<option value=\"\">请选择项目</option>';
+        tempExecImportProjectSelect.value = '';
+      }
+      if (tempExecImportVersionSelect) {
+        tempExecImportVersionSelect.disabled = true;
+        tempExecImportVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
+        tempExecImportVersionSelect.value = '';
+      }
+      syncImportConfirmState();
+    }
+
+    function isDbImportEnabled() {
+      var globalState = window.app && window.app.state ? window.app.state : null;
+      var user = globalState && globalState.currentUser ? globalState.currentUser : null;
+      var userId = user && user.id !== undefined && user.id !== null ? user.id : null;
+      if (!userId || String(userId) === '0') return false;
+      if (!window.app || window.app.authReady !== true) return false;
+      if (!apiClient) return false;
+      if (typeof apiClient.listProjects !== 'function' || typeof apiClient.listProjectVersions !== 'function') return false;
+      return Boolean(api && typeof api.importTempExecFilesToDb === 'function');
+    }
+
+    function renderImportFileHint() {
+      if (!tempExecImportFileHint) return;
+      var files = Array.isArray(importState.pendingFiles) ? importState.pendingFiles : [];
+      if (!files.length) {
+        tempExecImportFileHint.textContent = '未选择文件';
+        return;
+      }
+      var names = files.map(function(f) { return (f && f.name) ? f.name : ''; }).filter(Boolean);
+      var head = names.slice(0, 3).join('、');
+      var suffix = names.length > 3 ? ' 等' : '';
+      tempExecImportFileHint.textContent = '已选择 ' + names.length + ' 份文件：' + head + suffix;
+    }
+
+    function syncImportConfirmState() {
+      if (tempExecImportProjectSelect) {
+        tempExecImportProjectSelect.disabled = Boolean(importState.loading);
+      }
+      if (tempExecImportVersionSelect) {
+        tempExecImportVersionSelect.disabled = Boolean(importState.loading) || !importState.projectId;
+      }
+      if (tempExecImportConfirmBtn) {
+        var ready = Boolean(
+          !importState.loading &&
+          importState.projectId &&
+          importState.versionId &&
+          importState.pendingFiles &&
+          importState.pendingFiles.length
+        );
+        tempExecImportConfirmBtn.disabled = !ready;
+      }
+    }
+
+    function renderProjectOptions(list) {
+      if (!tempExecImportProjectSelect) return;
+      var projects = Array.isArray(list) ? list : [];
+      var html = ['<option value=\"\">请选择项目</option>'];
+      projects.forEach(function(p) {
+        if (!p) return;
+        var id = p.id;
+        if (id === null || id === undefined) return;
+        var name = p.name || ('项目#' + id);
+        html.push('<option value=\"' + escapeHtml(id) + '\">' + escapeHtml(name) + '</option>');
+      });
+      tempExecImportProjectSelect.innerHTML = html.join('');
+      tempExecImportProjectSelect.value = importState.projectId || '';
+    }
+
+    function renderVersionOptions(projectId, list) {
+      if (!tempExecImportVersionSelect) return;
+      var versions = Array.isArray(list) ? list : [];
+      var html = ['<option value=\"\">请选择版本</option>'];
+      versions.forEach(function(v) {
+        if (!v) return;
+        var id = v.id;
+        if (id === null || id === undefined) return;
+        var name = v.name || ('版本#' + id);
+        html.push('<option value=\"' + escapeHtml(id) + '\">' + escapeHtml(name) + '</option>');
+      });
+      tempExecImportVersionSelect.innerHTML = html.join('');
+      tempExecImportVersionSelect.value = importState.versionId || '';
+      tempExecImportVersionSelect.disabled = Boolean(importState.loading) || !projectId;
+    }
+
+    function ensureImportProjects() {
+      if (!isDbImportEnabled()) return;
+      if (importState.projectsLoaded) return;
+      if (!apiClient || typeof apiClient.listProjects !== 'function') return;
+      importState.projectsLoaded = true;
+      setStatus(tempExecStatus, '加载项目列表中...', '');
+      apiClient
+        .listProjects()
+        .then(function(list) {
+          renderProjectOptions(list || []);
+          setStatus(tempExecStatus, '', '');
+        })
+        .catch(function(err) {
+          importState.projectsLoaded = false;
+          setStatus(tempExecStatus, err && err.message ? err.message : '加载项目失败', 'err');
+        });
+    }
+
+    function handleImportProjectChange() {
+      if (!isDbImportEnabled()) return;
+      importState.projectId = tempExecImportProjectSelect ? String(tempExecImportProjectSelect.value || '') : '';
+      importState.versionId = '';
+      if (tempExecImportVersionSelect) {
+        tempExecImportVersionSelect.disabled = true;
+        tempExecImportVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
+        tempExecImportVersionSelect.value = '';
+      }
+      syncImportConfirmState();
+      var pid = importState.projectId;
+      if (!pid) return;
+      if (importState.versionsByProject[pid]) {
+        renderVersionOptions(pid, importState.versionsByProject[pid]);
+        syncImportConfirmState();
+        return;
+      }
+      setStatus(tempExecStatus, '加载版本中...', '');
+      apiClient
+        .listProjectVersions(pid)
+        .then(function(list) {
+          importState.versionsByProject[pid] = Array.isArray(list) ? list : [];
+          renderVersionOptions(pid, importState.versionsByProject[pid]);
+          setStatus(tempExecStatus, '', '');
+          syncImportConfirmState();
+        })
+        .catch(function(err) {
+          setStatus(tempExecStatus, err && err.message ? err.message : '加载版本失败', 'err');
+          syncImportConfirmState();
+        });
+    }
+
+    function handleImportVersionChange() {
+      if (!isDbImportEnabled()) return;
+      importState.versionId = tempExecImportVersionSelect ? String(tempExecImportVersionSelect.value || '') : '';
+      syncImportConfirmState();
+    }
+
     if (typeof api.loadTempExecState === 'function') {
       api.loadTempExecState();
+    }
+
+    if (tempExecImportProjectSelect) {
+      tempExecImportProjectSelect.addEventListener('change', handleImportProjectChange);
+    }
+    if (tempExecImportVersionSelect) {
+      tempExecImportVersionSelect.addEventListener('change', handleImportVersionChange);
+    }
+    if (tempExecImportConfirmBtn) {
+      tempExecImportConfirmBtn.addEventListener('click', function() {
+        if (!isDbImportEnabled()) return;
+        if (importState.loading) return;
+        if (!importState.pendingFiles || !importState.pendingFiles.length) {
+          setStatus(tempExecStatus, '请先选择用例文件', 'warn');
+          return;
+        }
+        if (!importState.projectId) {
+          setStatus(tempExecStatus, '请先选择项目', 'warn');
+          return;
+        }
+        if (!importState.versionId) {
+          setStatus(tempExecStatus, '请先选择版本', 'warn');
+          return;
+        }
+        importState.loading = true;
+        syncImportConfirmState();
+        api
+          .importTempExecFilesToDb(importState.pendingFiles, importState.projectId, importState.versionId)
+          .then(function(result) {
+            var res = result && typeof result === 'object' ? result : null;
+            var failed = res && Array.isArray(res.failed) ? res.failed : [];
+            if (failed.length) {
+              var failedNames = Object.create(null);
+              failed.forEach(function(item) {
+                if (!item || !item.file) return;
+                failedNames[String(item.file)] = true;
+              });
+              importState.pendingFiles = Array.prototype.slice.call(importState.pendingFiles || []).filter(function(file) {
+                return file && file.name && failedNames[String(file.name)];
+              });
+            } else {
+              importState.pendingFiles = [];
+            }
+            renderImportFileHint();
+            syncImportConfirmState();
+          })
+          .catch(function(err) {
+            setStatus(tempExecStatus, err && err.message ? err.message : '入库失败', 'err');
+          })
+          .finally(function() {
+            importState.loading = false;
+            syncImportConfirmState();
+          });
+      });
     }
 
     if (tempExecInput && tempExecDropZone && typeof api.importTempExecFiles === 'function') {
       tempExecInput.addEventListener('change', function(e) {
         var files = e.target.files;
-        if (files && files.length) api.importTempExecFiles(files);
+        if (files && files.length) {
+          if (isDbImportEnabled()) {
+            importState.pendingFiles = Array.prototype.slice.call(files || []).filter(Boolean);
+            renderImportFileHint();
+            syncImportConfirmState();
+            setStatus(tempExecStatus, '已选择文件，请选择项目与版本后点击确认入库', 'ok');
+          } else {
+            api.importTempExecFiles(files);
+          }
+        }
         e.target.value = '';
       });
       tempExecDropZone.addEventListener('dragover', function(e) {
@@ -533,9 +757,38 @@
         e.preventDefault();
         tempExecDropZone.classList.remove('dragover');
         var files = e.dataTransfer ? e.dataTransfer.files : null;
-        if (files && files.length) api.importTempExecFiles(files);
+        if (files && files.length) {
+          if (isDbImportEnabled()) {
+            importState.pendingFiles = Array.prototype.slice.call(files || []).filter(Boolean);
+            renderImportFileHint();
+            syncImportConfirmState();
+            setStatus(tempExecStatus, '已选择文件，请选择项目与版本后点击确认入库', 'ok');
+          } else {
+            api.importTempExecFiles(files);
+          }
+        }
       });
     }
+
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('app-tab-activated', function(e) {
+        var tabName = e && e.detail ? e.detail.tab : '';
+        if (tabName !== 'tempexec') return;
+        ensureImportProjects();
+      });
+      window.addEventListener('app-auth-ready', function() {
+        ensureImportProjects();
+      });
+      window.addEventListener('app-projects-updated', function() {
+        invalidateImportProjectsCache();
+        var globalState = window.app && window.app.state ? window.app.state : {};
+        var tabName = globalState && globalState.activeTab ? globalState.activeTab : '';
+        if (tabName === 'tempexec') ensureImportProjects();
+      });
+    }
+    ensureImportProjects();
+    renderImportFileHint();
+    syncImportConfirmState();
 
     if (caseTemplateDropdown && caseTemplateToggle && caseTemplateMenu) {
       caseTemplateToggle.addEventListener('click', function() {

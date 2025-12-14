@@ -24,6 +24,10 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     let nextCaseItemId = 1000;
     const caseFiles = [];
     const caseItemsByFileId = {};
+    let nextExecSetId = 2000;
+    let nextExecCaseId = 3000;
+    const execSets = [];
+    const execCasesBySetId = {};
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -117,6 +121,124 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
         return respond(200, found);
       }
 
+      if (pathName === '/api/exec/sets' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        let list = execSets.slice();
+        if (pid) list = list.filter((s) => String(s.project_id) === String(pid));
+        list.sort((a, b) => b.id - a.id);
+        return respond(200, list);
+      }
+
+      if (pathName === '/api/exec/sets/from-case-file' && method === 'POST') {
+        const body = route.request().postDataJSON() || {};
+        const caseFileId = Number(body.case_file_id);
+        const caseFile = caseFiles.find((f) => f.id === caseFileId);
+        if (!caseFile) return respond(404, { detail: '用例文件不存在' });
+        const now = new Date().toISOString();
+        let execSet = execSets
+          .filter((s) => s && Number(s.case_file_id) === caseFileId)
+          .sort((a, b) => b.id - a.id)[0];
+        if (!execSet) {
+          execSet = {
+            id: nextExecSetId++,
+            project_id: caseFile.project_id,
+            version_id: caseFile.version_id,
+            case_file_id: caseFileId,
+            name: caseFile.file_name_clean,
+            requirement: body.requirement || null,
+            reuse_enabled: body.reuse_enabled === true,
+            reuse_presets: body.reuse_presets || null,
+            status: 'active',
+            created_at: now,
+            updated_at: now,
+          };
+          execSets.push(execSet);
+          execCasesBySetId[execSet.id] = [];
+        } else {
+          execSet.status = 'active';
+          execSet.updated_at = now;
+        }
+
+        const existingCases = execCasesBySetId[execSet.id] || [];
+        const existingByItemId = new Map(existingCases.map((c) => [c.case_item_id, c]));
+        const items = caseItemsByFileId[caseFileId] || [];
+        const importMap = new Map();
+        if (body.prefer_result_source === 'import' && Array.isArray(body.import_cases)) {
+          body.import_cases.forEach((row) => {
+            if (!row) return;
+            const k = [row.module, row.title, row.expected].map((v) => String(v || '').trim().toLowerCase()).join('::');
+            importMap.set(k, row);
+          });
+        }
+        const nextCases = items.map((it, idx) => {
+          let c = existingByItemId.get(it.id);
+          if (!c) {
+            c = {
+              id: nextExecCaseId++,
+              exec_set_id: execSet.id,
+              case_item_id: it.id,
+              module: it.module,
+              title: it.title,
+              expected: it.expected,
+              priority: it.priority || null,
+              precondition: it.precondition || null,
+              steps: it.steps || null,
+              remark: it.remark || null,
+              reuse_details: null,
+              defect_links: null,
+              status: '未执行',
+              order_no: idx + 1,
+              executor_id: user.id,
+              created_at: now,
+              updated_at: now,
+            };
+          } else {
+            c.module = it.module;
+            c.title = it.title;
+            c.expected = it.expected;
+            c.priority = it.priority || null;
+            c.precondition = it.precondition || null;
+            c.steps = it.steps || null;
+            c.order_no = idx + 1;
+            c.updated_at = now;
+          }
+          const key = [c.module, c.title, c.expected].map((v) => String(v || '').trim().toLowerCase()).join('::');
+          const imported = importMap.get(key);
+          if (imported) {
+            if (imported.status !== undefined) c.status = imported.status;
+            if (imported.remark !== undefined) c.remark = imported.remark;
+            if (imported.reuse_details !== undefined) c.reuse_details = imported.reuse_details;
+            if (imported.defect_links !== undefined) c.defect_links = imported.defect_links;
+          }
+          return c;
+        });
+        execCasesBySetId[execSet.id] = nextCases;
+        return respond(200, execSet);
+      }
+
+      const execCasesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (execCasesMatch && method === 'GET') {
+        const execSetId = Number(execCasesMatch[1]);
+        return respond(200, execCasesBySetId[execSetId] || []);
+      }
+
+      const execCasePatchMatch = pathName.match(/^\/api\/exec\/cases\/(\d+)$/);
+      if (execCasePatchMatch && method === 'PATCH') {
+        const caseId = Number(execCasePatchMatch[1]);
+        const payload = route.request().postDataJSON() || {};
+        let found = null;
+        Object.keys(execCasesBySetId).forEach((sid) => {
+          const list = execCasesBySetId[sid] || [];
+          const idx = list.findIndex((c) => c.id === caseId);
+          if (idx !== -1) {
+            list[idx] = { ...list[idx], ...payload, updated_at: new Date().toISOString() };
+            found = list[idx];
+          }
+        });
+        if (!found) return respond(404, { detail: 'not found' });
+        return respond(200, found);
+      }
+
       if (pathName === '/api/auth/logout') return respond(200, {});
       if (pathName.startsWith('/api/')) return respond(200, []);
       return respond(404, { detail: 'not found' });
@@ -181,18 +303,21 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
       return st.tempExecFiles.some((f) => (f && f.name) === 'case_library_import');
     });
 
-    await page.evaluate(() => {
-      var st = window.app && window.app.state ? window.app.state : null;
-      var api = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
-      if (!st || !api) return;
-      var file = (st.tempExecFiles || []).find((f) => f && f.name === 'case_library_import');
-      if (!file || !file.cases || !file.cases[0]) return;
-      file.cases[0].actual = '通过';
-      file.cases[0].remark = '执行备注';
-      file.cases[0].defectLinks = [{ id: 'd1', url: 'http://example.com/bug' }];
-      if (api.persistTempExecState) api.persistTempExecState();
-      if (api.renderTempExecView) api.renderTempExecView();
+    await page.click('#openTempExecViewNavBtn');
+    const firstCasePatch = page.waitForResponse((res) => {
+      return res.url().includes('/api/exec/cases/') && res.request().method() === 'PATCH';
     });
+    const firstStatus = page.locator('#tempExecView select[data-temp-result]').first();
+    await firstStatus.selectOption('通过');
+    await page.locator('#tempExecView button[data-temp-remark-toggle]').first().click();
+    const remark = page.locator('#tempExecView textarea[data-temp-remark]').first();
+    await remark.fill('执行备注');
+    await page.locator('#tempExecView button[data-temp-defect-toggle]').first().click();
+    await page.locator('#tempExecView button[data-temp-defect-add]').first().click();
+    const defectInput = page.locator('#tempExecView input[data-temp-defect-link]').first();
+    await defectInput.fill('http://example.com/bug');
+    await firstCasePatch;
+    await page.waitForTimeout(600);
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
     page.on('dialog', async (dialog) => dialog.accept());

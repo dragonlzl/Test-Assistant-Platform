@@ -86,6 +86,14 @@
     el.className = ['status', type || ''].filter(Boolean).join(' ');
   }
 
+  function notifyProjectsUpdated(reason, detail) {
+    if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+    var payload = detail && typeof detail === 'object' ? detail : {};
+    payload.reason = reason || 'updated';
+    payload.ts = Date.now();
+    window.dispatchEvent(new CustomEvent('app-projects-updated', { detail: payload }));
+  }
+
   function formatTime(value) {
     if (!value) return '--';
     try {
@@ -462,6 +470,7 @@
       setStatus(dom.projectFormStatus, '项目名称不能为空', 'warn');
       return;
     }
+    var isEditing = Boolean(state.editingProjectId);
     // “新建/编辑项目”的错误提示统一展示在抽屉内，避免用户误以为是列表操作提示。
     setStatus(dom.projectFormStatus, '保存中...', '');
     const action = state.editingProjectId
@@ -469,7 +478,9 @@
       : api.createProject({ name: name, description: desc });
     action.then(function() {
       hideProjectForm();
-      return loadProjects();
+      return loadProjects().then(function() {
+        notifyProjectsUpdated(isEditing ? 'project-updated' : 'project-created', { name: name });
+      });
     }).catch(function(err) {
       setStatus(dom.projectFormStatus, err && err.message ? err.message : '保存失败', 'err');
     });
@@ -533,7 +544,11 @@
       if (!canDeleteProject) return;
       const id = Number(btn.dataset.id);
       if (!confirm('确认删除该项目？相关版本将被删除。')) return;
-      api.deleteProject(id).then(loadProjects).catch(function(err) {
+      api.deleteProject(id).then(function() {
+        return loadProjects().then(function() {
+          notifyProjectsUpdated('project-deleted', { project_id: id });
+        });
+      }).catch(function(err) {
         setStatus(dom.projectStatus, err && err.message ? err.message : '删除失败', 'err');
       });
     } else if (action === 'add-version') {
@@ -541,7 +556,11 @@
       const id = Number(btn.dataset.id);
       const name = prompt('请输入新版本名称');
       if (!name) return;
-      api.createVersion(id, { name: name }).then(loadProjects).catch(function(err) {
+      api.createVersion(id, { name: name }).then(function() {
+        return loadProjects().then(function() {
+          notifyProjectsUpdated('version-created', { project_id: id, version_name: name });
+        });
+      }).catch(function(err) {
         setStatus(dom.projectStatus, err && err.message ? err.message : '新增版本失败', 'err');
       });
     } else if (action === 'delete-version') {
@@ -549,7 +568,11 @@
       const pid = Number(btn.dataset.projectId);
       const vid = Number(btn.dataset.versionId);
       if (!confirm('确认删除该版本？')) return;
-      api.deleteVersion(pid, vid).then(loadProjects).catch(function(err) {
+      api.deleteVersion(pid, vid).then(function() {
+        return loadProjects().then(function() {
+          notifyProjectsUpdated('version-deleted', { project_id: pid, version_id: vid });
+        });
+      }).catch(function(err) {
         setStatus(dom.projectStatus, err && err.message ? err.message : '删除版本失败', 'err');
       });
     }

@@ -36,22 +36,22 @@ test.describe('管理员卡片可见性', () => {
     await page.click('[data-group-menu="cases"] [data-tab-btn="tempexec"]');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
     await expect(page.locator('[data-tab-btn="tempexec"]')).toHaveClass(/active/);
-    await expect(page.locator('[data-tab-section="project-admin"]')).toBeHidden();
-    await expect(page.locator('[data-tab-section="user-admin"]')).toBeHidden();
+    await expect(page.locator('#projectAdminHead')).toBeHidden();
+    await expect(page.locator('#userAdminHead')).toBeHidden();
 
     await page.reload();
     await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
     await expect(page.locator('[data-tab-btn="tempexec"]')).toHaveClass(/active/);
-    await expect(page.locator('[data-tab-section="project-admin"]')).toBeHidden();
-    await expect(page.locator('[data-tab-section="user-admin"]')).toBeHidden();
+    await expect(page.locator('#projectAdminHead')).toBeHidden();
+    await expect(page.locator('#userAdminHead')).toBeHidden();
 
     // 切到项目管理，再切回执行，确保可见性正常
     await page.click('.tab-group-btn[data-group="manage"]');
     await page.click('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
-    await expect(page.locator('[data-tab-section="project-admin"]')).toBeVisible();
+    await expect(page.locator('#projectAdminHead')).toBeVisible();
     await page.click('.tab-group-btn[data-group="cases"]');
     await page.click('[data-group-menu="cases"] [data-tab-btn="tempexec"]');
-    await expect(page.locator('[data-tab-section="project-admin"]')).toBeHidden();
+    await expect(page.locator('#projectAdminHead')).toBeHidden();
   });
 });

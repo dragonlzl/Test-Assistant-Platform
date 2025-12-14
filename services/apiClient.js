@@ -294,6 +294,45 @@
     }).then(handleResponse);
   }
 
+  function updateExecSet(execSetId, payload) {
+    return fetch('/api/exec/sets/' + execSetId, {
+      method: 'PATCH',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function upsertExecSetFromCaseFile(payload) {
+    return fetch('/api/exec/sets/from-case-file', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function createExecCase(execSetId, payload) {
+    return fetch('/api/exec/sets/' + execSetId + '/cases', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function updateExecCase(caseId, payload) {
+    return fetch('/api/exec/cases/' + caseId, {
+      method: 'PATCH',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function deleteExecCase(caseId) {
+    return fetch('/api/exec/cases/' + caseId, {
+      method: 'DELETE',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
   function addExecCasesFromLibrary(execSetId, caseItemIds) {
     return fetch('/api/exec/sets/' + execSetId + '/cases/from-library', {
       method: 'POST',
@@ -459,6 +498,11 @@
     listExecSets: listExecSets,
     createExecSet: createExecSet,
     listExecCases: listExecCases,
+    updateExecSet: updateExecSet,
+    upsertExecSetFromCaseFile: upsertExecSetFromCaseFile,
+    createExecCase: createExecCase,
+    updateExecCase: updateExecCase,
+    deleteExecCase: deleteExecCase,
     addExecCasesFromLibrary: addExecCasesFromLibrary,
     listSettings: listSettings,
     saveSettings: saveSettings,

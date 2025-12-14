@@ -1950,6 +1950,7 @@ body {
     .status.ok { color: var(--success); }
     .status.warn { color: var(--warn); }
     .status.err { color: var(--error); }
+    #tempExecStatus { white-space: pre-line; }
     .badge {
       background: var(--primary-weak);
       padding: 2px 8px;
@@ -3842,12 +3843,14 @@ body {
 /* 项目名最长 6 个中文，确保下拉选择框可完整展示 */
 #caseLibraryImportProjectSelect,
 #caseLibraryEditProjectSelect,
-#caseLibrarySelectProjectSelect {
+#caseLibrarySelectProjectSelect,
+#tempExecImportProjectSelect {
   min-width: 11em;
 }
 
 #caseLibraryImportVersionSelect,
-#caseLibrarySelectVersionSelect {
+#caseLibrarySelectVersionSelect,
+#tempExecImportVersionSelect {
   min-width: 9em;
 }
 

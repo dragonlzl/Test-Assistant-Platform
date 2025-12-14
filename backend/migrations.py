@@ -60,3 +60,41 @@ def apply_migrations(engine: Engine) -> None:
                     )
             _mark_applied(conn, 1)
 
+        # v2: 执行集补充 case_file 关联与复用/需求元信息。
+        if not _is_applied(conn, 2):
+            if "exec_sets" in tables:
+                cols = set([c["name"] for c in insp.get_columns("exec_sets")])
+                if "case_file_id" not in cols:
+                    conn.execute(text("ALTER TABLE exec_sets ADD COLUMN case_file_id INTEGER"))
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_exec_sets_case_file_id ON exec_sets(case_file_id)"
+                        )
+                    )
+                if "requirement" not in cols:
+                    conn.execute(text("ALTER TABLE exec_sets ADD COLUMN requirement VARCHAR(255)"))
+                if "reuse_enabled" not in cols:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE exec_sets ADD COLUMN reuse_enabled BOOLEAN NOT NULL DEFAULT 0"
+                        )
+                    )
+                if "reuse_presets" not in cols:
+                    conn.execute(text("ALTER TABLE exec_sets ADD COLUMN reuse_presets TEXT"))
+            _mark_applied(conn, 2)
+
+        # v3: 执行用例补充字段（优先级/前置/步骤）与复用/缺陷结构化存储。
+        if not _is_applied(conn, 3):
+            if "exec_cases" in tables:
+                cols = set([c["name"] for c in insp.get_columns("exec_cases")])
+                if "priority" not in cols:
+                    conn.execute(text("ALTER TABLE exec_cases ADD COLUMN priority VARCHAR(32)"))
+                if "precondition" not in cols:
+                    conn.execute(text("ALTER TABLE exec_cases ADD COLUMN precondition TEXT"))
+                if "steps" not in cols:
+                    conn.execute(text("ALTER TABLE exec_cases ADD COLUMN steps TEXT"))
+                if "reuse_details" not in cols:
+                    conn.execute(text("ALTER TABLE exec_cases ADD COLUMN reuse_details TEXT"))
+                if "defect_links" not in cols:
+                    conn.execute(text("ALTER TABLE exec_cases ADD COLUMN defect_links TEXT"))
+            _mark_applied(conn, 3)

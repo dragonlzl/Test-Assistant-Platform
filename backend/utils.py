@@ -21,8 +21,8 @@ def clean_case_file_name(name: str) -> str:
     ts_pattern = re.compile(r"(_result)?_\d{8}(?:_?\d{6})?$", flags=re.IGNORECASE)
     while ts_pattern.search(base):
         base = ts_pattern.sub("", base)
-    # 去除“勾选用例”前缀（用例生成/导出默认命名）
-    base = re.sub(r"^勾选用例[-_]*", "", base, flags=re.IGNORECASE)
+    # 去除“勾选用例”前缀（用例生成/导出默认命名，兼容 “勾选用例 登录” 这类带空格分隔的手工命名）
+    base = re.sub(r"^勾选用例[-_ ]*", "", base, flags=re.IGNORECASE)
     base = base.strip().strip("_- ")
     return base or "case"
 

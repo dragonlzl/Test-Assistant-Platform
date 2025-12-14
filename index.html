@@ -1204,8 +1204,20 @@
 <strong>测试用例</strong>
 <span>拖拽或点击选择</span>
 </div>
-<div class="status">支持多份导入，解析后自动出现在下方视图</div>
+<div class="status">拖拽或点击选择文件后，还需要选择项目与版本并确认才会入库</div>
 </label>
+<p class="hint" id="tempExecImportFileHint" style="margin:8px 0 6px;">未选择文件</p>
+<div class="case-library-filters" style="margin-bottom:8px;">
+  <span class="case-library-label">项目</span>
+  <select id="tempExecImportProjectSelect">
+    <option value="">请选择项目</option>
+  </select>
+  <span class="case-library-label">版本</span>
+  <select id="tempExecImportVersionSelect" disabled>
+    <option value="">请选择版本</option>
+  </select>
+  <button class="pill primary" id="tempExecImportConfirmBtn" disabled type="button">确认入库</button>
+</div>
 <p class="status" id="tempExecStatus"></p>
 </div>
 </div>

@@ -151,13 +151,21 @@ class ExecSetCreate(BaseModel):
     version_id: Optional[int] = None
     name: str
     source: Optional[str] = None
+    case_file_id: Optional[int] = None
+    requirement: Optional[str] = None
+    reuse_enabled: bool = False
+    reuse_presets: Optional[List[Any]] = None
 
 
 class ExecSetOut(BaseModel):
     id: int
     project_id: int
     version_id: Optional[int]
+    case_file_id: Optional[int] = None
     name: str
+    requirement: Optional[str] = None
+    reuse_enabled: bool = False
+    reuse_presets: Optional[Any] = None
     status: str
     created_at: datetime
     updated_at: datetime
@@ -175,8 +183,13 @@ class ExecCaseOut(BaseModel):
     module: str
     title: str
     expected: str
+    priority: Optional[str] = None
+    precondition: Optional[str] = None
+    steps: Optional[str] = None
     actual_result: Optional[str]
     defect_link: Optional[str]
+    reuse_details: Optional[Any] = None
+    defect_links: Optional[Any] = None
     remark: Optional[str]
     status: str
     order_no: int
@@ -190,11 +203,62 @@ class ExecCaseUpdate(BaseModel):
     module: Optional[str] = None
     title: Optional[str] = None
     expected: Optional[str] = None
+    priority: Optional[str] = None
+    precondition: Optional[str] = None
+    steps: Optional[str] = None
     actual_result: Optional[str] = None
     defect_link: Optional[str] = None
+    reuse_details: Optional[Any] = None
+    defect_links: Optional[Any] = None
     remark: Optional[str] = None
     status: Optional[str] = None
     executor_id: Optional[int] = None
+
+
+class ExecCaseCreate(BaseModel):
+    case_item_id: Optional[int] = None
+    module: Optional[str] = None
+    title: Optional[str] = None
+    expected: Optional[str] = None
+    priority: Optional[str] = None
+    precondition: Optional[str] = None
+    steps: Optional[str] = None
+    remark: Optional[str] = None
+    status: Optional[str] = None
+    reuse_details: Optional[Any] = None
+    defect_links: Optional[Any] = None
+    after_case_id: Optional[int] = None
+
+
+class ExecSetUpdate(BaseModel):
+    status: Optional[str] = None
+    requirement: Optional[str] = None
+    reuse_enabled: Optional[bool] = None
+    reuse_presets: Optional[Any] = None
+
+
+class ExecImportCasePayload(BaseModel):
+    module: str
+    title: str
+    expected: str
+    priority: Optional[str] = None
+    precondition: Optional[str] = None
+    steps: Optional[str] = None
+    remark: Optional[str] = None
+    status: Optional[str] = None
+    reuse_details: Optional[Any] = None
+    defect_links: Optional[Any] = None
+
+
+class ExecSetFromCaseFileRequest(BaseModel):
+    case_file_id: int
+    mode: str = "replace"
+    preserve_results: bool = True
+    prefer_result_source: str = "db"
+    import_cases: Optional[List[ExecImportCasePayload]] = None
+    requirement: Optional[str] = None
+    reuse_enabled: Optional[bool] = None
+    reuse_presets: Optional[Any] = None
 
 
 class ExecOverviewOut(BaseModel):

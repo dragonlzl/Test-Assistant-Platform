@@ -170,6 +170,37 @@
     return window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
   }
 
+  function isExecDbEnabled() {
+    if (!window.app || window.app.authReady !== true) return false;
+    var globalState = window.app && window.app.state ? window.app.state : null;
+    var user = globalState && globalState.currentUser ? globalState.currentUser : null;
+    var userId = user && user.id !== undefined && user.id !== null ? user.id : null;
+    if (!userId || String(userId) === '0') return false;
+    return Boolean(
+      apiClient &&
+        typeof apiClient.listExecSets === 'function' &&
+        typeof apiClient.listExecCases === 'function' &&
+        typeof apiClient.upsertExecSetFromCaseFile === 'function' &&
+        typeof apiClient.listCaseItems === 'function'
+    );
+  }
+
+  function mapExecCaseToImportPayload(row) {
+    if (!row) return null;
+    return {
+      module: row.module || '',
+      title: row.title || '',
+      expected: row.expected || '',
+      priority: row.priority || null,
+      precondition: row.precondition || null,
+      steps: row.steps || null,
+      remark: row.remark || null,
+      status: row.status || null,
+      reuse_details: row.reuse_details || null,
+      defect_links: row.defect_links || null,
+    };
+  }
+
   function ensureDrawer(drawerId, openButtons, onOpen) {
     if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
     return window.app.drawer.createDrawer({
@@ -249,6 +280,54 @@
         setStatus(dom.status, err && err.message ? err.message : '加载项目失败', 'err');
         return [];
       });
+  }
+
+  function invalidateProjectsCache() {
+    state.projects = [];
+    state.projectNameById = {};
+    state.versionsByProject = {};
+    state.versionNameByProject = {};
+
+    // 项目/版本列表发生变化时，避免“下拉已重建但 state 仍保留旧值”导致按钮可点击状态错误。
+    state.importDrawer.projectId = null;
+    state.importDrawer.versionId = null;
+    if (dom.importProjectSelect) dom.importProjectSelect.value = '';
+    if (dom.importVersionSelect) {
+      dom.importVersionSelect.disabled = true;
+      dom.importVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
+      dom.importVersionSelect.value = '';
+    }
+    syncImportConfirmEnabled();
+
+    state.editDrawer.projectId = null;
+    if (dom.editDrawerProjectSelect) dom.editDrawerProjectSelect.value = '';
+    if (dom.editDrawerListBody) {
+      dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"8\"><p class=\"hint\">请选择项目后点击确认。</p></td></tr>';
+    }
+
+    state.selectDrawer.projectId = null;
+    state.selectDrawer.versionId = null;
+    if (dom.selectProjectSelect) dom.selectProjectSelect.value = '';
+    if (dom.selectVersionSelect) {
+      dom.selectVersionSelect.disabled = true;
+      dom.selectVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
+      dom.selectVersionSelect.value = '';
+    }
+    if (dom.selectListBody) {
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"7\"><p class=\"hint\">请选择项目后点击确认。</p></td></tr>';
+    }
+  }
+
+  function bindProjectsUpdated() {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+    window.addEventListener('app-projects-updated', function() {
+      invalidateProjectsCache();
+      var globalState = window.app && window.app.state ? window.app.state : {};
+      var tabName = globalState && globalState.activeTab ? globalState.activeTab : '';
+      if (tabName === 'case-library' && isAuthReady()) {
+        ensureProjectsReady();
+      }
+    });
   }
 
   function normalizeId(value) {
@@ -1000,10 +1079,86 @@
     return normalizeName(module) + '::' + normalizeName(title) + '::' + normalizeName(expected);
   }
 
-  function transferItemsToTempExec(fileName, items) {
+  function transferItemsToTempExec(caseFile, fileName, items) {
     var tempExecApi = getTempExecApi();
     if (!tempExecApi || !window.app || !window.app.state) {
       setStatus(dom.status, '执行页未就绪，请先打开一次“用例执行”页签', 'warn');
+      return;
+    }
+    if (isExecDbEnabled() && caseFile && caseFile.id) {
+      var projectId = caseFile.project_id || null;
+      var name = (caseFile.file_name_clean || fileName || '').trim() || ('用例#' + caseFile.id);
+      setStatus(dom.status, '转到执行中...', '');
+      apiClient
+        .listExecSets(projectId || undefined)
+        .then(function(list) {
+          var sets = Array.isArray(list) ? list : [];
+          var fileIdNum = Number(caseFile.id);
+          var matched = sets.filter(function(s) {
+            return s && Number(s.case_file_id) === fileIdNum;
+          });
+          matched.sort(function(a, b) { return Number(b.id) - Number(a.id); });
+          var existingSet = matched.length ? matched[0] : null;
+          if (existingSet && String(existingSet.status || '') === 'active') {
+            var ok = window.confirm(
+              '检测到执行页已存在【' + name + '】的执行记录，将同步最新用例并尽量保留结果（模块+标题+预期一致保留），是否继续？'
+            );
+            if (!ok) {
+              var cancelErr = new Error('cancelled');
+              cancelErr._cancel = true;
+              throw cancelErr;
+            }
+          }
+          if (!existingSet) return { importCases: [] };
+          return apiClient
+            .listExecCases(existingSet.id)
+            .then(function(cases) {
+              var rows = Array.isArray(cases) ? cases : [];
+              return { importCases: rows.map(mapExecCaseToImportPayload).filter(Boolean) };
+            })
+            .catch(function() {
+              return { importCases: [] };
+            });
+        })
+        .then(function(ctx) {
+          var importCases = ctx && ctx.importCases ? ctx.importCases : [];
+          var prefer = importCases.length ? 'import' : 'db';
+          return apiClient.upsertExecSetFromCaseFile({
+            case_file_id: caseFile.id,
+            mode: 'replace',
+            prefer_result_source: prefer,
+            import_cases: importCases.length ? importCases : null,
+          });
+        })
+        .then(function(execSet) {
+          if (!execSet || !execSet.id) throw new Error('执行集创建失败');
+          var chain = Promise.resolve();
+          if (tempExecApi && typeof tempExecApi.loadTempExecState === 'function') {
+            chain = chain.then(function() { return tempExecApi.loadTempExecState(); });
+          }
+          return chain.then(function() {
+            if (tempExecApi && typeof tempExecApi.setTempExecActive === 'function') {
+              tempExecApi.setTempExecActive(String(execSet.id));
+            }
+            return execSet;
+          });
+        })
+        .then(function() {
+          setStatus(dom.status, '已转到执行：' + name, 'ok');
+          var coreApi = getCore();
+          var switchTab = window.app && typeof window.app.switchTab === 'function'
+            ? window.app.switchTab
+            : (coreApi && typeof coreApi.switchTab === 'function' ? coreApi.switchTab : null);
+          if (typeof switchTab === 'function') switchTab('tempexec');
+          var section = document.querySelector('[data-section-id=\"tempexec-view\"]');
+          if (section && coreApi && typeof coreApi.scrollElementIntoView === 'function') {
+            coreApi.scrollElementIntoView(section, 'smooth', 140);
+          }
+        })
+        .catch(function(err) {
+          if (err && err._cancel) return;
+          setStatus(dom.status, '转到执行失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+        });
       return;
     }
     var globalState = window.app.state;
@@ -1208,7 +1363,7 @@
     if (!caseFile || !caseFile.id) return;
     setStatus(dom.selectStatus, '加载用例条目...', '');
     apiClient.listCaseItems(caseFile.id).then(function(items) {
-      transferItemsToTempExec(caseFile.file_name_clean || ('用例#' + caseFile.id), items || []);
+      transferItemsToTempExec(caseFile, caseFile.file_name_clean || ('用例#' + caseFile.id), items || []);
       setStatus(dom.selectStatus, '已转到执行：' + (caseFile.file_name_clean || ''), 'ok');
       if (selectDrawerInstance && typeof selectDrawerInstance.close === 'function') selectDrawerInstance.close();
     }).catch(function(err) {
@@ -1284,7 +1439,7 @@
           setStatus(dom.editStatus, '请先选择用例', 'warn');
           return;
         }
-        transferItemsToTempExec(file.file_name_clean || ('用例#' + file.id), state.editor.items || []);
+        transferItemsToTempExec(file, file.file_name_clean || ('用例#' + file.id), state.editor.items || []);
       });
     }
     if (dom.editView) {
@@ -1412,6 +1567,7 @@
 
     bindEvents();
     bindTabActivation();
+    bindProjectsUpdated();
 
     // 若刷新后停留在用例库页，补一次加载。
     var visible = document.querySelector('section[data-tab-section=\"case-library\"]:not(.hidden)');
