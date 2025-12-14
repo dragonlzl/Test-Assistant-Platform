@@ -865,6 +865,15 @@
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入`（通过）。  
 - 更新记录：无  
 
+- 功能名称：用例库支持 Excel（xlsx）导入（格式与导出一致）  
+- 功能描述：用例库“导入用例”支持导入 `.xlsx` 文件；当 Excel 首行表头与导出一致（“模块/用例标题/优先级/前提条件/操作步骤/预期结果”）时可直接解析入库；解析完成后仍复用同一入库接口，因此同名判定/差异对比/覆盖导入规则与 XMind/JSON 导入一致。  
+- 操作方式：进入“用例相关 → 用例库”→打开“导入用例”→选择 `.xlsx` 文件（格式同导出 Excel）→选择项目/版本→确认入库。  
+- 使用效果：支持 Excel 作为用例编写与交换格式，导入链路统一且同名规则一致。  
+- 新增内容/接口/组件：导入文件选择允许 `.xlsx`（`index.html`）；前端新增 Excel 解析（支持 inlineStr/sharedStrings）并映射为用例条目（`scripts/modules/caseLibrary.js`）；UI 用例新增 Excel 导入覆盖（`tests/ui/case_library.spec.js`、fixture：`tests/fixtures/case_library_import.xlsx.base64`）。  
+- 复用说明：复用既有 JSZip 依赖与导入入库接口 `/api/case-files/import`，仅新增轻量解析逻辑与字段映射。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入\\ Excel`（通过）。  
+- 更新记录：无  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  

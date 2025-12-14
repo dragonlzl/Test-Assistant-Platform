@@ -1013,6 +1013,207 @@
     return String(val);
   }
 
+  function colLettersToIndex(letters) {
+    var text = String(letters || '').toUpperCase().replace(/[^A-Z]/g, '');
+    if (!text) return -1;
+    var sum = 0;
+    for (var i = 0; i < text.length; i += 1) {
+      var code = text.charCodeAt(i);
+      if (code < 65 || code > 90) continue;
+      sum = sum * 26 + (code - 64);
+    }
+    return sum - 1;
+  }
+
+  function parseXlsxSharedStrings(xmlText) {
+    if (!xmlText) return [];
+    var out = [];
+    try {
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(String(xmlText), 'application/xml');
+      if (!doc || doc.getElementsByTagName('parsererror').length) return [];
+      var sis = doc.getElementsByTagName('si');
+      for (var i = 0; i < sis.length; i += 1) {
+        var si = sis[i];
+        if (!si) continue;
+        // 兼容：Excel 可能用 <t> 或富文本 <r><t>。
+        var ts = si.getElementsByTagName('t');
+        if (!ts || !ts.length) {
+          out.push('');
+          continue;
+        }
+        var parts = [];
+        for (var j = 0; j < ts.length; j += 1) {
+          var t = ts[j];
+          if (!t) continue;
+          parts.push(t.textContent || '');
+        }
+        out.push(parts.join(''));
+      }
+    } catch (err) {
+      return [];
+    }
+    return out;
+  }
+
+  function parseXlsxSheetToRows(xmlText, sharedStrings) {
+    var rows = [];
+    if (!xmlText) return rows;
+    try {
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(String(xmlText), 'application/xml');
+      if (!doc || doc.getElementsByTagName('parsererror').length) return rows;
+      var rowNodes = doc.getElementsByTagName('row');
+      for (var i = 0; i < rowNodes.length; i += 1) {
+        var row = rowNodes[i];
+        if (!row) continue;
+        var cells = row.getElementsByTagName('c');
+        var map = {};
+        var maxCol = -1;
+        for (var j = 0; j < cells.length; j += 1) {
+          var cell = cells[j];
+          if (!cell) continue;
+          var ref = cell.getAttribute('r') || '';
+          var m = String(ref).match(/^([A-Za-z]+)/);
+          if (!m) continue;
+          var colIdx = colLettersToIndex(m[1]);
+          if (colIdx < 0) continue;
+          if (colIdx > maxCol) maxCol = colIdx;
+          var t = (cell.getAttribute('t') || '').toLowerCase();
+          var value = '';
+          if (t === 'inlinestr') {
+            var ts = cell.getElementsByTagName('t');
+            var parts = [];
+            for (var k = 0; k < ts.length; k += 1) {
+              parts.push(ts[k] && ts[k].textContent ? ts[k].textContent : '');
+            }
+            value = parts.join('');
+          } else if (t === 's') {
+            var vNode = cell.getElementsByTagName('v')[0];
+            var idx = vNode && vNode.textContent ? Number(String(vNode.textContent).trim()) : NaN;
+            if (!isNaN(idx) && sharedStrings && sharedStrings.length && sharedStrings[idx] !== undefined) {
+              value = sharedStrings[idx];
+            } else {
+              value = '';
+            }
+          } else {
+            // number / general / 其它：优先 <v>，兜底 <t>
+            var v = cell.getElementsByTagName('v')[0];
+            if (v && v.textContent !== undefined && v.textContent !== null) value = v.textContent;
+            else {
+              var t2 = cell.getElementsByTagName('t')[0];
+              value = t2 && t2.textContent ? t2.textContent : '';
+            }
+          }
+          map[String(colIdx)] = value;
+        }
+        if (maxCol < 0) continue;
+        var rowArr = [];
+        for (var c = 0; c <= maxCol; c += 1) {
+          rowArr[c] = map[String(c)] !== undefined ? map[String(c)] : '';
+        }
+        rows.push(rowArr);
+      }
+    } catch (err) {
+      return rows;
+    }
+    return rows;
+  }
+
+  function parseXlsxFileToCaseRows(file) {
+    var JSZipCtor = typeof JSZip !== 'undefined' ? JSZip : (window.JSZip ? window.JSZip : null);
+    if (!JSZipCtor) return Promise.reject(new Error('缺少 JSZip 依赖，无法解析 Excel'));
+    if (!file || typeof file.arrayBuffer !== 'function') return Promise.reject(new Error('Excel 文件不可用'));
+    var zip = new JSZipCtor();
+    return file.arrayBuffer().then(function(buf) {
+      return zip.loadAsync(buf);
+    }).then(function(z) {
+      var shared = null;
+      var sharedEntry = z.file('xl/sharedStrings.xml');
+      var sharedPromise = sharedEntry ? sharedEntry.async('string').then(function(txt) {
+        shared = parseXlsxSharedStrings(txt);
+      }).catch(function() { shared = []; }) : Promise.resolve();
+
+      return sharedPromise.then(function() {
+        var sheetEntry = z.file('xl/worksheets/sheet1.xml');
+        if (!sheetEntry) {
+          var candidates = [];
+          try {
+            z.forEach(function(relPath) {
+              if (!relPath) return;
+              if (String(relPath).indexOf('xl/worksheets/') !== 0) return;
+              if (String(relPath).slice(-4).toLowerCase() !== '.xml') return;
+              candidates.push(String(relPath));
+            });
+          } catch (err) {
+            candidates = [];
+          }
+          if (candidates.length) sheetEntry = z.file(candidates[0]);
+        }
+        if (!sheetEntry) throw new Error('Excel 解析失败：缺少工作表');
+        return sheetEntry.async('string').then(function(sheetXml) {
+          return parseXlsxSheetToRows(sheetXml, shared || []);
+        });
+      });
+    });
+  }
+
+  function buildImportItemsFromXlsxRows(rows) {
+    var list = Array.isArray(rows) ? rows : [];
+    if (!list.length) return [];
+    var headerRow = list[0] || [];
+    var headerIndex = {};
+    var headerMap = {
+      '模块': 'module',
+      '用例标题': 'title',
+      '优先级': 'priority',
+      '前提条件': 'preconditions',
+      '操作步骤': 'steps',
+      '预期结果': 'expected',
+    };
+    for (var i = 0; i < headerRow.length; i += 1) {
+      var text = headerRow[i] !== undefined && headerRow[i] !== null ? String(headerRow[i]).trim() : '';
+      if (!text) continue;
+      if (headerMap[text]) headerIndex[headerMap[text]] = i;
+    }
+    var required = ['module', 'title', 'expected'];
+    var hasHeader = Boolean(
+      headerIndex.module !== undefined &&
+      headerIndex.title !== undefined &&
+      headerIndex.expected !== undefined
+    );
+
+    function pick(row, key, fallbackIndex) {
+      if (!row) return '';
+      var idx = hasHeader && headerIndex[key] !== undefined ? headerIndex[key] : fallbackIndex;
+      var val = row[idx];
+      return val === undefined || val === null ? '' : String(val);
+    }
+
+    var out = [];
+    for (var r = 1; r < list.length; r += 1) {
+      var row = list[r] || [];
+      var module = pick(row, 'module', 0);
+      var title = pick(row, 'title', 1);
+      var priority = pick(row, 'priority', 2);
+      var preconditions = pick(row, 'preconditions', 3);
+      var steps = pick(row, 'steps', 4);
+      var expected = pick(row, 'expected', 5);
+      // 跳过空行
+      var any = String(module || '') + String(title || '') + String(priority || '') + String(preconditions || '') + String(steps || '') + String(expected || '');
+      if (!any.trim()) continue;
+      out.push({
+        module: module,
+        title: title,
+        priority: priority,
+        preconditions: preconditions,
+        steps: steps,
+        expected: expected,
+      });
+    }
+    return buildImportItems(out);
+  }
+
   function deriveCaseListFromText(text) {
     var coreApi = getCore();
     if (coreApi && typeof coreApi.deriveCaseListFromText === 'function') {
@@ -1062,6 +1263,11 @@
       return coreApi.parseXmindFile(file).then(function(res) {
         var list = res && Array.isArray(res.list) ? res.list : [];
         return { items: buildImportItems(list) };
+      });
+    }
+    if (ext === 'xlsx') {
+      return parseXlsxFileToCaseRows(file).then(function(rows) {
+        return { items: buildImportItemsFromXlsxRows(rows || []) };
       });
     }
     return file.text().then(function(text) {

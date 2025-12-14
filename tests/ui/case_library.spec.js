@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
@@ -579,10 +580,120 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#tempExecView select.status-select[data-status="通过"]')).toHaveCount(1);
   });
 
-	  test('编辑抽屉支持全选/全取消并删除所选用例文件（需二次确认）', async ({ page }) => {
-	    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
-	    const project = { id: 1, name: '战魂铭人', description: '用于用例库删除' };
-	    const versions = [{ id: 11, name: 'v1' }];
+  test('导入 Excel（xlsx）格式用例并入库', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '战魂铭人', description: '用于 Excel 导入' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    let nextCaseFileId = 100;
+    let nextCaseItemId = 1000;
+    const caseFiles = [];
+    const caseItemsByFileId = {};
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions`) return respond(200, versions);
+
+      if (pathName === '/api/case-files' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
+      }
+
+      if (pathName === '/api/case-files/import' && method === 'POST') {
+        const payload = route.request().postDataJSON();
+        if (payload.project_id !== project.id) return respond(400, { detail: 'bad project' });
+        if (payload.version_id !== versions[0].id) return respond(400, { detail: 'bad version' });
+        const items = Array.isArray(payload.items) ? payload.items : [];
+        // 期望 Excel 解析后至少包含两条用例（来自 fixture）
+        if (items.length < 2) return respond(400, { detail: 'excel parse failed' });
+        const first = items[0] || {};
+        if (first.module !== '登录' || !String(first.title || '').includes('登录')) {
+          return respond(400, { detail: 'excel payload mismatch' });
+        }
+        const fileName = payload.file_name || '';
+        const base = String(fileName).split(/[\\/]/).pop();
+        let clean = base.replace(/\.[^.]+$/, '').trim();
+        const now = new Date().toISOString();
+        const id = nextCaseFileId++;
+        const file = {
+          id,
+          project_id: payload.project_id,
+          version_id: payload.version_id,
+          file_name_clean: clean,
+          item_count: items.length,
+          importer_id: user.id,
+          importer_name: user.username,
+          imported_at: now,
+          updated_at: now,
+          last_updated_by: user.id,
+          last_updated_by_name: user.username,
+        };
+        caseFiles.push(file);
+        caseItemsByFileId[id] = items.map((it) => ({
+          id: nextCaseItemId++,
+          case_file_id: id,
+          module: it.module,
+          title: it.title,
+          expected: it.expected,
+          priority: it.priority || null,
+          precondition: it.precondition || it.preconditions || null,
+          steps: it.steps || null,
+          remark: it.remark || null,
+          created_at: now,
+          updated_at: now,
+        }));
+        return respond(201, file);
+      }
+
+      const itemsMatch = pathName.match(/^\/api\/case-files\/(\d+)\/items$/);
+      if (itemsMatch && method === 'GET') {
+        const fileId = Number(itemsMatch[1]);
+        return respond(200, caseItemsByFileId[fileId] || []);
+      }
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    await ensureCaseLibraryTab(page);
+
+    const b64Path = path.join(__dirname, '..', 'fixtures', 'case_library_import.xlsx.base64');
+    const b64 = fs.readFileSync(b64Path, 'utf-8').trim();
+    const buffer = Buffer.from(b64, 'base64');
+
+    await page.click('#openCaseLibraryImportDrawerBtn');
+    await expect(page.locator('#caseLibraryImportDrawer')).toHaveClass(/open/);
+    await page.setInputFiles('#caseLibraryImportInput', {
+      name: 'case_library_excel_import.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer,
+    });
+    await page.selectOption('#caseLibraryImportProjectSelect', String(project.id));
+    await expect(page.locator('#caseLibraryImportVersionSelect')).toBeEnabled();
+    await page.selectOption('#caseLibraryImportVersionSelect', String(versions[0].id));
+    await expect(page.locator('#caseLibraryImportConfirmBtn')).toBeEnabled();
+    await page.click('#caseLibraryImportConfirmBtn');
+    await expect(page.locator('#caseLibraryImportStatus')).toContainText('导入完成');
+    // 导入成功后应清空文件选择，避免重复导入
+    await expect(page.locator('#caseLibraryImportConfirmBtn')).toBeDisabled();
+    await expect(page.locator('#caseLibraryImportFileHint')).toContainText('未选择文件');
+  });
+
+  test('编辑抽屉支持全选/全取消并删除所选用例文件（需二次确认）', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '战魂铭人', description: '用于用例库删除' };
+    const versions = [{ id: 11, name: 'v1' }];
 
 	    const now = new Date().toISOString();
 	    const caseFiles = [
