@@ -3964,6 +3964,58 @@ body {
   min-height: 34px;
 }
 
+.case-library-search {
+  position: relative;
+  flex: 1 1 520px;
+  min-width: 320px;
+  max-width: 760px;
+}
+
+.case-library-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
+
+.case-library-search-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#caseLibraryEditSearchInput {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px 0 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  outline: none;
+}
+
+#caseLibraryEditSearchInput::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+#caseLibraryEditSearchInput:focus {
+  border-color: rgba(37, 99, 235, 0.75);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+  background: rgba(0, 0, 0, 0.28);
+}
+
 .case-library-drawer-actions {
   display: flex;
   flex-wrap: wrap;
