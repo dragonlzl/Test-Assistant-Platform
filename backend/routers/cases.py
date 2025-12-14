@@ -240,6 +240,8 @@ def import_case_file(
         case_file.imported_at = now
         case_file.source = payload.source
         case_file.updated_at = now
+        if getattr(payload, "reuse_enabled", None) is True:
+            case_file.reuse_enabled = True
         db.query(models.CaseItem).filter(models.CaseItem.case_file_id == case_file.id).delete(
             synchronize_session=False
         )
@@ -250,6 +252,7 @@ def import_case_file(
             project_id=project.id,
             version_id=payload.version_id,
             file_name_clean=clean_name,
+            reuse_enabled=True if (getattr(payload, "reuse_enabled", None) is True) else False,
             importer_id=user.id,
             imported_at=now,
             source=payload.source,
@@ -395,6 +398,7 @@ def list_case_files(
                 "project_id": case_file.project_id,
                 "version_id": case_file.version_id,
                 "file_name_clean": case_file.file_name_clean,
+                "reuse_enabled": bool(getattr(case_file, "reuse_enabled", False)),
                 "item_count": int(item_count or 0),
                 "importer_id": case_file.importer_id,
                 "importer_name": importer_name,

@@ -1600,7 +1600,7 @@
     if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = true;
     if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = true;
     if (dom.editDrawerListBody) {
-      dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"10\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
+      dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"11\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
     }
     syncEditDrawerControls();
   }
@@ -1770,7 +1770,7 @@
     if (!projectId) {
       setStatus(dom.editDrawerStatus, '请先选择项目', 'warn');
       if (dom.editDrawerListBody) {
-        dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"10\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
+        dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"11\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
       }
       syncEditDrawerControls();
       persistEditDrawerState({
@@ -1838,7 +1838,7 @@
     var list = getEditDrawerVisibleFiles();
     if (!list.length) {
       var hint = state.editDrawer.versionId ? '该版本暂无用例文件' : '暂无用例文件';
-      dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"10\"><p class=\"hint\">' + escapeHtml(hint) + '</p></td></tr>';
+      dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"11\"><p class=\"hint\">' + escapeHtml(hint) + '</p></td></tr>';
       syncEditDrawerControls();
       return;
     }
@@ -1853,16 +1853,21 @@
       var updaterName = f && f.last_updated_by_name ? f.last_updated_by_name : (importerName || '--');
       var updatedAt = formatTime(f && f.updated_at);
       var itemCount = (f && (f.item_count || f.item_count === 0)) ? String(f.item_count) : '--';
+      var reuseEnabled = Boolean(f && f.reuse_enabled);
+      var reuseText = reuseEnabled ? '是' : '否';
       var fileId = f && f.id !== null && f.id !== undefined ? String(f.id) : '';
       var checked = Boolean(fileId && state.editDrawer.selection && state.editDrawer.selection.has(fileId));
       var selectCell = '<td><input type=\"checkbox\" data-case-lib-edit-select=\"' + escapeHtml(fileId) + '\"' + (checked ? ' checked' : '') + ' /></td>';
+      var fileName = f && f.file_name_clean ? f.file_name_clean : ('文件#' + (f && f.id ? f.id : ''));
+      var reuseBadge = reuseEnabled ? ' <span class=\"badge case-library-reuse-badge\">复</span>' : '';
       return (
         '<tr>' +
           selectCell +
           '<td>' + escapeHtml(projectName) + '</td>' +
           '<td>' + escapeHtml(versionName) + '</td>' +
-          '<td>' + escapeHtml(f && f.file_name_clean ? f.file_name_clean : ('文件#' + (f && f.id ? f.id : ''))) + '</td>' +
+          '<td>' + escapeHtml(fileName) + reuseBadge + '</td>' +
           '<td>' + escapeHtml(itemCount) + '</td>' +
+          '<td>' + escapeHtml(reuseText) + '</td>' +
           '<td>' + escapeHtml(importerName) + '</td>' +
           '<td>' + escapeHtml(importedAt) + '</td>' +
           '<td>' + escapeHtml(updaterName) + '</td>' +
@@ -3072,12 +3077,14 @@
       var updatedAt = formatTime(f && f.updated_at);
       var idStr = f && f.id ? String(f.id) : '';
       var checked = idStr && state.selectDrawer.selection.has(idStr) ? ' checked' : '';
+      var fileName = f && f.file_name_clean ? f.file_name_clean : ('文件#' + (f && f.id ? f.id : ''));
+      var reuseBadge = (f && f.reuse_enabled) ? ' <span class=\"badge case-library-reuse-badge\">复</span>' : '';
       return (
         '<tr>' +
           '<td><input type=\"checkbox\" data-case-lib-select-select=\"' + escapeHtml(idStr) + '\"' + checked + '/></td>' +
           '<td>' + escapeHtml(projectName) + '</td>' +
           '<td>' + escapeHtml(versionName) + '</td>' +
-          '<td>' + escapeHtml(f && f.file_name_clean ? f.file_name_clean : ('文件#' + (f && f.id ? f.id : ''))) + '</td>' +
+          '<td>' + escapeHtml(fileName) + reuseBadge + '</td>' +
           '<td>' + escapeHtml(importerName) + '</td>' +
           '<td>' + escapeHtml(importedAt) + '</td>' +
           '<td>' + escapeHtml(updatedAt) + '</td>' +

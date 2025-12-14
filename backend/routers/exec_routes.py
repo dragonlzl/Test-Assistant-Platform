@@ -80,16 +80,26 @@ def update_exec_set(
     exec_set = _ensure_exec_set_access(db, user, exec_set_id)
     data = payload.model_dump(exclude_unset=True)
     changed = False
+    turned_on_reuse = False
     for field in ["status", "requirement", "reuse_enabled", "reuse_presets"]:
         if field not in data:
             continue
         value = data[field]
+        if field == "reuse_enabled":
+            value = bool(value)
+            if (not exec_set.reuse_enabled) and value:
+                turned_on_reuse = True
         if value != getattr(exec_set, field):
             setattr(exec_set, field, value)
             changed = True
     if changed:
         exec_set.updated_at = datetime.now(timezone.utc)
         db.add(exec_set)
+        # 执行页将用例切换为“复用类型”时：同步到用例库（case_files.reuse_enabled = true）。
+        if turned_on_reuse and exec_set.case_file_id:
+            db.query(models.CaseFile).filter(models.CaseFile.id == exec_set.case_file_id).update(
+                {models.CaseFile.reuse_enabled: True}, synchronize_session=False
+            )
         log_operation(
             db=db,
             user_id=user.id,
@@ -165,8 +175,16 @@ def upsert_exec_set_from_case_file(
         exec_set.requirement = payload.requirement
     if payload.reuse_enabled is not None:
         exec_set.reuse_enabled = bool(payload.reuse_enabled)
+    elif bool(getattr(case_file, "reuse_enabled", False)):
+        # 用例库标记为复用类型时：执行集自动启用复用（避免被创建为非复用）。
+        exec_set.reuse_enabled = True
     if payload.reuse_presets is not None:
         exec_set.reuse_presets = payload.reuse_presets
+
+    # 复用类型同步到用例库：只要执行集启用复用，就将用例库对应 case_file 标记为复用类型（只升不降）。
+    if exec_set.reuse_enabled and not bool(getattr(case_file, "reuse_enabled", False)):
+        case_file.reuse_enabled = True
+        db.add(case_file)
 
     import_map = {}
     if payload.import_cases:

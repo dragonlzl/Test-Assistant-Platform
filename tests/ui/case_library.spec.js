@@ -760,6 +760,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
         project_id: project.id,
         version_id: versions[0].id,
         file_name_clean: '用例A',
+        reuse_enabled: true,
         item_count: 2,
         importer_id: user.id,
         importer_name: user.username,
@@ -773,6 +774,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
         project_id: project.id,
         version_id: versions[0].id,
         file_name_clean: '用例B',
+        reuse_enabled: false,
         item_count: 1,
         importer_id: user.id,
         importer_name: user.username,
@@ -845,6 +847,13 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 	    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
 	    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例A');
 	    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例B');
+      await expect(page.locator('#caseLibraryEditDrawer thead')).toContainText('复用类型');
+      const reuseRow = page.locator('#caseLibraryEditListBody tr', { hasText: '用例A' });
+      await expect(reuseRow.locator('.case-library-reuse-badge')).toHaveCount(1);
+      await expect(reuseRow).toContainText('是');
+      const nonReuseRow = page.locator('#caseLibraryEditListBody tr', { hasText: '用例B' });
+      await expect(nonReuseRow.locator('.case-library-reuse-badge')).toHaveCount(0);
+      await expect(nonReuseRow).toContainText('否');
 
 	    // 先打开“用例A”的编辑视图，再回到抽屉删除，编辑视图应被清空/隐藏。
 	    await page.click('#caseLibraryEditListBody [data-case-lib-edit="100"]');

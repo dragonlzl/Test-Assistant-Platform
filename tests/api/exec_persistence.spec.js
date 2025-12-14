@@ -75,6 +75,19 @@ test.describe('exec persistence api', () => {
     expect(execSet.status).toBe('active');
     const execSetId = execSet.id;
 
+    // 默认非复用，切换为复用后应同步到用例库（case_files.reuse_enabled = true）。
+    const toggleReuseRes = await ctx.patch(`${apiBase}/api/exec/sets/${execSetId}`, {
+      headers,
+      data: { reuse_enabled: true },
+    });
+    expect(toggleReuseRes.status()).toBe(200);
+
+    const listCaseFilesRes = await ctx.get(`${apiBase}/api/case-files?project_id=${projectId}`, { headers });
+    expect(listCaseFilesRes.status()).toBe(200);
+    const listed = await listCaseFilesRes.json();
+    const matchedFile = Array.isArray(listed) ? listed.find((f) => f && f.id === caseFileId) : null;
+    expect(matchedFile && matchedFile.reuse_enabled).toBeTruthy();
+
     // 执行集按用户隔离：同一个 case_file，不同用户应各自拥有一份 exec_set，且互不可访问/覆盖。
     const otherUsername = 'exec-user-' + Date.now();
     const createUserRes = await ctx.post(`${apiBase}/api/users`, {

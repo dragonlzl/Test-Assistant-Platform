@@ -1951,13 +1951,18 @@ body {
     .status.warn { color: var(--warn); }
     .status.err { color: var(--error); }
     #tempExecStatus { white-space: pre-line; }
-    .badge {
-      background: var(--primary-weak);
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 12px;
-      color: var(--primary);
-    }
+.badge {
+  background: var(--primary-weak);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--primary);
+}
+.case-library-reuse-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 11px;
+}
 .tabs {
   display: flex;
   gap: 12px;

@@ -120,6 +120,7 @@ class CaseFile(Base):
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     version_id = Column(Integer, ForeignKey("project_versions.id", ondelete="SET NULL"))
     file_name_clean = Column(String(255), nullable=False)
+    reuse_enabled = Column(Boolean, default=False, nullable=False)
     importer_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     imported_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     updated_at = Column(

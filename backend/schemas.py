@@ -114,6 +114,7 @@ class CaseFileImportRequest(BaseModel):
     version_id: Optional[int] = None
     file_name: str
     source: Optional[str] = None
+    reuse_enabled: Optional[bool] = None
     items: List[CaseItemPayload]
 
 
@@ -122,6 +123,7 @@ class CaseFileOut(BaseModel):
     project_id: int
     version_id: Optional[int]
     file_name_clean: str
+    reuse_enabled: bool = False
     item_count: Optional[int] = None
     importer_id: Optional[int]
     importer_name: Optional[str] = None

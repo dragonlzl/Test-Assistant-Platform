@@ -235,3 +235,20 @@ def apply_migrations(engine: Engine) -> None:
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_case_items_id ON case_items(id)"))
                     conn.execute(text("PRAGMA foreign_keys=ON"))
             _mark_applied(conn, 5)
+
+        # v6: 用例文件新增复用类型标记（case_files.reuse_enabled），用于执行页复用开关与用例库展示/同步。
+        if not _is_applied(conn, 6):
+            if "case_files" in tables:
+                cols = set([c["name"] for c in insp.get_columns("case_files")])
+                if "reuse_enabled" not in cols:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE case_files ADD COLUMN reuse_enabled BOOLEAN NOT NULL DEFAULT 0"
+                        )
+                    )
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_case_files_reuse_enabled ON case_files(reuse_enabled)"
+                        )
+                    )
+            _mark_applied(conn, 6)
