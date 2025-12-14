@@ -739,6 +739,24 @@
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）；回归 `npm run test:ui -- tests/ui/project_changes_refresh_import_selects.spec.js`（通过）。  
 - 更新记录：无  
 
+- 功能名称：编辑抽屉版本筛选（默认全部）  
+- 功能描述：在“编辑用例&转到执行”抽屉增加版本选择框，默认“全部版本”；选择版本可快速筛选该版本下的用例文件，便于定位。  
+- 操作方式：进入“用例相关 → 用例库”→点“编辑用例&转到执行”→选择项目后，版本下拉自动启用→选择版本即可过滤列表（默认全部）。  
+- 使用效果：项目下用例文件较多时，可通过版本快速缩小范围。  
+- 新增内容/接口/组件：编辑抽屉新增版本下拉与前端过滤逻辑（`index.html`、`scripts/modules/caseLibrary.js`）；UI 用例新增版本筛选覆盖（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用现有版本缓存与 `loadVersions/listCaseFiles` 拉取逻辑，仅在前端做过滤。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库编辑视图移除实际结果字段  
+- 功能描述：用例库的“用例编辑视图”不展示“实际结果/执行结果”列与控件，避免用例库携带执行态信息。  
+- 操作方式：进入“用例相关 → 用例库”→编辑任一用例文件→表格仅保留模块/标题/前提/步骤/预期/备注等字段。  
+- 使用效果：用例库视图更贴近“标准用例库”的定位，不与执行页面字段混淆。  
+- 新增内容/接口/组件：移除编辑视图表头与行内“实际结果”列（`scripts/modules/caseLibrary.js`）；UI 用例增加断言确保不出现该列（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用既有编辑表格结构，仅删除与执行态相关的展示列。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  

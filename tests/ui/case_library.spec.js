@@ -289,6 +289,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
 
     await expect(page.locator('#caseLibraryEditDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
+    await expect(page.locator('#caseLibraryEditView th', { hasText: '实际结果' })).toHaveCount(0);
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
 
     await page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]').click();
@@ -411,6 +412,8 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
     await page.click('[data-group-menu="cases"] [data-tab-btn="case-library"]');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
+    await expect(page.locator('#flowNav')).toBeHidden();
+    await expect(page.locator('#caseLibraryHead')).toBeVisible();
 
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
@@ -429,6 +432,98 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#caseLibraryEditDrawerStatus')).toContainText('删除完成');
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('暂无用例文件');
     await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeDisabled();
+  });
+
+  test('编辑用例&转到执行：支持按版本筛选（默认全部版本）', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '战魂铭人', description: '用于用例库版本筛选' };
+    const versions = [{ id: 11, name: 'v1' }, { id: 12, name: 'v2' }];
+
+    const now = new Date().toISOString();
+    const caseFiles = [
+      {
+        id: 100,
+        project_id: project.id,
+        version_id: versions[0].id,
+        file_name_clean: '用例v1',
+        item_count: 1,
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+        last_updated_by: user.id,
+        last_updated_by_name: user.username,
+      },
+      {
+        id: 101,
+        project_id: project.id,
+        version_id: versions[1].id,
+        file_name_clean: '用例v2',
+        item_count: 1,
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+        last_updated_by: user.id,
+        last_updated_by_name: user.username,
+      },
+    ];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/case-files' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
+      }
+
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.authReady === true, { timeout: 20000 });
+
+    await page.click('.tab-group-btn[data-group="cases"]');
+    await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
+    await page.click('[data-group-menu="cases"] [data-tab-btn="case-library"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
+    await expect(page.locator('#flowNav')).toBeHidden();
+    await expect(page.locator('#caseLibraryHead')).toBeVisible();
+
+    await page.click('#openCaseLibraryEditDrawerBtn');
+    await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
+
+    await expect(page.locator('#caseLibraryEditVersionSelect')).toBeDisabled();
+    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+
+    await expect(page.locator('#caseLibraryEditVersionSelect')).toBeEnabled();
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例v1');
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例v2');
+
+    await page.selectOption('#caseLibraryEditVersionSelect', String(versions[0].id));
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例v1');
+    await expect(page.locator('#caseLibraryEditListBody')).not.toContainText('用例v2');
   });
 
   test('选择用例执行：选择项目后自动加载列表，选择版本后自动过滤', async ({ page }) => {
@@ -497,6 +592,8 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
     await page.click('[data-group-menu="cases"] [data-tab-btn="case-library"]');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
+    await expect(page.locator('#flowNav')).toBeHidden();
+    await expect(page.locator('#caseLibraryHead')).toBeVisible();
 
     await page.click('#openCaseLibrarySelectExecDrawerBtn');
     await expect(page.locator('#caseLibrarySelectExecDrawer')).toHaveClass(/open/);
