@@ -39,6 +39,7 @@
     importDiffRightTitle: document.getElementById('caseLibraryImportDiffRightTitle'),
     importDiffRightMeta: document.getElementById('caseLibraryImportDiffRightMeta'),
     importDiffRightBody: document.getElementById('caseLibraryImportDiffRightBody'),
+    importDiffOverwriteBtn: document.getElementById('caseLibraryImportDiffOverwriteBtn'),
 
     editDrawerProjectSelect: document.getElementById('caseLibraryEditProjectSelect'),
     editDrawerVersionSelect: document.getElementById('caseLibraryEditVersionSelect'),
@@ -80,6 +81,7 @@
       importItems: [],
       dbItems: [],
       rows: [],
+      loading: false,
     },
 
     editDrawer: {
@@ -272,6 +274,19 @@
     }).join('');
   }
 
+  function syncImportDiffControls() {
+    if (!dom.importDiffOverwriteBtn) return;
+    var can = Boolean(
+      !state.importDiff.loading &&
+      state.importDiff.projectId &&
+      state.importDiff.importVersionId &&
+      state.importDiff.fileName &&
+      Array.isArray(state.importDiff.importItems) &&
+      state.importDiff.importItems.length
+    );
+    dom.importDiffOverwriteBtn.disabled = !can;
+  }
+
   function openImportDiffDrawer(payload) {
     payload = payload || {};
     state.importDiff.fileName = payload.fileName || '';
@@ -282,6 +297,7 @@
     state.importDiff.importItems = Array.isArray(payload.importItems) ? payload.importItems : [];
     state.importDiff.dbItems = Array.isArray(payload.dbItems) ? payload.dbItems : [];
     state.importDiff.rows = buildImportDiffRows(state.importDiff.importItems, state.importDiff.dbItems);
+    state.importDiff.loading = false;
 
     var projectName = state.projectNameById[state.importDiff.projectId] || ('项目#' + state.importDiff.projectId);
     var importVerName = getVersionName(state.importDiff.projectId, state.importDiff.importVersionId);
@@ -313,6 +329,7 @@
     }
     renderImportDiffTable(dom.importDiffLeftBody, state.importDiff.rows, 'left');
     renderImportDiffTable(dom.importDiffRightBody, state.importDiff.rows, 'right');
+    syncImportDiffControls();
 
     if (importDrawerInstance && typeof importDrawerInstance.close === 'function') {
       importDrawerInstance.close();
@@ -329,6 +346,15 @@
     var projectId = payload.projectId || null;
     var importVersionId = payload.importVersionId || null;
     var cleanName = payload.cleanName || payload.fileName || '';
+    state.importDiff.fileName = payload.fileName || '';
+    state.importDiff.cleanName = payload.cleanName || payload.fileName || '';
+    state.importDiff.projectId = projectId;
+    state.importDiff.importVersionId = importVersionId;
+    state.importDiff.dbVersionId = null;
+    state.importDiff.importItems = [];
+    state.importDiff.dbItems = [];
+    state.importDiff.rows = [];
+    state.importDiff.loading = false;
     var projectName = state.projectNameById[projectId] || ('项目#' + projectId);
     var importVerName = getVersionName(projectId, importVersionId);
 
@@ -350,6 +376,7 @@
     if (dom.importDiffRightBody) {
       dom.importDiffRightBody.innerHTML = '<tr><td colspan="7"><p class="hint">加载中...</p></td></tr>';
     }
+    syncImportDiffControls();
 
     if (importDrawerInstance && typeof importDrawerInstance.close === 'function') {
       importDrawerInstance.close();
@@ -359,6 +386,90 @@
         importDiffDrawerInstance.open();
       }, 60);
     }
+  }
+
+  function refreshCaseFileListsByProject(projectId) {
+    if (!projectId) return Promise.resolve();
+    if (!apiClient || typeof apiClient.listCaseFiles !== 'function') return Promise.resolve();
+    return apiClient.listCaseFiles(projectId).then(function(files) {
+      var list = Array.isArray(files) ? files : [];
+      if (state.editDrawer.projectId && String(state.editDrawer.projectId) === String(projectId)) {
+        state.editDrawer.files = list;
+        renderEditDrawerList();
+        syncEditDrawerControls();
+      }
+      if (state.selectDrawer.projectId && String(state.selectDrawer.projectId) === String(projectId)) {
+        state.selectDrawer.files = list;
+        renderSelectDrawerList();
+      }
+      var editorFile = state.editor && state.editor.caseFile ? state.editor.caseFile : null;
+      if (editorFile && String(editorFile.project_id || '') === String(projectId || '')) {
+        var name = editorFile.file_name_clean || '';
+        var next = list.find(function(cf) { return cf && String(cf.file_name_clean || '') === String(name || ''); });
+        if (next && next.id && apiClient && typeof apiClient.listCaseItems === 'function') {
+          state.editor.caseFile = next;
+          return apiClient.listCaseItems(next.id).then(function(items) {
+            state.editor.items = Array.isArray(items) ? items : [];
+            renderEditorCard();
+          });
+        }
+      }
+    });
+  }
+
+  function confirmOverwriteImportFromDiff() {
+    if (state.importDiff.loading) return;
+    if (!apiClient || typeof apiClient.importCaseFile !== 'function') {
+      setStatus(dom.importDiffStatus, '后端导入接口未就绪', 'err');
+      return;
+    }
+    var projectId = state.importDiff.projectId;
+    var versionId = state.importDiff.importVersionId;
+    var fileName = state.importDiff.fileName || '';
+    var cleanName = state.importDiff.cleanName || fileName || '用例';
+    var items = Array.isArray(state.importDiff.importItems) ? state.importDiff.importItems : [];
+    if (!projectId || !versionId || !fileName || !items.length) {
+      setStatus(dom.importDiffStatus, '差异数据未就绪，请稍后重试', 'warn');
+      return;
+    }
+    var ok = window.confirm('是否确认覆盖导入用例：' + cleanName + '？');
+    if (!ok) return;
+
+    state.importDiff.loading = true;
+    syncImportDiffControls();
+    setStatus(dom.importDiffStatus, '覆盖导入中...', '');
+    setStatus(dom.importStatus, '覆盖导入中...', '');
+
+    apiClient
+      .importCaseFile(
+        {
+          project_id: projectId,
+          version_id: versionId,
+          file_name: fileName,
+          source: extFromFileName(fileName),
+          items: items,
+        },
+        { overwrite: true }
+      )
+      .then(function() {
+        var msg = '覆盖导入成功：' + cleanName;
+        setStatus(dom.importDiffStatus, msg, 'ok');
+        setStatus(dom.importStatus, msg, 'ok');
+        setStatus(dom.status, msg, 'ok');
+        refreshCaseFileListsByProject(projectId);
+        if (importDiffDrawerInstance && typeof importDiffDrawerInstance.close === 'function') {
+          importDiffDrawerInstance.close();
+        }
+      })
+      .catch(function(err) {
+        var msg = err && err.message ? err.message : '覆盖导入失败';
+        setStatus(dom.importDiffStatus, '覆盖导入失败：' + msg, 'err');
+        setStatus(dom.importStatus, '覆盖导入失败：' + msg, 'err');
+      })
+      .finally(function() {
+        state.importDiff.loading = false;
+        syncImportDiffControls();
+      });
   }
 
   function formatTime(value) {
@@ -2422,6 +2533,9 @@
     }
     if (dom.importConfirmBtn) {
       dom.importConfirmBtn.addEventListener('click', confirmImportToDb);
+    }
+    if (dom.importDiffOverwriteBtn) {
+      dom.importDiffOverwriteBtn.addEventListener('click', confirmOverwriteImportFromDiff);
     }
 
     if (dom.editDrawerConfirmBtn) {

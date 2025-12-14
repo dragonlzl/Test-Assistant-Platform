@@ -230,8 +230,12 @@
     }).then(handleResponse);
   }
 
-  function importCaseFile(payload) {
-    return fetch('/api/case-files/import', {
+  function importCaseFile(payload, options) {
+    var url = '/api/case-files/import';
+    if (options && options.overwrite) {
+      url += '?overwrite=1';
+    }
+    return fetch(url, {
       method: 'POST',
       headers: buildHeaders(),
       body: JSON.stringify(payload || {}),

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -30,6 +30,8 @@ def _ensure_case_access(
 @router.post("/import", response_model=schemas.CaseFileOut, status_code=status.HTTP_201_CREATED)
 def import_case_file(
     payload: schemas.CaseFileImportRequest,
+    response: Response,
+    overwrite: bool = False,
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -60,19 +62,42 @@ def import_case_file(
         )
         .first()
     )
-    if exists:
+    if exists and not overwrite:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="同名用例已存在")
-    case_file = models.CaseFile(
-        project_id=project.id,
-        version_id=payload.version_id,
-        file_name_clean=clean_name,
-        importer_id=user.id,
-        imported_at=datetime.now(timezone.utc),
-        source=payload.source,
-    )
-    db.add(case_file)
-    db.flush()
     now = datetime.now(timezone.utc)
+    linked_exec_sets = 0
+    prev_version_id = None
+    if exists and overwrite:
+        response.status_code = status.HTTP_200_OK
+        case_file = exists
+        prev_version_id = case_file.version_id
+        linked_exec_sets = (
+            db.query(func.count(models.ExecSet.id))
+            .filter(models.ExecSet.case_file_id == case_file.id)
+            .scalar()
+            or 0
+        )
+        case_file.version_id = payload.version_id
+        case_file.importer_id = user.id
+        case_file.imported_at = now
+        case_file.source = payload.source
+        case_file.updated_at = now
+        db.query(models.CaseItem).filter(models.CaseItem.case_file_id == case_file.id).delete(
+            synchronize_session=False
+        )
+        db.add(case_file)
+        db.flush()
+    else:
+        case_file = models.CaseFile(
+            project_id=project.id,
+            version_id=payload.version_id,
+            file_name_clean=clean_name,
+            importer_id=user.id,
+            imported_at=now,
+            source=payload.source,
+        )
+        db.add(case_file)
+        db.flush()
     values = []
     for item in unique_items:
         values.append(
@@ -108,12 +133,15 @@ def import_case_file(
     log_operation(
         db=db,
         user_id=user.id,
-        action="import_case_file",
+        action="overwrite_case_file" if (exists and overwrite) else "import_case_file",
         target_type="case_file",
         target_id=case_file.id,
         detail={
             "project_id": project.id,
             "file_name": clean_name,
+            "overwrite": bool(exists and overwrite),
+            "prev_version_id": prev_version_id,
+            "linked_exec_sets": int(linked_exec_sets or 0),
             "item_total": len(payload.items),
             "item_unique": len(unique_items),
             "item_imported": int(item_count),

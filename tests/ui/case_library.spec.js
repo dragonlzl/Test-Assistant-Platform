@@ -75,6 +75,21 @@ async function openDrawer(page, buttonSelector, drawerSelector) {
   }
 }
 
+async function openTabGroupMenu(page, groupName) {
+  const menu = page.locator('[data-group-menu="' + groupName + '"]');
+  const btn = page.locator('.tab-group-btn[data-group="' + groupName + '"]');
+  await btn.scrollIntoViewIfNeeded();
+  await btn.hover();
+  try {
+    await expect(menu).not.toHaveClass(/hidden/, { timeout: 1500 });
+    return;
+  } catch (err) {
+    // ignore and fallback to click
+  }
+  await btn.click({ force: true });
+  await expect(menu).not.toHaveClass(/hidden/);
+}
+
 test.describe('用例库页面（导入/编辑/转到执行）', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -122,6 +137,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
 
       if (pathName === '/api/case-files/import' && method === 'POST') {
         const payload = route.request().postDataJSON();
+        const overwrite = url.searchParams.get('overwrite') === '1' || url.searchParams.get('overwrite') === 'true';
         if (payload.project_id !== project.id) return respond(400, { detail: 'bad project' });
         if (payload.version_id !== versions[0].id) return respond(400, { detail: 'bad version' });
         const fileName = payload.file_name || '';
@@ -130,28 +146,38 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
         const tsPattern = /(_result)?_\d{8}(?:_?\d{6})?$/i;
         while (tsPattern.test(clean)) clean = clean.replace(tsPattern, '');
         clean = clean.replace(/^勾选用例[\s_\-\u2010-\u2015\u2212\uFE63\uFF0D]*/i, '').trim();
-        if (caseFiles.some((f) => f.file_name_clean === clean)) {
+        const existing = caseFiles.find((f) => f.file_name_clean === clean);
+        const now = new Date().toISOString();
+        if (existing && !overwrite) {
           return respond(400, { detail: '同名用例已存在' });
         }
-        const id = nextCaseFileId++;
-        const now = new Date().toISOString();
-        const file = {
-          id,
-          project_id: payload.project_id,
-          version_id: payload.version_id,
-          file_name_clean: clean,
-          item_count: Array.isArray(payload.items) ? payload.items.length : 0,
-          importer_id: user.id,
-          importer_name: user.username,
-          imported_at: now,
-          updated_at: now,
-          last_updated_by: user.id,
-          last_updated_by_name: user.username,
-        };
-        caseFiles.push(file);
-        caseItemsByFileId[id] = (payload.items || []).map((it) => ({
+        let file = existing;
+        if (!file) {
+          const id = nextCaseFileId++;
+          file = {
+            id,
+            project_id: payload.project_id,
+            version_id: payload.version_id,
+            file_name_clean: clean,
+            item_count: 0,
+            importer_id: user.id,
+            importer_name: user.username,
+            imported_at: now,
+            updated_at: now,
+            last_updated_by: user.id,
+            last_updated_by_name: user.username,
+          };
+          caseFiles.push(file);
+        } else {
+          file.version_id = payload.version_id;
+          file.updated_at = now;
+          file.last_updated_by = user.id;
+          file.last_updated_by_name = user.username;
+        }
+        const fileId = file.id;
+        const nextItems = (payload.items || []).map((it) => ({
           id: nextCaseItemId++,
-          case_file_id: id,
+          case_file_id: fileId,
           module: it.module,
           title: it.title,
           expected: it.expected,
@@ -162,7 +188,9 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
           created_at: now,
           updated_at: now,
         }));
-        return respond(201, file);
+        caseItemsByFileId[fileId] = nextItems;
+        file.item_count = nextItems.length;
+        return respond(existing ? 200 : 201, file);
       }
 
       const itemsMatch = pathName.match(/^\/api\/case-files\/(\d+)\/items$/);
@@ -322,8 +350,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await gotoIndex(page);
     await waitCaseLibraryReady(page, 30000);
 
-    await page.click('.tab-group-btn[data-group="cases"]');
-    await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
+    await openTabGroupMenu(page, 'cases');
     await page.click('[data-group-menu="cases"] [data-tab-btn="case-library"]');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
 
@@ -352,7 +379,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
         priority: 'P0',
         preconditions: '已注册账号',
         steps: '1. 输入账号\\n2. 输入密码\\n3. 点击登录（修改）',
-        expected: '登录成功进入主页',
+        expected: '登录成功',
         remark: '此字段不会参与对比',
       },
       {
@@ -386,7 +413,9 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#caseLibraryImportDiffLeftBody')).toContainText('新增用例');
     await expect(page.locator('#caseLibraryImportDiffLeftBody')).toContainText('点击登录（修改）');
     await expect(page.locator('#caseLibraryImportDiffRightBody')).toContainText('点击登录');
-    await page.click('#caseLibraryImportDiffDrawer .ghost-btn[data-drawer-close=\"caseLibraryImportDiffDrawer\"]');
+    page.once('dialog', async (dialog) => dialog.accept());
+    await page.click('#caseLibraryImportDiffOverwriteBtn');
+    await expect(page.locator('#caseLibraryImportStatus')).toContainText('覆盖导入成功');
     await expect(page.locator('#caseLibraryImportDiffDrawer')).not.toHaveClass(/open/);
 
     // 关闭导入抽屉再进入编辑抽屉，避免遮罩拦截点击
@@ -542,8 +571,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await gotoIndex(page);
     await waitCaseLibraryReady(page, 30000);
 
-    await page.click('.tab-group-btn[data-group="cases"]');
-    await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
+    await openTabGroupMenu(page, 'cases');
     await page.click('[data-group-menu="cases"] [data-tab-btn="case-library"]');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
     await expect(page.locator('#flowNav')).toBeHidden();
@@ -634,8 +662,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await gotoIndex(page);
     await waitCaseLibraryReady(page, 30000);
 
-    await page.click('.tab-group-btn[data-group="cases"]');
-    await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
+    await openTabGroupMenu(page, 'cases');
     await page.click('[data-group-menu="cases"] [data-tab-btn="case-library"]');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
     await expect(page.locator('#flowNav')).toBeHidden();
@@ -732,8 +759,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await gotoIndex(page);
     await waitCaseLibraryReady(page, 30000);
 
-    await page.click('.tab-group-btn[data-group="cases"]');
-    await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
+    await openTabGroupMenu(page, 'cases');
     await page.click('[data-group-menu="cases"] [data-tab-btn="case-library"]');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
     await expect(page.locator('#flowNav')).toBeHidden();
@@ -848,8 +874,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await gotoIndex(page);
     await waitCaseLibraryReady(page, 30000);
 
-    await page.click('.tab-group-btn[data-group="cases"]');
-    await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
+    await openTabGroupMenu(page, 'cases');
     await page.click('[data-group-menu="cases"] [data-tab-btn="case-library"]');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
     await expect(page.locator('#flowNav')).toBeHidden();
@@ -933,8 +958,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await gotoIndex(page);
     await waitCaseLibraryReady(page, 30000);
 
-    await page.click('.tab-group-btn[data-group="cases"]');
-    await expect(page.locator('[data-group-menu="cases"]')).not.toHaveClass(/hidden/);
+    await openTabGroupMenu(page, 'cases');
     await page.click('[data-group-menu="cases"] [data-tab-btn="case-library"]');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
     await expect(page.locator('#flowNav')).toBeHidden();

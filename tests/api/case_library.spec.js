@@ -199,6 +199,52 @@ test.describe('case library api', () => {
     const dupItems = await dupItemsRes.json();
     expect(dupItems.length).toBe(1);
 
+    const overwriteTargetRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '覆盖测试.json',
+        source: 'apitest',
+        items: [
+          { module: '覆盖', title: '原始用例', expected: 'ok' },
+        ],
+      },
+    });
+    expect(overwriteTargetRes.status()).toBe(201);
+    const overwriteTarget = await overwriteTargetRes.json();
+    const overwriteTargetDupRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '覆盖测试.json',
+        items: [
+          { module: '覆盖', title: '重复导入应拦截', expected: 'ok' },
+        ],
+      },
+    });
+    expect(overwriteTargetDupRes.status()).toBe(400);
+    const overwriteRes = await ctx.post(`${apiBase}/api/case-files/import?overwrite=1`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '覆盖测试.json',
+        items: [
+          { module: '覆盖', title: '覆盖后用例A', expected: '预期A' },
+          { module: '覆盖', title: '覆盖后用例B', expected: '预期B' },
+        ],
+      },
+    });
+    expect(overwriteRes.status()).toBe(200);
+    const overwritten = await overwriteRes.json();
+    expect(overwritten.id).toBe(overwriteTarget.id);
+    const overwrittenItemsRes = await ctx.get(`${apiBase}/api/case-files/${overwriteTarget.id}/items`, { headers });
+    expect(overwrittenItemsRes.status()).toBe(200);
+    const overwrittenItems = await overwrittenItemsRes.json();
+    expect(overwrittenItems.length).toBe(2);
+
     const sameTitleDifferentExpectedRes = await ctx.post(`${apiBase}/api/case-files/import`, {
       headers,
       data: {

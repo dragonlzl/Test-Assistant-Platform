@@ -811,6 +811,15 @@
 - 测试与验证：`node --check scripts/modules/caseLibrary.js tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
 - 更新记录：无  
 
+- 功能名称：同名差异对比支持“确认覆盖导入”  
+- 功能描述：在“同名用例差异对比”抽屉中增加“确认覆盖导入”按钮，点击后二次确认；确认后将覆盖用例库中同名用例文件（删除原条目并写入导入内容）。  
+- 操作方式：触发同名差异对比抽屉后→点击“确认覆盖导入”→确认弹窗→覆盖成功后自动关闭差异对比抽屉并提示成功。  
+- 使用效果：同名冲突可直接在差异对比界面一键覆盖入库，无需手动删除旧用例再导入。  
+- 新增内容/接口/组件：差异抽屉按钮（`index.html`）；前端覆盖导入调用（`scripts/modules/caseLibrary.js`、`services/apiClient.js`）；后端导入接口新增 `overwrite=1` 支持覆盖（`backend/routers/cases.py`）。  
+- 复用说明：复用原 `/api/case-files/import` 导入接口，仅增加 query 参数控制覆盖；覆盖后复用 `listCaseFiles/listCaseItems` 刷新视图。  
+- 测试与验证：UI：`npm run test:ui -- tests/ui/case_library.spec.js`（通过）；API：启动后端（`APP_DB_FILE=apitest.db .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080`）后执行 `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
 - 功能名称：用例库导入容错增强（允许“同标题不同预期”）  
 - 功能描述：用例库导入入库逻辑增强：同一份导入文件内重复条目会自动去重；同时兼容历史数据库唯一键不包含 `expected` 的情况（迁移修复），保证“同一分支/同标题但预期结果不同”可作为不同用例正常入库；导入失败时返回更明确的数据库约束错误信息，避免统一误报为“存在重复条目”。  
 - 操作方式：导入用例并确认入库；若用例标题相同但预期结果不同，将作为两条不同用例写入；历史库升级后无需手动清库。  
