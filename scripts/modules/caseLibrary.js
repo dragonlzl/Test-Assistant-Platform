@@ -75,6 +75,8 @@
     importDiff: {
       fileName: '',
       cleanName: '',
+      importedCleanName: '',
+      source: '',
       projectId: null,
       importVersionId: null,
       dbVersionId: null,
@@ -291,6 +293,8 @@
     payload = payload || {};
     state.importDiff.fileName = payload.fileName || '';
     state.importDiff.cleanName = payload.cleanName || '';
+    state.importDiff.importedCleanName = payload.importedCleanName || '';
+    state.importDiff.source = payload.source || '';
     state.importDiff.projectId = payload.projectId || null;
     state.importDiff.importVersionId = payload.importVersionId || null;
     state.importDiff.dbVersionId = payload.dbVersionId || null;
@@ -348,6 +352,8 @@
     var cleanName = payload.cleanName || payload.fileName || '';
     state.importDiff.fileName = payload.fileName || '';
     state.importDiff.cleanName = payload.cleanName || payload.fileName || '';
+    state.importDiff.importedCleanName = payload.importedCleanName || '';
+    state.importDiff.source = payload.source || '';
     state.importDiff.projectId = projectId;
     state.importDiff.importVersionId = importVersionId;
     state.importDiff.dbVersionId = null;
@@ -425,10 +431,14 @@
     }
     var projectId = state.importDiff.projectId;
     var versionId = state.importDiff.importVersionId;
-    var fileName = state.importDiff.fileName || '';
-    var cleanName = state.importDiff.cleanName || fileName || '用例';
+    var originalFileName = state.importDiff.fileName || '';
+    var cleanName = state.importDiff.cleanName || originalFileName || '用例';
+    var ext = (String(originalFileName || '').split('.').pop() || '').toLowerCase();
+    if (!ext || ext === String(originalFileName || '').toLowerCase()) ext = 'xmind';
+    var overwriteFileName = String(state.importDiff.cleanName || cleanCaseFileName(originalFileName) || 'case') + '.' + ext;
+    var source = state.importDiff.source || extFromFileName(originalFileName);
     var items = Array.isArray(state.importDiff.importItems) ? state.importDiff.importItems : [];
-    if (!projectId || !versionId || !fileName || !items.length) {
+    if (!projectId || !versionId || !overwriteFileName || !items.length) {
       setStatus(dom.importDiffStatus, '差异数据未就绪，请稍后重试', 'warn');
       return;
     }
@@ -445,8 +455,8 @@
         {
           project_id: projectId,
           version_id: versionId,
-          file_name: fileName,
-          source: extFromFileName(fileName),
+          file_name: overwriteFileName,
+          source: source,
           items: items,
         },
         { overwrite: true }
@@ -1094,39 +1104,68 @@
             }).catch(function(err) {
               failCount += 1;
               var msg = err && err.message ? err.message : '导入失败';
+              var errPayload = err && err.payload ? err.payload : null;
               failDetails.push({ file: file && file.name ? file.name : '文件', reason: msg });
               if (msg.indexOf('同名') !== -1) {
-                duplicateNames.push(cleanCaseFileName(file.name));
+                var importedCleanName = cleanCaseFileName(file.name);
+                var matchedCaseFileId = errPayload && errPayload.existing_case_file_id ? errPayload.existing_case_file_id : null;
+                var matchedCleanName = errPayload && errPayload.existing_file_name_clean ? String(errPayload.existing_file_name_clean) : importedCleanName;
+                var matchedVersionId = errPayload && (errPayload.existing_version_id || errPayload.existing_version_id === 0) ? errPayload.existing_version_id : null;
+                duplicateNames.push(matchedCleanName || importedCleanName);
+                if (matchedCleanName && importedCleanName && matchedCleanName !== importedCleanName) {
+                  msg = msg + '（匹配：' + matchedCleanName + '）';
+                }
                 if (!diffOpened) {
                   diffOpened = true;
-                  var cleanName = cleanCaseFileName(file.name);
+                  var cleanName = matchedCleanName || importedCleanName;
+                  var source = file.type || extFromFileName(file.name);
                   openImportDiffDrawerLoading({
                     fileName: file.name,
                     cleanName: cleanName,
+                    importedCleanName: importedCleanName,
                     projectId: s.projectId,
                     importVersionId: s.versionId,
+                    source: source,
                   });
                   // 拉取库中同名用例内容用于差异对比。
-                  Promise.all([apiClient.listCaseFiles(s.projectId), loadVersions(s.projectId)])
-                    .then(function(res) {
-                      var files = Array.isArray(res && res[0]) ? res[0] : [];
-                      var list = Array.isArray(files) ? files : [];
-                      var existing = list.find(function(cf) {
-                        return cf && String(cf.file_name_clean || '') === String(cleanName || '');
-                      });
-                      if (!existing) throw new Error('未找到库中同名用例：' + cleanName);
-                      return apiClient.listCaseItems(existing.id).then(function(dbItems) {
-                        openImportDiffDrawer({
-                          fileName: file.name,
-                          cleanName: cleanName,
-                          projectId: s.projectId,
-                          importVersionId: s.versionId,
-                          dbVersionId: existing.version_id || null,
-                          importItems: items,
-                          dbItems: dbItems || [],
-                        });
+                  (matchedCaseFileId
+                    ? Promise.all([apiClient.listCaseItems(matchedCaseFileId), loadVersions(s.projectId)]).then(function(res) {
+                      var dbItems = Array.isArray(res && res[0]) ? res[0] : [];
+                      openImportDiffDrawer({
+                        fileName: file.name,
+                        cleanName: cleanName,
+                        importedCleanName: importedCleanName,
+                        projectId: s.projectId,
+                        importVersionId: s.versionId,
+                        dbVersionId: matchedVersionId,
+                        importItems: items,
+                        dbItems: dbItems || [],
+                        source: source,
                       });
                     })
+                    : Promise.all([apiClient.listCaseFiles(s.projectId), loadVersions(s.projectId)])
+                        .then(function(res) {
+                          var files = Array.isArray(res && res[0]) ? res[0] : [];
+                          var list = Array.isArray(files) ? files : [];
+                          var existing = list.find(function(cf) {
+                            return cf && String(cf.file_name_clean || '') === String(cleanName || '');
+                          });
+                          if (!existing) throw new Error('未找到库中同名用例：' + cleanName);
+                          return apiClient.listCaseItems(existing.id).then(function(dbItems) {
+                            openImportDiffDrawer({
+                              fileName: file.name,
+                              cleanName: cleanName,
+                              importedCleanName: importedCleanName,
+                              projectId: s.projectId,
+                              importVersionId: s.versionId,
+                              dbVersionId: existing.version_id || null,
+                              importItems: items,
+                              dbItems: dbItems || [],
+                              source: source,
+                            });
+                          });
+                        })
+                  )
                     .catch(function(e) {
                       setStatus(dom.importDiffStatus, (e && e.message ? e.message : '打开差异对比失败'), 'err');
                       setStatus(dom.importStatus, (e && e.message ? e.message : '打开差异对比失败'), 'err');

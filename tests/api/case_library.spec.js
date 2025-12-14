@@ -265,6 +265,77 @@ test.describe('case library api', () => {
     const sItems = await sItemsRes.json();
     expect(sItems.length).toBe(2);
 
+    const fuzzyBaseRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '用例1.json',
+        source: 'apitest',
+        items: [
+          { module: '模块A', title: '标题1', expected: 'ok' },
+          { module: '模块B', title: '标题2', expected: 'ok' },
+          { module: '模块C', title: '标题3', expected: 'ok' },
+        ],
+      },
+    });
+    expect(fuzzyBaseRes.status()).toBe(201);
+    const fuzzyBase = await fuzzyBaseRes.json();
+    const fuzzyDupRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '用例1（1）.json',
+        source: 'apitest',
+        items: [
+          { module: '模块A', title: '标题X', expected: 'ok' },
+          { module: '模块B', title: '标题Y', expected: 'ok' },
+          { module: '模块Z', title: '标题Z', expected: 'ok' },
+        ],
+      },
+    });
+    expect(fuzzyDupRes.status()).toBe(400);
+    const fuzzyDupBody = await fuzzyDupRes.json();
+    expect(fuzzyDupBody && fuzzyDupBody.detail).toBe('同名用例已存在');
+    expect(fuzzyDupBody && fuzzyDupBody.existing_case_file_id).toBe(fuzzyBase.id);
+    expect(fuzzyDupBody && fuzzyDupBody.existing_file_name_clean).toBe('用例1');
+
+    const singleModuleBaseRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '单模块用例.json',
+        source: 'apitest',
+        items: [
+          { module: '模块X', title: '标题1', expected: 'ok' },
+          { module: '模块X', title: '标题2', expected: 'ok' },
+          { module: '模块X', title: '标题3', expected: 'ok' },
+        ],
+      },
+    });
+    expect(singleModuleBaseRes.status()).toBe(201);
+    const singleModuleBase = await singleModuleBaseRes.json();
+    const singleModuleDupRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '单模块用例（1）.json',
+        source: 'apitest',
+        items: [
+          { module: '模块X', title: '标题1', expected: 'ok' },
+          { module: '模块X', title: '标题2', expected: 'ok' },
+          { module: '模块X', title: '新增标题', expected: 'ok' },
+        ],
+      },
+    });
+    expect(singleModuleDupRes.status()).toBe(400);
+    const singleModuleDupBody = await singleModuleDupRes.json();
+    expect(singleModuleDupBody && singleModuleDupBody.existing_case_file_id).toBe(singleModuleBase.id);
+    expect(singleModuleDupBody && singleModuleDupBody.existing_file_name_clean).toBe('单模块用例');
+
     const deleteTargetRes = await ctx.post(`${apiBase}/api/case-files/import`, {
       headers,
       data: {

@@ -80,6 +80,7 @@
       var detail = translateDetail(body && body.detail ? body.detail : body, status);
       var error = new Error(detail);
       error.status = status;
+      error.payload = body;
       throw error;
     });
   }

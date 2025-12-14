@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
-from typing import List
+from typing import Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -15,6 +16,137 @@ from ..utils import clean_case_file_name, ensure_project_access, ensure_version_
 
 
 router = APIRouter(prefix="/case-files", tags=["case-library"])
+
+
+def _normalize_text(value: str) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _collect_import_modules(items: List[schemas.CaseItemPayload]) -> Set[str]:
+    modules: Set[str] = set()
+    for it in items or []:
+        mod = _normalize_text(getattr(it, "module", "") or "")
+        if mod:
+            modules.add(mod)
+    return modules
+
+
+def _collect_import_titles(items: List[schemas.CaseItemPayload]) -> Set[str]:
+    titles: Set[str] = set()
+    for it in items or []:
+        title = _normalize_text(getattr(it, "title", "") or "")
+        if title:
+            titles.add(title)
+    return titles
+
+
+def _find_duplicate_case_file(
+    db: Session,
+    project_id: int,
+    import_clean_name: str,
+    import_items: List[schemas.CaseItemPayload],
+) -> Tuple[Optional[models.CaseFile], Dict]:
+    """
+    同名判定（更准确）：
+    1) 名字去掉首尾空格后完全相同：同名。
+    2) 导入名字包含库中名字（如 “用例1（1）” / “xx用例1yy”）：
+       - 若模块交集 >= 2：同名。
+       - 若双方都只有 1 个模块且模块相同，则继续判断标题交集 >= 2：同名。
+    返回 (matched_case_file, meta)
+    """
+    import_name = _normalize_text(import_clean_name)
+    if not import_name:
+        return None, {}
+
+    files = (
+        db.query(models.CaseFile)
+        .filter(models.CaseFile.project_id == project_id)
+        .order_by(models.CaseFile.id.asc())
+        .all()
+    )
+    if not files:
+        return None, {}
+
+    for cf in files:
+        if _normalize_text(cf.file_name_clean) == import_name:
+            return cf, {"match_rule": "name_exact"}
+
+    candidates: List[models.CaseFile] = []
+    for cf in files:
+        base = _normalize_text(cf.file_name_clean)
+        if not base:
+            continue
+        if base == import_name:
+            continue
+        if base in import_name:
+            candidates.append(cf)
+
+    if not candidates:
+        return None, {}
+
+    import_modules = _collect_import_modules(import_items)
+    import_titles = _collect_import_titles(import_items)
+    import_module_count = len(import_modules)
+
+    best: Optional[models.CaseFile] = None
+    best_meta: Dict = {}
+    best_score = -1
+
+    for cf in candidates:
+        db_modules = {
+            _normalize_text(row[0])
+            for row in (
+                db.query(models.CaseItem.module)
+                .filter(models.CaseItem.case_file_id == cf.id)
+                .distinct()
+                .all()
+            )
+            if row and _normalize_text(row[0])
+        }
+        overlap_modules = len(import_modules.intersection(db_modules))
+        if overlap_modules >= 2:
+            score = overlap_modules * 10
+            if score > best_score:
+                best = cf
+                best_score = score
+                best_meta = {
+                    "match_rule": "name_contains+module_overlap>=2",
+                    "overlap_modules": overlap_modules,
+                }
+            continue
+
+        # 第二逻辑第二情况：双方都只有 1 个模块且模块相同，再看标题是否至少 2 条重合
+        if import_module_count == 1 and len(db_modules) == 1 and overlap_modules == 1:
+            module_name = next(iter(import_modules))
+            db_titles = {
+                _normalize_text(row[0])
+                for row in (
+                    db.query(models.CaseItem.title)
+                    .filter(
+                        models.CaseItem.case_file_id == cf.id,
+                        models.CaseItem.module == module_name,
+                    )
+                    .distinct()
+                    .all()
+                )
+                if row and _normalize_text(row[0])
+            }
+            overlap_titles = len(import_titles.intersection(db_titles))
+            if overlap_titles >= 2:
+                score = overlap_titles * 10 + 1
+                if score > best_score:
+                    best = cf
+                    best_score = score
+                    best_meta = {
+                        "match_rule": "name_contains+single_module+title_overlap>=2",
+                        "overlap_modules": overlap_modules,
+                        "overlap_titles": overlap_titles,
+                        "module": module_name,
+                    }
+
+    return best, best_meta
 
 
 def _ensure_case_access(
@@ -62,8 +194,34 @@ def import_case_file(
         )
         .first()
     )
+    # 更准确的同名判定：先按清洗名精准匹配，再按“包含 + 模块/标题重合”判断。
+    if not exists:
+        matched, meta = _find_duplicate_case_file(db, project.id, clean_name, unique_items)
+        if matched:
+            exists = matched
+            # 覆盖导入时可接受模糊匹配，否则拒绝并返回匹配信息供前端打开 diff。
+            if not overwrite:
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        "detail": "同名用例已存在",
+                        "existing_case_file_id": matched.id,
+                        "existing_file_name_clean": matched.file_name_clean,
+                        "existing_version_id": matched.version_id,
+                        "match": meta,
+                    },
+                )
     if exists and not overwrite:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="同名用例已存在")
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "detail": "同名用例已存在",
+                "existing_case_file_id": exists.id,
+                "existing_file_name_clean": exists.file_name_clean,
+                "existing_version_id": exists.version_id,
+                "match": {"match_rule": "name_exact"},
+            },
+        )
     now = datetime.now(timezone.utc)
     linked_exec_sets = 0
     prev_version_id = None
@@ -138,7 +296,7 @@ def import_case_file(
         target_id=case_file.id,
         detail={
             "project_id": project.id,
-            "file_name": clean_name,
+            "file_name": case_file.file_name_clean,
             "overwrite": bool(exists and overwrite),
             "prev_version_id": prev_version_id,
             "linked_exec_sets": int(linked_exec_sets or 0),

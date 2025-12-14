@@ -829,6 +829,15 @@
 - 测试与验证：API：启动后端（`APP_DB_FILE=apitest.db .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080`）后执行 `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
 - 更新记录：无  
 
+- 功能名称：用例库导入同名判定增强（包含名 + 模块/标题交集）  
+- 功能描述：用例库导入同名校验规则更准确：第一层按“清洗名去首尾空格后完全相同”判定同名；若导入名包含库中名（如“用例1（1）”“xx用例1yy”），则第二层按模块交集 ≥2 判同名；若双方都只有 1 个模块且模块相同，则第三层按用例标题交集 ≥2 判同名；判定范围为项目级（同项目跨版本也会拦截）。  
+- 操作方式：在“用例库 → 导入用例”选择项目/版本并确认入库；若命中上述同名规则则提示同名并进入差异对比/覆盖导入流程。  
+- 使用效果：避免通过“文件名变体”绕过同名限制，同时保持“同项目跨版本”的重复限制一致性。  
+- 新增内容/接口/组件：后端同名匹配 `_find_duplicate_case_file` 与导入接口结构化返回（`backend/routers/cases.py`）；API error body 透出（`services/apiClient.js`）；前端导入冲突时按 `existing_case_file_id` 拉取库中条目打开 Diff，覆盖导入时用匹配 cleanName 构造 `file_name`（`scripts/modules/caseLibrary.js`）；API 用例新增“包含名 + 模块/标题交集”断言（`tests/api/case_library.spec.js`）。  
+- 复用说明：复用既有项目级同名限制与 Diff 抽屉，仅扩展判定规则与错误返回信息。  
+- 测试与验证：API：启动后端（`APP_DB_FILE=apitest.db .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080`）后执行 `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  
