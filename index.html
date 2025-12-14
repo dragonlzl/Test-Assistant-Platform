@@ -205,8 +205,8 @@
             </svg>
           </span>
           <span class="nav-entry-text">
-            <span class="nav-entry-title">编辑用例&转到执行</span>
-            <span class="nav-entry-desc">编辑用例库并一键转到执行页</span>
+            <span class="nav-entry-title">编辑用例</span>
+            <span class="nav-entry-desc">编辑用例库条目，支持搜索/导出/删除</span>
           </span>
         </button>
         <button class="nav-entry-card nav-entry-overview" id="openCaseLibrarySelectExecDrawerBtn" type="button">
@@ -1426,7 +1426,7 @@
 <h2>用例库</h2>
 <div class="card-body">
 <div class="case-library" id="caseLibrary">
-  <p class="hint">提示：请使用顶部导航进行导入、编辑或选择用例转到执行。</p>
+  <p class="hint">提示：请使用顶部导航进行导入、编辑用例或选择用例转到执行。</p>
   <p class="status" id="caseLibraryStatus"></p>
 
   <div class="card hidden" id="caseLibraryEditCard">
@@ -1573,7 +1573,7 @@
   <div class="drawer-mask" data-drawer-close="caseLibraryEditDrawer"></div>
   <div class="drawer-panel">
     <div class="drawer-header">
-      <h3>编辑用例&转到执行</h3>
+      <h3>编辑用例</h3>
       <button class="link-toggle" data-drawer-close="caseLibraryEditDrawer">收起</button>
     </div>
     <div class="drawer-body">
@@ -1636,6 +1636,7 @@
         </div>
         <div class="case-library-drawer-actions">
           <button class="primary" id="caseLibrarySelectConfirmBtn" type="button">刷新</button>
+          <button class="secondary" id="caseLibrarySelectBatchExecBtn" type="button" disabled>批量转到执行</button>
         </div>
       </div>
       <p class="status" id="caseLibrarySelectDrawerStatus"></p>
@@ -1643,6 +1644,7 @@
         <table class="admin-table">
           <thead>
             <tr>
+              <th><input type="checkbox" id="caseLibrarySelectSelectAll" aria-label="全选/全不选"/></th>
               <th>所属项目</th>
               <th>版本</th>
               <th>用例名</th>
@@ -1653,7 +1655,7 @@
             </tr>
           </thead>
           <tbody id="caseLibrarySelectListBody">
-            <tr><td colspan="7"><p class="hint">请选择项目后自动刷新。</p></td></tr>
+            <tr><td colspan="8"><p class="hint">请选择项目后自动刷新。</p></td></tr>
           </tbody>
         </table>
       </div>
@@ -1913,5 +1915,50 @@
 <script src="./scripts/modules/authGuard.js" defer></script>
 <script src="./scripts/modules/app.js" defer></script>
 <script src="./scripts/modules/bootstrap.js" defer></script>
+<script>
+  (function() {
+    // 兜底：本地静态资源偶发“空响应”会导致关键脚本缺失（如 switchTab/drawer），自动刷新一次可恢复。
+    var retryKey = 'tap_bootstrap_reload_retry';
+    function getRetryCount() {
+      try {
+        return Number(sessionStorage.getItem(retryKey) || '0') || 0;
+      } catch (e) {
+        return 0;
+      }
+    }
+    function setRetryCount(n) {
+      try {
+        sessionStorage.setItem(retryKey, String(n || 0));
+      } catch (e) {
+        // ignore
+      }
+    }
+    function clearRetryCount() {
+      try {
+        sessionStorage.removeItem(retryKey);
+      } catch (e) {
+        // ignore
+      }
+    }
+    function isAppReady() {
+      if (!window.app) return false;
+      if (typeof window.app.switchTab !== 'function') return false;
+      if (!window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return false;
+      return true;
+    }
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        if (isAppReady()) {
+          clearRetryCount();
+          return;
+        }
+        var count = getRetryCount();
+        if (count >= 2) return;
+        setRetryCount(count + 1);
+        try { window.location.reload(); } catch (e) {}
+      }, 1800);
+    });
+  })();
+</script>
 </body>
 </html>

@@ -56,6 +56,8 @@
     selectProjectSelect: document.getElementById('caseLibrarySelectProjectSelect'),
     selectVersionSelect: document.getElementById('caseLibrarySelectVersionSelect'),
     selectConfirmBtn: document.getElementById('caseLibrarySelectConfirmBtn'),
+    selectSelectAll: document.getElementById('caseLibrarySelectSelectAll'),
+    selectBatchExecBtn: document.getElementById('caseLibrarySelectBatchExecBtn'),
     selectStatus: document.getElementById('caseLibrarySelectDrawerStatus'),
     selectListBody: document.getElementById('caseLibrarySelectListBody'),
   };
@@ -102,6 +104,8 @@
       versionId: null,
       files: [],
       loading: false,
+      processing: false,
+      selection: new Set(),
     },
 
     editor: {
@@ -884,14 +888,61 @@
   }
 
   function ensureDrawer(drawerId, openButtons, onOpen, onClose) {
-    if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
-    return window.app.drawer.createDrawer({
-      drawerId: drawerId,
-      openButtons: Array.isArray(openButtons) ? openButtons : [],
-      closeButtons: [],
-      onOpen: typeof onOpen === 'function' ? onOpen : undefined,
-      onClose: typeof onClose === 'function' ? onClose : undefined,
-    });
+    var openBtnIds = Array.isArray(openButtons) ? openButtons : [];
+    var hasDrawerApi = Boolean(window.app && window.app.drawer && typeof window.app.drawer.createDrawer === 'function');
+    if (hasDrawerApi) {
+      return window.app.drawer.createDrawer({
+        drawerId: drawerId,
+        openButtons: openBtnIds,
+        closeButtons: [],
+        onOpen: typeof onOpen === 'function' ? onOpen : undefined,
+        onClose: typeof onClose === 'function' ? onClose : undefined,
+      });
+    }
+
+    // 兜底：极少数情况下静态资源加载抖动（例如 drawer.js 返回空响应）会导致抽屉 API 缺失；
+    // 这里提供最小可用的 open/close，避免核心流程直接不可用。
+    var drawer = drawerId ? document.getElementById(drawerId) : null;
+    if (!drawer) return null;
+    var panel = drawer.querySelector ? drawer.querySelector('.drawer-panel') : null;
+    var mask = drawer.querySelector ? drawer.querySelector('.drawer-mask') : null;
+    var bound = false;
+
+    function open() {
+      if (drawer.classList && drawer.classList.contains('closing')) drawer.classList.remove('closing');
+      if (drawer.classList && !drawer.classList.contains('open')) drawer.classList.add('open');
+      if (drawer.classList && drawer.classList.contains('hidden')) drawer.classList.remove('hidden');
+      if (typeof onOpen === 'function') onOpen();
+    }
+    function close() {
+      if (drawer.classList) drawer.classList.remove('open');
+      if (typeof onClose === 'function') onClose();
+    }
+    function toggle() {
+      if (drawer.classList && drawer.classList.contains('open')) close();
+      else open();
+    }
+    function bindOnce() {
+      if (bound) return;
+      bound = true;
+      openBtnIds.forEach(function(id) {
+        var btn = document.getElementById(id);
+        if (!btn || typeof btn.addEventListener !== 'function') return;
+        btn.addEventListener('click', open);
+      });
+      if (mask && typeof mask.addEventListener === 'function') {
+        mask.addEventListener('click', close);
+      }
+      if (panel && panel.querySelectorAll) {
+        panel.querySelectorAll('[data-drawer-close]').forEach(function(node) {
+          if (!node || typeof node.addEventListener !== 'function') return;
+          node.addEventListener('click', close);
+        });
+      }
+    }
+
+    bindOnce();
+    return { open: open, close: close, toggle: toggle, element: drawer };
   }
 
   function syncProjectOptions(selectEl, placeholder) {
@@ -1991,8 +2042,79 @@
 
   function showEditorCard(show) {
     if (!dom.editCard) return;
+    // 兜底：部分环境下静态 CSS 资源可能加载抖动，增加 hidden 属性确保“隐藏”语义可靠。
+    try { dom.editCard.hidden = !show; } catch (_) {}
     if (show) dom.editCard.classList.remove('hidden');
     else dom.editCard.classList.add('hidden');
+  }
+
+  var exportDepsLoading = {
+    jszip: null,
+    xmindCore: null,
+  };
+
+  function hasJsZip() {
+    return Boolean(typeof JSZip !== 'undefined' || (typeof window !== 'undefined' && typeof window.JSZip !== 'undefined'));
+  }
+
+  function hasXmindBuilder() {
+    var api = window.app && (window.app.xmindCoreApi || window.app.xmindCore) ? (window.app.xmindCoreApi || window.app.xmindCore) : null;
+    return Boolean(api && typeof api.buildXmindPackageFromCases === 'function');
+  }
+
+  function loadScriptWithRetry(key, baseSrc, isReady, maxAttempts) {
+    var attempts = Number(maxAttempts);
+    if (!isFinite(attempts) || attempts <= 0) attempts = 2;
+    if (typeof isReady === 'function' && isReady()) return Promise.resolve(true);
+    if (exportDepsLoading[key]) return exportDepsLoading[key];
+
+    function appendOnce() {
+      return new Promise(function(resolve) {
+        if (typeof document === 'undefined' || !document.createElement) return resolve(false);
+        var script = document.createElement('script');
+        var sep = String(baseSrc).indexOf('?') === -1 ? '?' : '&';
+        script.src = String(baseSrc) + sep + 'ts=' + Date.now();
+        script.async = true;
+        script.setAttribute('data-case-lib-dyn', key);
+        script.onload = function() { resolve(true); };
+        script.onerror = function() { resolve(false); };
+        (document.head || document.documentElement || document.body).appendChild(script);
+      });
+    }
+
+    function attempt(n) {
+      return appendOnce().then(function() {
+        if (typeof isReady === 'function' && isReady()) return true;
+        if (n >= attempts) return false;
+        return new Promise(function(resolve) {
+          setTimeout(resolve, 220 + n * 260);
+        }).then(function() {
+          return attempt(n + 1);
+        });
+      });
+    }
+
+    exportDepsLoading[key] = attempt(0).finally(function() {
+      // 若仍未就绪，允许后续再次触发加载（例如用户再次点击导出）。
+      if (typeof isReady === 'function' && !isReady()) exportDepsLoading[key] = null;
+    });
+    return exportDepsLoading[key];
+  }
+
+  function ensureExportDepsReady() {
+    // xmindCore 依赖 JSZip；两者均为本地静态资源，极少数情况下会因空响应导致未加载，做一次兜底重拉。
+    var chain = Promise.resolve(true);
+    if (!hasJsZip()) {
+      chain = chain.then(function() {
+        return loadScriptWithRetry('jszip', './scripts/vendor/jszip.min.js', hasJsZip, 2);
+      });
+    }
+    if (!hasXmindBuilder()) {
+      chain = chain.then(function() {
+        return loadScriptWithRetry('xmindCore', './scripts/core/xmindCore.js', hasXmindBuilder, 2);
+      });
+    }
+    return chain;
   }
 
   function getXmindBuilder() {
@@ -2609,17 +2731,22 @@
     return normalizeName(module) + '::' + normalizeName(title) + '::' + normalizeName(expected);
   }
 
-  function transferItemsToTempExec(caseFile, fileName, items) {
+  function transferItemsToTempExec(caseFile, fileName, items, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var statusEl = opts.statusEl || dom.status;
+    var shouldSwitchTab = opts.switchTab !== false;
+    var skipActiveConfirm = opts.skipActiveConfirm === true;
+
     var tempExecApi = getTempExecApi();
     if (!tempExecApi || !window.app || !window.app.state) {
-      setStatus(dom.status, '执行页未就绪，请先打开一次“用例执行”页签', 'warn');
-      return;
+      setStatus(statusEl, '执行页未就绪，请先打开一次“用例执行”页签', 'warn');
+      return Promise.resolve({ ok: false, reason: 'not_ready' });
     }
     if (isExecDbEnabled() && caseFile && caseFile.id) {
       var projectId = caseFile.project_id || null;
       var name = (caseFile.file_name_clean || fileName || '').trim() || ('用例#' + caseFile.id);
-      setStatus(dom.status, '转到执行中...', '');
-      apiClient
+      setStatus(statusEl, '转到执行中...', '');
+      return apiClient
         .listExecSets(projectId || undefined)
         .then(function(list) {
           var sets = Array.isArray(list) ? list : [];
@@ -2629,7 +2756,7 @@
           });
           matched.sort(function(a, b) { return Number(b.id) - Number(a.id); });
           var existingSet = matched.length ? matched[0] : null;
-          if (existingSet && String(existingSet.status || '') === 'active') {
+          if (!skipActiveConfirm && existingSet && String(existingSet.status || '') === 'active') {
             var ok = window.confirm(
               '检测到执行页已存在【' + name + '】的执行记录，将同步最新用例并尽量保留结果（模块+标题+预期一致保留），是否继续？'
             );
@@ -2674,22 +2801,25 @@
           });
         })
         .then(function() {
-          setStatus(dom.status, '已转到执行：' + name, 'ok');
-          var coreApi = getCore();
-          var switchTab = window.app && typeof window.app.switchTab === 'function'
-            ? window.app.switchTab
-            : (coreApi && typeof coreApi.switchTab === 'function' ? coreApi.switchTab : null);
-          if (typeof switchTab === 'function') switchTab('tempexec');
-          var section = document.querySelector('[data-section-id=\"tempexec-view\"]');
-          if (section && coreApi && typeof coreApi.scrollElementIntoView === 'function') {
-            coreApi.scrollElementIntoView(section, 'smooth', 140);
+          setStatus(statusEl, '已转到执行：' + name, 'ok');
+          if (shouldSwitchTab) {
+            var coreApi = getCore();
+            var switchTab = window.app && typeof window.app.switchTab === 'function'
+              ? window.app.switchTab
+              : (coreApi && typeof coreApi.switchTab === 'function' ? coreApi.switchTab : null);
+            if (typeof switchTab === 'function') switchTab('tempexec');
+            var section = document.querySelector('[data-section-id=\"tempexec-view\"]');
+            if (section && coreApi && typeof coreApi.scrollElementIntoView === 'function') {
+              coreApi.scrollElementIntoView(section, 'smooth', 140);
+            }
           }
+          return { ok: true };
         })
         .catch(function(err) {
-          if (err && err._cancel) return;
-          setStatus(dom.status, '转到执行失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+          if (err && err._cancel) return { ok: false, reason: 'cancel' };
+          setStatus(statusEl, '转到执行失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+          return { ok: false, err: err };
         });
-      return;
     }
     var globalState = window.app.state;
     if (!Array.isArray(globalState.tempExecFiles)) globalState.tempExecFiles = [];
@@ -2700,8 +2830,8 @@
       return it && String(it.module || '').trim() && String(it.title || '').trim() && String(it.expected || '').trim();
     });
     if (!list.length) {
-      setStatus(dom.status, '用例为空或缺少必填字段（模块/标题/预期结果）', 'warn');
-      return;
+      setStatus(statusEl, '用例为空或缺少必填字段（模块/标题/预期结果）', 'warn');
+      return Promise.resolve({ ok: false, reason: 'empty' });
     }
 
     var name = (fileName || '').trim() || '用例';
@@ -2716,7 +2846,7 @@
 
     if (existing) {
       var ok = window.confirm('检测到名称为【' + name + '】的用例已存在，将用最新用例覆盖并尽量保留执行结果（标题+预期一致保留），是否继续？');
-      if (!ok) return;
+      if (!ok) return Promise.resolve({ ok: false, reason: 'cancel' });
 
       var rebuilt = tempExecApi.createTempExecFile(
         existing.name,
@@ -2727,8 +2857,8 @@
         existing.requirement
       );
       if (!rebuilt) {
-        setStatus(dom.status, '转到执行失败：未解析到有效用例', 'err');
-        return;
+        setStatus(statusEl, '转到执行失败：未解析到有效用例', 'err');
+        return Promise.resolve({ ok: false, reason: 'invalid' });
       }
       rebuilt.reuseEnabled = Boolean(existing.reuseEnabled);
       rebuilt.reusePresets = Array.isArray(existing.reusePresets) ? existing.reusePresets : [];
@@ -2757,30 +2887,89 @@
       if (typeof tempExecApi.persistTempExecState === 'function') tempExecApi.persistTempExecState();
       if (typeof tempExecApi.syncTempExecFocus === 'function') tempExecApi.syncTempExecFocus();
       if (typeof tempExecApi.setTempExecActive === 'function') tempExecApi.setTempExecActive(rebuilt.id);
-      setStatus(dom.status, '已覆盖并转到执行：' + name, 'ok');
+      setStatus(statusEl, '已覆盖并转到执行：' + name, 'ok');
     } else {
       var entry = tempExecApi.createTempExecFile(name, list, 'current', null, null, globalState.requirementLabel);
       if (!entry) {
-        setStatus(dom.status, '转到执行失败：未解析到有效用例', 'err');
-        return;
+        setStatus(statusEl, '转到执行失败：未解析到有效用例', 'err');
+        return Promise.resolve({ ok: false, reason: 'invalid' });
       }
       globalState.tempExecFiles.push(entry);
       globalState.tempExecPages[entry.id] = 0;
       if (typeof tempExecApi.persistTempExecState === 'function') tempExecApi.persistTempExecState();
       if (typeof tempExecApi.syncTempExecFocus === 'function') tempExecApi.syncTempExecFocus();
       if (typeof tempExecApi.setTempExecActive === 'function') tempExecApi.setTempExecActive(entry.id);
-      setStatus(dom.status, '已转到执行：' + name, 'ok');
+      setStatus(statusEl, '已转到执行：' + name, 'ok');
     }
 
-    var coreApi = getCore();
-    var switchTab = window.app && typeof window.app.switchTab === 'function'
-      ? window.app.switchTab
-      : (coreApi && typeof coreApi.switchTab === 'function' ? coreApi.switchTab : null);
-    if (typeof switchTab === 'function') switchTab('tempexec');
-    var section = document.querySelector('[data-section-id=\"tempexec-view\"]');
-    if (section && coreApi && typeof coreApi.scrollElementIntoView === 'function') {
-      coreApi.scrollElementIntoView(section, 'smooth', 140);
+    if (shouldSwitchTab) {
+      var coreApi = getCore();
+      var switchTab = window.app && typeof window.app.switchTab === 'function'
+        ? window.app.switchTab
+        : (coreApi && typeof coreApi.switchTab === 'function' ? coreApi.switchTab : null);
+      if (typeof switchTab === 'function') switchTab('tempexec');
+      var section = document.querySelector('[data-section-id=\"tempexec-view\"]');
+      if (section && coreApi && typeof coreApi.scrollElementIntoView === 'function') {
+        coreApi.scrollElementIntoView(section, 'smooth', 140);
+      }
     }
+    return Promise.resolve({ ok: true });
+  }
+
+  function getSelectDrawerVisibleFiles() {
+    var list = Array.isArray(state.selectDrawer.files) ? state.selectDrawer.files : [];
+    if (state.selectDrawer.versionId) {
+      list = list.filter(function(f) { return String(f && f.version_id || '') === String(state.selectDrawer.versionId || ''); });
+    }
+    return list;
+  }
+
+  function syncSelectDrawerControls() {
+    if (!dom.selectBatchExecBtn && !dom.selectSelectAll) return;
+    state.selectDrawer.selection = state.selectDrawer.selection instanceof Set ? state.selectDrawer.selection : new Set();
+
+    var visible = getSelectDrawerVisibleFiles();
+    var visibleIds = {};
+    visible.forEach(function(f) {
+      if (!f || !f.id) return;
+      visibleIds[String(f.id)] = true;
+    });
+
+    var nextSel = new Set();
+    state.selectDrawer.selection.forEach(function(id) {
+      if (visibleIds[String(id)]) nextSel.add(String(id));
+    });
+    state.selectDrawer.selection = nextSel;
+
+    var total = visible.length;
+    var selected = state.selectDrawer.selection.size;
+    var loading = Boolean(state.selectDrawer.loading || state.selectDrawer.processing);
+
+    if (dom.selectBatchExecBtn) {
+      dom.selectBatchExecBtn.disabled = loading || selected === 0;
+    }
+    if (dom.selectSelectAll) {
+      dom.selectSelectAll.checked = Boolean(total && selected === total);
+      dom.selectSelectAll.indeterminate = Boolean(selected && selected < total);
+    }
+  }
+
+  function setSelectDrawerSelectionAll(checked) {
+    state.selectDrawer.selection = state.selectDrawer.selection instanceof Set ? state.selectDrawer.selection : new Set();
+    var visible = getSelectDrawerVisibleFiles();
+    if (checked) {
+      visible.forEach(function(f) {
+        if (!f || !f.id) return;
+        state.selectDrawer.selection.add(String(f.id));
+      });
+    } else {
+      visible.forEach(function(f) {
+        if (!f || !f.id) return;
+        state.selectDrawer.selection.delete(String(f.id));
+      });
+    }
+    renderSelectDrawerList();
+    syncSelectDrawerControls();
   }
 
   function resetSelectDrawer() {
@@ -2788,7 +2977,9 @@
     state.selectDrawer.versionId = null;
     state.selectDrawer.files = [];
     state.selectDrawer.loading = false;
+    state.selectDrawer.processing = false;
     state.selectDrawer.loadSeq = 0;
+    state.selectDrawer.selection = new Set();
     setStatus(dom.selectStatus, '', '');
     syncProjectOptions(dom.selectProjectSelect, '请选择项目');
     if (dom.selectProjectSelect) dom.selectProjectSelect.value = '';
@@ -2798,8 +2989,13 @@
       dom.selectVersionSelect.value = '';
     }
     if (dom.selectListBody) {
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"7\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"8\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
     }
+    if (dom.selectSelectAll) {
+      dom.selectSelectAll.checked = false;
+      dom.selectSelectAll.indeterminate = false;
+    }
+    if (dom.selectBatchExecBtn) dom.selectBatchExecBtn.disabled = true;
   }
 
   function handleSelectProjectChange() {
@@ -2807,6 +3003,12 @@
     state.selectDrawer.projectId = projectId;
     state.selectDrawer.versionId = null;
     state.selectDrawer.files = [];
+    state.selectDrawer.processing = false;
+    state.selectDrawer.selection = new Set();
+    if (dom.selectSelectAll) {
+      dom.selectSelectAll.checked = false;
+      dom.selectSelectAll.indeterminate = false;
+    }
     if (!dom.selectVersionSelect) return;
     dom.selectVersionSelect.disabled = true;
     dom.selectVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
@@ -2845,21 +3047,22 @@
   function renderSelectDrawerList() {
     if (!dom.selectListBody) return;
     if (!state.selectDrawer.projectId) {
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"7\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"8\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
+      syncSelectDrawerControls();
       return;
     }
     if (state.selectDrawer.loading) {
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"7\"><p class=\"hint\">加载中...</p></td></tr>';
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"8\"><p class=\"hint\">加载中...</p></td></tr>';
+      syncSelectDrawerControls();
       return;
     }
-    var list = Array.isArray(state.selectDrawer.files) ? state.selectDrawer.files : [];
-    if (state.selectDrawer.versionId) {
-      list = list.filter(function(f) { return String(f && f.version_id || '') === String(state.selectDrawer.versionId || ''); });
-    }
+    var list = getSelectDrawerVisibleFiles();
     if (!list.length) {
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"7\"><p class=\"hint\">暂无用例文件</p></td></tr>';
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"8\"><p class=\"hint\">暂无用例文件</p></td></tr>';
+      syncSelectDrawerControls();
       return;
     }
+    state.selectDrawer.selection = state.selectDrawer.selection instanceof Set ? state.selectDrawer.selection : new Set();
     dom.selectListBody.innerHTML = list.map(function(f) {
       var rowProjectId = f && (f.project_id || f.project_id === 0) ? f.project_id : state.selectDrawer.projectId;
       var projectName = state.projectNameById[rowProjectId] || ('项目#' + rowProjectId);
@@ -2867,8 +3070,11 @@
       var importerName = f && f.importer_name ? f.importer_name : '--';
       var importedAt = formatTime(f && f.imported_at);
       var updatedAt = formatTime(f && f.updated_at);
+      var idStr = f && f.id ? String(f.id) : '';
+      var checked = idStr && state.selectDrawer.selection.has(idStr) ? ' checked' : '';
       return (
         '<tr>' +
+          '<td><input type=\"checkbox\" data-case-lib-select-select=\"' + escapeHtml(idStr) + '\"' + checked + '/></td>' +
           '<td>' + escapeHtml(projectName) + '</td>' +
           '<td>' + escapeHtml(versionName) + '</td>' +
           '<td>' + escapeHtml(f && f.file_name_clean ? f.file_name_clean : ('文件#' + (f && f.id ? f.id : ''))) + '</td>' +
@@ -2879,6 +3085,7 @@
         '</tr>'
       );
     }).join('');
+    syncSelectDrawerControls();
   }
 
   function loadSelectDrawerFiles() {
@@ -2887,6 +3094,8 @@
     state.selectDrawer.projectId = projectId;
     state.selectDrawer.versionId = versionId;
     state.selectDrawer.files = [];
+    state.selectDrawer.processing = false;
+    state.selectDrawer.selection = new Set();
     renderSelectDrawerList();
     if (!projectId) {
       setStatus(dom.selectStatus, '请先选择项目', 'warn');
@@ -2925,12 +3134,132 @@
     if (!caseFile || !caseFile.id) return;
     setStatus(dom.selectStatus, '加载用例条目...', '');
     apiClient.listCaseItems(caseFile.id).then(function(items) {
-      transferItemsToTempExec(caseFile, caseFile.file_name_clean || ('用例#' + caseFile.id), items || []);
-      setStatus(dom.selectStatus, '已转到执行：' + (caseFile.file_name_clean || ''), 'ok');
+      transferItemsToTempExec(
+        caseFile,
+        caseFile.file_name_clean || ('用例#' + caseFile.id),
+        items || [],
+        { statusEl: dom.selectStatus }
+      );
       if (selectDrawerInstance && typeof selectDrawerInstance.close === 'function') selectDrawerInstance.close();
     }).catch(function(err) {
       setStatus(dom.selectStatus, err && err.message ? err.message : '加载用例失败', 'err');
     });
+  }
+
+  function batchExecSelectedCaseFilesFromSelectDrawer() {
+    state.selectDrawer.selection = state.selectDrawer.selection instanceof Set ? state.selectDrawer.selection : new Set();
+    var projectId = state.selectDrawer.projectId || null;
+    if (!projectId) {
+      setStatus(dom.selectStatus, '请先选择项目', 'warn');
+      return;
+    }
+    var visible = getSelectDrawerVisibleFiles();
+    var selectedFiles = visible.filter(function(f) {
+      return f && f.id && state.selectDrawer.selection.has(String(f.id));
+    });
+    if (!selectedFiles.length) {
+      setStatus(dom.selectStatus, '请先勾选用例', 'warn');
+      return;
+    }
+
+    var failures = [];
+    var successes = 0;
+    var total = selectedFiles.length;
+
+    var precheck = Promise.resolve({ ok: true, skipConfirm: false });
+    if (isExecDbEnabled()) {
+      precheck = apiClient
+        .listExecSets(projectId || undefined)
+        .then(function(list) {
+          var sets = Array.isArray(list) ? list : [];
+          var activeNames = [];
+          var ids = {};
+          selectedFiles.forEach(function(f) { ids[Number(f.id)] = f; });
+          sets.forEach(function(s) {
+            if (!s || String(s.status || '') !== 'active') return;
+            var fid = Number(s.case_file_id);
+            var file = ids[fid];
+            if (!file) return;
+            activeNames.push(file.file_name_clean || ('用例#' + file.id));
+          });
+          if (!activeNames.length) return { ok: true, skipConfirm: false };
+          var msg =
+            '检测到以下用例已存在执行记录，将同步最新用例并尽量保留结果（模块+标题+预期一致保留），是否继续？\n' +
+            activeNames.join('\n');
+          var ok = window.confirm(msg);
+          if (!ok) return { ok: false, reason: 'cancel' };
+          return { ok: true, skipConfirm: true };
+        })
+        .catch(function() {
+          return { ok: true, skipConfirm: false };
+        });
+    }
+
+    setStatus(dom.selectStatus, '批量转到执行中...', '');
+    state.selectDrawer.processing = true;
+    syncSelectDrawerControls();
+
+    precheck
+      .then(function(ctx) {
+        if (!ctx || ctx.ok === false) {
+          setStatus(dom.selectStatus, '已取消批量转到执行', 'warn');
+          return null;
+        }
+        var skipConfirm = Boolean(ctx && ctx.skipConfirm);
+        var chain = Promise.resolve();
+        selectedFiles.forEach(function(file, index) {
+          chain = chain.then(function() {
+            var name = file.file_name_clean || ('用例#' + file.id);
+            setStatus(dom.selectStatus, '加载用例条目（' + (index + 1) + '/' + total + '）：' + name, '');
+            return apiClient
+              .listCaseItems(file.id)
+              .then(function(items) {
+                return transferItemsToTempExec(file, name, items || [], {
+                  statusEl: dom.selectStatus,
+                  switchTab: false,
+                  skipActiveConfirm: skipConfirm,
+                }).then(function(res) {
+                  if (res && res.ok) successes += 1;
+                });
+              })
+              .catch(function(err) {
+                failures.push({ name: name, err: err });
+              });
+          });
+        });
+
+        return chain.then(function() {
+          if (successes) {
+            var coreApi = getCore();
+            var switchTab = window.app && typeof window.app.switchTab === 'function'
+              ? window.app.switchTab
+              : (coreApi && typeof coreApi.switchTab === 'function' ? coreApi.switchTab : null);
+            if (typeof switchTab === 'function') switchTab('tempexec');
+            var section = document.querySelector('[data-section-id=\"tempexec-view\"]');
+            if (section && coreApi && typeof coreApi.scrollElementIntoView === 'function') {
+              coreApi.scrollElementIntoView(section, 'smooth', 140);
+            }
+          }
+
+          if (failures.length) {
+            setStatus(
+              dom.selectStatus,
+              '批量转到执行完成：成功 ' + successes + ' 份，失败 ' + failures.length + ' 份',
+              successes ? 'warn' : 'err'
+            );
+          } else {
+            setStatus(dom.selectStatus, '批量转到执行完成：成功 ' + successes + ' 份', 'ok');
+          }
+
+          state.selectDrawer.selection = new Set();
+          if (selectDrawerInstance && typeof selectDrawerInstance.close === 'function') selectDrawerInstance.close();
+          return null;
+        });
+      })
+      .finally(function() {
+        state.selectDrawer.processing = false;
+        renderSelectDrawerList();
+      });
   }
 
   function bindEvents() {
@@ -3146,7 +3475,25 @@
     if (dom.selectConfirmBtn) {
       dom.selectConfirmBtn.addEventListener('click', loadSelectDrawerFiles);
     }
+    if (dom.selectBatchExecBtn) {
+      dom.selectBatchExecBtn.addEventListener('click', batchExecSelectedCaseFilesFromSelectDrawer);
+    }
+    if (dom.selectSelectAll) {
+      dom.selectSelectAll.addEventListener('change', function() {
+        setSelectDrawerSelectionAll(Boolean(dom.selectSelectAll && dom.selectSelectAll.checked));
+      });
+    }
     if (dom.selectListBody) {
+      dom.selectListBody.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        if (!t || !t.getAttribute) return;
+        var id = t.getAttribute('data-case-lib-select-select');
+        if (!id) return;
+        state.selectDrawer.selection = state.selectDrawer.selection instanceof Set ? state.selectDrawer.selection : new Set();
+        if (t.checked) state.selectDrawer.selection.add(String(id));
+        else state.selectDrawer.selection.delete(String(id));
+        syncSelectDrawerControls();
+      });
       dom.selectListBody.addEventListener('click', function(e) {
         var btn = e && e.target && e.target.closest ? e.target.closest('[data-case-lib-exec]') : null;
         if (!btn) return;
@@ -3194,6 +3541,10 @@
 
   function init() {
     if (!dom.root) return;
+
+    // 兜底：本地静态资源偶发空响应时，提前触发一次导出依赖补拉，避免导出按钮处报“缺少依赖”。
+    ensureExportDepsReady();
+
     importDrawerInstance = ensureDrawer('caseLibraryImportDrawer', ['openCaseLibraryImportDrawerBtn'], function() {
       ensureProjectsReady().then(resetImportDrawer);
     });

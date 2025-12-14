@@ -167,7 +167,7 @@ async function ensureCaseLibraryTab(page) {
   await expect(page.locator('#caseLibraryHead')).toBeVisible();
 }
 
-test.describe('用例库页面（导入/编辑/转到执行）', () => {
+test.describe('用例库页面（导入/编辑/选择执行）', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
@@ -868,7 +868,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
 	    await expect(page.locator('#caseLibraryEditCard')).toBeHidden();
 	  });
 
-  test('编辑用例&转到执行：支持按版本筛选（默认全部版本）', async ({ page }) => {
+  test('编辑用例：支持按版本筛选（默认全部版本）', async ({ page }) => {
     const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
     const project = { id: 1, name: '战魂铭人', description: '用于用例库版本筛选' };
     const versions = [{ id: 11, name: 'v1' }, { id: 12, name: 'v2' }];
@@ -1231,5 +1231,183 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await page.selectOption('#caseLibrarySelectVersionSelect', String(versions[0].id));
     await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');
     await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('用例v2');
+  });
+
+  test('选择用例执行：支持勾选并批量转到执行', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '战魂铭人', description: '用于批量转执行' };
+    const versions = [{ id: 11, name: 'v1' }];
+    const now = new Date().toISOString();
+
+    const caseFiles = [
+      {
+        id: 100,
+        project_id: project.id,
+        version_id: versions[0].id,
+        file_name_clean: '用例A',
+        item_count: 1,
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+      },
+      {
+        id: 101,
+        project_id: project.id,
+        version_id: versions[0].id,
+        file_name_clean: '用例B',
+        item_count: 1,
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+      },
+    ];
+
+    const caseItemsByFileId = {
+      100: [
+        {
+          id: 1000,
+          case_file_id: 100,
+          module: '模块1',
+          title: '标题A',
+          expected: '预期A',
+          priority: 'P0',
+          precondition: '',
+          steps: '1. 步骤A',
+          remark: '',
+          created_at: now,
+          updated_at: now,
+        },
+      ],
+      101: [
+        {
+          id: 1001,
+          case_file_id: 101,
+          module: '模块1',
+          title: '标题B',
+          expected: '预期B',
+          priority: 'P1',
+          precondition: '',
+          steps: '1. 步骤B',
+          remark: '',
+          created_at: now,
+          updated_at: now,
+        },
+      ],
+    };
+
+    let nextExecSetId = 2000;
+    let nextExecCaseId = 3000;
+    const execSets = [];
+    const execCasesBySetId = {};
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+
+      if (pathName === '/api/case-files' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
+      }
+
+      const itemsMatch = pathName.match(/^\/api\/case-files\/(\d+)\/items$/);
+      if (itemsMatch && method === 'GET') {
+        const fileId = Number(itemsMatch[1]);
+        return respond(200, caseItemsByFileId[fileId] || []);
+      }
+
+      if (pathName === '/api/exec/sets' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        let list = execSets.slice();
+        if (pid) list = list.filter((s) => String(s.project_id) === String(pid));
+        list.sort((a, b) => b.id - a.id);
+        return respond(200, list);
+      }
+
+      if (pathName === '/api/exec/sets/from-case-file' && method === 'POST') {
+        const body = route.request().postDataJSON() || {};
+        const caseFileId = Number(body.case_file_id);
+        const caseFile = caseFiles.find((f) => f.id === caseFileId);
+        if (!caseFile) return respond(404, { detail: '用例文件不存在' });
+        const ts = new Date().toISOString();
+        const execSet = {
+          id: nextExecSetId++,
+          project_id: caseFile.project_id,
+          version_id: caseFile.version_id,
+          case_file_id: caseFileId,
+          name: caseFile.file_name_clean,
+          requirement: body.requirement || null,
+          reuse_enabled: body.reuse_enabled === true,
+          reuse_presets: body.reuse_presets || null,
+          status: 'active',
+          created_at: ts,
+          updated_at: ts,
+        };
+        execSets.push(execSet);
+        const items = caseItemsByFileId[caseFileId] || [];
+        execCasesBySetId[execSet.id] = items.map((it, idx) => ({
+          id: nextExecCaseId++,
+          exec_set_id: execSet.id,
+          case_item_id: it.id,
+          module: it.module,
+          title: it.title,
+          expected: it.expected,
+          priority: it.priority || null,
+          precondition: it.precondition || null,
+          steps: it.steps || null,
+          remark: it.remark || null,
+          reuse_details: null,
+          defect_links: null,
+          status: '未执行',
+          order_no: idx + 1,
+          executor_id: user.id,
+          created_at: ts,
+          updated_at: ts,
+        }));
+        return respond(200, execSet);
+      }
+
+      const execCasesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (execCasesMatch && method === 'GET') {
+        const execSetId = Number(execCasesMatch[1]);
+        return respond(200, execCasesBySetId[execSetId] || []);
+      }
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    await ensureCaseLibraryTab(page);
+
+    await openDrawer(page, '#openCaseLibrarySelectExecDrawerBtn', '#caseLibrarySelectExecDrawer');
+    await page.selectOption('#caseLibrarySelectProjectSelect', String(project.id));
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例A');
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例B');
+
+    await expect(page.locator('#caseLibrarySelectBatchExecBtn')).toBeDisabled();
+    await page.click('#caseLibrarySelectListBody input[data-case-lib-select-select="100"]');
+    await page.click('#caseLibrarySelectListBody input[data-case-lib-select-select="101"]');
+    await expect(page.locator('#caseLibrarySelectBatchExecBtn')).toBeEnabled();
+
+    await page.click('#caseLibrarySelectBatchExecBtn');
+    await expect(page.locator('#tempexecFlowNav')).toBeVisible();
+    await page.waitForFunction(() => {
+      const st = window.app && window.app.state ? window.app.state : null;
+      if (!st || !Array.isArray(st.tempExecFiles)) return false;
+      const names = st.tempExecFiles.map((f) => (f ? f.name : '')).filter(Boolean);
+      return names.includes('用例A') && names.includes('用例B');
+    });
   });
 });
