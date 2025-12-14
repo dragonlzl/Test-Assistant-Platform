@@ -775,6 +775,33 @@
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
 - 更新记录：无  
 
+- 功能名称：用例库编辑视图刷新恢复（保持选中用例）  
+- 功能描述：在已登录状态下，进入“用例库 → 编辑用例&转到执行”并打开某个用例文件的编辑视图后，刷新页面会自动恢复到上次选中的用例文件并保持编辑视图展示。  
+- 操作方式：在用例库编辑列表点击“编辑”进入用例编辑视图→直接刷新浏览器→仍展示上次用例编辑视图。  
+- 使用效果：避免刷新导致上下文丢失，提升连续编辑体验。  
+- 新增内容/接口/组件：用例库记录并恢复 `case_file_id`（localStorage：`tap-case-library-editor`）（`scripts/modules/caseLibrary.js`）；UI 用例新增刷新恢复覆盖并加固 `waitForFunction` 时序（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用现有 `listCaseFiles/listCaseItems/loadVersions` 接口与页签激活事件，仅增加轻量持久化与恢复流程。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库编辑抽屉刷新恢复（保持项目/版本/勾选/打开态）  
+- 功能描述：在已登录状态下，打开“编辑用例&转到执行”抽屉并选择项目/版本、勾选用例文件后，刷新页面仍会自动打开抽屉并恢复上次的项目/版本选择与勾选状态。  
+- 操作方式：进入“用例相关 → 用例库”→点“编辑用例&转到执行”→选择项目/版本并勾选若干用例→直接刷新浏览器→抽屉自动打开且选择/勾选保持不变。  
+- 使用效果：避免刷新导致抽屉筛选上下文与勾选丢失，提升连续导出/编辑/转执行的效率。  
+- 新增内容/接口/组件：编辑抽屉状态持久化（localStorage：`tap-case-library-edit-drawer`，含 `project_id/version_id/selected_ids/drawer_open`）（`scripts/modules/caseLibrary.js`）；持久化写入保护（避免初始化阶段覆盖成空）；`switchTab` 重复切到当前页签不再强制关闭抽屉，减少误关（`scripts/core/appRuntime.js`）；UI 用例新增“刷新恢复”覆盖（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用既有抽屉组件与项目/版本加载逻辑，仅增加轻量持久化与恢复流程。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js scripts/core/appRuntime.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库列表项目/版本展示修复（避免项目#null）  
+- 功能描述：用例库“编辑用例&转到执行/选择用例执行”列表的“所属项目/版本”列，改为优先使用用例文件行数据的 `project_id/version_id` 渲染，避免在刷新恢复或状态波动时出现“项目#null”“版本#10”这类异常展示。  
+- 操作方式：进入用例库相关抽屉，勾选/切换/刷新后列表的所属项目与版本展示保持正常。  
+- 使用效果：列表信息更稳定，避免误判用例归属。  
+- 新增内容/接口/组件：列表渲染逻辑调整（`scripts/modules/caseLibrary.js`）。  
+- 复用说明：复用既有项目/版本缓存与 `getVersionName`，仅调整取值优先级。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 编辑抽屉`（通过）。  
+- 更新记录：无  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  

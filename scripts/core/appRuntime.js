@@ -387,7 +387,8 @@
     }
 
     function switchTab(name) {
-      if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+      // 重复切到当前页签时不必关闭抽屉：避免误关，并避免影响“刷新后恢复抽屉打开态”的体验。
+      if (state.activeTab !== name && window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
         window.app.drawer.closeAllDrawers();
       }
       state.activeTab = name;

@@ -68,6 +68,7 @@
       files: [],
       loading: false,
       selection: new Set(),
+      restoring: false,
     },
 
     selectDrawer: {
@@ -89,6 +90,7 @@
       pendingInterval: null,
       pendingToast: null,
       pendingRemaining: 0,
+      restoring: false,
     },
   };
 
@@ -198,6 +200,182 @@
     return escaped.replace(/\n/g, '&#10;');
   }
 
+  function getCurrentUserId() {
+    var globalState = window.app && window.app.state ? window.app.state : null;
+    var user = globalState && globalState.currentUser ? globalState.currentUser : null;
+    var userId = user && user.id !== undefined && user.id !== null ? user.id : null;
+    if (!userId || String(userId) === '0') return null;
+    return userId;
+  }
+
+  var editorPersistKey = 'tap-case-library-editor';
+
+  function readEditorPersistedState() {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      var raw = localStorage.getItem(editorPersistKey);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function writeEditorPersistedState(payload) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      if (!payload) {
+        localStorage.removeItem(editorPersistKey);
+        return;
+      }
+      localStorage.setItem(editorPersistKey, JSON.stringify(payload));
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function clearEditorPersistedState() {
+    writeEditorPersistedState(null);
+  }
+
+  function persistEditorSelection(caseFile) {
+    if (!caseFile || caseFile.id === null || caseFile.id === undefined) return;
+    var userId = getCurrentUserId();
+    if (!userId) return;
+    var payload = {
+      user_id: userId,
+      project_id: caseFile.project_id,
+      case_file_id: caseFile.id,
+      saved_at: Date.now(),
+    };
+    writeEditorPersistedState(payload);
+  }
+
+  var editDrawerPersistKey = 'tap-case-library-edit-drawer';
+
+  function readEditDrawerPersistedState() {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      var raw = localStorage.getItem(editDrawerPersistKey);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function writeEditDrawerPersistedState(payload) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      if (!payload) {
+        localStorage.removeItem(editDrawerPersistKey);
+        return;
+      }
+      localStorage.setItem(editDrawerPersistKey, JSON.stringify(payload));
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function persistEditDrawerState(opts) {
+    opts = opts || {};
+    var userId = getCurrentUserId();
+    if (!userId) return;
+    var projectId = state.editDrawer && state.editDrawer.projectId ? state.editDrawer.projectId : null;
+    var versionId = state.editDrawer && state.editDrawer.versionId ? state.editDrawer.versionId : null;
+    var selection = state.editDrawer && state.editDrawer.selection instanceof Set ? state.editDrawer.selection : new Set();
+    state.editDrawer.selection = selection;
+    // 保护：避免“初始化/刷新期间 state 为空”时把已持久化的选择覆盖成空，导致无法恢复。
+    if (!opts.force_clear && !projectId) {
+      var existing = readEditDrawerPersistedState();
+      if (existing && String(existing.user_id || '') === String(userId)) {
+        var existingProjectId = normalizeId(existing.project_id);
+        if (existingProjectId) projectId = existingProjectId;
+        var existingVersionId = normalizeId(existing.version_id);
+        if (!versionId && existingVersionId) versionId = existingVersionId;
+        if (!selection.size && Array.isArray(existing.selected_ids) && existing.selected_ids.length) {
+          selection = new Set(existing.selected_ids.map(function(v) { return String(v); }));
+          state.editDrawer.selection = selection;
+        }
+      }
+    }
+    var payload = {
+      user_id: userId,
+      project_id: projectId || '',
+      version_id: versionId || '',
+      selected_ids: Array.from(selection),
+      drawer_open: Boolean(opts.drawer_open),
+      saved_at: Date.now(),
+    };
+    writeEditDrawerPersistedState(payload);
+  }
+
+  function restoreEditDrawerFromPersistedState() {
+    if (!isAuthReady()) return Promise.resolve(false);
+    if (state.editDrawer && state.editDrawer.restoring === true) return Promise.resolve(false);
+    var persisted = readEditDrawerPersistedState();
+    if (!persisted) return Promise.resolve(false);
+    var userId = getCurrentUserId();
+    if (!userId || String(persisted.user_id || '') !== String(userId)) return Promise.resolve(false);
+    var projectId = normalizeId(persisted.project_id);
+    var versionId = normalizeId(persisted.version_id);
+    var ids = Array.isArray(persisted.selected_ids) ? persisted.selected_ids.map(function(v) { return String(v); }) : [];
+    if (!projectId) return Promise.resolve(false);
+
+    state.editDrawer = state.editDrawer || {};
+    state.editDrawer.restoring = true;
+    state.editDrawer.projectId = projectId;
+    state.editDrawer.versionId = versionId || null;
+    state.editDrawer.selection = new Set(ids);
+    if (dom.editDrawerProjectSelect) dom.editDrawerProjectSelect.value = String(projectId);
+    if (dom.editDrawerVersionSelect) {
+      dom.editDrawerVersionSelect.disabled = true;
+      dom.editDrawerVersionSelect.innerHTML = '<option value=\"\">全部版本</option>';
+      dom.editDrawerVersionSelect.value = '';
+    }
+    renderEditDrawerList();
+    syncEditDrawerControls();
+
+    return loadVersions(projectId)
+      .then(function() {
+        if (dom.editDrawerVersionSelect) {
+          syncVersionOptions(dom.editDrawerVersionSelect, projectId, '全部版本');
+          dom.editDrawerVersionSelect.disabled = false;
+          if (versionId) dom.editDrawerVersionSelect.value = String(versionId);
+          else dom.editDrawerVersionSelect.value = '';
+        }
+        return apiClient.listCaseFiles(projectId);
+      })
+      .then(function(files) {
+        state.editDrawer.files = Array.isArray(files) ? files : [];
+        // 仅保留当前可见列表里的勾选，避免版本切换后隐藏项仍被导出。
+        var visibleIds = {};
+        getEditDrawerVisibleFiles().forEach(function(f) {
+          if (!f || f.id === null || f.id === undefined) return;
+          visibleIds[String(f.id)] = true;
+        });
+        var nextSel = new Set();
+        (state.editDrawer.selection || new Set()).forEach(function(id) {
+          if (visibleIds[String(id)]) nextSel.add(String(id));
+        });
+        state.editDrawer.selection = nextSel;
+        renderEditDrawerList();
+        syncEditDrawerControls();
+        return true;
+      })
+      .catch(function(err) {
+        console.error(err);
+        return false;
+      })
+      .finally(function() {
+        state.editDrawer.restoring = false;
+      });
+  }
+
   function isAuthReady() {
     if (window.app && window.app.authReady === true) return true;
     var globalState = window.app && window.app.state ? window.app.state : null;
@@ -246,13 +424,14 @@
     };
   }
 
-  function ensureDrawer(drawerId, openButtons, onOpen) {
+  function ensureDrawer(drawerId, openButtons, onOpen, onClose) {
     if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
     return window.app.drawer.createDrawer({
       drawerId: drawerId,
       openButtons: Array.isArray(openButtons) ? openButtons : [],
       closeButtons: [],
       onOpen: typeof onOpen === 'function' ? onOpen : undefined,
+      onClose: typeof onClose === 'function' ? onClose : undefined,
     });
   }
 
@@ -291,10 +470,17 @@
 
   function loadProjects() {
     return apiClient.listProjects().then(function(list) {
+      var importSelected = dom.importProjectSelect ? String(dom.importProjectSelect.value || '') : '';
+      var editSelected = dom.editDrawerProjectSelect ? String(dom.editDrawerProjectSelect.value || '') : '';
+      var selectSelected = dom.selectProjectSelect ? String(dom.selectProjectSelect.value || '') : '';
       state.projects = Array.isArray(list) ? list : [];
       syncProjectOptions(dom.importProjectSelect, '请选择项目');
       syncProjectOptions(dom.editDrawerProjectSelect, '请选择项目');
       syncProjectOptions(dom.selectProjectSelect, '请选择项目');
+      // 仅刷新 option 列表，不强制清空用户已选项目；若新列表不含该值，浏览器会自动回到空值。
+      if (dom.importProjectSelect && importSelected) dom.importProjectSelect.value = importSelected;
+      if (dom.editDrawerProjectSelect && editSelected) dom.editDrawerProjectSelect.value = editSelected;
+      if (dom.selectProjectSelect && selectSelected) dom.selectProjectSelect.value = selectSelected;
       return state.projects;
     });
   }
@@ -332,45 +518,6 @@
     state.projectNameById = {};
     state.versionsByProject = {};
     state.versionNameByProject = {};
-
-    // 项目/版本列表发生变化时，避免“下拉已重建但 state 仍保留旧值”导致按钮可点击状态错误。
-    state.importDrawer.projectId = null;
-    state.importDrawer.versionId = null;
-    if (dom.importProjectSelect) dom.importProjectSelect.value = '';
-    if (dom.importVersionSelect) {
-      dom.importVersionSelect.disabled = true;
-      dom.importVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
-      dom.importVersionSelect.value = '';
-    }
-    syncImportConfirmEnabled();
-
-    state.editDrawer.projectId = null;
-    state.editDrawer.versionId = null;
-    state.editDrawer.selection = new Set();
-    if (dom.editDrawerProjectSelect) dom.editDrawerProjectSelect.value = '';
-    if (dom.editDrawerVersionSelect) {
-      dom.editDrawerVersionSelect.disabled = true;
-      dom.editDrawerVersionSelect.innerHTML = '<option value=\"\">全部版本</option>';
-      dom.editDrawerVersionSelect.value = '';
-    }
-    if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = true;
-    if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = true;
-    if (dom.editDrawerListBody) {
-      dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"10\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
-    }
-    syncEditDrawerControls();
-
-    state.selectDrawer.projectId = null;
-    state.selectDrawer.versionId = null;
-    if (dom.selectProjectSelect) dom.selectProjectSelect.value = '';
-    if (dom.selectVersionSelect) {
-      dom.selectVersionSelect.disabled = true;
-      dom.selectVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
-      dom.selectVersionSelect.value = '';
-    }
-    if (dom.selectListBody) {
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"7\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
-    }
   }
 
   function bindProjectsUpdated() {
@@ -380,7 +527,18 @@
       var globalState = window.app && window.app.state ? window.app.state : {};
       var tabName = globalState && globalState.activeTab ? globalState.activeTab : '';
       if (tabName === 'case-library' && isAuthReady()) {
-        ensureProjectsReady();
+        ensureProjectsReady()
+          .then(function() {
+            return restoreEditorFromPersistedState();
+          })
+          .then(function() {
+            var persisted = readEditDrawerPersistedState();
+            var userId = getCurrentUserId();
+            var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
+            if (shouldOpen && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
+              editDrawerInstance.open();
+            }
+          });
       }
     });
   }
@@ -654,6 +812,7 @@
     state.editDrawer.selection = new Set();
     renderEditDrawerList();
     syncEditDrawerControls();
+    persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
   }
 
   function getSelectedEditDrawerCaseFiles() {
@@ -816,8 +975,13 @@
         dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"10\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
       }
       syncEditDrawerControls();
+      persistEditDrawerState({
+        drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')),
+        force_clear: true,
+      });
       return;
     }
+    persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
     loadEditDrawerFiles();
   }
 
@@ -868,6 +1032,7 @@
     }
     renderEditDrawerList();
     syncEditDrawerControls();
+    persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
   }
 
   function renderEditDrawerList() {
@@ -880,9 +1045,11 @@
       return;
     }
     var canDelete = isAdminUser();
-    var projectName = state.projectNameById[state.editDrawer.projectId] || ('项目#' + state.editDrawer.projectId);
     dom.editDrawerListBody.innerHTML = list.map(function(f) {
-      var versionName = getVersionName(state.editDrawer.projectId, f && f.version_id ? f.version_id : null);
+      // 兼容：列表项应自带 project_id/version_id；若 state 发生波动（例如刷新恢复过程中），优先使用行数据保证展示正确。
+      var rowProjectId = f && (f.project_id || f.project_id === 0) ? f.project_id : state.editDrawer.projectId;
+      var projectName = state.projectNameById[rowProjectId] || ('项目#' + rowProjectId);
+      var versionName = getVersionName(rowProjectId, f && f.version_id ? f.version_id : null);
       var importerName = f && f.importer_name ? f.importer_name : '--';
       var importedAt = formatTime(f && f.imported_at);
       var updaterName = f && f.last_updated_by_name ? f.last_updated_by_name : (importerName || '--');
@@ -988,7 +1155,7 @@
     state.editDrawer.projectId = projectId;
     state.editDrawer.versionId = normalizeId(dom.editDrawerVersionSelect ? dom.editDrawerVersionSelect.value : '');
     state.editDrawer.files = [];
-    state.editDrawer.selection = new Set();
+    state.editDrawer.selection = state.editDrawer.selection instanceof Set ? state.editDrawer.selection : new Set();
     renderEditDrawerList();
     if (!projectId) {
       setStatus(dom.editDrawerStatus, '请先选择项目', 'warn');
@@ -1010,6 +1177,17 @@
           }
         }
         setStatus(dom.editDrawerStatus, '已加载 ' + files.length + ' 份用例文件', files.length ? 'ok' : 'warn');
+        // 若列表更新，清理掉不存在/不可见的勾选项，避免按钮状态与实际不一致。
+        var visibleIds = {};
+        getEditDrawerVisibleFiles().forEach(function(f) {
+          if (!f || f.id === null || f.id === undefined) return;
+          visibleIds[String(f.id)] = true;
+        });
+        var nextSel = new Set();
+        (state.editDrawer.selection || new Set()).forEach(function(id) {
+          if (visibleIds[String(id)]) nextSel.add(String(id));
+        });
+        state.editDrawer.selection = nextSel;
         renderEditDrawerList();
       })
       .catch(function(err) {
@@ -1018,6 +1196,7 @@
       .finally(function() {
         state.editDrawer.loading = false;
         syncEditDrawerControls();
+        persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
       });
   }
 
@@ -1039,6 +1218,7 @@
       state.editor.remarkOpen = new Set();
       setStatus(dom.editStatus, '已加载 ' + state.editor.items.length + ' 条用例，可直接编辑', 'ok');
       if (dom.editSearchInput) dom.editSearchInput.value = '';
+      persistEditorSelection(caseFile);
       renderEditorCard();
       if (editDrawerInstance && typeof editDrawerInstance.close === 'function') editDrawerInstance.close();
     }).catch(function(err) {
@@ -1295,6 +1475,55 @@
     if (dom.editFileName) dom.editFileName.textContent = file.file_name_clean || ('文件#' + file.id);
     if (dom.editCardTitle) dom.editCardTitle.textContent = '用例编辑视图：' + (file.file_name_clean || ('#' + file.id));
     renderEditorTable();
+  }
+
+  function restoreEditorFromPersistedState() {
+    if (!isAuthReady()) return Promise.resolve(false);
+    if (state.editor.restoring === true) return Promise.resolve(false);
+    var persisted = readEditorPersistedState();
+    if (!persisted) return Promise.resolve(false);
+    var userId = getCurrentUserId();
+    if (!userId || String(persisted.user_id || '') !== String(userId)) return Promise.resolve(false);
+    var projectId = normalizeId(persisted.project_id);
+    var caseFileId = Number(persisted.case_file_id);
+    if (!projectId || isNaN(caseFileId) || caseFileId <= 0) return Promise.resolve(false);
+
+    state.editor.restoring = true;
+    setStatus(dom.editStatus, '', '');
+    return ensureProjectsReady()
+      .then(function() { return loadVersions(projectId); })
+      .then(function() { return apiClient.listCaseFiles(projectId); })
+      .then(function(files) {
+        var list = Array.isArray(files) ? files : [];
+        var found = list.find(function(f) { return f && Number(f.id) === caseFileId; }) || null;
+        if (!found) {
+          clearEditorPersistedState();
+          state.editor.caseFile = null;
+          state.editor.items = [];
+          showEditorCard(false);
+          return false;
+        }
+        return apiClient.listCaseItems(caseFileId).then(function(items) {
+          state.editor.caseFile = found;
+          state.editor.items = Array.isArray(items) ? items : [];
+          if (dom.editSearchInput) dom.editSearchInput.value = '';
+          state.editor.searchText = '';
+          state.editor.pageIndex = 0;
+          state.editor.selection = new Set();
+          state.editor.remarkOpen = new Set();
+          renderEditorCard();
+          return true;
+        });
+      })
+      .catch(function(err) {
+        console.error(err);
+        // 可能是权限变化/项目不可见，避免卡死：清理后不再恢复。
+        clearEditorPersistedState();
+        return false;
+      })
+      .finally(function() {
+        state.editor.restoring = false;
+      });
   }
 
   function cleanupPendingToast() {
@@ -1813,9 +2042,10 @@
       dom.selectListBody.innerHTML = '<tr><td colspan=\"7\"><p class=\"hint\">暂无用例文件</p></td></tr>';
       return;
     }
-    var projectName = state.projectNameById[state.selectDrawer.projectId] || ('项目#' + state.selectDrawer.projectId);
     dom.selectListBody.innerHTML = list.map(function(f) {
-      var versionName = getVersionName(state.selectDrawer.projectId, f && f.version_id ? f.version_id : null);
+      var rowProjectId = f && (f.project_id || f.project_id === 0) ? f.project_id : state.selectDrawer.projectId;
+      var projectName = state.projectNameById[rowProjectId] || ('项目#' + rowProjectId);
+      var versionName = getVersionName(rowProjectId, f && f.version_id ? f.version_id : null);
       var importerName = f && f.importer_name ? f.importer_name : '--';
       var importedAt = formatTime(f && f.imported_at);
       var updatedAt = formatTime(f && f.updated_at);
@@ -1945,6 +2175,7 @@
         if (t.checked) state.editDrawer.selection.add(String(id));
         else state.editDrawer.selection.delete(String(id));
         syncEditDrawerControls();
+        persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
       });
       dom.editDrawerListBody.addEventListener('click', function(e) {
         var btn = e && e.target && e.target.closest ? e.target.closest('[data-case-lib-edit]') : null;
@@ -2088,12 +2319,32 @@
       var tabName = e && e.detail ? e.detail.tab : '';
       if (tabName !== 'case-library') return;
       if (!isAuthReady()) return;
-      ensureProjectsReady();
+      ensureProjectsReady().then(function() {
+        return restoreEditorFromPersistedState();
+      }).then(function() {
+        var persisted = readEditDrawerPersistedState();
+        var userId = getCurrentUserId();
+        var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
+        if (shouldOpen && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
+          editDrawerInstance.open();
+        }
+      });
     });
     window.addEventListener('app-auth-ready', function() {
       var globalState = window.app && window.app.state ? window.app.state : {};
       var tabName = globalState && globalState.activeTab ? globalState.activeTab : '';
-      if (tabName === 'case-library') ensureProjectsReady();
+      if (tabName === 'case-library') {
+        ensureProjectsReady().then(function() {
+          return restoreEditorFromPersistedState();
+        }).then(function() {
+          var persisted = readEditDrawerPersistedState();
+          var userId = getCurrentUserId();
+          var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
+          if (shouldOpen && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
+            editDrawerInstance.open();
+          }
+        });
+      }
     });
   }
 
@@ -2102,9 +2353,38 @@
     importDrawerInstance = ensureDrawer('caseLibraryImportDrawer', ['openCaseLibraryImportDrawerBtn'], function() {
       ensureProjectsReady().then(resetImportDrawer);
     });
-    editDrawerInstance = ensureDrawer('caseLibraryEditDrawer', ['openCaseLibraryEditDrawerBtn'], function() {
-      ensureProjectsReady().then(resetEditDrawer);
-    });
+    editDrawerInstance = ensureDrawer(
+      'caseLibraryEditDrawer',
+      ['openCaseLibraryEditDrawerBtn'],
+      function() {
+        var prevPersisted = readEditDrawerPersistedState();
+        ensureProjectsReady().then(function() {
+          resetEditDrawer();
+          return restoreEditDrawerFromPersistedState()
+            .then(function(restored) {
+              if (restored) {
+                persistEditDrawerState({ drawer_open: true });
+                return;
+              }
+              // 恢复失败时尽量不覆盖旧选择，仅更新 open 状态。
+              var userId = getCurrentUserId();
+              if (
+                prevPersisted &&
+                userId &&
+                String(prevPersisted.user_id || '') === String(userId)
+              ) {
+                prevPersisted.drawer_open = true;
+                writeEditDrawerPersistedState(prevPersisted);
+              } else {
+                persistEditDrawerState({ drawer_open: true });
+              }
+            });
+        });
+      },
+      function() {
+        persistEditDrawerState({ drawer_open: false });
+      }
+    );
     selectDrawerInstance = ensureDrawer('caseLibrarySelectExecDrawer', ['openCaseLibrarySelectExecDrawerBtn'], function() {
       ensureProjectsReady().then(resetSelectDrawer);
     });
@@ -2115,7 +2395,18 @@
 
     // 若刷新后停留在用例库页，补一次加载。
     var visible = document.querySelector('section[data-tab-section=\"case-library\"]:not(.hidden)');
-    if (visible && isAuthReady()) ensureProjectsReady();
+    if (visible && isAuthReady()) {
+      ensureProjectsReady().then(function() {
+        return restoreEditorFromPersistedState();
+      }).then(function() {
+        var persisted = readEditDrawerPersistedState();
+        var userId = getCurrentUserId();
+        var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
+        if (shouldOpen && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
+          editDrawerInstance.open();
+        }
+      });
+    }
     window.app = window.app || {};
     window.app.caseLibraryBound = true;
   }
