@@ -55,7 +55,7 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
         let clean = base.replace(/\.[^.]+$/, '');
         const tsPattern = /(_result)?_\d{8}(?:_?\d{6})?$/i;
         while (tsPattern.test(clean)) clean = clean.replace(tsPattern, '');
-        clean = clean.replace(/^勾选用例[-_ ]*/i, '').trim();
+        clean = clean.replace(/^勾选用例[\s_\-\u2010-\u2015\u2212\uFE63\uFF0D]*/i, '').trim();
         if (caseFiles.some((f) => f.file_name_clean === clean && String(f.version_id || '') === String(payload.version_id || ''))) {
           return respond(400, { detail: '同名用例已存在' });
         }

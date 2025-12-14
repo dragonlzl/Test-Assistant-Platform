@@ -22,7 +22,14 @@ def clean_case_file_name(name: str) -> str:
     while ts_pattern.search(base):
         base = ts_pattern.sub("", base)
     # 去除“勾选用例”前缀（用例生成/导出默认命名，兼容 “勾选用例 登录” 这类带空格分隔的手工命名）
-    base = re.sub(r"^勾选用例[-_ ]*", "", base, flags=re.IGNORECASE)
+    # 注意：历史文件名可能包含全角空格/各种短横线（例如 “勾选用例　登录”、“勾选用例—登录”），需与前端清洗规则保持一致，
+    # 否则会出现“前端匹配不到已存在用例 → 重新调用导入 → 后端判重拒绝”的 0 成功/1 失败现象。
+    base = re.sub(
+        "^勾选用例[\\s_\\-\\u2010-\\u2015\\u2212\\uFE63\\uFF0D]*",
+        "",
+        base,
+        flags=re.IGNORECASE,
+    )
     base = base.strip().strip("_- ")
     return base or "case"
 

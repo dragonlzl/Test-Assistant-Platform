@@ -2769,7 +2769,7 @@
         } else {
           cleaned = base.replace(/\.[^.]+$/, '');
         }
-        cleaned = String(cleaned || '').replace(/^勾选用例[-_ ]*/i, '');
+        cleaned = String(cleaned || '').replace(/^勾选用例[\s_\-\u2010-\u2015\u2212\uFE63\uFF0D]*/i, '');
         cleaned = cleaned.trim().replace(/^[_-]+|[_-]+$/g, '');
         return cleaned || 'case';
       }

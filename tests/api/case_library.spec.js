@@ -85,6 +85,26 @@ test.describe('case library api', () => {
     const caseFileSpace = await importSpaceRes.json();
     expect(caseFileSpace.file_name_clean).toBe('账号登录');
 
+    const importUnicodeSepRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '勾选用例　全角空格测试_result_20251213121212.json',
+        source: 'apitest',
+        items: [
+          {
+            module: '登录',
+            title: '全角空格测试',
+            expected: 'ok',
+          },
+        ],
+      },
+    });
+    expect(importUnicodeSepRes.status()).toBe(201);
+    const caseFileUnicodeSep = await importUnicodeSepRes.json();
+    expect(caseFileUnicodeSep.file_name_clean).toBe('全角空格测试');
+
     const importRes2 = await ctx.post(`${apiBase}/api/case-files/import`, {
       headers,
       data: {
@@ -158,6 +178,26 @@ test.describe('case library api', () => {
     const items = await listItemsRes.json();
     expect(items.length).toBe(1);
     const caseItemId = items[0].id;
+
+    const dupInFileRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '重复条目测试.json',
+        source: 'apitest',
+        items: [
+          { module: '登录', title: '重复条目', expected: 'ok' },
+          { module: '登录', title: '重复条目', expected: 'ok' },
+        ],
+      },
+    });
+    expect(dupInFileRes.status()).toBe(201);
+    const dupInFile = await dupInFileRes.json();
+    const dupItemsRes = await ctx.get(`${apiBase}/api/case-files/${dupInFile.id}/items`, { headers });
+    expect(dupItemsRes.status()).toBe(200);
+    const dupItems = await dupItemsRes.json();
+    expect(dupItems.length).toBe(1);
 
     const patchRes = await ctx.patch(`${apiBase}/api/case-files/items/${caseItemId}`, {
       headers,

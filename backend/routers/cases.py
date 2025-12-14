@@ -36,6 +36,20 @@ def import_case_file(
     ensure_version_in_project(db, project.id, payload.version_id)
     if not payload.items:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用例为空")
+    # 导入文件内可能存在重复条目（按 模块+标题+预期结果 判断），直接写库会触发唯一约束导致整份导入失败；
+    # 这里做一次去重以提升容错（执行页导入侧也依赖该接口）。
+    unique_items = []
+    seen_keys = set()
+    duplicate_count = 0
+    for item in payload.items:
+        key = (item.module, item.title, item.expected)
+        if key in seen_keys:
+            duplicate_count += 1
+            continue
+        seen_keys.add(key)
+        unique_items.append(item)
+    if not unique_items:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用例为空")
     clean_name = clean_case_file_name(payload.file_name)
     exists = (
         db.query(models.CaseFile)
@@ -58,7 +72,8 @@ def import_case_file(
     )
     db.add(case_file)
     db.flush()
-    for item in payload.items:
+    now = datetime.now(timezone.utc)
+    for item in unique_items:
         db.add(
             models.CaseItem(
                 case_file_id=case_file.id,
@@ -71,8 +86,8 @@ def import_case_file(
                 remark=item.remark,
                 created_by=user.id,
                 updated_by=user.id,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=now,
+                updated_at=now,
             )
         )
     log_operation(
@@ -81,7 +96,13 @@ def import_case_file(
         action="import_case_file",
         target_type="case_file",
         target_id=case_file.id,
-        detail={"project_id": project.id, "file_name": clean_name},
+        detail={
+            "project_id": project.id,
+            "file_name": clean_name,
+            "item_total": len(payload.items),
+            "item_imported": len(unique_items),
+            "item_skipped_duplicates": duplicate_count,
+        },
     )
     try:
         db.commit()

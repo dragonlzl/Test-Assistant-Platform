@@ -150,7 +150,7 @@
       var pattern = /(_result)?_\d{8}(?:_?\d{6})?$/i;
       while (pattern.test(cleaned)) cleaned = cleaned.replace(pattern, '');
     }
-    cleaned = String(cleaned || '').replace(/^勾选用例[-_ ]*/i, '');
+    cleaned = String(cleaned || '').replace(/^勾选用例[\s_\-\u2010-\u2015\u2212\uFE63\uFF0D]*/i, '');
     cleaned = cleaned.trim().replace(/^[_-]+|[_-]+$/g, '');
     return cleaned || 'case';
   }
@@ -503,6 +503,7 @@
     var successCount = 0;
     var failCount = 0;
     var duplicateNames = [];
+    var failDetails = [];
     var chain = Promise.resolve();
 
     s.files.forEach(function(file) {
@@ -512,7 +513,9 @@
             var items = parsed && parsed.items ? parsed.items : [];
             if (!items.length) {
               failCount += 1;
-              setStatus(dom.importStatus, '【' + (file && file.name ? file.name : '文件') + '】未解析到有效用例，已跳过', 'warn');
+              var emptyMsg = '【' + (file && file.name ? file.name : '文件') + '】未解析到有效用例，已跳过';
+              failDetails.push({ file: file && file.name ? file.name : '文件', reason: emptyMsg });
+              setStatus(dom.importStatus, emptyMsg, 'warn');
               return;
             }
             return apiClient.importCaseFile({
@@ -526,6 +529,7 @@
             }).catch(function(err) {
               failCount += 1;
               var msg = err && err.message ? err.message : '导入失败';
+              failDetails.push({ file: file && file.name ? file.name : '文件', reason: msg });
               if (msg.indexOf('同名') !== -1) {
                 duplicateNames.push(cleanCaseFileName(file.name));
               }
@@ -534,7 +538,9 @@
           })
           .catch(function(err) {
             failCount += 1;
-            setStatus(dom.importStatus, err && err.message ? err.message : '解析失败', 'err');
+            var msg = err && err.message ? err.message : '解析失败';
+            failDetails.push({ file: file && file.name ? file.name : '文件', reason: msg });
+            setStatus(dom.importStatus, msg, 'err');
           });
       });
     });
@@ -544,6 +550,19 @@
       if (duplicateNames.length) {
         var head = duplicateNames.slice(0, 3).join('、');
         msg += '；同名用例已存在：' + head + (duplicateNames.length > 3 ? '...' : '');
+      }
+      if (failDetails.length) {
+        var lines = [msg];
+        failDetails.slice(0, 3).forEach(function(item) {
+          if (!item) return;
+          var fname = item.file ? String(item.file) : '文件';
+          var reason = item.reason ? String(item.reason) : '失败';
+          lines.push(' - ' + fname + '：' + reason);
+        });
+        if (failDetails.length > 3) {
+          lines.push(' - 还有 ' + (failDetails.length - 3) + ' 个失败未展开');
+        }
+        msg = lines.join('\n');
       }
       setStatus(dom.importStatus, msg, failCount ? 'warn' : 'ok');
       setStatus(dom.status, msg, failCount ? 'warn' : 'ok');

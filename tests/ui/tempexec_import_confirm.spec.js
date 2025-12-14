@@ -35,7 +35,7 @@ test.describe('用例执行-导入需确认入库', () => {
       let clean = String(base || '').replace(/\.[^.]+$/, '');
       const tsPattern = /(_result)?_\d{8}(?:_?\d{6})?$/i;
       while (tsPattern.test(clean)) clean = clean.replace(tsPattern, '');
-      clean = clean.replace(/^勾选用例[-_ ]*/i, '').trim();
+      clean = clean.replace(/^勾选用例[\s_\-\u2010-\u2015\u2212\uFE63\uFF0D]*/i, '').trim();
       return clean || 'case';
     }
 
@@ -433,5 +433,215 @@ test.describe('用例执行-导入需确认入库', () => {
       timeout: 10000,
     }).toBe(1);
     expect(importCallCount).toBe(0);
+  });
+
+  test('文件名含全角空格前缀时，能匹配已入库用例文件并避免同名导入失败', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '导入前缀兼容', description: 'for tempexec import match' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    let importEndpointCalled = 0;
+    const now = new Date().toISOString();
+
+    const existingCaseFile = {
+      id: 100,
+      project_id: project.id,
+      version_id: versions[0].id,
+      file_name_clean: '全角空格测试',
+      importer_id: user.id,
+      importer_name: user.username,
+      imported_at: now,
+      updated_at: now,
+      last_updated_by: user.id,
+      last_updated_by_name: user.username,
+    };
+    const caseFiles = [existingCaseFile];
+    const caseItemsByFileId = {
+      100: [
+        {
+          id: 1000,
+          case_file_id: 100,
+          module: '登录',
+          title: '全角空格测试',
+          expected: 'ok',
+          priority: null,
+          precondition: null,
+          steps: null,
+          remark: null,
+          created_at: now,
+          updated_at: now,
+        },
+      ],
+    };
+
+    let nextExecSetId = 2000;
+    let nextExecCaseId = 3000;
+    const execSets = [];
+    const execCasesBySetId = {};
+
+    function normalizeCleanName(fileName) {
+      const base = String(fileName || '').split(/[\\/]/).pop();
+      let clean = String(base || '').replace(/\.[^.]+$/, '');
+      const tsPattern = /(_result)?_\d{8}(?:_?\d{6})?$/i;
+      while (tsPattern.test(clean)) clean = clean.replace(tsPattern, '');
+      clean = clean.replace(/^勾选用例[\s_\-\u2010-\u2015\u2212\uFE63\uFF0D]*/i, '').trim();
+      return clean || 'case';
+    }
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/case-files' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
+      }
+
+      if (pathName === '/api/case-files/import' && method === 'POST') {
+        importEndpointCalled += 1;
+        const payload = route.request().postDataJSON();
+        const cleanName = normalizeCleanName(payload.file_name || '');
+        if (
+          caseFiles.some(
+            (f) =>
+              f.file_name_clean === cleanName &&
+              String(f.version_id || '') === String(payload.version_id || '')
+          )
+        ) {
+          return respond(400, { detail: '同名用例已存在' });
+        }
+        return respond(500, { detail: 'unexpected import call' });
+      }
+
+      const itemsMatch = pathName.match(/^\/api\/case-files\/(\d+)\/items$/);
+      if (itemsMatch && method === 'GET') {
+        const fileId = Number(itemsMatch[1]);
+        return respond(200, caseItemsByFileId[fileId] || []);
+      }
+
+      if (pathName === '/api/exec/sets' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        const list = pid ? execSets.filter((s) => String(s.project_id) === String(pid)) : execSets.slice();
+        return respond(200, list.slice().sort((a, b) => b.id - a.id));
+      }
+
+      if (pathName === '/api/exec/sets/from-case-file' && method === 'POST') {
+        const payload = route.request().postDataJSON();
+        const caseFileId = Number(payload.case_file_id);
+        const cf = caseFiles.find((f) => f.id === caseFileId);
+        if (!cf) return respond(404, { detail: 'case file not found' });
+
+        let execSet = execSets.find((s) => s.case_file_id === caseFileId) || null;
+        const now2 = new Date().toISOString();
+        if (!execSet) {
+          execSet = {
+            id: nextExecSetId++,
+            project_id: cf.project_id,
+            version_id: cf.version_id,
+            case_file_id: cf.id,
+            name: cf.file_name_clean,
+            requirement: payload.requirement || '',
+            reuse_enabled: payload.reuse_enabled ? true : false,
+            reuse_presets: payload.reuse_presets || null,
+            status: 'active',
+            created_at: now2,
+            updated_at: now2,
+          };
+          execSets.push(execSet);
+        } else {
+          execSet.status = 'active';
+          execSet.updated_at = now2;
+        }
+        const items = caseItemsByFileId[caseFileId] || [];
+        const rebuilt = items.map((it, idx) => ({
+          id: nextExecCaseId++,
+          exec_set_id: execSet.id,
+          case_item_id: it.id,
+          module: it.module,
+          title: it.title,
+          expected: it.expected,
+          priority: it.priority,
+          precondition: it.precondition,
+          steps: it.steps,
+          actual_result: null,
+          defect_link: null,
+          reuse_details: [],
+          defect_links: [],
+          remark: it.remark || '',
+          status: '未执行',
+          order_no: idx + 1,
+          executor_id: user.id,
+          created_at: now2,
+          updated_at: now2,
+        }));
+        execCasesBySetId[execSet.id] = rebuilt;
+        return respond(200, execSet);
+      }
+
+      const execCasesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (execCasesMatch && method === 'GET') {
+        const setId = Number(execCasesMatch[1]);
+        return respond(200, execCasesBySetId[setId] || []);
+      }
+
+      return respond(200, []);
+    });
+
+    const fileBuf = Buffer.from(
+      JSON.stringify(
+        {
+          requirement: '需求A',
+          cases: [
+            { module: '登录', title: '全角空格测试', expected: 'ok', priority: 'P1', steps: '1', preconditions: '' },
+          ],
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+
+    await page.click('#openTempExecDrawerBtn');
+    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+
+    await page.setInputFiles('#tempExecInput', {
+      name: '勾选用例　全角空格测试_result_20251213121212.json',
+      mimeType: 'application/json',
+      buffer: fileBuf,
+    });
+
+    await page.selectOption('#tempExecImportProjectSelect', String(project.id));
+    await page.waitForFunction(() => {
+      var sel = document.getElementById('tempExecImportVersionSelect');
+      return sel && sel.options && sel.options.length > 1;
+    });
+    await page.selectOption('#tempExecImportVersionSelect', String(versions[0].id));
+
+    await expect(page.locator('#tempExecImportConfirmBtn')).toBeEnabled();
+    await page.click('#tempExecImportConfirmBtn');
+
+    await expect(page.locator('#tempExecStatus')).toContainText('入库完成：成功 1');
+    expect(importEndpointCalled).toBe(0);
   });
 });
