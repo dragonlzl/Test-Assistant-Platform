@@ -1474,17 +1474,19 @@
         <div class="zone-line"><strong>拖拽</strong><span>用例文件到此处，或点击选择</span></div>
         <p class="hint" id="caseLibraryImportFileHint">未选择文件</p>
       </label>
-      <div class="case-library-drawer-toolbar">
-        <div class="case-library-filters">
-          <label class="case-library-label" for="caseLibraryImportProjectSelect">项目</label>
-          <select id="caseLibraryImportProjectSelect"></select>
-          <label class="case-library-label" for="caseLibraryImportVersionSelect">版本</label>
-          <select id="caseLibraryImportVersionSelect" disabled></select>
-        </div>
-        <div class="case-library-drawer-actions">
-          <button class="primary" id="caseLibraryImportConfirmBtn" type="button" disabled>确认入库</button>
-        </div>
-      </div>
+	      <div class="case-library-drawer-toolbar">
+	        <div class="case-library-filters">
+	          <label class="case-library-label" for="caseLibraryImportProjectSelect">项目</label>
+	          <select id="caseLibraryImportProjectSelect"></select>
+	          <label class="case-library-label" for="caseLibraryImportVersionSelect">版本</label>
+	          <select id="caseLibraryImportVersionSelect" disabled></select>
+	        </div>
+	        <div class="case-library-drawer-actions">
+	          <button class="secondary" id="caseLibraryImportExcelTemplateBtn" type="button">Excel导入模板</button>
+	          <button class="secondary" id="caseLibraryImportXmindTemplateBtn" type="button">XMind导入模板</button>
+	          <button class="primary" id="caseLibraryImportConfirmBtn" type="button" disabled>确认入库</button>
+	        </div>
+	      </div>
       <p class="status" id="caseLibraryImportStatus"></p>
       <div class="actions user-form-actions">
         <button class="ghost-btn" data-drawer-close="caseLibraryImportDrawer" type="button">关闭</button>

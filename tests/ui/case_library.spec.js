@@ -690,6 +690,52 @@ test.describe('用例库页面（导入/编辑/转到执行）', () => {
     await expect(page.locator('#caseLibraryImportFileHint')).toContainText('未选择文件');
   });
 
+  test('导入模板下载：Excel 与 XMind', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '战魂铭人', description: '用于导入模板' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions`) return respond(200, versions);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return route.fallback();
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    await ensureCaseLibraryTab(page);
+
+    await page.click('#openCaseLibraryImportDrawerBtn');
+    await expect(page.locator('#caseLibraryImportDrawer')).toHaveClass(/open/);
+
+    await page.waitForFunction(() => {
+      const hasZip = typeof window.JSZip !== 'undefined' || typeof JSZip !== 'undefined';
+      const api = window.app && (window.app.xmindCoreApi || window.app.xmindCore);
+      const hasXmind = api && typeof api.buildXmindPackageFromCases === 'function';
+      return Boolean(hasZip && hasXmind);
+    }, {}, { timeout: 60000 });
+
+    const [excelDownload] = await Promise.all([
+      page.waitForEvent('download', { timeout: 20000 }),
+      page.click('#caseLibraryImportExcelTemplateBtn'),
+    ]);
+    expect(await excelDownload.suggestedFilename()).toBe('用例导入模板.xlsx');
+
+    const [xmindDownload] = await Promise.all([
+      page.waitForEvent('download', { timeout: 20000 }),
+      page.click('#caseLibraryImportXmindTemplateBtn'),
+    ]);
+    expect(await xmindDownload.suggestedFilename()).toBe('用例导入模板.xmind');
+  });
+
   test('编辑抽屉支持全选/全取消并删除所选用例文件（需二次确认）', async ({ page }) => {
     const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
     const project = { id: 1, name: '战魂铭人', description: '用于用例库删除' };

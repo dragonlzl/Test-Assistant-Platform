@@ -28,6 +28,8 @@
     importFileHint: document.getElementById('caseLibraryImportFileHint'),
     importProjectSelect: document.getElementById('caseLibraryImportProjectSelect'),
     importVersionSelect: document.getElementById('caseLibraryImportVersionSelect'),
+    importExcelTemplateBtn: document.getElementById('caseLibraryImportExcelTemplateBtn'),
+    importXmindTemplateBtn: document.getElementById('caseLibraryImportXmindTemplateBtn'),
     importConfirmBtn: document.getElementById('caseLibraryImportConfirmBtn'),
     importStatus: document.getElementById('caseLibraryImportStatus'),
 
@@ -2079,6 +2081,52 @@
     return zip.generateAsync({ type: 'blob', compression: 'STORE' });
   }
 
+  function downloadImportExcelTemplate() {
+    var downloadBlob = getDownloadBlob();
+    if (!downloadBlob) return;
+    setStatus(dom.importStatus, '生成 Excel 导入模板中...', '');
+    buildCaseLibraryExcelBlob([], '用例导入模板')
+      .then(function(blob) {
+        if (!blob) throw new Error('无导出内容');
+        downloadBlob(sanitizeDownloadName('用例导入模板', '.xlsx'), blob);
+        setStatus(dom.importStatus, '已导出 Excel 导入模板', 'ok');
+      })
+      .catch(function(err) {
+        setStatus(dom.importStatus, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+      });
+  }
+
+  function downloadImportXmindTemplate() {
+    var builder = getXmindBuilder();
+    if (!builder) {
+      setStatus(dom.importStatus, '缺少 XMind 导出依赖', 'err');
+      return;
+    }
+    var downloadBlob = getDownloadBlob();
+    if (!downloadBlob) return;
+    setStatus(dom.importStatus, '生成 XMind 导入模板中...', '');
+    var sample = [
+      {
+        module: '模块',
+        title: '用例标题',
+        priority: 'P1',
+        precondition: '前提条件（可空）',
+        steps: '1. 操作步骤（可空）',
+        expected: '预期结果',
+        remark: '',
+      },
+    ];
+    builder(sample, '用例导入模板', '')
+      .then(function(pkg) {
+        if (!pkg || !pkg.blob) throw new Error('无导出内容');
+        downloadBlob(sanitizeDownloadName('用例导入模板', '.xmind'), pkg.blob);
+        setStatus(dom.importStatus, '已导出 XMind 导入模板', 'ok');
+      })
+      .catch(function(err) {
+        setStatus(dom.importStatus, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+      });
+  }
+
 
   function applyEditorFilter() {
     var items = Array.isArray(state.editor.items) ? state.editor.items : [];
@@ -2906,6 +2954,12 @@
     }
     if (dom.importConfirmBtn) {
       dom.importConfirmBtn.addEventListener('click', confirmImportToDb);
+    }
+    if (dom.importExcelTemplateBtn) {
+      dom.importExcelTemplateBtn.addEventListener('click', downloadImportExcelTemplate);
+    }
+    if (dom.importXmindTemplateBtn) {
+      dom.importXmindTemplateBtn.addEventListener('click', downloadImportXmindTemplate);
     }
     if (dom.importDiffOverwriteBtn) {
       dom.importDiffOverwriteBtn.addEventListener('click', confirmOverwriteImportFromDiff);

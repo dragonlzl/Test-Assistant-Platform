@@ -874,6 +874,15 @@
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入\\ Excel`（通过）。  
 - 更新记录：无  
 
+- 功能名称：用例库导入页提供 Excel/XMind 模板下载  
+- 功能描述：用例库“导入用例”抽屉新增两个模板按钮：点击“Excel导入模板”会下载仅包含表头字段的空 `.xlsx`；点击“XMind导入模板”会下载一份可直接参考的 `.xmind` 模板（含示例条目）。  
+- 操作方式：进入“用例相关 → 用例库”→打开“导入用例”抽屉→点击“Excel导入模板”或“XMind导入模板”下载。  
+- 使用效果：导入格式更明确，减少手工准备模板的成本。  
+- 新增内容/接口/组件：导入抽屉模板按钮（`index.html`）；模板文件生成与下载逻辑（`scripts/modules/caseLibrary.js`）；UI 用例新增模板下载覆盖（`tests/ui/case_library.spec.js`）。  
+- 复用说明：Excel 模板复用现有 `buildCaseLibraryExcelBlob`；XMind 模板复用现有 `buildXmindPackageFromCases`；不引入新依赖。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入模板下载`（通过）。  
+- 更新记录：无  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  
