@@ -353,8 +353,13 @@
     }).then(handleResponse);
   }
 
-  function deleteVersion(projectId, versionId) {
-    return fetch('/api/projects/' + projectId + '/versions/' + versionId, {
+  function deleteVersion(projectId, versionId, transferToVersionName) {
+    var url = '/api/projects/' + projectId + '/versions/' + versionId;
+    var transferName = transferToVersionName ? String(transferToVersionName || '').trim() : '';
+    if (transferName) {
+      url += '?transfer_to=' + encodeURIComponent(transferName);
+    }
+    return fetch(url, {
       method: 'DELETE',
       headers: buildHeaders(),
     }).then(handleResponse);

@@ -573,6 +573,40 @@
           notifyProjectsUpdated('version-deleted', { project_id: pid, version_id: vid });
         });
       }).catch(function(err) {
+        var statusCode = err && typeof err.status === 'number' ? err.status : 0;
+        var payload = err && err.payload ? err.payload : null;
+        var payloadDetail = payload && payload.detail ? payload.detail : null;
+        var code = payload && payload.code ? String(payload.code) : '';
+        if (!code && payloadDetail && payloadDetail.code) code = String(payloadDetail.code);
+        if (statusCode === 409 && code === 'VERSION_IN_USE') {
+          var count = 0;
+          if (payload && typeof payload.case_file_count === 'number') count = payload.case_file_count;
+          if (!count && payloadDetail && typeof payloadDetail.case_file_count === 'number') count = payloadDetail.case_file_count;
+          var transferName = prompt('该版本下已有 ' + count + ' 份用例文件，请输入要转移到的版本名称（需已创建）');
+          if (transferName === null) return;
+          transferName = String(transferName || '').trim();
+          if (!transferName) {
+            setStatus(dom.projectStatus, '未输入转移版本，已取消删除', '');
+            return;
+          }
+          var project = state.projects.find(function(p) { return p && Number(p.id) === pid; });
+          var versions = project && Array.isArray(project.versions) ? project.versions : [];
+          var target = versions.find(function(v) { return v && String(v.name || '') === transferName; });
+          if (!target) {
+            setStatus(dom.projectStatus, '版本不存在，请先创建版本后再进行操作', 'err');
+            return;
+          }
+          if (!confirm('是否确认将该版本下的 ' + count + ' 份用例文件转移到版本“' + transferName + '”后删除？')) return;
+          api.deleteVersion(pid, vid, transferName).then(function() {
+            return loadProjects().then(function() {
+              notifyProjectsUpdated('version-deleted', { project_id: pid, version_id: vid });
+              setStatus(dom.projectStatus, '已转移用例并删除版本', 'ok');
+            });
+          }).catch(function(err2) {
+            setStatus(dom.projectStatus, err2 && err2.message ? err2.message : '删除版本失败', 'err');
+          });
+          return;
+        }
         setStatus(dom.projectStatus, err && err.message ? err.message : '删除版本失败', 'err');
       });
     }

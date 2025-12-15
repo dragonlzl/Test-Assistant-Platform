@@ -345,4 +345,69 @@ test.describe('项目管理列表与抽屉', () => {
     const emptyHint = page.locator('#projectTableBody .hint');
     await expect(emptyHint).toHaveText(/联系管理员指派项目/);
   });
+
+  test('删除版本：存在用例时要求输入转移版本并二次确认', async ({ page }) => {
+    const projects = [
+      {
+        id: 1,
+        name: 'Alpha',
+        description: '第一个项目',
+        created_at: '2024-10-01T12:00:00Z',
+        versions: [
+          { id: 11, name: 'v1.0' },
+          { id: 12, name: 'v1.1' },
+        ],
+      },
+    ];
+
+    await page.unroute('**/api/projects');
+    await page.route('**/api/projects', (route) => {
+      if (route.request().method().toUpperCase() !== 'GET') return route.continue();
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(projects) });
+    });
+
+    await page.route('**/api/projects/1/versions/11**', (route) => {
+      const req = route.request();
+      if (req.method().toUpperCase() !== 'DELETE') return route.continue();
+      const url = new URL(req.url());
+      const transferTo = url.searchParams.get('transfer_to') || '';
+      if (!transferTo) {
+        return route.fulfill({
+          status: 409,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            detail: {
+              detail: '版本下已存在用例，请先指定转移版本',
+              code: 'VERSION_IN_USE',
+              case_file_count: 3,
+            },
+          }),
+        });
+      }
+      projects[0].versions = projects[0].versions.filter((v) => v.id !== 11);
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ detail: '版本已删除' }) });
+    });
+
+    const dialogs = [];
+    page.on('dialog', async (dialog) => {
+      dialogs.push(dialog.type());
+      if (dialog.type() === 'prompt') return dialog.accept('v1.1');
+      return dialog.accept();
+    });
+
+    await page.click('.tab-group-btn[data-group="manage"]');
+    await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
+    await page.click('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
+    await expect(page.locator('#projectAdminHead')).toBeVisible();
+
+    const row = page.locator('#projectTableBody tr').first();
+    await expect(row).toContainText('Alpha');
+    await expect(row.locator('[data-action="delete-version"]').first()).toBeVisible();
+
+    await row.locator('[data-action="delete-version"]').first().click();
+    await expect(page.locator('#projectStatus')).toContainText('已转移用例并删除版本', { timeout: 10000 });
+    await expect(row).not.toContainText('v1.0');
+    expect(dialogs.filter((t) => t === 'confirm').length).toBeGreaterThanOrEqual(2);
+    expect(dialogs.filter((t) => t === 'prompt').length).toBeGreaterThanOrEqual(1);
+  });
 });

@@ -1,6 +1,7 @@
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
@@ -215,6 +216,9 @@ def create_version(
 def delete_version(
     project_id: int,
     version_id: int,
+    transfer_to: Optional[str] = Query(
+        None, description="删除前将用例库中该版本用例转移到指定版本名（同项目内）"
+    ),
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -242,6 +246,52 @@ def delete_version(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="无权限删除该项目版本"
             )
+
+    case_file_count = (
+        db.query(func.count(models.CaseFile.id))
+        .filter(
+            models.CaseFile.project_id == project_id,
+            models.CaseFile.version_id == version_id,
+        )
+        .scalar()
+        or 0
+    )
+    transfer_name = (transfer_to or "").strip()
+    moved_count = 0
+    transfer_version_id = None
+    if case_file_count > 0:
+        if not transfer_name:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "detail": "版本下已存在用例，请先指定转移版本",
+                    "code": "VERSION_IN_USE",
+                    "case_file_count": int(case_file_count),
+                },
+            )
+        target = (
+            db.query(models.ProjectVersion)
+            .filter(
+                models.ProjectVersion.project_id == project_id,
+                models.ProjectVersion.name == transfer_name,
+            )
+            .first()
+        )
+        if not target:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="版本不存在，请先创建版本后再操作")
+        if target.id == version_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="转移版本不能与当前版本相同")
+        moved_count = (
+            db.query(models.CaseFile)
+            .filter(
+                models.CaseFile.project_id == project_id,
+                models.CaseFile.version_id == version_id,
+            )
+            .update({models.CaseFile.version_id: target.id}, synchronize_session=False)
+            or 0
+        )
+        transfer_version_id = target.id
+
     db.delete(version)
     log_operation(
         db=db,
@@ -249,7 +299,13 @@ def delete_version(
         action="delete_version",
         target_type="project_version",
         target_id=version_id,
-        detail={"project_id": project_id},
+        detail={
+            "project_id": project_id,
+            "case_file_count": int(case_file_count),
+            "moved_case_files": int(moved_count),
+            "transfer_to_version_name": transfer_name or None,
+            "transfer_to_version_id": transfer_version_id,
+        },
     )
     db.commit()
     return {"detail": "版本已删除"}

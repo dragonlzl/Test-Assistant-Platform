@@ -957,6 +957,15 @@
 - 测试与验证：`node --check scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/files_layout.spec.js`（通过）。  
 - 更新记录：Playwright 本地静态服务绑定为 `127.0.0.1`（`tests/playwright.config.js`）；2025-12-14 执行视图进一步移除“导出本次执行JSON”按钮（`index.html`、`scripts/modules/tempexec.js`），避免误导用户使用旧导出能力。  
 
+- 功能名称：项目管理删除版本支持“转移用例后删除”  
+- 功能描述：在项目管理删除版本时，若用例库已存在该版本下的用例文件，则删除会被拦截并提示输入要转移到的目标版本（同项目内且必须已创建）；确认后会将该项目下对应版本的用例文件批量更新为目标版本，再删除旧版本；若目标版本不存在则提示需先创建。  
+- 操作方式：进入“管理 → 项目管理”→在目标项目版本标签处点击“删除”→若提示“版本下已存在用例”，输入要转移到的版本名称并二次确认→完成转移并删除版本。  
+- 使用效果：避免误删版本导致用例版本丢失（变为 NULL），支持平滑迁移用例到新版本后再清理旧版本。  
+- 新增内容/接口/组件：后端删除版本接口支持 `transfer_to` 参数并在版本占用时返回 `409 VERSION_IN_USE`（`backend/routers/projects.py`）；前端删除交互增加“输入转移版本 + 二次确认”流程（`scripts/modules/admin.js`）；API 客户端支持携带 `transfer_to`（`services/apiClient.js`）；UI/API 自动化用例覆盖（`tests/ui/project_admin_drawer.spec.js`、`tests/api/project_version_delete_transfer.spec.js`）。  
+- 复用说明：复用原 `DELETE /api/projects/{project_id}/versions/{version_id}` 路由与鉴权逻辑，仅增加可选转移分支，不影响无占用版本的直接删除。  
+- 测试与验证：`python3 -m compileall backend`（通过）；`node --check scripts/modules/admin.js services/apiClient.js`（通过）；`npm run test:ui -- tests/ui/project_admin_drawer.spec.js -g 删除版本`（通过）；`APP_DB_FILE=apitest.db python -m uvicorn backend.main:app --host 127.0.0.1 --port 9001` 后执行 `API_BASE_URL=http://127.0.0.1:9001 npx playwright test --config tests/api/playwright.api.config.js tests/api/project_version_delete_transfer.spec.js`（通过）。  
+- 更新记录：2025-12-15 修复后端返回 `409` 时 `code` 位于 `payload.detail.code` 导致前端未进入“输入转移版本”引导流程的问题，并补充 UI 用例覆盖真实返回结构（`scripts/modules/admin.js`、`tests/ui/project_admin_drawer.spec.js`）。  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  
