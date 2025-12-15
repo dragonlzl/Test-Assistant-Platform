@@ -1008,6 +1008,127 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryImportFileHint')).toContainText('未选择文件');
   });
 
+  test('用例库导入：文件内存在重复条目时打开重复校验抽屉并确认后去重入库', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '重复条目确认', description: 'for case library duplicate drawer' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    let nextCaseFileId = 100;
+    let nextCaseItemId = 1000;
+    const caseFiles = [];
+    const caseItemsByFileId = {};
+    let importCallCount = 0;
+    let lastImportItemsLen = -1;
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions`) return respond(200, versions);
+
+      if (pathName === '/api/case-files' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
+      }
+
+      if (pathName === '/api/case-files/import' && method === 'POST') {
+        importCallCount += 1;
+        const payload = route.request().postDataJSON();
+        lastImportItemsLen = Array.isArray(payload.items) ? payload.items.length : 0;
+        const now = new Date().toISOString();
+        const cleanName = String(payload.file_name || '').split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
+        const file = {
+          id: nextCaseFileId++,
+          project_id: payload.project_id,
+          version_id: payload.version_id,
+          file_name_clean: cleanName,
+          importer_id: user.id,
+          importer_name: user.username,
+          imported_at: now,
+          updated_at: now,
+          last_updated_by: user.id,
+          last_updated_by_name: user.username,
+        };
+        caseFiles.push(file);
+        caseItemsByFileId[file.id] = (payload.items || []).map((it) => ({
+          id: nextCaseItemId++,
+          case_file_id: file.id,
+          module: it.module,
+          title: it.title,
+          expected: it.expected,
+          priority: it.priority || null,
+          precondition: it.precondition || null,
+          steps: it.steps || null,
+          remark: it.remark || null,
+          created_at: now,
+          updated_at: now,
+        }));
+        return respond(201, file);
+      }
+
+      const itemsMatch = pathName.match(/^\/api\/case-files\/(\d+)\/items$/);
+      if (itemsMatch && method === 'GET') {
+        const fileId = Number(itemsMatch[1]);
+        return respond(200, caseItemsByFileId[fileId] || []);
+      }
+
+      return respond(200, []);
+    });
+
+    const rawCases = [
+      { module: '调整', title: '普通攻击', expected: '进入战斗后会佩戴嘴炮进行攻击', priority: 'P1', precondition: '战斗场景', steps: '观察普通攻击', remark: '' },
+      { module: '调整', title: '普通攻击', expected: '进入战斗后会佩戴嘴炮进行攻击', priority: 'P1', precondition: '非战斗场景', steps: '观察普通攻击', remark: '' },
+      { module: '调整', title: '攻击数值', expected: '符合预期', priority: 'P1', precondition: '已拥有小小教官', steps: '观察攻击频率', remark: '' },
+    ];
+    const fileBuf = Buffer.from(JSON.stringify(rawCases, null, 2), 'utf8');
+
+    const base = await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    await ensureCaseLibraryTab(page);
+    await openDrawer(page, '#openCaseLibraryImportDrawerBtn', '#caseLibraryImportDrawer');
+
+    await page.setInputFiles('#caseLibraryImportInput', {
+      name: '小小教官调整_20251209221805.xmind.json',
+      mimeType: 'application/json',
+      buffer: fileBuf,
+    });
+    await expect(page.locator('#caseLibraryImportFileHint')).toContainText('已选择');
+
+    await page.waitForFunction(() => {
+      const sel = document.getElementById('caseLibraryImportProjectSelect');
+      return sel && sel.options && sel.options.length > 1;
+    });
+    await page.selectOption('#caseLibraryImportProjectSelect', String(project.id));
+
+    await page.waitForFunction(() => {
+      const sel = document.getElementById('caseLibraryImportVersionSelect');
+      return sel && !sel.disabled && sel.options && sel.options.length > 1;
+    });
+    await page.selectOption('#caseLibraryImportVersionSelect', String(versions[0].id));
+
+    await expect(page.locator('#caseLibraryImportConfirmBtn')).toBeEnabled();
+    await page.click('#caseLibraryImportConfirmBtn');
+
+    await expect(page.locator('#caseLibraryImportDuplicateDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryImportDuplicateStatus')).toContainText('原 3 条');
+    await expect(page.locator('#caseLibraryImportDuplicateBody')).toContainText('普通攻击');
+    expect(importCallCount).toBe(0);
+
+    await page.click('#caseLibraryImportDuplicateConfirmBtn');
+    await expect(page.locator('#caseLibraryImportDuplicateDrawer')).not.toHaveClass(/open/);
+
+    await expect.poll(() => importCallCount).toBe(1);
+    expect(lastImportItemsLen).toBe(2);
+    await expect(page.locator('#caseLibraryImportStatus')).toContainText('导入完成', { timeout: 5000 });
+    expect(base).toContain('http');
+  });
+
   test('格式校验抽屉确认后同名冲突：应关闭校验抽屉并打开 diff 抽屉', async ({ page }) => {
     const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
     const project = { id: 1, name: '战魂铭人', description: '用于同名切换' };

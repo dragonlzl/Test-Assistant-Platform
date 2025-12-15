@@ -1002,6 +1002,33 @@
 - 测试与验证：`node --check scripts/core/tempexecCore.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
 - 更新记录：2025-12-15 执行页 DB 加载优化上线（`scripts/core/tempexecCore.js`）。  
 
+- 功能名称：执行页导入重复条目改为抽屉确认（自动去重）  
+- 功能描述：执行页“导入并入库”检测到导入文件内存在重复条目（按 模块+用例标题+预期结果 判重）时，不再使用 `window.confirm` 弹窗；改为打开“导入用例重复校验”抽屉，展示重复条目列表与去重前后数量，用户点击确认后继续入库并自动去重。  
+- 操作方式：进入“用例执行 → 用例导入&分配”→选择包含重复条目的文件→选择项目/版本→点击“确认入库”→在“导入用例重复校验”抽屉中点击“确认继续入库（自动去重）”。  
+- 使用效果：重复条目更可视化，可明确知道哪些条目会被移除，避免弹窗信息过载且便于后续修正源文件。  
+- 新增内容/接口/组件：新增重复校验抽屉（`index.html`）、表格样式（`style.css`）、执行页入库重复处理改为抽屉确认（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用既有“抽屉组件”（`scripts/base/drawer.js`）与执行页导入去重逻辑，仅替换提示交互，不改变去重规则与入库流程。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js`（通过）；`npm run test:ui -- tests/ui/tempexec_import_confirm.spec.js`（通过，新增覆盖“重复条目抽屉确认后去重入库”）。  
+- 更新记录：2025-12-15 执行页导入重复条目抽屉确认上线（`index.html`、`style.css`、`scripts/core/tempexecCore.js`、`tests/ui/tempexec_import_confirm.spec.js`）；2025-12-15 重复抽屉升级为“完整展示重复组内全部字段+行号”（`index.html`、`style.css`、`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：用例库导入增加“重复条目抽屉确认”（自动去重）  
+- 功能描述：用例库“导入用例”在确认入库前增加重复条目提示：当同一导入文件内存在重复条目（按 模块+用例标题+预期结果 判重）时，打开“导入用例重复校验”抽屉，完整展示重复组内每条用例的全部字段与行号，并标记“保留/移除”；用户确认后自动去重再入库（避免后端唯一约束导致的静默丢条）。  
+- 操作方式：进入“用例相关 → 用例库”→打开“导入用例”抽屉→选择包含重复条目的文件并选择项目/版本→点击“确认入库”→在“导入用例重复校验”抽屉点击“确认继续入库（自动去重）”。  
+- 使用效果：重复条目可视化且可追溯到行号，用户可自行判断并决定是否继续入库；确认后入库结果与后端去重一致，避免“少一条但无提示”的困惑。  
+- 新增内容/接口/组件：新增用例库重复校验抽屉（`index.html`）、表格样式（`style.css`）、用例库导入链路重复检测与抽屉确认（`scripts/modules/caseLibrary.js`）。  
+- 复用说明：复用既有导入解析、`buildCaseItemKey` 判重与抽屉组件，仅新增“重复校验抽屉”交互，不改变入库接口。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 重复条目`（通过，新增覆盖“重复条目抽屉确认后去重入库”）。  
+- 更新记录：2025-12-15 用例库导入重复条目抽屉确认上线（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`）。  
+
+- 功能名称：执行页导入项目/版本选择持久化  
+- 功能描述：在“用例执行 → 用例导入&分配”中，项目与版本选择会写入本地存储并在刷新后自动恢复，方便连续多次导入无需重复选择。  
+- 操作方式：进入“用例执行 → 用例导入&分配”→选择项目与版本→刷新页面→再次进入该区域，项目/版本会自动恢复到上次选择。  
+- 使用效果：多次导入操作更顺畅，减少重复选择项目/版本的成本。  
+- 新增内容/接口/组件：导入选择持久化读写与恢复（`scripts/modules/tempexec.js`）；UI 用例新增覆盖“刷新后保持导入选择”（`tests/ui/tempexec_import_confirm.spec.js`）。  
+- 复用说明：复用用例库导入的持久化思路（localStorage 保存最近选择），并复用现有项目/版本加载逻辑，不改变入库接口。  
+- 测试与验证：`node --check scripts/modules/tempexec.js tests/ui/tempexec_import_confirm.spec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_import_confirm.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行页导入项目/版本选择持久化上线（`scripts/modules/tempexec.js`）。  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  

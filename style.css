@@ -2311,6 +2311,72 @@ body {
   background: rgba(231, 76, 60, 0.14) !important;
 }
 
+.tempexec-dup-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.tempexec-dup-table td,
+.tempexec-dup-table th {
+  vertical-align: top;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tempexec-dup-table th:nth-child(1),
+.tempexec-dup-table td:nth-child(1) { width: 72px; }
+.tempexec-dup-table th:nth-child(2),
+.tempexec-dup-table td:nth-child(2) { width: 8em; }
+.tempexec-dup-table th:nth-child(3),
+.tempexec-dup-table td:nth-child(3) { width: 10em; }
+.tempexec-dup-table th:nth-child(4),
+.tempexec-dup-table td:nth-child(4) { width: 5em; }
+.tempexec-dup-table th:nth-child(5),
+.tempexec-dup-table td:nth-child(5) { width: 15em; }
+.tempexec-dup-table th:nth-child(6),
+.tempexec-dup-table td:nth-child(6) { width: 15em; }
+.tempexec-dup-table th:nth-child(7),
+.tempexec-dup-table td:nth-child(7) { width: 20em; }
+.tempexec-dup-table th:nth-child(8),
+.tempexec-dup-table td:nth-child(8) { width: 10em; }
+.tempexec-dup-table th:nth-child(9),
+.tempexec-dup-table td:nth-child(9) { width: 10em; }
+.tempexec-dup-table th:nth-child(10),
+.tempexec-dup-table td:nth-child(10) { width: 10em; }
+.tempexec-dup-table th:nth-child(11),
+.tempexec-dup-table td:nth-child(11) { width: 7em; }
+
+.case-library-dup-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.case-library-dup-table td,
+.case-library-dup-table th {
+  vertical-align: top;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.case-library-dup-table th:nth-child(1),
+.case-library-dup-table td:nth-child(1) { width: 72px; }
+.case-library-dup-table th:nth-child(2),
+.case-library-dup-table td:nth-child(2) { width: 8em; }
+.case-library-dup-table th:nth-child(3),
+.case-library-dup-table td:nth-child(3) { width: 10em; }
+.case-library-dup-table th:nth-child(4),
+.case-library-dup-table td:nth-child(4) { width: 5em; }
+.case-library-dup-table th:nth-child(5),
+.case-library-dup-table td:nth-child(5) { width: 15em; }
+.case-library-dup-table th:nth-child(6),
+.case-library-dup-table td:nth-child(6) { width: 15em; }
+.case-library-dup-table th:nth-child(7),
+.case-library-dup-table td:nth-child(7) { width: 20em; }
+.case-library-dup-table th:nth-child(8),
+.case-library-dup-table td:nth-child(8) { width: 10em; }
+.case-library-dup-table th:nth-child(9),
+.case-library-dup-table td:nth-child(9) { width: 7em; }
+
 .diff-pair {
   display: flex;
   flex-direction: column;

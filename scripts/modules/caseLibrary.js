@@ -43,6 +43,10 @@
 	    importInvalidStatus: document.getElementById('caseLibraryImportInvalidStatus'),
 	    importInvalidBody: document.getElementById('caseLibraryImportInvalidBody'),
 	    importInvalidConfirmBtn: document.getElementById('caseLibraryImportInvalidConfirmBtn'),
+      importDuplicateTitle: document.getElementById('caseLibraryImportDuplicateTitle'),
+      importDuplicateStatus: document.getElementById('caseLibraryImportDuplicateStatus'),
+      importDuplicateBody: document.getElementById('caseLibraryImportDuplicateBody'),
+      importDuplicateConfirmBtn: document.getElementById('caseLibraryImportDuplicateConfirmBtn'),
 
     editDrawerProjectSelect: document.getElementById('caseLibraryEditProjectSelect'),
     editDrawerVersionSelect: document.getElementById('caseLibraryEditVersionSelect'),
@@ -680,6 +684,133 @@
 	      setStatus(dom.importInvalidStatus, '仍有 ' + invalid.length + ' 条用例必填字段为空，请修改后再确认', 'warn');
 	      return;
 	    }
+
+      var dup = buildDuplicateGroupsForImport(items);
+      if (dup.duplicateCount > 0) {
+        confirmImportDuplicatesByDrawer({
+          fileName: fileName,
+          total: items.length,
+          uniqueCount: dup.uniqueItems.length,
+          duplicateCount: dup.duplicateCount,
+          rows: dup.rows,
+        }).then(function(ok) {
+          if (!ok) {
+            setStatus(dom.importInvalidStatus, '已取消入库（包含重复条目）', 'warn');
+            return;
+          }
+          items = dup.uniqueItems;
+          state.importInvalid.items = items;
+
+          state.importInvalid.loading = true;
+          syncImportInvalidControls();
+          setStatus(dom.importInvalidStatus, '校验通过，入库中...', '');
+
+          apiClient.importCaseFile({
+            project_id: projectId,
+            version_id: versionId,
+            file_name: fileName,
+            source: state.importInvalid.source || extFromFileName(fileName),
+            items: sanitizeImportItemsForApi(items),
+          }).then(function() {
+            var msg = '入库成功：' + cleanCaseFileName(fileName);
+            if (structural.length) msg += '（已跳过字段层级不足 ' + structural.length + ' 条）';
+            setStatus(dom.importInvalidStatus, msg, 'ok');
+            setStatus(dom.importStatus, msg, 'ok');
+            setStatus(dom.status, msg, 'ok');
+            refreshCaseFileListsByProject(projectId);
+
+            if (importInvalidDrawerInstance && typeof importInvalidDrawerInstance.close === 'function') {
+              importInvalidDrawerInstance.close();
+            }
+
+            // 成功后从导入列表中移除该文件，避免重复导入；若已无文件则清空 input。
+            var file = state.importInvalid.file;
+            if (file && state.importDrawer && Array.isArray(state.importDrawer.files)) {
+              state.importDrawer.files = state.importDrawer.files.filter(function(f) { return f !== file; });
+            }
+            renderImportFileHint();
+            if (dom.importInput && (!state.importDrawer.files || !state.importDrawer.files.length)) {
+              try {
+                dom.importInput.value = '';
+              } catch (e) {
+                // ignore
+              }
+            }
+            syncImportConfirmEnabled();
+          }).catch(function(err) {
+            var msg = err && err.message ? err.message : '导入失败';
+            setStatus(dom.importInvalidStatus, '入库失败：' + msg, 'err');
+            setStatus(dom.importStatus, '入库失败：' + msg, 'err');
+            if (msg.indexOf('同名') !== -1) {
+              // 同名冲突：复用现有差异对比抽屉（保持导入数据为已修正内容）。
+              if (importInvalidDrawerInstance && typeof importInvalidDrawerInstance.close === 'function') {
+                importInvalidDrawerInstance.close();
+              }
+              var importedCleanName = cleanCaseFileName(fileName);
+              var errPayload = err && err.payload ? err.payload : null;
+              var matchedCaseFileId = errPayload && errPayload.existing_case_file_id ? errPayload.existing_case_file_id : null;
+              var matchedCleanName = errPayload && errPayload.existing_file_name_clean ? String(errPayload.existing_file_name_clean) : importedCleanName;
+              var matchedVersionId = errPayload && (errPayload.existing_version_id || errPayload.existing_version_id === 0) ? errPayload.existing_version_id : null;
+              var cleanName = matchedCleanName || importedCleanName;
+              var source = state.importInvalid.source || extFromFileName(fileName);
+              openImportDiffDrawerLoading({
+                fileName: fileName,
+                cleanName: cleanName,
+                importedCleanName: importedCleanName,
+                projectId: projectId,
+                importVersionId: versionId,
+                source: source,
+              });
+              (matchedCaseFileId
+                ? Promise.all([apiClient.listCaseItems(matchedCaseFileId), loadVersions(projectId)]).then(function(res) {
+                  var dbItems = Array.isArray(res && res[0]) ? res[0] : [];
+                  openImportDiffDrawer({
+                    fileName: fileName,
+                    cleanName: cleanName,
+                    importedCleanName: importedCleanName,
+                    projectId: projectId,
+                    importVersionId: versionId,
+                    dbVersionId: matchedVersionId,
+                    importItems: items,
+                    dbItems: dbItems || [],
+                    source: source,
+                  });
+                })
+                : Promise.all([apiClient.listCaseFiles(projectId), loadVersions(projectId)])
+                    .then(function(res) {
+                      var files = Array.isArray(res && res[0]) ? res[0] : [];
+                      var list = Array.isArray(files) ? files : [];
+                      var existing = list.find(function(cf) {
+                        return cf && String(cf.file_name_clean || '') === String(cleanName || '');
+                      });
+                      if (!existing) throw new Error('未找到库中同名用例：' + cleanName);
+                      return apiClient.listCaseItems(existing.id).then(function(dbItems) {
+                        openImportDiffDrawer({
+                          fileName: fileName,
+                          cleanName: cleanName,
+                          importedCleanName: importedCleanName,
+                          projectId: projectId,
+                          importVersionId: versionId,
+                          dbVersionId: existing.version_id || null,
+                          importItems: items,
+                          dbItems: dbItems || [],
+                          source: source,
+                        });
+                      });
+                    })
+              )
+                .catch(function(e) {
+                  setStatus(dom.importDiffStatus, (e && e.message ? e.message : '打开差异对比失败'), 'err');
+                  setStatus(dom.importInvalidStatus, '入库失败：' + msg, 'err');
+                });
+            }
+          }).finally(function() {
+            state.importInvalid.loading = false;
+            syncImportInvalidControls();
+          });
+        });
+        return;
+      }
 
 	    state.importInvalid.loading = true;
 	    syncImportInvalidControls();
@@ -1651,6 +1782,7 @@
         preconditions: preconditions,
         steps: steps,
         expected: expected,
+        _sourceLine: r + 1,
       });
     }
     return buildImportItems(out);
@@ -1681,7 +1813,7 @@
 	    }
 
 	    return list
-	      .map(function(item) {
+	      .map(function(item, idx) {
 	        if (!item || typeof item !== 'object') return null;
 	        var module = normalizeDashAsEmpty(item.module || item.module_name || item['模块'] || '');
 	        var title = normalizeDashAsEmpty(item.title || item.case_title || item['用例标题'] || '');
@@ -1692,6 +1824,8 @@
 	        var remark = normalizeDashAsEmpty(item.remark || '');
 	        var any = String(module || '') + String(title || '') + String(priority || '') + String(precondition || '') + String(steps || '') + String(expected || '') + String(remark || '');
 	        if (!any.trim()) return null;
+          var sourceLine = item._sourceLine;
+          if (!isFinite(Number(sourceLine)) || Number(sourceLine) <= 0) sourceLine = idx + 1;
 	        return {
 	          module: module,
 	          title: title,
@@ -1700,7 +1834,7 @@
 	          precondition: precondition || '',
 	          steps: steps || '',
 	          remark: remark || null,
-	          _sourceLine: item._sourceLine || null,
+	          _sourceLine: sourceLine,
 	        };
 	      })
 		      .filter(Boolean);
@@ -1872,6 +2006,141 @@
     return restoreImportDrawerFromPersistedState();
   }
 
+  var importDuplicateDrawerInstance = null;
+  var importDuplicateResolve = null;
+  var importDuplicateResolved = false;
+  var importDuplicateConfirmBound = false;
+
+  function renderImportDuplicateDrawer(payload) {
+    var titleEl = dom.importDuplicateTitle;
+    var statusEl = dom.importDuplicateStatus;
+    var bodyEl = dom.importDuplicateBody;
+    var confirmBtn = dom.importDuplicateConfirmBtn;
+
+    var fileName = payload && payload.fileName ? String(payload.fileName) : '用例';
+    var total = payload && Number.isFinite(Number(payload.total)) ? Number(payload.total) : 0;
+    var uniqueCount = payload && Number.isFinite(Number(payload.uniqueCount)) ? Number(payload.uniqueCount) : 0;
+    var duplicateCount = payload && Number.isFinite(Number(payload.duplicateCount)) ? Number(payload.duplicateCount) : 0;
+    var rows = payload && Array.isArray(payload.rows) ? payload.rows : [];
+
+    if (titleEl) titleEl.textContent = '导入用例重复校验：' + cleanCaseFileName(fileName);
+    if (statusEl) {
+      setStatus(statusEl, '检测到重复条目 ' + duplicateCount + ' 条，将自动去重：原 ' + total + ' 条 → 去重后 ' + uniqueCount + ' 条。', 'warn');
+    }
+    if (confirmBtn) confirmBtn.disabled = !duplicateCount;
+
+    if (!bodyEl) return;
+    if (!rows.length) {
+      bodyEl.innerHTML = '<tr><td colspan="9"><p class="hint">暂无重复条目</p></td></tr>';
+      return;
+    }
+    bodyEl.innerHTML = rows.map(function(entry) {
+      var item = entry && entry.item ? entry.item : null;
+      var line = entry && Number.isFinite(Number(entry.line)) ? Number(entry.line) : 0;
+      var keep = entry && entry.keep ? true : false;
+      var action = keep ? '保留' : '移除';
+
+      function toHtml(val) {
+        var text = val === null || val === undefined ? '' : String(val);
+        return escapeHtml(text).replace(/\n/g, '<br>');
+      }
+
+      return (
+        '<tr>' +
+          '<td>' + (line ? String(line) : '-') + '</td>' +
+          '<td>' + toHtml(item && item.module ? item.module : '') + '</td>' +
+          '<td>' + toHtml(item && item.title ? item.title : '') + '</td>' +
+          '<td>' + toHtml(item && item.priority ? item.priority : '') + '</td>' +
+          '<td>' + toHtml(item && item.precondition ? item.precondition : '') + '</td>' +
+          '<td>' + toHtml(item && item.steps ? item.steps : '') + '</td>' +
+          '<td>' + toHtml(item && item.expected ? item.expected : '') + '</td>' +
+          '<td>' + toHtml(item && item.remark ? item.remark : '') + '</td>' +
+          '<td>' + escapeHtml(action) + '</td>' +
+        '</tr>'
+      );
+    }).join('');
+  }
+
+  function ensureImportDuplicateDrawer() {
+    if (importDuplicateDrawerInstance) return importDuplicateDrawerInstance;
+    importDuplicateDrawerInstance = ensureDrawer('caseLibraryImportDuplicateDrawer', [], null, function() {
+      if (importDuplicateResolved) return;
+      if (typeof importDuplicateResolve === 'function') {
+        importDuplicateResolved = true;
+        try { importDuplicateResolve(false); } catch (e) {}
+        importDuplicateResolve = null;
+      }
+    });
+    if (!importDuplicateConfirmBound) {
+      importDuplicateConfirmBound = true;
+      if (dom.importDuplicateConfirmBtn) {
+        dom.importDuplicateConfirmBtn.addEventListener('click', function() {
+          if (importDuplicateResolved) return;
+          if (typeof importDuplicateResolve !== 'function') return;
+          importDuplicateResolved = true;
+          var resolve = importDuplicateResolve;
+          importDuplicateResolve = null;
+          try { resolve(true); } catch (e) {}
+          if (importDuplicateDrawerInstance && typeof importDuplicateDrawerInstance.close === 'function') {
+            importDuplicateDrawerInstance.close();
+          }
+        });
+      }
+    }
+    return importDuplicateDrawerInstance;
+  }
+
+  function confirmImportDuplicatesByDrawer(payload) {
+    var drawer = ensureImportDuplicateDrawer();
+    if (!drawer) return Promise.resolve(false);
+    importDuplicateResolved = false;
+    renderImportDuplicateDrawer(payload);
+    if (typeof drawer.open === 'function') drawer.open();
+    return new Promise(function(resolve) {
+      importDuplicateResolve = resolve;
+    });
+  }
+
+  function buildDuplicateGroupsForImport(items) {
+    var list = Array.isArray(items) ? items : [];
+    var seen = {};
+    var groups = {};
+    var unique = [];
+
+    list.forEach(function(it, idx) {
+      if (!it) return;
+      var key = buildCaseItemKey(it);
+      if (!key) return;
+      if (!groups[key]) groups[key] = [];
+      var line = it && Number.isFinite(Number(it._sourceLine)) ? Number(it._sourceLine) : (idx + 1);
+      groups[key].push({ line: line, item: it });
+
+      if (seen[key]) return;
+      seen[key] = true;
+      unique.push(it);
+    });
+
+    var rows = [];
+    Object.keys(groups).forEach(function(k) {
+      var arr = groups[k];
+      if (!arr || arr.length <= 1) return;
+      arr.forEach(function(entry, idx) {
+        rows.push({
+          line: entry && entry.line ? entry.line : 0,
+          item: entry && entry.item ? entry.item : null,
+          keep: idx === 0,
+        });
+      });
+    });
+    rows.sort(function(a, b) {
+      var la = a && a.line ? Number(a.line) : 0;
+      var lb = b && b.line ? Number(b.line) : 0;
+      return la - lb;
+    });
+    var duplicateCount = list.length - unique.length;
+    return { uniqueItems: unique, duplicateCount: duplicateCount, rows: rows };
+  }
+
   function handleImportFiles(files) {
     state.importDrawer.files = Array.from(files || []).filter(Boolean);
     renderImportFileHint();
@@ -1974,6 +2243,106 @@
 	              }
 	              return;
 	            }
+              var dup = buildDuplicateGroupsForImport(items);
+              if (dup.duplicateCount > 0) {
+                return confirmImportDuplicatesByDrawer({
+                  fileName: file.name,
+                  total: items.length,
+                  uniqueCount: dup.uniqueItems.length,
+                  duplicateCount: dup.duplicateCount,
+                  rows: dup.rows,
+                }).then(function(ok) {
+                  if (!ok) {
+                    failCount += 1;
+                    var cancelMsg = '已取消导入（包含重复条目）：' + (file && file.name ? file.name : '文件');
+                    failDetails.push({ file: file && file.name ? file.name : '文件', reason: cancelMsg });
+                    setStatus(dom.importStatus, cancelMsg, 'warn');
+                    return;
+                  }
+                  items = dup.uniqueItems;
+                  return apiClient.importCaseFile({
+                    project_id: s.projectId,
+                    version_id: s.versionId,
+                    file_name: file.name,
+                    source: file.type || extFromFileName(file.name),
+                    items: sanitizeImportItemsForApi(items),
+                  }).then(function() {
+                    successCount += 1;
+                  }).catch(function(err) {
+                    failCount += 1;
+                    var msg = err && err.message ? err.message : '导入失败';
+                    var errPayload = err && err.payload ? err.payload : null;
+                    failDetails.push({ file: file && file.name ? file.name : '文件', reason: msg });
+                    if (msg.indexOf('同名') !== -1) {
+                      var importedCleanName = cleanCaseFileName(file.name);
+                      var matchedCaseFileId = errPayload && errPayload.existing_case_file_id ? errPayload.existing_case_file_id : null;
+                      var matchedCleanName = errPayload && errPayload.existing_file_name_clean ? String(errPayload.existing_file_name_clean) : importedCleanName;
+                      var matchedVersionId = errPayload && (errPayload.existing_version_id || errPayload.existing_version_id === 0) ? errPayload.existing_version_id : null;
+                      duplicateNames.push(matchedCleanName || importedCleanName);
+                      if (matchedCleanName && importedCleanName && matchedCleanName !== importedCleanName) {
+                        msg = msg + '（匹配：' + matchedCleanName + '）';
+                      }
+                      if (!diffOpened) {
+                        diffOpened = true;
+                        var cleanName = matchedCleanName || importedCleanName;
+                        var source = file.type || extFromFileName(file.name);
+                        openImportDiffDrawerLoading({
+                          fileName: file.name,
+                          cleanName: cleanName,
+                          importedCleanName: importedCleanName,
+                          projectId: s.projectId,
+                          importVersionId: s.versionId,
+                          source: source,
+                        });
+                        // 拉取库中同名用例内容用于差异对比。
+                        (matchedCaseFileId
+                          ? Promise.all([apiClient.listCaseItems(matchedCaseFileId), loadVersions(s.projectId)]).then(function(res) {
+                            var dbItems = Array.isArray(res && res[0]) ? res[0] : [];
+                            openImportDiffDrawer({
+                              fileName: file.name,
+                              cleanName: cleanName,
+                              importedCleanName: importedCleanName,
+                              projectId: s.projectId,
+                              importVersionId: s.versionId,
+                              dbVersionId: matchedVersionId,
+                              importItems: items,
+                              dbItems: dbItems || [],
+                              source: source,
+                            });
+                          })
+                          : Promise.all([apiClient.listCaseFiles(s.projectId), loadVersions(s.projectId)])
+                              .then(function(res) {
+                                var files = Array.isArray(res && res[0]) ? res[0] : [];
+                                var list = Array.isArray(files) ? files : [];
+                                var existing = list.find(function(cf) {
+                                  return cf && String(cf.file_name_clean || '') === String(cleanName || '');
+                                });
+                                if (!existing) throw new Error('未找到库中同名用例：' + cleanName);
+                                return apiClient.listCaseItems(existing.id).then(function(dbItems) {
+                                  openImportDiffDrawer({
+                                    fileName: file.name,
+                                    cleanName: cleanName,
+                                    importedCleanName: importedCleanName,
+                                    projectId: s.projectId,
+                                    importVersionId: s.versionId,
+                                    dbVersionId: existing.version_id || null,
+                                    importItems: items,
+                                    dbItems: dbItems || [],
+                                    source: source,
+                                  });
+                                });
+                              })
+                        )
+                          .catch(function(e) {
+                            setStatus(dom.importDiffStatus, (e && e.message ? e.message : '打开差异对比失败'), 'err');
+                            setStatus(dom.importStatus, (e && e.message ? e.message : '打开差异对比失败'), 'err');
+                          });
+                      }
+                    }
+                    setStatus(dom.importStatus, msg, 'err');
+                  });
+                });
+              }
 	            return apiClient.importCaseFile({
 	              project_id: s.projectId,
 	              version_id: s.versionId,
@@ -4197,7 +4566,8 @@
         var persisted = readEditDrawerPersistedState();
         var userId = getCurrentUserId();
         var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
-        if (shouldOpen && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
+        var hasEditor = Boolean(state.editor && state.editor.caseFile && state.editor.caseFile.id);
+        if (shouldOpen && !hasEditor && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
           editDrawerInstance.open();
         }
       });
@@ -4212,7 +4582,8 @@
           var persisted = readEditDrawerPersistedState();
           var userId = getCurrentUserId();
           var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
-          if (shouldOpen && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
+          var hasEditor = Boolean(state.editor && state.editor.caseFile && state.editor.caseFile.id);
+          if (shouldOpen && !hasEditor && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
             editDrawerInstance.open();
           }
         });
@@ -4304,7 +4675,8 @@
         var persisted = readEditDrawerPersistedState();
         var userId = getCurrentUserId();
         var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
-        if (shouldOpen && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
+        var hasEditor = Boolean(state.editor && state.editor.caseFile && state.editor.caseFile.id);
+        if (shouldOpen && !hasEditor && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
           editDrawerInstance.open();
         }
       });

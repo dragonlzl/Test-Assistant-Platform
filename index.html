@@ -1325,6 +1325,45 @@
 </div>
 </div>
 </div>
+<div class="drawer" id="tempExecImportDuplicateDrawer" data-tab-section="tempexec">
+  <div class="drawer-mask" data-drawer-close="tempExecImportDuplicateDrawer"></div>
+  <div class="drawer-panel drawer-panel-wide">
+    <div class="drawer-header">
+      <h3 id="tempExecImportDuplicateTitle">导入用例重复校验</h3>
+      <button class="link-toggle" data-drawer-close="tempExecImportDuplicateDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">检测到导入文件内存在重复条目（按 模块+用例标题+预期结果 判重），数据库不支持重复条目，将在确认后自动去重。</p>
+      <p class="status" id="tempExecImportDuplicateStatus"></p>
+      <div class="admin-table-wrapper">
+        <table class="admin-table tempexec-dup-table">
+          <thead>
+            <tr>
+              <th>行号</th>
+              <th>模块</th>
+              <th>用例标题</th>
+              <th>优先级</th>
+              <th>前提条件</th>
+              <th>操作步骤</th>
+              <th>预期结果</th>
+              <th>实际结果</th>
+              <th>备注</th>
+              <th>缺陷链接</th>
+              <th>处理</th>
+            </tr>
+          </thead>
+          <tbody id="tempExecImportDuplicateBody">
+            <tr><td colspan="11"><p class="hint">暂无数据</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="primary" id="tempExecImportDuplicateConfirmBtn" type="button">确认继续入库（自动去重）</button>
+        <button class="ghost-btn" data-drawer-close="tempExecImportDuplicateDrawer" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
 <section class="card hidden" data-section-id="tempexec-view" data-tab-section="tempexec">
 <h2>执行视图</h2>
 <div class="card-body">
@@ -1614,7 +1653,7 @@
     </div>
 	  </div>
 	</div>
-	<div class="drawer" id="caseLibraryImportInvalidDrawer" data-tab-section="case-library">
+<div class="drawer" id="caseLibraryImportInvalidDrawer" data-tab-section="case-library">
 	  <div class="drawer-mask" data-drawer-close="caseLibraryImportInvalidDrawer"></div>
 	  <div class="drawer-panel drawer-panel-wide">
 	    <div class="drawer-header">
@@ -1696,6 +1735,43 @@
       </div>
       <div class="actions user-form-actions">
         <button class="ghost-btn" data-drawer-close="caseLibraryEditDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseLibraryImportDuplicateDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryImportDuplicateDrawer"></div>
+  <div class="drawer-panel drawer-panel-wide">
+    <div class="drawer-header">
+      <h3 id="caseLibraryImportDuplicateTitle">导入用例重复校验</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryImportDuplicateDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">检测到导入文件内存在重复条目（按 模块+用例标题+预期结果 判重），数据库不支持重复条目，将在确认后自动去重。</p>
+      <p class="status" id="caseLibraryImportDuplicateStatus"></p>
+      <div class="admin-table-wrapper">
+        <table class="admin-table case-library-dup-table">
+          <thead>
+            <tr>
+              <th>行号</th>
+              <th>模块</th>
+              <th>用例标题</th>
+              <th>优先级</th>
+              <th>前提条件</th>
+              <th>操作步骤</th>
+              <th>预期结果</th>
+              <th>备注</th>
+              <th>处理</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryImportDuplicateBody">
+            <tr><td colspan="9"><p class="hint">暂无数据</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="primary" id="caseLibraryImportDuplicateConfirmBtn" type="button">确认继续入库（自动去重）</button>
+        <button class="ghost-btn" data-drawer-close="caseLibraryImportDuplicateDrawer" type="button">取消</button>
       </div>
     </div>
   </div>

@@ -1052,6 +1052,65 @@
         });
     }
 
+    var importPersistKey = 'tap-tempexec-import-drawer';
+
+    function getCurrentUserId() {
+      var globalState = window.app && window.app.state ? window.app.state : null;
+      var user = globalState && globalState.currentUser ? globalState.currentUser : null;
+      var id = user && user.id !== undefined && user.id !== null ? user.id : '';
+      if (id === 0 || String(id) === '0') return '';
+      return id ? String(id) : '';
+    }
+
+    function readImportPersistedState() {
+      try {
+        var raw = localStorage.getItem(importPersistKey);
+        if (!raw) return null;
+        var parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function writeImportPersistedState(payload) {
+      try {
+        localStorage.setItem(importPersistKey, JSON.stringify(payload));
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function persistImportSelection(projectId, versionId) {
+      var userId = getCurrentUserId();
+      var payload = {
+        user_id: userId,
+        project_id: projectId ? String(projectId) : '',
+        version_id: versionId ? String(versionId) : '',
+        saved_at: Date.now(),
+      };
+      writeImportPersistedState(payload);
+    }
+
+    function applyImportPersistedSelection(projects) {
+      if (!isDbImportEnabled()) return false;
+      if (importState && importState.projectId) return false;
+      var persisted = readImportPersistedState();
+      if (!persisted) return false;
+      var userId = getCurrentUserId();
+      // 有 user_id 时按用户隔离；无 user_id（极少数场景）则允许全局复用。
+      if (persisted.user_id && userId && String(persisted.user_id) !== String(userId)) return false;
+
+      var pid = persisted.project_id ? String(persisted.project_id) : '';
+      if (!pid) return false;
+      var exists = Array.isArray(projects) && projects.some(function(p) { return p && String(p.id) === pid; });
+      if (!exists) return false;
+      importState.projectId = pid;
+      importState.versionId = persisted.version_id ? String(persisted.version_id) : '';
+      return true;
+    }
+
     function invalidateImportProjectsCache() {
       importState.projectsLoaded = false;
       importState.versionsByProject = {};
@@ -1152,8 +1211,43 @@
       apiClient
         .listProjects()
         .then(function(list) {
-          renderProjectOptions(list || []);
+          var projects = Array.isArray(list) ? list : [];
+          applyImportPersistedSelection(projects);
+          renderProjectOptions(projects);
           setStatus(tempExecStatus, '', '');
+          // 若已恢复 projectId，则自动加载版本并尝试恢复 versionId。
+          var pid = importState.projectId;
+          if (!pid) {
+            syncImportConfirmState();
+            return;
+          }
+          if (importState.versionsByProject[pid]) {
+            renderVersionOptions(pid, importState.versionsByProject[pid]);
+            // 若版本不存在则清空
+            if (importState.versionId) {
+              var ok = importState.versionsByProject[pid].some(function(v) { return v && String(v.id) === String(importState.versionId); });
+              if (!ok) importState.versionId = '';
+            }
+            renderVersionOptions(pid, importState.versionsByProject[pid]);
+            syncImportConfirmState();
+            return;
+          }
+          apiClient
+            .listProjectVersions(pid)
+            .then(function(versions) {
+              importState.versionsByProject[pid] = Array.isArray(versions) ? versions : [];
+              if (importState.versionId) {
+                var ok = importState.versionsByProject[pid].some(function(v) { return v && String(v.id) === String(importState.versionId); });
+                if (!ok) importState.versionId = '';
+              }
+              renderVersionOptions(pid, importState.versionsByProject[pid]);
+              syncImportConfirmState();
+            })
+            .catch(function() {
+              importState.versionId = '';
+              renderVersionOptions(pid, []);
+              syncImportConfirmState();
+            });
         })
         .catch(function(err) {
           importState.projectsLoaded = false;
@@ -1165,6 +1259,7 @@
       if (!isDbImportEnabled()) return;
       importState.projectId = tempExecImportProjectSelect ? String(tempExecImportProjectSelect.value || '') : '';
       importState.versionId = '';
+      persistImportSelection(importState.projectId, '');
       if (tempExecImportVersionSelect) {
         tempExecImportVersionSelect.disabled = true;
         tempExecImportVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
@@ -1196,6 +1291,7 @@
     function handleImportVersionChange() {
       if (!isDbImportEnabled()) return;
       importState.versionId = tempExecImportVersionSelect ? String(tempExecImportVersionSelect.value || '') : '';
+      persistImportSelection(importState.projectId, importState.versionId);
       syncImportConfirmState();
     }
 

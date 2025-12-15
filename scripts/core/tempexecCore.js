@@ -235,6 +235,133 @@
         client.saveSettings('user', [{ key: 'tempexec_ui_v1', value_json: payload }]).catch(function() {});
       }, 500);
     }
+
+    var tempExecImportDuplicateDrawer = null;
+    var tempExecImportDuplicateResolve = null;
+    var tempExecImportDuplicateResolved = false;
+    var tempExecImportDuplicateConfirmBound = false;
+
+    function ensureTempExecImportDuplicateDrawer() {
+      if (tempExecImportDuplicateDrawer) return tempExecImportDuplicateDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      tempExecImportDuplicateDrawer = window.app.drawer.createDrawer({
+        drawerId: 'tempExecImportDuplicateDrawer',
+        onClose: function() {
+          if (tempExecImportDuplicateResolved) return;
+          if (typeof tempExecImportDuplicateResolve === 'function') {
+            tempExecImportDuplicateResolved = true;
+            try { tempExecImportDuplicateResolve(false); } catch (e) {}
+            tempExecImportDuplicateResolve = null;
+          }
+        },
+      });
+      if (!tempExecImportDuplicateConfirmBound) {
+        tempExecImportDuplicateConfirmBound = true;
+        var confirmBtn = document.getElementById('tempExecImportDuplicateConfirmBtn');
+        if (confirmBtn && typeof confirmBtn.addEventListener === 'function') {
+          confirmBtn.addEventListener('click', function() {
+            if (tempExecImportDuplicateResolved) return;
+            if (typeof tempExecImportDuplicateResolve !== 'function') return;
+            tempExecImportDuplicateResolved = true;
+            var resolve = tempExecImportDuplicateResolve;
+            tempExecImportDuplicateResolve = null;
+            try { resolve(true); } catch (e) {}
+            if (tempExecImportDuplicateDrawer && typeof tempExecImportDuplicateDrawer.close === 'function') {
+              tempExecImportDuplicateDrawer.close();
+            }
+          });
+        }
+      }
+      return tempExecImportDuplicateDrawer;
+    }
+
+    function renderTempExecImportDuplicateDrawer(payload) {
+      var titleEl = document.getElementById('tempExecImportDuplicateTitle');
+      var statusEl = document.getElementById('tempExecImportDuplicateStatus');
+      var bodyEl = document.getElementById('tempExecImportDuplicateBody');
+      var confirmBtn = document.getElementById('tempExecImportDuplicateConfirmBtn');
+
+      var fileName = payload && payload.fileName ? String(payload.fileName) : '用例';
+      var total = payload && Number.isFinite(Number(payload.total)) ? Number(payload.total) : 0;
+      var uniqueCount = payload && Number.isFinite(Number(payload.uniqueCount)) ? Number(payload.uniqueCount) : 0;
+      var duplicateCount = payload && Number.isFinite(Number(payload.duplicateCount)) ? Number(payload.duplicateCount) : 0;
+      var rows = payload && Array.isArray(payload.rows) ? payload.rows : [];
+
+      if (titleEl) titleEl.textContent = '导入用例重复校验：' + fileName;
+      if (statusEl) {
+        var msg = '检测到重复条目 ' + duplicateCount + ' 条，将自动去重：原 ' + total + ' 条 → 去重后 ' + uniqueCount + ' 条。';
+        setStatus(statusEl, msg, 'warn');
+      }
+      if (confirmBtn) confirmBtn.disabled = !duplicateCount;
+
+      if (!bodyEl) return;
+      if (!rows.length) {
+        bodyEl.innerHTML = '<tr><td colspan="11"><p class="hint">暂无重复条目</p></td></tr>';
+        return;
+      }
+
+      function toHtml(val) {
+        var text = val === null || val === undefined ? '' : String(val);
+        return escapeHtml(text).replace(/\n/g, '<br>');
+      }
+      function formatDefects(list) {
+        if (!Array.isArray(list) || !list.length) return '';
+        var urls = list.map(function(d) {
+          if (!d) return '';
+          if (typeof d === 'string') return d;
+          if (d.url) return String(d.url);
+          if (d.value) return String(d.value);
+          return '';
+        }).filter(Boolean);
+        return urls.join('\n');
+      }
+
+      bodyEl.innerHTML = rows.map(function(entry) {
+        var item = entry && entry.payload ? entry.payload : null;
+        var src = entry && entry.source ? entry.source : null;
+        var line = entry && Number.isFinite(Number(entry.line)) ? Number(entry.line) : 0;
+        var keep = entry && entry.keep ? true : false;
+
+        var module = item && item.module ? String(item.module) : '';
+        var title = item && item.title ? String(item.title) : '';
+        var priority = item && item.priority ? String(item.priority) : '';
+        var pre = item && item.precondition ? String(item.precondition) : '';
+        var steps = item && item.steps ? String(item.steps) : '';
+        var expected = item && item.expected ? String(item.expected) : '';
+        var actual = src && src.actual ? String(src.actual) : '';
+        var remark = src && src.remark ? String(src.remark) : (item && item.remark ? String(item.remark) : '');
+        var defect = formatDefects(src && src.defectLinks ? src.defectLinks : []);
+        var action = keep ? '保留' : '移除';
+        return (
+          '<tr>' +
+            '<td>' + (line ? String(line) : '-') + '</td>' +
+            '<td>' + toHtml(module) + '</td>' +
+            '<td>' + toHtml(title) + '</td>' +
+            '<td>' + toHtml(priority) + '</td>' +
+            '<td>' + toHtml(pre) + '</td>' +
+            '<td>' + toHtml(steps) + '</td>' +
+            '<td>' + toHtml(expected) + '</td>' +
+            '<td>' + toHtml(actual) + '</td>' +
+            '<td>' + toHtml(remark) + '</td>' +
+            '<td>' + toHtml(defect) + '</td>' +
+            '<td>' + escapeHtml(action) + '</td>' +
+          '</tr>'
+        );
+      }).join('');
+    }
+
+    function confirmTempExecImportDuplicateByDrawer(payload) {
+      var drawer = ensureTempExecImportDuplicateDrawer();
+      if (!drawer) return Promise.resolve(false);
+
+      tempExecImportDuplicateResolved = false;
+      renderTempExecImportDuplicateDrawer(payload);
+      drawer.open();
+
+      return new Promise(function(resolve) {
+        tempExecImportDuplicateResolve = resolve;
+      });
+    }
     function syncTempSectionToggleButtons() {
       if (tempReqToggleBtn) {
         tempReqToggleBtn.classList.toggle('collapsed', Boolean(state.tempExecReqCollapsed));
@@ -3252,20 +3379,25 @@
           var casePairs = [];
           var totalCaseCount = 0;
           var duplicateCaseCount = 0;
-          var duplicateSamples = [];
+          var groupMap = {};
+          var firstByKey = {};
           var seenCaseKeys = new Set();
           for (var ci = 0; ci < casesList.length; ci += 1) {
             var rawCase = casesList[ci];
             var payloadCase = buildCaseItemPayloadFromTempCase(rawCase);
             if (!payloadCase) continue;
             totalCaseCount += 1;
+            var sourceLine = rawCase && Number.isFinite(Number(rawCase._sourceLine)) ? Number(rawCase._sourceLine) : 0;
+            var lineNo = sourceLine > 0 ? sourceLine : totalCaseCount;
             var keyCase = buildMatchKey(payloadCase.module, payloadCase.title, payloadCase.expected);
+            if (!groupMap[keyCase]) groupMap[keyCase] = [];
+            groupMap[keyCase].push({ line: lineNo, payload: payloadCase, source: rawCase });
             if (seenCaseKeys.has(keyCase)) {
               duplicateCaseCount += 1;
-              if (duplicateSamples.length < 6) duplicateSamples.push(payloadCase);
               continue;
             }
             seenCaseKeys.add(keyCase);
+            firstByKey[keyCase] = totalCaseCount;
             casePairs.push({ key: keyCase, payload: payloadCase, source: rawCase });
           }
           if (!casePairs.length) {
@@ -3273,20 +3405,32 @@
             continue;
           }
           if (duplicateCaseCount > 0) {
-            var sampleLines = duplicateSamples.slice(0, 5).map(function(item) {
-              var mod = item && item.module ? String(item.module) : '';
-              var title = item && item.title ? String(item.title) : '';
-              var expected = item && item.expected ? String(item.expected) : '';
-              var expShort = expected.length > 30 ? expected.slice(0, 30) + '…' : expected;
-              var titleShort = title.length > 26 ? title.slice(0, 26) + '…' : title;
-              return ' - ' + (mod || '-') + ' / ' + (titleShort || '-') + ' / ' + (expShort || '-');
-            }).join('\\n');
-            var confirmDuplicate = window.confirm(
-              '检测到导入文件【' + fileName + '】包含重复用例（按 模块+用例标题+预期结果 判断）共 ' + duplicateCaseCount + ' 条。\\n\\n' +
-                '数据库不支持重复条目，将自动去重：原 ' + totalCaseCount + ' 条 → 去重后 ' + casePairs.length + ' 条。\\n' +
-                (sampleLines ? ('\\n重复示例：\\n' + sampleLines + '\\n') : '\\n') +
-                '是否继续入库？'
-            );
+            var dupRows = [];
+            Object.keys(groupMap).forEach(function(key) {
+              var list = groupMap[key];
+              if (!Array.isArray(list) || list.length <= 1) return;
+              // 第一条保留，其余移除（去重逻辑与入库一致）
+              list.forEach(function(entry, idx) {
+                dupRows.push({
+                  line: entry && entry.line ? entry.line : 0,
+                  payload: entry && entry.payload ? entry.payload : null,
+                  source: entry && entry.source ? entry.source : null,
+                  keep: idx === 0,
+                });
+              });
+            });
+            dupRows.sort(function(a, b) {
+              var la = a && a.line ? Number(a.line) : 0;
+              var lb = b && b.line ? Number(b.line) : 0;
+              return la - lb;
+            });
+            var confirmDuplicate = await confirmTempExecImportDuplicateByDrawer({
+              fileName: fileName,
+              total: totalCaseCount,
+              uniqueCount: casePairs.length,
+              duplicateCount: duplicateCaseCount,
+              rows: dupRows.slice(0, 200),
+            });
             if (!confirmDuplicate) {
               failures.push({ file: fileName, reason: '已取消导入（包含重复条目，请先去重再入库）' });
               continue;
