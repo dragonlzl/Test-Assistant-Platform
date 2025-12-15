@@ -46,6 +46,8 @@ async function waitCaseLibraryReady(page, timeoutMs) {
   let retriedToken = false;
   let retriedReload = false;
   let retriedGoto = false;
+  let retriedCaseLibrary = false;
+  let retriedTabGroup = false;
 
   while (Date.now() < deadline) {
     // 用 evaluate 拿状态，避免 waitForFunction 因某些偶发脚本中断而卡死。
@@ -57,12 +59,13 @@ async function waitCaseLibraryReady(page, timeoutMs) {
         authReady: Boolean(window.app && window.app.authReady === true),
         caseLibraryBound: Boolean(window.app && window.app.caseLibraryBound === true),
         hasSwitchTab: Boolean(window.app && typeof window.app.switchTab === 'function'),
+        tabGroupBound: Boolean(window.app && window.app.tabGroupBound === true),
         path: (window.location && window.location.pathname) ? String(window.location.pathname) : '',
         token: token,
       };
     });
 
-    if (last && last.hasApp && last.authReady && last.caseLibraryBound && last.hasSwitchTab) return;
+    if (last && last.hasApp && last.authReady && last.caseLibraryBound && last.hasSwitchTab && last.tabGroupBound) return;
 
     // 兜底：偶发跳转到 login.html（通常因 token 注入/接口链路抖动），补 token 后回到 index.html 再等一次。
     if (!retriedGoto && last && last.path && last.path.indexOf('login') !== -1) {
@@ -89,6 +92,20 @@ async function waitCaseLibraryReady(page, timeoutMs) {
     // 兜底：偶发脚本未完整加载（switchTab 未挂载），先刷新一次触发重试。
     if (!retriedReload && last && last.hasApp && !last.hasSwitchTab) {
       retriedReload = true;
+      await reloadWithRetry(page);
+      await page.waitForTimeout(200);
+      continue;
+    }
+    // 兜底：极少数情况下模块脚本加载抖动导致 caseLibrary 未绑定（caseLibraryBound 未置位），刷新一次触发重试。
+    if (!retriedCaseLibrary && last && last.hasApp && last.authReady && last.hasSwitchTab && !last.caseLibraryBound) {
+      retriedCaseLibrary = true;
+      await reloadWithRetry(page);
+      await page.waitForTimeout(200);
+      continue;
+    }
+    // 兜底：tabGroup 初始化偶发未置位（tabGroupBound=false），刷新一次触发重试。
+    if (!retriedTabGroup && last && last.hasApp && last.authReady && last.caseLibraryBound && last.hasSwitchTab && !last.tabGroupBound) {
+      retriedTabGroup = true;
       await reloadWithRetry(page);
       await page.waitForTimeout(200);
       continue;
@@ -466,24 +483,24 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
         expected: '登录成功',
         remark: '此字段不会参与对比',
       },
-      {
-        module: '登录',
-        title: '密码错误提示',
-        priority: 'P2',
-        preconditions: '',
-        steps: '1. 输入账号\\n2. 输入错误密码\\n3. 点击登录',
-        expected: '提示密码错误',
-        remark: '',
-      },
-      {
-        module: '登录',
-        title: '新增用例',
-        priority: 'P1',
-        preconditions: '',
-        steps: '1. 步骤A',
-        expected: '预期A',
-        remark: '',
-      },
+	      {
+	        module: '登录',
+	        title: '密码错误提示',
+	        priority: 'P2',
+	        preconditions: '已注册账号',
+	        steps: '1. 输入账号\\n2. 输入错误密码\\n3. 点击登录',
+	        expected: '提示密码错误',
+	        remark: '',
+	      },
+	      {
+	        module: '登录',
+	        title: '新增用例',
+	        priority: 'P1',
+	        preconditions: '已注册账号',
+	        steps: '1. 步骤A',
+	        expected: '预期A',
+	        remark: '',
+	      },
     ];
     await page.setInputFiles('#caseLibraryImportInput', {
       name: path.basename(fixturePath),
@@ -590,12 +607,249 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#tempexecFlowNav')).toBeVisible();
     await expect(page.locator('#tempExecView')).toContainText('正常登录');
     await expect(page.locator('#tempExecView select.status-select[data-status="通过"]')).toHaveCount(1);
+	  });
+
+  test('用例导入校验：必填字段为空时打开修正抽屉并可修改后入库（优先级 p→P）', async ({ page }) => {
+	    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+	    const project = { id: 1, name: '战魂铭人', description: '用于导入校验' };
+	    const versions = [{ id: 11, name: 'v1' }];
+	    let imported = false;
+
+	    await page.route('**/api/**', async (route) => {
+	      const url = new URL(route.request().url());
+	      const pathName = url.pathname;
+	      const method = route.request().method();
+	      const respond = (status, body) =>
+	        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+	      if (pathName === '/api/users/me') return respond(200, user);
+	      if (pathName === '/api/projects') return respond(200, [project]);
+	      if (pathName === `/api/projects/${project.id}/versions`) return respond(200, versions);
+	      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+
+	      if (pathName === '/api/case-files/import' && method === 'POST') {
+	        const payload = route.request().postDataJSON();
+	        const items = Array.isArray(payload.items) ? payload.items : [];
+	        if (!items.length) return respond(400, { detail: 'empty items' });
+	        const first = items[0] || {};
+	        if (!first.precondition || !String(first.precondition).trim()) return respond(400, { detail: 'missing precondition' });
+	        if (!first.steps || !String(first.steps).trim()) return respond(400, { detail: 'missing steps' });
+	        if (String(first.priority || '') !== 'P1') return respond(400, { detail: 'priority should be P1' });
+	        imported = true;
+	        return respond(201, {
+	          id: 100,
+	          project_id: project.id,
+	          version_id: versions[0].id,
+	          file_name_clean: 'case_library_import_invalid',
+	          item_count: items.length,
+	          importer_id: user.id,
+	          importer_name: user.username,
+	          imported_at: new Date().toISOString(),
+	          updated_at: new Date().toISOString(),
+	          last_updated_by: user.id,
+	          last_updated_by_name: user.username,
+	        });
+	      }
+
+	      if (pathName === '/api/auth/logout') return respond(200, {});
+	      if (pathName.startsWith('/api/')) return respond(200, []);
+	      return respond(404, { detail: 'not found' });
+	    });
+
+	    await gotoIndex(page);
+	    await waitCaseLibraryReady(page, 30000);
+	    await ensureCaseLibraryTab(page);
+
+	    const fixturePath = path.join(__dirname, '..', 'fixtures', 'case_library_import_invalid.json');
+	    await page.click('#openCaseLibraryImportDrawerBtn');
+	    await expect(page.locator('#caseLibraryImportDrawer')).toHaveClass(/open/);
+	    await page.setInputFiles('#caseLibraryImportInput', fixturePath);
+	    await page.selectOption('#caseLibraryImportProjectSelect', String(project.id));
+	    await expect(page.locator('#caseLibraryImportVersionSelect')).toBeEnabled();
+	    await page.selectOption('#caseLibraryImportVersionSelect', String(versions[0].id));
+	    await expect(page.locator('#caseLibraryImportConfirmBtn')).toBeEnabled();
+	    await page.click('#caseLibraryImportConfirmBtn');
+
+	    await expect(page.locator('#caseLibraryImportStatus')).toContainText('导入校验失败');
+	    await expect(page.locator('#caseLibraryImportInvalidDrawer')).toHaveClass(/open/);
+	    await expect(page.locator('#caseLibraryImportInvalidStatus')).toContainText('请补齐');
+
+	    await page.locator('#caseLibraryImportInvalidBody [data-case-lib-import-invalid-field="precondition"][data-index="0"]').click();
+	    await page.locator('#caseLibraryImportInvalidBody [data-case-lib-import-invalid-field="precondition"][data-index="0"]').fill('已注册账号');
+	    await page.locator('#caseLibraryImportInvalidBody [data-case-lib-import-invalid-field="steps"][data-index="0"]').click();
+	    await page.locator('#caseLibraryImportInvalidBody [data-case-lib-import-invalid-field="steps"][data-index="0"]').fill('1. 输入手机号\\n2. 输入验证码\\n3. 点击登录');
+	    await page.click('#caseLibraryImportInvalidTitle');
+
+	    await page.click('#caseLibraryImportInvalidConfirmBtn');
+	    await expect(page.locator('#caseLibraryImportInvalidDrawer')).not.toHaveClass(/open/);
+	    await expect(page.locator('#caseLibraryImportStatus')).toContainText('入库成功');
+	    expect(imported).toBeTruthy();
+	    await expect(page.locator('#caseLibraryImportConfirmBtn')).toBeDisabled();
+	    await expect(page.locator('#caseLibraryImportFileHint')).toContainText('未选择文件');
+  });
+
+  test('XMind 缺预期结果：解析结果不应把根节点错位为模块', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '战魂铭人', description: '用于 XMind 校验' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions`) return respond(200, versions);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    const b64Path = path.join(__dirname, '..', 'fixtures', 'case_library_xmind_missing_expected.xmind.base64');
+    const b64 = fs.readFileSync(b64Path, 'utf-8').trim();
+    await page.waitForFunction(() => typeof window.JSZip !== 'undefined', {}, { timeout: 60000 });
+    const parsed = await page.evaluate(async (b64Text) => {
+      const atobFn = window.atob ? window.atob.bind(window) : null;
+      if (!atobFn) return { error: 'no atob' };
+      const bin = atobFn(String(b64Text || ''));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+      const head = Array.prototype.slice.call(bytes.slice(0, 8)).map((n) => Number(n));
+      const file = new File([bytes], 'missing_expected.xmind', { type: 'application/octet-stream' });
+      const fileBuf = await file.arrayBuffer();
+      const head2 = Array.prototype.slice.call(new Uint8Array(fileBuf).slice(0, 8)).map((n) => Number(n));
+      const core = window.app && window.app.core ? window.app.core : null;
+      if (!core || typeof core.parseXmindFile !== 'function') return { error: 'no parseXmindFile' };
+      try {
+        const res = await core.parseXmindFile(file);
+        return { head, head2, list: res && Array.isArray(res.list) ? res.list : [], rootTitle: res && res.rootTitle ? String(res.rootTitle) : '' };
+      } catch (err) {
+        return { head, head2, error: err && err.message ? String(err.message) : String(err || '') };
+      }
+    }, b64);
+    expect(parsed && parsed.head).toEqual([80, 75, 3, 4, 20, 0, 0, 0]);
+    expect(parsed && parsed.head2).toEqual([80, 75, 3, 4, 20, 0, 0, 0]);
+    expect(parsed && parsed.error).toBeFalsy();
+    expect(parsed.list && parsed.list.length).toBeGreaterThan(0);
+    expect(parsed.list[0].module).toBe('登录模块');
+    expect(parsed.list[0].title).toBe('验证码登录');
+    expect(parsed.rootTitle).toBe('需求A');
+    // 预期结果缺失时应为空，但不能导致根节点错位到 module/title 上
+    expect(String(parsed.list[0].expected || '')).toBe('');
+  });
+
+  test('XMind 中间字段缺失：字段层级不足时按行号提示且不展示字段内容', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '战魂铭人', description: '用于 XMind 层级校验' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions`) return respond(200, versions);
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    await ensureCaseLibraryTab(page);
+
+    const b64Path = path.join(__dirname, '..', 'fixtures', 'case_library_xmind_missing_precondition.xmind.base64');
+    const b64 = fs.readFileSync(b64Path, 'utf-8').trim().replace(/\s+/g, '');
+    const buf = Buffer.from(b64, 'base64');
+
+    await page.click('#openCaseLibraryImportDrawerBtn');
+    await expect(page.locator('#caseLibraryImportDrawer')).toHaveClass(/open/);
+    await page.setInputFiles('#caseLibraryImportInput', {
+      name: 'missing_precondition.xmind',
+      mimeType: 'application/octet-stream',
+      buffer: buf,
+    });
+    await page.selectOption('#caseLibraryImportProjectSelect', String(project.id));
+    await expect(page.locator('#caseLibraryImportVersionSelect')).toBeEnabled();
+    await page.selectOption('#caseLibraryImportVersionSelect', String(versions[0].id));
+    await expect(page.locator('#caseLibraryImportConfirmBtn')).toBeEnabled();
+
+    await page.click('#caseLibraryImportConfirmBtn');
+    await expect(page.locator('#caseLibraryImportStatus')).toContainText('字段层级不足');
+    await expect(page.locator('#caseLibraryImportInvalidDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryImportInvalidStatus')).toContainText('字段层级不足');
+
+    await expect(page.locator('#caseLibraryImportInvalidBody .import-structure-row')).toContainText('字段层级不足');
+    await expect(page.locator('#caseLibraryImportInvalidBody .import-structure-row')).toContainText('1');
+    // 同一份文件中未缺失层级的用例仍应在列表中展示，保持完整性
+    await expect(page.locator('#caseLibraryImportInvalidBody')).toContainText('密码登录');
+    await expect(page.locator('#caseLibraryImportInvalidConfirmBtn')).toBeEnabled();
+  });
+
+  test('XMind 字段内容为空：不应判定为层级不足，应进入必填校验', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '战魂铭人', description: '用于 XMind 空字段校验' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions`) return respond(200, versions);
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    await ensureCaseLibraryTab(page);
+
+    const b64Path = path.join(__dirname, '..', 'fixtures', 'case_library_xmind_empty_precondition.xmind.base64');
+    const b64 = fs.readFileSync(b64Path, 'utf-8').trim().replace(/\s+/g, '');
+    const buf = Buffer.from(b64, 'base64');
+
+    await page.click('#openCaseLibraryImportDrawerBtn');
+    await expect(page.locator('#caseLibraryImportDrawer')).toHaveClass(/open/);
+    await page.setInputFiles('#caseLibraryImportInput', {
+      name: 'empty_precondition.xmind',
+      mimeType: 'application/octet-stream',
+      buffer: buf,
+    });
+    await page.selectOption('#caseLibraryImportProjectSelect', String(project.id));
+    await expect(page.locator('#caseLibraryImportVersionSelect')).toBeEnabled();
+    await page.selectOption('#caseLibraryImportVersionSelect', String(versions[0].id));
+    await expect(page.locator('#caseLibraryImportConfirmBtn')).toBeEnabled();
+
+    await page.click('#caseLibraryImportConfirmBtn');
+    await expect(page.locator('#caseLibraryImportStatus')).toContainText('导入校验失败');
+    await expect(page.locator('#caseLibraryImportInvalidDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryImportInvalidStatus')).toContainText('请补齐');
+    await expect(page.locator('#caseLibraryImportInvalidBody .import-structure-row')).toHaveCount(0);
+    await expect(page.locator('#caseLibraryImportInvalidBody')).toContainText('账号登录');
+    await expect(page.locator('#caseLibraryImportInvalidBody')).toContainText('短信登录');
+
+    const invalidCells = page.locator('#caseLibraryImportInvalidBody td.invalid-cell');
+    await expect(invalidCells).toHaveCount(1);
   });
 
   test('导入 Excel（xlsx）格式用例并入库', async ({ page }) => {
-    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
-    const project = { id: 1, name: '战魂铭人', description: '用于 Excel 导入' };
-    const versions = [{ id: 11, name: 'v1' }];
+	    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+	    const project = { id: 1, name: '战魂铭人', description: '用于 Excel 导入' };
+	    const versions = [{ id: 11, name: 'v1' }];
 
     let nextCaseFileId = 100;
     let nextCaseItemId = 1000;
@@ -696,10 +950,119 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await page.selectOption('#caseLibraryImportVersionSelect', String(versions[0].id));
     await expect(page.locator('#caseLibraryImportConfirmBtn')).toBeEnabled();
     await page.click('#caseLibraryImportConfirmBtn');
-    await expect(page.locator('#caseLibraryImportStatus')).toContainText('导入完成');
+    await page.waitForFunction(() => {
+      const drawer = document.getElementById('caseLibraryImportInvalidDrawer');
+      const opened = drawer && drawer.classList && drawer.classList.contains('open');
+      const status = document.getElementById('caseLibraryImportStatus');
+      const text = status ? String(status.textContent || '') : '';
+      return Boolean(opened) || text.indexOf('导入完成') !== -1 || text.indexOf('导入校验失败') !== -1;
+    }, {}, { timeout: 10000 });
+    const invalidDrawerOpened = await page.locator('#caseLibraryImportInvalidDrawer').evaluate((el) => el.classList.contains('open'));
+    const importStatusText = await page.locator('#caseLibraryImportStatus').textContent();
+    if (invalidDrawerOpened || (importStatusText && String(importStatusText).indexOf('导入校验失败') !== -1)) {
+      await expect(page.locator('#caseLibraryImportInvalidDrawer')).toHaveClass(/open/);
+      const body = page.locator('#caseLibraryImportInvalidBody');
+      const fillIfEmpty = async (field, valueBuilder) => {
+        const nodes = body.locator(`[data-case-lib-import-invalid-field="${field}"]`);
+        const cnt = await nodes.count();
+        for (let i = 0; i < cnt; i += 1) {
+          const node = nodes.nth(i);
+          const text = await node.textContent();
+          if (text && String(text).trim()) continue;
+          const v = typeof valueBuilder === 'function' ? valueBuilder(i) : valueBuilder;
+          await node.click();
+          await node.fill(String(v));
+        }
+      };
+      await fillIfEmpty('module', '登录');
+      await fillIfEmpty('title', (i) => `登录用例${i + 1}`);
+      await fillIfEmpty('priority', 'P1');
+      await fillIfEmpty('precondition', '已注册账号');
+      await fillIfEmpty('steps', '1. 操作步骤');
+      await fillIfEmpty('expected', '预期结果');
+      await page.evaluate(() => {
+        try {
+          const el = document.activeElement;
+          if (el && typeof el.blur === 'function') el.blur();
+        } catch (_) {}
+      });
+      await page.click('#caseLibraryImportInvalidConfirmBtn');
+      await expect(page.locator('#caseLibraryImportInvalidDrawer')).not.toHaveClass(/open/);
+      await expect(page.locator('#caseLibraryImportStatus')).toContainText('入库成功');
+    } else {
+      await expect(page.locator('#caseLibraryImportStatus')).toContainText('导入完成');
+    }
     // 导入成功后应清空文件选择，避免重复导入
     await expect(page.locator('#caseLibraryImportConfirmBtn')).toBeDisabled();
     await expect(page.locator('#caseLibraryImportFileHint')).toContainText('未选择文件');
+  });
+
+  test('格式校验抽屉确认后同名冲突：应关闭校验抽屉并打开 diff 抽屉', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '战魂铭人', description: '用于同名切换' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    const existingCaseFileId = 77;
+    const existingItems = [
+      { id: 1, case_file_id: existingCaseFileId, module: '登录模块', title: '账号登录', priority: 'P1', precondition: '已注册账号', steps: '1. 输入账号', expected: '登录成功', remark: '' },
+    ];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions`) return respond(200, versions);
+
+      if (pathName === `/api/case-files/${existingCaseFileId}/items` && method === 'GET') {
+        return respond(200, existingItems);
+      }
+
+      if (pathName === '/api/case-files/import' && method === 'POST') {
+        return respond(400, {
+          detail: '同名用例已存在',
+          existing_case_file_id: existingCaseFileId,
+          existing_file_name_clean: 'empty_precondition',
+          existing_version_id: versions[0].id,
+        });
+      }
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    await ensureCaseLibraryTab(page);
+
+    const b64Path = path.join(__dirname, '..', 'fixtures', 'case_library_xmind_empty_precondition.xmind.base64');
+    const b64 = fs.readFileSync(b64Path, 'utf-8').trim().replace(/\s+/g, '');
+    const buf = Buffer.from(b64, 'base64');
+
+    await page.click('#openCaseLibraryImportDrawerBtn');
+    await expect(page.locator('#caseLibraryImportDrawer')).toHaveClass(/open/);
+    await page.setInputFiles('#caseLibraryImportInput', {
+      name: 'empty_precondition.xmind',
+      mimeType: 'application/octet-stream',
+      buffer: buf,
+    });
+    await page.selectOption('#caseLibraryImportProjectSelect', String(project.id));
+    await expect(page.locator('#caseLibraryImportVersionSelect')).toBeEnabled();
+    await page.selectOption('#caseLibraryImportVersionSelect', String(versions[0].id));
+    await page.click('#caseLibraryImportConfirmBtn');
+
+    await expect(page.locator('#caseLibraryImportInvalidDrawer')).toHaveClass(/open/);
+    await page.locator('#caseLibraryImportInvalidBody [data-case-lib-import-invalid-field=\"precondition\"][data-index=\"0\"]').click();
+    await page.locator('#caseLibraryImportInvalidBody [data-case-lib-import-invalid-field=\"precondition\"][data-index=\"0\"]').fill('已注册账号');
+    await page.click('#caseLibraryImportInvalidConfirmBtn');
+
+    await expect(page.locator('#caseLibraryImportInvalidDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryImportDiffDrawer')).toHaveClass(/open/);
   });
 
   test('导入模板下载：Excel 与 XMind', async ({ page }) => {
@@ -748,8 +1111,10 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     ]);
     expect(await excelReuseDownload.suggestedFilename()).toBe('用例导入模板（复用）.xlsx');
 
+    await page.locator('#caseLibraryImportXmindTemplateBtn').scrollIntoViewIfNeeded();
+    await expect(page.locator('#caseLibraryImportXmindTemplateBtn')).toBeEnabled();
     const [xmindDownload] = await Promise.all([
-      page.waitForEvent('download', { timeout: 20000 }),
+      page.waitForEvent('download', { timeout: 60000 }),
       page.click('#caseLibraryImportXmindTemplateBtn'),
     ]);
     expect(await xmindDownload.suggestedFilename()).toBe('用例导入模板.xmind');

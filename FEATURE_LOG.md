@@ -948,6 +948,24 @@
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入模板下载`（通过）。  
 - 更新记录：2025-12-15 复用模板在第二个工作表补充“执行页带结果（已执行）的复用示例”（不参与导入），便于直观看懂复用子项行与结果字段填写（`scripts/modules/caseLibrary.js`）。  
 
+- 功能名称：用例库导入必填字段校验与修正抽屉  
+- 功能描述：用例库“导入用例”在确认入库前增加格式校验：模块/用例标题/优先级/前提条件/操作步骤/预期结果均为必填；优先级允许小写 `p`（如 `p1`）并在入库前自动规范为大写 `P1`；当存在任意必填字段为空时，会自动打开“导入用例格式校验”抽屉，展示该文件内所有可解析用例条目，并对缺失字段高亮，支持页面内直接编辑；点击“确认修改并入库”后会再次校验并入库；若此时触发“同名用例已存在”，会自动关闭校验抽屉并打开差异对比抽屉引导覆盖导入。  
+- 操作方式：进入“用例相关 → 用例库”→打开“导入用例”抽屉→选择文件与项目/版本→点击“确认入库”→若提示校验失败则在“格式校验”抽屉补齐字段→点击“确认修改并入库”。  
+- 使用效果：导入前即可发现并修正缺失字段，避免“导入成功但内容不完整/被跳过”的困惑；同时统一优先级大小写格式。  
+- 新增内容/接口/组件：新增“导入用例格式校验”抽屉（`index.html`）；空字段高亮样式（`style.css`）；导入解析保留空字段并在入库前校验/修正入库（`scripts/modules/caseLibrary.js`）；XMind 模板提示文案调整为必填（`scripts/modules/caseLibrary.js`）；UI 用例新增覆盖（`tests/ui/case_library.spec.js`）与测试夹具补充（`tests/fixtures/case_library_import_invalid.json`）。  
+- 复用说明：复用既有导入解析与抽屉组件（`drawer.js`）与 diff 抽屉样式体系，仅新增“校验修正”抽屉与校验逻辑，不改变后端导入接口结构。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：2025-12-15 用例库导入必填校验上线（`scripts/modules/caseLibrary.js`、`index.html`、`style.css`）；2025-12-15 校验抽屉展示全量条目并在同名冲突时自动切换到 diff 抽屉（`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`）。  
+
+- 功能名称：修复 XMind 导入缺字段导致的根节点错位  
+- 功能描述：当导入的 XMind 用例字段层级不足（剔除根节点后不足 6 层）时，不再尝试“猜测补位”导致字段整体错位；会按行号提示“字段层级不足”，并在校验抽屉中同时展示“可正常解析的用例”，允许继续入库其余用例（字段层级不足的条目会被跳过）；当字段层级满足（>=6）时按最后 6 段映射为模块/标题/优先级/前提/步骤/预期，并继续走必填校验抽屉。  
+- 操作方式：导入 XMind → 点击“确认入库” → 若提示“字段层级缺失”则回到 XMind 补齐层级后重导入；若仅是字段内容为空（例如填了 `-` 占位）则在“格式校验”抽屉中补齐后入库。  
+- 使用效果：避免导入时字段整体错位（根节点变模块、模块变标题等）导致批量数据错误，并对“中间字段缺失”给出明确的行号定位提示。  
+- 新增内容/接口/组件：XMind 叶子路径标准化增强（剔除根节点并按字段长度识别缺失场景，`scripts/core/xmindCore.js`）；UI 用例覆盖（`tests/ui/case_library.spec.js`）与测试 fixture（`tests/fixtures/case_library_xmind_missing_expected.xmind.base64`）。  
+- 复用说明：复用既有 XMind JSON 遍历与导入校验抽屉机制，仅增强字段对齐策略。  
+- 测试与验证：`node --check scripts/core/xmindCore.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g XMind`（通过）。  
+- 更新记录：2025-12-15 修复 XMind 缺字段导入错位（`scripts/core/xmindCore.js`）；2025-12-15 用例库 XMind 导入增加字段层级(>=6)校验，层级不足时按行号提示并可继续入库其余用例（不足条目跳过，`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/case_library.spec.js`、`tests/fixtures/case_library_xmind_missing_precondition.xmind.base64`）；2025-12-15 XMind 节点存在但标题为空时视为字段内容为空（不计入层级缺失，`scripts/core/xmindCore.js`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`、`tests/fixtures/case_library_xmind_empty_precondition.xmind.base64`）。  
+
 - 功能名称：执行视图移除“导入执行JSON”按钮  
 - 功能描述：执行视图工具栏移除“导入执行JSON”入口，避免与 DB 导入/覆盖逻辑重复并降低误操作（保留导出本次执行 JSON 入口不变）。  
 - 操作方式：执行视图不再提供“导入执行JSON”按钮；如需导入请使用“用例导入&分配”流程。  

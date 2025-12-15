@@ -1,0 +1,11 @@
+[
+  {
+    "module": "登录",
+    "title": "验证码登录",
+    "priority": "p1",
+    "preconditions": "",
+    "steps": "",
+    "expected": "登录成功进入主页",
+    "remark": ""
+  }
+]

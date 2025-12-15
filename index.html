@@ -1576,9 +1576,9 @@
     </div>
   </div>
 </div>
-<div class="drawer" id="caseLibraryImportDiffDrawer" data-tab-section="case-library">
-  <div class="drawer-mask" data-drawer-close="caseLibraryImportDiffDrawer"></div>
-  <div class="drawer-panel drawer-panel-wide">
+	<div class="drawer" id="caseLibraryImportDiffDrawer" data-tab-section="case-library">
+	  <div class="drawer-mask" data-drawer-close="caseLibraryImportDiffDrawer"></div>
+	  <div class="drawer-panel drawer-panel-wide">
     <div class="drawer-header">
       <h3 id="caseLibraryImportDiffTitle">同名用例差异对比</h3>
       <button class="link-toggle" data-drawer-close="caseLibraryImportDiffDrawer">收起</button>
@@ -1641,13 +1641,48 @@
         <button class="ghost-btn" data-drawer-close="caseLibraryImportDiffDrawer" type="button">关闭</button>
       </div>
     </div>
-  </div>
-</div>
-<div class="drawer" id="caseLibraryEditDrawer" data-tab-section="case-library">
-  <div class="drawer-mask" data-drawer-close="caseLibraryEditDrawer"></div>
-  <div class="drawer-panel">
-    <div class="drawer-header">
-      <h3>编辑用例</h3>
+	  </div>
+	</div>
+	<div class="drawer" id="caseLibraryImportInvalidDrawer" data-tab-section="case-library">
+	  <div class="drawer-mask" data-drawer-close="caseLibraryImportInvalidDrawer"></div>
+	  <div class="drawer-panel drawer-panel-wide">
+	    <div class="drawer-header">
+	      <h3 id="caseLibraryImportInvalidTitle">导入用例格式校验</h3>
+	      <button class="link-toggle" data-drawer-close="caseLibraryImportInvalidDrawer">收起</button>
+	    </div>
+	    <div class="drawer-body">
+	      <p class="hint">以下用例存在必填字段为空（模块/用例标题/优先级/前提条件/操作步骤/预期结果），请点击单元格直接修改。</p>
+	      <p class="status" id="caseLibraryImportInvalidStatus"></p>
+	      <div class="admin-table-wrapper">
+	        <table class="admin-table diff-table">
+	          <thead>
+	            <tr>
+	              <th style="width:64px;">行号</th>
+	              <th>模块</th>
+	              <th>用例标题</th>
+	              <th>优先级</th>
+	              <th>前提条件</th>
+	              <th>操作步骤</th>
+	              <th>预期结果</th>
+	            </tr>
+	          </thead>
+	          <tbody id="caseLibraryImportInvalidBody">
+	            <tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>
+	          </tbody>
+	        </table>
+	      </div>
+	      <div class="actions user-form-actions">
+	        <button class="primary" id="caseLibraryImportInvalidConfirmBtn" type="button">确认修改并入库</button>
+	        <button class="ghost-btn" data-drawer-close="caseLibraryImportInvalidDrawer" type="button">关闭</button>
+	      </div>
+	    </div>
+	  </div>
+	</div>
+	<div class="drawer" id="caseLibraryEditDrawer" data-tab-section="case-library">
+	  <div class="drawer-mask" data-drawer-close="caseLibraryEditDrawer"></div>
+	  <div class="drawer-panel">
+	    <div class="drawer-header">
+	      <h3>编辑用例</h3>
       <button class="link-toggle" data-drawer-close="caseLibraryEditDrawer">收起</button>
     </div>
     <div class="drawer-body">

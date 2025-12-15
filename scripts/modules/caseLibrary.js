@@ -39,10 +39,14 @@
     importDiffLeftTitle: document.getElementById('caseLibraryImportDiffLeftTitle'),
     importDiffLeftMeta: document.getElementById('caseLibraryImportDiffLeftMeta'),
     importDiffLeftBody: document.getElementById('caseLibraryImportDiffLeftBody'),
-    importDiffRightTitle: document.getElementById('caseLibraryImportDiffRightTitle'),
-    importDiffRightMeta: document.getElementById('caseLibraryImportDiffRightMeta'),
-    importDiffRightBody: document.getElementById('caseLibraryImportDiffRightBody'),
-    importDiffOverwriteBtn: document.getElementById('caseLibraryImportDiffOverwriteBtn'),
+	    importDiffRightTitle: document.getElementById('caseLibraryImportDiffRightTitle'),
+	    importDiffRightMeta: document.getElementById('caseLibraryImportDiffRightMeta'),
+	    importDiffRightBody: document.getElementById('caseLibraryImportDiffRightBody'),
+	    importDiffOverwriteBtn: document.getElementById('caseLibraryImportDiffOverwriteBtn'),
+	    importInvalidTitle: document.getElementById('caseLibraryImportInvalidTitle'),
+	    importInvalidStatus: document.getElementById('caseLibraryImportInvalidStatus'),
+	    importInvalidBody: document.getElementById('caseLibraryImportInvalidBody'),
+	    importInvalidConfirmBtn: document.getElementById('caseLibraryImportInvalidConfirmBtn'),
 
     editDrawerProjectSelect: document.getElementById('caseLibraryEditProjectSelect'),
     editDrawerVersionSelect: document.getElementById('caseLibraryEditVersionSelect'),
@@ -77,19 +81,32 @@
       loading: false,
     },
 
-    importDiff: {
-      fileName: '',
-      cleanName: '',
-      importedCleanName: '',
-      source: '',
-      projectId: null,
-      importVersionId: null,
-      dbVersionId: null,
-      importItems: [],
-      dbItems: [],
-      rows: [],
-      loading: false,
-    },
+	    importDiff: {
+	      fileName: '',
+	      cleanName: '',
+	      importedCleanName: '',
+	      source: '',
+	      projectId: null,
+	      importVersionId: null,
+	      dbVersionId: null,
+	      importItems: [],
+	      dbItems: [],
+	      rows: [],
+	      loading: false,
+	    },
+
+	    importInvalid: {
+	      file: null,
+	      fileName: '',
+	      cleanName: '',
+	      source: '',
+	      projectId: null,
+	      versionId: null,
+	      structuralErrors: [],
+	      items: [],
+	      invalid: [],
+	      loading: false,
+	    },
 
     editDrawer: {
       projectId: null,
@@ -125,10 +142,11 @@
     },
   };
 
-  var importDrawerInstance = null;
-  var importDiffDrawerInstance = null;
-  var editDrawerInstance = null;
-  var selectDrawerInstance = null;
+	  var importDrawerInstance = null;
+	  var importDiffDrawerInstance = null;
+	  var importInvalidDrawerInstance = null;
+	  var editDrawerInstance = null;
+	  var selectDrawerInstance = null;
 
   function setStatus(el, text, type) {
     var coreApi = getCore();
@@ -352,7 +370,7 @@
     }
   }
 
-  function openImportDiffDrawerLoading(payload) {
+	  function openImportDiffDrawerLoading(payload) {
     payload = payload || {};
     var projectId = payload.projectId || null;
     var importVersionId = payload.importVersionId || null;
@@ -394,12 +412,323 @@
     if (importDrawerInstance && typeof importDrawerInstance.close === 'function') {
       importDrawerInstance.close();
     }
-    if (importDiffDrawerInstance && typeof importDiffDrawerInstance.open === 'function') {
-      setTimeout(function() {
-        importDiffDrawerInstance.open();
-      }, 60);
-    }
-  }
+	    if (importDiffDrawerInstance && typeof importDiffDrawerInstance.open === 'function') {
+	      setTimeout(function() {
+	        importDiffDrawerInstance.open();
+	      }, 60);
+	    }
+	  }
+
+	  function syncImportInvalidControls() {
+	    if (!dom.importInvalidConfirmBtn) return;
+	    var items = Array.isArray(state.importInvalid.items) ? state.importInvalid.items : [];
+	    dom.importInvalidConfirmBtn.disabled = Boolean(state.importInvalid.loading || !items.length);
+	  }
+
+	  function renderImportInvalidTable() {
+	    if (!dom.importInvalidBody) return;
+	    var structural = Array.isArray(state.importInvalid.structuralErrors) ? state.importInvalid.structuralErrors : [];
+	    var invalid = Array.isArray(state.importInvalid.invalid) ? state.importInvalid.invalid : [];
+	    if (!structural.length && !invalid.length) {
+	      dom.importInvalidBody.innerHTML = '<tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>';
+	      return;
+	    }
+
+	    function renderStructuralRows(list) {
+	      if (!list || !list.length) return '';
+	      return list.map(function(entry) {
+	        var lineNo = entry && typeof entry.line === 'number' ? entry.line : null;
+	        var depth = entry && typeof entry.depth === 'number' ? entry.depth : null;
+	        var detail = '字段层级不足：当前为 ' + (depth === null ? '?' : String(depth)) + ' 层（需至少 6 层：模块/用例标题/优先级/前提条件/操作步骤/预期结果），请在 XMind 中补齐后重新导入';
+	        return (
+	          '<tr class="import-structure-row">' +
+	            '<td>' + escapeHtml(lineNo === null ? '-' : String(lineNo)) + '</td>' +
+	            '<td colspan="6">' + escapeHtml(detail) + '</td>' +
+	          '</tr>'
+	        );
+	      }).join('');
+	    }
+
+	    function renderItemRow(idx, lineNo, item, err) {
+	      function cell(field, multiline) {
+	        var raw = item && item[field] !== undefined && item[field] !== null ? String(item[field]) : '';
+	        var html = raw ? escapeHtml(raw) : '';
+	        var cls = err && err[field] ? 'invalid-cell' : '';
+	        return (
+	          '<td class="' + cls + '">' +
+	            '<div class="temp-inline-edit" contenteditable="true" data-case-lib-import-invalid-field="' + field + '" data-index="' + idx + '" data-case-lib-multiline="' + (multiline ? 'true' : 'false') + '" data-placeholder="点击此处编辑">' +
+	              html +
+	            '</div>' +
+	          '</td>'
+	        );
+	      }
+	      return (
+	        '<tr>' +
+	          '<td>' + escapeHtml(String(lineNo)) + '</td>' +
+	          cell('module', false) +
+	          cell('title', false) +
+	          cell('priority', false) +
+	          cell('precondition', true) +
+	          cell('steps', true) +
+	          cell('expected', true) +
+	        '</tr>'
+	      );
+	    }
+
+	    function buildErrByIndex(invalidList) {
+	      var errByIndex = {};
+	      (invalidList || []).forEach(function(entry) {
+	        var idx = entry && typeof entry.index === 'number' ? entry.index : -1;
+	        if (idx < 0) return;
+	        errByIndex[idx] = entry && entry.err ? entry.err : {};
+	      });
+	      return errByIndex;
+	    }
+
+	    function buildItemsByLine(items) {
+	      var itemsByLine = {};
+	      (items || []).forEach(function(it, idx) {
+	        var lineNo = it && it._sourceLine ? Number(it._sourceLine) : null;
+	        if (!lineNo || !isFinite(lineNo)) lineNo = idx + 1;
+	        if (!itemsByLine[lineNo]) itemsByLine[lineNo] = [];
+	        itemsByLine[lineNo].push({ idx: idx, item: it });
+	      });
+	      return itemsByLine;
+	    }
+
+	    function buildSortedLines(structuralByLine, itemsByLine) {
+	      var allLineMap = {};
+	      Object.keys(structuralByLine || {}).forEach(function(k) { allLineMap[Number(k)] = true; });
+	      Object.keys(itemsByLine || {}).forEach(function(k) { allLineMap[Number(k)] = true; });
+	      var lines = Object.keys(allLineMap)
+	        .map(function(k) { return Number(k); })
+	        .filter(function(n) { return isFinite(n) && n > 0; });
+	      lines.sort(function(a, b) { return a - b; });
+	      return lines;
+	    }
+
+	    if (structural.length) {
+	      var errByIndex = buildErrByIndex(invalid);
+	      var structuralByLine = {};
+	      structural.forEach(function(entry) {
+	        var line = entry && typeof entry.line === 'number' ? entry.line : null;
+	        if (!line) return;
+	        structuralByLine[line] = entry;
+	      });
+	      var items = Array.isArray(state.importInvalid.items) ? state.importInvalid.items : [];
+	      var itemsByLine = buildItemsByLine(items);
+	      var lines = buildSortedLines(structuralByLine, itemsByLine);
+	      var rows = lines.map(function(line) {
+	        var html = '';
+	        if (structuralByLine[line]) html += renderStructuralRows([structuralByLine[line]]);
+	        var itemList = itemsByLine[line] || [];
+	        itemList.forEach(function(rec) {
+	          html += renderItemRow(rec.idx, line, rec.item, errByIndex[rec.idx] || {});
+	        });
+	        return html;
+	      }).join('');
+	      dom.importInvalidBody.innerHTML = rows || '<tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>';
+	      return;
+	    }
+
+	    // 内容校验：为保持完整性，展示同文件内所有可解析用例，并对缺失字段高亮。
+	    var errByIndex = buildErrByIndex(invalid);
+	    var items = Array.isArray(state.importInvalid.items) ? state.importInvalid.items : [];
+	    if (!items.length) {
+	      dom.importInvalidBody.innerHTML = '<tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>';
+	      return;
+	    }
+	    var itemsByLine = buildItemsByLine(items);
+	    var lines = buildSortedLines({}, itemsByLine);
+	    var rows = lines.map(function(line) {
+	      var html = '';
+	      var itemList = itemsByLine[line] || [];
+	      itemList.forEach(function(rec) {
+	        html += renderItemRow(rec.idx, line, rec.item, errByIndex[rec.idx] || {});
+	      });
+	      return html;
+	    }).join('');
+	    dom.importInvalidBody.innerHTML = rows || '<tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>';
+	  }
+
+	  function openImportInvalidDrawer(payload) {
+	    payload = payload || {};
+	    state.importInvalid.file = payload.file || null;
+	    state.importInvalid.fileName = payload.fileName || '';
+	    state.importInvalid.cleanName = payload.cleanName || cleanCaseFileName(payload.fileName || '');
+	    state.importInvalid.source = payload.source || '';
+	    state.importInvalid.projectId = payload.projectId || null;
+	    state.importInvalid.versionId = payload.versionId || null;
+	    state.importInvalid.structuralErrors = Array.isArray(payload.structuralErrors) ? payload.structuralErrors : [];
+	    state.importInvalid.items = Array.isArray(payload.items) ? payload.items : [];
+	    state.importInvalid.invalid = validateImportItems(state.importInvalid.items);
+	    state.importInvalid.loading = false;
+
+	    if (dom.importInvalidTitle) {
+	      dom.importInvalidTitle.textContent = '导入用例格式校验：' + (state.importInvalid.cleanName || state.importInvalid.fileName || '用例');
+	    }
+	    if (dom.importInvalidStatus) {
+	      var structuralCount = state.importInvalid.structuralErrors ? state.importInvalid.structuralErrors.length : 0;
+	      var itemCount = state.importInvalid.items ? state.importInvalid.items.length : 0;
+	      var invalidCount = state.importInvalid.invalid ? state.importInvalid.invalid.length : 0;
+	      if (structuralCount) {
+	        if (itemCount) {
+	          setStatus(dom.importInvalidStatus, '检测到字段层级不足 ' + structuralCount + ' 条（将跳过）；其余 ' + itemCount + ' 条可继续入库' + (invalidCount ? '（请先补齐必填字段）' : ''), 'warn');
+	        } else {
+	          setStatus(dom.importInvalidStatus, '全部条目字段层级不足（共 ' + structuralCount + ' 条），无法入库，请在 XMind 中补齐后重新导入', 'warn');
+	        }
+	      } else {
+	        setStatus(dom.importInvalidStatus, '请补齐必填字段后再确认入库', 'warn');
+	      }
+	    }
+	    renderImportInvalidTable();
+	    syncImportInvalidControls();
+
+	    if (importDrawerInstance && typeof importDrawerInstance.close === 'function') {
+	      importDrawerInstance.close();
+	    }
+	    if (importInvalidDrawerInstance && typeof importInvalidDrawerInstance.open === 'function') {
+	      setTimeout(function() {
+	        importInvalidDrawerInstance.open();
+	      }, 60);
+	    }
+	  }
+
+	  function confirmImportFromInvalidDrawer() {
+	    if (state.importInvalid.loading) return;
+	    if (!apiClient || typeof apiClient.importCaseFile !== 'function') {
+	      setStatus(dom.importInvalidStatus, '后端导入接口未就绪', 'err');
+	      return;
+	    }
+	    var projectId = state.importInvalid.projectId;
+	    var versionId = state.importInvalid.versionId;
+	    var fileName = state.importInvalid.fileName || '用例';
+	    var items = Array.isArray(state.importInvalid.items) ? state.importInvalid.items : [];
+	    var structural = Array.isArray(state.importInvalid.structuralErrors) ? state.importInvalid.structuralErrors : [];
+	    if (!projectId || !versionId || !items.length) {
+	      if (structural.length) {
+	        setStatus(dom.importInvalidStatus, '无可入库用例：字段层级不足 ' + structural.length + ' 条，请在 XMind 中补齐后重新导入', 'warn');
+	      } else {
+	        setStatus(dom.importInvalidStatus, '导入数据未就绪，请关闭后重新导入', 'warn');
+	      }
+	      return;
+	    }
+
+	    var invalid = validateImportItems(items);
+	    state.importInvalid.invalid = invalid;
+	    if (invalid.length) {
+	      renderImportInvalidTable();
+	      setStatus(dom.importInvalidStatus, '仍有 ' + invalid.length + ' 条用例必填字段为空，请修改后再确认', 'warn');
+	      return;
+	    }
+
+	    state.importInvalid.loading = true;
+	    syncImportInvalidControls();
+	    setStatus(dom.importInvalidStatus, '校验通过，入库中...', '');
+
+	    apiClient.importCaseFile({
+	      project_id: projectId,
+	      version_id: versionId,
+	      file_name: fileName,
+	      source: state.importInvalid.source || extFromFileName(fileName),
+	      items: sanitizeImportItemsForApi(items),
+	    }).then(function() {
+	      var msg = '入库成功：' + cleanCaseFileName(fileName);
+	      if (structural.length) msg += '（已跳过字段层级不足 ' + structural.length + ' 条）';
+	      setStatus(dom.importInvalidStatus, msg, 'ok');
+	      setStatus(dom.importStatus, msg, 'ok');
+	      setStatus(dom.status, msg, 'ok');
+	      refreshCaseFileListsByProject(projectId);
+
+	      if (importInvalidDrawerInstance && typeof importInvalidDrawerInstance.close === 'function') {
+	        importInvalidDrawerInstance.close();
+	      }
+
+	      // 成功后从导入列表中移除该文件，避免重复导入；若已无文件则清空 input。
+	      var file = state.importInvalid.file;
+	      if (file && state.importDrawer && Array.isArray(state.importDrawer.files)) {
+	        state.importDrawer.files = state.importDrawer.files.filter(function(f) { return f !== file; });
+	      }
+	      renderImportFileHint();
+	      if (dom.importInput && (!state.importDrawer.files || !state.importDrawer.files.length)) {
+	        try {
+	          dom.importInput.value = '';
+	        } catch (e) {
+	          // ignore
+	        }
+	      }
+	      syncImportConfirmEnabled();
+	    }).catch(function(err) {
+	      var msg = err && err.message ? err.message : '导入失败';
+	      setStatus(dom.importInvalidStatus, '入库失败：' + msg, 'err');
+	      setStatus(dom.importStatus, '入库失败：' + msg, 'err');
+	      if (msg.indexOf('同名') !== -1) {
+	        // 同名冲突：复用现有差异对比抽屉（保持导入数据为已修正内容）。
+	        if (importInvalidDrawerInstance && typeof importInvalidDrawerInstance.close === 'function') {
+	          importInvalidDrawerInstance.close();
+	        }
+	        var importedCleanName = cleanCaseFileName(fileName);
+	        var errPayload = err && err.payload ? err.payload : null;
+	        var matchedCaseFileId = errPayload && errPayload.existing_case_file_id ? errPayload.existing_case_file_id : null;
+	        var matchedCleanName = errPayload && errPayload.existing_file_name_clean ? String(errPayload.existing_file_name_clean) : importedCleanName;
+	        var matchedVersionId = errPayload && (errPayload.existing_version_id || errPayload.existing_version_id === 0) ? errPayload.existing_version_id : null;
+	        var cleanName = matchedCleanName || importedCleanName;
+	        var source = state.importInvalid.source || extFromFileName(fileName);
+	        openImportDiffDrawerLoading({
+	          fileName: fileName,
+	          cleanName: cleanName,
+	          importedCleanName: importedCleanName,
+	          projectId: projectId,
+	          importVersionId: versionId,
+	          source: source,
+	        });
+	        (matchedCaseFileId
+	          ? Promise.all([apiClient.listCaseItems(matchedCaseFileId), loadVersions(projectId)]).then(function(res) {
+	            var dbItems = Array.isArray(res && res[0]) ? res[0] : [];
+	            openImportDiffDrawer({
+	              fileName: fileName,
+	              cleanName: cleanName,
+	              importedCleanName: importedCleanName,
+	              projectId: projectId,
+	              importVersionId: versionId,
+	              dbVersionId: matchedVersionId,
+	              importItems: items,
+	              dbItems: dbItems || [],
+	              source: source,
+	            });
+	          })
+	          : Promise.all([apiClient.listCaseFiles(projectId), loadVersions(projectId)])
+	              .then(function(res) {
+	                var files = Array.isArray(res && res[0]) ? res[0] : [];
+	                var list = Array.isArray(files) ? files : [];
+	                var existing = list.find(function(cf) {
+	                  return cf && String(cf.file_name_clean || '') === String(cleanName || '');
+	                });
+	                if (!existing) throw new Error('未找到库中同名用例：' + cleanName);
+	                return apiClient.listCaseItems(existing.id).then(function(dbItems) {
+	                  openImportDiffDrawer({
+	                    fileName: fileName,
+	                    cleanName: cleanName,
+	                    importedCleanName: importedCleanName,
+	                    projectId: projectId,
+	                    importVersionId: versionId,
+	                    dbVersionId: existing.version_id || null,
+	                    importItems: items,
+	                    dbItems: dbItems || [],
+	                    source: source,
+	                  });
+	                });
+	              })
+	        ).catch(function(e) {
+	          setStatus(dom.importDiffStatus, (e && e.message ? e.message : '打开差异对比失败'), 'err');
+	          setStatus(dom.importStatus, (e && e.message ? e.message : '打开差异对比失败'), 'err');
+	        });
+	      }
+	    }).finally(function() {
+	      state.importInvalid.loading = false;
+	      syncImportInvalidControls();
+	    });
+	  }
 
   function refreshCaseFileListsByProject(projectId) {
     if (!projectId) return Promise.resolve();
@@ -1283,31 +1612,134 @@
     return [];
   }
 
-  function buildImportItems(list) {
-    if (!Array.isArray(list)) return [];
-    return list
-      .map(function(item) {
-        if (!item || typeof item !== 'object') return null;
-        var module = String(item.module || item.module_name || item['模块'] || '').trim();
-        var title = String(item.title || item.case_title || item['用例标题'] || '').trim();
-        var expected = String(item.expected || item.result || item['预期结果'] || '').trim();
-        if (!module || !title || !expected) return null;
-        var priority = String(item.priority || item.level || item['优先级'] || '').trim();
-        var precondition = String(item.preconditions || item.precondition || item['前提条件'] || '').trim();
-        var steps = toLineText(item.steps || item.actions || item['操作步骤'] || '').trim();
-        var remark = String(item.remark || '').trim();
-        return {
-          module: module,
-          title: title,
-          expected: expected,
-          priority: priority || null,
-          precondition: precondition || null,
-          steps: steps || null,
-          remark: remark || null,
-        };
-      })
-      .filter(Boolean);
-  }
+		  function buildImportItems(list) {
+	    if (!Array.isArray(list)) return [];
+
+	    function normalizeDashAsEmpty(text) {
+	      var t = text === null || text === undefined ? '' : String(text);
+	      t = t.trim();
+	      return t === '-' ? '' : t;
+	    }
+
+	    return list
+	      .map(function(item) {
+	        if (!item || typeof item !== 'object') return null;
+	        var module = normalizeDashAsEmpty(item.module || item.module_name || item['模块'] || '');
+	        var title = normalizeDashAsEmpty(item.title || item.case_title || item['用例标题'] || '');
+	        var expected = normalizeDashAsEmpty(item.expected || item.result || item['预期结果'] || '');
+	        var priority = normalizeDashAsEmpty(item.priority || item.level || item['优先级'] || '');
+	        var precondition = normalizeDashAsEmpty(item.preconditions || item.precondition || item['前提条件'] || '');
+	        var steps = normalizeDashAsEmpty(toLineText(item.steps || item.actions || item['操作步骤'] || ''));
+	        var remark = normalizeDashAsEmpty(item.remark || '');
+	        var any = String(module || '') + String(title || '') + String(priority || '') + String(precondition || '') + String(steps || '') + String(expected || '') + String(remark || '');
+	        if (!any.trim()) return null;
+	        return {
+	          module: module,
+	          title: title,
+	          expected: expected,
+	          priority: priority || '',
+	          precondition: precondition || '',
+	          steps: steps || '',
+	          remark: remark || null,
+	          _sourceLine: item._sourceLine || null,
+	        };
+	      })
+		      .filter(Boolean);
+		  }
+
+	  function normalizePriorityInput(value) {
+	    var text = value === null || value === undefined ? '' : String(value);
+	    text = text.trim();
+	    if (!text) return '';
+	    var head = text.charAt(0);
+	    if (head === 'p' || head === 'P') return 'P' + text.slice(1);
+	    return text;
+	  }
+
+	  function sanitizeImportItemsForApi(items) {
+	    var list = Array.isArray(items) ? items : [];
+	    return list
+	      .map(function(it) {
+	        if (!it) return null;
+	        return {
+	          module: String(it.module || '').trim(),
+	          title: String(it.title || '').trim(),
+	          expected: String(it.expected || '').trim(),
+	          priority: it.priority === null || it.priority === undefined ? null : String(it.priority || '').trim(),
+	          precondition: it.precondition === null || it.precondition === undefined ? null : String(it.precondition || '').trim(),
+	          steps: it.steps === null || it.steps === undefined ? null : String(it.steps || '').trim(),
+	          remark: it.remark === null || it.remark === undefined ? null : String(it.remark || '').trim(),
+	        };
+	      })
+	      .filter(Boolean);
+	  }
+
+	  function validateImportItems(items) {
+	    var list = Array.isArray(items) ? items : [];
+	    var invalid = [];
+	    list.forEach(function(it, idx) {
+	      if (!it) return;
+	      it.module = String(it.module === null || it.module === undefined ? '' : it.module).trim();
+	      it.title = String(it.title === null || it.title === undefined ? '' : it.title).trim();
+	      it.expected = String(it.expected === null || it.expected === undefined ? '' : it.expected).trim();
+	      it.priority = normalizePriorityInput(it.priority);
+	      it.precondition = String(it.precondition === null || it.precondition === undefined ? '' : it.precondition).trim();
+	      it.steps = String(it.steps === null || it.steps === undefined ? '' : it.steps).trim();
+
+	      var err = {
+	        module: !it.module,
+	        title: !it.title,
+	        priority: !it.priority,
+	        precondition: !it.precondition,
+	        steps: !it.steps,
+	        expected: !it.expected,
+	      };
+	      if (err.module || err.title || err.priority || err.precondition || err.steps || err.expected) {
+	        var lineNo = it && it._sourceLine ? Number(it._sourceLine) : (idx + 1);
+	        if (!isFinite(lineNo) || lineNo <= 0) lineNo = idx + 1;
+	        invalid.push({ index: idx, line: lineNo, err: err });
+	      }
+	    });
+	    return invalid;
+	  }
+
+	  function normalizeXmindPathSegments(pathArr, rootTitle) {
+	    if (!Array.isArray(pathArr)) return [];
+	    // 保留空字符串：XMind 中“节点存在但标题为空”应作为字段内容为空处理，不应被当作层级缺失。
+	    var clean = pathArr
+	      .filter(function(s) { return s !== null && s !== undefined; })
+	      .map(function(s) { return String(s).trim(); });
+	    if (!clean.length) return [];
+	    var rt = rootTitle === null || rootTitle === undefined ? '' : String(rootTitle).trim();
+	    if (rt && clean[0] === rt) clean = clean.slice(1);
+	    return clean;
+	  }
+
+	  function buildImportItemsFromXmindPaths(paths, rootTitle) {
+	    var list = Array.isArray(paths) ? paths : [];
+	    var structuralErrors = [];
+	    var raw = [];
+
+	    list.forEach(function(pathArr, idx) {
+	      var segs = normalizeXmindPathSegments(pathArr, rootTitle);
+	      if (segs.length < 6) {
+	        structuralErrors.push({ line: idx + 1, depth: segs.length });
+	        return;
+	      }
+	      var tail = segs.slice(-6);
+	      raw.push({
+	        module: tail[0] || '',
+	        title: tail[1] || '',
+	        priority: tail[2] || '',
+	        precondition: tail[3] || '',
+	        steps: tail[4] || '',
+	        expected: tail[5] || '',
+	        _sourceLine: idx + 1,
+	      });
+	    });
+
+	    return { items: buildImportItems(raw), structuralErrors: structuralErrors };
+	  }
 
   function parseImportFile(file) {
     if (!file) return Promise.resolve({ items: [] });
@@ -1315,8 +1747,10 @@
     var coreApi = getCore();
     if (ext === 'xmind' && coreApi && typeof coreApi.parseXmindFile === 'function') {
       return coreApi.parseXmindFile(file).then(function(res) {
-        var list = res && Array.isArray(res.list) ? res.list : [];
-        return { items: buildImportItems(list) };
+        var paths = res && Array.isArray(res.paths) ? res.paths : [];
+        var rootTitle = res && res.rootTitle ? String(res.rootTitle) : '';
+        var mapped = buildImportItemsFromXmindPaths(paths, rootTitle);
+        return { items: mapped.items, structuralErrors: mapped.structuralErrors };
       });
     }
     if (ext === 'xlsx') {
@@ -1416,10 +1850,10 @@
     syncImportConfirmEnabled();
   }
 
-  function confirmImportToDb() {
-    var s = state.importDrawer;
-    if (!s.files.length) {
-      setStatus(dom.importStatus, '请先选择用例文件', 'warn');
+	  function confirmImportToDb() {
+	    var s = state.importDrawer;
+	    if (!s.files.length) {
+	      setStatus(dom.importStatus, '请先选择用例文件', 'warn');
       return;
     }
     if (!s.projectId) {
@@ -1437,29 +1871,56 @@
 
     var successCount = 0;
     var failCount = 0;
-    var duplicateNames = [];
-    var failDetails = [];
-    var diffOpened = false;
-    var chain = Promise.resolve();
+	    var duplicateNames = [];
+	    var failDetails = [];
+	    var diffOpened = false;
+	    var invalidOpened = false;
+	    var chain = Promise.resolve();
 
-    s.files.forEach(function(file) {
-      chain = chain.then(function() {
-        return parseImportFile(file)
-          .then(function(parsed) {
-            var items = parsed && parsed.items ? parsed.items : [];
-            if (!items.length) {
-              failCount += 1;
-              var emptyMsg = '【' + (file && file.name ? file.name : '文件') + '】未解析到有效用例，已跳过';
-              failDetails.push({ file: file && file.name ? file.name : '文件', reason: emptyMsg });
-              setStatus(dom.importStatus, emptyMsg, 'warn');
-              return;
-            }
-            return apiClient.importCaseFile({
-              project_id: s.projectId,
-              version_id: s.versionId,
-              file_name: file.name,
+	    s.files.forEach(function(file) {
+	      chain = chain.then(function() {
+	        if (invalidOpened) return;
+	        return parseImportFile(file)
+	          .then(function(parsed) {
+	            if (invalidOpened) return;
+	            var structural = parsed && Array.isArray(parsed.structuralErrors) ? parsed.structuralErrors : [];
+	            var items = parsed && parsed.items ? parsed.items : [];
+	            if (!items.length) {
+	              failCount += 1;
+	              var emptyMsg = '【' + (file && file.name ? file.name : '文件') + '】未解析到有效用例，已跳过';
+	              failDetails.push({ file: file && file.name ? file.name : '文件', reason: emptyMsg });
+	              setStatus(dom.importStatus, emptyMsg, 'warn');
+	              return;
+	            }
+	            var invalid = validateImportItems(items);
+	            if (structural.length || invalid.length) {
+	              invalidOpened = true;
+	              openImportInvalidDrawer({
+	                file: file,
+	                fileName: file.name,
+	                cleanName: cleanCaseFileName(file.name),
+	                projectId: s.projectId,
+	                versionId: s.versionId,
+	                source: file.type || extFromFileName(file.name),
+	                items: items,
+	                structuralErrors: structural,
+	              });
+	              if (structural.length) {
+	                var hint = '导入发现字段层级不足 ' + structural.length + ' 条（将跳过）；可继续入库其余 ' + items.length + ' 条，或回到 XMind 补齐后重导入';
+	                setStatus(dom.importStatus, hint, 'warn');
+	                setStatus(dom.status, hint, 'warn');
+	              } else {
+	                setStatus(dom.importStatus, '导入校验失败：请在“格式校验”抽屉补齐必填字段后再确认入库', 'warn');
+	                setStatus(dom.status, '导入校验失败：请补齐必填字段后再确认入库', 'warn');
+	              }
+	              return;
+	            }
+	            return apiClient.importCaseFile({
+	              project_id: s.projectId,
+	              version_id: s.versionId,
+	              file_name: file.name,
               source: file.type || extFromFileName(file.name),
-              items: items,
+              items: sanitizeImportItemsForApi(items),
             }).then(function() {
               successCount += 1;
             }).catch(function(err) {
@@ -1535,21 +1996,23 @@
               }
               setStatus(dom.importStatus, msg, 'err');
             });
-          })
-          .catch(function(err) {
-            failCount += 1;
-            var msg = err && err.message ? err.message : '解析失败';
-            failDetails.push({ file: file && file.name ? file.name : '文件', reason: msg });
-            setStatus(dom.importStatus, msg, 'err');
-          });
-      });
-    });
+	          })
+	          .catch(function(err) {
+	            if (invalidOpened) return;
+	            failCount += 1;
+	            var msg = err && err.message ? err.message : '解析失败';
+	            failDetails.push({ file: file && file.name ? file.name : '文件', reason: msg });
+	            setStatus(dom.importStatus, msg, 'err');
+	          });
+	      });
+	    });
 
-    chain.then(function() {
-      var msg = '导入完成：成功 ' + successCount + ' 份，失败/跳过 ' + failCount + ' 份';
-      if (duplicateNames.length) {
-        var head = duplicateNames.slice(0, 3).join('、');
-        msg += '；同名用例已存在：' + head + (duplicateNames.length > 3 ? '...' : '');
+	    chain.then(function() {
+	      if (invalidOpened) return;
+	      var msg = '导入完成：成功 ' + successCount + ' 份，失败/跳过 ' + failCount + ' 份';
+	      if (duplicateNames.length) {
+	        var head = duplicateNames.slice(0, 3).join('、');
+	        msg += '；同名用例已存在：' + head + (duplicateNames.length > 3 ? '...' : '');
       }
       if (failDetails.length) {
         var lines = [msg];
@@ -1564,17 +2027,17 @@
         }
         msg = lines.join('\n');
       }
-      setStatus(dom.importStatus, msg, failCount ? 'warn' : 'ok');
-      setStatus(dom.status, msg, failCount ? 'warn' : 'ok');
-    }).finally(function() {
-      s.loading = false;
-      // 防止重复导入：当本次导入全部成功后，自动清空文件选择（保留项目/版本默认值）。
-      if (successCount > 0 && failCount === 0 && diffOpened !== true) {
-        s.files = [];
-        renderImportFileHint();
-        if (dom.importInput) {
-          try {
-            dom.importInput.value = '';
+	      setStatus(dom.importStatus, msg, failCount ? 'warn' : 'ok');
+	      setStatus(dom.status, msg, failCount ? 'warn' : 'ok');
+	    }).finally(function() {
+	      s.loading = false;
+	      // 防止重复导入：当本次导入全部成功后，自动清空文件选择（保留项目/版本默认值）。
+	      if (!invalidOpened && successCount > 0 && failCount === 0 && diffOpened !== true) {
+	        s.files = [];
+	        renderImportFileHint();
+	        if (dom.importInput) {
+	          try {
+	            dom.importInput.value = '';
           } catch (e) {
             // ignore
           }
@@ -2365,17 +2828,17 @@
     var downloadBlob = getDownloadBlob();
     if (!downloadBlob) return;
     setStatus(dom.importStatus, '生成 XMind 导入模板中...', '');
-    var sample = [
-      {
-        module: '模块',
-        title: '用例标题',
-        priority: 'P1',
-        precondition: '前提条件（可空）',
-        steps: '1. 操作步骤（可空）',
-        expected: '预期结果',
-        remark: '',
-      },
-    ];
+	    var sample = [
+	      {
+	        module: '模块',
+	        title: '用例标题',
+	        priority: 'P1',
+	        precondition: '前提条件（必填）',
+	        steps: '1. 操作步骤（必填）',
+	        expected: '预期结果',
+	        remark: '',
+	      },
+	    ];
     builder(sample, '用例导入模板', '')
       .then(function(pkg) {
         if (!pkg || !pkg.blob) throw new Error('无导出内容');
@@ -3439,9 +3902,29 @@
     if (dom.importXmindTemplateBtn) {
       dom.importXmindTemplateBtn.addEventListener('click', downloadImportXmindTemplate);
     }
-    if (dom.importDiffOverwriteBtn) {
-      dom.importDiffOverwriteBtn.addEventListener('click', confirmOverwriteImportFromDiff);
-    }
+	    if (dom.importDiffOverwriteBtn) {
+	      dom.importDiffOverwriteBtn.addEventListener('click', confirmOverwriteImportFromDiff);
+	    }
+	    if (dom.importInvalidConfirmBtn) {
+	      dom.importInvalidConfirmBtn.addEventListener('click', confirmImportFromInvalidDrawer);
+	    }
+	    if (dom.importInvalidBody) {
+	      dom.importInvalidBody.addEventListener('focusout', function(e) {
+	        var t = e && e.target ? e.target : null;
+	        if (!t || !t.getAttribute) return;
+	        var field = t.getAttribute('data-case-lib-import-invalid-field');
+	        if (!field) return;
+	        var idx = Number(t.getAttribute('data-index'));
+	        if (!isFinite(idx) || idx < 0) return;
+	        var multiline = String(t.getAttribute('data-case-lib-multiline') || '').toLowerCase() === 'true';
+	        var raw = multiline ? t.innerText : t.textContent;
+	        var value = String(raw || '').trim();
+	        var item = state.importInvalid.items[idx];
+	        if (!item) return;
+	        if (field === 'priority') value = normalizePriorityInput(value);
+	        item[field] = value;
+	      });
+	    }
 
     if (dom.editDrawerConfirmBtn) {
       dom.editDrawerConfirmBtn.addEventListener('click', loadEditDrawerFiles);
@@ -3684,12 +4167,35 @@
     // 兜底：本地静态资源偶发空响应时，提前触发一次导出依赖补拉，避免导出按钮处报“缺少依赖”。
     ensureExportDepsReady();
 
-    importDrawerInstance = ensureDrawer('caseLibraryImportDrawer', ['openCaseLibraryImportDrawerBtn'], function() {
-      ensureProjectsReady().then(resetImportDrawer);
-    });
-    importDiffDrawerInstance = ensureDrawer('caseLibraryImportDiffDrawer', [], function() {
-      // noop
-    });
+	    importDrawerInstance = ensureDrawer('caseLibraryImportDrawer', ['openCaseLibraryImportDrawerBtn'], function() {
+	      ensureProjectsReady().then(resetImportDrawer);
+	    });
+	    importDiffDrawerInstance = ensureDrawer('caseLibraryImportDiffDrawer', [], function() {
+	      // noop
+	    });
+	    importInvalidDrawerInstance = ensureDrawer(
+	      'caseLibraryImportInvalidDrawer',
+	      [],
+	      function() {
+	        // noop
+	      },
+	      function() {
+	        state.importInvalid.file = null;
+	        state.importInvalid.fileName = '';
+	        state.importInvalid.cleanName = '';
+	        state.importInvalid.source = '';
+	        state.importInvalid.projectId = null;
+	        state.importInvalid.versionId = null;
+	        state.importInvalid.items = [];
+	        state.importInvalid.invalid = [];
+	        state.importInvalid.loading = false;
+	        syncImportInvalidControls();
+	        if (dom.importInvalidStatus) setStatus(dom.importInvalidStatus, '', '');
+	        if (dom.importInvalidBody) {
+	          dom.importInvalidBody.innerHTML = '<tr><td colspan=\"7\"><p class=\"hint\">暂无数据</p></td></tr>';
+	        }
+	      }
+	    );
     editDrawerInstance = ensureDrawer(
       'caseLibraryEditDrawer',
       ['openCaseLibraryEditDrawerBtn'],

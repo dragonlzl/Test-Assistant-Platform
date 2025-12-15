@@ -12,7 +12,7 @@
     "module": "登录",
     "title": "密码错误提示",
     "priority": "P1",
-    "preconditions": "",
+    "preconditions": "已注册账号",
     "steps": "1. 输入账号\\n2. 输入错误密码\\n3. 点击登录",
     "expected": "提示密码错误",
     "remark": "覆盖错误提示"

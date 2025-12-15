@@ -206,19 +206,71 @@
       return res;
     }
 
-    function normalizeXmindPath(path) {
+    function normalizeXmindPath(path, rootTitle) {
       if (!Array.isArray(path)) return null;
-      var cleanPath = path.filter(Boolean);
-      if (cleanPath.length < 6) return null;
-      var trimmed = cleanPath.slice(-6);
-      if (trimmed.length < 6) return null;
+      var cleanPath = (path || []).filter(Boolean).map(function(s) { return String(s || '').trim(); }).filter(Boolean);
+      if (!cleanPath.length) return null;
+
+      var rt = rootTitle ? String(rootTitle || '').trim() : '';
+      if (rt && cleanPath.length && cleanPath[0] === rt) {
+        cleanPath = cleanPath.slice(1);
+      }
+      if (cleanPath.length < 2) return null;
+
+      function isPriorityText(text) {
+        var t = String(text || '').trim();
+        if (!t) return false;
+        return /^p\d+/i.test(t);
+      }
+
+      var module = '';
+      var title = '';
+      var priority = '';
+      var preconditions = '';
+      var steps = '';
+      var expected = '';
+
+      // 兼容子模块层级：优先取“最后 6 段字段”（但先剔除 root），避免根节点被当成模块。
+      if (cleanPath.length >= 6) {
+        var seg = cleanPath.slice(-6);
+        module = seg[0] || '';
+        title = seg[1] || '';
+        priority = seg[2] || '';
+        preconditions = seg[3] || '';
+        steps = seg[4] || '';
+        expected = seg[5] || '';
+      } else if (cleanPath.length === 5) {
+        // 缺 1 个字段（常见：缺预期结果 / 缺优先级），保证模块/标题不与根节点错位。
+        // 结构通常为：模块、标题、优先级、前提条件、操作步骤（缺预期）；或 模块、标题、前提条件、操作步骤、预期（缺优先级）。
+        module = cleanPath[0] || '';
+        title = cleanPath[1] || '';
+        if (isPriorityText(cleanPath[2])) {
+          priority = cleanPath[2] || '';
+          preconditions = cleanPath[3] || '';
+          steps = cleanPath[4] || '';
+          expected = '';
+        } else {
+          priority = '';
+          preconditions = cleanPath[2] || '';
+          steps = cleanPath[3] || '';
+          expected = cleanPath[4] || '';
+        }
+      } else {
+        // 长度不足：按顺序填充并补空，交由后续校验/修正抽屉处理。
+        module = cleanPath[0] || '';
+        title = cleanPath[1] || '';
+        priority = cleanPath.length > 2 ? (cleanPath[2] || '') : '';
+        preconditions = cleanPath.length > 3 ? (cleanPath[3] || '') : '';
+        steps = cleanPath.length > 4 ? (cleanPath[4] || '') : '';
+        expected = cleanPath.length > 5 ? (cleanPath[5] || '') : '';
+      }
       return {
-        module: trimmed[0] || '',
-        title: trimmed[1] || '',
-        priority: trimmed[2] || '',
-        preconditions: trimmed[3] || '',
-        steps: trimmed[4] || '',
-        expected: trimmed[5] || '',
+        module: module,
+        title: title,
+        priority: priority,
+        preconditions: preconditions,
+        steps: steps,
+        expected: expected,
       };
     }
 
@@ -233,7 +285,8 @@
         var currentPath = path || [];
         if (!topic) return;
         var title = getXmindTitle(topic);
-        var nextPath = title ? currentPath.concat(title) : currentPath;
+        // 保留空标题节点：用于区分“节点存在但内容为空”与“层级缺失”，避免字段错位。
+        var nextPath = currentPath.concat(title === undefined || title === null ? '' : title);
         var children = getXmindChildren(topic);
         if (!children.length) {
           paths.push(nextPath);
@@ -247,9 +300,9 @@
       return paths;
     }
 
-    function buildCaseListFromXmindJson(json) {
+    function buildCaseListFromXmindJson(json, rootTitle) {
       var paths = collectXmindLeafPaths(json);
-      return paths.map(normalizeXmindPath).filter(Boolean);
+      return paths.map(function(p) { return normalizeXmindPath(p, rootTitle); }).filter(Boolean);
     }
 
     function extractXmindTopicsFromXml(xmlText) {
@@ -271,12 +324,12 @@
       if (jsonEntry) {
         try {
           var json = JSON.parse(await jsonEntry.async('string'));
-          var cases = buildCaseListFromXmindJson(json);
-          var leafPaths = collectXmindLeafPaths(json);
           var rootTitle = '';
           if (Array.isArray(json) && json.length && json[0] && json[0].rootTopic) rootTitle = getXmindTitle(json[0].rootTopic);
           else if (json && Array.isArray(json.sheets) && json.sheets.length && json.sheets[0] && json.sheets[0].rootTopic) rootTitle = getXmindTitle(json.sheets[0].rootTopic);
           else if (json && json.rootTopic) rootTitle = getXmindTitle(json.rootTopic);
+          var cases = buildCaseListFromXmindJson(json, rootTitle);
+          var leafPaths = collectXmindLeafPaths(json);
           if (cases.length) {
             return { text: JSON.stringify(cases, null, 2), list: cases, paths: leafPaths, rootTitle: rootTitle };
           }

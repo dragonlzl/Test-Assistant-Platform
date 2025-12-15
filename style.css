@@ -2236,6 +2236,15 @@ body {
 .diff-cell-changed {
   background: rgba(231, 76, 60, 0.14) !important;
 }
+
+.invalid-cell {
+  background: rgba(231, 76, 60, 0.12) !important;
+  outline: 1px solid rgba(231, 76, 60, 0.25);
+}
+
+.import-structure-row td {
+  background: rgba(245, 158, 11, 0.14) !important;
+}
 .hidden {
   display: none !important;
 }
