@@ -221,6 +221,9 @@ test.describe('case library api', () => {
     expect(sameTitleExpectedDiffStepsItemsRes.status()).toBe(200);
     const sameTitleExpectedDiffStepsItems = await sameTitleExpectedDiffStepsItemsRes.json();
     expect(sameTitleExpectedDiffStepsItems.length).toBe(2);
+    const sameTitleExpectedDiffStepsItemIds = sameTitleExpectedDiffStepsItems
+      .map((it) => it && it.id)
+      .filter(Boolean);
 
     const overwriteTargetRes = await ctx.post(`${apiBase}/api/case-files/import`, {
       headers,
@@ -426,6 +429,22 @@ test.describe('case library api', () => {
     expect(listExecCasesRes.status()).toBe(200);
     const execCases = await listExecCasesRes.json();
     expect(execCases.length).toBe(1);
+
+    const addDiffSteps1 = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/cases/from-library`, {
+      headers,
+      data: { case_item_ids: [sameTitleExpectedDiffStepsItemIds[0]] },
+    });
+    expect(addDiffSteps1.status()).toBe(201);
+    const addDiffSteps2 = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/cases/from-library`, {
+      headers,
+      data: { case_item_ids: [sameTitleExpectedDiffStepsItemIds[1]] },
+    });
+    expect(addDiffSteps2.status()).toBe(201);
+
+    const listExecCasesAfterDiffStepsRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers });
+    expect(listExecCasesAfterDiffStepsRes.status()).toBe(200);
+    const execCasesAfterDiffSteps = await listExecCasesAfterDiffStepsRes.json();
+    expect(execCasesAfterDiffSteps.length).toBe(3);
 
     const dupAdd = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/cases/from-library`, {
       headers,

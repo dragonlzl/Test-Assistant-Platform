@@ -91,6 +91,62 @@ test.describe('执行总览页（DB 接口接入）', () => {
         ]);
       }
 
+      if (path === '/api/exec/overview/layout' && method === 'GET') {
+        const projectId = url.searchParams.get('project_id');
+        const versionId = url.searchParams.get('version_id');
+        const baseUser = {
+          project_id: Number(projectId),
+          version_id: versionId ? Number(versionId) : null,
+          user_id: user.id,
+          username: user.username,
+          level: user.level,
+          user_created_at: new Date('2020-01-01T00:00:00Z').toISOString(),
+          total: 5,
+          pending: 2,
+          passed: 1,
+          failed: 1,
+          blocked: 1,
+          not_applicable: 0,
+          ui_placement: { versionOrderByProject: { 1: ['12', '11'] }, fileOrderByProjectVersion: { 1: { 11: ['200'], 12: [] } } },
+          exec_sets: [
+            { exec_set_id: 200, exec_set_name: '需求-登录', version_id: 11, status: 'archived', requirement: '', total: 3, pending: 0, passed: 2, failed: 1, blocked: 0, not_applicable: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+            { exec_set_id: 201, exec_set_name: '需求-注册', version_id: 11, status: 'active', requirement: '', total: 2, pending: 2, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          ],
+        };
+        if (projectId === '2') {
+          return respond(200, [
+            Object.assign({}, baseUser, {
+              project_id: 2,
+              total: 1,
+              pending: 1,
+              passed: 0,
+              failed: 0,
+              blocked: 0,
+              not_applicable: 0,
+              exec_sets: [
+                { exec_set_id: 300, exec_set_name: '需求-战斗', version_id: 21, status: 'active', requirement: '', total: 1, pending: 1, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+              ],
+            }),
+          ]);
+        }
+        if (versionId === String(versionsByProject[1][0].id)) {
+          return respond(200, [
+            Object.assign({}, baseUser, {
+              total: 3,
+              pending: 1,
+              passed: 1,
+              failed: 1,
+              blocked: 0,
+              not_applicable: 0,
+              exec_sets: [
+                { exec_set_id: 200, exec_set_name: '需求-登录', version_id: 11, status: 'archived', requirement: '', total: 3, pending: 0, passed: 2, failed: 1, blocked: 0, not_applicable: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+              ],
+            }),
+          ]);
+        }
+        return respond(200, [baseUser]);
+      }
+
       if (path === '/api/exec/overview/cases' && method === 'GET') {
         const uid = url.searchParams.get('user_id');
         if (uid !== String(user.id)) return respond(200, []);
@@ -103,6 +159,35 @@ test.describe('执行总览页（DB 接口接入）', () => {
             module: '登录',
             title: '正常登录',
             status: '通过',
+            updated_at: new Date().toISOString(),
+          },
+        ]);
+      }
+
+      var execCasesMatch = path.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (execCasesMatch && method === 'GET') {
+        var execSetId = Number(execCasesMatch[1]);
+        if (execSetId !== 200) return respond(200, []);
+        return respond(200, [
+          {
+            id: 100,
+            exec_set_id: 200,
+            case_item_id: 1,
+            module: '登录',
+            title: '正常登录',
+            expected: 'ok',
+            priority: 'P0',
+            precondition: '',
+            steps: '1',
+            actual_result: 'ok',
+            defect_link: null,
+            reuse_details: null,
+            defect_links: null,
+            remark: '',
+            status: '通过',
+            order_no: 1,
+            executor_id: user.id,
+            created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },
         ]);
@@ -135,9 +220,9 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await expect(page.locator('#execOverviewDetail')).toBeVisible();
     await expect(page.locator('#execOverviewProjectTitle')).toContainText('元气骑士');
     await expect(page.locator('#execOverviewUserCards')).toContainText('总数 1');
-
-    await page.click('#execOverviewBackBtn');
-    await expect(page.locator('#execOverviewDetail')).toHaveClass(/hidden/);
+    await expect(page.locator('#execOverviewUserCards .exec-overview-progress')).toHaveCount(0);
+    await expect(page.locator('#execOverviewUserCards .exec-overview-file-progress')).toHaveCount(1);
+    await expect(page.locator('#execOverviewUserCards')).not.toContainText('组长');
 
     await page.click('#execOverviewNavProjects [data-project-id="1"]');
     await expect(page.locator('#execOverviewDetail')).toBeVisible();
@@ -147,13 +232,15 @@ test.describe('执行总览页（DB 接口接入）', () => {
 
     await expect(page.locator('#execOverviewUserCards')).toContainText(user.username);
     await expect(page.locator('#execOverviewUserCards')).toContainText('总数 5');
+    await expect(page.locator('#execOverviewUserCards')).toContainText('归');
+    await expect(page.locator('#execOverviewUserCards .exec-overview-progress')).toHaveCount(0);
+    await expect(page.locator('#execOverviewUserCards .exec-overview-file-progress')).toHaveCount(2);
 
     await page.selectOption('#execOverviewVersionSelect', String(versionsByProject[1][0].id));
     await expect(page.locator('#execOverviewUserCards')).toContainText('总数 3');
 
-    await page.click('#execOverviewUserCards .exec-overview-view-cases');
-    await expect(page.locator('#execOverviewCasesPanel')).toBeVisible();
-    await expect(page.locator('#execOverviewCasesTableBody')).toContainText('需求-登录');
-    await expect(page.locator('#execOverviewCasesTableBody')).toContainText('正常登录');
+    await page.click('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]');
+    await expect(page.locator('#execOverviewExecSetDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('正常登录');
   });
 });

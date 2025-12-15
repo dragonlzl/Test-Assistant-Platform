@@ -1056,6 +1056,15 @@
 - 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 重复条目`（通过）；`npm run test:ui -- tests/ui/tempexec_import_confirm.spec.js -g 重复条目`（通过）；API：启动后端（`APP_DB_FILE=apitest.db python -m uvicorn backend.main:app --host 127.0.0.1 --port <port>`）后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
 - 更新记录：2025-12-15 同一份用例内重复条目判定条件升级上线（`backend/models.py`、`backend/migrations.py`、`backend/routers/cases.py`、`backend/routers/exec_routes.py`、`scripts/core/tempexecCore.js`、`scripts/modules/caseLibrary.js`、`db_integration_plan.md`、`tests/api/case_library.spec.js`、`tests/ui/case_library.spec.js`、`tests/ui/tempexec_import_confirm.spec.js`）。  
 
+- 功能名称：执行总览视图优化（按用例进度/抽屉明细/版本归属修复）  
+- 功能描述：执行总览不再展示“人员总进度条”，改为每份用例（执行集）展示独立进度条；去掉人员“组长”标识；修复执行集错误落入“全部版本”分组导致出现“全部版本”版本盒子的问题（后端按 `case_file_id/source` 回填版本）；用例明细改为抽屉展示，并支持从明细行/用例卡片打开“执行列表”抽屉查看该执行集下的用例列表。  
+- 操作方式：进入“执行总览”→选择项目/版本→查看人员卡片下各执行集进度条；点击人员“查看用例”打开明细抽屉；在明细表点击“查看”或直接点击执行集卡片，打开执行列表抽屉。  
+- 使用效果：进度展示更细粒度，明细查看更聚焦；避免版本盒子出现“全部版本”误分组，提升可用性与一致性。  
+- 新增内容/接口/组件：执行总览明细抽屉与执行集抽屉（`index.html`、`scripts/modules/execOverview.js`、`style.css`）；执行总览接口版本回填与筛选兼容（`backend/routers/exec_routes.py`、`tests/api/exec_overview.spec.js`）。  
+- 复用说明：复用既有 Drawer 组件（`scripts/base/drawer.js`）与执行集用例列表接口（`GET /api/exec/sets/{id}/cases`），不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/execOverview.js`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）；API：启动后端（`APP_DB_FILE=apitest.db python -m uvicorn backend.main:app --host 127.0.0.1 --port <port>`）后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_overview.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行总览视图优化上线（`index.html`、`scripts/modules/execOverview.js`、`style.css`、`backend/routers/exec_routes.py`、`tests/ui/exec_overview.spec.js`、`tests/api/exec_overview.spec.js`）。  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  
@@ -1065,3 +1074,30 @@
 - 复用说明：复用原有确认澄清流程与状态提示方法，仅补充视图内状态承载。  
 - 测试与验证：`npm run test:ui -- tests/ui/workflow.spec.js`（通过，新增用例覆盖澄清提示）。  
 - 更新记录：无  
+
+- 功能名称：执行总览补充进度条与按人员展示项目执行布局  
+- 功能描述：执行总览页补回进度条展示，并支持在选定项目/版本下按人员分组展示“项目区（版本盒子→用例文件）”的执行布局；仅展示该项目/版本下有执行记录的人员；人员排序为“组长优先，其次按账号创建时间由早到晚”；归档执行集在总览中展示“归”标识，并且仅当归档前已执行完（pending=0）才长期展示，避免“未执行完就解散”的噪音。  
+- 操作方式：进入“用例相关 → 执行总览”→选择项目卡片→（可选）选择版本→查看各人员的进度条与版本盒子内的用例文件列表（含归档标识）。  
+- 使用效果：更直观地查看同项目下所有人员的执行进度与用例分布，归档用例可追溯且不干扰未完成执行。  
+- 新增内容/接口/组件：新增 `GET /api/exec/overview/layout` 返回项目成员的执行集布局与统计（`backend/routers/exec_routes.py`、`backend/schemas.py`）；前端执行总览页接入新接口并渲染进度条/归档标识/人员排序与布局（`scripts/modules/execOverview.js`、`services/apiClient.js`、`style.css`）；补充 UI/API 自动化覆盖（`tests/ui/exec_overview.spec.js`、`tests/api/exec_overview.spec.js`）。  
+- 复用说明：复用既有 `exec_sets/exec_cases` 作为权威数据源与现有“执行总览”页面框架，仅新增 layout 聚合接口与前端渲染增强，不改变执行页入库与实时保存逻辑。  
+- 测试与验证：`node --check services/apiClient.js scripts/modules/execOverview.js`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）；启动测试后端（`APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port <port>`）后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_overview.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行总览进度条与按人员布局展示上线（`backend/routers/exec_routes.py`、`backend/schemas.py`、`services/apiClient.js`、`scripts/modules/execOverview.js`、`style.css`、`tests/ui/exec_overview.spec.js`、`tests/api/exec_overview.spec.js`）。  
+
+- 功能名称：执行集从用例库添加的“相同用例”判定条件对齐  
+- 功能描述：从用例库添加用例到执行集（`POST /api/exec/sets/{id}/cases/from-library`）时，“相同用例”的判定从“模块+用例描述+预期结果”升级为“模块+用例描述+前提条件+操作步骤+预期结果”全字段一致才算重复，避免同名同预期但前置/步骤不同的用例被误判为重复而无法添加。  
+- 操作方式：在用例库准备两条“模块/描述/预期相同但步骤不同”的用例 → 添加到同一执行集；仅当五字段完全一致时才会提示重复。  
+- 使用效果：重复判断更准确，允许同名同预期但前置/步骤不同的用例同时进入执行集。  
+- 新增内容/接口/组件：后端执行接口判重 key 调整（`backend/routers/exec_routes.py`）；API 用例更新覆盖该场景（`tests/api/case_library.spec.js`）。  
+- 复用说明：复用既有接口与执行集用例列表，不新增后端接口。  
+- 测试与验证：`python3 -m compileall -q backend`（通过）；`API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行集从用例库添加去重条件对齐上线（`backend/routers/exec_routes.py`、`tests/api/case_library.spec.js`）。  
+
+- 功能名称：执行总览项目成员可见与入口简化  
+- 功能描述：执行总览页对“同一项目成员”开放：项目所属人员可在总览查看其他成员的执行进度与细节（只读）；同时执行总览页移除“返回项目列表”“查看用例”入口与对应抽屉逻辑，仅保留点击执行集卡片打开“执行列表”抽屉。  
+- 操作方式：项目成员进入“执行总览”→选择项目/版本→查看各成员执行集进度；点击任一执行集卡片可打开执行列表抽屉查看用例明细。  
+- 使用效果：项目内协作时可互相查看进度与明细；同时保留执行数据的写入隔离（编辑/更新仍按原规则限制），避免互相覆盖结果。  
+- 新增内容/接口/组件：执行集用例列表接口放开只读访问（`backend/routers/exec_routes.py`）；执行总览页移除返回/查看用例与明细抽屉（`index.html`、`scripts/modules/execOverview.js`）；抽屉“收起”按钮样式回归通用 `link-toggle`（`index.html`）；更新 API/UI 自动化覆盖该行为（`tests/api/exec_overview.spec.js`、`tests/ui/exec_overview.spec.js`）。  
+- 复用说明：复用既有项目权限校验，新增“只读执行集访问”与原有“个人执行集写隔离”并存，不新增接口。  
+- 测试与验证：`node --check scripts/modules/execOverview.js`（通过）；`python3 -m compileall -q backend`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）；API：启动测试后端后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_overview.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行总览项目成员可见与入口简化上线（`backend/routers/exec_routes.py`、`index.html`、`scripts/modules/execOverview.js`、`tests/api/exec_overview.spec.js`、`tests/ui/exec_overview.spec.js`）。  

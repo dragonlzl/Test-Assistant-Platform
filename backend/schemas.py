@@ -278,6 +278,39 @@ class ExecOverviewOut(BaseModel):
     not_applicable: int
 
 
+class ExecOverviewExecSetOut(BaseModel):
+    exec_set_id: int
+    exec_set_name: str
+    version_id: Optional[int]
+    status: str
+    requirement: Optional[str] = None
+    total: int
+    pending: int
+    passed: int
+    failed: int
+    blocked: int
+    not_applicable: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ExecOverviewUserLayoutOut(BaseModel):
+    project_id: int
+    version_id: Optional[int]
+    user_id: int
+    username: str
+    level: Optional[str] = None
+    user_created_at: datetime
+    total: int
+    pending: int
+    passed: int
+    failed: int
+    blocked: int
+    not_applicable: int
+    ui_placement: Optional[Any] = None
+    exec_sets: List[ExecOverviewExecSetOut]
+
+
 class ExecOverviewCaseOut(BaseModel):
     exec_case_id: int
     exec_set_id: int

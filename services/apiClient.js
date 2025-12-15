@@ -468,6 +468,18 @@
     }).then(handleResponse);
   }
 
+  function getExecutionOverviewLayout(projectId, versionId) {
+    var query = [];
+    if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
+    if (versionId || versionId === 0) query.push('version_id=' + encodeURIComponent(versionId));
+    var url = '/api/exec/overview/layout';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
   function listExecutionOverviewCases(params) {
     var query = [];
     if (params && (params.project_id || params.project_id === 0)) query.push('project_id=' + encodeURIComponent(params.project_id));
@@ -532,6 +544,7 @@
     updateFeatureAssignment: updateFeatureAssignment,
     listOperationLogs: listOperationLogs,
     getExecutionOverview: getExecutionOverview,
+    getExecutionOverviewLayout: getExecutionOverviewLayout,
     listExecutionOverviewCases: listExecutionOverviewCases,
   };
 })();
