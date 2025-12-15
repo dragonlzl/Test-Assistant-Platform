@@ -703,8 +703,13 @@ def update_exec_case(
             if case_item:
                 updated_case = False
                 for key in case_fields:
-                    if key in payload_data and payload_data[key] != getattr(case_item, key):
-                        setattr(case_item, key, payload_data[key])
+                    if key not in payload_data:
+                        continue
+                    value = payload_data[key]
+                    if key in ("precondition", "steps") and value is None:
+                        value = ""
+                    if value != getattr(case_item, key):
+                        setattr(case_item, key, value)
                         updated_case = True
                 if updated_case:
                     now = exec_case.updated_at
@@ -731,8 +736,8 @@ def update_exec_case(
                         title=exec_case.title,
                         expected=exec_case.expected,
                         priority=exec_case.priority,
-                        precondition=exec_case.precondition,
-                        steps=exec_case.steps,
+                        precondition=exec_case.precondition or "",
+                        steps=exec_case.steps or "",
                         remark=exec_case.remark,
                         created_by=user.id,
                         updated_by=user.id,

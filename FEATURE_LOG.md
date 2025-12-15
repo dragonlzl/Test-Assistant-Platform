@@ -1053,7 +1053,7 @@
 - 使用效果：重复判断更准确，减少误去重导致的用例缺失；同时保证执行页导入覆盖/追加入库的匹配键与用例库一致。  
 - 新增内容/接口/组件：用例库 `case_items` 唯一键升级与迁移（`backend/models.py`、`backend/migrations.py`）；导入去重与执行结果映射键升级（`backend/routers/cases.py`、`backend/routers/exec_routes.py`、`scripts/core/tempexecCore.js`、`scripts/modules/caseLibrary.js`）；更新规划文档唯一键描述（`db_integration_plan.md`）。  
 - 复用说明：复用既有“重复校验抽屉”和导入流程，仅扩展判重 key（并同步后端唯一约束与结果映射逻辑），不新增接口。  
-- 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 重复条目`（通过）；`npm run test:ui -- tests/ui/tempexec_import_confirm.spec.js -g 重复条目`（通过）；`API_BASE_URL=http://127.0.0.1:8080 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 重复条目`（通过）；`npm run test:ui -- tests/ui/tempexec_import_confirm.spec.js -g 重复条目`（通过）；API：启动后端（`APP_DB_FILE=apitest.db python -m uvicorn backend.main:app --host 127.0.0.1 --port <port>`）后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
 - 更新记录：2025-12-15 同一份用例内重复条目判定条件升级上线（`backend/models.py`、`backend/migrations.py`、`backend/routers/cases.py`、`backend/routers/exec_routes.py`、`scripts/core/tempexecCore.js`、`scripts/modules/caseLibrary.js`、`db_integration_plan.md`、`tests/api/case_library.spec.js`、`tests/ui/case_library.spec.js`、`tests/ui/tempexec_import_confirm.spec.js`）。  
 
 ## 已记录需求  
