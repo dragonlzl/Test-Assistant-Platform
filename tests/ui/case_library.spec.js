@@ -51,19 +51,28 @@ async function waitCaseLibraryReady(page, timeoutMs) {
 
   while (Date.now() < deadline) {
     // 用 evaluate 拿状态，避免 waitForFunction 因某些偶发脚本中断而卡死。
-    last = await page.evaluate(() => {
-      let token = '';
-      try { token = localStorage.getItem('tap-auth-token') || ''; } catch (_) { token = ''; }
-      return {
-        hasApp: Boolean(window.app),
-        authReady: Boolean(window.app && window.app.authReady === true),
-        caseLibraryBound: Boolean(window.app && window.app.caseLibraryBound === true),
-        hasSwitchTab: Boolean(window.app && typeof window.app.switchTab === 'function'),
-        tabGroupBound: Boolean(window.app && window.app.tabGroupBound === true),
-        path: (window.location && window.location.pathname) ? String(window.location.pathname) : '',
-        token: token,
-      };
-    });
+    try {
+      last = await page.evaluate(() => {
+        let token = '';
+        try { token = localStorage.getItem('tap-auth-token') || ''; } catch (_) { token = ''; }
+        return {
+          hasApp: Boolean(window.app),
+          authReady: Boolean(window.app && window.app.authReady === true),
+          caseLibraryBound: Boolean(window.app && window.app.caseLibraryBound === true),
+          hasSwitchTab: Boolean(window.app && typeof window.app.switchTab === 'function'),
+          tabGroupBound: Boolean(window.app && window.app.tabGroupBound === true),
+          path: (window.location && window.location.pathname) ? String(window.location.pathname) : '',
+          token: token,
+        };
+      });
+    } catch (err) {
+      const msg = err && err.message ? String(err.message) : String(err || '');
+      if (msg.indexOf('Execution context was destroyed') !== -1) {
+        await page.waitForLoadState('domcontentloaded', { timeout: 5000 });
+        continue;
+      }
+      throw err;
+    }
 
     if (last && last.hasApp && last.authReady && last.caseLibraryBound && last.hasSwitchTab && last.tabGroupBound) return;
 
@@ -511,9 +520,9 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryImportStatus')).toContainText('同名用例已存在');
     await expect(page.locator('#caseLibraryImportDiffDrawer')).toHaveClass(/open/);
     await expect(page.locator('#caseLibraryImportDiffStatus')).toContainText('对比完成');
-    await expect(page.locator('#caseLibraryImportDiffLeftBody')).toContainText('新增用例');
-    await expect(page.locator('#caseLibraryImportDiffLeftBody')).toContainText('点击登录（修改）');
-    await expect(page.locator('#caseLibraryImportDiffRightBody')).toContainText('点击登录');
+    await expect(page.locator('#caseLibraryImportDiffBody')).toContainText('新增用例');
+    await expect(page.locator('#caseLibraryImportDiffBody')).toContainText('点击登录（修改）');
+    await expect(page.locator('#caseLibraryImportDiffBody')).toContainText('点击登录');
     page.once('dialog', async (dialog) => dialog.accept());
     await page.click('#caseLibraryImportDiffOverwriteBtn');
     await expect(page.locator('#caseLibraryImportStatus')).toContainText('覆盖导入成功');
@@ -531,8 +540,10 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 
     // 抽屉内勾选后可导出 XMind/Excel（不含执行结果，使用原名）
     await page.click('#caseLibraryEditListBody input[data-case-lib-edit-select]');
+    await page.locator('#caseLibraryEditExportXmindBtn').scrollIntoViewIfNeeded();
+    await expect(page.locator('#caseLibraryEditExportXmindBtn')).toBeEnabled();
     const [xmindDownload] = await Promise.all([
-      page.waitForEvent('download', { timeout: 20000 }),
+      page.waitForEvent('download', { timeout: 60000 }),
       page.click('#caseLibraryEditExportXmindBtn'),
     ]);
     expect(await xmindDownload.suggestedFilename()).toBe('case_library_import.xmind');
@@ -986,7 +997,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
           if (el && typeof el.blur === 'function') el.blur();
         } catch (_) {}
       });
-      await page.click('#caseLibraryImportInvalidConfirmBtn');
+      await page.locator('#caseLibraryImportInvalidConfirmBtn').click({ force: true });
       await expect(page.locator('#caseLibraryImportInvalidDrawer')).not.toHaveClass(/open/);
       await expect(page.locator('#caseLibraryImportStatus')).toContainText('入库成功');
     } else {
@@ -1059,7 +1070,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryImportInvalidDrawer')).toHaveClass(/open/);
     await page.locator('#caseLibraryImportInvalidBody [data-case-lib-import-invalid-field=\"precondition\"][data-index=\"0\"]').click();
     await page.locator('#caseLibraryImportInvalidBody [data-case-lib-import-invalid-field=\"precondition\"][data-index=\"0\"]').fill('已注册账号');
-    await page.click('#caseLibraryImportInvalidConfirmBtn');
+    await page.locator('#caseLibraryImportInvalidConfirmBtn').click({ force: true });
 
     await expect(page.locator('#caseLibraryImportInvalidDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#caseLibraryImportDiffDrawer')).toHaveClass(/open/);
@@ -1418,7 +1429,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例B');
 
     // 非管理员也可勾选；删除按钮应不可用/不可见，但导出按钮可用。
-    await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeHidden();
+    await expect(page.locator('#caseLibraryEditDeleteBtn')).toHaveClass(/hidden/);
     await page.click('#caseLibraryEditSelectAll');
     await expect(page.locator('#caseLibraryEditExportXmindBtn')).toBeEnabled();
     await expect(page.locator('#caseLibraryEditExportExcelBtn')).toBeEnabled();

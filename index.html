@@ -1515,21 +1515,21 @@
           <span class="value" id="caseLibraryEditFileName">--</span>
         </div>
       </div>
-	      <div class="case-library-drawer-toolbar">
-	        <div class="case-library-search">
-	          <span class="case-library-search-icon" aria-hidden="true">
-	            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-	              <circle cx="11" cy="11" r="7"></circle>
-	              <path d="M20 20l-3.5-3.5"></path>
-	            </svg>
-	          </span>
-	          <input id="caseLibraryEditSearchInput" type="text" placeholder="搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果 / 备注"/>
-	        </div>
-	        <div class="case-library-drawer-actions">
-	          <button class="secondary" id="caseLibraryEditClearSearchBtn" type="button">清空搜索</button>
-	          <button class="primary" id="caseLibraryEditToExecBtn" type="button">转到执行</button>
-	        </div>
-	      </div>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-search">
+          <span class="case-library-search-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <circle cx="11" cy="11" r="7"></circle>
+              <path d="M20 20l-3.5-3.5"></path>
+            </svg>
+          </span>
+          <input id="caseLibraryEditSearchInput" type="text" placeholder="搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果 / 备注"/>
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="secondary" id="caseLibraryEditClearSearchBtn" type="button">清空搜索</button>
+          <button class="primary" id="caseLibraryEditToExecBtn" type="button">转到执行</button>
+        </div>
+      </div>
       <p class="status" id="caseLibraryEditStatus"></p>
       <div class="temp-case-view" id="caseLibraryEditView"></div>
     </div>
@@ -1551,24 +1551,24 @@
         <div class="zone-line"><strong>拖拽</strong><span>用例文件到此处，或点击选择</span></div>
         <p class="hint" id="caseLibraryImportFileHint">未选择文件</p>
       </label>
-	      <div class="case-library-drawer-toolbar">
-	        <div class="case-library-filters">
-	          <label class="case-library-label" for="caseLibraryImportProjectSelect">项目</label>
-	          <select id="caseLibraryImportProjectSelect"></select>
-	          <label class="case-library-label" for="caseLibraryImportVersionSelect">版本</label>
-	          <select id="caseLibraryImportVersionSelect" disabled></select>
-	          <label class="case-library-label" for="caseLibraryImportExcelTemplateType">Excel模板</label>
-	          <select id="caseLibraryImportExcelTemplateType">
-	            <option value="normal" selected>非复用模板</option>
-	            <option value="reuse">复用模板</option>
-	          </select>
-	        </div>
-	        <div class="case-library-drawer-actions">
-	          <button class="secondary" id="caseLibraryImportExcelTemplateBtn" type="button">Excel导入模板</button>
-	          <button class="secondary" id="caseLibraryImportXmindTemplateBtn" type="button">XMind导入模板</button>
-	          <button class="primary" id="caseLibraryImportConfirmBtn" type="button" disabled>确认入库</button>
-	        </div>
-	      </div>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryImportProjectSelect">项目</label>
+          <select id="caseLibraryImportProjectSelect"></select>
+          <label class="case-library-label" for="caseLibraryImportVersionSelect">版本</label>
+          <select id="caseLibraryImportVersionSelect" disabled></select>
+          <label class="case-library-label" for="caseLibraryImportExcelTemplateType">Excel模板</label>
+          <select id="caseLibraryImportExcelTemplateType">
+            <option value="normal" selected>非复用模板</option>
+            <option value="reuse">复用模板</option>
+          </select>
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="secondary" id="caseLibraryImportExcelTemplateBtn" type="button">Excel导入模板</button>
+          <button class="secondary" id="caseLibraryImportXmindTemplateBtn" type="button">XMind导入模板</button>
+          <button class="primary" id="caseLibraryImportConfirmBtn" type="button" disabled>确认入库</button>
+        </div>
+      </div>
       <p class="status" id="caseLibraryImportStatus"></p>
       <div class="actions user-form-actions">
         <button class="ghost-btn" data-drawer-close="caseLibraryImportDrawer" type="button">关闭</button>
@@ -1576,65 +1576,36 @@
     </div>
   </div>
 </div>
-	<div class="drawer" id="caseLibraryImportDiffDrawer" data-tab-section="case-library">
-	  <div class="drawer-mask" data-drawer-close="caseLibraryImportDiffDrawer"></div>
-	  <div class="drawer-panel drawer-panel-wide">
+  <div class="drawer" id="caseLibraryImportDiffDrawer" data-tab-section="case-library">
+    <div class="drawer-mask" data-drawer-close="caseLibraryImportDiffDrawer"></div>
+    <div class="drawer-panel drawer-panel-wide">
     <div class="drawer-header">
       <h3 id="caseLibraryImportDiffTitle">同名用例差异对比</h3>
       <button class="link-toggle" data-drawer-close="caseLibraryImportDiffDrawer">收起</button>
     </div>
     <div class="drawer-body">
-      <p class="hint">左侧为本次导入解析结果，右侧为数据库中已存在的同名用例。绿色表示新增，红色表示差异或将被覆盖/移除。</p>
+      <p class="hint">同一列表展示导入与库中差异：绿色表示新增，红色表示差异或将被覆盖/移除。</p>
       <p class="status" id="caseLibraryImportDiffStatus"></p>
-      <div class="case-library-diff">
-        <div class="case-library-diff-col">
-          <div class="case-library-diff-head">
-            <h4 id="caseLibraryImportDiffLeftTitle">导入用例</h4>
-            <p class="hint" id="caseLibraryImportDiffLeftMeta"></p>
-          </div>
-          <div class="admin-table-wrapper">
-            <table class="admin-table diff-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>模块</th>
-                  <th>用例标题</th>
-                  <th>优先级</th>
-                  <th>前提条件</th>
-                  <th>操作步骤</th>
-                  <th>预期结果</th>
-                </tr>
-              </thead>
-              <tbody id="caseLibraryImportDiffLeftBody">
-                <tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="case-library-diff-col">
-          <div class="case-library-diff-head">
-            <h4 id="caseLibraryImportDiffRightTitle">库中用例</h4>
-            <p class="hint" id="caseLibraryImportDiffRightMeta"></p>
-          </div>
-          <div class="admin-table-wrapper">
-            <table class="admin-table diff-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>模块</th>
-                  <th>用例标题</th>
-                  <th>优先级</th>
-                  <th>前提条件</th>
-                  <th>操作步骤</th>
-                  <th>预期结果</th>
-                </tr>
-              </thead>
-              <tbody id="caseLibraryImportDiffRightBody">
-                <tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+      <div class="case-library-diff-head">
+        <p class="hint" id="caseLibraryImportDiffMeta"></p>
+      </div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table diff-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>模块</th>
+              <th>用例标题</th>
+              <th>优先级</th>
+              <th>前提条件</th>
+              <th>操作步骤</th>
+              <th>预期结果</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryImportDiffBody">
+            <tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>
+          </tbody>
+        </table>
       </div>
       <div class="actions user-form-actions">
         <button class="primary" id="caseLibraryImportDiffOverwriteBtn" type="button">确认覆盖导入</button>

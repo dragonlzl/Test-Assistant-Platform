@@ -36,12 +36,8 @@
 
     importDiffTitle: document.getElementById('caseLibraryImportDiffTitle'),
     importDiffStatus: document.getElementById('caseLibraryImportDiffStatus'),
-    importDiffLeftTitle: document.getElementById('caseLibraryImportDiffLeftTitle'),
-    importDiffLeftMeta: document.getElementById('caseLibraryImportDiffLeftMeta'),
-    importDiffLeftBody: document.getElementById('caseLibraryImportDiffLeftBody'),
-	    importDiffRightTitle: document.getElementById('caseLibraryImportDiffRightTitle'),
-	    importDiffRightMeta: document.getElementById('caseLibraryImportDiffRightMeta'),
-	    importDiffRightBody: document.getElementById('caseLibraryImportDiffRightBody'),
+    importDiffMeta: document.getElementById('caseLibraryImportDiffMeta'),
+    importDiffBody: document.getElementById('caseLibraryImportDiffBody'),
 	    importDiffOverwriteBtn: document.getElementById('caseLibraryImportDiffOverwriteBtn'),
 	    importInvalidTitle: document.getElementById('caseLibraryImportInvalidTitle'),
 	    importInvalidStatus: document.getElementById('caseLibraryImportInvalidStatus'),
@@ -301,6 +297,87 @@
     }).join('');
   }
 
+  function renderImportDiffMergedTable(bodyEl, rows) {
+    if (!bodyEl) return;
+    if (!rows || !rows.length) {
+      bodyEl.innerHTML = '<tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>';
+      return;
+    }
+
+    function buildValueBlock(leftText, rightText, placeholderText) {
+      var left = normalizeDiffText(leftText);
+      var right = normalizeDiffText(rightText);
+      if (!left && !right) {
+        return '<div class="diff-one"><p class="hint">' + escapeHtml(placeholderText || '--') + '</p></div>';
+      }
+      if (left && right) {
+        if (left === right) {
+          return '<div class="diff-one">' + escapeHtml(left) + '</div>';
+        }
+        return (
+          '<div class="diff-pair">' +
+            '<div class="diff-pair-line diff-pair-left"><span class="diff-pair-tag">导入</span><div class="diff-pair-text">' + escapeHtml(left) + '</div></div>' +
+            '<div class="diff-pair-line diff-pair-right"><span class="diff-pair-tag">库</span><div class="diff-pair-text">' + escapeHtml(right) + '</div></div>' +
+          '</div>'
+        );
+      }
+      if (left) {
+        return (
+          '<div class="diff-one diff-one-with-tag">' +
+            '<span class="diff-pair-tag">导入</span>' +
+            '<div class="diff-pair-text">' + escapeHtml(left) + '</div>' +
+          '</div>'
+        );
+      }
+      return (
+        '<div class="diff-one diff-one-with-tag">' +
+          '<span class="diff-pair-tag">库</span>' +
+          '<div class="diff-pair-text">' + escapeHtml(right) + '</div>' +
+        '</div>'
+      );
+    }
+
+    bodyEl.innerHTML = rows.map(function(row, idx) {
+      var left = row ? row.left : null;
+      var right = row ? row.right : null;
+      var rowCls = '';
+      if (row && row.type === 'added') rowCls = 'diff-row-added';
+      if (row && row.type === 'removed') rowCls = 'diff-row-removed';
+      if (row && row.type === 'changed') rowCls = 'diff-row-changed';
+
+      var priorityCls = '';
+      var preconditionCls = '';
+      var stepsCls = '';
+      if (row && row.type === 'changed') {
+        if (row.diff && row.diff.priority) priorityCls = 'diff-cell-changed';
+        if (row.diff && row.diff.precondition) preconditionCls = 'diff-cell-changed';
+        if (row.diff && row.diff.steps) stepsCls = 'diff-cell-changed';
+      }
+
+      var badge = '';
+      if (row && row.type === 'added') badge = '<span class="diff-badge diff-badge-added">新增</span>';
+      else if (row && row.type === 'removed') badge = '<span class="diff-badge diff-badge-removed">将删除</span>';
+      else if (row && row.type === 'changed') badge = '<span class="diff-badge diff-badge-changed">有差异</span>';
+
+      return (
+        '<tr class="' + escapeHtml(rowCls) + '">' +
+          '<td>' + escapeHtml(String(idx + 1)) + '</td>' +
+          '<td>' + buildValueBlock(left && left.module, right && right.module, '（缺失）') + '</td>' +
+          '<td>' +
+            '<div class="diff-cell-stack">' +
+              buildValueBlock(left && left.title, right && right.title, '（缺失）') +
+              (badge ? ('<div class="diff-badge-row">' + badge + '</div>') : '') +
+            '</div>' +
+          '</td>' +
+          '<td class="' + escapeHtml(priorityCls) + '">' + buildValueBlock(left && left.priority, right && right.priority, '--') + '</td>' +
+          '<td class="' + escapeHtml(preconditionCls) + '">' + buildValueBlock(left && (left.precondition || left.preconditions), right && (right.precondition || right.preconditions), '--') + '</td>' +
+          '<td class="' + escapeHtml(stepsCls) + '">' + buildValueBlock(left && left.steps, right && right.steps, '--') + '</td>' +
+          '<td>' + buildValueBlock(left && left.expected, right && right.expected, '（缺失）') + '</td>' +
+        '</tr>'
+      );
+    }).join('');
+  }
+
   function syncImportDiffControls() {
     if (!dom.importDiffOverwriteBtn) return;
     var can = Boolean(
@@ -340,24 +417,17 @@
     if (dom.importDiffTitle) {
       dom.importDiffTitle.textContent = '同名用例差异对比：' + (state.importDiff.cleanName || state.importDiff.fileName || '用例');
     }
-    if (dom.importDiffLeftTitle) dom.importDiffLeftTitle.textContent = '导入用例（待入库）';
-    if (dom.importDiffRightTitle) dom.importDiffRightTitle.textContent = '库中用例（已存在）';
-    if (dom.importDiffLeftMeta) {
-      dom.importDiffLeftMeta.textContent = projectName + ' / ' + importVerName + ' / ' + leftCount + ' 条';
-      if (leftCount !== rightCount) dom.importDiffLeftMeta.classList.add('warn');
-      else dom.importDiffLeftMeta.classList.remove('warn');
-    }
-    if (dom.importDiffRightMeta) {
-      dom.importDiffRightMeta.textContent = projectName + ' / ' + dbVerName + ' / ' + rightCount + ' 条';
-      if (leftCount !== rightCount) dom.importDiffRightMeta.classList.add('warn');
-      else dom.importDiffRightMeta.classList.remove('warn');
+    if (dom.importDiffMeta) {
+      dom.importDiffMeta.textContent = projectName + ' / 导入版本：' + importVerName + '（' + leftCount + ' 条） / 库中版本：' + dbVerName + '（' + rightCount + ' 条）' +
+        ' / 新增 ' + addedCount + ' / 删除 ' + removedCount + ' / 差异 ' + changedCount;
+      if (leftCount !== rightCount) dom.importDiffMeta.classList.add('warn');
+      else dom.importDiffMeta.classList.remove('warn');
     }
     if (dom.importDiffStatus) {
       var summary = '对比完成：新增 ' + addedCount + ' 条，差异 ' + changedCount + ' 条，库中多出 ' + removedCount + ' 条';
       setStatus(dom.importDiffStatus, summary, (addedCount || changedCount || removedCount) ? 'warn' : 'ok');
     }
-    renderImportDiffTable(dom.importDiffLeftBody, state.importDiff.rows, 'left');
-    renderImportDiffTable(dom.importDiffRightBody, state.importDiff.rows, 'right');
+    renderImportDiffMergedTable(dom.importDiffBody, state.importDiff.rows);
     syncImportDiffControls();
 
     if (importDrawerInstance && typeof importDrawerInstance.close === 'function') {
@@ -390,23 +460,12 @@
     var importVerName = getVersionName(projectId, importVersionId);
 
     if (dom.importDiffTitle) dom.importDiffTitle.textContent = '同名用例差异对比：' + (cleanName || '用例');
-    if (dom.importDiffLeftTitle) dom.importDiffLeftTitle.textContent = '导入用例（待入库）';
-    if (dom.importDiffRightTitle) dom.importDiffRightTitle.textContent = '库中用例（已存在）';
-    if (dom.importDiffLeftMeta) {
-      dom.importDiffLeftMeta.textContent = projectName + ' / ' + importVerName;
-      dom.importDiffLeftMeta.classList.remove('warn');
-    }
-    if (dom.importDiffRightMeta) {
-      dom.importDiffRightMeta.textContent = projectName + ' / ' + '--';
-      dom.importDiffRightMeta.classList.remove('warn');
+    if (dom.importDiffMeta) {
+      dom.importDiffMeta.textContent = projectName + ' / 导入版本：' + importVerName + ' / 库中版本：--';
+      dom.importDiffMeta.classList.remove('warn');
     }
     if (dom.importDiffStatus) setStatus(dom.importDiffStatus, '加载差异对比中...', '');
-    if (dom.importDiffLeftBody) {
-      dom.importDiffLeftBody.innerHTML = '<tr><td colspan="7"><p class="hint">加载中...</p></td></tr>';
-    }
-    if (dom.importDiffRightBody) {
-      dom.importDiffRightBody.innerHTML = '<tr><td colspan="7"><p class="hint">加载中...</p></td></tr>';
-    }
+    if (dom.importDiffBody) dom.importDiffBody.innerHTML = '<tr><td colspan="7"><p class="hint">加载中...</p></td></tr>';
     syncImportDiffControls();
 
     if (importDrawerInstance && typeof importDrawerInstance.close === 'function') {
@@ -3902,29 +3961,29 @@
     if (dom.importXmindTemplateBtn) {
       dom.importXmindTemplateBtn.addEventListener('click', downloadImportXmindTemplate);
     }
-	    if (dom.importDiffOverwriteBtn) {
-	      dom.importDiffOverwriteBtn.addEventListener('click', confirmOverwriteImportFromDiff);
-	    }
-	    if (dom.importInvalidConfirmBtn) {
-	      dom.importInvalidConfirmBtn.addEventListener('click', confirmImportFromInvalidDrawer);
-	    }
-	    if (dom.importInvalidBody) {
-	      dom.importInvalidBody.addEventListener('focusout', function(e) {
-	        var t = e && e.target ? e.target : null;
-	        if (!t || !t.getAttribute) return;
-	        var field = t.getAttribute('data-case-lib-import-invalid-field');
-	        if (!field) return;
-	        var idx = Number(t.getAttribute('data-index'));
-	        if (!isFinite(idx) || idx < 0) return;
-	        var multiline = String(t.getAttribute('data-case-lib-multiline') || '').toLowerCase() === 'true';
-	        var raw = multiline ? t.innerText : t.textContent;
-	        var value = String(raw || '').trim();
-	        var item = state.importInvalid.items[idx];
-	        if (!item) return;
-	        if (field === 'priority') value = normalizePriorityInput(value);
-	        item[field] = value;
-	      });
-	    }
+    if (dom.importDiffOverwriteBtn) {
+      dom.importDiffOverwriteBtn.addEventListener('click', confirmOverwriteImportFromDiff);
+    }
+    if (dom.importInvalidConfirmBtn) {
+      dom.importInvalidConfirmBtn.addEventListener('click', confirmImportFromInvalidDrawer);
+    }
+    if (dom.importInvalidBody) {
+      dom.importInvalidBody.addEventListener('focusout', function(e) {
+        var t = e && e.target ? e.target : null;
+        if (!t || !t.getAttribute) return;
+        var field = t.getAttribute('data-case-lib-import-invalid-field');
+        if (!field) return;
+        var idx = Number(t.getAttribute('data-index'));
+        if (!isFinite(idx) || idx < 0) return;
+        var multiline = String(t.getAttribute('data-case-lib-multiline') || '').toLowerCase() === 'true';
+        var raw = multiline ? t.innerText : t.textContent;
+        var value = String(raw || '').trim();
+        var item = state.importInvalid.items[idx];
+        if (!item) return;
+        if (field === 'priority') value = normalizePriorityInput(value);
+        item[field] = value;
+      });
+    }
 
     if (dom.editDrawerConfirmBtn) {
       dom.editDrawerConfirmBtn.addEventListener('click', loadEditDrawerFiles);

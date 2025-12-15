@@ -2381,7 +2381,11 @@
       };
     }
 
+    var tempExecDbLoadSeq = 0;
+
     async function loadTempExecStateFromDb() {
+      tempExecDbLoadSeq += 1;
+      var loadSeq = tempExecDbLoadSeq;
       var client = getApiClient();
       if (!client || typeof client.listExecSets !== 'function') return;
       if (tempExecStatus) setStatus(tempExecStatus, '加载执行数据中...', '');
@@ -2415,32 +2419,24 @@
         return tb - ta;
       });
 
-      var files = [];
-      for (var i = 0; i < list.length; i += 1) {
-        var set = list[i];
-        var cases = [];
-        try {
-          var rawCases = await client.listExecCases(set.id);
-          cases = Array.isArray(rawCases) ? rawCases.map(mapExecCaseToTempCase).filter(Boolean) : [];
-        } catch (err) {
-          cases = [];
-        }
+      var files = list.map(function(set) {
         var createdAt = set && set.created_at ? Date.parse(set.created_at) : 0;
         if (!Number.isFinite(createdAt) || createdAt <= 0) createdAt = Date.now();
-        files.push({
+        return {
           id: String(set.id),
           execSetId: set.id,
           caseFileId: set.case_file_id || null,
           name: set.name || '测试用例',
-          cases: cases,
+          cases: [],
           scope: 'current',
           requirement: normalizeRequirementName(set.requirement) || '',
           reuseEnabled: Boolean(set.reuse_enabled),
           createdAt: createdAt,
           reusePresets: Array.isArray(set.reuse_presets) ? normalizeReusePresets(set.reuse_presets) : [],
           versionId: '',
-        });
-      }
+          _casesLoading: true,
+        };
+      });
 
       state.tempExecFiles = files;
       state.tempExecSelections = {};
@@ -2481,7 +2477,52 @@
       renderTempExecView();
       renderTempVersionGrid();
       renderTempFocusZone();
-      if (tempExecStatus) setStatus(tempExecStatus, '', '');
+
+      // 异步加载每个执行集的用例明细，避免执行集数量多时阻塞 UI 与“转到执行”链路。
+      (async function() {
+        if (!client || typeof client.listExecCases !== 'function') {
+          if (tempExecStatus) setStatus(tempExecStatus, '', '');
+          return;
+        }
+        var activeId = state.tempExecActiveId ? String(state.tempExecActiveId) : '';
+        var order = [];
+        for (var i = 0; i < files.length; i += 1) order.push(i);
+        if (activeId) {
+          order.sort(function(a, b) {
+            if (String(files[a] && files[a].id) === activeId) return -1;
+            if (String(files[b] && files[b].id) === activeId) return 1;
+            return a - b;
+          });
+        }
+        var concurrency = 4;
+        for (var start = 0; start < order.length; start += concurrency) {
+          var chunk = order.slice(start, start + concurrency);
+          await Promise.all(chunk.map(function(idx) {
+            var file = files[idx];
+            if (!file) return Promise.resolve();
+            return client
+              .listExecCases(file.execSetId)
+              .then(function(rawCases) {
+                var cases = Array.isArray(rawCases) ? rawCases.map(mapExecCaseToTempCase).filter(Boolean) : [];
+                // 仅在最新一次加载仍有效时写入，避免并发刷新导致状态回写错乱。
+                if (tempExecDbLoadSeq !== loadSeq) return;
+                file.cases = cases;
+                file._casesLoading = false;
+                if (String(file.id) === String(state.tempExecActiveId || '')) {
+                  renderTempExecView();
+                }
+              })
+              .catch(function() {
+                if (tempExecDbLoadSeq !== loadSeq) return;
+                file.cases = [];
+                file._casesLoading = false;
+              });
+          }));
+          if (tempExecDbLoadSeq !== loadSeq) return;
+        }
+        if (tempExecDbLoadSeq !== loadSeq) return;
+        if (tempExecStatus) setStatus(tempExecStatus, '', '');
+      })();
     }
 
     async function loadTempExecState() {

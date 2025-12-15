@@ -841,13 +841,13 @@
 - 更新记录：无  
 
 - 功能名称：用例导入同名差异对比抽屉（Git 风格 Diff）  
-- 功能描述：用例库导入时，若后端返回“同名用例已存在”，会自动关闭导入抽屉并打开新的“差异对比”抽屉：左侧展示本次导入解析结果，右侧展示库中同名用例；新增/删除/差异行分别以绿色/红色标记，字段差异单元格高亮；不展示/不对比“实际结果”“备注”。  
+- 功能描述：用例库导入时，若后端返回“同名用例已存在”，会自动关闭导入抽屉并打开新的“差异对比”抽屉：在同一份列表中展示导入与库中对比结果（字段内按“导入/库”分行展示），新增/删除/差异行分别以绿色/红色标记，字段差异单元格高亮；不展示/不对比“实际结果”“备注”。  
 - 操作方式：进入“用例相关 → 用例库”→点“导入用例”选择文件并选项目/版本→点击“确认入库”→若同名被拒绝则自动进入差异对比抽屉查看导入与库中内容差异。  
 - 使用效果：同名冲突时无需反复删除/重试导入，可直接快速定位差异（包括条目数不一致、字段变化、新增/删除）。  
 - 新增内容/接口/组件：Diff 抽屉 DOM（`index.html`）；Diff 样式（`style.css`）；差异计算与渲染（`scripts/modules/caseLibrary.js`）。  
 - 复用说明：复用现有文件名清洗与 `listCaseFiles/listCaseItems` 获取数据能力，在前端做轻量 Diff 渲染；不引入新依赖。  
 - 测试与验证：`node --check scripts/modules/caseLibrary.js tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
-- 更新记录：无  
+- 更新记录：2025-12-15 用例库同名 diff 抽屉改为单列表展示（`index.html`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/case_library.spec.js`）；2025-12-15 diff/校验抽屉字段列宽优化（模块6字、标题8字、优先级3字、前提12字、步骤12字、预期20字，`style.css`）；2025-12-15 diff/校验抽屉进一步优化：优先级加宽 2 字；字段在需要时展示“导入/库”标识且不计入字数，新增/将删除/有差异标识在单元格内独占一行居中展示（`style.css`、`scripts/modules/caseLibrary.js`）。  
 
 - 功能名称：同名差异对比支持“确认覆盖导入”  
 - 功能描述：在“同名用例差异对比”抽屉中增加“确认覆盖导入”按钮，点击后二次确认；确认后将覆盖用例库中同名用例文件（删除原条目并写入导入内容）。  
@@ -983,6 +983,24 @@
 - 复用说明：复用原 `DELETE /api/projects/{project_id}/versions/{version_id}` 路由与鉴权逻辑，仅增加可选转移分支，不影响无占用版本的直接删除。  
 - 测试与验证：`python3 -m compileall backend`（通过）；`node --check scripts/modules/admin.js services/apiClient.js`（通过）；`npm run test:ui -- tests/ui/project_admin_drawer.spec.js -g 删除版本`（通过）；`APP_DB_FILE=apitest.db python -m uvicorn backend.main:app --host 127.0.0.1 --port 9001` 后执行 `API_BASE_URL=http://127.0.0.1:9001 npx playwright test --config tests/api/playwright.api.config.js tests/api/project_version_delete_transfer.spec.js`（通过）。  
 - 更新记录：2025-12-15 修复后端返回 `409` 时 `code` 位于 `payload.detail.code` 导致前端未进入“输入转移版本”引导流程的问题，并补充 UI 用例覆盖真实返回结构（`scripts/modules/admin.js`、`tests/ui/project_admin_drawer.spec.js`）。  
+
+- 功能名称：用例库编辑视图列宽与换行优化  
+- 功能描述：用例库“用例编辑视图”的表格列宽与换行规则对齐导入校验/差异对比视图，避免字段过于拥挤导致阅读困难：模块≈6字/标题≈8字/优先级≈5字（含额外间距）/前提≈12字/步骤≈12字/预期≈20字，自动换行且不溢出。  
+- 操作方式：进入“用例相关 → 用例库”→打开“编辑用例”→选择文件进入“用例编辑视图”，查看表格字段展示与换行效果。  
+- 使用效果：编辑视图字段间距更均衡，长内容会自动换行，整体更易读。  
+- 新增内容/接口/组件：编辑视图表格 `table-layout: fixed` 与列宽/换行样式（`style.css`）。  
+- 复用说明：复用现有 `.temp-case-view` 表格体系，仅补充 `#caseLibraryEditView` 的列宽/换行规则，不改变编辑逻辑。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js scripts/core/tempexecCore.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 编辑用例`（通过）。  
+- 更新记录：2025-12-15 编辑视图列宽与换行规则上线（`style.css`）；2025-12-15 编辑视图“前提条件/操作步骤”各加宽≈3字（`style.css`）；2025-12-15 编辑视图“模块/用例标题”各加宽≈2字（`style.css`）。  
+
+- 功能名称：执行页 DB 模式加载明细异步化（提升“转到执行”稳定性）  
+- 功能描述：执行页 DB 模式加载执行集列表时，先渲染执行集元信息，再异步并发加载各执行集的用例明细，避免执行集数量较多时同步拉取导致 UI 阻塞与“转到执行”链路超时。  
+- 操作方式：在用例库点击“转到执行”或进入“用例执行”页签，观察执行集列表可更快出现，明细随后加载完成。  
+- 使用效果：执行页加载更快，“转到执行”更稳定，减少因执行集数量多导致的卡顿/超时。  
+- 新增内容/接口/组件：`loadTempExecStateFromDb` 先落地执行集骨架，再并发加载明细并按需刷新视图（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用既有 `listExecSets/listExecCases` 接口与渲染逻辑，仅调整加载顺序与并发策略，不改变数据结构与权限规则。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行页 DB 加载优化上线（`scripts/core/tempexecCore.js`）。  
 
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
