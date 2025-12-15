@@ -4565,22 +4565,29 @@
       renderTempVersionGrid();
     }
 
-    function reorderTempExecProject(sourceProjectId, targetProjectId) {
+    function reorderTempExecProject(sourceProjectId, targetProjectId, opts) {
       if (!isTempExecProjectLayoutEnabled()) return;
       var placement = ensureTempExecPlacement();
       var src = sourceProjectId === null || sourceProjectId === undefined ? '' : String(sourceProjectId);
       var tgt = targetProjectId === null || targetProjectId === undefined ? '' : String(targetProjectId);
       if (!src || !tgt || src === tgt) return;
+      var insertAfter = false;
+      if (opts && typeof opts === 'object') insertAfter = Boolean(opts.after);
+      else if (opts === true) insertAfter = true;
       placement.projectOrder = Array.isArray(placement.projectOrder) ? placement.projectOrder : [];
       placement.projectOrder = placement.projectOrder.filter(function(id) { return id !== src; });
       var idx = placement.projectOrder.indexOf(tgt);
-      if (idx === -1) placement.projectOrder.unshift(src);
-      else placement.projectOrder.splice(idx, 0, src);
+      if (idx === -1) {
+        if (insertAfter) placement.projectOrder.push(src);
+        else placement.projectOrder.unshift(src);
+      } else {
+        placement.projectOrder.splice(insertAfter ? (idx + 1) : idx, 0, src);
+      }
       persistTempExecState();
       renderTempVersionGrid();
     }
 
-    function reorderTempExecProjectVersion(projectId, sourceVersionId, targetVersionId) {
+    function reorderTempExecProjectVersion(projectId, sourceVersionId, targetVersionId, opts) {
       if (!isTempExecProjectLayoutEnabled()) return;
       var pid = projectId === null || projectId === undefined ? '' : String(projectId);
       if (!pid) return;
@@ -4589,10 +4596,17 @@
       var src = sourceVersionId === null || sourceVersionId === undefined ? '' : String(sourceVersionId || '');
       var tgt = targetVersionId === null || targetVersionId === undefined ? '' : String(targetVersionId || '');
       if (src === tgt) return;
+      var insertAfter = false;
+      if (opts && typeof opts === 'object') insertAfter = Boolean(opts.after);
+      else if (opts === true) insertAfter = true;
       placement.versionOrderByProject[pid] = placement.versionOrderByProject[pid].filter(function(id) { return id !== src; });
       var idx = placement.versionOrderByProject[pid].indexOf(tgt);
-      if (idx === -1) placement.versionOrderByProject[pid].unshift(src);
-      else placement.versionOrderByProject[pid].splice(idx, 0, src);
+      if (idx === -1) {
+        if (insertAfter) placement.versionOrderByProject[pid].push(src);
+        else placement.versionOrderByProject[pid].unshift(src);
+      } else {
+        placement.versionOrderByProject[pid].splice(insertAfter ? (idx + 1) : idx, 0, src);
+      }
       persistTempExecState();
       renderTempVersionGrid();
     }

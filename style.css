@@ -767,6 +767,19 @@ body {
   flex-direction: column;
   min-height: 110px;
 }
+.temp-drop-indicator {
+  border: 2px dashed rgba(37, 99, 235, 0.7);
+  border-radius: 12px;
+  background: rgba(37, 99, 235, 0.04);
+  box-sizing: border-box;
+  width: 100%;
+}
+.temp-drop-indicator.project {
+  min-height: 54px;
+}
+.temp-drop-indicator.version {
+  min-height: 110px;
+}
 .temp-project-version.dragover {
   border-color: #2563eb;
   box-shadow: 0 6px 14px rgba(37, 99, 235, 0.2);

@@ -1840,6 +1840,75 @@
     }
 
     if (tempVersionGrid) {
+      var tempProjectLayoutDropIndicator = null;
+      var tempProjectLayoutDrag = { type: '', key: '' };
+      function ensureTempProjectLayoutDropIndicator(type) {
+        if (!tempProjectLayoutDropIndicator) {
+          tempProjectLayoutDropIndicator = document.createElement('div');
+          tempProjectLayoutDropIndicator.className = 'temp-drop-indicator';
+          tempProjectLayoutDropIndicator.setAttribute('aria-hidden', 'true');
+        }
+        var t = type || '';
+        tempProjectLayoutDropIndicator.classList.toggle('project', t === 'project');
+        tempProjectLayoutDropIndicator.classList.toggle('version', t === 'version');
+        tempProjectLayoutDropIndicator.dataset.dropType = t;
+        return tempProjectLayoutDropIndicator;
+      }
+      function clearTempProjectLayoutDropIndicator() {
+        if (tempProjectLayoutDropIndicator && tempProjectLayoutDropIndicator.parentNode) {
+          tempProjectLayoutDropIndicator.parentNode.removeChild(tempProjectLayoutDropIndicator);
+        }
+        if (tempProjectLayoutDropIndicator) {
+          tempProjectLayoutDropIndicator.dataset.dropType = '';
+          tempProjectLayoutDropIndicator.dataset.dropTargetId = '';
+          tempProjectLayoutDropIndicator.dataset.dropAfter = '';
+          tempProjectLayoutDropIndicator.dataset.dropProjectId = '';
+        }
+      }
+      function getDropAfterByPointer(e, rect, prefer) {
+        if (!e || !rect) return false;
+        var mode = prefer || 'auto';
+        if (mode === 'x') {
+          return e.clientX > (rect.left + rect.width / 2);
+        }
+        if (mode === 'y') {
+          return e.clientY > (rect.top + rect.height / 2);
+        }
+        var cx = rect.left + rect.width / 2;
+        var cy = rect.top + rect.height / 2;
+        var dx = (e.clientX - cx) / Math.max(1, rect.width);
+        var dy = (e.clientY - cy) / Math.max(1, rect.height);
+        if (Math.abs(dx) >= Math.abs(dy)) return dx > 0;
+        return dy > 0;
+      }
+      function getDropAfterByPointerAny(e, rect) {
+        if (!e || !rect) return false;
+        var cx = rect.left + rect.width / 2;
+        var cy = rect.top + rect.height / 2;
+        return e.clientX > cx || e.clientY > cy;
+      }
+      function findCardUnderPointer(cards, x, y) {
+        var list = Array.isArray(cards) ? cards : [];
+        for (var i = 0; i < list.length; i += 1) {
+          var el = list[i];
+          if (!el || !el.getBoundingClientRect) continue;
+          var rect = el.getBoundingClientRect();
+          if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return el;
+        }
+        return null;
+      }
+      function trySetDragImage(e, el) {
+        if (!e || !e.dataTransfer || !el || !el.getBoundingClientRect) return;
+        try {
+          var rect = el.getBoundingClientRect();
+          var x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+          var y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+          if (typeof e.dataTransfer.setDragImage === 'function') {
+            e.dataTransfer.setDragImage(el, x, y);
+          }
+        } catch (err) {}
+      }
+
       tempVersionGrid.addEventListener('click', function(e) {
         var projectRemoveBtn = e.target.closest('[data-temp-project-remove]');
         if (projectRemoveBtn && api.removeTempExecProject) {
@@ -1897,10 +1966,14 @@
         e.dataTransfer.effectAllowed = 'move';
         if (project && projectHeader && project.dataset.tempProjectCard) {
           e.dataTransfer.setData('text/temp-project', project.dataset.tempProjectCard);
+          tempProjectLayoutDrag = { type: 'project', key: String(project.dataset.tempProjectCard || '') };
+          trySetDragImage(e, project);
           return;
         }
         if (version && versionHeader && version.dataset.tempProjectVersionCard) {
           e.dataTransfer.setData('text/temp-project-version', version.dataset.tempProjectVersionCard);
+          tempProjectLayoutDrag = { type: 'version', key: String(version.dataset.tempProjectVersionCard || '') };
+          trySetDragImage(e, version);
           return;
         }
         if (fileRow && fileRow.dataset.tempFile) {
@@ -1909,46 +1982,201 @@
       });
 
       tempVersionGrid.addEventListener('dragover', function(e) {
+        if (!e) return;
+        if (!e.dataTransfer) return;
         e.preventDefault();
-        var versionCard = e.target.closest('[data-temp-project-version-card]');
-        if (versionCard && versionCard.classList) versionCard.classList.add('dragover');
-        var projectCard = e.target.closest('[data-temp-project-card]');
-        if (projectCard && projectCard.classList) projectCard.classList.add('dragover');
+        var dragType = tempProjectLayoutDrag && tempProjectLayoutDrag.type ? tempProjectLayoutDrag.type : '';
+        var dragKey = tempProjectLayoutDrag && tempProjectLayoutDrag.key ? tempProjectLayoutDrag.key : '';
+        if (dragType === 'project' && dragKey) {
+          var indicator = ensureTempProjectLayoutDropIndicator('project');
+          var cards = Array.prototype.slice.call(tempVersionGrid.querySelectorAll('.temp-project-card'));
+          cards = cards.filter(function(el) { return el && el !== indicator; });
+          if (!cards.length) {
+            tempVersionGrid.appendChild(indicator);
+            indicator.dataset.dropTargetId = '';
+            indicator.dataset.dropAfter = '0';
+            return;
+          }
+          var insertIndex = cards.length;
+          var targetId = cards[cards.length - 1].dataset.tempProjectCard || '';
+          var after = true;
+          for (var i = 0; i < cards.length; i += 1) {
+            var card = cards[i];
+            if (!card || !card.getBoundingClientRect) continue;
+            var rect = card.getBoundingClientRect();
+            var midY = rect.top + rect.height / 2;
+            if (e.clientY < midY) {
+              insertIndex = i;
+              targetId = card.dataset.tempProjectCard || '';
+              after = false;
+              break;
+            }
+          }
+          if (insertIndex >= cards.length) {
+            targetId = cards[cards.length - 1].dataset.tempProjectCard || '';
+            after = true;
+          }
+          indicator.dataset.dropTargetId = targetId;
+          indicator.dataset.dropAfter = after ? '1' : '0';
+          var ref = cards[insertIndex] || null;
+          tempVersionGrid.insertBefore(indicator, ref);
+          return;
+        }
+        if (dragType === 'version' && dragKey) {
+          var src = parseProjectVersionKey(dragKey);
+          var projectCard = e.target.closest('[data-temp-project-card]');
+          if (!projectCard || !projectCard.dataset.tempProjectCard) {
+            clearTempProjectLayoutDropIndicator();
+            return;
+          }
+          if (src.projectId && String(src.projectId) !== String(projectCard.dataset.tempProjectCard || '')) {
+            clearTempProjectLayoutDropIndicator();
+            return;
+          }
+          var grid = projectCard.querySelector('.temp-project-versions');
+          if (!grid) {
+            clearTempProjectLayoutDropIndicator();
+            return;
+          }
+          var indicator2 = ensureTempProjectLayoutDropIndicator('version');
+          var versionCards = Array.prototype.slice.call(grid.querySelectorAll('.temp-project-version'));
+          versionCards = versionCards.filter(function(el) { return el && el !== indicator2; });
+          if (!versionCards.length) {
+            grid.appendChild(indicator2);
+            indicator2.dataset.dropProjectId = projectCard.dataset.tempProjectCard || '';
+            indicator2.dataset.dropTargetId = '';
+            indicator2.dataset.dropAfter = '0';
+            return;
+          }
+          var hit = findCardUnderPointer(versionCards, e.clientX, e.clientY);
+          var insertIndex2 = versionCards.length;
+          var targetKey = versionCards[versionCards.length - 1].dataset.tempProjectVersionCard || '';
+          var insertAfter2 = true;
+          if (hit) {
+            var rect2 = hit.getBoundingClientRect();
+            insertAfter2 = getDropAfterByPointerAny(e, rect2);
+            var idx2 = versionCards.indexOf(hit);
+            if (idx2 === -1) idx2 = versionCards.length - 1;
+            insertIndex2 = idx2 + (insertAfter2 ? 1 : 0);
+            targetKey = hit.dataset.tempProjectVersionCard || targetKey;
+          } else {
+            var rowCandidates = versionCards.filter(function(card2) {
+              if (!card2 || !card2.getBoundingClientRect) return false;
+              var r2 = card2.getBoundingClientRect();
+              return e.clientY >= r2.top && e.clientY <= r2.bottom;
+            });
+            if (rowCandidates.length) {
+              rowCandidates.sort(function(a, b) { return a.getBoundingClientRect().left - b.getBoundingClientRect().left; });
+              for (var j = 0; j < rowCandidates.length; j += 1) {
+                var rc = rowCandidates[j];
+                var rr = rc.getBoundingClientRect();
+                var cx2 = rr.left + rr.width / 2;
+                if (e.clientX < cx2) {
+                  insertIndex2 = versionCards.indexOf(rc);
+                  targetKey = rc.dataset.tempProjectVersionCard || targetKey;
+                  insertAfter2 = false;
+                  break;
+                }
+              }
+              if (insertIndex2 === versionCards.length) {
+                var last = rowCandidates[rowCandidates.length - 1];
+                insertIndex2 = versionCards.indexOf(last) + 1;
+                targetKey = last.dataset.tempProjectVersionCard || targetKey;
+                insertAfter2 = true;
+              }
+            } else {
+              for (var k = 0; k < versionCards.length; k += 1) {
+                var c2 = versionCards[k];
+                var cr = c2.getBoundingClientRect();
+                var midY2 = cr.top + cr.height / 2;
+                if (e.clientY < midY2) {
+                  insertIndex2 = k;
+                  targetKey = c2.dataset.tempProjectVersionCard || targetKey;
+                  insertAfter2 = false;
+                  break;
+                }
+              }
+              if (insertIndex2 === versionCards.length) {
+                targetKey = versionCards[versionCards.length - 1].dataset.tempProjectVersionCard || targetKey;
+                insertAfter2 = true;
+              }
+            }
+          }
+          indicator2.dataset.dropProjectId = projectCard.dataset.tempProjectCard || '';
+          indicator2.dataset.dropTargetId = targetKey;
+          indicator2.dataset.dropAfter = insertAfter2 ? '1' : '0';
+          var ref2 = versionCards[insertIndex2] || null;
+          grid.insertBefore(indicator2, ref2);
+          return;
+        }
+        // 其他拖拽（如用例条目拖拽）不走此指示器
+        clearTempProjectLayoutDropIndicator();
       });
 
       tempVersionGrid.addEventListener('dragleave', function(e) {
-        var versionCard = e.target.closest('[data-temp-project-version-card]');
-        if (versionCard && versionCard.classList) versionCard.classList.remove('dragover');
-        var projectCard = e.target.closest('[data-temp-project-card]');
-        if (projectCard && projectCard.classList) projectCard.classList.remove('dragover');
+        if (!e) return;
+        // dragleave 会在子元素之间频繁触发：仅当离开整个容器时才清理
+        if (e.currentTarget !== tempVersionGrid) return;
+        if (e.target !== tempVersionGrid) return;
+        clearTempProjectLayoutDropIndicator();
+      });
+
+      tempVersionGrid.addEventListener('dragend', function() {
+        clearTempProjectLayoutDropIndicator();
+        tempProjectLayoutDrag = { type: '', key: '' };
       });
 
       tempVersionGrid.addEventListener('drop', function(e) {
         e.preventDefault();
         if (!e.dataTransfer) return;
-        var projectCard = e.target.closest('[data-temp-project-card]');
-        var versionCard = e.target.closest('[data-temp-project-version-card]');
-        if (versionCard && versionCard.classList) versionCard.classList.remove('dragover');
-        if (projectCard && projectCard.classList) projectCard.classList.remove('dragover');
-
-        var dragProject = e.dataTransfer.getData('text/temp-project');
-        if (dragProject && projectCard && projectCard.dataset.tempProjectCard && api.reorderTempExecProject) {
-          api.reorderTempExecProject(dragProject, projectCard.dataset.tempProjectCard);
+        // drop 时也可能无法读取 dataTransfer（浏览器安全策略差异），兜底使用 dragstart 记录的类型/键
+        var dragProject = e.dataTransfer.getData('text/temp-project') || (tempProjectLayoutDrag.type === 'project' ? tempProjectLayoutDrag.key : '');
+        if (dragProject && api.reorderTempExecProject) {
+          var indicator = tempProjectLayoutDropIndicator;
+          var targetId = indicator && indicator.dataset ? (indicator.dataset.dropTargetId || '') : '';
+          var after = indicator && indicator.dataset ? (indicator.dataset.dropAfter === '1') : false;
+          if (!targetId) {
+            // 兜底：落在某个项目卡片上
+            var projectCard = e.target.closest('[data-temp-project-card]');
+            targetId = projectCard && projectCard.dataset ? (projectCard.dataset.tempProjectCard || '') : '';
+            after = false;
+          }
+          if (targetId) api.reorderTempExecProject(dragProject, targetId, { after: after });
+          clearTempProjectLayoutDropIndicator();
+          tempProjectLayoutDrag = { type: '', key: '' };
           return;
         }
-        var dragVerKey = e.dataTransfer.getData('text/temp-project-version');
-        if (dragVerKey && versionCard && versionCard.dataset.tempProjectVersionCard && api.reorderTempExecProjectVersion) {
-          var src = parseProjectVersionKey(dragVerKey);
-          var tgt = parseProjectVersionKey(versionCard.dataset.tempProjectVersionCard);
-          if (src.projectId && tgt.projectId && src.projectId === tgt.projectId) {
-            api.reorderTempExecProjectVersion(src.projectId, src.versionId, tgt.versionId);
-          } else {
+        var dragVerKey = e.dataTransfer.getData('text/temp-project-version') || (tempProjectLayoutDrag.type === 'version' ? tempProjectLayoutDrag.key : '');
+        if (dragVerKey && api.reorderTempExecProjectVersion) {
+          var src2 = parseProjectVersionKey(dragVerKey);
+          var indicator2 = tempProjectLayoutDropIndicator;
+          var targetKey = indicator2 && indicator2.dataset ? (indicator2.dataset.dropTargetId || '') : '';
+          var after2 = indicator2 && indicator2.dataset ? (indicator2.dataset.dropAfter === '1') : false;
+          var projectId = indicator2 && indicator2.dataset ? (indicator2.dataset.dropProjectId || '') : '';
+          // 以 drop 时的落点为准：若落在具体版本盒子上，则根据落点左右半区判定前/后插入
+          var versionCard = e.target.closest('[data-temp-project-version-card]');
+          if (versionCard && versionCard.dataset && versionCard.dataset.tempProjectVersionCard) {
+            targetKey = versionCard.dataset.tempProjectVersionCard || targetKey;
+            var rect = versionCard.getBoundingClientRect ? versionCard.getBoundingClientRect() : null;
+            after2 = rect ? getDropAfterByPointerAny(e, rect) : after2;
+            projectId = '';
+          }
+          var tgt2 = parseProjectVersionKey(targetKey);
+          var pid2 = projectId || tgt2.projectId || src2.projectId;
+          if (src2.projectId && pid2 && String(src2.projectId) === String(pid2) && tgt2.versionId) {
+            api.reorderTempExecProjectVersion(pid2, src2.versionId, tgt2.versionId, { after: after2 });
+          } else if (src2.projectId && pid2 && String(src2.projectId) !== String(pid2)) {
             setStatus(tempExecStatus, '不同项目之间不支持拖拽调整版本顺序', 'warn');
           }
+          clearTempProjectLayoutDropIndicator();
+          tempProjectLayoutDrag = { type: '', key: '' };
           return;
         }
+        clearTempProjectLayoutDropIndicator();
+        tempProjectLayoutDrag = { type: '', key: '' };
         var ids = e.dataTransfer.getData('text/plain');
         if (ids && api.reorderTempExecFileInProjectVersion) {
+          var versionCard = e.target.closest('[data-temp-project-version-card]');
           if (!versionCard || !versionCard.dataset.tempProjectVersionCard) return;
           var parsed = parseProjectVersionKey(versionCard.dataset.tempProjectVersionCard);
           var idArr = ids.split(',').map(function(s) { return s.trim(); }).filter(Boolean);

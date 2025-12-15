@@ -188,6 +188,17 @@ test.describe('用例执行-项目/版本分组布局', () => {
     expect(versionTitlesAfterReorder[0]).toBe('v1');
     expect(versionTitlesAfterReorder[1]).toBe('v2');
 
+    // 支持向后插入：将 v1 拖到 v2 后面（模拟拖到右下半区）
+    const v1HeaderAfter = projectACard.locator('.temp-project-version-header', { hasText: 'v1' }).first();
+    const v2HeaderAfter = projectACard.locator('.temp-project-version-header', { hasText: 'v2' }).first();
+    const v2Box = await v2HeaderAfter.boundingBox();
+    await v1HeaderAfter.dragTo(v2HeaderAfter, {
+      targetPosition: { x: v2Box ? Math.max(5, Math.floor(v2Box.width - 6)) : 80, y: v2Box ? Math.max(5, Math.floor(v2Box.height - 4)) : 26 },
+    });
+    const versionTitlesAfterReorder2 = (await projectACard.locator('.temp-project-version-header .title').allTextContents()).map((t) => t.trim());
+    expect(versionTitlesAfterReorder2[0]).toBe('v2');
+    expect(versionTitlesAfterReorder2[1]).toBe('v1');
+
     const projectAHeader = projectACard.locator('.temp-project-header').first();
     const projectBCard = page.locator('#tempVersionGrid .temp-project-card', { hasText: '项目B' }).first();
     const projectBHeader = projectBCard.locator('.temp-project-header').first();
