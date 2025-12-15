@@ -37,6 +37,7 @@
     var tempexecFlowNav = document.getElementById('tempexecFlowNav');
     var toggleTempReqBtn = document.getElementById('toggleTempReq');
     var toggleTempVersionBtn = document.getElementById('toggleTempVersion');
+    var createTempVersionBtn = document.getElementById('createTempVersionBtn');
     var tempExecDrawerEl = document.getElementById('tempExecDrawer');
     var tempExecOverviewDrawerEl = document.getElementById('tempExecOverviewDrawer');
     var tempExecImportDiffDrawerEl = document.getElementById('tempExecImportDiffDrawer');
@@ -526,7 +527,6 @@
     var tempExecPageSizeInput = document.getElementById('tempExecPageSizeInput');
     var tempExecPageSizeStatus = document.getElementById('tempExecPageSizeStatus');
     var saveTempExecPageSizeBtn = document.getElementById('saveTempExecPageSize');
-    var createTempVersionBtn = document.getElementById('createTempVersionBtn');
     var tempFocusBlock = document.getElementById('tempFocusBlock');
     var tempFocusZone = tempFocusBlock ? tempFocusBlock.querySelector('[data-temp-focus-zone]') : null;
 
@@ -1496,7 +1496,13 @@
         invalidateImportProjectsCache();
         var globalState = window.app && window.app.state ? window.app.state : {};
         var tabName = globalState && globalState.activeTab ? globalState.activeTab : '';
-        if (tabName === 'tempexec') ensureImportProjects();
+        if (tabName === 'tempexec') {
+          ensureImportProjects();
+          // 版本删除并转移后，需要同步刷新执行区的项目/版本分组
+          if (typeof api.loadTempExecState === 'function') {
+            api.loadTempExecState();
+          }
+        }
       });
     }
     ensureImportProjects();
@@ -1770,6 +1776,196 @@
       });
     }
 
+    function parseProjectVersionKey(raw) {
+      var text = String(raw || '');
+      var parts = text.split('||');
+      if (parts.length < 2) return { projectId: '', versionId: '' };
+      return { projectId: parts[0] || '', versionId: parts.slice(1).join('||') || '' };
+    }
+
+    function getProjectFiles(projectId) {
+      var pid = String(projectId || '');
+      var list = Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      return list.filter(function(file) { return file && String(file.projectId || '') === pid; });
+    }
+
+    function getProjectVersionFiles(projectId, versionId) {
+      var pid = String(projectId || '');
+      var vid = String(versionId || '');
+      var list = Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      return list.filter(function(file) {
+        if (!file) return false;
+        if (String(file.projectId || '') !== pid) return false;
+        return String(file.versionId || '') === vid;
+      });
+    }
+
+    function resolveInsertBeforeFileId(containerEl, clientY) {
+      if (!containerEl || !containerEl.querySelectorAll) return '';
+      var rows = Array.prototype.slice.call(containerEl.querySelectorAll('.temp-req-row[data-temp-file]'));
+      if (!rows.length) return '';
+      var target = '';
+      rows.some(function(row) {
+        if (!row || !row.getBoundingClientRect) return false;
+        var rect = row.getBoundingClientRect();
+        if (clientY < rect.top + rect.height / 2) {
+          target = row.dataset.tempFile || '';
+          return true;
+        }
+        return false;
+      });
+      return target;
+    }
+
+    function resolveProjectLabel(projectId) {
+      var pid = String(projectId || '');
+      if (!pid) return '项目#未知';
+      var list = Array.isArray(state.projects) ? state.projects : [];
+      var found = list.find(function(p) { return p && String(p.id) === pid; });
+      var name = found && found.name ? String(found.name) : '';
+      return name.trim() || ('项目#' + pid);
+    }
+
+    function resolveVersionLabel(projectId, versionId) {
+      var pid = String(projectId || '');
+      var vid = String(versionId || '');
+      if (!vid) return '全部版本';
+      var byProject = state.projectVersionsByProject && typeof state.projectVersionsByProject === 'object'
+        ? state.projectVersionsByProject
+        : {};
+      var list = pid && Array.isArray(byProject[pid]) ? byProject[pid] : [];
+      var found = list.find(function(v) { return v && String(v.id) === vid; });
+      var name = found && found.name ? String(found.name) : '';
+      return name.trim() || ('版本#' + vid);
+    }
+
+    if (tempVersionGrid) {
+      tempVersionGrid.addEventListener('click', function(e) {
+        var projectRemoveBtn = e.target.closest('[data-temp-project-remove]');
+        if (projectRemoveBtn && api.removeTempExecProject) {
+          var pid = projectRemoveBtn.dataset.tempProjectRemove || '';
+          var projectFiles = getProjectFiles(pid);
+          var projectLabel = resolveProjectLabel(pid);
+          var confirmed = window.confirm('是否确认关闭项目【' + projectLabel + '】（' + projectFiles.length + ' 份用例）？');
+          if (!confirmed) return;
+          api.removeTempExecProject(pid);
+          return;
+        }
+        var versionRemoveBtn = e.target.closest('[data-temp-project-version-remove]');
+        if (versionRemoveBtn && api.removeTempExecProjectVersion) {
+          var key = versionRemoveBtn.dataset.tempProjectVersionRemove || '';
+          var parsed = parseProjectVersionKey(key);
+          var versionFiles = getProjectVersionFiles(parsed.projectId, parsed.versionId);
+          var versionLabel = resolveVersionLabel(parsed.projectId, parsed.versionId);
+          var confirmed2 = window.confirm('是否确认关闭版本【' + versionLabel + '】（' + versionFiles.length + ' 份用例）？');
+          if (!confirmed2) return;
+          api.removeTempExecProjectVersion(parsed.projectId, parsed.versionId);
+          return;
+        }
+        var fileRemoveBtn = e.target.closest('[data-temp-remove]');
+        if (fileRemoveBtn && api.removeTempExecFile) {
+          e.preventDefault();
+          e.stopPropagation();
+          var fileId = fileRemoveBtn.dataset.tempRemove;
+          var targetFile = api.getTempExecFile ? api.getTempExecFile(fileId) : null;
+          if (!targetFile) return;
+          var confirmed3 = window.confirm("确定要删除【" + targetFile.name + "】吗？此操作不可撤销。");
+          if (!confirmed3) return;
+          api.removeTempExecFile(fileId);
+          return;
+        }
+        // 支持点击整行（含条数徽标/标签），不仅限于按钮本体
+        var fileNode = e.target.closest('[data-temp-file]');
+        if (!fileNode) return;
+        var id = fileNode.dataset.tempFile;
+        if (!id) return;
+        if (api.getTempExecFile && !api.getTempExecFile(id)) return;
+        if (id !== state.tempExecActiveId && api.setTempExecActive) api.setTempExecActive(id);
+        // DB 项目/版本分组模式下，避免触发 switchTab 重载导致 activeId 被旧设置覆盖回滚
+        if (!(api.isTempExecProjectLayoutEnabled && api.isTempExecProjectLayoutEnabled())) {
+          switchTab('tempexec');
+        }
+      });
+
+      tempVersionGrid.addEventListener('dragstart', function(e) {
+        var project = e.target.closest('[data-temp-project-card]');
+        var projectHeader = e.target.closest('[data-temp-project-drag]');
+        var version = e.target.closest('[data-temp-project-version-card]');
+        var versionHeader = e.target.closest('[data-temp-project-version-drag]');
+        var fileRow = e.target.closest('[data-temp-file]');
+        if (!e.dataTransfer) return;
+        e.dataTransfer.effectAllowed = 'move';
+        if (project && projectHeader && project.dataset.tempProjectCard) {
+          e.dataTransfer.setData('text/temp-project', project.dataset.tempProjectCard);
+          return;
+        }
+        if (version && versionHeader && version.dataset.tempProjectVersionCard) {
+          e.dataTransfer.setData('text/temp-project-version', version.dataset.tempProjectVersionCard);
+          return;
+        }
+        if (fileRow && fileRow.dataset.tempFile) {
+          e.dataTransfer.setData('text/plain', fileRow.dataset.tempFile);
+        }
+      });
+
+      tempVersionGrid.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        var versionCard = e.target.closest('[data-temp-project-version-card]');
+        if (versionCard && versionCard.classList) versionCard.classList.add('dragover');
+        var projectCard = e.target.closest('[data-temp-project-card]');
+        if (projectCard && projectCard.classList) projectCard.classList.add('dragover');
+      });
+
+      tempVersionGrid.addEventListener('dragleave', function(e) {
+        var versionCard = e.target.closest('[data-temp-project-version-card]');
+        if (versionCard && versionCard.classList) versionCard.classList.remove('dragover');
+        var projectCard = e.target.closest('[data-temp-project-card]');
+        if (projectCard && projectCard.classList) projectCard.classList.remove('dragover');
+      });
+
+      tempVersionGrid.addEventListener('drop', function(e) {
+        e.preventDefault();
+        if (!e.dataTransfer) return;
+        var projectCard = e.target.closest('[data-temp-project-card]');
+        var versionCard = e.target.closest('[data-temp-project-version-card]');
+        if (versionCard && versionCard.classList) versionCard.classList.remove('dragover');
+        if (projectCard && projectCard.classList) projectCard.classList.remove('dragover');
+
+        var dragProject = e.dataTransfer.getData('text/temp-project');
+        if (dragProject && projectCard && projectCard.dataset.tempProjectCard && api.reorderTempExecProject) {
+          api.reorderTempExecProject(dragProject, projectCard.dataset.tempProjectCard);
+          return;
+        }
+        var dragVerKey = e.dataTransfer.getData('text/temp-project-version');
+        if (dragVerKey && versionCard && versionCard.dataset.tempProjectVersionCard && api.reorderTempExecProjectVersion) {
+          var src = parseProjectVersionKey(dragVerKey);
+          var tgt = parseProjectVersionKey(versionCard.dataset.tempProjectVersionCard);
+          if (src.projectId && tgt.projectId && src.projectId === tgt.projectId) {
+            api.reorderTempExecProjectVersion(src.projectId, src.versionId, tgt.versionId);
+          } else {
+            setStatus(tempExecStatus, '不同项目之间不支持拖拽调整版本顺序', 'warn');
+          }
+          return;
+        }
+        var ids = e.dataTransfer.getData('text/plain');
+        if (ids && api.reorderTempExecFileInProjectVersion) {
+          if (!versionCard || !versionCard.dataset.tempProjectVersionCard) return;
+          var parsed = parseProjectVersionKey(versionCard.dataset.tempProjectVersionCard);
+          var idArr = ids.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+          if (!idArr.length) return;
+          var file = api.getTempExecFile ? api.getTempExecFile(idArr[0]) : null;
+          if (!file) return;
+          if (String(file.projectId || '') !== String(parsed.projectId || '') || String(file.versionId || '') !== String(parsed.versionId || '')) {
+            setStatus(tempExecStatus, '不同项目/不同版本之间不支持拖拽移动用例', 'warn');
+            return;
+          }
+          var body = versionCard.querySelector('.temp-project-version-body');
+          var beforeId = resolveInsertBeforeFileId(body, e.clientY);
+          api.reorderTempExecFileInProjectVersion(parsed.projectId, parsed.versionId, String(file.id), beforeId || '');
+        }
+      });
+    }
+
     function setTempDragContext(ctx) {
       window.app = window.app || {};
       window.app.tempDragContext = ctx;
@@ -1969,7 +2165,9 @@
           var fileId = fileBtn.dataset.tempFile;
           if (fileId && api.getTempExecFile && api.getTempExecFile(fileId)) {
             api.setTempExecActive(fileId);
-            switchTab('tempexec');
+            if (!(api.isTempExecProjectLayoutEnabled && api.isTempExecProjectLayoutEnabled())) {
+              switchTab('tempexec');
+            }
           }
         }
       });
@@ -2157,6 +2355,10 @@
 
     if (createTempVersionBtn && api.createTempVersion) {
       createTempVersionBtn.addEventListener('click', function() {
+        if (api.isTempExecProjectLayoutEnabled && api.isTempExecProjectLayoutEnabled()) {
+          setStatus(tempExecStatus, '当前为项目分组模式，不支持手动新建版本', 'warn');
+          return;
+        }
         var name = window.prompt('请输入版本名称');
         if (!name) return;
         var id = api.createTempVersion(name);

@@ -399,7 +399,8 @@ test.describe('文件导入导出与布局视图', () => {
         tab: 'tempexec',
         items: [
           { selector: '#tempExecOverviewBtn', disabled: false },
-          { selector: '#createTempVersionBtn', disabled: false },
+          // DB 模式下用例执行改为“项目/版本分组”，不支持手动新建版本
+          { selector: '#createTempVersionBtn', disabled: true },
           { selector: '#exportTempExecConfigBtn', disabled: true },
           { selector: '#importTempExecConfigBtn', disabled: false },
           { selector: '#exportTempExecXmindBtn', disabled: true },

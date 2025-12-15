@@ -122,6 +122,8 @@ test.describe('exec persistence api', () => {
     const mineSets = await listMineRes.json();
     expect(Array.isArray(mineSets)).toBeTruthy();
     expect(mineSets.some((s) => s && s.id === execSetId)).toBeTruthy();
+    const mineSet = mineSets.find((s) => s && s.id === execSetId);
+    expect(mineSet && mineSet.case_count).toBe(2);
     expect(mineSets.some((s) => s && s.id === otherExecSet.id)).toBeFalsy();
 
     const listOtherRes = await ctx.get(`${apiBase}/api/exec/sets?project_id=${projectId}`, { headers: otherHeaders });

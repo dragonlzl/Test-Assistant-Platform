@@ -134,7 +134,15 @@ class CaseFile(Base):
 class CaseItem(Base):
     __tablename__ = "case_items"
     __table_args__ = (
-        UniqueConstraint("case_file_id", "module", "title", "expected", name="uq_case_item_key"),
+        UniqueConstraint(
+            "case_file_id",
+            "module",
+            "title",
+            "precondition",
+            "steps",
+            "expected",
+            name="uq_case_item_key",
+        ),
         Index("ix_case_items_case_file_id", "case_file_id"),
     )
 
@@ -143,8 +151,8 @@ class CaseItem(Base):
     module = Column(String(255), nullable=False)
     title = Column(String(255), nullable=False)
     priority = Column(String(32), nullable=True)
-    precondition = Column(Text, nullable=True)
-    steps = Column(Text, nullable=True)
+    precondition = Column(Text, nullable=False, default="")
+    steps = Column(Text, nullable=False, default="")
     expected = Column(Text, nullable=False)
     remark = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))

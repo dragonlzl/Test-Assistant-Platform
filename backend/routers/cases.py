@@ -171,13 +171,27 @@ def import_case_file(
     ensure_version_in_project(db, project.id, payload.version_id)
     if not payload.items:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用例为空")
-    # 导入文件内可能存在重复条目（按 模块+标题+预期结果 判断），直接写库会触发唯一约束导致整份导入失败；
+    # 导入文件内可能存在重复条目（按 模块+标题+前提条件+操作步骤+预期结果 判断），直接写库会触发唯一约束导致整份导入失败；
     # 这里做一次去重以提升容错（执行页导入侧也依赖该接口）。
+    def _norm_key(value: str) -> str:
+        if value is None:
+            return ""
+        try:
+            return str(value).replace("\r\n", "\n").strip().lower()
+        except Exception:
+            return ""
+
     unique_items = []
     seen_keys = set()
     duplicate_count = 0
     for item in payload.items:
-        key = (item.module, item.title, item.expected)
+        key = (
+            _norm_key(item.module),
+            _norm_key(item.title),
+            _norm_key(getattr(item, "precondition", None)),
+            _norm_key(getattr(item, "steps", None)),
+            _norm_key(item.expected),
+        )
         if key in seen_keys:
             duplicate_count += 1
             continue
@@ -267,8 +281,8 @@ def import_case_file(
                 "module": item.module,
                 "title": item.title,
                 "priority": item.priority,
-                "precondition": item.precondition,
-                "steps": item.steps,
+                "precondition": item.precondition if item.precondition is not None else "",
+                "steps": item.steps if item.steps is not None else "",
                 "expected": item.expected,
                 "remark": item.remark,
                 "created_by": user.id,
@@ -479,6 +493,8 @@ def update_case_item(
         if field not in payload_data:
             continue
         value = payload_data[field]
+        if field in ("precondition", "steps") and value is None:
+            value = ""
         if value != getattr(case_item, field):
             setattr(case_item, field, value)
             changed = True
@@ -503,7 +519,8 @@ def update_case_item(
         except IntegrityError:
             db.rollback()
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="用例字段重复（模块/标题/预期结果）"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="用例字段重复（模块/标题/前提条件/操作步骤/预期结果）",
             )
         db.refresh(case_item)
     return case_item
@@ -527,8 +544,8 @@ def create_case_item(
         module=payload.module,
         title=payload.title,
         priority=payload.priority,
-        precondition=payload.precondition,
-        steps=payload.steps,
+        precondition=payload.precondition if payload.precondition is not None else "",
+        steps=payload.steps if payload.steps is not None else "",
         expected=payload.expected,
         remark=payload.remark,
         created_by=user.id,
@@ -553,7 +570,8 @@ def create_case_item(
     except IntegrityError:
         db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="用例字段重复（模块/标题/预期结果）"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="用例字段重复（模块/标题/前提条件/操作步骤/预期结果）",
         )
     db.refresh(case_item)
     return case_item

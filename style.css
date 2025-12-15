@@ -713,6 +713,107 @@ body {
   gap: 12px;
   align-items: stretch;
 }
+.temp-version-grid.temp-project-layout {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+.temp-project-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: linear-gradient(135deg, #f9fafb 0%, #fff 100%);
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.temp-project-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: grab;
+  user-select: none;
+}
+.temp-project-header:active {
+  cursor: grabbing;
+}
+.temp-project-header .title {
+  font-weight: 800;
+  color: var(--text);
+}
+.temp-project-header .remove {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.05);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text);
+}
+.temp-project-versions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+.temp-project-version {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.7);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  min-height: 110px;
+}
+.temp-project-version.dragover {
+  border-color: #2563eb;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.2);
+}
+.temp-project-version-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(37, 99, 235, 0.06);
+  border-radius: 12px 12px 0 0;
+  cursor: grab;
+  user-select: none;
+}
+.temp-project-version-header:active {
+  cursor: grabbing;
+}
+.temp-project-version-header .title {
+  font-weight: 700;
+  color: var(--text);
+}
+.temp-project-version-header .remove {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.05);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text);
+}
+.temp-project-version-body {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 60px;
+}
+@media (max-width: 960px) {
+  .temp-project-versions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .temp-project-versions { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+}
 .temp-version-card {
   border: 1px solid var(--border);
   border-radius: 12px;

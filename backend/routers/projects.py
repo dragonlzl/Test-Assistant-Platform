@@ -258,6 +258,7 @@ def delete_version(
     )
     transfer_name = (transfer_to or "").strip()
     moved_count = 0
+    moved_exec_sets = 0
     transfer_version_id = None
     if case_file_count > 0:
         if not transfer_name:
@@ -290,6 +291,16 @@ def delete_version(
             .update({models.CaseFile.version_id: target.id}, synchronize_session=False)
             or 0
         )
+        # 同步转移执行集，避免执行页面仍显示“已删除版本”或落入“全部版本”分组
+        moved_exec_sets = (
+            db.query(models.ExecSet)
+            .filter(
+                models.ExecSet.project_id == project_id,
+                models.ExecSet.version_id == version_id,
+            )
+            .update({models.ExecSet.version_id: target.id}, synchronize_session=False)
+            or 0
+        )
         transfer_version_id = target.id
 
     db.delete(version)
@@ -303,6 +314,7 @@ def delete_version(
             "project_id": project_id,
             "case_file_count": int(case_file_count),
             "moved_case_files": int(moved_count),
+            "moved_exec_sets": int(moved_exec_sets),
             "transfer_to_version_name": transfer_name or None,
             "transfer_to_version_id": transfer_version_id,
         },

@@ -169,6 +169,7 @@ class ExecSetOut(BaseModel):
     requirement: Optional[str] = None
     reuse_enabled: bool = False
     reuse_presets: Optional[Any] = None
+    case_count: Optional[int] = None
     status: str
     created_at: datetime
     updated_at: datetime

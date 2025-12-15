@@ -180,8 +180,10 @@
     if (!item) return '';
     var module = normalizeDiffText(item.module || '').toLowerCase();
     var title = normalizeDiffText(item.title || '').toLowerCase();
+    var precondition = normalizeDiffText(item.precondition || item.preconditions || '').toLowerCase();
+    var steps = normalizeDiffText(item.steps || '').toLowerCase();
     var expected = normalizeDiffText(item.expected || '').toLowerCase();
-    return [module, title, expected].join('::');
+    return [module, title, precondition, steps, expected].join('::');
   }
 
   function dedupeCaseItemsByKey(list) {
@@ -2025,7 +2027,7 @@
 
     if (titleEl) titleEl.textContent = '导入用例重复校验：' + cleanCaseFileName(fileName);
     if (statusEl) {
-      setStatus(statusEl, '检测到重复条目 ' + duplicateCount + ' 条，将自动去重：原 ' + total + ' 条 → 去重后 ' + uniqueCount + ' 条。', 'warn');
+      setStatus(statusEl, '检测到重复条目 ' + duplicateCount + ' 条（模块/用例描述/前提条件/操作步骤/预期结果均相同），将自动去重：原 ' + total + ' 条 → 去重后 ' + uniqueCount + ' 条。', 'warn');
     }
     if (confirmBtn) confirmBtn.disabled = !duplicateCount;
 

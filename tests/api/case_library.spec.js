@@ -199,6 +199,29 @@ test.describe('case library api', () => {
     const dupItems = await dupItemsRes.json();
     expect(dupItems.length).toBe(1);
 
+    const sameTitleExpectedDiffStepsRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '同标题同预期不同步骤.json',
+        source: 'apitest',
+        items: [
+          { module: '登录', title: '同名', precondition: '前置A', steps: 'step-1', expected: 'ok' },
+          { module: '登录', title: '同名', precondition: '前置A', steps: 'step-2', expected: 'ok' },
+        ],
+      },
+    });
+    expect(sameTitleExpectedDiffStepsRes.status()).toBe(201);
+    const sameTitleExpectedDiffSteps = await sameTitleExpectedDiffStepsRes.json();
+    const sameTitleExpectedDiffStepsItemsRes = await ctx.get(
+      `${apiBase}/api/case-files/${sameTitleExpectedDiffSteps.id}/items`,
+      { headers }
+    );
+    expect(sameTitleExpectedDiffStepsItemsRes.status()).toBe(200);
+    const sameTitleExpectedDiffStepsItems = await sameTitleExpectedDiffStepsItemsRes.json();
+    expect(sameTitleExpectedDiffStepsItems.length).toBe(2);
+
     const overwriteTargetRes = await ctx.post(`${apiBase}/api/case-files/import`, {
       headers,
       data: {

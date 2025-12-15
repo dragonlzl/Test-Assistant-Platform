@@ -19,7 +19,7 @@
 - user_projects：user_id, project_id（成员归属，限制非管理员可见与操作范围）。
 - operation_logs：id, user_id, action, target_type, target_id, result, detail(json/text), created_at。
 - case_files（用例库文件元）：id, project_id, version_id, file_name_clean, importer_id, imported_at, updated_at, source。
-- case_items（用例库条目）：id, case_file_id, module, title, priority, precondition, steps, expected, remark, created_by, updated_by, created_at, updated_at；唯一键(module,title,expected,case_file_id)。
+- case_items（用例库条目）：id, case_file_id, module, title, priority, precondition, steps, expected, remark, created_by, updated_by, created_at, updated_at；唯一键(case_file_id,module,title,precondition,steps,expected)。
 - exec_sets（执行集合/历史）：id, project_id, version_id, source(case_file_id/上传), name, status(active/archived), created_by, created_at, updated_at。
 - exec_cases：id, exec_set_id, case_item_id(可空), module, title, expected, actual_result, defect_link, remark, status, order_no, executor_id(执行责任人，可空), created_by, updated_by, created_at, updated_at。
 - exec_case_history：id, exec_case_id, field_changed, old_value, new_value, changed_by, changed_at。

@@ -717,6 +717,7 @@ test.describe('用例执行-导入需确认入库', () => {
     const execSets = [];
     const execCasesBySetId = {};
     let lastImportItemsLen = -1;
+    let lastImportItems = null;
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -746,6 +747,7 @@ test.describe('用例执行-导入需确认入库', () => {
       if (pathName === '/api/case-files/import' && method === 'POST') {
         const payload = route.request().postDataJSON();
         lastImportItemsLen = (payload.items || []).length;
+        lastImportItems = Array.isArray(payload.items) ? payload.items : [];
         const cleanName = String(payload.file_name || '').replace(/\.[^.]+$/, '');
         const now = new Date().toISOString();
         const file = {
@@ -844,8 +846,8 @@ test.describe('用例执行-导入需确认入库', () => {
 
     const cases = [
       { module: '调整', title: '普通攻击', expected: '进入战斗后会佩戴嘴炮进行攻击', priority: 'P1', preconditions: '战斗场景', steps: '观察普通攻击' },
-      { module: '调整', title: '普通攻击', expected: '进入战斗后会佩戴嘴炮进行攻击', priority: 'P1', preconditions: '非战斗场景', steps: '观察普通攻击' },
-      { module: '调整', title: '攻击数值', expected: '符合预期', priority: 'P1', preconditions: '已拥有小小教官', steps: '观察攻击频率' },
+      { module: '调整', title: '普通攻击', expected: '进入战斗后会佩戴嘴炮进行攻击', priority: 'P1', preconditions: '战斗场景', steps: '观察普通攻击' },
+      { module: '调整', title: '普通攻击', expected: '进入战斗后会佩戴嘴炮进行攻击', priority: 'P1', preconditions: '非战斗场景', steps: '观察普通攻击(不同步骤)' },
     ];
     const fileBuf = Buffer.from(JSON.stringify({ requirement: '需求A', cases }, null, 2), 'utf8');
 
@@ -888,6 +890,8 @@ test.describe('用例执行-导入需确认入库', () => {
       timeout: 10000,
     }).toBe(1);
     expect(lastImportItemsLen).toBe(2);
+    expect(Array.isArray(lastImportItems)).toBeTruthy();
+    expect(lastImportItems.some((it) => it && it.precondition === '非战斗场景')).toBeTruthy();
   });
 
   test('刷新页面后保持导入项目/版本选择（便于多次导入）', async ({ page }) => {
@@ -921,7 +925,17 @@ test.describe('用例执行-导入需确认入库', () => {
 
     const base = await gotoIndex(page);
     await waitAppInited(page, 30000);
+    await page.waitForFunction(() => window.app && window.app.authReady === true);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await page.waitForFunction(() => {
+      const nodes = document.querySelectorAll('[data-tab-section="tempexec"]');
+      if (!nodes || !nodes.length) return true;
+      for (let i = 0; i < nodes.length; i += 1) {
+        const el = nodes[i];
+        if (el && el.classList && !el.classList.contains('hidden')) return true;
+      }
+      return false;
+    });
 
     await page.click('#openTempExecDrawerBtn');
     await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
@@ -940,7 +954,17 @@ test.describe('用例执行-导入需确认入库', () => {
 
     await page.reload();
     await waitAppInited(page, 30000);
+    await page.waitForFunction(() => window.app && window.app.authReady === true);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await page.waitForFunction(() => {
+      const nodes = document.querySelectorAll('[data-tab-section="tempexec"]');
+      if (!nodes || !nodes.length) return true;
+      for (let i = 0; i < nodes.length; i += 1) {
+        const el = nodes[i];
+        if (el && el.classList && !el.classList.contains('hidden')) return true;
+      }
+      return false;
+    });
     await page.click('#openTempExecDrawerBtn');
     await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
 

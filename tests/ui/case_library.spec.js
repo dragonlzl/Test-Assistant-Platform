@@ -372,7 +372,9 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
         if (body.prefer_result_source === 'import' && Array.isArray(body.import_cases)) {
           body.import_cases.forEach((row) => {
             if (!row) return;
-            const k = [row.module, row.title, row.expected].map((v) => String(v || '').trim().toLowerCase()).join('::');
+            const k = [row.module, row.title, row.precondition, row.steps, row.expected]
+              .map((v) => String(v || '').trim().toLowerCase())
+              .join('::');
             importMap.set(k, row);
           });
         }
@@ -408,7 +410,9 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
             c.order_no = idx + 1;
             c.updated_at = now;
           }
-          const key = [c.module, c.title, c.expected].map((v) => String(v || '').trim().toLowerCase()).join('::');
+          const key = [c.module, c.title, c.precondition, c.steps, c.expected]
+            .map((v) => String(v || '').trim().toLowerCase())
+            .join('::');
           const imported = importMap.get(key);
           if (imported) {
             if (imported.status !== undefined) c.status = imported.status;
@@ -1019,6 +1023,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     const caseItemsByFileId = {};
     let importCallCount = 0;
     let lastImportItemsLen = -1;
+    let lastImportItems = null;
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -1041,6 +1046,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
         importCallCount += 1;
         const payload = route.request().postDataJSON();
         lastImportItemsLen = Array.isArray(payload.items) ? payload.items.length : 0;
+        lastImportItems = Array.isArray(payload.items) ? payload.items : [];
         const now = new Date().toISOString();
         const cleanName = String(payload.file_name || '').split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
         const file = {
@@ -1083,8 +1089,8 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 
     const rawCases = [
       { module: '调整', title: '普通攻击', expected: '进入战斗后会佩戴嘴炮进行攻击', priority: 'P1', precondition: '战斗场景', steps: '观察普通攻击', remark: '' },
-      { module: '调整', title: '普通攻击', expected: '进入战斗后会佩戴嘴炮进行攻击', priority: 'P1', precondition: '非战斗场景', steps: '观察普通攻击', remark: '' },
-      { module: '调整', title: '攻击数值', expected: '符合预期', priority: 'P1', precondition: '已拥有小小教官', steps: '观察攻击频率', remark: '' },
+      { module: '调整', title: '普通攻击', expected: '进入战斗后会佩戴嘴炮进行攻击', priority: 'P1', precondition: '战斗场景', steps: '观察普通攻击', remark: '' },
+      { module: '调整', title: '普通攻击', expected: '进入战斗后会佩戴嘴炮进行攻击', priority: 'P1', precondition: '非战斗场景', steps: '观察普通攻击(不同步骤)', remark: '' },
     ];
     const fileBuf = Buffer.from(JSON.stringify(rawCases, null, 2), 'utf8');
 
@@ -1125,6 +1131,8 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 
     await expect.poll(() => importCallCount).toBe(1);
     expect(lastImportItemsLen).toBe(2);
+    expect(Array.isArray(lastImportItems)).toBeTruthy();
+    expect(lastImportItems.some((it) => it && it.precondition === '非战斗场景')).toBeTruthy();
     await expect(page.locator('#caseLibraryImportStatus')).toContainText('导入完成', { timeout: 5000 });
     expect(base).toContain('http');
   });

@@ -67,6 +67,7 @@ def create_exec_set(
     )
     db.commit()
     db.refresh(exec_set)
+    setattr(exec_set, "case_count", 0)
     return exec_set
 
 
@@ -109,14 +110,27 @@ def update_exec_set(
         )
         db.commit()
         db.refresh(exec_set)
+    setattr(exec_set, "case_count", None)
     return exec_set
 
 
-def _normalize_match_key(module: str, title: str, expected: str) -> str:
+def _normalize_match_key(
+    module: str, title: str, precondition: str, steps: str, expected: str
+) -> str:
     def _norm(value: str) -> str:
         return (value or "").strip().lower()
 
-    return _norm(module) + "::" + _norm(title) + "::" + _norm(expected)
+    return (
+        _norm(module)
+        + "::"
+        + _norm(title)
+        + "::"
+        + _norm(precondition)
+        + "::"
+        + _norm(steps)
+        + "::"
+        + _norm(expected)
+    )
 
 
 @router.post("/sets/from-case-file", response_model=schemas.ExecSetOut)
@@ -189,7 +203,9 @@ def upsert_exec_set_from_case_file(
     import_map = {}
     if payload.import_cases:
         for item in payload.import_cases:
-            key = _normalize_match_key(item.module, item.title, item.expected)
+            key = _normalize_match_key(
+                item.module, item.title, item.precondition, item.steps, item.expected
+            )
             import_map[key] = item
 
     case_items = (
@@ -231,7 +247,7 @@ def upsert_exec_set_from_case_file(
         existing = existing_by_item_id.get(item.id)
         if existing and mode == "append":
             continue
-        key = _normalize_match_key(item.module, item.title, item.expected)
+        key = _normalize_match_key(item.module, item.title, item.precondition, item.steps, item.expected)
         import_case = import_map.get(key)
 
         if existing:
@@ -310,6 +326,15 @@ def upsert_exec_set_from_case_file(
     )
     db.commit()
     db.refresh(exec_set)
+    try:
+        count = (
+            db.query(func.count(models.ExecCase.id))
+            .filter(models.ExecCase.exec_set_id == exec_set.id)
+            .scalar()
+        )
+        setattr(exec_set, "case_count", int(count or 0))
+    except Exception:
+        setattr(exec_set, "case_count", None)
     return exec_set
 
 
@@ -335,7 +360,40 @@ def list_exec_sets(
         query = query.filter(models.ExecSet.created_by == user.id)
     elif not all_users:
         query = query.filter(models.ExecSet.created_by == user.id)
-    return query.order_by(models.ExecSet.id.desc()).all()
+    case_count_sq = (
+        db.query(
+            models.ExecCase.exec_set_id.label("exec_set_id"),
+            func.count(models.ExecCase.id).label("case_count"),
+        )
+        .group_by(models.ExecCase.exec_set_id)
+        .subquery()
+    )
+    rows = (
+        query.with_entities(models.ExecSet, case_count_sq.c.case_count.label("case_count"))
+        .outerjoin(case_count_sq, case_count_sq.c.exec_set_id == models.ExecSet.id)
+        .order_by(models.ExecSet.id.desc())
+        .all()
+    )
+    result = []
+    for row in rows:
+        exec_set, case_count = row
+        result.append(
+            {
+                "id": exec_set.id,
+                "project_id": exec_set.project_id,
+                "version_id": exec_set.version_id,
+                "case_file_id": exec_set.case_file_id,
+                "name": exec_set.name,
+                "requirement": exec_set.requirement,
+                "reuse_enabled": bool(exec_set.reuse_enabled),
+                "reuse_presets": exec_set.reuse_presets,
+                "case_count": int(case_count or 0),
+                "status": exec_set.status,
+                "created_at": exec_set.created_at,
+                "updated_at": exec_set.updated_at,
+            }
+        )
+    return result
 
 
 @router.get("/sets/{exec_set_id}/cases", response_model=List[schemas.ExecCaseOut])

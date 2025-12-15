@@ -252,3 +252,138 @@ def apply_migrations(engine: Engine) -> None:
                         )
                     )
             _mark_applied(conn, 6)
+
+        # v7: 用例条目唯一键升级为 “case_file_id + module + title + precondition + steps + expected”。
+        # 同时将 precondition/steps 升级为 NOT NULL（默认空串），避免 UNIQUE 遇到 NULL 失效。
+        if not _is_applied(conn, 7):
+            if "case_items" in tables:
+                idx_rows = conn.execute(text("PRAGMA index_list('case_items')")).fetchall()
+                unique_indexes = []
+                for row in idx_rows or []:
+                    # row: (seq, name, unique, origin, partial)
+                    name = row[1] if len(row) > 1 else None
+                    is_unique = bool(row[2]) if len(row) > 2 else False
+                    origin = row[3] if len(row) > 3 else ""
+                    if not name or not is_unique:
+                        continue
+                    unique_indexes.append({"name": name, "origin": origin})
+
+                def _index_cols(index_name: str) -> list[str]:
+                    info = conn.execute(
+                        text("PRAGMA index_info('" + str(index_name).replace("'", "''") + "')")
+                    ).fetchall()
+                    cols = []
+                    for r in info or []:
+                        # r: (seqno, cid, name)
+                        if len(r) >= 3 and r[2]:
+                            cols.append(str(r[2]))
+                    return cols
+
+                desired = ["case_file_id", "module", "title", "precondition", "steps", "expected"]
+                desired_set = set(desired)
+                has_desired = False
+                for idx in unique_indexes:
+                    cols = _index_cols(idx["name"])
+                    if set(cols) == desired_set:
+                        has_desired = True
+                        break
+
+                cols_meta = {c["name"]: c for c in insp.get_columns("case_items")}
+                pre_nullable = bool(cols_meta.get("precondition", {}).get("nullable", True))
+                steps_nullable = bool(cols_meta.get("steps", {}).get("nullable", True))
+                need_rebuild = (not has_desired) or pre_nullable or steps_nullable
+
+                if need_rebuild:
+                    cols = set([c["name"] for c in insp.get_columns("case_items")])
+                    if "precondition" not in cols:
+                        conn.execute(
+                            text(
+                                "ALTER TABLE case_items ADD COLUMN precondition TEXT NOT NULL DEFAULT ''"
+                            )
+                        )
+                        cols.add("precondition")
+                    if "steps" not in cols:
+                        conn.execute(
+                            text("ALTER TABLE case_items ADD COLUMN steps TEXT NOT NULL DEFAULT ''")
+                        )
+                        cols.add("steps")
+                    if "expected" not in cols:
+                        conn.execute(
+                            text("ALTER TABLE case_items ADD COLUMN expected TEXT NOT NULL DEFAULT ''")
+                        )
+                        cols.add("expected")
+
+                    conn.execute(text("PRAGMA foreign_keys=OFF"))
+                    conn.execute(text("ALTER TABLE case_items RENAME TO case_items_old"))
+                    conn.execute(
+                        text(
+                            """
+                            CREATE TABLE case_items (
+                              id INTEGER NOT NULL PRIMARY KEY,
+                              case_file_id INTEGER NOT NULL,
+                              module VARCHAR(255) NOT NULL,
+                              title VARCHAR(255) NOT NULL,
+                              priority VARCHAR(32),
+                              precondition TEXT NOT NULL DEFAULT '',
+                              steps TEXT NOT NULL DEFAULT '',
+                              expected TEXT NOT NULL DEFAULT '',
+                              remark TEXT,
+                              created_by INTEGER,
+                              updated_by INTEGER,
+                              created_at DATETIME NOT NULL,
+                              updated_at DATETIME NOT NULL,
+                              CONSTRAINT uq_case_item_key UNIQUE (case_file_id, module, title, precondition, steps, expected),
+                              FOREIGN KEY(case_file_id) REFERENCES case_files (id) ON DELETE CASCADE,
+                              FOREIGN KEY(created_by) REFERENCES users (id) ON DELETE SET NULL,
+                              FOREIGN KEY(updated_by) REFERENCES users (id) ON DELETE SET NULL
+                            )
+                            """
+                        )
+                    )
+
+                    target_cols = [
+                        "id",
+                        "case_file_id",
+                        "module",
+                        "title",
+                        "priority",
+                        "precondition",
+                        "steps",
+                        "expected",
+                        "remark",
+                        "created_by",
+                        "updated_by",
+                        "created_at",
+                        "updated_at",
+                    ]
+                    select_parts = []
+                    for c in target_cols:
+                        if c not in cols:
+                            if c in ("precondition", "steps", "expected"):
+                                select_parts.append("'' AS " + c)
+                            elif c in ("created_at", "updated_at"):
+                                select_parts.append("datetime('now') AS " + c)
+                            else:
+                                select_parts.append("NULL AS " + c)
+                            continue
+
+                        if c in ("precondition", "steps", "expected"):
+                            select_parts.append("COALESCE(" + c + ", '') AS " + c)
+                        else:
+                            select_parts.append(c)
+
+                    conn.execute(
+                        text(
+                            "INSERT INTO case_items (" + ", ".join(target_cols) + ")\n"
+                            "SELECT " + ", ".join(select_parts) + " FROM case_items_old"
+                        )
+                    )
+                    conn.execute(text("DROP TABLE case_items_old"))
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_case_items_case_file_id ON case_items(case_file_id)"
+                        )
+                    )
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_case_items_id ON case_items(id)"))
+                    conn.execute(text("PRAGMA foreign_keys=ON"))
+            _mark_applied(conn, 7)

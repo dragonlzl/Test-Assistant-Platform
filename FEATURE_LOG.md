@@ -1029,6 +1029,33 @@
 - 测试与验证：`node --check scripts/modules/tempexec.js tests/ui/tempexec_import_confirm.spec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_import_confirm.spec.js`（通过）。  
 - 更新记录：2025-12-15 执行页导入项目/版本选择持久化上线（`scripts/modules/tempexec.js`）。  
 
+- 功能名称：执行页导入&分配区改为“项目/版本分组”布局  
+- 功能描述：DB 模式下，“用例执行 → 用例导入&分配”下方不再展示需求区；原版本区升级为项目区：按“项目卡片 → 版本盒子”展示用例文件。项目/版本盒子支持拖拽换序；版本盒子内用例支持拖拽调整顺序；不同项目/不同版本间的用例不可互相拖拽移动；项目/版本/用例均可关闭移除（需二次确认），关闭后从执行页面消失，需重新导入/转入才会恢复。  
+- 操作方式：进入“用例执行 → 用例导入&分配”→导入用例并入库/或从用例库转到执行→执行页面会自动按项目与版本分组展示；可拖拽调整同项目内版本盒子顺序与盒子内用例顺序；点击项目/版本/用例右上角“×”可关闭移除。  
+- 使用效果：执行用例按项目与版本组织更清晰，避免“需求区/版本区”语义混淆；拖拽范围更可控，减少误操作。  
+- 新增内容/接口/组件：新增执行页项目分组渲染与排序缓存（`scripts/core/tempexecCore.js`）、执行页项目分组拖拽/关闭交互（`scripts/modules/tempexec.js`）、项目区样式（`style.css`）、文案调整（`index.html`）；新增 UI 用例覆盖项目/版本分组与拖拽限制（`tests/ui/tempexec_project_layout.spec.js`）。  
+- 复用说明：复用既有执行页文件行渲染、抽屉组件与持久化设置（`tempexec_ui_v1`），仅在 DB 模式下切换为“项目/版本分组”渲染，不删除旧需求/版本拖拽逻辑，便于未来回滚或复用。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_project_layout.spec.js tests/ui/tempexec_import_confirm.spec.js tests/ui/files_layout.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行页项目/版本分组布局上线（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`index.html`、`tests/ui/tempexec_project_layout.spec.js`）；2025-12-15 修复项目/版本盒子内点击切换用例时 `activeId` 被刷新回滚问题，并为执行集补充 `case_count` 返回与前端条目数展示（`backend/routers/exec_routes.py`、`backend/schemas.py`、`scripts/core/tempexecCore.js`、`tests/ui/tempexec_project_layout.spec.js`、`tests/api/exec_persistence.spec.js`）；2025-12-15 调整用例状态着色规则：只要存在“失败/阻塞”即标红（不要求全部执行完），并在明细异步加载完成后即时刷新用例行状态样式（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_project_layout.spec.js`）。  
+
+- 功能名称：删除版本并转移时同步迁移执行集版本  
+- 功能描述：项目管理删除版本并指定转移版本名时，除用例库 `case_files` 版本迁移外，同时将该项目下 `exec_sets` 的 `version_id` 迁移到目标版本，避免执行页面仍出现“已删除版本”或落入“全部版本”分组；前端在项目数据更新事件触发时会自动刷新执行数据。  
+- 操作方式：进入“项目管理”→删除版本→输入转移版本名→确认删除；用例库与执行页对应版本数据会同步迁移到目标版本。  
+- 使用效果：版本迁移对执行页面可见且一致，减少版本删除后的数据错位与手工处理成本。  
+- 新增内容/接口/组件：版本删除转移时同步更新 `exec_sets`（`backend/routers/projects.py`）；API 用例补充校验 `exec_sets.version_id` 迁移（`tests/api/project_version_delete_transfer.spec.js`）；执行页监听项目更新事件并刷新数据（`scripts/modules/tempexec.js`）。  
+- 复用说明：复用既有“版本删除转移”接口参数与用例库迁移逻辑，仅补充执行集迁移与前端刷新，不新增接口。  
+- 测试与验证：`API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/project_version_delete_transfer.spec.js`（通过）。  
+- 更新记录：2025-12-15 版本删除转移同步迁移执行集上线（`backend/routers/projects.py`、`scripts/modules/tempexec.js`、`tests/api/project_version_delete_transfer.spec.js`）。  
+
+- 功能名称：同一份用例内重复条目判定条件升级  
+- 功能描述：导入用例文件时，“重复条目（相同用例）”判定从“模块+用例描述+预期结果”升级为“模块+用例描述+前提条件+操作步骤+预期结果”全字段一致才算重复；避免同标题/同预期但前置或步骤不同的用例被误去重。  
+- 操作方式：在“用例库导入”或“用例执行导入入库”中导入同一文件：仅当条目模块/描述/前提/步骤/预期完全相同才会弹出“重复校验”抽屉并去重；若仅前提或步骤不同，会视为两条不同用例并同时入库。  
+- 使用效果：重复判断更准确，减少误去重导致的用例缺失；同时保证执行页导入覆盖/追加入库的匹配键与用例库一致。  
+- 新增内容/接口/组件：用例库 `case_items` 唯一键升级与迁移（`backend/models.py`、`backend/migrations.py`）；导入去重与执行结果映射键升级（`backend/routers/cases.py`、`backend/routers/exec_routes.py`、`scripts/core/tempexecCore.js`、`scripts/modules/caseLibrary.js`）；更新规划文档唯一键描述（`db_integration_plan.md`）。  
+- 复用说明：复用既有“重复校验抽屉”和导入流程，仅扩展判重 key（并同步后端唯一约束与结果映射逻辑），不新增接口。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 重复条目`（通过）；`npm run test:ui -- tests/ui/tempexec_import_confirm.spec.js -g 重复条目`（通过）；`API_BASE_URL=http://127.0.0.1:8080 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
+- 更新记录：2025-12-15 同一份用例内重复条目判定条件升级上线（`backend/models.py`、`backend/migrations.py`、`backend/routers/cases.py`、`backend/routers/exec_routes.py`、`scripts/core/tempexecCore.js`、`scripts/modules/caseLibrary.js`、`db_integration_plan.md`、`tests/api/case_library.spec.js`、`tests/ui/case_library.spec.js`、`tests/ui/tempexec_import_confirm.spec.js`）。  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  

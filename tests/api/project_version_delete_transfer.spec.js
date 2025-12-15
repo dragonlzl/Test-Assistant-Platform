@@ -64,6 +64,20 @@ test.describe('project version delete transfer', () => {
     });
     expect(importRes.status()).toBe(201);
 
+    const listCaseFiles = await ctx.get(`${apiBase}/api/case-files?project_id=${projectId}`, { headers });
+    expect(listCaseFiles.status()).toBe(200);
+    const caseFilesBefore = await listCaseFiles.json();
+    const importedFile = caseFilesBefore.find((f) => f && f.file_name_clean === '用例A');
+    expect(importedFile).toBeTruthy();
+
+    const createExecSet = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: { case_file_id: importedFile.id, mode: 'replace', prefer_result_source: 'db', preserve_results: true },
+    });
+    expect(createExecSet.status()).toBe(200);
+    const execSet = await createExecSet.json();
+    expect(execSet && execSet.version_id).toBe(ver1.id);
+
     const delNoTransfer = await ctx.delete(`${apiBase}/api/projects/${projectId}/versions/${ver1.id}`, { headers });
     expect(delNoTransfer.status()).toBe(409);
     const delNoTransferBody = await delNoTransfer.json();
@@ -82,6 +96,13 @@ test.describe('project version delete transfer', () => {
     const moved = caseFiles.find((f) => f && f.file_name_clean === '用例A');
     expect(moved).toBeTruthy();
     expect(moved.version_id).toBe(ver2.id);
+
+    const listExecSets = await ctx.get(`${apiBase}/api/exec/sets?project_id=${projectId}`, { headers });
+    expect(listExecSets.status()).toBe(200);
+    const execSets = await listExecSets.json();
+    const movedSet = execSets.find((s) => s && s.id === execSet.id);
+    expect(movedSet).toBeTruthy();
+    expect(movedSet.version_id).toBe(ver2.id);
 
     const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
     expect(delProj.status()).toBe(200);
