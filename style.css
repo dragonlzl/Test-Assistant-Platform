@@ -3911,6 +3911,10 @@ body {
   min-width: 9em;
 }
 
+#caseLibraryImportExcelTemplateType {
+  min-width: 9em;
+}
+
 .case-library-actions {
   display: flex;
   gap: 8px;

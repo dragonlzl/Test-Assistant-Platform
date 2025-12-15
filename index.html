@@ -1329,12 +1329,8 @@
 <h2>执行视图</h2>
 <div class="card-body">
 <div class="actions" style="margin-bottom:12px;">
-<button class="secondary" disabled="" id="exportTempExecBtn">导出本次执行JSON</button>
-<button class="secondary" id="importTempExecBtn">导入执行JSON</button>
 <button class="secondary" disabled="" id="exportTempExecXmindBtn">导出执行XMind</button>
 <button class="secondary" disabled="" id="exportTempExecCasesXmindBtn">导出用例XMind（无结果）</button>
-
-<input accept=".json,.txt" hidden="" id="importTempExecFile" type="file"/>
 </div>
 <div class="temp-case-view" id="tempExecView">
 <div class="temp-case-empty">暂无执行用例，请在“用例导入&分配”中导入或选择历史记录</div>
@@ -1561,6 +1557,11 @@
 	          <select id="caseLibraryImportProjectSelect"></select>
 	          <label class="case-library-label" for="caseLibraryImportVersionSelect">版本</label>
 	          <select id="caseLibraryImportVersionSelect" disabled></select>
+	          <label class="case-library-label" for="caseLibraryImportExcelTemplateType">Excel模板</label>
+	          <select id="caseLibraryImportExcelTemplateType">
+	            <option value="normal" selected>非复用模板</option>
+	            <option value="reuse">复用模板</option>
+	          </select>
 	        </div>
 	        <div class="case-library-drawer-actions">
 	          <button class="secondary" id="caseLibraryImportExcelTemplateBtn" type="button">Excel导入模板</button>

@@ -28,6 +28,7 @@
     importFileHint: document.getElementById('caseLibraryImportFileHint'),
     importProjectSelect: document.getElementById('caseLibraryImportProjectSelect'),
     importVersionSelect: document.getElementById('caseLibraryImportVersionSelect'),
+    importExcelTemplateTypeSelect: document.getElementById('caseLibraryImportExcelTemplateType'),
     importExcelTemplateBtn: document.getElementById('caseLibraryImportExcelTemplateBtn'),
     importXmindTemplateBtn: document.getElementById('caseLibraryImportXmindTemplateBtn'),
     importConfirmBtn: document.getElementById('caseLibraryImportConfirmBtn'),
@@ -2146,37 +2147,78 @@
       ];
     }));
 
-    var letters = ['A', 'B', 'C', 'D', 'E', 'F'];
-    var sheetRowsXml = rows.map(function(row, rIdx) {
-      var r = rIdx + 1;
-      var cells = letters.map(function(col, cIdx) {
-        var ref = col + r;
-        var value = row && row.length > cIdx ? row[cIdx] : '';
-        var text = escapeXmlTextPreserve(value);
-        return (
-          '<c r=\"' + ref + '\" t=\"inlineStr\">' +
-            '<is><t xml:space=\"preserve\">' + text + '</t></is>' +
-          '</c>'
-        );
-      }).join('');
-      return '<row r=\"' + r + '\">' + cells + '</row>';
-    }).join('');
+    return buildSimpleXlsxBlob({
+      sheets: [
+        { name: sheetName || '用例', rows: rows },
+      ],
+    });
+  }
 
-    var worksheetXml =
-      '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>' +
-      '<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" ' +
-        'xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">' +
-        '<sheetData>' + sheetRowsXml + '</sheetData>' +
-      '</worksheet>';
+  function buildSimpleXlsxBlob(options) {
+    var JSZipCtor = typeof JSZip !== 'undefined' ? JSZip : (window.JSZip ? window.JSZip : null);
+    if (!JSZipCtor) return Promise.reject(new Error('缺少 JSZip 依赖，无法导出 Excel'));
+    var sheets = options && Array.isArray(options.sheets) ? options.sheets.filter(Boolean) : [];
+    if (!sheets.length) return Promise.reject(new Error('无导出内容'));
+
+    var colCount = 0;
+    sheets.forEach(function(sheet) {
+      var rows = sheet && Array.isArray(sheet.rows) ? sheet.rows : [];
+      rows.forEach(function(row) {
+        if (Array.isArray(row) && row.length > colCount) colCount = row.length;
+      });
+    });
+    if (!colCount) colCount = 1;
+    var letters = [];
+    for (var i = 0; i < colCount; i += 1) {
+      letters.push(String.fromCharCode(65 + i));
+    }
+
+    function buildSheetXml(rows) {
+      var list = Array.isArray(rows) ? rows : [];
+      var sheetRowsXml = list.map(function(row, rIdx) {
+        var r = rIdx + 1;
+        var cells = letters.map(function(col, cIdx) {
+          var ref = col + r;
+          var value = row && row.length > cIdx ? row[cIdx] : '';
+          var text = escapeXmlTextPreserve(value);
+          return (
+            '<c r=\"' + ref + '\" t=\"inlineStr\">' +
+              '<is><t xml:space=\"preserve\">' + text + '</t></is>' +
+            '</c>'
+          );
+        }).join('');
+        return '<row r=\"' + r + '\">' + cells + '</row>';
+      }).join('');
+
+      return (
+        '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>' +
+        '<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" ' +
+          'xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">' +
+          '<sheetData>' + sheetRowsXml + '</sheetData>' +
+        '</worksheet>'
+      );
+    }
+
+    var sheetEntries = sheets.map(function(sheet, idx) {
+      var name = sheet && sheet.name ? String(sheet.name) : ('Sheet' + (idx + 1));
+      var rows = sheet && Array.isArray(sheet.rows) ? sheet.rows : [[]];
+      return { name: name, rows: rows, idx: idx + 1 };
+    });
+
+    var workbookSheetsXml = sheetEntries.map(function(entry) {
+      return '<sheet name=\"' + escapeXmlText(entry.name) + '\" sheetId=\"' + entry.idx + '\" r:id=\"rId' + entry.idx + '\"/>';
+    }).join('');
 
     var workbookXml =
       '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>' +
       '<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" ' +
         'xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">' +
-        '<sheets>' +
-          '<sheet name=\"' + escapeXmlText(sheetName || '用例') + '\" sheetId=\"1\" r:id=\"rId1\"/>' +
-        '</sheets>' +
+        '<sheets>' + workbookSheetsXml + '</sheets>' +
       '</workbook>';
+
+    var contentTypesOverrides = sheetEntries.map(function(entry) {
+      return '<Override PartName=\"/xl/worksheets/sheet' + entry.idx + '.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>';
+    }).join('');
 
     var contentTypesXml =
       '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>' +
@@ -2184,7 +2226,7 @@
         '<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>' +
         '<Default Extension=\"xml\" ContentType=\"application/xml\"/>' +
         '<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>' +
-        '<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>' +
+        contentTypesOverrides +
       '</Types>';
 
     var relsXml =
@@ -2196,7 +2238,9 @@
     var workbookRelsXml =
       '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>' +
       '<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">' +
-        '<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/>' +
+        sheetEntries.map(function(entry) {
+          return '<Relationship Id=\"rId' + entry.idx + '\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet' + entry.idx + '.xml\"/>';
+        }).join('') +
       '</Relationships>';
 
     var zip = new JSZipCtor();
@@ -2205,19 +2249,107 @@
     var xl = zip.folder('xl');
     xl.file('workbook.xml', workbookXml);
     xl.folder('_rels').file('workbook.xml.rels', workbookRelsXml);
-    xl.folder('worksheets').file('sheet1.xml', worksheetXml);
+    var worksheets = xl.folder('worksheets');
+    sheetEntries.forEach(function(entry) {
+      worksheets.file('sheet' + entry.idx + '.xml', buildSheetXml(entry.rows));
+    });
     return zip.generateAsync({ type: 'blob', compression: 'STORE' });
+  }
+
+  function buildCaseLibraryReuseExcelTemplateBlob(sheetName) {
+    var header = ['模块', '用例标题', '优先级', '前提条件', '操作步骤', '预期结果'];
+    var templateRows = [header];
+    var headerWithResult = header.concat(['实际结果', '备注', '缺陷链接']);
+    var exampleRows = [
+      headerWithResult,
+      [
+        '登录',
+        '账号密码登录（复用）',
+        'P1',
+        '已注册账号',
+        '1. 输入账号与密码\n2. 点击登录',
+        '复用场景主行（下一行起为复用子项行）',
+        '失败',
+        '主行备注：实际结果需与子项汇总一致',
+        'https://example.com/bug/123',
+      ],
+      [
+        '',
+        '',
+        '',
+        '',
+        '',
+        '子项1：登录成功并进入首页',
+        '通过',
+        '子项1备注：成功路径',
+        '',
+      ],
+      [
+        '',
+        '',
+        '',
+        '',
+        '',
+        '子项2：账号或密码错误时提示弹窗',
+        '失败',
+        '子项2备注：错误提示文案正确',
+        '',
+      ],
+      [
+        '支付',
+        '下单支付（复用）',
+        'P0',
+        '已登录且有余额',
+        '1. 选择商品\n2. 点击支付\n3. 完成支付',
+        '复用场景主行（下一行起为复用子项行）',
+        '通过',
+        '主行备注：全部子项通过则主行为“通过”',
+        '',
+      ],
+      [
+        '',
+        '',
+        '',
+        '',
+        '',
+        '子项1：余额支付成功并扣减余额',
+        '通过',
+        '子项1备注：余额扣减正确',
+        '',
+      ],
+      [
+        '',
+        '',
+        '',
+        '',
+        '',
+        '子项2：重复点击支付按钮不重复下单',
+        '通过',
+        '子项2备注：幂等校验通过',
+        '',
+      ],
+    ];
+    return buildSimpleXlsxBlob({
+      sheets: [
+        { name: sheetName || '用例导入模板（复用）', rows: templateRows },
+        { name: '示例（执行页带结果，不参与导入）', rows: exampleRows },
+      ],
+    });
   }
 
   function downloadImportExcelTemplate() {
     var downloadBlob = getDownloadBlob();
     if (!downloadBlob) return;
-    setStatus(dom.importStatus, '生成 Excel 导入模板中...', '');
-    buildCaseLibraryExcelBlob([], '用例导入模板')
+    var templateType = dom.importExcelTemplateTypeSelect ? String(dom.importExcelTemplateTypeSelect.value || '') : 'normal';
+    var isReuse = templateType === 'reuse';
+    var baseName = isReuse ? '用例导入模板（复用）' : '用例导入模板';
+    setStatus(dom.importStatus, '生成 ' + baseName + '中...', '');
+    var promise = isReuse ? buildCaseLibraryReuseExcelTemplateBlob(baseName) : buildCaseLibraryExcelBlob([], baseName);
+    promise
       .then(function(blob) {
         if (!blob) throw new Error('无导出内容');
-        downloadBlob(sanitizeDownloadName('用例导入模板', '.xlsx'), blob);
-        setStatus(dom.importStatus, '已导出 Excel 导入模板', 'ok');
+        downloadBlob(sanitizeDownloadName(baseName, '.xlsx'), blob);
+        setStatus(dom.importStatus, '已导出 ' + baseName, 'ok');
       })
       .catch(function(err) {
         setStatus(dom.importStatus, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');

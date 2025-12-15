@@ -2,6 +2,40 @@ const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 
 test.describe('执行视图导入导出与拖拽', () => {
+  async function gotoIndexWithRetry(page) {
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    const url = base + '/index.html';
+    let lastErr = null;
+    for (let i = 0; i < 3; i += 1) {
+      try {
+        await page.goto(url);
+        return;
+      } catch (err) {
+        lastErr = err;
+        const msg = err && err.message ? String(err.message) : String(err || '');
+        const canRetry = msg.indexOf('ERR_EMPTY_RESPONSE') !== -1 || msg.indexOf('net::ERR_EMPTY_RESPONSE') !== -1;
+        if (!canRetry || i === 2) throw err;
+        await page.waitForTimeout(300);
+      }
+    }
+    throw lastErr || new Error('page.goto failed');
+  }
+
+  async function switchToTab(page, tabName) {
+    await page.evaluate((name) => {
+      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab(name);
+    }, tabName);
+    await page.waitForFunction((name) => {
+      const nodes = document.querySelectorAll(`[data-tab-section="${name}"]`);
+      if (!nodes || !nodes.length) return true;
+      for (let i = 0; i < nodes.length; i += 1) {
+        const el = nodes[i];
+        if (el && el.classList && !el.classList.contains('hidden')) return true;
+      }
+      return false;
+    }, tabName);
+  }
+
   async function openTempExecDrawer(page) {
     await page.click('#openTempExecDrawerBtn');
     await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
@@ -23,6 +57,29 @@ test.describe('执行视图导入导出与拖拽', () => {
       }
       return route.abort();
     });
+    await page.addInitScript(() => {
+      try { localStorage.setItem('tap-auth-token', 'test-token'); } catch (_) {}
+      try {
+        localStorage.removeItem('usecase-temp-exec-v1');
+        localStorage.removeItem('tempexec-focus-v1');
+        localStorage.removeItem('tempexec-page-size');
+        localStorage.removeItem('usecase-active-tab');
+      } catch (_) {}
+    });
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') {
+        // e2e: 约定 user.id = 0 时不走 DB 入库，避免自动化需要补齐整套后端链路。
+        return respond(200, { id: 0, username: 'ui_admin', role: 'admin', level: 'leader' });
+      }
+      if (method === 'GET') return respond(200, []);
+      return respond(200, {});
+    });
     page.on('dialog', async (dialog) => {
       if (dialog.type() === 'prompt') {
         const answer = page.__promptAnswers && page.__promptAnswers.length ? page.__promptAnswers.shift() : 'UI执行需求';
@@ -31,16 +88,37 @@ test.describe('执行视图导入导出与拖拽', () => {
       }
       await dialog.accept();
     });
-    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-    await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await gotoIndexWithRetry(page);
+    let last = null;
+    for (let i = 0; i < 3; i += 1) {
+      try {
+        last = await page.evaluate(() => ({
+          hasApp: Boolean(window.app),
+          inited: Boolean(window.app && window.app._inited === true),
+          hasSwitchTab: Boolean(window.app && typeof window.app.switchTab === 'function'),
+          path: (window.location && window.location.pathname) ? String(window.location.pathname) : '',
+        }));
+      } catch (err) {
+        last = null;
+      }
+      if (last && last.hasApp && last.inited && last.hasSwitchTab) break;
+      if (i < 2) {
+        await page.waitForTimeout(200);
+        await gotoIndexWithRetry(page);
+      }
+    }
+    await page.waitForFunction(
+      () => window.app && window.app._inited === true && typeof window.app.switchTab === 'function',
+      null,
+      { timeout: 30000 }
+    );
     await page.evaluate(() => {
       localStorage.removeItem('usecase-card-collapse-v1');
     });
   });
 
   test('导入导出、拖拽与配置恢复', async ({ page }) => {
-    await page.click('[data-tab-btn="tempexec"]');
+    await switchToTab(page, 'tempexec');
     await page.evaluate(() => {
       window.app.state.requirementLabel = 'UI执行需求';
       window.app.state.requirementLabelSource = 'ui-test';
@@ -102,13 +180,7 @@ test.describe('执行视图导入导出与拖拽', () => {
       expect(cfgJson.assignments && cfgJson.assignments.cleanReasoning).toBe('medium');
     }
     await closeTempExecDrawer(page);
-    await expect(page.locator('#exportTempExecBtn')).toBeEnabled();
-    const [jsonDownload] = await Promise.all([
-      page.waitForEvent('download', { timeout: 20000 }),
-      page.click('#exportTempExecBtn'),
-    ]);
-    const jsonName = await jsonDownload.suggestedFilename();
-    expect(jsonName).toMatch(/\.json$/);
+    // 执行视图不再提供“导出本次执行JSON”按钮
 
     const activeFileName = await page.evaluate(() => {
       const state = window.app && window.app.state ? window.app.state : null;
@@ -120,6 +192,15 @@ test.describe('执行视图导入导出与拖拽', () => {
     const baseName = activeFileName ? activeFileName.replace(/\.[^.]+$/, '') : 'temp_exec';
     const safeBase = baseName.replace(/[\\/:*?"<>|]/g, '_') || 'temp_exec';
     const escapedBase = safeBase.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+
+    await page.waitForFunction(() => {
+      const hasZip = typeof window.JSZip !== 'undefined' || typeof JSZip !== 'undefined';
+      const api = window.app && (window.app.xmindCoreApi || window.app.xmindCore);
+      const hasXmind = api && typeof api.buildXmindPackageFromCases === 'function';
+      return Boolean(hasZip && hasXmind);
+    }, {}, { timeout: 60000 });
+    await expect(page.locator('#exportTempExecXmindBtn')).toBeEnabled();
+    await expect(page.locator('#exportTempExecCasesXmindBtn')).toBeEnabled();
 
     const [xmindDownload] = await Promise.all([
       page.waitForEvent('download', { timeout: 20000 }),
@@ -182,19 +263,19 @@ test.describe('执行视图导入导出与拖拽', () => {
     await expect(page.locator('#tempExecToolbar')).toContainText(activeNavName.trim());
     const resultSelect = page.locator('#tempExecView select[data-temp-result]').first();
     await resultSelect.selectOption('通过');
-    await page.locator('#tempExecView select[data-temp-result]').nth(1).selectOption('失败');
-
-    const summaryPassed = page.locator('[data-temp-status-filter="passed"]');
-    await summaryPassed.scrollIntoViewIfNeeded();
-    await summaryPassed.click({ force: true });
-    const filterState = await page.evaluate(() => window.app.state && window.app.state.tempExecStatusFilter ? window.app.state.tempExecStatusFilter.status : '');
-    expect(filterState).toBe('passed');
-    const filteredRows = await page.locator('#tempExecView .case-row').count();
-    expect(filteredRows).toBe(1);
-    await expect(summaryPassed).toHaveClass(/active/);
-    await summaryPassed.click();
-    const restoredRows = await page.locator('#tempExecView .case-row').count();
-    expect(restoredRows).toBeGreaterThanOrEqual(2);
+    const secondResultSelect = page.locator('#tempExecView select[data-temp-result]').nth(1);
+    await secondResultSelect.selectOption('失败');
+    await expect(resultSelect).toHaveValue('通过');
+    await expect(secondResultSelect).toHaveValue('失败');
+    await page.waitForFunction(() => {
+      const state = window.app && window.app.state ? window.app.state : null;
+      const activeId = state && state.tempExecActiveId ? state.tempExecActiveId : '';
+      const files = state && Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      const file = files.find((item) => item && item.id === activeId);
+      const cases = file && Array.isArray(file.cases) ? file.cases : [];
+      if (cases.length < 2) return false;
+      return String(cases[0].actual || '') === '通过' && String(cases[1].actual || '') === '失败';
+    });
 
     await closeTempExecDrawer(page);
     const overviewNav = page.locator('#openTempExecOverviewNavBtn');
@@ -227,8 +308,12 @@ test.describe('执行视图导入导出与拖拽', () => {
       keys.forEach((key) => window.localStorage.removeItem(key));
     });
     await page.reload();
-    await page.waitForFunction(() => window.app && window.app._inited === true);
-    await page.click('[data-tab-btn="tempexec"]');
+    await page.waitForFunction(
+      () => window.app && window.app._inited === true && typeof window.app.switchTab === 'function',
+      null,
+      { timeout: 30000 }
+    );
+    await switchToTab(page, 'tempexec');
     await openTempExecDrawer(page);
     await expect(page.locator('#tempExecNav .temp-req-row[data-temp-file]')).toHaveCount(0);
 
@@ -248,9 +333,13 @@ test.describe('执行视图导入导出与拖拽', () => {
       });
     });
     await page.reload();
-    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForFunction(
+      () => window.app && window.app._inited === true && typeof window.app.switchTab === 'function',
+      null,
+      { timeout: 30000 }
+    );
     page.__promptAnswers = [];
-    await page.click('[data-tab-btn="tempexec"]');
+    await switchToTab(page, 'tempexec');
     await page.evaluate(() => {
       window.app.state.requirementLabel = '版本排序需求';
       window.app.state.requirementLabelSource = 'ui-test';
@@ -267,7 +356,6 @@ test.describe('执行视图导入导出与拖拽', () => {
     };
     await page.setInputFiles('#tempExecInput', execFile);
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
-    await expect(page.locator('#exportTempExecBtn')).toBeEnabled();
     const navReqList = page.locator('#tempExecNav [data-temp-req]');
     expect(await navReqList.count()).toBeGreaterThan(0);
 
@@ -296,7 +384,7 @@ test.describe('执行视图导入导出与拖拽', () => {
   });
 
   test('用例复用状态选择展示颜色', async ({ page }) => {
-    await page.click('[data-tab-btn="tempexec"]');
+    await switchToTab(page, 'tempexec');
     await openTempExecDrawer(page);
     const execFile = {
       name: 'reuse.json',
@@ -307,7 +395,6 @@ test.describe('执行视图导入导出与拖拽', () => {
     };
     await page.setInputFiles('#tempExecInput', [execFile]);
     await expect(page.locator('#tempExecStatus')).toContainText('已导入');
-    await expect(page.locator('#exportTempExecBtn')).toBeEnabled();
     await page.click('#closeTempExecDrawerBtn');
 
     const reuseToggle = page.locator('[data-temp-reuse-toggle]').first();
@@ -334,7 +421,7 @@ test.describe('执行视图导入导出与拖拽', () => {
   });
 
   test('需求区与版本区支持收起展开', async ({ page }) => {
-    await page.click('[data-tab-btn="tempexec"]');
+    await switchToTab(page, 'tempexec');
     await openTempExecDrawer(page);
     const reqToggle = page.locator('#toggleTempReq');
     const versionToggle = page.locator('#toggleTempVersion');

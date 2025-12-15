@@ -939,6 +939,24 @@
 - 测试与验证：`node --check scripts/modules/caseLibrary.js tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入\\ \\-\\>`（通过）。  
 - 更新记录：按钮文案从“清空”调整为“清空搜索”（`index.html`）。  
 
+- 功能名称：用例库 Excel 导入模板支持复用/非复用选择  
+- 功能描述：用例库“导入用例”抽屉在下载 Excel 导入模板前增加“Excel模板”下拉选择，默认“非复用模板”；选择“复用模板”时导出的模板文件名与工作表名会标记为“用例导入模板（复用）”，便于区分与管理。  
+- 操作方式：进入“用例相关 → 用例库”→打开“导入用例”抽屉→在“Excel模板”中选择“非复用模板/复用模板”→点击“Excel导入模板”下载。  
+- 使用效果：模板用途更明确，下载时可直接区分复用/非复用模板，减少混用带来的导入误解。  
+- 新增内容/接口/组件：模板类型下拉控件（`index.html`）；模板下载按选择输出文件名/Sheet 名（`scripts/modules/caseLibrary.js`）；选择框最小宽度样式（`style.css`）；UI 用例新增“复用模板下载文件名”断言（`tests/ui/case_library.spec.js`）。  
+- 复用说明：Excel 模板仍复用既有 `buildCaseLibraryExcelBlob` 生成逻辑，仅在下载层增加模板类型分支，不改变导入格式结构。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入模板下载`（通过）。  
+- 更新记录：2025-12-15 复用模板在第二个工作表补充“执行页带结果（已执行）的复用示例”（不参与导入），便于直观看懂复用子项行与结果字段填写（`scripts/modules/caseLibrary.js`）。  
+
+- 功能名称：执行视图移除“导入执行JSON”按钮  
+- 功能描述：执行视图工具栏移除“导入执行JSON”入口，避免与 DB 导入/覆盖逻辑重复并降低误操作（保留导出本次执行 JSON 入口不变）。  
+- 操作方式：执行视图不再提供“导入执行JSON”按钮；如需导入请使用“用例导入&分配”流程。  
+- 使用效果：执行视图入口更聚焦，减少历史 JSON 导入导致的执行数据混乱。  
+- 新增内容/接口/组件：移除相关按钮与 file input（`index.html`）；清理绑定逻辑（`scripts/modules/tempexec.js`）；更新 UI 回归用例与布局断言（`tests/ui/files_layout.spec.js`）。  
+- 复用说明：复用既有执行页导出与 DB 导入机制，仅删除旧入口，不改变其他执行流程。  
+- 测试与验证：`node --check scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/files_layout.spec.js`（通过）。  
+- 更新记录：Playwright 本地静态服务绑定为 `127.0.0.1`（`tests/playwright.config.js`）；2025-12-14 执行视图进一步移除“导出本次执行JSON”按钮（`index.html`、`scripts/modules/tempexec.js`），避免误导用户使用旧导出能力。  
+
 ## 已记录需求  
 - 功能名称：需求澄清确认提示  
 - 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  

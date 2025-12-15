@@ -35,7 +35,7 @@ module.exports = defineConfig({
     },
   ],
   webServer: {
-    command: 'python3 -m http.server 8090',
+    command: 'python3 -m http.server 8090 --bind 127.0.0.1',
     cwd: path.join(__dirname, '..'),
     url: 'http://127.0.0.1:8090/index.html',
     reuseExistingServer: true,

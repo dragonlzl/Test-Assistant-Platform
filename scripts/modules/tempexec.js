@@ -519,11 +519,8 @@
     var tempExecOverviewSection = document.querySelector('[data-section-id="tempexec-overview"]');
     var tempExecViewSection = document.querySelector('[data-section-id="tempexec-view"]');
     var tempExecBackBtn = document.getElementById('tempExecBackBtn');
-    var exportTempExecBtn = document.getElementById('exportTempExecBtn');
     var exportTempExecConfigBtn = document.getElementById('exportTempExecConfigBtn');
     var exportTempExecXmindBtn = document.getElementById('exportTempExecXmindBtn');
-    var importTempExecBtn = document.getElementById('importTempExecBtn');
-    var importTempExecFile = document.getElementById('importTempExecFile');
     var importTempExecConfigBtn = document.getElementById('importTempExecConfigBtn');
     var importTempExecConfigFile = document.getElementById('importTempExecConfigFile');
     var tempExecPageSizeInput = document.getElementById('tempExecPageSizeInput');
@@ -2419,23 +2416,6 @@
       });
     }
 
-    if (exportTempExecBtn && api.getTempExecFile && api.serializeSingleTempExecFile) {
-      exportTempExecBtn.addEventListener('click', function() {
-        var active = api.getTempExecFile(state.tempExecActiveId);
-        if (!active) {
-          setStatus(tempExecStatus, '请选择需要导出的执行用例', 'warn');
-          return;
-        }
-        var payload = JSON.stringify([api.serializeSingleTempExecFile(active)], null, 2);
-        var stamp = formatCompactTimestamp();
-        var safeReq = (state.requirementLabel || '').replace(/[\\/:*?"<>|]/g, '_');
-        var safeName = (active.name || 'usecase').replace(/[\\/:*?"<>|]/g, '_');
-        var prefix = safeReq || 'temp_exec';
-        downloadText(prefix + '_' + safeName + '_' + stamp + '.json', payload);
-        setStatus(tempExecStatus, '已导出【' + (active.name || '') + '】的执行结果', 'ok');
-      });
-    }
-
     if (exportTempExecConfigBtn && api.exportTempExecSnapshot) {
       exportTempExecConfigBtn.addEventListener('click', function() {
         api.exportTempExecSnapshot();
@@ -2459,75 +2439,6 @@
         var file = e.target.files && e.target.files[0];
         e.target.value = '';
         if (file) api.importTempExecSnapshot(file);
-      });
-    }
-
-    if (importTempExecBtn && importTempExecFile && api.createTempExecFile && api.ensureTempExecReplacement && api.normalizeReusePresets) {
-      importTempExecBtn.addEventListener('click', function() { importTempExecFile.click(); });
-      importTempExecFile.addEventListener('change', function(e) {
-        var file = e.target.files && e.target.files[0];
-        e.target.value = '';
-        if (!file) return;
-        file.text().then(function(text) {
-          var trimmed = (text || '').trim();
-          if (!trimmed) {
-            setStatus(tempExecStatus, '导入文件为空', 'warn');
-            return;
-          }
-          var data;
-          try {
-            data = JSON.parse(trimmed);
-          } catch (err) {
-            setStatus(tempExecStatus, '执行数据 JSON 解析失败', 'err');
-            return;
-          }
-          if (!Array.isArray(data) || !data.length) {
-            setStatus(tempExecStatus, '导入文件未包含有效用例数据', 'warn');
-            return;
-          }
-          var existingIds = new Set(state.tempExecFiles.map(function(item) { return item.id; }));
-          var ensuredRequirement = '';
-          var merged = [];
-          data.forEach(function(item) {
-            if (!item || typeof item !== 'object') return;
-            var fileId = item.id || (api.generateTempExecId ? api.generateTempExecId() : '');
-            while (fileId && existingIds.has(fileId) && api.generateTempExecId) {
-              fileId = api.generateTempExecId();
-            }
-            var requirement = item.requirement || ensuredRequirement;
-            if (!requirement) {
-              ensuredRequirement = ensuredRequirement || (state.requirementLabel || '');
-              if (!ensuredRequirement && ctx.core && ctx.core.ensureRequirementLabel) {
-                ensuredRequirement = ctx.core.ensureRequirementLabel('请输入本次需求标识后再导入执行用例');
-              }
-              requirement = ensuredRequirement || '';
-              if (!requirement) return;
-            }
-            var entry = api.createTempExecFile(item.name, item.cases || [], 'current', fileId, item.createdAt, requirement);
-            if (!entry) return;
-            entry.reuseEnabled = Boolean(item.reuseEnabled);
-            entry.reusePresets = api.normalizeReusePresets(item && item.reusePresets);
-            if (!api.ensureTempExecReplacement(entry, merged)) return;
-            existingIds.add(entry.id);
-            merged.push(entry);
-          });
-          if (!merged.length) {
-            setStatus(tempExecStatus, '导入文件未包含有效用例数据', 'warn');
-            return;
-          }
-          state.tempExecFiles = state.tempExecFiles.concat(merged);
-          if (api.syncTempExecFocus) api.syncTempExecFocus();
-          merged.forEach(function(entry) {
-            state.tempExecPages[entry.id] = 0;
-          });
-          state.tempExecSelections = {};
-          if (api.persistTempExecState) api.persistTempExecState();
-          if (api.setTempExecActive) api.setTempExecActive(merged[merged.length - 1].id);
-          setStatus(tempExecStatus, '已导入执行结果数据', 'ok');
-        }).catch(function(err) {
-          console.error(err);
-          setStatus(tempExecStatus, '导入失败：' + err.message, 'err');
-        });
       });
     }
 

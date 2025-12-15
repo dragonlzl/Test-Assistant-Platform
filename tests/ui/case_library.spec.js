@@ -741,6 +741,13 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     ]);
     expect(await excelDownload.suggestedFilename()).toBe('用例导入模板.xlsx');
 
+    await page.selectOption('#caseLibraryImportExcelTemplateType', 'reuse');
+    const [excelReuseDownload] = await Promise.all([
+      page.waitForEvent('download', { timeout: 20000 }),
+      page.click('#caseLibraryImportExcelTemplateBtn'),
+    ]);
+    expect(await excelReuseDownload.suggestedFilename()).toBe('用例导入模板（复用）.xlsx');
+
     const [xmindDownload] = await Promise.all([
       page.waitForEvent('download', { timeout: 20000 }),
       page.click('#caseLibraryImportXmindTemplateBtn'),
