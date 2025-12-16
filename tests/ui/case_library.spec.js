@@ -1537,6 +1537,12 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
         return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
       }
 
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, []);
+      }
+
       const itemsMatch = pathName.match(/^\/api\/case-files\/(\d+)\/items$/);
       if (itemsMatch && method === 'GET') {
         const fileId = Number(itemsMatch[1]);
@@ -1727,6 +1733,14 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
         if (pid !== String(project.id)) return respond(200, []);
         return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
       }
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, [
+          { case_file_id: caseFiles[0].id, active_users: ['人员A', '人员B'] },
+          { case_file_id: caseFiles[1].id, active_users: [] },
+        ]);
+      }
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
       if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
       if (pathName === '/api/models' && method === 'GET') return respond(200, []);
@@ -1748,6 +1762,9 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await page.selectOption('#caseLibrarySelectProjectSelect', String(project.id));
     await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');
     await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v2');
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('人员A：执');
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('人员B：执');
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('未');
 
     await page.selectOption('#caseLibrarySelectVersionSelect', String(versions[0].id));
     await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');

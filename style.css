@@ -305,6 +305,11 @@ body {
       outline: 2px solid rgba(37,99,235,0.45);
       outline-offset: 2px;
     }
+    .nav-entry-card.active {
+      border-color: rgba(37,99,235,0.7);
+      box-shadow: 0 14px 28px rgba(37,99,235,0.22);
+      background: linear-gradient(120deg, #f5f7ff 0%, #e7ecff 65%, #ffffff 100%);
+    }
     .nav-entry-icon {
       width: 42px;
       height: 42px;
@@ -2833,6 +2838,16 @@ body {
 .tag.muted {
   background: #e5e7eb;
   color: #374151;
+}
+.tag.case-lib-exec-tag {
+  margin-right: 0;
+  margin-left: 6px;
+  background: rgba(34, 197, 94, 0.14);
+  color: #166534;
+}
+.tag.case-lib-exec-tag-pending {
+  margin-right: 0;
+  margin-left: 0;
 }
 .sidebar-user {
   margin: 6px 0 10px;

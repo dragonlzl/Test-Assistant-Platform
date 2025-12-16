@@ -121,6 +121,7 @@
       projectId: null,
       versionId: null,
       files: [],
+      execByFileId: {},
       loading: false,
       processing: false,
       selection: new Set(),
@@ -4006,6 +4007,7 @@
     state.selectDrawer.projectId = null;
     state.selectDrawer.versionId = null;
     state.selectDrawer.files = [];
+    state.selectDrawer.execByFileId = {};
     state.selectDrawer.loading = false;
     state.selectDrawer.processing = false;
     state.selectDrawer.loadSeq = 0;
@@ -4019,7 +4021,7 @@
       dom.selectVersionSelect.value = '';
     }
     if (dom.selectListBody) {
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"8\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
     }
     if (dom.selectSelectAll) {
       dom.selectSelectAll.checked = false;
@@ -4033,6 +4035,7 @@
     state.selectDrawer.projectId = projectId;
     state.selectDrawer.versionId = null;
     state.selectDrawer.files = [];
+    state.selectDrawer.execByFileId = {};
     state.selectDrawer.processing = false;
     state.selectDrawer.selection = new Set();
     if (dom.selectSelectAll) {
@@ -4048,11 +4051,13 @@
     var seq = state.selectDrawer.loadSeq;
     setStatus(dom.selectStatus, '加载用例库...', '');
     renderSelectDrawerList();
-    Promise.all([apiClient.listCaseFiles(projectId), loadVersions(projectId)])
-      .then(function(res) {
-        if (seq !== state.selectDrawer.loadSeq) return;
-        var files = Array.isArray(res && res[0]) ? res[0] : [];
-        state.selectDrawer.files = files;
+	    Promise.all([apiClient.listCaseFiles(projectId), loadVersions(projectId), apiClient.listExecSetsByCaseFile(projectId)])
+	      .then(function(res) {
+	        if (seq !== state.selectDrawer.loadSeq) return;
+	        var files = Array.isArray(res && res[0]) ? res[0] : [];
+	        var execSets = Array.isArray(res && res[2]) ? res[2] : [];
+	        state.selectDrawer.files = files;
+	        state.selectDrawer.execByFileId = buildSelectDrawerExecMap(execSets);
         syncVersionOptions(dom.selectVersionSelect, projectId, '请选择版本');
         dom.selectVersionSelect.disabled = false;
         setStatus(dom.selectStatus, '已加载 ' + files.length + ' 份用例文件', files.length ? 'ok' : 'warn');
@@ -4060,6 +4065,7 @@
       .catch(function(err) {
         if (seq !== state.selectDrawer.loadSeq) return;
         state.selectDrawer.files = [];
+        state.selectDrawer.execByFileId = {};
         setStatus(dom.selectStatus, err && err.message ? err.message : '加载失败', 'err');
       })
       .finally(function() {
@@ -4077,48 +4083,82 @@
   function renderSelectDrawerList() {
     if (!dom.selectListBody) return;
     if (!state.selectDrawer.projectId) {
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"8\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
       syncSelectDrawerControls();
       return;
     }
     if (state.selectDrawer.loading) {
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"8\"><p class=\"hint\">加载中...</p></td></tr>';
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">加载中...</p></td></tr>';
       syncSelectDrawerControls();
       return;
     }
     var list = getSelectDrawerVisibleFiles();
     if (!list.length) {
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"8\"><p class=\"hint\">暂无用例文件</p></td></tr>';
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">暂无用例文件</p></td></tr>';
       syncSelectDrawerControls();
       return;
     }
     state.selectDrawer.selection = state.selectDrawer.selection instanceof Set ? state.selectDrawer.selection : new Set();
-    dom.selectListBody.innerHTML = list.map(function(f) {
-      var rowProjectId = f && (f.project_id || f.project_id === 0) ? f.project_id : state.selectDrawer.projectId;
-      var projectName = state.projectNameById[rowProjectId] || ('项目#' + rowProjectId);
-      var versionName = getVersionName(rowProjectId, f && f.version_id ? f.version_id : null);
-      var importerName = f && f.importer_name ? f.importer_name : '--';
-      var importedAt = formatTime(f && f.imported_at);
-      var updatedAt = formatTime(f && f.updated_at);
-      var idStr = f && f.id ? String(f.id) : '';
-      var checked = idStr && state.selectDrawer.selection.has(idStr) ? ' checked' : '';
-      var fileName = f && f.file_name_clean ? f.file_name_clean : ('文件#' + (f && f.id ? f.id : ''));
-      var reuseBadge = (f && f.reuse_enabled) ? ' <span class=\"badge case-library-reuse-badge\">复</span>' : '';
-      return (
-        '<tr>' +
-          '<td><input type=\"checkbox\" data-case-lib-select-select=\"' + escapeHtml(idStr) + '\"' + checked + '/></td>' +
-          '<td>' + escapeHtml(projectName) + '</td>' +
-          '<td>' + escapeHtml(versionName) + '</td>' +
-          '<td>' + escapeHtml(fileName) + reuseBadge + '</td>' +
-          '<td>' + escapeHtml(importerName) + '</td>' +
-          '<td>' + escapeHtml(importedAt) + '</td>' +
-          '<td>' + escapeHtml(updatedAt) + '</td>' +
-          '<td><button class=\"primary\" type=\"button\" data-case-lib-exec=\"' + escapeHtml(f && f.id ? f.id : '') + '\">转到执行</button></td>' +
-        '</tr>'
-      );
-    }).join('');
-    syncSelectDrawerControls();
-  }
+    var execByFileId = state.selectDrawer.execByFileId && typeof state.selectDrawer.execByFileId === 'object'
+      ? state.selectDrawer.execByFileId
+      : {};
+	    dom.selectListBody.innerHTML = list.map(function(f) {
+	      var rowProjectId = f && (f.project_id || f.project_id === 0) ? f.project_id : state.selectDrawer.projectId;
+	      var projectName = state.projectNameById[rowProjectId] || ('项目#' + rowProjectId);
+	      var versionName = getVersionName(rowProjectId, f && f.version_id ? f.version_id : null);
+	      var importerName = f && f.importer_name ? f.importer_name : '--';
+	      var importedAt = formatTime(f && f.imported_at);
+	      var updatedAt = formatTime(f && f.updated_at);
+	      var idStr = f && f.id ? String(f.id) : '';
+	      var checked = idStr && state.selectDrawer.selection.has(idStr) ? ' checked' : '';
+	      var fileName = f && f.file_name_clean ? f.file_name_clean : ('文件#' + (f && f.id ? f.id : ''));
+	      var reuseBadge = (f && f.reuse_enabled) ? ' <span class=\"badge case-library-reuse-badge\">复</span>' : '';
+	      var execInfo = idStr && execByFileId[idStr] ? execByFileId[idStr] : null;
+	      var activeUsers = execInfo && Array.isArray(execInfo.active_users) ? execInfo.active_users : [];
+	      var hasActive = Boolean(activeUsers && activeUsers.length);
+	      var execStatusCell = '';
+	      if (!hasActive) {
+	        execStatusCell = '<div><span class="tag muted case-lib-exec-tag-pending" title="未转执行">未</span></div>';
+	      } else {
+	        execStatusCell = activeUsers
+	          .map(function(name) {
+	            return (
+	              '<div>' +
+	                escapeHtml(name) +
+	                '：<span class="tag case-lib-exec-tag" title="执行中">执</span>' +
+	              '</div>'
+	            );
+	          })
+	          .join('');
+	      }
+	      return (
+	        '<tr>' +
+	          '<td><input type=\"checkbox\" data-case-lib-select-select=\"' + escapeHtml(idStr) + '\"' + checked + '/></td>' +
+	          '<td>' + escapeHtml(projectName) + '</td>' +
+	          '<td>' + escapeHtml(versionName) + '</td>' +
+	          '<td>' + escapeHtml(fileName) + reuseBadge + '</td>' +
+	          '<td>' + execStatusCell + '</td>' +
+	          '<td>' + escapeHtml(importerName) + '</td>' +
+	          '<td>' + escapeHtml(importedAt) + '</td>' +
+	          '<td>' + escapeHtml(updatedAt) + '</td>' +
+	          '<td><button class=\"primary\" type=\"button\" data-case-lib-exec=\"' + escapeHtml(f && f.id ? f.id : '') + '\">转到执行</button></td>' +
+	        '</tr>'
+	      );
+	    }).join('');
+	    syncSelectDrawerControls();
+	  }
+
+	  function buildSelectDrawerExecMap(rows) {
+	    var list = Array.isArray(rows) ? rows : [];
+	    var byFileId = {};
+	    list.forEach(function(item) {
+	      if (!item) return;
+	      var fid = item.case_file_id || item.case_file_id === 0 ? String(item.case_file_id) : '';
+	      if (!fid) return;
+	      byFileId[fid] = item;
+	    });
+	    return byFileId;
+	  }
 
   function loadSelectDrawerFiles() {
     var projectId = normalizeId(dom.selectProjectSelect ? dom.selectProjectSelect.value : '');
@@ -4126,6 +4166,7 @@
     state.selectDrawer.projectId = projectId;
     state.selectDrawer.versionId = versionId;
     state.selectDrawer.files = [];
+    state.selectDrawer.execByFileId = {};
     state.selectDrawer.processing = false;
     state.selectDrawer.selection = new Set();
     renderSelectDrawerList();
@@ -4137,16 +4178,19 @@
     state.selectDrawer.loading = true;
     state.selectDrawer.loadSeq = Number(state.selectDrawer.loadSeq || 0) + 1;
     var seq = state.selectDrawer.loadSeq;
-    Promise.all([apiClient.listCaseFiles(projectId), loadVersions(projectId)])
-      .then(function(res) {
-        if (seq !== state.selectDrawer.loadSeq) return;
-        var files = Array.isArray(res && res[0]) ? res[0] : [];
-        state.selectDrawer.files = files;
+	    Promise.all([apiClient.listCaseFiles(projectId), loadVersions(projectId), apiClient.listExecSetsByCaseFile(projectId)])
+	      .then(function(res) {
+	        if (seq !== state.selectDrawer.loadSeq) return;
+	        var files = Array.isArray(res && res[0]) ? res[0] : [];
+	        var execSets = Array.isArray(res && res[2]) ? res[2] : [];
+	        state.selectDrawer.files = files;
+	        state.selectDrawer.execByFileId = buildSelectDrawerExecMap(execSets);
         setStatus(dom.selectStatus, '已加载 ' + files.length + ' 份用例文件', files.length ? 'ok' : 'warn');
       })
       .catch(function(err) {
         if (seq !== state.selectDrawer.loadSeq) return;
         state.selectDrawer.files = [];
+        state.selectDrawer.execByFileId = {};
         setStatus(dom.selectStatus, err && err.message ? err.message : '加载失败', 'err');
       })
       .finally(function() {

@@ -2,11 +2,13 @@
   var api = window.app && window.app.apiClient;
   if (!api) return;
 
-	  var dom = {
-	    root: document.getElementById('execOverview'),
-	    status: document.getElementById('execOverviewStatus'),
-	    refreshBtn: document.getElementById('execOverviewRefreshBtn'),
-	    navProjects: document.getElementById('execOverviewNavProjects'),
+    var execOverviewProjectStorageKey = 'exec_overview_last_project_id_v1';
+
+		  var dom = {
+		    root: document.getElementById('execOverview'),
+		    status: document.getElementById('execOverviewStatus'),
+		    refreshBtn: document.getElementById('execOverviewRefreshBtn'),
+		    navProjects: document.getElementById('execOverviewNavProjects'),
 	    projectList: document.getElementById('execOverviewProjects'),
 	    detail: document.getElementById('execOverviewDetail'),
 	    projectTitle: document.getElementById('execOverviewProjectTitle'),
@@ -73,6 +75,26 @@
     return isNaN(n) ? null : n;
   }
 
+  function loadLastProjectId() {
+    if (typeof localStorage === 'undefined') return '';
+    try {
+      var raw = localStorage.getItem(execOverviewProjectStorageKey) || '';
+      raw = String(raw || '').trim();
+      return raw;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function saveLastProjectId(projectId) {
+    if (typeof localStorage === 'undefined') return;
+    var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+    if (!pid) return;
+    try {
+      localStorage.setItem(execOverviewProjectStorageKey, pid);
+    } catch (e) {}
+  }
+
   function showProjectList() {
     state.currentProject = null;
     state.currentVersionId = null;
@@ -115,12 +137,15 @@
 	    }
 	    if (dom.emptyProjects) dom.emptyProjects.classList.add('hidden');
 	    if (dom.navProjects) {
+        var currentId = state.currentProject && state.currentProject.id ? String(state.currentProject.id) : '';
 	      dom.navProjects.innerHTML = list
 	        .map(function(p) {
 	          var name = p && p.name ? p.name : '未命名项目';
 	          var desc = p && p.description ? p.description : '';
+            var isActive = currentId && String(p && p.id) === currentId;
+            var cls = 'nav-entry-card nav-entry-overview' + (isActive ? ' active' : '');
 	          return (
-	            '<button type="button" class="nav-entry-card nav-entry-overview" data-project-id="' +
+	            '<button type="button" class="' + cls + '" data-project-id="' +
 	            escapeHtml(p.id) +
 	            '">' +
 	            '<span class="nav-entry-icon" aria-hidden="true">' +
@@ -536,7 +561,9 @@
       return false;
     });
     if (!project) return;
+    saveLastProjectId(project.id);
     showProjectDetail(project);
+    renderProjects();
     state.currentVersionId = null;
     renderVersionSelect();
     loadVersions(project.id).then(loadOverview);
@@ -621,7 +648,11 @@
     }
     // 默认先展示项目卡片列表。
     showProjectList();
-    loadProjects();
+    loadProjects().then(function() {
+      var savedProjectId = loadLastProjectId();
+      if (!savedProjectId) return;
+      openProjectById(savedProjectId);
+    });
   }
 
   function bindTabActivation() {

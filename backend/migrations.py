@@ -387,3 +387,12 @@ def apply_migrations(engine: Engine) -> None:
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_case_items_id ON case_items(id)"))
                     conn.execute(text("PRAGMA foreign_keys=ON"))
             _mark_applied(conn, 7)
+
+        # v8: 早期版本将“执行页删除/关闭”实现为 exec_set.status=archived（软删除）。
+        # 当前口径为“删除就是删除”，因此将历史 archived 执行集物理删除（级联删除 exec_cases/历史）。
+        if not _is_applied(conn, 8):
+            if "exec_sets" in tables:
+                cols = set([c["name"] for c in insp.get_columns("exec_sets")])
+                if "status" in cols:
+                    conn.execute(text("DELETE FROM exec_sets WHERE status = 'archived'"))
+            _mark_applied(conn, 8)

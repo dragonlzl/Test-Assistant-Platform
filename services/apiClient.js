@@ -291,6 +291,17 @@
     }).then(handleResponse);
   }
 
+  function listExecSetsByCaseFile(projectId) {
+    var query = [];
+    if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
+    var url = '/api/exec/sets/by-case-file';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
   function createExecSet(payload) {
     return fetch('/api/exec/sets', {
       method: 'POST',
@@ -311,6 +322,13 @@
       method: 'PATCH',
       headers: buildHeaders(),
       body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function deleteExecSet(execSetId) {
+    return fetch('/api/exec/sets/' + execSetId, {
+      method: 'DELETE',
+      headers: buildHeaders(),
     }).then(handleResponse);
   }
 
@@ -526,9 +544,11 @@
     createCaseItem: createCaseItem,
     deleteCaseItem: deleteCaseItem,
     listExecSets: listExecSets,
+    listExecSetsByCaseFile: listExecSetsByCaseFile,
     createExecSet: createExecSet,
     listExecCases: listExecCases,
     updateExecSet: updateExecSet,
+    deleteExecSet: deleteExecSet,
     upsertExecSetFromCaseFile: upsertExecSetFromCaseFile,
     createExecCase: createExecCase,
     updateExecCase: updateExecCase,

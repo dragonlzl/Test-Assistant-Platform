@@ -164,6 +164,7 @@ class ExecSetOut(BaseModel):
     id: int
     project_id: int
     version_id: Optional[int]
+    source: Optional[str] = None
     case_file_id: Optional[int] = None
     name: str
     requirement: Optional[str] = None
@@ -174,6 +175,11 @@ class ExecSetOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+
+class ExecSetByCaseFileOut(BaseModel):
+    case_file_id: int
+    active_users: List[str] = []
 
 
 class ExecCaseCreateFromLibrary(BaseModel):

@@ -1101,3 +1101,21 @@
 - 复用说明：复用既有项目权限校验，新增“只读执行集访问”与原有“个人执行集写隔离”并存，不新增接口。  
 - 测试与验证：`node --check scripts/modules/execOverview.js`（通过）；`python3 -m compileall -q backend`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）；API：启动测试后端后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_overview.spec.js`（通过）。  
 - 更新记录：2025-12-15 执行总览项目成员可见与入口简化上线（`backend/routers/exec_routes.py`、`index.html`、`scripts/modules/execOverview.js`、`tests/api/exec_overview.spec.js`、`tests/ui/exec_overview.spec.js`）。  
+
+- 功能名称：执行总览项目选择持久化  
+- 功能描述：在登录状态下，执行总览页会记录用户最近在导航中选择的项目，并在刷新页面后自动恢复到该项目详情视图（保持“选中状态”）。  
+- 操作方式：进入“执行总览”→点击顶部项目导航按钮进入某项目→刷新页面→再次进入执行总览，会自动打开上次选中的项目。  
+- 使用效果：减少重复选择项目的成本，连续查看进度更顺畅。  
+- 新增内容/接口/组件：本地存储记录项目ID并恢复（`scripts/modules/execOverview.js`）；导航按钮选中态样式（`style.css`）；UI 用例覆盖刷新后保持选中（`tests/ui/exec_overview.spec.js`）。  
+- 复用说明：复用现有 tab 激活加载逻辑，不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/execOverview.js`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行总览项目选择持久化上线（`scripts/modules/execOverview.js`、`style.css`、`tests/ui/exec_overview.spec.js`）。  
+
+- 功能名称：用例库“选择用例执行”列表增加执行页状态  
+- 功能描述：用例库页“选择用例执行”抽屉的列表视图新增“执行页状态”列：若无人执行则显示“未（未转执行标识）”；若多人已转执行则按“人员：执（执行中标识）”逐行展示，便于识别重复执行风险。  
+- 操作方式：进入“用例库”→点击“选择用例执行”→选择项目后查看列表的“执行页状态”列（会按“人员：执行中”逐行展示）。  
+- 使用效果：选择更直观，减少重复转执行带来的确认弹窗/覆盖困扰。  
+- 新增内容/接口/组件：新增 `GET /api/exec/sets/by-case-file` 聚合接口返回“用例文件→执行人员”映射（`backend/routers/exec_routes.py`、`backend/schemas.py`）；前端列表展示状态标签与人员列表（`index.html`、`scripts/modules/caseLibrary.js`、`services/apiClient.js`）；更新 UI/API 用例覆盖（`tests/ui/case_library.spec.js`、`tests/api/exec_sets_by_case_file.spec.js`）。  
+- 复用说明：复用既有 `exec_sets` 数据作为权威来源，仅新增聚合查询接口供列表渲染，不改变转执行入库逻辑。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 选择用例执行`（通过）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_sets_by_case_file.spec.js`（通过，需本地运行 FastAPI 服务并使用 `data/apitest.db`）。  
+- 更新记录：2025-12-16 修复“执行页状态”展示错误并支持展示多人选择执行（`backend/routers/exec_routes.py`、`backend/schemas.py`、`services/apiClient.js`、`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`、`tests/api/exec_sets_by_case_file.spec.js`）。  

@@ -4515,23 +4515,23 @@
       renderTempExecView();
     }
 
-    function removeTempExecFile(fileId) {
-      var idx = state.tempExecFiles.findIndex(function(item) { return item.id === fileId; });
-      if (idx === -1) return;
-      var targetFile = state.tempExecFiles[idx];
-      if (isDbMode()) {
-        var client = getApiClient();
-        var execSetId = targetFile && (targetFile.execSetId || Number(targetFile.id));
-        if (client && execSetId && typeof client.updateExecSet === 'function') {
-          client.updateExecSet(execSetId, { status: 'archived' }).catch(function(err) {
-            if (tempExecStatus) {
-              var msg = err && err.message ? err.message : '执行集归档失败，刷新后可能会再次出现';
-              setStatus(tempExecStatus, msg, 'warn');
-            }
-          });
-        }
-      }
-      removeTempExecFromVersion(fileId, { silent: true });
+	    function removeTempExecFile(fileId) {
+	      var idx = state.tempExecFiles.findIndex(function(item) { return item.id === fileId; });
+	      if (idx === -1) return;
+	      var targetFile = state.tempExecFiles[idx];
+	      if (isDbMode()) {
+	        var client = getApiClient();
+	        var execSetId = targetFile && (targetFile.execSetId || Number(targetFile.id));
+	        if (client && execSetId && typeof client.deleteExecSet === 'function') {
+	          client.deleteExecSet(execSetId).catch(function(err) {
+	            if (tempExecStatus) {
+	              var msg = err && err.message ? err.message : '执行集删除失败，刷新后可能会再次出现';
+	              setStatus(tempExecStatus, msg, 'warn');
+	            }
+	          });
+	        }
+	      }
+	      removeTempExecFromVersion(fileId, { silent: true });
       state.tempExecFiles.splice(idx, 1);
       var placement = ensureTempExecPlacement();
       Object.keys(placement.fileOrder || {}).forEach(function(req) {
@@ -4633,7 +4633,7 @@
       renderTempVersionGrid();
     }
 
-    function bulkRemoveTempExecFiles(fileIds, opts) {
+	    function bulkRemoveTempExecFiles(fileIds, opts) {
       var list = Array.isArray(fileIds)
         ? fileIds.map(function(id) { return id === null || id === undefined ? '' : String(id); }).filter(Boolean)
         : String(fileIds || '').split(',').map(function(id) { return id.trim(); }).filter(Boolean);
@@ -4646,14 +4646,14 @@
         var idx = state.tempExecFiles.findIndex(function(item) { return item && String(item.id) === String(id); });
         if (idx === -1) return;
         var targetFile = state.tempExecFiles[idx];
-        if (isDbMode()) {
-          var client = getApiClient();
-          var execSetId = targetFile && (targetFile.execSetId || Number(targetFile.id));
-          if (client && execSetId && typeof client.updateExecSet === 'function') {
-            client.updateExecSet(execSetId, { status: 'archived' }).catch(function() {});
-          }
-        }
-        removeTempExecFromVersion(String(id), { silent: true });
+	        if (isDbMode()) {
+	          var client = getApiClient();
+	          var execSetId = targetFile && (targetFile.execSetId || Number(targetFile.id));
+	          if (client && execSetId && typeof client.deleteExecSet === 'function') {
+	            client.deleteExecSet(execSetId).catch(function() {});
+	          }
+	        }
+	        removeTempExecFromVersion(String(id), { silent: true });
         Object.keys(placement.fileOrder || {}).forEach(function(req) {
           removeFileFromOrder(req, String(id));
         });
@@ -4663,7 +4663,7 @@
           if (pid && placement.fileOrderByProjectVersion[pid] && placement.fileOrderByProjectVersion[pid][vid]) {
             placement.fileOrderByProjectVersion[pid][vid] = placement.fileOrderByProjectVersion[pid][vid]
               .filter(function(item) { return String(item) !== String(id); });
-          }
+	    }
         }
         delete state.tempExecSelections[String(id)];
         delete state.tempExecRemarkOpen[String(id)];

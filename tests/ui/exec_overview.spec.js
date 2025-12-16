@@ -219,10 +219,21 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await page.click('#execOverviewNavProjects [data-project-id="2"]');
     await expect(page.locator('#execOverviewDetail')).toBeVisible();
     await expect(page.locator('#execOverviewProjectTitle')).toContainText('元气骑士');
+    await expect(page.locator('#execOverviewNavProjects [data-project-id="2"]')).toHaveClass(/active/);
     await expect(page.locator('#execOverviewUserCards')).toContainText('总数 1');
     await expect(page.locator('#execOverviewUserCards .exec-overview-progress')).toHaveCount(0);
     await expect(page.locator('#execOverviewUserCards .exec-overview-file-progress')).toHaveCount(1);
     await expect(page.locator('#execOverviewUserCards')).not.toContainText('组长');
+
+    await page.reload();
+    await page.waitForSelector('.tab-group-btn[data-group="cases"]', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', { timeout: 20000 });
+    await page.click('.tab-group-btn[data-group="cases"]');
+    await page.click('[data-group-menu="cases"] [data-tab-btn="exec-overview"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('exec-overview'); });
+    await expect(page.locator('#execOverviewDetail')).toBeVisible();
+    await expect(page.locator('#execOverviewProjectTitle')).toContainText('元气骑士');
+    await expect(page.locator('#execOverviewNavProjects [data-project-id="2"]')).toHaveClass(/active/);
 
     await page.click('#execOverviewNavProjects [data-project-id="1"]');
     await expect(page.locator('#execOverviewDetail')).toBeVisible();

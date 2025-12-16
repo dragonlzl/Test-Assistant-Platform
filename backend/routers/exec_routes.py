@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import List
 import json
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -15,6 +16,8 @@ from sqlalchemy.exc import IntegrityError
 
 
 router = APIRouter(prefix="/exec", tags=["execution"])
+
+_case_file_source_pattern = re.compile(r"^case_file:(\d+)$")
 
 
 def _ensure_exec_set_access(
@@ -40,6 +43,34 @@ def _ensure_exec_set_read_access(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="执行集不存在")
     ensure_project_access(db, user, exec_set.project_id)
     return exec_set
+
+
+def _parse_case_file_id(case_file_id, source):
+    if case_file_id is not None:
+        try:
+            cid = int(case_file_id)
+            return cid if cid > 0 else None
+        except Exception:
+            return None
+    if not source:
+        return None
+    raw = str(source).strip()
+    if not raw:
+        return None
+    if raw.isdigit():
+        try:
+            cid = int(raw)
+            return cid if cid > 0 else None
+        except Exception:
+            return None
+    m = _case_file_source_pattern.match(raw)
+    if m and m.group(1):
+        try:
+            cid = int(m.group(1))
+            return cid if cid > 0 else None
+        except Exception:
+            return None
+    return None
 
 
 @router.post("/sets", response_model=schemas.ExecSetOut, status_code=status.HTTP_201_CREATED)
@@ -122,6 +153,29 @@ def update_exec_set(
         db.refresh(exec_set)
     setattr(exec_set, "case_count", None)
     return exec_set
+
+
+@router.delete("/sets/{exec_set_id}")
+def delete_exec_set(
+    exec_set_id: int,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    exec_set = _ensure_exec_set_access(db, user, exec_set_id)
+    target_id = exec_set.id
+    project_id = exec_set.project_id
+    name = exec_set.name
+    db.delete(exec_set)
+    log_operation(
+        db=db,
+        user_id=user.id,
+        action="delete_exec_set",
+        target_type="exec_set",
+        target_id=target_id,
+        detail={"project_id": project_id, "name": name},
+    )
+    db.commit()
+    return {"status": "ok"}
 
 
 def _normalize_match_key(
@@ -392,6 +446,7 @@ def list_exec_sets(
                 "id": exec_set.id,
                 "project_id": exec_set.project_id,
                 "version_id": exec_set.version_id,
+                "source": exec_set.source,
                 "case_file_id": exec_set.case_file_id,
                 "name": exec_set.name,
                 "requirement": exec_set.requirement,
@@ -402,6 +457,52 @@ def list_exec_sets(
                 "created_at": exec_set.created_at,
                 "updated_at": exec_set.updated_at,
             }
+        )
+    return result
+
+
+@router.get("/sets/by-case-file", response_model=List[schemas.ExecSetByCaseFileOut])
+def list_exec_sets_by_case_file(
+    project_id: int,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_project_access(db, user, project_id)
+    rows = (
+        db.query(
+            models.ExecSet.case_file_id,
+            models.ExecSet.source,
+            models.ExecSet.status,
+            models.User.username,
+        )
+        .outerjoin(models.User, models.User.id == models.ExecSet.created_by)
+        .filter(models.ExecSet.project_id == project_id)
+        .all()
+    )
+    by_file = {}
+    for case_file_id, source, status_text, username in rows:
+        fid = _parse_case_file_id(case_file_id, source)
+        if not fid:
+            continue
+        entry = by_file.get(fid)
+        if not entry:
+            entry = {"active": set()}
+            by_file[fid] = entry
+        name = (username or "").strip() or None
+        if not name:
+            continue
+        if str(status_text or "") == "active":
+            entry["active"].add(name)
+    result: List[schemas.ExecSetByCaseFileOut] = []
+    for fid in sorted(by_file.keys()):
+        entry = by_file.get(fid) or {}
+        active_set = entry.get("active") or set()
+        active_users = sorted(list(active_set))
+        result.append(
+            schemas.ExecSetByCaseFileOut(
+                case_file_id=int(fid),
+                active_users=active_users,
+            )
         )
     return result
 
