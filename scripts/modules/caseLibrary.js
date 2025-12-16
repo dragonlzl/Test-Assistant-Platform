@@ -112,6 +112,7 @@
       projectId: null,
       versionId: null,
       files: [],
+      execByFileId: {},
       loading: false,
       selection: new Set(),
       restoring: false,
@@ -1334,10 +1335,19 @@
           if (versionId) dom.editDrawerVersionSelect.value = String(versionId);
           else dom.editDrawerVersionSelect.value = '';
         }
-        return apiClient.listCaseFiles(projectId);
+        var tasks = [apiClient.listCaseFiles(projectId)];
+        if (apiClient && typeof apiClient.listExecSetsByCaseFile === 'function') {
+          tasks.push(apiClient.listExecSetsByCaseFile(projectId));
+        } else {
+          tasks.push(Promise.resolve([]));
+        }
+        return Promise.all(tasks);
       })
-      .then(function(files) {
-        state.editDrawer.files = Array.isArray(files) ? files : [];
+      .then(function(res) {
+        var files = Array.isArray(res && res[0]) ? res[0] : [];
+        var execSets = Array.isArray(res && res[1]) ? res[1] : [];
+        state.editDrawer.files = files;
+        state.editDrawer.execByFileId = buildExecMapByFileId(execSets);
         // 仅保留当前可见列表里的勾选，避免版本切换后隐藏项仍被导出。
         var visibleIds = {};
         getEditDrawerVisibleFiles().forEach(function(f) {
@@ -2482,6 +2492,7 @@
     state.editDrawer.projectId = null;
     state.editDrawer.versionId = null;
     state.editDrawer.files = [];
+    state.editDrawer.execByFileId = {};
     state.editDrawer.loading = false;
     state.editDrawer.selection = new Set();
     setStatus(dom.editDrawerStatus, '', '');
@@ -2495,7 +2506,7 @@
     if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = true;
     if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = true;
     if (dom.editDrawerListBody) {
-      dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"11\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
+      dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"12\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
     }
     syncEditDrawerControls();
   }
@@ -2653,6 +2664,7 @@
     state.editDrawer.projectId = projectId;
     state.editDrawer.versionId = null;
     state.editDrawer.files = [];
+    state.editDrawer.execByFileId = {};
     state.editDrawer.selection = new Set();
     if (dom.editDrawerVersionSelect) {
       dom.editDrawerVersionSelect.disabled = true;
@@ -2665,7 +2677,7 @@
     if (!projectId) {
       setStatus(dom.editDrawerStatus, '请先选择项目', 'warn');
       if (dom.editDrawerListBody) {
-        dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"11\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
+        dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"12\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
       }
       syncEditDrawerControls();
       persistEditDrawerState({
@@ -2733,7 +2745,7 @@
     var list = getEditDrawerVisibleFiles();
     if (!list.length) {
       var hint = state.editDrawer.versionId ? '该版本暂无用例文件' : '暂无用例文件';
-      dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"11\"><p class=\"hint\">' + escapeHtml(hint) + '</p></td></tr>';
+      dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"12\"><p class=\"hint\">' + escapeHtml(hint) + '</p></td></tr>';
       syncEditDrawerControls();
       return;
     }
@@ -2755,12 +2767,16 @@
       var selectCell = '<td><input type=\"checkbox\" data-case-lib-edit-select=\"' + escapeHtml(fileId) + '\"' + (checked ? ' checked' : '') + ' /></td>';
       var fileName = f && f.file_name_clean ? f.file_name_clean : ('文件#' + (f && f.id ? f.id : ''));
       var reuseBadge = reuseEnabled ? ' <span class=\"badge case-library-reuse-badge\">复</span>' : '';
+      var execInfo = state.editDrawer.execByFileId && fileId ? state.editDrawer.execByFileId[fileId] : null;
+      var activeUsers = execInfo && Array.isArray(execInfo.active_users) ? execInfo.active_users : [];
+      var execStatusCell = renderExecPageStatusCell(activeUsers);
       return (
         '<tr>' +
           selectCell +
           '<td>' + escapeHtml(projectName) + '</td>' +
           '<td>' + escapeHtml(versionName) + '</td>' +
           '<td>' + escapeHtml(fileName) + reuseBadge + '</td>' +
+          '<td>' + execStatusCell + '</td>' +
           '<td>' + escapeHtml(itemCount) + '</td>' +
           '<td>' + escapeHtml(reuseText) + '</td>' +
           '<td>' + escapeHtml(importerName) + '</td>' +
@@ -2772,6 +2788,23 @@
       );
     }).join('');
     syncEditDrawerControls();
+  }
+
+  function renderExecPageStatusCell(activeUsers) {
+    var list = Array.isArray(activeUsers) ? activeUsers : [];
+    if (!list.length) {
+      return '<div><span class="tag muted case-lib-exec-tag-pending" title="未转执行">未</span></div>';
+    }
+    return list
+      .map(function(name) {
+        return (
+          '<div>' +
+            escapeHtml(name || '') +
+            '：<span class="tag case-lib-exec-tag" title="执行中">执</span>' +
+          '</div>'
+        );
+      })
+      .join('');
   }
 
   function deleteSelectedCaseFiles() {
@@ -2792,6 +2825,36 @@
     }
     var ids = Array.from(selection);
     var list = Array.isArray(state.editDrawer.files) ? state.editDrawer.files : [];
+
+    // 删除前强校验：只要存在于任意执行页（有人执行），必须先在执行页解散（删除执行集）再删库。
+    var execByFileId = state.editDrawer.execByFileId && typeof state.editDrawer.execByFileId === 'object'
+      ? state.editDrawer.execByFileId
+      : {};
+    var blocked = [];
+    ids.forEach(function(id) {
+      var key = String(id);
+      var execInfo = execByFileId[key] ? execByFileId[key] : null;
+      var activeUsers = execInfo && Array.isArray(execInfo.active_users) ? execInfo.active_users : [];
+      if (activeUsers && activeUsers.length) {
+        blocked.push({ id: key, activeUsers: activeUsers });
+      }
+    });
+    if (blocked.length) {
+      var lines = blocked.map(function(b) {
+        var found = list.find(function(f) { return f && String(f.id) === String(b.id); });
+        var name = found && found.file_name_clean ? String(found.file_name_clean) : ('文件#' + b.id);
+        var usersText = (b.activeUsers || []).filter(Boolean).join('、') || '未知人员';
+        return '- ' + name + '（' + usersText + '）';
+      });
+      var tip =
+        '以下用例文件正在执行页中，解散前无法删除：\n' +
+        lines.join('\n') +
+        '\n\n请先通知正在执行人，在执行页面的分配页面中解散该份用例（移除/删除执行集），解散后再删除。';
+      setStatus(dom.editDrawerStatus, '存在执行中用例，已阻止删除', 'warn');
+      window.alert(tip);
+      return;
+    }
+
     var items = ids.map(function(id) {
       var found = list.find(function(f) { return f && String(f.id) === String(id); });
       var name = found && found.file_name_clean ? String(found.file_name_clean) : ('文件#' + id);
@@ -2868,6 +2931,7 @@
     state.editDrawer.projectId = projectId;
     state.editDrawer.versionId = normalizeId(dom.editDrawerVersionSelect ? dom.editDrawerVersionSelect.value : '');
     state.editDrawer.files = [];
+    state.editDrawer.execByFileId = {};
     state.editDrawer.selection = state.editDrawer.selection instanceof Set ? state.editDrawer.selection : new Set();
     renderEditDrawerList();
     if (!projectId) {
@@ -2876,10 +2940,12 @@
     }
     setStatus(dom.editDrawerStatus, '加载用例库...', '');
     state.editDrawer.loading = true;
-    Promise.all([apiClient.listCaseFiles(projectId), loadVersions(projectId)])
+    Promise.all([apiClient.listCaseFiles(projectId), loadVersions(projectId), apiClient.listExecSetsByCaseFile(projectId)])
       .then(function(res) {
         var files = Array.isArray(res && res[0]) ? res[0] : [];
         state.editDrawer.files = files;
+        var execSets = Array.isArray(res && res[2]) ? res[2] : [];
+        state.editDrawer.execByFileId = buildExecMapByFileId(execSets);
         if (dom.editDrawerVersionSelect) {
           syncVersionOptions(dom.editDrawerVersionSelect, projectId, '全部版本');
           dom.editDrawerVersionSelect.disabled = false;
@@ -4057,7 +4123,7 @@
 	        var files = Array.isArray(res && res[0]) ? res[0] : [];
 	        var execSets = Array.isArray(res && res[2]) ? res[2] : [];
 	        state.selectDrawer.files = files;
-	        state.selectDrawer.execByFileId = buildSelectDrawerExecMap(execSets);
+	        state.selectDrawer.execByFileId = buildExecMapByFileId(execSets);
         syncVersionOptions(dom.selectVersionSelect, projectId, '请选择版本');
         dom.selectVersionSelect.disabled = false;
         setStatus(dom.selectStatus, '已加载 ' + files.length + ' 份用例文件', files.length ? 'ok' : 'warn');
@@ -4115,22 +4181,7 @@
 	      var reuseBadge = (f && f.reuse_enabled) ? ' <span class=\"badge case-library-reuse-badge\">复</span>' : '';
 	      var execInfo = idStr && execByFileId[idStr] ? execByFileId[idStr] : null;
 	      var activeUsers = execInfo && Array.isArray(execInfo.active_users) ? execInfo.active_users : [];
-	      var hasActive = Boolean(activeUsers && activeUsers.length);
-	      var execStatusCell = '';
-	      if (!hasActive) {
-	        execStatusCell = '<div><span class="tag muted case-lib-exec-tag-pending" title="未转执行">未</span></div>';
-	      } else {
-	        execStatusCell = activeUsers
-	          .map(function(name) {
-	            return (
-	              '<div>' +
-	                escapeHtml(name) +
-	                '：<span class="tag case-lib-exec-tag" title="执行中">执</span>' +
-	              '</div>'
-	            );
-	          })
-	          .join('');
-	      }
+	      var execStatusCell = renderExecPageStatusCell(activeUsers);
 	      return (
 	        '<tr>' +
 	          '<td><input type=\"checkbox\" data-case-lib-select-select=\"' + escapeHtml(idStr) + '\"' + checked + '/></td>' +
@@ -4148,7 +4199,7 @@
 	    syncSelectDrawerControls();
 	  }
 
-	  function buildSelectDrawerExecMap(rows) {
+	  function buildExecMapByFileId(rows) {
 	    var list = Array.isArray(rows) ? rows : [];
 	    var byFileId = {};
 	    list.forEach(function(item) {
@@ -4184,7 +4235,7 @@
 	        var files = Array.isArray(res && res[0]) ? res[0] : [];
 	        var execSets = Array.isArray(res && res[2]) ? res[2] : [];
 	        state.selectDrawer.files = files;
-	        state.selectDrawer.execByFileId = buildSelectDrawerExecMap(execSets);
+	        state.selectDrawer.execByFileId = buildExecMapByFileId(execSets);
         setStatus(dom.selectStatus, '已加载 ' + files.length + ' 份用例文件', files.length ? 'ok' : 'warn');
       })
       .catch(function(err) {

@@ -1,0 +1,37 @@
+INFO:     Started server process [56135]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8090 (Press CTRL+C to quit)
+INFO:     127.0.0.1:55175 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "POST /api/projects HTTP/1.1" 201 Created
+INFO:     127.0.0.1:55277 - "POST /api/projects/25/versions HTTP/1.1" 201 Created
+INFO:     127.0.0.1:55277 - "POST /api/case-files/import HTTP/1.1" 201 Created
+INFO:     127.0.0.1:55277 - "POST /api/exec/sets HTTP/1.1" 201 Created
+INFO:     127.0.0.1:55277 - "DELETE /api/case-files/35 HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:55277 - "DELETE /api/exec/sets/8 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "DELETE /api/case-files/35 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "DELETE /api/projects/25 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "POST /api/projects HTTP/1.1" 201 Created
+INFO:     127.0.0.1:55277 - "POST /api/projects/25/versions HTTP/1.1" 201 Created
+INFO:     127.0.0.1:55277 - "POST /api/users HTTP/1.1" 201 Created
+INFO:     127.0.0.1:55277 - "POST /api/users HTTP/1.1" 201 Created
+INFO:     127.0.0.1:55277 - "POST /api/users/assign-projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "POST /api/users/assign-projects HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "POST /api/case-files/import HTTP/1.1" 201 Created
+INFO:     127.0.0.1:55277 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "POST /api/exec/sets HTTP/1.1" 201 Created
+INFO:     127.0.0.1:55277 - "POST /api/exec/sets HTTP/1.1" 201 Created
+INFO:     127.0.0.1:55277 - "GET /api/exec/sets/by-case-file?project_id=25 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "DELETE /api/exec/sets/9 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "GET /api/exec/sets/by-case-file?project_id=25 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "DELETE /api/projects/25 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "DELETE /api/users/6 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55277 - "DELETE /api/users/7 HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [56135]

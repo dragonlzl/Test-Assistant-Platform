@@ -19,6 +19,15 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例库删除增加“执行中拦截”+ 编辑抽屉展示执行页状态
+- 功能描述：用例库页面“编辑抽屉”列表新增“执行页状态”，展示该用例文件是否已转到执行页以及正在执行人员；管理员删除用例文件时若存在任意执行集仍关联该用例文件，则提示“先在执行页解散（删除执行集）再删除”，并阻止删除，避免执行中用例被误删导致执行数据断链。
+- 操作方式：进入“用例相关 → 用例库”→打开“编辑抽屉”→选择项目→在列表中查看“执行页状态”；管理员勾选用例文件点“删除所选”，若提示执行中则先通知执行人到执行页分配页解散该份用例（移除/删除执行集）后再删库。
+- 使用效果：执行中的用例文件无法被直接从用例库删除；执行页状态在编辑抽屉可直接识别，降低误删风险。
+- 新增内容/接口/组件：`index.html`（编辑抽屉列表新增“执行页状态”列）；`scripts/modules/caseLibrary.js`（编辑抽屉加载/渲染执行页状态、删除前前端拦截提示）；`backend/routers/cases.py`（`DELETE /api/case-files/{id}` 增加“存在 active 执行集则 400”强校验）；`backend/routers/exec_routes.py`（`/api/exec/sets/by-case-file` 兼容执行集创建人缺失时返回“未知人员”）；新增/更新自动化：`tests/ui/case_library.spec.js`、`tests/api/case_file_delete_blocked_by_exec_sets.spec.js`。
+- 复用说明：复用既有“执行人员聚合接口”`/api/exec/sets/by-case-file` 与用例库编辑抽屉的列表渲染，仅扩展展示与删除校验，无新增前端依赖。
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/case_library.spec.js -g \"编辑抽屉删除\"`（通过，需本地 8090 静态服）；`APP_DB_FILE=apitest.db uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080` + `npx playwright test --config tests/api/playwright.api.config.js tests/api/case_file_delete_blocked_by_exec_sets.spec.js`（通过）。
+- 更新记录：2025-12-16 初版上线（执行中拦截 + 状态列）。
+
 - 功能名称：用例执行支持 Excel（xlsx）导入（可带执行结果）+ 同名差异对比覆盖  
 - 功能描述：用例执行页“用例导入&分配”支持导入 `.xlsx`；Excel 表头与导出对齐时可解析入库，支持两种格式：  
   - 不带结果：表头包含“模块/用例标题/优先级/前提条件/操作步骤/预期结果”。  

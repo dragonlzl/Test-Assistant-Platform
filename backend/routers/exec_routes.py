@@ -490,7 +490,7 @@ def list_exec_sets_by_case_file(
             by_file[fid] = entry
         name = (username or "").strip() or None
         if not name:
-            continue
+            name = "未知人员"
         if str(status_text or "") == "active":
             entry["active"].add(name)
     result: List[schemas.ExecSetByCaseFileOut] = []

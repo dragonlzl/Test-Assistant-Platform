@@ -1324,6 +1324,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
       if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
       if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
       if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
 
 	      if (pathName === '/api/case-files' && method === 'GET') {
 	        const pid = url.searchParams.get('project_id');
@@ -1360,6 +1361,8 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 	    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例A');
 	    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例B');
       await expect(page.locator('#caseLibraryEditDrawer thead')).toContainText('复用类型');
+      await expect(page.locator('#caseLibraryEditDrawer thead')).toContainText('执行页状态');
+      await expect(page.locator('#caseLibraryEditListBody')).toContainText('未');
       const reuseRow = page.locator('#caseLibraryEditListBody tr', { hasText: '用例A' });
       await expect(reuseRow.locator('.case-library-reuse-badge')).toHaveCount(1);
       await expect(reuseRow).toContainText('是');
@@ -1388,6 +1391,110 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 	    await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeDisabled();
 	    await expect(page.locator('#caseLibraryEditCard')).toBeHidden();
 	  });
+
+  test('编辑抽屉删除：执行中用例需先解散才能删除', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '战魂铭人', description: '用于用例库删除拦截' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    const now = new Date().toISOString();
+    const caseFiles = [
+      {
+        id: 100,
+        project_id: project.id,
+        version_id: versions[0].id,
+        file_name_clean: '用例A',
+        reuse_enabled: true,
+        item_count: 2,
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+        last_updated_by: user.id,
+        last_updated_by_name: user.username,
+      },
+    ];
+    const caseItemsByFileId = {
+      100: [
+        { id: 1, case_file_id: 100, module: '模块A', title: '用例A-1', expected: '预期', remark: '' },
+      ],
+    };
+    let execByCaseFileRows = [{ case_file_id: 100, active_users: ['人员A', '人员B'] }];
+    let deleteCalls = 0;
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, execByCaseFileRows);
+
+      if (pathName === '/api/case-files' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
+      }
+
+      const itemsMatch = pathName.match(/^\/api\/case-files\/(\d+)\/items$/);
+      if (itemsMatch && method === 'GET') {
+        const fileId = Number(itemsMatch[1]);
+        return respond(200, caseItemsByFileId[fileId] || []);
+      }
+
+      const delMatch = pathName.match(/^\/api\/case-files\/(\d+)$/);
+      if (delMatch && method === 'DELETE') {
+        deleteCalls += 1;
+        return respond(200, { detail: '用例文件已删除', case_file_id: Number(delMatch[1]), linked_exec_sets: 0 });
+      }
+
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    await ensureCaseLibraryTab(page);
+
+    await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
+    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例A');
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('人员A');
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('执');
+
+    await page.click('#caseLibraryEditSelectAll');
+    await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeEnabled();
+
+    let alertText = '';
+    page.once('dialog', async (dialog) => {
+      alertText = dialog.message();
+      await dialog.accept();
+    });
+    await page.click('#caseLibraryEditDeleteBtn');
+    expect(alertText).toContain('解散');
+    expect(deleteCalls).toBe(0);
+
+    // 模拟执行人已解散（执行页状态变为未转执行），再允许删除
+    execByCaseFileRows = [];
+    await page.click('#caseLibraryEditConfirmBtn');
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('未');
+
+    page.once('dialog', async (dialog) => dialog.accept());
+    await page.click('#caseLibraryEditDeleteBtn');
+    expect(deleteCalls).toBe(1);
+  });
 
   test('编辑用例：支持按版本筛选（默认全部版本）', async ({ page }) => {
     const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };

@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, aliased
@@ -448,6 +448,41 @@ def delete_case_file(
     db: Session = Depends(get_db),
 ):
     case_file = _ensure_case_access(db, admin, case_file_id)
+    case_file_key = str(case_file.id)
+    source_key = "case_file:" + case_file_key
+    active_exec_rows = (
+        db.query(models.ExecSet.id, models.User.username)
+        .outerjoin(models.User, models.User.id == models.ExecSet.created_by)
+        .filter(models.ExecSet.project_id == case_file.project_id)
+        .filter(models.ExecSet.status == "active")
+        .filter(
+            or_(
+                models.ExecSet.case_file_id == case_file.id,
+                models.ExecSet.source == case_file_key,
+                models.ExecSet.source == source_key,
+            )
+        )
+        .all()
+    )
+    if active_exec_rows:
+        users = set()
+        unknown = False
+        for _, username in active_exec_rows:
+            if username and str(username).strip():
+                users.add(str(username).strip())
+            else:
+                unknown = True
+        active_users = sorted(list(users))
+        if unknown:
+            active_users.append("未知人员")
+        users_text = "、".join(active_users) if active_users else "未知人员"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "detail": "该用例文件正在执行页中（执行人员：" + users_text + "），请先在执行页面解散该份用例后再删除。",
+                "active_users": active_users,
+            },
+        )
     linked_exec_sets = (
         db.query(func.count(models.ExecSet.id))
         .filter(models.ExecSet.case_file_id == case_file.id)
