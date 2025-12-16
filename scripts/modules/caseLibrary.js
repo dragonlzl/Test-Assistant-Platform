@@ -3470,6 +3470,63 @@
       });
   }
 
+  // “＋”新增用例高亮：仅保留在本次页面生命周期（刷新后清空），避免写入 localStorage/DB。
+  var caseLibraryNewAddedCaseUiKeysByFileId = {};
+
+  function ensureNonEnumerableKey(obj, keyName, value) {
+    if (!obj || typeof obj !== 'object') return '';
+    var has = false;
+    try { has = Object.prototype.hasOwnProperty.call(obj, keyName); } catch (err) { has = false; }
+    if (has) {
+      try { return String(obj[keyName] || ''); } catch (e) { return ''; }
+    }
+    var v = value || ('ui-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6));
+    try {
+      Object.defineProperty(obj, keyName, { value: v, enumerable: false, configurable: true, writable: true });
+    } catch (err2) {
+      try { obj[keyName] = v; } catch (err3) {}
+    }
+    return String(v || '');
+  }
+
+  function getCaseLibraryEditorUiKey(item) {
+    if (!item || typeof item !== 'object') return '';
+    var key = '';
+    try { key = String(item.__uiKey || ''); } catch (_) { key = ''; }
+    if (key) return key;
+    if (item.id !== null && item.id !== undefined) return 'id-' + String(item.id);
+    return ensureNonEnumerableKey(item, '__uiKey', '');
+  }
+
+  function ensureCaseLibraryNewAddedStore(caseFileId) {
+    var id = caseFileId !== null && caseFileId !== undefined ? String(caseFileId) : '';
+    if (!id) id = 'unknown';
+    if (!caseLibraryNewAddedCaseUiKeysByFileId[id] || typeof caseLibraryNewAddedCaseUiKeysByFileId[id] !== 'object') {
+      caseLibraryNewAddedCaseUiKeysByFileId[id] = {};
+    }
+    return caseLibraryNewAddedCaseUiKeysByFileId[id];
+  }
+
+  function markCaseLibraryNewAdded(caseFileId, item) {
+    var store = ensureCaseLibraryNewAddedStore(caseFileId);
+    var key = getCaseLibraryEditorUiKey(item);
+    if (!key) return;
+    store[key] = true;
+  }
+
+  function unmarkCaseLibraryNewAdded(caseFileId, item) {
+    var store = ensureCaseLibraryNewAddedStore(caseFileId);
+    var key = getCaseLibraryEditorUiKey(item);
+    if (!key) return;
+    delete store[key];
+  }
+
+  function isCaseLibraryNewAdded(caseFileId, item) {
+    var store = ensureCaseLibraryNewAddedStore(caseFileId);
+    var key = getCaseLibraryEditorUiKey(item);
+    return Boolean(key && store && store[key] === true);
+  }
+
 
   function applyEditorFilter() {
     var items = Array.isArray(state.editor.items) ? state.editor.items : [];
@@ -3525,6 +3582,7 @@
       dom.editView.innerHTML = '<p class=\"hint\">请先选择需要编辑的用例</p>';
       return;
     }
+    var caseFileId = state.editor.caseFile && state.editor.caseFile.id ? state.editor.caseFile.id : null;
     var matches = applyEditorFilter();
     var pageSize = getPageSize();
     var totalCases = matches.length;
@@ -3553,8 +3611,9 @@
       var remarkBtnClass = ['remark-toggle'];
       if (isRemarkOpen) remarkBtnClass.push('active');
       if (hasRemark) remarkBtnClass.push('filled');
+      var rowClass = 'case-row' + (isCaseLibraryNewAdded(caseFileId, item) ? ' new-added' : '');
       return (
-        '<tr class=\"case-row\">' +
+        '<tr class=\"' + rowClass + '\">' +
           '<td class=\"check\"><input type=\"checkbox\" data-case-lib-select data-index=\"' + idx + '\" ' + (selection.has(idx) ? 'checked' : '') + '></td>' +
           '<td class=\"index\">' + (idx + 1) + '</td>' +
           '<td class=\"module\"><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"module\" data-index=\"' + idx + '\" data-case-lib-multiline=\"false\" data-placeholder=\"' + editPlaceholder + '\">' + moduleHtml + '</div></td>' +
@@ -3834,6 +3893,7 @@
         return;
       }
       var newItem = ed.items[createIndex];
+      var uiKey = getCaseLibraryEditorUiKey(newItem);
       var payload = buildCaseItemPayload(newItem);
       var err = validatePayload(payload);
       if (err) {
@@ -3842,7 +3902,11 @@
         return;
       }
       apiClient.createCaseItem(file.id, payload).then(function(created) {
-        if (created) ed.items[createIndex] = created;
+        if (created) {
+          ensureNonEnumerableKey(created, '__uiKey', uiKey || '');
+          ed.items[createIndex] = created;
+          markCaseLibraryNewAdded(file.id, created);
+        }
         setStatus(dom.editStatus, '新增已入库', 'ok');
         renderEditorTable();
       }).catch(function(e) {
@@ -3877,8 +3941,10 @@
       expected: '待补充',
       remark: '',
     };
+    ensureNonEnumerableKey(fresh, '__uiKey', '');
     var insertAt = Math.min(Math.max(index + 1, 0), ed.items.length);
     ed.items.splice(insertAt, 0, fresh);
+    markCaseLibraryNewAdded(ed.caseFile ? ed.caseFile.id : null, fresh);
     ed.selection = new Set();
     ed.remarkOpen = new Set();
     ed.pageIndex = Math.floor(insertAt / getPageSize());
@@ -3898,6 +3964,7 @@
     if (!item) return;
     var confirmed = window.confirm('确定删除该用例吗？可在 8 秒内撤回。');
     if (!confirmed) return;
+    unmarkCaseLibraryNewAdded(ed.caseFile ? ed.caseFile.id : null, item);
     ed.items.splice(idx, 1);
     ed.selection = new Set();
     ed.remarkOpen = new Set();

@@ -2385,7 +2385,7 @@
       var raw = caseItem && caseItem.actual ? String(caseItem.actual) : '未执行';
       if (raw === 'pending') raw = '未执行';
       if (raw === '变更重跑' || raw === '有改动') {
-        return { label: raw, className: 'pending' };
+        return { label: raw, className: 'changed' };
       }
       var status = getCaseExecutionStatus(file, caseItem);
       var className = mapStatusToClass(status);
@@ -3431,6 +3431,77 @@
     }
 
     var tempExecDbLoadSeq = 0;
+
+    // “＋”新增用例高亮：仅保留在本次页面生命周期（刷新后清空），避免写入 localStorage/DB。
+    var tempExecNewAddedCaseUiKeysByFileId = {};
+    function ensureTempExecNewAddedStore(fileId) {
+      var id = fileId ? String(fileId) : '';
+      if (!id) id = 'unknown';
+      if (!tempExecNewAddedCaseUiKeysByFileId[id] || typeof tempExecNewAddedCaseUiKeysByFileId[id] !== 'object') {
+        tempExecNewAddedCaseUiKeysByFileId[id] = {};
+      }
+      return tempExecNewAddedCaseUiKeysByFileId[id];
+    }
+    function ensureTempExecNonEnumerableKey(obj, keyName, value) {
+      if (!obj || typeof obj !== 'object') return '';
+      var has = false;
+      try { has = Object.prototype.hasOwnProperty.call(obj, keyName); } catch (err) { has = false; }
+      if (has) {
+        try { return String(obj[keyName] || ''); } catch (e) { return ''; }
+      }
+      var v = value || ('ui-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6));
+      try {
+        Object.defineProperty(obj, keyName, { value: v, enumerable: false, configurable: true, writable: true });
+      } catch (err2) {
+        try { obj[keyName] = v; } catch (err3) {}
+      }
+      return String(v || '');
+    }
+    function getTempExecCaseUiKeys(item) {
+      if (!item || typeof item !== 'object') return [];
+      var keys = [];
+      var uiKey = '';
+      try { uiKey = String(item.__uiKey || ''); } catch (_) { uiKey = ''; }
+      if (uiKey) keys.push(uiKey);
+      var cid = item.execCaseId || item.id || null;
+      if (cid) keys.push('id-' + String(cid));
+      var tmpId = item._tempId ? String(item._tempId) : '';
+      if (tmpId) keys.push('tmp-' + tmpId);
+      return keys;
+    }
+    function ensureTempExecNewAddedUiKey(item) {
+      if (!item || typeof item !== 'object') return '';
+      var key = '';
+      try { key = String(item.__uiKey || ''); } catch (_) { key = ''; }
+      if (key) return key;
+      return ensureTempExecNonEnumerableKey(item, '__uiKey', '');
+    }
+    function markTempExecNewAdded(fileId, item) {
+      var store = ensureTempExecNewAddedStore(fileId);
+      var keys = getTempExecCaseUiKeys(item);
+      if (!keys.length) {
+        var ensured = ensureTempExecNewAddedUiKey(item);
+        if (ensured) keys = [ensured];
+      }
+      keys.forEach(function(k) { if (k) store[k] = true; });
+    }
+    function unmarkTempExecNewAdded(fileId, item) {
+      var store = ensureTempExecNewAddedStore(fileId);
+      var keys = getTempExecCaseUiKeys(item);
+      keys.forEach(function(k) { if (k) delete store[k]; });
+      var ensured = '';
+      try { ensured = String(item && item.__uiKey ? item.__uiKey : ''); } catch (_) { ensured = ''; }
+      if (ensured) delete store[ensured];
+    }
+    function isTempExecNewAdded(fileId, item) {
+      var store = ensureTempExecNewAddedStore(fileId);
+      var keys = getTempExecCaseUiKeys(item);
+      for (var i = 0; i < keys.length; i += 1) {
+        var k = keys[i];
+        if (k && store && store[k] === true) return true;
+      }
+      return false;
+    }
 
     async function loadTempExecStateFromDb() {
       tempExecDbLoadSeq += 1;
@@ -4836,6 +4907,13 @@
         payload.cases.forEach(function(c, idx) {
           file.cases.splice(insertAt + idx, 0, c);
         });
+        if (payload.newAddedKeys && Array.isArray(payload.newAddedKeys) && payload.newAddedKeys.length) {
+          payload.cases.forEach(function(c) {
+            var keys = getTempExecCaseUiKeys(c);
+            var hit = keys.some(function(k) { return payload.newAddedKeys.indexOf(k) !== -1; });
+            if (hit) markTempExecNewAdded(file.id, c);
+          });
+        }
         clearTempExecCaseStates(file.id);
         persistTempExecState();
         renderTempExecView();
@@ -4843,7 +4921,8 @@
       }
       if (payload.type === 'insert' && typeof payload.index === 'number') {
         if (file.cases[payload.index]) {
-          file.cases.splice(payload.index, 1);
+          var removed = file.cases.splice(payload.index, 1);
+          if (removed && removed[0]) unmarkTempExecNewAdded(file.id, removed[0]);
           clearTempExecCaseStates(file.id);
           persistTempExecState();
           renderTempExecView();
@@ -4921,6 +5000,8 @@
               insertCase.caseItemId = created.case_item_id || null;
               insertCase.pendingCreate = false;
               delete insertCase._tempId;
+              // 入库后补充 id 标记：确保同一页面生命周期内即便触发 reload/load，也仍能保持高亮。
+              markTempExecNewAdded(file.id, insertCase);
             }).catch(function() {});
           }
           return;
@@ -5007,12 +5088,14 @@
         reuseDetails: [],
         defectLinks: [],
       };
+      ensureTempExecNewAddedUiKey(fresh);
       if (isDbMode()) {
         fresh._tempId = generateTempExecId();
         fresh.pendingCreate = true;
       }
       var insertAt = Number.isInteger(index) && index >= -1 ? index + 1 : file.cases.length;
       file.cases.splice(insertAt, 0, fresh);
+      markTempExecNewAdded(fileId, fresh);
       pushTempExecUndo({ type: 'insert', fileId: fileId, index: insertAt, tempId: fresh._tempId || '' });
       clearTempExecCaseStates(fileId);
       persistTempExecState();
@@ -5029,7 +5112,13 @@
       var confirmed = window.confirm('确定删除该条用例吗？此操作不可撤销。');
       if (!confirmed) return;
       var removed = file.cases.splice(index, 1);
-      pushTempExecUndo({ type: 'remove', fileId: fileId, index: index, cases: removed });
+      var newAddedKeys = [];
+      removed.forEach(function(item) {
+        if (!isTempExecNewAdded(fileId, item)) return;
+        getTempExecCaseUiKeys(item).forEach(function(k) { if (k && newAddedKeys.indexOf(k) === -1) newAddedKeys.push(k); });
+        unmarkTempExecNewAdded(fileId, item);
+      });
+      pushTempExecUndo({ type: 'remove', fileId: fileId, index: index, cases: removed, newAddedKeys: newAddedKeys });
       clearTempExecCaseStates(fileId);
       persistTempExecState();
       renderTempExecView();
@@ -5616,8 +5705,9 @@
               '</td>' +
             '</tr>'
           : '';
+        var rowClass = 'case-row' + (isTempExecNewAdded(file.id, item) ? ' new-added' : '');
         return (
-          '<tr class="case-row">' +
+          '<tr class="' + rowClass + '">' +
             cells.join('') +
           '</tr>' +
           reuseRow +
