@@ -3767,7 +3767,96 @@
     state.editor.pendingOp = null;
   }
 
-  function startPendingToast(message) {
+  var caseLibraryBlockHintEl = null;
+  var caseLibraryBlockHintTimer = null;
+
+  function cleanupCaseLibraryBlockHint() {
+    if (caseLibraryBlockHintTimer) {
+      clearTimeout(caseLibraryBlockHintTimer);
+      caseLibraryBlockHintTimer = null;
+    }
+    if (caseLibraryBlockHintEl && caseLibraryBlockHintEl.parentNode) {
+      caseLibraryBlockHintEl.parentNode.removeChild(caseLibraryBlockHintEl);
+    }
+    caseLibraryBlockHintEl = null;
+  }
+
+  function positionCaseLibraryBlockHint(hintEl, anchorRect) {
+    if (!hintEl || !anchorRect) return;
+    var rect = anchorRect;
+    var hintRect = hintEl.getBoundingClientRect ? hintEl.getBoundingClientRect() : null;
+    var hintW = hintRect && hintRect.width ? hintRect.width : 260;
+    var hintH = hintRect && hintRect.height ? hintRect.height : 44;
+    var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    var margin = 8;
+    var width = Number(rect.width) || 0;
+    var height = Number(rect.height) || 0;
+    var leftBase = Number(rect.left) || 0;
+    var topBase = Number(rect.top) || 0;
+    var bottomBase = Number.isFinite(Number(rect.bottom)) ? Number(rect.bottom) : (topBase + height);
+    var centerX = leftBase + width / 2;
+    var left = centerX - hintW / 2;
+    if (vw) left = Math.min(Math.max(margin, left), Math.max(margin, vw - hintW - margin));
+    var aboveTop = topBase - 10 - hintH;
+    var belowTop = bottomBase + 10;
+    var top = aboveTop >= margin ? aboveTop : belowTop;
+    if (vh) top = Math.min(Math.max(margin, top), Math.max(margin, vh - hintH - margin));
+    hintEl.style.left = Math.round(left) + 'px';
+    hintEl.style.top = Math.round(top) + 'px';
+  }
+
+  function showCaseLibraryBlockHint(anchorRect, message) {
+    if (!anchorRect) return;
+    cleanupCaseLibraryBlockHint();
+    var hint = document.createElement('div');
+    hint.className = 'temp-click-hint';
+    var text = document.createElement('span');
+    text.textContent = message || '当前有待确认的增删操作，请先撤回或等待入库';
+    hint.appendChild(text);
+    document.body.appendChild(hint);
+    caseLibraryBlockHintEl = hint;
+    positionCaseLibraryBlockHint(hint, anchorRect);
+    caseLibraryBlockHintTimer = setTimeout(function() {
+      if (!caseLibraryBlockHintEl) return;
+      try { caseLibraryBlockHintEl.classList.add('fade-out'); } catch (_) {}
+      setTimeout(function() { cleanupCaseLibraryBlockHint(); }, 220);
+    }, 3000);
+  }
+
+  function captureCaseLibraryAnchorRect(anchorEl) {
+    if (!anchorEl) return null;
+    if (typeof anchorEl === 'object' && anchorEl.left !== undefined && anchorEl.top !== undefined) {
+      var left0 = Number(anchorEl.left) || 0;
+      var top0 = Number(anchorEl.top) || 0;
+      var width0 = Number(anchorEl.width) || 0;
+      var height0 = Number(anchorEl.height) || 0;
+      var bottom0 = Number.isFinite(Number(anchorEl.bottom)) ? Number(anchorEl.bottom) : (top0 + height0);
+      return { left: left0, top: top0, width: width0, height: height0, bottom: bottom0 };
+    }
+    if (typeof anchorEl.getBoundingClientRect !== 'function') return null;
+    try {
+      var rect = anchorEl.getBoundingClientRect();
+      if (!rect) return null;
+      var left = Number(rect.left) || 0;
+      var top = Number(rect.top) || 0;
+      var width = Number(rect.width) || 0;
+      var height = Number(rect.height) || 0;
+      return {
+        left: left,
+        top: top,
+        width: width,
+        height: height,
+        bottom: Number.isFinite(Number(rect.bottom)) ? Number(rect.bottom) : (top + height),
+      };
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function startPendingToast(message, options) {
+    options = options || {};
+    var anchorRect = options.anchorRect || null;
     cleanupPendingToast();
     var ed = state.editor;
     ed.pendingRemaining = 8;
@@ -3780,7 +3869,7 @@
     function renderCountdown() {
       text.textContent = (message || '已暂存变更') + '（' + ed.pendingRemaining + 's）';
     }
-    btn.addEventListener('click', function() {
+    var handleUndoClick = function() {
       var op = ed.pendingOp;
       if (!op) return;
       if (op.type === 'remove' && op.item) {
@@ -3795,7 +3884,8 @@
       clearPendingOp();
       setStatus(dom.editStatus, '已撤回增删操作（未入库）', 'ok');
       renderEditorTable();
-    });
+    };
+    btn.addEventListener('click', handleUndoClick);
     toast.appendChild(text);
     toast.appendChild(btn);
     document.body.appendChild(toast);
@@ -3920,12 +4010,15 @@
     setStatus(dom.editStatus, '变更已应用', 'ok');
   }
 
-  function insertCaseItem(index) {
+  function insertCaseItem(index, anchorEl) {
     var ed = state.editor;
     if (ed.pendingOp) {
       setStatus(dom.editStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+      var anchorRectWarn = captureCaseLibraryAnchorRect(anchorEl);
+      if (anchorRectWarn) showCaseLibraryBlockHint(anchorRectWarn, '当前有待确认的增删操作，请先撤回或等待入库');
       return;
     }
+    var anchorRect = captureCaseLibraryAnchorRect(anchorEl);
     var base = ed.items[index] || {};
     var moduleName = String(base.module || '').trim() || '模块';
     var title = '新用例-' + Math.random().toString(16).slice(2, 6);
@@ -3950,15 +4043,18 @@
     ed.pageIndex = Math.floor(insertAt / getPageSize());
     ed.pendingOp = { type: 'insert', itemKey: localId, index: insertAt };
     renderEditorTable();
-    startPendingToast('已新增用例，超时将自动入库');
+    startPendingToast('已新增用例，超时将自动入库', { anchorRect: anchorRect });
   }
 
-  function removeCaseItem(index) {
+  function removeCaseItem(index, anchorEl) {
     var ed = state.editor;
     if (ed.pendingOp) {
       setStatus(dom.editStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+      var anchorRectWarn = captureCaseLibraryAnchorRect(anchorEl);
+      if (anchorRectWarn) showCaseLibraryBlockHint(anchorRectWarn, '当前有待确认的增删操作，请先撤回或等待入库');
       return;
     }
+    var anchorRect = captureCaseLibraryAnchorRect(anchorEl);
     var idx = Math.max(0, Math.min(Number(index), ed.items.length - 1));
     var item = ed.items[idx];
     if (!item) return;
@@ -3970,7 +4066,7 @@
     ed.remarkOpen = new Set();
     ed.pendingOp = { type: 'remove', item: item, index: idx };
     renderEditorTable();
-    startPendingToast('已删除用例，超时将自动入库');
+    startPendingToast('已删除用例，超时将自动入库', { anchorRect: anchorRect });
   }
 
   function toggleRemark(index) {
@@ -4740,18 +4836,24 @@
         var toggle = t.closest ? t.closest('[data-case-lib-remark-toggle]') : null;
         if (toggle) {
           toggleRemark(toggle.getAttribute('data-index'));
+        return;
+      }
+      var insertBtn = t.closest ? t.closest('[data-case-lib-insert]') : null;
+      if (insertBtn) {
+          var ir = null;
+          try { ir = insertBtn.getBoundingClientRect ? insertBtn.getBoundingClientRect() : null; } catch (_) { ir = null; }
+          var anchorRect = ir ? { left: ir.left, top: ir.top, width: ir.width, height: ir.height, bottom: ir.bottom } : null;
+          insertCaseItem(Number(insertBtn.getAttribute('data-index')), anchorRect);
           return;
-        }
-        var insertBtn = t.closest ? t.closest('[data-case-lib-insert]') : null;
-        if (insertBtn) {
-          insertCaseItem(Number(insertBtn.getAttribute('data-index')));
+      }
+      var removeBtn = t.closest ? t.closest('[data-case-lib-remove]') : null;
+      if (removeBtn) {
+          var rr = null;
+          try { rr = removeBtn.getBoundingClientRect ? removeBtn.getBoundingClientRect() : null; } catch (_) { rr = null; }
+          var anchorRect2 = rr ? { left: rr.left, top: rr.top, width: rr.width, height: rr.height, bottom: rr.bottom } : null;
+          removeCaseItem(Number(removeBtn.getAttribute('data-index')), anchorRect2);
           return;
-        }
-        var removeBtn = t.closest ? t.closest('[data-case-lib-remove]') : null;
-        if (removeBtn) {
-          removeCaseItem(Number(removeBtn.getAttribute('data-index')));
-          return;
-        }
+      }
         var pageBtn = t.closest ? t.closest('[data-case-lib-page]') : null;
         if (pageBtn) {
           handlePaginationAction(pageBtn.getAttribute('data-case-lib-page'));

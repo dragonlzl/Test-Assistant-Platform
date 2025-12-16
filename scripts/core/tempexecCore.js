@@ -5025,7 +5025,96 @@
       tempExecUndoEl = null;
     }
 
-    function startTempExecUndoTimer(message) {
+    var tempExecBlockHintEl = null;
+    var tempExecBlockHintTimer = null;
+
+    function cleanupTempExecBlockHint() {
+      if (tempExecBlockHintTimer) {
+        clearTimeout(tempExecBlockHintTimer);
+        tempExecBlockHintTimer = null;
+      }
+      if (tempExecBlockHintEl && tempExecBlockHintEl.parentNode) {
+        tempExecBlockHintEl.parentNode.removeChild(tempExecBlockHintEl);
+      }
+      tempExecBlockHintEl = null;
+    }
+
+    function positionTempExecBlockHint(hintEl, anchorRect) {
+      if (!hintEl || !anchorRect) return;
+      var rect = anchorRect;
+      var hintRect = hintEl.getBoundingClientRect ? hintEl.getBoundingClientRect() : null;
+      var hintW = hintRect && hintRect.width ? hintRect.width : 260;
+      var hintH = hintRect && hintRect.height ? hintRect.height : 44;
+      var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+      var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      var margin = 8;
+      var width = Number(rect.width) || 0;
+      var height = Number(rect.height) || 0;
+      var leftBase = Number(rect.left) || 0;
+      var topBase = Number(rect.top) || 0;
+      var bottomBase = Number.isFinite(Number(rect.bottom)) ? Number(rect.bottom) : (topBase + height);
+      var centerX = leftBase + width / 2;
+      var left = centerX - hintW / 2;
+      if (vw) left = Math.min(Math.max(margin, left), Math.max(margin, vw - hintW - margin));
+      var aboveTop = topBase - 10 - hintH;
+      var belowTop = bottomBase + 10;
+      var top = aboveTop >= margin ? aboveTop : belowTop;
+      if (vh) top = Math.min(Math.max(margin, top), Math.max(margin, vh - hintH - margin));
+      hintEl.style.left = Math.round(left) + 'px';
+      hintEl.style.top = Math.round(top) + 'px';
+    }
+
+    function showTempExecBlockHint(anchorRect, message) {
+      if (!anchorRect) return;
+      cleanupTempExecBlockHint();
+      var hint = document.createElement('div');
+      hint.className = 'temp-click-hint';
+      var text = document.createElement('span');
+      text.textContent = message || '当前有待确认的增删操作，请先撤回或等待入库';
+      hint.appendChild(text);
+      document.body.appendChild(hint);
+      tempExecBlockHintEl = hint;
+      positionTempExecBlockHint(hint, anchorRect);
+      tempExecBlockHintTimer = setTimeout(function() {
+        if (!tempExecBlockHintEl) return;
+        try { tempExecBlockHintEl.classList.add('fade-out'); } catch (_) {}
+        setTimeout(function() { cleanupTempExecBlockHint(); }, 220);
+      }, 3000);
+    }
+
+    function captureTempExecAnchorRect(anchorEl) {
+      if (!anchorEl) return null;
+      if (typeof anchorEl === 'object' && anchorEl.left !== undefined && anchorEl.top !== undefined) {
+        var left0 = Number(anchorEl.left) || 0;
+        var top0 = Number(anchorEl.top) || 0;
+        var width0 = Number(anchorEl.width) || 0;
+        var height0 = Number(anchorEl.height) || 0;
+        var bottom0 = Number.isFinite(Number(anchorEl.bottom)) ? Number(anchorEl.bottom) : (top0 + height0);
+        return { left: left0, top: top0, width: width0, height: height0, bottom: bottom0 };
+      }
+      if (typeof anchorEl.getBoundingClientRect !== 'function') return null;
+      try {
+        var rect = anchorEl.getBoundingClientRect();
+        if (!rect) return null;
+        var left = Number(rect.left) || 0;
+        var top = Number(rect.top) || 0;
+        var width = Number(rect.width) || 0;
+        var height = Number(rect.height) || 0;
+        return {
+          left: left,
+          top: top,
+          width: width,
+          height: height,
+          bottom: Number.isFinite(Number(rect.bottom)) ? Number(rect.bottom) : (top + height),
+        };
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function startTempExecUndoTimer(message, options) {
+      options = options || {};
+      var anchorRect = options.anchorRect || null;
       cleanupTempExecUndoUI();
       var baseMsg = message || '已应用变更';
       var remaining = 8;
@@ -5040,7 +5129,7 @@
         var suffix = count > 1 ? '，可撤销 ' + count + ' 条' : '';
         text.textContent = baseMsg + suffix + '（' + remaining + 's）';
       };
-      btn.addEventListener('click', function() {
+      var handleUndoClick = function() {
         var success = restoreTempExecUndo();
         var hasMore = Array.isArray(state.tempExecUndoStack) && state.tempExecUndoStack.length > 0;
         if (success && hasMore) {
@@ -5053,7 +5142,8 @@
         if (tempExecStatus) {
           setStatus(tempExecStatus, success ? '已撤销最近操作' : '无法撤销', success ? 'ok' : 'warn');
         }
-      });
+      };
+      btn.addEventListener('click', handleUndoClick);
       tempExecUndoEl.appendChild(text);
       tempExecUndoEl.appendChild(btn);
       document.body.appendChild(tempExecUndoEl);
@@ -5071,9 +5161,14 @@
       if (tempExecStatus) setStatus(tempExecStatus, baseMsg, 'ok');
     }
 
-    function insertTempExecCase(fileId, index) {
+    function insertTempExecCase(fileId, index, anchorEl) {
       var file = getTempExecFile(fileId);
       if (!file || !Array.isArray(file.cases)) return;
+      var anchorRect = captureTempExecAnchorRect(anchorEl);
+      // 8 秒待确认期内重复操作：在点击处提醒（不阻止本次操作）。
+      if (anchorRect && tempExecUndoTimer) {
+        showTempExecBlockHint(anchorRect, '当前有待确认的增删操作，请先撤回或等待入库');
+      }
       var base = file.cases[index] || {};
       var moduleName = base.module || '';
       var fresh = {
@@ -5102,15 +5197,18 @@
       renderTempExecView();
       if (tempExecStatus) {
         setStatus(tempExecStatus, '已插入空用例', 'ok');
-        startTempExecUndoTimer('已插入空用例');
+        startTempExecUndoTimer('已插入空用例', { anchorRect: anchorRect });
       }
     }
 
-    function removeTempExecCase(fileId, index) {
+    function removeTempExecCase(fileId, index, anchorEl) {
       var file = getTempExecFile(fileId);
       if (!file || !Array.isArray(file.cases) || !file.cases[index]) return;
+      var anchorRect = captureTempExecAnchorRect(anchorEl);
+      var shouldHint = Boolean(anchorRect && tempExecUndoTimer);
       var confirmed = window.confirm('确定删除该条用例吗？此操作不可撤销。');
       if (!confirmed) return;
+      if (shouldHint) showTempExecBlockHint(anchorRect, '当前有待确认的增删操作，请先撤回或等待入库');
       var removed = file.cases.splice(index, 1);
       var newAddedKeys = [];
       removed.forEach(function(item) {
@@ -5124,7 +5222,7 @@
       renderTempExecView();
       if (tempExecStatus) {
         setStatus(tempExecStatus, '用例已删除', 'ok');
-        startTempExecUndoTimer('用例已删除');
+        startTempExecUndoTimer('用例已删除', { anchorRect: anchorRect });
       }
     }
 

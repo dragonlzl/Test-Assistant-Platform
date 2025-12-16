@@ -1609,6 +1609,37 @@ body {
   box-shadow: none;
   padding: 6px 12px;
 }
+.temp-click-hint {
+  position: fixed;
+  left: 8px;
+  top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(15,23,42,0.95);
+  color: #f8fafc;
+  border-radius: 12px;
+  box-shadow: 0 16px 30px rgba(15,23,42,0.28);
+  z-index: 121;
+  font-size: 13px;
+  max-width: 320px;
+  pointer-events: none;
+  opacity: 1;
+  transform: translateY(0);
+}
+.temp-click-hint.fade-out {
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.temp-click-hint .pill.secondary {
+  border-color: rgba(248,250,252,0.5);
+  color: #0f172a;
+  background: #e2e8f0;
+  box-shadow: none;
+  padding: 6px 12px;
+}
     .temp-exec-header {
       margin: 12px 0;
       display: flex;

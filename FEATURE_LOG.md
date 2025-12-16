@@ -1152,3 +1152,4 @@
 - 更新记录：2025-12-16 用例库“编辑用例”抽屉新增“归属”下拉（全部/当前登录用户），默认选中当前用户以便聚焦自己负责/维护的用例文件（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`）。  
 - 更新记录：2025-12-16 用例库“查看&编辑”抽屉新增“用例名”搜索框（用于快速过滤定位用例文件），并将入口/列表按钮文案统一为“查看&编辑”（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`）。  
 - 更新记录：2025-12-16 执行页与用例库编辑点击“＋”新增用例行增加绿色描边高亮，并在页面生命周期内保持到下次刷新（`scripts/core/tempexecCore.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/new_added_highlight.spec.js`）。  
+- 更新记录：2025-12-16 执行页/用例库编辑在 8 秒待确认期内重复点增删时，会在点击位置浮出提示“当前有待确认的增删操作，请先撤回或等待入库”（3 秒后自动消失），避免滚动后看不到固定位置提示（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/undo_click_hint.spec.js`）。  

@@ -2668,7 +2668,14 @@
         if (removeCaseBtn && api.removeTempExecCase) {
           var rcFileId = removeCaseBtn.dataset.tempCaseRemove;
           var rcIdx = Number(removeCaseBtn.dataset.index);
-          if (!Number.isNaN(rcIdx)) api.removeTempExecCase(rcFileId, rcIdx);
+          if (!Number.isNaN(rcIdx)) {
+            var rr = null;
+            try { rr = removeCaseBtn.getBoundingClientRect ? removeCaseBtn.getBoundingClientRect() : null; } catch (_) { rr = null; }
+            var anchorRect = rr
+              ? { left: rr.left, top: rr.top, width: rr.width, height: rr.height, bottom: rr.bottom }
+              : null;
+            api.removeTempExecCase(rcFileId, rcIdx, anchorRect);
+          }
           return;
         }
         var statusPill = e.target.closest('[data-temp-status-filter]');
@@ -2694,7 +2701,14 @@
         if (insertCaseBtn && api.insertTempExecCase) {
           var icFileId = insertCaseBtn.dataset.tempCaseInsert;
           var icIdx = Number(insertCaseBtn.dataset.index);
-          if (!Number.isNaN(icIdx)) api.insertTempExecCase(icFileId, icIdx);
+          if (!Number.isNaN(icIdx)) {
+            var ir = null;
+            try { ir = insertCaseBtn.getBoundingClientRect ? insertCaseBtn.getBoundingClientRect() : null; } catch (_) { ir = null; }
+            var anchorRect2 = ir
+              ? { left: ir.left, top: ir.top, width: ir.width, height: ir.height, bottom: ir.bottom }
+              : null;
+            api.insertTempExecCase(icFileId, icIdx, anchorRect2);
+          }
           return;
         }
         var defectOpenBtn = e.target.closest('[data-temp-defect-open]');
@@ -2743,14 +2757,28 @@
         if (removeCaseBtn && api.removeTempExecCase) {
           var rcFileId = removeCaseBtn.dataset.tempCaseRemove;
           var rcIdx = Number(removeCaseBtn.dataset.index);
-          if (!Number.isNaN(rcIdx)) api.removeTempExecCase(rcFileId, rcIdx);
+          if (!Number.isNaN(rcIdx)) {
+            var rr2 = null;
+            try { rr2 = removeCaseBtn.getBoundingClientRect ? removeCaseBtn.getBoundingClientRect() : null; } catch (_) { rr2 = null; }
+            var anchorRect3 = rr2
+              ? { left: rr2.left, top: rr2.top, width: rr2.width, height: rr2.height, bottom: rr2.bottom }
+              : null;
+            api.removeTempExecCase(rcFileId, rcIdx, anchorRect3);
+          }
           return;
         }
         var insertCaseBtn = e.target.closest('[data-temp-case-insert]');
         if (insertCaseBtn && api.insertTempExecCase) {
           var icFileId = insertCaseBtn.dataset.tempCaseInsert;
           var icIdx = Number(insertCaseBtn.dataset.index);
-          if (!Number.isNaN(icIdx)) api.insertTempExecCase(icFileId, icIdx);
+          if (!Number.isNaN(icIdx)) {
+            var ir2 = null;
+            try { ir2 = insertCaseBtn.getBoundingClientRect ? insertCaseBtn.getBoundingClientRect() : null; } catch (_) { ir2 = null; }
+            var anchorRect4 = ir2
+              ? { left: ir2.left, top: ir2.top, width: ir2.width, height: ir2.height, bottom: ir2.bottom }
+              : null;
+            api.insertTempExecCase(icFileId, icIdx, anchorRect4);
+          }
           return;
         }
         var searchBtn = e.target.closest('[data-temp-search-btn]');
