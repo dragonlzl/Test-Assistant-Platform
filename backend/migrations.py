@@ -396,3 +396,56 @@ def apply_migrations(engine: Engine) -> None:
                 if "status" in cols:
                     conn.execute(text("DELETE FROM exec_sets WHERE status = 'archived'"))
             _mark_applied(conn, 8)
+
+        # v9: 执行集记录用例库变更基线与最近一次 diff（用于执行页刷新同步与变更提示）。
+        if not _is_applied(conn, 9):
+            if "exec_sets" in tables:
+                cols = set([c["name"] for c in insp.get_columns("exec_sets")])
+                if "case_file_base_updated_at" not in cols:
+                    conn.execute(
+                        text("ALTER TABLE exec_sets ADD COLUMN case_file_base_updated_at DATETIME")
+                    )
+                if "case_file_last_diff_at" not in cols:
+                    conn.execute(
+                        text("ALTER TABLE exec_sets ADD COLUMN case_file_last_diff_at DATETIME")
+                    )
+                if "case_file_last_diff_json" not in cols:
+                    conn.execute(text("ALTER TABLE exec_sets ADD COLUMN case_file_last_diff_json TEXT"))
+                if "case_file_last_diff_shown_at" not in cols:
+                    conn.execute(
+                        text("ALTER TABLE exec_sets ADD COLUMN case_file_last_diff_shown_at DATETIME")
+                    )
+            _mark_applied(conn, 9)
+
+        # v10: 记录执行集最近一次同步到用例库的版本（避免仅执行页编辑触发误 diff）。
+        if not _is_applied(conn, 10):
+            if "exec_sets" in tables:
+                cols = set([c["name"] for c in insp.get_columns("exec_sets")])
+                if "case_file_last_synced_at" not in cols:
+                    conn.execute(
+                        text("ALTER TABLE exec_sets ADD COLUMN case_file_last_synced_at DATETIME")
+                    )
+            _mark_applied(conn, 10)
+
+        # v11: exec_cases 记录 case_item_source_id，避免 case_item 删除导致 FK 置空后无法判断 deleted diff。
+        if not _is_applied(conn, 11):
+            if "exec_cases" in tables:
+                cols = set([c["name"] for c in insp.get_columns("exec_cases")])
+                if "case_item_source_id" not in cols:
+                    conn.execute(text("ALTER TABLE exec_cases ADD COLUMN case_item_source_id INTEGER"))
+                # 回填历史数据：默认与 case_item_id 一致。
+                conn.execute(
+                    text(
+                        "UPDATE exec_cases SET case_item_source_id = case_item_id "
+                        "WHERE case_item_source_id IS NULL AND case_item_id IS NOT NULL"
+                    )
+                )
+            _mark_applied(conn, 11)
+
+        # v12: exec_sets 增加 diff 历史（记录执行期间用例库累计变更，最新在前）。
+        if not _is_applied(conn, 12):
+            if "exec_sets" in tables:
+                cols = set([c["name"] for c in insp.get_columns("exec_sets")])
+                if "case_file_diff_history_json" not in cols:
+                    conn.execute(text("ALTER TABLE exec_sets ADD COLUMN case_file_diff_history_json TEXT"))
+            _mark_applied(conn, 12)

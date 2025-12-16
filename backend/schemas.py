@@ -109,6 +109,16 @@ class CaseItemPayload(BaseModel):
     remark: Optional[str] = None
 
 
+class CaseItemPatch(BaseModel):
+    module: Optional[str] = None
+    title: Optional[str] = None
+    expected: Optional[str] = None
+    priority: Optional[str] = None
+    precondition: Optional[str] = None
+    steps: Optional[str] = None
+    remark: Optional[str] = None
+
+
 class CaseFileImportRequest(BaseModel):
     project_id: int
     version_id: Optional[int] = None
@@ -174,12 +184,62 @@ class ExecSetOut(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    case_file_base_updated_at: Optional[datetime] = None
+    case_file_last_synced_at: Optional[datetime] = None
+    case_file_last_diff_at: Optional[datetime] = None
+    case_file_last_diff_json: Optional[Any] = None
+    case_file_last_diff_shown_at: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
 
 class ExecSetByCaseFileOut(BaseModel):
     case_file_id: int
     active_users: List[str] = []
+
+
+class CaseLibraryCaseSnapshot(BaseModel):
+    module: str
+    title: str
+    priority: Optional[str] = None
+    precondition: str = ""
+    steps: str = ""
+    expected: str
+    remark: Optional[str] = None
+
+
+class ExecCaseLibraryDiffEntry(BaseModel):
+    kind: str
+    case_item_id: Optional[int] = None
+    changed_fields: List[str] = []
+    old: Optional[CaseLibraryCaseSnapshot] = None
+    new: Optional[CaseLibraryCaseSnapshot] = None
+
+
+class ExecCaseLibraryDiffSummary(BaseModel):
+    added: int = 0
+    updated: int = 0
+    deleted: int = 0
+
+
+class ExecCaseLibraryDiffHistoryBatch(BaseModel):
+    diff_at: datetime
+    summary: ExecCaseLibraryDiffSummary
+    diff: List[ExecCaseLibraryDiffEntry] = []
+
+
+class ExecCaseLibrarySyncOut(BaseModel):
+    exec_set_id: int
+    case_file_id: int
+    case_file_updated_at: datetime
+    base_updated_at: Optional[datetime] = None
+    last_diff_at: Optional[datetime] = None
+    last_shown_at: Optional[datetime] = None
+    ever_changed: bool = False
+    has_new_diff: bool = False
+    should_auto_popup: bool = False
+    summary: ExecCaseLibraryDiffSummary
+    diff: List[ExecCaseLibraryDiffEntry] = []
+    history: List[ExecCaseLibraryDiffHistoryBatch] = []
 
 
 class ExecCaseCreateFromLibrary(BaseModel):

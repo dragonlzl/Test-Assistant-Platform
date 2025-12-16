@@ -514,7 +514,7 @@ def delete_case_file(
 @router.patch("/items/{case_item_id}", response_model=schemas.CaseItemOut)
 def update_case_item(
     case_item_id: int,
-    payload: schemas.CaseItemPayload,
+    payload: schemas.CaseItemPatch,
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -528,6 +528,9 @@ def update_case_item(
         if field not in payload_data:
             continue
         value = payload_data[field]
+        if value is None and field in ("module", "title", "expected"):
+            # 必填字段不允许被 PATCH 为 null；不传字段即可保持原值。
+            continue
         if field in ("precondition", "steps") and value is None:
             value = ""
         if value != getattr(case_item, field):

@@ -57,6 +57,7 @@
     var closeTempExecDrawerBtn = document.getElementById('closeTempExecDrawerBtn');
     var closeTempExecOverviewDrawerBtn = document.getElementById('closeTempExecOverviewDrawerBtn');
     var exportTempExecCasesXmindBtn = document.getElementById('exportTempExecCasesXmindBtn');
+    var tempExecCaseLibraryChangesBtn = document.getElementById('tempExecCaseLibraryChangesBtn');
     var caseTemplateDropdown = document.getElementById('caseTemplateDropdown');
     var caseTemplateToggle = document.getElementById('caseTemplateToggle');
     var caseTemplateMenu = document.getElementById('caseTemplateMenu');
@@ -243,6 +244,25 @@
         if (shouldScroll) {
           scrollElementIntoView(tempExecViewSection, 'smooth', 140);
         }
+      }
+      // 再次打开“执行视图”时也触发一次“用例库同步+diff 检查”（仅 DB 模式会产生实际同步）。
+      // 注意：这里只递增触发序号，不会改变当前已选中的执行用例。
+      try {
+        if (window.app) {
+          var prev = Number(window.app.__tempexecCaseLibrarySyncSeq || 0);
+          if (!isFinite(prev) || prev < 0) prev = 0;
+          window.app.__tempexecCaseLibrarySyncSeq = prev + 1;
+          window.app.__tempexecCaseLibrarySyncReason = 'view-enter';
+        }
+      } catch (err) {
+        // ignore
+      }
+      try {
+        if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
+          window.app.tempExecApi.loadTempExecState();
+        }
+      } catch (err2) {
+        // ignore
       }
     }
     function showTempExecOverview() {
@@ -1480,10 +1500,7 @@
         var tabName = e && e.detail ? e.detail.tab : '';
         if (tabName !== 'tempexec') return;
         ensureImportProjects();
-        // DB 模式下：切到“用例执行”时刷新个人历史执行集，避免多人/多账号切换后展示不一致。
-        if (typeof api.loadTempExecState === 'function') {
-          api.loadTempExecState();
-        }
+        // 切到“用例执行”时的刷新/同步由 core/appRuntime 统一触发（避免时序差导致漏触发或重复触发）。
       });
       window.addEventListener('app-auth-ready', function() {
         ensureImportProjects();
@@ -2956,6 +2973,11 @@
     if (exportTempExecCasesXmindBtn && api.exportTempExecCasesToXmind) {
       exportTempExecCasesXmindBtn.addEventListener('click', function() {
         api.exportTempExecCasesToXmind();
+      });
+    }
+    if (tempExecCaseLibraryChangesBtn && api.openTempExecCaseLibraryDiffDrawer) {
+      tempExecCaseLibraryChangesBtn.addEventListener('click', function() {
+        api.openTempExecCaseLibraryDiffDrawer({ manual: true });
       });
     }
 

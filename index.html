@@ -1370,12 +1370,60 @@
 <div class="actions" style="margin-bottom:12px;">
 <button class="secondary" disabled="" id="exportTempExecXmindBtn">导出执行XMind</button>
 <button class="secondary" disabled="" id="exportTempExecCasesXmindBtn">导出用例XMind（无结果）</button>
+<button class="secondary case-library-changes-btn" disabled="" id="tempExecCaseLibraryChangesBtn">用例库变更</button>
 </div>
 <div class="temp-case-view" id="tempExecView">
 <div class="temp-case-empty">暂无执行用例，请在“用例导入&分配”中导入或选择历史记录</div>
 </div>
 
 </div></section>
+<div class="drawer" id="tempExecCaseLibraryDiffDrawer" data-tab-section="tempexec">
+  <div class="drawer-mask" data-drawer-close="tempExecCaseLibraryDiffDrawer"></div>
+  <div class="drawer-panel drawer-panel-wide">
+    <div class="drawer-header">
+      <h3>用例库变更</h3>
+      <button class="link-toggle" id="closeTempExecCaseLibraryDiffDrawerBtn" data-drawer-close="tempExecCaseLibraryDiffDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">进入执行页或刷新执行页时会同步用例库增删改，此处展示最近一次变更差异；可通过“用例库变更”按钮重复查看。</p>
+      <p class="status" id="tempExecCaseLibraryDiffStatus"></p>
+      <div class="case-lib-diff-header">
+        <div class="case-lib-diff-case">
+          <span class="hint">用例：</span>
+          <span class="case-lib-diff-case-name" id="tempExecCaseLibraryDiffCaseName"></span>
+        </div>
+        <button type="button" class="pill secondary" id="tempExecCaseLibraryDiffSelectCaseBtn">选择用例</button>
+      </div>
+      <div class="case-lib-diff-case-tabs" id="tempExecCaseLibraryDiffCaseTabs"></div>
+      <div class="actions" style="margin:8px 0 12px;">
+        <button type="button" class="summary-pill case-lib-diff-pill added" data-case-lib-diff-filter="added" id="tempExecCaseLibraryDiffAddedPill">新增 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill updated" data-case-lib-diff-filter="updated" id="tempExecCaseLibraryDiffUpdatedPill">改动 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill deleted" data-case-lib-diff-filter="deleted" id="tempExecCaseLibraryDiffDeletedPill">删除 0</button>
+      </div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table case-lib-diff-table">
+          <thead>
+            <tr>
+              <th style="width:70px;">类型</th>
+              <th style="width:160px;">修改时间</th>
+              <th style="width:180px;">模块</th>
+              <th style="width:220px;">用例标题</th>
+              <th>前提条件</th>
+              <th>操作步骤</th>
+              <th>预期结果</th>
+            </tr>
+          </thead>
+          <tbody id="tempExecCaseLibraryDiffBody">
+            <tr><td colspan="7"><p class="hint">暂无变更</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="tempExecCaseLibraryDiffDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="drawer" id="tempExecOverviewDrawer" data-tab-section="tempexec">
 <div class="drawer-mask" data-drawer-close="tempExecOverviewDrawer"></div>
 <div class="drawer-panel">

@@ -178,6 +178,13 @@ class ExecSet(Base):
     reuse_enabled = Column(Boolean, default=False, nullable=False)
     reuse_presets = Column(JSON, nullable=True)
     status = Column(String(32), nullable=False, default="active")
+    case_file_base_updated_at = Column(DateTime(timezone=True), nullable=True)
+    case_file_last_synced_at = Column(DateTime(timezone=True), nullable=True)
+    case_file_last_diff_at = Column(DateTime(timezone=True), nullable=True)
+    case_file_last_diff_json = Column(JSON, nullable=True)
+    case_file_last_diff_shown_at = Column(DateTime(timezone=True), nullable=True)
+    # 记录执行期间“用例库变更 diff”历史（最新在前），用于执行页 Diff 抽屉展示累计变更。
+    case_file_diff_history_json = Column(JSON, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     updated_at = Column(
@@ -194,6 +201,8 @@ class ExecCase(Base):
     id = Column(Integer, primary_key=True, index=True)
     exec_set_id = Column(Integer, ForeignKey("exec_sets.id", ondelete="CASCADE"), nullable=False)
     case_item_id = Column(Integer, ForeignKey("case_items.id", ondelete="SET NULL"))
+    # 保留用例库条目 ID 的“原始值”，避免 case_item 被删除后 FK 置空导致无法判断 deleted diff。
+    case_item_source_id = Column(Integer, nullable=True)
     module = Column(String(255), nullable=False)
     title = Column(String(255), nullable=False)
     expected = Column(Text, nullable=False)

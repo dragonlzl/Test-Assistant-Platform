@@ -1865,6 +1865,150 @@ body {
       background: #e2e8f0;
       color: #475569;
     }
+    .summary-pill.case-lib-diff-pill {
+      margin-left: 0;
+      margin-right: 8px;
+      border-color: rgba(15,23,42,0.08);
+    }
+    .summary-pill.case-lib-diff-pill.added {
+      background: #dbeafe;
+      color: #1d4ed8;
+      border-color: #93c5fd;
+    }
+    .summary-pill.case-lib-diff-pill.updated {
+      background: #fef9c3;
+      color: #92400e;
+      border-color: #fcd34d;
+    }
+    .summary-pill.case-lib-diff-pill.deleted {
+      background: #fee2e2;
+      color: #b91c1c;
+      border-color: #fecaca;
+    }
+    .summary-pill.case-lib-diff-pill.added.active {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59,130,246,0.22);
+    }
+    .summary-pill.case-lib-diff-pill.updated.active {
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 2px rgba(245,158,11,0.22);
+    }
+    .summary-pill.case-lib-diff-pill.deleted.active {
+      border-color: #ef4444;
+      box-shadow: 0 0 0 2px rgba(239,68,68,0.22);
+    }
+    .case-library-changes-btn {
+      position: relative;
+      border-color: rgba(15,23,42,0.18);
+    }
+    .case-library-changes-btn.has-new:not([disabled]) {
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 2px rgba(245,158,11,0.18);
+      background: #fef9c3;
+      color: #92400e;
+    }
+    .case-library-changes-btn.has-new:not([disabled])::after {
+      content: '';
+      position: absolute;
+      top: 7px;
+      right: 9px;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #f97316;
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.9);
+    }
+    .case-lib-diff-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 10px 0 10px;
+    }
+    .case-lib-diff-case {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
+    }
+    .case-lib-diff-case-name {
+      font-weight: 700;
+      color: #0f172a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .case-lib-diff-case-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 8px;
+    }
+    .summary-pill.case-lib-diff-case-pill {
+      margin: 0;
+      background: #f1f5f9;
+      color: #334155;
+      border-color: rgba(15,23,42,0.12);
+      font-weight: 600;
+      max-width: 320px;
+    }
+    .summary-pill.case-lib-diff-case-pill.active {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59,130,246,0.18);
+      background: #dbeafe;
+      color: #1d4ed8;
+    }
+    .summary-pill.case-lib-diff-case-pill.has-new:not(.active) {
+      border-color: rgba(245,158,11,0.75);
+    }
+    .summary-pill.case-lib-diff-case-pill.needs-attention:not(.active) {
+      box-shadow: 0 0 0 2px rgba(245,158,11,0.14);
+    }
+    .case-lib-diff-table td {
+      vertical-align: top;
+    }
+    .case-lib-diff-time {
+      font-size: 12px;
+      color: #475569;
+      white-space: nowrap;
+    }
+    .case-lib-diff-cell .case-lib-diff-old {
+      color: #b91c1c;
+      font-size: 12px;
+      line-height: 1.35;
+      margin-bottom: 6px;
+    }
+    .case-lib-diff-cell .case-lib-diff-new {
+      color: #15803d;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .case-lib-diff-cell .case-lib-diff-only {
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .tag.case-lib-diff-kind {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 44px;
+    }
+    .tag.case-lib-diff-kind.added {
+      background: #dbeafe;
+      color: #1d4ed8;
+      border: 1px solid #93c5fd;
+    }
+    .tag.case-lib-diff-kind.updated {
+      background: #fef9c3;
+      color: #92400e;
+      border: 1px solid #fcd34d;
+    }
+    .tag.case-lib-diff-kind.deleted {
+      background: #fee2e2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
     .structure-image {
       margin-top: 12px;
       border: 1px solid rgba(15,23,42,0.08);

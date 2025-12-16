@@ -332,6 +332,22 @@
     }).then(handleResponse);
   }
 
+  function syncExecSetCaseLibrary(execSetId) {
+    return fetch('/api/exec/sets/' + execSetId + '/case-library-sync', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify({}),
+    }).then(handleResponse);
+  }
+
+  function ackExecSetCaseLibraryDiff(execSetId) {
+    return fetch('/api/exec/sets/' + execSetId + '/case-library-diff/ack', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify({}),
+    }).then(handleResponse);
+  }
+
   function upsertExecSetFromCaseFile(payload) {
     return fetch('/api/exec/sets/from-case-file', {
       method: 'POST',
@@ -549,6 +565,8 @@
     listExecCases: listExecCases,
     updateExecSet: updateExecSet,
     deleteExecSet: deleteExecSet,
+    syncExecSetCaseLibrary: syncExecSetCaseLibrary,
+    ackExecSetCaseLibraryDiff: ackExecSetCaseLibraryDiff,
     upsertExecSetFromCaseFile: upsertExecSetFromCaseFile,
     createExecCase: createExecCase,
     updateExecCase: updateExecCase,

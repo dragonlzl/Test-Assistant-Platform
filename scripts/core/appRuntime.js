@@ -1,4 +1,36 @@
 (function() {
+  // 启动时预标记“用例库同步触发序号”：
+  // - 仅当刷新前处于 tempexec（sessionStorage 记录）时，认为本次加载需要触发一次“同步+自动弹 diff”检查
+  // - 进入 tempexec 页签时也会由 tempexec 模块递增该序号
+  try {
+    window.app = window.app || {};
+    var cfg = window.app.config || {};
+    var key = cfg.activeTabKey || 'usecase-active-tab';
+    var saved = '';
+    if (key && typeof sessionStorage !== 'undefined') {
+      try {
+        saved = String(sessionStorage.getItem(key) || '');
+      } catch (err) {
+        saved = '';
+      }
+    }
+    if (saved === 'tempexec') {
+      var prev = Number(window.app.__tempexecCaseLibrarySyncSeq || 0);
+      if (!Number.isFinite(prev) || prev < 0) prev = 0;
+      window.app.__tempexecCaseLibrarySyncSeq = prev + 1;
+      window.app.__tempexecCaseLibrarySyncReason = 'load';
+    }
+  } catch (err) {
+    try {
+      window.app = window.app || {};
+      if (!Number.isFinite(Number(window.app.__tempexecCaseLibrarySyncSeq || 0))) {
+        window.app.__tempexecCaseLibrarySyncSeq = 0;
+      }
+    } catch (err2) {
+      // ignore
+    }
+  }
+
   function init(ctx) {
     ctx = ctx || {};
     var state = ctx.state || {};
@@ -443,6 +475,32 @@
         renderSettingsUI();
         clearStatusById('feishuWebhookStatus');
       }
+      // 进入“用例执行”页签时：递增一次“用例库同步触发序号”，并尽量触发一次执行页数据刷新。
+      // 这样即便业务模块尚未绑定 app-tab-activated 监听，也能在切页时完成一次同步检查（仅 DB 模式会产生实际同步）。
+      if (name === 'tempexec') {
+        try {
+          window.app = window.app || {};
+          var prev = Number(window.app.__tempexecCaseLibrarySyncSeq || 0);
+          if (!Number.isFinite(prev) || prev < 0) prev = 0;
+          window.app.__tempexecCaseLibrarySyncSeq = prev + 1;
+          window.app.__tempexecCaseLibrarySyncReason = 'tab-enter';
+        } catch (err) {
+          // ignore
+        }
+        try {
+          if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
+            setTimeout(function() {
+              try {
+                window.app.tempExecApi.loadTempExecState();
+              } catch (err2) {
+                // ignore
+              }
+            }, 0);
+          }
+        } catch (err3) {
+          // ignore
+        }
+      }
       markActiveTabGroup(name);
       var grp = getGroupNameForTab(name);
       showTabGroup(grp, { keepTabActive: true, expand: false });
@@ -460,7 +518,17 @@
     try {
       if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
         window.addEventListener('beforeunload', function() {
-          persistActiveTabForSession(getActiveTabFromDom());
+          var tab = getActiveTabFromDom();
+          persistActiveTabForSession(tab);
+          // 标记“刷新来源页签”，用于执行页做“仅在执行页刷新才触发自动同步/diff”的判定。
+          // 注意：来源标记会同时在“离开页面”时写入，但执行页侧会结合 navigation.type=reload 做最终判断，避免误触发。
+          try {
+            if (typeof sessionStorage !== 'undefined') {
+              sessionStorage.setItem('tap-reload-source-tab', tab || '');
+            }
+          } catch (err) {
+            // ignore
+          }
         });
         window.addEventListener('visibilitychange', function() {
           if (document && document.visibilityState === 'hidden') {
