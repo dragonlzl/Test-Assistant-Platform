@@ -23,10 +23,29 @@
 
   function formatTime(value) {
     if (!value) return '--';
+    function normalizeTimeInput(input) {
+      if (!input) return '';
+      if (typeof input === 'number') return input;
+      var raw = String(input || '').trim();
+      if (!raw) return '';
+      // 兼容 SQLite/Pydantic 输出：若时间不含时区信息，默认按 UTC 解释（避免展示少 8 小时）。
+      if (raw.indexOf('T') === -1 && raw.indexOf(' ') !== -1) {
+        raw = raw.replace(' ', 'T');
+      }
+      raw = raw.replace(/(\.\d{3})\d+/, '$1');
+      raw = raw.replace(/([+-]\d{2}):(\d{2})$/, '$1$2');
+      var hasTz = /Z$/i.test(raw) || /[+-]\d{2}\d{2}$/.test(raw) || /[+-]\d{2}:\d{2}$/.test(raw);
+      var isIsoWithTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw);
+      if (isIsoWithTime && !hasTz) raw += 'Z';
+      return raw;
+    }
     try {
-      return new Date(value).toLocaleString();
+      var normalized = normalizeTimeInput(value);
+      var d = typeof normalized === 'number' ? new Date(normalized) : new Date(normalized || value);
+      if (!d || isNaN(d.getTime())) return String(value || '--');
+      return d.toLocaleString();
     } catch (e) {
-      return value;
+      return String(value || '--');
     }
   }
 

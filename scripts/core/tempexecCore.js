@@ -2785,6 +2785,37 @@
       restoreScroll();
     }
 
+    function normalizeDbTimeInput(input) {
+      if (!input) return '';
+      if (typeof input === 'number') return input;
+      var text = String(input || '').trim();
+      if (!text) return '';
+      // 兼容 SQLite/Pydantic 输出：若时间不含时区信息，默认按 UTC 解释（避免展示少 8 小时）。
+      if (text.indexOf('T') === -1 && text.indexOf(' ') !== -1) {
+        text = text.replace(' ', 'T');
+      }
+      // 毫秒统一裁剪为 3 位，避免部分浏览器解析失败。
+      text = text.replace(/(\.\d{3})\d+/, '$1');
+      // Safari 兼容：将 +08:00 转为 +0800
+      text = text.replace(/([+-]\d{2}):(\d{2})$/, '$1$2');
+      var hasTz = /Z$/i.test(text) || /[+-]\d{2}\d{2}$/.test(text) || /[+-]\d{2}:\d{2}$/.test(text);
+      var isIsoWithTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text);
+      if (isIsoWithTime && !hasTz) text += 'Z';
+      return text;
+    }
+
+    function parseDbTimeMs(value) {
+      if (!value) return 0;
+      if (typeof value === 'number') {
+        return Number.isFinite(value) && value > 0 ? value : 0;
+      }
+      var normalized = normalizeDbTimeInput(value);
+      var ts = 0;
+      try { ts = Date.parse(normalized || value); } catch (err) { ts = 0; }
+      if (!isFinite(ts) || ts <= 0) return 0;
+      return ts;
+    }
+
     function normalizeCaseLibrarySyncMeta(raw) {
       var res = raw && typeof raw === 'object' ? raw : {};
       var summary = res.summary && typeof res.summary === 'object' ? res.summary : {};
@@ -2810,13 +2841,7 @@
         })
         .filter(function(item) { return item && item.diffAt; });
       history.sort(function(a, b) {
-        var ta = 0;
-        var tb = 0;
-        try { ta = a && a.diffAt ? Date.parse(a.diffAt) : 0; } catch (err) { ta = 0; }
-        try { tb = b && b.diffAt ? Date.parse(b.diffAt) : 0; } catch (err2) { tb = 0; }
-        if (!isFinite(ta)) ta = 0;
-        if (!isFinite(tb)) tb = 0;
-        return tb - ta;
+        return parseDbTimeMs(b && b.diffAt) - parseDbTimeMs(a && a.diffAt);
       });
       return {
         execSetId: res.exec_set_id || res.execSetId || null,
@@ -2858,19 +2883,16 @@
           var available = Boolean(meta && (meta.everChanged === true || hasDiff));
           if (!available) return null;
           var ts = 0;
-          try {
-            if (hasHistory && meta.history[0] && meta.history[0].diffAt) {
-              ts = Date.parse(meta.history[0].diffAt);
-            } else {
-              ts = meta.lastDiffAt ? Date.parse(meta.lastDiffAt) : 0;
-            }
-          } catch (err) {
-            ts = 0;
+          if (hasHistory && meta.history[0] && meta.history[0].diffAt) {
+            ts = parseDbTimeMs(meta.history[0].diffAt);
+          } else if (meta.lastDiffAt) {
+            ts = parseDbTimeMs(meta.lastDiffAt);
           }
           if (!isFinite(ts)) ts = 0;
           return {
             execSetId: String(id),
             name: getTempExecFileNameByExecSetId(id),
+            unacked: hasUnackedCaseLibraryDiff(meta),
             hasNew: Boolean(meta && meta.hasNewDiff),
             shouldAuto: Boolean(meta && meta.shouldAutoPopup),
             lastTs: ts,
@@ -2878,6 +2900,7 @@
         })
         .filter(Boolean);
       list.sort(function(a, b) {
+        if (a.unacked !== b.unacked) return a.unacked ? -1 : 1;
         if (a.shouldAuto !== b.shouldAuto) return a.shouldAuto ? -1 : 1;
         if (a.hasNew !== b.hasNew) return a.hasNew ? -1 : 1;
         if (a.lastTs !== b.lastTs) return b.lastTs - a.lastTs;
@@ -2904,6 +2927,19 @@
       store.byExecSetId[String(execSetId)] = meta || null;
     }
 
+    function hasUnackedCaseLibraryDiff(meta) {
+      if (!meta) return false;
+      var lastDiffAt = meta.lastDiffAt ? String(meta.lastDiffAt) : '';
+      if (!lastDiffAt) return false;
+      var lastShownAt = meta.lastShownAt ? String(meta.lastShownAt) : '';
+      if (!lastShownAt) return true;
+      var diffTs = parseDbTimeMs(lastDiffAt);
+      var shownTs = parseDbTimeMs(lastShownAt);
+      if (!diffTs) return false;
+      if (!shownTs) return true;
+      return diffTs > shownTs;
+    }
+
     function syncTempExecCaseLibraryChangesButton(file) {
       if (!tempExecCaseLibraryChangesBtn) return;
       if (!file || !file.execSetId || !isDbMode()) {
@@ -2916,7 +2952,7 @@
       var hasDiff = Boolean(meta && Array.isArray(meta.diff) && meta.diff.length);
       tempExecCaseLibraryChangesBtn.disabled = !meta || !(meta.everChanged === true || hasDiff);
       try {
-        tempExecCaseLibraryChangesBtn.classList.toggle('has-new', Boolean(meta && (meta.hasNewDiff || meta.shouldAutoPopup)));
+        tempExecCaseLibraryChangesBtn.classList.toggle('has-new', hasUnackedCaseLibraryDiff(meta));
       } catch (err) {
         // ignore
       }
@@ -2941,7 +2977,7 @@
           var store = ensureTempExecCaseLibraryDiffState();
           var meta = store.byExecSetId[String(id)] || null;
           var cls = 'summary-pill case-lib-diff-case-pill' + (String(id) === String(selectedExecSetId || '') ? ' active' : '');
-          if (meta && meta.hasNewDiff) cls += ' has-new';
+          if (hasUnackedCaseLibraryDiff(meta)) cls += ' has-new';
           if (meta && meta.shouldAutoPopup) cls += ' needs-attention';
           return (
             '<button type="button" class="' + cls + '" data-case-lib-diff-exec-set="' + escapeHtml(id) + '">' +
@@ -2975,19 +3011,8 @@
 
       function formatCaseLibDiffTime(iso) {
         if (!iso) return '';
-        var raw = String(iso || '').trim();
-        if (!raw) return '';
-        raw = raw.replace(' ', 'T');
-        // Safari 兼容：将 +08:00 转为 +0800；无时区时按 UTC 处理（避免少 8 小时）。
-        var tzMatch = raw.match(/([+-]\d\d):?(\d\d)$/);
-        if (tzMatch) {
-          raw = raw.slice(0, raw.length - tzMatch[0].length) + tzMatch[1] + tzMatch[2];
-        }
-        var hasZone = /[zZ]$/.test(raw) || /[+-]\d\d\d\d$/.test(raw);
-        if (!hasZone) raw += 'Z';
-        var ts = 0;
-        try { ts = Date.parse(raw); } catch (err) { ts = 0; }
-        if (!isFinite(ts) || ts <= 0) return String(iso);
+        var ts = parseDbTimeMs(iso);
+        if (!ts) return String(iso || '');
         var d = new Date(ts);
         var pad = function(n) { return n < 10 ? '0' + n : String(n); };
         return (
@@ -3019,8 +3044,7 @@
         if (!batch) return;
         var diffAt = batch.diffAt ? String(batch.diffAt) : '';
         var operator = batch.operator ? String(batch.operator) : '';
-        var batchTs = 0;
-        try { batchTs = diffAt ? Date.parse(diffAt) : 0; } catch (err) { batchTs = 0; }
+        var batchTs = parseDbTimeMs(diffAt);
         if (!isFinite(batchTs)) batchTs = 0;
         var sum = batch.summary && typeof batch.summary === 'object' ? batch.summary : {};
         var diff = Array.isArray(batch.diff) ? batch.diff : [];
@@ -3179,6 +3203,7 @@
 
     function openTempExecCaseLibraryDiffDrawer(options) {
       options = options || {};
+      var manual = Boolean(options.manual);
       var desired = options.execSetId ? String(options.execSetId) : '';
       var saved = getTempExecCaseLibraryDiffSelectedExecSetId();
       var active = getTempExecFile(state.tempExecActiveId);
@@ -3202,7 +3227,18 @@
       if (tempExecCaseLibraryDiffDrawer && typeof tempExecCaseLibraryDiffDrawer.open === 'function') {
         tempExecCaseLibraryDiffDrawer.open();
       }
-      if (isDbMode()) {
+      // 仅在用户主动点击“用例库变更”按钮时才清除提醒（ack），自动弹窗不清除醒目状态。
+      if (manual && isDbMode()) {
+        if (meta && meta.lastDiffAt) {
+          meta.lastShownAt = meta.lastDiffAt;
+          meta.hasNewDiff = false;
+          meta.shouldAutoPopup = false;
+          store.byExecSetId[String(execSetId)] = meta;
+          if (active && String(active.execSetId || '') === String(execSetId)) {
+            syncTempExecCaseLibraryChangesButton(active);
+          }
+          renderTempExecCaseLibraryDiffCaseTabs(execSetId);
+        }
         var client = getApiClient();
         if (client && typeof client.ackExecSetCaseLibraryDiff === 'function') {
           client.ackExecSetCaseLibraryDiff(execSetId).catch(function() {});
@@ -3425,11 +3461,7 @@
       list = list.filter(function(s) { return s && String(s.status || '') === 'active'; });
       // 按更新时间倒序，保持“最近执行的用例”更靠前
       list = list.slice().sort(function(a, b) {
-        var ta = a && a.updated_at ? Date.parse(a.updated_at) : 0;
-        var tb = b && b.updated_at ? Date.parse(b.updated_at) : 0;
-        if (!Number.isFinite(ta)) ta = 0;
-        if (!Number.isFinite(tb)) tb = 0;
-        return tb - ta;
+        return parseDbTimeMs(b && b.updated_at) - parseDbTimeMs(a && a.updated_at);
       });
 
       // 补齐项目/版本名称缓存，避免执行页出现 “项目#null/版本#10” 等异常展示。
@@ -3488,7 +3520,7 @@
       }
 
       var files = list.map(function(set) {
-        var createdAt = set && set.created_at ? Date.parse(set.created_at) : 0;
+        var createdAt = parseDbTimeMs(set && set.created_at);
         if (!Number.isFinite(createdAt) || createdAt <= 0) createdAt = Date.now();
         var cid = set && set.case_file_id !== null && set.case_file_id !== undefined ? String(set.case_file_id) : '';
         var meta = cid && caseFileMetaById[cid] ? caseFileMetaById[cid] : null;
@@ -3650,15 +3682,6 @@
           if (activeId && autoPopupExecSetIds.indexOf(String(activeId)) !== -1) openExecSetId = String(activeId);
           if (!openExecSetId) openExecSetId = String(autoPopupExecSetIds[0]);
           if (openExecSetId) openTempExecCaseLibraryDiffDrawer({ auto: true, execSetId: openExecSetId });
-          // 自动弹窗视为已提示本次变更：批量 ack，避免多执行集时重复打扰。
-          if (isDbMode()) {
-            var ackClient = getApiClient();
-            if (ackClient && typeof ackClient.ackExecSetCaseLibraryDiff === 'function') {
-              autoPopupExecSetIds.forEach(function(id) {
-                ackClient.ackExecSetCaseLibraryDiff(id).catch(function() {});
-              });
-            }
-          }
         }
         if (tempExecStatus) setStatus(tempExecStatus, '', '');
       })();

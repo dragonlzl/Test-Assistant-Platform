@@ -54,6 +54,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
 
     const execSet = { id: 2001, project_id: project.id, version_id: versions[0].id, case_file_id: 100, name: '用例A', status: 'active', created_at: now, updated_at: now };
     let syncCalls = 0;
+    let acked = false;
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -102,7 +103,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
           case_file_updated_at: now,
           base_updated_at: now,
           last_diff_at: now,
-          last_shown_at: hasNew ? null : now,
+          last_shown_at: acked ? now : null,
           ever_changed: true,
           has_new_diff: hasNew,
           should_auto_popup: hasNew,
@@ -112,6 +113,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
       }
 
       if (pathName === `/api/exec/sets/${execSet.id}/case-library-diff/ack` && method === 'POST') {
+        acked = true;
         return respond(200, { detail: 'ok', exec_set_id: execSet.id });
       }
 
@@ -168,14 +170,17 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
 
     const btn = page.locator('#tempExecCaseLibraryChangesBtn');
     await expect(btn).toBeEnabled();
+    await expect(btn).toHaveClass(/has-new/);
 
     // 再次刷新：无新变更时不自动弹，但按钮仍可手动打开并查看最近一次差异
     await page.reload();
     await waitAppReady(page, 30000);
     await expect(diffDrawer).not.toHaveClass(/open/);
+    await expect(btn).toHaveClass(/has-new/);
 
     await btn.click();
     await expect(diffDrawer).toHaveClass(/open/);
+    await expect(btn).not.toHaveClass(/has-new/);
     await expect(page.locator('#tempExecCaseLibraryDiffCaseName')).toContainText('用例A');
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('旧步骤');
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('新步骤');

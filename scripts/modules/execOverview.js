@@ -61,6 +61,52 @@
       .replace(/'/g, '&#39;');
   }
 
+  function normalizeTimeInput(input) {
+    if (!input) return '';
+    if (typeof input === 'number') return input;
+    var raw = String(input || '').trim();
+    if (!raw) return '';
+    // 兼容 SQLite/Pydantic 输出：若时间不含时区信息，默认按 UTC 解释（避免展示少 8 小时）。
+    if (raw.indexOf('T') === -1 && raw.indexOf(' ') !== -1) {
+      raw = raw.replace(' ', 'T');
+    }
+    raw = raw.replace(/(\.\d{3})\d+/, '$1');
+    raw = raw.replace(/([+-]\d{2}):(\d{2})$/, '$1$2');
+    var hasTz = /Z$/i.test(raw) || /[+-]\d{2}\d{2}$/.test(raw) || /[+-]\d{2}:\d{2}$/.test(raw);
+    var isIsoWithTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw);
+    if (isIsoWithTime && !hasTz) raw += 'Z';
+    return raw;
+  }
+
+  function parseTimeToDate(value) {
+    if (!value) return null;
+    if (value instanceof Date) return value;
+    var normalized = normalizeTimeInput(value);
+    try {
+      var d = typeof normalized === 'number' ? new Date(normalized) : new Date(normalized || value);
+      if (!d || isNaN(d.getTime())) return null;
+      return d;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function parseTimeMs(value) {
+    var d = parseTimeToDate(value);
+    return d ? d.getTime() : 0;
+  }
+
+  function formatTime(value) {
+    if (!value) return '--';
+    var d = parseTimeToDate(value);
+    if (!d) return String(value || '--');
+    try {
+      return d.toLocaleString();
+    } catch (e) {
+      return String(value || '--');
+    }
+  }
+
   function formatName(row) {
     if (!row) return '未知人员';
     if (row.username) return row.username;
@@ -320,20 +366,18 @@
           var order = fileOrderByVer && fileOrderByVer[vid] && Array.isArray(fileOrderByVer[vid])
             ? fileOrderByVer[vid].map(function(x) { return x === null || x === undefined ? '' : String(x); })
             : [];
-          list.sort(function(a, b) {
-            var ia = order.indexOf(String(a.exec_set_id));
-            var ib = order.indexOf(String(b.exec_set_id));
-            if (ia !== -1 || ib !== -1) {
-              if (ia === -1) return 1;
-              if (ib === -1) return -1;
-              if (ia !== ib) return ia - ib;
-            }
-            var ta = a && a.updated_at ? Date.parse(a.updated_at) : 0;
-            var tb = b && b.updated_at ? Date.parse(b.updated_at) : 0;
-            if (!isFinite(ta)) ta = 0;
-            if (!isFinite(tb)) tb = 0;
-            return tb - ta;
-          });
+	          list.sort(function(a, b) {
+	            var ia = order.indexOf(String(a.exec_set_id));
+	            var ib = order.indexOf(String(b.exec_set_id));
+	            if (ia !== -1 || ib !== -1) {
+	              if (ia === -1) return 1;
+	              if (ib === -1) return -1;
+	              if (ia !== ib) return ia - ib;
+	            }
+	            var ta = a && a.updated_at ? parseTimeMs(a.updated_at) : 0;
+	            var tb = b && b.updated_at ? parseTimeMs(b.updated_at) : 0;
+	            return tb - ta;
+	          });
 
           var chips = list
             .map(function(es) {
@@ -384,17 +428,15 @@
       );
     }
 
-    if (hasLayout) {
-      list = list.slice().sort(function(a, b) {
-        var ta = a && a.user_created_at ? Date.parse(a.user_created_at) : 0;
-        var tb = b && b.user_created_at ? Date.parse(b.user_created_at) : 0;
-        if (!isFinite(ta)) ta = 0;
-        if (!isFinite(tb)) tb = 0;
-        if (ta !== tb) return ta - tb;
-        return String(a && a.username ? a.username : '').localeCompare(String(b && b.username ? b.username : ''), 'zh-Hans-CN');
-      });
-      dom.userCards.innerHTML = list.map(renderUserLayoutCard).join('');
-      return;
+	    if (hasLayout) {
+	      list = list.slice().sort(function(a, b) {
+	        var ta = a && a.user_created_at ? parseTimeMs(a.user_created_at) : 0;
+	        var tb = b && b.user_created_at ? parseTimeMs(b.user_created_at) : 0;
+	        if (ta !== tb) return ta - tb;
+	        return String(a && a.username ? a.username : '').localeCompare(String(b && b.username ? b.username : ''), 'zh-Hans-CN');
+	      });
+	      dom.userCards.innerHTML = list.map(renderUserLayoutCard).join('');
+	      return;
     }
 
     // 兼容旧接口：按总量降序，便于快速找到工作量最大的人员。
@@ -440,13 +482,7 @@
     }
     if (dom.execSetEmpty) dom.execSetEmpty.classList.add('hidden');
     dom.execSetTableBody.innerHTML = list.map(function(item) {
-      var updatedAt = item && item.updated_at ? item.updated_at : '';
-      var updatedText = '';
-      try {
-        updatedText = updatedAt ? new Date(updatedAt).toLocaleString() : '--';
-      } catch (e) {
-        updatedText = updatedAt || '--';
-      }
+      var updatedText = formatTime(item && item.updated_at ? item.updated_at : '');
       return (
         '<tr>' +
           '<td>' + escapeHtml(item.module || '') + '</td>' +
