@@ -1149,3 +1149,4 @@
 - 更新记录：2025-12-16 修复复用子项“变更重跑/有改动”状态颜色缺失（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_reuse_toggle_sync.spec.js`）。  
 - 更新记录：2025-12-16 修复时间显示少 8 小时（无时区时间按 UTC 解析后转本地显示），覆盖用例库导入/编辑时间、人员/项目创建时间、操作记录时间、执行总览更新时间、执行页用例库变更时间相关展示/比较（`scripts/modules/caseLibrary.js`、`scripts/modules/admin.js`、`scripts/modules/opsLog.js`、`scripts/modules/execOverview.js`、`scripts/core/tempexecCore.js`；UI 回归：`npm run test:ui -- tests/ui/case_library.spec.js -g 导入`、`npm run test:ui -- tests/ui/exec_overview.spec.js`）。  
 - 更新记录：2025-12-16 执行页“用例库变更”按钮提醒仅在用户主动点击后清除；未点击时跨刷新保持醒目，新变更再次进入提醒（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 更新记录：2025-12-16 用例库“编辑用例”抽屉新增“归属”下拉（全部/当前登录用户），默认选中当前用户以便聚焦自己负责/维护的用例文件（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`）。  
