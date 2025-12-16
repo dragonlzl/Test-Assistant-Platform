@@ -3796,6 +3796,11 @@ body {
       color: #b45309;
       border-color: #fde68a;
     }
+    .reuse-entry .status-select.changed {
+      background: #dbeafe;
+      color: #1d4ed8;
+      border-color: #bfdbfe;
+    }
     .reuse-entry .status-select.unspecified {
       background: #e2e8f0;
       color: #475569;

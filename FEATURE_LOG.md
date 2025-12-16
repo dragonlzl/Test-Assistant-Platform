@@ -1146,3 +1146,4 @@
 - 复用说明：复用既有执行集 PATCH 与用例库 `reuse_enabled` 字段，不新增新接口，仅补齐同步方向与默认行为。  
 - 测试与验证：`python3 -m compileall -q backend`（通过）；`npm run test:ui -- tests/ui/tempexec_reuse_toggle_sync.spec.js`（通过）；API：启动测试后端（`APP_DB_FILE=apitest.db python -m uvicorn backend.main:app --host 127.0.0.1 --port <port>`）后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_persistence.spec.js`（通过）。  
 - 更新记录：2025-12-16 执行页取消复用同步到用例库上线（`backend/routers/exec_routes.py`、`tests/api/exec_persistence.spec.js`、`tests/ui/tempexec_reuse_toggle_sync.spec.js`）。  
+- 更新记录：2025-12-16 修复复用子项“变更重跑/有改动”状态颜色缺失（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_reuse_toggle_sync.spec.js`）。  

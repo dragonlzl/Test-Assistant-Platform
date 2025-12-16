@@ -5405,15 +5405,24 @@
       return (
         '<div class="reuse-list">' +
           details.map(function(detail) {
-            var statusClass = mapStatusToClass(detail.status);
+            var currentStatus = detail && detail.status ? String(detail.status) : '未执行';
+            if (currentStatus === 'pending') currentStatus = '未执行';
+            var statusClass = mapStatusToClass(currentStatus);
+            var optionsHtml = '';
+            // 系统态：展示为当前值，但不允许用户主动选择（不出现在常规选项中）。
+            if (currentStatus === '变更重跑' || currentStatus === '有改动') {
+              statusClass = 'changed';
+              optionsHtml += '<option value="' + escapeHtml(currentStatus) + '" selected disabled>' + escapeHtml(currentStatus) + '</option>';
+            }
+            optionsHtml += tempExecResultOptions.map(function(opt) {
+              return '<option value="' + opt + '" ' + (currentStatus === opt ? 'selected' : '') + '>' + opt + '</option>';
+            }).join('');
             return (
               '<div class="reuse-entry" data-detail="' + detail.id + '">' +
                 '<input class="reuse-input" data-temp-reuse-text="' + file.id + '" data-index="' + caseIndex + '" data-detail="' + detail.id + '" placeholder="输入测试项..." value="' + escapeHtml(detail.text || '') + '"/>' +
                 '<input class="reuse-note" data-temp-reuse-note="' + file.id + '" data-index="' + caseIndex + '" data-detail="' + detail.id + '" placeholder="输入独立备注..." value="' + escapeHtml(detail.note || '') + '"/>' +
                 '<select class="status-select ' + statusClass + '" data-temp-reuse-status="' + file.id + '" data-index="' + caseIndex + '" data-detail="' + detail.id + '">' +
-                  tempExecResultOptions.map(function(opt) {
-                    return '<option value="' + opt + '" ' + (detail.status === opt ? 'selected' : '') + '>' + opt + '</option>';
-                  }).join('') +
+                  optionsHtml +
                 '</select>' +
                 '<button type="button" class="reuse-remove" data-temp-reuse-remove="' + file.id + '" data-index="' + caseIndex + '" data-detail="' + detail.id + '" title="删除测试项">删除</button>' +
               '</div>'
