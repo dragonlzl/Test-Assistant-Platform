@@ -401,8 +401,8 @@ test.describe('文件导入导出与布局视图', () => {
           { selector: '#tempExecOverviewBtn', disabled: false },
           // DB 模式下用例执行改为“项目/版本分组”，不支持手动新建版本
           { selector: '#createTempVersionBtn', disabled: true },
-          { selector: '#exportTempExecConfigBtn', disabled: true },
-          { selector: '#importTempExecConfigBtn', disabled: false },
+          { selector: '#exportTempExecConfigBtn', disabled: true, hidden: true },
+          { selector: '#importTempExecConfigBtn', disabled: true, hidden: true },
           { selector: '#exportTempExecXmindBtn', disabled: true },
           { selector: '#tempExecBackBtn', disabled: false },
         ],
@@ -435,6 +435,10 @@ test.describe('文件导入导出与布局视图', () => {
       for (const item of group.items) {
         const locator = page.locator(item.selector);
         await expect(locator).toHaveCount(1);
+        if (Object.prototype.hasOwnProperty.call(item, 'hidden')) {
+          if (item.hidden) await expect(locator).toBeHidden();
+          else await expect(locator).toBeVisible();
+        }
         if (item.disabled) {
           await expect(locator).toBeDisabled();
         } else {

@@ -259,6 +259,10 @@ test.describe('用例执行-导入需确认入库', () => {
 
     await page.click('#openTempExecDrawerBtn');
     await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#tempExecDrawer')).toContainText('导入用例后需要点击');
+    await expect(page.locator('#tempExecDrawer')).toContainText('确认入库');
+    await expect(page.locator('#exportTempExecConfigBtn')).toBeHidden();
+    await expect(page.locator('#importTempExecConfigBtn')).toBeHidden();
 
     await expect(page.locator('#tempExecImportConfirmBtn')).toBeDisabled();
     await expect(page.locator('#tempExecImportFileHint')).toContainText('未选择文件');

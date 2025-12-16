@@ -101,6 +101,65 @@ test.describe('exec persistence api', () => {
     const matchedFileOff = Array.isArray(listedOff) ? listedOff.find((f) => f && f.id === caseFileId) : null;
     expect(matchedFileOff && matchedFileOff.reuse_enabled).toBeFalsy();
 
+    // 兼容旧数据：exec_sets.case_file_id 为空但 source 内含 case_file_id 时，复用开关也应同步到用例库。
+    // 使用另一份用例文件隔离验证，避免影响后续“from-case-file upsert 复用同一 exec_set”断言。
+    const legacyImportRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: 'legacy-source_result_20251216121212.json',
+        source: 'apitest',
+        items: [
+          { module: '模块L', title: '用例L', expected: 'ok', priority: 'P0', precondition: '', steps: '', remark: '' },
+        ],
+      },
+    });
+    expect(legacyImportRes.status()).toBe(201);
+    const legacyCaseFile = await legacyImportRes.json();
+    const legacyCaseFileId = legacyCaseFile.id;
+    expect(legacyCaseFileId).toBeTruthy();
+
+    const legacySetRes = await ctx.post(`${apiBase}/api/exec/sets`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        name: 'legacy-source-set',
+        source: `case_file:${legacyCaseFileId}`,
+        reuse_enabled: false,
+        reuse_presets: [],
+      },
+    });
+    expect(legacySetRes.status()).toBe(201);
+    const legacySet = await legacySetRes.json();
+    expect(legacySet && legacySet.id).toBeTruthy();
+    expect(legacySet.case_file_id).toBeFalsy();
+
+    const legacyToggleOnRes = await ctx.patch(`${apiBase}/api/exec/sets/${legacySet.id}`, {
+      headers,
+      data: { reuse_enabled: true },
+    });
+    expect(legacyToggleOnRes.status()).toBe(200);
+
+    const legacyListOnRes = await ctx.get(`${apiBase}/api/case-files?project_id=${projectId}`, { headers });
+    expect(legacyListOnRes.status()).toBe(200);
+    const legacyListedOn = await legacyListOnRes.json();
+    const legacyMatchedOn = Array.isArray(legacyListedOn) ? legacyListedOn.find((f) => f && f.id === legacyCaseFileId) : null;
+    expect(legacyMatchedOn && legacyMatchedOn.reuse_enabled).toBeTruthy();
+
+    const legacyToggleOffRes = await ctx.patch(`${apiBase}/api/exec/sets/${legacySet.id}`, {
+      headers,
+      data: { reuse_enabled: false },
+    });
+    expect(legacyToggleOffRes.status()).toBe(200);
+
+    const legacyListOffRes = await ctx.get(`${apiBase}/api/case-files?project_id=${projectId}`, { headers });
+    expect(legacyListOffRes.status()).toBe(200);
+    const legacyListedOff = await legacyListOffRes.json();
+    const legacyMatchedOff = Array.isArray(legacyListedOff) ? legacyListedOff.find((f) => f && f.id === legacyCaseFileId) : null;
+    expect(legacyMatchedOff && legacyMatchedOff.reuse_enabled).toBeFalsy();
+
     // 关闭后再次转执行/同步：不应被用例库“反向开启”为复用。
     const upsertAgainRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
       headers,

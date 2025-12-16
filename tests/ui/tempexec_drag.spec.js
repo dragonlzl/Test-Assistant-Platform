@@ -1,5 +1,4 @@
 const { test, expect } = require('@playwright/test');
-const fs = require('fs');
 
 test.describe('执行视图导入导出与拖拽', () => {
   async function gotoIndexWithRetry(page) {
@@ -164,21 +163,8 @@ test.describe('执行视图导入导出与拖拽', () => {
       });
       localStorage.setItem('cleaner-assignment-v1', JSON.stringify(window.app.state.assignments));
     });
-    const [cfgDownload] = await Promise.all([
-      page.waitForEvent('download', { timeout: 20000 }),
-      page.click('#exportTempExecConfigBtn'),
-    ]);
-    expect(await cfgDownload.suggestedFilename()).toMatch(/tempexec_full/i);
-    const cfgPath = await cfgDownload.path();
-    if (cfgPath) {
-      const cfgContent = fs.readFileSync(cfgPath, 'utf-8');
-      const cfgJson = JSON.parse(cfgContent);
-      expect(Array.isArray(cfgJson.models)).toBeTruthy();
-      expect(cfgJson.models[0] && cfgJson.models[0].model).toBe('mock-model');
-      expect(cfgJson.assignments && cfgJson.assignments.cleanPrompt).toBe('clean-prompt-ui');
-      expect(cfgJson.assignments && cfgJson.assignments.cleanTemperature).toBe(0.4);
-      expect(cfgJson.assignments && cfgJson.assignments.cleanReasoning).toBe('medium');
-    }
+    await expect(page.locator('#exportTempExecConfigBtn')).toBeHidden();
+    await expect(page.locator('#importTempExecConfigBtn')).toBeHidden();
     await closeTempExecDrawer(page);
     // 执行视图不再提供“导出本次执行JSON”按钮
 

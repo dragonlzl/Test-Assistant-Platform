@@ -100,9 +100,11 @@ test.describe('工作流关键交互', () => {
     const exportCaseGen = page.locator('#exportCaseGen');
     await expect(exportCaseGen).toBeDisabled();
     const exportTempExecCfg = page.locator('#exportTempExecConfigBtn');
-    await expect(exportTempExecCfg).toBeDisabled();
+    await expect(exportTempExecCfg).toHaveCount(1);
+    await expect(exportTempExecCfg).toBeHidden();
     const importTempExecCfg = page.locator('#importTempExecConfigBtn');
     await expect(importTempExecCfg).toHaveCount(1);
+    await expect(importTempExecCfg).toBeHidden();
     const caseViewBtn = page.locator('#caseViewBtn');
     if (await caseViewBtn.isVisible()) {
       await caseViewBtn.click();

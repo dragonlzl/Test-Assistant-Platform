@@ -170,15 +170,24 @@ def update_exec_set(
         exec_set.updated_at = datetime.now(timezone.utc)
         db.add(exec_set)
         # 执行页复用开关需同步到用例库（case_files.reuse_enabled），避免执行页取消勾选后被用例库状态“反向开启”。
-        if exec_set.case_file_id:
-            if turned_on_reuse:
-                db.query(models.CaseFile).filter(models.CaseFile.id == exec_set.case_file_id).update(
-                    {models.CaseFile.reuse_enabled: True}, synchronize_session=False
-                )
-            elif turned_off_reuse:
-                db.query(models.CaseFile).filter(models.CaseFile.id == exec_set.case_file_id).update(
-                    {models.CaseFile.reuse_enabled: False}, synchronize_session=False
-                )
+        # 兼容旧数据：部分 exec_sets.case_file_id 为空，但 source 内含 case_file_id（case_file:123）。
+        resolved_case_file_id = _parse_case_file_id(exec_set.case_file_id, exec_set.source)
+        if resolved_case_file_id and exec_set.case_file_id is None:
+            exec_set.case_file_id = resolved_case_file_id
+            db.add(exec_set)
+        if resolved_case_file_id and (turned_on_reuse or turned_off_reuse):
+            case_file = (
+                db.query(models.CaseFile)
+                .filter(models.CaseFile.id == int(resolved_case_file_id))
+                .first()
+            )
+            if case_file and int(case_file.project_id) == int(exec_set.project_id):
+                desired = True if turned_on_reuse else False
+                if bool(getattr(case_file, "reuse_enabled", False)) != desired:
+                    case_file.reuse_enabled = desired
+                    case_file.updated_by = user.id
+                    case_file.updated_at = exec_set.updated_at
+                    db.add(case_file)
         log_operation(
             db=db,
             user_id=user.id,

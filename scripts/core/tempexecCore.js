@@ -2274,6 +2274,7 @@
       if (!file || !caseItem) return '未执行';
       // 系统态：后端可能标记为“变更重跑/有改动”，该状态统计与过滤均按“未执行”处理。
       var raw = caseItem.actual || '未执行';
+      try { raw = String(raw).trim(); } catch (err) { raw = raw || '未执行'; }
       if (raw === 'pending') raw = '未执行';
       if (raw === '变更重跑' || raw === '有改动') return '未执行';
       if (!file.reuseEnabled) return raw;
@@ -2286,6 +2287,7 @@
       details.forEach(function(detail) {
         if (!detail) return;
         var status = detail.status || '未执行';
+        try { status = String(status).trim(); } catch (err) { status = status || '未执行'; }
         if (status === '通过') stats.passed += 1;
         else if (status === '失败') stats.failed += 1;
         else if (status === '阻塞') stats.blocked += 1;
@@ -2374,15 +2376,18 @@
     }
 
     function mapStatusToClass(status) {
-      if (status === '通过') return 'passed';
-      if (status === '失败') return 'failed';
-      if (status === '阻塞') return 'blocked';
-      if (status === '不适用') return 'unspecified';
+      var text = status === null || status === undefined ? '' : String(status);
+      text = text.trim();
+      if (text === '通过') return 'passed';
+      if (text === '失败') return 'failed';
+      if (text === '阻塞') return 'blocked';
+      if (text === '不适用') return 'unspecified';
       return 'pending';
     }
 
     function getCaseExecutionDisplay(file, caseItem) {
       var raw = caseItem && caseItem.actual ? String(caseItem.actual) : '未执行';
+      raw = raw.trim();
       if (raw === 'pending') raw = '未执行';
       if (raw === '变更重跑' || raw === '有改动') {
         return { label: raw, className: 'changed' };
@@ -5616,6 +5621,7 @@
         '<div class="reuse-list">' +
           details.map(function(detail) {
             var currentStatus = detail && detail.status ? String(detail.status) : '未执行';
+            currentStatus = currentStatus.trim();
             if (currentStatus === 'pending') currentStatus = '未执行';
             var statusClass = mapStatusToClass(currentStatus);
             var optionsHtml = '';
@@ -5727,6 +5733,7 @@
         if (defectOpen) defectBtnClass.push('active');
         if (hasDefects) defectBtnClass.push('filled');
         var currentStatus = item && item.actual ? String(item.actual) : '未执行';
+        currentStatus = currentStatus.trim();
         if (currentStatus === 'pending') currentStatus = '未执行';
         var resultOptions = '';
         // 系统态：展示为当前值，但不允许用户主动选择（不出现在常规选项中）。

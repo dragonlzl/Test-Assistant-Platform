@@ -1146,6 +1146,7 @@
 - 复用说明：复用既有执行集 PATCH 与用例库 `reuse_enabled` 字段，不新增新接口，仅补齐同步方向与默认行为。  
 - 测试与验证：`python3 -m compileall -q backend`（通过）；`npm run test:ui -- tests/ui/tempexec_reuse_toggle_sync.spec.js`（通过）；API：启动测试后端（`APP_DB_FILE=apitest.db python -m uvicorn backend.main:app --host 127.0.0.1 --port <port>`）后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_persistence.spec.js`（通过）。  
 - 更新记录：2025-12-16 执行页取消复用同步到用例库上线（`backend/routers/exec_routes.py`、`tests/api/exec_persistence.spec.js`、`tests/ui/tempexec_reuse_toggle_sync.spec.js`）。  
+- 更新记录：2025-12-16 兼容旧执行集未落 `case_file_id`（仅 `source=case_file:<id>`）时，复用开关同步仍可更新用例库状态（`backend/routers/exec_routes.py`、`tests/api/exec_persistence.spec.js`）。  
 - 更新记录：2025-12-16 修复复用子项“变更重跑/有改动”状态颜色缺失（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_reuse_toggle_sync.spec.js`）。  
 - 更新记录：2025-12-16 修复时间显示少 8 小时（无时区时间按 UTC 解析后转本地显示），覆盖用例库导入/编辑时间、人员/项目创建时间、操作记录时间、执行总览更新时间、执行页用例库变更时间相关展示/比较（`scripts/modules/caseLibrary.js`、`scripts/modules/admin.js`、`scripts/modules/opsLog.js`、`scripts/modules/execOverview.js`、`scripts/core/tempexecCore.js`；UI 回归：`npm run test:ui -- tests/ui/case_library.spec.js -g 导入`、`npm run test:ui -- tests/ui/exec_overview.spec.js`）。  
 - 更新记录：2025-12-16 执行页“用例库变更”按钮提醒仅在用户主动点击后清除；未点击时跨刷新保持醒目，新变更再次进入提醒（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
@@ -1153,3 +1154,4 @@
 - 更新记录：2025-12-16 用例库“查看&编辑”抽屉新增“用例名”搜索框（用于快速过滤定位用例文件），并将入口/列表按钮文案统一为“查看&编辑”（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`）。  
 - 更新记录：2025-12-16 执行页与用例库编辑点击“＋”新增用例行增加绿色描边高亮，并在页面生命周期内保持到下次刷新（`scripts/core/tempexecCore.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/new_added_highlight.spec.js`）。  
 - 更新记录：2025-12-16 执行页/用例库编辑在 8 秒待确认期内重复点增删时，会在点击位置浮出提示“当前有待确认的增删操作，请先撤回或等待入库”（3 秒后自动消失），避免滚动后看不到固定位置提示（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/undo_click_hint.spec.js`）。  
+- 更新记录：2025-12-16 执行页“用例导入&分配”温馨提示改为提醒导入后需点击“确认入库”才能进行下一步，并暂时屏蔽“导出/导入执行页面配置”按钮（`index.html`、`tests/ui/tempexec_import_confirm.spec.js`、`tests/ui/files_layout.spec.js`、`tests/ui/workflow.spec.js`、`tests/ui/tempexec_drag.spec.js`）。  

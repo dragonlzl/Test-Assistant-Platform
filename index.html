@@ -1180,11 +1180,11 @@
 <p class="hint">导入 XMind/JSON/文本测试用例后，可在下方直接执行并记录实际结果。支持多份文件切换，执行数据会自动保存。</p>
 <div class="notice-card highlight" style="margin-bottom:12px;">
 <strong>温馨提示</strong>
-<p style="margin:4px 0 0;">点击下方“导出执行页面配置”可一键备份当前执行页面，若数据丢失，可通过导入该文件 100% 还原；导入时会覆盖当前数据，请谨慎操作。</p>
+<p style="margin:4px 0 0;">导入用例后需要点击“确认入库”，入库完成后才能进行下一步操作（如：分配执行人 / 进入执行视图）。</p>
 </div>
 <div class="actions" style="margin-bottom:12px;">
-<button class="pill success" disabled="" id="exportTempExecConfigBtn">导出执行页面配置</button>
-<button class="secondary" id="importTempExecConfigBtn">导入执行页面配置</button>
+<button class="pill success" disabled hidden id="exportTempExecConfigBtn">导出执行页面配置</button>
+<button class="secondary" disabled hidden id="importTempExecConfigBtn">导入执行页面配置</button>
 <input accept=".json" hidden="" id="importTempExecConfigFile" type="file"/>
 <div class="template-dropdown" id="caseTemplateDropdown">
   <button class="pill template-toggle" id="caseTemplateToggle" type="button">
