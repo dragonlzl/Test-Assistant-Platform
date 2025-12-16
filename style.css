@@ -4857,12 +4857,12 @@ body {
   border-bottom: 1px solid #e5e7eb;
 }
 .exec-overview-version-box .body {
-  --exec-overview-chip-height: 112px;
+  --exec-overview-chip-height: 88px;
   padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 308px;
+  max-height: 248px;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -4873,7 +4873,7 @@ button.exec-overview-file-chip,
   align-items: stretch;
   flex: 0 0 var(--exec-overview-chip-height);
   gap: 6px;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-radius: 10px;
   background: #fff;
   border: 1px solid #e5e7eb;
@@ -4995,7 +4995,7 @@ button.exec-overview-file-chip,
   text-align: right;
   color: #374151;
   font-weight: 700;
-  font-size: 12px;
+  font-size: 11px;
 }
 .exec-overview-file-chip.state-ok { border-color: rgba(34, 197, 94, 0.6); }
 .exec-overview-file-chip.state-err { border-color: rgba(239, 68, 68, 0.7); }
