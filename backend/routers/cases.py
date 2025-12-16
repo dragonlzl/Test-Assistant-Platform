@@ -254,6 +254,7 @@ def import_case_file(
         case_file.imported_at = now
         case_file.source = payload.source
         case_file.updated_at = now
+        case_file.updated_by = user.id
         if getattr(payload, "reuse_enabled", None) is True:
             case_file.reuse_enabled = True
         db.query(models.CaseItem).filter(models.CaseItem.case_file_id == case_file.id).delete(
@@ -268,6 +269,7 @@ def import_case_file(
             file_name_clean=clean_name,
             reuse_enabled=True if (getattr(payload, "reuse_enabled", None) is True) else False,
             importer_id=user.id,
+            updated_by=user.id,
             imported_at=now,
             source=payload.source,
         )
@@ -541,7 +543,7 @@ def update_case_item(
         case_item.updated_by = user.id
         case_item.updated_at = now
         db.query(models.CaseFile).filter(models.CaseFile.id == case_item.case_file_id).update(
-            {models.CaseFile.updated_at: now}, synchronize_session=False
+            {models.CaseFile.updated_at: now, models.CaseFile.updated_by: user.id}, synchronize_session=False
         )
         db.add(case_item)
         log_operation(
@@ -593,7 +595,7 @@ def create_case_item(
     )
     db.add(case_item)
     db.query(models.CaseFile).filter(models.CaseFile.id == case_file_id).update(
-        {models.CaseFile.updated_at: now}, synchronize_session=False
+        {models.CaseFile.updated_at: now, models.CaseFile.updated_by: user.id}, synchronize_session=False
     )
     log_operation(
         db=db,
@@ -628,7 +630,7 @@ def delete_case_item(
     now = datetime.now(timezone.utc)
     db.delete(case_item)
     db.query(models.CaseFile).filter(models.CaseFile.id == case_item.case_file_id).update(
-        {models.CaseFile.updated_at: now}, synchronize_session=False
+        {models.CaseFile.updated_at: now, models.CaseFile.updated_by: user.id}, synchronize_session=False
     )
     log_operation(
         db=db,

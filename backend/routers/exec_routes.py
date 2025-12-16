@@ -926,6 +926,7 @@ def _normalize_exec_set_case_library_history(raw) -> List[schemas.ExecCaseLibrar
         if not isinstance(item, dict):
             continue
         diff_at = item.get("diff_at") or item.get("diffAt") or item.get("last_diff_at") or item.get("lastDiffAt")
+        operator = item.get("operator") or item.get("operator_name") or item.get("operatorName") or None
         summary_raw = item.get("summary") or {}
         diff_raw = item.get("diff") or []
         if not diff_at:
@@ -945,6 +946,7 @@ def _normalize_exec_set_case_library_history(raw) -> List[schemas.ExecCaseLibrar
         try:
             batch = schemas.ExecCaseLibraryDiffHistoryBatch(
                 diff_at=diff_at,
+                operator=str(operator) if operator else None,
                 summary=summary,
                 diff=diff_entries,
             )
@@ -964,6 +966,7 @@ def _dump_exec_set_case_library_history(
     return [
         {
             "diff_at": b.diff_at.isoformat() if getattr(b, "diff_at", None) else None,
+            "operator": (str(b.operator) if getattr(b, "operator", None) else None),
             "summary": (b.summary.model_dump() if getattr(b, "summary", None) else schemas.ExecCaseLibraryDiffSummary().model_dump()),
             "diff": [e.model_dump() for e in (b.diff or [])],
         }
@@ -1051,6 +1054,24 @@ def sync_exec_set_case_library(
     has_new_diff = bool(summary.added or summary.updated or summary.deleted)
     if has_new_diff:
         exec_set.case_file_last_diff_at = case_file.updated_at
+        operator_name = None
+        try:
+            if getattr(case_file, "updated_by", None):
+                op_user = (
+                    db.query(models.User)
+                    .filter(models.User.id == int(case_file.updated_by))
+                    .first()
+                )
+                operator_name = op_user.username if op_user and op_user.username else None
+            if not operator_name and getattr(case_file, "importer_id", None):
+                op_user2 = (
+                    db.query(models.User)
+                    .filter(models.User.id == int(case_file.importer_id))
+                    .first()
+                )
+                operator_name = op_user2.username if op_user2 and op_user2.username else None
+        except Exception:
+            operator_name = None
         latest_payload = {
             "case_file_id": int(case_file.id),
             "case_file_updated_at": case_file.updated_at.isoformat() if case_file.updated_at else None,
@@ -1062,6 +1083,7 @@ def sync_exec_set_case_library(
         try:
             batch = schemas.ExecCaseLibraryDiffHistoryBatch(
                 diff_at=case_file.updated_at,
+                operator=operator_name,
                 summary=summary,
                 diff=new_entries,
             )

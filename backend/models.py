@@ -122,6 +122,7 @@ class CaseFile(Base):
     file_name_clean = Column(String(255), nullable=False)
     reuse_enabled = Column(Boolean, default=False, nullable=False)
     importer_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     imported_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False

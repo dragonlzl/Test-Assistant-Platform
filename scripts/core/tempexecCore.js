@@ -2785,10 +2785,12 @@
         .map(function(item) {
           var it = item && typeof item === 'object' ? item : {};
           var diffAt = it.diff_at || it.diffAt || it.last_diff_at || it.lastDiffAt || '';
+          var operator = it.operator || it.operator_name || it.operatorName || '';
           var sum = it.summary && typeof it.summary === 'object' ? it.summary : {};
           var d = Array.isArray(it.diff) ? it.diff : [];
           return {
             diffAt: diffAt ? String(diffAt) : '',
+            operator: operator ? String(operator) : '',
             summary: {
               added: Number(sum.added) || 0,
               updated: Number(sum.updated) || 0,
@@ -2944,6 +2946,12 @@
     function renderTempExecCaseLibraryDiff(execSetId) {
       if (!tempExecCaseLibraryDiffBody) return;
       var store = ensureTempExecCaseLibraryDiffState();
+      var lastRendered = state.tempExecCaseLibraryDiffLastRenderedExecSetId ? String(state.tempExecCaseLibraryDiffLastRenderedExecSetId) : '';
+      var nextRendered = execSetId ? String(execSetId) : '';
+      if (nextRendered && nextRendered !== lastRendered) {
+        store.filterByExecSetId[nextRendered] = '';
+        state.tempExecCaseLibraryDiffLastRenderedExecSetId = nextRendered;
+      }
       var meta = execSetId ? store.byExecSetId[String(execSetId)] : null;
       var filter = execSetId && store.filterByExecSetId[String(execSetId)]
         ? String(store.filterByExecSetId[String(execSetId)])
@@ -2958,8 +2966,18 @@
 
       function formatCaseLibDiffTime(iso) {
         if (!iso) return '';
+        var raw = String(iso || '').trim();
+        if (!raw) return '';
+        raw = raw.replace(' ', 'T');
+        // Safari 兼容：将 +08:00 转为 +0800；无时区时按 UTC 处理（避免少 8 小时）。
+        var tzMatch = raw.match(/([+-]\d\d):?(\d\d)$/);
+        if (tzMatch) {
+          raw = raw.slice(0, raw.length - tzMatch[0].length) + tzMatch[1] + tzMatch[2];
+        }
+        var hasZone = /[zZ]$/.test(raw) || /[+-]\d\d\d\d$/.test(raw);
+        if (!hasZone) raw += 'Z';
         var ts = 0;
-        try { ts = Date.parse(iso); } catch (err) { ts = 0; }
+        try { ts = Date.parse(raw); } catch (err) { ts = 0; }
         if (!isFinite(ts) || ts <= 0) return String(iso);
         var d = new Date(ts);
         var pad = function(n) { return n < 10 ? '0' + n : String(n); };
@@ -2991,6 +3009,7 @@
       batches.forEach(function(batch) {
         if (!batch) return;
         var diffAt = batch.diffAt ? String(batch.diffAt) : '';
+        var operator = batch.operator ? String(batch.operator) : '';
         var batchTs = 0;
         try { batchTs = diffAt ? Date.parse(diffAt) : 0; } catch (err) { batchTs = 0; }
         if (!isFinite(batchTs)) batchTs = 0;
@@ -3010,7 +3029,7 @@
           });
         }
         diff.forEach(function(entry) {
-          rows.push({ entry: entry, diffAt: diffAt, ts: batchTs });
+          rows.push({ entry: entry, diffAt: diffAt, operator: operator, ts: batchTs });
         });
       });
 
@@ -3060,7 +3079,7 @@
       }
 
       if (!visible.length) {
-        tempExecCaseLibraryDiffBody.innerHTML = '<tr><td colspan="7"><p class="hint">暂无变更</p></td></tr>';
+        tempExecCaseLibraryDiffBody.innerHTML = '<tr><td colspan="8"><p class="hint">暂无变更</p></td></tr>';
         return;
       }
 
@@ -3089,10 +3108,12 @@
         changedFields.forEach(function(f) { changedMap[String(f)] = true; });
         var typeTag = '<span class="tag case-lib-diff-kind ' + kind + '">' + escapeHtml(getCaseLibDiffKindLabel(kind)) + '</span>';
         var timeText = formatCaseLibDiffTime(row && row.diffAt ? row.diffAt : '');
+        var operatorText = row && row.operator ? String(row.operator) : '';
         return (
           '<tr>' +
             '<td>' + typeTag + '</td>' +
             '<td class="case-lib-diff-time">' + escapeHtml(timeText) + '</td>' +
+            '<td class="case-lib-diff-operator">' + escapeHtml(operatorText) + '</td>' +
             '<td>' + buildCell(oldSnap, newSnap, 'module', Boolean(changedMap.module)) + '</td>' +
             '<td>' + buildCell(oldSnap, newSnap, 'title', Boolean(changedMap.title)) + '</td>' +
             '<td>' + buildCell(oldSnap, newSnap, 'precondition', Boolean(changedMap.precondition)) + '</td>' +

@@ -449,3 +449,18 @@ def apply_migrations(engine: Engine) -> None:
                 if "case_file_diff_history_json" not in cols:
                     conn.execute(text("ALTER TABLE exec_sets ADD COLUMN case_file_diff_history_json TEXT"))
             _mark_applied(conn, 12)
+
+        # v13: case_files 增加 updated_by（用于执行页 diff 展示“操作人”）。
+        if not _is_applied(conn, 13):
+            if "case_files" in tables:
+                cols = set([c["name"] for c in insp.get_columns("case_files")])
+                if "updated_by" not in cols:
+                    conn.execute(text("ALTER TABLE case_files ADD COLUMN updated_by INTEGER"))
+                # 回填历史数据（兜底为 importer_id）
+                conn.execute(
+                    text(
+                        "UPDATE case_files SET updated_by = importer_id "
+                        "WHERE updated_by IS NULL AND importer_id IS NOT NULL"
+                    )
+                )
+            _mark_applied(conn, 13)

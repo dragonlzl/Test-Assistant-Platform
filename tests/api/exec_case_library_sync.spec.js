@@ -279,6 +279,7 @@ test.describe('exec case library sync api', () => {
     expect(sync2 && sync2.has_new_diff).toBeTruthy();
     expect(Array.isArray(sync2.history)).toBeTruthy();
     expect(sync2.history.length).toBeGreaterThanOrEqual(2);
+    expect(sync2.history[0] && sync2.history[0].operator).toBeTruthy();
 
     const first = sync2.history[0];
     const second = sync2.history[1];

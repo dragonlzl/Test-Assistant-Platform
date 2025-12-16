@@ -223,6 +223,7 @@ class ExecCaseLibraryDiffSummary(BaseModel):
 
 class ExecCaseLibraryDiffHistoryBatch(BaseModel):
     diff_at: datetime
+    operator: Optional[str] = None
     summary: ExecCaseLibraryDiffSummary
     diff: List[ExecCaseLibraryDiffEntry] = []
 

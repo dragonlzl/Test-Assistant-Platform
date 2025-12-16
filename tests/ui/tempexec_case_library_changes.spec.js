@@ -320,7 +320,12 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('A改');
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('A删');
 
+    // 切换用例后应重置过滤状态（药丸不应处于 active）
+    const deletedPill = page.locator('#tempExecCaseLibraryDiffDeletedPill');
+    await expect(deletedPill).not.toHaveClass(/active/);
+
     await page.click('#tempExecCaseLibraryDiffDeletedPill');
+    await expect(deletedPill).toHaveClass(/active/);
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('A删');
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).not.toContainText('A改');
   });
