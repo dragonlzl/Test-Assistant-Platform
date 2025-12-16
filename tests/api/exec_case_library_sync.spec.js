@@ -15,10 +15,16 @@ test.describe('exec case library sync api', () => {
     return body.access_token;
   }
 
-  test('用例库改动后：刷新同步返回 diff，已执行用例标记为“有改动”', async () => {
+  test('用例库改动后：刷新同步返回 diff，已执行用例标记为“变更重跑”', async () => {
     const ctx = await request.newContext();
     const token = await login(ctx, adminUser, adminPass);
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const meRes = await ctx.get(`${apiBase}/api/users/me`, { headers });
+    expect(meRes.status()).toBe(200);
+    const me = await meRes.json();
+    expect(me && me.id).toBeTruthy();
+    const myId = me.id;
 
     const healthRes = await ctx.get(`${apiBase}/api/health`);
     expect(healthRes.status()).toBe(200);
@@ -103,7 +109,18 @@ test.describe('exec case library sync api', () => {
     const afterCases = await afterCasesRes.json();
     expect(afterCases.length).toBe(1);
     expect(afterCases[0].steps).toBe('新步骤');
-    expect(afterCases[0].status).toBe('有改动');
+    expect(afterCases[0].status).toBe('变更重跑');
+
+    const overviewRes = await ctx.get(
+      `${apiBase}/api/exec/overview?project_id=${projectId}&version_id=${versionId}`,
+      { headers }
+    );
+    expect(overviewRes.status()).toBe(200);
+    const overview = await overviewRes.json();
+    const mine = Array.isArray(overview) ? overview.find((row) => row && row.user_id === myId) : null;
+    expect(mine).toBeTruthy();
+    expect(mine.pending).toBe(1);
+    expect(mine.passed).toBe(0);
 
     const ackRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/case-library-diff/ack`, { headers, data: {} });
     expect(ackRes.status()).toBe(200);

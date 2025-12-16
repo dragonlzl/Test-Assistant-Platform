@@ -130,7 +130,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
             priority: 'P0',
             precondition: '',
             steps: '新步骤',
-            status: '有改动',
+            status: '变更重跑',
             remark: '',
             defect_links: [],
             reuse_details: [],
@@ -162,6 +162,9 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
 
     await page.click('#closeTempExecCaseLibraryDiffDrawerBtn');
     await expect(diffDrawer).not.toHaveClass(/open/);
+
+    await expect(page.locator('#tempExecToolbar')).toContainText('未执行 1');
+    await expect(page.locator('#tempExecView')).toContainText('变更重跑');
 
     const btn = page.locator('#tempExecCaseLibraryChangesBtn');
     await expect(btn).toBeEnabled();

@@ -2272,7 +2272,11 @@
 
     function getCaseExecutionStatus(file, caseItem) {
       if (!file || !caseItem) return '未执行';
-      if (!file.reuseEnabled) return caseItem.actual || '未执行';
+      // 系统态：后端可能标记为“变更重跑/有改动”，该状态统计与过滤均按“未执行”处理。
+      var raw = caseItem.actual || '未执行';
+      if (raw === 'pending') raw = '未执行';
+      if (raw === '变更重跑' || raw === '有改动') return '未执行';
+      if (!file.reuseEnabled) return raw;
       return resolveReuseAggregateStatus(caseItem.reuseDetails);
     }
 
@@ -2378,6 +2382,11 @@
     }
 
     function getCaseExecutionDisplay(file, caseItem) {
+      var raw = caseItem && caseItem.actual ? String(caseItem.actual) : '未执行';
+      if (raw === 'pending') raw = '未执行';
+      if (raw === '变更重跑' || raw === '有改动') {
+        return { label: raw, className: 'pending' };
+      }
       var status = getCaseExecutionStatus(file, caseItem);
       var className = mapStatusToClass(status);
       var label = status || '未执行';
@@ -5499,10 +5508,11 @@
         if (defectOpen) defectBtnClass.push('active');
         if (hasDefects) defectBtnClass.push('filled');
         var currentStatus = item && item.actual ? String(item.actual) : '未执行';
+        if (currentStatus === 'pending') currentStatus = '未执行';
         var resultOptions = '';
-        // 系统态：仅当后端标记为“有改动”时展示，但不允许用户主动选择该项。
-        if (currentStatus === '有改动') {
-          resultOptions += '<option value="有改动" selected disabled hidden>有改动</option>';
+        // 系统态：展示为当前值，但不允许用户主动选择（不出现在常规选项中）。
+        if (currentStatus === '变更重跑' || currentStatus === '有改动') {
+          resultOptions += '<option value="' + escapeHtml(currentStatus) + '" selected disabled>' + escapeHtml(currentStatus) + '</option>';
         }
         resultOptions += tempExecResultOptions.map(function(opt) {
           return '<option value="' + opt + '" ' + (currentStatus === opt ? 'selected' : '') + '>' + opt + '</option>';
@@ -5665,9 +5675,11 @@
       var targetCase = file.cases[index];
       if (!Array.isArray(targetCase.reuseDetails)) targetCase.reuseDetails = [];
       targetCase.reuseDetails.push({ id: generateReuseDetailId(), text: '', note: '', status: '未执行' });
+      // 复用模式下同时维护 exec_case.status，方便总览统计与清除“变更重跑”系统态。
+      targetCase.actual = resolveReuseAggregateStatus(targetCase.reuseDetails);
       if (isDbMode()) {
         var caseId = targetCase && (targetCase.execCaseId || targetCase.id);
-        if (caseId) queueExecCasePatch(caseId, { reuse_details: targetCase.reuseDetails });
+        if (caseId) queueExecCasePatch(caseId, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
       }
       persistTempExecState();
       renderTempExecView();
@@ -5681,9 +5693,10 @@
       var confirmed = window.confirm('确定删除该复用测试项吗？该操作不可撤销。');
       if (!confirmed) return;
       targetCase.reuseDetails = targetCase.reuseDetails.filter(function(item) { return item.id !== detailId; });
+      targetCase.actual = resolveReuseAggregateStatus(targetCase.reuseDetails);
       if (isDbMode()) {
         var caseId = targetCase && (targetCase.execCaseId || targetCase.id);
-        if (caseId) queueExecCasePatch(caseId, { reuse_details: targetCase.reuseDetails });
+        if (caseId) queueExecCasePatch(caseId, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
       }
       persistTempExecState();
       renderTempExecView();
@@ -5697,9 +5710,10 @@
       var entry = targetCase.reuseDetails.find(function(item) { return item.id === detailId; });
       if (!entry) return;
       entry.status = tempExecResultOptions.indexOf(value) !== -1 ? value : '未执行';
+      targetCase.actual = resolveReuseAggregateStatus(targetCase.reuseDetails);
       if (isDbMode()) {
         var caseId = targetCase && (targetCase.execCaseId || targetCase.id);
-        if (caseId) queueExecCasePatch(caseId, { reuse_details: targetCase.reuseDetails });
+        if (caseId) queueExecCasePatch(caseId, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
       }
       persistTempExecState();
       renderTempExecView();
@@ -5740,7 +5754,10 @@
       if (!file) return;
       if (enabled === Boolean(file.reuseEnabled)) return;
       if (enabled) {
-        var hasExecution = file.cases.some(function(item) { return (item.actual && item.actual !== '未执行') || (item.remark && item.remark.trim()); });
+        var hasExecution = file.cases.some(function(item) {
+          var status = getCaseExecutionStatus(file, item);
+          return (status && status !== '未执行') || (item.remark && item.remark.trim());
+        });
         if (hasExecution) {
           var confirmMsg = '开启“用例复用”会清空当前执行结果与备注，是否继续？';
           if (!window.confirm(confirmMsg)) {

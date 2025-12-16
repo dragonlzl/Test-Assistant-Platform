@@ -405,7 +405,7 @@ def upsert_exec_set_from_case_file(
                     or before_steps != existing.steps
                     or before_remark != existing.remark
                 )
-                # 用例库发生改动时：若该用例已有执行结果，则标记为“有改动”，提醒重新确认。
+                # 用例库发生改动时：若该用例已有执行结果，则标记为“变更重跑”（系统态），提醒重新确认并按未执行处理。
                 if changed:
                     before_status = str(existing.status or "").strip()
                     defect_links_value = existing.defect_links
@@ -429,8 +429,8 @@ def upsert_exec_set_from_case_file(
                         or has_defect_links
                         or has_reuse_details
                     )
-                    if has_result and before_status != "有改动":
-                        existing.status = "有改动"
+                    if has_result and before_status not in ("变更重跑", "有改动"):
+                        existing.status = "变更重跑"
             db.add(existing)
             updated_any = True
             continue
@@ -843,8 +843,8 @@ def _sync_exec_set_from_case_file(
                     or has_defect_links
                     or has_reuse_details
                 )
-                if has_result and before_status != "有改动":
-                    existing.status = "有改动"
+                if has_result and before_status not in ("变更重跑", "有改动"):
+                    existing.status = "变更重跑"
 
             db.add(existing)
             updated_any = True
@@ -1588,7 +1588,9 @@ def get_execution_overview(
                 case(
                     (
                         (models.ExecCase.status == "pending")
-                        | (models.ExecCase.status == "未执行"),
+                        | (models.ExecCase.status == "未执行")
+                        | (models.ExecCase.status == "变更重跑")
+                        | (models.ExecCase.status == "有改动"),
                         1,
                     ),
                     else_=0,
@@ -1790,7 +1792,9 @@ def get_execution_overview_layout(
                 case(
                     (
                         (models.ExecCase.status == "pending")
-                        | (models.ExecCase.status == "未执行"),
+                        | (models.ExecCase.status == "未执行")
+                        | (models.ExecCase.status == "变更重跑")
+                        | (models.ExecCase.status == "有改动"),
                         1,
                     ),
                     else_=0,
