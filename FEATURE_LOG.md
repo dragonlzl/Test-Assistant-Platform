@@ -1137,3 +1137,12 @@
 - 复用说明：复用既有 `exec_sets` 数据作为权威来源，仅新增聚合查询接口供列表渲染，不改变转执行入库逻辑。  
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 选择用例执行`（通过）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_sets_by_case_file.spec.js`（通过，需本地运行 FastAPI 服务并使用 `data/apitest.db`）。  
 - 更新记录：2025-12-16 修复“执行页状态”展示错误并支持展示多人选择执行（`backend/routers/exec_routes.py`、`backend/schemas.py`、`services/apiClient.js`、`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`、`tests/api/exec_sets_by_case_file.spec.js`）。  
+
+- 功能名称：执行页取消复用同步到用例库  
+- 功能描述：修复“复用类型用例在执行页取消勾选复用后，用例库仍保持复用类型”导致的状态反复与执行页混合展示问题：执行页关闭复用会同步更新用例库 `case_files.reuse_enabled=false`；同时调整“从用例库转执行”逻辑，仅在新建执行集时按用例库默认启用复用，避免已关闭的执行集被用例库状态反向开启。  
+- 操作方式：进入“用例执行”→打开已转执行的复用类型用例→取消勾选“用例复用”；再进入“用例库”查看对应文件的“复用类型”列应为“否”；后续在用例库编辑/覆盖导入后，执行页不会再把复用/非复用版本混合组合。  
+- 使用效果：执行页复用开关与用例库展示保持一致；关闭复用后执行集不会被自动反向开启，避免用例重复与状态混乱。  
+- 新增内容/接口/组件：执行集更新接口同步关闭复用到用例库（`backend/routers/exec_routes.py`）；转执行接口默认复用逻辑修正（`backend/routers/exec_routes.py`）；API/UI 自动化覆盖关闭复用同步与不反向开启（`tests/api/exec_persistence.spec.js`、`tests/ui/tempexec_reuse_toggle_sync.spec.js`）。  
+- 复用说明：复用既有执行集 PATCH 与用例库 `reuse_enabled` 字段，不新增新接口，仅补齐同步方向与默认行为。  
+- 测试与验证：`python3 -m compileall -q backend`（通过）；`npm run test:ui -- tests/ui/tempexec_reuse_toggle_sync.spec.js`（通过）；API：启动测试后端（`APP_DB_FILE=apitest.db python -m uvicorn backend.main:app --host 127.0.0.1 --port <port>`）后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_persistence.spec.js`（通过）。  
+- 更新记录：2025-12-16 执行页取消复用同步到用例库上线（`backend/routers/exec_routes.py`、`tests/api/exec_persistence.spec.js`、`tests/ui/tempexec_reuse_toggle_sync.spec.js`）。  

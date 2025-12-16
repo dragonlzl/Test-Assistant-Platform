@@ -88,6 +88,29 @@ test.describe('exec persistence api', () => {
     const matchedFile = Array.isArray(listed) ? listed.find((f) => f && f.id === caseFileId) : null;
     expect(matchedFile && matchedFile.reuse_enabled).toBeTruthy();
 
+    // 执行页取消勾选复用：应同步到用例库（case_files.reuse_enabled = false），避免后续导入/同步又反向开启。
+    const toggleReuseOffRes = await ctx.patch(`${apiBase}/api/exec/sets/${execSetId}`, {
+      headers,
+      data: { reuse_enabled: false },
+    });
+    expect(toggleReuseOffRes.status()).toBe(200);
+
+    const listCaseFilesOffRes = await ctx.get(`${apiBase}/api/case-files?project_id=${projectId}`, { headers });
+    expect(listCaseFilesOffRes.status()).toBe(200);
+    const listedOff = await listCaseFilesOffRes.json();
+    const matchedFileOff = Array.isArray(listedOff) ? listedOff.find((f) => f && f.id === caseFileId) : null;
+    expect(matchedFileOff && matchedFileOff.reuse_enabled).toBeFalsy();
+
+    // 关闭后再次转执行/同步：不应被用例库“反向开启”为复用。
+    const upsertAgainRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: { case_file_id: caseFileId, mode: 'replace', prefer_result_source: 'db' },
+    });
+    expect(upsertAgainRes.status()).toBe(200);
+    const upsertAgain = await upsertAgainRes.json();
+    expect(upsertAgain && upsertAgain.id).toBe(execSetId);
+    expect(upsertAgain.reuse_enabled).toBeFalsy();
+
     // 执行集按用户隔离：同一个 case_file，不同用户应各自拥有一份 exec_set，且互不可访问/覆盖。
     const otherUsername = 'exec-user-' + Date.now();
     const createUserRes = await ctx.post(`${apiBase}/api/users`, {
@@ -133,8 +156,15 @@ test.describe('exec persistence api', () => {
     expect(otherSets.some((s) => s && s.id === otherExecSet.id)).toBeTruthy();
     expect(otherSets.some((s) => s && s.id === execSetId)).toBeFalsy();
 
-    const forbiddenRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers: otherHeaders });
-    expect(forbiddenRes.status()).toBe(403);
+    // 执行结果写入按个人隔离：非管理员不可修改他人的执行集；但用例列表接口允许同项目成员只读访问（供执行总览等场景查看）。
+    const forbiddenPatchRes = await ctx.patch(`${apiBase}/api/exec/sets/${execSetId}`, {
+      headers: otherHeaders,
+      data: { requirement: 'forbidden' },
+    });
+    expect(forbiddenPatchRes.status()).toBe(403);
+
+    const readonlyRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers: otherHeaders });
+    expect(readonlyRes.status()).toBe(200);
 
     const listExecCasesRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers });
     expect(listExecCasesRes.status()).toBe(200);
@@ -222,7 +252,8 @@ test.describe('exec persistence api', () => {
     expect(execCasesAfterRestoreRes.status()).toBe(200);
     const execCasesAfterRestore = await execCasesAfterRestoreRes.json();
     const restoredFirst = execCasesAfterRestore.find((c) => c.id === first.id);
-    expect(restoredFirst && restoredFirst.status).toBe('失败');
+    // 归档后恢复执行集时：会按用例库基线刷新基础字段；若执行用例已存在结果且字段发生变化，则标记为“变更重跑”提醒重新确认。
+    expect(restoredFirst && restoredFirst.status).toBe('变更重跑');
 
     const createItemRes = await ctx.post(`${apiBase}/api/case-files/${caseFileId}/items`, {
       headers,

@@ -135,14 +135,18 @@ def update_exec_set(
     data = payload.model_dump(exclude_unset=True)
     changed = False
     turned_on_reuse = False
+    turned_off_reuse = False
+    prev_reuse_enabled = bool(getattr(exec_set, "reuse_enabled", False))
     for field in ["status", "requirement", "reuse_enabled", "reuse_presets"]:
         if field not in data:
             continue
         value = data[field]
         if field == "reuse_enabled":
             value = bool(value)
-            if (not exec_set.reuse_enabled) and value:
+            if (not prev_reuse_enabled) and value:
                 turned_on_reuse = True
+            if prev_reuse_enabled and (not value):
+                turned_off_reuse = True
         if value != getattr(exec_set, field):
             setattr(exec_set, field, value)
             changed = True
@@ -165,11 +169,16 @@ def update_exec_set(
             exec_set.case_file_diff_history_json = None
         exec_set.updated_at = datetime.now(timezone.utc)
         db.add(exec_set)
-        # 执行页将用例切换为“复用类型”时：同步到用例库（case_files.reuse_enabled = true）。
-        if turned_on_reuse and exec_set.case_file_id:
-            db.query(models.CaseFile).filter(models.CaseFile.id == exec_set.case_file_id).update(
-                {models.CaseFile.reuse_enabled: True}, synchronize_session=False
-            )
+        # 执行页复用开关需同步到用例库（case_files.reuse_enabled），避免执行页取消勾选后被用例库状态“反向开启”。
+        if exec_set.case_file_id:
+            if turned_on_reuse:
+                db.query(models.CaseFile).filter(models.CaseFile.id == exec_set.case_file_id).update(
+                    {models.CaseFile.reuse_enabled: True}, synchronize_session=False
+                )
+            elif turned_off_reuse:
+                db.query(models.CaseFile).filter(models.CaseFile.id == exec_set.case_file_id).update(
+                    {models.CaseFile.reuse_enabled: False}, synchronize_session=False
+                )
         log_operation(
             db=db,
             user_id=user.id,
@@ -223,6 +232,37 @@ def _normalize_match_key(
         + "::"
         + _norm(expected)
     )
+
+
+def _has_reuse_execution(reuse_details_value) -> bool:
+    """
+    判断“复用子项”是否存在有效执行结果。
+    - status 为 通过/失败/阻塞/不适用 视为已执行
+    - note 非空也视为有执行痕迹（避免仅靠 status 丢失）
+    """
+    if reuse_details_value is None:
+        return False
+    data = reuse_details_value
+    if isinstance(reuse_details_value, str):
+        raw = reuse_details_value.strip()
+        if not raw:
+            return False
+        try:
+            data = json.loads(raw)
+        except Exception:
+            data = None
+    if not isinstance(data, list):
+        return False
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        st = str(item.get("status") or "").strip()
+        if st and st not in ("未执行", "pending"):
+            return True
+        note = str(item.get("note") or "").strip()
+        if note:
+            return True
+    return False
 
 
 @router.post("/sets/from-case-file", response_model=schemas.ExecSetOut)
@@ -295,16 +335,22 @@ def upsert_exec_set_from_case_file(
 
     if payload.requirement is not None:
         exec_set.requirement = payload.requirement
+    explicit_reuse_enabled = None
     if payload.reuse_enabled is not None:
-        exec_set.reuse_enabled = bool(payload.reuse_enabled)
-    elif bool(getattr(case_file, "reuse_enabled", False)):
-        # 用例库标记为复用类型时：执行集自动启用复用（避免被创建为非复用）。
+        explicit_reuse_enabled = bool(payload.reuse_enabled)
+        exec_set.reuse_enabled = explicit_reuse_enabled
+    elif created and bool(getattr(case_file, "reuse_enabled", False)):
+        # 用例库标记为复用类型时：新建执行集默认启用复用（避免被创建为非复用）。
         exec_set.reuse_enabled = True
     if payload.reuse_presets is not None:
         exec_set.reuse_presets = payload.reuse_presets
 
-    # 复用类型同步到用例库：只要执行集启用复用，就将用例库对应 case_file 标记为复用类型（只升不降）。
-    if exec_set.reuse_enabled and not bool(getattr(case_file, "reuse_enabled", False)):
+    # 复用类型同步到用例库（case_files.reuse_enabled），保证执行页与用例库一致，避免“取消勾选后又被反向开启”。
+    if explicit_reuse_enabled is not None:
+        if bool(getattr(case_file, "reuse_enabled", False)) != explicit_reuse_enabled:
+            case_file.reuse_enabled = explicit_reuse_enabled
+            db.add(case_file)
+    elif exec_set.reuse_enabled and not bool(getattr(case_file, "reuse_enabled", False)):
         case_file.reuse_enabled = True
         db.add(case_file)
 
@@ -416,21 +462,27 @@ def upsert_exec_set_from_case_file(
                             has_defect_links = bool(defect_links_value)
                         else:
                             has_defect_links = bool(str(defect_links_value).strip())
-                    has_reuse_details = False
-                    if reuse_details_value is not None:
-                        if isinstance(reuse_details_value, list):
-                            has_reuse_details = bool(reuse_details_value)
-                        else:
-                            has_reuse_details = bool(str(reuse_details_value).strip())
+                    has_reuse_execution = _has_reuse_execution(reuse_details_value)
                     has_result = bool(before_status and before_status != "未执行") or bool(
                         (existing.actual_result or "").strip()
                         or (existing.remark or "").strip()
                         or (existing.defect_link or "").strip()
                         or has_defect_links
-                        or has_reuse_details
+                        or has_reuse_execution
                     )
                     if has_result and before_status not in ("变更重跑", "有改动"):
                         existing.status = "变更重跑"
+                        # 复用类型：子项状态也同步为“变更重跑”，避免子项仍显示旧结果。
+                        if isinstance(existing.reuse_details, list) and existing.reuse_details:
+                            next_details = []
+                            for d in existing.reuse_details:
+                                if isinstance(d, dict):
+                                    d2 = dict(d)
+                                    d2["status"] = "变更重跑"
+                                    next_details.append(d2)
+                                else:
+                                    next_details.append(d)
+                            existing.reuse_details = next_details
             db.add(existing)
             updated_any = True
             continue
@@ -830,21 +882,26 @@ def _sync_exec_set_from_case_file(
                         has_defect_links = bool(defect_links_value)
                     else:
                         has_defect_links = bool(str(defect_links_value).strip())
-                has_reuse_details = False
-                if reuse_details_value is not None:
-                    if isinstance(reuse_details_value, list):
-                        has_reuse_details = bool(reuse_details_value)
-                    else:
-                        has_reuse_details = bool(str(reuse_details_value).strip())
+                has_reuse_execution = _has_reuse_execution(reuse_details_value)
                 has_result = bool(before_status and before_status != "未执行") or bool(
                     (existing.actual_result or "").strip()
                     or (existing.remark or "").strip()
                     or (existing.defect_link or "").strip()
                     or has_defect_links
-                    or has_reuse_details
+                    or has_reuse_execution
                 )
                 if has_result and before_status not in ("变更重跑", "有改动"):
                     existing.status = "变更重跑"
+                    if isinstance(existing.reuse_details, list) and existing.reuse_details:
+                        next_details = []
+                        for d in existing.reuse_details:
+                            if isinstance(d, dict):
+                                d2 = dict(d)
+                                d2["status"] = "变更重跑"
+                                next_details.append(d2)
+                            else:
+                                next_details.append(d)
+                        existing.reuse_details = next_details
 
             db.add(existing)
             updated_any = True
