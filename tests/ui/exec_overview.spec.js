@@ -94,6 +94,8 @@ test.describe('执行总览页（DB 接口接入）', () => {
       if (path === '/api/exec/overview/layout' && method === 'GET') {
         const projectId = url.searchParams.get('project_id');
         const versionId = url.searchParams.get('version_id');
+        const now = Date.now();
+        const iso = (ms) => new Date(ms).toISOString();
         const baseUser = {
           project_id: Number(projectId),
           version_id: versionId ? Number(versionId) : null,
@@ -109,8 +111,9 @@ test.describe('执行总览页（DB 接口接入）', () => {
           not_applicable: 0,
           ui_placement: { versionOrderByProject: { 1: ['12', '11'] }, fileOrderByProjectVersion: { 1: { 11: ['200'], 12: [] } } },
           exec_sets: [
-            { exec_set_id: 200, exec_set_name: '需求-登录', version_id: 11, status: 'archived', requirement: '', total: 3, pending: 0, passed: 2, failed: 1, blocked: 0, not_applicable: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-            { exec_set_id: 201, exec_set_name: '需求-注册', version_id: 11, status: 'active', requirement: '', total: 2, pending: 2, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+            { exec_set_id: 200, exec_set_name: '需求-登录', version_id: 11, status: 'archived', requirement: '', total: 3, pending: 0, passed: 2, failed: 1, blocked: 0, not_applicable: 0, created_at: iso(now - 20000), updated_at: iso(now - 2000) },
+            { exec_set_id: 201, exec_set_name: '需求-注册', version_id: 11, status: 'active', requirement: '', total: 2, pending: 2, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: iso(now - 18000), updated_at: iso(now - 1000) },
+            { exec_set_id: 202, exec_set_name: '需求-支付', version_id: 11, status: 'active', requirement: '', total: 4, pending: 3, passed: 1, failed: 0, blocked: 0, not_applicable: 0, created_at: iso(now - 16000), updated_at: iso(now - 1500) },
           ],
         };
         if (projectId === '2') {
@@ -241,14 +244,55 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await expect(page.locator('#execOverviewVersionSelect')).toContainText('全部版本');
     await expect(page.locator('#execOverviewVersionSelect')).toContainText('v1');
 
-    await expect(page.locator('#execOverviewUserCards')).toContainText(user.username);
-    await expect(page.locator('#execOverviewUserCards')).toContainText('总数 5');
-    await expect(page.locator('#execOverviewUserCards')).toContainText('归');
-    await expect(page.locator('#execOverviewUserCards .exec-overview-progress')).toHaveCount(0);
-    await expect(page.locator('#execOverviewUserCards .exec-overview-file-progress')).toHaveCount(2);
+	    await expect(page.locator('#execOverviewUserCards')).toContainText(user.username);
+	    await expect(page.locator('#execOverviewUserCards')).toContainText('总数 5');
+	    await expect(page.locator('#execOverviewUserCards')).toContainText('归');
+	    await expect(page.locator('#execOverviewUserCards .exec-overview-progress')).toHaveCount(0);
+	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-progress')).toHaveCount(3);
+	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-meta')).toHaveCount(3);
 
-    await page.selectOption('#execOverviewVersionSelect', String(versionsByProject[1][0].id));
-    await expect(page.locator('#execOverviewUserCards')).toContainText('总数 3');
+	    const layoutColumns = await page.$eval('#execOverviewUserCards .exec-overview-layout', (el) => {
+	      const cols = getComputedStyle(el).gridTemplateColumns || '';
+	      return cols.trim().split(/\s+/).filter(Boolean).length;
+	    });
+	    expect(layoutColumns).toBe(3);
+
+	    const v1Body = page.locator('#execOverviewUserCards .exec-overview-version-box', { hasText: 'v1' }).locator('.body').first();
+	    const v1BodyScrollable = await v1Body.evaluate((el) => el.scrollHeight > el.clientHeight);
+	    expect(v1BodyScrollable).toBe(true);
+	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"] .exec-overview-file-meta')).toContainText('已3/3');
+	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"] .exec-overview-kv.kv-pending')).toContainText('待0');
+	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"] .exec-overview-kv.kv-passed')).toContainText('过2');
+	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"] .exec-overview-kv.kv-failed')).toContainText('失1');
+
+	    // 滚动后：后续执行集也应展示进度条，且进度条边界在卡片内
+	    await v1Body.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="202"] .exec-overview-file-progress')).toBeVisible();
+	    const barInsideChip = await page
+	      .locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="202"]')
+	      .evaluate((chip) => {
+	        const bar = chip.querySelector('.exec-overview-file-progress');
+	        if (!bar) return false;
+	        const cr = chip.getBoundingClientRect();
+	        const br = bar.getBoundingClientRect();
+	        return br.top >= cr.top && br.bottom <= cr.bottom && br.left >= cr.left && br.right <= cr.right;
+	      });
+	    expect(barInsideChip).toBe(true);
+
+	    // “单条时高度”应作为基准：切到仅 1 条后再切回多条，子项高度保持一致（允许 2px 误差）
+	    await page.selectOption('#execOverviewVersionSelect', String(versionsByProject[1][0].id));
+	    const singleChipHeight = await page.locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]').evaluate((el) =>
+	      Math.round(el.getBoundingClientRect().height)
+	    );
+	    await page.selectOption('#execOverviewVersionSelect', '');
+	    await page.waitForTimeout(200);
+	    const multiChipHeight = await page.locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]').evaluate((el) =>
+	      Math.round(el.getBoundingClientRect().height)
+	    );
+	    expect(Math.abs(singleChipHeight - multiChipHeight)).toBeLessThanOrEqual(2);
+
+	    await page.selectOption('#execOverviewVersionSelect', String(versionsByProject[1][0].id));
+	    await expect(page.locator('#execOverviewUserCards')).toContainText('总数 3');
 
     await page.click('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]');
     await expect(page.locator('#execOverviewExecSetDrawer')).toHaveClass(/open/);

@@ -1856,14 +1856,16 @@
       return name.trim() || ('版本#' + vid);
     }
 
-    if (tempVersionGrid) {
-      var tempProjectLayoutDropIndicator = null;
-      var tempProjectLayoutDrag = { type: '', key: '' };
-      function ensureTempProjectLayoutDropIndicator(type) {
-        if (!tempProjectLayoutDropIndicator) {
-          tempProjectLayoutDropIndicator = document.createElement('div');
-          tempProjectLayoutDropIndicator.className = 'temp-drop-indicator';
-          tempProjectLayoutDropIndicator.setAttribute('aria-hidden', 'true');
+	    if (tempVersionGrid) {
+	      var tempProjectLayoutDropIndicator = null;
+	      var tempProjectLayoutDrag = { type: '', key: '' };
+	      var tempProjectLayoutFileHover = { body: null, hoverId: '' };
+	      var tempProjectLayoutFileDropIndicator = null;
+	      function ensureTempProjectLayoutDropIndicator(type) {
+	        if (!tempProjectLayoutDropIndicator) {
+	          tempProjectLayoutDropIndicator = document.createElement('div');
+	          tempProjectLayoutDropIndicator.className = 'temp-drop-indicator';
+	          tempProjectLayoutDropIndicator.setAttribute('aria-hidden', 'true');
         }
         var t = type || '';
         tempProjectLayoutDropIndicator.classList.toggle('project', t === 'project');
@@ -1871,17 +1873,52 @@
         tempProjectLayoutDropIndicator.dataset.dropType = t;
         return tempProjectLayoutDropIndicator;
       }
-      function clearTempProjectLayoutDropIndicator() {
-        if (tempProjectLayoutDropIndicator && tempProjectLayoutDropIndicator.parentNode) {
-          tempProjectLayoutDropIndicator.parentNode.removeChild(tempProjectLayoutDropIndicator);
-        }
-        if (tempProjectLayoutDropIndicator) {
-          tempProjectLayoutDropIndicator.dataset.dropType = '';
-          tempProjectLayoutDropIndicator.dataset.dropTargetId = '';
-          tempProjectLayoutDropIndicator.dataset.dropAfter = '';
-          tempProjectLayoutDropIndicator.dataset.dropProjectId = '';
-        }
-      }
+	      function clearTempProjectLayoutDropIndicator() {
+	        if (tempProjectLayoutDropIndicator && tempProjectLayoutDropIndicator.parentNode) {
+	          tempProjectLayoutDropIndicator.parentNode.removeChild(tempProjectLayoutDropIndicator);
+	        }
+	        if (tempProjectLayoutDropIndicator) {
+	          tempProjectLayoutDropIndicator.dataset.dropType = '';
+	          tempProjectLayoutDropIndicator.dataset.dropTargetId = '';
+	          tempProjectLayoutDropIndicator.dataset.dropAfter = '';
+	          tempProjectLayoutDropIndicator.dataset.dropProjectId = '';
+	        }
+	      }
+
+	      function clearTempProjectLayoutFileHover() {
+	        var body = tempProjectLayoutFileHover && tempProjectLayoutFileHover.body ? tempProjectLayoutFileHover.body : null;
+	        if (body && body.classList) body.classList.remove('dragover-file');
+	        if (body && body.querySelectorAll) {
+	          var rows = body.querySelectorAll('.temp-req-row.dragover-target');
+	          rows.forEach(function(el) { el.classList.remove('dragover-target'); });
+	        }
+	        if (tempProjectLayoutFileDropIndicator && tempProjectLayoutFileDropIndicator.parentNode) {
+	          tempProjectLayoutFileDropIndicator.parentNode.removeChild(tempProjectLayoutFileDropIndicator);
+	        }
+	        tempProjectLayoutFileHover = { body: null, hoverId: '' };
+	      }
+
+	      function ensureTempProjectLayoutFileDropIndicator() {
+	        if (tempProjectLayoutFileDropIndicator) return tempProjectLayoutFileDropIndicator;
+	        tempProjectLayoutFileDropIndicator = document.createElement('div');
+	        tempProjectLayoutFileDropIndicator.className = 'temp-file-drop-indicator';
+	        tempProjectLayoutFileDropIndicator.setAttribute('aria-hidden', 'true');
+	        return tempProjectLayoutFileDropIndicator;
+	      }
+
+	      function autoScrollContainerOnDrag(container, clientY) {
+	        if (!container || !container.getBoundingClientRect) return;
+	        if (container.scrollHeight <= container.clientHeight) return;
+	        var rect = container.getBoundingClientRect();
+	        var threshold = 26;
+	        var step = 18;
+	        if (clientY < rect.top + threshold) {
+	          container.scrollTop = Math.max(0, container.scrollTop - step);
+	        } else if (clientY > rect.bottom - threshold) {
+	          var maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
+	          container.scrollTop = Math.min(maxTop, container.scrollTop + step);
+	        }
+	      }
       function getDropAfterByPointer(e, rect, prefer) {
         if (!e || !rect) return false;
         var mode = prefer || 'auto';
@@ -1998,17 +2035,62 @@
         }
       });
 
-      tempVersionGrid.addEventListener('dragover', function(e) {
-        if (!e) return;
-        if (!e.dataTransfer) return;
-        e.preventDefault();
-        var dragType = tempProjectLayoutDrag && tempProjectLayoutDrag.type ? tempProjectLayoutDrag.type : '';
-        var dragKey = tempProjectLayoutDrag && tempProjectLayoutDrag.key ? tempProjectLayoutDrag.key : '';
-        if (dragType === 'project' && dragKey) {
-          var indicator = ensureTempProjectLayoutDropIndicator('project');
-          var cards = Array.prototype.slice.call(tempVersionGrid.querySelectorAll('.temp-project-card'));
-          cards = cards.filter(function(el) { return el && el !== indicator; });
-          if (!cards.length) {
+	      tempVersionGrid.addEventListener('dragover', function(e) {
+	        if (!e) return;
+	        if (!e.dataTransfer) return;
+	        e.preventDefault();
+	        var dragType = tempProjectLayoutDrag && tempProjectLayoutDrag.type ? tempProjectLayoutDrag.type : '';
+	        var dragKey = tempProjectLayoutDrag && tempProjectLayoutDrag.key ? tempProjectLayoutDrag.key : '';
+	        if (!dragType) {
+	          var ids = e.dataTransfer.getData('text/plain') || '';
+	          if (!ids && window.app && window.app.tempDragContext && window.app.tempDragContext.type === 'file') {
+	            ids = window.app.tempDragContext.fileId || '';
+	          }
+	          var versionCardHover = e.target.closest('[data-temp-project-version-card]');
+	          var bodyHover = versionCardHover ? versionCardHover.querySelector('.temp-project-version-body') : null;
+	          if (ids && bodyHover) {
+	            if (tempProjectLayoutFileHover.body && tempProjectLayoutFileHover.body !== bodyHover) {
+	              clearTempProjectLayoutFileHover();
+	            }
+	            bodyHover.classList.add('dragover-file');
+	            autoScrollContainerOnDrag(bodyHover, e.clientY);
+	            var beforeId = resolveInsertBeforeFileId(bodyHover, e.clientY);
+	            var indicatorFile = ensureTempProjectLayoutFileDropIndicator();
+	            var rows = Array.prototype.slice.call(bodyHover.querySelectorAll('.temp-req-row[data-temp-file]'));
+	            var inserted = false;
+	            if (beforeId) {
+	              var targetRow = bodyHover.querySelector('.temp-req-row[data-temp-file="' + beforeId + '"]');
+	              if (targetRow) {
+	                bodyHover.insertBefore(indicatorFile, targetRow);
+	                inserted = true;
+	              }
+	            }
+	            if (!inserted) {
+	              var firstRow = bodyHover.querySelector('.temp-req-row[data-temp-file]');
+	              var hint = bodyHover.querySelector('.hint');
+	              if (!firstRow && hint) {
+	                bodyHover.insertBefore(indicatorFile, hint);
+	                inserted = true;
+	              }
+	            }
+	            if (!inserted) {
+	              bodyHover.appendChild(indicatorFile);
+	            }
+	            rows.forEach(function(row) {
+	              row.classList.toggle('dragover-target', Boolean(beforeId) && row.dataset.tempFile === beforeId);
+	            });
+	            tempProjectLayoutFileHover = { body: bodyHover, hoverId: beforeId || '' };
+	            clearTempProjectLayoutDropIndicator();
+	            return;
+	          }
+	          clearTempProjectLayoutFileHover();
+	        }
+	        if (dragType === 'project' && dragKey) {
+	          clearTempProjectLayoutFileHover();
+	          var indicator = ensureTempProjectLayoutDropIndicator('project');
+	          var cards = Array.prototype.slice.call(tempVersionGrid.querySelectorAll('.temp-project-card'));
+	          cards = cards.filter(function(el) { return el && el !== indicator; });
+	          if (!cards.length) {
             tempVersionGrid.appendChild(indicator);
             indicator.dataset.dropTargetId = '';
             indicator.dataset.dropAfter = '0';
@@ -2036,14 +2118,15 @@
           indicator.dataset.dropTargetId = targetId;
           indicator.dataset.dropAfter = after ? '1' : '0';
           var ref = cards[insertIndex] || null;
-          tempVersionGrid.insertBefore(indicator, ref);
-          return;
-        }
-        if (dragType === 'version' && dragKey) {
-          var src = parseProjectVersionKey(dragKey);
-          var projectCard = e.target.closest('[data-temp-project-card]');
-          if (!projectCard || !projectCard.dataset.tempProjectCard) {
-            clearTempProjectLayoutDropIndicator();
+	          tempVersionGrid.insertBefore(indicator, ref);
+	          return;
+	        }
+	        if (dragType === 'version' && dragKey) {
+	          clearTempProjectLayoutFileHover();
+	          var src = parseProjectVersionKey(dragKey);
+	          var projectCard = e.target.closest('[data-temp-project-card]');
+	          if (!projectCard || !projectCard.dataset.tempProjectCard) {
+	            clearTempProjectLayoutDropIndicator();
             return;
           }
           if (src.projectId && String(src.projectId) !== String(projectCard.dataset.tempProjectCard || '')) {
@@ -2123,31 +2206,34 @@
           indicator2.dataset.dropTargetId = targetKey;
           indicator2.dataset.dropAfter = insertAfter2 ? '1' : '0';
           var ref2 = versionCards[insertIndex2] || null;
-          grid.insertBefore(indicator2, ref2);
-          return;
-        }
-        // 其他拖拽（如用例条目拖拽）不走此指示器
-        clearTempProjectLayoutDropIndicator();
-      });
+	          grid.insertBefore(indicator2, ref2);
+	          return;
+	        }
+	        // 其他拖拽（如用例条目拖拽）不走此指示器
+	        clearTempProjectLayoutDropIndicator();
+	      });
 
-      tempVersionGrid.addEventListener('dragleave', function(e) {
-        if (!e) return;
-        // dragleave 会在子元素之间频繁触发：仅当离开整个容器时才清理
-        if (e.currentTarget !== tempVersionGrid) return;
-        if (e.target !== tempVersionGrid) return;
-        clearTempProjectLayoutDropIndicator();
-      });
+	      tempVersionGrid.addEventListener('dragleave', function(e) {
+	        if (!e) return;
+	        // dragleave 会在子元素之间频繁触发：仅当离开整个容器时才清理
+	        if (e.currentTarget !== tempVersionGrid) return;
+	        if (e.target !== tempVersionGrid) return;
+	        clearTempProjectLayoutDropIndicator();
+	        clearTempProjectLayoutFileHover();
+	      });
 
-      tempVersionGrid.addEventListener('dragend', function() {
-        clearTempProjectLayoutDropIndicator();
-        tempProjectLayoutDrag = { type: '', key: '' };
-      });
+	      tempVersionGrid.addEventListener('dragend', function() {
+	        clearTempProjectLayoutDropIndicator();
+	        clearTempProjectLayoutFileHover();
+	        tempProjectLayoutDrag = { type: '', key: '' };
+	      });
 
-      tempVersionGrid.addEventListener('drop', function(e) {
-        e.preventDefault();
-        if (!e.dataTransfer) return;
-        // drop 时也可能无法读取 dataTransfer（浏览器安全策略差异），兜底使用 dragstart 记录的类型/键
-        var dragProject = e.dataTransfer.getData('text/temp-project') || (tempProjectLayoutDrag.type === 'project' ? tempProjectLayoutDrag.key : '');
+	      tempVersionGrid.addEventListener('drop', function(e) {
+	        e.preventDefault();
+	        if (!e.dataTransfer) return;
+	        clearTempProjectLayoutFileHover();
+	        // drop 时也可能无法读取 dataTransfer（浏览器安全策略差异），兜底使用 dragstart 记录的类型/键
+	        var dragProject = e.dataTransfer.getData('text/temp-project') || (tempProjectLayoutDrag.type === 'project' ? tempProjectLayoutDrag.key : '');
         if (dragProject && api.reorderTempExecProject) {
           var indicator = tempProjectLayoutDropIndicator;
           var targetId = indicator && indicator.dataset ? (indicator.dataset.dropTargetId || '') : '';

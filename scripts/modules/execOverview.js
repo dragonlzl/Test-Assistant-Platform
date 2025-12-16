@@ -318,6 +318,55 @@
       return 'pending';
     }
 
+    function buildExecSetMeta(item) {
+      var safe = function(n) { return Math.max(0, Number(n) || 0); };
+      var total = safe(item && item.total);
+      var pending = safe(item && item.pending);
+      var passed = safe(item && item.passed);
+      var failed = safe(item && item.failed);
+      var blocked = safe(item && item.blocked);
+      var na = safe(item && item.not_applicable);
+      var executed = Math.max(0, total - pending);
+
+      var statusText = '未执行';
+      var statusCls = 'pending';
+      if (total > 0 && (failed > 0 || blocked > 0)) {
+        if (failed > 0 && blocked > 0) statusText = '失败/阻塞';
+        else if (failed > 0) statusText = '失败';
+        else statusText = '阻塞';
+        statusCls = 'err';
+      } else if (total > 0 && pending === 0) {
+        statusText = '已完成';
+        statusCls = 'ok';
+      } else if (executed > 0) {
+        statusText = '执行中';
+        statusCls = 'running';
+      }
+
+      var parts = [];
+      parts.push('已' + executed + '/' + total);
+      parts.push('待' + pending);
+      parts.push('过' + passed);
+      parts.push('失' + failed);
+      parts.push('阻' + blocked);
+      if (na > 0) parts.push('NA' + na);
+      var counts = [
+        '<span class="exec-overview-kv kv-done">已' + executed + '/' + total + '</span>',
+        '<span class="exec-overview-kv kv-pending">待' + pending + '</span>',
+        '<span class="exec-overview-kv kv-passed">过' + passed + '</span>',
+        '<span class="exec-overview-kv kv-failed">失' + failed + '</span>',
+        '<span class="exec-overview-kv kv-blocked">阻' + blocked + '</span>',
+        (na > 0 ? '<span class="exec-overview-kv kv-na">NA' + na + '</span>' : ''),
+      ].filter(Boolean).join('');
+
+      return (
+        '<div class="exec-overview-file-meta">' +
+          '<span class="exec-overview-file-status status-' + statusCls + '">' + escapeHtml(statusText) + '</span>' +
+          '<span class="exec-overview-file-counts" title="' + escapeHtml(parts.join(' ')) + '">' + counts + '</span>' +
+        '</div>'
+      );
+    }
+
     function renderUserLayoutCard(userRow) {
       var total = userRow.total || 0;
       var pending = userRow.pending || 0;
@@ -394,6 +443,7 @@
                     '<span class="badge">' + (es.total || 0) + '</span>' +
                   '</div>' +
                   buildFileProgressBar(es.total || 0, es.pending || 0, es.passed || 0, es.failed || 0, es.blocked || 0, es.not_applicable || 0) +
+                  buildExecSetMeta(es) +
                 '</button>'
               );
             })

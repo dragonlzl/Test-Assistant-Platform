@@ -1157,3 +1157,8 @@
 - 更新记录：2025-12-16 执行页“用例导入&分配”温馨提示改为提醒导入后需点击“确认入库”才能进行下一步，并暂时屏蔽“导出/导入执行页面配置”按钮（`index.html`、`tests/ui/tempexec_import_confirm.spec.js`、`tests/ui/files_layout.spec.js`、`tests/ui/workflow.spec.js`、`tests/ui/tempexec_drag.spec.js`）。  
 - 更新记录：2025-12-16 人员管理删除用户增加“后果说明 + 输入当前管理员密码”确认（后端强校验，避免误删/越权脚本调用）（`backend/routers/users.py`、`backend/schemas.py`、`services/apiClient.js`、`index.html`、`scripts/modules/admin.js`、`tests/api/admin_entities.spec.js`、`tests/ui/user_admin_drawer.spec.js`）。  
 - 更新记录：2025-12-16 删除用户成功后页面中间悬浮提示“删除成功”，3 秒自动消失（`scripts/modules/admin.js`、`style.css`、`tests/ui/user_admin_drawer.spec.js`）。  
+- 更新记录：2025-12-16 执行总览/导入&分配视图按“三列版本”紧凑展示，并将版本内用例列表限制为“2.5 行可滚动”以提示可滚动；执行总览每个执行集卡片新增“状态 + 数量”小字信息（`scripts/modules/execOverview.js`、`style.css`、`tests/ui/exec_overview.spec.js`、`tests/ui/tempexec_project_layout.spec.js`）。  
+- 更新记录：2025-12-16 修复执行总览版本盒子滚动时进度条文本溢出，并将“待/过/失/阻”计数标识加上对应颜色；导入&分配页版本盒子内用例间距更紧凑，拖拽时显示虚线框并支持靠近边缘自动滚动（`scripts/modules/execOverview.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/exec_overview.spec.js`、`tests/ui/tempexec_project_layout.spec.js`）。  
+- 更新记录：2025-12-16 导入&分配页版本盒子保持高度不变，单屏展示调整为约 4.5 条子用例；执行总览滚动场景下仍可显示每条子用例进度条（`scripts/modules/execOverview.js`、`style.css`、`tests/ui/exec_overview.spec.js`、`tests/ui/tempexec_project_layout.spec.js`）。  
+- 更新记录：2025-12-16 导入&分配页版本盒子单屏展示调整为约 3.5 条子用例并回归更舒适的子项高度；执行总览子项高度与版本盒子最大高度同步调整，避免滚动场景遮挡“执行数据”（`style.css`）。  
+- 更新记录：2025-12-16 修复执行总览版本盒子内子项在多条时被 flex 压缩导致高度不一致/不触发滚动的问题，强制子项固定高度并通过滚动展示（`style.css`、`tests/ui/exec_overview.spec.js`）。  

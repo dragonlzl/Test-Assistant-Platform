@@ -33,6 +33,11 @@ test.describe('用例执行-项目/版本分组布局', () => {
       { id: 1001, project_id: 1, version_id: 11, case_file_id: 101, case_count: 1, name: '用例A', status: 'active', created_at: iso(now - 20000), updated_at: iso(now - 1000) },
       { id: 1002, project_id: 1, version_id: 11, case_file_id: 102, case_count: 1, name: '用例B', status: 'active', created_at: iso(now - 15000), updated_at: iso(now - 900) },
       { id: 1003, project_id: 1, version_id: 12, case_file_id: 103, case_count: 1, name: '用例C', status: 'active', created_at: iso(now - 5000), updated_at: iso(now - 100) },
+      { id: 1004, project_id: 1, version_id: 12, case_file_id: 104, case_count: 1, name: '用例E', status: 'active', created_at: iso(now - 4500), updated_at: iso(now - 90) },
+      { id: 1005, project_id: 1, version_id: 12, case_file_id: 105, case_count: 1, name: '用例F', status: 'active', created_at: iso(now - 4200), updated_at: iso(now - 80) },
+      { id: 1006, project_id: 1, version_id: 12, case_file_id: 106, case_count: 1, name: '用例G', status: 'active', created_at: iso(now - 4100), updated_at: iso(now - 70) },
+      { id: 1007, project_id: 1, version_id: 12, case_file_id: 107, case_count: 1, name: '用例H', status: 'active', created_at: iso(now - 4000), updated_at: iso(now - 60) },
+      { id: 1008, project_id: 1, version_id: 12, case_file_id: 108, case_count: 1, name: '用例I', status: 'active', created_at: iso(now - 3900), updated_at: iso(now - 50) },
       { id: 2001, project_id: 2, version_id: 21, case_file_id: 201, case_count: 1, name: '用例D', status: 'active', created_at: iso(now - 1000), updated_at: iso(now - 50) },
     ];
     const casesBySet = {};
@@ -132,6 +137,11 @@ test.describe('用例执行-项目/版本分组布局', () => {
     expect(projectTitles[1]).toBe('项目A');
 
     const projectACard = page.locator('#tempVersionGrid .temp-project-card', { hasText: '项目A' }).first();
+    const projectAVersionsCols = await projectACard.locator('.temp-project-versions').evaluate((el) => {
+      const cols = getComputedStyle(el).gridTemplateColumns || '';
+      return cols.trim().split(/\s+/).filter(Boolean).length;
+    });
+    expect(projectAVersionsCols).toBe(3);
     const versionTitles = (await projectACard.locator('.temp-project-version-header .title').allTextContents()).map((t) => t.trim());
     expect(versionTitles[0]).toBe('v2');
     expect(versionTitles[1]).toBe('v1');
@@ -176,6 +186,37 @@ test.describe('用例执行-项目/版本分组布局', () => {
 
     const v2Card = projectACard.locator('.temp-project-version', { hasText: 'v2' }).first();
     const v2Body = v2Card.locator('.temp-project-version-body');
+    const v2Rows = v2Body.locator('.temp-req-row[data-temp-file]');
+    await expect(v2Rows).toHaveCount(6);
+    const v2Scrollable = await v2Body.evaluate((el) => el.scrollHeight > el.clientHeight);
+    expect(v2Scrollable).toBe(true);
+
+    // 版本盒子内拖拽：需要虚线框提示，并支持靠近上下边缘自动滚动
+    const dragHints = await v2Body.evaluate((el) => {
+      try {
+        if (typeof DataTransfer !== 'function' || typeof DragEvent !== 'function') return { ok: false, reason: 'no-dnd' };
+        el.scrollTop = 0;
+        var dt = new DataTransfer();
+        dt.setData('text/plain', '1003');
+        var rect = el.getBoundingClientRect();
+        var evt = new DragEvent('dragover', {
+          bubbles: true,
+          cancelable: true,
+          clientX: Math.floor(rect.left + 10),
+          clientY: Math.floor(rect.bottom - 2),
+          dataTransfer: dt,
+        });
+        el.dispatchEvent(evt);
+        var indicator = el.querySelector('.temp-file-drop-indicator');
+        return { ok: true, hasOutline: el.classList.contains('dragover-file'), hasIndicator: Boolean(indicator), scrollTop: el.scrollTop };
+      } catch (err) {
+        return { ok: false, reason: String(err && err.message ? err.message : err) };
+      }
+    });
+    expect(dragHints.ok).toBe(true);
+    expect(dragHints.hasOutline).toBe(true);
+    expect(dragHints.hasIndicator).toBe(true);
+    expect(dragHints.scrollTop).toBeGreaterThan(0);
     await v1Rows.nth(0).dragTo(v2Body, { targetPosition: { x: 10, y: 10 } });
     await expect(page.locator('#tempExecStatus')).toContainText('不支持拖拽移动用例');
     await expect(v2Body).not.toContainText('用例A');
