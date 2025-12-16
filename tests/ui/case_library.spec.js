@@ -561,6 +561,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await expect(page.locator('#caseLibraryEditOwnerFilterSelect')).toBeVisible();
+    await expect(page.locator('#caseLibraryEditFileSearchInput')).toBeVisible();
     await expect(page.locator('#caseLibraryEditOwnerFilterSelect')).toHaveValue('me');
     await expect(page.locator('#caseLibraryEditOwnerFilterSelect option[value="me"]')).toHaveText(user.username);
     await expect(page.locator('#caseLibraryEditOwnerFilterSelect option[value="all"]')).toHaveText('全部');
@@ -572,6 +573,16 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('other_user_case_file');
     await page.selectOption('#caseLibraryEditOwnerFilterSelect', 'me');
     await expect(page.locator('#caseLibraryEditListBody')).not.toContainText('other_user_case_file');
+
+    // 用例名搜索：在“全部”范围内可快速定位目标用例文件
+    await page.selectOption('#caseLibraryEditOwnerFilterSelect', 'all');
+    await page.fill('#caseLibraryEditFileSearchInput', 'other_user');
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('other_user_case_file');
+    await expect(page.locator('#caseLibraryEditListBody')).not.toContainText('case_library_import');
+    await page.fill('#caseLibraryEditFileSearchInput', '');
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('case_library_import');
+    // 回到默认“仅自己”，保证后续导出/编辑仍聚焦当前用例文件
+    await page.selectOption('#caseLibraryEditOwnerFilterSelect', 'me');
 
     // 抽屉内勾选后可导出 XMind/Excel（不含执行结果，使用原名）
     await page.click('#caseLibraryEditListBody input[data-case-lib-edit-select]');

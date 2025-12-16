@@ -9,3 +9,5 @@ data/*.db
 data/*.db-*
 data/*.sqlite
 data/*.sqlite-*
+backend/config_local.py
+.env

@@ -205,8 +205,8 @@
             </svg>
           </span>
           <span class="nav-entry-text">
-            <span class="nav-entry-title">编辑用例</span>
-            <span class="nav-entry-desc">编辑用例库条目，支持搜索/导出/删除</span>
+            <span class="nav-entry-title">查看&amp;编辑</span>
+            <span class="nav-entry-desc">查看并编辑用例库条目，支持搜索/导出/删除</span>
           </span>
         </button>
         <button class="nav-entry-card nav-entry-overview" id="openCaseLibrarySelectExecDrawerBtn" type="button">
@@ -1583,7 +1583,7 @@
 <h2>用例库</h2>
 <div class="card-body">
 <div class="case-library" id="caseLibrary">
-  <p class="hint">提示：请使用顶部导航进行导入、编辑用例或选择用例转到执行。</p>
+  <p class="hint">提示：请使用顶部导航进行导入、查看&amp;编辑或选择用例转到执行。</p>
   <p class="status" id="caseLibraryStatus"></p>
 
   <div class="card hidden" id="caseLibraryEditCard">
@@ -1741,7 +1741,7 @@
 	  <div class="drawer-mask" data-drawer-close="caseLibraryEditDrawer"></div>
 	  <div class="drawer-panel">
 	    <div class="drawer-header">
-	      <h3>编辑用例</h3>
+	      <h3>查看&amp;编辑</h3>
       <button class="link-toggle" data-drawer-close="caseLibraryEditDrawer">收起</button>
     </div>
     <div class="drawer-body">
@@ -1753,6 +1753,8 @@
           <select id="caseLibraryEditVersionSelect" disabled></select>
           <label class="case-library-label" for="caseLibraryEditOwnerFilterSelect">归属</label>
           <select id="caseLibraryEditOwnerFilterSelect"></select>
+          <label class="case-library-label" for="caseLibraryEditFileSearchInput">用例名</label>
+          <input id="caseLibraryEditFileSearchInput" type="text" placeholder="搜索用例名" />
         </div>
         <div class="case-library-drawer-actions">
           <button class="primary" id="caseLibraryEditConfirmBtn" type="button">刷新</button>

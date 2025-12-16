@@ -51,6 +51,7 @@
     editDrawerProjectSelect: document.getElementById('caseLibraryEditProjectSelect'),
     editDrawerVersionSelect: document.getElementById('caseLibraryEditVersionSelect'),
     editDrawerOwnerFilterSelect: document.getElementById('caseLibraryEditOwnerFilterSelect'),
+    editDrawerFileSearchInput: document.getElementById('caseLibraryEditFileSearchInput'),
     editDrawerConfirmBtn: document.getElementById('caseLibraryEditConfirmBtn'),
     editDrawerExportXmindBtn: document.getElementById('caseLibraryEditExportXmindBtn'),
     editDrawerExportExcelBtn: document.getElementById('caseLibraryEditExportExcelBtn'),
@@ -113,6 +114,7 @@
       projectId: null,
       versionId: null,
       ownerFilter: 'me',
+      fileSearchText: '',
       files: [],
       execByFileId: {},
       loading: false,
@@ -2552,6 +2554,7 @@
     state.editDrawer.loading = false;
     state.editDrawer.selection = new Set();
     if (!state.editDrawer.ownerFilter) state.editDrawer.ownerFilter = 'me';
+    state.editDrawer.fileSearchText = '';
     setStatus(dom.editDrawerStatus, '', '');
     syncProjectOptions(dom.editDrawerProjectSelect, '请选择项目');
     if (dom.editDrawerProjectSelect) dom.editDrawerProjectSelect.value = '';
@@ -2561,6 +2564,7 @@
       dom.editDrawerVersionSelect.value = '';
     }
     syncEditDrawerOwnerFilterOptions();
+    if (dom.editDrawerFileSearchInput) dom.editDrawerFileSearchInput.value = '';
     if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = true;
     if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = true;
     if (dom.editDrawerListBody) {
@@ -2580,6 +2584,25 @@
   function handleEditDrawerOwnerFilterChange() {
     state.editDrawer.ownerFilter = normalizeEditDrawerOwnerFilter(dom.editDrawerOwnerFilterSelect ? dom.editDrawerOwnerFilterSelect.value : '');
     // 切换过滤后，仅保留当前可见列表里的勾选，避免隐藏项仍被导出/删除。
+    var visibleIds = {};
+    getEditDrawerVisibleFiles().forEach(function(f) {
+      if (!f || f.id === null || f.id === undefined) return;
+      visibleIds[String(f.id)] = true;
+    });
+    var nextSel = new Set();
+    (state.editDrawer.selection || new Set()).forEach(function(id) {
+      if (visibleIds[String(id)]) nextSel.add(String(id));
+    });
+    state.editDrawer.selection = nextSel;
+    renderEditDrawerList();
+    syncEditDrawerControls();
+    persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
+  }
+
+  function handleEditDrawerFileSearchInput() {
+    if (!dom.editDrawerFileSearchInput) return;
+    state.editDrawer.fileSearchText = String(dom.editDrawerFileSearchInput.value || '');
+    // 搜索同样视为筛选：仅保留可见项的勾选。
     var visibleIds = {};
     getEditDrawerVisibleFiles().forEach(function(f) {
       if (!f || f.id === null || f.id === undefined) return;
@@ -2773,14 +2796,23 @@
       visible = visible.filter(function(f) { return String(f && f.version_id || '') === String(state.editDrawer.versionId || ''); });
     }
     var ownerFilter = normalizeEditDrawerOwnerFilter(state.editDrawer && state.editDrawer.ownerFilter ? state.editDrawer.ownerFilter : 'me');
-    if (ownerFilter !== 'me') return visible;
-    var userId = getCurrentUserId();
-    if (!userId) return visible;
+    if (ownerFilter === 'me') {
+      var userId = getCurrentUserId();
+      if (userId) {
+        visible = visible.filter(function(f) {
+          if (!f) return false;
+          var importerId = f.importer_id !== null && f.importer_id !== undefined ? String(f.importer_id) : '';
+          var updaterId = f.last_updated_by !== null && f.last_updated_by !== undefined ? String(f.last_updated_by) : '';
+          return String(importerId) === String(userId) || String(updaterId) === String(userId);
+        });
+      }
+    }
+    var term = normalizeName(state.editDrawer && state.editDrawer.fileSearchText ? state.editDrawer.fileSearchText : '');
+    if (!term) return visible;
     return visible.filter(function(f) {
       if (!f) return false;
-      var importerId = f.importer_id !== null && f.importer_id !== undefined ? String(f.importer_id) : '';
-      var updaterId = f.last_updated_by !== null && f.last_updated_by !== undefined ? String(f.last_updated_by) : '';
-      return String(importerId) === String(userId) || String(updaterId) === String(userId);
+      var name = normalizeName(f.file_name_clean || '');
+      return name.indexOf(term) !== -1;
     });
   }
 
@@ -2832,7 +2864,10 @@
     if (!dom.editDrawerListBody) return;
     var list = getEditDrawerVisibleFiles();
     if (!list.length) {
-      var hint = state.editDrawer.versionId ? '该版本暂无用例文件' : '暂无用例文件';
+      var hint = '暂无用例文件';
+      var term = String(state.editDrawer && state.editDrawer.fileSearchText ? state.editDrawer.fileSearchText : '').trim();
+      if (term) hint = '未找到匹配的用例文件';
+      else if (state.editDrawer.versionId) hint = '该版本暂无用例文件';
       dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"12\"><p class=\"hint\">' + escapeHtml(hint) + '</p></td></tr>';
       syncEditDrawerControls();
       return;
@@ -2871,7 +2906,7 @@
           '<td>' + escapeHtml(importedAt) + '</td>' +
           '<td>' + escapeHtml(updaterName) + '</td>' +
           '<td>' + escapeHtml(updatedAt) + '</td>' +
-          '<td><button class=\"secondary\" type=\"button\" data-case-lib-edit=\"' + escapeHtml(f && f.id ? f.id : '') + '\">编辑</button></td>' +
+          '<td><button class=\"secondary\" type=\"button\" data-case-lib-edit=\"' + escapeHtml(f && f.id ? f.id : '') + '\">查看&amp;编辑</button></td>' +
         '</tr>'
       );
     }).join('');
@@ -4550,6 +4585,9 @@
     }
     if (dom.editDrawerOwnerFilterSelect) {
       dom.editDrawerOwnerFilterSelect.addEventListener('change', handleEditDrawerOwnerFilterChange);
+    }
+    if (dom.editDrawerFileSearchInput) {
+      dom.editDrawerFileSearchInput.addEventListener('input', handleEditDrawerFileSearchInput);
     }
     if (dom.editDrawerDeleteBtn) {
       dom.editDrawerDeleteBtn.addEventListener('click', deleteSelectedCaseFiles);
