@@ -1155,3 +1155,5 @@
 - 更新记录：2025-12-16 执行页与用例库编辑点击“＋”新增用例行增加绿色描边高亮，并在页面生命周期内保持到下次刷新（`scripts/core/tempexecCore.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/new_added_highlight.spec.js`）。  
 - 更新记录：2025-12-16 执行页/用例库编辑在 8 秒待确认期内重复点增删时，会在点击位置浮出提示“当前有待确认的增删操作，请先撤回或等待入库”（3 秒后自动消失），避免滚动后看不到固定位置提示（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/undo_click_hint.spec.js`）。  
 - 更新记录：2025-12-16 执行页“用例导入&分配”温馨提示改为提醒导入后需点击“确认入库”才能进行下一步，并暂时屏蔽“导出/导入执行页面配置”按钮（`index.html`、`tests/ui/tempexec_import_confirm.spec.js`、`tests/ui/files_layout.spec.js`、`tests/ui/workflow.spec.js`、`tests/ui/tempexec_drag.spec.js`）。  
+- 更新记录：2025-12-16 人员管理删除用户增加“后果说明 + 输入当前管理员密码”确认（后端强校验，避免误删/越权脚本调用）（`backend/routers/users.py`、`backend/schemas.py`、`services/apiClient.js`、`index.html`、`scripts/modules/admin.js`、`tests/api/admin_entities.spec.js`、`tests/ui/user_admin_drawer.spec.js`）。  
+- 更新记录：2025-12-16 删除用户成功后页面中间悬浮提示“删除成功”，3 秒自动消失（`scripts/modules/admin.js`、`style.css`、`tests/ui/user_admin_drawer.spec.js`）。  

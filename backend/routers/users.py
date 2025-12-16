@@ -8,7 +8,7 @@ from ..audit import log_operation
 from ..config import settings
 from ..db import get_db
 from ..dependencies import get_current_user, require_admin
-from ..security import hash_password
+from ..security import hash_password, verify_password
 
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -87,12 +87,18 @@ def update_user(
     return user
 
 
-@router.delete("/{user_id}")
-def delete_user(
+def _delete_user_with_admin_password(
+    db: Session,
+    admin: models.User,
     user_id: int,
-    admin: models.User = Depends(require_admin),
-    db: Session = Depends(get_db),
+    payload: schemas.AdminPasswordConfirm,
 ):
+    password = (payload.admin_password or "").strip()
+    if not password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请输入当前登录管理员密码")
+    if not verify_password(password, admin.password_hash or ""):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="管理员密码错误")
+
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
@@ -103,9 +109,30 @@ def delete_user(
         action="delete_user",
         target_type="user",
         target_id=user_id,
+        detail={"username": user.username},
     )
     db.commit()
     return {"detail": "用户已删除"}
+
+
+@router.post("/{user_id}/delete")
+def delete_user_confirmed(
+    user_id: int,
+    payload: schemas.AdminPasswordConfirm,
+    admin: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return _delete_user_with_admin_password(db=db, admin=admin, user_id=user_id, payload=payload)
+
+
+@router.delete("/{user_id}")
+def delete_user(
+    user_id: int,
+    payload: schemas.AdminPasswordConfirm,
+    admin: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return _delete_user_with_admin_password(db=db, admin=admin, user_id=user_id, payload=payload)
 
 
 @router.post("/{user_id}/reset_password")

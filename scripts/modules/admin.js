@@ -39,9 +39,14 @@
     userDrawerTitle: document.getElementById('userDrawerTitle'),
     userTableBody: document.getElementById('userTableBody'),
     userList: document.getElementById('userList'),
+    userDeleteTargetText: document.getElementById('userDeleteTargetText'),
+    userDeleteAdminPasswordInput: document.getElementById('userDeleteAdminPasswordInput'),
+    userDeleteConfirmBtn: document.getElementById('userDeleteConfirmBtn'),
+    userDeleteStatus: document.getElementById('userDeleteStatus'),
   };
   var userDrawer;
   var projectDrawer;
+  var userDeleteDrawer;
 
   function resolveProjectId(item) {
     if (item === null || item === undefined) return null;
@@ -84,6 +89,34 @@
     if (!el) return;
     el.textContent = text || '';
     el.className = ['status', type || ''].filter(Boolean).join(' ');
+  }
+
+  var centerToastEl = null;
+  var centerToastTimer = 0;
+  function showCenterToast(text, type) {
+    if (typeof document === 'undefined') return;
+    if (!text) return;
+    if (centerToastTimer) {
+      clearTimeout(centerToastTimer);
+      centerToastTimer = 0;
+    }
+    if (centerToastEl && centerToastEl.parentNode) {
+      try { centerToastEl.parentNode.removeChild(centerToastEl); } catch (_) {}
+    }
+    centerToastEl = document.createElement('div');
+    centerToastEl.className = 'temp-center-toast' + (type ? (' ' + String(type)) : '');
+    centerToastEl.textContent = String(text);
+    document.body.appendChild(centerToastEl);
+    centerToastTimer = setTimeout(function() {
+      if (!centerToastEl) return;
+      centerToastEl.classList.add('fade-out');
+      setTimeout(function() {
+        if (centerToastEl && centerToastEl.parentNode) {
+          try { centerToastEl.parentNode.removeChild(centerToastEl); } catch (_) {}
+        }
+        centerToastEl = null;
+      }, 240);
+    }, 3000);
   }
 
   function notifyProjectsUpdated(reason, detail) {
@@ -175,6 +208,22 @@
       closeButtons: [],
     });
     return projectDrawer;
+  }
+
+  function ensureUserDeleteDrawer() {
+    if (userDeleteDrawer) return userDeleteDrawer;
+    if (!window.app || !window.app.drawer) return null;
+    userDeleteDrawer = window.app.drawer.createDrawer({
+      drawerId: 'userDeleteDrawer',
+      openButtons: [],
+      closeButtons: [],
+      onClose: function() {
+        if (dom.userDeleteAdminPasswordInput) dom.userDeleteAdminPasswordInput.value = '';
+        if (dom.userDeleteConfirmBtn) dom.userDeleteConfirmBtn.disabled = true;
+        setStatus(dom.userDeleteStatus, '', '');
+      },
+    });
+    return userDeleteDrawer;
   }
 
   function showUserForm(editing) {
@@ -631,6 +680,59 @@
     }
   }
 
+  function updateDeleteConfirmState() {
+    if (!dom.userDeleteConfirmBtn) return;
+    var val = '';
+    if (dom.userDeleteAdminPasswordInput) val = String(dom.userDeleteAdminPasswordInput.value || '');
+    dom.userDeleteConfirmBtn.disabled = !val.trim();
+  }
+
+  function showDeleteUserConfirm(user) {
+    if (!user) return;
+    var current = getCurrentUser();
+    if (current && current.id && Number(current.id) === Number(user.id)) {
+      setStatus(dom.userStatus, '禁止删除当前登录账号，请更换管理员账号后操作', 'warn');
+      return;
+    }
+    state.deletingUserId = user.id;
+    setStatus(dom.userDeleteStatus, '', '');
+    if (dom.userDeleteTargetText) {
+      dom.userDeleteTargetText.textContent = (user.username || '') + '（ID: ' + user.id + '）';
+    }
+    if (dom.userDeleteAdminPasswordInput) dom.userDeleteAdminPasswordInput.value = '';
+    updateDeleteConfirmState();
+    var drawerInstance = ensureUserDeleteDrawer();
+    if (drawerInstance && typeof drawerInstance.open === 'function') {
+      drawerInstance.open();
+      setTimeout(function() {
+        if (dom.userDeleteAdminPasswordInput && typeof dom.userDeleteAdminPasswordInput.focus === 'function') {
+          dom.userDeleteAdminPasswordInput.focus({ preventScroll: true });
+        }
+      }, 0);
+    }
+  }
+
+  function confirmDeleteUser() {
+    var uid = state && state.deletingUserId ? Number(state.deletingUserId) : null;
+    if (!uid) return;
+    var password = dom.userDeleteAdminPasswordInput ? String(dom.userDeleteAdminPasswordInput.value || '').trim() : '';
+    if (!password) {
+      setStatus(dom.userDeleteStatus, '请输入当前登录管理员密码', 'warn');
+      updateDeleteConfirmState();
+      return;
+    }
+    setStatus(dom.userDeleteStatus, '删除中...', '');
+    api.deleteUser(uid, password).then(function() {
+      setStatus(dom.userStatus, '用户已删除', 'ok');
+      showCenterToast('删除成功', 'ok');
+      var drawerInstance = ensureUserDeleteDrawer();
+      if (drawerInstance && typeof drawerInstance.close === 'function') drawerInstance.close();
+      return loadUsers();
+    }).catch(function(err) {
+      setStatus(dom.userDeleteStatus, err && err.message ? err.message : '删除失败', 'err');
+    });
+  }
+
   function handleUserListClick(e) {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
@@ -651,10 +753,19 @@
         setStatus(dom.userStatus, err && err.message ? err.message : '重置失败', 'err');
       });
     } else if (action === 'delete-user') {
-      if (!confirm('确认删除该用户？')) return;
-      api.deleteUser(id).then(loadUsers).catch(function(err) {
-        setStatus(dom.userStatus, err && err.message ? err.message : '删除失败', 'err');
-      });
+      if (!user) return;
+      var confirmMsg = [
+        '确认删除用户【' + (user.username || '') + '】（ID: ' + user.id + '）？',
+        '',
+        '删除后果（不可恢复）：',
+        '1）该用户账号将被彻底删除，无法再登录；',
+        '2）该用户的项目归属会被移除；相关个人执行数据可能失去归属，普通用户可能无法再访问，只能由管理员查看/清理；',
+        '',
+        '下一步需要输入当前登录管理员密码以确认删除。',
+      ].join('\n');
+      if (!confirm(confirmMsg)) return;
+      state.deletingUserId = user.id;
+      showDeleteUserConfirm(user);
     }
   }
 
@@ -675,6 +786,15 @@
     });
     if (dom.userSaveBtn) dom.userSaveBtn.addEventListener('click', saveUser);
     if (dom.userTableBody) dom.userTableBody.addEventListener('click', handleUserListClick);
+    if (dom.userDeleteAdminPasswordInput) {
+      dom.userDeleteAdminPasswordInput.addEventListener('input', updateDeleteConfirmState);
+      dom.userDeleteAdminPasswordInput.addEventListener('keydown', function(e) {
+        if (!e || e.key !== 'Enter') return;
+        e.preventDefault();
+        confirmDeleteUser();
+      });
+    }
+    if (dom.userDeleteConfirmBtn) dom.userDeleteConfirmBtn.addEventListener('click', confirmDeleteUser);
   }
 
   function isAuthReady() {

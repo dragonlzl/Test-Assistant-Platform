@@ -146,10 +146,11 @@
     }).then(handleResponse);
   }
 
-  function deleteUser(userId) {
-    return fetch('/api/users/' + userId, {
-      method: 'DELETE',
+  function deleteUser(userId, adminPassword) {
+    return fetch('/api/users/' + userId + '/delete', {
+      method: 'POST',
       headers: buildHeaders(),
+      body: JSON.stringify({ admin_password: adminPassword || '' }),
     }).then(handleResponse);
   }
 

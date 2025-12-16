@@ -160,4 +160,59 @@ test.describe('人员管理列表与抽屉', () => {
     const emptyHint = page.locator('#userProjectsSelect .project-checkbox-empty');
     await expect(emptyHint).toContainText('暂无项目');
   });
+
+  test('删除用户需二次确认并输入当前管理员密码', async ({ page }) => {
+    await page.unroute('**/api/users');
+
+    const localUsers = [
+      { id: 1, username: 'alice', role: 'admin', level: 'leader', is_active: true, created_at: '2024-12-05T10:00:00Z' },
+      { id: 2, username: 'bob', role: 'user', level: 'member', is_active: true, created_at: '2024-12-06T10:00:00Z' },
+    ];
+
+    await page.route('**/api/users', (route) => {
+      if (route.request().method() !== 'GET') {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+      }
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(localUsers) });
+    });
+
+    await page.route('**/api/users/2/delete', async (route) => {
+      const payload = route.request().postDataJSON ? route.request().postDataJSON() : {};
+      if (!payload || payload.admin_password !== 'secret') {
+        return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ detail: '管理员密码错误' }) });
+      }
+      const idx = localUsers.findIndex((u) => u && u.id === 2);
+      if (idx !== -1) localUsers.splice(idx, 1);
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ detail: '用户已删除' }) });
+    });
+
+    const manageBtn = page.locator('.tab-group-btn', { hasText: '管理' });
+    await manageBtn.click();
+    await page.locator('[data-group-menu="manage"] [data-tab-btn="user-admin"]').click();
+
+    await page.once('dialog', async (dialog) => {
+      expect(dialog.type()).toBe('confirm');
+      expect(dialog.message()).toContain('删除后果');
+      await dialog.accept();
+    });
+    await page.locator('[data-action="delete-user"][data-id="2"]').click();
+
+    const deleteDrawer = page.locator('#userDeleteDrawer');
+    await expect(deleteDrawer).toHaveClass(/open/);
+    await expect(page.locator('#userDeleteTargetText')).toContainText('bob');
+    await expect(page.locator('#userDeleteConfirmBtn')).toBeDisabled();
+
+    await page.fill('#userDeleteAdminPasswordInput', 'secret');
+    await expect(page.locator('#userDeleteConfirmBtn')).toBeEnabled();
+    await page.click('#userDeleteConfirmBtn');
+
+    const toast = page.locator('.temp-center-toast', { hasText: '删除成功' });
+    await expect(toast).toBeVisible();
+    await expect(deleteDrawer).not.toHaveClass(/open/);
+    await expect(page.locator('#userTableBody tr')).toHaveCount(1);
+    await expect(page.locator('#userTableBody tr').first()).toContainText('alice');
+
+    await page.waitForTimeout(3300);
+    await expect(toast).toHaveCount(0);
+  });
 });

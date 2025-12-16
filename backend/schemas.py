@@ -49,6 +49,10 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class AdminPasswordConfirm(BaseModel):
+    admin_password: str
+
+
 class ProjectBase(BaseModel):
     name: str
     description: Optional[str] = None

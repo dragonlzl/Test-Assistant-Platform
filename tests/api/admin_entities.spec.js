@@ -63,7 +63,22 @@ test.describe('admin projects & users', () => {
     expect(userProjects.some(p => p.project_id === projectId)).toBeTruthy();
 
     // cleanup: delete user
-    const delUser = await ctx.delete(`${apiBase}/api/users/${userId}`, { headers });
+    const delUserMissingPwd = await ctx.post(`${apiBase}/api/users/${userId}/delete`, {
+      headers,
+      data: { admin_password: '' },
+    });
+    expect(delUserMissingPwd.status()).toBe(400);
+
+    const delUserWrongPwd = await ctx.post(`${apiBase}/api/users/${userId}/delete`, {
+      headers,
+      data: { admin_password: 'wrong-password' },
+    });
+    expect(delUserWrongPwd.status()).toBe(400);
+
+    const delUser = await ctx.post(`${apiBase}/api/users/${userId}/delete`, {
+      headers,
+      data: { admin_password: adminPass },
+    });
     expect(delUser.status()).toBe(200);
 
     // cleanup: delete version & project

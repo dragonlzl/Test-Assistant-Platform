@@ -1997,6 +1997,35 @@
     </div>
   </div>
 </div>
+<div class="drawer" id="userDeleteDrawer" data-tab-section="user-admin">
+  <div class="drawer-mask" data-drawer-close="userDeleteDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>删除用户确认</h3>
+      <button class="link-toggle" data-drawer-close="userDeleteDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <div class="notice-card highlight" style="margin:0 0 12px;">
+        <strong>删除后果（不可恢复）</strong>
+        <ul style="margin:8px 0 0 16px;">
+          <li>该用户账号将被彻底删除，无法再登录。</li>
+          <li>该用户的项目归属会被移除；相关个人执行数据可能失去归属，普通用户可能无法再访问，只能由管理员查看/清理。</li>
+          <li>该操作不可撤销，请谨慎确认。</li>
+        </ul>
+      </div>
+      <p class="hint" style="margin:0 0 10px;">待删除用户：<strong id="userDeleteTargetText"></strong></p>
+      <div class="form-row">
+        <label>管理员密码</label>
+        <input id="userDeleteAdminPasswordInput" type="password" placeholder="请输入当前登录管理员密码"/>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="danger" id="userDeleteConfirmBtn" type="button" disabled>确认删除</button>
+        <button class="ghost-btn" data-drawer-close="userDeleteDrawer" type="button">取消</button>
+      </div>
+      <p class="status" id="userDeleteStatus"></p>
+    </div>
+  </div>
+</div>
 <section class="card hidden" data-tab-section="ops-log" data-role="admin-only">
 <h2>操作记录</h2>
 <div class="card-body">
