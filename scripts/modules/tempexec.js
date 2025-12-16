@@ -272,8 +272,111 @@
       if (tempExecOverviewDrawer) tempExecOverviewDrawer.open();
       if (tempExecOverviewSection) {
         tempExecOverviewSection.classList.remove('hidden');
-        scrollElementIntoView(tempExecOverviewSection, 'smooth', 140);
       }
+      var drawerBody = tempExecOverviewDrawerEl && tempExecOverviewDrawerEl.querySelector('.drawer-body');
+      if (drawerBody) drawerBody.scrollTop = 0;
+    }
+
+    function scrollToTempExecCaseRow(fileId, idx, options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var attempts = 0;
+      var maxAttempts = 30;
+      var delay = Number(opts.delayMs);
+      if (!Number.isFinite(delay) || delay < 0) delay = 0;
+      if (!delay && opts.waitForDrawerUnlock) {
+        var closing = false;
+        if (tempExecOverviewDrawerEl && tempExecOverviewDrawerEl.classList) {
+          closing = closing || tempExecOverviewDrawerEl.classList.contains('closing');
+          closing = closing || tempExecOverviewDrawerEl.classList.contains('open');
+        }
+        if (tempExecDrawerEl && tempExecDrawerEl.classList) {
+          closing = closing || tempExecDrawerEl.classList.contains('closing');
+          closing = closing || tempExecDrawerEl.classList.contains('open');
+        }
+        // 抽屉关闭时会恢复 window.scrollTo(lockedScrollTop)，需要等解锁后再滚动到目标行，避免出现“先跳再被拉回”的上滚抖动。
+        delay = closing ? 520 : 80;
+      }
+      function tryScroll() {
+        attempts += 1;
+        if (!tempExecView) return;
+        var selector = 'tr.case-row[data-temp-case-row="' + String(fileId) + '"][data-index="' + String(idx) + '"]';
+        var target = tempExecView.querySelector(selector);
+        if (!target) {
+          target = tempExecView.querySelector('[data-temp-result="' + String(fileId) + '"][data-index="' + String(idx) + '"]');
+        }
+        if (!target) {
+          target = tempExecView.querySelector('[data-temp-remark="' + String(fileId) + '"][data-index="' + String(idx) + '"]');
+        }
+        if (target) {
+          scrollElementIntoView(target, 'auto', 160);
+          return;
+        }
+        if (attempts < maxAttempts) setTimeout(tryScroll, 40);
+      }
+      setTimeout(tryScroll, delay || 0);
+    }
+
+    function scrollToTempExecViewTop(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var delay = Number(opts.delayMs);
+      if (!Number.isFinite(delay) || delay < 0) delay = 0;
+      if (!delay && opts.waitForDrawerUnlock) {
+        var closing = false;
+        if (tempExecOverviewDrawerEl && tempExecOverviewDrawerEl.classList) {
+          closing = closing || tempExecOverviewDrawerEl.classList.contains('closing');
+          closing = closing || tempExecOverviewDrawerEl.classList.contains('open');
+        }
+        if (tempExecDrawerEl && tempExecDrawerEl.classList) {
+          closing = closing || tempExecDrawerEl.classList.contains('closing');
+          closing = closing || tempExecDrawerEl.classList.contains('open');
+        }
+        delay = closing ? 520 : 0;
+      }
+      setTimeout(function() {
+        if (tempExecViewSection) {
+          scrollElementIntoView(tempExecViewSection, 'auto', 140);
+        } else if (tempExecView) {
+          scrollElementIntoView(tempExecView, 'auto', 140);
+        }
+      }, delay || 0);
+    }
+
+    function jumpToTempExecCase(fileId, caseIndex) {
+      if (!fileId) return;
+      var idx = Number(caseIndex);
+      if (!Number.isFinite(idx) || idx < 0) idx = 0;
+      var liveApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : api;
+      var globalState = window.app && window.app.state ? window.app.state : state;
+
+      if (globalState && globalState.activeTab !== 'tempexec') {
+        switchTab('tempexec');
+      }
+      updateTempExecToolbarOffset();
+      try {
+        if (window.app) window.app.__drawerSkipRestoreOnce = true;
+      } catch (err) {
+        // ignore
+      }
+      if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
+      if (tempExecDrawer) tempExecDrawer.close();
+      if (tempExecOverviewSection) tempExecOverviewSection.classList.add('hidden');
+      if (tempExecViewSection) tempExecViewSection.classList.remove('hidden');
+
+      if (liveApi && typeof liveApi.jumpToTempExecCase === 'function') {
+        liveApi.jumpToTempExecCase(fileId, idx, { clearFilters: true });
+      } else {
+        if (globalState && (!globalState.tempExecPages || typeof globalState.tempExecPages !== 'object')) globalState.tempExecPages = {};
+        var size = defaultTempExecPageSize;
+        if (liveApi && typeof liveApi.getTempExecPageSize === 'function') size = Number(liveApi.getTempExecPageSize());
+        if (!Number.isFinite(size) || size <= 0) size = defaultTempExecPageSize;
+        var pageIndex = Math.floor(idx / size);
+        if (globalState && globalState.tempExecPages && typeof globalState.tempExecPages === 'object') {
+          globalState.tempExecPages[fileId] = pageIndex;
+        }
+        if (liveApi && typeof liveApi.setTempExecActive === 'function') liveApi.setTempExecActive(fileId);
+      }
+
+      scrollToTempExecCaseRow(fileId, idx, { waitForDrawerUnlock: true });
     }
     function focusTempExecBackup() {
       switchTab('tempexec');
@@ -2646,30 +2749,63 @@
         showTempExecOverview();
       });
     }
-    if (tempExecOverview && api.setTempExecActive) {
+      if (tempExecOverview && api.setTempExecActive) {
       tempExecOverview.addEventListener('click', function(e) {
+        var seg = e.target.closest('[data-temp-overview-file][data-temp-overview-status]');
+        if (seg) {
+          e.preventDefault();
+          e.stopPropagation();
+          var segFileId = seg.dataset.tempOverviewFile;
+          var segIndex = Number(seg.dataset.tempOverviewIndex);
+          if (!Number.isFinite(segIndex) || segIndex < 0) segIndex = 0;
+          jumpToTempExecCase(segFileId, segIndex);
+          return;
+        }
         var card = e.target.closest('[data-temp-file]');
         if (!card) return;
         var fileId = card.dataset.tempFile;
         if (fileId) {
-          api.setTempExecActive(fileId);
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            if (window.app) window.app.__drawerSkipRestoreOnce = true;
+          } catch (err2) {
+            // ignore
+          }
           switchTab('tempexec');
-          if (tempExecViewSection) scrollElementIntoView(tempExecViewSection, 'smooth', 120);
+          updateTempExecToolbarOffset();
+          if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
+          if (tempExecDrawer) tempExecDrawer.close();
+          if (tempExecOverviewSection) tempExecOverviewSection.classList.add('hidden');
+          if (tempExecViewSection) tempExecViewSection.classList.remove('hidden');
+          api.setTempExecActive(fileId);
+          // 选中用例后回到执行视图：定位到执行视图顶部，避免抽屉关闭滚动恢复导致“列表上滚遮挡顶部”。
+          scrollToTempExecViewTop({ waitForDrawerUnlock: true });
         }
       });
     }
     if (tempExecBackBtn) {
       tempExecBackBtn.addEventListener('click', function() {
-        if (api.prioritizeTempExecUnassignedRequirements) {
-          api.prioritizeTempExecUnassignedRequirements();
+        try {
+          if (api.prioritizeTempExecUnassignedRequirements) {
+            api.prioritizeTempExecUnassignedRequirements();
+          }
+        } catch (err) {
+          // ignore
+        }
+        try {
+          if (window.app) window.app.__drawerSkipRestoreOnce = true;
+        } catch (err2) {
+          // ignore
         }
         switchTab('tempexec');
         if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
         if (tempExecDrawer) tempExecDrawer.close();
         if (tempExecViewSection) {
           tempExecViewSection.classList.remove('hidden');
-          scrollElementIntoView(tempExecViewSection, 'smooth', 140);
         }
+        if (tempExecOverviewSection) tempExecOverviewSection.classList.add('hidden');
+        scrollToTempExecViewTop({ waitForDrawerUnlock: true });
       });
     }
     if (tempExecMindBtn && api.renderTempExecView && api.getTempExecFile) {

@@ -1163,3 +1163,6 @@
 - 更新记录：2025-12-16 导入&分配页版本盒子单屏展示调整为约 3.5 条子用例并回归更舒适的子项高度；执行总览子项高度与版本盒子最大高度同步调整，避免滚动场景遮挡“执行数据”（`style.css`）。  
 - 更新记录：2025-12-16 修复执行总览版本盒子内子项在多条时被 flex 压缩导致高度不一致/不触发滚动的问题，强制子项固定高度并通过滚动展示（`style.css`、`tests/ui/exec_overview.spec.js`）。  
 - 更新记录：2025-12-16 执行总览版本盒子子用例卡片高度再次降低以更紧凑展示，同时保持信息完整不遮挡，并继续保留“2.5 行露半行”滚动提示（`style.css`）。  
+- 更新记录：2025-12-16 执行页导航卡片“执行总览”更名为“个人执行总览”；在个人执行总览抽屉内点击进度条段可直接跳转到对应执行用例并关闭抽屉，同时修复点击底部进度时执行视图异常上滚的问题（`index.html`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_entry.spec.js`、`tests/ui/tempexec_progress.spec.js`；验证：`npm run test:ui -- tests/ui/tempexec_entry.spec.js tests/ui/tempexec_progress.spec.js`）。  
+- 更新记录：2025-12-16 个人执行总览抽屉内点击用例卡片（非进度条段）也会关闭抽屉并切换执行用例；进度条段跳转滚动延后到抽屉解锁后执行，避免“先跳到目标再被抽屉恢复滚动拉回”导致的外层执行视图上滚抖动（`scripts/modules/tempexec.js`、`tests/ui/tempexec_progress.spec.js`；验证：`npm run test:ui -- tests/ui/tempexec_progress.spec.js -g 个人执行总览`）。  
+- 更新记录：2025-12-17 修复个人执行总览抽屉内滚动后点击条目返回执行视图时，因抽屉滚动锁恢复（restore scrollTop）导致执行视图列表“自动上滚遮挡顶部”的问题：新增抽屉关闭时的“一次性跳过滚动恢复”开关，并在执行页抽屉内导航场景使用；同时移除抽屉打开时对 window 的滚动定位，改为仅滚动抽屉内容（`scripts/base/drawer.js`、`scripts/modules/tempexec.js`；验证：`npm run test:ui -- tests/ui/tempexec_entry.spec.js tests/ui/tempexec_progress.spec.js`）。  

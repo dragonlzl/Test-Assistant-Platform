@@ -63,10 +63,26 @@
     }
     if (scrollLocked) {
       var targetTop = lockedScrollTop || 0;
+      var skipRestore = false;
+      var overrideTop = null;
+      try {
+        if (typeof window !== 'undefined') {
+          window.app = window.app || {};
+          if (window.app.__drawerSkipRestoreOnce) {
+            skipRestore = true;
+            window.app.__drawerSkipRestoreOnce = false;
+          } else if (typeof window.app.__drawerRestoreScrollTopOnce === 'number') {
+            overrideTop = window.app.__drawerRestoreScrollTopOnce;
+            window.app.__drawerRestoreScrollTopOnce = null;
+          }
+        }
+      } catch (err2) {
+        // ignore
+      }
       scrollLocked = false;
       lockedScrollTop = 0;
-      if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
-        window.scrollTo(0, targetTop);
+      if (!skipRestore && typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+        window.scrollTo(0, overrideTop !== null && overrideTop !== undefined ? overrideTop : targetTop);
       }
     }
   }

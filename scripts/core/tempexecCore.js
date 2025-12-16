@@ -1248,6 +1248,39 @@
       scrollTempExecViewTop();
     }
 
+    function jumpToTempExecCase(fileId, caseIndex, options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      if (!fileId) return { ok: false, reason: 'missing_file_id' };
+      var file = getTempExecFile(fileId);
+      if (!file) return { ok: false, reason: 'file_not_found' };
+      var idx = Math.floor(Number(caseIndex));
+      if (!Number.isFinite(idx) || idx < 0) idx = 0;
+
+      if (opts.clearFilters !== false) {
+        var statusFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
+        if (statusFilter.fileId === fileId && statusFilter.status) {
+          state.tempExecStatusFilter = { fileId: '', status: '' };
+        }
+        var searchState = state.tempExecSearch || { fileId: '', term: '', raw: '' };
+        if (searchState.fileId === fileId && (searchState.term || searchState.raw)) {
+          state.tempExecSearch = { fileId: '', term: '', raw: '' };
+        }
+      }
+
+      if (!state.tempExecPages || typeof state.tempExecPages !== 'object') state.tempExecPages = {};
+      var size = getTempExecPageSize();
+      if (!Number.isFinite(size) || size <= 0) size = defaultTempExecPageSize;
+      var totalCases = Array.isArray(file.cases) ? file.cases.length : 0;
+      var totalPages = totalCases ? Math.ceil(totalCases / size) : 1;
+      var pageIndex = totalCases ? Math.floor(idx / size) : 0;
+      if (!Number.isFinite(pageIndex) || pageIndex < 0) pageIndex = 0;
+      if (pageIndex >= totalPages) pageIndex = Math.max(totalPages - 1, 0);
+      state.tempExecPages[fileId] = pageIndex;
+
+      setTempExecActive(fileId);
+      return { ok: true, fileId: fileId, index: idx, pageIndex: pageIndex, pageSize: size };
+    }
+
     function applyTempExecPageSize(value) {
       var size = clampTempExecPageSize(value);
       var changed = state.tempExecPageSize !== size;
@@ -2512,16 +2545,25 @@
       var completionCount = summary.passed + summary.unspecified;
       var executedPercent = total ? Math.round((completionCount / total) * 100) : 0;
       var segments = [
-        { label: '通过', count: summary.passed, className: 'status-passed' },
-        { label: '失败', count: summary.failed, className: 'status-failed' },
-        { label: '阻塞', count: summary.blocked, className: 'status-blocked' },
-        { label: '不适用', count: summary.unspecified, className: 'status-unspecified' },
-        { label: '未执行', count: summary.pending, className: 'status-pending' },
+        { key: 'passed', label: '通过', count: summary.passed, className: 'status-passed' },
+        { key: 'failed', label: '失败', count: summary.failed, className: 'status-failed' },
+        { key: 'blocked', label: '阻塞', count: summary.blocked, className: 'status-blocked' },
+        { key: 'unspecified', label: '不适用', count: summary.unspecified, className: 'status-unspecified' },
+        { key: 'pending', label: '未执行', count: summary.pending, className: 'status-pending' },
       ];
+      function findFirstCaseIndexForOverview(key) {
+        if (!file || !Array.isArray(file.cases)) return -1;
+        for (var i = 0; i < file.cases.length; i += 1) {
+          var status = getCaseExecutionStatus(file, file.cases[i]);
+          if (mapFilterToStatus(key, status)) return i;
+        }
+        return -1;
+      }
       var segmentHtml = total
         ? segments.filter(function(seg) { return seg.count > 0; }).map(function(seg) {
+            var firstIndex = findFirstCaseIndexForOverview(seg.key);
             return (
-              '<div class="temp-overview-segment ' + seg.className + '" style="flex:' + seg.count + ';">' +
+              '<div class="temp-overview-segment ' + seg.className + '" style="flex:' + seg.count + ';" data-temp-overview-file="' + file.id + '" data-temp-overview-status="' + seg.key + '" data-temp-overview-index="' + firstIndex + '">' +
                 '<span>' + seg.count + '</span>' +
               '</div>'
             );
@@ -5812,7 +5854,7 @@
           : '';
         var rowClass = 'case-row' + (isTempExecNewAdded(file.id, item) ? ' new-added' : '');
         return (
-          '<tr class="' + rowClass + '">' +
+          '<tr class="' + rowClass + '" data-temp-case-row="' + file.id + '" data-index="' + idx + '">' +
             cells.join('') +
           '</tr>' +
           reuseRow +
@@ -6164,6 +6206,7 @@
       removeTempExecFocus: removeTempExecFocus,
       prioritizeTempExecUnassignedRequirements: prioritizeTempExecUnassignedRequirements,
       openTempExecCaseLibraryDiffDrawer: openTempExecCaseLibraryDiffDrawer,
+      jumpToTempExecCase: jumpToTempExecCase,
     };
   }
 

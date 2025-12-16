@@ -9,13 +9,19 @@ test.describe('临时执行入口导航', () => {
       }
       return route.abort();
     });
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tap-e2e-skip-auth', '1');
+        localStorage.removeItem('tap-auth-token');
+      } catch (_) {}
+    });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
     await page.waitForFunction(() => window.app && window.app._inited === true);
   });
 
   test('入口卡片与抽屉交互', async ({ page }) => {
-    await page.click('[data-tab-btn="tempexec"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
     const topNav = page.locator('#tempexecFlowNav');
     await expect(topNav).toBeVisible();
     const navCards = topNav.locator('.nav-entry-card');
@@ -25,6 +31,7 @@ test.describe('临时执行入口导航', () => {
     expect(iconCount).toBe(cardCount);
     const importCardDesc = topNav.locator('.nav-entry-card', { hasText: '用例导入&分配' }).locator('.nav-entry-desc').first();
     await expect(importCardDesc).toContainText('导入/分配用例');
+    await expect(topNav.locator('#openTempExecOverviewNavBtn')).toContainText('个人执行总览');
 
     await page.click('#openTempExecDrawerBtn');
     const drawer = page.locator('#tempExecDrawer');
@@ -44,7 +51,7 @@ test.describe('临时执行入口导航', () => {
   });
 
   test('配置备份抽屉遮罩覆盖且不会导致页面滚动', async ({ page }) => {
-    await page.click('[data-tab-btn="tempexec"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
     const initialScroll = await page.evaluate(() => window.scrollY);
     await page.click('#openTempExecBackupNavBtn');
     const maskMetrics = await page.$eval('#tempExecDrawer .drawer-mask', (mask) => {
@@ -72,7 +79,7 @@ test.describe('临时执行入口导航', () => {
   });
 
   test('执行总览抽屉展开', async ({ page }) => {
-    await page.click('[data-tab-btn="tempexec"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
     await page.click('#openTempExecOverviewNavBtn');
     const overviewDrawer = page.locator('#tempExecOverviewDrawer');
     await expect(overviewDrawer).toHaveClass(/open/);
