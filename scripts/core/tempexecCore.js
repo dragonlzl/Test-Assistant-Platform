@@ -939,7 +939,15 @@
       var placement = ensureTempExecPlacement();
       var list = Array.isArray(projectIds) ? projectIds : [];
       var normalized = list.map(function(id) { return id === null || id === undefined ? '' : String(id); }).filter(Boolean);
-      var existing = placement.projectOrder.filter(function(id) { return normalized.includes(id); });
+      var globalState = window.app && window.app.state ? window.app.state : {};
+      var settings = globalState && globalState.settings && typeof globalState.settings === 'object' ? globalState.settings : {};
+      var userOrder = Array.isArray(settings.projectOrder) ? settings.projectOrder.slice() : [];
+      userOrder = userOrder.map(function(id) { return id === null || id === undefined ? '' : String(id); }).filter(Boolean);
+      var useUserOrder = userOrder.length > 0;
+
+      var existing = useUserOrder
+        ? userOrder.filter(function(id) { return normalized.includes(id); })
+        : placement.projectOrder.filter(function(id) { return normalized.includes(id); });
       var missing = normalized.filter(function(id) { return existing.indexOf(id) === -1; });
       if (missing.length) {
         var metaMap = projectMeta && typeof projectMeta.get === 'function' ? projectMeta : null;
@@ -950,7 +958,9 @@
           return a.localeCompare(b, 'zh-Hans-CN');
         });
       }
-      placement.projectOrder = missing.concat(existing);
+      // 用户已在“项目排序”设置中明确配置时：按用户排序为准，新增项目自动追加到末尾。
+      // 未配置时：延续旧逻辑（新出现的项目优先靠前）。
+      placement.projectOrder = useUserOrder ? existing.concat(missing) : missing.concat(existing);
       return placement.projectOrder.slice();
     }
 
@@ -2064,6 +2074,13 @@
 
     function getTempExecImportProjectFilterProjectIds(fallbackIds) {
       var list = Array.isArray(state.projects) ? state.projects : [];
+      if (list.length) {
+        var utils = window.app && window.app.utils ? window.app.utils : {};
+        var globalState = window.app && window.app.state ? window.app.state : {};
+        if (utils && typeof utils.sortProjectsByUserSettings === 'function') {
+          list = utils.sortProjectsByUserSettings(list, globalState);
+        }
+      }
       var ids = list
         .map(function(project) { return project && project.id !== null && project.id !== undefined ? String(project.id) : ''; })
         .filter(Boolean);

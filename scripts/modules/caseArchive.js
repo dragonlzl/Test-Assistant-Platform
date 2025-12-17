@@ -272,8 +272,13 @@
     if (!dom.projectSelect) return;
     var list = Array.isArray(state.projects) ? state.projects : [];
     var active = state.currentProjectId ? String(state.currentProjectId || '') : '';
+    var globalState = window.app && window.app.state ? window.app.state : {};
+    var defaultPid = '';
+    if (utils && typeof utils.resolveDefaultProjectIdByUserSettings === 'function') {
+      defaultPid = utils.resolveDefaultProjectIdByUserSettings(list, globalState);
+    }
     if (!active || !list.some(function(p) { return p && String(p.id) === active; })) {
-      active = list.length ? String(list[0].id) : '';
+      active = defaultPid || (list.length ? String(list[0].id) : '');
       state.currentProjectId = active;
     }
     var options = ['<option value=""' + (active ? '' : ' selected') + '>请选择项目</option>'];
@@ -318,7 +323,12 @@
     return api
       .listProjects()
       .then(function(list) {
-        state.projects = Array.isArray(list) ? list : [];
+        var projects = Array.isArray(list) ? list : [];
+        var globalState = window.app && window.app.state ? window.app.state : {};
+        if (utils && typeof utils.sortProjectsByUserSettings === 'function') {
+          projects = utils.sortProjectsByUserSettings(projects, globalState);
+        }
+        state.projects = projects;
         return state.projects;
       })
       .catch(function(err) {

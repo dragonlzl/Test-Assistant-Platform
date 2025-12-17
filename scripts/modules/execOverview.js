@@ -680,7 +680,13 @@
     return api
       .listProjects()
       .then(function(list) {
-        state.projects = Array.isArray(list) ? list : [];
+        var projects = Array.isArray(list) ? list : [];
+        var utils = window.app && window.app.utils ? window.app.utils : {};
+        var globalState = window.app && window.app.state ? window.app.state : {};
+        if (utils && typeof utils.sortProjectsByUserSettings === 'function') {
+          projects = utils.sortProjectsByUserSettings(projects, globalState);
+        }
+        state.projects = projects;
         renderProjects();
         setStatus('', '');
         return list;

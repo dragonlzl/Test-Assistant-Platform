@@ -35,6 +35,8 @@
       feishuWebhook: '',
       feishuMention: '',
       tempExecColumns: { ...defaultTempExecColumns },
+      projectOrder: [],
+      defaultProjectId: '',
     };
     const settingsKey = appConfig.settingsKey || 'usecase-settings-v1';
     const minModelTimeoutSec = Number(appConfig.minModelTimeoutSec) || 30;

@@ -850,11 +850,17 @@
         .listProjects()
         .then(function(list) {
           var projects = Array.isArray(list) ? list : [];
-          projects.sort(function(a, b) {
-            var na = a && a.name ? String(a.name) : '';
-            var nb = b && b.name ? String(b.name) : '';
-            return na.localeCompare(nb, 'zh-Hans-CN');
-          });
+          var utils = window.app && window.app.utils ? window.app.utils : {};
+          var globalState = window.app && window.app.state ? window.app.state : {};
+          if (utils && typeof utils.sortProjectsByUserSettings === 'function') {
+            projects = utils.sortProjectsByUserSettings(projects, globalState);
+          } else {
+            projects.sort(function(a, b) {
+              var na = a && a.name ? String(a.name) : '';
+              var nb = b && b.name ? String(b.name) : '';
+              return na.localeCompare(nb, 'zh-Hans-CN');
+            });
+          }
           st.projects = projects;
           renderCaseGenDbStoreProjects();
           if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '', '');

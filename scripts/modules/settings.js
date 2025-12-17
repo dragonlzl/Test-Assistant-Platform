@@ -8,6 +8,17 @@
     var utils = ctx.utils || {};
     var api = window.app && window.app.apiClient;
     var setStatus = ctx.setStatus || utils.setStatus || function noop() {};
+    var escapeHtml = typeof utils.escapeHtml === 'function'
+      ? utils.escapeHtml
+      : function(text) {
+          if (text === null || text === undefined) return '';
+          return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        };
     var clampTimeoutSeconds = ctx.clampTimeoutSeconds || function clampTimeoutSeconds(value) {
       var num = Math.round(Number(value));
       var min = config.minModelTimeoutSec || 30;
@@ -32,6 +43,8 @@
     var tempExecPageSizeInput = dom.tempExecPageSizeInput || document.getElementById('tempExecPageSizeInput');
     var saveTempExecPageSizeBtn = dom.saveTempExecPageSizeBtn || document.getElementById('saveTempExecPageSize');
     var tempExecPageSizeStatus = dom.tempExecPageSizeStatus || document.getElementById('tempExecPageSizeStatus');
+    var projectSortGrid = dom.projectSortGrid || document.getElementById('projectSortGrid');
+    var projectSortStatus = dom.projectSortStatus || document.getElementById('projectSortStatus');
 
     var defaultSettings = config.defaultSettings || {};
     var defaultTempExecColumns = config.defaultTempExecColumns || {};
@@ -65,6 +78,15 @@
       feishuMention: false,
       tempExecColumns: false,
       tempExecPageSize: false,
+      projectOrder: false,
+      defaultProjectId: false,
+    };
+
+    var projectSortState = {
+      loading: false,
+      projects: [],
+      draggingId: '',
+      indicator: null,
     };
 
     function isRequiredTempExecColumn(key) {
@@ -331,6 +353,16 @@
         state.settings.tempExecPageSize = defaultTempExecPageSize;
       }
       ensureTempExecColumns();
+
+      if (!Array.isArray(state.settings.projectOrder)) state.settings.projectOrder = [];
+      state.settings.projectOrder = state.settings.projectOrder
+        .map(function(v) { return v === null || v === undefined ? '' : String(v); })
+        .filter(Boolean);
+      if (state.settings.defaultProjectId === null || state.settings.defaultProjectId === undefined) {
+        state.settings.defaultProjectId = '';
+      } else {
+        state.settings.defaultProjectId = String(state.settings.defaultProjectId || '');
+      }
     }
 
     function persistSettings(keys) {
@@ -379,7 +411,290 @@
         }
       }
       renderTempExecColumnSettings();
+      renderProjectSortSetting();
     }
+
+    function normalizeProjectList(list) {
+      return (Array.isArray(list) ? list : [])
+        .filter(function(p) { return p && p.id !== null && p.id !== undefined; })
+        .map(function(p) {
+          return { id: p.id, name: p.name || ('项目#' + p.id) };
+        });
+    }
+
+    function sortProjectsBySetting(list) {
+      var projects = Array.isArray(list) ? list.slice() : [];
+      var order = state.settings && Array.isArray(state.settings.projectOrder) ? state.settings.projectOrder : [];
+      var rank = {};
+      order.forEach(function(id, idx) {
+        var key = id === null || id === undefined ? '' : String(id);
+        if (!key) return;
+        if (rank[key] === undefined) rank[key] = idx;
+      });
+      projects.forEach(function(p, idx) {
+        if (!p) return;
+        p.__idx = idx;
+      });
+      projects.sort(function(a, b) {
+        var aid = a && a.id !== null && a.id !== undefined ? String(a.id) : '';
+        var bid = b && b.id !== null && b.id !== undefined ? String(b.id) : '';
+        var ra = rank[aid];
+        var rb = rank[bid];
+        var hasA = ra !== undefined && ra !== null;
+        var hasB = rb !== undefined && rb !== null;
+        if (hasA && hasB) return Number(ra) - Number(rb);
+        if (hasA && !hasB) return -1;
+        if (!hasA && hasB) return 1;
+        var ia = a && a.__idx !== undefined ? Number(a.__idx) : 0;
+        var ib = b && b.__idx !== undefined ? Number(b.__idx) : 0;
+        return ia - ib;
+      });
+      projects.forEach(function(p) {
+        if (!p) return;
+        try { delete p.__idx; } catch (_) {}
+      });
+      return projects;
+    }
+
+    function ensureProjectOrderForProjects(projects) {
+      var list = Array.isArray(projects) ? projects : [];
+      var ids = list.map(function(p) { return p && p.id !== null && p.id !== undefined ? String(p.id) : ''; }).filter(Boolean);
+      var existing = state.settings && Array.isArray(state.settings.projectOrder) ? state.settings.projectOrder.slice() : [];
+      existing = existing.map(function(v) { return v === null || v === undefined ? '' : String(v); }).filter(Boolean);
+      var hasUserOrder = existing.length > 0;
+
+      var changed = false;
+      var merged = existing.slice();
+      if (hasUserOrder) {
+        var filtered = existing.filter(function(id) { return ids.indexOf(id) !== -1; });
+        var missing = ids.filter(function(id) { return filtered.indexOf(id) === -1; });
+        merged = filtered.concat(missing);
+        changed =
+          merged.length !== existing.length ||
+          merged.some(function(id, idx) { return String(existing[idx] || '') !== String(id || ''); });
+        if (changed) {
+          state.settings.projectOrder = merged.slice();
+        }
+      }
+
+      var def = state.settings && state.settings.defaultProjectId ? String(state.settings.defaultProjectId || '') : '';
+      var defChanged = false;
+      if (def && ids.indexOf(def) === -1) {
+        def = '';
+        state.settings.defaultProjectId = '';
+        defChanged = true;
+      }
+      // 仅一个所属项目时：默认选中并写入，避免用户每次都要点一次。
+      if (!def && ids.length === 1) {
+        def = ids[0];
+        state.settings.defaultProjectId = def;
+        defChanged = true;
+      }
+      // 仅当用户已配置项目排序（或已手动选择默认项目）时，才自动补齐默认项目，避免无意间影响旧的项目/版本排序策略。
+      if (!def && hasUserOrder && merged.length) {
+        def = merged[0];
+        state.settings.defaultProjectId = def;
+        defChanged = true;
+      }
+      return { changed: Boolean(changed || defChanged), order: hasUserOrder ? merged : ids, defaultProjectId: def };
+    }
+
+    function renderProjectSortSetting() {
+      if (!projectSortGrid) return;
+      if (projectSortState.loading) return;
+      if (!api || typeof api.listProjects !== 'function') {
+        projectSortGrid.innerHTML = '<p class="hint">当前模式不支持项目排序（需启用 DB 后端）</p>';
+        return;
+      }
+      if (!projectSortState.projects || !projectSortState.projects.length) {
+        projectSortState.loading = true;
+        if (projectSortStatus) setStatus(projectSortStatus, '加载项目中...', '');
+        api.listProjects().then(function(list) {
+          projectSortState.projects = sortProjectsBySetting(normalizeProjectList(list));
+          var res = ensureProjectOrderForProjects(projectSortState.projects);
+          projectSortState.projects = sortProjectsBySetting(projectSortState.projects);
+          renderProjectSortCards();
+          if (projectSortStatus) setStatus(projectSortStatus, '', '');
+          if (res && res.changed) {
+            dirtyDrafts.projectOrder = false;
+            dirtyDrafts.defaultProjectId = false;
+            persistSettings(['projectOrder', 'defaultProjectId']);
+          }
+        }).catch(function(err) {
+          projectSortState.projects = [];
+          renderProjectSortCards();
+          if (projectSortStatus) setStatus(projectSortStatus, err && err.message ? err.message : '加载项目失败', 'err');
+        }).finally(function() {
+          projectSortState.loading = false;
+        });
+        return;
+      }
+      renderProjectSortCards();
+    }
+
+    function renderProjectSortCards() {
+      if (!projectSortGrid) return;
+      var list = sortProjectsBySetting(projectSortState.projects || []);
+      var ids = list.map(function(p) { return p && p.id !== null && p.id !== undefined ? String(p.id) : ''; }).filter(Boolean);
+      var def = state.settings && state.settings.defaultProjectId ? String(state.settings.defaultProjectId || '') : '';
+      if (def && ids.indexOf(def) === -1) def = '';
+      if (!def) def = ids.length ? ids[0] : '';
+      var html = list.map(function(p, idx) {
+        if (!p) return '';
+        var pid = p.id !== null && p.id !== undefined ? String(p.id) : '';
+        if (!pid) return '';
+        var cls = ['project-sort-card'];
+        if (pid === def) cls.push('selected');
+        var tags = [
+          '<span class="rank">#' + (idx + 1) + '</span>',
+        ];
+        if (pid === def) tags.push('<span class="default">默认</span>');
+        var name = escapeHtml(p.name || '');
+        return (
+          '<div class="' + cls.join(' ') + '" draggable="true" data-project-sort-id="' + pid + '">' +
+            '<div class="name" title="' + name + '">' + name + '</div>' +
+            '<div class="meta">' + tags.join('') + '</div>' +
+          '</div>'
+        );
+      }).join('');
+      if (!html) {
+        projectSortGrid.innerHTML = '<p class="hint">暂无可排序项目</p>';
+        return;
+      }
+      projectSortGrid.innerHTML = html;
+    }
+
+    function cleanupProjectSortIndicator() {
+      var indicator = projectSortState.indicator;
+      if (indicator && indicator.parentNode) {
+        try { indicator.parentNode.removeChild(indicator); } catch (_) {}
+      }
+      projectSortState.indicator = null;
+    }
+
+    function ensureProjectSortIndicator() {
+      if (projectSortState.indicator) return projectSortState.indicator;
+      var el = document.createElement('div');
+      el.className = 'project-sort-indicator';
+      el.setAttribute('aria-hidden', 'true');
+      projectSortState.indicator = el;
+      return el;
+    }
+
+    function bindProjectSortEvents() {
+      if (!projectSortGrid) return;
+      if (projectSortGrid.dataset && projectSortGrid.dataset.bound === '1') return;
+      if (projectSortGrid.dataset) projectSortGrid.dataset.bound = '1';
+
+      projectSortGrid.addEventListener('click', function(e) {
+        var card = e && e.target && e.target.closest ? e.target.closest('[data-project-sort-id]') : null;
+        if (!card || !card.dataset) return;
+        var pid = card.dataset.projectSortId || '';
+        if (!pid) return;
+        state.settings.defaultProjectId = String(pid);
+        dirtyDrafts.defaultProjectId = false;
+        persistSettings(['defaultProjectId']);
+        renderProjectSortCards();
+        if (projectSortStatus) setStatus(projectSortStatus, '默认项目已更新', 'ok');
+      });
+
+      projectSortGrid.addEventListener('dragstart', function(e) {
+        var card = e && e.target && e.target.closest ? e.target.closest('[data-project-sort-id]') : null;
+        if (!card || !card.dataset) return;
+        var pid = card.dataset.projectSortId || '';
+        if (!pid) return;
+        projectSortState.draggingId = pid;
+        try {
+          card.classList.add('dragging');
+        } catch (_) {}
+        if (e.dataTransfer) {
+          try { e.dataTransfer.setData('text/project-sort', pid); } catch (_) {}
+          try { e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
+        }
+      });
+
+      projectSortGrid.addEventListener('dragover', function(e) {
+        var draggingId = projectSortState.draggingId || '';
+        if (!draggingId) {
+          try {
+            draggingId = e && e.dataTransfer ? (e.dataTransfer.getData('text/project-sort') || '') : '';
+          } catch (_) {}
+        }
+        if (!draggingId) return;
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        var card = e && e.target && e.target.closest ? e.target.closest('[data-project-sort-id]') : null;
+        if (!card || !card.dataset) {
+          // 指示框插入后可能会成为 hover 目标（尤其在 grid gap/落点框上），这里不主动清理避免闪动。
+          return;
+        }
+        var rect = card.getBoundingClientRect ? card.getBoundingClientRect() : null;
+        if (!rect) return;
+        var after = e && typeof e.clientX === 'number' ? (e.clientX - rect.left > rect.width / 2) : false;
+        var indicator = ensureProjectSortIndicator();
+        indicator.dataset.dropAfter = after ? '1' : '0';
+        indicator.dataset.dropTargetId = card.dataset.projectSortId || '';
+        var ref = after ? card.nextSibling : card;
+        if (ref !== indicator) {
+          try {
+            projectSortGrid.insertBefore(indicator, ref);
+          } catch (_) {}
+        }
+      });
+
+      projectSortGrid.addEventListener('dragleave', function(e) {
+        if (!e || e.currentTarget !== projectSortGrid) return;
+        if (e.target !== projectSortGrid) return;
+        cleanupProjectSortIndicator();
+      });
+
+      projectSortGrid.addEventListener('dragend', function() {
+        cleanupProjectSortIndicator();
+        projectSortState.draggingId = '';
+        try {
+          projectSortGrid.querySelectorAll('.project-sort-card.dragging').forEach(function(node) {
+            if (!node) return;
+            node.classList.remove('dragging');
+          });
+        } catch (_) {}
+      });
+
+      projectSortGrid.addEventListener('drop', function(e) {
+        var draggingId = projectSortState.draggingId || '';
+        if (!draggingId) {
+          try {
+            draggingId = e && e.dataTransfer ? (e.dataTransfer.getData('text/project-sort') || '') : '';
+          } catch (_) {}
+        }
+        if (!draggingId) return;
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        var indicator = projectSortState.indicator;
+        var targetId = indicator && indicator.dataset ? (indicator.dataset.dropTargetId || '') : '';
+        var after = indicator && indicator.dataset ? (indicator.dataset.dropAfter === '1') : false;
+        cleanupProjectSortIndicator();
+        projectSortState.draggingId = '';
+        if (!targetId || targetId === draggingId) return;
+
+        var list = sortProjectsBySetting(projectSortState.projects || []);
+        var ids = list.map(function(p) { return p && p.id !== null && p.id !== undefined ? String(p.id) : ''; }).filter(Boolean);
+        var fromIdx = ids.indexOf(String(draggingId));
+        var toIdx = ids.indexOf(String(targetId));
+        if (fromIdx === -1 || toIdx === -1) return;
+        ids.splice(fromIdx, 1);
+        if (fromIdx < toIdx) toIdx -= 1;
+        var insertAt = after ? toIdx + 1 : toIdx;
+        if (insertAt < 0) insertAt = 0;
+        if (insertAt > ids.length) insertAt = ids.length;
+        ids.splice(insertAt, 0, String(draggingId));
+        state.settings.projectOrder = ids.slice();
+        dirtyDrafts.projectOrder = false;
+        persistSettings(['projectOrder']);
+        // 重新按新顺序刷新卡片
+        projectSortState.projects = sortProjectsBySetting(projectSortState.projects || []);
+        renderProjectSortCards();
+        if (projectSortStatus) setStatus(projectSortStatus, '项目排序已更新', 'ok');
+      });
+    }
+
 
     function saveTimeoutSetting() {
       if (!modelTimeoutInput) return;
@@ -565,6 +880,7 @@
         dirtyDrafts.tempExecPageSize = true;
         setStatus(tempExecPageSizeStatus, '', '');
       });
+      bindProjectSortEvents();
     }
 
     bindEvents();

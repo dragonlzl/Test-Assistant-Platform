@@ -295,6 +295,92 @@
       }, 240);
     }, duration);
   }
+
+  function normalizeIdForSort(value) {
+    if (value === null || value === undefined) return '';
+    if (value === 0 || String(value) === '0') return '0';
+    return String(value || '');
+  }
+
+  function buildOrderIndex(orderIds) {
+    var index = {};
+    (orderIds || []).forEach(function(id, i) {
+      var key = normalizeIdForSort(id);
+      if (!key) return;
+      if (!Object.prototype.hasOwnProperty.call(index, key)) index[key] = i;
+    });
+    return index;
+  }
+
+  function sortProjectsByOrder(projects, orderIds) {
+    var list = Array.isArray(projects) ? projects.slice() : [];
+    if (!list.length) return [];
+    var index = buildOrderIndex(orderIds);
+    var fallbackRank = 1000000;
+    var wrapped = list.map(function(p, i) {
+      var pid = p && (p.id || p.id === 0) ? normalizeIdForSort(p.id) : '';
+      var rank = Object.prototype.hasOwnProperty.call(index, pid) ? index[pid] : fallbackRank;
+      return { item: p, rank: rank, idx: i };
+    });
+    wrapped.sort(function(a, b) {
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      return a.idx - b.idx;
+    });
+    return wrapped.map(function(w) { return w.item; });
+  }
+
+  function sortIdsByOrder(ids, orderIds) {
+    var list = Array.isArray(ids) ? ids.slice() : [];
+    if (!list.length) return [];
+    var index = buildOrderIndex(orderIds);
+    var fallbackRank = 1000000;
+    var wrapped = list.map(function(id, i) {
+      var key = normalizeIdForSort(id);
+      var rank = Object.prototype.hasOwnProperty.call(index, key) ? index[key] : fallbackRank;
+      if (key === 'unknown') rank = fallbackRank + 9999;
+      return { id: id, rank: rank, idx: i };
+    });
+    wrapped.sort(function(a, b) {
+      if (a.rank !== b.rank) return a.rank - b.rank;
+      return a.idx - b.idx;
+    });
+    return wrapped.map(function(w) { return w.id; });
+  }
+
+  function getUserProjectSortSettings(state) {
+    var st = state || (window.app && window.app.state ? window.app.state : {});
+    var settings = st && st.settings && typeof st.settings === 'object' ? st.settings : {};
+    var order = Array.isArray(settings.projectOrder) ? settings.projectOrder.slice() : [];
+    order = order.map(function(id) { return normalizeIdForSort(id); }).filter(Boolean);
+    var def = settings.defaultProjectId === null || settings.defaultProjectId === undefined
+      ? ''
+      : normalizeIdForSort(settings.defaultProjectId);
+    return { order: order, defaultProjectId: def };
+  }
+
+  function sortProjectsByUserSettings(projects, state) {
+    var st = getUserProjectSortSettings(state);
+    return sortProjectsByOrder(projects, st.order);
+  }
+
+  function sortProjectIdsByUserSettings(ids, state) {
+    var st = getUserProjectSortSettings(state);
+    return sortIdsByOrder(ids, st.order);
+  }
+
+  function resolveDefaultProjectIdByUserSettings(projects, state) {
+    var st = getUserProjectSortSettings(state);
+    var list = sortProjectsByOrder(projects, st.order);
+    var def = st.defaultProjectId;
+    if (def) {
+      var exists = list.some(function(p) { return p && (p.id || p.id === 0) && normalizeIdForSort(p.id) === def; });
+      if (exists) return def;
+    }
+    if (list.length && list[0] && (list[0].id || list[0].id === 0)) {
+      return normalizeIdForSort(list[0].id);
+    }
+    return '';
+  }
   window.app = window.app || {};
   window.app.utils = {
     setStatus: setStatus,
@@ -318,5 +404,11 @@
     formatCompactTimestamp: formatCompactTimestamp,
     scrollElementIntoView: scrollElementIntoView,
     showCenterToast: showCenterToast,
+    getUserProjectSortSettings: getUserProjectSortSettings,
+    sortProjectsByOrder: sortProjectsByOrder,
+    sortIdsByOrder: sortIdsByOrder,
+    sortProjectsByUserSettings: sortProjectsByUserSettings,
+    sortProjectIdsByUserSettings: sortProjectIdsByUserSettings,
+    resolveDefaultProjectIdByUserSettings: resolveDefaultProjectIdByUserSettings,
   };
 })();

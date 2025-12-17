@@ -2593,6 +2593,121 @@
     });
   }
 
+  var selectDrawerPersistKey = 'tap-case-library-select-drawer';
+
+  function readSelectDrawerPersistedState() {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      var raw = localStorage.getItem(selectDrawerPersistKey);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function writeSelectDrawerPersistedState(payload) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      if (!payload) {
+        localStorage.removeItem(selectDrawerPersistKey);
+        return;
+      }
+      localStorage.setItem(selectDrawerPersistKey, JSON.stringify(payload));
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function persistSelectDrawerState(opts) {
+    opts = opts || {};
+    var userId = getCurrentUserId();
+    if (!userId) return;
+    var projectId = opts.projectId !== undefined ? normalizeId(opts.projectId) : normalizeId(state.selectDrawer && state.selectDrawer.projectId);
+    var versionId = opts.versionId !== undefined ? normalizeId(opts.versionId) : normalizeId(state.selectDrawer && state.selectDrawer.versionId);
+    writeSelectDrawerPersistedState({
+      user_id: userId,
+      project_id: projectId || '',
+      version_id: versionId || '',
+      saved_at: Date.now(),
+    });
+  }
+
+  function restoreSelectDrawerFromPersistedState() {
+    if (!isAuthReady()) return Promise.resolve(false);
+    var persisted = readSelectDrawerPersistedState();
+    if (!persisted) return Promise.resolve(false);
+    var userId = getCurrentUserId();
+    if (!userId || String(persisted.user_id || '') !== String(userId)) return Promise.resolve(false);
+
+    var projectId = normalizeId(persisted.project_id);
+    var versionId = normalizeId(persisted.version_id);
+    if (!projectId) return Promise.resolve(false);
+
+    var hasProject = (state.projects || []).some(function(p) { return p && String(p.id) === String(projectId); });
+    if (!hasProject) return Promise.resolve(false);
+
+    state.selectDrawer.projectId = projectId;
+    state.selectDrawer.versionId = null;
+    state.selectDrawer.files = [];
+    state.selectDrawer.execByFileId = {};
+    state.selectDrawer.processing = false;
+    state.selectDrawer.selection = new Set();
+
+    if (dom.selectProjectSelect) dom.selectProjectSelect.value = String(projectId);
+    if (dom.selectVersionSelect) {
+      dom.selectVersionSelect.disabled = true;
+      dom.selectVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
+      dom.selectVersionSelect.value = '';
+    }
+
+    state.selectDrawer.loading = true;
+    state.selectDrawer.loadSeq = Number(state.selectDrawer.loadSeq || 0) + 1;
+    var seq = state.selectDrawer.loadSeq;
+    setStatus(dom.selectStatus, '加载用例库...', '');
+    renderSelectDrawerList();
+
+    return Promise.all([apiClient.listCaseFiles(projectId), loadVersions(projectId), apiClient.listExecSetsByCaseFile(projectId)])
+      .then(function(res) {
+        if (seq !== state.selectDrawer.loadSeq) return false;
+        var files = Array.isArray(res && res[0]) ? res[0] : [];
+        var execSets = Array.isArray(res && res[2]) ? res[2] : [];
+        state.selectDrawer.files = files;
+        state.selectDrawer.execByFileId = buildExecMapByFileId(execSets);
+        if (dom.selectVersionSelect) {
+          syncVersionOptions(dom.selectVersionSelect, projectId, '请选择版本');
+          dom.selectVersionSelect.disabled = false;
+          if (versionId) {
+            var ok = (state.versionsByProject[projectId] || []).some(function(v) { return v && String(v.id) === String(versionId); });
+            if (ok) {
+              dom.selectVersionSelect.value = String(versionId);
+              state.selectDrawer.versionId = versionId;
+            } else {
+              dom.selectVersionSelect.value = '';
+              state.selectDrawer.versionId = null;
+            }
+          } else {
+            dom.selectVersionSelect.value = '';
+            state.selectDrawer.versionId = null;
+          }
+        }
+        setStatus(dom.selectStatus, '已加载 ' + files.length + ' 份用例文件', files.length ? 'ok' : 'warn');
+        persistSelectDrawerState({ projectId: projectId, versionId: state.selectDrawer.versionId || '' });
+        renderSelectDrawerList();
+        return true;
+      })
+      .catch(function() {
+        return false;
+      })
+      .finally(function() {
+        if (seq !== state.selectDrawer.loadSeq) return;
+        state.selectDrawer.loading = false;
+        renderSelectDrawerList();
+      });
+  }
+
   var editDrawerPersistKey = 'tap-case-library-edit-drawer';
 
   function readEditDrawerPersistedState() {
@@ -2841,6 +2956,9 @@
   function syncProjectOptions(selectEl, placeholder) {
     if (!selectEl) return;
     var list = Array.isArray(state.projects) ? state.projects : [];
+    if (utils && typeof utils.sortProjectsByUserSettings === 'function') {
+      list = utils.sortProjectsByUserSettings(list);
+    }
     var options = ['<option value=\"\">' + escapeHtml(placeholder || '请选择项目') + '</option>'];
     state.projectNameById = {};
     list.forEach(function(p) {
@@ -2890,7 +3008,11 @@
       var editSelected = dom.editDrawerProjectSelect ? String(dom.editDrawerProjectSelect.value || '') : '';
       var selectSelected = dom.selectProjectSelect ? String(dom.selectProjectSelect.value || '') : '';
       var historySelected = dom.historyDrawerProjectSelect ? String(dom.historyDrawerProjectSelect.value || '') : '';
-      state.projects = Array.isArray(list) ? list : [];
+      var projects = Array.isArray(list) ? list : [];
+      if (utils && typeof utils.sortProjectsByUserSettings === 'function') {
+        projects = utils.sortProjectsByUserSettings(projects);
+      }
+      state.projects = projects;
       syncProjectOptions(dom.importProjectSelect, '请选择项目');
       syncProjectOptions(dom.editDrawerProjectSelect, '请选择项目');
       syncProjectOptions(dom.selectProjectSelect, '请选择项目');
@@ -6282,6 +6404,7 @@
     var projectId = normalizeId(dom.selectProjectSelect ? dom.selectProjectSelect.value : '');
     state.selectDrawer.projectId = projectId;
     state.selectDrawer.versionId = null;
+    persistSelectDrawerState({ projectId: projectId, versionId: '' });
     state.selectDrawer.files = [];
     state.selectDrawer.execByFileId = {};
     state.selectDrawer.processing = false;
@@ -6325,6 +6448,7 @@
 
   function handleSelectVersionChange() {
     state.selectDrawer.versionId = normalizeId(dom.selectVersionSelect ? dom.selectVersionSelect.value : '');
+    persistSelectDrawerState({ projectId: state.selectDrawer.projectId || '', versionId: state.selectDrawer.versionId || '' });
     renderSelectDrawerList();
   }
 
@@ -6398,6 +6522,7 @@
     var versionId = normalizeId(dom.selectVersionSelect ? dom.selectVersionSelect.value : '');
     state.selectDrawer.projectId = projectId;
     state.selectDrawer.versionId = versionId;
+    persistSelectDrawerState({ projectId: projectId, versionId: versionId || '' });
     state.selectDrawer.files = [];
     state.selectDrawer.execByFileId = {};
     state.selectDrawer.processing = false;
@@ -7125,7 +7250,10 @@
       }
     );
     selectDrawerInstance = ensureDrawer('caseLibrarySelectExecDrawer', ['openCaseLibrarySelectExecDrawerBtn'], function() {
-      ensureProjectsReady().then(resetSelectDrawer);
+      ensureProjectsReady().then(function() {
+        resetSelectDrawer();
+        return restoreSelectDrawerFromPersistedState();
+      });
     });
     historyDrawerInstance = ensureDrawer('caseLibraryHistoryDrawer', ['openCaseLibraryHistoryDrawerBtn'], function() {
       ensureProjectsReady().then(function() {

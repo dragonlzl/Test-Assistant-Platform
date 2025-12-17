@@ -1940,6 +1940,98 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('用例v2');
   });
 
+  test('选择用例执行：项目/版本选择持久化', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '战魂铭人', description: '用于持久化测试' };
+    const versions = [{ id: 11, name: 'v1' }, { id: 12, name: 'v2' }];
+    const now = new Date().toISOString();
+
+    const caseFiles = [
+      {
+        id: 100,
+        project_id: project.id,
+        version_id: versions[0].id,
+        file_name_clean: '用例v1',
+        item_count: 1,
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+      },
+      {
+        id: 101,
+        project_id: project.id,
+        version_id: versions[1].id,
+        file_name_clean: '用例v2',
+        item_count: 1,
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+      },
+    ];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
+      }
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, []);
+      }
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    await ensureCaseLibraryTab(page);
+
+    await openDrawer(page, '#openCaseLibrarySelectExecDrawerBtn', '#caseLibrarySelectExecDrawer');
+    await page.selectOption('#caseLibrarySelectProjectSelect', String(project.id));
+    await page.selectOption('#caseLibrarySelectVersionSelect', String(versions[0].id));
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');
+    await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('用例v2');
+    await page.click('#caseLibrarySelectExecDrawer .drawer-panel [data-drawer-close="caseLibrarySelectExecDrawer"]');
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    await ensureCaseLibraryTab(page);
+
+    await openDrawer(page, '#openCaseLibrarySelectExecDrawerBtn', '#caseLibrarySelectExecDrawer');
+    await expect
+      .poll(() => page.$eval('#caseLibrarySelectProjectSelect', (el) => el.value))
+      .toBe(String(project.id));
+    await page.waitForFunction(() => {
+      const el = document.getElementById('caseLibrarySelectVersionSelect');
+      return el && el.disabled === false;
+    });
+    await expect
+      .poll(() => page.$eval('#caseLibrarySelectVersionSelect', (el) => el.value))
+      .toBe(String(versions[0].id));
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');
+    await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('用例v2');
+  });
+
   test('选择用例执行：支持勾选并批量转到执行', async ({ page }) => {
     const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
     const project = { id: 1, name: '战魂铭人', description: '用于批量转执行' };

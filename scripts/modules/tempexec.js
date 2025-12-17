@@ -1525,6 +1525,9 @@
     function renderProjectOptions(list) {
       if (!tempExecImportProjectSelect) return;
       var projects = Array.isArray(list) ? list : [];
+      if (utils && typeof utils.sortProjectsByUserSettings === 'function') {
+        projects = utils.sortProjectsByUserSettings(projects, state);
+      }
       var html = ['<option value=\"\">请选择项目</option>'];
       projects.forEach(function(p) {
         if (!p) return;
@@ -1563,6 +1566,9 @@
         .listProjects()
         .then(function(list) {
           var projects = Array.isArray(list) ? list : [];
+          if (utils && typeof utils.sortProjectsByUserSettings === 'function') {
+            projects = utils.sortProjectsByUserSettings(projects, state);
+          }
           applyImportPersistedSelection(projects);
           renderProjectOptions(projects);
           setStatus(tempExecStatus, '', '');
