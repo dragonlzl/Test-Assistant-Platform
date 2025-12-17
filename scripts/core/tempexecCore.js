@@ -6418,6 +6418,47 @@
       var columnOrder = ['select', 'index', 'module', 'title', 'priority', 'preconditions', 'steps', 'expected', 'actual', 'remark', 'defect', 'ops'];
       var visibleKeys = columnOrder.filter(show);
       var colCount = visibleKeys.length || 1;
+
+      // 字段列宽：对齐“归档详情”视图的字段宽度；实际/备注/缺陷链接按需求固定；隐藏字段的宽度平均补给其他可伸缩字段。
+      var baseEm = {
+        module: 8,
+        title: 10,
+        priority: 5,
+        preconditions: 13,
+        steps: 15,
+        expected: 16,
+      };
+      // 优先级列不参与“平均补宽”，保持基准宽度不变。
+      var stretchKeys = Object.keys(baseEm).filter(function(key) { return key !== 'priority'; });
+      var hiddenEm = 0;
+      Object.keys(baseEm).forEach(function(key) {
+        if (!show(key)) hiddenEm += Number(baseEm[key]) || 0;
+      });
+      // “编号”列被隐藏时，其宽度也应补给其他字段（近似按 4 个汉字宽度计算）。
+      if (!show('index')) hiddenEm += 4;
+      var stretchVisible = stretchKeys.filter(show);
+      var extraEm = stretchVisible.length ? (hiddenEm / stretchVisible.length) : 0;
+      var widthByKey = {
+        select: '36px',
+        index: '50px',
+        actual: '4em',
+        remark: '4em',
+        defect: '6em',
+        ops: '40px',
+      };
+      stretchVisible.forEach(function(key) {
+        var base = Number(baseEm[key]) || 0;
+        var w = base + extraEm;
+        // 避免产生过长小数，减少 HTML 体积
+        var fixed = Math.round(w * 100) / 100;
+        widthByKey[key] = String(fixed) + 'em';
+      });
+      if (show('priority')) widthByKey.priority = String(Number(baseEm.priority) || 5) + 'em';
+      var colgroup = '<colgroup>' + visibleKeys.map(function(key) {
+        var width = widthByKey[key] || '';
+        return width ? ('<col style="width:' + width + '">') : '<col>';
+      }).join('') + '</colgroup>';
+
       var paged = matches.filter(function(_, idx) { return idx >= start && idx < end; });
       var rows = paged.map(function(entry) {
         var item = entry.item;
@@ -6577,6 +6618,7 @@
         presetPanel +
         paginationBlock +
         '<table data-resizable-id="temp-exec-' + escapeHtml(file.id) + '" data-resizable-label="执行视图 - ' + escapeHtml(file.name || '测试用例') + '">' +
+          colgroup +
           '<thead>' +
             '<tr>' + headerCells.join('') + '</tr>' +
           '</thead>' +

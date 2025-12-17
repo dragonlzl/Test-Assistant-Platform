@@ -1348,6 +1348,7 @@ body {
       width: 100%;
       border-collapse: collapse;
       font-size: 13px;
+      table-layout: fixed;
     }
     .temp-case-view th,
     .temp-case-view td,
@@ -1357,6 +1358,12 @@ body {
       padding: 12px 14px;
       vertical-align: top;
       line-height: 1.5;
+    }
+    .temp-case-view th,
+    .temp-case-view td {
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     /* “＋”新增用例：绿色描边，持续到下次刷新页面 */
     .temp-case-view tr.case-row.new-added td {
@@ -1378,9 +1385,10 @@ body {
       font-weight: 600;
     }
     .temp-case-view td .status-select {
-      width: 120px;
+      width: 100%;
+      min-width: 0;
       border-radius: 999px;
-      padding: 4px 12px;
+      padding: 4px 8px;
       border: 1px solid var(--border);
       background: #fff;
       font-weight: 600;
@@ -1388,6 +1396,7 @@ body {
       appearance: none;
       -moz-appearance: none;
       -webkit-appearance: none;
+      box-sizing: border-box;
     }
     .temp-case-view td .status-select[data-status="未执行"] {
       color: var(--text);
@@ -1423,7 +1432,7 @@ body {
       border: 1px solid var(--border);
       background: #fff;
       border-radius: 999px;
-      padding: 4px 12px;
+      padding: 4px 6px;
       font-size: 12px;
       cursor: pointer;
       transition: all 0.15s ease;
@@ -1431,6 +1440,9 @@ body {
       align-items: center;
       gap: 4px;
       color: var(--text);
+      width: 100%;
+      justify-content: center;
+      box-sizing: border-box;
     }
     .remark-toggle.filled {
       border-color: #c2410c;
@@ -4054,6 +4066,8 @@ tr.diff-locate-active td {
       font-weight: 600;
       cursor: pointer;
       transition: all 0.15s ease;
+      width: 100%;
+      box-sizing: border-box;
     }
     .reuse-status.pending {
       background: #f4f4f5;
@@ -4177,12 +4191,15 @@ tr.diff-locate-active td {
     .defect-toggle {
       border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 4px 12px;
+      padding: 4px 6px;
       font-size: 12px;
       cursor: pointer;
       color: var(--text);
       background: #fff;
       transition: all 0.15s ease;
+      width: 100%;
+      justify-content: center;
+      box-sizing: border-box;
     }
     .defect-toggle.filled {
       border-color: #34d399;
@@ -4259,7 +4276,7 @@ tr.diff-locate-active td {
     .temp-case-view th.actual,
     .temp-case-view td.actual,
     .temp-case-view .reuse-cell {
-      min-width: 150px;
+      min-width: 0;
     }
     .reuse-presets {
       margin-bottom: 12px;
