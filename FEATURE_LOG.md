@@ -1211,3 +1211,12 @@
 - 复用说明：复用既有 `tempExecPageSize` 设置项与 `.temp-pagination/.temp-search-input` 样式，不新增后端接口。  
 - 测试与验证：`node --check scripts/modules/execOverview.js`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）。  
 - 更新记录：2025-12-17 执行总览抽屉用例搜索与分页上线（`index.html`、`style.css`、`scripts/modules/execOverview.js`、`tests/ui/exec_overview.spec.js`）。  
+
+- 功能名称：执行页导入&分配抽屉项目筛选按钮（DB 持久化）  
+- 功能描述：用例执行页“用例导入&分配”抽屉在项目分组上方增加项目按钮（风格对齐个人执行总览项目区），点击后仅展示该项目的分组；最近选择的项目会写入数据库设置（`tempexec_ui_v1`），刷新页面或重新登录后仍保持上次选择，直到变更。  
+- 操作方式：进入“用例执行”→打开“用例导入&分配”抽屉→点击顶部“项目”按钮（全部项目/某项目）→下方项目分组按选择过滤；刷新页面或重新登录后再次进入抽屉，应仍保持上次选择。  
+- 使用效果：项目多/用例多时能更快聚焦目标项目，且筛选状态跨刷新/重登保持一致。  
+- 新增内容/接口/组件：项目筛选按钮渲染与过滤逻辑（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）；筛选状态纳入 `tempexec_ui_v1` 写入/恢复（`scripts/core/tempexecCore.js`、`scripts/base/state.js`）；筛选按钮样式（`style.css`）；UI 用例覆盖跨刷新/重登恢复（`tests/ui/tempexec_import_project_filter_persist.spec.js`）。  
+- 复用说明：复用现有 `/api/settings` 的 `tempexec_ui_v1` 持久化能力与既有 `nav-entry-card` 风格，不新增后端接口。  
+- 测试与验证：`node --check scripts/base/state.js scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_project_layout.spec.js tests/ui/tempexec_import_project_filter_persist.spec.js`（通过）。  
+- 更新记录：2025-12-17 执行页导入&分配抽屉项目筛选按钮与 DB 持久化上线（`scripts/base/state.js`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_import_project_filter_persist.spec.js`）。  

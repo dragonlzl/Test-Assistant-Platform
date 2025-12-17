@@ -284,6 +284,7 @@
           focus: Array.isArray(state.tempExecFocus) ? state.tempExecFocus : [],
           versions: serializeTempExecVersions(state),
           pageSize: state.tempExecPageSize || defaultTempExecPageSize,
+          importProjectFilterId: state.tempExecImportProjectFilterId ? String(state.tempExecImportProjectFilterId) : '',
         };
         client.saveSettings('user', [{ key: 'tempexec_ui_v1', value_json: payload }]).catch(function() {});
       }, 500);
@@ -2045,6 +2046,68 @@
       enforceTempFileDraggable(tempVersionGrid);
     }
 
+    function normalizeTempExecImportProjectFilterId(raw) {
+      var pid = raw === null || raw === undefined ? '' : String(raw);
+      if (!pid) return '';
+      var list = Array.isArray(state.projects) ? state.projects : [];
+      if (list.length) {
+        var ok = list.some(function(project) { return project && String(project.id) === pid; });
+        return ok ? pid : '';
+      }
+      var files = Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      var ok2 = files.some(function(file) { return file && file.projectId && String(file.projectId) === pid; });
+      return ok2 ? pid : '';
+    }
+
+    function getTempExecImportProjectFilterProjectIds(fallbackIds) {
+      var list = Array.isArray(state.projects) ? state.projects : [];
+      var ids = list
+        .map(function(project) { return project && project.id !== null && project.id !== undefined ? String(project.id) : ''; })
+        .filter(Boolean);
+      if (ids.length) return ids;
+      return Array.isArray(fallbackIds) ? fallbackIds.slice() : [];
+    }
+
+    function renderTempExecImportProjectFilterBlock(projectIds, activeProjectId) {
+      var list = Array.isArray(projectIds) ? projectIds : [];
+      if (!list.length) return '';
+      var active = activeProjectId ? String(activeProjectId) : '';
+      var icon =
+        '<span class="nav-entry-icon" aria-hidden="true">' +
+          '<svg viewBox="0 0 24 24" role="presentation" focusable="false">' +
+            '<path d="M3 6h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"></path>' +
+          '</svg>' +
+        '</span>';
+      var allCls = 'nav-entry-card nav-entry-overview' + (!active ? ' active' : '');
+      var allBtn =
+        '<button type="button" class="' + allCls + '" data-tempexec-import-project-filter="" data-tempexec-import-project-filter-all="1">' +
+          icon +
+          '<span class="nav-entry-text">' +
+            '<span class="nav-entry-title">全部项目</span>' +
+            '<span class="nav-entry-desc">显示所有项目分组</span>' +
+          '</span>' +
+        '</button>';
+      var cards = list.map(function(pid) {
+        var name = resolveProjectName(pid);
+        var cls = 'nav-entry-card nav-entry-overview' + (String(pid) === String(active) ? ' active' : '');
+        return (
+          '<button type="button" class="' + cls + '" data-tempexec-import-project-filter="' + escapeHtml(pid) + '">' +
+            icon +
+            '<span class="nav-entry-text">' +
+              '<span class="nav-entry-title">' + escapeHtml(name) + '</span>' +
+              '<span class="nav-entry-desc">仅展示该项目分组</span>' +
+            '</span>' +
+          '</button>'
+        );
+      }).join('');
+      return (
+        '<div class="tempexec-project-filter">' +
+          '<div class="tempexec-project-filter-title">项目</div>' +
+          '<div class="nav-entry-grid tempexec-project-filter-grid">' + allBtn + cards + '</div>' +
+        '</div>'
+      );
+    }
+
     function renderTempProjectGrid() {
       if (!tempVersionGrid) return;
       syncTempSectionToggleButtons();
@@ -2058,13 +2121,18 @@
 
       var files = Array.isArray(state.tempExecFiles) ? state.tempExecFiles.slice() : [];
       files = files.filter(function(file) { return file && file.projectId; });
-      if (!files.length) {
-        tempVersionGrid.innerHTML = '<span class="hint">暂无用例，导入用例后会按项目与版本自动分组</span>';
-        return;
-      }
+      var activeFilterProjectId = normalizeTempExecImportProjectFilterId(state.tempExecImportProjectFilterId);
+      state.tempExecImportProjectFilterId = activeFilterProjectId;
 
       var focusSet = new Set(state.tempExecFocus || []);
       var fileMap = new Map(files.map(function(file) { return [String(file.id), file]; }));
+
+      if (!files.length) {
+        var emptyFilterProjectIds = getTempExecImportProjectFilterProjectIds([]);
+        var emptyFilterBlock = renderTempExecImportProjectFilterBlock(emptyFilterProjectIds, activeFilterProjectId);
+        tempVersionGrid.innerHTML = emptyFilterBlock + '<span class="hint">暂无用例，导入用例后会按项目与版本自动分组</span>';
+        return;
+      }
 
       var projectMeta = new Map();
       var projectIdSet = new Set();
@@ -2078,8 +2146,18 @@
         if (ts > prev) projectMeta.set(pid, ts);
       });
       var orderedProjects = ensureProjectOrder(Array.from(projectIdSet.values()), projectMeta);
+      var filterProjectIds = getTempExecImportProjectFilterProjectIds(orderedProjects);
+      var filterBlockHtml = renderTempExecImportProjectFilterBlock(filterProjectIds, activeFilterProjectId);
 
-      var html = orderedProjects.map(function(pid) {
+      var visibleProjects = activeFilterProjectId
+        ? orderedProjects.filter(function(pid) { return String(pid) === String(activeFilterProjectId); })
+        : orderedProjects.slice();
+      if (!visibleProjects.length) {
+        tempVersionGrid.innerHTML = filterBlockHtml + '<span class="hint">当前项目暂无用例，可切换其他项目或继续导入</span>';
+        return;
+      }
+
+      var html = visibleProjects.map(function(pid) {
         var projectFiles = files.filter(function(file) { return file && String(file.projectId) === pid; });
         var versionMap = new Map();
         var versionMeta = new Map();
@@ -2142,7 +2220,7 @@
         );
       }).join('');
 
-      tempVersionGrid.innerHTML = html;
+      tempVersionGrid.innerHTML = filterBlockHtml + html;
       enforceTempFileDraggable(tempVersionGrid);
     }
 
@@ -3108,6 +3186,15 @@
       state.tempExecVersionCollapsed = !state.tempExecVersionCollapsed;
       persistTempExecState();
       renderTempVersionGrid();
+    }
+
+    function setTempExecImportProjectFilter(projectId) {
+      var next = normalizeTempExecImportProjectFilterId(projectId);
+      var current = state.tempExecImportProjectFilterId ? String(state.tempExecImportProjectFilterId) : '';
+      if (String(current) === String(next)) return;
+      state.tempExecImportProjectFilterId = next;
+      renderTempVersionGrid();
+      scheduleTempExecUiSave();
     }
 
     function prioritizeTempExecUnassignedRequirements() {
@@ -4080,6 +4167,11 @@
       state.tempExecVersions = [];
       if (uiState && uiState.pageSize) {
         state.tempExecPageSize = clampTempExecPageSize(uiState.pageSize);
+      }
+      if (uiState && uiState.importProjectFilterId !== null && uiState.importProjectFilterId !== undefined) {
+        state.tempExecImportProjectFilterId = normalizeTempExecImportProjectFilterId(uiState.importProjectFilterId);
+      } else {
+        state.tempExecImportProjectFilterId = normalizeTempExecImportProjectFilterId(state.tempExecImportProjectFilterId);
       }
       syncTempExecPlacement();
       var firstId = state.tempExecFiles.length ? state.tempExecFiles[0].id : '';
@@ -6558,6 +6650,7 @@
       renderTempFocusZone: renderTempFocusZone,
       toggleTempExecRequirementZone: toggleTempExecRequirementZone,
       toggleTempExecVersionZone: toggleTempExecVersionZone,
+      setTempExecImportProjectFilter: setTempExecImportProjectFilter,
       isTempExecProjectLayoutEnabled: isTempExecProjectLayoutEnabled,
       reorderTempExecProject: reorderTempExecProject,
       reorderTempExecProjectVersion: reorderTempExecProjectVersion,

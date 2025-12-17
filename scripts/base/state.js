@@ -120,6 +120,7 @@
       tempExecMindMode: false,
       tempExecPages: {},
       tempExecPageSize: defaultTempExecPageSize,
+      tempExecImportProjectFilterId: '',
       tempExecFocus: [],
       tempExecVersions: [],
       tempExecPlacement: Object.assign({}, defaultPlacement),

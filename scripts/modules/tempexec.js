@@ -2067,6 +2067,12 @@
       }
 
       tempVersionGrid.addEventListener('click', function(e) {
+        var filterBtn = e.target.closest('[data-tempexec-import-project-filter]');
+        if (filterBtn && api.setTempExecImportProjectFilter) {
+          var filterPid = filterBtn.dataset.tempexecImportProjectFilter || '';
+          api.setTempExecImportProjectFilter(filterPid);
+          return;
+        }
         var projectRemoveBtn = e.target.closest('[data-temp-project-remove]');
         if (projectRemoveBtn && api.removeTempExecProject) {
           var pid = projectRemoveBtn.dataset.tempProjectRemove || '';
@@ -2582,6 +2588,12 @@
         }
       });
       tempVersionGrid.addEventListener('click', function(e) {
+        var filterBtn2 = e.target.closest('[data-tempexec-import-project-filter]');
+        if (filterBtn2 && api.setTempExecImportProjectFilter) {
+          var filterPid2 = filterBtn2.dataset.tempexecImportProjectFilter || '';
+          api.setTempExecImportProjectFilter(filterPid2);
+          return;
+        }
         var removeBtn = e.target.closest('[data-temp-version-remove]');
         if (removeBtn && api.removeTempVersion) api.removeTempVersion(removeBtn.dataset.tempVersionRemove);
         var groupRemoveBtn = e.target.closest('[data-temp-group-remove]');

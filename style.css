@@ -721,6 +721,36 @@ body {
 .temp-version-grid.temp-project-layout {
   grid-template-columns: repeat(1, minmax(0, 1fr));
 }
+.tempexec-project-filter {
+  margin: 4px 0 12px;
+}
+.tempexec-project-filter-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.tempexec-project-filter-grid {
+  gap: 10px;
+}
+.tempexec-project-filter-grid .nav-entry-card {
+  flex: 0 0 180px;
+  max-width: 220px;
+  min-width: 150px;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+.tempexec-project-filter-grid .nav-entry-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+.tempexec-project-filter-grid .nav-entry-title {
+  font-size: 13px;
+}
+.tempexec-project-filter-grid .nav-entry-desc {
+  font-size: 12px;
+}
 .temp-project-card {
   border: 1px solid var(--border);
   border-radius: 12px;
