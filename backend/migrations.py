@@ -502,3 +502,23 @@ def apply_migrations(engine: Engine) -> None:
                     )
                 )
             _mark_applied(conn, 14)
+
+        # v15: exec_sets 增加归档信息（归档人/归档时间/归档原因）。
+        if not _is_applied(conn, 15):
+            if "exec_sets" in tables:
+                cols = set([c["name"] for c in insp.get_columns("exec_sets")])
+                if "archived_by" not in cols:
+                    conn.execute(text("ALTER TABLE exec_sets ADD COLUMN archived_by INTEGER"))
+                if "archived_at" not in cols:
+                    conn.execute(text("ALTER TABLE exec_sets ADD COLUMN archived_at DATETIME"))
+                if "archived_reason" not in cols:
+                    conn.execute(text("ALTER TABLE exec_sets ADD COLUMN archived_reason TEXT"))
+                # 回填：历史 archived 执行集若无 archived_at，则默认使用 updated_at 兜底。
+                if "status" in cols and "updated_at" in cols:
+                    conn.execute(
+                        text(
+                            "UPDATE exec_sets SET archived_at = COALESCE(updated_at, datetime('now')) "
+                            "WHERE status = 'archived' AND archived_at IS NULL"
+                        )
+                    )
+            _mark_applied(conn, 15)

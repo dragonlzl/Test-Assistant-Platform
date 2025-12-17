@@ -287,6 +287,7 @@
           versions: serializeTempExecVersions(state),
           pageSize: state.tempExecPageSize || defaultTempExecPageSize,
           importProjectFilterId: state.tempExecImportProjectFilterId ? String(state.tempExecImportProjectFilterId) : '',
+          archivedHidden: Array.isArray(state.tempExecArchivedHidden) ? state.tempExecArchivedHidden : [],
         };
         client.saveSettings('user', [{ key: 'tempexec_ui_v1', value_json: payload }]).catch(function() {});
       }, 500);
@@ -2514,7 +2515,9 @@
     function renderTempExecOverview() {
       if (!tempExecOverview) return;
       var isProjectLayout = isTempExecProjectLayoutEnabled();
-      var files = state.tempExecFiles.slice().sort(function(a, b) {
+      var archived = Array.isArray(state.tempExecArchivedFiles) ? state.tempExecArchivedFiles : [];
+      var combined = state.tempExecFiles.concat(archived);
+      var files = combined.slice().sort(function(a, b) {
         var sa = buildTempExecSummary(a);
         var sb = buildTempExecSummary(b);
         var pa = sa.total ? sa.executed / sa.total : 0;
@@ -2942,10 +2945,22 @@
         '</div>';
 
       var label = file && file.name ? String(file.name) : '测试用例';
+      var isArchived = file && String(file.status || '') === 'archived';
+      var archiveTag = isArchived ? '<span class="tag tag-archived">归</span>' : '';
+      var archiveAction = '';
+      if (!isArchived && isDbMode()) {
+        var execSetId = file && (file.execSetId || file.id) ? String(file.execSetId || file.id) : '';
+        if (execSetId) {
+          archiveAction =
+            '<span class="exec-overview-chip-action" data-temp-overview-archive="' + escapeHtml(execSetId) + '" title="归档该份用例">归档</span>';
+        }
+      }
       return (
-        '<button type="button" class="exec-overview-file-chip state-' + statusCls + '" data-temp-file="' + escapeHtml(file.id) + '">' +
+        '<button type="button" class="exec-overview-file-chip state-' + statusCls + '" data-temp-file="' + escapeHtml(file.id) + '"' + (isArchived ? ' data-temp-archived="1"' : '') + '>' +
           '<div class="row">' +
+            archiveTag +
             '<span class="text" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
+            archiveAction +
             '<span class="badge">' + total + '</span>' +
           '</div>' +
           progress +
@@ -3033,13 +3048,29 @@
         return '<span><span class="dot ' + (seg.className ? seg.className.replace('status-', '') : '') + '"></span>' + seg.label + ' ' + seg.count + '</span>';
       }).join('');
       var tags = [];
+      if (file && String(file.status || '') === 'archived') tags.push('<span class="tag tag-archived">归</span>');
       if (state.tempExecFocus.indexOf(file.id) !== -1) tags.push('<span class="tag tag-focus">专注</span>');
       var tagHtml = tags.join(' ');
+      var archiveBtn = '';
+      if (isDbMode() && !(file && String(file.status || '') === 'archived')) {
+        var execSetId = file && (file.execSetId || file.id) ? String(file.execSetId || file.id) : '';
+        if (execSetId) {
+          var disabled = file && file._casesLoading ? ' disabled' : '';
+          var tip = file && file._casesLoading ? '用例加载中，稍后再试' : '归档该份用例';
+          archiveBtn =
+            '<button type="button" class="pill secondary tiny" data-temp-overview-archive="' + escapeHtml(execSetId) + '"' + disabled + ' title="' + escapeHtml(tip) + '">' +
+              '归档' +
+            '</button>';
+        }
+      }
       return (
-        '<div class="temp-overview-entry" data-temp-file="' + file.id + '">' +
+        '<div class="temp-overview-entry" data-temp-file="' + file.id + '"' + (file && String(file.status || '') === 'archived' ? ' data-temp-archived="1"' : '') + '>' +
           '<div class="temp-overview-header">' +
             '<span>' + tagHtml + ' ' + escapeHtml(file && file.name ? file.name : '测试用例') + '</span>' +
-            '<span class="temp-overview-rate">执行进度 ' + executedPercent + '%（' + completionCount + '/' + summary.total + '）</span>' +
+            '<span class="temp-overview-actions">' +
+              archiveBtn +
+              '<span class="temp-overview-rate">执行进度 ' + executedPercent + '%（' + completionCount + '/' + summary.total + '）</span>' +
+            '</span>' +
           '</div>' +
           '<div class="temp-overview-bar">' + segmentHtml + '</div>' +
           '<div class="temp-overview-meta">' + metaHtml + '</div>' +
@@ -4059,12 +4090,45 @@
       list = list.slice().sort(function(a, b) {
         return parseDbTimeMs(b && b.updated_at) - parseDbTimeMs(a && a.updated_at);
       });
+      var archivedSets = [];
+      try {
+        archivedSets = await client.listExecSets(null, { status_filter: 'archived' });
+      } catch (err) {
+        archivedSets = [];
+      }
+      var archivedList = Array.isArray(archivedSets) ? archivedSets : [];
+      archivedList = archivedList.filter(function(s) { return s && String(s.status || '') === 'archived'; });
+      var archivedHiddenKeys = uiState && Array.isArray(uiState.archivedHidden)
+        ? uiState.archivedHidden.map(function(k) { return String(k || '').trim(); }).filter(Boolean)
+        : [];
+      if (archivedHiddenKeys.length) {
+        var hiddenSet = new Set(archivedHiddenKeys);
+        archivedList = archivedList.filter(function(s) {
+          if (!s) return false;
+          var pid = s && s.project_id !== null && s.project_id !== undefined ? String(s.project_id) : '';
+          if (!pid) return true;
+          var vid = s && s.version_id !== null && s.version_id !== undefined ? String(s.version_id || '') : '';
+          var exact = pid + '::' + vid;
+          var all = pid + '::';
+          return !hiddenSet.has(exact) && !hiddenSet.has(all);
+        });
+      }
+      // 归档记录可能非常多：个人总览仅展示最近 N 份，完整列表请到“用例归档”理解。
+      archivedList = archivedList
+        .slice()
+        .sort(function(a, b) {
+          var ta = parseDbTimeMs(a && (a.archived_at || a.updated_at));
+          var tb = parseDbTimeMs(b && (b.archived_at || b.updated_at));
+          return tb - ta;
+        })
+        .slice(0, 80);
 
       // 补齐项目/版本名称缓存，避免执行页出现 “项目#null/版本#10” 等异常展示。
       var caseFileMetaById = {};
+      var combinedSets = list.concat(archivedList);
       var needProjectIds = Array.from(
         new Set(
-          list
+          combinedSets
             .map(function(set) { return set && set.project_id !== null && set.project_id !== undefined ? String(set.project_id) : ''; })
             .filter(Boolean)
         )
@@ -4142,6 +4206,43 @@
           cases: [],
           caseCount: resolvedCaseCount,
           scope: 'current',
+          status: String(set.status || 'active'),
+          requirement: normalizeRequirementName(set.requirement) || '',
+          reuseEnabled: Boolean(set.reuse_enabled),
+          createdAt: createdAt,
+          reusePresets: Array.isArray(set.reuse_presets) ? normalizeReusePresets(set.reuse_presets) : [],
+          versionId: resolvedVersionId,
+          _casesLoading: true,
+        };
+      });
+      var archivedFiles = archivedList.map(function(set) {
+        var createdAt = parseDbTimeMs(set && set.created_at);
+        if (!Number.isFinite(createdAt) || createdAt <= 0) createdAt = Date.now();
+        var cid = set && set.case_file_id !== null && set.case_file_id !== undefined ? String(set.case_file_id) : '';
+        var meta = cid && caseFileMetaById[cid] ? caseFileMetaById[cid] : null;
+        var resolvedProjectId = set && set.project_id !== null && set.project_id !== undefined
+          ? String(set.project_id)
+          : (meta && meta.project_id !== null && meta.project_id !== undefined ? String(meta.project_id) : '');
+        var resolvedVersionId = set && set.version_id !== null && set.version_id !== undefined
+          ? String(set.version_id)
+          : (meta && meta.version_id !== null && meta.version_id !== undefined ? String(meta.version_id) : '');
+        var resolvedCaseCount = null;
+        if (set && set.case_count !== null && set.case_count !== undefined) {
+          resolvedCaseCount = Number(set.case_count);
+        } else if (meta && meta.item_count !== null && meta.item_count !== undefined) {
+          resolvedCaseCount = Number(meta.item_count);
+        }
+        if (!Number.isFinite(resolvedCaseCount) || resolvedCaseCount < 0) resolvedCaseCount = 0;
+        return {
+          id: String(set.id),
+          execSetId: set.id,
+          caseFileId: set.case_file_id || null,
+          projectId: resolvedProjectId,
+          name: set.name || '测试用例',
+          cases: [],
+          caseCount: resolvedCaseCount,
+          scope: 'archived',
+          status: 'archived',
           requirement: normalizeRequirementName(set.requirement) || '',
           reuseEnabled: Boolean(set.reuse_enabled),
           createdAt: createdAt,
@@ -4152,6 +4253,7 @@
       });
 
       state.tempExecFiles = files;
+      state.tempExecArchivedFiles = archivedFiles;
       state.tempExecSelections = {};
       state.tempExecRemarkOpen = {};
       state.tempExecReuseOpen = {};
@@ -4183,6 +4285,13 @@
         state.tempExecImportProjectFilterId = normalizeTempExecImportProjectFilterId(uiState.importProjectFilterId);
       } else {
         state.tempExecImportProjectFilterId = normalizeTempExecImportProjectFilterId(state.tempExecImportProjectFilterId);
+      }
+      if (uiState && Array.isArray(uiState.archivedHidden)) {
+        state.tempExecArchivedHidden = uiState.archivedHidden
+          .map(function(k) { return String(k || '').trim(); })
+          .filter(Boolean);
+      } else if (!Array.isArray(state.tempExecArchivedHidden)) {
+        state.tempExecArchivedHidden = [];
       }
       syncTempExecPlacement();
       var firstId = state.tempExecFiles.length ? state.tempExecFiles[0].id : '';
@@ -4265,6 +4374,8 @@
                   if (String(file.id) === String(state.tempExecActiveId || '')) {
                     renderTempExecView();
                   }
+                  // 若个人总览抽屉打开，实时刷新归档/执行进度展示。
+                  renderTempExecOverview();
                 })
                 .catch(function() {
                   if (tempExecDbLoadSeq !== loadSeq) return;
@@ -4272,10 +4383,42 @@
                   file.caseCount = 0;
                   file._casesLoading = false;
                   updateTempExecFileStateClass(file.id);
+                  renderTempExecOverview();
                 });
             });
           }));
           if (tempExecDbLoadSeq !== loadSeq) return;
+        }
+        // 归档执行集：仅用于个人总览展示“归”状态与执行结果，不参与执行页视图与用例库同步。
+        if (archivedFiles && archivedFiles.length) {
+          var archivedOrder = [];
+          for (var j = 0; j < archivedFiles.length; j += 1) archivedOrder.push(j);
+          var archivedConcurrency = 3;
+          for (var start2 = 0; start2 < archivedOrder.length; start2 += archivedConcurrency) {
+            var chunk2 = archivedOrder.slice(start2, start2 + archivedConcurrency);
+            await Promise.all(chunk2.map(function(idx2) {
+              var file2 = archivedFiles[idx2];
+              if (!file2) return Promise.resolve();
+              return client
+                .listExecCases(file2.execSetId)
+                .then(function(rawCases) {
+                  var cases2 = Array.isArray(rawCases) ? rawCases.map(mapExecCaseToTempCase).filter(Boolean) : [];
+                  if (tempExecDbLoadSeq !== loadSeq) return;
+                  file2.cases = cases2;
+                  file2.caseCount = Array.isArray(cases2) ? cases2.length : 0;
+                  file2._casesLoading = false;
+                  renderTempExecOverview();
+                })
+                .catch(function() {
+                  if (tempExecDbLoadSeq !== loadSeq) return;
+                  file2.cases = [];
+                  file2.caseCount = 0;
+                  file2._casesLoading = false;
+                  renderTempExecOverview();
+                });
+            }));
+            if (tempExecDbLoadSeq !== loadSeq) return;
+          }
         }
         if (tempExecDbLoadSeq !== loadSeq) return;
         if (allowCaseLibrarySync && autoPopupExecSetIds.length) {
@@ -5994,10 +6137,19 @@
       if (!isTempExecProjectLayoutEnabled()) return;
       var pid = projectId === null || projectId === undefined ? '' : String(projectId);
       if (!pid) return;
+      if (!Array.isArray(state.tempExecArchivedHidden)) state.tempExecArchivedHidden = [];
+      var hideKey = pid + '::';
+      if (state.tempExecArchivedHidden.indexOf(hideKey) === -1) state.tempExecArchivedHidden.push(hideKey);
+      if (Array.isArray(state.tempExecArchivedFiles) && state.tempExecArchivedFiles.length) {
+        state.tempExecArchivedFiles = state.tempExecArchivedFiles.filter(function(file) {
+          return !(file && String(file.projectId) === pid);
+        });
+      }
       var ids = (state.tempExecFiles || [])
         .filter(function(file) { return file && String(file.projectId) === pid; })
         .map(function(file) { return String(file.id); });
       bulkRemoveTempExecFiles(ids, { silentStatus: false });
+      renderTempExecOverview();
     }
 
     function removeTempExecProjectVersion(projectId, versionId) {
@@ -6005,10 +6157,20 @@
       var pid = projectId === null || projectId === undefined ? '' : String(projectId);
       var vid = versionId === null || versionId === undefined ? '' : String(versionId || '');
       if (!pid) return;
+      if (!Array.isArray(state.tempExecArchivedHidden)) state.tempExecArchivedHidden = [];
+      var hideKey = pid + '::' + vid;
+      if (state.tempExecArchivedHidden.indexOf(hideKey) === -1) state.tempExecArchivedHidden.push(hideKey);
+      if (Array.isArray(state.tempExecArchivedFiles) && state.tempExecArchivedFiles.length) {
+        state.tempExecArchivedFiles = state.tempExecArchivedFiles.filter(function(file) {
+          if (!file) return false;
+          return !(String(file.projectId) === pid && String(file.versionId || '') === vid);
+        });
+      }
       var ids = (state.tempExecFiles || [])
         .filter(function(file) { return file && String(file.projectId) === pid && String(file.versionId || '') === vid; })
         .map(function(file) { return String(file.id); });
       bulkRemoveTempExecFiles(ids, { silentStatus: false });
+      renderTempExecOverview();
     }
 
     function reorderTempRequirement(sourceReq, targetReq) {

@@ -3201,6 +3201,118 @@
     }
       if (tempExecOverview && api.setTempExecActive) {
       tempExecOverview.addEventListener('click', function(e) {
+        var archiveBtn = e.target.closest('[data-temp-overview-archive]');
+        if (archiveBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          var execSetId = archiveBtn.dataset ? (archiveBtn.dataset.tempOverviewArchive || '') : '';
+          var cardForArchive = archiveBtn.closest('[data-temp-file]');
+          var fileIdForArchive = cardForArchive && cardForArchive.dataset ? (cardForArchive.dataset.tempFile || '') : '';
+          var fileForArchive = fileIdForArchive && api.getTempExecFile ? api.getTempExecFile(fileIdForArchive) : null;
+          if (!fileForArchive) {
+            if (tempExecStatus) setStatus(tempExecStatus, '未找到要归档的用例', 'warn');
+            return;
+          }
+          if (fileForArchive._casesLoading) {
+            if (tempExecStatus) setStatus(tempExecStatus, '用例加载中，请稍后再试', 'warn');
+            return;
+          }
+          var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+          if (!client || typeof client.archiveExecSet !== 'function') {
+            if (tempExecStatus) setStatus(tempExecStatus, '当前模式不支持归档（需启用 DB 后端）', 'warn');
+            return;
+          }
+          var sid = Number(execSetId || (fileForArchive.execSetId || fileForArchive.id));
+          if (!Number.isFinite(sid) || sid <= 0) {
+            if (tempExecStatus) setStatus(tempExecStatus, '归档失败：执行集 ID 无效', 'err');
+            return;
+          }
+          var counts = { pending: 0, failed: 0, blocked: 0, total: 0 };
+          if (Array.isArray(fileForArchive.cases)) {
+            counts.total = fileForArchive.cases.length;
+            fileForArchive.cases.forEach(function(item) {
+              var disp = api.getCaseExecutionDisplay ? api.getCaseExecutionDisplay(fileForArchive, item) : null;
+              var st = disp && disp.label ? String(disp.label || '').trim() : '';
+              if (!st) st = '未执行';
+              if (st === '通过' || st === '不适用') return;
+              if (st === '失败') counts.failed += 1;
+              else if (st === '阻塞') counts.blocked += 1;
+              else counts.pending += 1;
+            });
+          }
+          var needReason = Boolean(counts.failed || counts.blocked || counts.pending);
+          var payload = {};
+          if (needReason) {
+            var msg =
+              '仍存在未通过用例（未执行 ' +
+              counts.pending +
+              ' / 失败 ' +
+              counts.failed +
+              ' / 阻塞 ' +
+              counts.blocked +
+              '），是否需要归档？';
+            if (!window.confirm(msg)) return;
+            var reason = window.prompt('原则是归档需要全部执行通过，请说明还有未通过用例就进行归档的原因。');
+            if (reason === null || reason === undefined) return;
+            reason = String(reason || '').trim();
+            if (!reason) {
+              if (tempExecStatus) setStatus(tempExecStatus, '归档已取消：未填写原因', 'warn');
+              return;
+            }
+            payload.reason = reason;
+          } else if (counts.total > 0) {
+            var okPassed = window.confirm('用例已全部执行通过（或通过+不适用），归档后无法更改测试结果，是否确认归档？');
+            if (!okPassed) return;
+          }
+          if (tempExecStatus) setStatus(tempExecStatus, '归档中...', '');
+          client
+            .archiveExecSet(sid, payload)
+            .then(function() {
+              if (tempExecStatus) setStatus(tempExecStatus, '归档成功', 'ok');
+              try {
+                // 归档成功提示：不受抽屉遮挡，也不被其他中心提示打断（固定展示满 5 秒）。
+                var app = window.app || {};
+                window.app = app;
+                var key = '__tapArchiveSuccessToast';
+                var store = app[key] && typeof app[key] === 'object' ? app[key] : {};
+                if (store.timer) {
+                  clearTimeout(store.timer);
+                  store.timer = 0;
+                }
+                if (store.fadeTimer) {
+                  clearTimeout(store.fadeTimer);
+                  store.fadeTimer = 0;
+                }
+                if (store.el && store.el.parentNode) {
+                  try { store.el.parentNode.removeChild(store.el); } catch (_) {}
+                }
+                var el = document.createElement('div');
+                el.className = 'temp-center-toast ok';
+                el.textContent = '归档成功，可到 用例相关 -> 用例归档 -> 查看归档 内查看详情。';
+                document.body.appendChild(el);
+                store.el = el;
+                store.timer = setTimeout(function() {
+                  if (!store.el) return;
+                  store.el.classList.add('fade-out');
+                  store.fadeTimer = setTimeout(function() {
+                    if (store.el && store.el.parentNode) {
+                      try { store.el.parentNode.removeChild(store.el); } catch (_) {}
+                    }
+                    store.el = null;
+                    store.timer = 0;
+                    store.fadeTimer = 0;
+                  }, 260);
+                }, 5000);
+                app[key] = store;
+              } catch (eToast) {}
+              if (api.loadTempExecState) api.loadTempExecState();
+              if (api.renderTempExecOverview) api.renderTempExecOverview();
+            })
+            .catch(function(err) {
+              if (tempExecStatus) setStatus(tempExecStatus, err && err.message ? err.message : '归档失败', 'err');
+            });
+          return;
+        }
         var projectBtn = e.target.closest('[data-temp-overview-project]');
         if (projectBtn) {
           e.preventDefault();
@@ -3217,6 +3329,11 @@
         if (seg) {
           e.preventDefault();
           e.stopPropagation();
+          var archivedSeg = seg.closest('[data-temp-archived="1"]');
+          if (archivedSeg) {
+            if (tempExecStatus) setStatus(tempExecStatus, '该用例已归档，请到【用例归档】页面查看', 'warn');
+            return;
+          }
           var segFileId = seg.dataset.tempOverviewFile;
           var segIndex = Number(seg.dataset.tempOverviewIndex);
           if (!Number.isFinite(segIndex) || segIndex < 0) segIndex = 0;
@@ -3225,6 +3342,10 @@
         }
         var card = e.target.closest('[data-temp-file]');
         if (!card) return;
+        if (card.dataset && card.dataset.tempArchived) {
+          if (tempExecStatus) setStatus(tempExecStatus, '该用例已归档，请到【用例归档】页面查看', 'warn');
+          return;
+        }
         var fileId = card.dataset.tempFile;
         if (fileId) {
           e.preventDefault();

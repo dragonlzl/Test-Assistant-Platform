@@ -533,9 +533,9 @@
       dirtyDrafts.tempExecPageSize = false;
       persistSettings(['tempExecPageSize']);
       if (result.changed) {
-        setStatus(tempExecPageSizeStatus, '分页设置已更新', 'ok');
+        setStatus(tempExecPageSizeStatus, '全局分页设置已更新', 'ok');
       } else {
-        setStatus(tempExecPageSizeStatus, '分页设置未变化', '');
+        setStatus(tempExecPageSizeStatus, '全局分页设置未变化', '');
       }
     }
 

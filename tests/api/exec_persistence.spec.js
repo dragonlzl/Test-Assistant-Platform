@@ -292,9 +292,9 @@ test.describe('exec persistence api', () => {
     const preferImportCase = casesAfterPreferImport.find((c) => c.id === first.id);
     expect(preferImportCase && preferImportCase.status).toBe('失败');
 
-    const archiveRes = await ctx.patch(`${apiBase}/api/exec/sets/${execSetId}`, {
+    const archiveRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/archive`, {
       headers,
-      data: { status: 'archived' },
+      data: { reason: '存在失败用例，仍需归档以便留存结果' },
     });
     expect(archiveRes.status()).toBe(200);
 
@@ -304,15 +304,17 @@ test.describe('exec persistence api', () => {
     });
     expect(restoreRes.status()).toBe(200);
     const restoredSet = await restoreRes.json();
-    expect(restoredSet.id).toBe(execSetId);
+    expect(restoredSet.id).not.toBe(execSetId);
     expect(restoredSet.status).toBe('active');
+    const activeExecSetId = restoredSet.id;
 
-    const execCasesAfterRestoreRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers });
+    const execCasesAfterRestoreRes = await ctx.get(`${apiBase}/api/exec/sets/${activeExecSetId}/cases`, { headers });
     expect(execCasesAfterRestoreRes.status()).toBe(200);
     const execCasesAfterRestore = await execCasesAfterRestoreRes.json();
-    const restoredFirst = execCasesAfterRestore.find((c) => c.id === first.id);
+    const restoredFirst = execCasesAfterRestore.find((c) => c && c.case_item_id === first.case_item_id);
     // 归档后恢复执行集时：会按用例库基线刷新基础字段；若执行用例已存在结果且字段发生变化，则标记为“变更重跑”提醒重新确认。
-    expect(restoredFirst && restoredFirst.status).toBe('变更重跑');
+    // 新语义：归档后会创建新的执行集，默认为未执行状态。
+    expect(restoredFirst && restoredFirst.status).toBe('未执行');
 
     const createItemRes = await ctx.post(`${apiBase}/api/case-files/${caseFileId}/items`, {
       headers,
@@ -330,7 +332,7 @@ test.describe('exec persistence api', () => {
     const newItem = await createItemRes.json();
 
     const lastCaseId = execCasesAfterRestore.length ? execCasesAfterRestore[execCasesAfterRestore.length - 1].id : null;
-    const createExecCaseRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/cases`, {
+    const createExecCaseRes = await ctx.post(`${apiBase}/api/exec/sets/${activeExecSetId}/cases`, {
       headers,
       data: { case_item_id: newItem.id, status: '未执行', after_case_id: lastCaseId },
     });
@@ -340,7 +342,7 @@ test.describe('exec persistence api', () => {
     expect(createdExec.module).toBe(newItem.module);
     expect(createdExec.title).toBe(newItem.title);
 
-    const blankExecRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/cases`, {
+    const blankExecRes = await ctx.post(`${apiBase}/api/exec/sets/${activeExecSetId}/cases`, {
       headers,
       data: { status: '未执行' },
     });
@@ -381,9 +383,9 @@ test.describe('exec persistence api', () => {
     });
     expect(hardReplaceRes.status()).toBe(200);
     const hardSet = await hardReplaceRes.json();
-    expect(hardSet.id).toBe(execSetId);
+    expect(hardSet.id).toBe(activeExecSetId);
 
-    const hardCasesRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers });
+    const hardCasesRes = await ctx.get(`${apiBase}/api/exec/sets/${activeExecSetId}/cases`, { headers });
     expect(hardCasesRes.status()).toBe(200);
     const hardCases = await hardCasesRes.json();
     expect(Array.isArray(hardCases)).toBeTruthy();
@@ -407,7 +409,7 @@ test.describe('exec persistence api', () => {
     const foreignItems = await foreignItemsRes.json();
     expect(foreignItems.length).toBe(1);
 
-    const badCreateRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/cases`, {
+    const badCreateRes = await ctx.post(`${apiBase}/api/exec/sets/${activeExecSetId}/cases`, {
       headers,
       data: { case_item_id: foreignItems[0].id },
     });
@@ -417,7 +419,10 @@ test.describe('exec persistence api', () => {
     expect([200, 404]).toContain(delProj.status());
 
     // cleanup other user
-    const delUser = await ctx.delete(`${apiBase}/api/users/${otherUser.id}`, { headers });
+    const delUser = await ctx.delete(`${apiBase}/api/users/${otherUser.id}`, {
+      headers,
+      data: { admin_password: adminPass },
+    });
     expect([200, 404]).toContain(delUser.status());
   });
 });

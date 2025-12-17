@@ -318,9 +318,12 @@
     }).then(handleResponse);
   }
 
-  function listExecSets(projectId) {
+  function listExecSets(projectId, options) {
     var query = [];
     if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
+    var opts = options && typeof options === 'object' ? options : {};
+    if (opts && opts.status_filter) query.push('status_filter=' + encodeURIComponent(opts.status_filter));
+    if (opts && opts.all_users) query.push('all_users=1');
     var url = '/api/exec/sets';
     if (query.length) url += '?' + query.join('&');
     return fetch(url, {
@@ -365,6 +368,44 @@
 
   function deleteExecSet(execSetId) {
     return fetch('/api/exec/sets/' + execSetId, {
+      method: 'DELETE',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function archiveExecSet(execSetId, payload) {
+    return fetch('/api/exec/sets/' + execSetId + '/archive', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function listExecArchives(params) {
+    var p = params && typeof params === 'object' ? params : {};
+    var query = [];
+    if (p && (p.project_id || p.project_id === 0)) query.push('project_id=' + encodeURIComponent(p.project_id));
+    if (p && (p.version_id || p.version_id === 0)) query.push('version_id=' + encodeURIComponent(p.version_id));
+    if (p && p.q) query.push('q=' + encodeURIComponent(p.q));
+    if (p && (p.limit || p.limit === 0)) query.push('limit=' + encodeURIComponent(p.limit));
+    if (p && (p.offset || p.offset === 0)) query.push('offset=' + encodeURIComponent(p.offset));
+    var url = '/api/exec/archives';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function getExecArchive(execSetId) {
+    return fetch('/api/exec/archives/' + execSetId, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function deleteExecArchive(execSetId) {
+    return fetch('/api/exec/archives/' + execSetId, {
       method: 'DELETE',
       headers: buildHeaders(),
     }).then(handleResponse);
@@ -606,6 +647,10 @@
     listExecCases: listExecCases,
     updateExecSet: updateExecSet,
     deleteExecSet: deleteExecSet,
+    archiveExecSet: archiveExecSet,
+    listExecArchives: listExecArchives,
+    getExecArchive: getExecArchive,
+    deleteExecArchive: deleteExecArchive,
     syncExecSetCaseLibrary: syncExecSetCaseLibrary,
     ackExecSetCaseLibraryDiff: ackExecSetCaseLibraryDiff,
     upsertExecSetFromCaseFile: upsertExecSetFromCaseFile,

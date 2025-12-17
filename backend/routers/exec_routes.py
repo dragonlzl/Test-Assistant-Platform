@@ -4,7 +4,7 @@ import json
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from .. import models, schemas
 from ..audit import log_case_library_change, log_operation
@@ -46,7 +46,7 @@ _case_file_source_pattern = re.compile(r"^case_file:(\d+)$")
 
 
 def _ensure_exec_set_access(
-    db: Session, user: models.User, exec_set_id: int
+    db: Session, user: models.User, exec_set_id: int, allow_archived: bool = False
 ) -> models.ExecSet:
     exec_set = db.query(models.ExecSet).filter(models.ExecSet.id == exec_set_id).first()
     if not exec_set:
@@ -57,6 +57,10 @@ def _ensure_exec_set_access(
         owner_id = exec_set.created_by
         if not owner_id or int(owner_id) != int(user.id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权限访问该执行集")
+    if not allow_archived:
+        current_status = str(exec_set.status or "").strip().lower()
+        if current_status == "archived":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="执行集已归档，无法修改")
     return exec_set
 
 
@@ -158,6 +162,10 @@ def update_exec_set(
     exec_set = _ensure_exec_set_access(db, user, exec_set_id)
     prev_status = str(exec_set.status or "").strip().lower()
     data = payload.model_dump(exclude_unset=True)
+    if "status" in data:
+        desired = str(data.get("status") or "").strip().lower()
+        if desired == "archived":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请使用归档按钮进行归档")
     changed = False
     turned_on_reuse = False
     turned_off_reuse = False
@@ -249,6 +257,157 @@ def delete_exec_set(
     return {"status": "ok"}
 
 
+def _get_exec_set_case_status_counts(db: Session, exec_set_id: int):
+    pending_statuses = ["pending", "未执行", "变更重跑", "有改动", ""]
+    failed_statuses = ["failed", "失败"]
+    blocked_statuses = ["blocked", "阻塞"]
+    row = (
+        db.query(
+            func.count(models.ExecCase.id).label("total"),
+            func.sum(
+                case(
+                    (
+                        (models.ExecCase.status.is_(None))
+                        | (models.ExecCase.status.in_(pending_statuses)),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("pending"),
+            func.sum(case((models.ExecCase.status.in_(failed_statuses), 1), else_=0)).label(
+                "failed"
+            ),
+            func.sum(
+                case((models.ExecCase.status.in_(blocked_statuses), 1), else_=0)
+            ).label("blocked"),
+        )
+        .filter(models.ExecCase.exec_set_id == exec_set_id)
+        .first()
+    )
+    if not row:
+        return {"total": 0, "pending": 0, "failed": 0, "blocked": 0}
+    return {
+        "total": int(row.total or 0),
+        "pending": int(row.pending or 0),
+        "failed": int(row.failed or 0),
+        "blocked": int(row.blocked or 0),
+    }
+
+
+def _build_archive_list_item(
+    exec_set: models.ExecSet,
+    project_name: str,
+    version_name: str,
+    importer_name: str,
+    archiver_name: str,
+    case_count: int,
+):
+    return schemas.ExecArchiveListItemOut(
+        exec_set_id=int(exec_set.id),
+        project_id=int(exec_set.project_id),
+        project_name=project_name or "",
+        version_id=(int(exec_set.version_id) if exec_set.version_id is not None else None),
+        version_name=(version_name if version_name else None),
+        name=str(exec_set.name or ""),
+        case_count=int(case_count or 0),
+        reuse_enabled=bool(getattr(exec_set, "reuse_enabled", False)),
+        imported_by=(int(exec_set.created_by) if exec_set.created_by is not None else None),
+        imported_by_name=(importer_name if importer_name else None),
+        imported_at=exec_set.created_at,
+        archived_by=(int(exec_set.archived_by) if exec_set.archived_by is not None else None),
+        archived_by_name=(archiver_name if archiver_name else None),
+        archived_at=(exec_set.archived_at if exec_set.archived_at is not None else None),
+        archived_reason=(str(exec_set.archived_reason) if exec_set.archived_reason is not None else None),
+    )
+
+
+@router.post("/sets/{exec_set_id}/archive", response_model=schemas.ExecArchiveListItemOut)
+def archive_exec_set(
+    exec_set_id: int,
+    payload: schemas.ExecSetArchiveRequest,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    exec_set = _ensure_exec_set_access(db, user, exec_set_id, allow_archived=True)
+    current_status = str(exec_set.status or "").strip().lower()
+    if current_status == "archived":
+        # 幂等：重复点击归档直接返回当前归档记录。
+        pass
+    else:
+        counts = _get_exec_set_case_status_counts(db, exec_set.id)
+        need_reason = bool(counts.get("pending") or counts.get("failed") or counts.get("blocked"))
+        reason = str(payload.reason or "").strip()
+        if need_reason and not reason:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "detail": "仍存在未通过用例，归档需填写原因",
+                    "counts": counts,
+                },
+            )
+        now = datetime.now(timezone.utc)
+        exec_set.status = "archived"
+        exec_set.archived_by = user.id
+        exec_set.archived_at = now
+        exec_set.archived_reason = reason if reason else None
+        exec_set.updated_at = now
+        db.add(exec_set)
+        log_operation(
+            db=db,
+            user_id=user.id,
+            action="archive_exec_set",
+            target_type="exec_set",
+            target_id=exec_set.id,
+            detail={
+                "project_id": exec_set.project_id,
+                "name": exec_set.name,
+                "counts": counts,
+                "reason": (reason if reason else None),
+            },
+        )
+        db.commit()
+        db.refresh(exec_set)
+
+    importer = aliased(models.User)
+    archiver = aliased(models.User)
+    case_count_sq = (
+        db.query(
+            models.ExecCase.exec_set_id.label("exec_set_id"),
+            func.count(models.ExecCase.id).label("case_count"),
+        )
+        .group_by(models.ExecCase.exec_set_id)
+        .subquery()
+    )
+    row = (
+        db.query(
+            models.ExecSet,
+            models.Project.name.label("project_name"),
+            models.ProjectVersion.name.label("version_name"),
+            importer.username.label("importer_name"),
+            archiver.username.label("archiver_name"),
+            case_count_sq.c.case_count.label("case_count"),
+        )
+        .join(models.Project, models.Project.id == models.ExecSet.project_id)
+        .outerjoin(models.ProjectVersion, models.ProjectVersion.id == models.ExecSet.version_id)
+        .outerjoin(importer, importer.id == models.ExecSet.created_by)
+        .outerjoin(archiver, archiver.id == models.ExecSet.archived_by)
+        .outerjoin(case_count_sq, case_count_sq.c.exec_set_id == models.ExecSet.id)
+        .filter(models.ExecSet.id == exec_set.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="归档记录不存在")
+    es, project_name, version_name, importer_name, archiver_name, case_count = row
+    return _build_archive_list_item(
+        es,
+        project_name,
+        version_name,
+        importer_name,
+        archiver_name,
+        int(case_count or 0),
+    )
+
+
 def _normalize_match_key(
     module: str, title: str, precondition: str, steps: str, expected: str
 ) -> str:
@@ -327,6 +486,7 @@ def upsert_exec_set_from_case_file(
         .filter(
             models.ExecSet.case_file_id == case_file.id,
             models.ExecSet.created_by == user.id,
+            models.ExecSet.status == "active",
         )
         .order_by(models.ExecSet.id.desc())
         .first()
@@ -350,22 +510,11 @@ def upsert_exec_set_from_case_file(
         db.flush()
         created = True
     else:
-        prev_status = str(exec_set.status or "").strip().lower()
-        exec_set.status = "active"
         exec_set.updated_at = now
-        if prev_status and prev_status != "active":
-            # 归档后重新启用执行集：视为“重新开始”，不展示归档前的用例库变更记录。
+        if exec_set.case_file_base_updated_at is None:
             exec_set.case_file_base_updated_at = case_file.updated_at
+        if exec_set.case_file_last_synced_at is None:
             exec_set.case_file_last_synced_at = case_file.updated_at
-            exec_set.case_file_last_diff_at = None
-            exec_set.case_file_last_diff_json = None
-            exec_set.case_file_last_diff_shown_at = None
-            exec_set.case_file_diff_history_json = None
-        else:
-            if exec_set.case_file_base_updated_at is None:
-                exec_set.case_file_base_updated_at = case_file.updated_at
-            if exec_set.case_file_last_synced_at is None:
-                exec_set.case_file_last_synced_at = case_file.updated_at
 
     if payload.requirement is not None:
         exec_set.requirement = payload.requirement
@@ -598,6 +747,7 @@ def upsert_exec_set_from_case_file(
 def list_exec_sets(
     project_id: int = None,
     all_users: bool = False,
+    status_filter: str = "active",
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -616,6 +766,11 @@ def list_exec_sets(
         query = query.filter(models.ExecSet.created_by == user.id)
     elif not all_users:
         query = query.filter(models.ExecSet.created_by == user.id)
+    desired = str(status_filter or "active").strip().lower()
+    if desired not in ("active", "archived", "all"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="status_filter 仅支持 active/archived/all")
+    if desired != "all":
+        query = query.filter(models.ExecSet.status == desired)
     case_count_sq = (
         db.query(
             models.ExecCase.exec_set_id.label("exec_set_id"),
@@ -2045,9 +2200,6 @@ def get_execution_overview_layout(
         passed = (row.passed_cn or 0) + (row.passed_en or 0)
         pending = row.pending or 0
         total = row.total or 0
-        # 归档用例：仅当已执行完（pending=0）才在总览中长期展示，避免“未执行完就被解散”的噪音。
-        if str(row.status or "") == "archived" and int(pending) > 0:
-            continue
         grouped.setdefault(uid, []).append(
             schemas.ExecOverviewExecSetOut(
                 exec_set_id=row.exec_set_id,
@@ -2100,3 +2252,168 @@ def get_execution_overview_layout(
         )
 
     return result
+
+
+@router.get("/archives", response_model=List[schemas.ExecArchiveListItemOut])
+def list_exec_archives(
+    project_id: int = None,
+    version_id: int = None,
+    q: str = None,
+    limit: int = 200,
+    offset: int = 0,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    safe_limit = max(1, min(int(limit or 200), 500))
+    safe_offset = max(0, int(offset or 0))
+
+    importer = aliased(models.User)
+    archiver = aliased(models.User)
+    case_count_sq = (
+        db.query(
+            models.ExecCase.exec_set_id.label("exec_set_id"),
+            func.count(models.ExecCase.id).label("case_count"),
+        )
+        .group_by(models.ExecCase.exec_set_id)
+        .subquery()
+    )
+    query = (
+        db.query(
+            models.ExecSet,
+            models.Project.name.label("project_name"),
+            models.ProjectVersion.name.label("version_name"),
+            importer.username.label("importer_name"),
+            archiver.username.label("archiver_name"),
+            case_count_sq.c.case_count.label("case_count"),
+        )
+        .join(models.Project, models.Project.id == models.ExecSet.project_id)
+        .outerjoin(models.ProjectVersion, models.ProjectVersion.id == models.ExecSet.version_id)
+        .outerjoin(importer, importer.id == models.ExecSet.created_by)
+        .outerjoin(archiver, archiver.id == models.ExecSet.archived_by)
+        .outerjoin(case_count_sq, case_count_sq.c.exec_set_id == models.ExecSet.id)
+        .filter(models.ExecSet.status == "archived")
+    )
+
+    if project_id is not None:
+        ensure_project_access(db, user, project_id)
+        query = query.filter(models.ExecSet.project_id == project_id)
+    elif user.role != "admin":
+        query = query.join(models.UserProject, models.UserProject.project_id == models.ExecSet.project_id).filter(
+            models.UserProject.user_id == user.id
+        )
+
+    if version_id is not None:
+        query = query.filter(models.ExecSet.version_id == version_id)
+
+    term = str(q or "").strip()
+    if term:
+        query = query.filter(models.ExecSet.name.contains(term))
+
+    rows = (
+        query.order_by(
+            func.coalesce(models.ExecSet.archived_at, models.ExecSet.updated_at).desc(),
+            models.ExecSet.id.desc(),
+        )
+        .offset(safe_offset)
+        .limit(safe_limit)
+        .all()
+    )
+    result: List[schemas.ExecArchiveListItemOut] = []
+    for es, project_name, version_name, importer_name, archiver_name, case_count in rows:
+        result.append(
+            _build_archive_list_item(
+                es,
+                project_name,
+                version_name,
+                importer_name,
+                archiver_name,
+                int(case_count or 0),
+            )
+        )
+    return result
+
+
+@router.get("/archives/{exec_set_id}", response_model=schemas.ExecArchiveDetailOut)
+def get_exec_archive_detail(
+    exec_set_id: int,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    importer = aliased(models.User)
+    archiver = aliased(models.User)
+    case_count_sq = (
+        db.query(
+            models.ExecCase.exec_set_id.label("exec_set_id"),
+            func.count(models.ExecCase.id).label("case_count"),
+        )
+        .group_by(models.ExecCase.exec_set_id)
+        .subquery()
+    )
+    row = (
+        db.query(
+            models.ExecSet,
+            models.Project.name.label("project_name"),
+            models.ProjectVersion.name.label("version_name"),
+            importer.username.label("importer_name"),
+            archiver.username.label("archiver_name"),
+            case_count_sq.c.case_count.label("case_count"),
+        )
+        .join(models.Project, models.Project.id == models.ExecSet.project_id)
+        .outerjoin(models.ProjectVersion, models.ProjectVersion.id == models.ExecSet.version_id)
+        .outerjoin(importer, importer.id == models.ExecSet.created_by)
+        .outerjoin(archiver, archiver.id == models.ExecSet.archived_by)
+        .outerjoin(case_count_sq, case_count_sq.c.exec_set_id == models.ExecSet.id)
+        .filter(models.ExecSet.id == exec_set_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="归档记录不存在")
+    exec_set, project_name, version_name, importer_name, archiver_name, case_count = row
+    if str(exec_set.status or "").strip().lower() != "archived":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该记录未归档")
+    ensure_project_access(db, user, exec_set.project_id)
+    cases = (
+        db.query(models.ExecCase)
+        .filter(models.ExecCase.exec_set_id == exec_set.id)
+        .order_by(models.ExecCase.order_no.asc(), models.ExecCase.id.asc())
+        .all()
+    )
+    base = _build_archive_list_item(
+        exec_set,
+        project_name,
+        version_name,
+        importer_name,
+        archiver_name,
+        int(case_count or 0),
+    )
+    return schemas.ExecArchiveDetailOut(**base.model_dump(), cases=cases)
+
+
+@router.delete("/archives/{exec_set_id}")
+def delete_exec_archive(
+    exec_set_id: int,
+    admin: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if admin.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅管理员可操作")
+    exec_set = db.query(models.ExecSet).filter(models.ExecSet.id == exec_set_id).first()
+    if not exec_set:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="归档记录不存在")
+    if str(exec_set.status or "").strip().lower() != "archived":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该记录未归档")
+    ensure_project_access(db, admin, exec_set.project_id)
+    target_id = exec_set.id
+    project_id = exec_set.project_id
+    name = exec_set.name
+    db.delete(exec_set)
+    log_operation(
+        db=db,
+        user_id=admin.id,
+        action="delete_exec_archive",
+        target_type="exec_set",
+        target_id=target_id,
+        detail={"project_id": project_id, "name": name},
+    )
+    db.commit()
+    return {"status": "ok"}

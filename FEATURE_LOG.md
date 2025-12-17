@@ -1298,3 +1298,18 @@
 - 复用说明：复用既有同名差异对比抽屉与 `/api/case-files/import`、`/api/case-files/{id}/items`、`/api/exec/sets/from-case-file` 等接口，不新增后端接口。  
 - 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_import_multi_diff_queue.spec.js`（通过）。  
 - 更新记录：2025-12-17 执行页多文件同名导入改为 diff 队列顺序处理并增加 10s 居中悬浮提示（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_import_multi_diff_queue.spec.js`）。  
+
+- 功能名称：用例归档页面 + 个人总览归档  
+- 功能描述：新增“用例归档”页面用于存放归档用例记录；在“用例执行→个人执行总览”每份用例新增“归档”入口。归档后执行集不再出现在执行页（导入&分配/执行视图），但归档结果仍保留：个人总览与执行总览会以“归”标识归档状态；归档页可按项目/版本筛选并查看归档明细（只读）。若仍存在未通过用例（未执行/失败/阻塞等），归档需二次确认并填写原因。管理员可删除归档记录。  
+- 操作方式：  
+  - 归档：进入“用例相关→用例执行→个人执行总览”→在用例卡片上点击“归档”→若存在未通过用例则确认并填写原因→归档成功后该用例从执行页消失，总览卡片标记“归”。  
+  - 查看：进入“用例相关→用例归档”→点击“查看归档”→选择项目/版本并搜索→列表点“查看”→在归档页主页展示只读用例详情（含实际结果/备注/缺陷链接/复用子项）。  
+  - 删除：管理员在归档列表点“删除”可移除归档记录（不可撤回）。  
+- 使用效果：执行结果可归档留存且可按项目/版本回溯；归档后执行页保持清爽，避免归档记录进入导入&分配；跨成员在所属项目内可查看归档结果。  
+- 新增内容/接口/组件：  
+  - 前端：新增归档页入口与页面（`index.html`、`scripts/modules/caseArchive.js`）；个人总览新增“归档”入口与“归”标识（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`）。  
+  - 后端：执行集归档字段与接口（`backend/models.py`、`backend/routers/exec_routes.py`、`backend/schemas.py`、`backend/migrations.py`）；归档查询/删除接口与权限控制；归档后转执行改为新建执行集（保留历史归档）。  
+  - 测试：API 用例（`tests/api/exec_archive.spec.js`）与 UI 用例（`tests/ui/case_archive.spec.js`）；同步调整旧用例（`tests/api/exec_persistence.spec.js`）。  
+- 复用说明：复用既有执行集/执行用例数据结构（`exec_sets/exec_cases`），以 `exec_sets.status=archived` + 归档元信息实现归档；归档页只读复用执行数据展示，不新增独立“归档结果表”。  
+- 测试与验证：`node --check scripts/modules/caseArchive.js scripts/modules/tempexec.js scripts/core/tempexecCore.js`（通过）；`API_BASE_URL=http://127.0.0.1:18080 APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app ...` 后执行 `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_archive.spec.js tests/api/exec_persistence.spec.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/case_archive.spec.js`（通过）。  
+- 更新记录：2025-12-17 用例归档页面与个人总览归档上线（`backend/`、`services/apiClient.js`、`index.html`、`style.css`、`scripts/`、`tests/`、`API_DOC.md`）。  

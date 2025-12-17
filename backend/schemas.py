@@ -369,6 +369,32 @@ class ExecSetUpdate(BaseModel):
     reuse_presets: Optional[Any] = None
 
 
+class ExecSetArchiveRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+class ExecArchiveListItemOut(BaseModel):
+    exec_set_id: int
+    project_id: int
+    project_name: str
+    version_id: Optional[int] = None
+    version_name: Optional[str] = None
+    name: str
+    case_count: int = 0
+    reuse_enabled: bool = False
+    imported_by: Optional[int] = None
+    imported_by_name: Optional[str] = None
+    imported_at: datetime
+    archived_by: Optional[int] = None
+    archived_by_name: Optional[str] = None
+    archived_at: Optional[datetime] = None
+    archived_reason: Optional[str] = None
+
+
+class ExecArchiveDetailOut(ExecArchiveListItemOut):
+    cases: List[ExecCaseOut] = []
+
+
 class ExecImportCasePayload(BaseModel):
     module: str
     title: str
