@@ -2027,6 +2027,11 @@ body {
       color: #1d4ed8;
       border-color: #93c5fd;
     }
+    .summary-pill.case-lib-diff-pill.appended {
+      background: #dcfce7;
+      color: #166534;
+      border-color: #86efac;
+    }
     .summary-pill.case-lib-diff-pill.updated {
       background: #fef9c3;
       color: #92400e;
@@ -2057,6 +2062,12 @@ body {
       background: #2563eb;
       color: #ffffff;
       box-shadow: 0 0 0 3px rgba(37,99,235,0.28);
+    }
+    .summary-pill.case-lib-diff-pill.appended.active {
+      border-color: #16a34a;
+      background: #16a34a;
+      color: #ffffff;
+      box-shadow: 0 0 0 3px rgba(22,163,74,0.22);
     }
     .summary-pill.case-lib-diff-pill.updated.active {
       border-color: #d97706;
@@ -2194,6 +2205,12 @@ body {
       background: #dbeafe;
       color: #1d4ed8;
       border: 1px solid #93c5fd;
+    }
+    .tag.case-lib-diff-kind.append,
+    .tag.case-lib-diff-kind.appended {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #86efac;
     }
     .tag.case-lib-diff-kind.updated {
       background: #fef9c3;
@@ -2992,6 +3009,11 @@ tr.diff-locate-active td {
 .invalid-cell {
   background: rgba(231, 76, 60, 0.12) !important;
   outline: 1px solid rgba(231, 76, 60, 0.25);
+}
+
+.input-invalid {
+  border-color: rgba(239, 68, 68, 0.9) !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18) !important;
 }
 
 .import-structure-row td {

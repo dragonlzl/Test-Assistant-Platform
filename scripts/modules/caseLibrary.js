@@ -82,6 +82,7 @@
     historyCaseName: document.getElementById('caseLibraryHistoryCaseName'),
     historyRefreshBtn: document.getElementById('caseLibraryHistoryRefreshBtn'),
     historyHideBtn: document.getElementById('caseLibraryHistoryHideBtn'),
+    historyAppendPill: document.getElementById('caseLibraryHistoryAppendPill'),
     historyAddedPill: document.getElementById('caseLibraryHistoryAddedPill'),
     historyUpdatedPill: document.getElementById('caseLibraryHistoryUpdatedPill'),
     historyDeletedPill: document.getElementById('caseLibraryHistoryDeletedPill'),
@@ -108,6 +109,8 @@
     },
 
 	    importDiff: {
+        mode: 'import',
+        caseFileId: null,
 	      fileName: '',
 	      cleanName: '',
 	      importedCleanName: '',
@@ -269,6 +272,23 @@
     return diff;
   }
 
+  function compareCaseItemFieldsForAppendOverwrite(left, right) {
+    var diff = {
+      priority: false,
+      precondition: false,
+      steps: false,
+      expected: false,
+      remark: false,
+    };
+    if (!left || !right) return diff;
+    diff.priority = normalizeDiffText(left.priority || '') !== normalizeDiffText(right.priority || '');
+    diff.precondition = normalizeDiffText(left.precondition || left.preconditions || '') !== normalizeDiffText(right.precondition || right.preconditions || '');
+    diff.steps = normalizeDiffText(left.steps || '') !== normalizeDiffText(right.steps || '');
+    diff.expected = normalizeDiffText(left.expected || '') !== normalizeDiffText(right.expected || '');
+    diff.remark = normalizeDiffText(left.remark || '') !== normalizeDiffText(right.remark || '');
+    return diff;
+  }
+
   function buildImportDiffRows(importItems, dbItems) {
     var leftList = dedupeCaseItemsByKey(importItems);
     var rightList = dedupeCaseItemsByKey(dbItems);
@@ -311,6 +331,63 @@
         diff: fieldDiff,
       };
     });
+  }
+
+  function buildAppendOverwriteDiffRows(appendItems, dbItems) {
+    var leftList = Array.isArray(appendItems) ? appendItems : [];
+    var rightList = Array.isArray(dbItems) ? dbItems : [];
+    var leftMap = {};
+    var rightMap = {};
+    leftList.forEach(function(it) {
+      var k = buildCaseItemKey(it);
+      if (!k) return;
+      if (leftMap[k]) return;
+      leftMap[k] = it;
+    });
+    rightList.forEach(function(it) {
+      var k = buildCaseItemKey(it);
+      if (!k) return;
+      if (rightMap[k]) return;
+      rightMap[k] = it;
+    });
+    var keys = {};
+    Object.keys(leftMap).forEach(function(k) { keys[k] = true; });
+    Object.keys(rightMap).forEach(function(k) { keys[k] = true; });
+    var keyList = Object.keys(keys);
+    keyList.sort(function(a, b) {
+      if (a < b) return -1;
+      if (a > b) return 1;
+      return 0;
+    });
+    return keyList.map(function(k) {
+      var left = leftMap[k] || null;
+      var right = rightMap[k] || null;
+      var rowType = '';
+      var fieldDiff = compareCaseItemFieldsForAppendOverwrite(left, right);
+      var changed = Boolean(fieldDiff.priority || fieldDiff.precondition || fieldDiff.steps || fieldDiff.expected || fieldDiff.remark);
+      if (left && !right) rowType = 'added';
+      else if (left && right && changed) rowType = 'changed';
+      else rowType = 'same';
+      return {
+        key: k,
+        left: left,
+        right: right,
+        type: rowType,
+        diff: fieldDiff,
+      };
+    });
+  }
+
+  function countUniqueCaseItemsByKey(list) {
+    var items = Array.isArray(list) ? list : [];
+    var seen = {};
+    items.forEach(function(it) {
+      var k = buildCaseItemKey(it);
+      if (!k) return;
+      if (seen[k]) return;
+      seen[k] = true;
+    });
+    return Object.keys(seen).length;
   }
 
   function renderImportDiffTable(bodyEl, rows, side) {
@@ -589,20 +666,33 @@
 
   function syncImportDiffControls() {
     if (!dom.importDiffOverwriteBtn) return;
-    var can = Boolean(
-      !state.importDiff.loading &&
-      state.importDiff.projectId &&
-      state.importDiff.importVersionId &&
-      state.importDiff.fileName &&
-      Array.isArray(state.importDiff.importItems) &&
-      state.importDiff.importItems.length
-    );
+    var mode = state.importDiff && state.importDiff.mode ? String(state.importDiff.mode) : 'import';
+    var can = false;
+    if (mode === 'append_overwrite') {
+      can = Boolean(
+        !state.importDiff.loading &&
+        state.importDiff.caseFileId &&
+        Array.isArray(state.importDiff.importItems) &&
+        state.importDiff.importItems.length
+      );
+    } else {
+      can = Boolean(
+        !state.importDiff.loading &&
+        state.importDiff.projectId &&
+        state.importDiff.importVersionId &&
+        state.importDiff.fileName &&
+        Array.isArray(state.importDiff.importItems) &&
+        state.importDiff.importItems.length
+      );
+    }
     dom.importDiffOverwriteBtn.disabled = !can;
   }
 
   function openImportDiffDrawer(payload) {
     payload = payload || {};
     state.importDiff.locateIndex = -1;
+    state.importDiff.mode = payload.mode || 'import';
+    state.importDiff.caseFileId = payload.caseFileId || null;
     state.importDiff.fileName = payload.fileName || '';
     state.importDiff.cleanName = payload.cleanName || '';
     state.importDiff.importedCleanName = payload.importedCleanName || '';
@@ -612,30 +702,53 @@
     state.importDiff.dbVersionId = payload.dbVersionId || null;
     state.importDiff.importItems = Array.isArray(payload.importItems) ? payload.importItems : [];
     state.importDiff.dbItems = Array.isArray(payload.dbItems) ? payload.dbItems : [];
-    state.importDiff.rows = buildImportDiffRows(state.importDiff.importItems, state.importDiff.dbItems);
+    state.importDiff.rows = (state.importDiff.mode === 'append_overwrite')
+      ? buildAppendOverwriteDiffRows(state.importDiff.importItems, state.importDiff.dbItems)
+      : buildImportDiffRows(state.importDiff.importItems, state.importDiff.dbItems);
     state.importDiff.loading = false;
 
     var projectName = state.projectNameById[state.importDiff.projectId] || ('项目#' + state.importDiff.projectId);
     var importVerName = getVersionName(state.importDiff.projectId, state.importDiff.importVersionId);
     var dbVerName = getVersionName(state.importDiff.projectId, state.importDiff.dbVersionId);
-    var leftCount = dedupeCaseItemsByKey(state.importDiff.importItems).length;
-    var rightCount = dedupeCaseItemsByKey(state.importDiff.dbItems).length;
+    var leftCount = (state.importDiff.mode === 'append_overwrite')
+      ? countUniqueCaseItemsByKey(state.importDiff.importItems)
+      : dedupeCaseItemsByKey(state.importDiff.importItems).length;
+    var rightCount = (state.importDiff.mode === 'append_overwrite')
+      ? countUniqueCaseItemsByKey(state.importDiff.dbItems)
+      : dedupeCaseItemsByKey(state.importDiff.dbItems).length;
     var changedCount = state.importDiff.rows.filter(function(r) { return r && r.type === 'changed'; }).length;
     var addedCount = state.importDiff.rows.filter(function(r) { return r && r.type === 'added'; }).length;
     var removedCount = state.importDiff.rows.filter(function(r) { return r && r.type === 'removed'; }).length;
 
     if (dom.importDiffTitle) {
-      dom.importDiffTitle.textContent = '同名用例差异对比：' + (state.importDiff.cleanName || state.importDiff.fileName || '用例');
+      dom.importDiffTitle.textContent = (state.importDiff.mode === 'append_overwrite' ? '追加入库差异对比：' : '同名用例差异对比：') +
+        (state.importDiff.cleanName || state.importDiff.fileName || '用例');
     }
     if (dom.importDiffMeta) {
-      dom.importDiffMeta.textContent = projectName + ' / 导入版本：' + importVerName + '（' + leftCount + ' 条） / 库中版本：' + dbVerName + '（' + rightCount + ' 条）' +
-        ' / 新增 ' + addedCount + ' / 删除 ' + removedCount + ' / 差异 ' + changedCount;
-      if (leftCount !== rightCount) dom.importDiffMeta.classList.add('warn');
-      else dom.importDiffMeta.classList.remove('warn');
+      if (state.importDiff.mode === 'append_overwrite') {
+        dom.importDiffMeta.textContent = projectName + ' / 版本：' + importVerName +
+          ' / 待追加入库：' + leftCount + ' 条（新增 ' + addedCount + ' / 重复 ' + rightCount + ' / 差异 ' + changedCount + '）';
+        if (changedCount) dom.importDiffMeta.classList.add('warn');
+        else dom.importDiffMeta.classList.remove('warn');
+      } else {
+        dom.importDiffMeta.textContent = projectName + ' / 导入版本：' + importVerName + '（' + leftCount + ' 条） / 库中版本：' + dbVerName + '（' + rightCount + ' 条）' +
+          ' / 新增 ' + addedCount + ' / 删除 ' + removedCount + ' / 差异 ' + changedCount;
+        if (leftCount !== rightCount) dom.importDiffMeta.classList.add('warn');
+        else dom.importDiffMeta.classList.remove('warn');
+      }
     }
     if (dom.importDiffStatus) {
-      var summary = '对比完成：新增 ' + addedCount + ' 条，差异 ' + changedCount + ' 条，库中多出 ' + removedCount + ' 条';
-      setStatus(dom.importDiffStatus, summary, (addedCount || changedCount || removedCount) ? 'warn' : 'ok');
+      var summary = '';
+      if (state.importDiff.mode === 'append_overwrite') {
+        summary = '检测到重复用例：新增 ' + addedCount + ' 条，差异 ' + changedCount + ' 条';
+        setStatus(dom.importDiffStatus, summary, changedCount ? 'warn' : 'ok');
+      } else {
+        summary = '对比完成：新增 ' + addedCount + ' 条，差异 ' + changedCount + ' 条，库中多出 ' + removedCount + ' 条';
+        setStatus(dom.importDiffStatus, summary, (addedCount || changedCount || removedCount) ? 'warn' : 'ok');
+      }
+    }
+    if (dom.importDiffOverwriteBtn) {
+      dom.importDiffOverwriteBtn.textContent = (state.importDiff.mode === 'append_overwrite') ? '确认覆盖并追加入库' : '确认覆盖导入';
     }
     renderImportDiffMergedTable(dom.importDiffBody, state.importDiff.rows);
     bindImportDiffLocateEvents();
@@ -655,6 +768,8 @@
 	  function openImportDiffDrawerLoading(payload) {
     payload = payload || {};
     state.importDiff.locateIndex = -1;
+    state.importDiff.mode = payload.mode || 'import';
+    state.importDiff.caseFileId = payload.caseFileId || null;
     var projectId = payload.projectId || null;
     var importVersionId = payload.importVersionId || null;
     var cleanName = payload.cleanName || payload.fileName || '';
@@ -672,9 +787,13 @@
     var projectName = state.projectNameById[projectId] || ('项目#' + projectId);
     var importVerName = getVersionName(projectId, importVersionId);
 
-    if (dom.importDiffTitle) dom.importDiffTitle.textContent = '同名用例差异对比：' + (cleanName || '用例');
+    if (dom.importDiffTitle) {
+      dom.importDiffTitle.textContent = (state.importDiff.mode === 'append_overwrite' ? '追加入库差异对比：' : '同名用例差异对比：') + (cleanName || '用例');
+    }
     if (dom.importDiffMeta) {
-      dom.importDiffMeta.textContent = projectName + ' / 导入版本：' + importVerName + ' / 库中版本：--';
+      dom.importDiffMeta.textContent = (state.importDiff.mode === 'append_overwrite')
+        ? (projectName + ' / 版本：' + importVerName + ' / 库中：--')
+        : (projectName + ' / 导入版本：' + importVerName + ' / 库中版本：--');
       dom.importDiffMeta.classList.remove('warn');
     }
     if (dom.importDiffStatus) setStatus(dom.importDiffStatus, '加载差异对比中...', '');
@@ -691,6 +810,142 @@
 	      }, 60);
 	    }
 	  }
+
+  // 供外部模块（如“用例生成”）复用同名差异对比抽屉：打开后等待用户“确认覆盖导入”或关闭抽屉。
+  function openImportDiffForExternal(options) {
+    options = options || {};
+    if (!apiClient || typeof apiClient.importCaseFile !== 'function' || typeof apiClient.listCaseItems !== 'function') {
+      return Promise.resolve({ ok: false, reason: 'api_not_ready' });
+    }
+    var projectId = options.projectId || options.project_id || null;
+    var versionId = options.versionId || options.version_id || null;
+    var fileName = options.fileName || options.file_name || '';
+    var items = Array.isArray(options.items) ? options.items : [];
+    var err = options.error || null;
+    var errPayload = err && err.payload ? err.payload : (options.payload || null);
+    var existingCaseFileId = errPayload && errPayload.existing_case_file_id ? errPayload.existing_case_file_id : null;
+    if (!projectId || !versionId || !fileName || !items.length || !existingCaseFileId) {
+      return Promise.resolve({ ok: false, reason: 'invalid_params' });
+    }
+    var importedCleanName = cleanCaseFileName(fileName);
+    var matchedCleanName = errPayload && errPayload.existing_file_name_clean ? String(errPayload.existing_file_name_clean) : '';
+    var cleanName = matchedCleanName || importedCleanName;
+    var dbVersionId = errPayload && (errPayload.existing_version_id || errPayload.existing_version_id === 0)
+      ? errPayload.existing_version_id
+      : null;
+    var source = options.source || options.importSource || extFromFileName(fileName) || 'external';
+
+    openImportDiffDrawerLoading({
+      fileName: fileName,
+      cleanName: cleanName,
+      importedCleanName: importedCleanName,
+      projectId: projectId,
+      importVersionId: versionId,
+      source: source,
+    });
+
+    return new Promise(function(resolve) {
+      state.importDiff.external = { resolve: resolve };
+      Promise.all([apiClient.listCaseItems(existingCaseFileId), loadVersions(projectId)])
+        .then(function(res) {
+          var dbItems = Array.isArray(res && res[0]) ? res[0] : [];
+          openImportDiffDrawer({
+            fileName: fileName,
+            cleanName: cleanName,
+            importedCleanName: importedCleanName,
+            projectId: projectId,
+            importVersionId: versionId,
+            dbVersionId: dbVersionId,
+            importItems: items,
+            dbItems: dbItems,
+            source: source,
+          });
+        })
+        .catch(function(loadErr) {
+          setStatus(dom.importDiffStatus, '加载差异对比失败：' + (loadErr && loadErr.message ? loadErr.message : '未知错误'), 'err');
+          var external = state.importDiff.external || null;
+          if (external && typeof external.resolve === 'function') {
+            state.importDiff.external = null;
+            try {
+              external.resolve({ ok: false, reason: 'load_failed', error: loadErr || null });
+            } catch (e) {
+              // ignore
+            }
+          }
+        });
+    });
+  }
+
+  // 供外部模块复用“追加入库覆盖差异对比”：用于确认是否覆盖同模块同标题的重复用例。
+  function openAppendDiffForExternal(options) {
+    options = options || {};
+    if (!apiClient || typeof apiClient.appendCaseItems !== 'function') {
+      return Promise.resolve({ ok: false, reason: 'api_not_ready' });
+    }
+    var projectId = options.projectId || options.project_id || null;
+    var versionId = options.versionId || options.version_id || null;
+    var caseFileId = options.caseFileId || options.case_file_id || null;
+    var fileNameClean = options.fileNameClean || options.file_name_clean || options.cleanName || '';
+    var items = Array.isArray(options.items) ? options.items : [];
+    var dbItems = Array.isArray(options.dbItems) ? options.dbItems : [];
+    if (!projectId || !versionId || !caseFileId || !items.length) {
+      return Promise.resolve({ ok: false, reason: 'invalid_params' });
+    }
+    var leftKeys = {};
+    items.forEach(function(it) {
+      var k = buildCaseItemKey(it);
+      if (k) leftKeys[k] = true;
+    });
+    var relatedDbItems = dbItems.filter(function(it) {
+      var k = buildCaseItemKey(it);
+      return Boolean(k && leftKeys[k]);
+    });
+    var hasConflict = relatedDbItems.length > 0;
+    if (!hasConflict) {
+      return Promise.resolve({ ok: false, reason: 'no_conflict' });
+    }
+
+    openImportDiffDrawerLoading({
+      mode: 'append_overwrite',
+      caseFileId: caseFileId,
+      fileName: fileNameClean || ('用例#' + caseFileId),
+      cleanName: fileNameClean || ('用例#' + caseFileId),
+      projectId: projectId,
+      importVersionId: versionId,
+      source: 'casegen',
+    });
+
+    return new Promise(function(resolve) {
+      state.importDiff.external = { resolve: resolve };
+      loadVersions(projectId)
+        .then(function() {
+          openImportDiffDrawer({
+            mode: 'append_overwrite',
+            caseFileId: caseFileId,
+            fileName: fileNameClean || ('用例#' + caseFileId),
+            cleanName: fileNameClean || ('用例#' + caseFileId),
+            projectId: projectId,
+            importVersionId: versionId,
+            dbVersionId: null,
+            importItems: items,
+            dbItems: relatedDbItems,
+            source: 'casegen',
+          });
+        })
+        .catch(function(loadErr) {
+          setStatus(dom.importDiffStatus, '加载差异对比失败：' + (loadErr && loadErr.message ? loadErr.message : '未知错误'), 'err');
+          var external = state.importDiff.external || null;
+          if (external && typeof external.resolve === 'function') {
+            state.importDiff.external = null;
+            try {
+              external.resolve({ ok: false, reason: 'load_failed', error: loadErr || null });
+            } catch (e) {
+              // ignore
+            }
+          }
+        });
+    });
+  }
 
 	  function syncImportInvalidControls() {
 	    if (!dom.importInvalidConfirmBtn) return;
@@ -1161,8 +1416,64 @@
 
   function confirmOverwriteImportFromDiff() {
     if (state.importDiff.loading) return;
-    if (!apiClient || typeof apiClient.importCaseFile !== 'function') {
-      setStatus(dom.importDiffStatus, '后端导入接口未就绪', 'err');
+    var mode = state.importDiff && state.importDiff.mode ? String(state.importDiff.mode) : 'import';
+    if (!apiClient || (mode === 'append_overwrite' ? typeof apiClient.appendCaseItems !== 'function' : typeof apiClient.importCaseFile !== 'function')) {
+      setStatus(dom.importDiffStatus, mode === 'append_overwrite' ? '后端追加接口未就绪' : '后端导入接口未就绪', 'err');
+      return;
+    }
+
+    if (mode === 'append_overwrite') {
+      var caseFileId = state.importDiff.caseFileId;
+      var cleanName2 = state.importDiff.cleanName || ('用例#' + caseFileId);
+      var items2 = Array.isArray(state.importDiff.importItems) ? state.importDiff.importItems : [];
+      if (!caseFileId || !items2.length) {
+        setStatus(dom.importDiffStatus, '差异数据未就绪，请稍后重试', 'warn');
+        return;
+      }
+      var ok2 = window.confirm('检测到重复用例，是否确认覆盖并追加入库：' + cleanName2 + '？');
+      if (!ok2) return;
+
+      state.importDiff.loading = true;
+      syncImportDiffControls();
+      setStatus(dom.importDiffStatus, '覆盖并追加入库中...', '');
+
+      apiClient
+        .appendCaseItems(caseFileId, { items: items2, overwrite_existing: true })
+        .then(function(res) {
+          var appended = res && (res.appended || res.appended_count) ? Number(res.appended || res.appended_count) : 0;
+          var overwritten = res && (res.overwritten || res.overwritten_count) ? Number(res.overwritten || res.overwritten_count) : 0;
+          var msg = '追加入库成功：新增 ' + appended + ' 条，覆盖 ' + overwritten + ' 条';
+          setStatus(dom.importDiffStatus, msg, 'ok');
+          var external = state.importDiff.external || null;
+          if (external && typeof external.resolve === 'function') {
+            state.importDiff.external = null;
+            try {
+              external.resolve({ ok: true, overwrite: true, result: res || null });
+            } catch (e) {
+              // ignore
+            }
+          }
+          if (importDiffDrawerInstance && typeof importDiffDrawerInstance.close === 'function') {
+            importDiffDrawerInstance.close();
+          }
+        })
+        .catch(function(err) {
+          var msg = err && err.message ? err.message : '追加入库失败';
+          setStatus(dom.importDiffStatus, '追加入库失败：' + msg, 'err');
+          var external = state.importDiff.external || null;
+          if (external && typeof external.resolve === 'function') {
+            state.importDiff.external = null;
+            try {
+              external.resolve({ ok: false, reason: 'append_overwrite_failed', error: err || null });
+            } catch (e) {
+              // ignore
+            }
+          }
+        })
+        .finally(function() {
+          state.importDiff.loading = false;
+          syncImportDiffControls();
+        });
       return;
     }
     var projectId = state.importDiff.projectId;
@@ -1197,12 +1508,21 @@
         },
         { overwrite: true }
       )
-      .then(function() {
+      .then(function(caseFile) {
         var msg = '覆盖导入成功：' + cleanName;
         setStatus(dom.importDiffStatus, msg, 'ok');
         setStatus(dom.importStatus, msg, 'ok');
         setStatus(dom.status, msg, 'ok');
         refreshCaseFileListsByProject(projectId);
+        var external = state.importDiff.external || null;
+        if (external && typeof external.resolve === 'function') {
+          state.importDiff.external = null;
+          try {
+            external.resolve({ ok: true, overwrite: true, caseFile: caseFile || null });
+          } catch (e) {
+            // ignore
+          }
+        }
         if (importDiffDrawerInstance && typeof importDiffDrawerInstance.close === 'function') {
           importDiffDrawerInstance.close();
         }
@@ -1211,6 +1531,15 @@
         var msg = err && err.message ? err.message : '覆盖导入失败';
         setStatus(dom.importDiffStatus, '覆盖导入失败：' + msg, 'err');
         setStatus(dom.importStatus, '覆盖导入失败：' + msg, 'err');
+        var external = state.importDiff.external || null;
+        if (external && typeof external.resolve === 'function') {
+          state.importDiff.external = null;
+          try {
+            external.resolve({ ok: false, reason: 'overwrite_failed', error: err || null });
+          } catch (e) {
+            // ignore
+          }
+        }
       })
       .finally(function() {
         state.importDiff.loading = false;
@@ -1248,6 +1577,7 @@
 
   function normalizeCaseLibHistoryKind(raw) {
     var kind = String(raw || '').trim().toLowerCase();
+    if (kind === 'append') return kind;
     if (kind === 'added' || kind === 'updated' || kind === 'deleted') return kind;
     if (kind === 'import' || kind === 'reimport' || kind === 'file_deleted') return kind;
     return kind;
@@ -1255,6 +1585,7 @@
 
   function getCaseLibHistoryKindLabel(kind) {
     var k = normalizeCaseLibHistoryKind(kind);
+    if (k === 'append') return '追加';
     if (k === 'added') return '新增';
     if (k === 'updated') return '改动';
     if (k === 'deleted') return '删除';
@@ -1327,7 +1658,7 @@
 
     var filter = state.historyDetail && state.historyDetail.filter ? String(state.historyDetail.filter) : '';
     var list = state.historyDetail && Array.isArray(state.historyDetail.history) ? state.historyDetail.history : [];
-    var totalSummary = { added: 0, updated: 0, deleted: 0, import: 0, reimport: 0, file_deleted: 0 };
+    var totalSummary = { append: 0, added: 0, updated: 0, deleted: 0, import: 0, reimport: 0, file_deleted: 0 };
     list.forEach(function(row) {
       var k = normalizeCaseLibHistoryKind(row && row.kind);
       if (k && totalSummary[k] !== undefined) totalSummary[k] += 1;
@@ -1338,6 +1669,7 @@
       pillEl.textContent = label + ' ' + (totalSummary[key] || 0);
       pillEl.classList.toggle('active', filter === key);
     }
+    syncPill(dom.historyAppendPill, 'append', '追加');
     syncPill(dom.historyAddedPill, 'added', '新增');
     syncPill(dom.historyUpdatedPill, 'updated', '改动');
     syncPill(dom.historyDeletedPill, 'deleted', '删除');
@@ -1392,7 +1724,7 @@
       var timeText = formatTime(row && row.changed_at ? row.changed_at : '');
       var typeTag = '<span class="tag case-lib-diff-kind ' + escapeHtml(kind) + '">' + escapeHtml(getCaseLibHistoryKindLabel(kind)) + '</span>';
 
-      if (kind === 'import' || kind === 'reimport' || kind === 'file_deleted') {
+      if (kind === 'append' || kind === 'import' || kind === 'reimport' || kind === 'file_deleted') {
         var titleText = getCaseLibHistoryKindLabel(kind);
         return (
           '<tr>' +
@@ -6014,6 +6346,7 @@
       });
     }
     [
+      dom.historyAppendPill,
       dom.historyAddedPill,
       dom.historyUpdatedPill,
       dom.historyDeletedPill,
@@ -6110,9 +6443,27 @@
 	    importDrawerInstance = ensureDrawer('caseLibraryImportDrawer', ['openCaseLibraryImportDrawerBtn'], function() {
 	      ensureProjectsReady().then(resetImportDrawer);
 	    });
-	    importDiffDrawerInstance = ensureDrawer('caseLibraryImportDiffDrawer', [], function() {
-	      // noop
-	    });
+	    importDiffDrawerInstance = ensureDrawer(
+	      'caseLibraryImportDiffDrawer',
+	      [],
+	      function() {
+	        // noop
+	      },
+	      function() {
+	        var external = state.importDiff && state.importDiff.external ? state.importDiff.external : null;
+	        if (external && typeof external.resolve === 'function') {
+	          state.importDiff.external = null;
+	          try {
+	            external.resolve({ ok: false, reason: 'closed' });
+	          } catch (e) {
+	            // ignore
+	          }
+	        }
+          state.importDiff.mode = 'import';
+          state.importDiff.caseFileId = null;
+          if (dom.importDiffOverwriteBtn) dom.importDiffOverwriteBtn.textContent = '确认覆盖导入';
+	      }
+	    );
 	    importInvalidDrawerInstance = ensureDrawer(
 	      'caseLibraryImportInvalidDrawer',
 	      [],
@@ -6188,6 +6539,9 @@
     // 兜底：某些时序下可能错过 app-tab-activated/app-auth-ready，短窗口轮询一次“是否需要恢复”。
     scheduleAutoRestoreProbe();
     window.app = window.app || {};
+    window.app.caseLibraryApi = window.app.caseLibraryApi || {};
+    window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
+    window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;
     window.app.caseLibraryBound = true;
   }
 

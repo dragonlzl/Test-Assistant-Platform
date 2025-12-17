@@ -21,12 +21,12 @@
   var caseGenAssignStatus = document.getElementById('caseGenAssignStatus');
   var caseGenPromptEl = document.getElementById('caseGenPrompt');
   var caseGenReasoningSelect = document.getElementById('caseGenReasoning');
-  var exportCaseGenBtn = document.getElementById('exportCaseGen');
-  var exportCaseGenXmindBtn = document.getElementById('exportCaseGenXmind');
-  var testCaseGenModelBtn = document.getElementById('testCaseGenModel');
-  var appendToExistingCasesBtn = document.getElementById('appendToExistingCases');
-  var appendTargetSelect = document.getElementById('appendTargetSelect');
-  var transferSelectedToExecBtn = document.getElementById('transferSelectedToExec');
+    var exportCaseGenBtn = document.getElementById('exportCaseGen');
+    var exportCaseGenXmindBtn = document.getElementById('exportCaseGenXmind');
+    var testCaseGenModelBtn = document.getElementById('testCaseGenModel');
+    var caseGenStoreActionSelect = document.getElementById('caseGenStoreActionSelect');
+    var caseGenStoreNewBtn = document.getElementById('caseGenStoreNewBtn');
+    var caseGenStoreAppendBtn = document.getElementById('caseGenStoreAppendBtn');
 
     function bindGoButtons() {
       if (goUsecaseGenBtn && api.goToCaseGeneration) {
@@ -153,24 +153,24 @@
     }
   }
 
-  function bindAppendButton() {
-    if (appendToExistingCasesBtn && api.appendSelectedCasesToImported) {
-      appendToExistingCasesBtn.addEventListener('click', api.appendSelectedCasesToImported);
+    function bindStoreButtons() {
+      if (caseGenStoreActionSelect) {
+        caseGenStoreActionSelect.addEventListener('change', function() {
+          if (api && typeof api.setCaseGenDbStoreNewAction === 'function') {
+            api.setCaseGenDbStoreNewAction(caseGenStoreActionSelect.value || '');
+          }
+          if (api && typeof api.clearCaseGenDbStoreNewActionError === 'function') {
+            api.clearCaseGenDbStoreNewActionError();
+          }
+        });
+      }
+      if (caseGenStoreNewBtn && api.openCaseGenDbStoreNewDrawer) {
+        caseGenStoreNewBtn.addEventListener('click', api.openCaseGenDbStoreNewDrawer);
+      }
+      if (caseGenStoreAppendBtn && api.openCaseGenDbStoreAppendDrawer) {
+        caseGenStoreAppendBtn.addEventListener('click', api.openCaseGenDbStoreAppendDrawer);
+      }
     }
-    if (appendTargetSelect) {
-      appendTargetSelect.addEventListener('change', function() {
-        if (api && typeof api.state === 'object') {
-          api.state.caseGenAppendTarget = appendTargetSelect.value || '';
-        }
-        if (api && typeof api.refreshAppendExistingButton === 'function') {
-          api.refreshAppendExistingButton();
-        }
-      });
-    }
-    if (transferSelectedToExecBtn && api.transferSelectedCasesToExec) {
-      transferSelectedToExecBtn.addEventListener('click', api.transferSelectedCasesToExec);
-    }
-  }
 
     // 初始渲染：进入用例生成时自动补模块
     if (typeof api.ensureCaseGenModulesFromSplit === 'function') {
@@ -181,7 +181,7 @@
     bindContainerEvents();
     bindModelSelectors();
     bindExportButtons();
-    bindAppendButton();
+    bindStoreButtons();
   }
 
   window.app = window.app || {};

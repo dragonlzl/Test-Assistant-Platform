@@ -711,7 +711,9 @@ def _case_snapshot(module, title, expected, priority=None, precondition="", step
     )
 
 
-def _diff_exec_set_against_case_file(db: Session, exec_set: models.ExecSet, case_file: models.CaseFile):
+def _diff_exec_set_against_case_file(
+    db: Session, exec_set: models.ExecSet, case_file: models.CaseFile, added_kind: str = "added"
+):
     case_items = (
         db.query(models.CaseItem)
         .filter(models.CaseItem.case_file_id == case_file.id)
@@ -737,6 +739,7 @@ def _diff_exec_set_against_case_file(db: Session, exec_set: models.ExecSet, case
         exec_by_item_id[int(source_id)] = c
 
     entries: List[schemas.ExecCaseLibraryDiffEntry] = []
+    appended = 0
     added = 0
     updated = 0
     deleted = 0
@@ -761,10 +764,15 @@ def _diff_exec_set_against_case_file(db: Session, exec_set: models.ExecSet, case
 
     for item_id, item in item_by_id.items():
         if item_id not in exec_by_item_id:
-            added += 1
+            kind = str(added_kind or "added").strip().lower()
+            if kind == "appended":
+                appended += 1
+            else:
+                kind = "added"
+                added += 1
             entries.append(
                 schemas.ExecCaseLibraryDiffEntry(
-                    kind="added",
+                    kind=kind,
                     case_item_id=item_id,
                     changed_fields=[],
                     old=None,
@@ -836,7 +844,9 @@ def _diff_exec_set_against_case_file(db: Session, exec_set: models.ExecSet, case
                 )
             )
 
-    summary = schemas.ExecCaseLibraryDiffSummary(added=added, updated=updated, deleted=deleted)
+    summary = schemas.ExecCaseLibraryDiffSummary(
+        appended=appended, added=added, updated=updated, deleted=deleted
+    )
     return {"entries": entries, "summary": summary}
 
 
@@ -1139,10 +1149,32 @@ def sync_exec_set_case_library(
             history=history_batches,
         )
 
-    diff_result = _diff_exec_set_against_case_file(db, exec_set, case_file)
+    added_kind = "added"
+    try:
+        last_ev = (
+            db.query(models.CaseLibraryChangeEvent)
+            .filter(models.CaseLibraryChangeEvent.project_id == case_file.project_id)
+            .filter(models.CaseLibraryChangeEvent.file_name_clean == case_file.file_name_clean)
+            .order_by(models.CaseLibraryChangeEvent.created_at.desc())
+            .first()
+        )
+        if (
+            last_ev
+            and str(getattr(last_ev, "kind", "") or "") == "append"
+            and last_ev.created_at
+            and case_file.updated_at
+        ):
+            # 追加入库：用最近一次事件与 case_file.updated_at 做时间邻近判断，避免误标记为“追加”。
+            delta = abs((last_ev.created_at - case_file.updated_at).total_seconds())
+            if delta <= 5:
+                added_kind = "appended"
+    except Exception:
+        added_kind = "added"
+
+    diff_result = _diff_exec_set_against_case_file(db, exec_set, case_file, added_kind=added_kind)
     new_entries = diff_result.get("entries") or []
     summary = diff_result.get("summary") or schemas.ExecCaseLibraryDiffSummary()
-    has_new_diff = bool(summary.added or summary.updated or summary.deleted)
+    has_new_diff = bool(summary.appended or summary.added or summary.updated or summary.deleted)
     if has_new_diff:
         exec_set.case_file_last_diff_at = case_file.updated_at
         operator_name = None

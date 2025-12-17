@@ -265,6 +265,36 @@
     var targetTop = top - (Number(offset) || 0);
     window.scrollTo({ top: targetTop, behavior: behavior || 'smooth' });
   }
+
+  var centerToastEl = null;
+  var centerToastTimer = 0;
+  function showCenterToast(text, type, durationMs) {
+    if (typeof document === 'undefined') return;
+    if (!text) return;
+    var duration = Number(durationMs);
+    if (!Number.isFinite(duration) || duration <= 0) duration = 3000;
+    if (centerToastTimer) {
+      clearTimeout(centerToastTimer);
+      centerToastTimer = 0;
+    }
+    if (centerToastEl && centerToastEl.parentNode) {
+      try { centerToastEl.parentNode.removeChild(centerToastEl); } catch (_) {}
+    }
+    centerToastEl = document.createElement('div');
+    centerToastEl.className = 'temp-center-toast' + (type ? (' ' + String(type)) : '');
+    centerToastEl.textContent = String(text);
+    document.body.appendChild(centerToastEl);
+    centerToastTimer = setTimeout(function() {
+      if (!centerToastEl) return;
+      centerToastEl.classList.add('fade-out');
+      setTimeout(function() {
+        if (centerToastEl && centerToastEl.parentNode) {
+          try { centerToastEl.parentNode.removeChild(centerToastEl); } catch (_) {}
+        }
+        centerToastEl = null;
+      }, 240);
+    }, duration);
+  }
   window.app = window.app || {};
   window.app.utils = {
     setStatus: setStatus,
@@ -287,5 +317,6 @@
     escapeHtmlPreserve: escapeHtmlPreserve,
     formatCompactTimestamp: formatCompactTimestamp,
     scrollElementIntoView: scrollElementIntoView,
+    showCenterToast: showCenterToast,
   };
 })();

@@ -60,6 +60,7 @@
     var tempExecCaseLibraryChangesBtn = null;
     var tempExecCaseLibraryDiffStatus = null;
     var tempExecCaseLibraryDiffBody = null;
+    var tempExecCaseLibraryDiffAppendedPill = null;
     var tempExecCaseLibraryDiffAddedPill = null;
     var tempExecCaseLibraryDiffUpdatedPill = null;
     var tempExecCaseLibraryDiffDeletedPill = null;
@@ -72,6 +73,7 @@
         tempExecCaseLibraryChangesBtn = document.getElementById('tempExecCaseLibraryChangesBtn');
         tempExecCaseLibraryDiffStatus = document.getElementById('tempExecCaseLibraryDiffStatus');
         tempExecCaseLibraryDiffBody = document.getElementById('tempExecCaseLibraryDiffBody');
+        tempExecCaseLibraryDiffAppendedPill = document.getElementById('tempExecCaseLibraryDiffAppendedPill');
         tempExecCaseLibraryDiffAddedPill = document.getElementById('tempExecCaseLibraryDiffAddedPill');
         tempExecCaseLibraryDiffUpdatedPill = document.getElementById('tempExecCaseLibraryDiffUpdatedPill');
         tempExecCaseLibraryDiffDeletedPill = document.getElementById('tempExecCaseLibraryDiffDeletedPill');
@@ -207,7 +209,7 @@
 
     function normalizeDiffKind(raw) {
       var kind = String(raw || '').trim().toLowerCase();
-      if (kind === 'added' || kind === 'updated' || kind === 'deleted') return kind;
+      if (kind === 'appended' || kind === 'added' || kind === 'updated' || kind === 'deleted') return kind;
       return '';
     }
 
@@ -3346,6 +3348,7 @@
             diffAt: diffAt ? String(diffAt) : '',
             operator: operator ? String(operator) : '',
             summary: {
+              appended: Number(sum.appended) || 0,
               added: Number(sum.added) || 0,
               updated: Number(sum.updated) || 0,
               deleted: Number(sum.deleted) || 0,
@@ -3368,6 +3371,7 @@
         hasNewDiff: Boolean(res.has_new_diff || res.hasNewDiff),
         shouldAutoPopup: Boolean(res.should_auto_popup || res.shouldAutoPopup),
         summary: {
+          appended: Number(summary.appended) || 0,
           added: Number(summary.added) || 0,
           updated: Number(summary.updated) || 0,
           deleted: Number(summary.deleted) || 0,
@@ -3473,6 +3477,7 @@
     }
 
     function getCaseLibDiffKindLabel(kind) {
+      if (kind === 'appended') return '追加';
       if (kind === 'added') return '新增';
       if (kind === 'updated') return '改动';
       if (kind === 'deleted') return '删除';
@@ -3542,7 +3547,7 @@
       var batches = meta && Array.isArray(meta.history) && meta.history.length ? meta.history : [];
       if (!batches.length) {
         var fallbackDiff = meta && Array.isArray(meta.diff) ? meta.diff : [];
-        var fallbackSummary = meta && meta.summary ? meta.summary : { added: 0, updated: 0, deleted: 0 };
+        var fallbackSummary = meta && meta.summary ? meta.summary : { appended: 0, added: 0, updated: 0, deleted: 0 };
         if (fallbackDiff.length) {
           batches = [{
             diffAt: meta && meta.lastDiffAt ? String(meta.lastDiffAt) : '',
@@ -3552,7 +3557,7 @@
         }
       }
 
-      var totalSummary = { added: 0, updated: 0, deleted: 0 };
+      var totalSummary = { appended: 0, added: 0, updated: 0, deleted: 0 };
       var rows = [];
       batches.forEach(function(batch) {
         if (!batch) return;
@@ -3562,14 +3567,16 @@
         if (!isFinite(batchTs)) batchTs = 0;
         var sum = batch.summary && typeof batch.summary === 'object' ? batch.summary : {};
         var diff = Array.isArray(batch.diff) ? batch.diff : [];
-        var hasSum = Number.isFinite(Number(sum.added)) || Number.isFinite(Number(sum.updated)) || Number.isFinite(Number(sum.deleted));
+        var hasSum = Number.isFinite(Number(sum.appended)) || Number.isFinite(Number(sum.added)) || Number.isFinite(Number(sum.updated)) || Number.isFinite(Number(sum.deleted));
         if (hasSum) {
+          totalSummary.appended += Number(sum.appended) || 0;
           totalSummary.added += Number(sum.added) || 0;
           totalSummary.updated += Number(sum.updated) || 0;
           totalSummary.deleted += Number(sum.deleted) || 0;
         } else {
           diff.forEach(function(entry) {
             var k = normalizeDiffKind(entry && entry.kind);
+            if (k === 'appended') totalSummary.appended += 1;
             if (k === 'added') totalSummary.added += 1;
             if (k === 'updated') totalSummary.updated += 1;
             if (k === 'deleted') totalSummary.deleted += 1;
@@ -3598,6 +3605,10 @@
         return kind === filter;
       });
 
+      if (tempExecCaseLibraryDiffAppendedPill) {
+        tempExecCaseLibraryDiffAppendedPill.textContent = '追加 ' + (totalSummary.appended || 0);
+        tempExecCaseLibraryDiffAppendedPill.classList.toggle('active', filter === 'appended');
+      }
       if (tempExecCaseLibraryDiffAddedPill) {
         tempExecCaseLibraryDiffAddedPill.textContent = '新增 ' + (totalSummary.added || 0);
         tempExecCaseLibraryDiffAddedPill.classList.toggle('active', filter === 'added');
@@ -3616,9 +3627,9 @@
         if (!meta) {
           statusText = '暂无用例库变更数据';
         } else if (meta.hasNewDiff) {
-          statusText = '已同步用例库变更到执行页：新增 ' + totalSummary.added + '，改动 ' + totalSummary.updated + '，删除 ' + totalSummary.deleted;
+          statusText = '已同步用例库变更到执行页：追加 ' + totalSummary.appended + '，新增 ' + totalSummary.added + '，改动 ' + totalSummary.updated + '，删除 ' + totalSummary.deleted;
         } else if (meta.everChanged) {
-          statusText = '暂无新的用例库变更，可查看历史差异：新增 ' + totalSummary.added + '，改动 ' + totalSummary.updated + '，删除 ' + totalSummary.deleted;
+          statusText = '暂无新的用例库变更，可查看历史差异：追加 ' + totalSummary.appended + '，新增 ' + totalSummary.added + '，改动 ' + totalSummary.updated + '，删除 ' + totalSummary.deleted;
         } else {
           statusText = '当前用例未发生用例库变更';
         }
@@ -3705,7 +3716,7 @@
           }
           if (!execSetId) return;
           var next = String(pill.dataset.caseLibDiffFilter || '');
-          if (next !== 'added' && next !== 'updated' && next !== 'deleted') return;
+          if (next !== 'appended' && next !== 'added' && next !== 'updated' && next !== 'deleted') return;
           var store = ensureTempExecCaseLibraryDiffState();
           var current = store.filterByExecSetId[execSetId] ? String(store.filterByExecSetId[execSetId]) : '';
           store.filterByExecSetId[execSetId] = (current === next) ? '' : next;

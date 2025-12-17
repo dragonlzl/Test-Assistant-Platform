@@ -1149,14 +1149,16 @@
       <button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
       <button class="secondary" id="exportCaseGenXmind">导出全部勾选用例XMind</button>
       <button class="secondary" id="toSplitFromCaseGen">前往测试模块拆分</button>
-      <button class="pill success" id="transferSelectedToExec">勾选用例到执行页</button>
     </div>
     <div class="action-right" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <span>用例视图中勾选用例，新增 到</span>
-      <select id="appendTargetSelect" style="min-width:200px;padding:6px 10px;border-radius:6px;border:1px solid #d0d5dd;box-shadow:inset 0 1px 2px rgba(0,0,0,0.04);background:#fff;">
-        <option value="">未选择</option>
+      <span class="hint" style="margin:0;">新用例入库后</span>
+      <select id="caseGenStoreActionSelect" style="min-width:200px;padding:6px 10px;border-radius:6px;border:1px solid #d0d5dd;box-shadow:inset 0 1px 2px rgba(0,0,0,0.04);background:#fff;">
+        <option value="">请选择</option>
+        <option value="store">直接入库</option>
+        <option value="store_to_exec">入库并转到执行</option>
       </select>
-      <button class="pill primary" disabled id="appendToExistingCases">确认新增</button>
+      <button class="pill primary" disabled id="caseGenStoreNewBtn">新用例入库</button>
+      <button class="pill secondary" disabled id="caseGenStoreAppendBtn">旧用例追加入库</button>
     </div>
   </div>
   <p class="status" id="caseGenStatus"></p>
@@ -1173,6 +1175,38 @@
     </div>
     <div class="drawer-body" id="caseGenViewDrawerBody">
       <p class="hint" style="margin:0;">请选择模块查看用例</p>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseGenDbStoreDrawer" data-tab-section="casesgen">
+  <div class="drawer-mask" data-drawer-close="caseGenDbStoreDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseGenDbStoreDrawerTitle">入库</h3>
+      <button class="link-toggle" id="closeCaseGenDbStoreDrawerBtn" data-drawer-close="caseGenDbStoreDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="caseGenDbStoreDrawerBody">
+      <p class="hint" style="margin:0 0 10px;">选择项目与版本后写入用例库；“旧用例追加入库”需额外选择目标用例。</p>
+      <div class="case-library-filters" style="margin-bottom:8px;">
+        <span class="case-library-label">项目</span>
+        <select id="caseGenDbStoreProjectSelect">
+          <option value="">请选择项目</option>
+        </select>
+        <span class="case-library-label">版本</span>
+        <select id="caseGenDbStoreVersionSelect" disabled>
+          <option value="">请选择版本</option>
+        </select>
+      </div>
+      <div class="case-library-filters hidden" style="margin-bottom:8px;" id="caseGenDbStoreCaseFileRow">
+        <span class="case-library-label">用例</span>
+        <select id="caseGenDbStoreCaseFileSelect" disabled style="min-width:240px;">
+          <option value="">请选择用例</option>
+        </select>
+      </div>
+      <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px;">
+        <button class="pill primary" id="caseGenDbStoreConfirmBtn" disabled type="button">确认入库</button>
+      </div>
+      <p class="status" id="caseGenDbStoreStatus"></p>
     </div>
   </div>
 </div>
@@ -1378,6 +1412,7 @@
       </div>
       <div class="case-lib-diff-case-tabs" id="tempExecCaseLibraryDiffCaseTabs"></div>
       <div class="actions" style="margin:8px 0 12px;">
+        <button type="button" class="summary-pill case-lib-diff-pill appended" data-case-lib-diff-filter="appended" id="tempExecCaseLibraryDiffAppendedPill">追加 0</button>
         <button type="button" class="summary-pill case-lib-diff-pill added" data-case-lib-diff-filter="added" id="tempExecCaseLibraryDiffAddedPill">新增 0</button>
         <button type="button" class="summary-pill case-lib-diff-pill updated" data-case-lib-diff-filter="updated" id="tempExecCaseLibraryDiffUpdatedPill">改动 0</button>
         <button type="button" class="summary-pill case-lib-diff-pill deleted" data-case-lib-diff-filter="deleted" id="tempExecCaseLibraryDiffDeletedPill">删除 0</button>
@@ -1621,6 +1656,7 @@
         </div>
       </div>
       <div class="actions" style="margin:8px 0 12px;">
+        <button type="button" class="summary-pill case-lib-diff-pill appended" data-case-lib-history-filter="append" id="caseLibraryHistoryAppendPill">追加 0</button>
         <button type="button" class="summary-pill case-lib-diff-pill added" data-case-lib-history-filter="added" id="caseLibraryHistoryAddedPill">新增 0</button>
         <button type="button" class="summary-pill case-lib-diff-pill updated" data-case-lib-history-filter="updated" id="caseLibraryHistoryUpdatedPill">改动 0</button>
         <button type="button" class="summary-pill case-lib-diff-pill deleted" data-case-lib-history-filter="deleted" id="caseLibraryHistoryDeletedPill">删除 0</button>

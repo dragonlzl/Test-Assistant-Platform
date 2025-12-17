@@ -163,6 +163,27 @@ class CaseItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CaseFileAppendRequest(BaseModel):
+    items: List[CaseItemPayload]
+    overwrite_existing: bool = False
+
+
+class CaseFileAppendOut(BaseModel):
+    case_file_id: int
+    project_id: int
+    version_id: Optional[int] = None
+    file_name_clean: str
+    appended: int = 0
+    overwritten: int = 0
+    overwritten_changed: int = 0
+    skipped_payload_duplicates: int = 0
+    skipped_db_conflicts: int = 0
+    skipped_existing_conflicts: int = 0
+    total_payload: int = 0
+    total_unique: int = 0
+    updated_at: datetime
+
+
 class ExecSetCreate(BaseModel):
     project_id: int
     version_id: Optional[int] = None
@@ -220,6 +241,7 @@ class ExecCaseLibraryDiffEntry(BaseModel):
 
 
 class ExecCaseLibraryDiffSummary(BaseModel):
+    appended: int = 0
     added: int = 0
     updated: int = 0
     deleted: int = 0

@@ -947,7 +947,6 @@
     assignIfPresent(api, casesGenCoreModule, [
       'renderCaseGeneration',
       'renderCaseTable',
-      'renderAppendTargetOptions',
       'parseGeneratedCases',
       'generateCasesForModule',
       'topUpCasesForModule',
@@ -965,10 +964,11 @@
       'refreshCaseSelectionUI',
       'updateSupplementButtons',
       'refreshAppendExistingButton',
-      'renderAppendTargetOptions',
       'getCaseListForModule',
-      'appendSelectedCasesToImported',
-      'transferSelectedCasesToExec',
+      'setCaseGenDbStoreNewAction',
+      'clearCaseGenDbStoreNewActionError',
+      'openCaseGenDbStoreNewDrawer',
+      'openCaseGenDbStoreAppendDrawer',
       'refreshExportCaseGenXmindButton',
     ]);
 

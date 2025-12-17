@@ -19,6 +19,20 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例生成页：新用例入库 / 旧用例追加入库（DB 模式）
+- 功能描述：用例生成完成后，提供全局“新用例入库”“旧用例追加入库”入口，将勾选用例写入用例库；新用例入库用例名使用“需求标识”，并支持“直接入库 / 入库并转到执行”；旧用例追加入库支持在项目/版本内选择目标用例并追加，且保留原执行记录；追加会记录到用例库改动历史，执行页 diff 增加“追加”变更类型。
+- 操作方式：
+  - 新用例入库：在“用例生成”页先选择“新用例入库后”的动作（直接入库/入库并转到执行）→点击“新用例入库”→在抽屉内选择项目与版本→确认；若存在未生成或未勾选模块，会弹出二次确认提示后再入库。
+  - 旧用例追加入库：点击“旧用例追加入库”→在抽屉内选择项目与版本→选择该版本内目标用例→确认；同样会先进行“未生成/未勾选模块”二次确认，再进行“追加到目标用例”二次确认。
+- 使用效果：入库/追加入库的重名与差异对比逻辑与用例库导入/执行页导入一致；追加入库不会覆盖原执行结果；若当前正在执行的用例库发生追加，执行页同步 diff 会展示“追加”并可按类型筛选。
+- 新增内容/接口/组件：
+  - 前端：`index.html`（新增 `#caseGenStoreActionSelect/#caseGenStoreNewBtn/#caseGenStoreAppendBtn` 与 `#caseGenDbStoreDrawer`，移除旧“新增到/勾选到执行”入口）、`scripts/core/casesGenCore.js`（入库抽屉、校验/二次确认、导入/追加入库、入库并转到执行）、`scripts/core/appRuntime.js`（暴露 casesGenApi 入库方法）、`scripts/modules/caseLibrary.js`（外部复用同名差异对比抽屉、历史支持 append）、`scripts/core/tempexecCore.js`（diff 支持 appended）、`style.css`（必选框标红与 appended/append 标签样式）。
+  - 后端：`POST /api/case-files/{case_file_id}/items/append`（追加入库并写历史/操作日志）；执行页同步 diff 支持 `kind=appended` 与 `summary.appended`（`backend/routers/exec_routes.py`、`backend/schemas.py`、`backend/routers/cases.py`）。
+  - 测试：UI `tests/ui/casegen_db_store.spec.js`；API `tests/api/exec_case_library_sync.spec.js`（覆盖 appended diff 与“保留已执行结果”）。
+- 复用说明：复用用例库 `import` 的同名 diff 弹窗/确认链路（通过 `caseLibraryApi.openImportDiffForExternal` 复用抽屉），复用用例库历史落库机制与执行页 case-library-sync 同步机制，仅新增“追加”类型与最小必要 API。
+- 测试与验证：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js`；`npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js`（通过）；`APP_DB_FILE=apitest.db API_BASE_URL=http://127.0.0.1:18080 .venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 18080` + `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_case_library_sync.spec.js`（通过）。
+- 更新记录：2025-12-17 落地入库/追加入库入口并下线旧“新增到/勾选到执行”按钮；执行页与历史新增“追加”变更类型；追加入库遇到目标用例内重复（模块+标题+前提+步骤+预期一致）时打开 diff 并确认覆盖。
+
 - 功能名称：用例执行抽屉：暂时停用常用用例模版 + diff 抽屉宽度统一
 - 功能描述：暂时屏蔽“用例执行 → 用例导入&分配”中的常用用例模版入口；并将“用例库变更 diff / 同名用例差异对比”相关抽屉宽度统一为约 2/3 屏（与默认抽屉一致），避免 diff 表头被挤压到不可见。
 - 操作方式：

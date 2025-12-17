@@ -704,6 +704,220 @@ def create_case_item(
     return case_item
 
 
+@router.post(
+    "/{case_file_id}/items/append",
+    response_model=schemas.CaseFileAppendOut,
+    status_code=status.HTTP_200_OK,
+)
+def append_case_items(
+    case_file_id: int,
+    payload: schemas.CaseFileAppendRequest,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    case_file = _ensure_case_access(db, user, case_file_id)
+    items = payload.items or []
+    if not items:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用例为空")
+    overwrite_existing = bool(getattr(payload, "overwrite_existing", False))
+
+    # 追加也要对 payload 做一次去重，避免触发唯一约束导致整批失败（与导入接口一致）。
+    def _norm_key(value: str) -> str:
+        if value is None:
+            return ""
+        try:
+            return str(value).replace("\r\n", "\n").strip().lower()
+        except Exception:
+            return ""
+
+    unique_items: List[schemas.CaseItemPayload] = []
+    seen_keys = set()
+    duplicate_count = 0
+    for item in items:
+        key = (
+            _norm_key(item.module),
+            _norm_key(item.title),
+            _norm_key(getattr(item, "precondition", None)),
+            _norm_key(getattr(item, "steps", None)),
+            _norm_key(item.expected),
+        )
+        if key in seen_keys:
+            duplicate_count += 1
+            continue
+        seen_keys.add(key)
+        unique_items.append(item)
+    if not unique_items:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用例为空")
+
+    before_count = (
+        db.query(func.count(models.CaseItem.id))
+        .filter(models.CaseItem.case_file_id == case_file.id)
+        .scalar()
+        or 0
+    )
+    now = datetime.now(timezone.utc)
+    # “重复”判定：模块 + 标题 + 前提条件 + 操作步骤 + 预期结果 都一致。
+    def _content_key(item_payload: schemas.CaseItemPayload):
+        return (
+            _norm_key(item_payload.module),
+            _norm_key(item_payload.title),
+            _norm_key(getattr(item_payload, "precondition", None)),
+            _norm_key(getattr(item_payload, "steps", None)),
+            _norm_key(item_payload.expected),
+        )
+
+    existing_rows = (
+        db.query(models.CaseItem)
+        .filter(models.CaseItem.case_file_id == case_file.id)
+        .order_by(models.CaseItem.id.asc())
+        .all()
+    )
+    existing_by_content = {}
+    for row in existing_rows:
+        if not row:
+            continue
+        key = (
+            _norm_key(row.module),
+            _norm_key(row.title),
+            _norm_key(getattr(row, "precondition", None)),
+            _norm_key(getattr(row, "steps", None)),
+            _norm_key(getattr(row, "expected", None)),
+        )
+        if not key[0] or not key[1] or not key[4]:
+            continue
+        bucket = existing_by_content.get(key)
+        if bucket is None:
+            bucket = []
+            existing_by_content[key] = bucket
+        bucket.append(row)
+
+    values = []
+    overwritten = 0
+    overwritten_changed = 0
+    skipped_existing_conflicts = 0
+
+    for item in unique_items:
+        content_key = _content_key(item)
+        if not content_key[0] or not content_key[1] or not content_key[4]:
+            continue
+        matched = existing_by_content.get(content_key) or []
+        if matched:
+            if overwrite_existing:
+                for row in matched:
+                    if not row:
+                        continue
+                    changed = False
+                    next_priority = item.priority
+                    next_remark = item.remark
+                    if row.priority != next_priority:
+                        row.priority = next_priority
+                        changed = True
+                    if (row.remark or "") != (next_remark or ""):
+                        row.remark = next_remark
+                        changed = True
+                    row.updated_by = user.id
+                    row.updated_at = now
+                    db.add(row)
+                    overwritten += 1
+                    if changed:
+                        overwritten_changed += 1
+            else:
+                skipped_existing_conflicts += 1
+            continue
+
+        values.append(
+            {
+                "case_file_id": case_file.id,
+                "module": item.module,
+                "title": item.title,
+                "priority": item.priority,
+                "precondition": item.precondition if item.precondition is not None else "",
+                "steps": item.steps if item.steps is not None else "",
+                "expected": item.expected,
+                "remark": item.remark,
+                "created_by": user.id,
+                "updated_by": user.id,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+
+    if values:
+        db.execute(sqlite_insert(models.CaseItem).values(values).prefix_with("OR IGNORE"))
+
+    after_count = (
+        db.query(func.count(models.CaseItem.id))
+        .filter(models.CaseItem.case_file_id == case_file.id)
+        .scalar()
+        or 0
+    )
+    appended = max(0, int(after_count) - int(before_count))
+    skipped_db_conflicts = max(0, int(len(values)) - int(appended))
+
+    case_file.updated_at = now
+    case_file.updated_by = user.id
+    db.add(case_file)
+
+    log_case_library_change(
+        db=db,
+        user=user,
+        project_id=case_file.project_id,
+        version_id=case_file.version_id,
+        file_name_clean=case_file.file_name_clean,
+        case_file_id=case_file.id,
+        kind="append",
+        meta={
+            "overwrite_existing": bool(overwrite_existing),
+            "item_total": int(len(items)),
+            "item_unique": int(len(unique_items)),
+            "item_appended": int(appended),
+            "item_overwritten": int(overwritten),
+            "item_overwritten_changed": int(overwritten_changed),
+            "item_skipped_payload_duplicates": int(duplicate_count),
+            "item_skipped_db_conflicts": int(skipped_db_conflicts),
+            "item_skipped_existing_conflicts": int(skipped_existing_conflicts),
+        },
+        at=now,
+    )
+    log_operation(
+        db=db,
+        user_id=user.id,
+        action="append_case_items",
+        target_type="case_file",
+        target_id=case_file.id,
+        detail={
+            "project_id": case_file.project_id,
+            "version_id": case_file.version_id,
+            "file_name": case_file.file_name_clean,
+            "overwrite_existing": bool(overwrite_existing),
+            "item_total": int(len(items)),
+            "item_unique": int(len(unique_items)),
+            "item_appended": int(appended),
+            "item_overwritten": int(overwritten),
+            "item_overwritten_changed": int(overwritten_changed),
+            "item_skipped_payload_duplicates": int(duplicate_count),
+            "item_skipped_db_conflicts": int(skipped_db_conflicts),
+            "item_skipped_existing_conflicts": int(skipped_existing_conflicts),
+        },
+    )
+    db.commit()
+    return schemas.CaseFileAppendOut(
+        case_file_id=int(case_file.id),
+        project_id=int(case_file.project_id),
+        version_id=int(case_file.version_id) if case_file.version_id is not None else None,
+        file_name_clean=str(case_file.file_name_clean or ""),
+        appended=int(appended),
+        overwritten=int(overwritten),
+        overwritten_changed=int(overwritten_changed),
+        skipped_payload_duplicates=int(duplicate_count),
+        skipped_db_conflicts=int(skipped_db_conflicts),
+        skipped_existing_conflicts=int(skipped_existing_conflicts),
+        total_payload=int(len(items)),
+        total_unique=int(len(unique_items)),
+        updated_at=case_file.updated_at or now,
+    )
+
+
 @router.delete("/items/{case_item_id}")
 def delete_case_item(
     case_item_id: int,

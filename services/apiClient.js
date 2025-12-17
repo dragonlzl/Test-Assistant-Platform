@@ -274,6 +274,14 @@
     }).then(handleResponse);
   }
 
+  function appendCaseItems(caseFileId, payload) {
+    return fetch('/api/case-files/' + caseFileId + '/items/append', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
   function deleteCaseItem(caseItemId) {
     return fetch('/api/case-files/items/' + caseItemId, {
       method: 'DELETE',
@@ -588,6 +596,7 @@
     deleteCaseFile: deleteCaseFile,
     updateCaseItem: updateCaseItem,
     createCaseItem: createCaseItem,
+    appendCaseItems: appendCaseItems,
     deleteCaseItem: deleteCaseItem,
     listCaseLibraryChangeFiles: listCaseLibraryChangeFiles,
     getCaseLibraryChangeHistory: getCaseLibraryChangeHistory,

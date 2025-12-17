@@ -36,6 +36,7 @@
     var caseGenStatus = dom.caseGenStatus;
     var caseGenTimingEl = dom.caseGenTimingEl;
     var tempExecStatus = dom.tempExecStatus;
+    var apiClient = (window.app && window.app.apiClient) ? window.app.apiClient : null;
     var exportCaseGenBtn = dom.exportCaseGenBtn || dom.exportCaseGen;
     if (!exportCaseGenBtn && typeof document !== 'undefined') {
       exportCaseGenBtn = document.getElementById('exportCaseGen');
@@ -43,6 +44,17 @@
     var appendToExistingCasesBtn = dom.appendToExistingCasesBtn || dom.appendToExistingCases;
     var appendTargetSelect = dom.appendTargetSelect;
     var transferSelectedToExecBtn = dom.transferSelectedToExecBtn || dom.transferSelectedToExec;
+    var caseGenStoreActionSelect = document.getElementById('caseGenStoreActionSelect');
+    var caseGenStoreNewBtn = document.getElementById('caseGenStoreNewBtn');
+    var caseGenStoreAppendBtn = document.getElementById('caseGenStoreAppendBtn');
+    var caseGenDbStoreDrawerTitle = document.getElementById('caseGenDbStoreDrawerTitle');
+    var caseGenDbStoreProjectSelect = document.getElementById('caseGenDbStoreProjectSelect');
+    var caseGenDbStoreVersionSelect = document.getElementById('caseGenDbStoreVersionSelect');
+    var caseGenDbStoreCaseFileRow = document.getElementById('caseGenDbStoreCaseFileRow');
+    var caseGenDbStoreCaseFileSelect = document.getElementById('caseGenDbStoreCaseFileSelect');
+    var caseGenDbStoreConfirmBtn = document.getElementById('caseGenDbStoreConfirmBtn');
+    var caseGenDbStoreStatus = document.getElementById('caseGenDbStoreStatus');
+    var caseGenDbStoreDrawer = null;
     var exportCaseGenXmindBtn = dom.exportCaseGenXmindBtn || dom.exportCaseGenXmind;
     var caseGenViewDrawerBody = dom.caseGenViewDrawerBody;
     var caseGenViewDrawerTitle = dom.caseGenViewDrawerTitle;
@@ -155,6 +167,71 @@
     var setCaseViewHint = handlers.setCaseViewHint || function() {};
     var parseCaseList = handlers.parseCaseList || function() { return []; };
     var extractJsonObjects = handlers.extractJsonObjects || function() { return []; };
+
+    function ensureDbStoreState() {
+      if (!state.caseGenDbStore || typeof state.caseGenDbStore !== 'object') {
+        state.caseGenDbStore = {
+          mode: '',
+          newAction: '',
+          loading: false,
+          projects: [],
+          versionsByProject: {},
+          caseFilesByProject: {},
+          projectId: '',
+          versionId: '',
+          caseFileId: '',
+        };
+      }
+      return state.caseGenDbStore;
+    }
+
+    function isDbStoreReady() {
+      return Boolean(
+        apiClient &&
+        typeof apiClient.listProjects === 'function' &&
+        typeof apiClient.listProjectVersions === 'function' &&
+        typeof apiClient.listCaseFiles === 'function' &&
+        typeof apiClient.importCaseFile === 'function'
+      );
+    }
+
+    function ensureCaseGenDbStoreDrawer() {
+      if (caseGenDbStoreDrawer) return caseGenDbStoreDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      caseGenDbStoreDrawer = window.app.drawer.createDrawer({
+        drawerId: 'caseGenDbStoreDrawer',
+        closeButtons: ['closeCaseGenDbStoreDrawerBtn'],
+        onClose: function() {
+          var st = ensureDbStoreState();
+          st.loading = false;
+          st.mode = '';
+          st.projectId = '';
+          st.versionId = '';
+          st.caseFileId = '';
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '', '');
+          syncCaseGenDbStoreControls();
+        },
+      });
+      return caseGenDbStoreDrawer;
+    }
+
+    function clearCaseGenDbStoreNewActionError() {
+      if (caseGenStoreActionSelect && caseGenStoreActionSelect.classList) {
+        caseGenStoreActionSelect.classList.remove('input-invalid');
+      }
+    }
+
+    function markCaseGenDbStoreNewActionError() {
+      if (caseGenStoreActionSelect && caseGenStoreActionSelect.classList) {
+        caseGenStoreActionSelect.classList.add('input-invalid');
+      }
+    }
+
+    function setCaseGenDbStoreNewAction(action) {
+      var st = ensureDbStoreState();
+      st.newAction = String(action || '');
+      clearCaseGenDbStoreNewActionError();
+    }
 
     function ensureCaseModuleTimingState() {
       if (!state.caseGenTiming || typeof state.caseGenTiming !== 'object') {
@@ -610,14 +687,686 @@
 
     function refreshAppendExistingButton() {
       var hasSelection = hasSelectedGeneratedCases();
-      if (appendToExistingCasesBtn) {
-        var disabled = !hasSelection || !hasValidAppendTargetSelection();
-        appendToExistingCasesBtn.disabled = disabled;
-      }
-      if (transferSelectedToExecBtn) {
-        transferSelectedToExecBtn.disabled = false;
-      }
+      if (caseGenStoreNewBtn) caseGenStoreNewBtn.disabled = !hasSelection || !isDbStoreReady();
+      if (caseGenStoreAppendBtn) caseGenStoreAppendBtn.disabled = !hasSelection || !isDbStoreReady();
       refreshExportCaseGenXmindButton();
+    }
+
+    function buildCaseItemPayloadFromGenerated(item, fallbackModule) {
+      if (!item) return null;
+      var module = String(item.module || fallbackModule || '').trim();
+      var title = String(item.title || '').trim();
+      var expected = String(item.expected || '').trim();
+      if (!module || !title || !expected) return null;
+      var priority = item.priority ? String(item.priority).trim() : '';
+      var pre = item.precondition !== undefined ? item.precondition : item.preconditions;
+      var preText = pre === null || pre === undefined ? '' : String(pre);
+      var stepsRaw = item.steps;
+      var stepsText = '';
+      if (Array.isArray(stepsRaw)) {
+        stepsText = stepsRaw.map(function(s) { return String(s || '').trim(); }).filter(Boolean).join('\n');
+      } else if (stepsRaw !== null && stepsRaw !== undefined) {
+        stepsText = String(stepsRaw);
+      }
+      var remark = item.remark ? String(item.remark).trim() : '';
+      return {
+        module: module,
+        title: title,
+        expected: expected,
+        priority: priority || null,
+        precondition: preText.trim() ? preText.trim() : null,
+        steps: stepsText.trim() ? stepsText.trim() : null,
+        remark: remark || null,
+      };
+    }
+
+    function collectDbStoreSelectedItems() {
+      var selectedEntries = collectSelectedCaseEntries();
+      var items = [];
+      selectedEntries.forEach(function(entry) {
+        var moduleTitle = entry && entry.moduleTitle ? String(entry.moduleTitle) : '';
+        var cases = entry && Array.isArray(entry.cases) ? entry.cases : [];
+        cases.forEach(function(it) {
+          var payload = buildCaseItemPayloadFromGenerated(it, moduleTitle);
+          if (payload) items.push(payload);
+        });
+      });
+      return items;
+    }
+
+    function listCaseGenModulesMissingSelectionOrGeneration() {
+      var out = [];
+      if (!Array.isArray(state.caseGenModules)) return out;
+      state.caseGenModules.forEach(function(mod) {
+        if (!mod || !mod.id) return;
+        var title = resolveModuleTitle(mod.title || mod.module || '');
+        var list = getCaseListForModule(mod.id);
+        var hasGenerated = Boolean(list && list.length);
+        var selection = state.caseSelections[mod.id];
+        var hasSelected = false;
+        if (hasGenerated && selection && selection.size) {
+          selection.forEach(function(idx) {
+            if (!hasSelected && list && list[idx]) hasSelected = true;
+          });
+        }
+        if (!hasGenerated || !hasSelected) out.push(title);
+      });
+      return out;
+    }
+
+    function syncCaseGenDbStoreControls() {
+      var st = ensureDbStoreState();
+      var mode = st.mode || '';
+      if (caseGenDbStoreCaseFileRow && caseGenDbStoreCaseFileRow.classList) {
+        caseGenDbStoreCaseFileRow.classList.toggle('hidden', mode !== 'append');
+      }
+      var pid = st.projectId || '';
+      var vid = st.versionId || '';
+      var fid = st.caseFileId || '';
+      if (caseGenDbStoreVersionSelect) {
+        caseGenDbStoreVersionSelect.disabled = Boolean(st.loading || !pid);
+      }
+      if (caseGenDbStoreCaseFileSelect) {
+        caseGenDbStoreCaseFileSelect.disabled = Boolean(st.loading || mode !== 'append' || !pid || !vid);
+      }
+      if (caseGenDbStoreConfirmBtn) {
+        var needCaseFile = mode === 'append';
+        var can = Boolean(!st.loading && pid && vid && (!needCaseFile || fid));
+        caseGenDbStoreConfirmBtn.disabled = !can;
+      }
+    }
+
+    function renderCaseGenDbStoreProjects() {
+      var st = ensureDbStoreState();
+      if (!caseGenDbStoreProjectSelect) return;
+      var list = Array.isArray(st.projects) ? st.projects : [];
+      caseGenDbStoreProjectSelect.innerHTML = ['<option value=\"\">请选择项目</option>']
+        .concat(
+          list.map(function(p) {
+            var id = p && (p.id || p.id === 0) ? String(p.id) : '';
+            var name = p && p.name ? String(p.name) : ('项目#' + id);
+            return '<option value=\"' + escapeHtml(id) + '\">' + escapeHtml(name) + '</option>';
+          })
+        )
+        .join('');
+      caseGenDbStoreProjectSelect.value = st.projectId || '';
+    }
+
+    function renderCaseGenDbStoreVersions() {
+      var st = ensureDbStoreState();
+      if (!caseGenDbStoreVersionSelect) return;
+      var pid = st.projectId || '';
+      var list = pid && st.versionsByProject && st.versionsByProject[pid] ? st.versionsByProject[pid] : [];
+      list = Array.isArray(list) ? list : [];
+      caseGenDbStoreVersionSelect.innerHTML = ['<option value=\"\">请选择版本</option>']
+        .concat(
+          list.map(function(v) {
+            var id = v && (v.id || v.id === 0) ? String(v.id) : '';
+            var name = v && v.name ? String(v.name) : ('版本#' + id);
+            return '<option value=\"' + escapeHtml(id) + '\">' + escapeHtml(name) + '</option>';
+          })
+        )
+        .join('');
+      caseGenDbStoreVersionSelect.value = st.versionId || '';
+      caseGenDbStoreVersionSelect.disabled = Boolean(st.loading || !pid);
+    }
+
+    function renderCaseGenDbStoreCaseFiles() {
+      var st = ensureDbStoreState();
+      if (!caseGenDbStoreCaseFileSelect) return;
+      var pid = st.projectId || '';
+      var vid = st.versionId || '';
+      var list = pid && st.caseFilesByProject && st.caseFilesByProject[pid] ? st.caseFilesByProject[pid] : [];
+      list = Array.isArray(list) ? list : [];
+      var filtered = vid
+        ? list.filter(function(cf) { return cf && String(cf.version_id || '') === String(vid); })
+        : [];
+      filtered.sort(function(a, b) {
+        var na = a && a.file_name_clean ? String(a.file_name_clean) : '';
+        var nb = b && b.file_name_clean ? String(b.file_name_clean) : '';
+        return na.localeCompare(nb, 'zh-Hans-CN');
+      });
+      caseGenDbStoreCaseFileSelect.innerHTML = ['<option value=\"\">请选择用例</option>']
+        .concat(
+          filtered.map(function(cf) {
+            var id = cf && (cf.id || cf.id === 0) ? String(cf.id) : '';
+            var name = cf && cf.file_name_clean ? String(cf.file_name_clean) : ('用例#' + id);
+            return '<option value=\"' + escapeHtml(id) + '\">' + escapeHtml(name) + '</option>';
+          })
+        )
+        .join('');
+      caseGenDbStoreCaseFileSelect.value = st.caseFileId || '';
+      caseGenDbStoreCaseFileSelect.disabled = Boolean(st.loading || !pid || !vid);
+    }
+
+    function loadCaseGenDbStoreProjects() {
+      if (!isDbStoreReady()) return Promise.reject(new Error('后端未就绪'));
+      var st = ensureDbStoreState();
+      if (st.loading) return Promise.resolve([]);
+      st.loading = true;
+      syncCaseGenDbStoreControls();
+      if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '加载项目中...', '');
+      return apiClient
+        .listProjects()
+        .then(function(list) {
+          var projects = Array.isArray(list) ? list : [];
+          projects.sort(function(a, b) {
+            var na = a && a.name ? String(a.name) : '';
+            var nb = b && b.name ? String(b.name) : '';
+            return na.localeCompare(nb, 'zh-Hans-CN');
+          });
+          st.projects = projects;
+          renderCaseGenDbStoreProjects();
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '', '');
+          return projects;
+        })
+        .catch(function(err) {
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '加载项目失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+          return [];
+        })
+        .finally(function() {
+          st.loading = false;
+          syncCaseGenDbStoreControls();
+        });
+    }
+
+    function loadCaseGenDbStoreVersions(projectId) {
+      if (!isDbStoreReady()) return Promise.reject(new Error('后端未就绪'));
+      var st = ensureDbStoreState();
+      var pid = String(projectId || '');
+      if (!pid) return Promise.resolve([]);
+      if (st.versionsByProject && Array.isArray(st.versionsByProject[pid])) {
+        return Promise.resolve(st.versionsByProject[pid]);
+      }
+      st.loading = true;
+      syncCaseGenDbStoreControls();
+      if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '加载版本中...', '');
+      return apiClient
+        .listProjectVersions(pid)
+        .then(function(list) {
+          var versions = Array.isArray(list) ? list : [];
+          versions.sort(function(a, b) {
+            var na = a && a.name ? String(a.name) : '';
+            var nb = b && b.name ? String(b.name) : '';
+            return na.localeCompare(nb, 'zh-Hans-CN');
+          });
+          st.versionsByProject[pid] = versions;
+          renderCaseGenDbStoreVersions();
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '', '');
+          return versions;
+        })
+        .catch(function(err) {
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '加载版本失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+          return [];
+        })
+        .finally(function() {
+          st.loading = false;
+          syncCaseGenDbStoreControls();
+        });
+    }
+
+    function loadCaseGenDbStoreCaseFiles(projectId) {
+      if (!isDbStoreReady()) return Promise.reject(new Error('后端未就绪'));
+      var st = ensureDbStoreState();
+      var pid = String(projectId || '');
+      if (!pid) return Promise.resolve([]);
+      if (st.caseFilesByProject && Array.isArray(st.caseFilesByProject[pid])) {
+        return Promise.resolve(st.caseFilesByProject[pid]);
+      }
+      st.loading = true;
+      syncCaseGenDbStoreControls();
+      if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '加载用例列表中...', '');
+      return apiClient
+        .listCaseFiles(pid)
+        .then(function(list) {
+          var files = Array.isArray(list) ? list : [];
+          st.caseFilesByProject[pid] = files;
+          renderCaseGenDbStoreCaseFiles();
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '', '');
+          return files;
+        })
+        .catch(function(err) {
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '加载用例列表失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+          return [];
+        })
+        .finally(function() {
+          st.loading = false;
+          syncCaseGenDbStoreControls();
+        });
+    }
+
+    function maybeConfirmIncompleteModulesBeforeStore() {
+      var missing = listCaseGenModulesMissingSelectionOrGeneration();
+      if (!missing.length) return true;
+      var msg = missing.join(' ') + ' 没有选择用例，确定继续写入用例库吗？';
+      return window.confirm(msg);
+    }
+
+    function triggerTempExecCaseLibrarySync(reason) {
+      try {
+        if (window && window.app) {
+          var prev = Number(window.app.__tempexecCaseLibrarySyncSeq || 0);
+          if (!Number.isFinite(prev) || prev < 0) prev = 0;
+          window.app.__tempexecCaseLibrarySyncSeq = prev + 1;
+          window.app.__tempexecCaseLibrarySyncReason = reason || 'casegen-store';
+        }
+      } catch (err) {
+        // ignore
+      }
+      try {
+        if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
+          window.app.tempExecApi.loadTempExecState();
+        }
+      } catch (err2) {
+        // ignore
+      }
+    }
+
+    function openTempExecViewByNav() {
+      try {
+        var btn = document.getElementById('openTempExecViewNavBtn');
+        if (btn && typeof btn.click === 'function') btn.click();
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function goToExecSet(execSetId) {
+      if (!execSetId) return Promise.resolve();
+      try {
+        switchTab('tempexec');
+      } catch (err) {
+        // ignore
+      }
+      openTempExecViewByNav();
+      if (!window.app || !window.app.tempExecApi) return Promise.resolve();
+      var tempApi = window.app.tempExecApi;
+      if (typeof tempApi.loadTempExecState !== 'function' || typeof tempApi.setTempExecActive !== 'function') return Promise.resolve();
+      return Promise.resolve()
+        .then(function() { return tempApi.loadTempExecState(); })
+        .then(function() { tempApi.setTempExecActive(String(execSetId)); });
+    }
+
+    function openCaseGenDbStoreDrawer(mode) {
+      if (!isDbStoreReady()) {
+        setStatus(caseGenStatus, '后端未就绪，请先启动后端服务后再入库', 'warn');
+        return;
+      }
+      var drawer = ensureCaseGenDbStoreDrawer();
+      if (!drawer) {
+        setStatus(caseGenStatus, '抽屉组件未就绪，无法入库', 'err');
+        return;
+      }
+      var st = ensureDbStoreState();
+      st.mode = mode || '';
+      st.projectId = '';
+      st.versionId = '';
+      st.caseFileId = '';
+      if (caseGenDbStoreDrawerTitle) {
+        caseGenDbStoreDrawerTitle.textContent = (mode === 'append') ? '旧用例追加入库' : '新用例入库';
+      }
+      if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '', '');
+      if (caseGenDbStoreVersionSelect) {
+        caseGenDbStoreVersionSelect.value = '';
+        caseGenDbStoreVersionSelect.disabled = true;
+      }
+      if (caseGenDbStoreCaseFileSelect) {
+        caseGenDbStoreCaseFileSelect.value = '';
+        caseGenDbStoreCaseFileSelect.disabled = true;
+      }
+      renderCaseGenDbStoreProjects();
+      renderCaseGenDbStoreVersions();
+      renderCaseGenDbStoreCaseFiles();
+      syncCaseGenDbStoreControls();
+      drawer.open();
+      loadCaseGenDbStoreProjects();
+    }
+
+    var caseGenDbStoreBound = false;
+    function bindCaseGenDbStoreEvents() {
+      if (caseGenDbStoreBound) return;
+      caseGenDbStoreBound = true;
+      if (caseGenDbStoreProjectSelect) {
+        caseGenDbStoreProjectSelect.addEventListener('change', function() {
+          var st = ensureDbStoreState();
+          st.projectId = caseGenDbStoreProjectSelect.value || '';
+          st.versionId = '';
+          st.caseFileId = '';
+          renderCaseGenDbStoreVersions();
+          renderCaseGenDbStoreCaseFiles();
+          syncCaseGenDbStoreControls();
+          if (st.projectId) loadCaseGenDbStoreVersions(st.projectId);
+        });
+      }
+      if (caseGenDbStoreVersionSelect) {
+        caseGenDbStoreVersionSelect.addEventListener('change', function() {
+          var st = ensureDbStoreState();
+          st.versionId = caseGenDbStoreVersionSelect.value || '';
+          st.caseFileId = '';
+          renderCaseGenDbStoreCaseFiles();
+          syncCaseGenDbStoreControls();
+          if (st.mode === 'append' && st.projectId) {
+            loadCaseGenDbStoreCaseFiles(st.projectId).then(function() {
+              renderCaseGenDbStoreCaseFiles();
+              syncCaseGenDbStoreControls();
+            });
+          }
+        });
+      }
+      if (caseGenDbStoreCaseFileSelect) {
+        caseGenDbStoreCaseFileSelect.addEventListener('change', function() {
+          var st = ensureDbStoreState();
+          st.caseFileId = caseGenDbStoreCaseFileSelect.value || '';
+          syncCaseGenDbStoreControls();
+        });
+      }
+      if (caseGenDbStoreConfirmBtn) {
+        caseGenDbStoreConfirmBtn.addEventListener('click', function() {
+          var st = ensureDbStoreState();
+          if (st.mode === 'append') confirmCaseGenDbAppend();
+          else confirmCaseGenDbNewImport();
+        });
+      }
+    }
+
+    function openCaseGenDbStoreNewDrawer() {
+      var st = ensureDbStoreState();
+      var action = st.newAction || (caseGenStoreActionSelect ? caseGenStoreActionSelect.value : '');
+      action = String(action || '');
+      if (!action) {
+        markCaseGenDbStoreNewActionError();
+        setStatus(caseGenStatus, '请先选择“直接入库”或“入库并转到执行”', 'warn');
+        return;
+      }
+      clearCaseGenDbStoreNewActionError();
+      openCaseGenDbStoreDrawer('new');
+    }
+
+    function openCaseGenDbStoreAppendDrawer() {
+      openCaseGenDbStoreDrawer('append');
+    }
+
+    function confirmCaseGenDbNewImport() {
+      var st = ensureDbStoreState();
+      if (st.loading) return;
+      var items = collectDbStoreSelectedItems();
+      if (!items.length) {
+        setStatus(caseGenStatus, '请先勾选用例后再入库', 'warn');
+        return;
+      }
+      if (!st.projectId || !st.versionId) {
+        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '请先选择项目与版本', 'warn');
+        return;
+      }
+      var okMissing = maybeConfirmIncompleteModulesBeforeStore();
+      if (!okMissing) {
+        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消入库', 'warn');
+        return;
+      }
+      var requirementLabel = ensureRequirementLabel('请输入需求标识后再入库');
+      if (!requirementLabel) {
+        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消入库（需求标识为空）', 'warn');
+        return;
+      }
+      var fileName = String(requirementLabel) + '.xmind';
+      var action = st.newAction || (caseGenStoreActionSelect ? caseGenStoreActionSelect.value : '');
+      action = String(action || '');
+      var projectIdNum = Number(st.projectId);
+      var versionIdNum = Number(st.versionId);
+      st.loading = true;
+      syncCaseGenDbStoreControls();
+      if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '入库中...', '');
+      apiClient
+        .importCaseFile({
+          project_id: projectIdNum,
+          version_id: versionIdNum,
+          file_name: fileName,
+          source: 'casegen',
+          items: items,
+        })
+        .then(function(caseFile) {
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '入库成功：' + requirementLabel, 'ok');
+          setStatus(caseGenStatus, '入库成功：' + requirementLabel, 'ok');
+          try {
+            if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
+              window.app.utils.showCenterToast('用例入库成功', 'ok', 3000);
+            }
+          } catch (_) {}
+          var drawer = ensureCaseGenDbStoreDrawer();
+          if (drawer) drawer.close();
+          triggerTempExecCaseLibrarySync('casegen-new');
+          if (action === 'store_to_exec' && caseFile && caseFile.id && typeof apiClient.upsertExecSetFromCaseFile === 'function') {
+            return apiClient
+              .upsertExecSetFromCaseFile({
+                case_file_id: caseFile.id,
+                mode: 'replace',
+                preserve_results: true,
+                prefer_result_source: 'db',
+                requirement: requirementLabel,
+              })
+              .then(function(execSet) {
+                if (execSet && execSet.id) return goToExecSet(execSet.id);
+                return null;
+              });
+          }
+          return null;
+        })
+        .catch(function(err) {
+          var msg = err && err.message ? err.message : '入库失败';
+          if (msg.indexOf('同名') !== -1 && window.app && window.app.caseLibraryApi && typeof window.app.caseLibraryApi.openImportDiffForExternal === 'function') {
+            var drawer2 = ensureCaseGenDbStoreDrawer();
+            if (drawer2) drawer2.close();
+            setStatus(caseGenStatus, '检测到同名用例，已打开差异对比抽屉', 'warn');
+            return window.app.caseLibraryApi
+              .openImportDiffForExternal({
+                projectId: projectIdNum,
+                versionId: versionIdNum,
+                fileName: fileName,
+                source: 'casegen',
+                items: items,
+                error: err,
+              })
+              .then(function(res) {
+                if (!res || res.ok !== true) {
+                  setStatus(caseGenStatus, '已取消覆盖导入', 'warn');
+                  return null;
+                }
+                var caseFile2 = res.caseFile || null;
+                try {
+                  if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
+                    window.app.utils.showCenterToast('用例入库成功', 'ok', 3000);
+                  }
+                } catch (_) {}
+                triggerTempExecCaseLibrarySync('casegen-new-overwrite');
+                if (action === 'store_to_exec' && caseFile2 && caseFile2.id && typeof apiClient.upsertExecSetFromCaseFile === 'function') {
+                  return apiClient
+                    .upsertExecSetFromCaseFile({
+                      case_file_id: caseFile2.id,
+                      mode: 'replace',
+                      preserve_results: true,
+                      prefer_result_source: 'db',
+                      requirement: requirementLabel,
+                    })
+                    .then(function(execSet2) {
+                      if (execSet2 && execSet2.id) return goToExecSet(execSet2.id);
+                      return null;
+                    });
+                }
+                return null;
+              });
+          }
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '入库失败：' + msg, 'err');
+          setStatus(caseGenStatus, '入库失败：' + msg, 'err');
+          return null;
+        })
+        .finally(function() {
+          st.loading = false;
+          syncCaseGenDbStoreControls();
+        });
+    }
+
+    function confirmCaseGenDbAppend() {
+      var st = ensureDbStoreState();
+      if (st.loading) return;
+      var items = collectDbStoreSelectedItems();
+      if (!items.length) {
+        setStatus(caseGenStatus, '请先勾选用例后再追加入库', 'warn');
+        return;
+      }
+      if (!st.projectId || !st.versionId || !st.caseFileId) {
+        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '请先选择项目、版本与目标用例', 'warn');
+        return;
+      }
+      var okMissing = maybeConfirmIncompleteModulesBeforeStore();
+      if (!okMissing) {
+        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消追加入库', 'warn');
+        return;
+      }
+      var selectedName = '';
+      try {
+        if (caseGenDbStoreCaseFileSelect) {
+          var opt = caseGenDbStoreCaseFileSelect.options[caseGenDbStoreCaseFileSelect.selectedIndex];
+          selectedName = opt ? String(opt.textContent || '').trim() : '';
+        }
+      } catch (err) {
+        selectedName = '';
+      }
+      var ok = window.confirm('确认将 ' + items.length + ' 条用例追加到【' + (selectedName || '目标用例') + '】吗？');
+      if (!ok) {
+        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消追加入库', 'warn');
+        return;
+      }
+      if (!apiClient || typeof apiClient.appendCaseItems !== 'function') {
+        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '后端追加接口未就绪', 'err');
+        return;
+      }
+      var caseFileIdNum = Number(st.caseFileId);
+      var projectIdNum = Number(st.projectId);
+      var versionIdNum = Number(st.versionId);
+
+      function applyAppendResult(res, overwrite) {
+        var appended = res && (res.appended || res.appended_count) ? Number(res.appended || res.appended_count) : 0;
+        var overwritten = res && (res.overwritten || res.overwritten_count) ? Number(res.overwritten || res.overwritten_count) : 0;
+        var skipped = res && (res.skipped_db_conflicts || res.skipped) ? Number(res.skipped_db_conflicts || res.skipped) : 0;
+        var skippedExisting = res && (res.skipped_existing_conflicts || res.skipped_existing_title_conflicts) ? Number(res.skipped_existing_conflicts || res.skipped_existing_title_conflicts) : 0;
+        var msg = '追加入库成功：新增 ' + appended + ' 条';
+        if (overwrite && overwritten) msg += '，覆盖 ' + overwritten + ' 条';
+        if (!overwrite && skippedExisting) msg += '，重复已跳过 ' + skippedExisting + ' 条';
+        if (!overwrite && !skippedExisting && skipped) msg += '，重复已跳过 ' + skipped + ' 条';
+        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, msg, 'ok');
+        setStatus(caseGenStatus, msg, 'ok');
+        try {
+          if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
+            window.app.utils.showCenterToast('追加入库成功', 'ok', 3000);
+          }
+        } catch (_) {}
+        triggerTempExecCaseLibrarySync(overwrite ? 'casegen-append-overwrite' : 'casegen-append');
+      }
+
+      // 若目标用例中已存在同模块同标题用例：打开 diff 抽屉，确认是否覆盖后再追加入库。
+      if (typeof apiClient.listCaseItems === 'function' &&
+          window.app &&
+          window.app.caseLibraryApi &&
+          typeof window.app.caseLibraryApi.openAppendDiffForExternal === 'function') {
+        st.loading = true;
+        syncCaseGenDbStoreControls();
+        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '检查重复用例中...', '');
+        apiClient
+          .listCaseItems(caseFileIdNum)
+          .then(function(dbItems) {
+            var list = Array.isArray(dbItems) ? dbItems : [];
+            var keyMap = {};
+            items.forEach(function(it) {
+              var mod = (it && it.module ? String(it.module) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+              var title = (it && it.title ? String(it.title) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+              var pre = (it && it.precondition ? String(it.precondition) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+              var steps = (it && it.steps ? String(it.steps) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+              var expected = (it && it.expected ? String(it.expected) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+              if (mod && title && expected) keyMap[mod + '::' + title + '::' + pre + '::' + steps + '::' + expected] = true;
+            });
+            var hasConflict = list.some(function(it) {
+              var mod = (it && it.module ? String(it.module) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+              var title = (it && it.title ? String(it.title) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+              var pre = (it && it.precondition ? String(it.precondition) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+              var steps = (it && it.steps ? String(it.steps) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+              var expected = (it && it.expected ? String(it.expected) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+              return Boolean(mod && title && expected && keyMap[mod + '::' + title + '::' + pre + '::' + steps + '::' + expected]);
+            });
+
+            if (!hasConflict) {
+              st.loading = true;
+              syncCaseGenDbStoreControls();
+              if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '追加入库中...', '');
+              return apiClient.appendCaseItems(caseFileIdNum, { items: items }).then(function(res) {
+                applyAppendResult(res || null, false);
+                var drawer0 = ensureCaseGenDbStoreDrawer();
+                if (drawer0) drawer0.close();
+                return null;
+              }).finally(function() {
+                st.loading = false;
+                syncCaseGenDbStoreControls();
+              });
+            }
+
+            var drawer = ensureCaseGenDbStoreDrawer();
+            if (drawer) drawer.close();
+            st.loading = false;
+            syncCaseGenDbStoreControls();
+            if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '', '');
+            setStatus(caseGenStatus, '检测到重复用例，已打开差异对比，请确认是否覆盖', 'warn');
+            return window.app.caseLibraryApi
+              .openAppendDiffForExternal({
+                projectId: projectIdNum,
+                versionId: versionIdNum,
+                caseFileId: caseFileIdNum,
+                fileNameClean: selectedName || ('用例#' + caseFileIdNum),
+                items: items,
+                dbItems: list,
+              })
+              .then(function(res) {
+                if (res && res.ok === true) {
+                  applyAppendResult(res.result || null, true);
+                  return null;
+                }
+                setStatus(caseGenStatus, '已取消追加入库', 'warn');
+                return null;
+              });
+          })
+          .then(function() {
+            // no-op
+            return null;
+          })
+          .catch(function(err) {
+            st.loading = false;
+            syncCaseGenDbStoreControls();
+            var msg = err && err.message ? err.message : '追加入库失败';
+            if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '追加入库失败：' + msg, 'err');
+            setStatus(caseGenStatus, '追加入库失败：' + msg, 'err');
+          });
+        return;
+      }
+
+      st.loading = true;
+      syncCaseGenDbStoreControls();
+      if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '追加入库中...', '');
+      apiClient
+        .appendCaseItems(caseFileIdNum, { items: items })
+        .then(function(res) {
+          applyAppendResult(res || null, false);
+          var drawer = ensureCaseGenDbStoreDrawer();
+          if (drawer) drawer.close();
+          return null;
+        })
+        .catch(function(err) {
+          var msg = err && err.message ? err.message : '追加入库失败';
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '追加入库失败：' + msg, 'err');
+          setStatus(caseGenStatus, '追加入库失败：' + msg, 'err');
+          return null;
+        })
+        .finally(function() {
+          st.loading = false;
+          syncCaseGenDbStoreControls();
+        });
     }
 
     function collectSelectedCaseEntries() {
@@ -1843,6 +2592,10 @@
       refreshCaseSelectionUI: refreshCaseSelectionUI,
       updateSupplementButtons: updateSupplementButtons,
       refreshAppendExistingButton: refreshAppendExistingButton,
+      setCaseGenDbStoreNewAction: setCaseGenDbStoreNewAction,
+      clearCaseGenDbStoreNewActionError: clearCaseGenDbStoreNewActionError,
+      openCaseGenDbStoreNewDrawer: function() { bindCaseGenDbStoreEvents(); return openCaseGenDbStoreNewDrawer(); },
+      openCaseGenDbStoreAppendDrawer: function() { bindCaseGenDbStoreEvents(); return openCaseGenDbStoreAppendDrawer(); },
       renderAppendTargetOptions: renderAppendTargetOptions,
       getCaseListForModule: getCaseListForModule,
       exportSelectedCasesData: exportSelectedCasesData,
