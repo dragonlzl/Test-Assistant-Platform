@@ -17,12 +17,14 @@
     editProject: document.getElementById('caseLibraryEditProject'),
     editVersion: document.getElementById('caseLibraryEditVersion'),
     editFileName: document.getElementById('caseLibraryEditFileName'),
-    editSearchInput: document.getElementById('caseLibraryEditSearchInput'),
-    editClearSearchBtn: document.getElementById('caseLibraryEditClearSearchBtn'),
-    editBatchDeleteBtn: document.getElementById('caseLibraryEditBatchDeleteBtn'),
-    editToExecBtn: document.getElementById('caseLibraryEditToExecBtn'),
-    editStatus: document.getElementById('caseLibraryEditStatus'),
-    editView: document.getElementById('caseLibraryEditView'),
+	    editSearchInput: document.getElementById('caseLibraryEditSearchInput'),
+	    editClearSearchBtn: document.getElementById('caseLibraryEditClearSearchBtn'),
+	    editBatchDeleteBtn: document.getElementById('caseLibraryEditBatchDeleteBtn'),
+	    editBatchAddCountInput: document.getElementById('caseLibraryEditBatchAddCountInput'),
+	    editBatchAddBtn: document.getElementById('caseLibraryEditBatchAddBtn'),
+	    editToExecBtn: document.getElementById('caseLibraryEditToExecBtn'),
+	    editStatus: document.getElementById('caseLibraryEditStatus'),
+	    editView: document.getElementById('caseLibraryEditView'),
 
     importDropZone: document.getElementById('caseLibraryImportDropZone'),
     importInput: document.getElementById('caseLibraryImportInput'),
@@ -180,15 +182,16 @@
       pageIndex: 0,
     },
 
-    editor: {
-      caseFile: null,
-      items: [],
-      searchText: '',
-      pageIndex: 0,
-      selection: new Set(),
-      remarkOpen: new Set(),
-      pendingOp: null,
-      pendingTimer: null,
+	    editor: {
+	      caseFile: null,
+	      items: [],
+	      searchText: '',
+	      pageIndex: 0,
+	      batchAddCount: 5,
+	      selection: new Set(),
+	      remarkOpen: new Set(),
+	      pendingOp: null,
+	      pendingTimer: null,
       pendingInterval: null,
       pendingToast: null,
       pendingRemaining: 0,
@@ -2027,9 +2030,40 @@
       });
   }
 
-  function normalizeName(value) {
-    return String(value || '').trim().toLowerCase();
-  }
+	  function normalizeName(value) {
+	    return String(value || '').trim().toLowerCase();
+	  }
+
+	  var INVISIBLE_MARKER_RE = /[\u200b\u200c\u200d\u2060\ufeff]/g;
+	  var INVISIBLE_MARKER_SET = ['\u200b', '\u200c', '\u200d', '\u2060', '\ufeff'];
+
+	  function stripInvisibleMarkers(value) {
+	    if (value === null || value === undefined) return '';
+	    try {
+	      return String(value).replace(INVISIBLE_MARKER_RE, '');
+	    } catch (err) {
+	      return '';
+	    }
+	  }
+
+	  function normalizeEditorText(value) {
+	    return stripInvisibleMarkers(value).trim();
+	  }
+
+	  function buildInvisibleMarker(seed) {
+	    var raw = '';
+	    try {
+	      raw = String(seed || '') + '|' + Date.now().toString(16) + '|' + Math.random().toString(16).slice(2);
+	    } catch (e) {
+	      raw = Date.now().toString(16) + '|' + Math.random().toString(16).slice(2);
+	    }
+	    var out = '';
+	    for (var i = 0; i < raw.length; i += 1) {
+	      var code = raw.charCodeAt(i);
+	      out += INVISIBLE_MARKER_SET[code % INVISIBLE_MARKER_SET.length];
+	    }
+	    return out || INVISIBLE_MARKER_SET[0];
+	  }
 
   function clampPageSize(value) {
     var n = Number(value);
@@ -2143,11 +2177,12 @@
     dom.editDrawerOwnerFilterSelect.value = desired;
   }
 
-  var editorPersistKey = 'tap-case-library-editor';
+	  var editorPersistKey = 'tap-case-library-editor';
+	  var editorBatchAddCountPersistKey = 'tap-case-library-editor-batch-add-count';
 
-  function readEditorPersistedState() {
-    if (typeof localStorage === 'undefined') return null;
-    try {
+	  function readEditorPersistedState() {
+	    if (typeof localStorage === 'undefined') return null;
+	    try {
       var raw = localStorage.getItem(editorPersistKey);
       if (!raw) return null;
       var parsed = JSON.parse(raw);
@@ -2171,9 +2206,62 @@
     }
   }
 
-  function clearEditorPersistedState() {
-    writeEditorPersistedState(null);
-  }
+	  function clearEditorPersistedState() {
+	    writeEditorPersistedState(null);
+	  }
+
+	  function readEditorBatchAddCountPersistedState() {
+	    if (typeof localStorage === 'undefined') return null;
+	    try {
+	      var raw = localStorage.getItem(editorBatchAddCountPersistKey);
+	      if (!raw) return null;
+	      var parsed = JSON.parse(raw);
+	      if (!parsed || typeof parsed !== 'object') return null;
+	      return parsed;
+	    } catch (err) {
+	      return null;
+	    }
+	  }
+
+	  function writeEditorBatchAddCountPersistedState(payload) {
+	    if (typeof localStorage === 'undefined') return;
+	    try {
+	      if (!payload) {
+	        localStorage.removeItem(editorBatchAddCountPersistKey);
+	        return;
+	      }
+	      localStorage.setItem(editorBatchAddCountPersistKey, JSON.stringify(payload));
+	    } catch (err) {
+	      // ignore
+	    }
+	  }
+
+	  function clampBatchAddCount(value) {
+	    var n = Number(value);
+	    if (!isFinite(n)) return 5;
+	    n = Math.floor(n);
+	    if (n < 1) n = 1;
+	    if (n > 10) n = 10;
+	    return n;
+	  }
+
+	  function persistEditorBatchAddCount(count) {
+	    var userId = getCurrentUserId();
+	    writeEditorBatchAddCountPersistedState({
+	      user_id: userId || null,
+	      count: clampBatchAddCount(count),
+	      updated_at: Date.now(),
+	    });
+	  }
+
+	  function restoreEditorBatchAddCountFromPersistedState() {
+	    var persisted = readEditorBatchAddCountPersistedState();
+	    if (!persisted || typeof persisted !== 'object') return;
+	    var userId = getCurrentUserId();
+	    var persistedUser = persisted.user_id !== null && persisted.user_id !== undefined ? String(persisted.user_id) : '';
+	    if (userId && persistedUser && persistedUser !== String(userId)) return;
+	    state.editor.batchAddCount = clampBatchAddCount(persisted.count);
+	  }
 
   var importDrawerPersistKey = 'tap-case-library-import-drawer';
 
@@ -4313,19 +4401,19 @@
     return (state.editDrawer.files || []).find(function(f) { return f && f.id === fileId; }) || null;
   }
 
-  function openEditorForCaseFile(caseFile) {
-    if (!caseFile || !caseFile.id) return;
-    setStatus(dom.editDrawerStatus, '加载用例条目...', '');
-    apiClient.listCaseItems(caseFile.id).then(function(items) {
-      // 保证视图互斥：切到编辑视图时，应隐藏“历史详情”卡片（但不清理其持久化，方便用户回退查看）。
-      setHistoryDetailVisible(false);
-      state.editor.caseFile = caseFile;
-      state.editor.items = Array.isArray(items) ? items : [];
-      state.editor.searchText = '';
-      state.editor.pageIndex = 0;
-      state.editor.selection = new Set();
-      state.editor.remarkOpen = new Set();
-      setStatus(dom.editStatus, '已加载 ' + state.editor.items.length + ' 条用例，可直接编辑', 'ok');
+	  function openEditorForCaseFile(caseFile) {
+	    if (!caseFile || !caseFile.id) return;
+	    setStatus(dom.editDrawerStatus, '加载用例条目...', '');
+	    apiClient.listCaseItems(caseFile.id).then(function(items) {
+	      // 保证视图互斥：切到编辑视图时，应隐藏“历史详情”卡片（但不清理其持久化，方便用户回退查看）。
+	      setHistoryDetailVisible(false);
+	      state.editor.caseFile = caseFile;
+	      state.editor.items = reorderItemsByExistingModuleAppend(Array.isArray(items) ? items : []);
+	      state.editor.searchText = '';
+	      state.editor.pageIndex = 0;
+	      state.editor.selection = new Set();
+	      state.editor.remarkOpen = new Set();
+	      setStatus(dom.editStatus, '已加载 ' + state.editor.items.length + ' 条用例，可直接编辑', 'ok');
       if (dom.editSearchInput) dom.editSearchInput.value = '';
       persistEditorSelection(caseFile);
       persistCaseLibraryLastView('editor');
@@ -4736,28 +4824,77 @@
   }
 
 
-  function applyEditorFilter() {
-    var items = Array.isArray(state.editor.items) ? state.editor.items : [];
-    var term = normalizeName(state.editor.searchText);
-    if (!term) {
-      return items.map(function(item, idx) { return { item: item, idx: idx }; });
-    }
-    return items
-      .map(function(item, idx) { return { item: item, idx: idx }; })
-      .filter(function(entry) {
-        var it = entry.item || {};
-        var hay = [
-          it.module,
-          it.title,
-          it.priority,
-          it.precondition,
-          it.steps,
-          it.expected,
-          it.remark,
-        ].map(function(s) { return String(s || '').toLowerCase(); }).join(' ');
-        return hay.indexOf(term) !== -1;
-      });
-  }
+	  function applyEditorFilter() {
+	    var items = Array.isArray(state.editor.items) ? state.editor.items : [];
+	    var term = normalizeName(state.editor.searchText);
+	    if (!term) {
+	      return items.map(function(item, idx) { return { item: item, idx: idx }; });
+	    }
+	    return items
+	      .map(function(item, idx) { return { item: item, idx: idx }; })
+	      .filter(function(entry) {
+	        var it = entry.item || {};
+	        var hay = [
+	          stripInvisibleMarkers(it.module),
+	          stripInvisibleMarkers(it.title),
+	          stripInvisibleMarkers(it.priority),
+	          stripInvisibleMarkers(it.precondition),
+	          stripInvisibleMarkers(it.steps),
+	          stripInvisibleMarkers(it.expected),
+	          stripInvisibleMarkers(it.remark),
+	        ].map(function(s) { return String(s || '').toLowerCase(); }).join(' ');
+	        return hay.indexOf(term) !== -1;
+	      });
+	  }
+
+	  function shouldModuleRepositionItem(item, seenModules) {
+	    if (!item) return false;
+	    var moduleName = normalizeEditorText(item.module);
+	    if (!moduleName) return false;
+	    if (!seenModules || seenModules[moduleName] !== true) return false;
+	    var title = normalizeEditorText(item.title);
+	    var priority = normalizeEditorText(item.priority);
+	    var pre = normalizeEditorText(item.precondition);
+	    var steps = normalizeEditorText(item.steps);
+	    var expected = normalizeEditorText(item.expected);
+	    if (!title || !priority || !pre || !steps || !expected) return false;
+	    return true;
+	  }
+
+	  function reorderItemsByExistingModuleAppend(items) {
+	    var list = Array.isArray(items) ? items.slice() : [];
+	    if (!list.length) return list;
+	    var result = [];
+	    var seenModules = {};
+	    var moduleLastPos = {};
+
+	    function bumpPositionsFrom(index) {
+	      Object.keys(moduleLastPos).forEach(function(k) {
+	        if (moduleLastPos[k] >= index) moduleLastPos[k] += 1;
+	      });
+	    }
+
+	    list.forEach(function(it) {
+	      var moduleName = normalizeEditorText(it && it.module);
+	      var canMove = shouldModuleRepositionItem(it, seenModules);
+
+	      if (!moduleName || !canMove || moduleLastPos[moduleName] === undefined) {
+	        result.push(it);
+	        if (moduleName) {
+	          seenModules[moduleName] = true;
+	          moduleLastPos[moduleName] = result.length - 1;
+	        }
+	        return;
+	      }
+
+	      var insertAt = moduleLastPos[moduleName] + 1;
+	      bumpPositionsFrom(insertAt);
+	      result.splice(insertAt, 0, it);
+	      moduleLastPos[moduleName] = insertAt;
+	      seenModules[moduleName] = true;
+	    });
+	    return result;
+	  }
 
   function buildEditorPagination(totalCases, pageIndex, totalPages, start, end) {
     var pageSize = getPageSize();
@@ -4803,23 +4940,30 @@
     var visibleIndexes = [];
     var selection = state.editor.selection;
     var remarkOpen = state.editor.remarkOpen;
-    var rows = paged.map(function(entry) {
-      var item = entry.item || {};
-      var idx = entry.idx;
-      visibleIndexes.push(idx);
-      var editPlaceholder = '点击此处编辑';
-      var moduleHtml = item.module ? escapeHtml(item.module) : '';
-      var titleHtml = item.title ? escapeHtml(item.title) : '';
-      var priorityHtml = item.priority ? escapeHtml(item.priority) : '';
-      var preHtml = item.precondition ? escapeHtml(item.precondition).replace(/\n/g, '<br>') : '';
-      var stepsHtml = item.steps ? escapeHtml(item.steps).replace(/\n/g, '<br>') : '';
-      var expectedHtml = item.expected ? escapeHtml(item.expected).replace(/\n/g, '<br>') : '';
-      var isRemarkOpen = remarkOpen.has(idx);
-      var hasRemark = Boolean(item.remark && String(item.remark).trim());
-      var remarkBtnClass = ['remark-toggle'];
-      if (isRemarkOpen) remarkBtnClass.push('active');
-      if (hasRemark) remarkBtnClass.push('filled');
-      var rowClass = 'case-row' + (isCaseLibraryNewAdded(caseFileId, item) ? ' new-added' : '');
+	    var rows = paged.map(function(entry) {
+	      var item = entry.item || {};
+	      var idx = entry.idx;
+	      visibleIndexes.push(idx);
+	      var editPlaceholder = '点击此处编辑';
+	      var moduleText = stripInvisibleMarkers(item.module);
+	      var titleText = stripInvisibleMarkers(item.title);
+	      var priorityText = stripInvisibleMarkers(item.priority);
+	      var preText = stripInvisibleMarkers(item.precondition);
+	      var stepsText = stripInvisibleMarkers(item.steps);
+	      var expectedText = stripInvisibleMarkers(item.expected);
+	      var moduleHtml = moduleText ? escapeHtml(moduleText) : '';
+	      var titleHtml = titleText ? escapeHtml(titleText) : '';
+	      var priorityHtml = priorityText ? escapeHtml(priorityText) : '';
+	      var preHtml = preText ? escapeHtml(preText).replace(/\n/g, '<br>') : '';
+	      var stepsHtml = stepsText ? escapeHtml(stepsText).replace(/\n/g, '<br>') : '';
+	      var expectedHtml = expectedText ? escapeHtml(expectedText).replace(/\n/g, '<br>') : '';
+	      var isRemarkOpen = remarkOpen.has(idx);
+	      var remarkText = stripInvisibleMarkers(item.remark);
+	      var hasRemark = Boolean(remarkText && String(remarkText).trim());
+	      var remarkBtnClass = ['remark-toggle'];
+	      if (isRemarkOpen) remarkBtnClass.push('active');
+	      if (hasRemark) remarkBtnClass.push('filled');
+	      var rowClass = 'case-row' + (isCaseLibraryNewAdded(caseFileId, item) ? ' new-added' : '');
       return (
         '<tr class=\"' + rowClass + '\">' +
           '<td class=\"check\"><input type=\"checkbox\" data-case-lib-select data-index=\"' + idx + '\" ' + (selection.has(idx) ? 'checked' : '') + '></td>' +
@@ -4838,13 +4982,13 @@
             '</div>' +
           '</td>' +
         '</tr>' +
-        '<tr class=\"remark-row ' + (isRemarkOpen ? 'visible' : '') + '\">' +
-          '<td colspan=\"10\">' +
-            '<textarea class=\"remark-panel\" data-case-lib-remark data-index=\"' + idx + '\" placeholder=\"填写备注...\">' + escapeHtml(item.remark || '') + '</textarea>' +
-          '</td>' +
-        '</tr>'
-      );
-    }).join('');
+	        '<tr class=\"remark-row ' + (isRemarkOpen ? 'visible' : '') + '\">' +
+	          '<td colspan=\"10\">' +
+	            '<textarea class=\"remark-panel\" data-case-lib-remark data-index=\"' + idx + '\" placeholder=\"填写备注...\">' + escapeHtml(remarkText || '') + '</textarea>' +
+	          '</td>' +
+	        '</tr>'
+	      );
+	    }).join('');
 
     var allVisibleSelected = visibleIndexes.length && visibleIndexes.every(function(idx) { return selection.has(idx); });
     var headerCheckbox = (
@@ -4878,6 +5022,7 @@
       paginationBottom
     );
     syncEditorBatchDeleteControls();
+    syncEditorBatchAddControls();
   }
 
   function renderEditorCard() {
@@ -4896,6 +5041,7 @@
     renderEditorTable();
     syncEditorSearchControls();
     syncEditorBatchDeleteControls();
+    syncEditorBatchAddControls();
   }
 
   function syncEditorSearchControls() {
@@ -4915,6 +5061,18 @@
     if (selected) label += '（' + selected + '）';
     dom.editBatchDeleteBtn.textContent = label;
     dom.editBatchDeleteBtn.disabled = disabled;
+  }
+
+  function syncEditorBatchAddControls() {
+    var ed = state.editor;
+    if (dom.editBatchAddCountInput) {
+      if (ed && isFinite(Number(ed.batchAddCount))) {
+        dom.editBatchAddCountInput.value = String(clampBatchAddCount(ed.batchAddCount));
+      }
+    }
+    if (!dom.editBatchAddBtn) return;
+    var disabled = !ed || !ed.caseFile || Boolean(ed.pendingOp);
+    dom.editBatchAddBtn.disabled = disabled;
   }
 
   function restoreEditorFromPersistedState() {
@@ -4943,13 +5101,13 @@
           showEditorCard(false);
           return false;
         }
-        return apiClient.listCaseItems(caseFileId).then(function(items) {
-          state.editor.caseFile = found;
-          state.editor.items = Array.isArray(items) ? items : [];
-          if (dom.editSearchInput) dom.editSearchInput.value = '';
-          state.editor.searchText = '';
-          state.editor.pageIndex = 0;
-          state.editor.selection = new Set();
+	        return apiClient.listCaseItems(caseFileId).then(function(items) {
+	          state.editor.caseFile = found;
+	          state.editor.items = reorderItemsByExistingModuleAppend(Array.isArray(items) ? items : []);
+	          if (dom.editSearchInput) dom.editSearchInput.value = '';
+	          state.editor.searchText = '';
+	          state.editor.pageIndex = 0;
+	          state.editor.selection = new Set();
           state.editor.remarkOpen = new Set();
           renderEditorCard();
           syncEditorSearchControls();
@@ -5235,6 +5393,20 @@
           var idx = Math.max(0, Math.min(Number(r.index), ed.items.length));
           ed.items.splice(idx, 0, r.item);
         });
+      } else if (op.type === 'insert_batch' && Array.isArray(op.itemKeys)) {
+        var keys = op.itemKeys.slice();
+        var removals = [];
+        for (var i = 0; i < keys.length; i += 1) {
+          var key = keys[i];
+          var idx = ed.items.findIndex(function(it) { return it && it.__localId === key; });
+          if (idx !== -1) removals.push(idx);
+        }
+        removals.sort(function(a, b) { return b - a; });
+        removals.forEach(function(idx) {
+          var removed = ed.items[idx];
+          if (removed) unmarkCaseLibraryNewAdded(ed.caseFile ? ed.caseFile.id : null, removed);
+          ed.items.splice(idx, 1);
+        });
       } else if (op.type === 'insert' && op.itemKey) {
         var idx = ed.items.findIndex(function(it) { return it && it.__localId === op.itemKey; });
         if (idx !== -1) ed.items.splice(idx, 1);
@@ -5265,21 +5437,21 @@
     }, ed.pendingRemaining * 1000);
   }
 
-  function buildCaseItemPayload(item) {
-    var priority = item && item.priority ? String(item.priority).trim() : '';
-    var pre = item && item.precondition ? String(item.precondition).trim() : '';
-    var steps = item && item.steps ? String(item.steps).trim() : '';
-    var remark = item && item.remark ? String(item.remark).trim() : '';
-    return {
-      module: String(item && item.module ? item.module : '').trim(),
-      title: String(item && item.title ? item.title : '').trim(),
-      expected: String(item && item.expected ? item.expected : '').trim(),
-      priority: priority || null,
-      precondition: pre || null,
-      steps: steps || null,
-      remark: remark || null,
-    };
-  }
+	  function buildCaseItemPayload(item) {
+	    var priority = normalizeEditorText(item && item.priority ? item.priority : '');
+	    var pre = normalizeEditorText(item && item.precondition ? item.precondition : '');
+	    var steps = normalizeEditorText(item && item.steps ? item.steps : '');
+	    var remark = normalizeEditorText(item && item.remark ? item.remark : '');
+	    return {
+	      module: normalizeEditorText(item && item.module ? item.module : ''),
+	      title: normalizeEditorText(item && item.title ? item.title : ''),
+	      expected: normalizeEditorText(item && item.expected ? item.expected : ''),
+	      priority: priority || null,
+	      precondition: pre || null,
+	      steps: steps || null,
+	      remark: remark || null,
+	    };
+	  }
 
   function validatePayload(payload) {
     if (!payload) return '内容不能为空';
@@ -5399,6 +5571,84 @@
       return;
     }
 
+    if (op.type === 'insert_batch' && Array.isArray(op.itemKeys)) {
+      var keys = op.itemKeys.slice();
+      var entries = [];
+      keys.forEach(function(key) {
+        var idx = ed.items.findIndex(function(it) { return it && it.__localId === key; });
+        if (idx === -1) return;
+        var item = ed.items[idx];
+        if (!item) return;
+        entries.push({ index: idx, item: item, key: key });
+      });
+
+      if (!entries.length) {
+        ed.pendingOp = null;
+        setStatus(dom.editStatus, '批量新增已撤回或不存在', 'warn');
+        renderEditorTable();
+        return;
+      }
+
+      function settle(p) {
+        return Promise.resolve(p).then(
+          function(v) { return { status: 'fulfilled', value: v }; },
+          function(err) { return { status: 'rejected', reason: err }; }
+        );
+      }
+
+      var promises = entries.map(function(entry, seq) {
+        var item = entry.item || {};
+        var uiKey = getCaseLibraryEditorUiKey(item);
+        var module = normalizeEditorText(item.module);
+        var title = normalizeEditorText(item.title);
+        var priority = normalizeEditorText(item.priority);
+        var pre = normalizeEditorText(item.precondition);
+        var steps = normalizeEditorText(item.steps);
+
+        var expectedRaw = item.expected !== null && item.expected !== undefined ? String(item.expected) : '';
+        var expectedNorm = normalizeEditorText(expectedRaw);
+        var expected = expectedNorm ? expectedNorm : expectedRaw;
+        if (!expected) expected = buildInvisibleMarker(String(item.__localId || '') + '|' + seq);
+
+        var payload = {
+          module: module,
+          title: title,
+          expected: expected,
+          priority: priority || null,
+          precondition: pre || '',
+          steps: steps || '',
+          remark: normalizeEditorText(item.remark) || null,
+        };
+
+        return settle(apiClient.createCaseItem(file.id, payload).then(function(created) {
+          if (!created) return created;
+          ensureNonEnumerableKey(created, '__uiKey', uiKey || '');
+          ed.items[entry.index] = created;
+          markCaseLibraryNewAdded(file.id, created);
+          return created;
+        }));
+      });
+
+      Promise.all(promises).then(function(results) {
+        var failures = [];
+        for (var i = 0; i < results.length; i += 1) {
+          if (results[i] && results[i].status === 'rejected') failures.push(entries[i]);
+        }
+        if (!failures.length) {
+          setStatus(dom.editStatus, '批量新增已入库（' + entries.length + '条）', 'ok');
+          renderEditorTable();
+          return;
+        }
+        setStatus(dom.editStatus, '批量新增部分失败：成功 ' + (entries.length - failures.length) + ' 条，失败 ' + failures.length + ' 条', 'warn');
+        renderEditorTable();
+      }).catch(function(e) {
+        setStatus(dom.editStatus, e && e.message ? e.message : '批量新增入库失败', 'err');
+      }).finally(function() {
+        ed.pendingOp = null;
+      });
+      return;
+    }
+
     if (op.type === 'insert' && op.itemKey) {
       var createIndex = ed.items.findIndex(function(it) { return it && it.__localId === op.itemKey; });
       if (createIndex === -1) {
@@ -5434,10 +5684,10 @@
     setStatus(dom.editStatus, '变更已应用', 'ok');
   }
 
-  function insertCaseItem(index, anchorEl) {
-    var ed = state.editor;
-    if (ed.pendingOp) {
-      setStatus(dom.editStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+	  function insertCaseItem(index, anchorEl) {
+	    var ed = state.editor;
+	    if (ed.pendingOp) {
+	      setStatus(dom.editStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
       var anchorRectWarn = captureCaseLibraryAnchorRect(anchorEl);
       if (anchorRectWarn) showCaseLibraryBlockHint(anchorRectWarn, '当前有待确认的增删操作，请先撤回或等待入库');
       return;
@@ -5466,9 +5716,87 @@
     ed.remarkOpen = new Set();
     ed.pageIndex = Math.floor(insertAt / getPageSize());
     ed.pendingOp = { type: 'insert', itemKey: localId, index: insertAt };
-    renderEditorTable();
-    startPendingToast('已新增用例，超时将自动入库', { anchorRect: anchorRect });
-  }
+	    renderEditorTable();
+	    startPendingToast('已新增用例，超时将自动入库', { anchorRect: anchorRect });
+	  }
+
+	  function parseBatchAddCountInput(raw) {
+	    var text = raw === null || raw === undefined ? '' : String(raw);
+	    text = text.trim();
+	    if (!text) return { ok: false, reason: '请输入批量新增数量（1-10）' };
+	    if (!/^\d+$/.test(text)) return { ok: false, reason: '数量仅支持正整数（1-10）' };
+	    var n = Number(text);
+	    if (!isFinite(n)) return { ok: false, reason: '数量格式不正确' };
+	    n = Math.floor(n);
+	    if (n < 1) return { ok: false, reason: '数量最小为 1' };
+	    if (n > 10) return { ok: false, reason: '数量最大为 10' };
+	    return { ok: true, value: n };
+	  }
+
+	  function setBatchAddCountInputInvalid(invalid) {
+	    if (!dom.editBatchAddCountInput || !dom.editBatchAddCountInput.classList) return;
+	    if (invalid) dom.editBatchAddCountInput.classList.add('input-invalid');
+	    else dom.editBatchAddCountInput.classList.remove('input-invalid');
+	  }
+
+	  function batchInsertCaseItems(anchorEl) {
+	    var ed = state.editor;
+	    if (!ed) return;
+	    if (ed.pendingOp) {
+	      setStatus(dom.editStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+	      var anchorRectWarn = captureCaseLibraryAnchorRect(anchorEl);
+	      if (anchorRectWarn) showCaseLibraryBlockHint(anchorRectWarn, '当前有待确认的增删操作，请先撤回或等待入库');
+	      return;
+	    }
+	    if (!ed.caseFile) {
+	      setStatus(dom.editStatus, '请先选择用例', 'warn');
+	      return;
+	    }
+
+	    var raw = dom.editBatchAddCountInput ? dom.editBatchAddCountInput.value : (ed.batchAddCount || 5);
+	    var parsed = parseBatchAddCountInput(raw);
+	    if (!parsed.ok) {
+	      setBatchAddCountInputInvalid(true);
+	      setStatus(dom.editStatus, parsed.reason || '批量新增数量不合法', 'warn');
+	      return;
+	    }
+	    setBatchAddCountInputInvalid(false);
+
+	    var count = parsed.value;
+	    ed.batchAddCount = count;
+	    persistEditorBatchAddCount(count);
+
+	    var anchorRect = captureCaseLibraryAnchorRect(anchorEl);
+	    var fileId = ed.caseFile ? ed.caseFile.id : null;
+	    var startIndex = ed.items.length;
+	    var keys = [];
+	    for (var i = 0; i < count; i += 1) {
+	      var localId = 'local-batch-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6) + '-' + i;
+	      var marker = buildInvisibleMarker(localId);
+	      var fresh = {
+	        __localId: localId,
+	        case_file_id: fileId,
+	        module: '',
+	        title: '',
+	        priority: '',
+	        precondition: '',
+	        steps: '',
+	        expected: marker,
+	        remark: '',
+	      };
+	      ensureNonEnumerableKey(fresh, '__uiKey', '');
+	      markCaseLibraryNewAdded(fileId, fresh);
+	      ed.items.push(fresh);
+	      keys.push(localId);
+	    }
+
+	    ed.selection = new Set();
+	    ed.remarkOpen = new Set();
+	    ed.pageIndex = Math.floor(startIndex / getPageSize());
+	    ed.pendingOp = { type: 'insert_batch', itemKeys: keys, startIndex: startIndex };
+	    renderEditorTable();
+	    startPendingToast('已新增用例 ' + keys.length + ' 条，超时将自动入库', { anchorRect: anchorRect });
+	  }
 
 	  function removeCaseItem(index, anchorEl) {
 	    var ed = state.editor;
@@ -6298,19 +6626,46 @@
     if (dom.editDrawerExportXmindBtn) {
       dom.editDrawerExportXmindBtn.addEventListener('click', exportEditDrawerSelectionToXmind);
     }
-    if (dom.editDrawerExportExcelBtn) {
-      dom.editDrawerExportExcelBtn.addEventListener('click', exportEditDrawerSelectionToExcel);
-    }
-	    if (dom.editToExecBtn) {
-	      dom.editToExecBtn.addEventListener('click', function() {
-	        var file = state.editor.caseFile;
-	        if (!file) {
-          setStatus(dom.editStatus, '请先选择用例', 'warn');
-          return;
-        }
-	        transferItemsToTempExec(file, file.file_name_clean || ('用例#' + file.id), state.editor.items || []);
+	    if (dom.editDrawerExportExcelBtn) {
+	      dom.editDrawerExportExcelBtn.addEventListener('click', exportEditDrawerSelectionToExcel);
+	    }
+	    if (dom.editBatchAddCountInput) {
+	      dom.editBatchAddCountInput.addEventListener('input', function() {
+	        setBatchAddCountInputInvalid(false);
+	        var parsed = parseBatchAddCountInput(dom.editBatchAddCountInput.value);
+	        if (!parsed.ok) return;
+	        state.editor.batchAddCount = parsed.value;
+	        persistEditorBatchAddCount(parsed.value);
+	        syncEditorBatchAddControls();
+	      });
+	      dom.editBatchAddCountInput.addEventListener('blur', function() {
+	        var parsed = parseBatchAddCountInput(dom.editBatchAddCountInput.value);
+	        if (!parsed.ok) {
+	          setBatchAddCountInputInvalid(true);
+	          return;
+	        }
+	        setBatchAddCountInputInvalid(false);
+	        state.editor.batchAddCount = parsed.value;
+	        persistEditorBatchAddCount(parsed.value);
+	        syncEditorBatchAddControls();
 	      });
 	    }
+	    if (dom.editBatchAddBtn) {
+	      dom.editBatchAddBtn.addEventListener('click', function(e) {
+	        var t = e && e.currentTarget ? e.currentTarget : null;
+	        batchInsertCaseItems(t);
+	      });
+	    }
+		    if (dom.editToExecBtn) {
+		      dom.editToExecBtn.addEventListener('click', function() {
+		        var file = state.editor.caseFile;
+		        if (!file) {
+	          setStatus(dom.editStatus, '请先选择用例', 'warn');
+	          return;
+	        }
+		        transferItemsToTempExec(file, file.file_name_clean || ('用例#' + file.id), state.editor.items || []);
+		      });
+		    }
 	    if (dom.editBatchDeleteBtn) {
 	      dom.editBatchDeleteBtn.addEventListener('click', function(e) {
 	        var t = e && e.currentTarget ? e.currentTarget : null;
@@ -6372,21 +6727,23 @@
 	          syncEditorBatchDeleteControls();
 	        }
 	      });
-      dom.editView.addEventListener('focusout', function(e) {
-        var t = e && e.target ? e.target : null;
-        if (!t || !t.getAttribute) return;
-        var field = t.getAttribute('data-case-lib-edit-field');
-        if (!field) return;
-        var idx = Number(t.getAttribute('data-index'));
-        if (!isFinite(idx)) return;
-        var multiline = String(t.getAttribute('data-case-lib-multiline') || '').toLowerCase() === 'true';
-        var raw = multiline ? t.innerText : t.textContent;
-        var value = String(raw || '').trim();
-        var item = state.editor.items[idx];
-        if (!item) return;
-        item[field] = value;
-        saveCaseItemAtIndex(idx, '保存');
-      });
+	      dom.editView.addEventListener('focusout', function(e) {
+	        var t = e && e.target ? e.target : null;
+	        if (!t || !t.getAttribute) return;
+	        var field = t.getAttribute('data-case-lib-edit-field');
+	        if (!field) return;
+	        var idx = Number(t.getAttribute('data-index'));
+	        if (!isFinite(idx)) return;
+	        var multiline = String(t.getAttribute('data-case-lib-multiline') || '').toLowerCase() === 'true';
+	        var raw = multiline ? t.innerText : t.textContent;
+	        var item = state.editor.items[idx];
+	        if (!item) return;
+	        var prevNorm = normalizeEditorText(item[field]);
+	        var nextNorm = normalizeEditorText(raw);
+	        if (prevNorm === nextNorm) return;
+	        item[field] = nextNorm;
+	        saveCaseItemAtIndex(idx, '保存');
+	      });
       dom.editView.addEventListener('blur', function(e) {
         var t = e && e.target ? e.target : null;
         if (!t || !t.getAttribute) return;
@@ -6521,16 +6878,17 @@
   var autoRestoreAttempt = 0;
   var autoRestoreTimer = null;
 
-	  function restoreCaseLibraryAfterActivated() {
-	    if (!isAuthReady()) {
-	      pendingCaseLibraryTab = true;
-	      setStatus(dom.status, '登录信息加载中...', '');
-	      return Promise.resolve(null);
-	    }
-	    pendingCaseLibraryTab = false;
-	    return ensureProjectsReady()
-	      .then(function() { return restoreCaseLibraryLastSelection(); })
-	      .then(function(view) {
+		  function restoreCaseLibraryAfterActivated() {
+		    if (!isAuthReady()) {
+		      pendingCaseLibraryTab = true;
+		      setStatus(dom.status, '登录信息加载中...', '');
+		      return Promise.resolve(null);
+		    }
+		    pendingCaseLibraryTab = false;
+		    restoreEditorBatchAddCountFromPersistedState();
+		    return ensureProjectsReady()
+		      .then(function() { return restoreCaseLibraryLastSelection(); })
+		      .then(function(view) {
 	        var persisted = readEditDrawerPersistedState();
 	        var userId = getCurrentUserId();
 	        var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);

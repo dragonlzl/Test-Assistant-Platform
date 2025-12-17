@@ -4879,6 +4879,11 @@ tr.diff-locate-active td {
   width: min(320px, 60vw);
 }
 
+.case-library-drawer-actions input.case-library-count-input {
+  width: 72px;
+  min-width: 72px;
+}
+
 .case-library-items-table th.check,
 .case-library-items-table td.check {
   width: 44px;

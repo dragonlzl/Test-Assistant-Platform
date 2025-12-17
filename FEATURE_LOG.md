@@ -1266,3 +1266,20 @@
 - 复用说明：复用既有历史详情数据与渲染逻辑，仅补充展示字段，不新增接口。  
 - 测试与验证：`npm run test:ui -- tests/ui/case_library_history.spec.js`（通过）。  
 - 更新记录：2025-12-17 用例改动历史详情表新增“用例名”列（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_history.spec.js`）。  
+
+- 功能名称：用例库编辑视图批量新增（数量持久化 + 8 秒撤回）  
+- 功能描述：用例库“用例编辑视图”新增“批量新增”按钮与数量输入框（默认 5，可输入 1-10 的正整数并做校验）；数量配置写入本地存储，刷新后保持。点击“批量新增”会在列表末尾一次性追加 N 条空用例（全部绿描边高亮，分页自动跳到第一条空用例所在页），并复用同一套 8 秒撤回机制：8 秒内撤回则全部取消；超时后自动逐条入库。  
+- 操作方式：进入“用例库”→“查看&编辑”打开某用例→在编辑视图右上角输入数量（1-10）→点“批量新增”→可在 8 秒内撤回；不撤回则超时自动入库。  
+- 使用效果：批量补齐占位用例更高效，且与现有“新增/删除”一致提供 8 秒撤回窗口；输入数量刷新后保持，减少重复设置。  
+- 新增内容/接口/组件：编辑视图新增数量输入与按钮（`index.html`、`style.css`）；批量新增/撤回/入库逻辑（`scripts/modules/caseLibrary.js`）；UI 自动化覆盖（`tests/ui/case_library_batch_add.spec.js`）。  
+- 复用说明：复用既有新增接口 `/api/case-files/{id}/items` 与既有 8 秒撤回 toast 机制；为避免“全字段为空”触发唯一约束，批量新增的空用例在入库时会为 `expected` 写入不可见占位（界面展示仍为空）。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_add.spec.js`（通过）。  
+- 更新记录：2025-12-17 用例库编辑视图支持批量新增（含数量持久化与 8 秒撤回）（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_batch_add.spec.js`）。  
+
+- 功能名称：用例库刷新后按模块归位（满足完整字段才归位）  
+- 功能描述：用例库编辑视图在刷新/重新加载用例条目时，若某条用例的模块名已存在于当前用例且模块/标题/优先级/前提条件/操作步骤/预期结果均非空，则会将该用例归位到对应模块用例的末尾（按“同模块追加到末尾”规则），方便批量新增后填充内容的用例在下次刷新自动回到对应模块。  
+- 操作方式：批量新增后在空用例中填写模块/标题/优先级/前提条件/步骤/预期并保存→刷新页面或重新打开该用例编辑视图→该用例将移动到对应模块末尾。  
+- 新增内容/接口/组件：前端加载用例条目时的归位排序（`scripts/modules/caseLibrary.js`）；UI 自动化覆盖（`tests/ui/case_library_batch_add.spec.js`）。  
+- 复用说明：仅调整前端渲染顺序，不改后端查询顺序/不新增接口。  
+- 测试与验证：`npm run test:ui -- tests/ui/case_library_batch_add.spec.js -g 归位`（通过）。  
+- 更新记录：2025-12-17 用例库编辑视图刷新后按模块归位上线（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_batch_add.spec.js`）。  
