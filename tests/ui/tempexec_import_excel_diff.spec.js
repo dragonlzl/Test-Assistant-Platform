@@ -225,6 +225,9 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
     const actualHeaders = page.locator('#tempExecImportDiffDrawer th[data-tempexec-diff-result]', { hasText: '实际结果' });
     await expect(actualHeaders).toHaveCount(1);
     await expect(actualHeaders.first()).toBeVisible();
+    await expect(page.locator('#tempExecImportDiffLocateBar')).toContainText('差异定位');
+    await page.click('#tempExecImportDiffLocateBar [data-diff-locate-action="next"]');
+    await expect(page.locator('#tempExecImportDiffBody tr.diff-locate-active')).toHaveCount(1);
 
     let confirmCount = 0;
     page.on('dialog', async (dialog) => {

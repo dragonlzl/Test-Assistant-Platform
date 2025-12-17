@@ -30,7 +30,7 @@
   - 测试：`tests/ui/files_layout.spec.js` 同步断言按钮为禁用态；`tests/ui/tempexec_import_excel_diff.spec.js` 回归同名差异对比表头可见/隐藏逻辑。
 - 复用说明：复用现有抽屉宽度体系（默认 `drawer-panel`）与通用抽屉组件（`scripts/base/drawer.js`），仅做最小 UI/样式增量修正。
 - 测试与验证：`npx playwright test --config tests/playwright.config.js tests/ui/files_layout.spec.js tests/ui/tempexec_case_library_changes.spec.js tests/ui/tempexec_import_excel_diff.spec.js --workers=1`（通过）。
-- 更新记录：无
+- 更新记录：2025-12-17 同名用例差异对比新增“差异定位”：当视口内看不到差异但实际存在差异时，可通过“首处/上一处/下一处/末处”快速跳转并高亮定位（`index.html`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/tempexec_import_excel_diff.spec.js`、`tests/ui/case_library.spec.js`）。
 
 - 功能名称：用例库“用例改动历史”抽屉 + 历史永久落库
 - 功能描述：用例库页面顶部导航新增“用例改动历史”入口，打开右侧抽屉查看当前账号可访问项目内的用例变更历史；历史记录永久留存在数据库，整份用例删除后仍可查看，未重新导入时标记为“已删除”。

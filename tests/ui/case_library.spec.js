@@ -527,6 +527,9 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryImportDiffBody')).toContainText('新增用例');
     await expect(page.locator('#caseLibraryImportDiffBody')).toContainText('点击登录（修改）');
     await expect(page.locator('#caseLibraryImportDiffBody')).toContainText('点击登录');
+    await expect(page.locator('#caseLibraryImportDiffLocateBar')).toContainText('差异定位');
+    await page.click('#caseLibraryImportDiffLocateBar [data-diff-locate-action="next"]');
+    await expect(page.locator('#caseLibraryImportDiffBody tr.diff-locate-active')).toHaveCount(1);
     page.once('dialog', async (dialog) => dialog.accept());
     await page.click('#caseLibraryImportDiffOverwriteBtn');
     await expect(page.locator('#caseLibraryImportStatus')).toContainText('覆盖导入成功');

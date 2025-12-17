@@ -37,6 +37,7 @@
     importDiffTitle: document.getElementById('caseLibraryImportDiffTitle'),
     importDiffStatus: document.getElementById('caseLibraryImportDiffStatus'),
     importDiffMeta: document.getElementById('caseLibraryImportDiffMeta'),
+    importDiffLocateBar: document.getElementById('caseLibraryImportDiffLocateBar'),
     importDiffBody: document.getElementById('caseLibraryImportDiffBody'),
 	    importDiffOverwriteBtn: document.getElementById('caseLibraryImportDiffOverwriteBtn'),
 	    importInvalidTitle: document.getElementById('caseLibraryImportInvalidTitle'),
@@ -118,6 +119,7 @@
 	      dbItems: [],
 	      rows: [],
 	      loading: false,
+        locateIndex: -1,
 	    },
 
 	    importInvalid: {
@@ -438,6 +440,153 @@
     }).join('');
   }
 
+  var importDiffLocateHighlightTimer = null;
+  function clearImportDiffLocateHighlight() {
+    if (importDiffLocateHighlightTimer) clearTimeout(importDiffLocateHighlightTimer);
+    importDiffLocateHighlightTimer = null;
+    if (!dom.importDiffBody || !dom.importDiffBody.querySelectorAll) return;
+    var active = dom.importDiffBody.querySelectorAll('tr.diff-locate-active');
+    active.forEach(function(tr) {
+      if (!tr || !tr.classList) return;
+      tr.classList.remove('diff-locate-active');
+    });
+  }
+
+  function getImportDiffRowEls() {
+    if (!dom.importDiffBody || !dom.importDiffBody.querySelectorAll) return [];
+    return Array.prototype.slice.call(
+      dom.importDiffBody.querySelectorAll('tr.diff-row-added, tr.diff-row-removed, tr.diff-row-changed')
+    );
+  }
+
+  function isAnyImportDiffRowInView(rows, containerEl) {
+    var list = Array.isArray(rows) ? rows : [];
+    if (!list.length || !containerEl || !containerEl.getBoundingClientRect) return false;
+    var crect = containerEl.getBoundingClientRect();
+    var top = crect.top + 60;
+    var bottom = crect.bottom - 40;
+    for (var i = 0; i < list.length; i += 1) {
+      var row = list[i];
+      if (!row || !row.getBoundingClientRect) continue;
+      var r = row.getBoundingClientRect();
+      if (r.bottom > top && r.top < bottom) return true;
+    }
+    return false;
+  }
+
+  function buildImportDiffLocateBarHtml() {
+    if (!dom.importDiffLocateBar) return '';
+    var rows = Array.isArray(state.importDiff.rows) ? state.importDiff.rows : [];
+    var added = rows.filter(function(r) { return r && r.type === 'added'; }).length;
+    var removed = rows.filter(function(r) { return r && r.type === 'removed'; }).length;
+    var changed = rows.filter(function(r) { return r && r.type === 'changed'; }).length;
+    var total = added + removed + changed;
+    if (!total) {
+      return (
+        '<div class="diff-locate-info">差异定位</div>' +
+        '<div class="diff-locate-empty">暂无差异</div>'
+      );
+    }
+    var current = Number.isInteger(state.importDiff.locateIndex) ? state.importDiff.locateIndex : -1;
+    var posText = current >= 0 ? ('位置 ' + String(current + 1) + '/' + String(total)) : ('位置 --/' + String(total));
+    var hasCurrent = current >= 0;
+    var disablePrev = !hasCurrent || current <= 0;
+    var disableNext = hasCurrent && current >= total - 1;
+    var disableFirst = hasCurrent && current <= 0;
+    var disableLast = hasCurrent && current >= total - 1;
+    return (
+      '<div class="diff-locate-info">差异定位：新增 ' + String(added) +
+        ' / 删除 ' + String(removed) +
+        ' / 差异 ' + String(changed) +
+        '，共 ' + String(total) + ' 处</div>' +
+      '<div class="diff-locate-controls">' +
+        '<button type="button" class="secondary" data-diff-locate-scope="case-library-import-diff" data-diff-locate-action="first" ' + (disableFirst ? 'disabled' : '') + '>首处</button>' +
+        '<button type="button" class="secondary" data-diff-locate-scope="case-library-import-diff" data-diff-locate-action="prev" ' + (disablePrev ? 'disabled' : '') + '>上一处</button>' +
+        '<button type="button" class="secondary" data-diff-locate-scope="case-library-import-diff" data-diff-locate-action="next" ' + (disableNext ? 'disabled' : '') + '>下一处</button>' +
+        '<button type="button" class="secondary" data-diff-locate-scope="case-library-import-diff" data-diff-locate-action="last" ' + (disableLast ? 'disabled' : '') + '>末处</button>' +
+        '<span class="diff-locate-pos" data-diff-locate-pos>' + escapeHtml(posText) + '</span>' +
+        '<span class="diff-locate-hint hidden" data-diff-locate-hint></span>' +
+      '</div>'
+    );
+  }
+
+  function renderImportDiffLocateBar() {
+    if (!dom.importDiffLocateBar) return;
+    dom.importDiffLocateBar.innerHTML = buildImportDiffLocateBarHtml();
+    updateImportDiffLocateHint();
+  }
+
+  function updateImportDiffLocateHint() {
+    if (!dom.importDiffLocateBar || !dom.importDiffLocateBar.querySelector) return;
+    var hintEl = dom.importDiffLocateBar.querySelector('[data-diff-locate-hint]');
+    if (!hintEl) return;
+    var rows = Array.isArray(state.importDiff.rows) ? state.importDiff.rows : [];
+    var added = rows.filter(function(r) { return r && r.type === 'added'; }).length;
+    var removed = rows.filter(function(r) { return r && r.type === 'removed'; }).length;
+    var changed = rows.filter(function(r) { return r && r.type === 'changed'; }).length;
+    var total = added + removed + changed;
+    if (!total) {
+      hintEl.textContent = '';
+      if (hintEl.classList) hintEl.classList.add('hidden');
+      return;
+    }
+    var drawerEl = document.getElementById('caseLibraryImportDiffDrawer');
+    var bodyEl = drawerEl ? drawerEl.querySelector('.drawer-body') : null;
+    var inView = isAnyImportDiffRowInView(getImportDiffRowEls(), bodyEl);
+    var hint = inView ? '' : '当前视口无差异，可点击“下一处”定位';
+    hintEl.textContent = hint;
+    if (!hintEl.classList) return;
+    hintEl.classList.toggle('hidden', !hint);
+  }
+
+  function jumpToImportDiffAt(index) {
+    var rows = getImportDiffRowEls();
+    if (!rows.length) return;
+    var idx = Number(index);
+    if (!Number.isFinite(idx)) idx = 0;
+    if (idx < 0) idx = 0;
+    if (idx >= rows.length) idx = rows.length - 1;
+    state.importDiff.locateIndex = idx;
+    clearImportDiffLocateHighlight();
+    var row = rows[idx];
+    if (row && row.scrollIntoView) {
+      try { row.scrollIntoView({ block: 'center' }); } catch (e) { row.scrollIntoView(); }
+    }
+    if (row && row.classList) row.classList.add('diff-locate-active');
+    importDiffLocateHighlightTimer = setTimeout(function() {
+      if (row && row.classList) row.classList.remove('diff-locate-active');
+    }, 2000);
+    renderImportDiffLocateBar();
+  }
+
+  var importDiffLocateBound = false;
+  function bindImportDiffLocateEvents() {
+    if (importDiffLocateBound) return;
+    importDiffLocateBound = true;
+    var drawerEl = document.getElementById('caseLibraryImportDiffDrawer');
+    if (drawerEl && typeof drawerEl.addEventListener === 'function') {
+      drawerEl.addEventListener('click', function(e) {
+        var btn = e && e.target && e.target.closest ? e.target.closest('[data-diff-locate-action]') : null;
+        if (!btn || !btn.getAttribute) return;
+        if (btn.getAttribute('data-diff-locate-scope') !== 'case-library-import-diff') return;
+        var action = btn.getAttribute('data-diff-locate-action') || '';
+        if (!action) return;
+        var rows = getImportDiffRowEls();
+        if (!rows.length) return;
+        if (action === 'first') jumpToImportDiffAt(0);
+        else if (action === 'last') jumpToImportDiffAt(rows.length - 1);
+        else if (action === 'next') jumpToImportDiffAt((state.importDiff.locateIndex >= 0 ? state.importDiff.locateIndex + 1 : 0));
+        else if (action === 'prev') jumpToImportDiffAt((state.importDiff.locateIndex >= 0 ? state.importDiff.locateIndex - 1 : rows.length - 1));
+      });
+      var bodyEl = drawerEl.querySelector('.drawer-body');
+      if (bodyEl && typeof bodyEl.addEventListener === 'function') {
+        var debounce = (utils && typeof utils.debounce === 'function') ? utils.debounce : null;
+        var onScroll = function() { updateImportDiffLocateHint(); };
+        bodyEl.addEventListener('scroll', debounce ? debounce(onScroll, 120) : onScroll);
+      }
+    }
+  }
+
   function syncImportDiffControls() {
     if (!dom.importDiffOverwriteBtn) return;
     var can = Boolean(
@@ -453,6 +602,7 @@
 
   function openImportDiffDrawer(payload) {
     payload = payload || {};
+    state.importDiff.locateIndex = -1;
     state.importDiff.fileName = payload.fileName || '';
     state.importDiff.cleanName = payload.cleanName || '';
     state.importDiff.importedCleanName = payload.importedCleanName || '';
@@ -488,6 +638,8 @@
       setStatus(dom.importDiffStatus, summary, (addedCount || changedCount || removedCount) ? 'warn' : 'ok');
     }
     renderImportDiffMergedTable(dom.importDiffBody, state.importDiff.rows);
+    bindImportDiffLocateEvents();
+    renderImportDiffLocateBar();
     syncImportDiffControls();
 
     if (importDrawerInstance && typeof importDrawerInstance.close === 'function') {
@@ -502,6 +654,7 @@
 
 	  function openImportDiffDrawerLoading(payload) {
     payload = payload || {};
+    state.importDiff.locateIndex = -1;
     var projectId = payload.projectId || null;
     var importVersionId = payload.importVersionId || null;
     var cleanName = payload.cleanName || payload.fileName || '';
@@ -526,6 +679,7 @@
     }
     if (dom.importDiffStatus) setStatus(dom.importDiffStatus, '加载差异对比中...', '');
     if (dom.importDiffBody) dom.importDiffBody.innerHTML = '<tr><td colspan="7"><p class="hint">加载中...</p></td></tr>';
+    renderImportDiffLocateBar();
     syncImportDiffControls();
 
     if (importDrawerInstance && typeof importDrawerInstance.close === 'function') {

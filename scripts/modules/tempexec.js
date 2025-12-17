@@ -44,6 +44,7 @@
     var tempExecImportDiffTitle = document.getElementById('tempExecImportDiffTitle');
     var tempExecImportDiffStatus = document.getElementById('tempExecImportDiffStatus');
     var tempExecImportDiffMeta = document.getElementById('tempExecImportDiffMeta');
+    var tempExecImportDiffLocateBar = document.getElementById('tempExecImportDiffLocateBar');
     var tempExecImportDiffBody = document.getElementById('tempExecImportDiffBody');
     var tempExecImportDiffOverwriteBtn = document.getElementById('tempExecImportDiffOverwriteBtn');
     var openTempExecDrawerBtn = document.getElementById('openTempExecDrawerBtn');
@@ -680,6 +681,8 @@
       dbHasResult: false,
       showResultFields: false,
       rows: [],
+      locateIndex: -1,
+      diffCounts: { added: 0, removed: 0, changed: 0, total: 0 },
     };
 
     function normalizeDiffText(value) {
@@ -900,6 +903,145 @@
       });
     }
 
+    var importDiffLocateHighlightTimer = null;
+    function clearImportDiffLocateHighlight() {
+      if (importDiffLocateHighlightTimer) clearTimeout(importDiffLocateHighlightTimer);
+      importDiffLocateHighlightTimer = null;
+      if (!tempExecImportDiffBody || !tempExecImportDiffBody.querySelectorAll) return;
+      var active = tempExecImportDiffBody.querySelectorAll('tr.diff-locate-active');
+      active.forEach(function(tr) {
+        if (!tr || !tr.classList) return;
+        tr.classList.remove('diff-locate-active');
+      });
+    }
+
+    function getImportDiffRowEls() {
+      if (!tempExecImportDiffBody || !tempExecImportDiffBody.querySelectorAll) return [];
+      return Array.prototype.slice.call(
+        tempExecImportDiffBody.querySelectorAll('tr.diff-row-added, tr.diff-row-removed, tr.diff-row-changed')
+      );
+    }
+
+    function isAnyImportDiffRowInView(rows, containerEl) {
+      var list = Array.isArray(rows) ? rows : [];
+      if (!list.length || !containerEl || !containerEl.getBoundingClientRect) return false;
+      var crect = containerEl.getBoundingClientRect();
+      var top = crect.top + 60;
+      var bottom = crect.bottom - 40;
+      for (var i = 0; i < list.length; i += 1) {
+        var row = list[i];
+        if (!row || !row.getBoundingClientRect) continue;
+        var r = row.getBoundingClientRect();
+        if (r.bottom > top && r.top < bottom) return true;
+      }
+      return false;
+    }
+
+    function buildImportDiffLocateBarHtml() {
+      if (!tempExecImportDiffLocateBar) return '';
+      var counts = importDiffState.diffCounts || { added: 0, removed: 0, changed: 0, total: 0 };
+      var total = Number(counts.total) || 0;
+      if (!total) {
+        return (
+          '<div class="diff-locate-info">差异定位</div>' +
+          '<div class="diff-locate-empty">暂无差异</div>'
+        );
+      }
+      var current = Number.isInteger(importDiffState.locateIndex) ? importDiffState.locateIndex : -1;
+      var posText = current >= 0 ? ('位置 ' + String(current + 1) + '/' + String(total)) : ('位置 --/' + String(total));
+      var hasCurrent = current >= 0;
+      var disablePrev = !hasCurrent || current <= 0;
+      var disableNext = hasCurrent && current >= total - 1;
+      var disableFirst = hasCurrent && current <= 0;
+      var disableLast = hasCurrent && current >= total - 1;
+
+      return (
+        '<div class="diff-locate-info">差异定位：新增 ' + String(counts.added || 0) +
+          ' / 删除 ' + String(counts.removed || 0) +
+          ' / 差异 ' + String(counts.changed || 0) +
+          '，共 ' + String(total) + ' 处</div>' +
+        '<div class="diff-locate-controls">' +
+          '<button type="button" class="secondary" data-diff-locate-scope="tempexec-import-diff" data-diff-locate-action="first" ' + (disableFirst ? 'disabled' : '') + '>首处</button>' +
+          '<button type="button" class="secondary" data-diff-locate-scope="tempexec-import-diff" data-diff-locate-action="prev" ' + (disablePrev ? 'disabled' : '') + '>上一处</button>' +
+          '<button type="button" class="secondary" data-diff-locate-scope="tempexec-import-diff" data-diff-locate-action="next" ' + (disableNext ? 'disabled' : '') + '>下一处</button>' +
+          '<button type="button" class="secondary" data-diff-locate-scope="tempexec-import-diff" data-diff-locate-action="last" ' + (disableLast ? 'disabled' : '') + '>末处</button>' +
+          '<span class="diff-locate-pos" data-diff-locate-pos>' + escapeHtml(posText) + '</span>' +
+          '<span class="diff-locate-hint hidden" data-diff-locate-hint></span>' +
+        '</div>'
+      );
+    }
+
+    function renderImportDiffLocateBar() {
+      if (!tempExecImportDiffLocateBar) return;
+      tempExecImportDiffLocateBar.innerHTML = buildImportDiffLocateBarHtml();
+      updateImportDiffLocateHint();
+    }
+
+    function updateImportDiffLocateHint() {
+      if (!tempExecImportDiffLocateBar || !tempExecImportDiffLocateBar.querySelector) return;
+      var hintEl = tempExecImportDiffLocateBar.querySelector('[data-diff-locate-hint]');
+      if (!hintEl) return;
+      var total = importDiffState && importDiffState.diffCounts ? Number(importDiffState.diffCounts.total) || 0 : 0;
+      if (!total) {
+        hintEl.textContent = '';
+        if (hintEl.classList) hintEl.classList.add('hidden');
+        return;
+      }
+      var bodyEl = tempExecImportDiffDrawerEl ? tempExecImportDiffDrawerEl.querySelector('.drawer-body') : null;
+      var inView = isAnyImportDiffRowInView(getImportDiffRowEls(), bodyEl);
+      var hint = inView ? '' : '当前视口无差异，可点击“下一处”定位';
+      hintEl.textContent = hint;
+      if (!hintEl.classList) return;
+      hintEl.classList.toggle('hidden', !hint);
+    }
+
+    function jumpToImportDiffAt(index) {
+      var rows = getImportDiffRowEls();
+      if (!rows.length) return;
+      var idx = Number(index);
+      if (!Number.isFinite(idx)) idx = 0;
+      if (idx < 0) idx = 0;
+      if (idx >= rows.length) idx = rows.length - 1;
+      importDiffState.locateIndex = idx;
+      clearImportDiffLocateHighlight();
+      var row = rows[idx];
+      if (row && row.scrollIntoView) {
+        try { row.scrollIntoView({ block: 'center' }); } catch (e) { row.scrollIntoView(); }
+      }
+      if (row && row.classList) row.classList.add('diff-locate-active');
+      importDiffLocateHighlightTimer = setTimeout(function() {
+        if (row && row.classList) row.classList.remove('diff-locate-active');
+      }, 2000);
+      renderImportDiffLocateBar();
+    }
+
+    var importDiffLocateBound = false;
+    function bindImportDiffLocateEvents() {
+      if (importDiffLocateBound) return;
+      importDiffLocateBound = true;
+      if (tempExecImportDiffDrawerEl) {
+        tempExecImportDiffDrawerEl.addEventListener('click', function(e) {
+          var btn = e && e.target && e.target.closest ? e.target.closest('[data-diff-locate-action]') : null;
+          if (!btn || !btn.getAttribute) return;
+          if (btn.getAttribute('data-diff-locate-scope') !== 'tempexec-import-diff') return;
+          var action = btn.getAttribute('data-diff-locate-action') || '';
+          if (!action) return;
+          var rows = getImportDiffRowEls();
+          if (!rows.length) return;
+          if (action === 'first') jumpToImportDiffAt(0);
+          else if (action === 'last') jumpToImportDiffAt(rows.length - 1);
+          else if (action === 'next') jumpToImportDiffAt((importDiffState.locateIndex >= 0 ? importDiffState.locateIndex + 1 : 0));
+          else if (action === 'prev') jumpToImportDiffAt((importDiffState.locateIndex >= 0 ? importDiffState.locateIndex - 1 : rows.length - 1));
+        });
+      }
+      var bodyEl = tempExecImportDiffDrawerEl ? tempExecImportDiffDrawerEl.querySelector('.drawer-body') : null;
+      if (bodyEl && typeof bodyEl.addEventListener === 'function') {
+        bodyEl.addEventListener('scroll', debounce(function() {
+          updateImportDiffLocateHint();
+        }, 120));
+      }
+    }
+
     function renderImportDiffMergedTable(bodyEl, rows, includeResult) {
       if (!bodyEl) return;
       var list = Array.isArray(rows) ? rows : [];
@@ -1014,6 +1156,8 @@
     function openImportDiffDrawerLoading(payload) {
       payload = payload || {};
       importDiffState.loading = true;
+      importDiffState.locateIndex = -1;
+      importDiffState.diffCounts = { added: 0, removed: 0, changed: 0, total: 0 };
       importDiffState.fileName = payload.fileName || '';
       importDiffState.cleanName = payload.cleanName || '';
       importDiffState.projectId = payload.projectId || null;
@@ -1042,6 +1186,7 @@
       if (tempExecImportDiffMeta) tempExecImportDiffMeta.textContent = '';
       if (tempExecImportDiffBody) tempExecImportDiffBody.innerHTML = '<tr><td colspan="10"><p class="hint">加载中...</p></td></tr>';
       setDiffResultFieldsVisible(true);
+      renderImportDiffLocateBar();
       syncImportDiffControls();
       if (tempExecDrawer) tempExecDrawer.close();
       if (tempExecImportDiffDrawer && typeof tempExecImportDiffDrawer.open === 'function') {
@@ -1080,6 +1225,7 @@
       var addedCount = importDiffState.rows.filter(function(r) { return r && r.type === 'added'; }).length;
       var removedCount = importDiffState.rows.filter(function(r) { return r && r.type === 'removed'; }).length;
       var changedCount = importDiffState.rows.filter(function(r) { return r && r.type === 'changed'; }).length;
+      importDiffState.diffCounts = { added: addedCount, removed: removedCount, changed: changedCount, total: addedCount + removedCount + changedCount };
       var leftCount = importRows.length || 0;
       var rightCount = dbRows.length || 0;
       if (tempExecImportDiffMeta) {
@@ -1091,6 +1237,8 @@
       renderImportDiffMergedTable(tempExecImportDiffBody, importDiffState.rows, importDiffState.showResultFields);
       if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '', '');
       syncImportDiffControls();
+      bindImportDiffLocateEvents();
+      renderImportDiffLocateBar();
     }
 
     function confirmOverwriteImportFromDiff() {

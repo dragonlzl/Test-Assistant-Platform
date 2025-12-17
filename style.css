@@ -2800,6 +2800,50 @@ body {
   background: rgba(231, 76, 60, 0.08);
 }
 
+.diff-locate-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.diff-locate-info {
+  font-size: 13px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.diff-locate-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.diff-locate-pos {
+  font-size: 13px;
+  color: #475569;
+}
+
+.diff-locate-hint {
+  font-size: 12px;
+  color: #b45309;
+}
+
+.diff-locate-empty {
+  font-size: 13px;
+  color: #64748b;
+}
+
+tr.diff-locate-active td {
+  box-shadow: inset 0 0 0 2px rgba(96, 165, 250, 0.9);
+}
+
 .diff-cell-changed {
   background: rgba(231, 76, 60, 0.14) !important;
 }
