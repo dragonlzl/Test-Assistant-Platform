@@ -223,9 +223,8 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
     await expect(page.locator('#tempExecImportDiffDrawer')).toHaveClass(/open/);
     await expect(page.locator('#tempExecImportDiffTitle')).toContainText('用例A');
     const actualHeaders = page.locator('#tempExecImportDiffDrawer th[data-tempexec-diff-result]', { hasText: '实际结果' });
-    await expect(actualHeaders).toHaveCount(2);
+    await expect(actualHeaders).toHaveCount(1);
     await expect(actualHeaders.first()).toBeVisible();
-    await expect(actualHeaders.nth(1)).toBeVisible();
 
     let confirmCount = 0;
     page.on('dialog', async (dialog) => {
@@ -335,14 +334,11 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
     const actualHeaders2 = page.locator('#tempExecImportDiffDrawer th[data-tempexec-diff-result]', { hasText: '实际结果' });
     const remarkHeaders2 = page.locator('#tempExecImportDiffDrawer th[data-tempexec-diff-result]', { hasText: '备注' });
     const defectHeaders2 = page.locator('#tempExecImportDiffDrawer th[data-tempexec-diff-result]', { hasText: '缺陷链接' });
-    await expect(actualHeaders2).toHaveCount(2);
-    await expect(remarkHeaders2).toHaveCount(2);
-    await expect(defectHeaders2).toHaveCount(2);
+    await expect(actualHeaders2).toHaveCount(1);
+    await expect(remarkHeaders2).toHaveCount(1);
+    await expect(defectHeaders2).toHaveCount(1);
     await expect(actualHeaders2.first()).toHaveClass(/hidden/);
-    await expect(actualHeaders2.nth(1)).toHaveClass(/hidden/);
     await expect(remarkHeaders2.first()).toHaveClass(/hidden/);
-    await expect(remarkHeaders2.nth(1)).toHaveClass(/hidden/);
     await expect(defectHeaders2.first()).toHaveClass(/hidden/);
-    await expect(defectHeaders2.nth(1)).toHaveClass(/hidden/);
   });
 });

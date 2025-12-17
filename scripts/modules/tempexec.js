@@ -43,12 +43,8 @@
     var tempExecImportDiffDrawerEl = document.getElementById('tempExecImportDiffDrawer');
     var tempExecImportDiffTitle = document.getElementById('tempExecImportDiffTitle');
     var tempExecImportDiffStatus = document.getElementById('tempExecImportDiffStatus');
-    var tempExecImportDiffLeftTitle = document.getElementById('tempExecImportDiffLeftTitle');
-    var tempExecImportDiffLeftMeta = document.getElementById('tempExecImportDiffLeftMeta');
-    var tempExecImportDiffLeftBody = document.getElementById('tempExecImportDiffLeftBody');
-    var tempExecImportDiffRightTitle = document.getElementById('tempExecImportDiffRightTitle');
-    var tempExecImportDiffRightMeta = document.getElementById('tempExecImportDiffRightMeta');
-    var tempExecImportDiffRightBody = document.getElementById('tempExecImportDiffRightBody');
+    var tempExecImportDiffMeta = document.getElementById('tempExecImportDiffMeta');
+    var tempExecImportDiffBody = document.getElementById('tempExecImportDiffBody');
     var tempExecImportDiffOverwriteBtn = document.getElementById('tempExecImportDiffOverwriteBtn');
     var openTempExecDrawerBtn = document.getElementById('openTempExecDrawerBtn');
     var openTempExecViewNavBtn = document.getElementById('openTempExecViewNavBtn');
@@ -904,64 +900,97 @@
       });
     }
 
-    function renderDiffTableBody(bodyEl, side, rows, includeResult) {
+    function renderImportDiffMergedTable(bodyEl, rows, includeResult) {
       if (!bodyEl) return;
       var list = Array.isArray(rows) ? rows : [];
       if (!list.length) {
         bodyEl.innerHTML = '<tr><td colspan="' + (includeResult ? '10' : '7') + '"><p class="hint">暂无数据</p></td></tr>';
         return;
       }
-      bodyEl.innerHTML = list.map(function(row, idx) {
-        var item = side === 'left' ? row.left : row.right;
-        var other = side === 'left' ? row.right : row.left;
-        var isPlaceholder = !item;
-        var rowCls = '';
-        if (row.type === 'added' && side === 'left') rowCls = 'diff-row-added';
-        if (row.type === 'removed' && side === 'right') rowCls = 'diff-row-removed';
-        if (row.type === 'changed') rowCls = 'diff-row-changed';
 
-        var module = item ? (item.module || '') : '';
-        var title = item ? (item.title || '') : '';
-        var expected = item ? (item.expected || '') : '';
-        var priority = item ? (item.priority || '') : '';
-        var preconditions = item ? (item.preconditions || '') : '';
-        var steps = item ? (item.steps || '') : '';
-        var actual = item ? (item.actual || '') : '';
-        var remark = item ? (item.remark || '') : '';
-        var defect = item ? (item.defect || '') : '';
+      function buildValueBlock(leftText, rightText, placeholderText) {
+        var left = normalizeDiffText(leftText);
+        var right = normalizeDiffText(rightText);
+        if (!left && !right) {
+          return '<div class="diff-one"><p class="hint">' + escapeHtml(placeholderText || '--') + '</p></div>';
+        }
+        if (left && right) {
+          if (left === right) {
+            return '<div class="diff-one">' + escapeHtml(left) + '</div>';
+          }
+          return (
+            '<div class="diff-pair">' +
+              '<div class="diff-pair-line diff-pair-left"><span class="diff-pair-tag">导入</span><div class="diff-pair-text">' + escapeHtml(left) + '</div></div>' +
+              '<div class="diff-pair-line diff-pair-right"><span class="diff-pair-tag">执行</span><div class="diff-pair-text">' + escapeHtml(right) + '</div></div>' +
+            '</div>'
+          );
+        }
+        if (left) {
+          return (
+            '<div class="diff-one diff-one-with-tag">' +
+              '<span class="diff-pair-tag">导入</span>' +
+              '<div class="diff-pair-text">' + escapeHtml(left) + '</div>' +
+            '</div>'
+          );
+        }
+        return (
+          '<div class="diff-one diff-one-with-tag">' +
+            '<span class="diff-pair-tag">执行</span>' +
+            '<div class="diff-pair-text">' + escapeHtml(right) + '</div>' +
+          '</div>'
+        );
+      }
+
+      bodyEl.innerHTML = list.map(function(row, idx) {
+        var left = row ? row.left : null;
+        var right = row ? row.right : null;
+        var rowCls = '';
+        if (row && row.type === 'added') rowCls = 'diff-row-added';
+        if (row && row.type === 'removed') rowCls = 'diff-row-removed';
+        if (row && row.type === 'changed') rowCls = 'diff-row-changed';
 
         var priorityCls = '';
-        var preCls = '';
+        var preconditionsCls = '';
         var stepsCls = '';
         var actualCls = '';
         var remarkCls = '';
         var defectCls = '';
-        if (!isPlaceholder && other && row.type === 'changed' && row.diff) {
+        if (row && row.type === 'changed' && row.diff) {
           if (row.diff.priority) priorityCls = 'diff-cell-changed';
-          if (row.diff.preconditions) preCls = 'diff-cell-changed';
+          if (row.diff.preconditions) preconditionsCls = 'diff-cell-changed';
           if (row.diff.steps) stepsCls = 'diff-cell-changed';
           if (includeResult && row.diff.actual) actualCls = 'diff-cell-changed';
           if (includeResult && row.diff.remark) remarkCls = 'diff-cell-changed';
           if (includeResult && row.diff.defect) defectCls = 'diff-cell-changed';
         }
 
-        var hint = isPlaceholder ? '<p class="hint">（无对应项）</p>' : '';
+        var badge = '';
+        if (row && row.type === 'added') badge = '<span class="diff-badge diff-badge-added">新增</span>';
+        else if (row && row.type === 'removed') badge = '<span class="diff-badge diff-badge-removed">将删除</span>';
+        else if (row && row.type === 'changed') badge = '<span class="diff-badge diff-badge-changed">有差异</span>';
+
         var resultCells = includeResult
           ? (
-              '<td data-tempexec-diff-result class="' + escapeHtml(actualCls) + '">' + escapeHtml(actual) + '</td>' +
-              '<td data-tempexec-diff-result class="' + escapeHtml(remarkCls) + '">' + escapeHtml(remark) + '</td>' +
-              '<td data-tempexec-diff-result class="' + escapeHtml(defectCls) + '">' + escapeHtml(defect) + '</td>'
+              '<td data-tempexec-diff-result class="' + escapeHtml(actualCls) + '">' + buildValueBlock(left && left.actual, right && right.actual, '--') + '</td>' +
+              '<td data-tempexec-diff-result class="' + escapeHtml(remarkCls) + '">' + buildValueBlock(left && left.remark, right && right.remark, '--') + '</td>' +
+              '<td data-tempexec-diff-result class="' + escapeHtml(defectCls) + '">' + buildValueBlock(left && left.defect, right && right.defect, '--') + '</td>'
             )
           : '';
+
         return (
           '<tr class="' + escapeHtml(rowCls) + '">' +
             '<td>' + escapeHtml(String(idx + 1)) + '</td>' +
-            '<td>' + escapeHtml(module) + '</td>' +
-            '<td>' + escapeHtml(title) + hint + '</td>' +
-            '<td class="' + escapeHtml(priorityCls) + '">' + escapeHtml(priority) + '</td>' +
-            '<td class="' + escapeHtml(preCls) + '">' + escapeHtml(preconditions) + '</td>' +
-            '<td class="' + escapeHtml(stepsCls) + '">' + escapeHtml(steps) + '</td>' +
-            '<td>' + escapeHtml(expected) + '</td>' +
+            '<td>' + buildValueBlock(left && left.module, right && right.module, '（缺失）') + '</td>' +
+            '<td>' +
+              '<div class="diff-cell-stack">' +
+                buildValueBlock(left && left.title, right && right.title, '（缺失）') +
+                (badge ? ('<div class="diff-badge-row">' + badge + '</div>') : '') +
+              '</div>' +
+            '</td>' +
+            '<td class="' + escapeHtml(priorityCls) + '">' + buildValueBlock(left && left.priority, right && right.priority, '--') + '</td>' +
+            '<td class="' + escapeHtml(preconditionsCls) + '">' + buildValueBlock(left && left.preconditions, right && right.preconditions, '--') + '</td>' +
+            '<td class="' + escapeHtml(stepsCls) + '">' + buildValueBlock(left && left.steps, right && right.steps, '--') + '</td>' +
+            '<td>' + buildValueBlock(left && left.expected, right && right.expected, '（缺失）') + '</td>' +
             resultCells +
           '</tr>'
         );
@@ -1010,10 +1039,8 @@
         tempExecImportDiffTitle.textContent = '同名用例差异对比：' + (importDiffState.cleanName || importDiffState.fileName || '用例');
       }
       if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '正在加载差异对比...', '');
-      if (tempExecImportDiffLeftMeta) tempExecImportDiffLeftMeta.textContent = '';
-      if (tempExecImportDiffRightMeta) tempExecImportDiffRightMeta.textContent = '';
-      if (tempExecImportDiffLeftBody) tempExecImportDiffLeftBody.innerHTML = '<tr><td colspan="10"><p class="hint">加载中...</p></td></tr>';
-      if (tempExecImportDiffRightBody) tempExecImportDiffRightBody.innerHTML = '<tr><td colspan="10"><p class="hint">加载中...</p></td></tr>';
+      if (tempExecImportDiffMeta) tempExecImportDiffMeta.textContent = '';
+      if (tempExecImportDiffBody) tempExecImportDiffBody.innerHTML = '<tr><td colspan="10"><p class="hint">加载中...</p></td></tr>';
       setDiffResultFieldsVisible(true);
       syncImportDiffControls();
       if (tempExecDrawer) tempExecDrawer.close();
@@ -1050,17 +1077,18 @@
       });
       importDiffState.rows = buildDiffRows(importRows, dbRows, importDiffState.showResultFields);
 
-      if (tempExecImportDiffLeftMeta) {
-        tempExecImportDiffLeftMeta.textContent = (importRows.length || 0) + ' 行';
-        tempExecImportDiffLeftMeta.classList.toggle('warn', importRows.length !== dbRows.length);
-      }
-      if (tempExecImportDiffRightMeta) {
-        tempExecImportDiffRightMeta.textContent = (dbRows.length || 0) + ' 行';
-        tempExecImportDiffRightMeta.classList.toggle('warn', importRows.length !== dbRows.length);
+      var addedCount = importDiffState.rows.filter(function(r) { return r && r.type === 'added'; }).length;
+      var removedCount = importDiffState.rows.filter(function(r) { return r && r.type === 'removed'; }).length;
+      var changedCount = importDiffState.rows.filter(function(r) { return r && r.type === 'changed'; }).length;
+      var leftCount = importRows.length || 0;
+      var rightCount = dbRows.length || 0;
+      if (tempExecImportDiffMeta) {
+        tempExecImportDiffMeta.textContent =
+          '导入（' + leftCount + ' 条） / 执行中（' + rightCount + ' 条） / 新增 ' + addedCount + ' / 删除 ' + removedCount + ' / 差异 ' + changedCount;
+        tempExecImportDiffMeta.classList.toggle('warn', leftCount !== rightCount);
       }
       setDiffResultFieldsVisible(importDiffState.showResultFields);
-      renderDiffTableBody(tempExecImportDiffLeftBody, 'left', importDiffState.rows, importDiffState.showResultFields);
-      renderDiffTableBody(tempExecImportDiffRightBody, 'right', importDiffState.rows, importDiffState.showResultFields);
+      renderImportDiffMergedTable(tempExecImportDiffBody, importDiffState.rows, importDiffState.showResultFields);
       if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '', '');
       syncImportDiffControls();
     }
@@ -1629,7 +1657,14 @@
     renderImportFileHint();
     syncImportConfirmState();
 
-    if (caseTemplateDropdown && caseTemplateToggle && caseTemplateMenu) {
+    // 临时屏蔽：常用用例模版入口（后续恢复时删除本判断即可）。
+    var disableCaseTemplate = false;
+    try {
+      disableCaseTemplate = Boolean(caseTemplateToggle && caseTemplateToggle.disabled);
+    } catch (err) {
+      disableCaseTemplate = false;
+    }
+    if (!disableCaseTemplate && caseTemplateDropdown && caseTemplateToggle && caseTemplateMenu) {
       caseTemplateToggle.addEventListener('click', function() {
         var isOpen = caseTemplateDropdown.classList.contains('open');
         if (isOpen) {

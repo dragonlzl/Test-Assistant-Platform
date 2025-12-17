@@ -411,7 +411,8 @@ test.describe('文件导入导出与布局视图', () => {
         tab: 'casesgen',
         items: [
           { selector: '#exportCaseGen', disabled: true },
-          { selector: '#caseTemplateToggle', disabled: false },
+          // 临时屏蔽：用例执行页“常用用例模版”入口
+          { selector: '#caseTemplateToggle', disabled: true },
         ],
       },
       {

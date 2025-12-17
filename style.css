@@ -2658,8 +2658,8 @@ body {
   overscroll-behavior: contain;
 }
 .drawer .drawer-panel.drawer-panel-wide {
-  width: min(96vw, 1200px);
-  max-width: 1200px;
+  width: 1200px;
+  max-width: 96vw;
   min-width: 520px;
 }
 .drawer.open .drawer-panel {
@@ -2767,6 +2767,25 @@ body {
 .diff-table th:nth-child(7),
 .diff-table td:nth-child(7) {
   width: calc(20em + var(--diff-tag-width));
+}
+
+#tempExecImportDiffDrawer .diff-table {
+  min-width: 1760px;
+}
+
+#tempExecImportDiffDrawer .diff-table th:nth-child(8),
+#tempExecImportDiffDrawer .diff-table td:nth-child(8) {
+  width: calc(10em + var(--diff-tag-width));
+}
+
+#tempExecImportDiffDrawer .diff-table th:nth-child(9),
+#tempExecImportDiffDrawer .diff-table td:nth-child(9) {
+  width: calc(10em + var(--diff-tag-width));
+}
+
+#tempExecImportDiffDrawer .diff-table th:nth-child(10),
+#tempExecImportDiffDrawer .diff-table td:nth-child(10) {
+  width: calc(12em + var(--diff-tag-width));
 }
 
 .diff-row-added td {
