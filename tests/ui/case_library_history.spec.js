@@ -227,6 +227,7 @@ test.describe('用例库-用例改动历史抽屉', () => {
     await expect(page.locator('#caseLibraryHistoryDetailCard')).not.toHaveClass(/hidden/);
     await expect(page.locator('#caseLibraryEditCard')).toHaveClass(/hidden/);
     await expect(page.locator('#caseLibraryHistoryDetailCard')).toContainText('操作人员');
+    await expect(page.locator('#caseLibraryHistoryDetailCard')).toContainText('用例名');
     await expect(page.locator('#caseLibraryHistoryBody')).toContainText('demo_user');
     await expect(page.locator('#caseLibraryHistoryDetailCard')).toContainText('新增');
     await expect(page.locator('#caseLibraryHistoryDetailCard')).toContainText('改动');

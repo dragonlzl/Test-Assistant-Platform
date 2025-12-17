@@ -1630,11 +1630,12 @@
           </span>
           <input id="caseLibraryEditSearchInput" type="text" placeholder="搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果 / 备注"/>
         </div>
-        <div class="case-library-drawer-actions">
-          <button class="secondary" id="caseLibraryEditClearSearchBtn" type="button">清空搜索</button>
-          <button class="primary" id="caseLibraryEditToExecBtn" type="button">转到执行</button>
-        </div>
-      </div>
+	        <div class="case-library-drawer-actions">
+	          <button class="secondary" id="caseLibraryEditClearSearchBtn" type="button">清空搜索</button>
+	          <button class="secondary" id="caseLibraryEditBatchDeleteBtn" type="button" disabled>批量删除</button>
+	          <button class="primary" id="caseLibraryEditToExecBtn" type="button">转到执行</button>
+	        </div>
+	      </div>
       <p class="status" id="caseLibraryEditStatus"></p>
       <div class="temp-case-view" id="caseLibraryEditView"></div>
     </div>
@@ -1666,24 +1667,25 @@
       </div>
       <div id="caseLibraryHistoryPaginationTop"></div>
       <div class="admin-table-wrapper">
-        <table class="admin-table case-lib-diff-table">
-          <thead>
-            <tr>
-              <th style="width:70px;">类型</th>
-              <th style="width:160px;">修改时间</th>
-              <th style="width:120px;">操作人员</th>
-              <th style="width:180px;">模块</th>
-              <th style="width:220px;">用例标题</th>
-              <th>前提条件</th>
-              <th>操作步骤</th>
-              <th>预期结果</th>
-            </tr>
-          </thead>
-          <tbody id="caseLibraryHistoryBody">
-            <tr><td colspan="8"><p class="hint">暂无记录</p></td></tr>
-          </tbody>
-        </table>
-      </div>
+	        <table class="admin-table case-lib-diff-table">
+	          <thead>
+	            <tr>
+	              <th style="width:70px;">类型</th>
+	              <th style="width:160px;">修改时间</th>
+	              <th style="width:120px;">操作人员</th>
+	              <th style="width:220px;">用例名</th>
+	              <th style="width:180px;">模块</th>
+	              <th style="width:220px;">用例标题</th>
+	              <th>前提条件</th>
+	              <th>操作步骤</th>
+	              <th>预期结果</th>
+	            </tr>
+	          </thead>
+	          <tbody id="caseLibraryHistoryBody">
+	            <tr><td colspan="9"><p class="hint">暂无记录</p></td></tr>
+	          </tbody>
+	        </table>
+	      </div>
       <div id="caseLibraryHistoryPaginationBottom"></div>
     </div>
   </div>

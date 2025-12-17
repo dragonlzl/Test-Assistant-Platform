@@ -1248,3 +1248,21 @@
 - 复用说明：复用现有 `/api/settings` 的 `tempexec_ui_v1` 持久化能力与既有 `nav-entry-card` 风格，不新增后端接口。  
 - 测试与验证：`node --check scripts/base/state.js scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_project_layout.spec.js tests/ui/tempexec_import_project_filter_persist.spec.js`（通过）。  
 - 更新记录：2025-12-17 执行页导入&分配抽屉项目筛选按钮与 DB 持久化上线（`scripts/base/state.js`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_import_project_filter_persist.spec.js`）。  
+
+- 功能名称：用例库编辑视图批量删除（8 秒撤回）  
+- 功能描述：用例库“查看&编辑”的用例编辑视图增加“批量删除”按钮；勾选用例后可批量删除，沿用同一套 8 秒撤回机制：8 秒内点击“撤回”则全部恢复且不会写入；超时后才会逐条调用删除接口写入用例库。若批量删除中存在失败，会把失败项恢复回编辑视图并提示成功/失败数量。  
+- 操作方式：进入“用例库”→“查看&编辑”打开某用例→勾选多条用例→点击“批量删除（N）”→确认；可在弹出的撤回提示中 8 秒内撤回；不撤回则超时自动入库。  
+- 使用效果：批量删除操作更高效，且提供与单条删除一致的撤回窗口，降低误删风险。  
+- 新增内容/接口/组件：新增按钮（`index.html`）；批量删除/撤回/失败回滚逻辑（`scripts/modules/caseLibrary.js`）；UI 自动化覆盖（`tests/ui/case_library_batch_delete.spec.js`）。  
+- 复用说明：复用既有单条删除接口 `/api/case-files/items/{id}` 与既有 8 秒撤回 toast 机制，不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_delete.spec.js`（通过）。  
+- 更新记录：2025-12-17 用例库编辑视图支持批量删除并 8 秒撤回（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_batch_delete.spec.js`）。  
+
+- 功能名称：用例改动历史详情增加“用例名”列  
+- 功能描述：在用例库“用例改动历史详情”表格中新增“用例名”列，便于截图/导出/对照时直接看到当前历史记录归属的用例文件名。  
+- 操作方式：进入“用例库”→“用例改动历史”→打开某用例的“历史详情”，表格中可看到“用例名”列。  
+- 使用效果：历史详情信息更完整，减少仅靠顶部摘要定位用例名的成本。  
+- 新增内容/接口/组件：表头/占位列更新（`index.html`）；历史详情渲染补列与空态 colspan 同步（`scripts/modules/caseLibrary.js`）；UI 自动化断言补充（`tests/ui/case_library_history.spec.js`）。  
+- 复用说明：复用既有历史详情数据与渲染逻辑，仅补充展示字段，不新增接口。  
+- 测试与验证：`npm run test:ui -- tests/ui/case_library_history.spec.js`（通过）。  
+- 更新记录：2025-12-17 用例改动历史详情表新增“用例名”列（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_history.spec.js`）。  

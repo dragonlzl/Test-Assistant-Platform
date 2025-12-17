@@ -19,6 +19,7 @@
     editFileName: document.getElementById('caseLibraryEditFileName'),
     editSearchInput: document.getElementById('caseLibraryEditSearchInput'),
     editClearSearchBtn: document.getElementById('caseLibraryEditClearSearchBtn'),
+    editBatchDeleteBtn: document.getElementById('caseLibraryEditBatchDeleteBtn'),
     editToExecBtn: document.getElementById('caseLibraryEditToExecBtn'),
     editStatus: document.getElementById('caseLibraryEditStatus'),
     editView: document.getElementById('caseLibraryEditView'),
@@ -1682,13 +1683,13 @@
       : list.slice();
 
     if (!selectedProjectId || !selectedFileName) {
-      dom.historyBody.innerHTML = '<tr><td colspan="8"><p class="hint">请先在“用例改动历史”中选择用例查看详情。</p></td></tr>';
+      dom.historyBody.innerHTML = '<tr><td colspan="9"><p class="hint">请先在“用例改动历史”中选择用例查看详情。</p></td></tr>';
       setHistoryPagination('');
       return;
     }
 
     if (!visible.length) {
-      dom.historyBody.innerHTML = '<tr><td colspan="8"><p class="hint">暂无记录</p></td></tr>';
+      dom.historyBody.innerHTML = '<tr><td colspan="9"><p class="hint">暂无记录</p></td></tr>';
       setHistoryPagination(buildHistoryPagination(0, 0, 1, 0, 0));
       return;
     }
@@ -1731,6 +1732,7 @@
             '<td>' + typeTag + '</td>' +
             '<td class="case-lib-diff-time">' + escapeHtml(timeText) + '</td>' +
             '<td class="case-lib-diff-operator">' + escapeHtml(operator) + '</td>' +
+            '<td><div class="case-lib-diff-cell"><div class="case-lib-diff-only">' + escapeHtml(selectedFileName) + '</div></div></td>' +
             '<td><div class="case-lib-diff-cell"><div class="case-lib-diff-only">-</div></div></td>' +
             '<td><div class="case-lib-diff-cell"><div class="case-lib-diff-only">' + escapeHtml(titleText) + '</div></div></td>' +
             '<td><div class="case-lib-diff-cell"><div class="case-lib-diff-only">-</div></div></td>' +
@@ -1751,6 +1753,7 @@
           '<td>' + typeTag + '</td>' +
           '<td class="case-lib-diff-time">' + escapeHtml(timeText) + '</td>' +
           '<td class="case-lib-diff-operator">' + escapeHtml(operator) + '</td>' +
+          '<td><div class="case-lib-diff-cell"><div class="case-lib-diff-only">' + escapeHtml(selectedFileName) + '</div></div></td>' +
           '<td>' + buildCell(oldSnap, newSnap, 'module', Boolean(changedMap.module)) + '</td>' +
           '<td>' + buildCell(oldSnap, newSnap, 'title', Boolean(changedMap.title)) + '</td>' +
           '<td>' + buildCell(oldSnap, newSnap, 'precondition', Boolean(changedMap.precondition)) + '</td>' +
@@ -4874,6 +4877,7 @@
       '</table>' +
       paginationBottom
     );
+    syncEditorBatchDeleteControls();
   }
 
   function renderEditorCard() {
@@ -4890,6 +4894,8 @@
     if (dom.editFileName) dom.editFileName.textContent = file.file_name_clean || ('文件#' + file.id);
     if (dom.editCardTitle) dom.editCardTitle.textContent = '用例编辑视图：' + (file.file_name_clean || ('#' + file.id));
     renderEditorTable();
+    syncEditorSearchControls();
+    syncEditorBatchDeleteControls();
   }
 
   function syncEditorSearchControls() {
@@ -4898,6 +4904,17 @@
     if (dom.editSearchInput) val = String(dom.editSearchInput.value || '');
     var term = String(state.editor && state.editor.searchText ? state.editor.searchText : '') || val;
     dom.editClearSearchBtn.disabled = !term.trim();
+  }
+
+  function syncEditorBatchDeleteControls() {
+    if (!dom.editBatchDeleteBtn) return;
+    var ed = state.editor;
+    var selected = ed && ed.selection && typeof ed.selection.size === 'number' ? ed.selection.size : 0;
+    var disabled = !ed || !ed.caseFile || !selected || Boolean(ed.pendingOp);
+    var label = '批量删除';
+    if (selected) label += '（' + selected + '）';
+    dom.editBatchDeleteBtn.textContent = label;
+    dom.editBatchDeleteBtn.disabled = disabled;
   }
 
   function restoreEditorFromPersistedState() {
@@ -5209,6 +5226,15 @@
       if (op.type === 'remove' && op.item) {
         var insertAt = Math.min(Math.max(op.index, 0), ed.items.length);
         ed.items.splice(insertAt, 0, op.item);
+      } else if (op.type === 'remove_batch' && Array.isArray(op.removed)) {
+        var list = op.removed
+          .filter(function(r) { return r && r.item; })
+          .slice()
+          .sort(function(a, b) { return Number(a.index) - Number(b.index); });
+        list.forEach(function(r) {
+          var idx = Math.max(0, Math.min(Number(r.index), ed.items.length));
+          ed.items.splice(idx, 0, r.item);
+        });
       } else if (op.type === 'insert' && op.itemKey) {
         var idx = ed.items.findIndex(function(it) { return it && it.__localId === op.itemKey; });
         if (idx !== -1) ed.items.splice(idx, 1);
@@ -5309,6 +5335,70 @@
       });
       return;
     }
+
+    if (op.type === 'remove_batch' && Array.isArray(op.removed)) {
+      var removed = op.removed.slice();
+      var toDelete = [];
+      var seen = {};
+      removed.forEach(function(r) {
+        var item = r && r.item ? r.item : null;
+        if (!item || !item.id) return;
+        var id = String(item.id);
+        if (seen[id]) return;
+        seen[id] = true;
+        toDelete.push({ id: item.id, index: r.index, item: item });
+      });
+
+      if (!toDelete.length) {
+        ed.pendingOp = null;
+        setStatus(dom.editStatus, '批量删除已撤回或无需入库', 'warn');
+        renderEditorTable();
+        return;
+      }
+
+      function settle(p) {
+        return Promise.resolve(p).then(
+          function(v) { return { status: 'fulfilled', value: v }; },
+          function(err) { return { status: 'rejected', reason: err }; }
+        );
+      }
+
+      var promises = toDelete.map(function(entry) {
+        return settle(apiClient.deleteCaseItem(entry.id));
+      });
+
+      Promise.all(promises).then(function(results) {
+        var failures = [];
+        for (var i = 0; i < results.length; i += 1) {
+          if (results[i] && results[i].status === 'rejected') failures.push(toDelete[i]);
+        }
+
+        if (!failures.length) {
+          setStatus(dom.editStatus, '批量删除已入库（' + toDelete.length + '条）', 'ok');
+          return;
+        }
+
+        failures
+          .slice()
+          .sort(function(a, b) { return Number(a.index) - Number(b.index); })
+          .forEach(function(entry) {
+            var idx = Math.max(0, Math.min(Number(entry.index), ed.items.length));
+            ed.items.splice(idx, 0, entry.item);
+          });
+        renderEditorTable();
+        setStatus(
+          dom.editStatus,
+          '批量删除部分失败：成功 ' + (toDelete.length - failures.length) + ' 条，失败 ' + failures.length + ' 条',
+          'warn'
+        );
+      }).catch(function(e) {
+        setStatus(dom.editStatus, e && e.message ? e.message : '批量删除入库失败', 'err');
+      }).finally(function() {
+        ed.pendingOp = null;
+      });
+      return;
+    }
+
     if (op.type === 'insert' && op.itemKey) {
       var createIndex = ed.items.findIndex(function(it) { return it && it.__localId === op.itemKey; });
       if (createIndex === -1) {
@@ -5380,10 +5470,10 @@
     startPendingToast('已新增用例，超时将自动入库', { anchorRect: anchorRect });
   }
 
-  function removeCaseItem(index, anchorEl) {
-    var ed = state.editor;
-    if (ed.pendingOp) {
-      setStatus(dom.editStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+	  function removeCaseItem(index, anchorEl) {
+	    var ed = state.editor;
+	    if (ed.pendingOp) {
+	      setStatus(dom.editStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
       var anchorRectWarn = captureCaseLibraryAnchorRect(anchorEl);
       if (anchorRectWarn) showCaseLibraryBlockHint(anchorRectWarn, '当前有待确认的增删操作，请先撤回或等待入库');
       return;
@@ -5399,13 +5489,71 @@
     ed.selection = new Set();
     ed.remarkOpen = new Set();
     ed.pendingOp = { type: 'remove', item: item, index: idx };
-    renderEditorTable();
-    startPendingToast('已删除用例，超时将自动入库', { anchorRect: anchorRect });
-  }
+	    renderEditorTable();
+	    startPendingToast('已删除用例，超时将自动入库', { anchorRect: anchorRect });
+	  }
 
-  function toggleRemark(index) {
-    var idx = Number(index);
-    if (!isFinite(idx)) return;
+	  function removeSelectedCaseItems(anchorEl) {
+	    var ed = state.editor;
+	    if (!ed) return;
+	    if (ed.pendingOp) {
+	      setStatus(dom.editStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+	      var anchorRectWarn = captureCaseLibraryAnchorRect(anchorEl);
+	      if (anchorRectWarn) showCaseLibraryBlockHint(anchorRectWarn, '当前有待确认的增删操作，请先撤回或等待入库');
+	      return;
+	    }
+	    if (!ed.caseFile) {
+	      setStatus(dom.editStatus, '请先选择用例', 'warn');
+	      return;
+	    }
+	    ed.selection = ed.selection instanceof Set ? ed.selection : new Set();
+	    var raw = Array.from(ed.selection);
+	    var indices = [];
+	    var seen = {};
+	    raw.forEach(function(v) {
+	      var idx = Number(v);
+	      if (!isFinite(idx)) return;
+	      if (idx < 0 || idx >= ed.items.length) return;
+	      var key = String(idx);
+	      if (seen[key]) return;
+	      seen[key] = true;
+	      indices.push(idx);
+	    });
+	    if (!indices.length) {
+	      setStatus(dom.editStatus, '请先勾选需要删除的用例', 'warn');
+	      syncEditorBatchDeleteControls();
+	      return;
+	    }
+	    var confirmed = window.confirm('确定删除已勾选的 ' + indices.length + ' 条用例吗？可在 8 秒内撤回。');
+	    if (!confirmed) return;
+
+	    var anchorRect = captureCaseLibraryAnchorRect(anchorEl);
+	    indices.sort(function(a, b) { return b - a; });
+	    var removed = [];
+	    var fileId = ed.caseFile ? ed.caseFile.id : null;
+	    indices.forEach(function(idx) {
+	      if (idx < 0 || idx >= ed.items.length) return;
+	      var item = ed.items[idx];
+	      if (!item) return;
+	      removed.push({ index: idx, item: item });
+	      unmarkCaseLibraryNewAdded(fileId, item);
+	      ed.items.splice(idx, 1);
+	    });
+	    if (!removed.length) {
+	      setStatus(dom.editStatus, '未删除任何用例', 'warn');
+	      syncEditorBatchDeleteControls();
+	      return;
+	    }
+	    ed.selection = new Set();
+	    ed.remarkOpen = new Set();
+	    ed.pendingOp = { type: 'remove_batch', removed: removed };
+	    renderEditorTable();
+	    startPendingToast('已删除用例 ' + removed.length + ' 条，超时将自动入库', { anchorRect: anchorRect });
+	  }
+
+	  function toggleRemark(index) {
+	    var idx = Number(index);
+	    if (!isFinite(idx)) return;
     if (state.editor.remarkOpen.has(idx)) state.editor.remarkOpen.delete(idx);
     else state.editor.remarkOpen.add(idx);
     renderEditorTable();
@@ -6153,20 +6301,26 @@
     if (dom.editDrawerExportExcelBtn) {
       dom.editDrawerExportExcelBtn.addEventListener('click', exportEditDrawerSelectionToExcel);
     }
-    if (dom.editToExecBtn) {
-      dom.editToExecBtn.addEventListener('click', function() {
-        var file = state.editor.caseFile;
-        if (!file) {
+	    if (dom.editToExecBtn) {
+	      dom.editToExecBtn.addEventListener('click', function() {
+	        var file = state.editor.caseFile;
+	        if (!file) {
           setStatus(dom.editStatus, '请先选择用例', 'warn');
           return;
         }
-        transferItemsToTempExec(file, file.file_name_clean || ('用例#' + file.id), state.editor.items || []);
-      });
-    }
-    if (dom.editView) {
-      dom.editView.addEventListener('click', function(e) {
-        var t = e && e.target ? e.target : null;
-        if (!t) return;
+	        transferItemsToTempExec(file, file.file_name_clean || ('用例#' + file.id), state.editor.items || []);
+	      });
+	    }
+	    if (dom.editBatchDeleteBtn) {
+	      dom.editBatchDeleteBtn.addEventListener('click', function(e) {
+	        var t = e && e.currentTarget ? e.currentTarget : null;
+	        removeSelectedCaseItems(t);
+	      });
+	    }
+	    if (dom.editView) {
+	      dom.editView.addEventListener('click', function(e) {
+	        var t = e && e.target ? e.target : null;
+	        if (!t) return;
         var toggle = t.closest ? t.closest('[data-case-lib-remark-toggle]') : null;
         if (toggle) {
           toggleRemark(toggle.getAttribute('data-index'));
@@ -6210,13 +6364,14 @@
           renderEditorTable();
           return;
         }
-        if (t.hasAttribute && t.hasAttribute('data-case-lib-select')) {
-          var idx = Number(t.getAttribute('data-index'));
-          if (!isFinite(idx)) return;
-          if (t.checked) state.editor.selection.add(idx);
-          else state.editor.selection.delete(idx);
-        }
-      });
+	        if (t.hasAttribute && t.hasAttribute('data-case-lib-select')) {
+	          var idx = Number(t.getAttribute('data-index'));
+	          if (!isFinite(idx)) return;
+	          if (t.checked) state.editor.selection.add(idx);
+	          else state.editor.selection.delete(idx);
+	          syncEditorBatchDeleteControls();
+	        }
+	      });
       dom.editView.addEventListener('focusout', function(e) {
         var t = e && e.target ? e.target : null;
         if (!t || !t.getAttribute) return;
