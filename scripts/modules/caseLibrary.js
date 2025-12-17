@@ -4921,6 +4921,24 @@
     );
   }
 
+  function scrollEditorToIndex(index) {
+    if (!dom.editView || typeof dom.editView.querySelector !== 'function') return;
+    var idx = Number(index);
+    if (!isFinite(idx) || idx < 0) return;
+    var selector = '[data-case-lib-edit-field=\"module\"][data-index=\"' + idx + '\"]';
+    var cell = dom.editView.querySelector(selector);
+    var anchor = cell || dom.editView.querySelector('input[data-case-lib-select][data-index=\"' + idx + '\"]');
+    if (!anchor) return;
+    var row = anchor && anchor.closest ? anchor.closest('tr') : null;
+    var target = row || anchor;
+    if (target && target.scrollIntoView) {
+      try { target.scrollIntoView({ block: 'center' }); } catch (e) { target.scrollIntoView(); }
+    }
+    if (cell && cell.focus) {
+      try { cell.focus(); } catch (_) {}
+    }
+  }
+
   function renderEditorTable() {
     if (!dom.editView) return;
     if (!state.editor.caseFile) {
@@ -5795,6 +5813,7 @@
 	    ed.pageIndex = Math.floor(startIndex / getPageSize());
 	    ed.pendingOp = { type: 'insert_batch', itemKeys: keys, startIndex: startIndex };
 	    renderEditorTable();
+	    setTimeout(function() { scrollEditorToIndex(startIndex); }, 0);
 	    startPendingToast('已新增用例 ' + keys.length + ' 条，超时将自动入库', { anchorRect: anchorRect });
 	  }
 

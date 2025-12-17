@@ -1275,6 +1275,7 @@
 - 复用说明：复用既有新增接口 `/api/case-files/{id}/items` 与既有 8 秒撤回 toast 机制；为避免“全字段为空”触发唯一约束，批量新增的空用例在入库时会为 `expected` 写入不可见占位（界面展示仍为空）。  
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_add.spec.js`（通过）。  
 - 更新记录：2025-12-17 用例库编辑视图支持批量新增（含数量持久化与 8 秒撤回）（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_batch_add.spec.js`）。  
+- 更新记录：2025-12-17 批量新增后即使不触发翻页，也会自动滚动定位到首条新增用例（`scripts/modules/caseLibrary.js`）。  
 
 - 功能名称：用例库刷新后按模块归位（满足完整字段才归位）  
 - 功能描述：用例库编辑视图在刷新/重新加载用例条目时，若某条用例的模块名已存在于当前用例且模块/标题/优先级/前提条件/操作步骤/预期结果均非空，则会将该用例归位到对应模块用例的末尾（按“同模块追加到末尾”规则），方便批量新增后填充内容的用例在下次刷新自动回到对应模块。  
