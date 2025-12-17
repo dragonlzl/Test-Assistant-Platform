@@ -20,6 +20,10 @@
       execSetTitle: document.getElementById('execOverviewExecSetTitle'),
       execSetStatus: document.getElementById('execOverviewExecSetStatus'),
       execSetClose: document.getElementById('execOverviewExecSetClose'),
+      execSetSearchInput: document.getElementById('execOverviewExecSetSearchInput'),
+      execSetSearchClearBtn: document.getElementById('execOverviewExecSetSearchClearBtn'),
+      execSetPaginationTop: document.getElementById('execOverviewExecSetPaginationTop'),
+      execSetPaginationBottom: document.getElementById('execOverviewExecSetPaginationBottom'),
       execSetTableBody: document.getElementById('execOverviewExecSetTableBody'),
       execSetEmpty: document.getElementById('execOverviewExecSetEmpty'),
 	  };
@@ -31,6 +35,13 @@
     currentVersionId: null,
     overviewRows: [],
     overviewLayoutUsers: [],
+    execSetDrawer: {
+      execSetId: null,
+      execSetName: '',
+      rows: [],
+      searchText: '',
+      pageIndex: 0,
+    },
   };
 
   function setStatus(text, type) {
@@ -163,6 +174,79 @@
 
   var execSetDrawerInstance = null;
 
+  function clampPageSize(value) {
+    var n = Number(value);
+    if (!isFinite(n) || n <= 0) return 20;
+    if (n < 5) return 5;
+    if (n > 200) return 200;
+    return Math.floor(n);
+  }
+
+  function getPageSize() {
+    var globalState = window.app && window.app.state ? window.app.state : {};
+    var fromSettings = globalState && globalState.settings ? globalState.settings.tempExecPageSize : null;
+    if (fromSettings !== null && fromSettings !== undefined) return clampPageSize(fromSettings);
+    return clampPageSize(globalState && globalState.tempExecPageSize ? globalState.tempExecPageSize : 20);
+  }
+
+  function setExecSetPagination(html) {
+    if (dom.execSetPaginationTop) dom.execSetPaginationTop.innerHTML = html || '';
+    if (dom.execSetPaginationBottom) dom.execSetPaginationBottom.innerHTML = html || '';
+  }
+
+  function buildExecSetPagination(total, pageIndex, totalPages, start, end, rawTotal) {
+    total = Number(total) || 0;
+    rawTotal = Number(rawTotal) || 0;
+    pageIndex = Number(pageIndex) || 0;
+    totalPages = Number(totalPages) || 1;
+    start = Number(start) || 0;
+    end = Number(end) || 0;
+    var currentPage = totalPages ? pageIndex + 1 : 1;
+    var maxPage = totalPages || 1;
+    var rangeInfo = total ? ('显示 ' + (start + 1) + '-' + end + ' / 共 ' + total + ' 条') : '暂无记录';
+    if (rawTotal && total && total !== rawTotal) {
+      rangeInfo += '（筛选后）';
+    } else if (rawTotal && !total && rawTotal) {
+      rangeInfo += '（筛选后）';
+    }
+    return (
+      '<div class=\"temp-pagination\" data-exec-overview-pagination>' +
+        '<div class=\"temp-pagination-info\">' + escapeHtml(rangeInfo) + '，每页 ' + getPageSize() + ' 条</div>' +
+        '<div class=\"temp-pagination-controls\">' +
+          '<button type=\"button\" class=\"secondary\" data-exec-overview-page=\"first\" ' + (pageIndex <= 0 ? 'disabled' : '') + '>首页</button>' +
+          '<button type=\"button\" class=\"secondary\" data-exec-overview-page=\"prev\" ' + (pageIndex <= 0 ? 'disabled' : '') + '>上一页</button>' +
+          '<button type=\"button\" class=\"secondary\" data-exec-overview-page=\"next\" ' + (pageIndex >= totalPages - 1 ? 'disabled' : '') + '>下一页</button>' +
+          '<button type=\"button\" class=\"secondary\" data-exec-overview-page=\"last\" ' + (pageIndex >= totalPages - 1 ? 'disabled' : '') + '>末页</button>' +
+          '<label>跳转</label>' +
+          '<input type=\"number\" min=\"1\" max=\"' + maxPage + '\" value=\"' + Math.min(currentPage, maxPage) + '\" data-exec-overview-page-input>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function normalizeExecSetSearchText(value) {
+    var text = value === null || value === undefined ? '' : String(value);
+    return text.trim().toLowerCase();
+  }
+
+  function matchesExecSetCase(item, term) {
+    if (!term) return true;
+    if (!item) return false;
+    function has(field) {
+      var raw = item[field];
+      if (raw === null || raw === undefined) return false;
+      return String(raw).toLowerCase().indexOf(term) !== -1;
+    }
+    return Boolean(
+      has('module') ||
+      has('title') ||
+      has('status') ||
+      has('actual_result') ||
+      has('expected') ||
+      has('remark')
+    );
+  }
+
   function hideExecSetDrawer() {
     if (execSetDrawerInstance && typeof execSetDrawerInstance.close === 'function') {
       execSetDrawerInstance.close();
@@ -171,6 +255,52 @@
     if (dom.execSetEmpty) dom.execSetEmpty.classList.add('hidden');
     if (dom.execSetTitle) dom.execSetTitle.textContent = '执行列表';
     setDrawerStatus(dom.execSetStatus, '', '');
+    setExecSetPagination('');
+    state.execSetDrawer.execSetId = null;
+    state.execSetDrawer.execSetName = '';
+    state.execSetDrawer.rows = [];
+    state.execSetDrawer.searchText = '';
+    state.execSetDrawer.pageIndex = 0;
+    if (dom.execSetSearchInput) dom.execSetSearchInput.value = '';
+    if (dom.execSetSearchClearBtn) dom.execSetSearchClearBtn.disabled = true;
+  }
+
+  function syncExecSetSearchControls() {
+    if (!dom.execSetSearchClearBtn) return;
+    var term = state.execSetDrawer && state.execSetDrawer.searchText ? String(state.execSetDrawer.searchText) : '';
+    dom.execSetSearchClearBtn.disabled = !term.trim();
+  }
+
+  function renderExecSetDrawer() {
+    var rawList = Array.isArray(state.execSetDrawer.rows) ? state.execSetDrawer.rows : [];
+    var term = normalizeExecSetSearchText(state.execSetDrawer.searchText);
+    var filtered = term
+      ? rawList.filter(function(item) { return matchesExecSetCase(item, term); })
+      : rawList;
+    var pageSize = getPageSize();
+    var total = filtered.length;
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    if (state.execSetDrawer.pageIndex >= totalPages) state.execSetDrawer.pageIndex = Math.max(totalPages - 1, 0);
+    if (state.execSetDrawer.pageIndex < 0) state.execSetDrawer.pageIndex = 0;
+    var start = state.execSetDrawer.pageIndex * pageSize;
+    var end = Math.min(total, start + pageSize);
+    var pageRows = total ? filtered.slice(start, end) : [];
+
+    renderExecSetCases(pageRows);
+
+    if (dom.execSetEmpty) {
+      if (term && !total && rawList.length) {
+        dom.execSetEmpty.textContent = '未找到匹配用例';
+      } else {
+        dom.execSetEmpty.textContent = '暂无用例';
+      }
+    }
+
+    if (!rawList.length && !term) {
+      setExecSetPagination('');
+      return;
+    }
+    setExecSetPagination(buildExecSetPagination(total, state.execSetDrawer.pageIndex, totalPages, start, end, rawList.length));
   }
 
 	  function renderProjects() {
@@ -620,17 +750,27 @@
     setDrawerStatus(dom.execSetStatus, '加载中...', '');
     if (execSetDrawerInstance && typeof execSetDrawerInstance.open === 'function') execSetDrawerInstance.open();
     if (dom.execSetEmpty) dom.execSetEmpty.classList.add('hidden');
+    state.execSetDrawer.execSetId = sid;
+    state.execSetDrawer.execSetName = name;
+    state.execSetDrawer.rows = [];
+    state.execSetDrawer.searchText = '';
+    state.execSetDrawer.pageIndex = 0;
+    if (dom.execSetSearchInput) dom.execSetSearchInput.value = '';
+    syncExecSetSearchControls();
+    setExecSetPagination('');
     if (dom.execSetTableBody) {
       dom.execSetTableBody.innerHTML = '<tr><td colspan="5"><p class="hint">加载中...</p></td></tr>';
     }
     api
       .listExecCases(sid)
       .then(function(rows) {
-        renderExecSetCases(rows);
+        state.execSetDrawer.rows = Array.isArray(rows) ? rows : [];
+        renderExecSetDrawer();
         setDrawerStatus(dom.execSetStatus, '', '');
       })
       .catch(function(err) {
-        renderExecSetCases([]);
+        state.execSetDrawer.rows = [];
+        renderExecSetDrawer();
         setDrawerStatus(dom.execSetStatus, err && err.message ? err.message : '执行列表加载失败', 'err');
       });
   }
@@ -660,6 +800,55 @@
         if (dom.execSetDrawer) {
           execSetDrawerInstance = window.app.drawer.createDrawer({ drawerId: 'execOverviewExecSetDrawer', openButtons: [], closeButtons: ['execOverviewExecSetClose'] });
         }
+      }
+
+      if (dom.execSetSearchInput) {
+        dom.execSetSearchInput.addEventListener('input', function() {
+          state.execSetDrawer.searchText = String(dom.execSetSearchInput.value || '');
+          state.execSetDrawer.pageIndex = 0;
+          syncExecSetSearchControls();
+          renderExecSetDrawer();
+        });
+      }
+      if (dom.execSetSearchClearBtn) {
+        dom.execSetSearchClearBtn.addEventListener('click', function() {
+          state.execSetDrawer.searchText = '';
+          state.execSetDrawer.pageIndex = 0;
+          if (dom.execSetSearchInput) dom.execSetSearchInput.value = '';
+          syncExecSetSearchControls();
+          renderExecSetDrawer();
+        });
+      }
+      if (dom.execSetDrawer) {
+        dom.execSetDrawer.addEventListener('click', function(e) {
+          var btn = e && e.target && e.target.closest ? e.target.closest('[data-exec-overview-page]') : null;
+          if (!btn) return;
+          var action = btn.getAttribute('data-exec-overview-page') || '';
+          if (!action) return;
+          var pageSize = getPageSize();
+          var term = normalizeExecSetSearchText(state.execSetDrawer.searchText);
+          var rawList = Array.isArray(state.execSetDrawer.rows) ? state.execSetDrawer.rows : [];
+          var filtered = term ? rawList.filter(function(item) { return matchesExecSetCase(item, term); }) : rawList;
+          var total = filtered.length;
+          var totalPages = total ? Math.ceil(total / pageSize) : 1;
+          if (action === 'prev') state.execSetDrawer.pageIndex -= 1;
+          else if (action === 'next') state.execSetDrawer.pageIndex += 1;
+          else if (action === 'first') state.execSetDrawer.pageIndex = 0;
+          else if (action === 'last') state.execSetDrawer.pageIndex = totalPages - 1;
+          if (state.execSetDrawer.pageIndex < 0) state.execSetDrawer.pageIndex = 0;
+          if (state.execSetDrawer.pageIndex >= totalPages) state.execSetDrawer.pageIndex = Math.max(totalPages - 1, 0);
+          renderExecSetDrawer();
+        });
+        dom.execSetDrawer.addEventListener('change', function(e) {
+          var t = e && e.target ? e.target : null;
+          if (!t || !t.hasAttribute) return;
+          if (!t.hasAttribute('data-exec-overview-page-input')) return;
+          var raw = t.value;
+          var idx = Math.floor(Number(raw)) - 1;
+          if (!isFinite(idx) || idx < 0) idx = 0;
+          state.execSetDrawer.pageIndex = idx;
+          renderExecSetDrawer();
+        });
       }
 
 	    if (dom.refreshBtn) {

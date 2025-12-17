@@ -1202,3 +1202,12 @@
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library_history.spec.js`（通过）。  
 - 更新记录：2025-12-17 用例库刷新恢复最后操作视图上线（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_history.spec.js`）。  
 - 更新记录：2025-12-17 修复“先看历史详情再看编辑，刷新后仍回历史详情”的互斥显示问题，刷新前展示编辑则刷新后保持编辑（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_history.spec.js`）。  
+
+- 功能名称：执行总览抽屉用例搜索与分页  
+- 功能描述：执行总览页面点击执行集打开“执行列表”抽屉后，列表支持搜索与分页；分页大小复用“其他设置”里的 `tempExecPageSize` 配置。  
+- 操作方式：进入“执行总览”→点击任意执行集卡片打开抽屉→可在搜索框输入关键词筛选（模块/标题/状态/实际结果）→使用分页按钮翻页；分页大小在“其他设置-分页设置”调整后生效。  
+- 使用效果：执行集用例较多时可快速定位目标用例，抽屉列表可控且不再一次性铺满。  
+- 新增内容/接口/组件：抽屉增加搜索框与分页容器（`index.html`、`style.css`）；前端新增筛选/分页渲染逻辑（`scripts/modules/execOverview.js`）；UI 自动化覆盖分页大小读取 settings 与搜索筛选（`tests/ui/exec_overview.spec.js`）。  
+- 复用说明：复用既有 `tempExecPageSize` 设置项与 `.temp-pagination/.temp-search-input` 样式，不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/execOverview.js`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）。  
+- 更新记录：2025-12-17 执行总览抽屉用例搜索与分页上线（`index.html`、`style.css`、`scripts/modules/execOverview.js`、`tests/ui/exec_overview.spec.js`）。  

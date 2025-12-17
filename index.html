@@ -2200,7 +2200,14 @@
         <button class="link-toggle" id="execOverviewExecSetClose" type="button" data-drawer-close="execOverviewExecSetDrawer">收起</button>
       </div>
       <div class="drawer-body">
-        <span class="status" id="execOverviewExecSetStatus"></span>
+        <div class="exec-overview-drawer-actions">
+          <div class="temp-search-bar">
+            <input class="temp-search-input" id="execOverviewExecSetSearchInput" type="text" placeholder="搜索模块 / 用例标题 / 状态 / 实际结果"/>
+            <button class="secondary" id="execOverviewExecSetSearchClearBtn" type="button" disabled>清空</button>
+          </div>
+          <span class="status" id="execOverviewExecSetStatus"></span>
+        </div>
+        <div id="execOverviewExecSetPaginationTop"></div>
         <div class="table-wrapper">
           <table class="admin-table exec-overview-exec-set-table">
             <thead>
@@ -2216,6 +2223,7 @@
           </table>
           <p class="hint hidden" id="execOverviewExecSetEmpty">暂无用例</p>
         </div>
+        <div id="execOverviewExecSetPaginationBottom"></div>
       </div>
     </div>
   </div>

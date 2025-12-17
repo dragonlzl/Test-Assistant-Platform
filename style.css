@@ -4775,6 +4775,17 @@ body {
   gap: 10px;
   margin-bottom: 10px;
 }
+.exec-overview-drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.exec-overview-drawer-actions .status {
+  margin-left: auto;
+}
 .exec-overview-project-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

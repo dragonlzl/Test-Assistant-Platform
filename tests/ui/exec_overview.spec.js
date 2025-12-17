@@ -298,4 +298,124 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await expect(page.locator('#execOverviewExecSetDrawer')).toHaveClass(/open/);
     await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('正常登录');
   });
+
+  test('执行列表抽屉支持搜索与分页（分页大小读取“其他设置”）', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const projects = [{ id: 1, name: '战魂铭人', description: '用于执行总览' }];
+    const versionsByProject = { 1: [{ id: 11, name: 'v1' }] };
+    const pageSize = 6;
+    const settings = [{ scope: 'user', owner_id: user.id, key: 'tempExecPageSize', value_json: pageSize }];
+
+    const buildCases = (count) =>
+      Array.from({ length: count }).map((_, i) => ({
+        id: 1000 + i + 1,
+        exec_set_id: 200,
+        module: i % 2 === 0 ? '登录' : '支付',
+        title: '用例 ' + String(i + 1),
+        expected: 'ok',
+        priority: 'P0',
+        precondition: '',
+        steps: '1',
+        actual_result: i % 3 === 0 ? 'ok' : '',
+        defect_link: null,
+        reuse_details: null,
+        defect_links: null,
+        remark: '',
+        status: i % 3 === 0 ? '通过' : '未执行',
+        order_no: i + 1,
+        executor_id: user.id,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+    const cases = buildCases(13);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const path = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (path === '/api/users/me') return respond(200, user);
+      if (path === '/api/projects') return respond(200, projects);
+      var versionsMatch = path.match(/^\/api\/projects\/(\d+)\/versions$/);
+      if (versionsMatch) {
+        var pid = Number(versionsMatch[1]);
+        return respond(200, versionsByProject[pid] || []);
+      }
+
+      if (path === '/api/settings' && method === 'GET') return respond(200, settings);
+      if (path === '/api/settings' && method === 'PUT') return respond(200, settings);
+
+      if (path === '/api/exec/overview/layout' && method === 'GET') {
+        return respond(200, [
+          {
+            project_id: 1,
+            version_id: null,
+            user_id: user.id,
+            username: user.username,
+            level: user.level,
+            user_created_at: new Date('2020-01-01T00:00:00Z').toISOString(),
+            total: cases.length,
+            pending: cases.length,
+            passed: 0,
+            failed: 0,
+            blocked: 0,
+            not_applicable: 0,
+            ui_placement: { versionOrderByProject: { 1: ['11'] }, fileOrderByProjectVersion: { 1: { 11: ['200'] } } },
+            exec_sets: [
+              { exec_set_id: 200, exec_set_name: '需求-登录', version_id: 11, status: 'active', requirement: '', total: cases.length, pending: cases.length, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+            ],
+          },
+        ]);
+      }
+
+      var execCasesMatch = path.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (execCasesMatch && method === 'GET') {
+        var execSetId = Number(execCasesMatch[1]);
+        if (execSetId !== 200) return respond(200, []);
+        return respond(200, cases);
+      }
+
+      if (path === '/api/auth/logout') return respond(200, {});
+      if (path.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForSelector('.tab-group-btn[data-group="cases"]', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.state && window.app.authReady === true, null, { timeout: 20000 });
+    await page.waitForFunction((size) => window.app && window.app.state && window.app.state.tempExecPageSize === size, pageSize, { timeout: 20000 });
+
+    await page.click('.tab-group-btn[data-group="cases"]');
+    await page.click('[data-group-menu="cases"] [data-tab-btn="exec-overview"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('exec-overview'); });
+    await expect(page.locator('#execOverviewNavProjects .nav-entry-card')).toHaveCount(1);
+
+    await page.click('#execOverviewNavProjects [data-project-id="1"]');
+    await expect(page.locator('#execOverviewDetail')).toBeVisible();
+    await expect(page.locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]')).toBeVisible();
+
+    await page.click('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]');
+    await expect(page.locator('#execOverviewExecSetDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execOverviewExecSetPaginationTop')).toContainText('每页 ' + String(pageSize) + ' 条');
+    await expect(page.locator('#execOverviewExecSetTableBody tr')).toHaveCount(pageSize);
+    await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('用例 1');
+    await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('用例 ' + String(pageSize));
+
+    await page.locator('[data-exec-overview-page="next"]').first().click();
+    await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('用例 ' + String(pageSize + 1));
+
+    await page.fill('#execOverviewExecSetSearchInput', '用例 12');
+    await expect(page.locator('#execOverviewExecSetSearchClearBtn')).not.toBeDisabled();
+    await expect(page.locator('#execOverviewExecSetTableBody tr')).toHaveCount(1);
+    await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('用例 12');
+
+    await page.click('#execOverviewExecSetSearchClearBtn');
+    await expect(page.locator('#execOverviewExecSetSearchInput')).toHaveValue('');
+    await expect(page.locator('#execOverviewExecSetSearchClearBtn')).toBeDisabled();
+    await expect(page.locator('#execOverviewExecSetTableBody tr')).toHaveCount(pageSize);
+  });
 });
