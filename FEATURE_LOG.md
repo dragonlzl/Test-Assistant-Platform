@@ -19,6 +19,20 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例库“用例改动历史”抽屉 + 历史永久落库
+- 功能描述：用例库页面顶部导航新增“用例改动历史”入口，打开右侧抽屉查看当前账号可访问项目内的用例变更历史；历史记录永久留存在数据库，整份用例删除后仍可查看，未重新导入时标记为“已删除”。
+- 操作方式：进入“用例相关 → 用例库”→点击“用例改动历史”卡片；在抽屉中选择用例（项目/版本/用例名），查看导入/覆盖导入/增删改/整份删除的历史记录；可通过药丸筛选不同类型。
+- 使用效果：用例库变更可追溯，支持定位“谁在什么时间改了哪条用例”，并在整份删除后仍可回溯历史，便于审计与排查。
+- 新增内容/接口/组件：
+  - 后端：新增表 `case_library_change_events`（迁移 v14）；新增接口 `GET /api/case-files/change-history/files`、`GET /api/case-files/change-history`；在 `POST /api/case-files/import`、`PATCH/POST/DELETE /api/case-files/items/*`、`DELETE /api/case-files/{id}` 以及执行页同步写库路径 `PATCH /api/exec/cases/{id}` 中写入历史记录（含操作人快照）。
+  - 前端：`index.html`（新增导航按钮与抽屉 DOM）、`scripts/modules/caseLibrary.js`（抽屉加载/渲染/筛选/切换）、`services/apiClient.js`（新增 API 方法）、`style.css`（补齐导入/重导/整份删除样式）。
+  - 测试：UI `tests/ui/case_library_history.spec.js`；API `tests/api/case_library_history.spec.js`。
+- 复用说明：复用执行页“用例库变更 diff”表格样式（`case-lib-diff-*`）与通用抽屉组件（`scripts/base/drawer.js`），仅新增最小增量接口与历史表。
+- 测试与验证：`node --check services/apiClient.js scripts/modules/caseLibrary.js`（通过）；UI：`npm run test:ui -- tests/ui/case_library_history.spec.js tests/ui/case_library.spec.js`（通过）；API：启动测试后端后 `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library_history.spec.js`（通过，使用测试库 apitest.db）。
+- 更新记录：2025-12-17 当历史用例列表为空（无任何改动记录）时，抽屉不再一直显示“加载历史用例中...”，改为提示“暂无发生过改动的用例”（`scripts/modules/caseLibrary.js`）。
+- 更新记录：2025-12-17 “用例改动历史”抽屉改为“按项目/版本查询 + 搜索过滤 + 文件级列表”，不再打开即加载全量；点击列表“历史详情”后关闭抽屉，并在用例库页面内展示该用例的历史明细（保留药丸筛选与原字段）（`index.html`、`scripts/modules/caseLibrary.js`、`backend/routers/cases.py`、`backend/schemas.py`、`services/apiClient.js`、`tests/ui/case_library_history.spec.js`、`tests/api/case_library_history.spec.js`）。
+- 更新记录：2025-12-17 “用例改动历史”查询支持“全部版本”选项，并在列表中增加“版本”列；点击“历史详情”后会隐藏用例编辑视图，确保主区域展示的是改动详情 diff 列表（`index.html`、`scripts/modules/caseLibrary.js`、`backend/routers/cases.py`、`tests/ui/case_library_history.spec.js`）。
+
 - 功能名称：用例执行个人总览对齐执行总览布局（项目盒子 + 版本盒子）
 - 功能描述：在“用例执行 → 用例执行总览（个人总览）”中保持顶部功能区不变，将下方展示区改为与“执行总览”一致的视觉风格：按项目盒子选择项目，下方按版本盒子分组展示执行集，并以同款用例子项卡片展示进度与统计。
 - 操作方式：进入“用例相关 → 用例执行”→打开“用例导入&分配”抽屉→点“用例执行情况总览”；在项目盒子中切换项目，在版本下拉中筛选版本，点击用例子项可跳转回执行视图。

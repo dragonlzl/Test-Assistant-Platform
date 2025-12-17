@@ -247,6 +247,41 @@ class ExecCaseLibrarySyncOut(BaseModel):
     history: List[ExecCaseLibraryDiffHistoryBatch] = []
 
 
+class CaseLibraryChangeFileOut(BaseModel):
+    project_id: int
+    file_name_clean: str
+    case_file_id: Optional[int] = None
+    version_id: Optional[int] = None
+    is_deleted: bool = False
+    last_changed_at: datetime
+    last_operator: Optional[str] = None
+    importer_name: Optional[str] = None
+    imported_at: Optional[datetime] = None
+    last_updated_by_name: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    total_events: int = 0
+
+
+class CaseLibraryChangeEntryOut(BaseModel):
+    id: int
+    kind: str
+    changed_at: datetime
+    operator: Optional[str] = None
+    changed_fields: List[str] = []
+    old: Optional[CaseLibraryCaseSnapshot] = None
+    new: Optional[CaseLibraryCaseSnapshot] = None
+    meta: Optional[Any] = None
+
+
+class CaseLibraryChangeHistoryOut(BaseModel):
+    project_id: int
+    file_name_clean: str
+    case_file_id: Optional[int] = None
+    version_id: Optional[int] = None
+    is_deleted: bool = False
+    history: List[CaseLibraryChangeEntryOut] = []
+
+
 class ExecCaseCreateFromLibrary(BaseModel):
     case_item_ids: List[int]
 

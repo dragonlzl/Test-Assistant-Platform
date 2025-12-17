@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
-from ..audit import log_operation
+from ..audit import log_case_library_change, log_operation
 from ..db import get_db
 from ..dependencies import get_current_user
 from ..utils import ensure_project_access, ensure_version_in_project
@@ -16,6 +16,31 @@ from sqlalchemy.exc import IntegrityError
 
 
 router = APIRouter(prefix="/exec", tags=["execution"])
+
+
+def _snapshot_case_item_for_history(case_item: models.CaseItem):
+    if not case_item:
+        return None
+    return {
+        "module": case_item.module,
+        "title": case_item.title,
+        "priority": case_item.priority,
+        "precondition": case_item.precondition or "",
+        "steps": case_item.steps or "",
+        "expected": case_item.expected,
+        "remark": case_item.remark,
+    }
+
+
+def _compute_case_item_changed_fields(old_snap: dict, new_snap: dict):
+    keys = ["module", "title", "precondition", "steps", "expected"]
+    changed = []
+    for k in keys:
+        old_val = "" if old_snap is None else str(old_snap.get(k) or "")
+        new_val = "" if new_snap is None else str(new_snap.get(k) or "")
+        if old_val != new_val:
+            changed.append(k)
+    return changed
 
 _case_file_source_pattern = re.compile(r"^case_file:(\d+)$")
 
@@ -1547,6 +1572,7 @@ def update_exec_case(
                 .first()
             )
             if case_item:
+                old_snap = _snapshot_case_item_for_history(case_item)
                 updated_case = False
                 for key in case_fields:
                     if key not in payload_data:
@@ -1565,6 +1591,31 @@ def update_exec_case(
                         {models.CaseFile.updated_at: now}, synchronize_session=False
                     )
                     db.add(case_item)
+                    try:
+                        case_file = (
+                            db.query(models.CaseFile)
+                            .filter(models.CaseFile.id == case_item.case_file_id)
+                            .first()
+                        )
+                        if case_file:
+                            new_snap = _snapshot_case_item_for_history(case_item)
+                            log_case_library_change(
+                                db=db,
+                                user=user,
+                                project_id=case_file.project_id,
+                                version_id=case_file.version_id,
+                                file_name_clean=case_file.file_name_clean,
+                                case_file_id=case_file.id,
+                                case_item_id=case_item.id,
+                                kind="updated",
+                                old=old_snap,
+                                new=new_snap,
+                                meta={"changed_fields": _compute_case_item_changed_fields(old_snap or {}, new_snap or {})},
+                                at=now,
+                            )
+                    except Exception:
+                        # 历史记录不应影响执行用例更新主流程
+                        pass
         else:
             # 新增的执行用例可能尚未绑定 case_item：当必填字段齐全时自动落库到用例库并绑定。
             required_ready = (
@@ -1597,6 +1648,29 @@ def update_exec_case(
                         {models.CaseFile.updated_at: now}, synchronize_session=False
                     )
                     db.add(exec_case)
+                    try:
+                        case_file = (
+                            db.query(models.CaseFile)
+                            .filter(models.CaseFile.id == exec_set.case_file_id)
+                            .first()
+                        )
+                        if case_file:
+                            log_case_library_change(
+                                db=db,
+                                user=user,
+                                project_id=case_file.project_id,
+                                version_id=case_file.version_id,
+                                file_name_clean=case_file.file_name_clean,
+                                case_file_id=case_file.id,
+                                case_item_id=case_item.id,
+                                kind="added",
+                                old=None,
+                                new=_snapshot_case_item_for_history(case_item),
+                                meta={"source": "exec_case_auto_bind"},
+                                at=now,
+                            )
+                    except Exception:
+                        pass
         log_operation(
             db=db,
             user_id=user.id,

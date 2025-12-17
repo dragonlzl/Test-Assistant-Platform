@@ -166,6 +166,30 @@ class CaseItem(Base):
     case_file = relationship("CaseFile", back_populates="items")
 
 
+class CaseLibraryChangeEvent(Base):
+    __tablename__ = "case_library_change_events"
+    __table_args__ = (
+        Index("ix_case_lib_change_proj_file_time", "project_id", "file_name_clean", "created_at"),
+        Index("ix_case_lib_change_project_time", "project_id", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, nullable=False, index=True)
+    version_id = Column(Integer, nullable=True)
+    file_name_clean = Column(String(255), nullable=False, index=True)
+    case_file_id = Column(Integer, nullable=True)
+    case_item_id = Column(Integer, nullable=True)
+    kind = Column(String(32), nullable=False)
+    operator_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    operator_name = Column(String(64), nullable=True)
+    old_json = Column(JSON, nullable=True)
+    new_json = Column(JSON, nullable=True)
+    meta_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+
+    operator = relationship("User")
+
+
 class ExecSet(Base):
     __tablename__ = "exec_sets"
 

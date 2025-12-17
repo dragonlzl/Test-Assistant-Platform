@@ -67,6 +67,27 @@
     selectBatchExecBtn: document.getElementById('caseLibrarySelectBatchExecBtn'),
     selectStatus: document.getElementById('caseLibrarySelectDrawerStatus'),
     selectListBody: document.getElementById('caseLibrarySelectListBody'),
+
+    historyDrawerProjectSelect: document.getElementById('caseLibraryHistoryProjectSelect'),
+    historyDrawerVersionSelect: document.getElementById('caseLibraryHistoryVersionSelect'),
+    historyDrawerSearchInput: document.getElementById('caseLibraryHistorySearchInput'),
+    historyDrawerQueryBtn: document.getElementById('caseLibraryHistoryQueryBtn'),
+    historyDrawerClearBtn: document.getElementById('caseLibraryHistoryClearBtn'),
+    historyDrawerStatus: document.getElementById('caseLibraryHistoryDrawerStatus'),
+    historyDrawerListBody: document.getElementById('caseLibraryHistoryDrawerListBody'),
+
+    historyDetailCard: document.getElementById('caseLibraryHistoryDetailCard'),
+    historyStatus: document.getElementById('caseLibraryHistoryStatus'),
+    historyCaseName: document.getElementById('caseLibraryHistoryCaseName'),
+    historyRefreshBtn: document.getElementById('caseLibraryHistoryRefreshBtn'),
+    historyHideBtn: document.getElementById('caseLibraryHistoryHideBtn'),
+    historyAddedPill: document.getElementById('caseLibraryHistoryAddedPill'),
+    historyUpdatedPill: document.getElementById('caseLibraryHistoryUpdatedPill'),
+    historyDeletedPill: document.getElementById('caseLibraryHistoryDeletedPill'),
+    historyImportPill: document.getElementById('caseLibraryHistoryImportPill'),
+    historyReimportPill: document.getElementById('caseLibraryHistoryReimportPill'),
+    historyFileDeletedPill: document.getElementById('caseLibraryHistoryFileDeletedPill'),
+    historyBody: document.getElementById('caseLibraryHistoryBody'),
   };
 
   var state = {
@@ -132,6 +153,24 @@
       selection: new Set(),
     },
 
+    historyQueryDrawer: {
+      projectId: null,
+      versionId: null,
+      files: [],
+      loading: false,
+      searchText: '',
+    },
+
+    historyDetail: {
+      projectId: null,
+      fileNameClean: '',
+      isDeleted: false,
+      versionId: null,
+      history: [],
+      filter: '',
+      loading: false,
+    },
+
     editor: {
       caseFile: null,
       items: [],
@@ -153,6 +192,7 @@
 	  var importInvalidDrawerInstance = null;
 	  var editDrawerInstance = null;
 	  var selectDrawerInstance = null;
+    var historyDrawerInstance = null;
 
   function setStatus(el, text, type) {
     var coreApi = getCore();
@@ -175,6 +215,11 @@
       .replace(/>/g, '&gt;')
       .replace(/\"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  function escapeHtmlPreserve(text) {
+    if (utils && typeof utils.escapeHtmlPreserve === 'function') return utils.escapeHtmlPreserve(text);
+    return escapeHtml(text).replace(/\n/g, '<br/>');
   }
 
   function normalizeDiffText(value) {
@@ -1044,6 +1089,364 @@
     }
   }
 
+  function normalizeCaseLibHistoryKind(raw) {
+    var kind = String(raw || '').trim().toLowerCase();
+    if (kind === 'added' || kind === 'updated' || kind === 'deleted') return kind;
+    if (kind === 'import' || kind === 'reimport' || kind === 'file_deleted') return kind;
+    return kind;
+  }
+
+  function getCaseLibHistoryKindLabel(kind) {
+    var k = normalizeCaseLibHistoryKind(kind);
+    if (k === 'added') return '新增';
+    if (k === 'updated') return '改动';
+    if (k === 'deleted') return '删除';
+    if (k === 'import') return '导入';
+    if (k === 'reimport') return '重导';
+    if (k === 'file_deleted') return '整份删除';
+    return k || '--';
+  }
+
+  function setCaseLibraryHistoryFilter(next) {
+    var current = state.historyDetail && state.historyDetail.filter ? String(state.historyDetail.filter) : '';
+    var normalized = normalizeCaseLibHistoryKind(next);
+    state.historyDetail.filter = current === normalized ? '' : normalized;
+    renderCaseLibraryHistory();
+  }
+
+  function setHistoryDetailVisible(visible) {
+    if (!dom.historyDetailCard || !dom.historyDetailCard.classList) return;
+    if (visible) dom.historyDetailCard.classList.remove('hidden');
+    else dom.historyDetailCard.classList.add('hidden');
+  }
+
+  function renderCaseLibraryHistory() {
+    if (!dom.historyBody) return;
+    var selectedProjectId = state.historyDetail && state.historyDetail.projectId ? String(state.historyDetail.projectId) : '';
+    var selectedFileName = state.historyDetail && state.historyDetail.fileNameClean ? String(state.historyDetail.fileNameClean) : '';
+
+    if (dom.historyCaseName) {
+      if (selectedProjectId && selectedFileName) {
+        var projectName = state.projectNameById[selectedProjectId] || ('项目#' + selectedProjectId);
+        var versionName = getVersionName(
+          selectedProjectId,
+          state.historyDetail && state.historyDetail.versionId ? String(state.historyDetail.versionId) : ''
+        );
+        var base = projectName + ' / ' + versionName + ' / ' + (selectedFileName || '--');
+        dom.historyCaseName.textContent = base + (state.historyDetail && state.historyDetail.isDeleted ? '（已删除）' : '');
+      } else {
+        dom.historyCaseName.textContent = '';
+      }
+    }
+
+    var filter = state.historyDetail && state.historyDetail.filter ? String(state.historyDetail.filter) : '';
+    var list = state.historyDetail && Array.isArray(state.historyDetail.history) ? state.historyDetail.history : [];
+    var totalSummary = { added: 0, updated: 0, deleted: 0, import: 0, reimport: 0, file_deleted: 0 };
+    list.forEach(function(row) {
+      var k = normalizeCaseLibHistoryKind(row && row.kind);
+      if (k && totalSummary[k] !== undefined) totalSummary[k] += 1;
+    });
+
+    function syncPill(pillEl, key, label) {
+      if (!pillEl) return;
+      pillEl.textContent = label + ' ' + (totalSummary[key] || 0);
+      pillEl.classList.toggle('active', filter === key);
+    }
+    syncPill(dom.historyAddedPill, 'added', '新增');
+    syncPill(dom.historyUpdatedPill, 'updated', '改动');
+    syncPill(dom.historyDeletedPill, 'deleted', '删除');
+    syncPill(dom.historyImportPill, 'import', '导入');
+    syncPill(dom.historyReimportPill, 'reimport', '重导');
+    syncPill(dom.historyFileDeletedPill, 'file_deleted', '整份删除');
+
+    var visible = filter
+      ? list.filter(function(row) { return normalizeCaseLibHistoryKind(row && row.kind) === filter; })
+      : list.slice();
+
+    if (!selectedProjectId || !selectedFileName) {
+      dom.historyBody.innerHTML = '<tr><td colspan="8"><p class="hint">请先在“用例改动历史”中选择用例查看详情。</p></td></tr>';
+      return;
+    }
+
+    if (!visible.length) {
+      dom.historyBody.innerHTML = '<tr><td colspan="8"><p class="hint">暂无记录</p></td></tr>';
+      return;
+    }
+
+    function buildCell(oldSnap, newSnap, key, changed) {
+      var oldVal = oldSnap && oldSnap[key] !== undefined && oldSnap[key] !== null ? String(oldSnap[key]) : '';
+      var newVal = newSnap && newSnap[key] !== undefined && newSnap[key] !== null ? String(newSnap[key]) : '';
+      if (!changed) {
+        var text = newVal || oldVal || '';
+        return '<div class="case-lib-diff-cell"><div class="case-lib-diff-only">' + escapeHtmlPreserve(text) + '</div></div>';
+      }
+      return (
+        '<div class="case-lib-diff-cell">' +
+          '<div class="case-lib-diff-old">旧：' + escapeHtmlPreserve(oldVal) + '</div>' +
+          '<div class="case-lib-diff-new">新：' + escapeHtmlPreserve(newVal) + '</div>' +
+        '</div>'
+      );
+    }
+
+    dom.historyBody.innerHTML = visible.map(function(row) {
+      var kind = normalizeCaseLibHistoryKind(row && row.kind);
+      var operator = row && row.operator ? String(row.operator) : '';
+      var timeText = formatTime(row && row.changed_at ? row.changed_at : '');
+      var typeTag = '<span class="tag case-lib-diff-kind ' + escapeHtml(kind) + '">' + escapeHtml(getCaseLibHistoryKindLabel(kind)) + '</span>';
+
+      if (kind === 'import' || kind === 'reimport' || kind === 'file_deleted') {
+        var titleText = getCaseLibHistoryKindLabel(kind);
+        return (
+          '<tr>' +
+            '<td>' + typeTag + '</td>' +
+            '<td class="case-lib-diff-time">' + escapeHtml(timeText) + '</td>' +
+            '<td class="case-lib-diff-operator">' + escapeHtml(operator) + '</td>' +
+            '<td><div class="case-lib-diff-cell"><div class="case-lib-diff-only">-</div></div></td>' +
+            '<td><div class="case-lib-diff-cell"><div class="case-lib-diff-only">' + escapeHtml(titleText) + '</div></div></td>' +
+            '<td><div class="case-lib-diff-cell"><div class="case-lib-diff-only">-</div></div></td>' +
+            '<td><div class="case-lib-diff-cell"><div class="case-lib-diff-only">-</div></div></td>' +
+            '<td><div class="case-lib-diff-cell"><div class="case-lib-diff-only">-</div></div></td>' +
+          '</tr>'
+        );
+      }
+
+      var oldSnap = row && row.old && typeof row.old === 'object' ? row.old : null;
+      var newSnap = row && row.new && typeof row.new === 'object' ? row.new : null;
+      var changedFields = Array.isArray(row && row.changed_fields) ? row.changed_fields : [];
+      var changedMap = {};
+      changedFields.forEach(function(f) { changedMap[String(f)] = true; });
+
+      return (
+        '<tr>' +
+          '<td>' + typeTag + '</td>' +
+          '<td class="case-lib-diff-time">' + escapeHtml(timeText) + '</td>' +
+          '<td class="case-lib-diff-operator">' + escapeHtml(operator) + '</td>' +
+          '<td>' + buildCell(oldSnap, newSnap, 'module', Boolean(changedMap.module)) + '</td>' +
+          '<td>' + buildCell(oldSnap, newSnap, 'title', Boolean(changedMap.title)) + '</td>' +
+          '<td>' + buildCell(oldSnap, newSnap, 'precondition', Boolean(changedMap.precondition)) + '</td>' +
+          '<td>' + buildCell(oldSnap, newSnap, 'steps', Boolean(changedMap.steps)) + '</td>' +
+          '<td>' + buildCell(oldSnap, newSnap, 'expected', Boolean(changedMap.expected)) + '</td>' +
+        '</tr>'
+      );
+    }).join('');
+  }
+
+  function resetHistoryQueryDrawer() {
+    state.historyQueryDrawer.projectId = null;
+    state.historyQueryDrawer.versionId = null;
+    state.historyQueryDrawer.searchText = '';
+    state.historyQueryDrawer.files = [];
+    state.historyQueryDrawer.loading = false;
+    setStatus(dom.historyDrawerStatus, '', '');
+    syncProjectOptions(dom.historyDrawerProjectSelect, '请选择项目');
+    if (dom.historyDrawerProjectSelect) dom.historyDrawerProjectSelect.value = '';
+    if (dom.historyDrawerVersionSelect) {
+      dom.historyDrawerVersionSelect.disabled = true;
+      dom.historyDrawerVersionSelect.innerHTML = '<option value=\"\">请选择版本</option><option value=\"0\">全部版本</option>';
+      dom.historyDrawerVersionSelect.value = '';
+    }
+    if (dom.historyDrawerSearchInput) dom.historyDrawerSearchInput.value = '';
+    if (dom.historyDrawerListBody) {
+      dom.historyDrawerListBody.innerHTML = '<tr><td colspan=\"8\"><p class=\"hint\">请选择项目与版本后点击“查询”。</p></td></tr>';
+    }
+  }
+
+  function getHistoryQueryVisibleFiles() {
+    var list = state.historyQueryDrawer && Array.isArray(state.historyQueryDrawer.files) ? state.historyQueryDrawer.files : [];
+    var q = state.historyQueryDrawer && state.historyQueryDrawer.searchText ? String(state.historyQueryDrawer.searchText).trim().toLowerCase() : '';
+    if (!q) return list.slice();
+    return list.filter(function(f) {
+      var name = f && f.file_name_clean ? String(f.file_name_clean) : '';
+      return name.toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  function renderHistoryQueryDrawerList() {
+    if (!dom.historyDrawerListBody) return;
+    var visible = getHistoryQueryVisibleFiles();
+    if (!visible.length) {
+      dom.historyDrawerListBody.innerHTML = '<tr><td colspan=\"8\"><p class=\"hint\">暂无有改动记录的用例文件</p></td></tr>';
+      return;
+    }
+    dom.historyDrawerListBody.innerHTML = visible.map(function(f) {
+      var pid = f && (f.project_id || f.project_id === 0) ? String(f.project_id) : '';
+      var vid = f && (f.version_id || f.version_id === 0) ? String(f.version_id) : '';
+      var name = f && f.file_name_clean ? String(f.file_name_clean) : '--';
+      var nameText = name + (f && f.is_deleted ? '（已删除）' : '');
+      var changedAt = formatTime(f && f.last_changed_at ? f.last_changed_at : '');
+      var versionName = vid ? getVersionName(pid, vid) : '--';
+      var importer = f && f.importer_name ? String(f.importer_name) : '--';
+      var importedAt = formatTime(f && f.imported_at ? f.imported_at : '');
+      var updatedBy = f && f.last_updated_by_name ? String(f.last_updated_by_name) : (f && f.last_operator ? String(f.last_operator) : '--');
+      var updatedAt = formatTime(f && f.updated_at ? f.updated_at : '');
+      return (
+        '<tr>' +
+          '<td class=\"case-lib-diff-time\">' + escapeHtml(changedAt) + '</td>' +
+          '<td>' + escapeHtml(nameText) + '</td>' +
+          '<td>' + escapeHtml(versionName) + '</td>' +
+          '<td class=\"case-lib-diff-operator\">' + escapeHtml(importer) + '</td>' +
+          '<td class=\"case-lib-diff-time\">' + escapeHtml(importedAt) + '</td>' +
+          '<td class=\"case-lib-diff-operator\">' + escapeHtml(updatedBy) + '</td>' +
+          '<td class=\"case-lib-diff-time\">' + escapeHtml(updatedAt) + '</td>' +
+          '<td>' +
+            '<button type=\"button\" class=\"secondary\" data-case-lib-history-open=\"1\" data-case-lib-history-project=\"' + escapeHtml(pid) + '\" data-case-lib-history-file=\"' + escapeHtml(name) + '\" data-case-lib-history-version=\"' + escapeHtml(vid) + '\">历史详情</button>' +
+          '</td>' +
+        '</tr>'
+      );
+    }).join('');
+  }
+
+  function handleHistoryQueryProjectChange() {
+    state.historyQueryDrawer.projectId = normalizeId(dom.historyDrawerProjectSelect ? dom.historyDrawerProjectSelect.value : '');
+    state.historyQueryDrawer.versionId = null;
+    state.historyQueryDrawer.files = [];
+    setStatus(dom.historyDrawerStatus, '', '');
+    if (dom.historyDrawerVersionSelect) {
+      dom.historyDrawerVersionSelect.disabled = true;
+      dom.historyDrawerVersionSelect.innerHTML = '<option value=\"\">加载版本中...</option>';
+    }
+    renderHistoryQueryDrawerList();
+    var pid = state.historyQueryDrawer.projectId;
+    if (!pid) {
+      if (dom.historyDrawerVersionSelect) {
+        dom.historyDrawerVersionSelect.disabled = true;
+        dom.historyDrawerVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
+        dom.historyDrawerVersionSelect.value = '';
+      }
+      return;
+    }
+    loadVersions(pid).then(function() {
+      if (dom.historyDrawerVersionSelect) {
+        dom.historyDrawerVersionSelect.disabled = false;
+        syncVersionOptionsWithAll(dom.historyDrawerVersionSelect, pid);
+        dom.historyDrawerVersionSelect.value = '0';
+        state.historyQueryDrawer.versionId = 0;
+      }
+    });
+  }
+
+  function handleHistoryQueryVersionChange() {
+    state.historyQueryDrawer.versionId = normalizeId(dom.historyDrawerVersionSelect ? dom.historyDrawerVersionSelect.value : '');
+  }
+
+  function handleHistoryQuerySearchInput() {
+    state.historyQueryDrawer.searchText = String(dom.historyDrawerSearchInput ? dom.historyDrawerSearchInput.value : '');
+    renderHistoryQueryDrawerList();
+  }
+
+  function clearHistoryQuerySearch() {
+    state.historyQueryDrawer.searchText = '';
+    if (dom.historyDrawerSearchInput) dom.historyDrawerSearchInput.value = '';
+    renderHistoryQueryDrawerList();
+  }
+
+  function loadHistoryQueryDrawerFiles() {
+    if (!apiClient || typeof apiClient.listCaseLibraryChangeFiles !== 'function') {
+      setStatus(dom.historyDrawerStatus, '缺少历史接口（apiClient.listCaseLibraryChangeFiles）', 'warn');
+      state.historyQueryDrawer.files = [];
+      renderHistoryQueryDrawerList();
+      return Promise.resolve([]);
+    }
+    var pid = state.historyQueryDrawer.projectId;
+    var vid = state.historyQueryDrawer.versionId;
+    if (!pid || vid === null || vid === undefined) {
+      setStatus(dom.historyDrawerStatus, '请先选择项目与版本', 'warn');
+      return Promise.resolve([]);
+    }
+    state.historyQueryDrawer.loading = true;
+    setStatus(dom.historyDrawerStatus, '加载中...', '');
+    return apiClient
+      .listCaseLibraryChangeFiles({ project_id: pid, version_id: vid, limit: 500 })
+      .then(function(list) {
+        state.historyQueryDrawer.files = Array.isArray(list) ? list : [];
+        setStatus(dom.historyDrawerStatus, '已加载 ' + state.historyQueryDrawer.files.length + ' 条（仅展示有改动记录的用例）', state.historyQueryDrawer.files.length ? 'ok' : '');
+        renderHistoryQueryDrawerList();
+        return state.historyQueryDrawer.files;
+      })
+      .catch(function(err) {
+        var msg = err && err.message ? err.message : '加载失败';
+        setStatus(dom.historyDrawerStatus, '查询失败：' + msg, 'err');
+        state.historyQueryDrawer.files = [];
+        renderHistoryQueryDrawerList();
+        return [];
+      })
+      .finally(function() {
+        state.historyQueryDrawer.loading = false;
+      });
+  }
+
+  function openCaseLibraryHistoryDetail(projectId, fileNameClean, versionId) {
+    var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+    var name = String(fileNameClean || '').trim();
+    if (!pid || !name) return;
+    state.historyDetail.projectId = pid;
+    state.historyDetail.fileNameClean = name;
+    state.historyDetail.filter = '';
+    state.historyDetail.history = [];
+    state.historyDetail.isDeleted = false;
+    state.historyDetail.versionId = versionId || null;
+    setHistoryDetailVisible(true);
+    if (dom.editCard && dom.editCard.classList) dom.editCard.classList.add('hidden');
+    if (historyDrawerInstance && typeof historyDrawerInstance.close === 'function') historyDrawerInstance.close();
+    setStatus(dom.historyStatus, '加载历史记录中...', '');
+    renderCaseLibraryHistory();
+    loadCaseLibraryHistoryEntries(pid, name).then(function() {
+      try {
+        if (dom.historyDetailCard && typeof dom.historyDetailCard.scrollIntoView === 'function') {
+          dom.historyDetailCard.scrollIntoView();
+        }
+      } catch (e) {
+        // ignore
+      }
+    });
+  }
+
+  function loadCaseLibraryHistoryEntries(projectId, fileNameClean) {
+    if (!apiClient || typeof apiClient.getCaseLibraryChangeHistory !== 'function') {
+      setStatus(dom.historyStatus, '缺少历史接口（apiClient.getCaseLibraryChangeHistory）', 'warn');
+      state.historyDetail.history = [];
+      renderCaseLibraryHistory();
+      return Promise.resolve(null);
+    }
+    var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+    var name = String(fileNameClean || '').trim();
+    if (!pid || !name) {
+      state.historyDetail.history = [];
+      setStatus(dom.historyStatus, '请选择一个用例查看历史记录', '');
+      renderCaseLibraryHistory();
+      return Promise.resolve(null);
+    }
+    state.historyDetail.loading = true;
+    setStatus(dom.historyStatus, '加载历史记录中...', '');
+    return apiClient
+      .getCaseLibraryChangeHistory(pid, name, { limit: 800 })
+      .then(function(res) {
+        var history = res && Array.isArray(res.history) ? res.history : [];
+        state.historyDetail.isDeleted = Boolean(res && res.is_deleted);
+        state.historyDetail.versionId = res && (res.version_id || res.version_id === 0) ? res.version_id : state.historyDetail.versionId;
+        state.historyDetail.history = history;
+        var statusText = '';
+        if (state.historyDetail.isDeleted) {
+          statusText = '该用例已被整份删除（未重新导入），历史记录仍保留。';
+        } else {
+          statusText = history.length ? ('已加载 ' + history.length + ' 条历史记录') : '暂无历史记录';
+        }
+        setStatus(dom.historyStatus, statusText, history.length ? 'ok' : '');
+        renderCaseLibraryHistory();
+        return res;
+      })
+      .catch(function(err) {
+        var msg = err && err.message ? err.message : '加载失败';
+        setStatus(dom.historyStatus, '加载历史记录失败：' + msg, 'err');
+        state.historyDetail.history = [];
+        renderCaseLibraryHistory();
+        return null;
+      })
+      .finally(function() {
+        state.historyDetail.loading = false;
+      });
+  }
+
   function normalizeName(value) {
     return String(value || '').trim().toLowerCase();
   }
@@ -1562,6 +1965,19 @@
     selectEl.innerHTML = options.join('');
   }
 
+  function syncVersionOptionsWithAll(selectEl, projectId) {
+    if (!selectEl) return;
+    var list = projectId && state.versionsByProject[projectId] ? state.versionsByProject[projectId] : [];
+    var options = ['<option value=\"\">请选择版本</option>', '<option value=\"0\">全部版本</option>'];
+    if (!state.versionNameByProject[projectId]) state.versionNameByProject[projectId] = {};
+    (list || []).forEach(function(v) {
+      if (!v) return;
+      state.versionNameByProject[projectId][v.id] = v.name || ('版本#' + v.id);
+      options.push('<option value=\"' + escapeHtml(v.id) + '\">' + escapeHtml(state.versionNameByProject[projectId][v.id]) + '</option>');
+    });
+    selectEl.innerHTML = options.join('');
+  }
+
   function getVersionName(projectId, versionId) {
     if (!versionId) return '--';
     var map = projectId && state.versionNameByProject[projectId] ? state.versionNameByProject[projectId] : null;
@@ -1574,14 +1990,17 @@
       var importSelected = dom.importProjectSelect ? String(dom.importProjectSelect.value || '') : '';
       var editSelected = dom.editDrawerProjectSelect ? String(dom.editDrawerProjectSelect.value || '') : '';
       var selectSelected = dom.selectProjectSelect ? String(dom.selectProjectSelect.value || '') : '';
+      var historySelected = dom.historyDrawerProjectSelect ? String(dom.historyDrawerProjectSelect.value || '') : '';
       state.projects = Array.isArray(list) ? list : [];
       syncProjectOptions(dom.importProjectSelect, '请选择项目');
       syncProjectOptions(dom.editDrawerProjectSelect, '请选择项目');
       syncProjectOptions(dom.selectProjectSelect, '请选择项目');
+      syncProjectOptions(dom.historyDrawerProjectSelect, '请选择项目');
       // 仅刷新 option 列表，不强制清空用户已选项目；若新列表不含该值，浏览器会自动回到空值。
       if (dom.importProjectSelect && importSelected) dom.importProjectSelect.value = importSelected;
       if (dom.editDrawerProjectSelect && editSelected) dom.editDrawerProjectSelect.value = editSelected;
       if (dom.selectProjectSelect && selectSelected) dom.selectProjectSelect.value = selectSelected;
+      if (dom.historyDrawerProjectSelect && historySelected) dom.historyDrawerProjectSelect.value = historySelected;
       return state.projects;
     });
   }
@@ -4947,6 +5366,64 @@
         if (file) execCaseFileFromDrawer(file);
       });
     }
+
+    if (dom.historyDrawerProjectSelect) {
+      dom.historyDrawerProjectSelect.addEventListener('change', handleHistoryQueryProjectChange);
+    }
+    if (dom.historyDrawerVersionSelect) {
+      dom.historyDrawerVersionSelect.addEventListener('change', handleHistoryQueryVersionChange);
+    }
+    if (dom.historyDrawerSearchInput) {
+      dom.historyDrawerSearchInput.addEventListener('input', handleHistoryQuerySearchInput);
+    }
+    if (dom.historyDrawerQueryBtn) {
+      dom.historyDrawerQueryBtn.addEventListener('click', loadHistoryQueryDrawerFiles);
+    }
+    if (dom.historyDrawerClearBtn) {
+      dom.historyDrawerClearBtn.addEventListener('click', clearHistoryQuerySearch);
+    }
+    if (dom.historyDrawerListBody) {
+      dom.historyDrawerListBody.addEventListener('click', function(e) {
+        var btn = e && e.target && e.target.closest ? e.target.closest('[data-case-lib-history-open]') : null;
+        if (!btn) return;
+        var pid = btn.getAttribute('data-case-lib-history-project') || '';
+        var name = btn.getAttribute('data-case-lib-history-file') || '';
+        var vid = btn.getAttribute('data-case-lib-history-version') || '';
+        openCaseLibraryHistoryDetail(pid, name, vid);
+      });
+    }
+    if (dom.historyRefreshBtn) {
+      dom.historyRefreshBtn.addEventListener('click', function() {
+        var pid = state.historyDetail && state.historyDetail.projectId ? String(state.historyDetail.projectId) : '';
+        var name = state.historyDetail && state.historyDetail.fileNameClean ? String(state.historyDetail.fileNameClean) : '';
+        if (!pid || !name) {
+          setStatus(dom.historyStatus, '请先选择一个用例查看历史详情', 'warn');
+          return;
+        }
+        ensureProjectsReady().then(function() {
+          return loadCaseLibraryHistoryEntries(pid, name);
+        });
+      });
+    }
+    if (dom.historyHideBtn) {
+      dom.historyHideBtn.addEventListener('click', function() {
+        setHistoryDetailVisible(false);
+      });
+    }
+    [
+      dom.historyAddedPill,
+      dom.historyUpdatedPill,
+      dom.historyDeletedPill,
+      dom.historyImportPill,
+      dom.historyReimportPill,
+      dom.historyFileDeletedPill,
+    ].forEach(function(pill) {
+      if (!pill || typeof pill.addEventListener !== 'function') return;
+      pill.addEventListener('click', function() {
+        var next = pill.getAttribute('data-case-lib-history-filter') || '';
+        setCaseLibraryHistoryFilter(next);
+      });
+    });
   }
 
   function bindTabActivation() {
@@ -5055,6 +5532,11 @@
     );
     selectDrawerInstance = ensureDrawer('caseLibrarySelectExecDrawer', ['openCaseLibrarySelectExecDrawerBtn'], function() {
       ensureProjectsReady().then(resetSelectDrawer);
+    });
+    historyDrawerInstance = ensureDrawer('caseLibraryHistoryDrawer', ['openCaseLibraryHistoryDrawerBtn'], function() {
+      ensureProjectsReady().then(function() {
+        resetHistoryQueryDrawer();
+      });
     });
 
     bindEvents();

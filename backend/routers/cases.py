@@ -9,7 +9,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, aliased
 
 from .. import models, schemas
-from ..audit import log_operation
+from ..audit import log_case_library_change, log_operation
 from ..db import get_db
 from ..dependencies import get_current_user, require_admin
 from ..utils import clean_case_file_name, ensure_project_access, ensure_version_in_project
@@ -307,6 +307,26 @@ def import_case_file(
         db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用例为空")
     skipped_db_conflicts = max(0, int(len(unique_items)) - int(item_count))
+    log_case_library_change(
+        db=db,
+        user=user,
+        project_id=project.id,
+        version_id=payload.version_id,
+        file_name_clean=case_file.file_name_clean,
+        case_file_id=case_file.id,
+        kind="reimport" if (exists and overwrite) else "import",
+        meta={
+            "overwrite": bool(exists and overwrite),
+            "prev_version_id": prev_version_id,
+            "linked_exec_sets": int(linked_exec_sets or 0),
+            "item_total": len(payload.items),
+            "item_unique": len(unique_items),
+            "item_imported": int(item_count),
+            "item_skipped_payload_duplicates": duplicate_count,
+            "item_skipped_db_conflicts": skipped_db_conflicts,
+        },
+        at=now,
+    )
     log_operation(
         db=db,
         user_id=user.id,
@@ -443,6 +463,31 @@ def list_case_items(
     return items
 
 
+def _snapshot_case_item(item: models.CaseItem):
+    if not item:
+        return None
+    return {
+        "module": item.module,
+        "title": item.title,
+        "priority": item.priority,
+        "precondition": item.precondition or "",
+        "steps": item.steps or "",
+        "expected": item.expected,
+        "remark": item.remark,
+    }
+
+
+def _compute_changed_fields(old_snap: dict, new_snap: dict):
+    keys = ["module", "title", "precondition", "steps", "expected"]
+    changed = []
+    for k in keys:
+        old_val = "" if old_snap is None else str(old_snap.get(k) or "")
+        new_val = "" if new_snap is None else str(new_snap.get(k) or "")
+        if old_val != new_val:
+            changed.append(k)
+    return changed
+
+
 @router.delete("/{case_file_id}")
 def delete_case_file(
     case_file_id: int,
@@ -491,6 +536,17 @@ def delete_case_file(
         .scalar()
         or 0
     )
+    log_case_library_change(
+        db=db,
+        user=admin,
+        project_id=case_file.project_id,
+        version_id=case_file.version_id,
+        file_name_clean=case_file.file_name_clean,
+        case_file_id=case_file.id,
+        kind="file_deleted",
+        meta={"linked_exec_sets": int(linked_exec_sets)},
+        at=datetime.now(timezone.utc),
+    )
     db.delete(case_file)
     log_operation(
         db=db,
@@ -523,7 +579,8 @@ def update_case_item(
     case_item = db.query(models.CaseItem).filter(models.CaseItem.id == case_item_id).first()
     if not case_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用例不存在")
-    _ensure_case_access(db, user, case_item.case_file_id)
+    case_file = _ensure_case_access(db, user, case_item.case_file_id)
+    old_snap = _snapshot_case_item(case_item)
     payload_data = payload.model_dump(exclude_unset=True)
     changed = False
     for field in ["module", "title", "priority", "precondition", "steps", "expected", "remark"]:
@@ -546,6 +603,21 @@ def update_case_item(
             {models.CaseFile.updated_at: now, models.CaseFile.updated_by: user.id}, synchronize_session=False
         )
         db.add(case_item)
+        new_snap = _snapshot_case_item(case_item)
+        log_case_library_change(
+            db=db,
+            user=user,
+            project_id=case_file.project_id,
+            version_id=case_file.version_id,
+            file_name_clean=case_file.file_name_clean,
+            case_file_id=case_file.id,
+            case_item_id=case_item.id,
+            kind="updated",
+            old=old_snap,
+            new=new_snap,
+            meta={"changed_fields": _compute_changed_fields(old_snap or {}, new_snap or {})},
+            at=now,
+        )
         log_operation(
             db=db,
             user_id=user.id,
@@ -577,7 +649,7 @@ def create_case_item(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _ensure_case_access(db, user, case_file_id)
+    case_file = _ensure_case_access(db, user, case_file_id)
     now = datetime.now(timezone.utc)
     case_item = models.CaseItem(
         case_file_id=case_file_id,
@@ -594,8 +666,23 @@ def create_case_item(
         updated_at=now,
     )
     db.add(case_item)
+    db.flush()
     db.query(models.CaseFile).filter(models.CaseFile.id == case_file_id).update(
         {models.CaseFile.updated_at: now, models.CaseFile.updated_by: user.id}, synchronize_session=False
+    )
+    log_case_library_change(
+        db=db,
+        user=user,
+        project_id=case_file.project_id,
+        version_id=case_file.version_id,
+        file_name_clean=case_file.file_name_clean,
+        case_file_id=case_file.id,
+        case_item_id=case_item.id,
+        kind="added",
+        old=None,
+        new=_snapshot_case_item(case_item),
+        meta=None,
+        at=now,
     )
     log_operation(
         db=db,
@@ -626,8 +713,23 @@ def delete_case_item(
     case_item = db.query(models.CaseItem).filter(models.CaseItem.id == case_item_id).first()
     if not case_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用例不存在")
-    _ensure_case_access(db, user, case_item.case_file_id)
+    case_file = _ensure_case_access(db, user, case_item.case_file_id)
+    old_snap = _snapshot_case_item(case_item)
     now = datetime.now(timezone.utc)
+    log_case_library_change(
+        db=db,
+        user=user,
+        project_id=case_file.project_id,
+        version_id=case_file.version_id,
+        file_name_clean=case_file.file_name_clean,
+        case_file_id=case_file.id,
+        case_item_id=case_item.id,
+        kind="deleted",
+        old=old_snap,
+        new=None,
+        meta=None,
+        at=now,
+    )
     db.delete(case_item)
     db.query(models.CaseFile).filter(models.CaseFile.id == case_item.case_file_id).update(
         {models.CaseFile.updated_at: now, models.CaseFile.updated_by: user.id}, synchronize_session=False
@@ -642,3 +744,206 @@ def delete_case_item(
     )
     db.commit()
     return {"detail": "用例已删除"}
+
+
+@router.get("/change-history/files", response_model=List[schemas.CaseLibraryChangeFileOut])
+def list_case_library_change_files(
+    project_id: int,
+    version_id: Optional[int] = None,
+    q: Optional[str] = None,
+    limit: int = 200,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_project_access(db, user, project_id)
+    if version_id is not None and int(version_id) != 0:
+        ensure_version_in_project(db, project_id, int(version_id))
+    max_limit = 500
+    resolved_limit = int(limit or 0)
+    if resolved_limit <= 0:
+        resolved_limit = 200
+    if resolved_limit > max_limit:
+        resolved_limit = max_limit
+
+    # 仅展示“发生改动”的用例：过滤 view 类事件，避免刷屏。
+    events = (
+        db.query(models.CaseLibraryChangeEvent)
+        .filter(models.CaseLibraryChangeEvent.project_id == project_id)
+        .filter(models.CaseLibraryChangeEvent.kind != "view")
+        .order_by(models.CaseLibraryChangeEvent.created_at.desc())
+        .limit(8000)
+        .all()
+    )
+    latest_by_key = {}
+    total_by_key = {}
+    latest_import_by_key = {}
+    for ev in events:
+        file_name_clean = str(ev.file_name_clean or "")
+        if not file_name_clean:
+            continue
+        key = file_name_clean
+        if key not in latest_by_key:
+            latest_by_key[key] = ev
+        total_by_key[key] = int(total_by_key.get(key, 0) or 0) + 1
+        if ev.kind in ("import", "reimport") and key not in latest_import_by_key:
+            latest_import_by_key[key] = ev
+
+    if not latest_by_key:
+        return []
+
+    current_files = (
+        db.query(models.CaseFile)
+        .filter(models.CaseFile.project_id == project_id)
+        .all()
+    )
+    current_map = {}
+    user_ids = set()
+    for cf in current_files:
+        if not cf:
+            continue
+        key = str(cf.file_name_clean or "")
+        if not key:
+            continue
+        current_map[key] = cf
+        if cf.importer_id is not None:
+            user_ids.add(int(cf.importer_id))
+        if cf.updated_by is not None:
+            user_ids.add(int(cf.updated_by))
+
+    user_name_by_id = {}
+    if user_ids:
+        for u in db.query(models.User).filter(models.User.id.in_(list(user_ids))).all():
+            if not u:
+                continue
+            user_name_by_id[int(u.id)] = str(u.username)
+
+    rows = []
+    q_text = str(q or "").strip().lower()
+    resolved_version_id = None
+    if version_id is not None and int(version_id) != 0:
+        resolved_version_id = int(version_id)
+    for file_name_clean, ev in latest_by_key.items():
+        cf = current_map.get(file_name_clean)
+        is_deleted = cf is None
+        derived_version_id = (
+            int(cf.version_id) if (cf and cf.version_id is not None) else (int(ev.version_id) if ev.version_id is not None else None)
+        )
+        if resolved_version_id is not None:
+            if derived_version_id is None or int(derived_version_id) != resolved_version_id:
+                continue
+        if q_text and q_text not in str(file_name_clean).lower():
+            continue
+        importer_name = None
+        imported_at = None
+        last_updated_by_name = None
+        updated_at = None
+        if cf:
+            if cf.importer_id is not None:
+                importer_name = user_name_by_id.get(int(cf.importer_id))
+            imported_at = cf.imported_at
+            if cf.updated_by is not None:
+                last_updated_by_name = user_name_by_id.get(int(cf.updated_by))
+            updated_at = cf.updated_at
+        else:
+            import_ev = latest_import_by_key.get(file_name_clean)
+            if import_ev:
+                importer_name = str(import_ev.operator_name) if import_ev.operator_name else None
+                imported_at = import_ev.created_at
+            last_updated_by_name = str(ev.operator_name) if ev.operator_name else None
+            updated_at = ev.created_at
+        rows.append(
+            schemas.CaseLibraryChangeFileOut(
+                project_id=int(project_id),
+                file_name_clean=file_name_clean,
+                case_file_id=(int(cf.id) if cf else (int(ev.case_file_id) if ev.case_file_id is not None else None)),
+                version_id=derived_version_id,
+                is_deleted=bool(is_deleted),
+                last_changed_at=ev.created_at,
+                last_operator=(str(ev.operator_name) if ev.operator_name else None),
+                importer_name=importer_name,
+                imported_at=imported_at,
+                last_updated_by_name=last_updated_by_name,
+                updated_at=updated_at,
+                total_events=int(total_by_key.get(key, 0) or 0),
+            )
+        )
+
+    rows.sort(key=lambda r: r.last_changed_at, reverse=True)
+    return rows[:resolved_limit]
+
+
+@router.get("/change-history", response_model=schemas.CaseLibraryChangeHistoryOut)
+def get_case_library_change_history(
+    project_id: int,
+    file_name_clean: str,
+    limit: int = 500,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_project_access(db, user, project_id)
+    name = str(file_name_clean or "").strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="file_name_clean 不能为空")
+    max_limit = 2000
+    resolved_limit = int(limit or 0)
+    if resolved_limit <= 0:
+        resolved_limit = 500
+    if resolved_limit > max_limit:
+        resolved_limit = max_limit
+
+    case_file = (
+        db.query(models.CaseFile)
+        .filter(models.CaseFile.project_id == project_id, models.CaseFile.file_name_clean == name)
+        .first()
+    )
+    is_deleted = case_file is None
+
+    events = (
+        db.query(models.CaseLibraryChangeEvent)
+        .filter(models.CaseLibraryChangeEvent.project_id == project_id)
+        .filter(models.CaseLibraryChangeEvent.file_name_clean == name)
+        .filter(models.CaseLibraryChangeEvent.kind != "view")
+        .order_by(models.CaseLibraryChangeEvent.created_at.desc())
+        .limit(resolved_limit)
+        .all()
+    )
+    history = []
+    for ev in events:
+        old_snap = ev.old_json if isinstance(ev.old_json, dict) else None
+        new_snap = ev.new_json if isinstance(ev.new_json, dict) else None
+        meta = ev.meta_json if isinstance(ev.meta_json, dict) else None
+        changed_fields = []
+        if meta and isinstance(meta.get("changed_fields"), list):
+            changed_fields = [str(x) for x in meta.get("changed_fields") if x is not None]
+        elif old_snap is not None and new_snap is not None:
+            changed_fields = _compute_changed_fields(old_snap or {}, new_snap or {})
+        history.append(
+            schemas.CaseLibraryChangeEntryOut(
+                id=int(ev.id),
+                kind=str(ev.kind or ""),
+                changed_at=ev.created_at,
+                operator=(str(ev.operator_name) if ev.operator_name else None),
+                changed_fields=changed_fields,
+                old=old_snap,
+                new=new_snap,
+                meta=meta,
+            )
+        )
+
+    version_id = None
+    case_file_id = None
+    if case_file:
+        case_file_id = int(case_file.id)
+        version_id = int(case_file.version_id) if case_file.version_id is not None else None
+    else:
+        if events:
+            version_id = int(events[0].version_id) if events[0].version_id is not None else None
+            case_file_id = int(events[0].case_file_id) if events[0].case_file_id is not None else None
+    return schemas.CaseLibraryChangeHistoryOut(
+        project_id=int(project_id),
+        file_name_clean=name,
+        case_file_id=case_file_id,
+        version_id=version_id,
+        is_deleted=bool(is_deleted),
+        history=history,
+    )

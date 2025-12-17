@@ -464,3 +464,41 @@ def apply_migrations(engine: Engine) -> None:
                     )
                 )
             _mark_applied(conn, 13)
+
+        # v14: 用例库改动历史（导入/覆盖导入/增删改/整份删除）永久留存。
+        if not _is_applied(conn, 14):
+            if "case_library_change_events" not in tables:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS case_library_change_events (
+                          id INTEGER PRIMARY KEY,
+                          project_id INTEGER NOT NULL,
+                          version_id INTEGER,
+                          file_name_clean VARCHAR(255) NOT NULL,
+                          case_file_id INTEGER,
+                          case_item_id INTEGER,
+                          kind VARCHAR(32) NOT NULL,
+                          operator_id INTEGER,
+                          operator_name VARCHAR(64),
+                          old_json TEXT,
+                          new_json TEXT,
+                          meta_json TEXT,
+                          created_at DATETIME NOT NULL
+                        )
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_case_lib_change_proj_file_time "
+                        "ON case_library_change_events(project_id, file_name_clean, created_at)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_case_lib_change_project_time "
+                        "ON case_library_change_events(project_id, created_at)"
+                    )
+                )
+            _mark_applied(conn, 14)

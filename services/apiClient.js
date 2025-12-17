@@ -281,6 +281,35 @@
     }).then(handleResponse);
   }
 
+  function listCaseLibraryChangeFiles(params) {
+    var p = params && typeof params === 'object' ? params : {};
+    var query = [];
+    if (p && (p.project_id || p.project_id === 0)) query.push('project_id=' + encodeURIComponent(p.project_id));
+    if (p && (p.version_id || p.version_id === 0)) query.push('version_id=' + encodeURIComponent(p.version_id));
+    if (p && p.q) query.push('q=' + encodeURIComponent(p.q));
+    if (p && (p.limit || p.limit === 0)) query.push('limit=' + encodeURIComponent(p.limit));
+    var url = '/api/case-files/change-history/files';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function getCaseLibraryChangeHistory(projectId, fileNameClean, params) {
+    var query = [];
+    if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
+    if (fileNameClean) query.push('file_name_clean=' + encodeURIComponent(fileNameClean));
+    var p = params && typeof params === 'object' ? params : {};
+    if (p && (p.limit || p.limit === 0)) query.push('limit=' + encodeURIComponent(p.limit));
+    var url = '/api/case-files/change-history';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
   function listExecSets(projectId) {
     var query = [];
     if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
@@ -560,6 +589,8 @@
     updateCaseItem: updateCaseItem,
     createCaseItem: createCaseItem,
     deleteCaseItem: deleteCaseItem,
+    listCaseLibraryChangeFiles: listCaseLibraryChangeFiles,
+    getCaseLibraryChangeHistory: getCaseLibraryChangeHistory,
     listExecSets: listExecSets,
     listExecSetsByCaseFile: listExecSetsByCaseFile,
     createExecSet: createExecSet,

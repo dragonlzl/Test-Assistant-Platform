@@ -225,6 +225,19 @@
             <span class="nav-entry-desc">从用例库选择用例并转到执行页</span>
           </span>
         </button>
+        <button class="nav-entry-card nav-entry-backup" id="openCaseLibraryHistoryDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M12 7v6"></path>
+              <path d="M12 13l4 2"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">用例改动历史</span>
+            <span class="nav-entry-desc">查看导入/编辑/删除产生的历史记录</span>
+          </span>
+        </button>
       </div>
     </div>
   </div>
@@ -1406,7 +1419,7 @@
             <tr>
               <th style="width:70px;">类型</th>
               <th style="width:160px;">修改时间</th>
-              <th style="width:120px;">操作人</th>
+              <th style="width:120px;">操作人员</th>
               <th style="width:180px;">模块</th>
               <th style="width:220px;">用例标题</th>
               <th>前提条件</th>
@@ -1620,6 +1633,51 @@
       </div>
       <p class="status" id="caseLibraryEditStatus"></p>
       <div class="temp-case-view" id="caseLibraryEditView"></div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="caseLibraryHistoryDetailCard">
+    <h3>用例改动历史详情</h3>
+    <div class="card-body">
+      <p class="hint">展示用例库导入/覆盖导入/增删改/删除的历史记录（永久保留）。</p>
+      <p class="status" id="caseLibraryHistoryStatus"></p>
+      <div class="case-lib-diff-header">
+        <div class="case-lib-diff-case">
+          <span class="hint">用例：</span>
+          <span class="case-lib-diff-case-name" id="caseLibraryHistoryCaseName"></span>
+        </div>
+        <div class="case-library-drawer-actions">
+          <button type="button" class="pill secondary" id="caseLibraryHistoryRefreshBtn">刷新</button>
+          <button type="button" class="pill secondary" id="caseLibraryHistoryHideBtn">收起详情</button>
+        </div>
+      </div>
+      <div class="actions" style="margin:8px 0 12px;">
+        <button type="button" class="summary-pill case-lib-diff-pill added" data-case-lib-history-filter="added" id="caseLibraryHistoryAddedPill">新增 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill updated" data-case-lib-history-filter="updated" id="caseLibraryHistoryUpdatedPill">改动 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill deleted" data-case-lib-history-filter="deleted" id="caseLibraryHistoryDeletedPill">删除 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill import" data-case-lib-history-filter="import" id="caseLibraryHistoryImportPill">导入 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill reimport" data-case-lib-history-filter="reimport" id="caseLibraryHistoryReimportPill">重导 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill file-deleted" data-case-lib-history-filter="file_deleted" id="caseLibraryHistoryFileDeletedPill">整份删除 0</button>
+      </div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table case-lib-diff-table">
+          <thead>
+            <tr>
+              <th style="width:70px;">类型</th>
+              <th style="width:160px;">修改时间</th>
+              <th style="width:120px;">操作人</th>
+              <th style="width:180px;">模块</th>
+              <th style="width:220px;">用例标题</th>
+              <th>前提条件</th>
+              <th>操作步骤</th>
+              <th>预期结果</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryHistoryBody">
+            <tr><td colspan="8"><p class="hint">暂无记录</p></td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -1873,6 +1931,55 @@
       </div>
       <div class="actions user-form-actions">
         <button class="ghost-btn" data-drawer-close="caseLibrarySelectExecDrawer" type="button">关闭</button>
+      </div>
+    </div>
+</div>
+</div>
+<div class="drawer" id="caseLibraryHistoryDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryHistoryDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>用例改动历史</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryHistoryDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">选择项目与版本后查询，仅展示有历史改动记录的用例文件。</p>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryHistoryProjectSelect">项目</label>
+          <select id="caseLibraryHistoryProjectSelect"></select>
+          <label class="case-library-label" for="caseLibraryHistoryVersionSelect">版本</label>
+          <select id="caseLibraryHistoryVersionSelect" disabled></select>
+          <label class="case-library-label" for="caseLibraryHistorySearchInput">用例名</label>
+          <input id="caseLibraryHistorySearchInput" type="text" placeholder="搜索用例名" />
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="primary" id="caseLibraryHistoryQueryBtn" type="button">查询</button>
+          <button class="secondary" id="caseLibraryHistoryClearBtn" type="button">清空搜索</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibraryHistoryDrawerStatus"></p>
+      <div class="admin-table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th style="width:160px;">修改时间</th>
+              <th>用例名</th>
+              <th style="width:120px;">版本</th>
+              <th style="width:120px;">导入人员</th>
+              <th style="width:160px;">导入时间</th>
+              <th style="width:120px;">更新人员</th>
+              <th style="width:160px;">更新时间</th>
+              <th style="width:120px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryHistoryDrawerListBody">
+            <tr><td colspan="8"><p class="hint">请选择项目与版本后点击“查询”。</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibraryHistoryDrawer" type="button">关闭</button>
       </div>
     </div>
   </div>
