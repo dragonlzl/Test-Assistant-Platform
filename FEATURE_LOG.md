@@ -32,6 +32,9 @@
 - 更新记录：2025-12-17 当历史用例列表为空（无任何改动记录）时，抽屉不再一直显示“加载历史用例中...”，改为提示“暂无发生过改动的用例”（`scripts/modules/caseLibrary.js`）。
 - 更新记录：2025-12-17 “用例改动历史”抽屉改为“按项目/版本查询 + 搜索过滤 + 文件级列表”，不再打开即加载全量；点击列表“历史详情”后关闭抽屉，并在用例库页面内展示该用例的历史明细（保留药丸筛选与原字段）（`index.html`、`scripts/modules/caseLibrary.js`、`backend/routers/cases.py`、`backend/schemas.py`、`services/apiClient.js`、`tests/ui/case_library_history.spec.js`、`tests/api/case_library_history.spec.js`）。
 - 更新记录：2025-12-17 “用例改动历史”查询支持“全部版本”选项，并在列表中增加“版本”列；点击“历史详情”后会隐藏用例编辑视图，确保主区域展示的是改动详情 diff 列表（`index.html`、`scripts/modules/caseLibrary.js`、`backend/routers/cases.py`、`tests/ui/case_library_history.spec.js`）。
+- 更新记录：2025-12-17 “用例改动历史”抽屉项目/版本/搜索持久化并在再次打开时自动恢复；历史详情 diff 列表按“执行视图分页设置”进行分页（默认 20），刷新/回到用例库页时按时间戳恢复最近一次选择（编辑视图 vs 历史详情）（`scripts/modules/caseLibrary.js`、`index.html`、`tests/ui/case_library_history.spec.js`）。
+- 更新记录：2025-12-17 历史详情持久化兼容“用户信息未加载但已进入页面”的场景：除 user_id 外增加 loginSeq 作为会话标识，避免刷新后无法恢复历史详情（`scripts/modules/caseLibrary.js`）。
+- 更新记录：2025-12-17 修复“同时存在编辑视图与历史详情选择时，刷新后总是回到编辑视图”的问题：新增“最近操作视图”持久化，刷新/回到用例库页时按该标识优先恢复（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_history.spec.js`）。
 
 - 功能名称：用例执行个人总览对齐执行总览布局（项目盒子 + 版本盒子）
 - 功能描述：在“用例执行 → 用例执行总览（个人总览）”中保持顶部功能区不变，将下方展示区改为与“执行总览”一致的视觉风格：按项目盒子选择项目，下方按版本盒子分组展示执行集，并以同款用例子项卡片展示进度与统计。
@@ -1189,3 +1192,13 @@
 - 更新记录：2025-12-16 执行页导航卡片“执行总览”更名为“个人执行总览”；在个人执行总览抽屉内点击进度条段可直接跳转到对应执行用例并关闭抽屉，同时修复点击底部进度时执行视图异常上滚的问题（`index.html`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_entry.spec.js`、`tests/ui/tempexec_progress.spec.js`；验证：`npm run test:ui -- tests/ui/tempexec_entry.spec.js tests/ui/tempexec_progress.spec.js`）。  
 - 更新记录：2025-12-16 个人执行总览抽屉内点击用例卡片（非进度条段）也会关闭抽屉并切换执行用例；进度条段跳转滚动延后到抽屉解锁后执行，避免“先跳到目标再被抽屉恢复滚动拉回”导致的外层执行视图上滚抖动（`scripts/modules/tempexec.js`、`tests/ui/tempexec_progress.spec.js`；验证：`npm run test:ui -- tests/ui/tempexec_progress.spec.js -g 个人执行总览`）。  
 - 更新记录：2025-12-17 修复个人执行总览抽屉内滚动后点击条目返回执行视图时，因抽屉滚动锁恢复（restore scrollTop）导致执行视图列表“自动上滚遮挡顶部”的问题：新增抽屉关闭时的“一次性跳过滚动恢复”开关，并在执行页抽屉内导航场景使用；同时移除抽屉打开时对 window 的滚动定位，改为仅滚动抽屉内容（`scripts/base/drawer.js`、`scripts/modules/tempexec.js`；验证：`npm run test:ui -- tests/ui/tempexec_entry.spec.js tests/ui/tempexec_progress.spec.js`）。  
+
+- 功能名称：用例库刷新恢复最后操作视图  
+- 功能描述：修复“先在查看&编辑打开用例编辑视图，再进入用例改动历史查看历史详情，刷新页面却回到编辑视图”的问题；刷新后以最后操作的视图为准，优先恢复到历史详情视图。  
+- 操作方式：进入“用例库”→在“查看&编辑”打开某用例→进入“用例改动历史”并打开“历史详情”→直接刷新页面，应仍停留在该历史详情视图。  
+- 使用效果：刷新不会把视图误切回编辑页，符合“最后操作视图优先”的直觉。  
+- 新增内容/接口/组件：前端在页面卸载前补一次“当前视图”落盘，并放宽历史详情恢复对项目列表就绪的硬依赖（`scripts/modules/caseLibrary.js`）；UI 用例强化为“刷新后无需二次切页也能恢复”（`tests/ui/case_library_history.spec.js`）。  
+- 复用说明：复用既有 localStorage 持久化键（`tap-case-library-last-view`、`tap-case-library-history-detail`），不新增接口。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library_history.spec.js`（通过）。  
+- 更新记录：2025-12-17 用例库刷新恢复最后操作视图上线（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_history.spec.js`）。  
+- 更新记录：2025-12-17 修复“先看历史详情再看编辑，刷新后仍回历史详情”的互斥显示问题，刷新前展示编辑则刷新后保持编辑（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_history.spec.js`）。  

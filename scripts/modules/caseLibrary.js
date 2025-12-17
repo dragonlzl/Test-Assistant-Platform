@@ -87,6 +87,8 @@
     historyImportPill: document.getElementById('caseLibraryHistoryImportPill'),
     historyReimportPill: document.getElementById('caseLibraryHistoryReimportPill'),
     historyFileDeletedPill: document.getElementById('caseLibraryHistoryFileDeletedPill'),
+    historyPaginationTop: document.getElementById('caseLibraryHistoryPaginationTop'),
+    historyPaginationBottom: document.getElementById('caseLibraryHistoryPaginationBottom'),
     historyBody: document.getElementById('caseLibraryHistoryBody'),
   };
 
@@ -169,6 +171,7 @@
       history: [],
       filter: '',
       loading: false,
+      pageIndex: 0,
     },
 
     editor: {
@@ -1111,7 +1114,9 @@
     var current = state.historyDetail && state.historyDetail.filter ? String(state.historyDetail.filter) : '';
     var normalized = normalizeCaseLibHistoryKind(next);
     state.historyDetail.filter = current === normalized ? '' : normalized;
+    state.historyDetail.pageIndex = 0;
     renderCaseLibraryHistory();
+    persistHistoryDetailSelection();
   }
 
   function setHistoryDetailVisible(visible) {
@@ -1124,6 +1129,33 @@
     if (!dom.historyBody) return;
     var selectedProjectId = state.historyDetail && state.historyDetail.projectId ? String(state.historyDetail.projectId) : '';
     var selectedFileName = state.historyDetail && state.historyDetail.fileNameClean ? String(state.historyDetail.fileNameClean) : '';
+
+    function setHistoryPagination(html) {
+      if (dom.historyPaginationTop) dom.historyPaginationTop.innerHTML = html || '';
+      if (dom.historyPaginationBottom) dom.historyPaginationBottom.innerHTML = html || '';
+    }
+
+    function buildHistoryPagination(total, pageIndex, totalPages, start, end) {
+      total = Number(total) || 0;
+      pageIndex = Number(pageIndex) || 0;
+      totalPages = Number(totalPages) || 1;
+      start = Number(start) || 0;
+      end = Number(end) || 0;
+      var currentPage = totalPages ? pageIndex + 1 : 1;
+      var maxPage = totalPages || 1;
+      var rangeInfo = total ? ('显示 ' + (start + 1) + '-' + end + ' / 共 ' + total + ' 条') : '暂无记录';
+      return (
+        '<div class=\"temp-pagination\" data-case-lib-history-pagination>' +
+          '<div class=\"temp-pagination-info\">' + escapeHtml(rangeInfo) + '，每页 ' + getPageSize() + ' 条</div>' +
+          '<div class=\"temp-pagination-controls\">' +
+            '<button type=\"button\" class=\"secondary\" data-case-lib-history-page=\"prev\" ' + (pageIndex <= 0 ? 'disabled' : '') + '>上一页</button>' +
+            '<button type=\"button\" class=\"secondary\" data-case-lib-history-page=\"next\" ' + (pageIndex >= totalPages - 1 ? 'disabled' : '') + '>下一页</button>' +
+            '<label>跳转</label>' +
+            '<input type=\"number\" min=\"1\" max=\"' + maxPage + '\" value=\"' + Math.min(currentPage, maxPage) + '\" data-case-lib-history-page-input>' +
+          '</div>' +
+        '</div>'
+      );
+    }
 
     if (dom.historyCaseName) {
       if (selectedProjectId && selectedFileName) {
@@ -1165,13 +1197,25 @@
 
     if (!selectedProjectId || !selectedFileName) {
       dom.historyBody.innerHTML = '<tr><td colspan="8"><p class="hint">请先在“用例改动历史”中选择用例查看详情。</p></td></tr>';
+      setHistoryPagination('');
       return;
     }
 
     if (!visible.length) {
       dom.historyBody.innerHTML = '<tr><td colspan="8"><p class="hint">暂无记录</p></td></tr>';
+      setHistoryPagination(buildHistoryPagination(0, 0, 1, 0, 0));
       return;
     }
+
+    var pageSize = getPageSize();
+    var total = visible.length;
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    if (state.historyDetail.pageIndex >= totalPages) state.historyDetail.pageIndex = Math.max(totalPages - 1, 0);
+    if (state.historyDetail.pageIndex < 0) state.historyDetail.pageIndex = 0;
+    var start = state.historyDetail.pageIndex * pageSize;
+    var end = Math.min(total, start + pageSize);
+    var paged = visible.slice(start, end);
+    setHistoryPagination(buildHistoryPagination(total, state.historyDetail.pageIndex, totalPages, start, end));
 
     function buildCell(oldSnap, newSnap, key, changed) {
       var oldVal = oldSnap && oldSnap[key] !== undefined && oldSnap[key] !== null ? String(oldSnap[key]) : '';
@@ -1188,7 +1232,7 @@
       );
     }
 
-    dom.historyBody.innerHTML = visible.map(function(row) {
+    dom.historyBody.innerHTML = paged.map(function(row) {
       var kind = normalizeCaseLibHistoryKind(row && row.kind);
       var operator = row && row.operator ? String(row.operator) : '';
       var timeText = formatTime(row && row.changed_at ? row.changed_at : '');
@@ -1229,6 +1273,43 @@
         '</tr>'
       );
     }).join('');
+  }
+
+  function handleHistoryDetailPaginationAction(action) {
+    var filter = state.historyDetail && state.historyDetail.filter ? String(state.historyDetail.filter) : '';
+    var list = state.historyDetail && Array.isArray(state.historyDetail.history) ? state.historyDetail.history : [];
+    var visible = filter
+      ? list.filter(function(row) { return normalizeCaseLibHistoryKind(row && row.kind) === filter; })
+      : list.slice();
+    var total = visible.length;
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    if (!action) return;
+    if (action === 'prev') state.historyDetail.pageIndex -= 1;
+    else if (action === 'next') state.historyDetail.pageIndex += 1;
+    else if (action === 'first') state.historyDetail.pageIndex = 0;
+    else if (action === 'last') state.historyDetail.pageIndex = totalPages - 1;
+    if (state.historyDetail.pageIndex < 0) state.historyDetail.pageIndex = 0;
+    if (state.historyDetail.pageIndex >= totalPages) state.historyDetail.pageIndex = Math.max(totalPages - 1, 0);
+    renderCaseLibraryHistory();
+    persistHistoryDetailSelection();
+  }
+
+  function handleHistoryDetailPaginationJump(value) {
+    var filter = state.historyDetail && state.historyDetail.filter ? String(state.historyDetail.filter) : '';
+    var list = state.historyDetail && Array.isArray(state.historyDetail.history) ? state.historyDetail.history : [];
+    var visible = filter
+      ? list.filter(function(row) { return normalizeCaseLibHistoryKind(row && row.kind) === filter; })
+      : list.slice();
+    var total = visible.length;
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    var n = Number(value);
+    if (!isFinite(n)) return;
+    var idx = Math.max(0, Math.min(totalPages - 1, Math.floor(n - 1)));
+    state.historyDetail.pageIndex = idx;
+    renderCaseLibraryHistory();
+    persistHistoryDetailSelection();
   }
 
   function resetHistoryQueryDrawer() {
@@ -1301,6 +1382,7 @@
     state.historyQueryDrawer.versionId = null;
     state.historyQueryDrawer.files = [];
     setStatus(dom.historyDrawerStatus, '', '');
+    persistHistoryQueryState();
     if (dom.historyDrawerVersionSelect) {
       dom.historyDrawerVersionSelect.disabled = true;
       dom.historyDrawerVersionSelect.innerHTML = '<option value=\"\">加载版本中...</option>';
@@ -1321,23 +1403,27 @@
         syncVersionOptionsWithAll(dom.historyDrawerVersionSelect, pid);
         dom.historyDrawerVersionSelect.value = '0';
         state.historyQueryDrawer.versionId = 0;
+        persistHistoryQueryState();
       }
     });
   }
 
   function handleHistoryQueryVersionChange() {
     state.historyQueryDrawer.versionId = normalizeId(dom.historyDrawerVersionSelect ? dom.historyDrawerVersionSelect.value : '');
+    persistHistoryQueryState();
   }
 
   function handleHistoryQuerySearchInput() {
     state.historyQueryDrawer.searchText = String(dom.historyDrawerSearchInput ? dom.historyDrawerSearchInput.value : '');
     renderHistoryQueryDrawerList();
+    persistHistoryQueryState();
   }
 
   function clearHistoryQuerySearch() {
     state.historyQueryDrawer.searchText = '';
     if (dom.historyDrawerSearchInput) dom.historyDrawerSearchInput.value = '';
     renderHistoryQueryDrawerList();
+    persistHistoryQueryState();
   }
 
   function loadHistoryQueryDrawerFiles() {
@@ -1361,6 +1447,7 @@
         state.historyQueryDrawer.files = Array.isArray(list) ? list : [];
         setStatus(dom.historyDrawerStatus, '已加载 ' + state.historyQueryDrawer.files.length + ' 条（仅展示有改动记录的用例）', state.historyQueryDrawer.files.length ? 'ok' : '');
         renderHistoryQueryDrawerList();
+        persistHistoryQueryState();
         return state.historyQueryDrawer.files;
       })
       .catch(function(err) {
@@ -1385,11 +1472,14 @@
     state.historyDetail.history = [];
     state.historyDetail.isDeleted = false;
     state.historyDetail.versionId = versionId || null;
+    state.historyDetail.pageIndex = 0;
     setHistoryDetailVisible(true);
     if (dom.editCard && dom.editCard.classList) dom.editCard.classList.add('hidden');
     if (historyDrawerInstance && typeof historyDrawerInstance.close === 'function') historyDrawerInstance.close();
     setStatus(dom.historyStatus, '加载历史记录中...', '');
     renderCaseLibraryHistory();
+    persistHistoryDetailSelection();
+    persistCaseLibraryLastView('history');
     loadCaseLibraryHistoryEntries(pid, name).then(function() {
       try {
         if (dom.historyDetailCard && typeof dom.historyDetailCard.scrollIntoView === 'function') {
@@ -1433,6 +1523,7 @@
         }
         setStatus(dom.historyStatus, statusText, history.length ? 'ok' : '');
         renderCaseLibraryHistory();
+        persistHistoryDetailSelection();
         return res;
       })
       .catch(function(err) {
@@ -1530,6 +1621,16 @@
     var user = globalState && globalState.currentUser ? globalState.currentUser : null;
     var name = user && user.username ? String(user.username) : '';
     return name.trim();
+  }
+
+  function getCurrentLoginSeq() {
+    // 兼容“用户信息尚未加载但已进入页面”的场景：用 loginSeq 作为一次登录会话的稳定标识。
+    if (typeof localStorage === 'undefined') return '';
+    try {
+      return String(localStorage.getItem('tap-login-seq') || '');
+    } catch (err) {
+      return '';
+    }
   }
 
   function normalizeEditDrawerOwnerFilter(value) {
@@ -1692,6 +1793,202 @@
       saved_at: Date.now(),
     };
     writeEditorPersistedState(payload);
+  }
+
+  var historyQueryPersistKey = 'tap-case-library-history-query';
+
+  function readHistoryQueryPersistedState() {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      var raw = localStorage.getItem(historyQueryPersistKey);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function writeHistoryQueryPersistedState(payload) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      if (!payload) {
+        localStorage.removeItem(historyQueryPersistKey);
+        return;
+      }
+      localStorage.setItem(historyQueryPersistKey, JSON.stringify(payload));
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function persistHistoryQueryState() {
+    var userId = getCurrentUserId();
+    var loginSeq = getCurrentLoginSeq();
+    if (!userId && !loginSeq) return;
+    var persisted = readHistoryQueryPersistedState();
+    if (persisted) {
+      var sameUser = userId && String(persisted.user_id || '') === String(userId);
+      var sameLogin = loginSeq && String(persisted.login_seq || '') === String(loginSeq);
+      if (!sameUser && !sameLogin) persisted = null;
+    }
+    var projectId = state.historyQueryDrawer ? state.historyQueryDrawer.projectId : null;
+    var versionId = state.historyQueryDrawer ? state.historyQueryDrawer.versionId : null;
+    var searchText = state.historyQueryDrawer ? String(state.historyQueryDrawer.searchText || '') : '';
+    // 保护：避免“初始化空值”覆盖掉已有选择导致无法恢复。
+    if (!projectId && persisted) {
+      projectId = normalizeId(persisted.project_id);
+      versionId = normalizeId(persisted.version_id);
+      searchText = persisted.search_text ? String(persisted.search_text) : searchText;
+    }
+    if (!projectId) return;
+    writeHistoryQueryPersistedState({
+      user_id: userId || '',
+      login_seq: loginSeq || '',
+      project_id: projectId || '',
+      version_id: (versionId || versionId === 0) ? versionId : '',
+      search_text: searchText || '',
+      saved_at: Date.now(),
+    });
+  }
+
+  function restoreHistoryQueryDrawerFromPersistedState() {
+    if (!isAuthReady()) return Promise.resolve(false);
+    var persisted = readHistoryQueryPersistedState();
+    if (!persisted) return Promise.resolve(false);
+    var userId = getCurrentUserId();
+    var loginSeq = getCurrentLoginSeq();
+    var okByUser = userId && String(persisted.user_id || '') === String(userId);
+    var okByLogin = loginSeq && String(persisted.login_seq || '') === String(loginSeq);
+    if (!okByUser && !okByLogin) return Promise.resolve(false);
+    var projectId = normalizeId(persisted.project_id);
+    var versionId = normalizeId(persisted.version_id);
+    // normalizeId 会把 "0" 解析成 0（期望），把 "" 解析成 null。
+    if (!projectId) return Promise.resolve(false);
+    var hasProject = (state.projects || []).some(function(p) { return p && String(p.id) === String(projectId); });
+    if (!hasProject) return Promise.resolve(false);
+
+    state.historyQueryDrawer.projectId = projectId;
+    state.historyQueryDrawer.versionId = (versionId || versionId === 0) ? versionId : null;
+    state.historyQueryDrawer.searchText = persisted.search_text ? String(persisted.search_text) : '';
+    if (dom.historyDrawerProjectSelect) dom.historyDrawerProjectSelect.value = String(projectId);
+    if (dom.historyDrawerSearchInput) dom.historyDrawerSearchInput.value = state.historyQueryDrawer.searchText || '';
+    renderHistoryQueryDrawerList();
+
+    if (!dom.historyDrawerVersionSelect) return Promise.resolve(true);
+    dom.historyDrawerVersionSelect.disabled = true;
+    dom.historyDrawerVersionSelect.innerHTML = '<option value=\"\">加载版本中...</option>';
+    dom.historyDrawerVersionSelect.value = '';
+    return loadVersions(projectId)
+      .then(function() {
+        if (!dom.historyDrawerVersionSelect) return true;
+        dom.historyDrawerVersionSelect.disabled = false;
+        syncVersionOptionsWithAll(dom.historyDrawerVersionSelect, projectId);
+        var v = state.historyQueryDrawer.versionId;
+        if (v || v === 0) dom.historyDrawerVersionSelect.value = String(v);
+        else dom.historyDrawerVersionSelect.value = '';
+        // 若此前已查询过，自动恢复列表（不加载“全量”，只加载已选择的项目/版本）。
+        if (v || v === 0) {
+          return loadHistoryQueryDrawerFiles().then(function() { return true; });
+        }
+        return true;
+      })
+      .catch(function() {
+        return false;
+      });
+  }
+
+  var historyDetailPersistKey = 'tap-case-library-history-detail';
+  var caseLibraryLastViewPersistKey = 'tap-case-library-last-view';
+
+  function readHistoryDetailPersistedState() {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      var raw = localStorage.getItem(historyDetailPersistKey);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function writeHistoryDetailPersistedState(payload) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      if (!payload) {
+        localStorage.removeItem(historyDetailPersistKey);
+        return;
+      }
+      localStorage.setItem(historyDetailPersistKey, JSON.stringify(payload));
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function clearHistoryDetailPersistedState() {
+    writeHistoryDetailPersistedState(null);
+  }
+
+  function readCaseLibraryLastViewPersistedState() {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      var raw = localStorage.getItem(caseLibraryLastViewPersistKey);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function writeCaseLibraryLastViewPersistedState(payload) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      if (!payload) {
+        localStorage.removeItem(caseLibraryLastViewPersistKey);
+        return;
+      }
+      localStorage.setItem(caseLibraryLastViewPersistKey, JSON.stringify(payload));
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function persistCaseLibraryLastView(viewName) {
+    var view = String(viewName || '').trim();
+    if (view !== 'editor' && view !== 'history') return;
+    var userId = getCurrentUserId();
+    var loginSeq = getCurrentLoginSeq();
+    if (!userId && !loginSeq) return;
+    writeCaseLibraryLastViewPersistedState({
+      user_id: userId || '',
+      login_seq: loginSeq || '',
+      view: view,
+      saved_at: Date.now(),
+    });
+  }
+
+  function persistHistoryDetailSelection() {
+    var userId = getCurrentUserId();
+    var loginSeq = getCurrentLoginSeq();
+    if (!userId && !loginSeq) return;
+    var pid = state.historyDetail && state.historyDetail.projectId ? String(state.historyDetail.projectId) : '';
+    var name = state.historyDetail && state.historyDetail.fileNameClean ? String(state.historyDetail.fileNameClean) : '';
+    if (!pid || !name) return;
+    writeHistoryDetailPersistedState({
+      user_id: userId || '',
+      login_seq: loginSeq || '',
+      project_id: pid,
+      file_name_clean: name,
+      version_id: (state.historyDetail.versionId || state.historyDetail.versionId === 0) ? state.historyDetail.versionId : '',
+      filter: state.historyDetail && state.historyDetail.filter ? String(state.historyDetail.filter) : '',
+      page_index: state.historyDetail && isFinite(Number(state.historyDetail.pageIndex)) ? Number(state.historyDetail.pageIndex) : 0,
+      saved_at: Date.now(),
+    });
   }
 
   var editDrawerPersistKey = 'tap-case-library-edit-drawer';
@@ -2049,13 +2346,13 @@
       if (tabName === 'case-library' && isAuthReady()) {
         ensureProjectsReady()
           .then(function() {
-            return restoreEditorFromPersistedState();
+            return restoreCaseLibraryLastSelection();
           })
-          .then(function() {
+          .then(function(view) {
             var persisted = readEditDrawerPersistedState();
             var userId = getCurrentUserId();
             var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
-            if (shouldOpen && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
+            if (view === 'editor' && shouldOpen && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
               editDrawerInstance.open();
             }
           });
@@ -3531,6 +3828,8 @@
     if (!caseFile || !caseFile.id) return;
     setStatus(dom.editDrawerStatus, '加载用例条目...', '');
     apiClient.listCaseItems(caseFile.id).then(function(items) {
+      // 保证视图互斥：切到编辑视图时，应隐藏“历史详情”卡片（但不清理其持久化，方便用户回退查看）。
+      setHistoryDetailVisible(false);
       state.editor.caseFile = caseFile;
       state.editor.items = Array.isArray(items) ? items : [];
       state.editor.searchText = '';
@@ -3540,6 +3839,7 @@
       setStatus(dom.editStatus, '已加载 ' + state.editor.items.length + ' 条用例，可直接编辑', 'ok');
       if (dom.editSearchInput) dom.editSearchInput.value = '';
       persistEditorSelection(caseFile);
+      persistCaseLibraryLastView('editor');
       renderEditorCard();
       syncEditorSearchControls();
       if (editDrawerInstance && typeof editDrawerInstance.close === 'function') editDrawerInstance.close();
@@ -4162,6 +4462,135 @@
       .finally(function() {
         state.editor.restoring = false;
       });
+  }
+
+  function restoreHistoryDetailFromPersistedState() {
+    if (!isAuthReady()) return Promise.resolve(false);
+    if (state.historyDetail && state.historyDetail.restoring === true) return Promise.resolve(false);
+    var persisted = readHistoryDetailPersistedState();
+    if (!persisted) return Promise.resolve(false);
+    var userId = getCurrentUserId();
+    var loginSeq = getCurrentLoginSeq();
+    var okByUser = userId && String(persisted.user_id || '') === String(userId);
+    var okByLogin = loginSeq && String(persisted.login_seq || '') === String(loginSeq);
+    if (!okByUser && !okByLogin) return Promise.resolve(false);
+    var projectId = normalizeId(persisted.project_id);
+    var fileNameClean = persisted.file_name_clean ? String(persisted.file_name_clean) : '';
+    if (!projectId || !fileNameClean.trim()) return Promise.resolve(false);
+    // 仅在“已加载过项目列表”时才严格校验项目存在；避免因为项目列表未就绪/加载失败导致历史详情无法恢复。
+    var projectsLoaded = Boolean(state.projects && state.projects.length);
+    if (projectsLoaded) {
+      var hasProject = (state.projects || []).some(function(p) { return p && String(p.id) === String(projectId); });
+      if (!hasProject) return Promise.resolve(false);
+    }
+
+    state.historyDetail.restoring = true;
+    state.historyDetail.projectId = String(projectId);
+    state.historyDetail.fileNameClean = String(fileNameClean).trim();
+    state.historyDetail.filter = persisted.filter ? String(persisted.filter) : '';
+    state.historyDetail.pageIndex = isFinite(Number(persisted.page_index)) ? Number(persisted.page_index) : 0;
+    state.historyDetail.versionId = (persisted.version_id || persisted.version_id === 0) ? persisted.version_id : null;
+    setHistoryDetailVisible(true);
+    if (dom.editCard && dom.editCard.classList) dom.editCard.classList.add('hidden');
+    setStatus(dom.historyStatus, '加载历史记录中...', '');
+    renderCaseLibraryHistory();
+    return loadCaseLibraryHistoryEntries(projectId, fileNameClean)
+      .then(function(res) {
+        if (!res) return false;
+        return true;
+      })
+      .catch(function() {
+        clearHistoryDetailPersistedState();
+        setHistoryDetailVisible(false);
+        return false;
+      })
+      .finally(function() {
+        state.historyDetail.restoring = false;
+      });
+  }
+
+  function restoreCaseLibraryLastSelection() {
+    if (!isAuthReady()) return Promise.resolve(null);
+    var lastView = readCaseLibraryLastViewPersistedState();
+    if (lastView) {
+      var userId = getCurrentUserId();
+      var loginSeq = getCurrentLoginSeq();
+      var okByUser = userId && String(lastView.user_id || '') === String(userId);
+      var okByLogin = loginSeq && String(lastView.login_seq || '') === String(loginSeq);
+      if (okByUser || okByLogin) {
+        var viewName = lastView.view ? String(lastView.view) : '';
+        if (viewName === 'history') {
+          return restoreHistoryDetailFromPersistedState().then(function(ok) {
+            if (ok) return 'history';
+            setHistoryDetailVisible(false);
+            if (dom.editCard && dom.editCard.classList) dom.editCard.classList.remove('hidden');
+            return restoreEditorFromPersistedState().then(function(ok2) { return ok2 ? 'editor' : null; });
+          });
+        }
+        if (viewName === 'editor') {
+          setHistoryDetailVisible(false);
+          if (dom.editCard && dom.editCard.classList) dom.editCard.classList.remove('hidden');
+          return restoreEditorFromPersistedState().then(function(ok) {
+            if (ok) return 'editor';
+            return restoreHistoryDetailFromPersistedState().then(function(ok2) { return ok2 ? 'history' : null; });
+          });
+        }
+      }
+    }
+
+    var editorPersisted = readEditorPersistedState();
+    var historyPersisted = readHistoryDetailPersistedState();
+    var editorAt = editorPersisted && isFinite(Number(editorPersisted.saved_at)) ? Number(editorPersisted.saved_at) : 0;
+    var historyAt = historyPersisted && isFinite(Number(historyPersisted.saved_at)) ? Number(historyPersisted.saved_at) : 0;
+    var preferHistory = historyAt > editorAt;
+
+    if (preferHistory) {
+      return restoreHistoryDetailFromPersistedState().then(function(ok) {
+        if (ok) return 'history';
+        setHistoryDetailVisible(false);
+        if (dom.editCard && dom.editCard.classList) dom.editCard.classList.remove('hidden');
+        return restoreEditorFromPersistedState().then(function(ok2) { return ok2 ? 'editor' : null; });
+      });
+    }
+    setHistoryDetailVisible(false);
+    if (dom.editCard && dom.editCard.classList) dom.editCard.classList.remove('hidden');
+    return restoreEditorFromPersistedState().then(function(ok) {
+      if (ok) return 'editor';
+      return restoreHistoryDetailFromPersistedState().then(function(ok2) { return ok2 ? 'history' : null; });
+      });
+  }
+
+  function isHistoryDetailVisible() {
+    return Boolean(
+      dom.historyDetailCard &&
+        dom.historyDetailCard.classList &&
+        !dom.historyDetailCard.classList.contains('hidden')
+    );
+  }
+
+  function isEditorCardVisible() {
+    return Boolean(dom.editCard && dom.editCard.classList && !dom.editCard.classList.contains('hidden'));
+  }
+
+  function bindUnloadPersistence() {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+    window.addEventListener('beforeunload', function() {
+      try {
+        // 刷新/关闭前再写一次“当前视图”，确保刷新后回到最后操作视图。
+        if (isHistoryDetailVisible()) {
+          persistHistoryDetailSelection();
+          persistCaseLibraryLastView('history');
+          return;
+        }
+        if (isEditorCardVisible()) {
+          var file = state.editor && state.editor.caseFile ? state.editor.caseFile : null;
+          if (file) persistEditorSelection(file);
+          persistCaseLibraryLastView('editor');
+        }
+      } catch (err) {
+        // ignore
+      }
+    });
   }
 
   function cleanupPendingToast() {
@@ -5408,6 +5837,26 @@
     if (dom.historyHideBtn) {
       dom.historyHideBtn.addEventListener('click', function() {
         setHistoryDetailVisible(false);
+        // 用户主动收起详情，视为切回“非详情”态：不再在刷新后自动恢复该详情。
+        clearHistoryDetailPersistedState();
+        // 若此前在编辑视图选中过用例，则刷新后优先恢复编辑视图；否则不指定。
+        var hasEditor = Boolean(state.editor && state.editor.caseFile && state.editor.caseFile.id);
+        if (hasEditor) persistCaseLibraryLastView('editor');
+      });
+    }
+    if (dom.historyDetailCard) {
+      dom.historyDetailCard.addEventListener('click', function(e) {
+        var btn = e && e.target && e.target.closest ? e.target.closest('[data-case-lib-history-page]') : null;
+        if (!btn) return;
+        var action = btn.getAttribute('data-case-lib-history-page') || '';
+        if (!action) return;
+        handleHistoryDetailPaginationAction(action);
+      });
+      dom.historyDetailCard.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        if (!t || !t.hasAttribute) return;
+        if (!t.hasAttribute('data-case-lib-history-page-input')) return;
+        handleHistoryDetailPaginationJump(t.value);
       });
     }
     [
@@ -5426,39 +5875,71 @@
     });
   }
 
+  var pendingCaseLibraryTab = false;
+  var autoRestoreAttempt = 0;
+  var autoRestoreTimer = null;
+
+  function restoreCaseLibraryAfterActivated() {
+    if (!isAuthReady()) {
+      pendingCaseLibraryTab = true;
+      setStatus(dom.status, '登录信息加载中...', '');
+      return Promise.resolve(null);
+    }
+    pendingCaseLibraryTab = false;
+    return ensureProjectsReady()
+      .then(function() { return restoreCaseLibraryLastSelection(); })
+      .then(function(view) {
+        var persisted = readEditDrawerPersistedState();
+        var userId = getCurrentUserId();
+        var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
+        var hasEditor = Boolean(state.editor && state.editor.caseFile && state.editor.caseFile.id);
+        if (view === 'editor' && shouldOpen && !hasEditor && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
+          editDrawerInstance.open();
+        }
+        return view;
+      });
+  }
+
+  function scheduleAutoRestoreProbe() {
+    if (autoRestoreTimer) return;
+    autoRestoreAttempt = 0;
+    var maxAttempts = 30;
+    var intervalMs = 200;
+
+    function clearProbe() {
+      if (autoRestoreTimer) clearTimeout(autoRestoreTimer);
+      autoRestoreTimer = null;
+    }
+
+    function tick() {
+      autoRestoreAttempt += 1;
+      if (autoRestoreAttempt > maxAttempts) return clearProbe();
+
+      var visible = document.querySelector('section[data-tab-section=\"case-library\"]:not(.hidden)');
+      if (visible && isAuthReady()) {
+        clearProbe();
+        restoreCaseLibraryAfterActivated();
+        return;
+      }
+      autoRestoreTimer = setTimeout(tick, intervalMs);
+    }
+
+    autoRestoreTimer = setTimeout(tick, 0);
+  }
+
   function bindTabActivation() {
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     window.addEventListener('app-tab-activated', function(e) {
       var tabName = e && e.detail ? e.detail.tab : '';
       if (tabName !== 'case-library') return;
-      if (!isAuthReady()) return;
-      ensureProjectsReady().then(function() {
-        return restoreEditorFromPersistedState();
-      }).then(function() {
-        var persisted = readEditDrawerPersistedState();
-        var userId = getCurrentUserId();
-        var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
-        var hasEditor = Boolean(state.editor && state.editor.caseFile && state.editor.caseFile.id);
-        if (shouldOpen && !hasEditor && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
-          editDrawerInstance.open();
-        }
-      });
+      restoreCaseLibraryAfterActivated();
     });
     window.addEventListener('app-auth-ready', function() {
       var globalState = window.app && window.app.state ? window.app.state : {};
       var tabName = globalState && globalState.activeTab ? globalState.activeTab : '';
-      if (tabName === 'case-library') {
-        ensureProjectsReady().then(function() {
-          return restoreEditorFromPersistedState();
-        }).then(function() {
-          var persisted = readEditDrawerPersistedState();
-          var userId = getCurrentUserId();
-          var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
-          var hasEditor = Boolean(state.editor && state.editor.caseFile && state.editor.caseFile.id);
-          if (shouldOpen && !hasEditor && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
-            editDrawerInstance.open();
-          }
-        });
+      var visible = document.querySelector('section[data-tab-section=\"case-library\"]:not(.hidden)');
+      if (tabName === 'case-library' || pendingCaseLibraryTab || visible) {
+        restoreCaseLibraryAfterActivated();
       }
     });
   }
@@ -5536,28 +6017,17 @@
     historyDrawerInstance = ensureDrawer('caseLibraryHistoryDrawer', ['openCaseLibraryHistoryDrawerBtn'], function() {
       ensureProjectsReady().then(function() {
         resetHistoryQueryDrawer();
+        return restoreHistoryQueryDrawerFromPersistedState();
       });
     });
 
     bindEvents();
     bindTabActivation();
     bindProjectsUpdated();
+    bindUnloadPersistence();
 
-    // 若刷新后停留在用例库页，补一次加载。
-    var visible = document.querySelector('section[data-tab-section=\"case-library\"]:not(.hidden)');
-    if (visible && isAuthReady()) {
-      ensureProjectsReady().then(function() {
-        return restoreEditorFromPersistedState();
-      }).then(function() {
-        var persisted = readEditDrawerPersistedState();
-        var userId = getCurrentUserId();
-        var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
-        var hasEditor = Boolean(state.editor && state.editor.caseFile && state.editor.caseFile.id);
-        if (shouldOpen && !hasEditor && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
-          editDrawerInstance.open();
-        }
-      });
-    }
+    // 兜底：某些时序下可能错过 app-tab-activated/app-auth-ready，短窗口轮询一次“是否需要恢复”。
+    scheduleAutoRestoreProbe();
     window.app = window.app || {};
     window.app.caseLibraryBound = true;
   }
