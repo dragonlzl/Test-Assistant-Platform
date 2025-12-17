@@ -4519,7 +4519,8 @@ body {
 }
 
 .case-library-filters select,
-#execOverviewVersionSelect {
+#execOverviewVersionSelect,
+[data-temp-overview-version-select] {
   -webkit-appearance: none;
   appearance: none;
   padding: 8px 34px 8px 10px;
@@ -4539,19 +4540,22 @@ body {
 }
 
 .case-library-filters select:hover:not(:disabled),
-#execOverviewVersionSelect:hover:not(:disabled) {
+#execOverviewVersionSelect:hover:not(:disabled),
+[data-temp-overview-version-select]:hover:not(:disabled) {
   border-color: #cbd5e1;
 }
 
 .case-library-filters select:focus,
-#execOverviewVersionSelect:focus {
+#execOverviewVersionSelect:focus,
+[data-temp-overview-version-select]:focus {
   outline: none;
   border-color: rgba(37, 99, 235, 0.55);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 .case-library-filters select:disabled,
-#execOverviewVersionSelect:disabled {
+#execOverviewVersionSelect:disabled,
+[data-temp-overview-version-select]:disabled {
   cursor: not-allowed;
   color: #94a3b8;
   border-color: #e2e8f0;
@@ -4566,6 +4570,9 @@ body {
 }
 
 #execOverviewVersionSelect {
+  min-width: 9em;
+}
+[data-temp-overview-version-select] {
   min-width: 9em;
 }
 

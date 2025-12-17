@@ -2751,6 +2751,18 @@
     }
       if (tempExecOverview && api.setTempExecActive) {
       tempExecOverview.addEventListener('click', function(e) {
+        var projectBtn = e.target.closest('[data-temp-overview-project]');
+        if (projectBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          var pid = projectBtn.dataset ? (projectBtn.dataset.tempOverviewProject || '') : '';
+          if (state) {
+            state.tempExecOverviewProjectId = pid;
+            state.tempExecOverviewVersionId = '';
+          }
+          if (api.renderTempExecOverview) api.renderTempExecOverview();
+          return;
+        }
         var seg = e.target.closest('[data-temp-overview-file][data-temp-overview-status]');
         if (seg) {
           e.preventDefault();
@@ -2782,6 +2794,12 @@
           // 选中用例后回到执行视图：定位到执行视图顶部，避免抽屉关闭滚动恢复导致“列表上滚遮挡顶部”。
           scrollToTempExecViewTop({ waitForDrawerUnlock: true });
         }
+      });
+      tempExecOverview.addEventListener('change', function(e) {
+        var sel = e && e.target && e.target.closest ? e.target.closest('[data-temp-overview-version-select]') : null;
+        if (!sel) return;
+        if (state) state.tempExecOverviewVersionId = sel.value || '';
+        if (api.renderTempExecOverview) api.renderTempExecOverview();
       });
     }
     if (tempExecBackBtn) {

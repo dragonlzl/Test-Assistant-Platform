@@ -2450,6 +2450,17 @@
       var currentBlock = currentFile
         ? '<div class="temp-overview-grid two-cols">' + renderTempExecOverviewEntry(currentFile) + '</div>'
         : '<p class="hint">暂无正在执行的用例</p>';
+      if (isProjectLayout) {
+        // DB 模式个人总览：按项目卡片 + 版本盒子展示（风格对齐执行总览）。
+        tempExecOverview.innerHTML = (
+          '<div class="temp-overview-section temp-overview-current">' +
+            '<h3 class="temp-overview-section-title">当前执行区</h3>' +
+            currentBlock +
+          '</div>' +
+          renderTempExecOverviewProjectLayout(files, currentFile)
+        );
+        return;
+      }
       var versionMap = new Map();
       files.forEach(function(file) {
         var label = '';
@@ -2491,6 +2502,375 @@
             '</div>'
           )
         )
+      );
+    }
+
+    function renderTempExecOverviewProjectLayout(files, currentFile) {
+      var list = Array.isArray(files) ? files : [];
+      if (!list.length) {
+        return (
+          '<div class="temp-overview-section">' +
+            '<h3 class="temp-overview-section-title">项目/版本区</h3>' +
+            '<p class="hint">暂无项目执行数据</p>' +
+          '</div>'
+        );
+      }
+      var summaryByFileId = new Map();
+      var filesByProject = new Map();
+      var projectMeta = new Map();
+      list.forEach(function(file) {
+        if (!file) return;
+        var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+        if (!fid) return;
+        var summary = buildTempExecSummary(file);
+        summaryByFileId.set(fid, summary);
+        var pid = file && file.projectId !== null && file.projectId !== undefined ? String(file.projectId) : '';
+        if (!pid) pid = 'unknown';
+        if (!filesByProject.has(pid)) filesByProject.set(pid, []);
+        filesByProject.get(pid).push(file);
+        var t = Number(file && file.createdAt ? file.createdAt : 0) || 0;
+        var prev = Number(projectMeta.get(pid) || 0) || 0;
+        if (t > prev) projectMeta.set(pid, t);
+      });
+
+      var projectIds = Array.from(filesByProject.keys());
+      var orderedProjects = projectIds.slice();
+      if (projectIds.length) {
+        if (typeof ensureProjectOrder === 'function') {
+          try {
+            var normalized = projectIds.filter(function(pid) { return pid && pid !== 'unknown'; });
+            var ordered = ensureProjectOrder(normalized, projectMeta);
+            var tail = projectIds.indexOf('unknown') !== -1 ? ['unknown'] : [];
+            orderedProjects = (ordered || []).concat(tail);
+          } catch (err) {
+            orderedProjects.sort(function(a, b) { return String(a).localeCompare(String(b), 'zh-Hans-CN'); });
+          }
+        } else {
+          orderedProjects.sort(function(a, b) { return String(a).localeCompare(String(b), 'zh-Hans-CN'); });
+        }
+      }
+
+      var defaultProjectId = '';
+      if (state && state.tempExecOverviewProjectId) defaultProjectId = String(state.tempExecOverviewProjectId || '');
+      if (!defaultProjectId || !filesByProject.has(defaultProjectId)) {
+        var fromCurrent = currentFile && currentFile.projectId ? String(currentFile.projectId) : '';
+        if (fromCurrent && filesByProject.has(fromCurrent)) defaultProjectId = fromCurrent;
+        else defaultProjectId = orderedProjects.length ? orderedProjects[0] : '';
+      }
+      if (state) state.tempExecOverviewProjectId = defaultProjectId;
+      var versionFilter = state && state.tempExecOverviewVersionId ? String(state.tempExecOverviewVersionId || '') : '';
+
+      var projectCards = renderTempExecOverviewProjectCards(orderedProjects, defaultProjectId);
+      var detail = renderTempExecOverviewProjectDetail(defaultProjectId, filesByProject.get(defaultProjectId) || [], summaryByFileId, versionFilter);
+
+      return (
+        '<div class="temp-overview-section">' +
+          '<h3 class="temp-overview-section-title">项目区</h3>' +
+          '<div class="nav-entry-grid">' + (projectCards || '<p class="hint">暂无项目</p>') + '</div>' +
+        '</div>' +
+        '<div class="temp-overview-section">' +
+          '<h3 class="temp-overview-section-title">版本区</h3>' +
+          detail +
+        '</div>'
+      );
+    }
+
+    function renderTempExecOverviewProjectCards(projectIds, activeProjectId) {
+      var list = Array.isArray(projectIds) ? projectIds : [];
+      if (!list.length) return '';
+      var icon =
+        '<span class="nav-entry-icon" aria-hidden="true">' +
+          '<svg viewBox="0 0 24 24" role="presentation" focusable="false">' +
+            '<path d="M3 6h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"></path>' +
+          '</svg>' +
+        '</span>';
+      return list
+        .map(function(pid) {
+          var resolved = pid === 'unknown' ? '' : pid;
+          var name = pid === 'unknown' ? '项目#未知' : resolveProjectName(resolved);
+          var cls = 'nav-entry-card nav-entry-overview' + (String(pid) === String(activeProjectId) ? ' active' : '');
+          return (
+            '<button type="button" class="' + cls + '" data-temp-overview-project="' + escapeHtml(pid) + '">' +
+              icon +
+              '<span class="nav-entry-text">' +
+                '<span class="nav-entry-title">' + escapeHtml(name) + '</span>' +
+                '<span class="nav-entry-desc">查看版本与执行进度</span>' +
+              '</span>' +
+            '</button>'
+          );
+        })
+        .join('');
+    }
+
+    function renderTempExecOverviewProjectDetail(projectId, files, summaryByFileId, versionFilter) {
+      var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+      var list = Array.isArray(files) ? files : [];
+      if (!pid || !list.length) {
+        return '<p class="hint">暂无执行数据</p>';
+      }
+      var canUsePlacement = pid && pid !== 'unknown';
+      var verMap = new Map();
+      var unassigned = [];
+      list.forEach(function(file) {
+        if (!file) return;
+        var vid = file && file.versionId !== null && file.versionId !== undefined ? String(file.versionId || '') : '';
+        if (!vid) {
+          unassigned.push(file);
+          return;
+        }
+        if (!verMap.has(vid)) verMap.set(vid, []);
+        verMap.get(vid).push(file);
+      });
+
+      var versionIds = Array.from(verMap.keys());
+      var versionMeta = new Map();
+      versionIds.forEach(function(vid) {
+        var filesIn = verMap.get(vid) || [];
+        var max = 0;
+        filesIn.forEach(function(f) {
+          var t = Number(f && f.createdAt ? f.createdAt : 0) || 0;
+          if (t > max) max = t;
+        });
+        versionMeta.set(vid, max);
+      });
+      var orderedVersions = [];
+      if (canUsePlacement && typeof ensureProjectVersionOrder === 'function') {
+        try {
+          orderedVersions = ensureProjectVersionOrder(pid, versionIds, versionMeta) || [];
+        } catch (err) {
+          orderedVersions = versionIds.slice().sort(function(a, b) { return String(a).localeCompare(String(b), 'zh-Hans-CN'); });
+        }
+      } else {
+        orderedVersions = versionIds.slice().sort(function(a, b) { return String(a).localeCompare(String(b), 'zh-Hans-CN'); });
+      }
+
+      var filterVid = versionFilter ? String(versionFilter) : '';
+      if (filterVid && orderedVersions.indexOf(filterVid) === -1) filterVid = '';
+
+      var selectHtml = '';
+      if (orderedVersions.length) {
+        var opts = ['<option value=""' + (filterVid ? '' : ' selected') + '>全部版本</option>'];
+        orderedVersions.forEach(function(vid) {
+          var name = pid === 'unknown' ? ('版本#' + String(vid)) : resolveVersionName(pid, vid);
+          var selected = filterVid && String(vid) === String(filterVid) ? ' selected' : '';
+          opts.push('<option value="' + escapeHtml(vid) + '"' + selected + '>' + escapeHtml(name) + '</option>');
+        });
+        selectHtml =
+          '<div class="exec-overview-detail-head" style="margin:0 0 12px;">' +
+            '<h3 style="margin:0;font-size:16px;">' + escapeHtml(pid === 'unknown' ? '项目#未知' : resolveProjectName(pid)) + '</h3>' +
+            '<label class="inline">版本 <select data-temp-overview-version-select="1">' + opts.join('') + '</select></label>' +
+          '</div>';
+      }
+
+      var total = 0;
+      var pending = 0;
+      var passed = 0;
+      var failed = 0;
+      var blocked = 0;
+      var na = 0;
+      list.forEach(function(file) {
+        if (!file) return;
+        var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+        var s = summaryByFileId && typeof summaryByFileId.get === 'function' ? summaryByFileId.get(fid) : null;
+        if (!s) s = buildTempExecSummary(file);
+        total += Number(s.total) || 0;
+        pending += Number(s.pending) || 0;
+        passed += Number(s.passed) || 0;
+        failed += Number(s.failed) || 0;
+        blocked += Number(s.blocked) || 0;
+        na += Number(s.unspecified) || 0;
+      });
+
+      var versionBoxes = [];
+      orderedVersions.forEach(function(vid) {
+        if (filterVid && String(vid) !== String(filterVid)) return;
+        var filesIn = verMap.get(vid) || [];
+        var fileIds = filesIn.map(function(f) { return f && f.id !== null && f.id !== undefined ? String(f.id) : ''; }).filter(Boolean);
+        var fileMeta = new Map();
+        filesIn.forEach(function(f) {
+          var fid = f && f.id !== null && f.id !== undefined ? String(f.id) : '';
+          if (!fid) return;
+          var t = Number(f && f.createdAt ? f.createdAt : 0) || 0;
+          fileMeta.set(fid, t);
+        });
+        var orderedFileIds = [];
+        if (canUsePlacement && typeof ensureProjectVersionFileOrder === 'function') {
+          try {
+            orderedFileIds = ensureProjectVersionFileOrder(pid, vid, fileIds, fileMeta) || [];
+          } catch (err) {
+            orderedFileIds = fileIds.slice();
+          }
+        } else {
+          orderedFileIds = fileIds.slice();
+          orderedFileIds.sort(function(a, b) {
+            var ta = Number(fileMeta.get(a) || 0) || 0;
+            var tb = Number(fileMeta.get(b) || 0) || 0;
+            if (ta !== tb) return tb - ta;
+            return String(a).localeCompare(String(b), 'zh-Hans-CN');
+          });
+        }
+        var byId = {};
+        filesIn.forEach(function(f) {
+          var fid = f && f.id !== null && f.id !== undefined ? String(f.id) : '';
+          if (fid) byId[fid] = f;
+        });
+        var chips = orderedFileIds
+          .map(function(fid) {
+            var file = byId[fid];
+            if (!file) return '';
+            var summary = summaryByFileId && typeof summaryByFileId.get === 'function' ? summaryByFileId.get(fid) : null;
+            if (!summary) summary = buildTempExecSummary(file);
+            return renderTempExecOverviewExecSetChip(file, summary);
+          })
+          .join('');
+        var vname = pid === 'unknown' ? ('版本#' + String(vid)) : resolveVersionName(pid, vid);
+        versionBoxes.push(
+          '<div class="exec-overview-version-box">' +
+            '<div class="head"><span class="title" title="' + escapeHtml(vname) + '">' + escapeHtml(vname) + '</span></div>' +
+            '<div class="body">' + (chips || '<span class="hint">暂无用例</span>') + '</div>' +
+          '</div>'
+        );
+      });
+
+      if (!filterVid && unassigned.length) {
+        var chips2 = unassigned
+          .slice()
+          .sort(function(a, b) { return Number(b && b.createdAt ? b.createdAt : 0) - Number(a && a.createdAt ? a.createdAt : 0); })
+          .map(function(file) {
+            var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+            var summary = summaryByFileId && typeof summaryByFileId.get === 'function' ? summaryByFileId.get(fid) : null;
+            if (!summary) summary = buildTempExecSummary(file);
+            return renderTempExecOverviewExecSetChip(file, summary);
+          })
+          .join('');
+        versionBoxes.push(
+          '<div class="exec-overview-version-box">' +
+            '<div class="head"><span class="title" title="未分配版本">未分配版本</span></div>' +
+            '<div class="body">' + (chips2 || '<span class="hint">暂无用例</span>') + '</div>' +
+          '</div>'
+        );
+      }
+
+      var metaLine =
+        '<div class="meta">' +
+          '<span>总数 ' + total + '</span>' +
+          '<span>待执行 ' + pending + '</span>' +
+          '<span>通过 ' + passed + '</span>' +
+          '<span>失败 ' + failed + '</span>' +
+          '<span>阻塞 ' + blocked + '</span>' +
+          '<span>不适用 ' + na + '</span>' +
+        '</div>';
+
+      var detail =
+        '<div class="exec-overview-user-grid layout-mode">' +
+          '<div class="exec-overview-user-card">' +
+            '<div class="head"><div class="name">个人总览</div></div>' +
+            metaLine +
+            '<div class="exec-overview-layout">' + versionBoxes.join('') + '</div>' +
+          '</div>' +
+        '</div>';
+
+      return selectHtml + detail;
+    }
+
+    function renderTempExecOverviewExecSetChip(file, summary) {
+      var safe = function(n) { return Math.max(0, Number(n) || 0); };
+      var total = safe(summary && summary.total);
+      var pending = safe(summary && summary.pending);
+      var passed = safe(summary && summary.passed);
+      var failed = safe(summary && summary.failed);
+      var blocked = safe(summary && summary.blocked);
+      var na = safe(summary && summary.unspecified);
+      if (!total) {
+        var fallbackTotal = getTempExecFileCaseCount(file);
+        if (fallbackTotal > 0) {
+          total = fallbackTotal;
+          pending = fallbackTotal;
+          passed = 0;
+          failed = 0;
+          blocked = 0;
+          na = 0;
+        }
+      }
+      var executed = Math.max(0, total - pending);
+      var done = passed + na;
+      var pct = total ? Math.round((done / total) * 100) : 0;
+
+      var statusText = '未执行';
+      var statusCls = 'pending';
+      if (total > 0 && (failed > 0 || blocked > 0)) {
+        if (failed > 0 && blocked > 0) statusText = '失败/阻塞';
+        else if (failed > 0) statusText = '失败';
+        else statusText = '阻塞';
+        statusCls = 'err';
+      } else if (total > 0 && pending === 0) {
+        statusText = '已完成';
+        statusCls = 'ok';
+      } else if (executed > 0) {
+        statusText = '进行中';
+        statusCls = 'running';
+      }
+
+      function findFirstIndex(key) {
+        if (!file || !Array.isArray(file.cases)) return -1;
+        for (var i = 0; i < file.cases.length; i += 1) {
+          var s = getCaseExecutionStatus(file, file.cases[i]);
+          if (mapFilterToStatus(key, s)) return i;
+        }
+        return -1;
+      }
+
+      var segs = [
+        { key: 'passed', className: 'status-passed', count: passed },
+        { key: 'failed', className: 'status-failed', count: failed },
+        { key: 'blocked', className: 'status-blocked', count: blocked },
+        { key: 'unspecified', className: 'status-unspecified', count: na },
+        { key: 'pending', className: 'status-pending', count: pending },
+      ].filter(function(seg) { return seg && seg.count > 0; });
+      var barHtml = segs.length
+        ? segs
+          .map(function(seg) {
+            var firstIndex = findFirstIndex(seg.key);
+            return (
+              '<div class="temp-overview-segment ' + seg.className + '" style="flex:' + seg.count + ';" data-temp-overview-file="' + escapeHtml(file.id) + '" data-temp-overview-status="' + escapeHtml(seg.key) + '" data-temp-overview-index="' + String(firstIndex) + '">' +
+                '<span>' + String(seg.count) + '</span>' +
+              '</div>'
+            );
+          })
+          .join('')
+        : '<div class="temp-overview-segment status-pending" style="flex:1;"><span>0</span></div>';
+
+      var progress =
+        '<div class="exec-overview-file-progress" title="执行进度 ' + pct + '%（' + done + '/' + total + '）">' +
+          '<div class="temp-overview-bar">' + barHtml + '</div>' +
+          '<div class="label">' + pct + '%</div>' +
+        '</div>';
+
+      var kvs = [
+        '<span class="exec-overview-kv kv-done">已' + executed + '/' + total + '</span>',
+        '<span class="exec-overview-kv kv-pending">待' + pending + '</span>',
+        '<span class="exec-overview-kv kv-passed">过' + passed + '</span>',
+        '<span class="exec-overview-kv kv-failed">失' + failed + '</span>',
+        '<span class="exec-overview-kv kv-blocked">阻' + blocked + '</span>',
+        (na > 0 ? '<span class="exec-overview-kv kv-na">NA' + na + '</span>' : ''),
+      ].filter(Boolean);
+
+      var meta =
+        '<div class="exec-overview-file-meta">' +
+          '<span class="exec-overview-file-status status-' + statusCls + '">' + escapeHtml(statusText) + '</span>' +
+          '<span class="exec-overview-file-counts" title="' + escapeHtml(kvs.join(' ')) + '">' + kvs.join('') + '</span>' +
+        '</div>';
+
+      var label = file && file.name ? String(file.name) : '测试用例';
+      return (
+        '<button type="button" class="exec-overview-file-chip state-' + statusCls + '" data-temp-file="' + escapeHtml(file.id) + '">' +
+          '<div class="row">' +
+            '<span class="text" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
+            '<span class="badge">' + total + '</span>' +
+          '</div>' +
+          progress +
+          meta +
+        '</button>'
       );
     }
 
