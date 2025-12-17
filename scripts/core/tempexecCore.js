@@ -6425,8 +6425,9 @@
         title: 10,
         priority: 5,
         preconditions: 13,
-        steps: 15,
-        expected: 16,
+        // 操作步骤减少 1 个汉字宽度；预期结果减少 2 个汉字宽度；宽度加到“实际结果”。
+        steps: 14,
+        expected: 14,
       };
       // 优先级列不参与“平均补宽”，保持基准宽度不变。
       var stretchKeys = Object.keys(baseEm).filter(function(key) { return key !== 'priority'; });
@@ -6441,7 +6442,7 @@
       var widthByKey = {
         select: '36px',
         index: '50px',
-        actual: '4em',
+        actual: '7em',
         remark: '4em',
         defect: '6em',
         ops: '40px',
