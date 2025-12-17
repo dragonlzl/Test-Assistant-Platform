@@ -5289,10 +5289,12 @@
     ed.pendingRemaining = 0;
   }
 
-  function clearPendingOp() {
-    cleanupPendingToast();
-    state.editor.pendingOp = null;
-  }
+	  function clearPendingOp() {
+	    cleanupPendingToast();
+	    state.editor.pendingOp = null;
+	    syncEditorBatchDeleteControls();
+	    syncEditorBatchAddControls();
+	  }
 
   var caseLibraryBlockHintEl = null;
   var caseLibraryBlockHintTimer = null;
@@ -5521,7 +5523,7 @@
       }).catch(function(e) {
         setStatus(dom.editStatus, e && e.message ? e.message : '删除入库失败', 'err');
       }).finally(function() {
-        ed.pendingOp = null;
+        clearPendingOp();
       });
       return;
     }
@@ -5557,11 +5559,11 @@
         return settle(apiClient.deleteCaseItem(entry.id));
       });
 
-      Promise.all(promises).then(function(results) {
-        var failures = [];
-        for (var i = 0; i < results.length; i += 1) {
-          if (results[i] && results[i].status === 'rejected') failures.push(toDelete[i]);
-        }
+	      Promise.all(promises).then(function(results) {
+	        var failures = [];
+	        for (var i = 0; i < results.length; i += 1) {
+	          if (results[i] && results[i].status === 'rejected') failures.push(toDelete[i]);
+	        }
 
         if (!failures.length) {
           setStatus(dom.editStatus, '批量删除已入库（' + toDelete.length + '条）', 'ok');
@@ -5581,13 +5583,13 @@
           '批量删除部分失败：成功 ' + (toDelete.length - failures.length) + ' 条，失败 ' + failures.length + ' 条',
           'warn'
         );
-      }).catch(function(e) {
-        setStatus(dom.editStatus, e && e.message ? e.message : '批量删除入库失败', 'err');
-      }).finally(function() {
-        ed.pendingOp = null;
-      });
-      return;
-    }
+	      }).catch(function(e) {
+	        setStatus(dom.editStatus, e && e.message ? e.message : '批量删除入库失败', 'err');
+	      }).finally(function() {
+	        clearPendingOp();
+	      });
+	      return;
+	    }
 
     if (op.type === 'insert_batch' && Array.isArray(op.itemKeys)) {
       var keys = op.itemKeys.slice();
@@ -5647,11 +5649,11 @@
         }));
       });
 
-      Promise.all(promises).then(function(results) {
-        var failures = [];
-        for (var i = 0; i < results.length; i += 1) {
-          if (results[i] && results[i].status === 'rejected') failures.push(entries[i]);
-        }
+	      Promise.all(promises).then(function(results) {
+	        var failures = [];
+	        for (var i = 0; i < results.length; i += 1) {
+	          if (results[i] && results[i].status === 'rejected') failures.push(entries[i]);
+	        }
         if (!failures.length) {
           setStatus(dom.editStatus, '批量新增已入库（' + entries.length + '条）', 'ok');
           renderEditorTable();
@@ -5659,13 +5661,13 @@
         }
         setStatus(dom.editStatus, '批量新增部分失败：成功 ' + (entries.length - failures.length) + ' 条，失败 ' + failures.length + ' 条', 'warn');
         renderEditorTable();
-      }).catch(function(e) {
-        setStatus(dom.editStatus, e && e.message ? e.message : '批量新增入库失败', 'err');
-      }).finally(function() {
-        ed.pendingOp = null;
-      });
-      return;
-    }
+	      }).catch(function(e) {
+	        setStatus(dom.editStatus, e && e.message ? e.message : '批量新增入库失败', 'err');
+	      }).finally(function() {
+	        clearPendingOp();
+	      });
+	      return;
+	    }
 
     if (op.type === 'insert' && op.itemKey) {
       var createIndex = ed.items.findIndex(function(it) { return it && it.__localId === op.itemKey; });
@@ -5691,13 +5693,13 @@
         }
         setStatus(dom.editStatus, '新增已入库', 'ok');
         renderEditorTable();
-      }).catch(function(e) {
-        setStatus(dom.editStatus, e && e.message ? e.message : '新增入库失败', 'err');
-      }).finally(function() {
-        ed.pendingOp = null;
-      });
-      return;
-    }
+	      }).catch(function(e) {
+	        setStatus(dom.editStatus, e && e.message ? e.message : '新增入库失败', 'err');
+	      }).finally(function() {
+	        clearPendingOp();
+	      });
+	      return;
+	    }
     clearPendingOp();
     setStatus(dom.editStatus, '变更已应用', 'ok');
   }

@@ -1257,6 +1257,7 @@
 - 复用说明：复用既有单条删除接口 `/api/case-files/items/{id}` 与既有 8 秒撤回 toast 机制，不新增后端接口。  
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_delete.spec.js`（通过）。  
 - 更新记录：2025-12-17 用例库编辑视图支持批量删除并 8 秒撤回（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_batch_delete.spec.js`）。  
+- 更新记录：2025-12-17 修复批量删除超时入库后，“批量新增”按钮未自动恢复可用状态（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_batch_delete.spec.js`）。  
 
 - 功能名称：用例改动历史详情增加“用例名”列  
 - 功能描述：在用例库“用例改动历史详情”表格中新增“用例名”列，便于截图/导出/对照时直接看到当前历史记录归属的用例文件名。  

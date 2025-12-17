@@ -198,6 +198,6 @@ test.describe('用例库编辑视图批量删除', () => {
     await page.waitForTimeout(8500);
     expect(deleteCalls).toBe(2);
     await expect(page.locator('#caseLibraryEditStatus')).toContainText('批量删除已入库');
+    await expect(page.locator('#caseLibraryEditBatchAddBtn')).toBeEnabled();
   });
 });
-
