@@ -200,7 +200,8 @@
   };
 
 	  var importDrawerInstance = null;
-	  var importDiffDrawerInstance = null;
+  var importDiffDrawerInstance = null;
+  var importDiffDrawerOpenTimer = 0;
 	  var importInvalidDrawerInstance = null;
 	  var editDrawerInstance = null;
 	  var selectDrawerInstance = null;
@@ -762,10 +763,20 @@
     if (importDrawerInstance && typeof importDrawerInstance.close === 'function') {
       importDrawerInstance.close();
     }
+    if (importDiffDrawerOpenTimer) {
+      clearTimeout(importDiffDrawerOpenTimer);
+      importDiffDrawerOpenTimer = 0;
+    }
     if (importDiffDrawerInstance && typeof importDiffDrawerInstance.open === 'function') {
-      setTimeout(function() {
+      var el = importDiffDrawerInstance.element;
+      var alreadyOpen = Boolean(el && el.classList && el.classList.contains('open'));
+      if (alreadyOpen) {
         importDiffDrawerInstance.open();
-      }, 60);
+      } else {
+        importDiffDrawerOpenTimer = setTimeout(function() {
+          importDiffDrawerInstance.open();
+        }, 60);
+      }
     }
   }
 
@@ -808,12 +819,22 @@
     if (importDrawerInstance && typeof importDrawerInstance.close === 'function') {
       importDrawerInstance.close();
     }
-	    if (importDiffDrawerInstance && typeof importDiffDrawerInstance.open === 'function') {
-	      setTimeout(function() {
-	        importDiffDrawerInstance.open();
-	      }, 60);
+	    if (importDiffDrawerOpenTimer) {
+	      clearTimeout(importDiffDrawerOpenTimer);
+	      importDiffDrawerOpenTimer = 0;
 	    }
-	  }
+	    if (importDiffDrawerInstance && typeof importDiffDrawerInstance.open === 'function') {
+	      var el = importDiffDrawerInstance.element;
+	      var alreadyOpen = Boolean(el && el.classList && el.classList.contains('open'));
+	      if (alreadyOpen) {
+	        importDiffDrawerInstance.open();
+	      } else {
+	        importDiffDrawerOpenTimer = setTimeout(function() {
+	          importDiffDrawerInstance.open();
+	        }, 60);
+	      }
+	    }
+		  }
 
   // 供外部模块（如“用例生成”）复用同名差异对比抽屉：打开后等待用户“确认覆盖导入”或关闭抽屉。
   function openImportDiffForExternal(options) {
@@ -1457,7 +1478,9 @@
               // ignore
             }
           }
-          if (importDiffDrawerInstance && typeof importDiffDrawerInstance.close === 'function') {
+          var q = state.importDiff && state.importDiff.queue ? state.importDiff.queue : null;
+          var keepOpen = Boolean(q && q.active && Number(q.total) > 0 && Number(q.index) < Number(q.total) - 1);
+          if (!keepOpen && importDiffDrawerInstance && typeof importDiffDrawerInstance.close === 'function') {
             importDiffDrawerInstance.close();
           }
         })
@@ -1527,7 +1550,9 @@
             // ignore
           }
         }
-        if (importDiffDrawerInstance && typeof importDiffDrawerInstance.close === 'function') {
+        var q = state.importDiff && state.importDiff.queue ? state.importDiff.queue : null;
+        var keepOpen = Boolean(q && q.active && Number(q.total) > 0 && Number(q.index) < Number(q.total) - 1);
+        if (!keepOpen && importDiffDrawerInstance && typeof importDiffDrawerInstance.close === 'function') {
           importDiffDrawerInstance.close();
         }
       })
@@ -3542,10 +3567,10 @@
     syncImportConfirmEnabled();
   }
 
-	  function confirmImportToDb() {
-	    var s = state.importDrawer;
-	    if (!s.files.length) {
-	      setStatus(dom.importStatus, '请先选择用例文件', 'warn');
+  function confirmImportToDb() {
+    var s = state.importDrawer;
+    if (!s.files.length) {
+      setStatus(dom.importStatus, '请先选择用例文件', 'warn');
       return;
     }
     if (!s.projectId) {
@@ -3557,286 +3582,326 @@
       return;
     }
 
+    function buildNameList(names, maxCount) {
+      var list = Array.isArray(names) ? names.filter(Boolean) : [];
+      var max = Number.isFinite(Number(maxCount)) ? Number(maxCount) : 8;
+      if (!list.length) return '';
+      var head = list.slice(0, max).join('、');
+      return list.length > max ? (head + '...（共 ' + list.length + ' 份）') : head;
+    }
+
+    function pushSkip(skipped, name, reason) {
+      skipped.push({ name: name || '用例', reason: reason || '已跳过' });
+    }
+
+    function pushFail(failed, name, reason) {
+      failed.push({ name: name || '用例', reason: reason || '失败' });
+    }
+
+    function getSameNameMatchedCleanName(fileName, errPayload) {
+      var importedCleanName = cleanCaseFileName(fileName || '');
+      var matchedCleanName = errPayload && errPayload.existing_file_name_clean ? String(errPayload.existing_file_name_clean) : '';
+      return matchedCleanName || importedCleanName || (fileName ? String(fileName) : '用例');
+    }
+
+    function enqueueSameNameDiffTask(queue, file, items, err) {
+      var fileName = file && file.name ? file.name : '';
+      var errPayload = err && err.payload ? err.payload : null;
+      var cleanName = getSameNameMatchedCleanName(fileName, errPayload);
+      queue.push({
+        projectId: s.projectId,
+        versionId: s.versionId,
+        fileName: fileName,
+        importItems: items,
+        source: (file && file.type) ? file.type : (extFromFileName(fileName) || ''),
+        error: err,
+        cleanName: cleanName,
+      });
+      return cleanName;
+    }
+
+    function openImportDiffForQueueTask(task) {
+      if (!task) return Promise.resolve({ ok: false, reason: 'invalid_task' });
+      var projectId = task.projectId;
+      var versionId = task.versionId;
+      var fileName = task.fileName || '';
+      var items = Array.isArray(task.importItems) ? task.importItems : [];
+      var err = task.error || null;
+      var errPayload = err && err.payload ? err.payload : null;
+      var importedCleanName = cleanCaseFileName(fileName);
+      var cleanName = task.cleanName || importedCleanName || '用例';
+      var source = task.source || extFromFileName(fileName) || 'external';
+      var existingCaseFileId = errPayload && errPayload.existing_case_file_id ? errPayload.existing_case_file_id : null;
+      var dbVersionId = errPayload && (errPayload.existing_version_id || errPayload.existing_version_id === 0)
+        ? errPayload.existing_version_id
+        : null;
+
+      // 优先走“带 existing_case_file_id”的通道（由后端返回），否则回退到拉列表按 cleanName 匹配。
+      if (existingCaseFileId) {
+        return openImportDiffForExternal({
+          projectId: projectId,
+          versionId: versionId,
+          fileName: fileName,
+          items: items,
+          error: err,
+          source: source,
+        });
+      }
+
+      if (!projectId || !versionId || !fileName || !items.length) {
+        return Promise.resolve({ ok: false, reason: 'invalid_params' });
+      }
+
+      openImportDiffDrawerLoading({
+        fileName: fileName,
+        cleanName: cleanName,
+        importedCleanName: importedCleanName,
+        projectId: projectId,
+        importVersionId: versionId,
+        source: source,
+      });
+
+      return new Promise(function(resolve) {
+        state.importDiff.external = { resolve: resolve };
+        Promise.all([apiClient.listCaseFiles(projectId), loadVersions(projectId)])
+          .then(function(res) {
+            var files = Array.isArray(res && res[0]) ? res[0] : [];
+            var list = Array.isArray(files) ? files : [];
+            var existing = list.find(function(cf) {
+              return cf && String(cf.file_name_clean || '') === String(cleanName || '');
+            });
+            if (!existing) throw new Error('未找到库中同名用例：' + cleanName);
+            return apiClient.listCaseItems(existing.id).then(function(dbItems) {
+              openImportDiffDrawer({
+                fileName: fileName,
+                cleanName: cleanName,
+                importedCleanName: importedCleanName,
+                projectId: projectId,
+                importVersionId: versionId,
+                dbVersionId: dbVersionId || existing.version_id || null,
+                importItems: items,
+                dbItems: dbItems || [],
+                source: source,
+              });
+            });
+          })
+          .catch(function(loadErr) {
+            setStatus(dom.importDiffStatus, '加载差异对比失败：' + (loadErr && loadErr.message ? loadErr.message : '未知错误'), 'err');
+            var external = state.importDiff.external || null;
+            if (external && typeof external.resolve === 'function') {
+              state.importDiff.external = null;
+              try {
+                external.resolve({ ok: false, reason: 'load_failed', error: loadErr || null });
+              } catch (e) {
+                // ignore
+              }
+            }
+          });
+      });
+    }
+
+    function buildFinalImportMessage(imported, overwritten, skipped, failed) {
+      var importedNames = imported.slice();
+      var overwrittenNames = overwritten.slice();
+      var skippedItems = Array.isArray(skipped) ? skipped : [];
+      var failedItems = Array.isArray(failed) ? failed : [];
+      var skippedNames = skippedItems.map(function(it) { return it && it.name ? it.name : '用例'; });
+      var totalOk = importedNames.length + overwrittenNames.length;
+      var totalSkip = skippedNames.length;
+      var totalFail = failedItems.length;
+
+      var lines = [];
+      lines.push('导入完成：成功 ' + totalOk + ' 份，跳过 ' + totalSkip + ' 份，失败 ' + totalFail + ' 份');
+      if (importedNames.length) lines.push('入库成功：' + buildNameList(importedNames, 10));
+      if (overwrittenNames.length) lines.push('覆盖导入成功：' + buildNameList(overwrittenNames, 10));
+      if (skippedItems.length) {
+        skippedItems.slice(0, 6).forEach(function(it) {
+          if (!it) return;
+          lines.push('跳过 - ' + (it.name || '用例') + '：' + (it.reason || '已跳过'));
+        });
+        if (skippedItems.length > 6) lines.push('跳过 - 还有 ' + (skippedItems.length - 6) + ' 份未展开');
+      }
+      if (failedItems.length) {
+        failedItems.slice(0, 6).forEach(function(it) {
+          if (!it) return;
+          lines.push('失败 - ' + (it.name || '用例') + '：' + (it.reason || '失败'));
+        });
+        if (failedItems.length > 6) lines.push('失败 - 还有 ' + (failedItems.length - 6) + ' 份未展开');
+      }
+      return lines.join('\n');
+    }
+
     s.loading = true;
     syncImportConfirmEnabled();
     setStatus(dom.importStatus, '解析并导入中...', '');
 
-    var successCount = 0;
-    var failCount = 0;
-	    var duplicateNames = [];
-	    var failDetails = [];
-	    var diffOpened = false;
-	    var invalidOpened = false;
-	    var chain = Promise.resolve();
+    var importedNames = [];
+    var overwrittenNames = [];
+    var skippedItems = [];
+    var failedItems = [];
+    var diffQueue = [];
+    var invalidOpened = false;
+    var chain = Promise.resolve();
 
-	    s.files.forEach(function(file) {
-	      chain = chain.then(function() {
-	        if (invalidOpened) return;
-	        return parseImportFile(file)
-	          .then(function(parsed) {
-	            if (invalidOpened) return;
-	            var structural = parsed && Array.isArray(parsed.structuralErrors) ? parsed.structuralErrors : [];
-	            var items = parsed && parsed.items ? parsed.items : [];
-	            if (!items.length) {
-	              failCount += 1;
-	              var emptyMsg = '【' + (file && file.name ? file.name : '文件') + '】未解析到有效用例，已跳过';
-	              failDetails.push({ file: file && file.name ? file.name : '文件', reason: emptyMsg });
-	              setStatus(dom.importStatus, emptyMsg, 'warn');
-	              return;
-	            }
-	            var invalid = validateImportItems(items);
-	            if (structural.length || invalid.length) {
-	              invalidOpened = true;
-	              openImportInvalidDrawer({
-	                file: file,
-	                fileName: file.name,
-	                cleanName: cleanCaseFileName(file.name),
-	                projectId: s.projectId,
-	                versionId: s.versionId,
-	                source: file.type || extFromFileName(file.name),
-	                items: items,
-	                structuralErrors: structural,
-	              });
-	              if (structural.length) {
-	                var hint = '导入发现字段层级不足 ' + structural.length + ' 条（将跳过）；可继续入库其余 ' + items.length + ' 条，或回到 XMind 补齐后重导入';
-	                setStatus(dom.importStatus, hint, 'warn');
-	                setStatus(dom.status, hint, 'warn');
-	              } else {
-	                setStatus(dom.importStatus, '导入校验失败：请在“格式校验”抽屉补齐必填字段后再确认入库', 'warn');
-	                setStatus(dom.status, '导入校验失败：请补齐必填字段后再确认入库', 'warn');
-	              }
-	              return;
-	            }
-              var dup = buildDuplicateGroupsForImport(items);
-              if (dup.duplicateCount > 0) {
-                return confirmImportDuplicatesByDrawer({
-                  fileName: file.name,
-                  total: items.length,
-                  uniqueCount: dup.uniqueItems.length,
-                  duplicateCount: dup.duplicateCount,
-                  rows: dup.rows,
-                }).then(function(ok) {
-                  if (!ok) {
-                    failCount += 1;
-                    var cancelMsg = '已取消导入（包含重复条目）：' + (file && file.name ? file.name : '文件');
-                    failDetails.push({ file: file && file.name ? file.name : '文件', reason: cancelMsg });
-                    setStatus(dom.importStatus, cancelMsg, 'warn');
-                    return;
-                  }
-                  items = dup.uniqueItems;
-                  return apiClient.importCaseFile({
-                    project_id: s.projectId,
-                    version_id: s.versionId,
-                    file_name: file.name,
-                    source: file.type || extFromFileName(file.name),
-                    items: sanitizeImportItemsForApi(items),
-                  }).then(function() {
-                    successCount += 1;
-                  }).catch(function(err) {
-                    failCount += 1;
-                    var msg = err && err.message ? err.message : '导入失败';
-                    var errPayload = err && err.payload ? err.payload : null;
-                    failDetails.push({ file: file && file.name ? file.name : '文件', reason: msg });
-                    if (msg.indexOf('同名') !== -1) {
-                      var importedCleanName = cleanCaseFileName(file.name);
-                      var matchedCaseFileId = errPayload && errPayload.existing_case_file_id ? errPayload.existing_case_file_id : null;
-                      var matchedCleanName = errPayload && errPayload.existing_file_name_clean ? String(errPayload.existing_file_name_clean) : importedCleanName;
-                      var matchedVersionId = errPayload && (errPayload.existing_version_id || errPayload.existing_version_id === 0) ? errPayload.existing_version_id : null;
-                      duplicateNames.push(matchedCleanName || importedCleanName);
-                      if (matchedCleanName && importedCleanName && matchedCleanName !== importedCleanName) {
-                        msg = msg + '（匹配：' + matchedCleanName + '）';
-                      }
-                      if (!diffOpened) {
-                        diffOpened = true;
-                        var cleanName = matchedCleanName || importedCleanName;
-                        var source = file.type || extFromFileName(file.name);
-                        openImportDiffDrawerLoading({
-                          fileName: file.name,
-                          cleanName: cleanName,
-                          importedCleanName: importedCleanName,
-                          projectId: s.projectId,
-                          importVersionId: s.versionId,
-                          source: source,
-                        });
-                        // 拉取库中同名用例内容用于差异对比。
-                        (matchedCaseFileId
-                          ? Promise.all([apiClient.listCaseItems(matchedCaseFileId), loadVersions(s.projectId)]).then(function(res) {
-                            var dbItems = Array.isArray(res && res[0]) ? res[0] : [];
-                            openImportDiffDrawer({
-                              fileName: file.name,
-                              cleanName: cleanName,
-                              importedCleanName: importedCleanName,
-                              projectId: s.projectId,
-                              importVersionId: s.versionId,
-                              dbVersionId: matchedVersionId,
-                              importItems: items,
-                              dbItems: dbItems || [],
-                              source: source,
-                            });
-                          })
-                          : Promise.all([apiClient.listCaseFiles(s.projectId), loadVersions(s.projectId)])
-                              .then(function(res) {
-                                var files = Array.isArray(res && res[0]) ? res[0] : [];
-                                var list = Array.isArray(files) ? files : [];
-                                var existing = list.find(function(cf) {
-                                  return cf && String(cf.file_name_clean || '') === String(cleanName || '');
-                                });
-                                if (!existing) throw new Error('未找到库中同名用例：' + cleanName);
-                                return apiClient.listCaseItems(existing.id).then(function(dbItems) {
-                                  openImportDiffDrawer({
-                                    fileName: file.name,
-                                    cleanName: cleanName,
-                                    importedCleanName: importedCleanName,
-                                    projectId: s.projectId,
-                                    importVersionId: s.versionId,
-                                    dbVersionId: existing.version_id || null,
-                                    importItems: items,
-                                    dbItems: dbItems || [],
-                                    source: source,
-                                  });
-                                });
-                              })
-                        )
-                          .catch(function(e) {
-                            setStatus(dom.importDiffStatus, (e && e.message ? e.message : '打开差异对比失败'), 'err');
-                            setStatus(dom.importStatus, (e && e.message ? e.message : '打开差异对比失败'), 'err');
-                          });
-                      }
-                    }
-                    setStatus(dom.importStatus, msg, 'err');
-                  });
-                });
+    s.files.forEach(function(file) {
+      chain = chain.then(function() {
+        if (invalidOpened) return;
+        return parseImportFile(file)
+          .then(function(parsed) {
+            if (invalidOpened) return;
+            var structural = parsed && Array.isArray(parsed.structuralErrors) ? parsed.structuralErrors : [];
+            var items = parsed && parsed.items ? parsed.items : [];
+            var cleanName = cleanCaseFileName(file && file.name ? file.name : '');
+            if (!items.length) {
+              var emptyMsg = '未解析到有效用例';
+              pushSkip(skippedItems, cleanName || (file && file.name ? file.name : '文件'), emptyMsg);
+              setStatus(dom.importStatus, '【' + (file && file.name ? file.name : '文件') + '】' + emptyMsg + '，已跳过', 'warn');
+              return;
+            }
+            var invalid = validateImportItems(items);
+            if (structural.length || invalid.length) {
+              invalidOpened = true;
+              openImportInvalidDrawer({
+                file: file,
+                fileName: file.name,
+                cleanName: cleanCaseFileName(file.name),
+                projectId: s.projectId,
+                versionId: s.versionId,
+                source: file.type || extFromFileName(file.name),
+                items: items,
+                structuralErrors: structural,
+              });
+              if (structural.length) {
+                var hint = '导入发现字段层级不足 ' + structural.length + ' 条（将跳过）；可继续入库其余 ' + items.length + ' 条，或回到 XMind 补齐后重导入';
+                setStatus(dom.importStatus, hint, 'warn');
+                setStatus(dom.status, hint, 'warn');
+              } else {
+                setStatus(dom.importStatus, '导入校验失败：请在“格式校验”抽屉补齐必填字段后再确认入库', 'warn');
+                setStatus(dom.status, '导入校验失败：请补齐必填字段后再确认入库', 'warn');
               }
-	            return apiClient.importCaseFile({
-	              project_id: s.projectId,
-	              version_id: s.versionId,
-	              file_name: file.name,
-              source: file.type || extFromFileName(file.name),
-              items: sanitizeImportItemsForApi(items),
-            }).then(function() {
-              successCount += 1;
-            }).catch(function(err) {
-              failCount += 1;
-              var msg = err && err.message ? err.message : '导入失败';
-              var errPayload = err && err.payload ? err.payload : null;
-              failDetails.push({ file: file && file.name ? file.name : '文件', reason: msg });
-              if (msg.indexOf('同名') !== -1) {
-                var importedCleanName = cleanCaseFileName(file.name);
-                var matchedCaseFileId = errPayload && errPayload.existing_case_file_id ? errPayload.existing_case_file_id : null;
-                var matchedCleanName = errPayload && errPayload.existing_file_name_clean ? String(errPayload.existing_file_name_clean) : importedCleanName;
-                var matchedVersionId = errPayload && (errPayload.existing_version_id || errPayload.existing_version_id === 0) ? errPayload.existing_version_id : null;
-                duplicateNames.push(matchedCleanName || importedCleanName);
-                if (matchedCleanName && importedCleanName && matchedCleanName !== importedCleanName) {
-                  msg = msg + '（匹配：' + matchedCleanName + '）';
+              return;
+            }
+
+            function doImport(validItems) {
+              return apiClient.importCaseFile({
+                project_id: s.projectId,
+                version_id: s.versionId,
+                file_name: file.name,
+                source: file.type || extFromFileName(file.name),
+                items: sanitizeImportItemsForApi(validItems),
+              }).then(function() {
+                importedNames.push(cleanName || (file && file.name ? file.name : '用例'));
+              }).catch(function(err) {
+                var msg = err && err.message ? err.message : '导入失败';
+                if (msg.indexOf('同名') !== -1) {
+                  var matchedName = enqueueSameNameDiffTask(diffQueue, file, validItems, err);
+                  setStatus(dom.importStatus, msg + '：' + matchedName + '（已加入差异对比队列）', 'warn');
+                  return;
                 }
-                if (!diffOpened) {
-                  diffOpened = true;
-                  var cleanName = matchedCleanName || importedCleanName;
-                  var source = file.type || extFromFileName(file.name);
-                  openImportDiffDrawerLoading({
-                    fileName: file.name,
-                    cleanName: cleanName,
-                    importedCleanName: importedCleanName,
-                    projectId: s.projectId,
-                    importVersionId: s.versionId,
-                    source: source,
-                  });
-                  // 拉取库中同名用例内容用于差异对比。
-                  (matchedCaseFileId
-                    ? Promise.all([apiClient.listCaseItems(matchedCaseFileId), loadVersions(s.projectId)]).then(function(res) {
-                      var dbItems = Array.isArray(res && res[0]) ? res[0] : [];
-                      openImportDiffDrawer({
-                        fileName: file.name,
-                        cleanName: cleanName,
-                        importedCleanName: importedCleanName,
-                        projectId: s.projectId,
-                        importVersionId: s.versionId,
-                        dbVersionId: matchedVersionId,
-                        importItems: items,
-                        dbItems: dbItems || [],
-                        source: source,
-                      });
-                    })
-                    : Promise.all([apiClient.listCaseFiles(s.projectId), loadVersions(s.projectId)])
-                        .then(function(res) {
-                          var files = Array.isArray(res && res[0]) ? res[0] : [];
-                          var list = Array.isArray(files) ? files : [];
-                          var existing = list.find(function(cf) {
-                            return cf && String(cf.file_name_clean || '') === String(cleanName || '');
-                          });
-                          if (!existing) throw new Error('未找到库中同名用例：' + cleanName);
-                          return apiClient.listCaseItems(existing.id).then(function(dbItems) {
-                            openImportDiffDrawer({
-                              fileName: file.name,
-                              cleanName: cleanName,
-                              importedCleanName: importedCleanName,
-                              projectId: s.projectId,
-                              importVersionId: s.versionId,
-                              dbVersionId: existing.version_id || null,
-                              importItems: items,
-                              dbItems: dbItems || [],
-                              source: source,
-                            });
-                          });
-                        })
-                  )
-                    .catch(function(e) {
-                      setStatus(dom.importDiffStatus, (e && e.message ? e.message : '打开差异对比失败'), 'err');
-                      setStatus(dom.importStatus, (e && e.message ? e.message : '打开差异对比失败'), 'err');
-                    });
+                pushFail(failedItems, cleanName || (file && file.name ? file.name : '用例'), msg);
+                setStatus(dom.importStatus, msg, 'err');
+              });
+            }
+
+            var dup = buildDuplicateGroupsForImport(items);
+            if (dup.duplicateCount > 0) {
+              return confirmImportDuplicatesByDrawer({
+                fileName: file.name,
+                total: items.length,
+                uniqueCount: dup.uniqueItems.length,
+                duplicateCount: dup.duplicateCount,
+                rows: dup.rows,
+              }).then(function(ok) {
+                if (!ok) {
+                  pushSkip(skippedItems, cleanName || (file && file.name ? file.name : '用例'), '已取消导入（包含重复条目）');
+                  setStatus(dom.importStatus, '已取消导入（包含重复条目）：' + (file && file.name ? file.name : '文件'), 'warn');
+                  return;
                 }
+                return doImport(dup.uniqueItems);
+              });
+            }
+            return doImport(items);
+          })
+          .catch(function(err) {
+            if (invalidOpened) return;
+            var msg = err && err.message ? err.message : '解析失败';
+            var cleanName = cleanCaseFileName(file && file.name ? file.name : '');
+            pushFail(failedItems, cleanName || (file && file.name ? file.name : '用例'), msg);
+            setStatus(dom.importStatus, msg, 'err');
+          });
+      });
+    });
+
+    chain
+      .then(function() {
+        if (invalidOpened) return;
+        if (!diffQueue.length) return;
+        setStatus(dom.importStatus, '检测到同名用例冲突 ' + diffQueue.length + ' 份，请依次确认覆盖导入或关闭跳过', 'warn');
+        state.importDiff.queue = { active: true, total: diffQueue.length, index: -1 };
+        var diffChain = Promise.resolve();
+        diffQueue.forEach(function(task, idx) {
+          diffChain = diffChain.then(function() {
+            if (!task) return;
+            if (invalidOpened) return;
+            if (state.importDiff.queue && state.importDiff.queue.active) state.importDiff.queue.index = idx;
+            var tip = '同名用例已存在，处理差异对比（' + (idx + 1) + '/' + diffQueue.length + '）：' + (task.cleanName || '用例');
+            setStatus(dom.importStatus, tip, 'warn');
+            return openImportDiffForQueueTask(task).then(function(res) {
+              if (res && res.ok) {
+                overwrittenNames.push(task.cleanName || cleanCaseFileName(task.fileName));
+                return;
               }
-              setStatus(dom.importStatus, msg, 'err');
+              if (res && res.reason === 'closed') {
+                pushSkip(skippedItems, task.cleanName || cleanCaseFileName(task.fileName), '同名冲突已跳过');
+                return;
+              }
+              var reason = res && res.reason ? String(res.reason) : '同名冲突处理失败';
+              pushFail(failedItems, task.cleanName || cleanCaseFileName(task.fileName), reason);
             });
-	          })
-	          .catch(function(err) {
-	            if (invalidOpened) return;
-	            failCount += 1;
-	            var msg = err && err.message ? err.message : '解析失败';
-	            failDetails.push({ file: file && file.name ? file.name : '文件', reason: msg });
-	            setStatus(dom.importStatus, msg, 'err');
-	          });
-	      });
-	    });
-
-	    chain.then(function() {
-	      if (invalidOpened) return;
-	      var msg = '导入完成：成功 ' + successCount + ' 份，失败/跳过 ' + failCount + ' 份';
-	      if (duplicateNames.length) {
-	        var head = duplicateNames.slice(0, 3).join('、');
-	        msg += '；同名用例已存在：' + head + (duplicateNames.length > 3 ? '...' : '');
-      }
-      if (failDetails.length) {
-        var lines = [msg];
-        failDetails.slice(0, 3).forEach(function(item) {
-          if (!item) return;
-          var fname = item.file ? String(item.file) : '文件';
-          var reason = item.reason ? String(item.reason) : '失败';
-          lines.push(' - ' + fname + '：' + reason);
+          });
         });
-        if (failDetails.length > 3) {
-          lines.push(' - 还有 ' + (failDetails.length - 3) + ' 个失败未展开');
+        return diffChain.finally(function() {
+          if (state.importDiff.queue && state.importDiff.queue.active) {
+            state.importDiff.queue.active = false;
+            state.importDiff.queue.index = -1;
+          }
+        });
+      })
+      .then(function() {
+        if (invalidOpened) return;
+        var msg = buildFinalImportMessage(importedNames, overwrittenNames, skippedItems, failedItems);
+        var hasIssues = Boolean(skippedItems.length || failedItems.length);
+        setStatus(dom.importStatus, msg, hasIssues ? 'warn' : 'ok');
+        setStatus(dom.status, msg, hasIssues ? 'warn' : 'ok');
+        if (utils && typeof utils.showCenterToast === 'function') {
+          utils.showCenterToast(msg, hasIssues ? 'warn' : 'ok', 10000);
         }
-        msg = lines.join('\n');
-      }
-	      setStatus(dom.importStatus, msg, failCount ? 'warn' : 'ok');
-	      setStatus(dom.status, msg, failCount ? 'warn' : 'ok');
-	    }).finally(function() {
-	      s.loading = false;
-	      // 防止重复导入：当本次导入全部成功后，自动清空文件选择（保留项目/版本默认值）。
-	      if (!invalidOpened && successCount > 0 && failCount === 0 && diffOpened !== true) {
-	        s.files = [];
-	        renderImportFileHint();
-	        if (dom.importInput) {
-	          try {
-	            dom.importInput.value = '';
-          } catch (e) {
-            // ignore
+      })
+      .finally(function() {
+        s.loading = false;
+        if (state.importDiff.queue && state.importDiff.queue.active) {
+          state.importDiff.queue.active = false;
+          state.importDiff.queue.index = -1;
+        }
+        // 防止重复导入：当本次导入无跳过/失败时，自动清空文件选择（保留项目/版本默认值）。
+        if (
+          !invalidOpened &&
+          (importedNames.length || overwrittenNames.length) &&
+          skippedItems.length === 0 &&
+          failedItems.length === 0
+        ) {
+          s.files = [];
+          renderImportFileHint();
+          if (dom.importInput) {
+            try {
+              dom.importInput.value = '';
+            } catch (e) {
+              // ignore
+            }
           }
         }
-      }
-      syncImportConfirmEnabled();
-    });
+        syncImportConfirmEnabled();
+      });
   }
 
   function resetEditDrawer() {
@@ -6984,6 +7049,10 @@
 	        // noop
 	      },
 	      function() {
+	        if (importDiffDrawerOpenTimer) {
+	          clearTimeout(importDiffDrawerOpenTimer);
+	          importDiffDrawerOpenTimer = 0;
+	        }
 	        var external = state.importDiff && state.importDiff.external ? state.importDiff.external : null;
 	        if (external && typeof external.resolve === 'function') {
 	          state.importDiff.external = null;

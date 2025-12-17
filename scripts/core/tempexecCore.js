@@ -4841,7 +4841,9 @@
       if (!files.length) throw new Error('未选择文件');
 
       var importedExecSetIds = [];
+      var importedNames = [];
       var failures = [];
+      var duplicates = [];
       if (tempExecStatus) setStatus(tempExecStatus, '正在入库用例...', '');
 
       var existingCaseFiles = [];
@@ -5094,31 +5096,32 @@
           var existingCaseFile = caseFileByName[normalizedName] || null;
 
           // 用例执行导入与用例库导入对齐：遇到同名用例先走差异对比抽屉，再由用户确认是否覆盖导入。
+          // 多文件导入时不阻塞非同名：同名用例先加入队列，后续依次弹出 diff 抽屉处理。
           if (existingCaseFile && existingCaseFile.id) {
             var importExecCasesAll = casesList
               .map(function(item) { return buildExecImportPayloadFromTempCase(item, inferredReuse); })
               .filter(Boolean);
-            var dupErr = new Error('同名用例已存在');
-            dupErr.code = 'duplicate_case_file';
-            dupErr.payload = {
-              existing_case_file_id: existingCaseFile.id,
-              existing_file_name_clean: existingCaseFile.file_name_clean || cleanName,
-              existing_version_id: existingCaseFile.version_id || null,
-            };
-            dupErr.duplicate = {
-              file_name: fileName,
-              clean_name: cleanName,
-              project_id: pid,
-              version_id: vid,
-              source: (file && file.type) ? file.type : (ext ? ('file:' + ext) : 'file'),
-              ext: ext || '',
-              items: caseItemPayload,
-              exec_cases: importExecCasesAll,
-              has_result: Boolean(hasResult),
-              reuse_enabled: Boolean(inferredReuse),
-              requirement: requirementLabel || '',
-            };
-            throw dupErr;
+            duplicates.push({
+              payload: {
+                existing_case_file_id: existingCaseFile.id,
+                existing_file_name_clean: existingCaseFile.file_name_clean || cleanName,
+                existing_version_id: existingCaseFile.version_id || null,
+              },
+              duplicate: {
+                file_name: fileName,
+                clean_name: cleanName,
+                project_id: pid,
+                version_id: vid,
+                source: (file && file.type) ? file.type : (ext ? ('file:' + ext) : 'file'),
+                ext: ext || '',
+                items: caseItemPayload,
+                exec_cases: importExecCasesAll,
+                has_result: Boolean(hasResult),
+                reuse_enabled: Boolean(inferredReuse),
+                requirement: requirementLabel || '',
+              },
+            });
+            continue;
           }
 
           var execSet = null;
@@ -5138,28 +5141,29 @@
                 var importExecCasesAll2 = casesList
                   .map(function(item2) { return buildExecImportPayloadFromTempCase(item2, inferredReuse); })
                   .filter(Boolean);
-                var dupErr2 = new Error(msgImport || '同名用例已存在');
-                dupErr2.code = 'duplicate_case_file';
-                dupErr2.payload = errImport && errImport.payload ? errImport.payload : null;
-                dupErr2.duplicate = {
-                  file_name: fileName,
-                  clean_name: cleanName,
-                  project_id: pid,
-                  version_id: vid,
-                  source: (file && file.type) ? file.type : (ext ? ('file:' + ext) : 'file'),
-                  ext: ext || '',
-                  items: caseItemPayload,
-                  exec_cases: importExecCasesAll2,
-                  has_result: Boolean(hasResult),
-                  reuse_enabled: Boolean(inferredReuse),
-                  requirement: requirementLabel || '',
-                };
-                throw dupErr2;
+                duplicates.push({
+                  payload: errImport && errImport.payload ? errImport.payload : null,
+                  duplicate: {
+                    file_name: fileName,
+                    clean_name: cleanName,
+                    project_id: pid,
+                    version_id: vid,
+                    source: (file && file.type) ? file.type : (ext ? ('file:' + ext) : 'file'),
+                    ext: ext || '',
+                    items: caseItemPayload,
+                    exec_cases: importExecCasesAll2,
+                    has_result: Boolean(hasResult),
+                    reuse_enabled: Boolean(inferredReuse),
+                    requirement: requirementLabel || '',
+                  },
+                });
+                continue;
               }
               throw errImport;
             }
             caseFileByName[normText(caseFile.file_name_clean || cleanName)] = caseFile;
             existingCaseFile = caseFile;
+            importedNames.push(caseFile.file_name_clean || cleanName);
 
             var importCases = null;
             if (hasResult || inferredReuse) {
@@ -5345,6 +5349,7 @@
         if (getTempExecFile(latestId)) setTempExecActive(latestId);
       }
       var summary = '入库完成：成功 ' + importedExecSetIds.length + '，失败 ' + failures.length;
+      if (duplicates.length) summary += '，同名待处理 ' + duplicates.length;
       var lines = [summary];
       if (failures.length) {
         failures.slice(0, 3).forEach(function(item) {
@@ -5357,7 +5362,7 @@
         }
       }
       if (tempExecStatus) setStatus(tempExecStatus, lines.join('\n'), failures.length ? 'warn' : 'ok');
-      return { imported: importedExecSetIds.length, failed: failures, mode: 'db' };
+      return { imported: importedExecSetIds.length, failed: failures, duplicates: duplicates, imported_names: importedNames, mode: 'db' };
     }
 
     function setTempExecActive(fileId) {

@@ -922,6 +922,8 @@
 - 复用说明：复用现有文件名清洗与 `listCaseFiles/listCaseItems` 获取数据能力，在前端做轻量 Diff 渲染；不引入新依赖。  
 - 测试与验证：`node --check scripts/modules/caseLibrary.js tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
 - 更新记录：2025-12-15 用例库同名 diff 抽屉改为单列表展示（`index.html`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/case_library.spec.js`）；2025-12-15 diff/校验抽屉字段列宽优化（模块6字、标题8字、优先级3字、前提12字、步骤12字、预期20字，`style.css`）；2025-12-15 diff/校验抽屉进一步优化：优先级加宽 2 字；字段在需要时展示“导入/库”标识且不计入字数，新增/将删除/有差异标识在单元格内独占一行居中展示（`style.css`、`scripts/modules/caseLibrary.js`）。  
+- 更新记录：2025-12-17 多文件导入遇到多份同名冲突时，差异对比按导入顺序逐份弹出（确认覆盖或关闭跳过后自动进入下一份）；非同名文件不会被同名 diff 阻塞；导入完成提示会展示成功/覆盖/跳过/失败的具体用例名（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_multi_import_diff_queue.spec.js`）。  
+- 更新记录：2025-12-17 多文件同名 diff 队列处理完成后，导入结果明细改为居中悬浮 toast（10s 自动消失）；覆盖处理时不再先关闭抽屉再打开下一份，改为保持打开并直接切换到下一份（`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/case_library_multi_import_diff_queue.spec.js`）。  
 
 - 功能名称：同名差异对比支持“确认覆盖导入”  
 - 功能描述：在“同名用例差异对比”抽屉中增加“确认覆盖导入”按钮，点击后二次确认；确认后将覆盖用例库中同名用例文件（删除原条目并写入导入内容）。  

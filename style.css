@@ -1733,11 +1733,19 @@ body {
   z-index: 200;
   font-size: 14px;
   max-width: 380px;
+  white-space: pre-wrap;
+  text-align: left;
   pointer-events: none;
   opacity: 1;
 }
 .temp-center-toast.ok {
   background: rgba(22,163,74,0.95);
+}
+.temp-center-toast.warn {
+  background: rgba(180,83,9,0.95);
+}
+.temp-center-toast.err {
+  background: rgba(185,28,28,0.95);
 }
 .temp-center-toast.fade-out {
   opacity: 0;

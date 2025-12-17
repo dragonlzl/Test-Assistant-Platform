@@ -214,10 +214,26 @@
       openButtons: ['openTempExecOverviewNavBtn', 'tempExecOverviewBtn'],
       closeButtons: ['closeTempExecOverviewDrawerBtn'],
     });
+    var tempExecImportDiffDrawerOpenTimer = 0;
     var tempExecImportDiffDrawer = window.app.drawer && window.app.drawer.createDrawer({
       drawerId: 'tempExecImportDiffDrawer',
       openButtons: [],
       closeButtons: [],
+      onClose: function() {
+        if (tempExecImportDiffDrawerOpenTimer) {
+          clearTimeout(tempExecImportDiffDrawerOpenTimer);
+          tempExecImportDiffDrawerOpenTimer = 0;
+        }
+        var external = importDiffState && importDiffState.external ? importDiffState.external : null;
+        if (external && typeof external.resolve === 'function') {
+          importDiffState.external = null;
+          try {
+            external.resolve({ ok: false, reason: 'closed' });
+          } catch (err) {
+            // ignore
+          }
+        }
+      },
     });
     if (tempExecDrawer) {
       var tabButtons = document.querySelectorAll('[data-tab-btn]');
@@ -683,6 +699,8 @@
       rows: [],
       locateIndex: -1,
       diffCounts: { added: 0, removed: 0, changed: 0, total: 0 },
+      external: null,
+      queue: { active: false, total: 0, index: -1 },
     };
 
     function normalizeDiffText(value) {
@@ -1189,8 +1207,19 @@
       renderImportDiffLocateBar();
       syncImportDiffControls();
       if (tempExecDrawer) tempExecDrawer.close();
+      if (tempExecImportDiffDrawerOpenTimer) {
+        clearTimeout(tempExecImportDiffDrawerOpenTimer);
+        tempExecImportDiffDrawerOpenTimer = 0;
+      }
       if (tempExecImportDiffDrawer && typeof tempExecImportDiffDrawer.open === 'function') {
-        tempExecImportDiffDrawer.open();
+        var alreadyOpen = Boolean(tempExecImportDiffDrawerEl && tempExecImportDiffDrawerEl.classList && tempExecImportDiffDrawerEl.classList.contains('open'));
+        if (alreadyOpen) {
+          tempExecImportDiffDrawer.open();
+        } else {
+          tempExecImportDiffDrawerOpenTimer = setTimeout(function() {
+            tempExecImportDiffDrawer.open();
+          }, 60);
+        }
       } else if (tempExecImportDiffDrawerEl && tempExecImportDiffDrawerEl.classList) {
         tempExecImportDiffDrawerEl.classList.add('open');
         tempExecImportDiffDrawerEl.classList.remove('hidden');
@@ -1331,19 +1360,42 @@
           var msg = '覆盖导入成功：' + cleanName;
           if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, msg, 'ok');
           setStatus(tempExecStatus, msg, 'ok');
-          importState.pendingFiles = [];
-          renderImportFileHint();
-          syncImportConfirmState();
-          if (tempExecImportDiffDrawer && typeof tempExecImportDiffDrawer.close === 'function') {
-            tempExecImportDiffDrawer.close();
-          } else if (tempExecImportDiffDrawerEl && tempExecImportDiffDrawerEl.classList) {
-            tempExecImportDiffDrawerEl.classList.remove('open');
+          var external = importDiffState.external || null;
+          if (external && typeof external.resolve === 'function') {
+            importDiffState.external = null;
+            try {
+              external.resolve({ ok: true, overwrite: true });
+            } catch (err) {
+              // ignore
+            }
+          }
+
+          var q = importDiffState && importDiffState.queue ? importDiffState.queue : null;
+          var keepOpen = Boolean(q && q.active && Number(q.total) > 0 && Number(q.index) < Number(q.total) - 1);
+          if (!keepOpen) {
+            importState.pendingFiles = [];
+            renderImportFileHint();
+            syncImportConfirmState();
+            if (tempExecImportDiffDrawer && typeof tempExecImportDiffDrawer.close === 'function') {
+              tempExecImportDiffDrawer.close();
+            } else if (tempExecImportDiffDrawerEl && tempExecImportDiffDrawerEl.classList) {
+              tempExecImportDiffDrawerEl.classList.remove('open');
+            }
           }
         })
         .catch(function(err) {
           var msg = err && err.message ? err.message : '覆盖导入失败';
           if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '覆盖导入失败：' + msg, 'err');
           setStatus(tempExecStatus, '覆盖导入失败：' + msg, 'err');
+          var external = importDiffState.external || null;
+          if (external && typeof external.resolve === 'function') {
+            importDiffState.external = null;
+            try {
+              external.resolve({ ok: false, reason: 'overwrite_failed', error: err || null });
+            } catch (err2) {
+              // ignore
+            }
+          }
         })
         .finally(function() {
           importDiffState.loading = false;
@@ -1594,6 +1646,194 @@
       syncImportConfirmState();
     }
 
+    function stripFileExt(name) {
+      var raw = String(name || '');
+      var base = raw.split(/[\\/]/).pop() || raw;
+      var cleaned = base.replace(/\.[^.]+$/, '');
+      return cleaned || base || '';
+    }
+
+    function buildNameList(names, maxCount) {
+      var list = Array.isArray(names) ? names.filter(Boolean) : [];
+      var max = Number.isFinite(Number(maxCount)) ? Number(maxCount) : 8;
+      if (!list.length) return '';
+      var head = list.slice(0, max).join('、');
+      return list.length > max ? (head + '...（共 ' + list.length + ' 份）') : head;
+    }
+
+    function buildFinalImportMessage(importedNames, overwrittenNames, skippedItems, failedItems) {
+      var okCount = (Array.isArray(importedNames) ? importedNames.length : 0) + (Array.isArray(overwrittenNames) ? overwrittenNames.length : 0);
+      var skipped = Array.isArray(skippedItems) ? skippedItems : [];
+      var failed = Array.isArray(failedItems) ? failedItems : [];
+      var lines = [];
+      lines.push('入库完成：成功 ' + okCount + '，跳过 ' + skipped.length + '，失败 ' + failed.length);
+      if (importedNames && importedNames.length) lines.push('入库成功：' + buildNameList(importedNames, 10));
+      if (overwrittenNames && overwrittenNames.length) lines.push('覆盖导入成功：' + buildNameList(overwrittenNames, 10));
+      if (skipped.length) {
+        skipped.slice(0, 10).forEach(function(item) {
+          var name = item && item.name ? String(item.name) : '用例';
+          var reason = item && item.reason ? String(item.reason) : '已跳过';
+          lines.push('跳过 - ' + name + '：' + reason);
+        });
+        if (skipped.length > 10) lines.push('跳过 - 还有 ' + (skipped.length - 10) + ' 份未展开');
+      }
+      if (failed.length) {
+        failed.slice(0, 10).forEach(function(item2) {
+          var name2 = item2 && item2.name ? String(item2.name) : '用例';
+          var reason2 = item2 && item2.reason ? String(item2.reason) : '失败';
+          lines.push('失败 - ' + name2 + '：' + reason2);
+        });
+        if (failed.length > 10) lines.push('失败 - 还有 ' + (failed.length - 10) + ' 份未展开');
+      }
+      return lines.join('\n');
+    }
+
+    function openImportDiffForQueueTask(task) {
+      if (!task || !task.duplicate) return Promise.resolve({ ok: false, reason: 'invalid_task' });
+      if (!apiClient || typeof apiClient.listCaseItems !== 'function') return Promise.resolve({ ok: false, reason: 'api_not_ready' });
+
+      var dup = task.duplicate || {};
+      var payload = task.payload || null;
+      var projectId = dup.project_id || importState.projectId;
+      var versionId = dup.version_id || importState.versionId;
+      var fileName = dup.file_name || '';
+      var cleanName = dup.clean_name || stripFileExt(fileName) || '';
+      var matchedCleanName = payload && payload.existing_file_name_clean ? String(payload.existing_file_name_clean) : '';
+      var dbVersionId = payload && (payload.existing_version_id || payload.existing_version_id === 0) ? payload.existing_version_id : null;
+      var existingId = payload && payload.existing_case_file_id ? payload.existing_case_file_id : null;
+
+      function fail(reason, msg) {
+        var text = msg || '打开差异对比失败';
+        if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, text, 'err');
+        setStatus(tempExecStatus, text, 'err');
+        var external = importDiffState.external || null;
+        if (external && typeof external.resolve === 'function') {
+          importDiffState.external = null;
+          try {
+            external.resolve({ ok: false, reason: reason || 'load_failed' });
+          } catch (err) {
+            // ignore
+          }
+        }
+        try {
+          if (tempExecImportDiffDrawer && typeof tempExecImportDiffDrawer.close === 'function') {
+            tempExecImportDiffDrawer.close();
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      function ensureExistingId() {
+        if (existingId) return Promise.resolve(existingId);
+        if (!apiClient || typeof apiClient.listCaseFiles !== 'function') return Promise.resolve(null);
+        return apiClient.listCaseFiles(projectId).then(function(files) {
+          var list = Array.isArray(files) ? files : [];
+          var targetName = matchedCleanName || cleanName;
+          var matched = list.find(function(cf) {
+            if (!cf || !cf.id) return false;
+            if (String(cf.version_id || '') !== String(versionId || '')) return false;
+            return String(cf.file_name_clean || '') === String(targetName || '');
+          });
+          if (!matched && cleanName) {
+            matched = list.find(function(cf2) {
+              if (!cf2 || !cf2.id) return false;
+              if (String(cf2.version_id || '') !== String(versionId || '')) return false;
+              return String(cf2.file_name_clean || '') === String(cleanName || '');
+            });
+          }
+          if (matched && matched.id) {
+            existingId = matched.id;
+            if (!dbVersionId) dbVersionId = matched.version_id || null;
+            if (!matchedCleanName && matched.file_name_clean) matchedCleanName = matched.file_name_clean;
+          }
+          return existingId || null;
+        }).catch(function() { return null; });
+      }
+
+      openImportDiffDrawerLoading({
+        fileName: fileName,
+        cleanName: matchedCleanName || cleanName || '',
+        projectId: projectId,
+        importVersionId: versionId,
+        dbVersionId: dbVersionId,
+        ext: dup.ext || '',
+        source: dup.source || '',
+        importItems: Array.isArray(dup.items) ? dup.items : [],
+        importExecCases: Array.isArray(dup.exec_cases) ? dup.exec_cases : [],
+        importHasResult: dup.has_result === true,
+        importReuseEnabled: dup.reuse_enabled === true,
+        requirement: dup.requirement || '',
+        dbCaseFileId: existingId,
+      });
+
+      return new Promise(function(resolve) {
+        importDiffState.external = { resolve: resolve };
+        ensureExistingId()
+          .then(function(id) {
+            if (!id) throw new Error('未找到库中同名用例 ID：' + (matchedCleanName || cleanName || '用例'));
+            importDiffState.dbCaseFileId = id;
+            if (!apiClient || typeof apiClient.listExecSets !== 'function') {
+              return apiClient.listCaseItems(id).then(function(dbItems) {
+                openImportDiffDrawer({
+                  dbItems: Array.isArray(dbItems) ? dbItems : [],
+                  dbExecSetId: null,
+                  dbExecCases: [],
+                  dbReuseEnabled: false,
+                  dbHasResult: false,
+                  importHasResult: dup.has_result === true,
+                });
+              });
+            }
+
+            return Promise.all([apiClient.listCaseItems(id), apiClient.listExecSets(projectId)])
+              .then(function(res2) {
+                var dbItems = Array.isArray(res2 && res2[0]) ? res2[0] : [];
+                var execSets = Array.isArray(res2 && res2[1]) ? res2[1] : [];
+                var matchedSet = execSets
+                  .filter(function(s) { return s && Number(s.case_file_id) === Number(id); })
+                  .sort(function(a, b) { return Number(b.id || 0) - Number(a.id || 0); })[0] || null;
+                var reuseEnabled = Boolean(matchedSet && matchedSet.reuse_enabled);
+                if (!matchedSet || !matchedSet.id || !apiClient || typeof apiClient.listExecCases !== 'function') {
+                  openImportDiffDrawer({
+                    dbItems: dbItems,
+                    dbExecSetId: null,
+                    dbExecCases: [],
+                    dbReuseEnabled: reuseEnabled,
+                    dbHasResult: false,
+                    importHasResult: dup.has_result === true,
+                  });
+                  return;
+                }
+                return apiClient.listExecCases(matchedSet.id).then(function(execCases) {
+                  var list = Array.isArray(execCases) ? execCases : [];
+                  openImportDiffDrawer({
+                    dbItems: dbItems,
+                    dbExecSetId: matchedSet.id,
+                    dbExecCases: list,
+                    dbReuseEnabled: reuseEnabled,
+                    dbHasResult: detectExecCasesHasResult(list, reuseEnabled),
+                    importHasResult: dup.has_result === true,
+                  });
+                }).catch(function() {
+                  openImportDiffDrawer({
+                    dbItems: dbItems,
+                    dbExecSetId: matchedSet.id,
+                    dbExecCases: [],
+                    dbReuseEnabled: reuseEnabled,
+                    dbHasResult: false,
+                    importHasResult: dup.has_result === true,
+                  });
+                });
+              });
+          })
+          .catch(function(err) {
+            var msg = err && err.message ? err.message : '打开差异对比失败';
+            fail('load_failed', msg);
+          });
+      });
+    }
+
     if (typeof api.loadTempExecState === 'function') {
       api.loadTempExecState();
     }
@@ -1622,108 +1862,123 @@
         }
         importState.loading = true;
         syncImportConfirmState();
+        var originalFiles = Array.prototype.slice.call(importState.pendingFiles || []).filter(Boolean);
+        var importedNames = [];
+        var overwrittenNames = [];
+        var skippedItems = [];
+        var failedItems = [];
         api
           .importTempExecFilesToDb(importState.pendingFiles, importState.projectId, importState.versionId)
           .then(function(result) {
             var res = result && typeof result === 'object' ? result : null;
             var failed = res && Array.isArray(res.failed) ? res.failed : [];
+            var duplicates = res && Array.isArray(res.duplicates) ? res.duplicates : [];
+            var importedFromCore = res && Array.isArray(res.imported_names) ? res.imported_names : [];
+            importedFromCore.forEach(function(name) {
+              if (!name) return;
+              importedNames.push(String(name));
+            });
             if (failed.length) {
               var failedNames = Object.create(null);
               failed.forEach(function(item) {
                 if (!item || !item.file) return;
                 failedNames[String(item.file)] = true;
+                failedItems.push({
+                  name: stripFileExt(item.file),
+                  fileName: String(item.file),
+                  reason: item.reason || (item.message || '入库失败'),
+                });
               });
-              importState.pendingFiles = Array.prototype.slice.call(importState.pendingFiles || []).filter(function(file) {
-                return file && file.name && failedNames[String(file.name)];
+              var duplicateNames = Object.create(null);
+              (duplicates || []).forEach(function(task) {
+                var dup = task && task.duplicate ? task.duplicate : null;
+                var fname = dup && dup.file_name ? String(dup.file_name) : '';
+                if (fname) duplicateNames[fname] = true;
+              });
+              importState.pendingFiles = originalFiles.filter(function(file) {
+                if (!file || !file.name) return false;
+                var nm = String(file.name);
+                return Boolean(failedNames[nm] || duplicateNames[nm]);
               });
             } else {
+              if (duplicates && duplicates.length) {
+                var duplicateNames2 = Object.create(null);
+                duplicates.forEach(function(task2) {
+                  var dup2 = task2 && task2.duplicate ? task2.duplicate : null;
+                  var fname2 = dup2 && dup2.file_name ? String(dup2.file_name) : '';
+                  if (fname2) duplicateNames2[fname2] = true;
+                });
+                importState.pendingFiles = originalFiles.filter(function(file2) {
+                  return file2 && file2.name && duplicateNames2[String(file2.name)];
+                });
+              } else {
+                importState.pendingFiles = [];
+              }
+            }
+            renderImportFileHint();
+            syncImportConfirmState();
+            if (!duplicates || !duplicates.length) return;
+            setStatus(tempExecStatus, '检测到同名用例冲突 ' + duplicates.length + ' 份，请依次确认覆盖导入或关闭跳过', 'warn');
+            importDiffState.queue = { active: true, total: duplicates.length, index: -1 };
+            var diffChain = Promise.resolve();
+            duplicates.forEach(function(task, idx) {
+              diffChain = diffChain.then(function() {
+                if (!task) return;
+                if (importDiffState.queue && importDiffState.queue.active) importDiffState.queue.index = idx;
+                var name = task && task.duplicate ? (task.duplicate.clean_name || stripFileExt(task.duplicate.file_name)) : '用例';
+                var fileName = task && task.duplicate && task.duplicate.file_name ? String(task.duplicate.file_name) : '';
+                var tip = '同名用例已存在，处理差异对比（' + (idx + 1) + '/' + duplicates.length + '）：' + (name || '用例');
+                setStatus(tempExecStatus, tip, 'warn');
+                return openImportDiffForQueueTask(task).then(function(res2) {
+                  if (res2 && res2.ok) {
+                    overwrittenNames.push(name || '用例');
+                    return;
+                  }
+                  if (res2 && res2.reason === 'closed') {
+                    skippedItems.push({ name: name || '用例', fileName: fileName, reason: '同名冲突已跳过' });
+                    return;
+                  }
+                  var reason = res2 && res2.reason ? String(res2.reason) : '同名冲突处理失败';
+                  failedItems.push({ name: name || '用例', fileName: fileName, reason: reason });
+                });
+              });
+            });
+            return diffChain.finally(function() {
+              if (importDiffState.queue && importDiffState.queue.active) {
+                importDiffState.queue.active = false;
+                importDiffState.queue.index = -1;
+              }
+            });
+          })
+          .then(function() {
+            var msg = buildFinalImportMessage(importedNames, overwrittenNames, skippedItems, failedItems);
+            var hasIssues = Boolean(skippedItems.length || failedItems.length);
+            setStatus(tempExecStatus, msg, hasIssues ? 'warn' : 'ok');
+            if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
+              window.app.utils.showCenterToast(msg, hasIssues ? 'warn' : 'ok', 10000);
+            }
+
+            if (!hasIssues && (importedNames.length || overwrittenNames.length)) {
               importState.pendingFiles = [];
+            } else {
+              var leftFileNames = Object.create(null);
+              skippedItems.forEach(function(item3) {
+                if (!item3 || !item3.fileName) return;
+                leftFileNames[String(item3.fileName)] = true;
+              });
+              failedItems.forEach(function(item4) {
+                if (!item4 || !item4.fileName) return;
+                leftFileNames[String(item4.fileName)] = true;
+              });
+              importState.pendingFiles = originalFiles.filter(function(file3) {
+                if (!file3 || !file3.name) return false;
+                return Boolean(leftFileNames[String(file3.name)]);
+              });
             }
             renderImportFileHint();
             syncImportConfirmState();
           })
           .catch(function(err) {
-            if (err && err.code === 'duplicate_case_file' && err.duplicate) {
-              var dup = err.duplicate || {};
-              var payload = err && err.payload ? err.payload : null;
-              var existingId = payload && payload.existing_case_file_id ? payload.existing_case_file_id : null;
-              var matchedCleanName = payload && payload.existing_file_name_clean ? String(payload.existing_file_name_clean) : (dup.clean_name || '');
-              var dbVersionId = payload && (payload.existing_version_id || payload.existing_version_id === 0) ? payload.existing_version_id : null;
-              if (!existingId) {
-                setStatus(tempExecStatus, '打开差异对比失败：未找到同名用例 ID', 'err');
-                return;
-              }
-              openImportDiffDrawerLoading({
-                fileName: dup.file_name || '',
-                cleanName: matchedCleanName || dup.clean_name || '',
-                projectId: dup.project_id || importState.projectId,
-                importVersionId: dup.version_id || importState.versionId,
-                dbVersionId: dbVersionId,
-                ext: dup.ext || '',
-                source: dup.source || '',
-                importItems: Array.isArray(dup.items) ? dup.items : [],
-                importExecCases: Array.isArray(dup.exec_cases) ? dup.exec_cases : [],
-                importHasResult: dup.has_result === true,
-                importReuseEnabled: dup.reuse_enabled === true,
-                requirement: dup.requirement || '',
-                dbCaseFileId: existingId,
-              });
-
-              var projectId = dup.project_id || importState.projectId;
-              Promise.all([
-                apiClient && typeof apiClient.listCaseItems === 'function' ? apiClient.listCaseItems(existingId) : Promise.resolve([]),
-                apiClient && typeof apiClient.listExecSets === 'function' ? apiClient.listExecSets(projectId) : Promise.resolve([]),
-              ])
-                .then(function(res2) {
-                  var dbItems = Array.isArray(res2 && res2[0]) ? res2[0] : [];
-                  var execSets = Array.isArray(res2 && res2[1]) ? res2[1] : [];
-                  var matchedSet = execSets
-                    .filter(function(s) { return s && Number(s.case_file_id) === Number(existingId); })
-                    .sort(function(a, b) { return Number(b.id || 0) - Number(a.id || 0); })[0] || null;
-                  var reuseEnabled = Boolean(matchedSet && matchedSet.reuse_enabled);
-                  if (!matchedSet || !matchedSet.id || !apiClient || typeof apiClient.listExecCases !== 'function') {
-                    openImportDiffDrawer({
-                      dbItems: dbItems,
-                      dbExecSetId: null,
-                      dbExecCases: [],
-                      dbReuseEnabled: reuseEnabled,
-                      dbHasResult: false,
-                      importHasResult: dup.has_result === true,
-                    });
-                    return;
-                  }
-                  return apiClient.listExecCases(matchedSet.id).then(function(execCases) {
-                    var list = Array.isArray(execCases) ? execCases : [];
-                    openImportDiffDrawer({
-                      dbItems: dbItems,
-                      dbExecSetId: matchedSet.id,
-                      dbExecCases: list,
-                      dbReuseEnabled: reuseEnabled,
-                      dbHasResult: detectExecCasesHasResult(list, reuseEnabled),
-                      importHasResult: dup.has_result === true,
-                    });
-                  }).catch(function() {
-                    openImportDiffDrawer({
-                      dbItems: dbItems,
-                      dbExecSetId: matchedSet.id,
-                      dbExecCases: [],
-                      dbReuseEnabled: reuseEnabled,
-                      dbHasResult: false,
-                      importHasResult: dup.has_result === true,
-                    });
-                  });
-                })
-                .catch(function(e) {
-                  var msg = e && e.message ? e.message : '打开差异对比失败';
-                  if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, msg, 'err');
-                  setStatus(tempExecStatus, msg, 'err');
-                })
-                .finally(function() {
-                  importState.loading = false;
-                  syncImportConfirmState();
-                });
-              return;
-            }
             setStatus(tempExecStatus, err && err.message ? err.message : '入库失败', 'err');
           })
           .finally(function() {
