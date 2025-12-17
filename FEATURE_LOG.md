@@ -32,6 +32,7 @@
 - 复用说明：复用用例库 `import` 的同名 diff 弹窗/确认链路（通过 `caseLibraryApi.openImportDiffForExternal` 复用抽屉），复用用例库历史落库机制与执行页 case-library-sync 同步机制，仅新增“追加”类型与最小必要 API。
 - 测试与验证：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js`；`npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js`（通过）；`APP_DB_FILE=apitest.db API_BASE_URL=http://127.0.0.1:18080 .venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 18080` + `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_case_library_sync.spec.js`（通过）。
 - 更新记录：2025-12-17 落地入库/追加入库入口并下线旧“新增到/勾选到执行”按钮；执行页与历史新增“追加”变更类型；追加入库遇到目标用例内重复（模块+标题+前提+步骤+预期一致）时打开 diff 并确认覆盖。
+- 更新记录：2025-12-17 用例生成页“入库后动作选择”左侧增加提示：先到各模块右上角的【用例视图】中勾选用例（`index.html`、`tests/ui/casegen_db_store.spec.js`）。
 
 - 功能名称：用例执行抽屉：暂时停用常用用例模版 + diff 抽屉宽度统一
 - 功能描述：暂时屏蔽“用例执行 → 用例导入&分配”中的常用用例模版入口；并将“用例库变更 diff / 同名用例差异对比”相关抽屉宽度统一为约 2/3 屏（与默认抽屉一致），避免 diff 表头被挤压到不可见。
@@ -45,6 +46,7 @@
 - 复用说明：复用现有抽屉宽度体系（默认 `drawer-panel`）与通用抽屉组件（`scripts/base/drawer.js`），仅做最小 UI/样式增量修正。
 - 测试与验证：`npx playwright test --config tests/playwright.config.js tests/ui/files_layout.spec.js tests/ui/tempexec_case_library_changes.spec.js tests/ui/tempexec_import_excel_diff.spec.js --workers=1`（通过）。
 - 更新记录：2025-12-17 同名用例差异对比新增“差异定位”：当视口内看不到差异但实际存在差异时，可通过“首处/上一处/下一处/末处”快速跳转并高亮定位（`index.html`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/tempexec_import_excel_diff.spec.js`、`tests/ui/case_library.spec.js`）。
+- 更新记录：2025-12-17 同名用例差异对比的“差异定位”操作栏改为 sticky 固定展示，定位后无需回到顶部即可继续定位（`style.css`、`tests/ui/case_library.spec.js`）。
 
 - 功能名称：用例库“用例改动历史”抽屉 + 历史永久落库
 - 功能描述：用例库页面顶部导航新增“用例改动历史”入口，打开右侧抽屉查看当前账号可访问项目内的用例变更历史；历史记录永久留存在数据库，整份用例删除后仍可查看，未重新导入时标记为“已删除”。

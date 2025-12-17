@@ -486,11 +486,11 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryImportVersionSelect')).toHaveValue(String(versions[0].id));
 
     // 同名校验：再次导入同名文件（但内容不同），应打开差异对比抽屉
-    const secondImportPayload = [
-      {
-        module: '登录',
-        title: '正常登录',
-        priority: 'P0',
+	    const secondImportPayload = [
+	      {
+	        module: '登录',
+	        title: '正常登录',
+	        priority: 'P0',
         preconditions: '已注册账号',
         steps: '1. 输入账号\\n2. 输入密码\\n3. 点击登录（修改）',
         expected: '登录成功',
@@ -505,16 +505,27 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 	        expected: '提示密码错误',
 	        remark: '',
 	      },
-	      {
+		      {
+		        module: '登录',
+		        title: '新增用例',
+		        priority: 'P1',
+		        preconditions: '已注册账号',
+		        steps: '1. 步骤A',
+		        expected: '预期A',
+		        remark: '',
+		      },
+	    ];
+	    for (let i = 0; i < 36; i += 1) {
+	      secondImportPayload.push({
 	        module: '登录',
-	        title: '新增用例',
-	        priority: 'P1',
+	        title: '新增用例-滚动定位-' + (i + 1),
+	        priority: 'P2',
 	        preconditions: '已注册账号',
-	        steps: '1. 步骤A',
+	        steps: '1. 步骤A\\n2. 步骤B',
 	        expected: '预期A',
 	        remark: '',
-	      },
-    ];
+	      });
+	    }
     await page.setInputFiles('#caseLibraryImportInput', {
       name: path.basename(fixturePath),
       mimeType: 'application/json',
@@ -526,12 +537,18 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryImportDiffStatus')).toContainText('对比完成');
     await expect(page.locator('#caseLibraryImportDiffBody')).toContainText('新增用例');
     await expect(page.locator('#caseLibraryImportDiffBody')).toContainText('点击登录（修改）');
-    await expect(page.locator('#caseLibraryImportDiffBody')).toContainText('点击登录');
-    await expect(page.locator('#caseLibraryImportDiffLocateBar')).toContainText('差异定位');
-    await page.click('#caseLibraryImportDiffLocateBar [data-diff-locate-action="next"]');
-    await expect(page.locator('#caseLibraryImportDiffBody tr.diff-locate-active')).toHaveCount(1);
-    page.once('dialog', async (dialog) => dialog.accept());
-    await page.click('#caseLibraryImportDiffOverwriteBtn');
+	    await expect(page.locator('#caseLibraryImportDiffBody')).toContainText('点击登录');
+	    await expect(page.locator('#caseLibraryImportDiffLocateBar')).toContainText('差异定位');
+
+	    const diffDrawerBody = page.locator('#caseLibraryImportDiffDrawer .drawer-body');
+	    await diffDrawerBody.evaluate((el) => {
+	      el.scrollTop = el.scrollHeight;
+	    });
+	    await expect(page.locator('#caseLibraryImportDiffLocateBar')).toBeVisible();
+	    await page.click('#caseLibraryImportDiffLocateBar [data-diff-locate-action="next"]');
+	    await expect(page.locator('#caseLibraryImportDiffBody tr.diff-locate-active')).toHaveCount(1);
+	    page.once('dialog', async (dialog) => dialog.accept());
+	    await page.click('#caseLibraryImportDiffOverwriteBtn');
     await expect(page.locator('#caseLibraryImportStatus')).toContainText('覆盖导入成功');
     await expect(page.locator('#caseLibraryImportDiffDrawer')).not.toHaveClass(/open/);
 

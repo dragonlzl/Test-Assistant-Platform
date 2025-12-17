@@ -121,6 +121,8 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
 
     await gotoIndex(page);
     await seedCaseGenState(page, { selectIndex: 0 });
+    await expect(page.locator('#caseGenStoreActionHint')).toBeVisible();
+    await expect(page.locator('#caseGenStoreActionHint')).toContainText('先到各模块右上角的【用例视图】中勾选用例');
 
     const storeBtn = page.locator('#caseGenStoreNewBtn');
     await expect(storeBtn).toBeEnabled();

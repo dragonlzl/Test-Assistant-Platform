@@ -2818,11 +2818,14 @@ body {
 }
 
 .diff-locate-bar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  margin: 10px 0 12px;
+  margin: 0 0 12px;
   padding: 10px 12px;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
