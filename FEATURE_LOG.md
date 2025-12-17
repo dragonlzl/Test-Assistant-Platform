@@ -1289,3 +1289,12 @@
 - 复用说明：仅调整前端渲染顺序，不改后端查询顺序/不新增接口。  
 - 测试与验证：`npm run test:ui -- tests/ui/case_library_batch_add.spec.js -g 归位`（通过）。  
 - 更新记录：2025-12-17 用例库编辑视图刷新后按模块归位上线（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_batch_add.spec.js`）。  
+
+- 功能名称：用例执行导入多文件同名 diff 队列（顺序处理 + 10s 悬浮提示）  
+- 功能描述：用例执行页（DB 模式）一次选择多份用例文件入库时，若存在多份“同名用例”冲突，不再阻塞非同名文件：先入库非同名文件；同名冲突文件会按顺序逐份弹出差异对比抽屉，用户可逐份“确认覆盖导入”或关闭跳过；处理完全部差异后给出包含具体用例名的结果提示，并以页面正中间悬浮 toast 展示 10s 自动消失。  
+- 操作方式：进入“用例执行”→选择多份文件→选择项目/版本→点击“确认入库”；同名冲突会依次弹出 diff；确认覆盖或关闭跳过后自动进入下一份。  
+- 使用效果：多文件导入体验与用例库导入对齐，冲突处理不阻塞其它文件；最终成功/跳过/失败清单更清晰，且通过 10s 居中悬浮提示便于截图与回溯。  
+- 新增内容/接口/组件：执行页导入入库返回结果补充 `duplicates/imported_names` 并改为队列处理（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）；UI 自动化覆盖（`tests/ui/tempexec_import_multi_diff_queue.spec.js`）。  
+- 复用说明：复用既有同名差异对比抽屉与 `/api/case-files/import`、`/api/case-files/{id}/items`、`/api/exec/sets/from-case-file` 等接口，不新增后端接口。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_import_multi_diff_queue.spec.js`（通过）。  
+- 更新记录：2025-12-17 执行页多文件同名导入改为 diff 队列顺序处理并增加 10s 居中悬浮提示（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_import_multi_diff_queue.spec.js`）。  
