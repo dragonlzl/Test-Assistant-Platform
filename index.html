@@ -1135,27 +1135,47 @@
 <h2>用例生成</h2>
   <div class="card-body">
   <p class="hint">根据测试模块拆分的结果生成结构化测试用例，每个模块可单独调用模型生成 JSON 格式用例。</p>
-  <div class="actions" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-    <div class="action-left" style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
-      <button class="secondary" id="exportCaseGenXmind">导出全部勾选用例XMind</button>
-      <button class="secondary" id="toSplitFromCaseGen">前往测试模块拆分</button>
+  <div class="casegen-zones">
+    <div class="casegen-zone" data-casegen-zone="general">
+      <div class="casegen-zone-head">
+        <div class="casegen-zone-title">通用操作区</div>
+        <div class="hint" style="margin:0;">导出/跳转等通用操作</div>
+      </div>
+      <div class="actions casegen-zone-actions">
+        <button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
+        <button class="secondary" id="exportCaseGenXmind">导出全部勾选用例XMind</button>
+        <button class="secondary" id="toSplitFromCaseGen">前往测试模块拆分</button>
+      </div>
     </div>
-    <div class="action-right" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <span class="hint" style="margin:0;" id="caseGenStoreActionHint">先到各模块右上角的【用例视图】中勾选用例</span>
-      <span class="hint" style="margin:0;">新用例入库后</span>
-      <select id="caseGenStoreActionSelect" style="min-width:200px;padding:6px 10px;border-radius:6px;border:1px solid #d0d5dd;box-shadow:inset 0 1px 2px rgba(0,0,0,0.04);background:#fff;">
-        <option value="">请选择</option>
-        <option value="store">直接入库</option>
-        <option value="store_to_exec">入库并转到执行</option>
-      </select>
-      <button class="pill primary" disabled id="caseGenStoreNewBtn">新用例入库</button>
-      <button class="pill secondary" disabled id="caseGenStoreAppendBtn">旧用例追加入库</button>
+
+    <div class="casegen-zone" data-casegen-zone="store">
+      <div class="casegen-zone-head">
+        <div class="casegen-zone-title">入库操作区</div>
+        <div class="hint" style="margin:0;">新用例入库 / 旧用例追加入库</div>
+      </div>
+      <div class="actions casegen-zone-actions">
+        <span class="hint" style="margin:0;" id="caseGenStoreActionHint">先到各模块右上角的【用例视图】中勾选用例</span>
+        <span class="hint" style="margin:0;">新用例入库后</span>
+        <select id="caseGenStoreActionSelect" class="casegen-store-action-select">
+          <option value="">请选择</option>
+          <option value="store">直接入库</option>
+          <option value="store_to_exec">入库并转到执行</option>
+        </select>
+        <button class="pill primary" disabled id="caseGenStoreNewBtn">新用例入库</button>
+        <button class="pill secondary" disabled id="caseGenStoreAppendBtn">旧用例追加入库</button>
+      </div>
+      <p class="status" id="caseGenStatus"></p>
+    </div>
+
+    <div class="casegen-zone" data-casegen-zone="modules">
+      <div class="casegen-zone-head">
+        <div class="casegen-zone-title">模块区</div>
+        <div class="hint" style="margin:0;">按模块生成/勾选/导出用例</div>
+      </div>
+      <div class="usecase-modules" id="casesGenerationContainer"></div>
+      <p class="hint timing">模型用时：<strong><span id="caseGenTiming">--</span> 秒</strong></p>
     </div>
   </div>
-  <p class="status" id="caseGenStatus"></p>
-  <div class="usecase-modules" id="casesGenerationContainer"></div>
-  <p class="hint timing">模型用时：<strong><span id="caseGenTiming">--</span> 秒</strong></p>
   </div>
   </section>
 <div class="drawer" id="caseGenViewDrawer" data-tab-section="casesgen">
