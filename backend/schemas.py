@@ -410,6 +410,8 @@ class ExecImportCasePayload(BaseModel):
 
 class ExecSetFromCaseFileRequest(BaseModel):
     case_file_id: int
+    # 执行版本：用于执行页分组/归档等展示口径；不传则默认沿用用例库导入版本。
+    exec_version_id: Optional[int] = None
     mode: str = "replace"
     preserve_results: bool = True
     prefer_result_source: str = "db"

@@ -107,4 +107,67 @@ test.describe('project version delete transfer', () => {
     const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
     expect(delProj.status()).toBe(200);
   });
+
+  test('case file name is project-unique across versions', async () => {
+    const ctx = await request.newContext();
+    const token = await login(ctx);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const projectName = 'autotest-transfer-conflict-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'api transfer conflict' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projBody = await createProj.json();
+    const projectId = projBody.id;
+
+    const ver1Res = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers,
+      data: { name: 'v1' },
+    });
+    expect(ver1Res.status()).toBe(201);
+    const ver1 = await ver1Res.json();
+
+    const ver2Res = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers,
+      data: { name: 'v2' },
+    });
+    expect(ver2Res.status()).toBe(201);
+    const ver2 = await ver2Res.json();
+
+    // 项目级同名：同一项目下跨版本也不允许同名
+    const importV1 = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: ver1.id,
+        file_name: '同名用例.xmind',
+        items: [{ module: '模块', title: 'A', expected: 'ok' }],
+      },
+    });
+    expect(importV1.status()).toBe(201);
+    const v1File = await importV1.json();
+    expect(v1File && v1File.id).toBeTruthy();
+
+    const importV2 = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: ver2.id,
+        file_name: '同名用例.xmind',
+        items: [{ module: '模块', title: 'B', expected: 'ok' }],
+      },
+    });
+    expect(importV2.status()).toBe(400);
+
+    const delWithTransfer = await ctx.delete(
+      `${apiBase}/api/projects/${projectId}/versions/${ver1.id}?transfer_to=${encodeURIComponent('v2')}`,
+      { headers }
+    );
+    expect(delWithTransfer.status()).toBe(200);
+
+    const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
+    expect(delProj.status()).toBe(200);
+  });
 });

@@ -176,10 +176,11 @@ test.describe('用例执行-多文件同名 diff 队列', () => {
         if (!authed) return respond(401, { detail: 'unauthorized' });
         const payload = route.request().postDataJSON();
         const now2 = new Date().toISOString();
+        const hasExecVersion = Object.prototype.hasOwnProperty.call(payload || {}, 'exec_version_id');
         const set = {
           id: nextExecSetId++,
           project_id: project.id,
-          version_id: versions[0].id,
+          version_id: hasExecVersion ? payload.exec_version_id : versions[0].id,
           case_file_id: payload.case_file_id,
           name: String(payload.case_file_id || ''),
           requirement: payload.requirement || '',
@@ -224,6 +225,9 @@ test.describe('用例执行-多文件同名 diff 队列', () => {
     await page.selectOption('#tempExecImportProjectSelect', String(project.id));
     await page.selectOption('#tempExecImportVersionSelect', String(versions[0].id));
     await page.click('#tempExecImportConfirmBtn');
+    await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
+    await page.click('#execVersionSelectDrawerConfirmBtn');
 
     await expect(page.locator('#tempExecImportDiffDrawer')).toHaveClass(/open/, { timeout: 8000 });
     await expect(page.locator('#tempExecImportDiffTitle')).toContainText('用例A');

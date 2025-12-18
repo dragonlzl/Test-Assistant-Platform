@@ -309,6 +309,7 @@
     if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
     if (fileNameClean) query.push('file_name_clean=' + encodeURIComponent(fileNameClean));
     var p = params && typeof params === 'object' ? params : {};
+    if (p && (p.version_id || p.version_id === 0)) query.push('version_id=' + encodeURIComponent(p.version_id));
     if (p && (p.limit || p.limit === 0)) query.push('limit=' + encodeURIComponent(p.limit));
     var url = '/api/case-files/change-history';
     if (query.length) url += '?' + query.join('&');

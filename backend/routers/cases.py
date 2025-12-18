@@ -210,7 +210,9 @@ def import_case_file(
     )
     # 更准确的同名判定：先按清洗名精准匹配，再按“包含 + 模块/标题重合”判断。
     if not exists:
-        matched, meta = _find_duplicate_case_file(db, project.id, clean_name, unique_items)
+        matched, meta = _find_duplicate_case_file(
+            db, project.id, clean_name, unique_items
+        )
         if matched:
             exists = matched
             # 覆盖导入时可接受模糊匹配，否则拒绝并返回匹配信息供前端打开 diff。
@@ -995,7 +997,11 @@ def list_case_library_change_files(
         file_name_clean = str(ev.file_name_clean or "")
         if not file_name_clean:
             continue
-        key = file_name_clean
+        key = (
+            int(ev.case_file_id)
+            if ev.case_file_id is not None
+            else ("n", file_name_clean, int(ev.version_id) if ev.version_id is not None else None)
+        )
         if key not in latest_by_key:
             latest_by_key[key] = ev
         total_by_key[key] = int(total_by_key.get(key, 0) or 0) + 1
@@ -1015,10 +1021,12 @@ def list_case_library_change_files(
     for cf in current_files:
         if not cf:
             continue
-        key = str(cf.file_name_clean or "")
-        if not key:
+        file_key = str(cf.file_name_clean or "")
+        if not file_key:
             continue
-        current_map[key] = cf
+        current_map[int(cf.id)] = cf
+        # 兼容：极少数历史变更事件缺少 case_file_id 时，按 (name,version) 回落匹配。
+        current_map[("n", file_key, int(cf.version_id) if cf.version_id is not None else None)] = cf
         if cf.importer_id is not None:
             user_ids.add(int(cf.importer_id))
         if cf.updated_by is not None:
@@ -1036,8 +1044,9 @@ def list_case_library_change_files(
     resolved_version_id = None
     if version_id is not None and int(version_id) != 0:
         resolved_version_id = int(version_id)
-    for file_name_clean, ev in latest_by_key.items():
-        cf = current_map.get(file_name_clean)
+    for k, ev in latest_by_key.items():
+        file_name_clean = str(ev.file_name_clean or "")
+        cf = current_map.get(k)
         is_deleted = cf is None
         derived_version_id = (
             int(cf.version_id) if (cf and cf.version_id is not None) else (int(ev.version_id) if ev.version_id is not None else None)
@@ -1078,7 +1087,7 @@ def list_case_library_change_files(
                 imported_at=imported_at,
                 last_updated_by_name=last_updated_by_name,
                 updated_at=updated_at,
-                total_events=int(total_by_key.get(key, 0) or 0),
+                total_events=int(total_by_key.get(k, 0) or 0),
             )
         )
 
@@ -1090,11 +1099,16 @@ def list_case_library_change_files(
 def get_case_library_change_history(
     project_id: int,
     file_name_clean: str,
+    version_id: Optional[int] = None,
     limit: int = 500,
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     ensure_project_access(db, user, project_id)
+    resolved_version_id = None
+    if version_id is not None and int(version_id) != 0:
+        resolved_version_id = int(version_id)
+        ensure_version_in_project(db, project_id, resolved_version_id)
     name = str(file_name_clean or "").strip()
     if not name:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="file_name_clean 不能为空")
@@ -1105,18 +1119,23 @@ def get_case_library_change_history(
     if resolved_limit > max_limit:
         resolved_limit = max_limit
 
-    case_file = (
-        db.query(models.CaseFile)
-        .filter(models.CaseFile.project_id == project_id, models.CaseFile.file_name_clean == name)
-        .first()
+    case_file_q = db.query(models.CaseFile).filter(
+        models.CaseFile.project_id == project_id, models.CaseFile.file_name_clean == name
     )
+    if resolved_version_id is not None:
+        case_file_q = case_file_q.filter(models.CaseFile.version_id == resolved_version_id)
+    case_file = case_file_q.first()
     is_deleted = case_file is None
 
-    events = (
+    events_q = (
         db.query(models.CaseLibraryChangeEvent)
         .filter(models.CaseLibraryChangeEvent.project_id == project_id)
         .filter(models.CaseLibraryChangeEvent.file_name_clean == name)
-        .filter(models.CaseLibraryChangeEvent.kind != "view")
+    )
+    if resolved_version_id is not None:
+        events_q = events_q.filter(models.CaseLibraryChangeEvent.version_id == resolved_version_id)
+    events = (
+        events_q.filter(models.CaseLibraryChangeEvent.kind != "view")
         .order_by(models.CaseLibraryChangeEvent.created_at.desc())
         .limit(resolved_limit)
         .all()

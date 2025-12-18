@@ -177,8 +177,14 @@ test.describe('用例库-用例改动历史抽屉', () => {
       if (pathName === '/api/case-files/change-history' && method === 'GET') {
         const pid = url.searchParams.get('project_id') || '';
         const name = url.searchParams.get('file_name_clean') || '';
-        const key = `${pid}::${name}`;
-        return respond(200, historyByKey[key] || { project_id: Number(pid), file_name_clean: name, history: [], is_deleted: false });
+        const vid = url.searchParams.get('version_id') || '';
+        const key = vid ? `${pid}::${vid}::${name}` : `${pid}::${name}`;
+        return respond(
+          200,
+          historyByKey[key] ||
+            historyByKey[`${pid}::${name}`] ||
+            { project_id: Number(pid), file_name_clean: name, history: [], is_deleted: false }
+        );
       }
 
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
@@ -353,7 +359,14 @@ test.describe('用例库-用例改动历史抽屉', () => {
       if (pathName === '/api/case-files/change-history' && method === 'GET') {
         const pid = url.searchParams.get('project_id') || '';
         const name = url.searchParams.get('file_name_clean') || '';
-        return respond(200, historyByKey[`${pid}::${name}`] || { project_id: Number(pid), file_name_clean: name, history: [], is_deleted: false });
+        const vid = url.searchParams.get('version_id') || '';
+        const key = vid ? `${pid}::${vid}::${name}` : `${pid}::${name}`;
+        return respond(
+          200,
+          historyByKey[key] ||
+            historyByKey[`${pid}::${name}`] ||
+            { project_id: Number(pid), file_name_clean: name, history: [], is_deleted: false }
+        );
       }
 
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);

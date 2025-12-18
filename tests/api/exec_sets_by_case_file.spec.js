@@ -127,9 +127,15 @@ test.describe('exec sets by case file api', () => {
     // cleanup
     const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers: adminHeaders });
     expect(delProj.status()).toBe(200);
-    const delUserA = await ctx.delete(`${apiBase}/api/users/${memberAId}`, { headers: adminHeaders });
+    const delUserA = await ctx.post(`${apiBase}/api/users/${memberAId}/delete`, {
+      headers: adminHeaders,
+      data: { admin_password: adminPass },
+    });
     expect(delUserA.status()).toBe(200);
-    const delUserB = await ctx.delete(`${apiBase}/api/users/${memberBId}`, { headers: adminHeaders });
+    const delUserB = await ctx.post(`${apiBase}/api/users/${memberBId}/delete`, {
+      headers: adminHeaders,
+      data: { admin_password: adminPass },
+    });
     expect(delUserB.status()).toBe(200);
   });
 });

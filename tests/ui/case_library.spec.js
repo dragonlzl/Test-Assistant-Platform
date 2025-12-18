@@ -341,14 +341,22 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
         const caseFile = caseFiles.find((f) => f.id === caseFileId);
         if (!caseFile) return respond(404, { detail: '用例文件不存在' });
         const now = new Date().toISOString();
+        const hasExecVersion = Object.prototype.hasOwnProperty.call(body, 'exec_version_id');
+        const targetVersionId = hasExecVersion ? body.exec_version_id : caseFile.version_id;
+        const matchVersion = (a, b) => {
+          const av = a === null || a === undefined || a === '' ? null : Number(a);
+          const bv = b === null || b === undefined || b === '' ? null : Number(b);
+          if (av === null && bv === null) return true;
+          return Number.isFinite(av) && Number.isFinite(bv) && av === bv;
+        };
         let execSet = execSets
-          .filter((s) => s && Number(s.case_file_id) === caseFileId)
+          .filter((s) => s && Number(s.case_file_id) === caseFileId && matchVersion(s.version_id, targetVersionId))
           .sort((a, b) => b.id - a.id)[0];
         if (!execSet) {
           execSet = {
             id: nextExecSetId++,
             project_id: caseFile.project_id,
-            version_id: caseFile.version_id,
+            version_id: targetVersionId,
             case_file_id: caseFileId,
             name: caseFile.file_name_clean,
             requirement: body.requirement || null,
@@ -655,6 +663,9 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 
     // 先转到执行，给执行页写入结果，再回到用例库进行同名覆盖
     await page.click('#caseLibraryEditToExecBtn');
+    await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
+    await page.click('#execVersionSelectDrawerConfirmBtn');
     await expect(page.locator('#tempexecFlowNav')).toBeVisible();
     await page.waitForFunction(() => {
       var st = window.app && window.app.state ? window.app.state : null;
@@ -680,6 +691,9 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
     page.on('dialog', async (dialog) => dialog.accept());
     await page.click('#caseLibraryEditToExecBtn');
+    await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
+    await page.click('#execVersionSelectDrawerConfirmBtn');
     await expect(page.locator('#tempexecFlowNav')).toBeVisible();
     await expect(page.locator('#tempExecView')).toContainText('正常登录');
     await expect(page.locator('#tempExecView select.status-select[data-status="通过"]')).toHaveCount(1);
@@ -2137,10 +2151,11 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
         const caseFile = caseFiles.find((f) => f.id === caseFileId);
         if (!caseFile) return respond(404, { detail: '用例文件不存在' });
         const ts = new Date().toISOString();
+        const hasExecVersion = Object.prototype.hasOwnProperty.call(body, 'exec_version_id');
         const execSet = {
           id: nextExecSetId++,
           project_id: caseFile.project_id,
-          version_id: caseFile.version_id,
+          version_id: hasExecVersion ? body.exec_version_id : caseFile.version_id,
           case_file_id: caseFileId,
           name: caseFile.file_name_clean,
           requirement: body.requirement || null,
@@ -2200,6 +2215,9 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibrarySelectBatchExecBtn')).toBeEnabled();
 
     await page.click('#caseLibrarySelectBatchExecBtn');
+    await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
+    await page.click('#execVersionSelectDrawerConfirmBtn');
     await expect(page.locator('#tempexecFlowNav')).toBeVisible();
     await page.waitForFunction(() => {
       const st = window.app && window.app.state ? window.app.state : null;

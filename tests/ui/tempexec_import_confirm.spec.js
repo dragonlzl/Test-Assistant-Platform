@@ -180,14 +180,22 @@ test.describe('用例执行-导入需确认入库', () => {
         const caseFileId = Number(payload.case_file_id);
         const cf = caseFiles.find((f) => f.id === caseFileId);
         if (!cf) return respond(404, { detail: 'case file not found' });
+        const hasExecVersion = Object.prototype.hasOwnProperty.call(payload || {}, 'exec_version_id');
+        const targetVersionId = hasExecVersion ? payload.exec_version_id : cf.version_id;
+        const matchVersion = (a, b) => {
+          const av = a === null || a === undefined || a === '' ? null : Number(a);
+          const bv = b === null || b === undefined || b === '' ? null : Number(b);
+          if (av === null && bv === null) return true;
+          return Number.isFinite(av) && Number.isFinite(bv) && av === bv;
+        };
 
-        let execSet = execSets.find((s) => s.case_file_id === caseFileId) || null;
+        let execSet = execSets.find((s) => s.case_file_id === caseFileId && matchVersion(s.version_id, targetVersionId)) || null;
         const now = new Date().toISOString();
         if (!execSet) {
           execSet = {
             id: nextExecSetId++,
             project_id: cf.project_id,
-            version_id: cf.version_id,
+            version_id: targetVersionId,
             case_file_id: cf.id,
             name: cf.file_name_clean,
             requirement: payload.requirement || '',
@@ -292,12 +300,302 @@ test.describe('用例执行-导入需确认入库', () => {
 
     await expect(page.locator('#tempExecImportConfirmBtn')).toBeEnabled();
     await page.click('#tempExecImportConfirmBtn');
+    await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
+    await page.click('#execVersionSelectDrawerConfirmBtn');
 
     await expect.poll(() => page.evaluate(() => (window.app && window.app.state && window.app.state.tempExecFiles ? window.app.state.tempExecFiles.length : -1)), {
       timeout: 10000,
     }).toBe(1);
     await expect.poll(() => page.evaluate(() => (window.app && window.app.state && window.app.state.tempExecFiles && window.app.state.tempExecFiles[0] ? window.app.state.tempExecFiles[0].name : ''))).toContain('登录');
     await expect(page.locator('#tempExecImportFileHint')).toContainText('未选择文件');
+  });
+
+  test('同名用例选择不同执行版本：不覆盖其他版本执行结果', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '执行版本隔离', description: 'for tempexec exec version isolation' };
+    const versions = [{ id: 11, name: 'v1' }, { id: 12, name: 'v2' }];
+
+    let nextExecSetId = 2000;
+    let nextExecCaseId = 3000;
+    const now = new Date().toISOString();
+
+    const caseFiles = [
+      {
+        id: 100,
+        project_id: project.id,
+        version_id: versions[0].id,
+        file_name_clean: '用例A',
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+        last_updated_by: user.id,
+        last_updated_by_name: user.username,
+      },
+    ];
+    const caseItemsByFileId = {};
+    caseItemsByFileId[caseFiles[0].id] = [
+      {
+        id: 1000,
+        case_file_id: caseFiles[0].id,
+        module: '模块A',
+        title: '用例A-标题',
+        expected: '预期A',
+        priority: 'P1',
+        precondition: '',
+        steps: '步骤1',
+        remark: '',
+        created_at: now,
+        updated_at: now,
+      },
+    ];
+
+    const execSets = [
+      {
+        id: nextExecSetId++,
+        project_id: project.id,
+        version_id: versions[0].id,
+        case_file_id: caseFiles[0].id,
+        name: caseFiles[0].file_name_clean,
+        requirement: '',
+        reuse_enabled: false,
+        reuse_presets: null,
+        status: 'active',
+        created_at: now,
+        updated_at: now,
+      },
+    ];
+    const execCasesBySetId = {};
+    execCasesBySetId[execSets[0].id] = [
+      {
+        id: nextExecCaseId++,
+        exec_set_id: execSets[0].id,
+        case_item_id: caseItemsByFileId[caseFiles[0].id][0].id,
+        module: '模块A',
+        title: '用例A-标题',
+        expected: '预期A',
+        priority: 'P1',
+        precondition: '',
+        steps: '步骤1',
+        actual_result: null,
+        defect_link: null,
+        reuse_details: [],
+        defect_links: [],
+        remark: '',
+        status: '通过',
+        order_no: 1,
+        executor_id: user.id,
+        created_at: now,
+        updated_at: now,
+      },
+    ];
+    let lastUpsertPayload = null;
+    page.on('dialog', async (dialog) => {
+      await dialog.accept();
+    });
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/case-files' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, caseFiles.slice().sort((a, b) => b.id - a.id));
+      }
+      const itemsMatch = pathName.match(/^\/api\/case-files\/(\d+)\/items$/);
+      if (itemsMatch && method === 'GET') {
+        const fileId = Number(itemsMatch[1]);
+        return respond(200, caseItemsByFileId[fileId] || []);
+      }
+
+      if (pathName === '/api/case-files/import' && method === 'POST') {
+        if (url.searchParams.get('overwrite') !== '1') {
+          return respond(409, { detail: '同名用例已存在', existing_case_file_id: caseFiles[0].id });
+        }
+        const payload = route.request().postDataJSON() || {};
+        const ts = new Date().toISOString();
+        caseFiles[0].updated_at = ts;
+        caseFiles[0].last_updated_by = user.id;
+        caseFiles[0].last_updated_by_name = user.username;
+        caseFiles[0].version_id = payload.version_id || caseFiles[0].version_id;
+        return respond(200, caseFiles[0]);
+      }
+
+      if (pathName === '/api/exec/sets' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        const list = pid ? execSets.filter((s) => String(s.project_id) === String(pid)) : execSets.slice();
+        return respond(200, list.slice().sort((a, b) => b.id - a.id));
+      }
+
+      if (pathName === '/api/exec/sets/from-case-file' && method === 'POST') {
+        const payload = route.request().postDataJSON();
+        lastUpsertPayload = payload;
+        const caseFileId = Number(payload.case_file_id);
+        const cf = caseFiles.find((f) => f.id === caseFileId);
+        if (!cf) return respond(404, { detail: 'case file not found' });
+        const hasExecVersion = Object.prototype.hasOwnProperty.call(payload || {}, 'exec_version_id');
+        const targetVersionId = hasExecVersion ? payload.exec_version_id : cf.version_id;
+        const matchVersion = (a, b) => {
+          const av = a === null || a === undefined || a === '' ? null : Number(a);
+          const bv = b === null || b === undefined || b === '' ? null : Number(b);
+          if (av === null && bv === null) return true;
+          return Number.isFinite(av) && Number.isFinite(bv) && av === bv;
+        };
+
+        let execSet = execSets.find((s) => s.case_file_id === caseFileId && matchVersion(s.version_id, targetVersionId)) || null;
+        const now2 = new Date().toISOString();
+        if (!execSet) {
+          execSet = {
+            id: nextExecSetId++,
+            project_id: cf.project_id,
+            version_id: targetVersionId,
+            case_file_id: cf.id,
+            name: cf.file_name_clean,
+            requirement: payload.requirement || '',
+            reuse_enabled: payload.reuse_enabled ? true : false,
+            reuse_presets: payload.reuse_presets || null,
+            status: 'active',
+            created_at: now2,
+            updated_at: now2,
+          };
+          execSets.push(execSet);
+        } else {
+          execSet.status = 'active';
+          execSet.updated_at = now2;
+        }
+
+        const items = caseItemsByFileId[caseFileId] || [];
+        const prev = execCasesBySetId[execSet.id] || [];
+        const prevByItemId = new Map(prev.filter((c) => c && c.case_item_id).map((c) => [c.case_item_id, c]));
+        const rebuilt = items.map((it, idx) => {
+          const existed = prevByItemId.get(it.id);
+          return {
+            id: existed ? existed.id : nextExecCaseId++,
+            exec_set_id: execSet.id,
+            case_item_id: it.id,
+            module: it.module,
+            title: it.title,
+            expected: it.expected,
+            priority: it.priority,
+            precondition: it.precondition,
+            steps: it.steps,
+            actual_result: null,
+            defect_link: null,
+            reuse_details: (existed && existed.reuse_details) ? existed.reuse_details : [],
+            defect_links: (existed && existed.defect_links) ? existed.defect_links : [],
+            remark: existed ? existed.remark : (it.remark || ''),
+            status: existed ? existed.status : '未执行',
+            order_no: idx + 1,
+            executor_id: user.id,
+            created_at: existed ? existed.created_at : now2,
+            updated_at: now2,
+          };
+        });
+        execCasesBySetId[execSet.id] = rebuilt;
+        return respond(200, execSet);
+      }
+
+      const execCasesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (execCasesMatch && method === 'GET') {
+        const setId = Number(execCasesMatch[1]);
+        return respond(200, execCasesBySetId[setId] || []);
+      }
+
+      return respond(200, []);
+    });
+
+    const fileBuf = Buffer.from(
+      JSON.stringify(
+        {
+          requirement: '需求A',
+          cases: [
+            { module: '模块A', title: '用例A-标题', expected: '预期A', priority: 'P1', steps: '步骤1', preconditions: '' },
+          ],
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    await gotoIndex(page);
+    await waitAppInited(page, 30000);
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+
+    await expect.poll(() => page.evaluate(() => (window.app && window.app.state && window.app.state.tempExecFiles ? window.app.state.tempExecFiles.length : -1))).toBe(1);
+
+    await page.click('#openTempExecDrawerBtn');
+    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+    await page.setInputFiles('#tempExecInput', {
+      name: '用例A.json',
+      mimeType: 'application/json',
+      buffer: fileBuf,
+    });
+
+    await page.waitForFunction(() => {
+      var sel = document.getElementById('tempExecImportProjectSelect');
+      return sel && sel.options && sel.options.length > 1;
+    });
+    await page.selectOption('#tempExecImportProjectSelect', String(project.id));
+    await page.waitForFunction(() => {
+      var sel = document.getElementById('tempExecImportVersionSelect');
+      return sel && !sel.disabled && sel.options && sel.options.length > 1;
+    });
+    await page.selectOption('#tempExecImportVersionSelect', String(versions[0].id));
+
+    await page.click('#tempExecImportConfirmBtn');
+    await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execVersionSelectDrawerImportVersion')).toContainText('v1');
+    await page.waitForFunction(() => {
+      var sel = document.getElementById('execVersionSelectDrawerVersionSelect');
+      return sel && !sel.disabled && sel.options && sel.options.length > 1;
+    });
+    await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
+    await page.selectOption('#execVersionSelectDrawerVersionSelect', String(versions[1].id));
+    await page.click('#execVersionSelectDrawerConfirmBtn');
+    await expect(page.locator('#execVersionSelectDrawer')).not.toHaveClass(/open/);
+
+    await expect(page.locator('#tempExecImportDiffDrawer')).toHaveClass(/open/, { timeout: 8000 });
+    await expect(page.locator('#tempExecImportDiffTitle')).toContainText('用例A');
+    await page.click('#tempExecImportDiffOverwriteBtn');
+
+    await expect.poll(() => (lastUpsertPayload ? 1 : 0), { timeout: 5000 }).toBe(1);
+    expect(Object.prototype.hasOwnProperty.call(lastUpsertPayload || {}, 'exec_version_id')).toBe(true);
+    expect(lastUpsertPayload.exec_version_id).toBe(versions[1].id);
+
+    await expect.poll(() => page.evaluate(() => {
+      var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles) ? window.app.state.tempExecFiles : [];
+      return files.length;
+    }), { timeout: 10000 }).toBe(2);
+
+    await expect.poll(() => page.evaluate(() => {
+      var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles) ? window.app.state.tempExecFiles : [];
+      var v1 = files.find((f) => String(f && f.versionId) === '11') || null;
+      var v2 = files.find((f) => String(f && f.versionId) === '12') || null;
+      return {
+        hasV1: Boolean(v1),
+        hasV2: Boolean(v2),
+        v1Actual: v1 && v1.cases && v1.cases[0] ? v1.cases[0].actual : '',
+        v2Count: v2 && Array.isArray(v2.cases) ? v2.cases.length : 0,
+      };
+    }), { timeout: 10000 }).toEqual({ hasV1: true, hasV2: true, v1Actual: '通过', v2Count: 1 });
   });
 
   test('历史用例名带前缀时导入仍能复用入库', async ({ page }) => {
@@ -362,14 +660,22 @@ test.describe('用例执行-导入需确认入库', () => {
         const caseFileId = Number(payload.case_file_id);
         const cf = caseFiles.find((f) => f.id === caseFileId);
         if (!cf) return respond(404, { detail: 'case file not found' });
+        const hasExecVersion = Object.prototype.hasOwnProperty.call(payload || {}, 'exec_version_id');
+        const targetVersionId = hasExecVersion ? payload.exec_version_id : cf.version_id;
+        const matchVersion = (a, b) => {
+          const av = a === null || a === undefined || a === '' ? null : Number(a);
+          const bv = b === null || b === undefined || b === '' ? null : Number(b);
+          if (av === null && bv === null) return true;
+          return Number.isFinite(av) && Number.isFinite(bv) && av === bv;
+        };
 
-        let execSet = execSets.find((s) => s.case_file_id === caseFileId) || null;
+        let execSet = execSets.find((s) => s.case_file_id === caseFileId && matchVersion(s.version_id, targetVersionId)) || null;
         const now = new Date().toISOString();
         if (!execSet) {
           execSet = {
             id: nextExecSetId++,
             project_id: cf.project_id,
-            version_id: cf.version_id,
+            version_id: targetVersionId,
             case_file_id: cf.id,
             name: cf.file_name_clean,
             requirement: payload.requirement || '',
@@ -491,6 +797,9 @@ test.describe('用例执行-导入需确认入库', () => {
 
     await expect(page.locator('#tempExecImportConfirmBtn')).toBeEnabled();
     await page.click('#tempExecImportConfirmBtn');
+    await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
+    await page.click('#execVersionSelectDrawerConfirmBtn');
 
     await expect(page.locator('#tempExecImportDiffDrawer')).toHaveClass(/open/);
     await expect(page.locator('#tempExecImportDiffTitle')).toContainText('登录');
@@ -608,14 +917,22 @@ test.describe('用例执行-导入需确认入库', () => {
         const caseFileId = Number(payload.case_file_id);
         const cf = caseFiles.find((f) => f.id === caseFileId);
         if (!cf) return respond(404, { detail: 'case file not found' });
+        const hasExecVersion = Object.prototype.hasOwnProperty.call(payload || {}, 'exec_version_id');
+        const targetVersionId = hasExecVersion ? payload.exec_version_id : cf.version_id;
+        const matchVersion = (a, b) => {
+          const av = a === null || a === undefined || a === '' ? null : Number(a);
+          const bv = b === null || b === undefined || b === '' ? null : Number(b);
+          if (av === null && bv === null) return true;
+          return Number.isFinite(av) && Number.isFinite(bv) && av === bv;
+        };
 
-        let execSet = execSets.find((s) => s.case_file_id === caseFileId) || null;
+        let execSet = execSets.find((s) => s.case_file_id === caseFileId && matchVersion(s.version_id, targetVersionId)) || null;
         const now2 = new Date().toISOString();
         if (!execSet) {
           execSet = {
             id: nextExecSetId++,
             project_id: cf.project_id,
-            version_id: cf.version_id,
+            version_id: targetVersionId,
             case_file_id: cf.id,
             name: cf.file_name_clean,
             requirement: payload.requirement || '',
@@ -701,6 +1018,9 @@ test.describe('用例执行-导入需确认入库', () => {
 
     await expect(page.locator('#tempExecImportConfirmBtn')).toBeEnabled();
     await page.click('#tempExecImportConfirmBtn');
+    await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
+    await page.click('#execVersionSelectDrawerConfirmBtn');
 
     await expect(page.locator('#tempExecImportDiffDrawer')).toHaveClass(/open/);
     await expect(page.locator('#tempExecImportDiffTitle')).toContainText('全角空格测试');
@@ -796,13 +1116,21 @@ test.describe('用例执行-导入需确认入库', () => {
         const caseFileId = Number(payload.case_file_id);
         const cf = caseFiles.find((f) => f.id === caseFileId);
         if (!cf) return respond(404, { detail: 'case file not found' });
+        const hasExecVersion = Object.prototype.hasOwnProperty.call(payload || {}, 'exec_version_id');
         const now = new Date().toISOString();
-        let execSet = execSets.find((s) => s.case_file_id === caseFileId) || null;
+        const targetVersionId = hasExecVersion ? payload.exec_version_id : cf.version_id;
+        const matchVersion = (a, b) => {
+          const av = a === null || a === undefined || a === '' ? null : Number(a);
+          const bv = b === null || b === undefined || b === '' ? null : Number(b);
+          if (av === null && bv === null) return true;
+          return Number.isFinite(av) && Number.isFinite(bv) && av === bv;
+        };
+        let execSet = execSets.find((s) => s.case_file_id === caseFileId && matchVersion(s.version_id, targetVersionId)) || null;
         if (!execSet) {
           execSet = {
             id: nextExecSetId++,
             project_id: cf.project_id,
-            version_id: cf.version_id,
+            version_id: targetVersionId,
             case_file_id: cf.id,
             name: cf.file_name_clean,
             requirement: payload.requirement || '',
@@ -882,6 +1210,9 @@ test.describe('用例执行-导入需确认入库', () => {
     await page.selectOption('#tempExecImportVersionSelect', String(versions[0].id));
 
     await page.click('#tempExecImportConfirmBtn');
+    await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
+    await page.click('#execVersionSelectDrawerConfirmBtn');
 
     await expect(page.locator('#tempExecImportDuplicateDrawer')).toHaveClass(/open/);
     await expect(page.locator('#tempExecImportDuplicateStatus')).toContainText('原 3 条');

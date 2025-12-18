@@ -277,7 +277,10 @@ test.describe('exec overview api', () => {
     expect(Array.isArray(adminExecCases)).toBeTruthy();
     expect(adminExecCases.length).toBe(2);
 
-    const delUser = await ctx.delete(`${apiBase}/api/users/${memberId}`, { headers: adminHeaders });
+    const delUser = await ctx.post(`${apiBase}/api/users/${memberId}/delete`, {
+      headers: adminHeaders,
+      data: { admin_password: adminPass },
+    });
     expect([200, 404]).toContain(delUser.status());
     const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers: adminHeaders });
     expect([200, 404]).toContain(delProj.status());

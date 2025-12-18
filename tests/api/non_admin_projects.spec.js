@@ -61,7 +61,10 @@ test.describe('非管理员项目可见性', () => {
     const forbidRes = await ctx.get(`${apiBase}/api/users/99999/projects`, { headers: memberHeaders });
     expect(forbidRes.status()).toBe(403);
 
-    const delUser = await ctx.delete(`${apiBase}/api/users/${userId}`, { headers: adminHeaders });
+    const delUser = await ctx.post(`${apiBase}/api/users/${userId}/delete`, {
+      headers: adminHeaders,
+      data: { admin_password: adminPass },
+    });
     expect([200, 404]).toContain(delUser.status());
     const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers: adminHeaders });
     expect([200, 404]).toContain(delProj.status());
@@ -128,9 +131,15 @@ test.describe('非管理员项目可见性', () => {
     });
     expect(memberUpdate.status()).toBe(403);
 
-    const delMember = await ctx.delete(`${apiBase}/api/users/${memberId}`, { headers: adminHeaders });
+    const delMember = await ctx.post(`${apiBase}/api/users/${memberId}/delete`, {
+      headers: adminHeaders,
+      data: { admin_password: adminPass },
+    });
     expect([200, 404]).toContain(delMember.status());
-    const delLeader = await ctx.delete(`${apiBase}/api/users/${leaderId}`, { headers: adminHeaders });
+    const delLeader = await ctx.post(`${apiBase}/api/users/${leaderId}/delete`, {
+      headers: adminHeaders,
+      data: { admin_password: adminPass },
+    });
     expect([200, 404]).toContain(delLeader.status());
     const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers: adminHeaders });
     expect([200, 404]).toContain(delProj.status());

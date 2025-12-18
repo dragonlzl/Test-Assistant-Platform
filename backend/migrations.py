@@ -522,3 +522,71 @@ def apply_migrations(engine: Engine) -> None:
                         )
                     )
             _mark_applied(conn, 15)
+
+        # v16: 用例文件同名约束调整为“项目+版本级”（允许跨版本同名）。
+        # 仍使用唯一索引实现；若历史数据异常导致重复，则跳过创建以避免启动失败。
+        if not _is_applied(conn, 16):
+            if "case_files" in tables:
+                # 删除旧索引（项目级同名）
+                idx_rows = conn.execute(text("PRAGMA index_list('case_files')")).fetchall()
+                for row in idx_rows or []:
+                    name = row[1] if len(row) > 1 else None
+                    if not name:
+                        continue
+                    if name == "uq_case_file_name_project":
+                        conn.execute(text("DROP INDEX IF EXISTS uq_case_file_name_project"))
+
+                dup = conn.execute(
+                    text(
+                        """
+                        SELECT project_id, version_id, file_name_clean, COUNT(*) AS cnt
+                        FROM case_files
+                        GROUP BY project_id, version_id, file_name_clean
+                        HAVING cnt > 1
+                        LIMIT 1
+                        """
+                    )
+                ).fetchone()
+                if not dup:
+                    conn.execute(
+                        text(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS uq_case_file_name_project_version "
+                            "ON case_files(project_id, version_id, file_name_clean)"
+                    )
+                )
+            _mark_applied(conn, 16)
+
+        # v17: 用例文件同名约束恢复为“项目级”（同一项目下跨版本不允许同名）。
+        # 仍使用唯一索引实现；若历史数据异常导致重复，则跳过创建以避免启动失败。
+        if not _is_applied(conn, 17):
+            if "case_files" in tables:
+                # 删除旧索引（项目+版本级同名）
+                idx_rows = conn.execute(text("PRAGMA index_list('case_files')")).fetchall()
+                for row in idx_rows or []:
+                    name = row[1] if len(row) > 1 else None
+                    if not name:
+                        continue
+                    if name == "uq_case_file_name_project_version":
+                        conn.execute(
+                            text("DROP INDEX IF EXISTS uq_case_file_name_project_version")
+                        )
+
+                dup = conn.execute(
+                    text(
+                        """
+                        SELECT project_id, file_name_clean, COUNT(*) AS cnt
+                        FROM case_files
+                        GROUP BY project_id, file_name_clean
+                        HAVING cnt > 1
+                        LIMIT 1
+                        """
+                    )
+                ).fetchone()
+                if not dup:
+                    conn.execute(
+                        text(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS uq_case_file_name_project "
+                            "ON case_files(project_id, file_name_clean)"
+                        )
+                    )
+            _mark_applied(conn, 17)

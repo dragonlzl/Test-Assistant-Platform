@@ -471,6 +471,11 @@ def upsert_exec_set_from_case_file(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用例文件不存在")
     ensure_project_access(db, user, case_file.project_id)
     ensure_version_in_project(db, case_file.project_id, case_file.version_id)
+    exec_version_field_set = (
+        hasattr(payload, "__fields_set__") and "exec_version_id" in payload.__fields_set__
+    )
+    if exec_version_field_set and payload.exec_version_id is not None:
+        ensure_version_in_project(db, case_file.project_id, payload.exec_version_id)
 
     mode = (payload.mode or "replace").strip().lower()
     if mode not in ("replace", "append"):
@@ -480,23 +485,30 @@ def upsert_exec_set_from_case_file(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="prefer_result_source 仅支持 db/import")
     preserve_results = True if payload.preserve_results is None else bool(payload.preserve_results)
 
+    target_version_id = payload.exec_version_id if exec_version_field_set else case_file.version_id
+
     # 按用户隔离：同一份 case_file，每个用户各自维护一份 exec_set/exec_cases。
-    exec_set = (
+    # 同一用户、同一 case_file：允许按“执行版本（exec_sets.version_id）”分叉多份执行集，执行结果相互独立。
+    exec_set_q = (
         db.query(models.ExecSet)
         .filter(
             models.ExecSet.case_file_id == case_file.id,
             models.ExecSet.created_by == user.id,
             models.ExecSet.status == "active",
         )
-        .order_by(models.ExecSet.id.desc())
-        .first()
     )
+    if target_version_id is None:
+        exec_set_q = exec_set_q.filter(models.ExecSet.version_id.is_(None))
+    else:
+        exec_set_q = exec_set_q.filter(models.ExecSet.version_id == int(target_version_id))
+    exec_set = exec_set_q.order_by(models.ExecSet.id.desc()).first()
     now = datetime.now(timezone.utc)
     created = False
     if not exec_set:
+        initial_version_id = target_version_id
         exec_set = models.ExecSet(
             project_id=case_file.project_id,
-            version_id=case_file.version_id,
+            version_id=initial_version_id,
             case_file_id=case_file.id,
             name=case_file.file_name_clean,
             status="active",
@@ -511,6 +523,8 @@ def upsert_exec_set_from_case_file(
         created = True
     else:
         exec_set.updated_at = now
+        if exec_version_field_set:
+            exec_set.version_id = payload.exec_version_id
         if exec_set.case_file_base_updated_at is None:
             exec_set.case_file_base_updated_at = case_file.updated_at
         if exec_set.case_file_last_synced_at is None:
@@ -913,8 +927,7 @@ def _diff_exec_set_against_case_file(
             changed_fields.append("steps")
         if old_snap.expected != new_snap.expected:
             changed_fields.append("expected")
-        if (old_snap.remark or "") != (new_snap.remark or ""):
-            changed_fields.append("remark")
+        # remark 属于“执行备注”字段，可能包含执行过程记录，不应参与用例库变更导致的“变更重跑”判定。
         return changed_fields
 
     for item_id, item in item_by_id.items():
@@ -1047,8 +1060,24 @@ def _sync_exec_set_from_case_file(
             before_priority = existing.priority
             before_precondition = existing.precondition
             before_steps = existing.steps
-            before_remark = existing.remark
             before_status = str(existing.status or "").strip()
+
+            defect_links_value = existing.defect_links
+            reuse_details_value = existing.reuse_details
+            has_defect_links = False
+            if defect_links_value is not None:
+                if isinstance(defect_links_value, list):
+                    has_defect_links = bool(defect_links_value)
+                else:
+                    has_defect_links = bool(str(defect_links_value).strip())
+            has_reuse_execution = _has_reuse_execution(reuse_details_value)
+            # 注意：exec_case.remark 属于执行备注（非用例库字段），不应导致“误判已执行”或触发重跑。
+            has_result = bool(before_status and before_status != "未执行") or bool(
+                (existing.actual_result or "").strip()
+                or (existing.defect_link or "").strip()
+                or has_defect_links
+                or has_reuse_execution
+            )
 
             existing.module = item.module
             existing.title = item.title
@@ -1056,7 +1085,6 @@ def _sync_exec_set_from_case_file(
             existing.priority = item.priority
             existing.precondition = item.precondition
             existing.steps = item.steps
-            existing.remark = item.remark
             existing.order_no = idx + 1
             existing.case_item_id = item.id
             existing.case_item_source_id = int(item.id)
@@ -1070,25 +1098,8 @@ def _sync_exec_set_from_case_file(
                 or before_priority != existing.priority
                 or before_precondition != existing.precondition
                 or before_steps != existing.steps
-                or before_remark != existing.remark
             )
             if changed:
-                defect_links_value = existing.defect_links
-                reuse_details_value = existing.reuse_details
-                has_defect_links = False
-                if defect_links_value is not None:
-                    if isinstance(defect_links_value, list):
-                        has_defect_links = bool(defect_links_value)
-                    else:
-                        has_defect_links = bool(str(defect_links_value).strip())
-                has_reuse_execution = _has_reuse_execution(reuse_details_value)
-                has_result = bool(before_status and before_status != "未执行") or bool(
-                    (existing.actual_result or "").strip()
-                    or (existing.remark or "").strip()
-                    or (existing.defect_link or "").strip()
-                    or has_defect_links
-                    or has_reuse_execution
-                )
                 if has_result and before_status not in ("变更重跑", "有改动"):
                     existing.status = "变更重跑"
                     if isinstance(existing.reuse_details, list) and existing.reuse_details:

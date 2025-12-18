@@ -71,6 +71,11 @@
 ## 7. 用例执行归档（Execution Archive）
 > 归档是“执行集 exec_set”维度的操作：归档后不再出现在“用例执行”页面的导入/执行视图中，但执行结果仍保留，可在“用例归档”页面查看；同一份用例可多次执行并多次归档（对应不同 exec_set 记录）。
 
+### 7.0 执行集创建/同步
+- `POST /api/exec/sets/from-case-file`（需登录）  
+  - 入参：`{ case_file_id, exec_version_id?, mode?, preserve_results?, prefer_result_source?, import_cases?, requirement?, reuse_enabled?, reuse_presets? }`  
+  - 说明：从用例库同步/创建执行集；`exec_version_id` 为“执行版本”，可传 `null` 表示未分配版本；不传则默认沿用用例库的导入版本。
+
 ### 7.1 列表与过滤
 - `GET /api/exec/sets`（需登录）  
   - Query：`project_id?`、`status_filter?=active|archived|all`（默认 `active`）、`all_users?=1`（仅管理员）  

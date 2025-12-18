@@ -4459,7 +4459,9 @@
         // 仅在“用例执行（tempexec）”页签内才同步用例库变更并考虑自动弹窗。
         // 其他页面触发的执行数据加载（例如 authReady 初始化）不应打扰用户。
         try { allowCaseLibrarySync = String(state && state.activeTab ? state.activeTab : '') === 'tempexec'; } catch (err) { allowCaseLibrarySync = false; }
-        var autoPopupExecSetIds = [];
+        // 多版本执行同一份用例时：同一批变更只自动弹窗一次（按 case_file_id 去重）。
+        var autoPopupByCaseFileId = {};
+        var autoPopupCaseFileOrder = [];
         var activeId = state.tempExecActiveId ? String(state.tempExecActiveId) : '';
         var order = [];
         for (var i = 0; i < files.length; i += 1) order.push(i);
@@ -4495,7 +4497,17 @@
                     syncTempExecCaseLibraryChangesButton(getTempExecFile(state.tempExecActiveId));
                   }
                   if (meta && meta.shouldAutoPopup) {
-                    if (autoPopupExecSetIds.indexOf(String(execSetId)) === -1) autoPopupExecSetIds.push(String(execSetId));
+                    var cfKey = '';
+                    if (meta && meta.caseFileId !== null && meta.caseFileId !== undefined) {
+                      cfKey = String(meta.caseFileId);
+                    }
+                    if (!cfKey) cfKey = 'execset:' + String(execSetId);
+                    if (!Object.prototype.hasOwnProperty.call(autoPopupByCaseFileId, cfKey)) {
+                      autoPopupByCaseFileId[cfKey] = String(execSetId);
+                      autoPopupCaseFileOrder.push(cfKey);
+                    } else if (activeId && String(activeId) === String(execSetId)) {
+                      autoPopupByCaseFileId[cfKey] = String(execSetId);
+                    }
                   }
                 })
                 .catch(function() {});
@@ -4562,6 +4574,9 @@
           }
         }
         if (tempExecDbLoadSeq !== loadSeq) return;
+        var autoPopupExecSetIds = autoPopupCaseFileOrder
+          .map(function(key) { return autoPopupByCaseFileId[key]; })
+          .filter(Boolean);
         if (allowCaseLibrarySync && autoPopupExecSetIds.length) {
           var openExecSetId = '';
           if (activeId && autoPopupExecSetIds.indexOf(String(activeId)) !== -1) openExecSetId = String(activeId);
@@ -5060,7 +5075,7 @@
       return { cases: out, reuseEnabled: reuseEnabled, hasResult: detectHasExecResult(out, reuseEnabled) };
     }
 
-    async function importTempExecFilesToDb(fileList, projectId, versionId) {
+    async function importTempExecFilesToDb(fileList, projectId, versionId, execVersionId) {
       if (!isDbMode()) {
         // 静态模式：仍沿用原本的本地导入逻辑，避免影响离线使用与既有自动化。
         await importTempExecFiles(fileList);
@@ -5084,6 +5099,11 @@
       var vid = Number(versionId);
       if (!Number.isFinite(pid) || pid <= 0) throw new Error('请选择项目');
       if (!Number.isFinite(vid) || vid <= 0) throw new Error('请选择版本');
+      var execVid = null;
+      if (execVersionId !== null && execVersionId !== undefined && String(execVersionId) !== '') {
+        var parsedExec = Number(execVersionId);
+        execVid = Number.isFinite(parsedExec) ? parsedExec : null;
+      }
 
       function normText(value) {
         if (normalizeTempExecName) return normalizeTempExecName(value);
@@ -5139,7 +5159,6 @@
       var caseFileByName = {};
       (existingCaseFiles || []).forEach(function(f) {
         if (!f || !f.file_name_clean) return;
-        if (String(f.version_id || '') !== String(vid || '')) return;
         var keyRaw = normText(f.file_name_clean);
         if (keyRaw) {
           var prev = caseFileByName[keyRaw];
@@ -5463,6 +5482,7 @@
               requirement: requirementLabel || '',
               reuse_enabled: inferredReuse ? true : false,
               reuse_presets: null,
+              exec_version_id: execVid,
             });
             if (execSet && execSet.id) {
               importedExecSetIds.push(execSet.id);
@@ -5546,6 +5566,7 @@
             requirement: requirementLabel || '',
             reuse_enabled: inferredReuse ? true : false,
             reuse_presets: null,
+            exec_version_id: execVid,
           });
           if (!execSet || !execSet.id) {
             failures.push({ file: fileName, reason: '执行集创建失败' });

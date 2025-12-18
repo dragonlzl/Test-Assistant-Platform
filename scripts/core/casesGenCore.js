@@ -1142,18 +1142,38 @@
           if (drawer) drawer.close();
           triggerTempExecCaseLibrarySync('casegen-new');
           if (action === 'store_to_exec' && caseFile && caseFile.id && typeof apiClient.upsertExecSetFromCaseFile === 'function') {
-            return apiClient
-              .upsertExecSetFromCaseFile({
-                case_file_id: caseFile.id,
-                mode: 'replace',
-                preserve_results: true,
-                prefer_result_source: 'db',
-                requirement: requirementLabel,
-              })
-              .then(function(execSet) {
-                if (execSet && execSet.id) return goToExecSet(execSet.id);
-                return null;
-              });
+            var execVersionDrawerApi = window.app && window.app.execVersionDrawer ? window.app.execVersionDrawer : null;
+            if (!execVersionDrawerApi || typeof execVersionDrawerApi.open !== 'function') return null;
+            var projectName = '';
+            try {
+              var pList = Array.isArray(state.projects) ? state.projects : [];
+              var found = pList.find(function(p) { return p && Number(p.id) === Number(projectIdNum); }) || null;
+              projectName = found && found.name ? String(found.name) : '';
+            } catch (_) {
+              projectName = '';
+            }
+            return execVersionDrawerApi.open({
+              title: '选择执行版本',
+              projectId: projectIdNum,
+              projectName: projectName || ('项目#' + projectIdNum),
+              importVersionId: versionIdNum,
+            }).then(function(res0) {
+              if (!res0 || res0.ok !== true) return null;
+              var execVid = Object.prototype.hasOwnProperty.call(res0, 'versionId') ? res0.versionId : (res0.exec_version_id || null);
+              return apiClient
+                .upsertExecSetFromCaseFile({
+                  case_file_id: caseFile.id,
+                  mode: 'replace',
+                  preserve_results: true,
+                  prefer_result_source: 'db',
+                  requirement: requirementLabel,
+                  exec_version_id: execVid,
+                })
+                .then(function(execSet) {
+                  if (execSet && execSet.id) return goToExecSet(execSet.id);
+                  return null;
+                });
+            });
           }
           return null;
         })
@@ -1185,18 +1205,38 @@
                 } catch (_) {}
                 triggerTempExecCaseLibrarySync('casegen-new-overwrite');
                 if (action === 'store_to_exec' && caseFile2 && caseFile2.id && typeof apiClient.upsertExecSetFromCaseFile === 'function') {
-                  return apiClient
-                    .upsertExecSetFromCaseFile({
-                      case_file_id: caseFile2.id,
-                      mode: 'replace',
-                      preserve_results: true,
-                      prefer_result_source: 'db',
-                      requirement: requirementLabel,
-                    })
-                    .then(function(execSet2) {
-                      if (execSet2 && execSet2.id) return goToExecSet(execSet2.id);
-                      return null;
-                    });
+                  var execVersionDrawerApi2 = window.app && window.app.execVersionDrawer ? window.app.execVersionDrawer : null;
+                  if (!execVersionDrawerApi2 || typeof execVersionDrawerApi2.open !== 'function') return null;
+                  var projectName2 = '';
+                  try {
+                    var pList2 = Array.isArray(state.projects) ? state.projects : [];
+                    var found2 = pList2.find(function(p) { return p && Number(p.id) === Number(projectIdNum); }) || null;
+                    projectName2 = found2 && found2.name ? String(found2.name) : '';
+                  } catch (_) {
+                    projectName2 = '';
+                  }
+                  return execVersionDrawerApi2.open({
+                    title: '选择执行版本',
+                    projectId: projectIdNum,
+                    projectName: projectName2 || ('项目#' + projectIdNum),
+                    importVersionId: versionIdNum,
+                  }).then(function(res1) {
+                    if (!res1 || res1.ok !== true) return null;
+                    var execVid2 = Object.prototype.hasOwnProperty.call(res1, 'versionId') ? res1.versionId : (res1.exec_version_id || null);
+                    return apiClient
+                      .upsertExecSetFromCaseFile({
+                        case_file_id: caseFile2.id,
+                        mode: 'replace',
+                        preserve_results: true,
+                        prefer_result_source: 'db',
+                        requirement: requirementLabel,
+                        exec_version_id: execVid2,
+                      })
+                      .then(function(execSet2) {
+                        if (execSet2 && execSet2.id) return goToExecSet(execSet2.id);
+                        return null;
+                      });
+                  });
                 }
                 return null;
               });

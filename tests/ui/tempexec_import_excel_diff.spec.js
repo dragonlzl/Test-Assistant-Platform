@@ -182,7 +182,9 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
         const payload = route.request().postDataJSON();
         expect(payload && payload.mode).toBe('replace');
         expect(payload && payload.preserve_results).toBe(false);
-        return respond(200, execSets[1]);
+        const hasExecVersion = Object.prototype.hasOwnProperty.call(payload || {}, 'exec_version_id');
+        const resolved = hasExecVersion ? { ...execSets[1], version_id: payload.exec_version_id } : execSets[1];
+        return respond(200, resolved);
       }
 
       if (pathName === '/api/auth/logout') return respond(200, {});
@@ -219,6 +221,9 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
     await page.selectOption('#tempExecImportVersionSelect', String(version.id));
 
     await page.click('#tempExecImportConfirmBtn');
+    await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
+    await page.click('#execVersionSelectDrawerConfirmBtn');
 
     await expect(page.locator('#tempExecImportDiffDrawer')).toHaveClass(/open/);
     await expect(page.locator('#tempExecImportDiffTitle')).toContainText('用例A');
@@ -332,6 +337,9 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
     await page.selectOption('#tempExecImportProjectSelect', String(project.id));
     await page.selectOption('#tempExecImportVersionSelect', String(version.id));
     await page.click('#tempExecImportConfirmBtn');
+    await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
+    await page.click('#execVersionSelectDrawerConfirmBtn');
 
     await expect(page.locator('#tempExecImportDiffDrawer')).toHaveClass(/open/);
     const actualHeaders2 = page.locator('#tempExecImportDiffDrawer th[data-tempexec-diff-result]', { hasText: '实际结果' });

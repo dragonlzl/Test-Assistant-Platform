@@ -1332,18 +1332,21 @@
             items: importDiffState.importItems,
           },
           { overwrite: true }
-        )
-        .then(function(caseFile) {
-          if (!caseFile || !caseFile.id) throw new Error('覆盖入库失败：未返回用例文件');
-          return apiClient.upsertExecSetFromCaseFile({
-            case_file_id: caseFile.id,
-            mode: 'replace',
-            preserve_results: false,
+	        )
+	        .then(function(caseFile) {
+	          if (!caseFile || !caseFile.id) throw new Error('覆盖入库失败：未返回用例文件');
+	          var execVid = Object.prototype.hasOwnProperty.call(importDiffState, 'execVersionId') ? importDiffState.execVersionId : null;
+	          if (execVid === undefined) execVid = null;
+	          return apiClient.upsertExecSetFromCaseFile({
+	            case_file_id: caseFile.id,
+	            mode: 'replace',
+	            preserve_results: false,
             prefer_result_source: preferSource,
             import_cases: importCases && importCases.length ? importCases : null,
             requirement: importDiffState.requirement || '',
             reuse_enabled: importDiffState.importReuseEnabled ? true : false,
             reuse_presets: null,
+            exec_version_id: execVid,
           });
         })
         .then(function(execSet) {
@@ -1707,9 +1710,18 @@
       var versionId = dup.version_id || importState.versionId;
       var fileName = dup.file_name || '';
       var cleanName = dup.clean_name || stripFileExt(fileName) || '';
-      var matchedCleanName = payload && payload.existing_file_name_clean ? String(payload.existing_file_name_clean) : '';
-      var dbVersionId = payload && (payload.existing_version_id || payload.existing_version_id === 0) ? payload.existing_version_id : null;
-      var existingId = payload && payload.existing_case_file_id ? payload.existing_case_file_id : null;
+	      var matchedCleanName = payload && payload.existing_file_name_clean ? String(payload.existing_file_name_clean) : '';
+	      var dbVersionId = payload && (payload.existing_version_id || payload.existing_version_id === 0) ? payload.existing_version_id : null;
+	      var existingId = payload && payload.existing_case_file_id ? payload.existing_case_file_id : null;
+	      var execVersionId = Object.prototype.hasOwnProperty.call(importState, 'execVersionId') ? importState.execVersionId : null;
+	      if (execVersionId === undefined) execVersionId = null;
+
+      function matchExecVersion(serverValue, targetValue) {
+        if (targetValue === null || targetValue === undefined || String(targetValue) === '') {
+          return serverValue === null || serverValue === undefined || String(serverValue) === '';
+        }
+        return String(serverValue) === String(targetValue);
+      }
 
       function fail(reason, msg) {
         var text = msg || '打开差异对比失败';
@@ -1741,13 +1753,11 @@
           var targetName = matchedCleanName || cleanName;
           var matched = list.find(function(cf) {
             if (!cf || !cf.id) return false;
-            if (String(cf.version_id || '') !== String(versionId || '')) return false;
             return String(cf.file_name_clean || '') === String(targetName || '');
           });
           if (!matched && cleanName) {
             matched = list.find(function(cf2) {
               if (!cf2 || !cf2.id) return false;
-              if (String(cf2.version_id || '') !== String(versionId || '')) return false;
               return String(cf2.file_name_clean || '') === String(cleanName || '');
             });
           }
@@ -1760,6 +1770,7 @@
         }).catch(function() { return null; });
       }
 
+      importDiffState.execVersionId = execVersionId;
       openImportDiffDrawerLoading({
         fileName: fileName,
         cleanName: matchedCleanName || cleanName || '',
@@ -1800,7 +1811,11 @@
                 var dbItems = Array.isArray(res2 && res2[0]) ? res2[0] : [];
                 var execSets = Array.isArray(res2 && res2[1]) ? res2[1] : [];
                 var matchedSet = execSets
-                  .filter(function(s) { return s && Number(s.case_file_id) === Number(id); })
+                  .filter(function(s) {
+                    if (!s || Number(s.case_file_id) !== Number(id)) return false;
+                    if (String(s.status || '') !== 'active') return false;
+                    return matchExecVersion(s.version_id, execVersionId);
+                  })
                   .sort(function(a, b) { return Number(b.id || 0) - Number(a.id || 0); })[0] || null;
                 var reuseEnabled = Boolean(matchedSet && matchedSet.reuse_enabled);
                 if (!matchedSet || !matchedSet.id || !apiClient || typeof apiClient.listExecCases !== 'function') {
@@ -1869,16 +1884,71 @@
           setStatus(tempExecStatus, '请先选择版本', 'warn');
           return;
         }
-        importState.loading = true;
-        syncImportConfirmState();
-        var originalFiles = Array.prototype.slice.call(importState.pendingFiles || []).filter(Boolean);
-        var importedNames = [];
-        var overwrittenNames = [];
-        var skippedItems = [];
-        var failedItems = [];
-        api
-          .importTempExecFilesToDb(importState.pendingFiles, importState.projectId, importState.versionId)
-          .then(function(result) {
+        var execVersionDrawerApi = window.app && window.app.execVersionDrawer ? window.app.execVersionDrawer : null;
+        if (!execVersionDrawerApi || typeof execVersionDrawerApi.open !== 'function') {
+          setStatus(tempExecStatus, '执行版本选择组件未就绪，请刷新页面后重试', 'err');
+          return;
+        }
+
+        var pid = importState.projectId;
+        var importVid = importState.versionId;
+        var importVerName = '';
+        try {
+          if (tempExecImportVersionSelect && tempExecImportVersionSelect.options && tempExecImportVersionSelect.selectedIndex >= 0) {
+            var opt = tempExecImportVersionSelect.options[tempExecImportVersionSelect.selectedIndex];
+            if (opt && opt.text) importVerName = String(opt.text || '').trim();
+          }
+        } catch (_) {
+          importVerName = '';
+        }
+        if (!importVerName) {
+          try {
+            var cached = importState && importState.versionsByProject ? importState.versionsByProject[String(pid)] : null;
+            if (Array.isArray(cached)) {
+              var foundVer = cached.find(function(v) { return v && String(v.id) === String(importVid); }) || null;
+              if (foundVer && foundVer.name) importVerName = String(foundVer.name);
+            }
+          } catch (_) {
+            importVerName = '';
+          }
+        }
+        var projectName = '';
+        try {
+          var pList = window.app && window.app.state && Array.isArray(window.app.state.projects) ? window.app.state.projects : [];
+          var found = pList.find(function(p) { return p && String(p.id) === String(pid); }) || null;
+          projectName = found && found.name ? String(found.name) : '';
+        } catch (_) {
+          projectName = '';
+        }
+
+        try { if (window.app) window.app.__drawerSkipRestoreOnce = true; } catch (_) {}
+        if (tempExecDrawer) tempExecDrawer.close();
+        execVersionDrawerApi.open({
+          title: '选择执行版本',
+          projectId: pid,
+          projectName: projectName || ('项目#' + pid),
+          importVersionId: importVid,
+          importVersionName: importVerName || '',
+        }).then(function(res0) {
+          if (tempExecDrawer) tempExecDrawer.open();
+          if (!res0 || res0.ok !== true) {
+            setStatus(tempExecStatus, '已取消入库', 'warn');
+            return null;
+          }
+          var execVid = Object.prototype.hasOwnProperty.call(res0, 'versionId') ? res0.versionId : (res0.exec_version_id || null);
+          if (execVid === undefined) execVid = null;
+          importState.execVersionId = execVid;
+
+          importState.loading = true;
+          syncImportConfirmState();
+          var originalFiles = Array.prototype.slice.call(importState.pendingFiles || []).filter(Boolean);
+          var importedNames = [];
+          var overwrittenNames = [];
+          var skippedItems = [];
+          var failedItems = [];
+          return api
+            .importTempExecFilesToDb(importState.pendingFiles, importState.projectId, importState.versionId, execVid)
+            .then(function(result) {
             var res = result && typeof result === 'object' ? result : null;
             var failed = res && Array.isArray(res.failed) ? res.failed : [];
             var duplicates = res && Array.isArray(res.duplicates) ? res.duplicates : [];
@@ -1987,13 +2057,14 @@
             renderImportFileHint();
             syncImportConfirmState();
           })
-          .catch(function(err) {
-            setStatus(tempExecStatus, err && err.message ? err.message : '入库失败', 'err');
-          })
-          .finally(function() {
-            importState.loading = false;
-            syncImportConfirmState();
-          });
+            .catch(function(err) {
+              setStatus(tempExecStatus, err && err.message ? err.message : '入库失败', 'err');
+            })
+            .finally(function() {
+              importState.loading = false;
+              syncImportConfirmState();
+            });
+        });
       });
     }
 

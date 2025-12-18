@@ -165,6 +165,27 @@ test.describe('case library api', () => {
     });
     expect(crossVerRes.status()).toBe(400);
 
+    const crossVerOverwriteRes = await ctx.post(`${apiBase}/api/case-files/import?overwrite=1`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId2,
+        file_name: '登录.json',
+        items: [
+          {
+            module: '登录',
+            title: '跨版本同名覆盖导入',
+            expected: 'ok',
+          },
+        ],
+      },
+    });
+    expect(crossVerOverwriteRes.status()).toBe(200);
+    const crossVerOverwrite = await crossVerOverwriteRes.json();
+    expect(crossVerOverwrite && crossVerOverwrite.id).toBe(caseFileId);
+    expect(crossVerOverwrite && crossVerOverwrite.file_name_clean).toBe('登录');
+    expect(crossVerOverwrite && crossVerOverwrite.version_id).toBe(versionId2);
+
     const listFilesRes = await ctx.get(`${apiBase}/api/case-files?project_id=${projectId}`, { headers });
     expect(listFilesRes.status()).toBe(200);
     const listFiles = await listFilesRes.json();

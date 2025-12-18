@@ -182,5 +182,75 @@ test.describe('exec archive api', () => {
     expect(Array.isArray(afterDelete)).toBeTruthy();
     expect(afterDelete.some((x) => x && x.exec_set_id === execSetAId)).toBeFalsy();
   });
-});
 
+  test('exec_version_id controls archive version filter', async () => {
+    const ctx = await request.newContext();
+    const adminToken = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' };
+
+    const projectName = 'archive-exec-version-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'exec version archive filter' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const v1Res = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, { headers, data: { name: 'v1' } });
+    expect(v1Res.status()).toBe(201);
+    const v1 = await v1Res.json();
+    const v2Res = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, { headers, data: { name: 'v2' } });
+    expect(v2Res.status()).toBe(201);
+    const v2 = await v2Res.json();
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: v1.id,
+        file_name: '执行版本用例.json',
+        items: [{ module: '模块', title: '用例1', expected: 'ok' }],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFile = await importRes.json();
+
+    const upsertRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: { case_file_id: caseFile.id, exec_version_id: v2.id, mode: 'replace', prefer_result_source: 'db' },
+    });
+    expect(upsertRes.status()).toBe(200);
+    const execSet = await upsertRes.json();
+    expect(execSet && execSet.version_id).toBe(v2.id);
+
+    const casesRes = await ctx.get(`${apiBase}/api/exec/sets/${execSet.id}/cases`, { headers });
+    expect(casesRes.status()).toBe(200);
+    const cases = await casesRes.json();
+    expect(Array.isArray(cases)).toBeTruthy();
+    expect(cases.length).toBe(1);
+
+    const patchRes = await ctx.patch(`${apiBase}/api/exec/cases/${cases[0].id}`, {
+      headers,
+      data: { status: '通过' },
+    });
+    expect(patchRes.status()).toBe(200);
+
+    const archiveRes = await ctx.post(`${apiBase}/api/exec/sets/${execSet.id}/archive`, { headers, data: {} });
+    expect(archiveRes.status()).toBe(200);
+
+    const listV2Res = await ctx.get(`${apiBase}/api/exec/archives?project_id=${projectId}&version_id=${v2.id}`, { headers });
+    expect(listV2Res.status()).toBe(200);
+    const listV2 = await listV2Res.json();
+    expect(Array.isArray(listV2)).toBeTruthy();
+    expect(listV2.some((x) => x && x.exec_set_id === execSet.id)).toBeTruthy();
+
+    const listV1Res = await ctx.get(`${apiBase}/api/exec/archives?project_id=${projectId}&version_id=${v1.id}`, { headers });
+    expect(listV1Res.status()).toBe(200);
+    const listV1 = await listV1Res.json();
+    expect(Array.isArray(listV1)).toBeTruthy();
+    expect(listV1.some((x) => x && x.exec_set_id === execSet.id)).toBeFalsy();
+
+    const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
+    expect(delProj.status()).toBe(200);
+  });
+});

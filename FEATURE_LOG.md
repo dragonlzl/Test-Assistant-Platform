@@ -19,6 +19,34 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行版本选择（转到执行/入库确认/多版本独立执行）
+- 功能描述：
+  - 导入用例时选择的“版本”仅用于记录导入版本（`case_files.version_id`），不再强绑定执行版本。
+  - 转到执行/批量转到执行/执行页确认入库/入库并转到执行：统一新增“执行版本选择”抽屉，默认选中项目内“最近新增/更新”的版本，允许选择“未分配版本”。
+  - 执行页版本盒子分组改为基于执行版本（`exec_sets.version_id`）：同一项目下，同一份用例可在不同执行版本同时存在执行集，执行结果互不影响。
+  - 用例库同名校验保持项目级：同一项目下跨版本不允许同名用例文件；归档按执行集生效，版本 A 的归档不影响版本 B 的同名执行集。
+  - 当同一用例在多个执行版本同时执行且用例库发生变更时，“用例库 diff 自动弹窗”按 `case_file_id` 去重，每批变更只自动弹一次。
+- 操作方式：
+  - 用例库：用例详情“转到执行”、选择用例执行抽屉“转到执行”、批量“转到执行” → 弹出“执行版本选择”抽屉 → 确认后进入执行页对应版本盒子。
+  - 执行页：导入后点击“确认入库” → 弹出“执行版本选择”抽屉 → 确认后入库并进入对应版本盒子。
+  - 用例生成：入库并转到执行（DB 模式）→ 入库成功后弹出“执行版本选择”抽屉 → 确认后跳转到执行集。
+- 使用效果：
+  - 支持同项目下不同执行版本并行执行同名用例，结果与归档互不干扰；执行页版本盒子始终以“执行版本”为准展示。
+  - 版本选择交互统一收口到抽屉说明（导入版本 vs 执行版本），减少误解；跨版本同一批用例变更不会重复弹出 diff。
+- 新增内容/接口/组件：
+  - 前端：新增可复用抽屉组件 `scripts/base/execVersionDrawer.js`，并在 `index.html` 增加 `#execVersionSelectDrawer`；用例库转执行/批量转执行（`scripts/modules/caseLibrary.js`）、执行页确认入库（`scripts/modules/tempexec.js` + `scripts/core/tempexecCore.js`）、用例生成入库转执行（`scripts/core/casesGenCore.js`）接入执行版本选择并透传。
+  - 后端：`/api/exec/sets/from-case-file` 支持 `exec_version_id`，并将执行集按 `(case_file_id, created_by, status, version_id)` 维度分叉创建（`backend/routers/exec_routes.py`、`backend/schemas.py`）。
+  - 数据一致性：用例库同名约束保持项目级（`backend/models.py`，迁移 `backend/migrations.py` v17 兜底恢复项目级唯一索引）。
+  - 测试：新增 API 用例 `tests/api/exec_version_isolation.spec.js`；同步更新既有 API/UI 用例覆盖新交互与约束。
+- 复用说明：复用既有抽屉框架（`scripts/base/drawer.js`）与执行集 upsert 链路（`/api/exec/sets/from-case-file`），仅扩展“执行版本”参数与前端交互；未新增独立数据结构。
+- 测试与验证：
+  - 语法检查：`node --check scripts/base/execVersionDrawer.js scripts/modules/caseLibrary.js scripts/core/tempexecCore.js scripts/modules/tempexec.js scripts/core/casesGenCore.js`（通过）；`python3 -m compileall -q backend`（通过）
+  - UI：`npm run test:ui -- tests/ui/case_library_history.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js tests/ui/tempexec_import_confirm.spec.js tests/ui/tempexec_import_excel_diff.spec.js tests/ui/tempexec_import_multi_diff_queue.spec.js tests/ui/casegen_db_store.spec.js`（30 passed）
+  - API：`APP_DB_FILE=apitest_tmp_xxx.db python3.12 -m uvicorn backend.main:app --host 127.0.0.1 --port 18081` 后执行 `API_BASE_URL=http://127.0.0.1:18081 npm run test:api`（23 passed）
+- 更新记录：2025-12-18 执行版本选择与多版本独立执行上线（`scripts/base/execVersionDrawer.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`、`scripts/core/tempexecCore.js`、`backend/routers/exec_routes.py`、`backend/migrations.py`、`tests/api/exec_version_isolation.spec.js` 等）。
+  - 修复：执行页导入同名用例时，选择其他“执行版本”不再误覆盖当前版本执行集；导入版本在抽屉中优先展示版本名称（避免出现 `版本#id` 误导）。
+  - 修复：用例库同步（case-library-sync）不再把“执行备注”差异当作用例变更，避免导入同名无差异但触发其他版本用例被标记为“变更重跑”；并补充回归用例覆盖（`tests/api/exec_version_isolation.spec.js`）。
+
 - 功能名称：用例执行导入&分配：归档占位 + 解散归档（防止版本盒子消失）
 - 功能描述：当某项目版本下的个人执行用例全部归档后，执行页“用例导入&分配”的项目/版本盒子不再直接消失；已归档执行集以“占位”形式保留在版本盒子底部，并提供“解散归档”用于清除占位（不影响归档记录与未归档用例）。
 - 操作方式：

@@ -2109,7 +2109,43 @@
         <button class="ghost-btn" data-drawer-close="caseLibraryHistoryDrawer" type="button">关闭</button>
       </div>
     </div>
-  </div>
+</div>
+</div>
+
+<div class="drawer hidden" id="execVersionSelectDrawer">
+  <div class="drawer-mask" data-drawer-close="execVersionSelectDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="execVersionSelectDrawerTitle">选择执行版本</h3>
+      <button class="link-toggle" data-drawer-close="execVersionSelectDrawer" type="button">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" style="margin:0 0 10px;" id="execVersionSelectDrawerHint">
+        导入版本仅用于记录用例库归属；执行版本用于“用例执行”页面的版本分组、归档筛选等展示与统计。
+      </p>
+      <div class="case-library-drawer-meta" style="margin-bottom:10px;">
+        <div class="meta-line">
+          <span class="label">项目</span>
+          <span class="value" id="execVersionSelectDrawerProject">--</span>
+        </div>
+        <div class="meta-line">
+          <span class="label">导入版本</span>
+          <span class="value" id="execVersionSelectDrawerImportVersion">--</span>
+        </div>
+      </div>
+      <div class="case-library-filters" style="margin-bottom:8px;">
+        <span class="case-library-label">执行版本</span>
+        <select id="execVersionSelectDrawerVersionSelect" disabled>
+          <option value="">加载中...</option>
+        </select>
+      </div>
+      <p class="status" id="execVersionSelectDrawerStatus"></p>
+      <div class="actions user-form-actions" style="justify-content:flex-end; gap:8px;">
+        <button class="primary" id="execVersionSelectDrawerConfirmBtn" type="button" disabled>确认并继续</button>
+        <button class="ghost-btn" id="execVersionSelectDrawerCancelBtn" data-drawer-close="execVersionSelectDrawer" type="button">取消</button>
+      </div>
+</div>
+</div>
 </div>
 <section class="card hidden" data-tab-section="project-admin" data-role="admin-only">
 <h2>项目管理</h2>
@@ -2378,6 +2414,7 @@
 <script src="./scripts/base/state.js" defer></script>
 <script src="./scripts/base/utils.js" defer></script>
 <script src="./scripts/base/drawer.js" defer></script>
+<script src="./scripts/base/execVersionDrawer.js" defer></script>
 <script src="./services/storage.js" defer></script>
 <script src="./services/modelClient.js" defer></script>
 <script src="./services/apiClient.js" defer></script>

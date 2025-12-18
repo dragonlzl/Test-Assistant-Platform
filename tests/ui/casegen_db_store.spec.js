@@ -265,10 +265,12 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
       if (pathName === '/api/exec/sets/from-case-file' && method === 'POST') {
         const body = route.request().postDataJSON();
         createdExecSet = body;
+        const hasExecVersion = Object.prototype.hasOwnProperty.call(body, 'exec_version_id');
+        const resolvedVersionId = hasExecVersion ? body.exec_version_id : versions[0].id;
         return respond(200, {
           id: 2001,
           project_id: project.id,
-          version_id: versions[0].id,
+          version_id: resolvedVersionId,
           case_file_id: body.case_file_id,
           name: requirement,
           requirement: requirement,
@@ -284,11 +286,14 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
         });
       }
       if (pathName === '/api/exec/sets' && method === 'GET') {
+        const resolvedVersionId = createdExecSet && Object.prototype.hasOwnProperty.call(createdExecSet, 'exec_version_id')
+          ? createdExecSet.exec_version_id
+          : versions[0].id;
         return respond(200, [
           {
             id: 2001,
             project_id: project.id,
-            version_id: versions[0].id,
+            version_id: resolvedVersionId,
             case_file_id: 101,
             name: requirement,
             requirement: requirement,
@@ -338,6 +343,10 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await page.selectOption('#caseGenDbStoreProjectSelect', String(project.id));
     await page.selectOption('#caseGenDbStoreVersionSelect', String(versions[0].id));
     await page.click('#caseGenDbStoreConfirmBtn');
+
+    await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
+    await page.click('#execVersionSelectDrawerConfirmBtn');
 
     await expect.poll(async () => {
       return page.evaluate(() => (window.app && window.app.state ? window.app.state.activeTab : ''));
