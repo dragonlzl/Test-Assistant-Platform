@@ -3385,7 +3385,7 @@
       }
       if (!active) {
         renderTempExecToolbar(null);
-        tempExecView.innerHTML = ctxHtml + '<div class="temp-case-empty">暂无执行用例，请通过“用例导入&分配”抽屉导入或选择历史记录</div>';
+        tempExecView.innerHTML = ctxHtml + '<div class="temp-case-empty">暂无执行用例，请通过“用例导入”抽屉导入，或在“执行分配”中选择历史记录</div>';
         if (tempExecMindContainer) tempExecMindContainer.classList.add('hidden');
         state.tempExecMindMode = false;
         if (exportTempExecBtn) exportTempExecBtn.disabled = true;
@@ -3852,8 +3852,11 @@
       var saved = getTempExecCaseLibraryDiffSelectedExecSetId();
       var active = getTempExecFile(state.tempExecActiveId);
       var activeExecSetId = active && active.execSetId ? String(active.execSetId) : '';
-      var execSetId = desired || saved || activeExecSetId || '';
+      // 用户在执行视图点击“用例库变更”时：优先打开当前用例的变更（并清除当前用例的醒目提醒）。
+      // 避免出现“上次选中过其他用例 -> 本次点击仍打开旧用例 -> 当前按钮一直醒目”的错觉。
+      var execSetId = desired || (manual ? (activeExecSetId || saved) : (saved || activeExecSetId)) || '';
       if (!execSetId) return false;
+      if (manual) setTempExecCaseLibraryDiffSelectedExecSetId(execSetId);
       var store = ensureTempExecCaseLibraryDiffState();
       var meta = store.byExecSetId[String(execSetId)] || null;
       var hasDiff = Boolean(meta && Array.isArray(meta.diff) && meta.diff.length);

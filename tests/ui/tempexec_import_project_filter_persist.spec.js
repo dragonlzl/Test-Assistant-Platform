@@ -147,8 +147,8 @@ test.describe('用例执行-导入抽屉项目筛选持久化', () => {
     const contextA = await browser.newContext();
     const pageA = await setupPage(contextA, apiHandler, 'token-a');
     await switchToTab(pageA, 'tempexec');
-    await pageA.click('#openTempExecDrawerBtn');
-    await expect(pageA.locator('#tempExecDrawer')).toHaveClass(/open/);
+    await pageA.click('#openTempExecAssignDrawerBtn');
+    await expect(pageA.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
 
     const filterButtons = pageA.locator('#tempVersionGrid [data-tempexec-import-project-filter]');
     await expect(filterButtons).toHaveCount(3);
@@ -166,7 +166,7 @@ test.describe('用例执行-导入抽屉项目筛选持久化', () => {
     await pageA.reload();
     await waitAppReady(pageA, 30000);
     await switchToTab(pageA, 'tempexec');
-    await pageA.click('#openTempExecDrawerBtn');
+    await pageA.click('#openTempExecAssignDrawerBtn');
     await expect(pageA.locator('#tempVersionGrid [data-tempexec-import-project-filter="1"]')).toHaveClass(/active/);
     await expect(pageA.locator('#tempVersionGrid .temp-project-card', { hasText: '项目A' })).toHaveCount(1);
     await expect(pageA.locator('#tempVersionGrid .temp-project-card', { hasText: '项目B' })).toHaveCount(0);
@@ -175,7 +175,7 @@ test.describe('用例执行-导入抽屉项目筛选持久化', () => {
     const contextB = await browser.newContext();
     const pageB = await setupPage(contextB, apiHandler, 'token-b');
     await switchToTab(pageB, 'tempexec');
-    await pageB.click('#openTempExecDrawerBtn');
+    await pageB.click('#openTempExecAssignDrawerBtn');
     await expect(pageB.locator('#tempVersionGrid [data-tempexec-import-project-filter="1"]')).toHaveClass(/active/);
     await expect(pageB.locator('#tempVersionGrid .temp-project-card', { hasText: '项目A' })).toHaveCount(1);
     await expect(pageB.locator('#tempVersionGrid .temp-project-card', { hasText: '项目B' })).toHaveCount(0);

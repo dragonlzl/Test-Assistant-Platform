@@ -270,7 +270,7 @@
 		    <div class="flow-title">功能导航</div>
 		    <p class="hint" style="margin:0 0 6px;">用例执行相关入口汇总于此，点击卡片快速打开。</p>
 	    <div class="nav-entry-grid">
-	      <button class="nav-entry-card nav-entry-import" id="openTempExecDrawerBtn" type="button">
+	      <button class="nav-entry-card nav-entry-import" id="openTempExecImportDrawerBtn" type="button">
 	        <span class="nav-entry-icon" aria-hidden="true">
 	          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
 	            <path d="M12 3v9"></path>
@@ -280,8 +280,21 @@
 	          </svg>
 	        </span>
 	        <span class="nav-entry-text">
-	          <span class="nav-entry-title">用例导入&分配</span>
-	          <span class="nav-entry-desc">导入/分配用例并备份配置</span>
+	          <span class="nav-entry-title">用例导入</span>
+	          <span class="nav-entry-desc">导入用例并确认入库</span>
+	        </span>
+	      </button>
+	      <button class="nav-entry-card nav-entry-view" id="openTempExecAssignDrawerBtn" type="button">
+	        <span class="nav-entry-icon" aria-hidden="true">
+	          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+	            <path d="M16 11a4 4 0 1 0-8 0"></path>
+	            <path d="M12 3v4"></path>
+	            <path d="M4 21v-1a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v1"></path>
+	          </svg>
+	        </span>
+	        <span class="nav-entry-text">
+	          <span class="nav-entry-title">执行分配</span>
+	          <span class="nav-entry-desc">项目/版本分组、专注区与执行人分配</span>
 	        </span>
 	      </button>
 	      <button class="nav-entry-card nav-entry-overview" id="openTempExecOverviewNavBtn" type="button">
@@ -328,11 +341,11 @@
 <div class="notice-card highlight">
 <h3>新增亮点（用例执行 & 总览）</h3>
 <ul>
-<li>“用例导入&分配”支持<strong>版本分组</strong>：新建版本后可拖拽需求盒子入版本，右上角“×”可移出，版本卡内需求盒子原样展示。</li>
+<li>“执行分配”支持<strong>版本分组</strong>：新建版本后可拖拽需求盒子入版本，右上角“×”可移出，版本卡内需求盒子原样展示。</li>
 <li>总览视图全新分区：<strong>版本区</strong>按版本→需求分组、两列布局；<strong>需求区</strong>展示未分配版本的需求，四列布局，用例按执行进度升序自动排序。</li>
 <li>执行视图可自定义列显示：在“设置”→“执行视图列显示”中勾选表头，标题/实际结果/备注/缺陷/选择列为必选，其余可自由隐藏。</li>
 <li>总览卡片可点击跳转执行视图；专注用例在总览中以渐变标识高亮。</li>
-<li>用例导入标题右侧的“用例执行情况总览”按钮一键进入总览，信息分区更清晰。</li>
+<li>执行分配标题右侧的“用例执行情况总览”按钮一键进入总览，信息分区更清晰。</li>
 </ul>
 </div>
 <p class="hint">按照下列步骤依次完成需求清洗、缺口补全与用例生成，过程中可随时回到“功能工作流”查看各卡片详情。</p>
@@ -367,11 +380,11 @@
 </article>
 <article class="help-card">
 <h3>用例生成</h3>
-<p>选择模块后即可批量生成 JSON 用例；若覆盖对比仍有缺失，可使用补全按钮按选定缺失点补写。支持导出调试文件或继续流转。</p>
+<p>选择模块后即可批量生成 JSON 用例；也可导入模块用例文件（会弹出“需求标识”抽屉确认归属）；若覆盖对比仍有缺失，可使用补全按钮按选定缺失点补写。</p>
 </article>
 <article class="help-card">
 <h3>用例执行</h3>
-<p>导入 XMind/JSON 用例即可直接执行，结果实时保存。可切换当前/历史文件、批量更新执行状态，并在“用例执行情况总览”中查看彩色进度条。</p>
+<p>用例导入用于入库；执行分配用于项目/版本分组与专注区整理；执行视图用于录入结果并实时保存。可在“用例执行情况总览”中查看彩色进度条。</p>
 </article>
 <article class="help-card">
 <h3>AI一键需求&用例评审</h3>
@@ -1222,24 +1235,43 @@
     </div>
   </div>
 </div>
-<div class="drawer" id="tempExecDrawer" data-tab-section="tempexec">
-<div class="drawer-mask" data-drawer-close="tempExecDrawer"></div>
+<div class="drawer" id="caseGenRequirementDrawer" data-tab-section="casesgen">
+  <div class="drawer-mask" data-drawer-close="caseGenRequirementDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseGenRequirementDrawerTitle">填写需求标识</h3>
+      <button class="link-toggle" id="closeCaseGenRequirementDrawerBtn" data-drawer-close="caseGenRequirementDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" id="caseGenRequirementDrawerHint" style="margin:0 0 10px;"></p>
+      <div class="row column" style="margin:0;">
+        <label class="inline">需求标识
+          <input id="caseGenRequirementDrawerInput" maxlength="20" placeholder="例如：登录改造 / 订单导出"/>
+        </label>
+      </div>
+      <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px;">
+        <button class="pill primary" id="caseGenRequirementDrawerConfirmBtn" type="button">确认</button>
+        <button class="ghost-btn" id="caseGenRequirementDrawerCancelBtn" type="button">取消</button>
+      </div>
+      <p class="status" id="caseGenRequirementDrawerStatus"></p>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="tempExecImportDrawer" data-tab-section="tempexec">
+<div class="drawer-mask" data-drawer-close="tempExecImportDrawer"></div>
 <div class="drawer-panel">
 <div class="drawer-header">
-<h3>用例导入&分配</h3>
-<button class="link-toggle" id="closeTempExecDrawerBtn" data-drawer-close="tempExecDrawer">收起</button>
+<h3>用例导入</h3>
+<button class="link-toggle" id="closeTempExecImportDrawerBtn" data-drawer-close="tempExecImportDrawer">收起</button>
 </div>
 <div class="drawer-body">
 <section class="card" data-section-id="tempexec-import" data-tab-section="tempexec">
-<div class="card-title-row">
-<h2>用例导入&分配</h2>
-<button class="pill primary" id="tempExecOverviewBtn">用例执行情况总览</button>
-</div>
+<h2>用例导入</h2>
 <div class="card-body">
-<p class="hint">导入 XMind/JSON/文本测试用例后，可在下方直接执行并记录实际结果。支持多份文件切换，执行数据会自动保存。</p>
+<p class="hint">导入 XMind/JSON/文本测试用例后，可在“执行视图”直接执行并记录实际结果；支持多份文件切换，执行数据会自动保存。</p>
 <div class="notice-card highlight" style="margin-bottom:12px;">
 <strong>温馨提示</strong>
-<p style="margin:4px 0 0;">导入用例后需要点击“确认入库”，入库完成后才能进行下一步操作（如：分配执行人 / 进入执行视图）。</p>
+<p style="margin:4px 0 0;">导入用例后需要点击“确认入库”，入库完成后才能进行下一步操作（如：执行分配 / 进入执行视图）。</p>
 </div>
 <div class="actions" style="margin-bottom:12px;">
 <button class="pill success" disabled hidden id="exportTempExecConfigBtn">导出执行页面配置</button>
@@ -1280,6 +1312,26 @@
 <p class="status" id="tempExecStatus"></p>
 </div>
 </div>
+</div>
+</section>
+</div>
+</div>
+</div>
+<div class="drawer" id="tempExecAssignDrawer" data-tab-section="tempexec">
+<div class="drawer-mask" data-drawer-close="tempExecAssignDrawer"></div>
+<div class="drawer-panel">
+<div class="drawer-header">
+<h3>执行分配</h3>
+<button class="link-toggle" id="closeTempExecAssignDrawerBtn" data-drawer-close="tempExecAssignDrawer">收起</button>
+</div>
+<div class="drawer-body">
+<section class="card" data-section-id="tempexec-assign" data-tab-section="tempexec">
+<div class="card-title-row">
+<h2>执行分配</h2>
+<button class="pill primary" id="tempExecOverviewBtn" type="button">用例执行情况总览</button>
+</div>
+<div class="card-body">
+<p class="hint">在此页面进行执行分配：可按需求查看用例列表、创建版本分组、拖拽需求盒子进版本、拖拽用例到专注区；也可在执行视图进行执行人分配与结果录入。</p>
 <div class="temp-exec-header">
 <p class="hint">需求用例组（可拖拽操作）</p>
 <div class="temp-header-actions">
@@ -1401,7 +1453,7 @@
 <button class="secondary case-library-changes-btn" disabled="" id="tempExecCaseLibraryChangesBtn">用例库变更</button>
 </div>
 <div class="temp-case-view" id="tempExecView">
-<div class="temp-case-empty">暂无执行用例，请在“用例导入&分配”中导入或选择历史记录</div>
+<div class="temp-case-empty">暂无执行用例，请在“用例导入”中导入，或在“执行分配”中选择历史记录</div>
 </div>
 
 </div></section>
@@ -1476,6 +1528,28 @@
 </section>
 </div>
 </div>
+</div>
+<div class="drawer" id="tempExecArchiveReasonDrawer" data-tab-section="tempexec">
+  <div class="drawer-mask" data-drawer-close="tempExecArchiveReasonDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>填写归档原因</h3>
+      <button class="link-toggle" id="closeTempExecArchiveReasonDrawerBtn" data-drawer-close="tempExecArchiveReasonDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" id="tempExecArchiveReasonHint" style="margin:0 0 10px;">原则上归档前需全部执行通过；如仍有未通过/未执行用例，请填写归档原因后继续。</p>
+      <div class="row column" style="margin:0;">
+        <label class="inline">归档原因
+          <textarea id="tempExecArchiveReasonInput" placeholder="请说明原因（必填）" style="min-height:140px;"></textarea>
+        </label>
+      </div>
+      <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px;">
+        <button class="pill primary" id="tempExecArchiveReasonConfirmBtn" type="button">确认归档</button>
+        <button class="ghost-btn" id="tempExecArchiveReasonCancelBtn" type="button">取消</button>
+      </div>
+      <p class="status" id="tempExecArchiveReasonStatus"></p>
+    </div>
+  </div>
 </div>
 <div class="drawer" id="caseArchiveDrawer" data-tab-section="case-archive">
 <div class="drawer-mask" data-drawer-close="caseArchiveDrawer"></div>

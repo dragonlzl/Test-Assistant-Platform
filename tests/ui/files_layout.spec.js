@@ -272,18 +272,22 @@ test.describe('文件导入导出与布局视图', () => {
     await expect(page.locator('#cleanViewDrawer')).toHaveClass(/open/);
     await expect(page.locator('#cleanViewContainer')).toBeVisible();
     await expect(page.locator('#cleanRawView')).toBeVisible();
-    await page.click('#cleanViewDrawer .drawer-mask');
+    await page.click('#cleanViewDrawer .drawer-mask', { position: { x: 10, y: 10 } });
     await expect(page.locator('#cleanViewDrawer')).not.toHaveClass(/open/);
 
     await switchToTab(page, 'casesgen');
     await expect(page.locator('[data-section-id="casesgen"]')).toBeVisible();
 
     await switchToTab(page, 'tempexec');
-    await page.click('#openTempExecDrawerBtn');
+    await page.click('#openTempExecImportDrawerBtn');
     await expect(page.locator('#tempExecDropZone')).toBeVisible();
+    await page.click('#tempExecImportDrawer .drawer-mask', { position: { x: 10, y: 10 } });
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/open/);
+
+    await page.click('#openTempExecAssignDrawerBtn');
     await expect(page.locator('#tempVersionGrid')).toBeVisible();
-    await page.click('#tempExecDrawer .drawer-mask');
-    await expect(page.locator('#tempExecDrawer')).not.toHaveClass(/open/);
+    await page.click('#tempExecAssignDrawer .drawer-mask', { position: { x: 10, y: 10 } });
+    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
 
     await switchToTab(page, 'auto');
     await expect(page.locator('#runAutoWorkflow')).toBeVisible();
@@ -304,7 +308,7 @@ test.describe('文件导入导出与布局视图', () => {
     await page.click('#toggleCleanViewBtn', { force: true });
     await expect(page.locator('#cleanViewDrawer')).toHaveClass(/open/);
     await expect(page.locator('#cleanViewContainer')).toBeVisible();
-    await page.click('#cleanViewDrawer .drawer-mask');
+    await page.click('#cleanViewDrawer .drawer-mask', { position: { x: 10, y: 10 } });
     await expect(page.locator('#cleanViewDrawer')).not.toHaveClass(/open/);
 
     await page.evaluate(() => {
@@ -318,7 +322,7 @@ test.describe('文件导入导出与布局视图', () => {
     await caseViewBtn.click();
     await expect(page.locator('#caseViewDrawer')).toHaveClass(/open/);
     await expect(page.locator('#caseViewContainer')).toBeVisible();
-    await page.click('#caseViewDrawer .drawer-mask');
+    await page.click('#caseViewDrawer .drawer-mask', { position: { x: 10, y: 10 } });
     await expect(page.locator('#caseViewDrawer')).not.toHaveClass(/open/);
 
     // 拆分视图入口依赖拆分解析结果，布局/交互测试仅校验清洗/用例视图抽屉即可。

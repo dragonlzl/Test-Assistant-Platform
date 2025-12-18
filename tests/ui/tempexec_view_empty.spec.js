@@ -35,7 +35,7 @@ test.describe('执行视图空态与样式', () => {
     await page.click('[data-tab-btn="tempexec"]');
 
     const emptyHint = page.locator('#tempExecView .temp-case-empty');
-    await expect(emptyHint).toHaveText('暂无执行用例，请通过“用例导入&分配”抽屉导入或选择历史记录');
+    await expect(emptyHint).toHaveText('暂无执行用例，请通过“用例导入”抽屉导入，或在“执行分配”中选择历史记录');
 
     const positions = await page.evaluate(() => {
       var host = document.createElement('div');

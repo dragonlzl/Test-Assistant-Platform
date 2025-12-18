@@ -115,7 +115,7 @@ test.describe('工作流关键交互', () => {
 
   test('用例执行拖拽占位可响应', async ({ page }) => {
     await openCasesTab(page, 'tempexec');
-    await page.click('#openTempExecDrawerBtn');
+    await page.click('#openTempExecImportDrawerBtn');
     const dropZone = page.locator('#tempExecDropZone');
     const data = await page.evaluateHandle(() => {
       const dt = new DataTransfer();
@@ -126,7 +126,7 @@ test.describe('工作流关键交互', () => {
     await dropZone.dispatchEvent('dragover', { dataTransfer: data });
     await dropZone.dispatchEvent('drop', { dataTransfer: data });
     await expect(dropZone).toBeVisible();
-    await page.click('#closeTempExecDrawerBtn');
+    await page.click('#closeTempExecImportDrawerBtn');
     await expect(page.locator('body')).not.toHaveClass(/drawer-open/);
   });
 

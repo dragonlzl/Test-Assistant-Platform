@@ -9,8 +9,8 @@ async function gotoIndex(page) {
 async function switchToTempExec(page) {
   await page.click('[data-group="cases"]');
   await page.click('[data-tab-btn="tempexec"]');
-  await page.click('#openTempExecDrawerBtn');
-  await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+  await page.click('#openTempExecAssignDrawerBtn');
+  await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
 }
 
 test.describe('用例执行-归档后不自动切换项目', () => {
@@ -167,7 +167,7 @@ test.describe('用例执行-归档后不自动切换项目', () => {
     });
 
     await page.click('#tempExecOverviewBtn');
-    await expect(page.locator('#tempExecDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
     await page.click('[data-temp-overview-archive="1001"]');
 
@@ -223,7 +223,7 @@ test.describe('用例执行-归档后不自动切换项目', () => {
     await gotoIndex(page);
     await switchToTempExec(page);
     await page.click('#tempExecOverviewBtn');
-    await expect(page.locator('#tempExecDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
 
     const archivedChip = page.locator('.exec-overview-file-chip[data-temp-archived="1"] .tag-archived').first();
@@ -231,6 +231,6 @@ test.describe('用例执行-归档后不自动切换项目', () => {
     await archivedChip.click();
 
     await expect(page.locator('#tempExecOverviewDrawer')).not.toHaveClass(/open/);
-    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
   });
 });

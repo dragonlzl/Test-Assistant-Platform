@@ -193,7 +193,7 @@ test.describe('项目管理变更后，导入区项目/版本下拉刷新', () =
     await page.waitForFunction(() => window.app && window.app.adminBound === true, {}, { timeout: 30000 });
 
     await page.evaluate(() => { window.app.switchTab('tempexec'); });
-    await page.click('#openTempExecDrawerBtn');
+    await page.click('#openTempExecImportDrawerBtn');
     await page.waitForFunction(() => {
       const sel = document.getElementById('tempExecImportProjectSelect');
       return sel && sel.options && sel.options.length > 1;
@@ -213,7 +213,7 @@ test.describe('项目管理变更后，导入区项目/版本下拉刷新', () =
     await expect(page.locator('#projectTableBody')).toContainText('项目二', { timeout: 10000 });
 
     await page.evaluate(() => { window.app.switchTab('tempexec'); });
-    await page.click('#openTempExecDrawerBtn');
+    await page.click('#openTempExecImportDrawerBtn');
     await page.waitForFunction(() => {
       const sel = document.getElementById('tempExecImportProjectSelect');
       return sel && sel.options && sel.options.length > 2;

@@ -1,10 +1,24 @@
 const path = require('path');
 const { test, expect } = require('@playwright/test');
 
+async function gotoCleanTab(page) {
+  await page.click('[data-group="ai"]');
+  await page.click('[data-tab-btn="clean"]');
+}
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+});
+
 test('导入覆盖对比后可展开缺失模块视图', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.app && window.app._inited === true);
-  await page.click('[data-tab-btn="clean"]');
+  await gotoCleanTab(page);
 
   const fixturePath = path.join(__dirname, '..', 'fixtures', 'cases_compare_missing_view.txt');
   const [chooser] = await Promise.all([
@@ -28,7 +42,7 @@ test('导入覆盖对比后可展开缺失模块视图', async ({ page }) => {
 test('导入带需求标识的覆盖结果仍可展示缺失模块', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.app && window.app._inited === true);
-  await page.click('[data-tab-btn="clean"]');
+  await gotoCleanTab(page);
 
   const fixturePath = path.join(__dirname, '..', 'fixtures', 'cases_compare_missing_view_wrapped.txt');
   const [chooser] = await Promise.all([
@@ -52,7 +66,7 @@ test('导入带需求标识的覆盖结果仍可展示缺失模块', async ({ pa
 test('缺失模块表头全选/取消有效', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.app && window.app._inited === true);
-  await page.click('[data-tab-btn="clean"]');
+  await gotoCleanTab(page);
 
   const fixturePath = path.join(__dirname, '..', 'fixtures', 'cases_compare_missing_view.txt');
   const [chooser] = await Promise.all([
@@ -85,7 +99,7 @@ test('缺失模块表头全选/取消有效', async ({ page }) => {
 test('无拆分结果时生成用例按钮禁用，填入拆分结果后可用', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.app && window.app._inited === true);
-  await page.click('[data-tab-btn="clean"]');
+  await gotoCleanTab(page);
 
   await page.evaluate(() => {
     var splitEl = document.getElementById('splitResult');
@@ -119,7 +133,7 @@ test('无拆分结果时生成用例按钮禁用，填入拆分结果后可用',
 test('导入拆分与覆盖对比后智能生成填充按钮自动可用', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.app && window.app._inited === true);
-  await page.click('[data-tab-btn="clean"]');
+  await gotoCleanTab(page);
 
   const splitPayload = '#NODE:SPLIT\n[{"module":"礼包投放与触发","key_scenarios":["礼包到期触发"],"test_points":["到期提醒"],"coupled_modules":[]}]';
   await page.setInputFiles('#splitDebugFile', {
@@ -144,7 +158,7 @@ test('导入拆分与覆盖对比后智能生成填充按钮自动可用', async
 test('智能填充后自动关闭缺失抽屉并可滚动', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.app && window.app._inited === true);
-  await page.click('[data-tab-btn="clean"]');
+  await gotoCleanTab(page);
 
   const splitPayload = '#NODE:SPLIT\n[{"module":"礼包投放与触发","key_scenarios":["礼包到期触发"],"test_points":["到期提醒"],"coupled_modules":[]}]';
   await page.setInputFiles('#splitDebugFile', {
@@ -168,6 +182,7 @@ test('智能填充后自动关闭缺失抽屉并可滚动', async ({ page }) => 
   await page.click('#missingSmartFillBtn');
 
   await expect(page.locator('#missingViewDrawer')).not.toHaveClass(/open/);
+  await page.waitForFunction(() => !document.body.classList.contains('drawer-open'));
   const bodyHasLock = await page.evaluate(() => document.body.classList.contains('drawer-open'));
   expect(bodyHasLock).toBeFalsy();
 });
@@ -175,7 +190,7 @@ test('智能填充后自动关闭缺失抽屉并可滚动', async ({ page }) => 
 test('从缺失抽屉跳转到用例生成后自动收起抽屉', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.app && window.app._inited === true);
-  await page.click('[data-tab-btn="clean"]');
+  await gotoCleanTab(page);
 
   const splitPayload = '#NODE:SPLIT\n[{"module":"礼包投放与触发","key_scenarios":["礼包到期触发"],"test_points":["到期提醒"],"coupled_modules":[]}]';
   await page.setInputFiles('#splitDebugFile', {
@@ -206,6 +221,7 @@ test('从缺失抽屉跳转到用例生成后自动收起抽屉', async ({ page 
   });
   await expect(page.locator('section[data-tab-section="casesgen"]')).not.toHaveClass(/hidden/);
   await expect(page.locator('#missingViewDrawer')).not.toHaveClass(/open/);
+  await page.waitForFunction(() => !document.body.classList.contains('drawer-open'));
   const bodyLocked = await page.evaluate(() => document.body.classList.contains('drawer-open'));
   expect(bodyLocked).toBeFalsy();
 });

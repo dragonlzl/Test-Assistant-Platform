@@ -120,7 +120,7 @@ test.describe('用例执行-项目/版本分组布局', () => {
       }
       return false;
     });
-    await page.click('#openTempExecDrawerBtn');
+    await page.click('#openTempExecAssignDrawerBtn');
     await expect(page.locator('#createTempVersionBtn')).toBeDisabled();
 
     await page.waitForFunction(() => {

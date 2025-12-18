@@ -26,12 +26,12 @@ test.describe('临时执行进度视图', () => {
     });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
   });
 
   test('执行概览统计与拖拽同步', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
-    await page.locator('#openTempExecDrawerBtn').click({ force: true });
+    await page.locator('#openTempExecImportDrawerBtn').click({ force: true });
     await page.evaluate(() => {
       window.app.state.requirementLabel = '进度测试需求';
       window.app.state.requirementLabelSource = 'ui-test';
@@ -57,11 +57,22 @@ test.describe('临时执行进度视图', () => {
     page.__promptAnswers.push('需求二');
     await page.setInputFiles('#tempExecInput', [execFileA, execFileB]);
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
+    await page.click('#closeTempExecImportDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/closing/);
+    await page.click('#openTempExecAssignDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
+
+    const createBtn = page.locator('#createTempVersionBtn');
+    if (!(await createBtn.isVisible().catch(() => false))) {
+      await page.click('#toggleTempVersion', { force: true });
+    }
+    await expect(createBtn).toBeVisible();
 
     page.__promptAnswers.push('版本一');
-    await page.click('#createTempVersionBtn');
+    await createBtn.click({ force: true });
     page.__promptAnswers.push('版本二');
-    await page.click('#createTempVersionBtn');
+    await createBtn.click({ force: true });
     await expect(page.locator('#tempVersionGrid [data-temp-version]')).toHaveCount(2);
 
     const navRows = page.locator('#tempExecNav .temp-req-row[data-temp-file]');
@@ -74,8 +85,16 @@ test.describe('临时执行进度视图', () => {
     const firstFileSelects = page.locator('#tempExecView select[data-temp-result]');
     await firstFileSelects.nth(0).selectOption('通过');
     await firstFileSelects.nth(1).selectOption('失败');
-    const navButtons = page.locator('#tempExecNav button[data-temp-file]');
-    await navButtons.first().click();
+
+    // 执行视图切换文件需回到“执行分配”抽屉选择（点击后会自动收起抽屉并滚动到执行视图）。
+    await expect(page.locator('body')).not.toHaveClass(/drawer-open/);
+    await page.click('#openTempExecAssignDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
+    const remainingNavRows = page.locator('#tempExecNav .temp-req-row[data-temp-file]');
+    await expect(remainingNavRows).toHaveCount(1);
+    await remainingNavRows.first().click({ force: true });
+    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecToolbar')).toContainText('progressB.json');
     const secondFileSelects = page.locator('#tempExecView select[data-temp-result]');
     await secondFileSelects.nth(0).selectOption('阻塞');
     await secondFileSelects.nth(1).selectOption('不适用');
@@ -116,7 +135,7 @@ test.describe('临时执行进度视图', () => {
     const overviewDrawer = page.locator('#tempExecOverviewDrawer');
     await expect(overviewDrawer).not.toHaveClass(/open/);
     await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 5000 });
-    await page.locator('#openTempExecDrawerBtn').click({ force: true });
+    await page.locator('#openTempExecAssignDrawerBtn').click({ force: true });
 
     await page.evaluate(() => {
       const api = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
@@ -143,7 +162,7 @@ test.describe('临时执行进度视图', () => {
 
   test('个人执行总览点击进度可跳转用例并关闭抽屉', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
-    await page.locator('#openTempExecDrawerBtn').click({ force: true });
+    await page.locator('#openTempExecImportDrawerBtn').click({ force: true });
     await page.evaluate(() => {
       window.app.state.requirementLabel = '进度跳转需求';
       window.app.state.requirementLabelSource = 'ui-test';
@@ -161,6 +180,8 @@ test.describe('临时执行进度视图', () => {
     page.__promptAnswers = ['跳转需求'];
     await page.setInputFiles('#tempExecInput', [execFile]);
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
+    await page.click('#closeTempExecImportDrawerBtn', { force: true });
+    await page.click('#openTempExecAssignDrawerBtn', { force: true });
 
     const jumpInfo = await page.evaluate(() => {
       const api = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
@@ -234,7 +255,7 @@ test.describe('临时执行进度视图', () => {
 
   test('个人执行总览点击卡片可关闭抽屉并切换用例', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
-    await page.locator('#openTempExecDrawerBtn').click({ force: true });
+    await page.locator('#openTempExecImportDrawerBtn').click({ force: true });
 
     const list = [];
     for (let i = 1; i <= 3; i += 1) {
@@ -254,6 +275,8 @@ test.describe('临时执行进度视图', () => {
     page.__promptAnswers.push('卡片需求2');
     await page.setInputFiles('#tempExecInput', [execFileA, execFileB]);
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
+    await page.click('#closeTempExecImportDrawerBtn', { force: true });
+    await page.click('#openTempExecAssignDrawerBtn', { force: true });
 
     const ids = await page.evaluate(() => {
       const st = window.app && window.app.state ? window.app.state : {};

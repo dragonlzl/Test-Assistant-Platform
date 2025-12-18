@@ -10,18 +10,25 @@ test.describe('卡片折叠持久化', () => {
       }
       return route.abort();
     });
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tap-e2e-skip-auth', '1');
+        localStorage.removeItem('tap-auth-token');
+      } catch (_) {}
+    });
     page.on('dialog', async (dialog) => {
       await dialog.accept(page.__promptAnswers.shift() || '');
     });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
     await page.evaluate(() => {
       localStorage.removeItem('usecase-card-collapse-v1');
     });
   });
 
   test('折叠状态刷新后保持', async ({ page }) => {
+    await page.click('[data-group="ai"]');
     await page.click('[data-tab-btn="clean"]');
     const importCard = page.locator('section[data-section-id="import"]');
     await importCard.scrollIntoViewIfNeeded();
@@ -32,6 +39,7 @@ test.describe('卡片折叠持久化', () => {
 
     await page.reload();
     await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.click('[data-group="ai"]');
     await page.click('[data-tab-btn="clean"]');
     const importCardAfter = page.locator('section[data-section-id="import"]');
     await expect(importCardAfter).toHaveClass(/collapsed/);
@@ -42,4 +50,3 @@ test.describe('卡片折叠持久化', () => {
     expect(restoredState && restoredState.import).toBe(false);
   });
 });
-

@@ -208,9 +208,9 @@ test.describe('用例执行-多文件同名 diff 队列', () => {
     await gotoIndex(page);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 
-    await page.click('#openTempExecDrawerBtn');
-    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#tempExecDrawer [data-section-id="tempexec-import"]')).toBeVisible();
+    await page.click('#openTempExecImportDrawerBtn');
+    await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#tempExecImportDrawer [data-section-id="tempexec-import"]')).toBeVisible();
 
     const fileA = { requirement: '需求A', cases: [{ module: '模块A', title: '新用例A', priority: 'P1', preconditions: '', steps: '步骤', expected: '新预期A' }] };
     const fileB = { requirement: '需求B', cases: [{ module: '模块B', title: '新用例B', priority: 'P1', preconditions: '', steps: '步骤', expected: '新预期B' }] };

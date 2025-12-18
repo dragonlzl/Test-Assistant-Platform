@@ -1377,6 +1377,8 @@
 - 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/caseArchive.js`（通过）；`npm run test:ui -- tests/ui/case_archive.spec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_drag.spec.js`（通过）。  
 - 更新记录：2025-12-18 复用子项宽度再微调：子项描述再减少 5 个汉字宽度给子项；用例库编辑视图移除“备注”列；补充执行页功能导航的“执行视图”入口（`style.css`、`scripts/modules/caseLibrary.js`、`index.html`）。  
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_add.spec.js`（通过）。  
+- 更新记录：2025-12-18 执行页归档交互优化：当仍存在未通过用例时，不再单独弹出“是否需要归档”的二次确认提示，改为直接进入“填写归档原因”抽屉并展示未通过统计（`scripts/modules/tempexec.js`、`tests/ui/case_archive.spec.js`）。  
+- 测试与验证：`node --check scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/case_archive.spec.js`（通过）。  
 
 - 功能名称：用例生成页面分区（通用操作区 / 入库操作区 / 模块区）  
 - 功能描述：用例生成页面按从上到下分为“通用操作区、入库操作区、模块区”，避免导出/跳转/入库按钮混杂在同一行；通用操作区放置“导出全部用例TXT、导出全部勾选用例XMind、前往测试模块拆分”；入库操作区放置“新用例入库、旧用例追加入库、入库后动作选择”。当选择“入库并转到执行”时，入库确认后会弹出“选择执行版本”抽屉并继续转到执行页（复用既有逻辑）。  
@@ -1386,3 +1388,5 @@
 - 复用说明：复用既有入库抽屉（`caseGenDbStoreDrawer`）与执行版本选择抽屉（`execVersionSelectDrawer`），不新增/不改后端接口。  
 - 测试与验证：`npm run test:ui -- tests/ui/casegen_layout_zones.spec.js`（通过）。  
 - 更新记录：2025-12-18 用例生成页面分区与通用/入库/模块分组上线（`index.html`、`style.css`、`tests/ui/casegen_layout_zones.spec.js`）。  
+- 更新记录：2025-12-18 “填写需求标识”抽屉输入框支持最多 20 个字符并同步加宽显示（`index.html`、`style.css`、`scripts/core/casesGenCore.js`、`tests/ui/casegen_display_format.spec.js`）。  
+- 测试与验证：`node --check scripts/core/casesGenCore.js`（通过）；`npm run test:ui -- tests/ui/casegen_display_format.spec.js`（通过）。  

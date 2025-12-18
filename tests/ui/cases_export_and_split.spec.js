@@ -1,7 +1,17 @@
 const { test, expect } = require('@playwright/test');
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+});
+
 test('导出覆盖对比仅下载不跳转', async ({ page }) => {
   await page.goto('/');
+  await page.click('[data-group="ai"]');
   await page.click('[data-tab-btn="clean"]');
   const beforeUrl = page.url();
   await page.evaluate(() => {
@@ -37,6 +47,8 @@ test('拆分执行时开始拆分按钮不可点击', async ({ browser }) => {
       maxTokens: 64,
     }]));
     localStorage.setItem('cleaner-assignment-v1', JSON.stringify({ splitId: 'mock-split-model', splitTemperature: 0.2 }));
+    localStorage.setItem('tap-e2e-skip-auth', '1');
+    localStorage.removeItem('tap-auth-token');
   });
   const page = await context.newPage();
   await page.route('http://127.0.0.1:8123/mock-split', async (route) => {
@@ -50,6 +62,7 @@ test('拆分执行时开始拆分按钮不可点击', async ({ browser }) => {
     });
   });
   await page.goto('/');
+  await page.click('[data-group="ai"]');
   await page.click('[data-tab-btn="clean"]');
   await expect(page.locator('#splitModelSelect')).toHaveValue('mock-split-model');
   await page.evaluate(() => {

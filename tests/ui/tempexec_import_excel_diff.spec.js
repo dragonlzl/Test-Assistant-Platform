@@ -200,8 +200,8 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
     await waitAppReady(page, 30000);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 
-    await page.click('#openTempExecDrawerBtn');
-    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+    await page.click('#openTempExecImportDrawerBtn');
+    await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
 
     const rows = [
       ['模块', '用例标题', '优先级', '前提条件', '操作步骤', '预期结果', '实际结果', '备注', '缺陷链接'],
@@ -322,8 +322,8 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
     await waitAppReady(page, 30000);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 
-    await page.click('#openTempExecDrawerBtn');
-    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+    await page.click('#openTempExecImportDrawerBtn');
+    await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
     const rows = [
       ['模块', '用例标题', '优先级', '前提条件', '操作步骤', '预期结果'],
       ['模块', '标题', 'P0', '', '', '预期'],

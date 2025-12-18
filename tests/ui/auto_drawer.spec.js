@@ -9,6 +9,12 @@ test.describe('一键执行抽屉视图', () => {
       }
       return route.abort();
     });
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tap-e2e-skip-auth', '1');
+        localStorage.removeItem('tap-auth-token');
+      } catch (_) {}
+    });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
     await page.waitForFunction(() => window.app && window.app._inited === true);
@@ -56,7 +62,7 @@ test.describe('一键执行抽屉视图', () => {
     await expect(drawer).toHaveClass(/open/);
     await page.click('#autoClarifyConfirm');
     await page.evaluate(() => window.__autoWaitPromise);
-    await page.click('#closeAutoClarifyDrawerBtn');
+    await page.click('#autoClarifyDrawer .drawer-mask');
     await expect(drawer).not.toHaveClass(/open/);
   });
 

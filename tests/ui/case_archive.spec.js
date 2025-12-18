@@ -92,9 +92,10 @@ test.describe('用例归档（个人总览归档 + 归档页查看）', () => {
       try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
     }, token);
 
+    const dialogMessages = [];
     page.on('dialog', async (dialog) => {
+      try { dialogMessages.push({ type: dialog.type(), message: dialog.message() }); } catch (_) {}
       if (dialog.type() === 'confirm') return dialog.accept();
-      if (dialog.type() === 'prompt') return dialog.accept('归档原因：留存失败结果');
       return dialog.accept();
     });
 
@@ -207,18 +208,24 @@ test.describe('用例归档（个人总览归档 + 归档页查看）', () => {
     // 等待执行数据加载完成（此处应展示“失败”状态）
     await expect(page.locator('#tempExecOverview .exec-overview-file-status')).toContainText('失败', { timeout: 8000 });
 
-    // 点击归档（会触发 confirm + prompt）
+    // 点击归档（直接弹出归档原因抽屉）
     const archiveBtn = page.locator('[data-temp-overview-archive]').first();
     await expect(archiveBtn).toBeVisible();
 
     await archiveBtn.click();
+    expect(dialogMessages.length).toBe(0);
+    const reasonDrawer = page.locator('#tempExecArchiveReasonDrawer');
+    await expect(reasonDrawer).toHaveClass(/open/);
+    await page.fill('#tempExecArchiveReasonInput', '归档原因：留存失败结果');
+    await page.click('#tempExecArchiveReasonConfirmBtn');
+    await expect(reasonDrawer).not.toHaveClass(/open/, { timeout: 10000 });
 
     // 个人总览仍展示归档状态“归”
     await expect(page.locator('#tempExecOverview .tag-archived')).toBeVisible({ timeout: 8000 });
 
     // 点击归档卡片应提示去归档页查看
-    await page.click('#tempExecOverview [data-temp-file]');
-    await expect(page.locator('#tempExecStatus')).toContainText('已归档', { timeout: 3000 });
+    await page.click('#tempExecOverview [data-temp-file][data-temp-archived="1"] .temp-overview-bar');
+    await expect(page.locator('.temp-center-toast.warn')).toContainText('已归档', { timeout: 3000 });
     await page.click('#closeTempExecOverviewDrawerBtn');
     await expect(page.locator('#tempExecOverviewDrawer')).not.toHaveClass(/open/);
 

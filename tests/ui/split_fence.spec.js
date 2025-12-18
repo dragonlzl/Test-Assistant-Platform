@@ -1,9 +1,26 @@
 const { test, expect } = require('@playwright/test');
 
+test.beforeEach(async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      return route.continue();
+    }
+    return route.abort();
+  });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+});
+
 test('拆分结果含代码块也能解析', async ({ page }) => {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
   await page.goto(base + '/index.html');
-  await page.waitForFunction(() => window.app && window.app._inited === true);
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+  await page.click('[data-group="ai"]');
   await page.click('[data-tab-btn="clean"]');
 
   const fencedSplit = [
@@ -39,7 +56,8 @@ test('拆分结果含代码块也能解析', async ({ page }) => {
       stripCodeFence: utils.stripCodeFence,
     });
     if (!splitCore || typeof splitCore.parseSplitModules !== 'function') return [];
-    const text = document.getElementById('splitResult')?.value || '';
+    var splitEl = document.getElementById('splitResult');
+    var text = splitEl ? (splitEl.value || '') : '';
     return splitCore.parseSplitModules(text);
   });
   expect(Array.isArray(parsed)).toBeTruthy();
@@ -50,7 +68,7 @@ test('拆分结果含代码块也能解析', async ({ page }) => {
 test('拆分结果含 #NODE 与单引号代码块时覆盖对比可正常预检', async ({ page }) => {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
   await page.goto(base + '/index.html');
-  await page.waitForFunction(() => window.app && window.app._inited === true);
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
 
   const quotedSplit = [
     '#NODE:SPLIT',
@@ -59,6 +77,7 @@ test('拆分结果含 #NODE 与单引号代码块时覆盖对比可正常预检'
     "'''",
   ].join('\n');
 
+  await page.click('[data-group="ai"]');
   await page.click('[data-tab-btn="clean"]');
   await page.evaluate((value) => {
     var el = document.getElementById('splitResult');

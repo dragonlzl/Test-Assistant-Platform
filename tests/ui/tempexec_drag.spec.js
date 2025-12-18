@@ -36,14 +36,14 @@ test.describe('执行视图导入导出与拖拽', () => {
   }
 
   async function openTempExecDrawer(page) {
-    await page.click('#openTempExecDrawerBtn');
-    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+    await page.click('#openTempExecAssignDrawerBtn');
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
   }
   async function closeTempExecDrawer(page) {
-    const drawer = page.locator('#tempExecDrawer');
+    const drawer = page.locator('#tempExecAssignDrawer');
     const isOpen = await drawer.evaluate((el) => el.classList.contains('open'));
     if (!isOpen) return;
-    await page.click('#closeTempExecDrawerBtn', { trial: false });
+    await page.click('#closeTempExecAssignDrawerBtn', { trial: false });
     await expect(drawer).not.toHaveClass(/open/);
   }
 
@@ -381,7 +381,7 @@ test.describe('执行视图导入导出与拖拽', () => {
     };
     await page.setInputFiles('#tempExecInput', [execFile]);
     await expect(page.locator('#tempExecStatus')).toContainText('已导入');
-    await page.click('#closeTempExecDrawerBtn');
+    await page.click('#closeTempExecAssignDrawerBtn');
 
     const reuseToggle = page.locator('[data-temp-reuse-toggle]').first();
     await reuseToggle.check();

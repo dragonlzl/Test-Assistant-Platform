@@ -39,7 +39,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
       if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
-        return route.continue();
+        return route.fallback();
       }
       return route.abort();
     });

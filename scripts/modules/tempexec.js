@@ -38,8 +38,15 @@
     var toggleTempReqBtn = document.getElementById('toggleTempReq');
     var toggleTempVersionBtn = document.getElementById('toggleTempVersion');
     var createTempVersionBtn = document.getElementById('createTempVersionBtn');
-    var tempExecDrawerEl = document.getElementById('tempExecDrawer');
+    var tempExecImportDrawerEl = document.getElementById('tempExecImportDrawer');
+    var tempExecAssignDrawerEl = document.getElementById('tempExecAssignDrawer');
     var tempExecOverviewDrawerEl = document.getElementById('tempExecOverviewDrawer');
+    var tempExecArchiveReasonDrawerEl = document.getElementById('tempExecArchiveReasonDrawer');
+    var tempExecArchiveReasonHint = document.getElementById('tempExecArchiveReasonHint');
+    var tempExecArchiveReasonInput = document.getElementById('tempExecArchiveReasonInput');
+    var tempExecArchiveReasonConfirmBtn = document.getElementById('tempExecArchiveReasonConfirmBtn');
+    var tempExecArchiveReasonCancelBtn = document.getElementById('tempExecArchiveReasonCancelBtn');
+    var tempExecArchiveReasonStatus = document.getElementById('tempExecArchiveReasonStatus');
     var tempExecImportDiffDrawerEl = document.getElementById('tempExecImportDiffDrawer');
     var tempExecImportDiffTitle = document.getElementById('tempExecImportDiffTitle');
     var tempExecImportDiffStatus = document.getElementById('tempExecImportDiffStatus');
@@ -47,11 +54,13 @@
     var tempExecImportDiffLocateBar = document.getElementById('tempExecImportDiffLocateBar');
     var tempExecImportDiffBody = document.getElementById('tempExecImportDiffBody');
     var tempExecImportDiffOverwriteBtn = document.getElementById('tempExecImportDiffOverwriteBtn');
-    var openTempExecDrawerBtn = document.getElementById('openTempExecDrawerBtn');
+    var openTempExecImportDrawerBtn = document.getElementById('openTempExecImportDrawerBtn');
+    var openTempExecAssignDrawerBtn = document.getElementById('openTempExecAssignDrawerBtn');
     var openTempExecViewNavBtn = document.getElementById('openTempExecViewNavBtn');
     var openTempExecOverviewNavBtn = document.getElementById('openTempExecOverviewNavBtn');
     var openTempExecBackupNavBtn = document.getElementById('openTempExecBackupNavBtn');
-    var closeTempExecDrawerBtn = document.getElementById('closeTempExecDrawerBtn');
+    var closeTempExecImportDrawerBtn = document.getElementById('closeTempExecImportDrawerBtn');
+    var closeTempExecAssignDrawerBtn = document.getElementById('closeTempExecAssignDrawerBtn');
     var closeTempExecOverviewDrawerBtn = document.getElementById('closeTempExecOverviewDrawerBtn');
     var exportTempExecCasesXmindBtn = document.getElementById('exportTempExecCasesXmindBtn');
     var tempExecCaseLibraryChangesBtn = document.getElementById('tempExecCaseLibraryChangesBtn');
@@ -203,17 +212,225 @@
       loadCaseTemplates(forceRefresh);
     }
 
-    var tempExecDrawer = window.app.drawer && window.app.drawer.createDrawer({
-      drawerId: 'tempExecDrawer',
-      openButtons: ['openTempExecDrawerBtn'],
-      closeButtons: ['closeTempExecDrawerBtn'],
+    var tempExecImportDrawer = window.app.drawer && window.app.drawer.createDrawer({
+      drawerId: 'tempExecImportDrawer',
+      openButtons: ['openTempExecImportDrawerBtn'],
+      closeButtons: ['closeTempExecImportDrawerBtn'],
       onClose: closeTemplateDropdown,
+    });
+    var tempExecAssignDrawer = window.app.drawer && window.app.drawer.createDrawer({
+      drawerId: 'tempExecAssignDrawer',
+      openButtons: ['openTempExecAssignDrawerBtn'],
+      closeButtons: ['closeTempExecAssignDrawerBtn'],
     });
     var tempExecOverviewDrawer = window.app.drawer && window.app.drawer.createDrawer({
       drawerId: 'tempExecOverviewDrawer',
       openButtons: ['openTempExecOverviewNavBtn', 'tempExecOverviewBtn'],
       closeButtons: ['closeTempExecOverviewDrawerBtn'],
     });
+    var tempExecArchiveReasonContext = null;
+    var tempExecArchiveReasonDrawer = window.app.drawer && window.app.drawer.createDrawer({
+      drawerId: 'tempExecArchiveReasonDrawer',
+      closeButtons: ['closeTempExecArchiveReasonDrawerBtn'],
+      onClose: function() {
+        if (tempExecArchiveReasonStatus) setStatus(tempExecArchiveReasonStatus, '', '');
+        if (tempExecArchiveReasonInput && tempExecArchiveReasonInput.classList) {
+          tempExecArchiveReasonInput.classList.remove('input-invalid');
+        }
+        if (tempExecArchiveReasonContext && tempExecArchiveReasonContext.resumeOverview && !tempExecArchiveReasonContext.submitting) {
+          // 用户手动关闭：回到归档总览，保持操作连续性
+          try { if (window.app) window.app.__drawerSkipRestoreOnce = true; } catch (_) {}
+          showTempExecOverview();
+        }
+        tempExecArchiveReasonContext = null;
+      },
+    });
+
+    function openTempExecArchiveReasonDrawerForArchive(options) {
+      options = options || {};
+      if (!tempExecArchiveReasonDrawer || typeof tempExecArchiveReasonDrawer.open !== 'function') return false;
+      if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+        window.app.drawer.closeAllDrawers();
+      }
+      tempExecArchiveReasonContext = {
+        execSetId: options.execSetId || '',
+        client: options.client || null,
+        payloadBase: options.payloadBase || {},
+        resumeOverview: options.resumeOverview !== false,
+        submitting: false,
+      };
+      if (tempExecArchiveReasonStatus) setStatus(tempExecArchiveReasonStatus, '', '');
+      if (tempExecArchiveReasonInput) {
+        if (tempExecArchiveReasonInput.classList) tempExecArchiveReasonInput.classList.remove('input-invalid');
+        tempExecArchiveReasonInput.value = options.defaultValue || '';
+      }
+      if (tempExecArchiveReasonHint) {
+        tempExecArchiveReasonHint.textContent =
+          options.hintText ||
+          '原则上归档前需全部执行通过；如仍有未通过/未执行用例，请填写归档原因后继续。';
+      }
+      if (tempExecArchiveReasonConfirmBtn) tempExecArchiveReasonConfirmBtn.disabled = false;
+      if (tempExecArchiveReasonCancelBtn) tempExecArchiveReasonCancelBtn.disabled = false;
+      tempExecArchiveReasonDrawer.open();
+      try {
+        if (tempExecArchiveReasonInput) tempExecArchiveReasonInput.focus();
+      } catch (_) {}
+      return true;
+    }
+
+    function showTempExecCenterToast(text, level) {
+      var msg = text === null || text === undefined ? '' : String(text);
+      if (!msg) return;
+      var kind = level === 'err' ? 'err' : (level === 'warn' ? 'warn' : 'ok');
+      try {
+        var app = window.app || {};
+        window.app = app;
+        var key = '__tapTempExecToast';
+        var store = app[key] && typeof app[key] === 'object' ? app[key] : {};
+        if (store.timer) {
+          clearTimeout(store.timer);
+          store.timer = 0;
+        }
+        if (store.fadeTimer) {
+          clearTimeout(store.fadeTimer);
+          store.fadeTimer = 0;
+        }
+        if (store.el && store.el.parentNode) {
+          try { store.el.parentNode.removeChild(store.el); } catch (_) {}
+        }
+        var el = document.createElement('div');
+        el.className = 'temp-center-toast ' + kind;
+        el.textContent = msg;
+        document.body.appendChild(el);
+        store.el = el;
+        store.timer = setTimeout(function() {
+          if (!store.el) return;
+          store.el.classList.add('fade-out');
+          store.fadeTimer = setTimeout(function() {
+            if (store.el && store.el.parentNode) {
+              try { store.el.parentNode.removeChild(store.el); } catch (_) {}
+            }
+            store.el = null;
+            store.timer = 0;
+            store.fadeTimer = 0;
+          }, 260);
+        }, 3500);
+        app[key] = store;
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function submitTempExecArchiveReason() {
+      if (!tempExecArchiveReasonContext) return;
+      var ctx0 = tempExecArchiveReasonContext;
+      var client = ctx0.client;
+      if (!client || typeof client.archiveExecSet !== 'function') {
+        if (tempExecArchiveReasonStatus) setStatus(tempExecArchiveReasonStatus, '当前模式不支持归档（需启用 DB 后端）', 'warn');
+        return;
+      }
+      var sid = Number(ctx0.execSetId);
+      if (!Number.isFinite(sid) || sid <= 0) {
+        if (tempExecArchiveReasonStatus) setStatus(tempExecArchiveReasonStatus, '归档失败：执行集 ID 无效', 'err');
+        return;
+      }
+      var raw = tempExecArchiveReasonInput ? String(tempExecArchiveReasonInput.value || '').trim() : '';
+      var reason = raw;
+      if (!reason) {
+        if (tempExecArchiveReasonStatus) setStatus(tempExecArchiveReasonStatus, '归档原因不能为空', 'warn');
+        if (tempExecArchiveReasonInput && tempExecArchiveReasonInput.classList) {
+          tempExecArchiveReasonInput.classList.add('input-invalid');
+        }
+        try { if (tempExecArchiveReasonInput) tempExecArchiveReasonInput.focus(); } catch (_) {}
+        return;
+      }
+      if (tempExecArchiveReasonInput && tempExecArchiveReasonInput.classList) {
+        tempExecArchiveReasonInput.classList.remove('input-invalid');
+      }
+      var payload = Object.assign({}, ctx0.payloadBase || {});
+      payload.reason = reason;
+      ctx0.submitting = true;
+      if (tempExecArchiveReasonConfirmBtn) tempExecArchiveReasonConfirmBtn.disabled = true;
+      if (tempExecArchiveReasonCancelBtn) tempExecArchiveReasonCancelBtn.disabled = true;
+      if (tempExecArchiveReasonStatus) setStatus(tempExecArchiveReasonStatus, '归档中...', '');
+      if (tempExecStatus) setStatus(tempExecStatus, '归档中...', '');
+      client
+        .archiveExecSet(sid, payload)
+        .then(function() {
+          if (tempExecStatus) setStatus(tempExecStatus, '归档成功', 'ok');
+          try {
+            var app = window.app || {};
+            window.app = app;
+            var key = '__tapArchiveSuccessToast';
+            var store = app[key] && typeof app[key] === 'object' ? app[key] : {};
+            if (store.timer) {
+              clearTimeout(store.timer);
+              store.timer = 0;
+            }
+            if (store.fadeTimer) {
+              clearTimeout(store.fadeTimer);
+              store.fadeTimer = 0;
+            }
+            if (store.el && store.el.parentNode) {
+              try { store.el.parentNode.removeChild(store.el); } catch (_) {}
+            }
+            var el = document.createElement('div');
+            el.className = 'temp-center-toast ok';
+            el.textContent = '归档成功，可到 用例相关 -> 用例归档 -> 查看归档 内查看详情。';
+            document.body.appendChild(el);
+            store.el = el;
+            store.timer = setTimeout(function() {
+              if (!store.el) return;
+              store.el.classList.add('fade-out');
+              store.fadeTimer = setTimeout(function() {
+                if (store.el && store.el.parentNode) {
+                  try { store.el.parentNode.removeChild(store.el); } catch (_) {}
+                }
+                store.el = null;
+                store.timer = 0;
+                store.fadeTimer = 0;
+              }, 260);
+            }, 5000);
+            app[key] = store;
+          } catch (eToast) {}
+          ctx0.submitting = false;
+          try {
+            if (tempExecArchiveReasonDrawer && typeof tempExecArchiveReasonDrawer.close === 'function') {
+              tempExecArchiveReasonDrawer.close();
+            }
+          } catch (closeErr) {
+            // ignore close errors
+          }
+          try { if (window.app) window.app.__drawerSkipRestoreOnce = true; } catch (_) {}
+          try { if (api.loadTempExecState) api.loadTempExecState(); } catch (_) {}
+          try { if (api.renderTempExecOverview) api.renderTempExecOverview(); } catch (_) {}
+          try { showTempExecOverview(); } catch (_) {}
+        })
+        .catch(function(err) {
+          ctx0.submitting = false;
+          if (tempExecArchiveReasonConfirmBtn) tempExecArchiveReasonConfirmBtn.disabled = false;
+          if (tempExecArchiveReasonCancelBtn) tempExecArchiveReasonCancelBtn.disabled = false;
+          if (tempExecArchiveReasonStatus) {
+            setStatus(
+              tempExecArchiveReasonStatus,
+              err && err.message ? err.message : '归档失败，请重试或取消',
+              'err'
+            );
+          }
+        });
+    }
+
+    if (tempExecArchiveReasonConfirmBtn) {
+      tempExecArchiveReasonConfirmBtn.addEventListener('click', function() { submitTempExecArchiveReason(); });
+    }
+    if (tempExecArchiveReasonCancelBtn) {
+      tempExecArchiveReasonCancelBtn.addEventListener('click', function() {
+        if (tempExecArchiveReasonContext) tempExecArchiveReasonContext.submitting = false;
+        if (tempExecArchiveReasonDrawer && typeof tempExecArchiveReasonDrawer.close === 'function') {
+          tempExecArchiveReasonDrawer.close();
+        }
+      });
+    }
     var tempExecImportDiffDrawerOpenTimer = 0;
     var tempExecImportDiffDrawer = window.app.drawer && window.app.drawer.createDrawer({
       drawerId: 'tempExecImportDiffDrawer',
@@ -235,12 +452,13 @@
         }
       },
     });
-    if (tempExecDrawer) {
+    if (tempExecImportDrawer || tempExecAssignDrawer) {
       var tabButtons = document.querySelectorAll('[data-tab-btn]');
       tabButtons.forEach(function(btn) {
         btn.addEventListener('click', function() {
           if (btn && btn.dataset && btn.dataset.tabBtn !== 'tempexec') {
-            tempExecDrawer.close();
+            if (tempExecImportDrawer) tempExecImportDrawer.close();
+            if (tempExecAssignDrawer) tempExecAssignDrawer.close();
             if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
           }
         });
@@ -254,7 +472,8 @@
       }
       updateTempExecToolbarOffset();
       if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
-      if (tempExecDrawer) tempExecDrawer.close();
+      if (tempExecImportDrawer) tempExecImportDrawer.close();
+      if (tempExecAssignDrawer) tempExecAssignDrawer.close();
       if (tempExecViewSection) {
         tempExecViewSection.classList.remove('hidden');
         if (shouldScroll) {
@@ -284,7 +503,8 @@
     function showTempExecOverview() {
       switchTab('tempexec');
       updateTempExecToolbarOffset();
-      if (tempExecDrawer) tempExecDrawer.close();
+      if (tempExecImportDrawer) tempExecImportDrawer.close();
+      if (tempExecAssignDrawer) tempExecAssignDrawer.close();
       if (tempExecOverviewDrawer) tempExecOverviewDrawer.open();
       if (tempExecOverviewSection) {
         tempExecOverviewSection.classList.remove('hidden');
@@ -305,9 +525,13 @@
           closing = closing || tempExecOverviewDrawerEl.classList.contains('closing');
           closing = closing || tempExecOverviewDrawerEl.classList.contains('open');
         }
-        if (tempExecDrawerEl && tempExecDrawerEl.classList) {
-          closing = closing || tempExecDrawerEl.classList.contains('closing');
-          closing = closing || tempExecDrawerEl.classList.contains('open');
+        if (tempExecImportDrawerEl && tempExecImportDrawerEl.classList) {
+          closing = closing || tempExecImportDrawerEl.classList.contains('closing');
+          closing = closing || tempExecImportDrawerEl.classList.contains('open');
+        }
+        if (tempExecAssignDrawerEl && tempExecAssignDrawerEl.classList) {
+          closing = closing || tempExecAssignDrawerEl.classList.contains('closing');
+          closing = closing || tempExecAssignDrawerEl.classList.contains('open');
         }
         // 抽屉关闭时会恢复 window.scrollTo(lockedScrollTop)，需要等解锁后再滚动到目标行，避免出现“先跳再被拉回”的上滚抖动。
         delay = closing ? 520 : 80;
@@ -342,9 +566,13 @@
           closing = closing || tempExecOverviewDrawerEl.classList.contains('closing');
           closing = closing || tempExecOverviewDrawerEl.classList.contains('open');
         }
-        if (tempExecDrawerEl && tempExecDrawerEl.classList) {
-          closing = closing || tempExecDrawerEl.classList.contains('closing');
-          closing = closing || tempExecDrawerEl.classList.contains('open');
+        if (tempExecImportDrawerEl && tempExecImportDrawerEl.classList) {
+          closing = closing || tempExecImportDrawerEl.classList.contains('closing');
+          closing = closing || tempExecImportDrawerEl.classList.contains('open');
+        }
+        if (tempExecAssignDrawerEl && tempExecAssignDrawerEl.classList) {
+          closing = closing || tempExecAssignDrawerEl.classList.contains('closing');
+          closing = closing || tempExecAssignDrawerEl.classList.contains('open');
         }
         delay = closing ? 520 : 0;
       }
@@ -374,7 +602,8 @@
         // ignore
       }
       if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
-      if (tempExecDrawer) tempExecDrawer.close();
+      if (tempExecImportDrawer) tempExecImportDrawer.close();
+      if (tempExecAssignDrawer) tempExecAssignDrawer.close();
       if (tempExecOverviewSection) tempExecOverviewSection.classList.add('hidden');
       if (tempExecViewSection) tempExecViewSection.classList.remove('hidden');
 
@@ -396,8 +625,8 @@
     }
     function focusTempExecBackup() {
       switchTab('tempexec');
-      if (tempExecDrawer) tempExecDrawer.open();
-      var drawerBody = tempExecDrawerEl && tempExecDrawerEl.querySelector('.drawer-body');
+      if (tempExecImportDrawer) tempExecImportDrawer.open();
+      var drawerBody = tempExecImportDrawerEl && tempExecImportDrawerEl.querySelector('.drawer-body');
       if (drawerBody) drawerBody.scrollTop = 0;
       if (exportTempExecConfigBtn && typeof exportTempExecConfigBtn.focus === 'function') {
         exportTempExecConfigBtn.focus({ preventScroll: true });
@@ -1209,7 +1438,8 @@
       setDiffResultFieldsVisible(true);
       renderImportDiffLocateBar();
       syncImportDiffControls();
-      if (tempExecDrawer) tempExecDrawer.close();
+      if (tempExecImportDrawer) tempExecImportDrawer.close();
+      if (tempExecAssignDrawer) tempExecAssignDrawer.close();
       if (tempExecImportDiffDrawerOpenTimer) {
         clearTimeout(tempExecImportDiffDrawerOpenTimer);
         tempExecImportDiffDrawerOpenTimer = 0;
@@ -1922,7 +2152,7 @@
         }
 
         try { if (window.app) window.app.__drawerSkipRestoreOnce = true; } catch (_) {}
-        if (tempExecDrawer) tempExecDrawer.close();
+        if (tempExecImportDrawer) tempExecImportDrawer.close();
         execVersionDrawerApi.open({
           title: '选择执行版本',
           projectId: pid,
@@ -1930,7 +2160,7 @@
           importVersionId: importVid,
           importVersionName: importVerName || '',
         }).then(function(res0) {
-          if (tempExecDrawer) tempExecDrawer.open();
+          if (tempExecImportDrawer) tempExecImportDrawer.open();
           if (!res0 || res0.ok !== true) {
             setStatus(tempExecStatus, '已取消入库', 'warn');
             return null;
@@ -3389,7 +3619,7 @@
 	            if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
 	            if (tempExecOverviewSection) tempExecOverviewSection.classList.add('hidden');
 	            if (tempExecViewSection) tempExecViewSection.classList.remove('hidden');
-	            if (tempExecDrawer) tempExecDrawer.open();
+	            if (tempExecAssignDrawer) tempExecAssignDrawer.open();
 	            return;
 	          }
 	        }
@@ -3435,23 +3665,22 @@
           var needReason = Boolean(counts.failed || counts.blocked || counts.pending);
           var payload = {};
           if (needReason) {
-            var msg =
+            var hintText =
               '仍存在未通过用例（未执行 ' +
               counts.pending +
               ' / 失败 ' +
               counts.failed +
               ' / 阻塞 ' +
               counts.blocked +
-              '），是否需要归档？';
-            if (!window.confirm(msg)) return;
-            var reason = window.prompt('原则是归档需要全部执行通过，请说明还有未通过用例就进行归档的原因。');
-            if (reason === null || reason === undefined) return;
-            reason = String(reason || '').trim();
-            if (!reason) {
-              if (tempExecStatus) setStatus(tempExecStatus, '归档已取消：未填写原因', 'warn');
-              return;
-            }
-            payload.reason = reason;
+              '），请填写归档原因后继续。';
+            openTempExecArchiveReasonDrawerForArchive({
+              execSetId: sid,
+              client: client,
+              payloadBase: payload,
+              resumeOverview: true,
+              hintText: hintText,
+            });
+            return;
           } else if (counts.total > 0) {
             var okPassed = window.confirm('用例已全部执行通过（或通过+不适用），归档后无法更改测试结果，是否确认归档？');
             if (!okPassed) return;
@@ -3517,27 +3746,29 @@
           if (api.renderTempExecOverview) api.renderTempExecOverview();
           return;
         }
-        var seg = e.target.closest('[data-temp-overview-file][data-temp-overview-status]');
-        if (seg) {
-          e.preventDefault();
-          e.stopPropagation();
-          var archivedSeg = seg.closest('[data-temp-archived="1"]');
-          if (archivedSeg) {
-            if (tempExecStatus) setStatus(tempExecStatus, '该用例已归档，请到【用例归档】页面查看', 'warn');
-            return;
-          }
-          var segFileId = seg.dataset.tempOverviewFile;
-          var segIndex = Number(seg.dataset.tempOverviewIndex);
-          if (!Number.isFinite(segIndex) || segIndex < 0) segIndex = 0;
+	        var seg = e.target.closest('[data-temp-overview-file][data-temp-overview-status]');
+	        if (seg) {
+	          e.preventDefault();
+	          e.stopPropagation();
+	          var archivedSeg = seg.closest('[data-temp-archived="1"]');
+	          if (archivedSeg) {
+	            if (tempExecStatus) setStatus(tempExecStatus, '该用例已归档，请到【用例归档】页面查看', 'warn');
+	            showTempExecCenterToast('该用例已归档，请到【用例归档】页面查看', 'warn');
+	            return;
+	          }
+	          var segFileId = seg.dataset.tempOverviewFile;
+	          var segIndex = Number(seg.dataset.tempOverviewIndex);
+	          if (!Number.isFinite(segIndex) || segIndex < 0) segIndex = 0;
           jumpToTempExecCase(segFileId, segIndex);
           return;
         }
-        var card = e.target.closest('[data-temp-file]');
-        if (!card) return;
-        if (card.dataset && card.dataset.tempArchived) {
-          if (tempExecStatus) setStatus(tempExecStatus, '该用例已归档，请到【用例归档】页面查看', 'warn');
-          return;
-        }
+	        var card = e.target.closest('[data-temp-file]');
+	        if (!card) return;
+	        if (card.dataset && card.dataset.tempArchived) {
+	          if (tempExecStatus) setStatus(tempExecStatus, '该用例已归档，请到【用例归档】页面查看', 'warn');
+	          showTempExecCenterToast('该用例已归档，请到【用例归档】页面查看', 'warn');
+	          return;
+	        }
         var fileId = card.dataset.tempFile;
         if (fileId) {
           e.preventDefault();
@@ -3550,7 +3781,8 @@
           switchTab('tempexec');
           updateTempExecToolbarOffset();
           if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
-          if (tempExecDrawer) tempExecDrawer.close();
+          if (tempExecImportDrawer) tempExecImportDrawer.close();
+          if (tempExecAssignDrawer) tempExecAssignDrawer.close();
           if (tempExecOverviewSection) tempExecOverviewSection.classList.add('hidden');
           if (tempExecViewSection) tempExecViewSection.classList.remove('hidden');
           api.setTempExecActive(fileId);
@@ -3581,7 +3813,8 @@
         }
         switchTab('tempexec');
         if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
-        if (tempExecDrawer) tempExecDrawer.close();
+        if (tempExecImportDrawer) tempExecImportDrawer.close();
+        if (tempExecAssignDrawer) tempExecAssignDrawer.close();
         if (tempExecViewSection) {
           tempExecViewSection.classList.remove('hidden');
         }

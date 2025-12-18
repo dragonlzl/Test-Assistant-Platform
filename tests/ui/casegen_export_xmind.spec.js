@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 
 async function prepareCaseGen(page, requirementLabel) {
+  await page.click('[data-group="ai"]');
   await page.click('[data-tab-btn="clean"]');
   await page.evaluate((reqLabel) => {
     window.prompt = () => reqLabel;
@@ -31,6 +32,11 @@ async function prepareCaseGen(page, requirementLabel) {
     mimeType: 'application/json',
     buffer: Buffer.from(importContent),
   });
+  const requirementDrawer = page.locator('#caseGenRequirementDrawer');
+  await expect(requirementDrawer).toHaveClass(/open/);
+  await page.fill('#caseGenRequirementDrawerInput', requirementLabel);
+  await page.click('#caseGenRequirementDrawerConfirmBtn');
+  await expect(requirementDrawer).not.toHaveClass(/open/);
   await page.waitForFunction((id) => {
     const state = window.app && window.app.state;
     return state && state.caseGenResults && state.caseGenResults[id] && state.caseGenResults[id].trim().length > 0;
@@ -54,6 +60,12 @@ test.describe('用例生成导出 XMind', () => {
         return route.continue();
       }
       return route.abort();
+    });
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tap-e2e-skip-auth', '1');
+        localStorage.removeItem('tap-auth-token');
+      } catch (_) {}
     });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');

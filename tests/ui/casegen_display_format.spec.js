@@ -9,12 +9,19 @@ test.describe('用例生成展示格式', () => {
       }
       return route.abort();
     });
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tap-e2e-skip-auth', '1');
+        localStorage.removeItem('tap-auth-token');
+      } catch (_) {}
+    });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
     await page.waitForFunction(() => window.app && window.app._inited === true);
   });
 
   test('导入含 <br/> 的用例结果后展示为格式化 JSON', async ({ page }) => {
+    await page.click('[data-group="ai"]');
     await page.click('[data-tab-btn="clean"]');
     await page.evaluate(() => {
       window.prompt = () => '测试需求';
@@ -38,6 +45,16 @@ test.describe('用例生成展示格式', () => {
       mimeType: 'text/plain',
       buffer: Buffer.from(payload),
     });
+
+    const requirementDrawer = page.locator('#caseGenRequirementDrawer');
+    await expect(requirementDrawer).toHaveClass(/open/);
+    const requirementInput = page.locator('#caseGenRequirementDrawerInput');
+    await expect(requirementInput).toHaveAttribute('maxlength', '20');
+    await requirementInput.fill('');
+    await requirementInput.type('测'.repeat(21));
+    await expect(requirementInput).toHaveValue('测'.repeat(20));
+    await page.click('#caseGenRequirementDrawerConfirmBtn');
+    await expect(requirementDrawer).not.toHaveClass(/open/);
 
     const textarea = page.locator('#casesGenerationContainer textarea[data-result]').first();
     await expect(textarea).not.toHaveValue('');

@@ -9,8 +9,8 @@ async function gotoIndex(page) {
 async function switchToTempExec(page) {
   await page.click('[data-group="cases"]');
   await page.click('[data-tab-btn="tempexec"]');
-  await page.click('#openTempExecDrawerBtn');
-  await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+  await page.click('#openTempExecAssignDrawerBtn');
+  await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
 }
 
 function buildApiRouter(options) {

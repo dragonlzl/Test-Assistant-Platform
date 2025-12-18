@@ -5307,6 +5307,8 @@
 	          state.editor.pageIndex = 0;
 	          state.editor.selection = new Set();
           state.editor.remarkOpen = new Set();
+          // 保证视图互斥：恢复“编辑”视图时应隐藏“历史详情”卡片。
+          setHistoryDetailVisible(false);
           renderEditorCard();
           syncEditorSearchControls();
           return true;
@@ -5350,6 +5352,9 @@
     state.historyDetail.pageIndex = isFinite(Number(persisted.page_index)) ? Number(persisted.page_index) : 0;
     state.historyDetail.versionId = (persisted.version_id || persisted.version_id === 0) ? persisted.version_id : null;
     setHistoryDetailVisible(true);
+    // 保证视图互斥：恢复“历史详情”时应隐藏编辑卡片。
+    if (dom.editCard && dom.editCard.classList) dom.editCard.classList.add('hidden');
+    try { if (dom.editCard) dom.editCard.hidden = true; } catch (_) {}
     setStatus(dom.historyStatus, '加载历史记录中...', '');
     renderCaseLibraryHistory();
     return loadCaseLibraryHistoryEntries(projectId, fileNameClean)
@@ -7191,36 +7196,43 @@
   var pendingCaseLibraryTab = false;
   var autoRestoreAttempt = 0;
   var autoRestoreTimer = null;
+  var restoreAfterActivatedPromise = null;
 
 		  function restoreCaseLibraryAfterActivated() {
-		    if (!isAuthReady()) {
-		      pendingCaseLibraryTab = true;
-		      setStatus(dom.status, '登录信息加载中...', '');
-		      return Promise.resolve(null);
-		    }
-		    pendingCaseLibraryTab = false;
-		    restoreEditorBatchAddCountFromPersistedState();
-		    return ensureProjectsReady()
-		      .then(function() { return restoreCaseLibraryLastSelection(); })
-		      .then(function(view) {
-	        var persisted = readEditDrawerPersistedState();
-	        var userId = getCurrentUserId();
-	        var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
-	        var hasEditor = Boolean(state.editor && state.editor.caseFile && state.editor.caseFile.id);
-	        var inHistoryView = view === 'history' || isHistoryDetailVisible();
-	        // 仅当不在历史详情视图时，才根据持久化状态自动打开“查看&编辑”抽屉。
-	        // 例如：仅在抽屉内勾选/导出后刷新，也应保持抽屉开启与勾选状态。
-	        if (!inHistoryView && shouldOpen && !hasEditor && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
-	          editDrawerInstance.open();
-	        }
-	        return view;
-	      });
-	  }
+		    if (restoreAfterActivatedPromise) return restoreAfterActivatedPromise;
+		    restoreAfterActivatedPromise = (function() {
+		      if (!isAuthReady()) {
+		        pendingCaseLibraryTab = true;
+		        setStatus(dom.status, '登录信息加载中...', '');
+		        return Promise.resolve(null);
+		      }
+		      pendingCaseLibraryTab = false;
+		      restoreEditorBatchAddCountFromPersistedState();
+		      return ensureProjectsReady()
+		        .then(function() { return restoreCaseLibraryLastSelection(); })
+		        .then(function(view) {
+		          var persisted = readEditDrawerPersistedState();
+		          var userId = getCurrentUserId();
+		          var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
+		          var hasEditor = Boolean(state.editor && state.editor.caseFile && state.editor.caseFile.id);
+		          var inHistoryView = view === 'history' || isHistoryDetailVisible();
+		          // 仅当不在历史详情视图时，才根据持久化状态自动打开“查看&编辑”抽屉。
+		          // 例如：仅在抽屉内勾选/导出后刷新，也应保持抽屉开启与勾选状态。
+		          if (!inHistoryView && shouldOpen && !hasEditor && editDrawerInstance && typeof editDrawerInstance.open === 'function') {
+		            editDrawerInstance.open();
+		          }
+		          return view;
+		        });
+		    })();
+		    return restoreAfterActivatedPromise.finally(function() {
+		      restoreAfterActivatedPromise = null;
+		    });
+		  }
 
   function scheduleAutoRestoreProbe() {
     if (autoRestoreTimer) return;
     autoRestoreAttempt = 0;
-    var maxAttempts = 30;
+    var maxAttempts = 150;
     var intervalMs = 200;
 
     function clearProbe() {

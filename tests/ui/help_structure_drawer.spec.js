@@ -9,9 +9,15 @@ test.describe('使用帮助 XMind 结构抽屉', () => {
       }
       return route.abort();
     });
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tap-e2e-skip-auth', '1');
+        localStorage.removeItem('tap-auth-token');
+      } catch (_) {}
+    });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
     await page.evaluate(() => {
       localStorage.removeItem('usecase-card-collapse-v1');
     });

@@ -32,7 +32,7 @@ test.describe('临时执行搜索功能', () => {
     });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
     await page.evaluate(() => {
       var keys = ['usecase-temp-exec-v1', 'tempexec-focus-v1', 'tempexec-page-size'];
       keys.forEach(function(key) {
@@ -40,13 +40,13 @@ test.describe('临时执行搜索功能', () => {
       });
     });
     await page.reload();
-    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
   });
 
   test('执行视图搜索与清空', async ({ page }) => {
     await page.click('[data-group="cases"]');
     await page.click('[data-tab-btn="tempexec"]');
-    await page.click('#openTempExecDrawerBtn');
+    await page.click('#openTempExecImportDrawerBtn');
     await page.evaluate(() => {
       window.app.state.requirementLabel = '搜索需求';
       window.app.state.requirementLabelSource = 'ui-test';
@@ -65,9 +65,16 @@ test.describe('临时执行搜索功能', () => {
     await page.setInputFiles('#tempExecInput', execFile);
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
 
-    await expect(page.locator('#tempExecNav button[data-temp-file]')).toHaveCount(1, { timeout: 5000 });
-    await page.click('#tempExecNav button[data-temp-file]');
-    await page.locator('#closeTempExecDrawerBtn').click({ force: true });
+    await page.click('#closeTempExecImportDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/closing/);
+    await page.click('#openTempExecAssignDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
+    const navButtons = page.locator('#tempExecNav button[data-temp-file]');
+    await expect(navButtons).toHaveCount(1, { timeout: 5000 });
+    await expect(navButtons.first()).toBeVisible();
+    await navButtons.first().click({ force: true });
+    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 15000 });
     const caseRows = page.locator('#tempExecView table tbody tr').filter({ has: page.locator('[data-temp-case-remove]') });
     await expect(caseRows.first()).toBeVisible({ timeout: 15000 });

@@ -1,9 +1,22 @@
 const { test, expect } = require('@playwright/test');
 
 test('模型响应含代码块包装也能被剥离', async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      return route.continue();
+    }
+    return route.abort();
+  });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
   await page.goto(base + '/index.html');
-  await page.waitForFunction(() => window.app && window.app._inited === true);
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
 
   const results = await page.evaluate(async () => {
     const service = window.app && window.app.services && window.app.services.modelClient;

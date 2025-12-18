@@ -4,6 +4,7 @@ test('拆分结果写入后自动可展开拆分视图', async ({ page }) => {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
   await page.goto(base + '/index.html');
   await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
+  await page.click('[data-group="ai"]');
   await page.click('[data-tab-btn="clean"]');
 
   await page.evaluate(() => {

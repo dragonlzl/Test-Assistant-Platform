@@ -66,9 +66,9 @@ test.describe('抽屉遮罩不遮挡侧边栏/流程导航', () => {
 
   test('tempexec drawer keeps sidebar and tempexec nav visible with full mask', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
-    await page.click('#openTempExecDrawerBtn');
+    await page.click('#openTempExecImportDrawerBtn');
 
-    const drawer = page.locator('#tempExecDrawer');
+    const drawer = page.locator('#tempExecImportDrawer');
     await expect(drawer).toHaveClass(/open/);
 
     const sidebar = page.locator('aside.sidebar');
@@ -77,7 +77,7 @@ test.describe('抽屉遮罩不遮挡侧边栏/流程导航', () => {
     const tempexecNav = page.locator('#tempexecFlowNav');
     await expect(tempexecNav).toBeVisible();
 
-    const mask = page.locator('#tempExecDrawer .drawer-mask');
+    const mask = page.locator('#tempExecImportDrawer .drawer-mask');
     await expect(mask).toBeVisible();
     const box = await mask.boundingBox();
     expect(box && box.width).toBeGreaterThan(1000);
@@ -86,7 +86,7 @@ test.describe('抽屉遮罩不遮挡侧边栏/流程导航', () => {
 
   test('tempexec drawer keeps nav visible after page has been scrolled', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
-    await page.waitForSelector('#openTempExecDrawerBtn');
+    await page.waitForSelector('#openTempExecImportDrawerBtn');
     await page.evaluate(() => {
       var filler = document.createElement('div');
       filler.id = 'drawer-scroll-filler-exec';
@@ -99,9 +99,9 @@ test.describe('抽屉遮罩不遮挡侧边栏/流程导航', () => {
       document.documentElement.scrollTop = target;
       document.body.scrollTop = target;
     });
-    await page.locator('#openTempExecDrawerBtn').evaluate((btn) => btn.click());
+    await page.locator('#openTempExecImportDrawerBtn').evaluate((btn) => btn.click());
 
-    const drawer = page.locator('#tempExecDrawer');
+    const drawer = page.locator('#tempExecImportDrawer');
     await expect(drawer).toHaveClass(/open/);
 
     const sidebar = page.locator('aside.sidebar');
@@ -113,7 +113,7 @@ test.describe('抽屉遮罩不遮挡侧边栏/流程导航', () => {
 
   test('tempexec drawer keeps nav position after long scroll on execute view', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
-    await page.waitForSelector('#openTempExecDrawerBtn');
+    await page.waitForSelector('#openTempExecImportDrawerBtn');
     await page.evaluate(() => {
       document.documentElement.style.overflowY = 'auto';
       document.documentElement.style.overflowX = 'hidden';
@@ -140,8 +140,8 @@ test.describe('抽屉遮罩不遮挡侧边栏/流程导航', () => {
     const beforeNavTop = await page.$eval('#tempexecFlowNav', (el) => el.getBoundingClientRect().top);
     const scrollBefore = await page.evaluate(() => window.scrollY);
 
-    await page.locator('#openTempExecDrawerBtn').evaluate((btn) => btn.click());
-    await page.waitForSelector('#tempExecDrawer.open');
+    await page.locator('#openTempExecImportDrawerBtn').evaluate((btn) => btn.click());
+    await page.waitForSelector('#tempExecImportDrawer.open');
     await page.waitForTimeout(180);
 
     const afterSidebarTop = await page.$eval('aside.sidebar', (el) => el.getBoundingClientRect().top);

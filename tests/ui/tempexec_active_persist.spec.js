@@ -3,6 +3,14 @@ const { test, expect } = require('@playwright/test');
 test.describe('执行视图选中用例持久化', () => {
   test.beforeEach(async ({ page }) => {
     page.__promptAnswers = [];
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tap-e2e-skip-auth', '1');
+        localStorage.removeItem('tap-auth-token');
+      } catch (e) {
+        // ignore
+      }
+    });
     await page.route('**/*', (route) => {
       const url = route.request().url();
       if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
@@ -10,9 +18,17 @@ test.describe('执行视图选中用例持久化', () => {
       }
       return route.abort();
     });
+    await page.route('**/api/**', async (route) => {
+      const req = route.request();
+      const method = req.method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+      if (method === 'GET') return respond(200, []);
+      return respond(200, {});
+    });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
     await page.evaluate(() => {
       ['usecase-temp-exec-v1', 'tempexec-focus-v1', 'tempexec-page-size'].forEach(function(key) {
         window.localStorage.removeItem(key);
@@ -21,7 +37,9 @@ test.describe('执行视图选中用例持久化', () => {
   });
 
   test('刷新后保持上次选中的用例', async ({ page }) => {
-    await page.click('[data-tab-btn="tempexec"]');
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('tempexec');
+    });
     const now = Date.now();
     await page.evaluate((stamp) => {
       const files = [
@@ -69,8 +87,10 @@ test.describe('执行视图选中用例持久化', () => {
       window.app.state.tempExecPreserveScrollOnce = false;
     }, now);
     await page.reload();
-    await page.waitForFunction(() => window.app && window.app._inited === true);
-    await page.click('[data-tab-btn="tempexec"]');
+    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('tempexec');
+    });
     const navButtons = page.locator('#tempExecNav button[data-temp-file]');
     await expect(navButtons).toHaveCount(2, { timeout: 5000 });
     const activeMatch = await page.$eval('#tempExecNav .temp-req-item.active .name-text', (el) => (el && el.textContent) || '');

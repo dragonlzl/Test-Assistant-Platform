@@ -265,10 +265,10 @@ test.describe('用例执行-导入需确认入库', () => {
     await waitAppInited(page, 30000);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 
-    await page.click('#openTempExecDrawerBtn');
-    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#tempExecDrawer')).toContainText('导入用例后需要点击');
-    await expect(page.locator('#tempExecDrawer')).toContainText('确认入库');
+    await page.click('#openTempExecImportDrawerBtn');
+    await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#tempExecImportDrawer')).toContainText('导入用例后需要点击');
+    await expect(page.locator('#tempExecImportDrawer')).toContainText('确认入库');
     await expect(page.locator('#exportTempExecConfigBtn')).toBeHidden();
     await expect(page.locator('#importTempExecConfigBtn')).toBeHidden();
 
@@ -541,8 +541,8 @@ test.describe('用例执行-导入需确认入库', () => {
 
     await expect.poll(() => page.evaluate(() => (window.app && window.app.state && window.app.state.tempExecFiles ? window.app.state.tempExecFiles.length : -1))).toBe(1);
 
-    await page.click('#openTempExecDrawerBtn');
-    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+    await page.click('#openTempExecImportDrawerBtn');
+    await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
     await page.setInputFiles('#tempExecInput', {
       name: '用例A.json',
       mimeType: 'application/json',
@@ -773,8 +773,8 @@ test.describe('用例执行-导入需确认入库', () => {
     await waitAppInited(page, 30000);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 
-    await page.click('#openTempExecDrawerBtn');
-    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+    await page.click('#openTempExecImportDrawerBtn');
+    await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
 
     await page.setInputFiles('#tempExecInput', {
       name: '勾选用例 登录_result_20251213121212.json',
@@ -1000,8 +1000,8 @@ test.describe('用例执行-导入需确认入库', () => {
     await waitAppInited(page, 30000);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 
-    await page.click('#openTempExecDrawerBtn');
-    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+    await page.click('#openTempExecImportDrawerBtn');
+    await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
 
     await page.setInputFiles('#tempExecInput', {
       name: '勾选用例　全角空格测试_result_20251213121212.json',
@@ -1187,8 +1187,8 @@ test.describe('用例执行-导入需确认入库', () => {
     await waitAppInited(page, 30000);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 
-    await page.click('#openTempExecDrawerBtn');
-    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+    await page.click('#openTempExecImportDrawerBtn');
+    await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
 
     await page.setInputFiles('#tempExecInput', {
       name: '小小教官调整_20251209221805.xmind.json',
@@ -1272,8 +1272,8 @@ test.describe('用例执行-导入需确认入库', () => {
       return false;
     });
 
-    await page.click('#openTempExecDrawerBtn');
-    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+    await page.click('#openTempExecImportDrawerBtn');
+    await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
 
     await page.waitForFunction(() => {
       var sel = document.getElementById('tempExecImportProjectSelect');
@@ -1300,8 +1300,8 @@ test.describe('用例执行-导入需确认入库', () => {
       }
       return false;
     });
-    await page.click('#openTempExecDrawerBtn');
-    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+    await page.click('#openTempExecImportDrawerBtn');
+    await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
 
     await page.waitForFunction(() => {
       var sel = document.getElementById('tempExecImportProjectSelect');

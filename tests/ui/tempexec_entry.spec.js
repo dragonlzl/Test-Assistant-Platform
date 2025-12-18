@@ -29,14 +29,16 @@ test.describe('临时执行入口导航', () => {
 	    expect(cardCount).toBeGreaterThanOrEqual(2);
 	    const iconCount = await navCards.locator('.nav-entry-icon svg').count();
 	    expect(iconCount).toBe(cardCount);
-	    const importCardDesc = topNav.locator('.nav-entry-card', { hasText: '用例导入&分配' }).locator('.nav-entry-desc').first();
-	    await expect(importCardDesc).toContainText('导入/分配用例');
+	    const importCardDesc = topNav.locator('.nav-entry-card', { hasText: '用例导入' }).locator('.nav-entry-desc').first();
+	    await expect(importCardDesc).toContainText('导入用例并确认入库');
+	    const assignCardDesc = topNav.locator('.nav-entry-card', { hasText: '执行分配' }).locator('.nav-entry-desc').first();
+	    await expect(assignCardDesc).toContainText('版本分组');
 	    await expect(topNav.locator('#openTempExecOverviewNavBtn')).toContainText('归档操作&进度预览');
 
-	    await page.click('#openTempExecDrawerBtn');
-	    const drawer = page.locator('#tempExecDrawer');
+	    await page.click('#openTempExecImportDrawerBtn');
+	    const drawer = page.locator('#tempExecImportDrawer');
 	    await expect(drawer).toHaveClass(/open/);
-    const widthRatio = await page.$eval('#tempExecDrawer .drawer-panel', function(panel) {
+    const widthRatio = await page.$eval('#tempExecImportDrawer .drawer-panel', function(panel) {
       if (!panel || !panel.getBoundingClientRect) return 0;
       var rect = panel.getBoundingClientRect();
       var viewport = window.innerWidth || document.documentElement.clientWidth || 0;
@@ -46,16 +48,16 @@ test.describe('临时执行入口导航', () => {
     expect(widthRatio).toBeGreaterThan(0.6);
     expect(widthRatio).toBeLessThan(1);
 
-	    await page.click('#tempExecDrawer .drawer-mask', { position: { x: 10, y: 10 } });
+	    await page.click('#tempExecImportDrawer .drawer-mask', { position: { x: 10, y: 10 } });
 	    await expect(drawer).not.toHaveClass(/open/);
 	  });
 
 	  test('抽屉遮罩覆盖且不会导致页面滚动', async ({ page }) => {
 	    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 	    const initialScroll = await page.evaluate(() => window.scrollY);
-	    await page.click('#openTempExecDrawerBtn');
-	    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
-	    const maskMetrics = await page.$eval('#tempExecDrawer .drawer-mask', (mask) => {
+	    await page.click('#openTempExecImportDrawerBtn');
+	    await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
+	    const maskMetrics = await page.$eval('#tempExecImportDrawer .drawer-mask', (mask) => {
 	      const rect = mask.getBoundingClientRect();
 	      return {
 	        width: rect.width,
@@ -70,11 +72,11 @@ test.describe('临时执行入口导航', () => {
     expect(maskMetrics.height).toBeGreaterThanOrEqual(maskMetrics.vh - 2);
 	    expect(maskMetrics.left).toBeLessThanOrEqual(1);
 	    expect(maskMetrics.top).toBeLessThanOrEqual(1);
-	    await page.click('#tempExecDrawer .drawer-mask', { position: { x: 10, y: 10 } });
+	    await page.click('#tempExecImportDrawer .drawer-mask', { position: { x: 10, y: 10 } });
 	    const afterFirstClose = await page.evaluate(() => window.scrollY);
-	    await page.click('#openTempExecDrawerBtn');
-	    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
-	    await page.click('#tempExecDrawer .drawer-mask', { position: { x: 10, y: 10 } });
+	    await page.click('#openTempExecImportDrawerBtn');
+	    await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
+	    await page.click('#tempExecImportDrawer .drawer-mask', { position: { x: 10, y: 10 } });
 	    const finalScroll = await page.evaluate(() => window.scrollY);
 	    expect(Math.abs(finalScroll - initialScroll)).toBeLessThanOrEqual(2);
 	    expect(Math.abs(finalScroll - afterFirstClose)).toBeLessThanOrEqual(2);

@@ -56,7 +56,7 @@ test.describe('执行视图粘顶布局', () => {
       window.app.state.requirementLabel = '粘顶导航需求';
       window.app.state.requirementLabelSource = 'ui-test';
     });
-    await page.click('#openTempExecDrawerBtn');
+    await page.click('#openTempExecImportDrawerBtn');
     await page.setInputFiles('#tempExecInput', {
       name: 'sticky.json',
       mimeType: 'application/json',
@@ -66,7 +66,7 @@ test.describe('执行视图粘顶布局', () => {
       ], null, 2)),
     });
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
-    await page.click('#closeTempExecDrawerBtn');
+    await page.click('#closeTempExecImportDrawerBtn');
     await expect(page.locator('#tempExecToolbarCard')).toBeVisible({ timeout: 15000 });
 
     const navTopBefore = await page.$eval('#tempexecFlowNav', (el) => el.getBoundingClientRect().top);

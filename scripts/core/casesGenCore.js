@@ -55,6 +55,13 @@
     var caseGenDbStoreConfirmBtn = document.getElementById('caseGenDbStoreConfirmBtn');
     var caseGenDbStoreStatus = document.getElementById('caseGenDbStoreStatus');
     var caseGenDbStoreDrawer = null;
+    var caseGenRequirementDrawerHint = document.getElementById('caseGenRequirementDrawerHint');
+    var caseGenRequirementDrawerInput = document.getElementById('caseGenRequirementDrawerInput');
+    var caseGenRequirementDrawerConfirmBtn = document.getElementById('caseGenRequirementDrawerConfirmBtn');
+    var caseGenRequirementDrawerCancelBtn = document.getElementById('caseGenRequirementDrawerCancelBtn');
+    var caseGenRequirementDrawerStatus = document.getElementById('caseGenRequirementDrawerStatus');
+    var caseGenRequirementDrawer = null;
+    var caseGenRequirementDrawerExternal = null;
     var exportCaseGenXmindBtn = dom.exportCaseGenXmindBtn || dom.exportCaseGenXmind;
     var caseGenViewDrawerBody = dom.caseGenViewDrawerBody;
     var caseGenViewDrawerTitle = dom.caseGenViewDrawerTitle;
@@ -213,6 +220,96 @@
         },
       });
       return caseGenDbStoreDrawer;
+    }
+
+    function ensureCaseGenRequirementDrawer() {
+      if (caseGenRequirementDrawer) return caseGenRequirementDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      caseGenRequirementDrawer = window.app.drawer.createDrawer({
+        drawerId: 'caseGenRequirementDrawer',
+        closeButtons: ['closeCaseGenRequirementDrawerBtn'],
+        onClose: function() {
+          if (caseGenRequirementDrawerInput && caseGenRequirementDrawerInput.classList) {
+            caseGenRequirementDrawerInput.classList.remove('input-invalid');
+          }
+          if (caseGenRequirementDrawerStatus) setStatus(caseGenRequirementDrawerStatus, '', '');
+          if (caseGenRequirementDrawerExternal && typeof caseGenRequirementDrawerExternal.resolve === 'function') {
+            var ext = caseGenRequirementDrawerExternal;
+            caseGenRequirementDrawerExternal = null;
+            try { ext.resolve(''); } catch (err) {}
+          }
+        },
+      });
+
+      function resolveExternal(text, shouldClose) {
+        if (caseGenRequirementDrawerExternal && typeof caseGenRequirementDrawerExternal.resolve === 'function') {
+          var ext = caseGenRequirementDrawerExternal;
+          caseGenRequirementDrawerExternal = null;
+          try { ext.resolve(text || ''); } catch (err) {}
+        }
+        if (shouldClose && caseGenRequirementDrawer && typeof caseGenRequirementDrawer.close === 'function') {
+          caseGenRequirementDrawer.close();
+        }
+      }
+
+      if (caseGenRequirementDrawerConfirmBtn) {
+        caseGenRequirementDrawerConfirmBtn.addEventListener('click', function() {
+          if (!caseGenRequirementDrawerInput) {
+            resolveExternal('', true);
+            return;
+          }
+          var raw = String(caseGenRequirementDrawerInput.value || '').trim();
+          var normalized = normalizeRequirementName(raw);
+          if (!normalized) {
+            if (caseGenRequirementDrawerStatus) setStatus(caseGenRequirementDrawerStatus, '请填写需求标识（不可为空）', 'warn');
+            if (caseGenRequirementDrawerInput.classList) caseGenRequirementDrawerInput.classList.add('input-invalid');
+            try { caseGenRequirementDrawerInput.focus(); } catch (_) {}
+            return;
+          }
+          if (normalized.length > 20) {
+            if (caseGenRequirementDrawerStatus) setStatus(caseGenRequirementDrawerStatus, '需求标识最长 20 个汉字（或 20 个字符）', 'warn');
+            if (caseGenRequirementDrawerInput.classList) caseGenRequirementDrawerInput.classList.add('input-invalid');
+            try { caseGenRequirementDrawerInput.focus(); } catch (_) {}
+            return;
+          }
+          if (caseGenRequirementDrawerInput.classList) caseGenRequirementDrawerInput.classList.remove('input-invalid');
+          setRequirementLabel(normalized, 'manual');
+          resolveExternal(normalized, true);
+        });
+      }
+      if (caseGenRequirementDrawerCancelBtn) {
+        caseGenRequirementDrawerCancelBtn.addEventListener('click', function() {
+          resolveExternal('', true);
+        });
+      }
+      return caseGenRequirementDrawer;
+    }
+
+    function promptRequirementLabelByDrawer(promptText) {
+      var drawer = ensureCaseGenRequirementDrawer();
+      if (!drawer || typeof drawer.open !== 'function') {
+        return Promise.resolve(promptRequirementLabel(promptText));
+      }
+      if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+        window.app.drawer.closeAllDrawers();
+      }
+      if (caseGenRequirementDrawerHint) {
+        var suffix = '请填写本次需求名称，作为需求标识（不可为空）';
+        var text = String(promptText || '').trim();
+        caseGenRequirementDrawerHint.textContent = text ? (text + '；' + suffix) : suffix;
+      }
+      if (caseGenRequirementDrawerStatus) setStatus(caseGenRequirementDrawerStatus, '', '');
+      if (caseGenRequirementDrawerInput) {
+        if (caseGenRequirementDrawerInput.classList) caseGenRequirementDrawerInput.classList.remove('input-invalid');
+        caseGenRequirementDrawerInput.value = getRequirementLabel(false) || '';
+      }
+      drawer.open();
+      try {
+        if (caseGenRequirementDrawerInput) caseGenRequirementDrawerInput.focus();
+      } catch (_) {}
+      return new Promise(function(resolve) {
+        caseGenRequirementDrawerExternal = { resolve: resolve };
+      });
     }
 
     function clearCaseGenDbStoreNewActionError() {
@@ -1951,7 +2048,7 @@
         if (parsedLabel) {
           setRequirementLabel(parsedLabel, 'import');
         } else {
-          var ensured = promptRequirementLabel('请输入本次需求标识后再导入用例');
+          var ensured = await promptRequirementLabelByDrawer('请输入本次需求标识后再导入用例');
           if (!ensured) {
             setCaseModuleStatus(moduleId, '已取消导入（需求标识为空）', 'warn');
             return;

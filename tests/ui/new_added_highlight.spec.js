@@ -279,8 +279,7 @@ test.describe('＋新增用例高亮（绿色描边）', () => {
     await page.locator('#caseLibraryEditView [data-case-lib-insert][data-index="0"]').click();
     await expect(page.locator('#caseLibraryEditView tr.case-row.new-added')).toHaveCount(1);
 
-    await page.locator('#caseLibraryEditView tr.case-row.new-added [data-case-lib-remark-toggle]').click();
+    await page.locator('#caseLibraryEditView tr.case-row.new-added input[data-case-lib-select]').click();
     await expect(page.locator('#caseLibraryEditView tr.case-row.new-added')).toHaveCount(1);
   });
 });
-
