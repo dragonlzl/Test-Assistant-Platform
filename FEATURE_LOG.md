@@ -1390,3 +1390,14 @@
 - 更新记录：2025-12-18 用例生成页面分区与通用/入库/模块分组上线（`index.html`、`style.css`、`tests/ui/casegen_layout_zones.spec.js`）。  
 - 更新记录：2025-12-18 “填写需求标识”抽屉输入框支持最多 20 个字符并同步加宽显示（`index.html`、`style.css`、`scripts/core/casesGenCore.js`、`tests/ui/casegen_display_format.spec.js`）。  
 - 测试与验证：`node --check scripts/core/casesGenCore.js`（通过）；`npm run test:ui -- tests/ui/casegen_display_format.spec.js`（通过）。  
+
+- 功能名称：操作记录页面（管理员）增强：抽屉查看 + 筛选分页 + 前端操作留痕  
+- 功能描述：完善“操作记录”页面，仅管理员可见可用；顶部新增“操作记录导航”并提供【查看记录】入口，打开抽屉后以列表展示操作时间/操作人员/操作项/操作行为；支持按人员筛选、按操作行为平铺复选筛选（默认全部），分页每页条数复用“其他设置→全局分页设置”；补充 `POST /api/ops/event` 用于记录仅发生在前端的关键操作（如导出/导出模板/查看用例文件等），供管理员在操作记录中回溯；对系统自动同步类日志做隐藏处理，避免刷屏。  
+- 操作方式：进入“管理→操作记录”→点击顶部导航【查看记录】→在抽屉中选择人员/操作行为→翻页查看；导出用例文件（XMind/Excel）、导出执行 XMind、导出用例导入模板（Excel/XMind）、以及在用例库点击“查看&编辑”进入编辑视图时会写入操作记录。  
+- 使用效果：管理员可按人员/行为快速回溯关键操作（登录/登出/增删改/归档/导入/导出等），并与全局分页设置保持一致；导出类操作也可留痕。  
+- 新增内容/接口/组件：  
+  - 后端：新增 `POST /api/ops/event`（`backend/routers/ops.py`、`backend/schemas.py`、`backend/audit.py`）；同步更新 API 文档（`API_DOC.md`）。  
+  - 前端：操作记录顶部导航与抽屉列表（`index.html`、`scripts/modules/opsLog.js`、`style.css`）；前端导出操作自动写入日志（`services/apiClient.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`）。  
+  - 测试：API 用例（`tests/api/ops_log.spec.js`）与 UI 用例（`tests/ui/ops_log.spec.js`）。  
+- 复用说明：复用既有 `operation_logs` 表与 `/api/ops` 管理员查询接口；分页条数复用“其他设置→全局分页设置（tempExecPageSize）”；抽屉交互复用通用 drawer 组件。  
+- 更新记录：2025-12-18 操作记录页增强上线（`backend/`、`services/apiClient.js`、`index.html`、`style.css`、`scripts/`、`tests/`、`API_DOC.md`）。  

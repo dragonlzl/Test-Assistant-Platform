@@ -899,6 +899,21 @@
     var tempFocusZone = tempFocusBlock ? tempFocusBlock.querySelector('[data-temp-focus-zone]') : null;
 
     var apiClient = window.app && window.app.apiClient ? window.app.apiClient : null;
+    function safeLogOperation(action, targetType, targetId, detail) {
+      if (!apiClient || typeof apiClient.createOperationLogEvent !== 'function') return;
+      try {
+        apiClient.createOperationLogEvent({
+          action: action,
+          target_type: targetType,
+          target_id: targetId,
+          detail: detail || null,
+        }).catch(function() {
+          // ignore
+        });
+      } catch (err) {
+        // ignore
+      }
+    }
     var importState = {
       pendingFiles: [],
       projectId: '',
@@ -4225,17 +4240,36 @@
 
     if (exportTempExecConfigBtn && api.exportTempExecSnapshot) {
       exportTempExecConfigBtn.addEventListener('click', function() {
+        var activeId = state && state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
+        var execSetId = activeId ? Number(activeId) : null;
+        safeLogOperation('export_exec_snapshot', 'exec_set', Number.isFinite(execSetId) ? execSetId : null, {
+          exec_set_id: Number.isFinite(execSetId) ? execSetId : null,
+        });
         api.exportTempExecSnapshot();
       });
     }
 
     if (exportTempExecXmindBtn && api.exportTempExecToXmind) {
       exportTempExecXmindBtn.addEventListener('click', function() {
+        var activeId = state && state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
+        var execSetId = activeId ? Number(activeId) : null;
+        safeLogOperation('export_exec_xmind', 'exec_set', Number.isFinite(execSetId) ? execSetId : null, {
+          exec_set_id: Number.isFinite(execSetId) ? execSetId : null,
+          format: 'xmind',
+          with_result: true,
+        });
         api.exportTempExecToXmind();
       });
     }
     if (exportTempExecCasesXmindBtn && api.exportTempExecCasesToXmind) {
       exportTempExecCasesXmindBtn.addEventListener('click', function() {
+        var activeId = state && state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
+        var execSetId = activeId ? Number(activeId) : null;
+        safeLogOperation('export_cases_xmind', 'exec_set', Number.isFinite(execSetId) ? execSetId : null, {
+          exec_set_id: Number.isFinite(execSetId) ? execSetId : null,
+          format: 'xmind',
+          with_result: false,
+        });
         api.exportTempExecCasesToXmind();
       });
     }

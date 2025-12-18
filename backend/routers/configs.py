@@ -108,7 +108,11 @@ def save_settings(
         action="update_settings",
         target_type="settings",
         target_id=owner_id,
-        detail={"scope": scope_norm, "keys": [item.key for item in payload.items]},
+        detail={
+            "scope": scope_norm,
+            "keys": [item.key for item in payload.items],
+            "items": [{"key": item.key, "value_json": item.value_json} for item in payload.items],
+        },
     )
     db.commit()
     for setting in saved:

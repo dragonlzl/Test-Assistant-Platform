@@ -4,6 +4,22 @@
 
   var utils = window.app && window.app.utils ? window.app.utils : {};
 
+  function safeLogOperation(action, targetType, targetId, detail) {
+    if (!apiClient || typeof apiClient.createOperationLogEvent !== 'function') return;
+    try {
+      apiClient.createOperationLogEvent({
+        action: action,
+        target_type: targetType,
+        target_id: targetId,
+        detail: detail || null,
+      }).catch(function() {
+        // ignore
+      });
+    } catch (err) {
+      // ignore
+    }
+  }
+
   function getCore() {
     return window.app && window.app.core ? window.app.core : {};
   }
@@ -4173,6 +4189,15 @@
       })
       .then(function() {
         setStatus(dom.editDrawerStatus, '导出完成：成功 ' + success + ' 份，失败 ' + fail + ' 份', fail ? 'warn' : 'ok');
+        if (success) {
+          safeLogOperation('export_case_files_xmind', 'case_file', files.length === 1 ? files[0].id : null, {
+            format: 'xmind',
+            count: files.length,
+            success: success,
+            fail: fail,
+            case_file_ids: files.map(function(f) { return f && f.id ? f.id : null; }).filter(function(v) { return v !== null; }),
+          });
+        }
       })
       .catch(function(err) {
         setStatus(dom.editDrawerStatus, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
@@ -4236,6 +4261,15 @@
       })
       .then(function() {
         setStatus(dom.editDrawerStatus, '导出完成：成功 ' + success + ' 份，失败 ' + fail + ' 份', fail ? 'warn' : 'ok');
+        if (success) {
+          safeLogOperation('export_case_files_excel', 'case_file', files.length === 1 ? files[0].id : null, {
+            format: 'xlsx',
+            count: files.length,
+            success: success,
+            fail: fail,
+            case_file_ids: files.map(function(f) { return f && f.id ? f.id : null; }).filter(function(v) { return v !== null; }),
+          });
+        }
       })
       .catch(function(err) {
         setStatus(dom.editDrawerStatus, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
@@ -4923,6 +4957,11 @@
         if (!blob) throw new Error('无导出内容');
         downloadBlob(sanitizeDownloadName(baseName, '.xlsx'), blob);
         setStatus(dom.importStatus, '已导出 ' + baseName, 'ok');
+        safeLogOperation('export_case_template_excel', 'case_template', null, {
+          format: 'xlsx',
+          template_type: isReuse ? 'reuse' : 'normal',
+          name: baseName,
+        });
       })
       .catch(function(err) {
         setStatus(dom.importStatus, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
@@ -4954,6 +4993,10 @@
         if (!pkg || !pkg.blob) throw new Error('无导出内容');
         downloadBlob(sanitizeDownloadName('用例导入模板', '.xmind'), pkg.blob);
         setStatus(dom.importStatus, '已导出 XMind 导入模板', 'ok');
+        safeLogOperation('export_case_template_xmind', 'case_template', null, {
+          format: 'xmind',
+          name: '用例导入模板',
+        });
       })
       .catch(function(err) {
         setStatus(dom.importStatus, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
@@ -6883,7 +6926,10 @@
         if (!btn) return;
         var id = btn.getAttribute('data-case-lib-edit');
         var file = findCaseFileInEditDrawer(id);
-        if (file) openEditorForCaseFile(file);
+        if (file) {
+          safeLogOperation('view_case_file', 'case_file', file.id, { file_name: file.file_name_clean || '' });
+          openEditorForCaseFile(file);
+        }
       });
     }
 

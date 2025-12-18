@@ -570,6 +570,14 @@
     }).then(handleResponse);
   }
 
+  function createOperationLogEvent(payload) {
+    return fetch('/api/ops/event', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
   function getExecutionOverview(projectId, versionId) {
     var query = [];
     if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
@@ -668,6 +676,7 @@
     createFeatureAssignment: createFeatureAssignment,
     updateFeatureAssignment: updateFeatureAssignment,
     listOperationLogs: listOperationLogs,
+    createOperationLogEvent: createOperationLogEvent,
     getExecutionOverview: getExecutionOverview,
     getExecutionOverviewLayout: getExecutionOverviewLayout,
     listExecutionOverviewCases: listExecutionOverviewCases,

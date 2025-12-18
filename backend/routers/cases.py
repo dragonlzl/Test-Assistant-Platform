@@ -626,7 +626,13 @@ def update_case_item(
             action="update_case_item",
             target_type="case_item",
             target_id=case_item.id,
-            detail={"case_file_id": case_item.case_file_id},
+            detail={
+                "case_file_id": case_item.case_file_id,
+                "file_name": case_file.file_name_clean,
+                "case_item_id": case_item.id,
+                "module": case_item.module,
+                "title": case_item.title,
+            },
         )
         try:
             db.commit()
@@ -692,7 +698,13 @@ def create_case_item(
         action="create_case_item",
         target_type="case_file",
         target_id=case_file_id,
-        detail={"case_file_id": case_file_id},
+        detail={
+            "case_file_id": case_file_id,
+            "file_name": case_file.file_name_clean,
+            "case_item_id": case_item.id,
+            "module": case_item.module,
+            "title": case_item.title,
+        },
     )
     try:
         db.commit()
@@ -956,7 +968,13 @@ def delete_case_item(
         action="delete_case_item",
         target_type="case_item",
         target_id=case_item_id,
-        detail={"case_file_id": case_item.case_file_id},
+        detail={
+            "case_file_id": case_item.case_file_id,
+            "file_name": case_file.file_name_clean,
+            "case_item_id": case_item.id,
+            "module": case_item.module,
+            "title": case_item.title,
+        },
     )
     db.commit()
     return {"detail": "用例已删除"}

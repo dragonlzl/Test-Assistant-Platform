@@ -51,6 +51,7 @@
     tempExecStorageKey: 'usecase-temp-exec-v1',
     tempExecFocusStorageKey: 'tempexec-focus-v1',
     tempExecPageSizeStorageKey: 'tempexec-page-size',
+    opsLogViewStorageKey: 'tap-ops-log-view-v1',
     defaultTempExecPageSize: 20,
     tempExecResultOptions: ['未执行', '通过', '失败', '阻塞', '不适用'],
     defaultPlacement: {

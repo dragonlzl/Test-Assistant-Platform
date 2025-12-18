@@ -555,3 +555,11 @@ class OperationLogOut(BaseModel):
     detail: Optional[Any] = None
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+
+
+class OperationLogEventIn(BaseModel):
+    action: str
+    target_type: Optional[str] = None
+    target_id: Optional[int] = None
+    result: str = "success"
+    detail: Optional[Any] = None

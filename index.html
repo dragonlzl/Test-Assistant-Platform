@@ -265,6 +265,29 @@
       </div>
     </div>
   </div>
+  <div class="tempexec-head hidden" data-tab-section="ops-log" data-role="admin-only" id="opsLogHead">
+    <div class="flow" id="opsLogFlowNav">
+      <div class="flow-title">操作记录导航</div>
+      <p class="hint" style="margin:0 0 6px;">用于查看人员在平台内的关键操作记录，支持按人员/行为筛选。</p>
+      <div class="nav-entry-grid">
+        <button class="nav-entry-card nav-entry-view" id="openOpsLogDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M8 5h8"></path>
+              <path d="M8 9h8"></path>
+              <path d="M8 13h8"></path>
+              <path d="M8 17h5"></path>
+              <path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">查看记录</span>
+            <span class="nav-entry-desc">按人员/操作行为筛选并分页查看</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
 		<div class="tempexec-head hidden" data-tab-section="tempexec">
 		  <div class="flow" id="tempexecFlowNav">
 		    <div class="flow-title">功能导航</div>
@@ -2358,8 +2381,8 @@
         <button class="ghost-btn" data-drawer-close="userDrawer" type="button">取消</button>
       </div>
       <p class="status" id="userFormStatus"></p>
-    </div>
-  </div>
+</div>
+</div>
 </div>
 <div class="drawer" id="userDeleteDrawer" data-tab-section="user-admin">
   <div class="drawer-mask" data-drawer-close="userDeleteDrawer"></div>
@@ -2387,42 +2410,57 @@
         <button class="ghost-btn" data-drawer-close="userDeleteDrawer" type="button">取消</button>
       </div>
       <p class="status" id="userDeleteStatus"></p>
+</div>
+</div>
+</div>
+<div class="drawer" id="opsLogDrawer" data-tab-section="ops-log" data-role="admin-only">
+  <div class="drawer-mask" data-drawer-close="opsLogDrawer"></div>
+  <div class="drawer-panel drawer-panel-wide">
+    <div class="drawer-header">
+      <h3>操作记录</h3>
+      <button class="link-toggle" data-drawer-close="opsLogDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <section class="card" data-tab-section="ops-log">
+        <h2>操作记录列表</h2>
+        <div class="card-body">
+          <div class="toolbar">
+            <button class="secondary" id="opsLogDrawerRefreshBtn" type="button">刷新</button>
+            <label class="inline">人员
+              <select id="opsLogUserSelect"></select>
+            </label>
+            <span class="status" id="opsLogDrawerStatus"></span>
+          </div>
+          <div class="ops-log-filters">
+            <div class="ops-log-filter-title">操作行为</div>
+            <div class="ops-log-filter-grid" id="opsLogActionFilterGrid"></div>
+          </div>
+          <div id="opsLogPaginationTop"></div>
+          <div class="admin-table-wrapper" style="margin-top:10px;">
+            <table class="admin-table ops-log-table">
+              <thead>
+                <tr>
+                  <th>操作时间</th>
+                  <th>操作人员</th>
+                  <th>操作项</th>
+                  <th>操作行为</th>
+                </tr>
+              </thead>
+              <tbody id="opsLogDrawerTableBody"></tbody>
+            </table>
+          </div>
+          <div id="opsLogPaginationBottom"></div>
+          <p class="hint hidden" id="opsLogDrawerEmpty">暂无操作记录</p>
+        </div>
+      </section>
     </div>
   </div>
 </div>
 <section class="card hidden" data-tab-section="ops-log" data-role="admin-only">
 <h2>操作记录</h2>
 <div class="card-body">
-  <div class="toolbar">
-    <button class="secondary" id="opsLogRefresh">刷新</button>
-    <label class="inline">
-      每页
-      <select id="opsLogLimit">
-        <option value="50">50</option>
-        <option value="100" selected>100</option>
-        <option value="200">200</option>
-        <option value="500">500</option>
-      </select>
-      条
-    </label>
-    <span class="status" id="opsLogStatus"></span>
-  </div>
-  <div class="table-wrapper">
-    <table class="admin-table ops-log-table">
-      <thead>
-        <tr>
-          <th>时间</th>
-          <th>人员</th>
-          <th>操作</th>
-          <th>对象</th>
-          <th>结果</th>
-          <th>详情</th>
-        </tr>
-      </thead>
-      <tbody id="opsLogTableBody"></tbody>
-    </table>
-    <p class="hint hidden" id="opsLogEmpty">暂无操作记录</p>
-  </div>
+  <p class="hint">提示：使用顶部导航中的【查看记录】进行筛选与查看。</p>
+  <p class="status" id="opsLogStatus"></p>
 </div>
 	</section>
 	<section class="card hidden" data-tab-section="exec-overview">

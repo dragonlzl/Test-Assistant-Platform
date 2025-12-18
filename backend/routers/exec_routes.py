@@ -738,6 +738,8 @@ def upsert_exec_set_from_case_file(
         target_id=exec_set.id,
         detail={
             "case_file_id": case_file.id,
+            "case_file_name": case_file.file_name_clean,
+            "exec_set_name": exec_set.name,
             "mode": mode,
             "created": created,
             "new_cases": len(new_cases),
@@ -1170,7 +1172,13 @@ def _sync_exec_set_from_case_file(
             action="sync_exec_set_from_case_file",
             target_type="exec_set",
             target_id=exec_set.id,
-            detail={"case_file_id": case_file.id, "new_cases": int(new_cases)},
+            detail={
+                "auto": True,
+                "case_file_id": case_file.id,
+                "case_file_name": case_file.file_name_clean,
+                "exec_set_name": exec_set.name,
+                "new_cases": int(new_cases),
+            },
         )
         db.commit()
         db.refresh(exec_set)

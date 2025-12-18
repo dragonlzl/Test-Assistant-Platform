@@ -14,7 +14,7 @@ def log_operation(
     target_id: Optional[int] = None,
     result: str = "success",
     detail: Optional[Any] = None,
-) -> None:
+) -> models.OperationLog:
     entry = models.OperationLog(
         user_id=user_id,
         action=action,
@@ -25,6 +25,7 @@ def log_operation(
         created_at=datetime.now(timezone.utc),
     )
     db.add(entry)
+    return entry
 
 
 def log_case_library_change(

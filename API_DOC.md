@@ -54,7 +54,13 @@
   - 不存在返回 404，未分配返回 403。
 
 ## 4. 操作日志（Operation Logs）
-- 日志写入：登录/登出/改密、用户 CRUD、项目/版本 CRUD、分配项目等均写入 `operation_logs`，含 `user_id/action/target_type/target_id/detail`。当前未暴露列表查询接口，后续开放需补充文档。
+- 日志写入：登录/登出/改密、用户 CRUD、项目/版本 CRUD、分配项目、用例库导入/编辑/删除、执行集归档等均写入 `operation_logs`，含 `user_id/action/target_type/target_id/detail`。
+- `GET /api/ops`（仅管理员）
+  - Query：`limit?`（默认 200，最大 500）、`offset?`（默认 0）、`user_id?`（按人员过滤）
+  - 出参：`OperationLog[]`（按 `created_at` 倒序）
+- `POST /api/ops/event`（需登录）
+  - 入参：`{ action: string, target_type?: string, target_id?: number, result?: string, detail?: any }`
+  - 说明：用于记录“仅发生在前端”的关键操作（如导出文件等），不会影响业务流程；仅管理员可在“操作记录”页面查看。
 
 ## 5. 响应与错误约定
 - 成功：2xx + JSON 体；删除/重置返回 `detail` 提示。
