@@ -66,6 +66,8 @@
     casesPageIndex: 0,
     restoringDetail: null,
     casesSearchText: '',
+    // 归档详情：只读展开状态（按 exec_set 维度隔离，避免切换详情互相影响）
+    casePanelOpenByExecSet: {},
   };
 
   var detailPersistKey = 'tap-case-archive-detail';
@@ -245,6 +247,161 @@
       pad(date.getMinutes()) +
       ':' +
       pad(date.getSeconds())
+    );
+  }
+
+  function normalizeExecStatus(value) {
+    var text = value === null || value === undefined ? '' : String(value);
+    text = text.trim();
+    if (!text) return '未执行';
+    if (text === 'pending') return '未执行';
+    return text;
+  }
+
+  function mapStatusToClass(status) {
+    var text = normalizeExecStatus(status);
+    if (text === '通过') return 'passed';
+    if (text === '失败') return 'failed';
+    if (text === '阻塞') return 'blocked';
+    if (text === '不适用') return 'unspecified';
+    if (text === '变更重跑' || text === '有改动') return 'changed';
+    return 'pending';
+  }
+
+  function getTempExecResultOptions() {
+    var config = window.app && window.app.config ? window.app.config : {};
+    var list = config && Array.isArray(config.tempExecResultOptions) ? config.tempExecResultOptions : null;
+    if (list && list.length) return list.slice();
+    return ['未执行', '通过', '失败', '阻塞', '不适用'];
+  }
+
+  function parseReuseDetails(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try {
+        var parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (err) {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  function parseDefectUrls(item) {
+    var merged = [];
+    if (!item || typeof item !== 'object') return merged;
+    var defectSingle = item.defect_link ? String(item.defect_link) : '';
+    if (defectSingle && defectSingle.trim()) merged.push(defectSingle.trim());
+    var defectLinks = item.defect_links;
+    if (defectLinks) {
+      if (Array.isArray(defectLinks)) {
+        defectLinks.forEach(function(d) {
+          if (d === null || d === undefined) return;
+          if (typeof d === 'string') {
+            if (d.trim()) merged.push(d.trim());
+            return;
+          }
+          if (d && typeof d === 'object' && d.url) {
+            var url = String(d.url);
+            if (url.trim()) merged.push(url.trim());
+          }
+        });
+      } else if (typeof defectLinks === 'string') {
+        if (defectLinks.trim()) merged.push(defectLinks.trim());
+      }
+    }
+    // 简单去重（保持顺序）
+    var seen = {};
+    return merged.filter(function(u) {
+      var k = String(u || '').trim();
+      if (!k) return false;
+      if (seen[k]) return false;
+      seen[k] = true;
+      return true;
+    });
+  }
+
+  function normalizeDefectOpenUrl(url) {
+    var text = (url || '').trim();
+    if (!text) return '';
+    var lower = text.toLowerCase();
+    if (lower.indexOf('http://') === 0 || lower.indexOf('https://') === 0) return text;
+    if (/^[a-z][a-z0-9+.-]*:/.test(text)) return text;
+    return 'https://' + text;
+  }
+
+  function ensureCasePanelState(execSetId) {
+    var sid = execSetId === null || execSetId === undefined ? '' : String(execSetId);
+    if (!sid) sid = 'unknown';
+    if (!state.casePanelOpenByExecSet[sid] || typeof state.casePanelOpenByExecSet[sid] !== 'object') {
+      state.casePanelOpenByExecSet[sid] = { remark: new Set(), defect: new Set(), reuse: new Set() };
+    }
+    return state.casePanelOpenByExecSet[sid];
+  }
+
+  function resetCasePanelState(execSetId) {
+    var sid = execSetId === null || execSetId === undefined ? '' : String(execSetId);
+    if (!sid) sid = 'unknown';
+    state.casePanelOpenByExecSet[sid] = { remark: new Set(), defect: new Set(), reuse: new Set() };
+    return state.casePanelOpenByExecSet[sid];
+  }
+
+  function buildReadonlyStatusSelect(currentStatus) {
+    var status = normalizeExecStatus(currentStatus);
+    var options = getTempExecResultOptions();
+    var html = '';
+    if (status === '变更重跑' || status === '有改动') {
+      html += '<option value="' + escapeHtml(status) + '" selected disabled>' + escapeHtml(status) + '</option>';
+    }
+    html += options.map(function(opt) {
+      return '<option value="' + escapeHtml(opt) + '" ' + (status === opt ? 'selected' : '') + '>' + escapeHtml(opt) + '</option>';
+    }).join('');
+    return (
+      '<select class="status-select" disabled data-status="' + escapeHtml(status) + '">' +
+        html +
+      '</select>'
+    );
+  }
+
+  function renderReadonlyReusePanel(item) {
+    var details = parseReuseDetails(item && item.reuse_details !== undefined ? item.reuse_details : null);
+    if (!details.length) return '<p class="reuse-empty">暂无复用子项。</p>';
+    return (
+      '<div class="reuse-list">' +
+        details.map(function(d, i) {
+          if (!d || typeof d !== 'object') return '';
+          var text = d.text ? String(d.text) : ('子项' + (i + 1));
+          var note = d.note ? String(d.note) : '';
+          var st = normalizeExecStatus(d.status);
+          var cls = mapStatusToClass(st);
+          return (
+            '<div class="reuse-entry readonly">' +
+              '<div class="reuse-input readonly">' + escapeHtml(text) + '</div>' +
+              '<div class="reuse-note readonly">' + escapeHtml(note) + '</div>' +
+              '<span class="status-select ' + escapeHtml(cls) + '">' + escapeHtml(st) + '</span>' +
+            '</div>'
+          );
+        }).filter(Boolean).join('') +
+      '</div>'
+    );
+  }
+
+  function renderReadonlyDefectPanel(item) {
+    var urls = parseDefectUrls(item);
+    if (!urls.length) return '<p class="reuse-empty">暂无缺陷链接。</p>';
+    return (
+      '<div class="defect-list">' +
+        urls.map(function(url) {
+          return (
+            '<div class="defect-entry readonly">' +
+              '<div class="defect-url" title="' + escapeHtml(url) + '">' + escapeHtml(url) + '</div>' +
+              '<button type="button" class="defect-open" data-case-archive-defect-open="' + escapeHtml(url) + '">打开</button>' +
+            '</div>'
+          );
+        }).join('') +
+      '</div>'
     );
   }
 
@@ -485,6 +642,8 @@
       clearDetailPersistedState();
       return;
     }
+    // 切换详情时清空只读展开状态，避免复用之前的展开状态造成误解。
+    resetCasePanelState(d.exec_set_id);
     dom.detailCard.classList.remove('hidden');
     var shouldRestore = false;
     var restoring = state.restoringDetail && typeof state.restoringDetail === 'object' ? state.restoringDetail : null;
@@ -553,6 +712,8 @@
       return;
     }
     if (dom.casesEmpty) dom.casesEmpty.classList.add('hidden');
+    var reuseEnabled = Boolean(detail && detail.reuse_enabled);
+    var panelState = ensureCasePanelState(detail && detail.exec_set_id ? detail.exec_set_id : '');
     var pageSize = getPageSize();
     var total = list.length;
     var totalPages = total ? Math.ceil(total / pageSize) : 1;
@@ -562,64 +723,95 @@
     var end = Math.min(total, start + pageSize);
     var view = list.slice(start, end);
     setCasesPagination(buildCasesPagination(total, state.casesPageIndex, totalPages, start, end));
+    var colCount = 10;
     dom.casesBody.innerHTML = view.map(function(item, idx) {
-      var statusText = item && item.status ? String(item.status) : '';
-      var actual = statusText ? String(statusText) : '';
-      var reuseDetailsText = '';
-      var reuseRaw = item && item.reuse_details !== undefined ? item.reuse_details : null;
-      var reuseList = [];
-      if (reuseRaw) {
-        if (Array.isArray(reuseRaw)) reuseList = reuseRaw;
-        else if (typeof reuseRaw === 'string') {
-          try { reuseList = JSON.parse(reuseRaw); } catch (e) { reuseList = []; }
-        }
-      }
-      if (Array.isArray(reuseList) && reuseList.length) {
-        reuseDetailsText = reuseList
-          .map(function(d, i) {
-            if (!d || typeof d !== 'object') return '';
-            var st = d.status ? String(d.status) : '未执行';
-            var text = d.text ? String(d.text) : ('子项' + (i + 1));
-            var note = d.note ? String(d.note) : '';
-            return '【' + st + '】' + text + (note ? ('（' + note + '）') : '');
-          })
-          .filter(Boolean)
-          .join('\n');
-      }
-      var remark = item && item.remark ? String(item.remark) : '';
-      var defectSingle = item && item.defect_link ? String(item.defect_link) : '';
-      var defectLinks = [];
-      if (item && item.defect_links) {
-        if (Array.isArray(item.defect_links)) defectLinks = item.defect_links;
-        else if (typeof item.defect_links === 'string') defectLinks = [item.defect_links];
-      }
-      var mergedDefects = [];
-      if (defectSingle) mergedDefects.push(defectSingle);
-      defectLinks.forEach(function(d) {
-        if (d === null || d === undefined) return;
-        if (typeof d === 'string') mergedDefects.push(d);
-        else if (d && typeof d === 'object' && d.url) mergedDefects.push(String(d.url));
-      });
-      var defectsText = mergedDefects.join('\n');
-      var actualCombined = actual;
-      if (reuseDetailsText) {
-        actualCombined = (actualCombined ? (actualCombined + '\n') : '') + '---复用子项---\n' + reuseDetailsText;
-      }
+      var caseId = item && item.id !== null && item.id !== undefined ? String(item.id) : String(start + idx + 1);
+      var statusText = normalizeExecStatus(item && item.status ? item.status : '');
+      var statusClass = mapStatusToClass(statusText);
 
-      return (
-        '<tr>' +
+      var remark = item && item.remark ? String(item.remark) : '';
+      var hasRemark = Boolean(remark && remark.trim());
+      var remarkOpen = panelState.remark && panelState.remark.has(caseId);
+      var remarkBtnClass = ['remark-toggle'];
+      if (remarkOpen) remarkBtnClass.push('active');
+      if (hasRemark) remarkBtnClass.push('filled');
+
+      var defectUrls = parseDefectUrls(item);
+      var hasDefects = defectUrls.length > 0;
+      var defectOpen = panelState.defect && panelState.defect.has(caseId);
+      var defectBtnClass = ['defect-toggle'];
+      if (defectOpen) defectBtnClass.push('active');
+      if (hasDefects) defectBtnClass.push('filled');
+
+      var reuseOpen = panelState.reuse && panelState.reuse.has(caseId);
+      var actualCell = reuseEnabled
+        ? (
+          '<td class="reuse-cell actual">' +
+            '<button type="button" class="reuse-status ' + escapeHtml(statusClass) + '" data-case-archive-reuse-toggle="' + escapeHtml(caseId) + '">' +
+              escapeHtml(statusText) +
+            '</button>' +
+          '</td>'
+        )
+        : (
+          '<td class="actual">' +
+            buildReadonlyStatusSelect(statusText) +
+          '</td>'
+        );
+
+      var mainRow = (
+        '<tr data-case-archive-case-row="main" data-case-archive-case-id="' + escapeHtml(caseId) + '">' +
           '<td class="index">' + (start + idx + 1) + '</td>' +
-          '<td class="module">' + escapeHtml(item.module || '') + '</td>' +
-          '<td class="title">' + escapeHtml(item.title || '') + '</td>' +
-          '<td>' + escapeHtml(item.priority || '') + '</td>' +
-          '<td>' + escapeHtmlPreserve(item.precondition || '') + '</td>' +
-          '<td>' + escapeHtmlPreserve(item.steps || '') + '</td>' +
-          '<td>' + escapeHtmlPreserve(item.expected || '') + '</td>' +
-          '<td class="actual">' + escapeHtmlPreserve(actualCombined || '') + '</td>' +
-          '<td>' + escapeHtmlPreserve(remark || '') + '</td>' +
-          '<td>' + escapeHtmlPreserve(defectsText || '') + '</td>' +
+          '<td class="module">' + escapeHtml(item && item.module ? item.module : '') + '</td>' +
+          '<td class="title">' + escapeHtml(item && item.title ? item.title : '') + '</td>' +
+          '<td>' + escapeHtml(item && item.priority ? item.priority : '') + '</td>' +
+          '<td>' + escapeHtmlPreserve(item && item.precondition ? item.precondition : '') + '</td>' +
+          '<td>' + escapeHtmlPreserve(item && item.steps ? item.steps : '') + '</td>' +
+          '<td>' + escapeHtmlPreserve(item && item.expected ? item.expected : '') + '</td>' +
+          actualCell +
+          '<td>' +
+            '<button type="button" class="' + remarkBtnClass.join(' ') + '" data-case-archive-remark-toggle="' + escapeHtml(caseId) + '">' +
+              (hasRemark ? '备注已填' : '备注') +
+            '</button>' +
+          '</td>' +
+          '<td>' +
+            '<button type="button" class="' + defectBtnClass.join(' ') + '" data-case-archive-defect-toggle="' + escapeHtml(caseId) + '">' +
+              (hasDefects ? '链接已填' : '缺陷链接') +
+            '</button>' +
+          '</td>' +
         '</tr>'
       );
+
+      var reuseRow = reuseEnabled
+        ? (
+          '<tr class="reuse-row ' + (reuseOpen ? 'visible' : '') + '" data-case-archive-reuse-row="' + escapeHtml(caseId) + '">' +
+            '<td colspan="' + colCount + '">' +
+              '<div class="reuse-panel readonly">' +
+                renderReadonlyReusePanel(item) +
+              '</div>' +
+            '</td>' +
+          '</tr>'
+        )
+        : '';
+
+      var remarkRow = (
+        '<tr class="remark-row ' + (remarkOpen ? 'visible' : '') + '" data-case-archive-remark-row="' + escapeHtml(caseId) + '">' +
+          '<td colspan="' + colCount + '">' +
+            '<div class="remark-panel readonly">' + escapeHtmlPreserve(remark || '') + '</div>' +
+          '</td>' +
+        '</tr>'
+      );
+
+      var defectRow = (
+        '<tr class="defect-row ' + (defectOpen ? 'visible' : '') + '" data-case-archive-defect-row="' + escapeHtml(caseId) + '">' +
+          '<td colspan="' + colCount + '">' +
+            '<div class="defect-panel readonly">' +
+              renderReadonlyDefectPanel(item) +
+            '</div>' +
+          '</td>' +
+        '</tr>'
+      );
+
+      return mainRow + reuseRow + remarkRow + defectRow;
     }).join('');
   }
 
@@ -723,6 +915,62 @@
           if (e && typeof e.preventDefault === 'function') e.preventDefault();
           if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
           deleteArchive(id);
+        }
+      });
+    }
+    if (dom.casesBody) {
+      dom.casesBody.addEventListener('click', function(e) {
+        if (!state.selected || !state.selected.exec_set_id) return;
+        var openBtn = e && e.target && e.target.closest ? e.target.closest('[data-case-archive-defect-open]') : null;
+        if (openBtn) {
+          var rawUrl = openBtn.getAttribute('data-case-archive-defect-open') || '';
+          var targetUrl = normalizeDefectOpenUrl(rawUrl);
+          if (targetUrl) window.open(targetUrl, '_blank');
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+          return;
+        }
+        var remarkBtn = e && e.target && e.target.closest ? e.target.closest('[data-case-archive-remark-toggle]') : null;
+        if (remarkBtn) {
+          var rid = remarkBtn.getAttribute('data-case-archive-remark-toggle') || '';
+          if (rid) {
+            var panels = ensureCasePanelState(state.selected.exec_set_id);
+            if (panels.remark.has(rid)) panels.remark.delete(rid);
+            else panels.remark.add(rid);
+            renderCases(state.selected);
+            persistDetailSelection();
+          }
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+          return;
+        }
+        var defectBtn = e && e.target && e.target.closest ? e.target.closest('[data-case-archive-defect-toggle]') : null;
+        if (defectBtn) {
+          var did = defectBtn.getAttribute('data-case-archive-defect-toggle') || '';
+          if (did) {
+            var panels2 = ensureCasePanelState(state.selected.exec_set_id);
+            if (panels2.defect.has(did)) panels2.defect.delete(did);
+            else panels2.defect.add(did);
+            renderCases(state.selected);
+            persistDetailSelection();
+          }
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+          return;
+        }
+        var reuseBtn = e && e.target && e.target.closest ? e.target.closest('[data-case-archive-reuse-toggle]') : null;
+        if (reuseBtn) {
+          var uid = reuseBtn.getAttribute('data-case-archive-reuse-toggle') || '';
+          if (uid) {
+            var panels3 = ensureCasePanelState(state.selected.exec_set_id);
+            if (panels3.reuse.has(uid)) panels3.reuse.delete(uid);
+            else panels3.reuse.add(uid);
+            renderCases(state.selected);
+            persistDetailSelection();
+          }
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+          return;
         }
       });
     }

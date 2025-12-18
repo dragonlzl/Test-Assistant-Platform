@@ -5141,14 +5141,13 @@
     if (state.editor.pageIndex < 0) state.editor.pageIndex = 0;
     var start = state.editor.pageIndex * pageSize;
     var end = Math.min(totalCases, start + pageSize);
-    var paged = matches.filter(function(_, idx) { return idx >= start && idx < end; });
-    var visibleIndexes = [];
-    var selection = state.editor.selection;
-    var remarkOpen = state.editor.remarkOpen;
-	    var rows = paged.map(function(entry) {
-	      var item = entry.item || {};
-	      var idx = entry.idx;
-	      visibleIndexes.push(idx);
+	    var paged = matches.filter(function(_, idx) { return idx >= start && idx < end; });
+	    var visibleIndexes = [];
+	    var selection = state.editor.selection;
+		    var rows = paged.map(function(entry) {
+		      var item = entry.item || {};
+		      var idx = entry.idx;
+		      visibleIndexes.push(idx);
 	      var editPlaceholder = '点击此处编辑';
 	      var moduleText = stripInvisibleMarkers(item.module);
 	      var titleText = stripInvisibleMarkers(item.title);
@@ -5159,37 +5158,25 @@
 	      var moduleHtml = moduleText ? escapeHtml(moduleText) : '';
 	      var titleHtml = titleText ? escapeHtml(titleText) : '';
 	      var priorityHtml = priorityText ? escapeHtml(priorityText) : '';
-	      var preHtml = preText ? escapeHtml(preText).replace(/\n/g, '<br>') : '';
-	      var stepsHtml = stepsText ? escapeHtml(stepsText).replace(/\n/g, '<br>') : '';
-	      var expectedHtml = expectedText ? escapeHtml(expectedText).replace(/\n/g, '<br>') : '';
-	      var isRemarkOpen = remarkOpen.has(idx);
-	      var remarkText = stripInvisibleMarkers(item.remark);
-	      var hasRemark = Boolean(remarkText && String(remarkText).trim());
-	      var remarkBtnClass = ['remark-toggle'];
-	      if (isRemarkOpen) remarkBtnClass.push('active');
-	      if (hasRemark) remarkBtnClass.push('filled');
-	      var rowClass = 'case-row' + (isCaseLibraryNewAdded(caseFileId, item) ? ' new-added' : '');
-      return (
-        '<tr class=\"' + rowClass + '\">' +
-          '<td class=\"check\"><input type=\"checkbox\" data-case-lib-select data-index=\"' + idx + '\" ' + (selection.has(idx) ? 'checked' : '') + '></td>' +
+		      var preHtml = preText ? escapeHtml(preText).replace(/\n/g, '<br>') : '';
+		      var stepsHtml = stepsText ? escapeHtml(stepsText).replace(/\n/g, '<br>') : '';
+		      var expectedHtml = expectedText ? escapeHtml(expectedText).replace(/\n/g, '<br>') : '';
+		      var rowClass = 'case-row' + (isCaseLibraryNewAdded(caseFileId, item) ? ' new-added' : '');
+	      return (
+	        '<tr class=\"' + rowClass + '\">' +
+	          '<td class=\"check\"><input type=\"checkbox\" data-case-lib-select data-index=\"' + idx + '\" ' + (selection.has(idx) ? 'checked' : '') + '></td>' +
           '<td class=\"index\">' + (idx + 1) + '</td>' +
           '<td class=\"module\"><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"module\" data-index=\"' + idx + '\" data-case-lib-multiline=\"false\" data-placeholder=\"' + editPlaceholder + '\">' + moduleHtml + '</div></td>' +
           '<td class=\"title\"><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"title\" data-index=\"' + idx + '\" data-case-lib-multiline=\"false\" data-placeholder=\"' + editPlaceholder + '\">' + titleHtml + '</div></td>' +
           '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"priority\" data-index=\"' + idx + '\" data-case-lib-multiline=\"false\" data-placeholder=\"' + editPlaceholder + '\">' + priorityHtml + '</div></td>' +
-          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"precondition\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + preHtml + '</div></td>' +
-          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"steps\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + stepsHtml + '</div></td>' +
-          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"expected\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + expectedHtml + '</div></td>' +
-          '<td><button type=\"button\" class=\"' + remarkBtnClass.join(' ') + '\" data-case-lib-remark-toggle data-index=\"' + idx + '\">' + (hasRemark ? '备注已填' : '备注') + '</button></td>' +
-          '<td class=\"case-op-col\">' +
-            '<div class=\"case-ops\">' +
-              '<button type=\"button\" class=\"case-op remove\" title=\"删除当前用例\" data-case-lib-remove data-index=\"' + idx + '\">−</button>' +
-              '<button type=\"button\" class=\"case-op add\" title=\"在下方插入用例\" data-case-lib-insert data-index=\"' + idx + '\">＋</button>' +
-            '</div>' +
-          '</td>' +
-        '</tr>' +
-	        '<tr class=\"remark-row ' + (isRemarkOpen ? 'visible' : '') + '\">' +
-	          '<td colspan=\"10\">' +
-	            '<textarea class=\"remark-panel\" data-case-lib-remark data-index=\"' + idx + '\" placeholder=\"填写备注...\">' + escapeHtml(remarkText || '') + '</textarea>' +
+	          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"precondition\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + preHtml + '</div></td>' +
+	          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"steps\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + stepsHtml + '</div></td>' +
+	          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"expected\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + expectedHtml + '</div></td>' +
+	          '<td class=\"case-op-col\">' +
+	            '<div class=\"case-ops\">' +
+	              '<button type=\"button\" class=\"case-op remove\" title=\"删除当前用例\" data-case-lib-remove data-index=\"' + idx + '\">−</button>' +
+	              '<button type=\"button\" class=\"case-op add\" title=\"在下方插入用例\" data-case-lib-insert data-index=\"' + idx + '\">＋</button>' +
+	            '</div>' +
 	          '</td>' +
 	        '</tr>'
 	      );
@@ -5199,10 +5186,10 @@
     var headerCheckbox = (
       '<th class=\"check\"><input type=\"checkbox\" data-case-lib-select-all data-visible=\"' + visibleIndexes.join(',') + '\" ' +
       (visibleIndexes.length ? (allVisibleSelected ? 'checked' : '') : 'disabled') + '></th>'
-    );
-    var emptyRow = visibleIndexes.length
-      ? ''
-      : '<tr><td colspan=\"10\">' + (state.editor.items.length ? '当前页暂无用例' : '未解析到有效用例') + '</td></tr>';
+	    );
+	    var emptyRow = visibleIndexes.length
+	      ? ''
+	      : '<tr><td colspan=\"9\">' + (state.editor.items.length ? '当前页暂无用例' : '未解析到有效用例') + '</td></tr>';
     var paginationTop = buildEditorPagination(totalCases, state.editor.pageIndex, totalPages, start, end);
     var paginationBottom = buildEditorPagination(totalCases, state.editor.pageIndex, totalPages, start, end);
     dom.editView.innerHTML = (
@@ -5215,13 +5202,12 @@
             '<th class=\"module\">模块</th>' +
             '<th class=\"title\">用例标题</th>' +
             '<th>优先级</th>' +
-            '<th>前提条件</th>' +
-            '<th>操作步骤</th>' +
-            '<th>预期结果</th>' +
-            '<th>备注</th>' +
-            '<th class=\"ops\" title=\"增删\">增删</th>' +
-          '</tr>' +
-        '</thead>' +
+	            '<th>前提条件</th>' +
+	            '<th>操作步骤</th>' +
+	            '<th>预期结果</th>' +
+	            '<th class=\"ops\" title=\"增删\">增删</th>' +
+	          '</tr>' +
+	        '</thead>' +
         '<tbody>' + (rows || emptyRow) + '</tbody>' +
       '</table>' +
       paginationBottom

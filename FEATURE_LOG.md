@@ -1313,3 +1313,11 @@
 - 复用说明：复用既有执行集/执行用例数据结构（`exec_sets/exec_cases`），以 `exec_sets.status=archived` + 归档元信息实现归档；归档页只读复用执行数据展示，不新增独立“归档结果表”。  
 - 测试与验证：`node --check scripts/modules/caseArchive.js scripts/modules/tempexec.js scripts/core/tempexecCore.js`（通过）；`API_BASE_URL=http://127.0.0.1:18080 APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app ...` 后执行 `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_archive.spec.js tests/api/exec_persistence.spec.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/case_archive.spec.js`（通过）。  
 - 更新记录：2025-12-17 用例归档页面与个人总览归档上线（`backend/`、`services/apiClient.js`、`index.html`、`style.css`、`scripts/`、`tests/`、`API_DOC.md`）。  
+- 更新记录：2025-12-18 归档详情视图的“实际结果/备注/缺陷链接”改为执行页同款折叠展开（复用用例实际结果可展开子项与子项结果，内容只读），字段列宽对齐执行页（`scripts/modules/caseArchive.js`、`style.css`、`tests/ui/case_archive.spec.js`）。  
+- 测试与验证：`node --check scripts/modules/caseArchive.js`（通过）；`npm run test:ui -- tests/ui/case_archive.spec.js`（通过）。  
+- 更新记录：2025-12-18 执行页/归档详情的复用子项布局优化：子项输入宽度减半，执行状态与删除按钮固定宽度（4/3 个汉字）并保持同一行，剩余宽度优先给子项备注（`style.css`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/case_archive.spec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_drag.spec.js`（通过）。  
+- 更新记录：2025-12-18 执行页/归档详情列宽微调：用例标题与前提条件各缩小 1 个汉字宽度，增加备注列宽；复用子项备注减少 5 个汉字宽度给子项；归档详情缺陷链接增加“打开”按钮（`scripts/core/tempexecCore.js`、`scripts/modules/caseArchive.js`、`style.css`、`tests/ui/case_archive.spec.js`）。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/caseArchive.js`（通过）；`npm run test:ui -- tests/ui/case_archive.spec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_drag.spec.js`（通过）。  
+- 更新记录：2025-12-18 复用子项宽度再微调：子项描述再减少 5 个汉字宽度给子项；用例库编辑视图移除“备注”列；补充执行页功能导航的“执行视图”入口（`style.css`、`scripts/modules/caseLibrary.js`、`index.html`）。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_add.spec.js`（通过）。  

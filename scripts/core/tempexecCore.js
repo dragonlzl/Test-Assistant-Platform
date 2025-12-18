@@ -6422,9 +6422,9 @@
       // 字段列宽：对齐“归档详情”视图的字段宽度；实际/备注/缺陷链接按需求固定；隐藏字段的宽度平均补给其他可伸缩字段。
       var baseEm = {
         module: 8,
-        title: 10,
+        title: 9,
         priority: 5,
-        preconditions: 13,
+        preconditions: 12,
         // 操作步骤减少 1 个汉字宽度；预期结果减少 2 个汉字宽度；宽度加到“实际结果”。
         steps: 14,
         expected: 14,
@@ -6443,7 +6443,7 @@
         select: '36px',
         index: '50px',
         actual: '7em',
-        remark: '4em',
+        remark: '6em',
         defect: '6em',
         ops: '40px',
       };
