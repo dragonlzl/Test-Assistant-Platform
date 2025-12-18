@@ -10,6 +10,22 @@ test.describe('临时执行搜索功能', () => {
       }
       return route.abort();
     });
+    await page.addInitScript(() => {
+      try { localStorage.setItem('tap-auth-token', 'test-token'); } catch (_) {}
+    });
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+      if (pathName === '/api/users/me' && method === 'GET') {
+        // e2e: user.id = 0 不走 DB 入库，避免静态模式误触发 API。
+        return respond(200, { id: 0, username: 'ui_admin', role: 'admin', level: 'leader' });
+      }
+      if (method === 'GET') return respond(200, []);
+      return respond(200, {});
+    });
     page.on('dialog', async (dialog) => {
       const answer = page.__promptAnswers && page.__promptAnswers.length ? page.__promptAnswers.shift() : '搜索需求';
       await dialog.accept(answer);
@@ -28,6 +44,7 @@ test.describe('临时执行搜索功能', () => {
   });
 
   test('执行视图搜索与清空', async ({ page }) => {
+    await page.click('[data-group="cases"]');
     await page.click('[data-tab-btn="tempexec"]');
     await page.click('#openTempExecDrawerBtn');
     await page.evaluate(() => {
@@ -51,7 +68,6 @@ test.describe('临时执行搜索功能', () => {
     await expect(page.locator('#tempExecNav button[data-temp-file]')).toHaveCount(1, { timeout: 5000 });
     await page.click('#tempExecNav button[data-temp-file]');
     await page.locator('#closeTempExecDrawerBtn').click({ force: true });
-    await page.click('#openTempExecViewNavBtn');
     await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 15000 });
     const caseRows = page.locator('#tempExecView table tbody tr').filter({ has: page.locator('[data-temp-case-remove]') });
     await expect(caseRows.first()).toBeVisible({ timeout: 15000 });

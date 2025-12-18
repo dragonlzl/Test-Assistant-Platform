@@ -265,53 +265,41 @@
       </div>
     </div>
   </div>
-	<div class="tempexec-head hidden" data-tab-section="tempexec">
-	  <div class="flow" id="tempexecFlowNav">
-	    <div class="flow-title">功能导航</div>
-	    <p class="hint" style="margin:0 0 6px;">用例执行相关入口汇总于此，点击卡片快速打开。</p>
-    <div class="nav-entry-grid">
-      <button class="nav-entry-card nav-entry-import" id="openTempExecDrawerBtn" type="button">
-        <span class="nav-entry-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-            <path d="M12 3v9"></path>
-            <path d="M9.5 9.5 12 12l2.5-2.5"></path>
-            <rect x="5" y="13" width="14" height="6" rx="2"></rect>
-            <path d="M9 16h6"></path>
-          </svg>
-        </span>
-        <span class="nav-entry-text">
-          <span class="nav-entry-title">用例导入&分配</span>
-          <span class="nav-entry-desc">导入/分配用例并备份配置</span>
-        </span>
-      </button>
-      <button class="nav-entry-card nav-entry-view" id="openTempExecViewNavBtn" type="button">
-        <span class="nav-entry-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-            <path d="M4 12s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"></path>
-            <circle cx="12" cy="12" r="2.2"></circle>
-          </svg>
-        </span>
-        <span class="nav-entry-text">
-          <span class="nav-entry-title">执行视图</span>
-          <span class="nav-entry-desc">查看并更新用例执行结果</span>
-        </span>
-      </button>
-      <button class="nav-entry-card nav-entry-overview" id="openTempExecOverviewNavBtn" type="button">
-        <span class="nav-entry-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-            <rect class="fill" x="4.5" y="12.5" width="3.5" height="5" rx="1.2"></rect>
+		<div class="tempexec-head hidden" data-tab-section="tempexec">
+		  <div class="flow" id="tempexecFlowNav">
+		    <div class="flow-title">功能导航</div>
+		    <p class="hint" style="margin:0 0 6px;">用例执行相关入口汇总于此，点击卡片快速打开。</p>
+	    <div class="nav-entry-grid">
+	      <button class="nav-entry-card nav-entry-import" id="openTempExecDrawerBtn" type="button">
+	        <span class="nav-entry-icon" aria-hidden="true">
+	          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+	            <path d="M12 3v9"></path>
+	            <path d="M9.5 9.5 12 12l2.5-2.5"></path>
+	            <rect x="5" y="13" width="14" height="6" rx="2"></rect>
+	            <path d="M9 16h6"></path>
+	          </svg>
+	        </span>
+	        <span class="nav-entry-text">
+	          <span class="nav-entry-title">用例导入&分配</span>
+	          <span class="nav-entry-desc">导入/分配用例并备份配置</span>
+	        </span>
+	      </button>
+	      <button class="nav-entry-card nav-entry-overview" id="openTempExecOverviewNavBtn" type="button">
+	        <span class="nav-entry-icon" aria-hidden="true">
+	          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+	            <rect class="fill" x="4.5" y="12.5" width="3.5" height="5" rx="1.2"></rect>
             <rect class="fill" x="10.25" y="9" width="3.5" height="8.5" rx="1.2"></rect>
             <rect class="fill" x="16" y="6" width="3.5" height="11.5" rx="1.2"></rect>
             <path d="M4.5 18.5h15"></path>
           </svg>
-        </span>
-        <span class="nav-entry-text">
-          <span class="nav-entry-title">个人执行总览</span>
-          <span class="nav-entry-desc">一键查看执行进度</span>
-        </span>
-      </button>
-    </div>
-  </div>
+	        </span>
+	        <span class="nav-entry-text">
+	          <span class="nav-entry-title">归档操作&进度预览</span>
+	          <span class="nav-entry-desc">预览进度并归档用例（可跳转归档详情）</span>
+	        </span>
+	      </button>
+	    </div>
+	  </div>
   <section class="card hidden temp-exec-toolbar-card" id="tempExecToolbarCard" data-tab-section="tempexec">
     <div class="card-body">
       <div class="temp-exec-toolbar" id="tempExecToolbar"></div>
@@ -1344,8 +1332,8 @@
 </div>
 </div>
 </div>
-</div>
-<div class="drawer" id="tempExecImportDuplicateDrawer" data-tab-section="tempexec">
+	</div>
+	<div class="drawer" id="tempExecImportDuplicateDrawer" data-tab-section="tempexec">
   <div class="drawer-mask" data-drawer-close="tempExecImportDuplicateDrawer"></div>
   <div class="drawer-panel drawer-panel-wide">
     <div class="drawer-header">
@@ -1384,12 +1372,12 @@
     </div>
   </div>
 </div>
-<section class="card hidden" data-section-id="tempexec-view" data-tab-section="tempexec">
-<h2>执行视图</h2>
-<div class="card-body">
-<div class="actions" style="margin-bottom:12px;">
-<button class="secondary" disabled="" id="exportTempExecXmindBtn">导出执行XMind</button>
-<button class="secondary" disabled="" id="exportTempExecCasesXmindBtn">导出用例XMind（无结果）</button>
+	<section class="card" data-section-id="tempexec-view" data-tab-section="tempexec">
+	<h2>执行视图</h2>
+	<div class="card-body">
+	<div class="actions" style="margin-bottom:12px;">
+	<button class="secondary" disabled="" id="exportTempExecXmindBtn">导出执行XMind</button>
+	<button class="secondary" disabled="" id="exportTempExecCasesXmindBtn">导出用例XMind（无结果）</button>
 <button class="secondary case-library-changes-btn" disabled="" id="tempExecCaseLibraryChangesBtn">用例库变更</button>
 </div>
 <div class="temp-case-view" id="tempExecView">

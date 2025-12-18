@@ -10,6 +10,22 @@ test.describe('执行视图粘顶布局', () => {
       }
       return route.abort();
     });
+    await page.addInitScript(() => {
+      try { localStorage.setItem('tap-auth-token', 'test-token'); } catch (_) {}
+    });
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+      if (pathName === '/api/users/me' && method === 'GET') {
+        // e2e: user.id = 0 不走 DB 入库，避免静态模式误触发 API。
+        return respond(200, { id: 0, username: 'ui_admin', role: 'admin', level: 'leader' });
+      }
+      if (method === 'GET') return respond(200, []);
+      return respond(200, {});
+    });
     page.on('dialog', async (dialog) => {
       if (dialog.type() === 'prompt') {
         const answer = page.__promptAnswers && page.__promptAnswers.length ? page.__promptAnswers.shift() : '粘顶需求';
@@ -34,6 +50,7 @@ test.describe('执行视图粘顶布局', () => {
   });
 
   test('功能导航与当前文件工具条保持粘顶', async ({ page }) => {
+    await page.click('[data-group="cases"]');
     await page.click('[data-tab-btn="tempexec"]');
     await page.evaluate(() => {
       window.app.state.requirementLabel = '粘顶导航需求';
@@ -50,8 +67,7 @@ test.describe('执行视图粘顶布局', () => {
     });
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
     await page.click('#closeTempExecDrawerBtn');
-    await page.click('#openTempExecViewNavBtn');
-    await expect(page.locator('#tempExecToolbarCard')).toBeVisible();
+    await expect(page.locator('#tempExecToolbarCard')).toBeVisible({ timeout: 15000 });
 
     const navTopBefore = await page.$eval('#tempexecFlowNav', (el) => el.getBoundingClientRect().top);
     const toolbarTopBefore = await page.$eval('#tempExecToolbarCard', (el) => el.getBoundingClientRect().top);

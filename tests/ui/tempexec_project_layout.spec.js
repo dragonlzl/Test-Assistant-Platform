@@ -163,15 +163,38 @@ test.describe('用例执行-项目/版本分组布局', () => {
     const afterOrder = await v1Rows.locator('.name-text').allTextContents();
     expect(afterOrder.map((t) => t.trim())).toEqual(['用例A', '用例B']);
 
+    // Safari 等场景 drop 可能读不到 dataTransfer：应兜底使用 tempDragContext 仍可完成排序
+    const fallbackDrop = await v1Body.evaluate((el) => {
+      try {
+        if (typeof DragEvent !== 'function') return { ok: false, reason: 'no-dnd' };
+        window.app = window.app || {};
+        window.app.tempDragContext = { type: 'file', fileId: '1002' };
+        var rect = el.getBoundingClientRect();
+        var evt = new DragEvent('drop', {
+          bubbles: true,
+          cancelable: true,
+          clientX: Math.floor(rect.left + 10),
+          clientY: Math.floor(rect.top + 5),
+        });
+        el.dispatchEvent(evt);
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, reason: String(err && err.message ? err.message : err) };
+      }
+    });
+    expect(fallbackDrop.ok).toBe(true);
+    const afterFallbackOrder = await v1Rows.locator('.name-text').allTextContents();
+    expect(afterFallbackOrder.map((t) => t.trim())).toEqual(['用例B', '用例A']);
+
     // 点击整行（含条数徽标）也能切换激活用例
-    await v1Rows.first().locator('.temp-req-count-badge').click();
+    await v1Body.locator('.temp-req-row[data-temp-file="1001"] .temp-req-count-badge').click();
     await expect.poll(
       () => page.evaluate(() => (window.app && window.app.state ? String(window.app.state.tempExecActiveId || '') : '')),
       { timeout: 5000 }
     ).toBe('1001');
 
     // 再点一次切换到另一份用例，并模拟某些场景重复触发 tempexec 激活事件：不应把 activeId 回滚
-    await v1Rows.nth(1).click();
+    await v1Body.locator('.temp-req-row[data-temp-file="1002"]').click();
     await expect.poll(
       () => page.evaluate(() => (window.app && window.app.state ? String(window.app.state.tempExecActiveId || '') : '')),
       { timeout: 5000 }
@@ -217,6 +240,53 @@ test.describe('用例执行-项目/版本分组布局', () => {
     expect(dragHints.hasOutline).toBe(true);
     expect(dragHints.hasIndicator).toBe(true);
     expect(dragHints.scrollTop).toBeGreaterThan(0);
+
+    // drop 阶段坐标不可靠（如 clientY=0/缺失）时：应以 dragover 插入的指示器位置为准完成重排
+    const indicatorDrop = await v2Body.evaluate((el) => {
+      try {
+        if (typeof DataTransfer !== 'function' || typeof DragEvent !== 'function') return { ok: false, reason: 'no-dnd' };
+        var rows = Array.prototype.slice.call(el.querySelectorAll('.temp-req-row[data-temp-file]'));
+        if (rows.length < 3) return { ok: false, reason: 'not-enough-rows' };
+        var targetRow = rows[2];
+        var rect = targetRow.getBoundingClientRect();
+        var dt = new DataTransfer();
+        dt.setData('text/plain', '1003');
+        window.app = window.app || {};
+        window.app.tempDragContext = { type: 'file', fileId: '1003' };
+        var over = new DragEvent('dragover', {
+          bubbles: true,
+          cancelable: true,
+          clientX: Math.floor(rect.left + 10),
+          clientY: Math.floor(rect.top + 2),
+          dataTransfer: dt,
+        });
+        el.dispatchEvent(over);
+        var indicator = el.querySelector('.temp-file-drop-indicator');
+        var next = indicator && indicator.nextElementSibling;
+        var beforeId = next && next.dataset ? (next.dataset.tempFile || '') : '';
+        var drop = new DragEvent('drop', {
+          bubbles: true,
+          cancelable: true,
+          clientX: Math.floor(rect.left + 10),
+          clientY: 0,
+        });
+        el.dispatchEvent(drop);
+        return { ok: true, beforeId };
+      } catch (err) {
+        return { ok: false, reason: String(err && err.message ? err.message : err) };
+      }
+    });
+    expect(indicatorDrop.ok).toBe(true);
+    const idsAfterIndicatorDrop = await v2Rows.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('data-temp-file')));
+    const idxMoved = idsAfterIndicatorDrop.indexOf('1003');
+    expect(idxMoved).toBeGreaterThan(-1);
+    expect(idxMoved).not.toBe(0);
+    if (indicatorDrop.beforeId) {
+      const idxBefore = idsAfterIndicatorDrop.indexOf(indicatorDrop.beforeId);
+      expect(idxBefore).toBeGreaterThan(-1);
+      expect(idxMoved).toBe(idxBefore - 1);
+    }
+
     await v1Rows.nth(0).dragTo(v2Body, { targetPosition: { x: 10, y: 10 } });
     await expect(page.locator('#tempExecStatus')).toContainText('不支持拖拽移动用例');
     await expect(v2Body).not.toContainText('用例A');

@@ -1,0 +1,236 @@
+const { test, expect } = require('@playwright/test');
+
+async function gotoIndex(page) {
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  await page.goto(base + '/index.html');
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
+}
+
+async function switchToTempExec(page) {
+  await page.click('[data-group="cases"]');
+  await page.click('[data-tab-btn="tempexec"]');
+  await page.click('#openTempExecDrawerBtn');
+  await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+}
+
+test.describe('用例执行-归档后不自动切换项目', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.continue();
+      }
+      return route.abort();
+    });
+    await page.addInitScript(() => {
+      try { localStorage.setItem('tap-auth-token', 'test-token'); } catch (_) {}
+      try {
+        localStorage.removeItem('usecase-active-tab');
+        localStorage.removeItem('usecase-temp-exec-v1');
+        localStorage.removeItem('tempexec-focus-v1');
+      } catch (_) {}
+    });
+    page.on('dialog', async (dialog) => dialog.accept());
+  });
+
+  test('当前项目全部归档后，执行视图不自动跳到其他项目，并显示项目/版本提示', async ({ page }) => {
+    const user = { id: 1, username: 'ui_user', role: 'user', level: 'member' };
+    const projects = [
+      { id: 1, name: '项目A', description: '' },
+      { id: 2, name: '项目B', description: '' },
+    ];
+    const versionsByProject = {
+      1: [{ id: 11, project_id: 1, name: 'v1' }],
+      2: [{ id: 21, project_id: 2, name: 'v2' }],
+    };
+    const now = Date.now();
+    const iso = (ms) => new Date(ms).toISOString();
+    // 注意：tempexec DB 模式下会根据 created_at 做默认排序；确保 A 比 B 新，才能稳定成为默认激活项。
+    const setA = { id: 1001, project_id: 1, version_id: 11, case_file_id: 101, case_count: 1, name: '用例A', status: 'active', created_at: iso(now - 1000), updated_at: iso(now - 900) };
+    const setB = { id: 2001, project_id: 2, version_id: 21, case_file_id: 201, case_count: 1, name: '用例B', status: 'active', created_at: iso(now - 20000), updated_at: iso(now - 800) };
+    let archived = false;
+    const casesBySetId = {
+      1001: [
+        {
+          id: 10011,
+          exec_set_id: 1001,
+          case_item_id: null,
+          module: '模块',
+          title: '标题A',
+          expected: '预期',
+          priority: 'P1',
+          precondition: '前提',
+          steps: '步骤',
+          actual_result: null,
+          defect_link: null,
+          reuse_details: null,
+          defect_links: null,
+          remark: null,
+          status: '通过',
+          order_no: 1,
+          executor_id: user.id,
+          created_at: setA.created_at,
+          updated_at: setA.updated_at,
+        },
+      ],
+      2001: [
+        {
+          id: 20011,
+          exec_set_id: 2001,
+          case_item_id: null,
+          module: '模块',
+          title: '标题B',
+          expected: '预期',
+          priority: 'P1',
+          precondition: '前提',
+          steps: '步骤',
+          actual_result: null,
+          defect_link: null,
+          reuse_details: null,
+          defect_links: null,
+          remark: null,
+          status: '未执行',
+          order_no: 1,
+          executor_id: user.id,
+          created_at: setB.created_at,
+          updated_at: setB.updated_at,
+        },
+      ],
+    };
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') return respond(200, user);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, projects);
+      const verMatch = pathName.match(/^\/api\/projects\/(\d+)\/versions$/);
+      if (verMatch && method === 'GET') {
+        const pid = Number(verMatch[1]);
+        return respond(200, versionsByProject[pid] || []);
+      }
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/exec/sets' && method === 'GET') {
+        const statusFilter = url.searchParams.get('status_filter') || '';
+        if (statusFilter === 'archived') {
+          if (!archived) return respond(200, []);
+          return respond(200, [
+            Object.assign({}, setA, { status: 'archived', archived_at: iso(now - 100) }),
+          ]);
+        }
+        return respond(200, archived ? [setB] : [setA, setB]);
+      }
+
+      const casesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (casesMatch && method === 'GET') {
+        const execSetId = Number(casesMatch[1]);
+        return respond(200, casesBySetId[execSetId] || []);
+      }
+
+      const archiveMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/archive$/);
+      if (archiveMatch && method === 'POST') {
+        archived = true;
+        return respond(200, { ok: true });
+      }
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await switchToTempExec(page);
+
+    await expect(page.locator('#tempVersionGrid .temp-req-row[data-temp-file="1001"]')).toBeVisible();
+    await page.click('#tempVersionGrid .temp-req-row[data-temp-file="1001"]');
+    await expect.poll(
+      () => page.evaluate(() => (window.app && window.app.state ? String(window.app.state.tempExecActiveId || '') : '')),
+      { timeout: 8000 }
+    ).toBe('1001');
+
+    await page.waitForFunction(() => {
+      const st = window.app && window.app.state ? window.app.state : null;
+      if (!st) return false;
+      const file = (st.tempExecFiles || []).find((f) => String(f && f.id) === '1001');
+      return file && file._casesLoading === false;
+    });
+
+    await page.click('#tempExecOverviewBtn');
+    await expect(page.locator('#tempExecDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
+    await page.click('[data-temp-overview-archive="1001"]');
+
+    await expect.poll(
+      () => page.evaluate(() => (window.app && window.app.state ? String(window.app.state.tempExecActiveId || '') : '')),
+      { timeout: 8000 }
+    ).toBe('');
+
+    await expect(page.locator('#tempExecView .temp-exec-context')).toContainText('项目 项目A');
+    await expect(page.locator('#tempExecView .temp-exec-context')).toContainText('版本 v1');
+    await expect(page.locator('#tempExecView')).toContainText('暂无执行用例');
+    await expect(page.locator('#tempExecView')).not.toContainText('标题B');
+  });
+
+  test('点击已归档“归”字标识：关闭总览抽屉并打开导入&分配抽屉', async ({ page }) => {
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') return respond(200, { id: 1, username: 'ui_user', role: 'user', level: 'member' });
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [{ id: 1, name: '项目A', description: '' }]);
+      if (pathName === '/api/projects/1/versions' && method === 'GET') return respond(200, [{ id: 11, project_id: 1, name: 'v1' }]);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+
+      const now = Date.now();
+      const iso = (ms) => new Date(ms).toISOString();
+      if (pathName === '/api/exec/sets' && method === 'GET') {
+        const statusFilter = url.searchParams.get('status_filter') || '';
+        if (statusFilter === 'archived') {
+          return respond(200, [
+            { id: 3001, project_id: 1, version_id: 11, case_file_id: 101, case_count: 1, name: '归档用例A', status: 'archived', created_at: iso(now - 5000), updated_at: iso(now - 3000), archived_at: iso(now - 1000) },
+          ]);
+        }
+        return respond(200, []);
+      }
+      const casesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (casesMatch && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await switchToTempExec(page);
+    await page.click('#tempExecOverviewBtn');
+    await expect(page.locator('#tempExecDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
+
+    const archivedChip = page.locator('.exec-overview-file-chip[data-temp-archived="1"] .tag-archived').first();
+    await expect(archivedChip).toBeVisible();
+    await archivedChip.click();
+
+    await expect(page.locator('#tempExecOverviewDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecDrawer')).toHaveClass(/open/);
+  });
+});

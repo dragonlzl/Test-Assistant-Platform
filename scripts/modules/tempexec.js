@@ -248,7 +248,10 @@
     }
     function showTempExecView(options) {
       var shouldScroll = !options || options.scroll !== false;
-      switchTab('tempexec');
+      var shouldReload = !options || options.reload !== false;
+      if (!state || String(state.activeTab || '') !== 'tempexec') {
+        switchTab('tempexec');
+      }
       updateTempExecToolbarOffset();
       if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
       if (tempExecDrawer) tempExecDrawer.close();
@@ -271,7 +274,7 @@
         // ignore
       }
       try {
-        if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
+        if (shouldReload && window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
           window.app.tempExecApi.loadTempExecState();
         }
       } catch (err2) {
@@ -2031,9 +2034,9 @@
           } else {
             api.importTempExecFiles(files);
           }
-        }
-      });
-    }
+	        }
+	      });
+	    }
 
     if (typeof window !== 'undefined' && window.addEventListener) {
       window.addEventListener('app-tab-activated', function(e) {
@@ -2181,6 +2184,10 @@
         var targetReq = e.target.closest('[data-temp-req]');
         if (!targetFile && !targetReq) return;
         if (targetReq && targetReq.closest('[data-temp-focus-zone]')) return;
+        if (targetFile && targetFile.dataset && String(targetFile.dataset.tempArchived || '') === '1') {
+          e.preventDefault();
+          return;
+        }
         if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
         if (targetFile) {
           if (e.dataTransfer) e.dataTransfer.setData('text/plain', targetFile.dataset.tempFile || '');
@@ -2371,6 +2378,8 @@
       var target = '';
       rows.some(function(row) {
         if (!row || !row.getBoundingClientRect) return false;
+        // 已归档占位固定在底部：插入点/高亮应忽略归档行，避免出现“可插到归档下方”的误导。
+        if (row.dataset && String(row.dataset.tempArchived || '') === '1') return false;
         var rect = row.getBoundingClientRect();
         if (clientY < rect.top + rect.height / 2) {
           target = row.dataset.tempFile || '';
@@ -2517,6 +2526,16 @@
           api.setTempExecImportProjectFilter(filterPid);
           return;
         }
+        var archivedDissolveBtn = e.target.closest('[data-temp-project-version-archived-dissolve]');
+        if (archivedDissolveBtn && api.dissolveTempExecArchivedProjectVersion) {
+          var key0 = archivedDissolveBtn.dataset.tempProjectVersionArchivedDissolve || '';
+          var parsed0 = parseProjectVersionKey(key0);
+          var versionLabel0 = resolveVersionLabel(parsed0.projectId, parsed0.versionId);
+          var confirmed0 = window.confirm('确定解散版本【' + versionLabel0 + '】下的已归档占位吗？\n（不影响归档记录，仅清除占位）');
+          if (!confirmed0) return;
+          api.dissolveTempExecArchivedProjectVersion(parsed0.projectId, parsed0.versionId);
+          return;
+        }
         var projectRemoveBtn = e.target.closest('[data-temp-project-remove]');
         if (projectRemoveBtn && api.removeTempExecProject) {
           var pid = projectRemoveBtn.dataset.tempProjectRemove || '';
@@ -2532,9 +2551,22 @@
           var key = versionRemoveBtn.dataset.tempProjectVersionRemove || '';
           var parsed = parseProjectVersionKey(key);
           var versionFiles = getProjectVersionFiles(parsed.projectId, parsed.versionId);
+          var archivedInVersion = Array.isArray(state.tempExecArchivedFiles)
+            ? state.tempExecArchivedFiles.filter(function(f) {
+                if (!f) return false;
+                return String(f.projectId) === String(parsed.projectId) && String(f.versionId || '') === String(parsed.versionId || '');
+              })
+            : [];
+          var archivedCount = archivedInVersion.length;
           var versionLabel = resolveVersionLabel(parsed.projectId, parsed.versionId);
-          var confirmed2 = window.confirm('是否确认关闭版本【' + versionLabel + '】（' + versionFiles.length + ' 份用例）？');
+          var tip2 = archivedCount
+            ? ('\n该版本包含 ' + archivedCount + ' 份已归档占位，确认后将同时“解散归档”占位。')
+            : '';
+          var confirmed2 = window.confirm('是否确认关闭版本【' + versionLabel + '】（' + versionFiles.length + ' 份用例）？' + tip2);
           if (!confirmed2) return;
+          if (archivedCount && api.dissolveTempExecArchivedProjectVersion) {
+            api.dissolveTempExecArchivedProjectVersion(parsed.projectId, parsed.versionId);
+          }
           api.removeTempExecProjectVersion(parsed.projectId, parsed.versionId);
           return;
         }
@@ -2553,13 +2585,18 @@
         // 支持点击整行（含条数徽标/标签），不仅限于按钮本体
         var fileNode = e.target.closest('[data-temp-file]');
         if (!fileNode) return;
+        if (fileNode.dataset && fileNode.dataset.tempArchived) {
+          setStatus(tempExecStatus, '该用例已归档（仅占位，不影响同名导入/转入执行）；如需查看详情请到“用例归档”页。', 'warn');
+          return;
+        }
         var id = fileNode.dataset.tempFile;
         if (!id) return;
         if (api.getTempExecFile && !api.getTempExecFile(id)) return;
         if (id !== state.tempExecActiveId && api.setTempExecActive) api.setTempExecActive(id);
-        // DB 项目/版本分组模式下，避免触发 switchTab 重载导致 activeId 被旧设置覆盖回滚
+        // 项目/版本分组模式下：点击只切换当前用例，不强制关闭“导入&分配”抽屉（避免影响拖拽排序体验）。
+        // 执行视图默认常驻展示：用户可自行关闭抽屉查看执行视图。
         if (!(api.isTempExecProjectLayoutEnabled && api.isTempExecProjectLayoutEnabled())) {
-          switchTab('tempexec');
+          showTempExecView({ scroll: true });
         }
       });
 
@@ -2569,7 +2606,13 @@
         var version = e.target.closest('[data-temp-project-version-card]');
         var versionHeader = e.target.closest('[data-temp-project-version-drag]');
         var fileRow = e.target.closest('[data-temp-file]');
+        if (fileRow && fileRow.dataset && String(fileRow.dataset.tempArchived || '') === '1') {
+          e.preventDefault();
+          return;
+        }
         if (!e.dataTransfer) return;
+        // 兜底清理上一次拖拽类型，避免影响普通用例条目的拖拽排序。
+        tempProjectLayoutDrag = { type: '', key: '' };
         e.dataTransfer.effectAllowed = 'move';
         if (project && projectHeader && project.dataset.tempProjectCard) {
           e.dataTransfer.setData('text/temp-project', project.dataset.tempProjectCard);
@@ -2584,28 +2627,43 @@
           return;
         }
         if (fileRow && fileRow.dataset.tempFile) {
-          e.dataTransfer.setData('text/plain', fileRow.dataset.tempFile);
+          var fid = String(fileRow.dataset.tempFile || '');
+          e.dataTransfer.setData('text/plain', fid);
+          // 额外兜底：部分浏览器 drop/dragover 读不到 dataTransfer，此处同步记录拖拽上下文用于后续排序。
+          var file = fid && api.getTempExecFile ? api.getTempExecFile(fid) : null;
+          var req = normalizeRequirementName(file && file.requirement) || fileRow.dataset.tempReq || '';
+          setTempDragContext({
+            type: 'file',
+            fileId: fid,
+            requirement: req,
+            versionId: file && file.versionId ? file.versionId : '',
+          });
         }
       });
 
-	      tempVersionGrid.addEventListener('dragover', function(e) {
-	        if (!e) return;
-	        if (!e.dataTransfer) return;
-	        e.preventDefault();
-	        var dragType = tempProjectLayoutDrag && tempProjectLayoutDrag.type ? tempProjectLayoutDrag.type : '';
-	        var dragKey = tempProjectLayoutDrag && tempProjectLayoutDrag.key ? tempProjectLayoutDrag.key : '';
-	        if (!dragType) {
-	          var ids = e.dataTransfer.getData('text/plain') || '';
-	          if (!ids && window.app && window.app.tempDragContext && window.app.tempDragContext.type === 'file') {
-	            ids = window.app.tempDragContext.fileId || '';
-	          }
-	          var versionCardHover = e.target.closest('[data-temp-project-version-card]');
-	          var bodyHover = versionCardHover ? versionCardHover.querySelector('.temp-project-version-body') : null;
-	          if (ids && bodyHover) {
-	            if (tempProjectLayoutFileHover.body && tempProjectLayoutFileHover.body !== bodyHover) {
-	              clearTempProjectLayoutFileHover();
-	            }
-	            bodyHover.classList.add('dragover-file');
+		      tempVersionGrid.addEventListener('dragover', function(e) {
+		        if (!e) return;
+		        var dataTransfer = e.dataTransfer || null;
+		        var dragType = tempProjectLayoutDrag && tempProjectLayoutDrag.type ? tempProjectLayoutDrag.type : '';
+		        var dragKey = tempProjectLayoutDrag && tempProjectLayoutDrag.key ? tempProjectLayoutDrag.key : '';
+		        var ids = '';
+		        if (!dragType) {
+		          ids = dataTransfer ? (dataTransfer.getData('text/plain') || '') : '';
+		          if (!ids && window.app && window.app.tempDragContext && window.app.tempDragContext.type === 'file') {
+		            ids = window.app.tempDragContext.fileId || '';
+		          }
+		        }
+		        // 若无法识别任何拖拽类型，不应拦截页面默认行为（避免影响其他区域）。
+		        if (!dragType && !ids) return;
+		        e.preventDefault();
+		        if (!dragType) {
+		          var versionCardHover = e.target.closest('[data-temp-project-version-card]');
+		          var bodyHover = versionCardHover ? versionCardHover.querySelector('.temp-project-version-body') : null;
+		          if (ids && bodyHover) {
+		            if (tempProjectLayoutFileHover.body && tempProjectLayoutFileHover.body !== bodyHover) {
+		              clearTempProjectLayoutFileHover();
+		            }
+		            bodyHover.classList.add('dragover-file');
 	            autoScrollContainerOnDrag(bodyHover, e.clientY);
 	            var beforeId = resolveInsertBeforeFileId(bodyHover, e.clientY);
 	            var indicatorFile = ensureTempProjectLayoutFileDropIndicator();
@@ -2627,6 +2685,14 @@
 	              }
 	            }
 	            if (!inserted) {
+	              // 若版本盒子底部存在“已归档占位”，指示器必须插在其上方，避免误导为可拖到归档下方。
+	              var firstArchivedRow = bodyHover.querySelector('.temp-req-row[data-temp-archived="1"]');
+	              if (firstArchivedRow) {
+	                bodyHover.insertBefore(indicatorFile, firstArchivedRow);
+	                inserted = true;
+	              }
+	            }
+	            if (!inserted) {
 	              bodyHover.appendChild(indicatorFile);
 	            }
 	            rows.forEach(function(row) {
@@ -2634,14 +2700,14 @@
 	            });
 	            tempProjectLayoutFileHover = { body: bodyHover, hoverId: beforeId || '' };
 	            clearTempProjectLayoutDropIndicator();
-	            return;
-	          }
-	          clearTempProjectLayoutFileHover();
-	        }
-	        if (dragType === 'project' && dragKey) {
-	          clearTempProjectLayoutFileHover();
-	          var indicator = ensureTempProjectLayoutDropIndicator('project');
-	          var cards = Array.prototype.slice.call(tempVersionGrid.querySelectorAll('.temp-project-card'));
+		            return;
+		          }
+		          clearTempProjectLayoutFileHover();
+		        }
+		        if (dragType === 'project' && dragKey) {
+		          clearTempProjectLayoutFileHover();
+		          var indicator = ensureTempProjectLayoutDropIndicator('project');
+		          var cards = Array.prototype.slice.call(tempVersionGrid.querySelectorAll('.temp-project-card'));
 	          cards = cards.filter(function(el) { return el && el !== indicator; });
 	          if (!cards.length) {
             tempVersionGrid.appendChild(indicator);
@@ -2781,16 +2847,17 @@
 	        tempProjectLayoutDrag = { type: '', key: '' };
 	      });
 
-	      tempVersionGrid.addEventListener('drop', function(e) {
-	        e.preventDefault();
-	        if (!e.dataTransfer) return;
-	        clearTempProjectLayoutFileHover();
-	        // drop 时也可能无法读取 dataTransfer（浏览器安全策略差异），兜底使用 dragstart 记录的类型/键
-	        var dragProject = e.dataTransfer.getData('text/temp-project') || (tempProjectLayoutDrag.type === 'project' ? tempProjectLayoutDrag.key : '');
+      tempVersionGrid.addEventListener('drop', function(e) {
+        e.preventDefault();
+        var dataTransfer = e.dataTransfer || null;
+        // 注意：不要在 drop 一开始就清理 fileHover/指示器，否则某些浏览器 clientY/dataTransfer 不可用时会导致“能拖动但不换位置”。
+        // drop 时也可能无法读取 dataTransfer（浏览器安全策略差异），兜底使用 dragstart 记录的类型/键
+        var dragProject = dataTransfer ? dataTransfer.getData('text/temp-project') : '';
+        dragProject = dragProject || (tempProjectLayoutDrag.type === 'project' ? tempProjectLayoutDrag.key : '');
         if (dragProject && api.reorderTempExecProject) {
           var indicator = tempProjectLayoutDropIndicator;
-          var targetId = indicator && indicator.dataset ? (indicator.dataset.dropTargetId || '') : '';
-          var after = indicator && indicator.dataset ? (indicator.dataset.dropAfter === '1') : false;
+	          var targetId = indicator && indicator.dataset ? (indicator.dataset.dropTargetId || '') : '';
+	          var after = indicator && indicator.dataset ? (indicator.dataset.dropAfter === '1') : false;
           if (!targetId) {
             // 兜底：落在某个项目卡片上
             var projectCard = e.target.closest('[data-temp-project-card]');
@@ -2799,14 +2866,16 @@
           }
           if (targetId) api.reorderTempExecProject(dragProject, targetId, { after: after });
           clearTempProjectLayoutDropIndicator();
+          clearTempProjectLayoutFileHover();
           tempProjectLayoutDrag = { type: '', key: '' };
           return;
         }
-        var dragVerKey = e.dataTransfer.getData('text/temp-project-version') || (tempProjectLayoutDrag.type === 'version' ? tempProjectLayoutDrag.key : '');
+        var dragVerKey = dataTransfer ? dataTransfer.getData('text/temp-project-version') : '';
+        dragVerKey = dragVerKey || (tempProjectLayoutDrag.type === 'version' ? tempProjectLayoutDrag.key : '');
         if (dragVerKey && api.reorderTempExecProjectVersion) {
-          var src2 = parseProjectVersionKey(dragVerKey);
-          var indicator2 = tempProjectLayoutDropIndicator;
-          var targetKey = indicator2 && indicator2.dataset ? (indicator2.dataset.dropTargetId || '') : '';
+	          var src2 = parseProjectVersionKey(dragVerKey);
+	          var indicator2 = tempProjectLayoutDropIndicator;
+	          var targetKey = indicator2 && indicator2.dataset ? (indicator2.dataset.dropTargetId || '') : '';
           var after2 = indicator2 && indicator2.dataset ? (indicator2.dataset.dropAfter === '1') : false;
           var projectId = indicator2 && indicator2.dataset ? (indicator2.dataset.dropProjectId || '') : '';
           // 以 drop 时的落点为准：若落在具体版本盒子上，则根据落点左右半区判定前/后插入
@@ -2825,16 +2894,20 @@
             setStatus(tempExecStatus, '不同项目之间不支持拖拽调整版本顺序', 'warn');
           }
           clearTempProjectLayoutDropIndicator();
+          clearTempProjectLayoutFileHover();
           tempProjectLayoutDrag = { type: '', key: '' };
           return;
         }
         clearTempProjectLayoutDropIndicator();
         tempProjectLayoutDrag = { type: '', key: '' };
-        var ids = e.dataTransfer.getData('text/plain');
-        if (ids && api.reorderTempExecFileInProjectVersion) {
-          var versionCard = e.target.closest('[data-temp-project-version-card]');
-          if (!versionCard || !versionCard.dataset.tempProjectVersionCard) return;
-          var parsed = parseProjectVersionKey(versionCard.dataset.tempProjectVersionCard);
+        var ids = dataTransfer ? (dataTransfer.getData('text/plain') || '') : '';
+	        if (!ids && window.app && window.app.tempDragContext && window.app.tempDragContext.type === 'file') {
+	          ids = window.app.tempDragContext.fileId || '';
+	        }
+	        if (ids && api.reorderTempExecFileInProjectVersion) {
+	          var versionCard = e.target.closest('[data-temp-project-version-card]');
+	          if (!versionCard || !versionCard.dataset.tempProjectVersionCard) return;
+	          var parsed = parseProjectVersionKey(versionCard.dataset.tempProjectVersionCard);
           var idArr = ids.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
           if (!idArr.length) return;
           var file = api.getTempExecFile ? api.getTempExecFile(idArr[0]) : null;
@@ -2844,9 +2917,27 @@
             return;
           }
           var body = versionCard.querySelector('.temp-project-version-body');
-          var beforeId = resolveInsertBeforeFileId(body, e.clientY);
+          var beforeId = '';
+          // 优先使用 dragover 插入的指示器位置（更可靠：部分浏览器 drop 不提供 clientY 或 clientY 不准确）。
+          if (body && tempProjectLayoutFileDropIndicator && tempProjectLayoutFileDropIndicator.parentNode === body) {
+            var next = tempProjectLayoutFileDropIndicator.nextElementSibling;
+            if (next && next.dataset && next.dataset.tempFile && String(next.dataset.tempArchived || '') !== '1') {
+              beforeId = next.dataset.tempFile || '';
+            }
+          }
+          // 兜底使用 dragover 计算出的 hoverId（若指示器未能插入 DOM）。
+          if (!beforeId && tempProjectLayoutFileHover && tempProjectLayoutFileHover.body === body) {
+            beforeId = tempProjectLayoutFileHover.hoverId || '';
+          }
+          // 最后兜底用坐标计算插入点（兼容无 dragover 的极端场景）。
+          if (!beforeId) {
+            var cy = (typeof e.clientY === 'number' && Number.isFinite(e.clientY)) ? e.clientY : 0;
+            beforeId = resolveInsertBeforeFileId(body, cy);
+          }
           api.reorderTempExecFileInProjectVersion(parsed.projectId, parsed.versionId, String(file.id), beforeId || '');
+          setTempDragContext(null);
         }
+        clearTempProjectLayoutFileHover();
       });
     }
 
@@ -2895,6 +2986,10 @@
         var targetReq = e.target.closest('[data-temp-req]');
         var targetVer = e.target.closest('[data-temp-version]');
         if (!targetFile && !targetReq && !targetVer) return;
+        if (targetFile && targetFile.dataset && String(targetFile.dataset.tempArchived || '') === '1') {
+          e.preventDefault();
+          return;
+        }
         if (!e.dataTransfer) return;
         e.dataTransfer.effectAllowed = 'move';
         if (targetFile) {
@@ -3068,6 +3163,7 @@
       setTempDragContext(null);
       var fileBtn = e.target.closest('[data-temp-file]');
       if (fileBtn) {
+        if (fileBtn.dataset && String(fileBtn.dataset.tempArchived || '') === '1') return;
         if (e.dataTransfer) {
           e.dataTransfer.effectAllowed = 'move';
           e.dataTransfer.setData('text/plain', fileBtn.dataset.tempFile || '');
@@ -3170,6 +3266,10 @@
       tempFocusBlock.addEventListener('dragstart', function(e) {
         var btn = e.target.closest('button[data-temp-file]');
         if (!btn || !e.dataTransfer) return;
+        if (btn.dataset && String(btn.dataset.tempArchived || '') === '1') {
+          e.preventDefault();
+          return;
+        }
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', btn.dataset.tempFile || '');
       });
@@ -3205,12 +3305,27 @@
         showTempExecOverview();
       });
     }
-      if (tempExecOverview && api.setTempExecActive) {
-      tempExecOverview.addEventListener('click', function(e) {
-        var archiveBtn = e.target.closest('[data-temp-overview-archive]');
-        if (archiveBtn) {
-          e.preventDefault();
-          e.stopPropagation();
+	    if (tempExecOverview && api.setTempExecActive) {
+	      tempExecOverview.addEventListener('click', function(e) {
+	        var archivedTag = e.target.closest('.tag-archived');
+	        if (archivedTag) {
+	          var archivedCard = archivedTag.closest('[data-temp-archived="1"]');
+	          if (archivedCard) {
+	            e.preventDefault();
+	            e.stopPropagation();
+	            switchTab('tempexec');
+	            updateTempExecToolbarOffset();
+	            if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
+	            if (tempExecOverviewSection) tempExecOverviewSection.classList.add('hidden');
+	            if (tempExecViewSection) tempExecViewSection.classList.remove('hidden');
+	            if (tempExecDrawer) tempExecDrawer.open();
+	            return;
+	          }
+	        }
+	        var archiveBtn = e.target.closest('[data-temp-overview-archive]');
+	        if (archiveBtn) {
+	          e.preventDefault();
+	          e.stopPropagation();
           var execSetId = archiveBtn.dataset ? (archiveBtn.dataset.tempOverviewArchive || '') : '';
           var cardForArchive = archiveBtn.closest('[data-temp-file]');
           var fileIdForArchive = cardForArchive && cardForArchive.dataset ? (cardForArchive.dataset.tempFile || '') : '';

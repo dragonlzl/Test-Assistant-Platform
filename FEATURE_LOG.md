@@ -19,6 +19,34 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例执行导入&分配：归档占位 + 解散归档（防止版本盒子消失）
+- 功能描述：当某项目版本下的个人执行用例全部归档后，执行页“用例导入&分配”的项目/版本盒子不再直接消失；已归档执行集以“占位”形式保留在版本盒子底部，并提供“解散归档”用于清除占位（不影响归档记录与未归档用例）。
+- 操作方式：
+  - 进入“用例执行 → 用例导入&分配”（DB 模式项目/版本分组布局）：若某版本下存在已归档占位，版本标题栏出现“解散归档”按钮。
+  - 已归档占位行显示灰色遮罩“已归档”，不可点击进入执行、不可拖拽、不可删除；点击占位行会提示“仅占位，不影响同名导入/转入执行；详情请到用例归档页”。
+  - 点击“解散归档”：仅清除该版本下已归档占位（会记入前端 UI 设置，后续不再出现）。
+  - 点击版本“关闭（×）”：若该版本包含已归档占位，会在二次确认中提示并同步执行“解散归档”逻辑；未归档用例仍走原关闭版本逻辑。
+- 使用效果：
+  - 即使该版本下全部用例已归档，版本盒子仍可见，用户仍可“关闭版本/关闭项目/解散归档”。
+  - 多个已归档占位固定在版本盒子底部，并按“最近归档在上”排序；其他用例无法移动到归档占位下方。
+  - 解散归档仅清除占位，不影响未归档用例与真实归档记录，也不影响同名用例继续导入/转入执行。
+- 新增内容/接口/组件：
+  - 前端：`scripts/core/tempexecCore.js`（归档占位数据加载、项目/版本分组渲染合并 active+archived、占位排序、`dissolveTempExecArchivedProjectVersion` API）、`scripts/modules/tempexec.js`（按钮点击/关闭提示/归档占位点击提示/拖拽限制与指示器插入点约束）、`style.css`（“解散归档”按钮与遮罩样式）。
+  - 测试：UI `tests/ui/tempexec_archived_placeholder.spec.js`（覆盖仅归档占位/排序/拖拽指示器/关闭版本提示与同步解散）。
+- 复用说明：复用现有 DB 模式 `/api/exec/sets?status_filter=archived` 拉取逻辑与项目/版本分组布局渲染，未新增后端接口；“解散归档”通过复用 tempexec UI settings（`tempexec_ui_v1.archivedHidden`）实现持久化隐藏。
+- 测试与验证：
+  - `node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_archived_placeholder.spec.js`（通过）
+  - 回归：`npx playwright test --config tests/playwright.config.js tests/ui/tempexec_project_layout.spec.js tests/ui/case_archive.spec.js`（通过）
+- 更新记录：2025-12-18 新增“归档占位/解散归档”与拖拽指示器约束，补齐 UI 自动化覆盖。
+- 更新记录：2025-12-18 归档遮罩“已归档”右对齐；移除顶部“执行视图”导航卡片并默认展示执行视图；“解散归档”改为按 exec_set_id 记忆，不影响未来新归档再次占位（`tempexec_ui_v1.archivedHidden` 兼容 pid::vid 与 exec_set_id 混用）。
+- 更新记录：2025-12-18 修复导入&分配页普通用例拖拽排序失效：项目/版本分组下点击不再强制关闭抽屉；拖拽开始时清理上一次 dragType，避免误判为项目/版本拖拽。
+- 更新记录：2025-12-18 用例执行导航卡片“个人执行总览”更名为“归档操作&进度预览”，描述同步更新（`index.html`、`tests/ui/tempexec_entry.spec.js`）。
+- 更新记录：2025-12-18 修复导入&分配页同版本盒子内用例拖拽排序：drop 场景读不到 `dataTransfer` 时兜底使用 `tempDragContext`，避免浏览器差异导致排序无效（`scripts/modules/tempexec.js`、`tests/ui/tempexec_project_layout.spec.js`）。
+- 更新记录：2025-12-18 归档与总览交互优化：同版本盒子内拖拽排序兼容 `drop` 阶段无 `dataTransfer`；当前项目用例全部归档后不自动切换到其他项目执行视图（执行视图顶部展示“当前用例归属：项目/版本”）；在“归档操作&进度预览”点已归档“归”标识会自动关闭总览抽屉并打开“用例导入&分配”（`scripts/modules/tempexec.js`、`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_archive_stay_project.spec.js`、`tests/ui/tempexec_project_layout.spec.js`）。
+- 更新记录：2025-12-18 继续修复导入&分配页拖拽排序：`dragover` 不再依赖 `event.dataTransfer` 存在（避免部分浏览器 dragover/drop 不触发导致“能拖动但放下不换位置”）（`scripts/modules/tempexec.js`）；回归 `tests/ui/tempexec_project_layout.spec.js`、`tests/ui/tempexec_archived_placeholder.spec.js`（通过）。
+- 更新记录：2025-12-18 修复项目/版本分组下版本盒子拖拽排序：`drop` 阶段不再提前清理“文件指示器/hoverId”，并优先按指示器位置计算插入点；归档占位 `dragstart` 强制 `preventDefault` 禁止拖拽，避免出现“都能拖拽但无法换位置”的错觉（`scripts/modules/tempexec.js`、`tests/ui/tempexec_project_layout.spec.js`）。
+
 - 功能名称：用例生成页：新用例入库 / 旧用例追加入库（DB 模式）
 - 功能描述：用例生成完成后，提供全局“新用例入库”“旧用例追加入库”入口，将勾选用例写入用例库；新用例入库用例名使用“需求标识”，并支持“直接入库 / 入库并转到执行”；旧用例追加入库支持在项目/版本内选择目标用例并追加，且保留原执行记录；追加会记录到用例库改动历史，执行页 diff 增加“追加”变更类型。
 - 操作方式：

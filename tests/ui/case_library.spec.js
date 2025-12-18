@@ -662,7 +662,6 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
       return st.tempExecFiles.some((f) => (f && f.name) === 'case_library_import');
     });
 
-    await page.click('#openTempExecViewNavBtn');
     const firstCasePatch = page.waitForResponse((res) => {
       return res.url().includes('/api/exec/cases/') && res.request().method() === 'PATCH';
     });
