@@ -46,8 +46,8 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
       { id: 6, user_id: 1, username: 'admin', action: 'delete_case_file', target_type: 'case_file', target_id: 103, result: 'success', detail: { file_name: 'case-5' }, created_at: new Date(now - 5 * 1000).toISOString() },
       { id: 7, user_id: 2, username: 'user_b', action: 'logout', target_type: 'auth', target_id: 2, result: 'success', detail: {}, created_at: new Date(now - 6 * 1000).toISOString() },
       { id: 8, user_id: 1, username: 'admin', action: 'create_project', target_type: 'project', target_id: 9, result: 'success', detail: { name: 'proj-1' }, created_at: new Date(now - 7 * 1000).toISOString() },
-      { id: 9, user_id: 1, username: 'admin', action: 'update_settings', target_type: 'settings', target_id: null, result: 'success', detail: { keys: ['tempExecPageSize'] }, created_at: new Date(now - 8 * 1000).toISOString() },
-      { id: 10, user_id: 2, username: 'user_b', action: 'export_case_files_excel', target_type: 'case_file', target_id: 104, result: 'success', detail: { file_name: 'case-9' }, created_at: new Date(now - 9 * 1000).toISOString() },
+      { id: 9, user_id: 1, username: 'admin', action: 'batch_create_case_items', target_type: 'case_item', target_id: null, result: 'success', detail: { file_name: 'case-batch-1', count: 3 }, created_at: new Date(now - 8 * 1000).toISOString() },
+      { id: 10, user_id: 2, username: 'user_b', action: 'batch_delete_case_items', target_type: 'case_item', target_id: null, result: 'success', detail: { file_name: 'case-batch-2', count: 2 }, created_at: new Date(now - 9 * 1000).toISOString() },
       { id: 11, user_id: 1, username: 'admin', action: 'create_user', target_type: 'user', target_id: 3, result: 'success', detail: { username: 'u3' }, created_at: new Date(now - 10 * 1000).toISOString() },
       { id: 12, user_id: 1, username: 'admin', action: 'import_case_file', target_type: 'case_file', target_id: 105, result: 'success', detail: { file_name: 'case-11', source: 'tempexec' }, created_at: new Date(now - 11 * 1000).toISOString() },
       { id: 13, user_id: 1, username: 'admin', action: 'delete_version', target_type: 'project_version', target_id: 12, result: 'success', detail: { project_name: 'proj-2', version_name: 'v2', page: 'project-admin' }, created_at: new Date(now - 12 * 1000).toISOString() },
@@ -102,6 +102,8 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     // 翻页：下一页应出现更旧的记录。
     await page.click('#opsLogPaginationTop [data-ops-log-page="next"]');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例：case-5');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('批量新增3条');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('批量删除2条');
     await page.click('#opsLogPaginationTop [data-ops-log-page="last"]');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('版本 proj-2v2');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('解散归档');

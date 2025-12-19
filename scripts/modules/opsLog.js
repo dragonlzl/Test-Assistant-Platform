@@ -196,6 +196,17 @@
 
     // 解散归档占位（执行页版本盒子）
     if (action === 'dissolve_exec_archived_placeholders') {
+      var nameList = [];
+      if (Array.isArray(detail.file_names)) nameList = detail.file_names;
+      else if (Array.isArray(detail.case_names)) nameList = detail.case_names;
+      nameList = nameList.map(function(v) { return String(v || '').trim(); }).filter(Boolean);
+      if (nameList.length) {
+        var shown0 = nameList.slice(0, 3);
+        var suffix0 = nameList.length > shown0.length ? (' 等（' + nameList.length + ' 份）') : '';
+        return '用例：' + shown0.join('、') + suffix0;
+      }
+      var singleName0 = String(detail.file_name || detail.case_file_name || '').trim();
+      if (singleName0) return '用例：' + singleName0;
       var projName0 = String(detail.project_name || '').trim();
       var verName0 = String(detail.version_name || detail.name || '').trim();
       var label0 = (projName0 || verName0) ? (projName0 + verName0) : '';
@@ -494,8 +505,16 @@
     if (action === 'export_exec_snapshot') return '导出excel（含结果）';
 
     // 用例（子项）
-    if (action === 'batch_create_case_items') return '批量新增';
-    if (action === 'batch_delete_case_items') return '批量删除';
+    if (action === 'batch_create_case_items') {
+      var count1 = Number(detail.count);
+      if (Number.isFinite(count1) && count1 > 0) return '批量新增' + count1 + '条';
+      return '批量新增';
+    }
+    if (action === 'batch_delete_case_items') {
+      var count2 = Number(detail.count);
+      if (Number.isFinite(count2) && count2 > 0) return '批量删除' + count2 + '条';
+      return '批量删除';
+    }
     if (action === 'create_case_item') return detail && detail.batch === true ? '' : '新增';
     if (action === 'update_case_item') return '修改';
     if (action === 'delete_case_item') return detail && detail.batch === true ? '' : '删除';

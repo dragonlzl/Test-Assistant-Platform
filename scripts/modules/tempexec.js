@@ -2848,12 +2848,19 @@
           var key0 = archivedDissolveBtn.dataset.tempProjectVersionArchivedDissolve || '';
           var parsed0 = parseProjectVersionKey(key0);
           var versionLabel0 = resolveVersionLabel(parsed0.projectId, parsed0.versionId);
-          var archivedCount0 = Array.isArray(state.tempExecArchivedFiles)
+          var archivedList0 = Array.isArray(state.tempExecArchivedFiles)
             ? state.tempExecArchivedFiles.filter(function(f) {
                 if (!f) return false;
                 return String(f.projectId) === String(parsed0.projectId) && String(f.versionId || '') === String(parsed0.versionId || '');
-              }).length
+              })
             : 0;
+          var archivedCount0 = Array.isArray(archivedList0) ? archivedList0.length : 0;
+          var archivedNames0 = Array.isArray(archivedList0)
+            ? archivedList0.map(function(f) {
+                if (!f) return '';
+                return String(f.name || f.fileName || f.caseFileName || '').trim();
+              }).filter(Boolean)
+            : [];
           var confirmed0 = window.confirm('确定解散版本【' + versionLabel0 + '】下的已归档占位吗？\n（不影响归档记录，仅清除占位）');
           if (!confirmed0) return;
           safeLogOperation(
@@ -2866,6 +2873,8 @@
               version_id: parsed0.versionId ? Number(parsed0.versionId) : null,
               version_name: versionLabel0,
               count: archivedCount0,
+              file_name: archivedNames0.length === 1 ? archivedNames0[0] : null,
+              file_names: archivedNames0,
             }
           );
           api.dissolveTempExecArchivedProjectVersion(parsed0.projectId, parsed0.versionId);
@@ -2900,6 +2909,12 @@
           var confirmed2 = window.confirm('是否确认关闭版本【' + versionLabel + '】（' + versionFiles.length + ' 份用例）？' + tip2);
           if (!confirmed2) return;
           if (archivedCount && api.dissolveTempExecArchivedProjectVersion) {
+            var archivedNames = Array.isArray(archivedInVersion)
+              ? archivedInVersion.map(function(f) {
+                  if (!f) return '';
+                  return String(f.name || f.fileName || f.caseFileName || '').trim();
+                }).filter(Boolean)
+              : [];
             safeLogOperation(
               'dissolve_exec_archived_placeholders',
               'project_version',
@@ -2910,6 +2925,8 @@
                 version_id: parsed.versionId ? Number(parsed.versionId) : null,
                 version_name: versionLabel,
                 count: archivedCount,
+                file_name: archivedNames.length === 1 ? archivedNames[0] : null,
+                file_names: archivedNames,
               }
             );
             api.dissolveTempExecArchivedProjectVersion(parsed.projectId, parsed.versionId);
