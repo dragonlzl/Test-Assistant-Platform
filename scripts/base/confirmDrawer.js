@@ -14,6 +14,7 @@
     inputRow: document.getElementById('appConfirmDrawerInputRow'),
     inputLabel: document.getElementById('appConfirmDrawerInputLabel'),
     input: document.getElementById('appConfirmDrawerInput'),
+    select: document.getElementById('appConfirmDrawerSelect'),
     confirmBtn: document.getElementById('appConfirmDrawerConfirmBtn'),
     cancelBtn: document.getElementById('appConfirmDrawerCancelBtn'),
   };
@@ -35,6 +36,11 @@
 
   function clearStatus() {
     setStatus('', '');
+  }
+
+  function isSelectConfig(cfg) {
+    if (!cfg) return false;
+    return cfg.type === 'select' || cfg.kind === 'select';
   }
 
   function resolveDrawerElement(ref) {
@@ -94,13 +100,20 @@
 
   function applyInputConfig(cfg) {
     inputConfig = cfg || null;
-    if (!dom.inputRow || !dom.input) return;
+    if (!dom.inputRow) return;
     if (!inputConfig) {
       dom.inputRow.classList.add('hidden');
-      dom.input.value = '';
-      dom.input.placeholder = '请输入内容';
-      dom.input.removeAttribute('maxlength');
-      dom.input.type = 'text';
+      if (dom.input) {
+        dom.input.value = '';
+        dom.input.placeholder = '请输入内容';
+        dom.input.removeAttribute('maxlength');
+        dom.input.type = 'text';
+        dom.input.classList.remove('hidden');
+      }
+      if (dom.select) {
+        dom.select.innerHTML = '';
+        dom.select.classList.add('hidden');
+      }
       return;
     }
     dom.inputRow.classList.remove('hidden');
@@ -112,13 +125,50 @@
         dom.inputLabel.textContent = labelText;
       }
     }
-    dom.input.type = inputConfig.type ? String(inputConfig.type) : 'text';
-    dom.input.placeholder = inputConfig.placeholder ? String(inputConfig.placeholder) : '请输入内容';
-    dom.input.value = inputConfig.value ? String(inputConfig.value) : '';
-    if (Number.isFinite(inputConfig.maxLength) && Number(inputConfig.maxLength) > 0) {
-      dom.input.setAttribute('maxlength', String(Number(inputConfig.maxLength)));
-    } else {
-      dom.input.removeAttribute('maxlength');
+    var useSelect = isSelectConfig(inputConfig);
+    if (dom.input) dom.input.classList.toggle('hidden', useSelect);
+    if (dom.select) dom.select.classList.toggle('hidden', !useSelect);
+    if (useSelect) {
+      if (dom.select) {
+        dom.select.innerHTML = '';
+        var options = Array.isArray(inputConfig.options) ? inputConfig.options : [];
+        var placeholder = inputConfig.placeholder ? String(inputConfig.placeholder) : '';
+        if (placeholder) {
+          var placeholderOption = document.createElement('option');
+          placeholderOption.value = '';
+          placeholderOption.textContent = placeholder;
+          dom.select.appendChild(placeholderOption);
+        }
+        for (var i = 0; i < options.length; i += 1) {
+          var item = options[i];
+          var optValue = '';
+          var optLabel = '';
+          var optDisabled = false;
+          if (item && typeof item === 'object') {
+            optValue = item.value !== undefined ? String(item.value) : '';
+            optLabel = item.label !== undefined ? String(item.label) : optValue;
+            optDisabled = item.disabled === true;
+          } else {
+            optValue = item !== undefined && item !== null ? String(item) : '';
+            optLabel = optValue;
+          }
+          var optEl = document.createElement('option');
+          optEl.value = optValue;
+          optEl.textContent = optLabel;
+          if (optDisabled) optEl.disabled = true;
+          dom.select.appendChild(optEl);
+        }
+        dom.select.value = inputConfig.value ? String(inputConfig.value) : '';
+      }
+    } else if (dom.input) {
+      dom.input.type = inputConfig.type ? String(inputConfig.type) : 'text';
+      dom.input.placeholder = inputConfig.placeholder ? String(inputConfig.placeholder) : '请输入内容';
+      dom.input.value = inputConfig.value ? String(inputConfig.value) : '';
+      if (Number.isFinite(inputConfig.maxLength) && Number(inputConfig.maxLength) > 0) {
+        dom.input.setAttribute('maxlength', String(Number(inputConfig.maxLength)));
+      } else {
+        dom.input.removeAttribute('maxlength');
+      }
     }
   }
 
@@ -150,21 +200,23 @@
   function handleConfirm() {
     if (!drawerInstance || resolved) return;
     var payload = { ok: true };
-    if (inputConfig && dom.input) {
-      var raw = String(dom.input.value || '');
+    var useSelect = isSelectConfig(inputConfig);
+    var inputEl = useSelect ? dom.select : dom.input;
+    if (inputConfig && inputEl) {
+      var raw = String(inputEl.value || '');
       var trimmed = raw.trim();
       if (inputConfig.required && !trimmed) {
         var labelText = inputConfig.label ? String(inputConfig.label) : '内容';
         var msg = inputConfig.requiredMessage ? String(inputConfig.requiredMessage) : ('请输入' + labelText);
         setStatus(msg, 'warn');
-        dom.input.focus();
+        inputEl.focus();
         return;
       }
       if (typeof inputConfig.validate === 'function') {
         var err = inputConfig.validate(trimmed, raw);
         if (err) {
           setStatus(String(err), 'warn');
-          dom.input.focus();
+          inputEl.focus();
           return;
         }
       }
@@ -203,9 +255,11 @@
     var prevDrawer = options && (options.previousDrawer || options.prevDrawer || options.drawer) ? (options.previousDrawer || options.prevDrawer || options.drawer) : null;
     suspended = suspendDrawer(prevDrawer);
     drawer.open();
-    if (dom.input && inputConfig) {
+    if (inputConfig) {
       setTimeout(function() {
-        if (dom.input && typeof dom.input.focus === 'function') dom.input.focus({ preventScroll: true });
+        var useSelect = isSelectConfig(inputConfig);
+        var inputEl = useSelect ? dom.select : dom.input;
+        if (inputEl && typeof inputEl.focus === 'function') inputEl.focus({ preventScroll: true });
       }, 0);
     }
     return new Promise(function(resolve) {

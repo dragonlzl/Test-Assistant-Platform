@@ -372,7 +372,7 @@ test.describe('项目管理列表与抽屉', () => {
     await expect(emptyHint).toHaveText(/联系管理员指派项目/);
   });
 
-  test('删除版本：存在用例时要求输入转移版本并二次确认', async ({ page }) => {
+  test('删除版本：存在用例时选择转移版本并确认删除', async ({ page }) => {
     const projects = [
       {
         id: 1,
@@ -414,13 +414,6 @@ test.describe('项目管理列表与抽屉', () => {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ detail: '版本已删除' }) });
     });
 
-    const dialogs = [];
-    page.on('dialog', async (dialog) => {
-      dialogs.push(dialog.type());
-      if (dialog.type() === 'prompt') return dialog.accept('v1.1');
-      return dialog.accept();
-    });
-
     await page.click('.tab-group-btn[data-group="manage"]');
     await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
     await page.click('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
@@ -431,9 +424,17 @@ test.describe('项目管理列表与抽屉', () => {
     await expect(row.locator('[data-action="delete-version"]').first()).toBeVisible();
 
     await row.locator('[data-action="delete-version"]').first().click();
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('确认删除该版本');
+    await page.click('#appConfirmDrawerConfirmBtn');
+
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('选择要转移到的版本');
+    await page.selectOption('#appConfirmDrawerSelect', 'v1.1');
+    await page.click('#appConfirmDrawerConfirmBtn');
+
     await expect(page.locator('#projectStatus')).toContainText('已转移用例并删除版本', { timeout: 10000 });
+    await expect(page.locator('.temp-center-toast', { hasText: '已转移用例并删除版本' })).toBeVisible();
     await expect(row).not.toContainText('v1.0');
-    expect(dialogs.filter((t) => t === 'confirm').length).toBeGreaterThanOrEqual(2);
-    expect(dialogs.filter((t) => t === 'prompt').length).toBeGreaterThanOrEqual(1);
   });
 });

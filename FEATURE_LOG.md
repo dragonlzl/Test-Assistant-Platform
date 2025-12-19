@@ -19,6 +19,19 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行分配/项目管理删除确认抽屉化与居中提示  
+- 功能描述：执行分配页版本盒子“×”关闭版本（包含归档占位时提示解散归档）与项目管理删除版本的确认弹窗统一改为抽屉；解散归档占位与删除版本成功后均显示 3 秒居中提示。  
+- 操作方式：  
+  - 执行分配页：版本盒子点击“×”→抽屉确认关闭版本（含归档占位提示）→确认后解散归档占位并提示。  
+  - 项目管理：版本列表点击“删除”→抽屉确认删除→若版本占用需输入转移版本名并二次抽屉确认→删除成功提示。  
+- 使用效果：避免浏览器弹窗打断，删除/解散反馈更统一且不遮挡抽屉。  
+- 新增内容/接口/组件：  
+  - 前端：执行分配版本关闭改抽屉并增加解散居中提示（`scripts/modules/tempexec.js`）；项目管理删除版本改抽屉并增加居中提示（`scripts/modules/admin.js`）。  
+  - 测试：UI 用例更新（`tests/ui/tempexec_archived_placeholder.spec.js`、`tests/ui/project_admin_drawer.spec.js`）。  
+- 复用说明：复用通用确认抽屉（`appConfirmDrawer`）与居中提示样式，不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/tempexec.js scripts/modules/admin.js`（通过）；`npm run test:ui -- tests/ui/tempexec_archived_placeholder.spec.js tests/ui/project_admin_drawer.spec.js`（通过，需放开本地 http.server 端口权限）。  
+- 更新记录：2025-12-19 执行分配/项目管理删除确认抽屉化与居中提示上线（`scripts/modules/tempexec.js`、`scripts/modules/admin.js`、`tests/ui/tempexec_archived_placeholder.spec.js`、`tests/ui/project_admin_drawer.spec.js`）。  
+
 - 功能名称：用例生成全模块用例视图全选按钮  
 - 功能描述：在“用例生成”的全模块用例视图抽屉顶部新增“全选所有模块用例/取消全选”按钮，统一切换所有模块的勾选状态；按钮仅在全模块视图展示，且随勾选数量更新文案与禁用状态。  
 - 操作方式：进入“用例生成”→点击“全模块用例视图”→点击顶部“全选所有模块用例”，再次点击为取消全选。  
@@ -1474,3 +1487,4 @@
 - 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  
 - 更新记录：2025-12-19 进度跳转打开用例视图时不回滚滚动位置（`scripts/core/casegenCore.js`）。  
 - 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  
+- 更新记录：2025-12-19 执行分配关闭版本提示补充归档用例名、删除版本转移提示改为抽屉下拉选择（`scripts/modules/tempexec.js`、`scripts/modules/admin.js`、`scripts/base/confirmDrawer.js`、`index.html`、`tests/ui/tempexec_archived_placeholder.spec.js`、`tests/ui/project_admin_drawer.spec.js`）。  

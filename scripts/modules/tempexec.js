@@ -2992,35 +2992,50 @@
             : [];
           var archivedCount = archivedInVersion.length;
           var versionLabel = resolveVersionLabel(parsed.projectId, parsed.versionId);
-          var tip2 = archivedCount
-            ? ('\n该版本包含 ' + archivedCount + ' 份已归档占位，确认后将同时“解散归档”占位。')
-            : '';
-          var confirmed2 = window.confirm('是否确认关闭版本【' + versionLabel + '】（' + versionFiles.length + ' 份用例）？' + tip2);
-          if (!confirmed2) return;
-          if (archivedCount && api.dissolveTempExecArchivedProjectVersion) {
-            var archivedNames = Array.isArray(archivedInVersion)
-              ? archivedInVersion.map(function(f) {
-                  if (!f) return '';
-                  return String(f.name || f.fileName || f.caseFileName || '').trim();
-                }).filter(Boolean)
-              : [];
-            safeLogOperation(
-              'dissolve_exec_archived_placeholders',
-              'project_version',
-              parsed.versionId ? Number(parsed.versionId) : null,
-              {
-                project_id: parsed.projectId ? Number(parsed.projectId) : null,
-                project_name: resolveProjectLabel(parsed.projectId),
-                version_id: parsed.versionId ? Number(parsed.versionId) : null,
-                version_name: versionLabel,
-                count: archivedCount,
-                file_name: archivedNames.length === 1 ? archivedNames[0] : null,
-                file_names: archivedNames,
-              }
-            );
-            api.dissolveTempExecArchivedProjectVersion(parsed.projectId, parsed.versionId);
+          var archivedNames = Array.isArray(archivedInVersion)
+            ? archivedInVersion.map(function(f) {
+                if (!f) return '';
+                return String(f.name || f.fileName || f.caseFileName || '').trim();
+              }).filter(Boolean)
+            : [];
+          var archivedLabel = archivedNames.length ? archivedNames.join(' 、') : '暂无';
+          var closeMsg = '确定关闭版本【' + versionLabel + '】吗？';
+          if (archivedCount) {
+            closeMsg += '版本包括待解散用例 ' + archivedLabel + '。';
           }
-          api.removeTempExecProjectVersion(parsed.projectId, parsed.versionId);
+          closeMsg += '确认后将关闭该版本（' + versionFiles.length + ' 份用例）。';
+          var prevDrawer2 = resolveTempExecActiveDrawer();
+          openConfirmDrawer({
+            title: '确认关闭版本',
+            message: closeMsg,
+            confirmText: '确认关闭',
+            cancelText: '取消',
+            previousDrawer: prevDrawer2 || null,
+          }).then(function(res) {
+            if (!res || res.ok !== true) return;
+            if (archivedCount && api.dissolveTempExecArchivedProjectVersion) {
+              safeLogOperation(
+                'dissolve_exec_archived_placeholders',
+                'project_version',
+                parsed.versionId ? Number(parsed.versionId) : null,
+                {
+                  project_id: parsed.projectId ? Number(parsed.projectId) : null,
+                  project_name: resolveProjectLabel(parsed.projectId),
+                  version_id: parsed.versionId ? Number(parsed.versionId) : null,
+                  version_name: versionLabel,
+                  count: archivedCount,
+                  file_name: archivedNames.length === 1 ? archivedNames[0] : null,
+                  file_names: archivedNames,
+                }
+              );
+              api.dissolveTempExecArchivedProjectVersion(parsed.projectId, parsed.versionId);
+              if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
+                var toastLabel = archivedNames.length ? archivedNames.join(' 、') : ('共 ' + archivedCount + ' 份');
+                window.app.utils.showCenterToast('已解散归档用例：' + toastLabel, 'ok', 3000);
+              }
+            }
+            api.removeTempExecProjectVersion(parsed.projectId, parsed.versionId);
+          });
           return;
         }
         var fileRemoveBtn = e.target.closest('[data-temp-remove]');

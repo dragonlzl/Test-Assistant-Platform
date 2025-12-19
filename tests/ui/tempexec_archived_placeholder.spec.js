@@ -9,6 +9,7 @@ async function gotoIndex(page) {
 async function switchToTempExec(page) {
   await page.click('[data-group="cases"]');
   await page.click('[data-tab-btn="tempexec"]');
+  await expect(page.locator('#openTempExecAssignDrawerBtn')).toBeVisible();
   await page.click('#openTempExecAssignDrawerBtn');
   await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
 }
@@ -204,13 +205,6 @@ test.describe('用例执行-归档占位与解散归档', () => {
       { id: 3002, project_id: project.id, version_id: versions[0].id, case_file_id: 402, case_count: 1, name: '归档用例C', status: 'archived', created_at: iso(now - 100000), updated_at: iso(now - 90000), archived_at: iso(now - 80000) },
     ];
 
-    let lastConfirm = '';
-    page.removeAllListeners('dialog');
-    page.on('dialog', async (dialog) => {
-      if (dialog.type() === 'confirm') lastConfirm = dialog.message();
-      await dialog.accept();
-    });
-
     await page.route('**/api/**', buildApiRouter({ project, versions, activeSets, archivedSets }));
     await gotoIndex(page);
     await switchToTempExec(page);
@@ -220,7 +214,13 @@ test.describe('用例执行-归档占位与解散归档', () => {
     await expect(v3Card.locator('.temp-req-row.archived')).toHaveCount(1);
 
     await v3Card.locator('[data-temp-project-version-remove]').click();
-    expect(lastConfirm.indexOf('解散归档') !== -1).toBe(true);
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    const closeMsg = await page.locator('#appConfirmDrawerMessage').innerText();
+    expect(closeMsg).toContain('版本包括待解散用例');
+    expect(closeMsg).toContain('归档用例C');
+    expect(closeMsg).not.toContain('占位');
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await expect(page.locator('.temp-center-toast')).toContainText('已解散归档用例：归档用例C', { timeout: 3000 });
     await expect(page.locator('#tempVersionGrid .temp-project-version', { hasText: 'v3' })).toHaveCount(0);
 
     await expect.poll(
