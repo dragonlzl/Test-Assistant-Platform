@@ -48,11 +48,14 @@
       return Boolean(body.querySelector('[data-view-container="' + moduleId + '"]'));
     }
 
-    function openCaseViewIfAvailable(moduleId) {
+    function openCaseViewIfAvailable(moduleId, skipRestore) {
       if (!hasGeneratedCasesForModule(moduleId)) return;
       if (isCaseViewOpenedForModule(moduleId)) return;
       var api = window.app && window.app.casesGenApi ? window.app.casesGenApi : null;
       if (!api || typeof api.toggleCaseView !== 'function') return;
+      if (skipRestore) {
+        try { if (window.app) window.app.__drawerSkipRestoreOnce = true; } catch (_) {}
+      }
       api.toggleCaseView(moduleId);
     }
 
@@ -109,7 +112,7 @@
         scrollElementIntoView(targetCard, 'smooth', 120);
       }
       if (moduleId) {
-        openCaseViewIfAvailable(moduleId);
+        openCaseViewIfAvailable(moduleId, true);
       }
     }
 
