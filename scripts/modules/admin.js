@@ -91,6 +91,42 @@
     el.className = ['status', type || ''].filter(Boolean).join(' ');
   }
 
+  function openConfirmDrawer(options) {
+    const utils = window.app && window.app.utils ? window.app.utils : null;
+    if (utils && typeof utils.openConfirmDrawer === 'function') {
+      return utils.openConfirmDrawer(options || {});
+    }
+    const msg = options && options.message ? String(options.message) : '';
+    let ok = true;
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      ok = window.confirm(msg);
+    }
+    return Promise.resolve({ ok: ok });
+  }
+
+  function promptNewVersionName(projectName) {
+    const drawerApi = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
+    if (!drawerApi || typeof drawerApi.open !== 'function') {
+      const name = prompt('请输入新版本名称');
+      const trimmed = name ? String(name).trim() : '';
+      return Promise.resolve({ ok: Boolean(trimmed), value: trimmed });
+    }
+    return drawerApi.open({
+      title: '新增版本',
+      message: '为项目【' + projectName + '】新增版本',
+      confirmText: '确认新增',
+      cancelText: '取消',
+      previousDrawer: projectDrawer || null,
+      input: {
+        label: '版本名称',
+        placeholder: '请输入新版本名称',
+        required: true,
+        requiredMessage: '请输入版本名称',
+        maxLength: 50,
+      },
+    });
+  }
+
   var centerToastEl = null;
   var centerToastTimer = 0;
   function showCenterToast(text, type) {
@@ -622,14 +658,22 @@
     } else if (action === 'add-version') {
       if (!canManageVersions) return;
       const id = Number(btn.dataset.id);
-      const name = prompt('请输入新版本名称');
-      if (!name) return;
-      api.createVersion(id, { name: name }).then(function() {
-        return loadProjects().then(function() {
-          notifyProjectsUpdated('version-created', { project_id: id, version_name: name });
+      const project = state.projects.find(function(p) { return p && Number(p.id) === Number(id); });
+      const projectName = project && project.name ? project.name : ('项目#' + id);
+      promptNewVersionName(projectName).then(function(res) {
+        if (!res || res.ok !== true) return;
+        const name = res.value ? String(res.value).trim() : '';
+        if (!name) {
+          setStatus(dom.projectStatus, '版本名称不能为空', 'warn');
+          return;
+        }
+        api.createVersion(id, { name: name }).then(function() {
+          return loadProjects().then(function() {
+            notifyProjectsUpdated('version-created', { project_id: id, version_name: name });
+          });
+        }).catch(function(err) {
+          setStatus(dom.projectStatus, err && err.message ? err.message : '新增版本失败', 'err');
         });
-      }).catch(function(err) {
-        setStatus(dom.projectStatus, err && err.message ? err.message : '新增版本失败', 'err');
       });
     } else if (action === 'delete-version') {
       if (!canManageVersions) return;
@@ -746,11 +790,19 @@
       showUserForm(user);
       dom.userForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (action === 'reset-password') {
-      if (!confirm('确认重置该用户密码为默认值？')) return;
-      api.resetUserPassword(id).then(function() {
-        setStatus(dom.userStatus, '密码已重置', 'ok');
-      }).catch(function(err) {
-        setStatus(dom.userStatus, err && err.message ? err.message : '重置失败', 'err');
+      openConfirmDrawer({
+        title: '确认重置密码',
+        message: '确认重置该用户密码为默认值？',
+        confirmText: '确认重置',
+        cancelText: '取消',
+        previousDrawer: userDrawer || null,
+      }).then(function(res) {
+        if (!res || res.ok !== true) return;
+        api.resetUserPassword(id).then(function() {
+          setStatus(dom.userStatus, '密码已重置', 'ok');
+        }).catch(function(err) {
+          setStatus(dom.userStatus, err && err.message ? err.message : '重置失败', 'err');
+        });
       });
     } else if (action === 'delete-user') {
       if (!user) return;

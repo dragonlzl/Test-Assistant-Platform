@@ -1,8 +1,16 @@
 const { test, expect } = require('@playwright/test');
 
+async function confirmDrawerInput(page, value) {
+  const drawer = page.locator('#appConfirmDrawer');
+  await expect(drawer).toHaveClass(/open/);
+  await expect(page.locator('#appConfirmDrawerInputRow')).toBeVisible();
+  await page.fill('#appConfirmDrawerInput', value);
+  await page.click('#appConfirmDrawerConfirmBtn');
+  await expect(drawer).not.toHaveClass(/open/);
+}
+
 test.describe('项目管理变更后，导入区项目/版本下拉刷新', () => {
   test.beforeEach(async ({ page }) => {
-    page.__promptAnswers = [];
     await page.route('**/*', (route) => {
       const url = route.request().url();
       if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
@@ -12,14 +20,6 @@ test.describe('项目管理变更后，导入区项目/版本下拉刷新', () =
     });
     await page.addInitScript(() => {
       try { localStorage.setItem('tap-auth-token', 'test-token'); } catch (_) {}
-    });
-    page.on('dialog', async (dialog) => {
-      if (dialog.type() === 'prompt') {
-        const answer = page.__promptAnswers && page.__promptAnswers.length ? page.__promptAnswers.shift() : '';
-        await dialog.accept(answer);
-        return;
-      }
-      await dialog.accept();
     });
   });
 
@@ -120,10 +120,10 @@ test.describe('项目管理变更后，导入区项目/版本下拉刷新', () =
     await page.click('#caseLibraryImportDrawer button.ghost-btn[data-drawer-close=\"caseLibraryImportDrawer\"]');
 
     // 新增版本：回到项目管理页，触发“项目/版本更新事件”，用例库缓存应失效。
-    page.__promptAnswers.push('v2');
     await page.evaluate(() => { window.app.switchTab('project-admin'); });
     await page.waitForSelector('#projectTableBody [data-action=\"add-version\"][data-id=\"1\"]', { timeout: 10000 });
     await page.click('#projectTableBody [data-action=\"add-version\"][data-id=\"1\"]');
+    await confirmDrawerInput(page, 'v2');
     await expect(page.locator('#projectTableBody')).toContainText('v2', { timeout: 10000 });
 
     // 回到用例库导入：版本下拉应能刷新出 v2（否则说明仍在用旧缓存）。

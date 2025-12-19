@@ -19,6 +19,24 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：弹窗确认改为抽屉（同名导入/入库/归档/管理等）
+- 功能描述：
+  - 同名用例导入差异确认、用例生成入库未勾选提示/追加确认、归档删除/解散、人员重置密码、新增版本、用例库批量删除等原弹窗改为右侧抽屉确认。
+  - 多抽屉场景自动挂起上一层抽屉，确认结束后恢复，避免遮挡与误操作。
+- 操作方式：
+  - 用例库：同名差异对比抽屉内点击“确认覆盖导入/覆盖并追加入库”；批量删除用例时在抽屉确认。
+  - 用例生成：新用例入库/旧用例追加入库时，“未勾选模块提示/确认追加/确认入库”均在抽屉完成。
+  - 用例执行：同名导入差异对比“确认覆盖导入”及执行结果二次提示以抽屉确认；“解散归档/删除归档”均为抽屉确认。
+  - 管理端：人员重置密码、新增版本名称输入均改为抽屉确认/输入。
+- 使用效果：确认提示不再阻塞页面；多抽屉场景层级清晰，操作路径更一致。
+- 新增内容/接口/组件：
+  - 前端新增通用确认抽屉 `#appConfirmDrawer` 与脚本 `scripts/base/confirmDrawer.js`；`scripts/base/utils.js` 暴露 `openConfirmDrawer`。
+  - 业务接入：`scripts/modules/caseLibrary.js`、`scripts/core/casesGenCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseArchive.js`、`scripts/modules/admin.js`。
+  - 样式：`style.css` 增加 confirm drawer 与 `drawer-suspended` 处理。
+- 复用说明：复用现有抽屉框架（`scripts/base/drawer.js`），仅新增通用确认抽屉并接入各模块。
+- 测试与验证：待补充（见本次执行记录）。
+- 更新记录：2025-12-19 弹窗确认统一改为抽屉并补充 UI 测试覆盖。
+
 - 功能名称：执行版本选择（转到执行/入库确认/多版本独立执行）
 - 功能描述：
   - 导入用例时选择的“版本”仅用于记录导入版本（`case_files.version_id`），不再强绑定执行版本。
@@ -1417,3 +1435,12 @@
 - 更新记录：2025-12-19 操作记录补齐操作页面/对象名称/行为文案（`backend/`、`scripts/`、`tests/`）。  
 - 更新记录：2025-12-19 操作记录批量行为显示数量，解散归档操作项展示用例名（`scripts/modules/opsLog.js`、`scripts/modules/tempexec.js`、`tests/ui/ops_log.spec.js`）。  
 - 更新记录：2025-12-19 侧边一级菜单与二级入口同步高亮，悬停一级入口显示独立颜色区分当前页面（`scripts/core/appRuntime.js`、`style.css`、`tests/ui/sidebar_menu.spec.js`）。  
+
+- 功能名称：多处二次确认弹窗改为抽屉提示  
+- 功能描述：用例生成追加确认与模块未勾选提醒、用例执行解散归档确认、用例库编辑批量删除确认等交互统一改为通用确认抽屉，并在打开抽屉时挂起当前抽屉避免遮挡与误操作。  
+- 操作方式：触发追加入库/解散归档/批量删除等操作时，页面顶部弹出确认抽屉，可在抽屉内确认或取消。  
+- 使用效果：二次确认入口统一为抽屉，保留上下文且避免浏览器弹窗打断。  
+- 新增内容/接口/组件：复用通用确认抽屉（`appConfirmDrawer`）；确认抽屉接入与挂起逻辑（`scripts/core/casesGenCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`）；UI 用例更新（`tests/ui/tempexec_progress.spec.js`、`tests/ui/casegen_db_store.spec.js`、`tests/ui/case_library_batch_delete.spec.js`）。  
+- 复用说明：复用既有通用确认抽屉与现有业务流程，不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/tempexec.js scripts/modules/caseLibrary.js scripts/core/casesGenCore.js`（通过）；`npm run test:ui -- tests/ui/tempexec_progress.spec.js tests/ui/tempexec_drag.spec.js tests/ui/casegen_db_store.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_delete.spec.js`（通过）。  
+- 更新记录：2025-12-19 多处确认弹窗改为抽屉并处理抽屉挂起（`scripts/core/casesGenCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`tests/ui/tempexec_progress.spec.js`、`tests/ui/casegen_db_store.spec.js`、`tests/ui/case_library_batch_delete.spec.js`）。  

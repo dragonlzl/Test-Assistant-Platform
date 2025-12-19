@@ -2264,6 +2264,29 @@
 </div>
 </div>
 </div>
+<div class="drawer" id="appConfirmDrawer">
+  <div class="drawer-mask" data-drawer-close="appConfirmDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="appConfirmDrawerTitle">确认操作</h3>
+      <button class="link-toggle" data-drawer-close="appConfirmDrawer" type="button">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="confirm-drawer-message" id="appConfirmDrawerMessage"></p>
+      <div class="row column hidden" id="appConfirmDrawerInputRow">
+        <label class="inline" id="appConfirmDrawerInputLabel">输入内容
+          <input id="appConfirmDrawerInput" type="text" placeholder="请输入内容"/>
+        </label>
+      </div>
+      <p class="hint hidden" id="appConfirmDrawerHint"></p>
+      <p class="status" id="appConfirmDrawerStatus"></p>
+      <div class="actions user-form-actions" style="justify-content:flex-end; gap:8px;">
+        <button class="primary" id="appConfirmDrawerConfirmBtn" type="button">确认</button>
+        <button class="ghost-btn" id="appConfirmDrawerCancelBtn" data-drawer-close="appConfirmDrawer" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
 <section class="card hidden" data-tab-section="project-admin" data-role="admin-only">
 <h2>项目管理</h2>
 <div class="card-body" id="projectAdmin">
@@ -2547,6 +2570,7 @@
 <script src="./scripts/base/state.js" defer></script>
 <script src="./scripts/base/utils.js" defer></script>
 <script src="./scripts/base/drawer.js" defer></script>
+<script src="./scripts/base/confirmDrawer.js" defer></script>
 <script src="./scripts/base/execVersionDrawer.js" defer></script>
 <script src="./services/storage.js" defer></script>
 <script src="./services/modelClient.js" defer></script>

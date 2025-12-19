@@ -7,6 +7,16 @@ async function gotoIndex(page) {
   return base;
 }
 
+async function confirmDrawer(page, message) {
+  const drawer = page.locator('#appConfirmDrawer');
+  await expect(drawer).toHaveClass(/open/);
+  if (message) {
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText(message);
+  }
+  await page.click('#appConfirmDrawerConfirmBtn');
+  await expect(drawer).not.toHaveClass(/open/);
+}
+
 test.describe('用例归档（个人总览归档 + 归档页查看）', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {

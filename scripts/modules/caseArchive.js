@@ -16,6 +16,18 @@
     ? utils.escapeHtmlPreserve
     : function(text) { return escapeHtml(text).replace(/\n/g, '<br>'); };
 
+  function openConfirmDrawer(options) {
+    if (utils && typeof utils.openConfirmDrawer === 'function') {
+      return utils.openConfirmDrawer(options || {});
+    }
+    var msg = options && options.message ? String(options.message) : '';
+    var ok = true;
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      ok = window.confirm(msg);
+    }
+    return Promise.resolve({ ok: ok });
+  }
+
   var dom = {
     root: document.getElementById('caseArchive'),
     status: document.getElementById('caseArchiveStatus'),
@@ -844,18 +856,26 @@
     if (!api.deleteExecArchive) return;
     var sid = Number(execSetId);
     if (!Number.isFinite(sid) || sid <= 0) return;
-    var ok = window.confirm('确定删除该归档记录吗？此操作不可撤销。');
-    if (!ok) return;
-    setStatus(dom.drawerStatus, '删除中...', '');
-    api
-      .deleteExecArchive(sid)
-      .then(function() {
-        setStatus(dom.drawerStatus, '已删除', 'ok');
-        return loadArchives();
-      })
-      .catch(function(err) {
-        setStatus(dom.drawerStatus, err && err.message ? err.message : '删除失败', 'err');
-      });
+    var drawerRef = ensureDrawer();
+    openConfirmDrawer({
+      title: '确认删除归档',
+      message: '确定删除该归档记录吗？此操作不可撤销。',
+      confirmText: '确认删除',
+      cancelText: '取消',
+      previousDrawer: drawerRef,
+    }).then(function(res) {
+      if (!res || res.ok !== true) return;
+      setStatus(dom.drawerStatus, '删除中...', '');
+      api
+        .deleteExecArchive(sid)
+        .then(function() {
+          setStatus(dom.drawerStatus, '已删除', 'ok');
+          return loadArchives();
+        })
+        .catch(function(err) {
+          setStatus(dom.drawerStatus, err && err.message ? err.message : '删除失败', 'err');
+        });
+    });
   }
 
   function bindEvents() {

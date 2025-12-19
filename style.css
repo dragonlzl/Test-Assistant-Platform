@@ -2925,6 +2925,17 @@ body {
 .drawer.closing .drawer-panel {
   pointer-events: auto;
 }
+.drawer.drawer-suspended {
+  visibility: hidden;
+  pointer-events: none;
+  transition: none;
+}
+.drawer.drawer-suspended .drawer-mask,
+.drawer.drawer-suspended .drawer-panel {
+  opacity: 0;
+  pointer-events: none;
+  transition: none;
+}
 .drawer .drawer-header {
   display: flex;
   align-items: center;
@@ -2938,6 +2949,16 @@ body {
   overflow-y: auto;
   height: calc(100vh - 60px);
   overscroll-behavior: contain;
+}
+.confirm-drawer-message {
+  margin: 0 0 12px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+.confirm-drawer-hint {
+  margin: 0 0 12px;
 }
 @media (max-width: 900px) {
   .drawer .drawer-panel {

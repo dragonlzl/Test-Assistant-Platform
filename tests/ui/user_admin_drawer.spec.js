@@ -1,5 +1,15 @@
 const { test, expect } = require('@playwright/test');
 
+async function confirmDrawer(page, message) {
+  const drawer = page.locator('#appConfirmDrawer');
+  await expect(drawer).toHaveClass(/open/);
+  if (message) {
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText(message);
+  }
+  await page.click('#appConfirmDrawerConfirmBtn');
+  await expect(drawer).not.toHaveClass(/open/);
+}
+
 test.describe('人员管理列表与抽屉', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -214,5 +224,22 @@ test.describe('人员管理列表与抽屉', () => {
 
     await page.waitForTimeout(3300);
     await expect(toast).toHaveCount(0);
+  });
+
+  test('重置密码使用确认抽屉', async ({ page }) => {
+    let resetCalled = false;
+    await page.route('**/api/users/2/reset_password', (route) => {
+      resetCalled = true;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ detail: '密码已重置' }) });
+    });
+
+    const manageBtn = page.locator('.tab-group-btn', { hasText: '管理' });
+    await manageBtn.click();
+    await page.locator('[data-group-menu="manage"] [data-tab-btn="user-admin"]').click();
+
+    await page.locator('[data-action="reset-password"][data-id="2"]').click();
+    await confirmDrawer(page, '重置该用户密码为默认值');
+    await expect(page.locator('#userStatus')).toContainText('密码已重置', { timeout: 5000 });
+    expect(resetCalled).toBe(true);
   });
 });

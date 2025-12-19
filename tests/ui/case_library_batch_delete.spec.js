@@ -156,10 +156,6 @@ test.describe('用例库编辑视图批量删除', () => {
       try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
     }, token);
 
-    page.on('dialog', async (dialog) => {
-      await dialog.accept();
-    });
-
     await gotoIndex(page);
     await waitAppReady(page, 30000);
 
@@ -180,6 +176,12 @@ test.describe('用例库编辑视图批量删除', () => {
     await expect(page.locator('#caseLibraryEditBatchDeleteBtn')).toContainText('（2）');
 
     await page.click('#caseLibraryEditBatchDeleteBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await page.waitForFunction(() => {
+      const el = document.getElementById('appConfirmDrawer');
+      return !el || (!el.classList.contains('open') && !el.classList.contains('closing'));
+    });
     const toast = page.locator('.temp-undo-toast');
     await expect(toast).toBeVisible();
     await expect(toast).toContainText('已删除用例 2 条');
@@ -192,6 +194,12 @@ test.describe('用例库编辑视图批量删除', () => {
     await page.click('#caseLibraryEditView input[data-case-lib-select][data-index="0"]');
     await page.click('#caseLibraryEditView input[data-case-lib-select][data-index="1"]');
     await page.click('#caseLibraryEditBatchDeleteBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await page.waitForFunction(() => {
+      const el = document.getElementById('appConfirmDrawer');
+      return !el || (!el.classList.contains('open') && !el.classList.contains('closing'));
+    });
     await expect(page.locator('#caseLibraryEditView')).not.toContainText('正常登录');
     await expect(page.locator('#caseLibraryEditView')).not.toContainText('异常登录');
 

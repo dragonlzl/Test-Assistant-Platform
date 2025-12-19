@@ -63,6 +63,19 @@ async function waitAppInited(page, timeoutMs) {
   throw new Error('waitAppInited timeout: ' + JSON.stringify(last || {}));
 }
 
+async function confirmDrawer(page, options) {
+  const opts = options || {};
+  const drawer = page.locator('#appConfirmDrawer');
+  await expect(drawer).toHaveClass(/open/);
+  if (opts.messageIncludes && Array.isArray(opts.messageIncludes)) {
+    for (const text of opts.messageIncludes) {
+      await expect(page.locator('#appConfirmDrawerMessage')).toContainText(text);
+    }
+  }
+  await page.click('#appConfirmDrawerConfirmBtn');
+  await expect(drawer).not.toHaveClass(/open/);
+}
+
 test.describe('用例执行-导入需确认入库', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -575,6 +588,8 @@ test.describe('用例执行-导入需确认入库', () => {
     await expect(page.locator('#tempExecImportDiffDrawer')).toHaveClass(/open/, { timeout: 8000 });
     await expect(page.locator('#tempExecImportDiffTitle')).toContainText('用例A');
     await page.click('#tempExecImportDiffOverwriteBtn');
+    await confirmDrawer(page, { messageIncludes: ['覆盖导入用例', '用例A'] });
+    await confirmDrawer(page, { messageIncludes: ['清空现有执行结果'] });
 
     await expect.poll(() => (lastUpsertPayload ? 1 : 0), { timeout: 5000 }).toBe(1);
     expect(Object.prototype.hasOwnProperty.call(lastUpsertPayload || {}, 'exec_version_id')).toBe(true);

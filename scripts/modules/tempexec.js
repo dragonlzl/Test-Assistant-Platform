@@ -101,6 +101,54 @@
         }, delay);
       };
     };
+    function openConfirmDrawer(options) {
+      if (utils && typeof utils.openConfirmDrawer === 'function') {
+        return utils.openConfirmDrawer(options || {});
+      }
+      var msg = options && options.message ? String(options.message) : '';
+      var ok = true;
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        ok = window.confirm(msg);
+      }
+      return Promise.resolve({ ok: ok });
+    }
+    function resolveTempExecActiveDrawer() {
+      var candidates = [
+        tempExecArchiveReasonDrawer,
+        tempExecImportDiffDrawer,
+        tempExecImportDrawer,
+        tempExecAssignDrawer,
+        tempExecOverviewDrawer,
+      ];
+      for (var i = 0; i < candidates.length; i += 1) {
+        var drawer = candidates[i];
+        var el = drawer && drawer.element ? drawer.element : null;
+        if (el && el.classList && el.classList.contains('open')) return drawer;
+      }
+      return null;
+    }
+    function promptTempVersionName(prevDrawer) {
+      var drawerApi = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
+      if (drawerApi && typeof drawerApi.open === 'function') {
+        return drawerApi.open({
+          title: '新建版本',
+          message: '请输入版本名称',
+          confirmText: '确认新增',
+          cancelText: '取消',
+          previousDrawer: prevDrawer || null,
+          input: {
+            label: '版本名称',
+            placeholder: '请输入版本名称',
+            required: true,
+            requiredMessage: '请输入版本名称',
+            maxLength: 50,
+          },
+        });
+      }
+      var name = window.prompt('请输入版本名称');
+      var trimmed = name ? String(name).trim() : '';
+      return Promise.resolve({ ok: Boolean(trimmed), value: trimmed });
+    }
     function normalizeTemplateName(raw) {
       if (!raw) return '';
       var clean = raw.split('?')[0] || '';
@@ -925,6 +973,7 @@
     };
     var importDiffState = {
       loading: false,
+      confirming: false,
       fileName: '',
       cleanName: '',
       projectId: null,
@@ -1409,6 +1458,7 @@
       if (!tempExecImportDiffOverwriteBtn) return;
       var can = Boolean(
         !importDiffState.loading &&
+        !importDiffState.confirming &&
         importDiffState.projectId &&
         importDiffState.importVersionId &&
         importDiffState.dbCaseFileId &&
@@ -1422,6 +1472,7 @@
     function openImportDiffDrawerLoading(payload) {
       payload = payload || {};
       importDiffState.loading = true;
+      importDiffState.confirming = false;
       importDiffState.locateIndex = -1;
       importDiffState.diffCounts = { added: 0, removed: 0, changed: 0, total: 0 };
       importDiffState.fileName = payload.fileName || '';
@@ -1478,6 +1529,7 @@
     function openImportDiffDrawer(payload) {
       payload = payload || {};
       importDiffState.loading = false;
+      importDiffState.confirming = false;
       importDiffState.dbItems = Array.isArray(payload.dbItems) ? payload.dbItems : [];
       importDiffState.dbExecSetId = payload.dbExecSetId || null;
       importDiffState.dbExecCases = Array.isArray(payload.dbExecCases) ? payload.dbExecCases : [];
@@ -1520,15 +1572,12 @@
     }
 
     function confirmOverwriteImportFromDiff() {
-      if (importDiffState.loading) return;
+      if (importDiffState.loading || importDiffState.confirming) return;
       if (!apiClient || typeof apiClient.importCaseFile !== 'function' || typeof apiClient.upsertExecSetFromCaseFile !== 'function') {
         if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '后端入库接口未就绪', 'err');
         return;
       }
       var cleanName = importDiffState.cleanName || importDiffState.fileName || '用例';
-      var ok = window.confirm('是否确认覆盖导入用例：' + cleanName + '？');
-      if (!ok) return;
-
       var needSecondConfirm = false;
       var secondMsg = '';
       if (importDiffState.dbHasResult && importDiffState.importHasResult) {
@@ -1538,120 +1587,150 @@
         needSecondConfirm = true;
         secondMsg = '覆盖后将清空现有执行结果（实际结果/备注/缺陷链接），是否继续？';
       }
-      if (needSecondConfirm) {
-        var ok2 = window.confirm(secondMsg);
-        if (!ok2) return;
-      }
-
-      var ext = importDiffState.ext || (String(importDiffState.fileName || '').split('.').pop() || 'xmind');
-      ext = String(ext || '').toLowerCase();
-      if (!ext || ext === String(importDiffState.fileName || '').toLowerCase()) ext = 'xmind';
-      var overwriteFileName = String(importDiffState.cleanName || cleanName || 'case') + '.' + ext;
-
-      importDiffState.loading = true;
+      importDiffState.confirming = true;
       syncImportDiffControls();
-      if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '覆盖导入中...', '');
-      setStatus(tempExecStatus, '覆盖导入中...', '');
 
-      var shouldImportResult = Boolean(importDiffState.importHasResult);
-      var shouldClearResult = Boolean(importDiffState.dbHasResult && !importDiffState.importHasResult);
-      var importCases = null;
-      var preferSource = 'db';
-      if (shouldImportResult) {
-        importCases = Array.isArray(importDiffState.importExecCases) ? importDiffState.importExecCases : [];
-        preferSource = 'import';
-      } else if (shouldClearResult) {
-        importCases = (Array.isArray(importDiffState.importExecCases) ? importDiffState.importExecCases : []).map(function(row) {
-          if (!row) return null;
-          return Object.assign({}, row, { status: '未执行', remark: '', defect_links: [], reuse_details: [] });
-        }).filter(Boolean);
-        preferSource = 'import';
-      }
-
-      apiClient
-        .importCaseFile(
-          {
-            project_id: importDiffState.projectId,
-            version_id: importDiffState.importVersionId,
-            file_name: overwriteFileName,
-            source: importDiffState.source || 'tempexec',
-            items: importDiffState.importItems,
-          },
-          { overwrite: true }
-	        )
-	        .then(function(caseFile) {
-	          if (!caseFile || !caseFile.id) throw new Error('覆盖入库失败：未返回用例文件');
-	          var execVid = Object.prototype.hasOwnProperty.call(importDiffState, 'execVersionId') ? importDiffState.execVersionId : null;
-	          if (execVid === undefined) execVid = null;
-	          return apiClient.upsertExecSetFromCaseFile({
-	            case_file_id: caseFile.id,
-	            mode: 'replace',
-	            preserve_results: false,
-            prefer_result_source: preferSource,
-            import_cases: importCases && importCases.length ? importCases : null,
-            requirement: importDiffState.requirement || '',
-            reuse_enabled: importDiffState.importReuseEnabled ? true : false,
-            reuse_presets: null,
-            exec_version_id: execVid,
+      var started = false;
+      openConfirmDrawer({
+        title: '确认覆盖导入',
+        message: '是否确认覆盖导入用例：' + cleanName + '？',
+        confirmText: '确认覆盖',
+        cancelText: '取消',
+        danger: true,
+        previousDrawer: tempExecImportDiffDrawer,
+      })
+        .then(function(res) {
+          if (!res || res.ok !== true) return null;
+          if (!needSecondConfirm) return { ok: true };
+          return openConfirmDrawer({
+            title: '执行结果确认',
+            message: secondMsg,
+            confirmText: '继续覆盖',
+            cancelText: '取消',
+            danger: true,
+            previousDrawer: tempExecImportDiffDrawer,
           });
         })
-        .then(function(execSet) {
-          if (!execSet || !execSet.id) throw new Error('执行集更新失败');
-          var chain = Promise.resolve();
-          if (api && typeof api.loadTempExecState === 'function') {
-            chain = chain.then(function() { return api.loadTempExecState(); });
-          }
-          return chain.then(function() {
-            if (api && typeof api.setTempExecActive === 'function') {
-              api.setTempExecActive(String(execSet.id));
-            }
-            return execSet;
-          });
-        })
-        .then(function() {
-          var msg = '覆盖导入成功：' + cleanName;
-          if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, msg, 'ok');
-          setStatus(tempExecStatus, msg, 'ok');
-          var external = importDiffState.external || null;
-          if (external && typeof external.resolve === 'function') {
-            importDiffState.external = null;
-            try {
-              external.resolve({ ok: true, overwrite: true });
-            } catch (err) {
-              // ignore
-            }
+        .then(function(res2) {
+          if (!res2 || res2.ok !== true) return null;
+          started = true;
+          importDiffState.confirming = false;
+          var ext = importDiffState.ext || (String(importDiffState.fileName || '').split('.').pop() || 'xmind');
+          ext = String(ext || '').toLowerCase();
+          if (!ext || ext === String(importDiffState.fileName || '').toLowerCase()) ext = 'xmind';
+          var overwriteFileName = String(importDiffState.cleanName || cleanName || 'case') + '.' + ext;
+
+          importDiffState.loading = true;
+          syncImportDiffControls();
+          if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '覆盖导入中...', '');
+          setStatus(tempExecStatus, '覆盖导入中...', '');
+
+          var shouldImportResult = Boolean(importDiffState.importHasResult);
+          var shouldClearResult = Boolean(importDiffState.dbHasResult && !importDiffState.importHasResult);
+          var importCases = null;
+          var preferSource = 'db';
+          if (shouldImportResult) {
+            importCases = Array.isArray(importDiffState.importExecCases) ? importDiffState.importExecCases : [];
+            preferSource = 'import';
+          } else if (shouldClearResult) {
+            importCases = (Array.isArray(importDiffState.importExecCases) ? importDiffState.importExecCases : []).map(function(row) {
+              if (!row) return null;
+              return Object.assign({}, row, { status: '未执行', remark: '', defect_links: [], reuse_details: [] });
+            }).filter(Boolean);
+            preferSource = 'import';
           }
 
-          var q = importDiffState && importDiffState.queue ? importDiffState.queue : null;
-          var keepOpen = Boolean(q && q.active && Number(q.total) > 0 && Number(q.index) < Number(q.total) - 1);
-          if (!keepOpen) {
-            importState.pendingFiles = [];
-            renderImportFileHint();
-            syncImportConfirmState();
-            if (tempExecImportDiffDrawer && typeof tempExecImportDiffDrawer.close === 'function') {
-              tempExecImportDiffDrawer.close();
-            } else if (tempExecImportDiffDrawerEl && tempExecImportDiffDrawerEl.classList) {
-              tempExecImportDiffDrawerEl.classList.remove('open');
-            }
-          }
-        })
-        .catch(function(err) {
-          var msg = err && err.message ? err.message : '覆盖导入失败';
-          if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '覆盖导入失败：' + msg, 'err');
-          setStatus(tempExecStatus, '覆盖导入失败：' + msg, 'err');
-          var external = importDiffState.external || null;
-          if (external && typeof external.resolve === 'function') {
-            importDiffState.external = null;
-            try {
-              external.resolve({ ok: false, reason: 'overwrite_failed', error: err || null });
-            } catch (err2) {
-              // ignore
-            }
-          }
+          return apiClient
+            .importCaseFile(
+              {
+                project_id: importDiffState.projectId,
+                version_id: importDiffState.importVersionId,
+                file_name: overwriteFileName,
+                source: importDiffState.source || 'tempexec',
+                items: importDiffState.importItems,
+              },
+              { overwrite: true }
+            )
+            .then(function(caseFile) {
+              if (!caseFile || !caseFile.id) throw new Error('覆盖入库失败：未返回用例文件');
+              var execVid = Object.prototype.hasOwnProperty.call(importDiffState, 'execVersionId') ? importDiffState.execVersionId : null;
+              if (execVid === undefined) execVid = null;
+              return apiClient.upsertExecSetFromCaseFile({
+                case_file_id: caseFile.id,
+                mode: 'replace',
+                preserve_results: false,
+                prefer_result_source: preferSource,
+                import_cases: importCases && importCases.length ? importCases : null,
+                requirement: importDiffState.requirement || '',
+                reuse_enabled: importDiffState.importReuseEnabled ? true : false,
+                reuse_presets: null,
+                exec_version_id: execVid,
+              });
+            })
+            .then(function(execSet) {
+              if (!execSet || !execSet.id) throw new Error('执行集更新失败');
+              var chain = Promise.resolve();
+              if (api && typeof api.loadTempExecState === 'function') {
+                chain = chain.then(function() { return api.loadTempExecState(); });
+              }
+              return chain.then(function() {
+                if (api && typeof api.setTempExecActive === 'function') {
+                  api.setTempExecActive(String(execSet.id));
+                }
+                return execSet;
+              });
+            })
+            .then(function() {
+              var msg = '覆盖导入成功：' + cleanName;
+              if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, msg, 'ok');
+              setStatus(tempExecStatus, msg, 'ok');
+              var external = importDiffState.external || null;
+              if (external && typeof external.resolve === 'function') {
+                importDiffState.external = null;
+                try {
+                  external.resolve({ ok: true, overwrite: true });
+                } catch (err) {
+                  // ignore
+                }
+              }
+
+              var q = importDiffState && importDiffState.queue ? importDiffState.queue : null;
+              var keepOpen = Boolean(q && q.active && Number(q.total) > 0 && Number(q.index) < Number(q.total) - 1);
+              if (!keepOpen) {
+                importState.pendingFiles = [];
+                renderImportFileHint();
+                syncImportConfirmState();
+                if (tempExecImportDiffDrawer && typeof tempExecImportDiffDrawer.close === 'function') {
+                  tempExecImportDiffDrawer.close();
+                } else if (tempExecImportDiffDrawerEl && tempExecImportDiffDrawerEl.classList) {
+                  tempExecImportDiffDrawerEl.classList.remove('open');
+                }
+              }
+            })
+            .catch(function(err) {
+              var msg = err && err.message ? err.message : '覆盖导入失败';
+              if (tempExecImportDiffStatus) setStatus(tempExecImportDiffStatus, '覆盖导入失败：' + msg, 'err');
+              setStatus(tempExecStatus, '覆盖导入失败：' + msg, 'err');
+              var external = importDiffState.external || null;
+              if (external && typeof external.resolve === 'function') {
+                importDiffState.external = null;
+                try {
+                  external.resolve({ ok: false, reason: 'overwrite_failed', error: err || null });
+                } catch (err2) {
+                  // ignore
+                }
+              }
+            })
+            .finally(function() {
+              importDiffState.loading = false;
+              syncImportDiffControls();
+            });
         })
         .finally(function() {
-          importDiffState.loading = false;
-          syncImportDiffControls();
+          if (!started) {
+            importDiffState.confirming = false;
+            syncImportDiffControls();
+          }
         });
     }
 
@@ -2861,23 +2940,32 @@
                 return String(f.name || f.fileName || f.caseFileName || '').trim();
               }).filter(Boolean)
             : [];
-          var confirmed0 = window.confirm('确定解散版本【' + versionLabel0 + '】下的已归档占位吗？\n（不影响归档记录，仅清除占位）');
-          if (!confirmed0) return;
-          safeLogOperation(
-            'dissolve_exec_archived_placeholders',
-            'project_version',
-            parsed0.versionId ? Number(parsed0.versionId) : null,
-            {
-              project_id: parsed0.projectId ? Number(parsed0.projectId) : null,
-              project_name: resolveProjectLabel(parsed0.projectId),
-              version_id: parsed0.versionId ? Number(parsed0.versionId) : null,
-              version_name: versionLabel0,
-              count: archivedCount0,
-              file_name: archivedNames0.length === 1 ? archivedNames0[0] : null,
-              file_names: archivedNames0,
-            }
-          );
-          api.dissolveTempExecArchivedProjectVersion(parsed0.projectId, parsed0.versionId);
+          var dissolveMsg = '确定解散版本【' + versionLabel0 + '】下的已归档占位吗？\\n（不影响归档记录，仅清除占位）';
+          var prevDrawer = resolveTempExecActiveDrawer();
+          openConfirmDrawer({
+            title: '确认解散归档',
+            message: dissolveMsg,
+            confirmText: '确认解散',
+            cancelText: '取消',
+            previousDrawer: prevDrawer || null,
+          }).then(function(res) {
+            if (!res || res.ok !== true) return;
+            safeLogOperation(
+              'dissolve_exec_archived_placeholders',
+              'project_version',
+              parsed0.versionId ? Number(parsed0.versionId) : null,
+              {
+                project_id: parsed0.projectId ? Number(parsed0.projectId) : null,
+                project_name: resolveProjectLabel(parsed0.projectId),
+                version_id: parsed0.versionId ? Number(parsed0.versionId) : null,
+                version_name: versionLabel0,
+                count: archivedCount0,
+                file_name: archivedNames0.length === 1 ? archivedNames0[0] : null,
+                file_names: archivedNames0,
+              }
+            );
+            api.dissolveTempExecArchivedProjectVersion(parsed0.projectId, parsed0.versionId);
+          });
           return;
         }
         var projectRemoveBtn = e.target.closest('[data-temp-project-remove]');
@@ -3903,10 +3991,12 @@
           setStatus(tempExecStatus, '当前为项目分组模式，不支持手动新建版本', 'warn');
           return;
         }
-        var name = window.prompt('请输入版本名称');
-        if (!name) return;
-        var id = api.createTempVersion(name);
-        if (id && tempExecStatus) setStatus(tempExecStatus, '版本已创建，可拖拽需求到对应版本', 'ok');
+        var prevDrawer = resolveTempExecActiveDrawer();
+        promptTempVersionName(prevDrawer).then(function(res) {
+          if (!res || res.ok !== true) return;
+          var id = api.createTempVersion(res.value || '');
+          if (id && tempExecStatus) setStatus(tempExecStatus, '版本已创建，可拖拽需求到对应版本', 'ok');
+        });
       });
     }
 

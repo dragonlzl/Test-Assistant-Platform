@@ -181,6 +181,7 @@
           mode: '',
           newAction: '',
           loading: false,
+          confirming: false,
           projects: [],
           versionsByProject: {},
           caseFilesByProject: {},
@@ -211,6 +212,7 @@
         onClose: function() {
           var st = ensureDbStoreState();
           st.loading = false;
+          st.confirming = false;
           st.mode = '';
           st.projectId = '';
           st.versionId = '';
@@ -851,6 +853,28 @@
       return out;
     }
 
+    function openConfirmDrawer(options) {
+      var liveUtils = window.app && window.app.utils ? window.app.utils : null;
+      if (liveUtils && typeof liveUtils.openConfirmDrawer === 'function') {
+        return liveUtils.openConfirmDrawer(options || {});
+      }
+      var msg = options && options.message ? String(options.message) : '';
+      var ok = true;
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        ok = window.confirm(msg);
+      }
+      return Promise.resolve({ ok: ok });
+    }
+    function resolveCaseGenActiveDrawer() {
+      var candidates = [caseGenDbStoreDrawer, caseGenViewDrawer];
+      for (var i = 0; i < candidates.length; i += 1) {
+        var drawer = candidates[i];
+        var el = drawer && drawer.element ? drawer.element : null;
+        if (el && el.classList && el.classList.contains('open')) return drawer;
+      }
+      return null;
+    }
+
     function syncCaseGenDbStoreControls() {
       var st = ensureDbStoreState();
       var mode = st.mode || '';
@@ -860,15 +884,16 @@
       var pid = st.projectId || '';
       var vid = st.versionId || '';
       var fid = st.caseFileId || '';
+      var busy = Boolean(st.loading || st.confirming);
       if (caseGenDbStoreVersionSelect) {
-        caseGenDbStoreVersionSelect.disabled = Boolean(st.loading || !pid);
+        caseGenDbStoreVersionSelect.disabled = Boolean(busy || !pid);
       }
       if (caseGenDbStoreCaseFileSelect) {
-        caseGenDbStoreCaseFileSelect.disabled = Boolean(st.loading || mode !== 'append' || !pid || !vid);
+        caseGenDbStoreCaseFileSelect.disabled = Boolean(busy || mode !== 'append' || !pid || !vid);
       }
       if (caseGenDbStoreConfirmBtn) {
         var needCaseFile = mode === 'append';
-        var can = Boolean(!st.loading && pid && vid && (!needCaseFile || fid));
+        var can = Boolean(!busy && pid && vid && (!needCaseFile || fid));
         caseGenDbStoreConfirmBtn.disabled = !can;
       }
     }
@@ -1038,11 +1063,20 @@
         });
     }
 
-    function maybeConfirmIncompleteModulesBeforeStore() {
+    function maybeConfirmIncompleteModulesBeforeStore(actionLabel, drawerRef) {
       var missing = listCaseGenModulesMissingSelectionOrGeneration();
-      if (!missing.length) return true;
-      var msg = missing.join(' ') + ' 没有选择用例，确定继续写入用例库吗？';
-      return window.confirm(msg);
+      if (!missing.length) return Promise.resolve(true);
+      var label = actionLabel ? String(actionLabel) : '写入用例库';
+      var msg = missing.join(' ') + ' 没有选择用例，确定继续' + label + '吗？';
+      return openConfirmDrawer({
+        title: '确认' + label,
+        message: msg,
+        confirmText: '继续' + label,
+        cancelText: '返回检查',
+        previousDrawer: drawerRef || null,
+      }).then(function(res) {
+        return Boolean(res && res.ok === true);
+      });
     }
 
     function triggerTempExecCaseLibrarySync(reason) {
@@ -1102,6 +1136,7 @@
       }
       var st = ensureDbStoreState();
       st.mode = mode || '';
+      st.confirming = false;
       st.projectId = '';
       st.versionId = '';
       st.caseFileId = '';
@@ -1191,7 +1226,7 @@
 
     function confirmCaseGenDbNewImport() {
       var st = ensureDbStoreState();
-      if (st.loading) return;
+      if (st.loading || st.confirming) return;
       var items = collectDbStoreSelectedItems();
       if (!items.length) {
         setStatus(caseGenStatus, '请先勾选用例后再入库', 'warn');
@@ -1201,156 +1236,162 @@
         if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '请先选择项目与版本', 'warn');
         return;
       }
-      var okMissing = maybeConfirmIncompleteModulesBeforeStore();
-      if (!okMissing) {
-        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消入库', 'warn');
-        return;
-      }
-      var requirementLabel = ensureRequirementLabel('请输入需求标识后再入库');
-      if (!requirementLabel) {
-        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消入库（需求标识为空）', 'warn');
-        return;
-      }
-      var fileName = String(requirementLabel) + '.xmind';
-      var action = st.newAction || (caseGenStoreActionSelect ? caseGenStoreActionSelect.value : '');
-      action = String(action || '');
-      var projectIdNum = Number(st.projectId);
-      var versionIdNum = Number(st.versionId);
-      st.loading = true;
+      var drawerRef = ensureCaseGenDbStoreDrawer();
+      st.confirming = true;
       syncCaseGenDbStoreControls();
-      if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '入库中...', '');
-      apiClient
-        .importCaseFile({
-          project_id: projectIdNum,
-          version_id: versionIdNum,
-          file_name: fileName,
-          source: 'casegen',
-          items: items,
-        })
-        .then(function(caseFile) {
-          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '入库成功：' + requirementLabel, 'ok');
-          setStatus(caseGenStatus, '入库成功：' + requirementLabel, 'ok');
-          try {
-            if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
-              window.app.utils.showCenterToast('用例入库成功', 'ok', 3000);
-            }
-          } catch (_) {}
-          var drawer = ensureCaseGenDbStoreDrawer();
-          if (drawer) drawer.close();
-          triggerTempExecCaseLibrarySync('casegen-new');
-          if (action === 'store_to_exec' && caseFile && caseFile.id && typeof apiClient.upsertExecSetFromCaseFile === 'function') {
-            var execVersionDrawerApi = window.app && window.app.execVersionDrawer ? window.app.execVersionDrawer : null;
-            if (!execVersionDrawerApi || typeof execVersionDrawerApi.open !== 'function') return null;
-            var projectName = '';
+      maybeConfirmIncompleteModulesBeforeStore('入库', drawerRef).then(function(okMissing) {
+        st.confirming = false;
+        syncCaseGenDbStoreControls();
+        if (!okMissing) {
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消入库', 'warn');
+          return;
+        }
+        var requirementLabel = ensureRequirementLabel('请输入需求标识后再入库');
+        if (!requirementLabel) {
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消入库（需求标识为空）', 'warn');
+          return;
+        }
+        var fileName = String(requirementLabel) + '.xmind';
+        var action = st.newAction || (caseGenStoreActionSelect ? caseGenStoreActionSelect.value : '');
+        action = String(action || '');
+        var projectIdNum = Number(st.projectId);
+        var versionIdNum = Number(st.versionId);
+        st.loading = true;
+        syncCaseGenDbStoreControls();
+        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '入库中...', '');
+        apiClient
+          .importCaseFile({
+            project_id: projectIdNum,
+            version_id: versionIdNum,
+            file_name: fileName,
+            source: 'casegen',
+            items: items,
+          })
+          .then(function(caseFile) {
+            if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '入库成功：' + requirementLabel, 'ok');
+            setStatus(caseGenStatus, '入库成功：' + requirementLabel, 'ok');
             try {
-              var pList = Array.isArray(state.projects) ? state.projects : [];
-              var found = pList.find(function(p) { return p && Number(p.id) === Number(projectIdNum); }) || null;
-              projectName = found && found.name ? String(found.name) : '';
-            } catch (_) {
-              projectName = '';
+              if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
+                window.app.utils.showCenterToast('用例入库成功', 'ok', 3000);
+              }
+            } catch (_) {}
+            var drawer = ensureCaseGenDbStoreDrawer();
+            if (drawer) drawer.close();
+            triggerTempExecCaseLibrarySync('casegen-new');
+            if (action === 'store_to_exec' && caseFile && caseFile.id && typeof apiClient.upsertExecSetFromCaseFile === 'function') {
+              var execVersionDrawerApi = window.app && window.app.execVersionDrawer ? window.app.execVersionDrawer : null;
+              if (!execVersionDrawerApi || typeof execVersionDrawerApi.open !== 'function') return null;
+              var projectName = '';
+              try {
+                var pList = Array.isArray(state.projects) ? state.projects : [];
+                var found = pList.find(function(p) { return p && Number(p.id) === Number(projectIdNum); }) || null;
+                projectName = found && found.name ? String(found.name) : '';
+              } catch (_) {
+                projectName = '';
+              }
+              return execVersionDrawerApi.open({
+                title: '选择执行版本',
+                projectId: projectIdNum,
+                projectName: projectName || ('项目#' + projectIdNum),
+                importVersionId: versionIdNum,
+              }).then(function(res0) {
+                if (!res0 || res0.ok !== true) return null;
+                var execVid = Object.prototype.hasOwnProperty.call(res0, 'versionId') ? res0.versionId : (res0.exec_version_id || null);
+                return apiClient
+                  .upsertExecSetFromCaseFile({
+                    case_file_id: caseFile.id,
+                    mode: 'replace',
+                    preserve_results: true,
+                    prefer_result_source: 'db',
+                    requirement: requirementLabel,
+                    exec_version_id: execVid,
+                  })
+                  .then(function(execSet) {
+                    if (execSet && execSet.id) return goToExecSet(execSet.id);
+                    return null;
+                  });
+              });
             }
-            return execVersionDrawerApi.open({
-              title: '选择执行版本',
-              projectId: projectIdNum,
-              projectName: projectName || ('项目#' + projectIdNum),
-              importVersionId: versionIdNum,
-            }).then(function(res0) {
-              if (!res0 || res0.ok !== true) return null;
-              var execVid = Object.prototype.hasOwnProperty.call(res0, 'versionId') ? res0.versionId : (res0.exec_version_id || null);
-              return apiClient
-                .upsertExecSetFromCaseFile({
-                  case_file_id: caseFile.id,
-                  mode: 'replace',
-                  preserve_results: true,
-                  prefer_result_source: 'db',
-                  requirement: requirementLabel,
-                  exec_version_id: execVid,
+            return null;
+          })
+          .catch(function(err) {
+            var msg = err && err.message ? err.message : '入库失败';
+            if (msg.indexOf('同名') !== -1 && window.app && window.app.caseLibraryApi && typeof window.app.caseLibraryApi.openImportDiffForExternal === 'function') {
+              var drawer2 = ensureCaseGenDbStoreDrawer();
+              if (drawer2) drawer2.close();
+              setStatus(caseGenStatus, '检测到同名用例，已打开差异对比抽屉', 'warn');
+              return window.app.caseLibraryApi
+                .openImportDiffForExternal({
+                  projectId: projectIdNum,
+                  versionId: versionIdNum,
+                  fileName: fileName,
+                  source: 'casegen',
+                  items: items,
+                  error: err,
                 })
-                .then(function(execSet) {
-                  if (execSet && execSet.id) return goToExecSet(execSet.id);
+                .then(function(res) {
+                  if (!res || res.ok !== true) {
+                    setStatus(caseGenStatus, '已取消覆盖导入', 'warn');
+                    return null;
+                  }
+                  var caseFile2 = res.caseFile || null;
+                  try {
+                    if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
+                      window.app.utils.showCenterToast('用例入库成功', 'ok', 3000);
+                    }
+                  } catch (_) {}
+                  triggerTempExecCaseLibrarySync('casegen-new-overwrite');
+                  if (action === 'store_to_exec' && caseFile2 && caseFile2.id && typeof apiClient.upsertExecSetFromCaseFile === 'function') {
+                    var execVersionDrawerApi2 = window.app && window.app.execVersionDrawer ? window.app.execVersionDrawer : null;
+                    if (!execVersionDrawerApi2 || typeof execVersionDrawerApi2.open !== 'function') return null;
+                    var projectName2 = '';
+                    try {
+                      var pList2 = Array.isArray(state.projects) ? state.projects : [];
+                      var found2 = pList2.find(function(p) { return p && Number(p.id) === Number(projectIdNum); }) || null;
+                      projectName2 = found2 && found2.name ? String(found2.name) : '';
+                    } catch (_) {
+                      projectName2 = '';
+                    }
+                    return execVersionDrawerApi2.open({
+                      title: '选择执行版本',
+                      projectId: projectIdNum,
+                      projectName: projectName2 || ('项目#' + projectIdNum),
+                      importVersionId: versionIdNum,
+                    }).then(function(res1) {
+                      if (!res1 || res1.ok !== true) return null;
+                      var execVid2 = Object.prototype.hasOwnProperty.call(res1, 'versionId') ? res1.versionId : (res1.exec_version_id || null);
+                      return apiClient
+                        .upsertExecSetFromCaseFile({
+                          case_file_id: caseFile2.id,
+                          mode: 'replace',
+                          preserve_results: true,
+                          prefer_result_source: 'db',
+                          requirement: requirementLabel,
+                          exec_version_id: execVid2,
+                        })
+                        .then(function(execSet2) {
+                          if (execSet2 && execSet2.id) return goToExecSet(execSet2.id);
+                          return null;
+                        });
+                    });
+                  }
                   return null;
                 });
-            });
-          }
-          return null;
-        })
-        .catch(function(err) {
-          var msg = err && err.message ? err.message : '入库失败';
-          if (msg.indexOf('同名') !== -1 && window.app && window.app.caseLibraryApi && typeof window.app.caseLibraryApi.openImportDiffForExternal === 'function') {
-            var drawer2 = ensureCaseGenDbStoreDrawer();
-            if (drawer2) drawer2.close();
-            setStatus(caseGenStatus, '检测到同名用例，已打开差异对比抽屉', 'warn');
-            return window.app.caseLibraryApi
-              .openImportDiffForExternal({
-                projectId: projectIdNum,
-                versionId: versionIdNum,
-                fileName: fileName,
-                source: 'casegen',
-                items: items,
-                error: err,
-              })
-              .then(function(res) {
-                if (!res || res.ok !== true) {
-                  setStatus(caseGenStatus, '已取消覆盖导入', 'warn');
-                  return null;
-                }
-                var caseFile2 = res.caseFile || null;
-                try {
-                  if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
-                    window.app.utils.showCenterToast('用例入库成功', 'ok', 3000);
-                  }
-                } catch (_) {}
-                triggerTempExecCaseLibrarySync('casegen-new-overwrite');
-                if (action === 'store_to_exec' && caseFile2 && caseFile2.id && typeof apiClient.upsertExecSetFromCaseFile === 'function') {
-                  var execVersionDrawerApi2 = window.app && window.app.execVersionDrawer ? window.app.execVersionDrawer : null;
-                  if (!execVersionDrawerApi2 || typeof execVersionDrawerApi2.open !== 'function') return null;
-                  var projectName2 = '';
-                  try {
-                    var pList2 = Array.isArray(state.projects) ? state.projects : [];
-                    var found2 = pList2.find(function(p) { return p && Number(p.id) === Number(projectIdNum); }) || null;
-                    projectName2 = found2 && found2.name ? String(found2.name) : '';
-                  } catch (_) {
-                    projectName2 = '';
-                  }
-                  return execVersionDrawerApi2.open({
-                    title: '选择执行版本',
-                    projectId: projectIdNum,
-                    projectName: projectName2 || ('项目#' + projectIdNum),
-                    importVersionId: versionIdNum,
-                  }).then(function(res1) {
-                    if (!res1 || res1.ok !== true) return null;
-                    var execVid2 = Object.prototype.hasOwnProperty.call(res1, 'versionId') ? res1.versionId : (res1.exec_version_id || null);
-                    return apiClient
-                      .upsertExecSetFromCaseFile({
-                        case_file_id: caseFile2.id,
-                        mode: 'replace',
-                        preserve_results: true,
-                        prefer_result_source: 'db',
-                        requirement: requirementLabel,
-                        exec_version_id: execVid2,
-                      })
-                      .then(function(execSet2) {
-                        if (execSet2 && execSet2.id) return goToExecSet(execSet2.id);
-                        return null;
-                      });
-                  });
-                }
-                return null;
-              });
-          }
-          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '入库失败：' + msg, 'err');
-          setStatus(caseGenStatus, '入库失败：' + msg, 'err');
-          return null;
-        })
-        .finally(function() {
-          st.loading = false;
-          syncCaseGenDbStoreControls();
-        });
+            }
+            if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '入库失败：' + msg, 'err');
+            setStatus(caseGenStatus, '入库失败：' + msg, 'err');
+            return null;
+          })
+          .finally(function() {
+            st.loading = false;
+            syncCaseGenDbStoreControls();
+          });
+      });
     }
 
     function confirmCaseGenDbAppend() {
       var st = ensureDbStoreState();
-      if (st.loading) return;
+      if (st.loading || st.confirming) return;
       var items = collectDbStoreSelectedItems();
       if (!items.length) {
         setStatus(caseGenStatus, '请先勾选用例后再追加入库', 'warn');
@@ -1358,11 +1399,6 @@
       }
       if (!st.projectId || !st.versionId || !st.caseFileId) {
         if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '请先选择项目、版本与目标用例', 'warn');
-        return;
-      }
-      var okMissing = maybeConfirmIncompleteModulesBeforeStore();
-      if (!okMissing) {
-        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消追加入库', 'warn');
         return;
       }
       var selectedName = '';
@@ -1373,11 +1409,6 @@
         }
       } catch (err) {
         selectedName = '';
-      }
-      var ok = window.confirm('确认将 ' + items.length + ' 条用例追加到【' + (selectedName || '目标用例') + '】吗？');
-      if (!ok) {
-        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消追加入库', 'warn');
-        return;
       }
       if (!apiClient || typeof apiClient.appendCaseItems !== 'function') {
         if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '后端追加接口未就绪', 'err');
@@ -1406,112 +1437,142 @@
         triggerTempExecCaseLibrarySync(overwrite ? 'casegen-append-overwrite' : 'casegen-append');
       }
 
-      // 若目标用例中已存在同模块同标题用例：打开 diff 抽屉，确认是否覆盖后再追加入库。
-      if (typeof apiClient.listCaseItems === 'function' &&
-          window.app &&
-          window.app.caseLibraryApi &&
-          typeof window.app.caseLibraryApi.openAppendDiffForExternal === 'function') {
+      function proceedAppend() {
+        // 若目标用例中已存在同模块同标题用例：打开 diff 抽屉，确认是否覆盖后再追加入库。
+        if (typeof apiClient.listCaseItems === 'function' &&
+            window.app &&
+            window.app.caseLibraryApi &&
+            typeof window.app.caseLibraryApi.openAppendDiffForExternal === 'function') {
+          st.loading = true;
+          syncCaseGenDbStoreControls();
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '检查重复用例中...', '');
+          apiClient
+            .listCaseItems(caseFileIdNum)
+            .then(function(dbItems) {
+              var list = Array.isArray(dbItems) ? dbItems : [];
+              var keyMap = {};
+              items.forEach(function(it) {
+                var mod = (it && it.module ? String(it.module) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+                var title = (it && it.title ? String(it.title) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+                var pre = (it && it.precondition ? String(it.precondition) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+                var steps = (it && it.steps ? String(it.steps) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+                var expected = (it && it.expected ? String(it.expected) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+                if (mod && title && expected) keyMap[mod + '::' + title + '::' + pre + '::' + steps + '::' + expected] = true;
+              });
+              var hasConflict = list.some(function(it) {
+                var mod = (it && it.module ? String(it.module) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+                var title = (it && it.title ? String(it.title) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+                var pre = (it && it.precondition ? String(it.precondition) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+                var steps = (it && it.steps ? String(it.steps) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+                var expected = (it && it.expected ? String(it.expected) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
+                return Boolean(mod && title && expected && keyMap[mod + '::' + title + '::' + pre + '::' + steps + '::' + expected]);
+              });
+
+              if (!hasConflict) {
+                st.loading = true;
+                syncCaseGenDbStoreControls();
+                if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '追加入库中...', '');
+                return apiClient.appendCaseItems(caseFileIdNum, { items: items }).then(function(res) {
+                  applyAppendResult(res || null, false);
+                  var drawer0 = ensureCaseGenDbStoreDrawer();
+                  if (drawer0) drawer0.close();
+                  return null;
+                }).finally(function() {
+                  st.loading = false;
+                  syncCaseGenDbStoreControls();
+                });
+              }
+
+              var drawer = ensureCaseGenDbStoreDrawer();
+              if (drawer) drawer.close();
+              st.loading = false;
+              syncCaseGenDbStoreControls();
+              if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '', '');
+              setStatus(caseGenStatus, '检测到重复用例，已打开差异对比，请确认是否覆盖', 'warn');
+              return window.app.caseLibraryApi
+                .openAppendDiffForExternal({
+                  projectId: projectIdNum,
+                  versionId: versionIdNum,
+                  caseFileId: caseFileIdNum,
+                  fileNameClean: selectedName || ('用例#' + caseFileIdNum),
+                  items: items,
+                  dbItems: list,
+                })
+                .then(function(res) {
+                  if (res && res.ok === true) {
+                    applyAppendResult(res.result || null, true);
+                    return null;
+                  }
+                  setStatus(caseGenStatus, '已取消追加入库', 'warn');
+                  return null;
+                });
+            })
+            .then(function() {
+              // no-op
+              return null;
+            })
+            .catch(function(err) {
+              st.loading = false;
+              syncCaseGenDbStoreControls();
+              var msg = err && err.message ? err.message : '追加入库失败';
+              if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '追加入库失败：' + msg, 'err');
+              setStatus(caseGenStatus, '追加入库失败：' + msg, 'err');
+            });
+          return;
+        }
+
         st.loading = true;
         syncCaseGenDbStoreControls();
-        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '检查重复用例中...', '');
+        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '追加入库中...', '');
         apiClient
-          .listCaseItems(caseFileIdNum)
-          .then(function(dbItems) {
-            var list = Array.isArray(dbItems) ? dbItems : [];
-            var keyMap = {};
-            items.forEach(function(it) {
-              var mod = (it && it.module ? String(it.module) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
-              var title = (it && it.title ? String(it.title) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
-              var pre = (it && it.precondition ? String(it.precondition) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
-              var steps = (it && it.steps ? String(it.steps) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
-              var expected = (it && it.expected ? String(it.expected) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
-              if (mod && title && expected) keyMap[mod + '::' + title + '::' + pre + '::' + steps + '::' + expected] = true;
-            });
-            var hasConflict = list.some(function(it) {
-              var mod = (it && it.module ? String(it.module) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
-              var title = (it && it.title ? String(it.title) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
-              var pre = (it && it.precondition ? String(it.precondition) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
-              var steps = (it && it.steps ? String(it.steps) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
-              var expected = (it && it.expected ? String(it.expected) : '').replace(/\r\n/g, '\n').trim().toLowerCase();
-              return Boolean(mod && title && expected && keyMap[mod + '::' + title + '::' + pre + '::' + steps + '::' + expected]);
-            });
-
-            if (!hasConflict) {
-              st.loading = true;
-              syncCaseGenDbStoreControls();
-              if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '追加入库中...', '');
-              return apiClient.appendCaseItems(caseFileIdNum, { items: items }).then(function(res) {
-                applyAppendResult(res || null, false);
-                var drawer0 = ensureCaseGenDbStoreDrawer();
-                if (drawer0) drawer0.close();
-                return null;
-              }).finally(function() {
-                st.loading = false;
-                syncCaseGenDbStoreControls();
-              });
-            }
-
+          .appendCaseItems(caseFileIdNum, { items: items })
+          .then(function(res) {
+            applyAppendResult(res || null, false);
             var drawer = ensureCaseGenDbStoreDrawer();
             if (drawer) drawer.close();
-            st.loading = false;
-            syncCaseGenDbStoreControls();
-            if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '', '');
-            setStatus(caseGenStatus, '检测到重复用例，已打开差异对比，请确认是否覆盖', 'warn');
-            return window.app.caseLibraryApi
-              .openAppendDiffForExternal({
-                projectId: projectIdNum,
-                versionId: versionIdNum,
-                caseFileId: caseFileIdNum,
-                fileNameClean: selectedName || ('用例#' + caseFileIdNum),
-                items: items,
-                dbItems: list,
-              })
-              .then(function(res) {
-                if (res && res.ok === true) {
-                  applyAppendResult(res.result || null, true);
-                  return null;
-                }
-                setStatus(caseGenStatus, '已取消追加入库', 'warn');
-                return null;
-              });
-          })
-          .then(function() {
-            // no-op
             return null;
           })
           .catch(function(err) {
-            st.loading = false;
-            syncCaseGenDbStoreControls();
             var msg = err && err.message ? err.message : '追加入库失败';
             if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '追加入库失败：' + msg, 'err');
             setStatus(caseGenStatus, '追加入库失败：' + msg, 'err');
+            return null;
+          })
+          .finally(function() {
+            st.loading = false;
+            syncCaseGenDbStoreControls();
           });
-        return;
       }
 
-      st.loading = true;
+      var drawerRef = ensureCaseGenDbStoreDrawer();
+      st.confirming = true;
       syncCaseGenDbStoreControls();
-      if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '追加入库中...', '');
-      apiClient
-        .appendCaseItems(caseFileIdNum, { items: items })
-        .then(function(res) {
-          applyAppendResult(res || null, false);
-          var drawer = ensureCaseGenDbStoreDrawer();
-          if (drawer) drawer.close();
-          return null;
-        })
-        .catch(function(err) {
-          var msg = err && err.message ? err.message : '追加入库失败';
-          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '追加入库失败：' + msg, 'err');
-          setStatus(caseGenStatus, '追加入库失败：' + msg, 'err');
-          return null;
-        })
-        .finally(function() {
-          st.loading = false;
+      maybeConfirmIncompleteModulesBeforeStore('追加入库', drawerRef).then(function(okMissing) {
+        if (!okMissing) {
+          st.confirming = false;
           syncCaseGenDbStoreControls();
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消追加入库', 'warn');
+          return null;
+        }
+        var confirmMsg = '确认将 ' + items.length + ' 条用例追加到【' + (selectedName || '目标用例') + '】吗？';
+        return openConfirmDrawer({
+          title: '确认追加入库',
+          message: confirmMsg,
+          confirmText: '确认追加',
+          cancelText: '取消',
+          previousDrawer: drawerRef,
         });
+      }).then(function(res) {
+        if (!res) return;
+        st.confirming = false;
+        syncCaseGenDbStoreControls();
+        if (!res.ok) {
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消追加入库', 'warn');
+          return;
+        }
+        proceedAppend();
+      });
     }
-
     function collectSelectedCaseEntries() {
       var results = [];
       if (!state.caseGenModules || !state.caseGenModules.length) return results;
@@ -2140,8 +2201,16 @@
         var confirmPartsExec = ['将向【' + (targetFile.name || '用例') + '】追加 ' + additionInfo.additions.length + ' 条用例'];
         if (additionInfo.moduleCount) confirmPartsExec.push('涉及 ' + additionInfo.moduleCount + ' 个模块');
         if (additionInfo.duplicateCount) confirmPartsExec.push('其余 ' + additionInfo.duplicateCount + ' 条因标题重复将跳过');
-        var confirmedExec = window.confirm(confirmPartsExec.join('，') + '，是否继续？');
-        if (!confirmedExec) {
+        var confirmMsgExec = confirmPartsExec.join('，') + '，是否继续？';
+        var prevDrawer = resolveCaseGenActiveDrawer();
+        var resExec = await openConfirmDrawer({
+          title: '确认追加',
+          message: confirmMsgExec,
+          confirmText: '确认追加',
+          cancelText: '取消',
+          previousDrawer: prevDrawer || null,
+        });
+        if (!resExec || resExec.ok !== true) {
           setStatus(caseGenStatus, '已取消追加到用例执行', 'warn');
           return;
         }
@@ -2211,8 +2280,16 @@
       var confirmParts = ['将向【' + targetWorkflowName + '】追加 ' + additionInfoWorkflow.additions.length + ' 条新用例'];
       if (additionInfoWorkflow.moduleCount) confirmParts.push('涉及 ' + additionInfoWorkflow.moduleCount + ' 个模块');
       if (additionInfoWorkflow.duplicateCount) confirmParts.push('其余 ' + additionInfoWorkflow.duplicateCount + ' 条因标题重复将跳过');
-      var confirmed = window.confirm(confirmParts.join('，') + '，是否继续？');
-      if (!confirmed) {
+      var confirmMsg = confirmParts.join('，') + '，是否继续？';
+      var prevDrawer2 = resolveCaseGenActiveDrawer();
+      var resWorkflow = await openConfirmDrawer({
+        title: '确认追加',
+        message: confirmMsg,
+        confirmText: '确认追加',
+        cancelText: '取消',
+        previousDrawer: prevDrawer2 || null,
+      });
+      if (!resWorkflow || resWorkflow.ok !== true) {
         setStatus(caseGenStatus, '已取消追加到已有用例', 'warn');
         return;
       }

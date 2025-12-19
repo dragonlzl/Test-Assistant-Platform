@@ -7,6 +7,19 @@ async function gotoIndex(page) {
   return base;
 }
 
+async function confirmDrawer(page, options) {
+  const opts = options || {};
+  const drawer = page.locator('#appConfirmDrawer');
+  await expect(drawer).toHaveClass(/open/);
+  if (opts.messageIncludes && Array.isArray(opts.messageIncludes)) {
+    for (const text of opts.messageIncludes) {
+      await expect(page.locator('#appConfirmDrawerMessage')).toContainText(text);
+    }
+  }
+  await page.click('#appConfirmDrawerConfirmBtn');
+  await expect(drawer).not.toHaveClass(/open/);
+}
+
 test.describe('用例执行-多文件同名 diff 队列', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -46,10 +59,6 @@ test.describe('用例执行-多文件同名 diff 队列', () => {
     await page.addInitScript((tk) => {
       try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
     }, token);
-
-    page.on('dialog', async (dialog) => {
-      await dialog.accept();
-    });
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -233,6 +242,7 @@ test.describe('用例执行-多文件同名 diff 队列', () => {
     await expect(page.locator('#tempExecImportDiffTitle')).toContainText('用例A');
 
     await page.click('#tempExecImportDiffOverwriteBtn');
+    await confirmDrawer(page, { messageIncludes: ['覆盖导入用例', '用例A'] });
     await expect(page.locator('#tempExecImportDiffDrawer')).toHaveClass(/open/);
     await expect(page.locator('#tempExecImportDiffTitle')).toContainText('用例C');
 

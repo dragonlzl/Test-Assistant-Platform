@@ -114,6 +114,9 @@ test.describe('用例执行-归档占位与解散归档', () => {
     expect(String(draggableAttr || '')).toBe('false');
 
     await v1Card.locator('.archived-dissolve').click();
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('解散版本');
+    await page.click('#appConfirmDrawerConfirmBtn');
     await expect(page.locator('#tempVersionGrid .temp-req-row.archived')).toHaveCount(0);
     await expect(page.locator('#tempVersionGrid .archived-dissolve')).toHaveCount(0);
     await expect(page.locator('#tempVersionGrid .temp-project-version', { hasText: 'v1' })).toHaveCount(0);

@@ -1,6 +1,32 @@
 const { test, expect } = require('@playwright/test');
 
 test.describe('临时执行进度视图', () => {
+  async function confirmDrawerInput(page, value) {
+    const drawer = page.locator('#appConfirmDrawer');
+    await drawer.waitFor({ state: 'attached' });
+    await page.waitForFunction(() => {
+      const el = document.getElementById('appConfirmDrawer');
+      return el && el.classList.contains('open');
+    }).catch(() => {});
+    const isOpen = await drawer.evaluate((el) => el.classList.contains('open')).catch(() => false);
+    if (!isOpen) return;
+    await expect(page.locator('#appConfirmDrawerInputRow')).toBeVisible();
+    await page.fill('#appConfirmDrawerInput', value);
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await page.waitForFunction(() => {
+      const el = document.getElementById('appConfirmDrawer');
+      if (el && (el.classList.contains('open') || el.classList.contains('closing'))) return false;
+      return !document.querySelector('.drawer.drawer-suspended');
+    }).catch(() => {});
+  }
+  async function createTempVersion(page, name, expectedCount) {
+    await page.click('#createTempVersionBtn', { force: true });
+    await confirmDrawerInput(page, name);
+    if (expectedCount) {
+      await expect(page.locator('#tempVersionGrid [data-temp-version]')).toHaveCount(expectedCount);
+    }
+  }
+
   test.beforeEach(async ({ page }) => {
     page.__promptAnswers = [];
     await page.route('**/*', (route) => {
@@ -12,9 +38,26 @@ test.describe('临时执行进度视图', () => {
     });
     await page.addInitScript(() => {
       try {
-        localStorage.setItem('tap-e2e-skip-auth', '1');
-        localStorage.removeItem('tap-auth-token');
+        localStorage.setItem('tap-auth-token', 'ui-test-token');
+        localStorage.removeItem('tap-e2e-skip-auth');
+        localStorage.removeItem('usecase-temp-exec-v1');
+        localStorage.removeItem('tempexec-focus-v1');
+        localStorage.removeItem('tempexec-page-size');
+        localStorage.removeItem('usecase-active-tab');
       } catch (_) {}
+    });
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') {
+        return respond(200, { id: 0, username: 'e2e', role: 'admin', level: 'leader' });
+      }
+      if (method === 'GET') return respond(200, []);
+      return respond(200, {});
     });
     page.on('dialog', async (dialog) => {
       if (dialog.type() === 'prompt') {
@@ -26,7 +69,22 @@ test.describe('临时执行进度视图', () => {
     });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
+    await page.waitForFunction(
+      () => window.app && window.app._inited === true && window.app.tempExecApi,
+      { timeout: 20000 }
+    );
+    await page.waitForFunction(() => window.app && window.app.authReady === true, { timeout: 20000 });
+    await page.evaluate(() => {
+      if (window.app) window.app.authReady = true;
+      if (window.app && window.app.state) {
+        window.app.state.currentUser = { id: 0, username: 'e2e', role: 'admin', level: 'leader' };
+        window.app.state.tempExecVersionCollapsed = false;
+      }
+      if (window.app && window.app.tempExecApi) {
+        if (window.app.tempExecApi.renderTempVersionGrid) window.app.tempExecApi.renderTempVersionGrid();
+        if (window.app.tempExecApi.renderTempExecNav) window.app.tempExecApi.renderTempExecNav();
+      }
+    });
   });
 
   test('执行概览统计与拖拽同步', async ({ page }) => {
@@ -69,10 +127,8 @@ test.describe('临时执行进度视图', () => {
     }
     await expect(createBtn).toBeVisible();
 
-    page.__promptAnswers.push('版本一');
-    await createBtn.click({ force: true });
-    page.__promptAnswers.push('版本二');
-    await createBtn.click({ force: true });
+    await createTempVersion(page, '版本一', 1);
+    await createTempVersion(page, '版本二', 2);
     await expect(page.locator('#tempVersionGrid [data-temp-version]')).toHaveCount(2);
 
     const navRows = page.locator('#tempExecNav .temp-req-row[data-temp-file]');
@@ -181,7 +237,10 @@ test.describe('临时执行进度视图', () => {
     await page.setInputFiles('#tempExecInput', [execFile]);
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
     await page.click('#closeTempExecImportDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/closing/);
     await page.click('#openTempExecAssignDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
 
     const jumpInfo = await page.evaluate(() => {
       const api = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
@@ -276,7 +335,10 @@ test.describe('临时执行进度视图', () => {
     await page.setInputFiles('#tempExecInput', [execFileA, execFileB]);
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
     await page.click('#closeTempExecImportDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/closing/);
     await page.click('#openTempExecAssignDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
 
     const ids = await page.evaluate(() => {
       const st = window.app && window.app.state ? window.app.state : {};

@@ -75,6 +75,32 @@ async function seedCaseGenState(page, options) {
   });
 }
 
+async function confirmDrawer(page, options) {
+  const opts = options || {};
+  const drawer = page.locator('#appConfirmDrawer');
+  await expect(drawer).toHaveClass(/open/);
+  if (opts.messageIncludes && opts.messageIncludes.length) {
+    for (const msg of opts.messageIncludes) {
+      await expect(page.locator('#appConfirmDrawerMessage')).toContainText(msg);
+    }
+  } else if (opts.message) {
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText(opts.message);
+  }
+  if (opts.inputValue !== undefined) {
+    await page.fill('#appConfirmDrawerInput', String(opts.inputValue));
+  }
+  const prevMessage = await page.locator('#appConfirmDrawerMessage').evaluate((el) => el.textContent || '').catch(() => '');
+  await page.click('#appConfirmDrawerConfirmBtn');
+  await page.waitForFunction((prev) => {
+    const el = document.getElementById('appConfirmDrawer');
+    if (!el) return true;
+    if (!el.classList.contains('open') && !el.classList.contains('closing')) return true;
+    const msgEl = document.getElementById('appConfirmDrawerMessage');
+    const next = msgEl ? (msgEl.textContent || '') : '';
+    return String(next).trim() !== String(prev || '').trim();
+  }, prevMessage);
+}
+
 test.describe('用例生成-新用例入库/旧用例追加入库', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -145,12 +171,6 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
       try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
     }, token);
 
-    const dialogs = [];
-    page.on('dialog', async (dialog) => {
-      dialogs.push({ type: dialog.type(), message: dialog.message() });
-      await dialog.accept();
-    });
-
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
       const pathName = url.pathname;
@@ -203,14 +223,13 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await page.selectOption('#caseGenDbStoreVersionSelect', String(versions[0].id));
     await expect(page.locator('#caseGenDbStoreConfirmBtn')).toBeEnabled();
     await page.click('#caseGenDbStoreConfirmBtn');
+    await confirmDrawer(page, { messageIncludes: ['支付', '没有选择用例'] });
 
     await expect(page.locator('#caseGenStatus')).toContainText('入库成功', { timeout: 5000 });
     expect(importedPayload && importedPayload.project_id).toBe(project.id);
     expect(importedPayload && importedPayload.version_id).toBe(versions[0].id);
     expect(String(importedPayload && importedPayload.file_name)).toContain(requirement);
 
-    const confirmMsgs = dialogs.filter((d) => d.type === 'confirm').map((d) => d.message);
-    expect(confirmMsgs.some((msg) => msg.indexOf('支付') !== -1 && msg.indexOf('没有选择用例') !== -1)).toBe(true);
   });
 
   test('新用例入库：入库并转到执行会创建执行集并切换到执行页', async ({ page }) => {
@@ -221,10 +240,6 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     const requirement = 'UI自动化需求-入库并执行';
     const now = new Date().toISOString();
     let createdExecSet = null;
-
-    page.on('dialog', async (dialog) => {
-      await dialog.accept();
-    });
 
     await page.addInitScript((tk) => {
       try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
@@ -343,6 +358,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await page.selectOption('#caseGenDbStoreProjectSelect', String(project.id));
     await page.selectOption('#caseGenDbStoreVersionSelect', String(versions[0].id));
     await page.click('#caseGenDbStoreConfirmBtn');
+    await confirmDrawer(page, { messageIncludes: ['支付', '没有选择用例'] });
 
     await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
     await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
@@ -368,12 +384,6 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await page.addInitScript((tk) => {
       try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
     }, token);
-
-    const dialogs = [];
-    page.on('dialog', async (dialog) => {
-      dialogs.push({ type: dialog.type(), message: dialog.message() });
-      await dialog.accept();
-    });
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -423,14 +433,13 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await expect(page.locator('#caseGenDbStoreCaseFileRow')).not.toHaveClass(/hidden/);
     await page.selectOption('#caseGenDbStoreCaseFileSelect', String(caseFiles[0].id));
     await page.click('#caseGenDbStoreConfirmBtn');
+    await confirmDrawer(page, { messageIncludes: ['支付', '没有选择用例'] });
+    await confirmDrawer(page, { messageIncludes: ['追加到【旧用例A】'] });
 
     await expect(page.locator('#caseGenStatus')).toContainText('追加入库成功', { timeout: 5000 });
     expect(appendPayload && Array.isArray(appendPayload.items) && appendPayload.items.length).toBe(1);
     expect(String(appendPayload.items[0].module || '')).toContain('登录');
 
-    const confirmMsgs = dialogs.filter((d) => d.type === 'confirm').map((d) => d.message);
-    expect(confirmMsgs.some((msg) => msg.indexOf('支付') !== -1 && msg.indexOf('没有选择用例') !== -1)).toBe(true);
-    expect(confirmMsgs.some((msg) => msg.indexOf('追加到【旧用例A】') !== -1)).toBe(true);
   });
 
   test('旧用例追加入库：目标用例存在重复时打开diff并确认覆盖', async ({ page }) => {
@@ -447,12 +456,6 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await page.addInitScript((tk) => {
       try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
     }, token);
-
-    const dialogs = [];
-    page.on('dialog', async (dialog) => {
-      dialogs.push({ type: dialog.type(), message: dialog.message() });
-      await dialog.accept();
-    });
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -505,14 +508,15 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await page.selectOption('#caseGenDbStoreVersionSelect', String(versions[0].id));
     await page.selectOption('#caseGenDbStoreCaseFileSelect', String(caseFiles[0].id));
     await page.click('#caseGenDbStoreConfirmBtn');
+    await confirmDrawer(page, { messageIncludes: ['支付', '没有选择用例'] });
+    await confirmDrawer(page, { messageIncludes: ['追加到【旧用例A】'] });
 
     await expect(page.locator('#caseLibraryImportDiffDrawer')).toHaveClass(/open/);
     await page.click('#caseLibraryImportDiffOverwriteBtn');
+    await confirmDrawer(page, { messageIncludes: ['覆盖并追加入库'] });
 
     await expect(page.locator('#caseGenStatus')).toContainText('追加入库成功', { timeout: 5000 });
     expect(appendPayload && appendPayload.overwrite_existing).toBe(true);
 
-    const confirmMsgs = dialogs.filter((d) => d.type === 'confirm').map((d) => d.message);
-    expect(confirmMsgs.some((msg) => msg.indexOf('覆盖并追加入库') !== -1)).toBe(true);
   });
 });

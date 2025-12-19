@@ -296,6 +296,19 @@
     }, duration);
   }
 
+  function openConfirmDrawer(options) {
+    var drawerApi = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
+    if (drawerApi && typeof drawerApi.open === 'function') {
+      return drawerApi.open(options || {});
+    }
+    var msg = options && options.message ? String(options.message) : '';
+    var ok = true;
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      ok = window.confirm(msg);
+    }
+    return Promise.resolve({ ok: ok });
+  }
+
   function normalizeIdForSort(value) {
     if (value === null || value === undefined) return '';
     if (value === 0 || String(value) === '0') return '0';
@@ -404,6 +417,7 @@
     formatCompactTimestamp: formatCompactTimestamp,
     scrollElementIntoView: scrollElementIntoView,
     showCenterToast: showCenterToast,
+    openConfirmDrawer: openConfirmDrawer,
     getUserProjectSortSettings: getUserProjectSortSettings,
     sortProjectsByOrder: sortProjectsByOrder,
     sortIdsByOrder: sortIdsByOrder,

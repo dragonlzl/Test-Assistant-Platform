@@ -81,6 +81,21 @@ async function waitAppReady(page, timeoutMs) {
   throw new Error('waitAppReady timeout: ' + JSON.stringify(last || {}));
 }
 
+async function confirmDrawer(page, options) {
+  const opts = options || {};
+  const drawer = page.locator('#appConfirmDrawer');
+  await expect(drawer).toHaveClass(/open/);
+  if (opts.messageIncludes && Array.isArray(opts.messageIncludes)) {
+    for (const text of opts.messageIncludes) {
+      await expect(page.locator('#appConfirmDrawerMessage')).toContainText(text);
+    }
+  } else if (opts.message) {
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText(opts.message);
+  }
+  await page.click('#appConfirmDrawerConfirmBtn');
+  await expect(drawer).not.toHaveClass(/open/);
+}
+
 test.describe('用例执行-Excel 导入同名差异对比', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -234,19 +249,15 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
     await page.click('#tempExecImportDiffLocateBar [data-diff-locate-action="next"]');
     await expect(page.locator('#tempExecImportDiffBody tr.diff-locate-active')).toHaveCount(1);
 
-    let confirmCount = 0;
-    page.on('dialog', async (dialog) => {
-      confirmCount += 1;
-      await dialog.accept();
-    });
     const overwriteResp = page.waitForResponse((resp) => {
       const u = resp.url();
       return u.indexOf('/api/case-files/import') !== -1 && u.indexOf('overwrite=1') !== -1 && resp.status() === 200;
     });
     await page.click('#tempExecImportDiffOverwriteBtn');
+    await confirmDrawer(page, { messageIncludes: ['覆盖导入用例', '用例A'] });
+    await confirmDrawer(page, { messageIncludes: ['替换现有执行结果'] });
     await overwriteResp;
     await page.waitForTimeout(400);
-    expect(confirmCount).toBe(2);
     expect(lastOverwritePayload && Array.isArray(lastOverwritePayload.items) ? lastOverwritePayload.items.length : -1).toBe(1);
     expect(
       lastOverwritePayload && Array.isArray(lastOverwritePayload.items)

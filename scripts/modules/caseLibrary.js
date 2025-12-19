@@ -25,6 +25,18 @@
     return window.app && window.app.core ? window.app.core : {};
   }
 
+  function openConfirmDrawer(options) {
+    if (utils && typeof utils.openConfirmDrawer === 'function') {
+      return utils.openConfirmDrawer(options || {});
+    }
+    var msg = options && options.message ? String(options.message) : '';
+    var ok = true;
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+      ok = window.confirm(msg);
+    }
+    return Promise.resolve({ ok: ok });
+  }
+
   var dom = {
     root: document.getElementById('caseLibrary'),
     status: document.getElementById('caseLibraryStatus'),
@@ -142,6 +154,7 @@
 	      dbItems: [],
 	      rows: [],
 	      loading: false,
+        confirming: false,
         locateIndex: -1,
 	    },
 
@@ -693,6 +706,7 @@
     if (mode === 'append_overwrite') {
       can = Boolean(
         !state.importDiff.loading &&
+        !state.importDiff.confirming &&
         state.importDiff.caseFileId &&
         Array.isArray(state.importDiff.importItems) &&
         state.importDiff.importItems.length
@@ -700,6 +714,7 @@
     } else {
       can = Boolean(
         !state.importDiff.loading &&
+        !state.importDiff.confirming &&
         state.importDiff.projectId &&
         state.importDiff.importVersionId &&
         state.importDiff.fileName &&
@@ -728,6 +743,7 @@
       ? buildAppendOverwriteDiffRows(state.importDiff.importItems, state.importDiff.dbItems)
       : buildImportDiffRows(state.importDiff.importItems, state.importDiff.dbItems);
     state.importDiff.loading = false;
+    state.importDiff.confirming = false;
 
     var projectName = state.projectNameById[state.importDiff.projectId] || ('项目#' + state.importDiff.projectId);
     var importVerName = getVersionName(state.importDiff.projectId, state.importDiff.importVersionId);
@@ -816,6 +832,7 @@
     state.importDiff.dbItems = [];
     state.importDiff.rows = [];
     state.importDiff.loading = false;
+    state.importDiff.confirming = false;
     var projectName = state.projectNameById[projectId] || ('项目#' + projectId);
     var importVerName = getVersionName(projectId, importVersionId);
 
@@ -1457,7 +1474,7 @@
   }
 
   function confirmOverwriteImportFromDiff() {
-    if (state.importDiff.loading) return;
+    if (state.importDiff.loading || state.importDiff.confirming) return;
     var mode = state.importDiff && state.importDiff.mode ? String(state.importDiff.mode) : 'import';
     if (!apiClient || (mode === 'append_overwrite' ? typeof apiClient.appendCaseItems !== 'function' : typeof apiClient.importCaseFile !== 'function')) {
       setStatus(dom.importDiffStatus, mode === 'append_overwrite' ? '后端追加接口未就绪' : '后端导入接口未就绪', 'err');
@@ -1472,52 +1489,64 @@
         setStatus(dom.importDiffStatus, '差异数据未就绪，请稍后重试', 'warn');
         return;
       }
-      var ok2 = window.confirm('检测到重复用例，是否确认覆盖并追加入库：' + cleanName2 + '？');
-      if (!ok2) return;
-
-      state.importDiff.loading = true;
+      var confirmMsg2 = '检测到重复用例，是否确认覆盖并追加入库：' + cleanName2 + '？';
+      state.importDiff.confirming = true;
       syncImportDiffControls();
-      setStatus(dom.importDiffStatus, '覆盖并追加入库中...', '');
+      openConfirmDrawer({
+        title: '确认覆盖并追加入库',
+        message: confirmMsg2,
+        confirmText: '确认覆盖并追加入库',
+        cancelText: '取消',
+        previousDrawer: importDiffDrawerInstance,
+      }).then(function(res2) {
+        state.importDiff.confirming = false;
+        syncImportDiffControls();
+        if (!res2 || res2.ok !== true) return;
 
-      apiClient
-        .appendCaseItems(caseFileId, { items: items2, overwrite_existing: true })
-        .then(function(res) {
-          var appended = res && (res.appended || res.appended_count) ? Number(res.appended || res.appended_count) : 0;
-          var overwritten = res && (res.overwritten || res.overwritten_count) ? Number(res.overwritten || res.overwritten_count) : 0;
-          var msg = '追加入库成功：新增 ' + appended + ' 条，覆盖 ' + overwritten + ' 条';
-          setStatus(dom.importDiffStatus, msg, 'ok');
-          var external = state.importDiff.external || null;
-          if (external && typeof external.resolve === 'function') {
-            state.importDiff.external = null;
-            try {
-              external.resolve({ ok: true, overwrite: true, result: res || null });
-            } catch (e) {
-              // ignore
+        state.importDiff.loading = true;
+        syncImportDiffControls();
+        setStatus(dom.importDiffStatus, '覆盖并追加入库中...', '');
+
+        apiClient
+          .appendCaseItems(caseFileId, { items: items2, overwrite_existing: true })
+          .then(function(res) {
+            var appended = res && (res.appended || res.appended_count) ? Number(res.appended || res.appended_count) : 0;
+            var overwritten = res && (res.overwritten || res.overwritten_count) ? Number(res.overwritten || res.overwritten_count) : 0;
+            var msg = '追加入库成功：新增 ' + appended + ' 条，覆盖 ' + overwritten + ' 条';
+            setStatus(dom.importDiffStatus, msg, 'ok');
+            var external = state.importDiff.external || null;
+            if (external && typeof external.resolve === 'function') {
+              state.importDiff.external = null;
+              try {
+                external.resolve({ ok: true, overwrite: true, result: res || null });
+              } catch (e) {
+                // ignore
+              }
             }
-          }
-          var q = state.importDiff && state.importDiff.queue ? state.importDiff.queue : null;
-          var keepOpen = Boolean(q && q.active && Number(q.total) > 0 && Number(q.index) < Number(q.total) - 1);
-          if (!keepOpen && importDiffDrawerInstance && typeof importDiffDrawerInstance.close === 'function') {
-            importDiffDrawerInstance.close();
-          }
-        })
-        .catch(function(err) {
-          var msg = err && err.message ? err.message : '追加入库失败';
-          setStatus(dom.importDiffStatus, '追加入库失败：' + msg, 'err');
-          var external = state.importDiff.external || null;
-          if (external && typeof external.resolve === 'function') {
-            state.importDiff.external = null;
-            try {
-              external.resolve({ ok: false, reason: 'append_overwrite_failed', error: err || null });
-            } catch (e) {
-              // ignore
+            var q = state.importDiff && state.importDiff.queue ? state.importDiff.queue : null;
+            var keepOpen = Boolean(q && q.active && Number(q.total) > 0 && Number(q.index) < Number(q.total) - 1);
+            if (!keepOpen && importDiffDrawerInstance && typeof importDiffDrawerInstance.close === 'function') {
+              importDiffDrawerInstance.close();
             }
-          }
-        })
-        .finally(function() {
-          state.importDiff.loading = false;
-          syncImportDiffControls();
-        });
+          })
+          .catch(function(err) {
+            var msg = err && err.message ? err.message : '追加入库失败';
+            setStatus(dom.importDiffStatus, '追加入库失败：' + msg, 'err');
+            var external = state.importDiff.external || null;
+            if (external && typeof external.resolve === 'function') {
+              state.importDiff.external = null;
+              try {
+                external.resolve({ ok: false, reason: 'append_overwrite_failed', error: err || null });
+              } catch (e) {
+                // ignore
+              }
+            }
+          })
+          .finally(function() {
+            state.importDiff.loading = false;
+            syncImportDiffControls();
+          });
+      });
       return;
     }
     var projectId = state.importDiff.projectId;
@@ -1533,64 +1562,76 @@
       setStatus(dom.importDiffStatus, '差异数据未就绪，请稍后重试', 'warn');
       return;
     }
-    var ok = window.confirm('是否确认覆盖导入用例：' + cleanName + '？');
-    if (!ok) return;
-
-    state.importDiff.loading = true;
+    var confirmMsg = '是否确认覆盖导入用例：' + cleanName + '？';
+    state.importDiff.confirming = true;
     syncImportDiffControls();
-    setStatus(dom.importDiffStatus, '覆盖导入中...', '');
-    setStatus(dom.importStatus, '覆盖导入中...', '');
+    openConfirmDrawer({
+      title: '确认覆盖导入',
+      message: confirmMsg,
+      confirmText: '确认覆盖导入',
+      cancelText: '取消',
+      previousDrawer: importDiffDrawerInstance,
+    }).then(function(res) {
+      state.importDiff.confirming = false;
+      syncImportDiffControls();
+      if (!res || res.ok !== true) return;
 
-    apiClient
-      .importCaseFile(
-        {
-          project_id: projectId,
-          version_id: versionId,
-          file_name: overwriteFileName,
-          source: source,
-          items: items,
-        },
-        { overwrite: true }
-      )
-      .then(function(caseFile) {
-        var msg = '覆盖导入成功：' + cleanName;
-        setStatus(dom.importDiffStatus, msg, 'ok');
-        setStatus(dom.importStatus, msg, 'ok');
-        setStatus(dom.status, msg, 'ok');
-        refreshCaseFileListsByProject(projectId);
-        var external = state.importDiff.external || null;
-        if (external && typeof external.resolve === 'function') {
-          state.importDiff.external = null;
-          try {
-            external.resolve({ ok: true, overwrite: true, caseFile: caseFile || null });
-          } catch (e) {
-            // ignore
+      state.importDiff.loading = true;
+      syncImportDiffControls();
+      setStatus(dom.importDiffStatus, '覆盖导入中...', '');
+      setStatus(dom.importStatus, '覆盖导入中...', '');
+
+      apiClient
+        .importCaseFile(
+          {
+            project_id: projectId,
+            version_id: versionId,
+            file_name: overwriteFileName,
+            source: source,
+            items: items,
+          },
+          { overwrite: true }
+        )
+        .then(function(caseFile) {
+          var msg = '覆盖导入成功：' + cleanName;
+          setStatus(dom.importDiffStatus, msg, 'ok');
+          setStatus(dom.importStatus, msg, 'ok');
+          setStatus(dom.status, msg, 'ok');
+          refreshCaseFileListsByProject(projectId);
+          var external = state.importDiff.external || null;
+          if (external && typeof external.resolve === 'function') {
+            state.importDiff.external = null;
+            try {
+              external.resolve({ ok: true, overwrite: true, caseFile: caseFile || null });
+            } catch (e) {
+              // ignore
+            }
           }
-        }
-        var q = state.importDiff && state.importDiff.queue ? state.importDiff.queue : null;
-        var keepOpen = Boolean(q && q.active && Number(q.total) > 0 && Number(q.index) < Number(q.total) - 1);
-        if (!keepOpen && importDiffDrawerInstance && typeof importDiffDrawerInstance.close === 'function') {
-          importDiffDrawerInstance.close();
-        }
-      })
-      .catch(function(err) {
-        var msg = err && err.message ? err.message : '覆盖导入失败';
-        setStatus(dom.importDiffStatus, '覆盖导入失败：' + msg, 'err');
-        setStatus(dom.importStatus, '覆盖导入失败：' + msg, 'err');
-        var external = state.importDiff.external || null;
-        if (external && typeof external.resolve === 'function') {
-          state.importDiff.external = null;
-          try {
-            external.resolve({ ok: false, reason: 'overwrite_failed', error: err || null });
-          } catch (e) {
-            // ignore
+          var q = state.importDiff && state.importDiff.queue ? state.importDiff.queue : null;
+          var keepOpen = Boolean(q && q.active && Number(q.total) > 0 && Number(q.index) < Number(q.total) - 1);
+          if (!keepOpen && importDiffDrawerInstance && typeof importDiffDrawerInstance.close === 'function') {
+            importDiffDrawerInstance.close();
           }
-        }
-      })
-      .finally(function() {
-        state.importDiff.loading = false;
-        syncImportDiffControls();
-      });
+        })
+        .catch(function(err) {
+          var msg = err && err.message ? err.message : '覆盖导入失败';
+          setStatus(dom.importDiffStatus, '覆盖导入失败：' + msg, 'err');
+          setStatus(dom.importStatus, '覆盖导入失败：' + msg, 'err');
+          var external = state.importDiff.external || null;
+          if (external && typeof external.resolve === 'function') {
+            state.importDiff.external = null;
+            try {
+              external.resolve({ ok: false, reason: 'overwrite_failed', error: err || null });
+            } catch (e) {
+              // ignore
+            }
+          }
+        })
+        .finally(function() {
+          state.importDiff.loading = false;
+          syncImportDiffControls();
+        });
+    });
   }
 
   function formatTime(value) {
@@ -4537,61 +4578,69 @@
     }).filter(Boolean);
     var head = pairs.slice(0, 6).join('、');
     var suffix = pairs.length > 6 ? (' 等' + pairs.length + '份') : '';
-    var ok = window.confirm('是否确认删除用例：' + head + suffix + '？');
-    if (!ok) return;
-
-    state.editDrawer.loading = true;
-    syncEditDrawerControls();
-    setStatus(dom.editDrawerStatus, '删除中...', '');
-    var success = 0;
-    var fail = 0;
-    var deletedIds = [];
-    var chain = Promise.resolve();
-    ids.forEach(function(id) {
-      chain = chain.then(function() {
-        return apiClient
-          .deleteCaseFile(id)
-          .then(function() {
-            success += 1;
-            deletedIds.push(String(id));
-          })
-          .catch(function(err) {
-            fail += 1;
-            var msg = err && err.message ? err.message : '删除失败';
-            setStatus(dom.editDrawerStatus, '删除失败：' + msg, 'err');
-          });
-      });
-    });
-    chain.then(function() {
-      var msg = '删除完成：成功 ' + success + ' 份，失败 ' + fail + ' 份';
-      setStatus(dom.editDrawerStatus, msg, fail ? 'warn' : 'ok');
-    }).finally(function() {
-      state.editDrawer.loading = false;
-      state.editDrawer.selection = new Set();
-      if (deletedIds.length) {
-        var deletedSet = new Set(deletedIds);
-        state.editDrawer.files = (state.editDrawer.files || []).filter(function(f) {
-          if (!f || f.id === null || f.id === undefined) return true;
-          return !deletedSet.has(String(f.id));
+    var confirmMsg = '是否确认删除用例：' + head + suffix + '？';
+    openConfirmDrawer({
+      title: '确认删除用例',
+      message: confirmMsg,
+      confirmText: '确认删除',
+      cancelText: '取消',
+      danger: true,
+      previousDrawer: editDrawerInstance || null,
+    }).then(function(res) {
+      if (!res || res.ok !== true) return;
+      state.editDrawer.loading = true;
+      syncEditDrawerControls();
+      setStatus(dom.editDrawerStatus, '删除中...', '');
+      var success = 0;
+      var fail = 0;
+      var deletedIds = [];
+      var chain = Promise.resolve();
+      ids.forEach(function(id) {
+        chain = chain.then(function() {
+          return apiClient
+            .deleteCaseFile(id)
+            .then(function() {
+              success += 1;
+              deletedIds.push(String(id));
+            })
+            .catch(function(err) {
+              fail += 1;
+              var msg = err && err.message ? err.message : '删除失败';
+              setStatus(dom.editDrawerStatus, '删除失败：' + msg, 'err');
+            });
         });
-        // 若当前编辑视图正在编辑被删除的用例文件，需立即清空视图，避免误以为仍可编辑。
-        var editorFile = state.editor && state.editor.caseFile ? state.editor.caseFile : null;
-        if (editorFile && editorFile.id !== null && editorFile.id !== undefined) {
-          if (deletedSet.has(String(editorFile.id))) {
-            state.editor.caseFile = null;
-            state.editor.items = [];
-            state.editor.searchText = '';
-            state.editor.pageIndex = 0;
-            state.editor.selection = new Set();
-            state.editor.remarkOpen = new Set();
-            showEditorCard(false);
-            clearEditorPersistedState();
-            setStatus(dom.editStatus, '当前编辑用例已被删除', 'warn');
+      });
+      chain.then(function() {
+        var msg = '删除完成：成功 ' + success + ' 份，失败 ' + fail + ' 份';
+        setStatus(dom.editDrawerStatus, msg, fail ? 'warn' : 'ok');
+      }).finally(function() {
+        state.editDrawer.loading = false;
+        state.editDrawer.selection = new Set();
+        if (deletedIds.length) {
+          var deletedSet = new Set(deletedIds);
+          state.editDrawer.files = (state.editDrawer.files || []).filter(function(f) {
+            if (!f || f.id === null || f.id === undefined) return true;
+            return !deletedSet.has(String(f.id));
+          });
+          // 若当前编辑视图正在编辑被删除的用例文件，需立即清空视图，避免误以为仍可编辑。
+          var editorFile = state.editor && state.editor.caseFile ? state.editor.caseFile : null;
+          if (editorFile && editorFile.id !== null && editorFile.id !== undefined) {
+            if (deletedSet.has(String(editorFile.id))) {
+              state.editor.caseFile = null;
+              state.editor.items = [];
+              state.editor.searchText = '';
+              state.editor.pageIndex = 0;
+              state.editor.selection = new Set();
+              state.editor.remarkOpen = new Set();
+              showEditorCard(false);
+              clearEditorPersistedState();
+              setStatus(dom.editStatus, '当前编辑用例已被删除', 'warn');
+            }
           }
         }
-      }
-      renderEditDrawerList();
-      syncEditDrawerControls();
+        renderEditDrawerList();
+        syncEditDrawerControls();
+      });
     });
   }
 
@@ -6151,32 +6200,41 @@
 	      syncEditorBatchDeleteControls();
 	      return;
 	    }
-	    var confirmed = window.confirm('确定删除已勾选的 ' + indices.length + ' 条用例吗？可在 8 秒内撤回。');
-	    if (!confirmed) return;
+    var confirmMsg = '确定删除已勾选的 ' + indices.length + ' 条用例吗？可在 8 秒内撤回。';
+    openConfirmDrawer({
+      title: '确认批量删除',
+      message: confirmMsg,
+      confirmText: '确认删除',
+      cancelText: '取消',
+      danger: true,
+      previousDrawer: editDrawerInstance || null,
+    }).then(function(res) {
+      if (!res || res.ok !== true) return;
 
-	    var anchorRect = captureCaseLibraryAnchorRect(anchorEl);
-	    indices.sort(function(a, b) { return b - a; });
-	    var removed = [];
-	    var fileId = ed.caseFile ? ed.caseFile.id : null;
-	    indices.forEach(function(idx) {
-	      if (idx < 0 || idx >= ed.items.length) return;
-	      var item = ed.items[idx];
-	      if (!item) return;
-	      removed.push({ index: idx, item: item });
-	      unmarkCaseLibraryNewAdded(fileId, item);
-	      ed.items.splice(idx, 1);
-	    });
-	    if (!removed.length) {
-	      setStatus(dom.editStatus, '未删除任何用例', 'warn');
-	      syncEditorBatchDeleteControls();
-	      return;
-	    }
-	    ed.selection = new Set();
-	    ed.remarkOpen = new Set();
-	    ed.pendingOp = { type: 'remove_batch', removed: removed };
-	    renderEditorTable();
-	    startPendingToast('已删除用例 ' + removed.length + ' 条，超时将自动入库', { anchorRect: anchorRect });
-	  }
+      var anchorRect = captureCaseLibraryAnchorRect(anchorEl);
+      indices.sort(function(a, b) { return b - a; });
+      var removed = [];
+      var fileId = ed.caseFile ? ed.caseFile.id : null;
+      indices.forEach(function(idx) {
+        if (idx < 0 || idx >= ed.items.length) return;
+        var item = ed.items[idx];
+        if (!item) return;
+        removed.push({ index: idx, item: item });
+        unmarkCaseLibraryNewAdded(fileId, item);
+        ed.items.splice(idx, 1);
+      });
+      if (!removed.length) {
+        setStatus(dom.editStatus, '未删除任何用例', 'warn');
+        syncEditorBatchDeleteControls();
+        return;
+      }
+      ed.selection = new Set();
+      ed.remarkOpen = new Set();
+      ed.pendingOp = { type: 'remove_batch', removed: removed };
+      renderEditorTable();
+      startPendingToast('已删除用例 ' + removed.length + ' 条，超时将自动入库', { anchorRect: anchorRect });
+    });
+  }
 
 	  function toggleRemark(index) {
 	    var idx = Number(index);
@@ -7398,9 +7456,10 @@
 	          } catch (e) {
 	            // ignore
 	          }
-	        }
+          }
           state.importDiff.mode = 'import';
           state.importDiff.caseFileId = null;
+          state.importDiff.confirming = false;
           if (dom.importDiffOverwriteBtn) dom.importDiffOverwriteBtn.textContent = '确认覆盖导入';
 	      }
 	    );

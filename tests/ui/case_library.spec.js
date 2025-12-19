@@ -555,8 +555,10 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 	    await expect(page.locator('#caseLibraryImportDiffLocateBar')).toBeVisible();
 	    await page.click('#caseLibraryImportDiffLocateBar [data-diff-locate-action="next"]');
 	    await expect(page.locator('#caseLibraryImportDiffBody tr.diff-locate-active')).toHaveCount(1);
-	    page.once('dialog', async (dialog) => dialog.accept());
-	    await page.click('#caseLibraryImportDiffOverwriteBtn');
+    await page.click('#caseLibraryImportDiffOverwriteBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('覆盖导入用例');
+    await page.click('#appConfirmDrawerConfirmBtn');
     await expect(page.locator('#caseLibraryImportStatus')).toContainText('覆盖导入成功');
     await expect(page.locator('#caseLibraryImportDiffDrawer')).not.toHaveClass(/open/);
 
@@ -1458,8 +1460,10 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 	    await page.click('#caseLibraryEditSelectAll');
 	    await expect(page.locator('#caseLibraryEditDeleteBtn')).toBeEnabled();
 
-    page.once('dialog', async (dialog) => dialog.accept());
     await page.click('#caseLibraryEditDeleteBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('删除用例');
+    await page.click('#appConfirmDrawerConfirmBtn');
 
 	    await expect(page.locator('#caseLibraryEditDrawerStatus')).toContainText('删除完成');
 	    await expect(page.locator('#caseLibraryEditListBody')).toContainText('暂无用例文件');
@@ -1566,9 +1570,10 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await page.click('#caseLibraryEditConfirmBtn');
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('未');
 
-    page.once('dialog', async (dialog) => dialog.accept());
     await page.click('#caseLibraryEditDeleteBtn');
-    expect(deleteCalls).toBe(1);
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await expect.poll(() => deleteCalls).toBe(1);
   });
 
   test('编辑用例：支持按版本筛选（默认全部版本）', async ({ page }) => {

@@ -201,6 +201,9 @@ test.describe('用例库导入-多文件同名 diff 队列', () => {
     expect(importCalls.map((c) => c.fileName)).toEqual(['用例A.json', '用例B.json', '用例C.json']);
 
     await page.click('#caseLibraryImportDiffOverwriteBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('覆盖导入用例');
+    await page.click('#appConfirmDrawerConfirmBtn');
     await expect(page.locator('#caseLibraryImportDiffDrawer')).toHaveClass(/open/);
     await expect(page.locator('#caseLibraryImportDiffTitle')).toContainText('用例C');
 

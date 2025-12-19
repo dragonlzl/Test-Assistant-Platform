@@ -46,6 +46,23 @@ test.describe('执行视图导入导出与拖拽', () => {
     await page.click('#closeTempExecAssignDrawerBtn', { trial: false });
     await expect(drawer).not.toHaveClass(/open/);
   }
+  async function confirmDrawerInput(page, value) {
+    const drawer = page.locator('#appConfirmDrawer');
+    await drawer.waitFor({ state: 'attached' });
+    await page.waitForFunction(() => {
+      const el = document.getElementById('appConfirmDrawer');
+      return el && el.classList.contains('open');
+    }).catch(() => {});
+    const isOpen = await drawer.evaluate((el) => el.classList.contains('open')).catch(() => false);
+    if (!isOpen) return;
+    await expect(page.locator('#appConfirmDrawerInputRow')).toBeVisible();
+    await page.fill('#appConfirmDrawerInput', value);
+    await page.click('#appConfirmDrawerConfirmBtn');
+  }
+  async function createTempVersion(page, name) {
+    await page.click('#createTempVersionBtn');
+    await confirmDrawerInput(page, name);
+  }
 
   test.beforeEach(async ({ page }) => {
     page.__promptAnswers = [];
@@ -203,10 +220,8 @@ test.describe('执行视图导入导出与拖拽', () => {
     expect(plainName).toMatch(new RegExp(`^${escapedBase}_\\d{14}\\.xmind$`));
     await openTempExecDrawer(page);
 
-    page.__promptAnswers.push('版本A');
-    await page.click('#createTempVersionBtn');
-    page.__promptAnswers.push('版本B');
-    await page.click('#createTempVersionBtn');
+    await createTempVersion(page, '版本A');
+    await createTempVersion(page, '版本B');
     await expect(page.locator('#tempVersionGrid [data-temp-version]')).toHaveCount(2);
 
     const firstReq = page.locator('#tempExecNav [data-temp-req]').first();
@@ -345,10 +360,8 @@ test.describe('执行视图导入导出与拖拽', () => {
     const navReqList = page.locator('#tempExecNav [data-temp-req]');
     expect(await navReqList.count()).toBeGreaterThan(0);
 
-    page.__promptAnswers.push('版本A');
-    await page.click('#createTempVersionBtn');
-    page.__promptAnswers.push('版本B');
-    await page.click('#createTempVersionBtn');
+    await createTempVersion(page, '版本A');
+    await createTempVersion(page, '版本B');
     await expect(page.locator('#tempVersionGrid [data-temp-version]')).toHaveCount(2);
 
     const versionOrderBefore = await page.$$eval('#tempVersionGrid [data-temp-version] .title', (nodes) => nodes.map((n) => (n.textContent || '').trim()));
