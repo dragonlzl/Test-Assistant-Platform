@@ -1459,3 +1459,5 @@
 - 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  
 - 更新记录：2025-12-19 用例生成入库前未勾选时自动打开首个模块视图并红框提示勾选（`scripts/core/casesGenCore.js`、`style.css`、`tests/ui/casegen_db_store.spec.js`）。  
 - 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  
+- 更新记录：2025-12-19 用例生成进度模块点击有结果时自动打开用例视图（`scripts/core/casegenCore.js`、`tests/ui/casegen_db_store.spec.js`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  

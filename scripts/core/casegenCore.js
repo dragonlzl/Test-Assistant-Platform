@@ -24,6 +24,38 @@
     var parseSplitModules = handlers.parseSplitModules || function() { return []; };
     var scrollToSection = handlers.scrollToSection;
 
+    function hasGeneratedCasesForModule(moduleId) {
+      if (!moduleId) return false;
+      try {
+        if (window.app && window.app.casesGenApi && typeof window.app.casesGenApi.getCaseListForModule === 'function') {
+          var list = window.app.casesGenApi.getCaseListForModule(moduleId);
+          if (Array.isArray(list)) return list.length > 0;
+        }
+      } catch (err) {
+        // ignore
+      }
+      var raw = state.caseGenResults && state.caseGenResults[moduleId] ? String(state.caseGenResults[moduleId]) : '';
+      var trimmed = raw.trim ? raw.trim() : '';
+      return Boolean(trimmed && !/^\[\s*\]$/.test(trimmed));
+    }
+
+    function isCaseViewOpenedForModule(moduleId) {
+      if (!moduleId || typeof document === 'undefined') return false;
+      var drawer = document.getElementById('caseGenViewDrawer');
+      if (!drawer || !drawer.classList || !drawer.classList.contains('open')) return false;
+      var body = document.getElementById('caseGenViewDrawerBody');
+      if (!body || !body.querySelector) return false;
+      return Boolean(body.querySelector('[data-view-container="' + moduleId + '"]'));
+    }
+
+    function openCaseViewIfAvailable(moduleId) {
+      if (!hasGeneratedCasesForModule(moduleId)) return;
+      if (isCaseViewOpenedForModule(moduleId)) return;
+      var api = window.app && window.app.casesGenApi ? window.app.casesGenApi : null;
+      if (!api || typeof api.toggleCaseView !== 'function') return;
+      api.toggleCaseView(moduleId);
+    }
+
     function goToCaseGeneration(trigger) {
       var splitText = splitResultEl && splitResultEl.value ? splitResultEl.value.trim() : '';
       if (!splitText) {
@@ -75,6 +107,9 @@
         : null;
       if (targetCard) {
         scrollElementIntoView(targetCard, 'smooth', 120);
+      }
+      if (moduleId) {
+        openCaseViewIfAvailable(moduleId);
       }
     }
 
