@@ -5635,6 +5635,56 @@ tr.diff-locate-active td {
   margin: 0;
   font-size: 16px;
 }
+.exec-overview-version-summary {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+}
+.exec-overview-version-summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.exec-overview-version-summary-head h4 {
+  margin: 0;
+  font-size: 14px;
+}
+.exec-overview-version-summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.exec-overview-version-summary-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+.exec-overview-version-summary-title {
+  flex: 0 0 140px;
+  font-weight: 700;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.exec-overview-version-summary-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .exec-overview-user-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

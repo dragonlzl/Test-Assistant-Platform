@@ -20,8 +20,10 @@ test.describe('执行总览页（DB 接口接入）', () => {
       { id: 1, name: '战魂铭人', description: '用于执行总览' },
       { id: 2, name: '元气骑士', description: '用于执行总览' },
     ];
+    const versionV1 = { id: 11, name: 'v1' };
+    const versionV2 = { id: 12, name: 'v2' };
     const versionsByProject = {
-      1: [{ id: 11, name: 'v1' }, { id: 12, name: 'v2' }],
+      1: [versionV2, versionV1],
       2: [{ id: 21, name: 'v1' }],
     };
 
@@ -59,11 +61,11 @@ test.describe('执行总览页（DB 接口接入）', () => {
             },
           ]);
         }
-        if (versionId === String(versionsByProject[1][0].id)) {
+        if (versionId === String(versionV1.id)) {
           return respond(200, [
             {
               project_id: 1,
-              version_id: versionsByProject[1][0].id,
+              version_id: versionV1.id,
               user_id: user.id,
               username: user.username,
               total: 3,
@@ -81,11 +83,11 @@ test.describe('执行总览页（DB 接口接入）', () => {
             version_id: null,
             user_id: user.id,
             username: user.username,
-            total: 5,
-            pending: 2,
-            passed: 1,
+            total: 11,
+            pending: 6,
+            passed: 4,
             failed: 1,
-            blocked: 1,
+            blocked: 0,
             not_applicable: 0,
           },
         ]);
@@ -103,17 +105,18 @@ test.describe('执行总览页（DB 接口接入）', () => {
           username: user.username,
           level: user.level,
           user_created_at: new Date('2020-01-01T00:00:00Z').toISOString(),
-          total: 5,
-          pending: 2,
-          passed: 1,
+          total: 11,
+          pending: 6,
+          passed: 4,
           failed: 1,
-          blocked: 1,
+          blocked: 0,
           not_applicable: 0,
           ui_placement: { versionOrderByProject: { 1: ['12', '11'] }, fileOrderByProjectVersion: { 1: { 11: ['200'], 12: [] } } },
           exec_sets: [
             { exec_set_id: 200, exec_set_name: '需求-登录', version_id: 11, status: 'archived', requirement: '', total: 3, pending: 0, passed: 2, failed: 1, blocked: 0, not_applicable: 0, created_at: iso(now - 20000), updated_at: iso(now - 2000) },
             { exec_set_id: 201, exec_set_name: '需求-注册', version_id: 11, status: 'active', requirement: '', total: 2, pending: 2, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: iso(now - 18000), updated_at: iso(now - 1000) },
             { exec_set_id: 202, exec_set_name: '需求-支付', version_id: 11, status: 'active', requirement: '', total: 4, pending: 3, passed: 1, failed: 0, blocked: 0, not_applicable: 0, created_at: iso(now - 16000), updated_at: iso(now - 1500) },
+            { exec_set_id: 203, exec_set_name: '需求-支付-v2', version_id: 12, status: 'active', requirement: '', total: 2, pending: 1, passed: 1, failed: 0, blocked: 0, not_applicable: 0, created_at: iso(now - 14000), updated_at: iso(now - 800) },
           ],
         };
         if (projectId === '2') {
@@ -132,7 +135,7 @@ test.describe('执行总览页（DB 接口接入）', () => {
             }),
           ]);
         }
-        if (versionId === String(versionsByProject[1][0].id)) {
+        if (versionId === String(versionV1.id)) {
           return respond(200, [
             Object.assign({}, baseUser, {
               total: 3,
@@ -158,7 +161,7 @@ test.describe('执行总览页（DB 接口接入）', () => {
             exec_case_id: 100,
             exec_set_id: 200,
             exec_set_name: '需求-登录',
-            version_id: versionsByProject[1][0].id,
+            version_id: versionV1.id,
             module: '登录',
             title: '正常登录',
             status: '通过',
@@ -223,6 +226,8 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await expect(page.locator('#execOverviewDetail')).toBeVisible();
     await expect(page.locator('#execOverviewProjectTitle')).toContainText('元气骑士');
     await expect(page.locator('#execOverviewNavProjects [data-project-id="2"]')).toHaveClass(/active/);
+    await expect(page.locator('#execOverviewVersionSummary')).toBeVisible();
+    await expect(page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row')).toHaveCount(1);
     await expect(page.locator('#execOverviewUserCards')).toContainText('总数 1');
     await expect(page.locator('#execOverviewUserCards .exec-overview-progress')).toHaveCount(0);
     await expect(page.locator('#execOverviewUserCards .exec-overview-file-progress')).toHaveCount(1);
@@ -245,11 +250,18 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await expect(page.locator('#execOverviewVersionSelect')).toContainText('v1');
 
 	    await expect(page.locator('#execOverviewUserCards')).toContainText(user.username);
-	    await expect(page.locator('#execOverviewUserCards')).toContainText('总数 5');
+	    await expect(page.locator('#execOverviewUserCards')).toContainText('总数 11');
 	    await expect(page.locator('#execOverviewUserCards')).toContainText('归');
 	    await expect(page.locator('#execOverviewUserCards .exec-overview-progress')).toHaveCount(0);
-	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-progress')).toHaveCount(3);
-	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-meta')).toHaveCount(3);
+	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-progress')).toHaveCount(4);
+	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-meta')).toHaveCount(4);
+
+	    const summaryRows = page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row');
+	    await expect(summaryRows).toHaveCount(2);
+	    await expect(summaryRows.nth(0)).toContainText('v2');
+	    await expect(summaryRows.nth(0)).toContainText('已1/2');
+	    await expect(summaryRows.nth(1)).toContainText('v1');
+	    await expect(summaryRows.nth(1)).toContainText('已4/9');
 
 	    const layoutColumns = await page.$eval('#execOverviewUserCards .exec-overview-layout', (el) => {
 	      const cols = getComputedStyle(el).gridTemplateColumns || '';
@@ -280,7 +292,7 @@ test.describe('执行总览页（DB 接口接入）', () => {
 	    expect(barInsideChip).toBe(true);
 
 	    // “单条时高度”应作为基准：切到仅 1 条后再切回多条，子项高度保持一致（允许 2px 误差）
-	    await page.selectOption('#execOverviewVersionSelect', String(versionsByProject[1][0].id));
+	    await page.selectOption('#execOverviewVersionSelect', String(versionV1.id));
 	    const singleChipHeight = await page.locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]').evaluate((el) =>
 	      Math.round(el.getBoundingClientRect().height)
 	    );
@@ -291,8 +303,9 @@ test.describe('执行总览页（DB 接口接入）', () => {
 	    );
 	    expect(Math.abs(singleChipHeight - multiChipHeight)).toBeLessThanOrEqual(2);
 
-	    await page.selectOption('#execOverviewVersionSelect', String(versionsByProject[1][0].id));
+	    await page.selectOption('#execOverviewVersionSelect', String(versionV1.id));
 	    await expect(page.locator('#execOverviewUserCards')).toContainText('总数 3');
+	    await expect(page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row')).toHaveCount(2);
 
     await page.click('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]');
     await expect(page.locator('#execOverviewExecSetDrawer')).toHaveClass(/open/);

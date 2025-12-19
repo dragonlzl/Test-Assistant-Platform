@@ -13,6 +13,9 @@
 	    detail: document.getElementById('execOverviewDetail'),
 	    projectTitle: document.getElementById('execOverviewProjectTitle'),
 	    versionSelect: document.getElementById('execOverviewVersionSelect'),
+      versionSummary: document.getElementById('execOverviewVersionSummary'),
+      versionSummaryBody: document.getElementById('execOverviewVersionSummaryBody'),
+      versionSummaryEmpty: document.getElementById('execOverviewVersionSummaryEmpty'),
 	    userCards: document.getElementById('execOverviewUserCards'),
 	    emptyProjects: document.getElementById('execOverviewEmptyProjects'),
 	    emptyUsers: document.getElementById('execOverviewEmptyUsers'),
@@ -35,6 +38,7 @@
     currentVersionId: null,
     overviewRows: [],
     overviewLayoutUsers: [],
+    versionSummaryRows: [],
     execSetDrawer: {
       execSetId: null,
       execSetName: '',
@@ -132,6 +136,148 @@
     return isNaN(n) ? null : n;
   }
 
+  function normalizeVersionKey(value) {
+    if (value === null || value === undefined || value === '') return '';
+    return String(value);
+  }
+
+  function resolveVersionNameById(versionId) {
+    if (versionId === null || versionId === undefined || versionId === '') return '未分配版本';
+    var versions = Array.isArray(state.versions) ? state.versions : [];
+    var found = null;
+    versions.some(function(v) {
+      if (!v) return false;
+      if (String(v.id) === String(versionId)) {
+        found = v;
+        return true;
+      }
+      return false;
+    });
+    if (found && found.name) return found.name;
+    return '版本#' + String(versionId);
+  }
+
+  function buildVersionOrderList() {
+    var versions = Array.isArray(state.versions) ? state.versions : [];
+    return versions
+      .filter(function(v) { return v && (v.id || v.id === 0); })
+      .map(function(v) { return String(v.id); });
+  }
+
+  function sortVersionSummaryRows(rows) {
+    var order = buildVersionOrderList();
+    return rows.slice().sort(function(a, b) {
+      var ak = normalizeVersionKey(a && a.version_id);
+      var bk = normalizeVersionKey(b && b.version_id);
+      if (ak === '' && bk !== '') return 1;
+      if (bk === '' && ak !== '') return -1;
+      var ia = order.indexOf(String(ak));
+      var ib = order.indexOf(String(bk));
+      if (ia === -1 && ib === -1) {
+        return resolveVersionNameById(ak).localeCompare(resolveVersionNameById(bk), 'zh-Hans-CN');
+      }
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+  }
+
+  function buildFileProgressBar(total, pending, passed, failed, blocked, na) {
+    var t = Number(total) || 0;
+    if (t <= 0) {
+      return (
+        '<div class="exec-overview-file-progress" title="执行进度 0%（0/0）">' +
+          '<div class="temp-overview-bar">' +
+            '<div class="temp-overview-segment status-pending" style="flex:1;"><span>0</span></div>' +
+          '</div>' +
+          '<div class="label">0%</div>' +
+        '</div>'
+      );
+    }
+    var safe = function(n) { return Math.max(0, Number(n) || 0); };
+    var pPending = safe(pending);
+    var pPassed = safe(passed);
+    var pFailed = safe(failed);
+    var pBlocked = safe(blocked);
+    var pNa = safe(na);
+    var done = pPassed + pNa;
+    var pct = Math.round((done / t) * 100);
+
+    var segs = [
+      { className: 'status-passed', count: pPassed },
+      { className: 'status-failed', count: pFailed },
+      { className: 'status-blocked', count: pBlocked },
+      { className: 'status-unspecified', count: pNa },
+      { className: 'status-pending', count: pPending },
+    ].filter(function(seg) { return seg && seg.count > 0; });
+    var segmentHtml = segs.length
+      ? segs
+        .map(function(seg) {
+          return (
+            '<div class="temp-overview-segment ' + seg.className + '" style="flex:' + seg.count + ';">' +
+              '<span>' + String(seg.count) + '</span>' +
+            '</div>'
+          );
+        })
+        .join('')
+      : '<div class="temp-overview-segment status-pending" style="flex:1;"><span>0</span></div>';
+    return (
+      '<div class="exec-overview-file-progress" title="执行进度 ' + pct + '%（' + done + '/' + t + '）">' +
+        '<div class="temp-overview-bar">' + segmentHtml + '</div>' +
+        '<div class="label">' + pct + '%</div>' +
+      '</div>'
+    );
+  }
+
+  function buildExecSetMeta(item) {
+    var safe = function(n) { return Math.max(0, Number(n) || 0); };
+    var total = safe(item && item.total);
+    var pending = safe(item && item.pending);
+    var passed = safe(item && item.passed);
+    var failed = safe(item && item.failed);
+    var blocked = safe(item && item.blocked);
+    var na = safe(item && item.not_applicable);
+    var executed = Math.max(0, total - pending);
+
+    var statusText = '未执行';
+    var statusCls = 'pending';
+    if (total > 0 && (failed > 0 || blocked > 0)) {
+      if (failed > 0 && blocked > 0) statusText = '失败/阻塞';
+      else if (failed > 0) statusText = '失败';
+      else statusText = '阻塞';
+      statusCls = 'err';
+    } else if (total > 0 && pending === 0) {
+      statusText = '已完成';
+      statusCls = 'ok';
+    } else if (executed > 0) {
+      statusText = '执行中';
+      statusCls = 'running';
+    }
+
+    var parts = [];
+    parts.push('已' + executed + '/' + total);
+    parts.push('待' + pending);
+    parts.push('过' + passed);
+    parts.push('失' + failed);
+    parts.push('阻' + blocked);
+    if (na > 0) parts.push('NA' + na);
+    var counts = [
+      '<span class="exec-overview-kv kv-done">已' + executed + '/' + total + '</span>',
+      '<span class="exec-overview-kv kv-pending">待' + pending + '</span>',
+      '<span class="exec-overview-kv kv-passed">过' + passed + '</span>',
+      '<span class="exec-overview-kv kv-failed">失' + failed + '</span>',
+      '<span class="exec-overview-kv kv-blocked">阻' + blocked + '</span>',
+      (na > 0 ? '<span class="exec-overview-kv kv-na">NA' + na + '</span>' : ''),
+    ].filter(Boolean).join('');
+
+    return (
+      '<div class="exec-overview-file-meta">' +
+        '<span class="exec-overview-file-status status-' + statusCls + '">' + escapeHtml(statusText) + '</span>' +
+        '<span class="exec-overview-file-counts" title="' + escapeHtml(parts.join(' ')) + '">' + counts + '</span>' +
+      '</div>'
+    );
+  }
+
   function loadLastProjectId() {
     if (typeof localStorage === 'undefined') return '';
     try {
@@ -158,6 +304,8 @@
     state.versions = [];
     state.overviewRows = [];
     state.overviewLayoutUsers = [];
+    state.versionSummaryRows = [];
+    renderVersionSummary();
     if (dom.detail) dom.detail.classList.add('hidden');
     if (dom.projectList) dom.projectList.classList.add('hidden');
     if (dom.projectTitle) dom.projectTitle.textContent = '';
@@ -373,69 +521,6 @@
     if (dom.emptyUsers) dom.emptyUsers.classList.add('hidden');
     dom.userCards.classList.toggle('layout-mode', hasLayout);
 
-    function resolveVersionNameById(versionId) {
-      if (versionId === null || versionId === undefined || versionId === '') return '未分配版本';
-      var versions = Array.isArray(state.versions) ? state.versions : [];
-      var found = null;
-      versions.some(function(v) {
-        if (!v) return false;
-        if (String(v.id) === String(versionId)) {
-          found = v;
-          return true;
-        }
-        return false;
-      });
-      if (found && found.name) return found.name;
-      return '版本#' + String(versionId);
-    }
-
-    function buildFileProgressBar(total, pending, passed, failed, blocked, na) {
-      var t = Number(total) || 0;
-      if (t <= 0) {
-        return (
-          '<div class="exec-overview-file-progress" title="执行进度 0%（0/0）">' +
-            '<div class="temp-overview-bar">' +
-              '<div class="temp-overview-segment status-pending" style="flex:1;"><span>0</span></div>' +
-            '</div>' +
-            '<div class="label">0%</div>' +
-          '</div>'
-        );
-      }
-      var safe = function(n) { return Math.max(0, Number(n) || 0); };
-      var pPending = safe(pending);
-      var pPassed = safe(passed);
-      var pFailed = safe(failed);
-      var pBlocked = safe(blocked);
-      var pNa = safe(na);
-      var done = pPassed + pNa;
-      var pct = Math.round((done / t) * 100);
-
-      var segs = [
-        { className: 'status-passed', count: pPassed },
-        { className: 'status-failed', count: pFailed },
-        { className: 'status-blocked', count: pBlocked },
-        { className: 'status-unspecified', count: pNa },
-        { className: 'status-pending', count: pPending },
-      ].filter(function(seg) { return seg && seg.count > 0; });
-      var segmentHtml = segs.length
-        ? segs
-          .map(function(seg) {
-            return (
-              '<div class="temp-overview-segment ' + seg.className + '" style="flex:' + seg.count + ';">' +
-                '<span>' + String(seg.count) + '</span>' +
-              '</div>'
-            );
-          })
-          .join('')
-        : '<div class="temp-overview-segment status-pending" style="flex:1;"><span>0</span></div>';
-      return (
-        '<div class="exec-overview-file-progress" title="执行进度 ' + pct + '%（' + done + '/' + t + '）">' +
-          '<div class="temp-overview-bar">' + segmentHtml + '</div>' +
-          '<div class="label">' + pct + '%</div>' +
-        '</div>'
-      );
-    }
-
     function computeExecSetState(item) {
       var total = Number(item && item.total) || 0;
       var pending = Number(item && item.pending) || 0;
@@ -448,54 +533,6 @@
       return 'pending';
     }
 
-    function buildExecSetMeta(item) {
-      var safe = function(n) { return Math.max(0, Number(n) || 0); };
-      var total = safe(item && item.total);
-      var pending = safe(item && item.pending);
-      var passed = safe(item && item.passed);
-      var failed = safe(item && item.failed);
-      var blocked = safe(item && item.blocked);
-      var na = safe(item && item.not_applicable);
-      var executed = Math.max(0, total - pending);
-
-      var statusText = '未执行';
-      var statusCls = 'pending';
-      if (total > 0 && (failed > 0 || blocked > 0)) {
-        if (failed > 0 && blocked > 0) statusText = '失败/阻塞';
-        else if (failed > 0) statusText = '失败';
-        else statusText = '阻塞';
-        statusCls = 'err';
-      } else if (total > 0 && pending === 0) {
-        statusText = '已完成';
-        statusCls = 'ok';
-      } else if (executed > 0) {
-        statusText = '执行中';
-        statusCls = 'running';
-      }
-
-      var parts = [];
-      parts.push('已' + executed + '/' + total);
-      parts.push('待' + pending);
-      parts.push('过' + passed);
-      parts.push('失' + failed);
-      parts.push('阻' + blocked);
-      if (na > 0) parts.push('NA' + na);
-      var counts = [
-        '<span class="exec-overview-kv kv-done">已' + executed + '/' + total + '</span>',
-        '<span class="exec-overview-kv kv-pending">待' + pending + '</span>',
-        '<span class="exec-overview-kv kv-passed">过' + passed + '</span>',
-        '<span class="exec-overview-kv kv-failed">失' + failed + '</span>',
-        '<span class="exec-overview-kv kv-blocked">阻' + blocked + '</span>',
-        (na > 0 ? '<span class="exec-overview-kv kv-na">NA' + na + '</span>' : ''),
-      ].filter(Boolean).join('');
-
-      return (
-        '<div class="exec-overview-file-meta">' +
-          '<span class="exec-overview-file-status status-' + statusCls + '">' + escapeHtml(statusText) + '</span>' +
-          '<span class="exec-overview-file-counts" title="' + escapeHtml(parts.join(' ')) + '">' + counts + '</span>' +
-        '</div>'
-      );
-    }
 
     function renderUserLayoutCard(userRow) {
       var total = userRow.total || 0;
@@ -652,6 +689,123 @@
     }).join('');
   }
 
+  function aggregateSummaryFromLayout(layoutUsers) {
+    var map = {};
+    var list = Array.isArray(layoutUsers) ? layoutUsers : [];
+    list.forEach(function(userRow) {
+      var sets = Array.isArray(userRow && userRow.exec_sets) ? userRow.exec_sets : [];
+      sets.forEach(function(es) {
+        if (!es) return;
+        var key = normalizeVersionKey(es.version_id);
+        if (!map[key]) {
+          map[key] = {
+            version_id: key,
+            total: 0,
+            pending: 0,
+            passed: 0,
+            failed: 0,
+            blocked: 0,
+            not_applicable: 0,
+          };
+        }
+        map[key].total += Number(es.total) || 0;
+        map[key].pending += Number(es.pending) || 0;
+        map[key].passed += Number(es.passed) || 0;
+        map[key].failed += Number(es.failed) || 0;
+        map[key].blocked += Number(es.blocked) || 0;
+        map[key].not_applicable += Number(es.not_applicable) || 0;
+      });
+    });
+    return Object.keys(map).map(function(key) { return map[key]; });
+  }
+
+  function aggregateSummaryFromRows(rows) {
+    var map = {};
+    var list = Array.isArray(rows) ? rows : [];
+    list.forEach(function(row) {
+      if (!row) return;
+      var key = normalizeVersionKey(row.version_id);
+      if (!map[key]) {
+        map[key] = {
+          version_id: key,
+          total: 0,
+          pending: 0,
+          passed: 0,
+          failed: 0,
+          blocked: 0,
+          not_applicable: 0,
+        };
+      }
+      map[key].total += Number(row.total) || 0;
+      map[key].pending += Number(row.pending) || 0;
+      map[key].passed += Number(row.passed) || 0;
+      map[key].failed += Number(row.failed) || 0;
+      map[key].blocked += Number(row.blocked) || 0;
+      map[key].not_applicable += Number(row.not_applicable) || 0;
+    });
+    return Object.keys(map).map(function(key) { return map[key]; });
+  }
+
+  function renderVersionSummary() {
+    if (!dom.versionSummaryBody) return;
+    var list = Array.isArray(state.versionSummaryRows) ? state.versionSummaryRows : [];
+    if (!list.length) {
+      dom.versionSummaryBody.innerHTML = '';
+      if (dom.versionSummaryEmpty) dom.versionSummaryEmpty.classList.remove('hidden');
+      return;
+    }
+    if (dom.versionSummaryEmpty) dom.versionSummaryEmpty.classList.add('hidden');
+    list = sortVersionSummaryRows(list);
+    dom.versionSummaryBody.innerHTML = list.map(function(row) {
+      var total = Number(row.total) || 0;
+      var pending = Number(row.pending) || 0;
+      var passed = Number(row.passed) || 0;
+      var failed = Number(row.failed) || 0;
+      var blocked = Number(row.blocked) || 0;
+      var na = Number(row.not_applicable) || 0;
+      var title = resolveVersionNameById(row.version_id);
+      return (
+        '<div class="exec-overview-version-summary-row">' +
+          '<div class="exec-overview-version-summary-title" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</div>' +
+          '<div class="exec-overview-version-summary-main">' +
+            buildFileProgressBar(total, pending, passed, failed, blocked, na) +
+            buildExecSetMeta({
+              total: total,
+              pending: pending,
+              passed: passed,
+              failed: failed,
+              blocked: blocked,
+              not_applicable: na,
+            }) +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function loadVersionSummary(projectId) {
+    if (!projectId) {
+      state.versionSummaryRows = [];
+      renderVersionSummary();
+      return Promise.resolve([]);
+    }
+    if (!api.getExecutionOverview && !api.getExecutionOverviewLayout) return Promise.resolve([]);
+    var hasLayout = typeof api.getExecutionOverviewLayout === 'function';
+    var fetcher = hasLayout ? api.getExecutionOverviewLayout : api.getExecutionOverview;
+    return fetcher
+      .call(api, projectId, null)
+      .then(function(rows) {
+        state.versionSummaryRows = hasLayout ? aggregateSummaryFromLayout(rows) : aggregateSummaryFromRows(rows);
+        renderVersionSummary();
+        return rows;
+      })
+      .catch(function() {
+        state.versionSummaryRows = [];
+        renderVersionSummary();
+        return [];
+      });
+  }
+
   function renderExecSetCases(rows) {
     if (!dom.execSetTableBody) return;
     var list = Array.isArray(rows) ? rows : [];
@@ -798,7 +952,9 @@
     renderProjects();
     state.currentVersionId = null;
     renderVersionSelect();
-    loadVersions(project.id).then(loadOverview);
+    loadVersions(project.id).then(function() {
+      return Promise.all([loadOverview(), loadVersionSummary(project.id)]);
+    });
   }
 
 	  function bindEvents() {
@@ -882,15 +1038,17 @@
 	            setStatus('', '');
 	            return;
 	          }
-	          showProjectDetail(found);
-	          state.currentVersionId = null;
-	          renderVersionSelect();
-	          loadVersions(found.id).then(loadOverview).finally(function() {
-	            setStatus('', '');
-	          });
-	        });
-	      });
-	    }
+          showProjectDetail(found);
+          state.currentVersionId = null;
+          renderVersionSelect();
+          loadVersions(found.id).then(function() {
+            return Promise.all([loadOverview(), loadVersionSummary(found.id)]);
+          }).finally(function() {
+            setStatus('', '');
+          });
+        });
+      });
+    }
 	    if (dom.navProjects) {
 	      dom.navProjects.addEventListener('click', function(e) {
 	        var btn = e && e.target && e.target.closest ? e.target.closest('[data-project-id]') : null;
@@ -900,9 +1058,11 @@
 	      });
 	    }
 	    if (dom.versionSelect) {
-	      dom.versionSelect.addEventListener('change', function() {
-	        state.currentVersionId = normalizeVersionId(dom.versionSelect.value);
+      dom.versionSelect.addEventListener('change', function() {
+        state.currentVersionId = normalizeVersionId(dom.versionSelect.value);
         loadOverview();
+        var pid = state.currentProject && state.currentProject.id ? state.currentProject.id : null;
+        if (pid || pid === 0) loadVersionSummary(pid);
       });
     }
     if (dom.userCards) {

@@ -2570,13 +2570,21 @@
 	  </div>
 	  <div class="exec-overview-project-grid" id="execOverviewProjects"></div>
 	  <p class="hint hidden" id="execOverviewEmptyProjects">暂无可用项目</p>
-	  <div class="exec-overview-detail hidden" id="execOverviewDetail">
+  <div class="exec-overview-detail hidden" id="execOverviewDetail">
     <div class="exec-overview-detail-head">
       <h3 id="execOverviewProjectTitle">项目</h3>
       <label class="inline">
         版本
         <select id="execOverviewVersionSelect"></select>
       </label>
+    </div>
+    <div class="exec-overview-version-summary" id="execOverviewVersionSummary">
+      <div class="exec-overview-version-summary-head">
+        <h4>版本总览</h4>
+        <span class="hint">汇总该项目所有执行人进度</span>
+      </div>
+      <div class="exec-overview-version-summary-body" id="execOverviewVersionSummaryBody"></div>
+      <p class="hint hidden" id="execOverviewVersionSummaryEmpty">暂无版本汇总</p>
     </div>
     <div class="exec-overview-user-grid" id="execOverviewUserCards"></div>
     <p class="hint hidden" id="execOverviewEmptyUsers">暂无执行数据</p>
