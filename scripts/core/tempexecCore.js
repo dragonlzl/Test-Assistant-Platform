@@ -2626,6 +2626,7 @@
       var navHintNext = navDisabled ? '暂无可切换用例' : '切换下一份用例';
       var navHtml =
         '<div class="toolbar-nav" role="group" aria-label="切换用例">' +
+          '<span class="nav-label">用例切换：</span>' +
           '<button type="button" class="pill secondary nav-btn prev" data-temp-file-nav="prev"' + navAttr + ' title="' + escapeHtml(navHintPrev) + '">' +
             '上一份' +
           '</button>' +
@@ -2642,6 +2643,16 @@
             '归档' +
           '</button>';
       }
+      var actionsHtml =
+        '<div class="toolbar-actions">' +
+          '<div class="toolbar-search">' +
+            '<input class="temp-search-input" data-temp-search-input="' + file.id + '" value="' + escapeHtml(searchRaw) + '" placeholder="搜索用例关键字">' +
+            '<button type="button" class="pill secondary" data-temp-search-btn="' + file.id + '">搜索</button>' +
+            '<button type="button" class="pill secondary" data-temp-search-clear="' + file.id + '">清除</button>' +
+          '</div>' +
+          navHtml +
+          '<div class="toolbar-archive-wrap">' + archiveHtml + '</div>' +
+        '</div>';
       var toolbarHtml = [
         '<div class="toolbar-file">当前文件：<strong>' + escapeHtml(file.name) + '</strong></div>',
         '<span class="summary-pill executed ' + (activeFilter === 'executed' ? 'active' : '') + '" data-temp-status-filter="executed" data-temp-status-file="' + file.id + '">已执行 ' + summary.executed + '</span>',
@@ -2650,13 +2661,7 @@
         '<span class="summary-pill failed ' + (activeFilter === 'failed' ? 'active' : '') + '" data-temp-status-filter="failed" data-temp-status-file="' + file.id + '">失败 ' + summary.failed + '</span>',
         '<span class="summary-pill blocked ' + (activeFilter === 'blocked' ? 'active' : '') + '" data-temp-status-filter="blocked" data-temp-status-file="' + file.id + '">阻塞 ' + summary.blocked + '</span>',
         '<span class="summary-pill unspecified ' + (activeFilter === 'unspecified' ? 'active' : '') + '" data-temp-status-filter="unspecified" data-temp-status-file="' + file.id + '">不适用 ' + summary.unspecified + '</span>',
-        navHtml,
-        '<div class="toolbar-search">',
-          '<input class="temp-search-input" data-temp-search-input="' + file.id + '" value="' + escapeHtml(searchRaw) + '" placeholder="搜索用例关键字">',
-          '<button type="button" class="pill secondary" data-temp-search-btn="' + file.id + '">搜索</button>',
-          '<button type="button" class="pill secondary" data-temp-search-clear="' + file.id + '">清除</button>',
-        '</div>',
-        archiveHtml,
+        actionsHtml,
       ].join('');
       tempExecToolbar.innerHTML = toolbarHtml;
       tempExecToolbarCard.classList.remove('hidden');

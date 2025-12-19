@@ -31,6 +31,11 @@
   - `node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）  
   - `npm run test:ui -- tests/ui/tempexec_archive_stay_project.spec.js --workers=1`（通过）  
 - 更新记录：2025-12-19 执行视图顶部切换/归档按钮上线（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_archive_stay_project.spec.js`）。  
+- 更新记录：2025-12-19 工具栏搜索/归档移至下一行左侧，归档成功提示缩短为 3 秒（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`）。  
+- 更新记录：2025-12-19 用例执行顶部导航新增“用例库”入口（`index.html`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_entry.spec.js`）。  
+- 更新记录：2025-12-19 上一份/下一份按钮调整至归档同一行并置于左侧（`scripts/core/tempexecCore.js`）。  
+- 更新记录：2025-12-19 工具栏按钮分列：搜索左、切换中、归档右（`scripts/core/tempexecCore.js`、`style.css`）。  
+- 更新记录：2025-12-19 用例切换按钮前补充“用例切换：”说明（`scripts/core/tempexecCore.js`）。  
 
 - 功能名称：用例库转执行确认抽屉与总览归档置底  
 - 功能描述：  

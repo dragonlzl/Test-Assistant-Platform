@@ -52,7 +52,7 @@ test.describe('临时执行入口导航', () => {
 	    await expect(drawer).not.toHaveClass(/open/);
 	  });
 
-	  test('抽屉遮罩覆盖且不会导致页面滚动', async ({ page }) => {
+  test('抽屉遮罩覆盖且不会导致页面滚动', async ({ page }) => {
 	    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 	    const initialScroll = await page.evaluate(() => window.scrollY);
 	    await page.click('#openTempExecImportDrawerBtn');
@@ -81,6 +81,14 @@ test.describe('临时执行入口导航', () => {
 	    expect(Math.abs(finalScroll - initialScroll)).toBeLessThanOrEqual(2);
 	    expect(Math.abs(finalScroll - afterFirstClose)).toBeLessThanOrEqual(2);
 	  });
+
+  test('顶部导航进入用例库', async ({ page }) => {
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    const entryBtn = page.locator('#openTempExecCaseLibraryBtn');
+    await expect(entryBtn).toBeVisible();
+    await entryBtn.click();
+    await expect(page.locator('#caseLibraryFlowNav')).toBeVisible();
+  });
 
   test('执行总览抽屉展开', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
