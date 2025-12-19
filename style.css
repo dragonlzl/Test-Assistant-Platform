@@ -4257,6 +4257,10 @@ tr.diff-locate-active td {
     .caseview tbody tr:last-child td {
       border-bottom: none;
     }
+    .caseview.caseview-selection-hint input[type="checkbox"] {
+      box-shadow: 0 0 0 2px #ef4444;
+      border-radius: 4px;
+    }
     .temp-reuse-toggle {
       display: flex;
       align-items: center;

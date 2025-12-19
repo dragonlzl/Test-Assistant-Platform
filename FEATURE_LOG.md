@@ -1457,3 +1457,5 @@
 - 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  
 - 更新记录：2025-12-19 追加入库流程减少重复确认：缺失模块确认后直接进入追加/差异覆盖（`scripts/core/casesGenCore.js`、`scripts/modules/caseLibrary.js`、`tests/ui/casegen_db_store.spec.js`）。  
 - 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  
+- 更新记录：2025-12-19 用例生成入库前未勾选时自动打开首个模块视图并红框提示勾选（`scripts/core/casesGenCore.js`、`style.css`、`tests/ui/casegen_db_store.spec.js`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  

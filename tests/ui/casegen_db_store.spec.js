@@ -173,6 +173,97 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await expect(page.locator('#caseGenStoreActionSelect')).toHaveClass(/input-invalid/);
   });
 
+  test('新用例入库：未勾选用例时自动打开视图并提示勾选', async ({ page }) => {
+    const token = 'token-casegen-store-unchecked';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page, { selectIndex: -1 });
+    await page.selectOption('#caseGenStoreActionSelect', 'store');
+    await page.click('#caseGenStoreNewBtn');
+
+    const viewDrawer = page.locator('#caseGenViewDrawer');
+    await expect(viewDrawer).toHaveClass(/open/);
+    const viewContainer = page.locator('#caseGenViewDrawerBody .caseview');
+    await expect(viewContainer).toHaveClass(/caseview-selection-hint/);
+    await page.click('#caseGenViewDrawerBody input[data-case-select]');
+    await expect(viewContainer).not.toHaveClass(/caseview-selection-hint/);
+  });
+
+  test('旧用例追加入库：未勾选用例时自动打开视图并提示勾选', async ({ page }) => {
+    const token = 'token-casegen-append-unchecked';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page, { selectIndex: -1 });
+    await page.click('#caseGenStoreAppendBtn');
+
+    const viewDrawer = page.locator('#caseGenViewDrawer');
+    await expect(viewDrawer).toHaveClass(/open/);
+    const viewContainer = page.locator('#caseGenViewDrawerBody .caseview');
+    await expect(viewContainer).toHaveClass(/caseview-selection-hint/);
+    await page.click('#caseGenViewDrawerBody input[data-case-select]');
+    await expect(viewContainer).not.toHaveClass(/caseview-selection-hint/);
+  });
+
   test('新用例入库：直接入库成功，且会校验未选模块二次确认', async ({ page }) => {
     const token = 'token-casegen-store-new';
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };

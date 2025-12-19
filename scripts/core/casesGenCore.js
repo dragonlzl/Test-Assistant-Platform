@@ -758,6 +758,7 @@
       if (exportBtn) exportBtn.disabled = selection.size === 0;
       var xmindBtn = container.querySelector('button[data-xmind-selected="' + moduleId + '"]');
       if (xmindBtn) xmindBtn.disabled = selection.size === 0;
+      applyCaseGenSelectionHint(moduleId);
       refreshAppendExistingButton();
       refreshExportCaseGenXmindButton();
     }
@@ -784,10 +785,20 @@
       return false;
     }
 
+    function hasGeneratedCases() {
+      if (!state.caseGenModules || !state.caseGenModules.length) return false;
+      for (var i = 0; i < state.caseGenModules.length; i += 1) {
+        var mod = state.caseGenModules[i];
+        var list = getCaseListForModule(mod.id);
+        if (list && list.length) return true;
+      }
+      return false;
+    }
+
     function refreshAppendExistingButton() {
-      var hasSelection = hasSelectedGeneratedCases();
-      if (caseGenStoreNewBtn) caseGenStoreNewBtn.disabled = !hasSelection || !isDbStoreReady();
-      if (caseGenStoreAppendBtn) caseGenStoreAppendBtn.disabled = !hasSelection || !isDbStoreReady();
+      var hasGenerated = hasGeneratedCases();
+      if (caseGenStoreNewBtn) caseGenStoreNewBtn.disabled = !hasGenerated || !isDbStoreReady();
+      if (caseGenStoreAppendBtn) caseGenStoreAppendBtn.disabled = !hasGenerated || !isDbStoreReady();
       refreshExportCaseGenXmindButton();
     }
 
@@ -831,6 +842,63 @@
         });
       });
       return items;
+    }
+
+    function ensureCaseGenSelectionHintState() {
+      if (!state.caseGenSelectionHints || typeof state.caseGenSelectionHints !== 'object') {
+        state.caseGenSelectionHints = {};
+      }
+      return state.caseGenSelectionHints;
+    }
+
+    function setCaseGenSelectionHint(moduleId, enabled) {
+      if (!moduleId) return;
+      var map = ensureCaseGenSelectionHintState();
+      if (enabled) map[moduleId] = true;
+      else delete map[moduleId];
+      applyCaseGenSelectionHint(moduleId);
+    }
+
+    function applyCaseGenSelectionHint(moduleId) {
+      var container = getCaseViewContainer(moduleId);
+      if (!container || !container.classList) return;
+      var map = ensureCaseGenSelectionHintState();
+      var selection = state.caseSelections[moduleId];
+      var hasSelection = selection && selection.size > 0;
+      var shouldShow = Boolean(map[moduleId] && !hasSelection);
+      container.classList.toggle('caseview-selection-hint', shouldShow);
+    }
+
+    function findFirstGeneratedModuleId() {
+      if (!state.caseGenModules || !state.caseGenModules.length) return '';
+      for (var i = 0; i < state.caseGenModules.length; i += 1) {
+        var mod = state.caseGenModules[i];
+        var list = getCaseListForModule(mod.id);
+        if (list && list.length) return mod.id;
+      }
+      return '';
+    }
+
+    function openCaseViewForModule(moduleId) {
+      if (!moduleId) return false;
+      var drawer = ensureCaseGenDrawer();
+      if (!drawer || !drawer.element) return false;
+      var drawerEl = drawer.element;
+      var isOpenCurrent = drawerEl.classList.contains('open') && activeCaseViewModuleId === moduleId;
+      if (isOpenCurrent) return true;
+      toggleCaseView(moduleId);
+      return true;
+    }
+
+    function openCaseViewForSelectionHint() {
+      var moduleId = findFirstGeneratedModuleId();
+      if (!moduleId) return false;
+      if (caseGenDbStoreDrawer && caseGenDbStoreDrawer.element && caseGenDbStoreDrawer.element.classList.contains('open')) {
+        caseGenDbStoreDrawer.close();
+      }
+      setCaseGenSelectionHint(moduleId, true);
+      openCaseViewForModule(moduleId);
+      return true;
     }
 
     function listCaseGenModulesMissingSelectionOrGeneration() {
@@ -1218,10 +1286,28 @@
         return;
       }
       clearCaseGenDbStoreNewActionError();
+      if (!hasSelectedGeneratedCases()) {
+        if (!hasGeneratedCases()) {
+          setStatus(caseGenStatus, '请先生成用例后再入库', 'warn');
+          return;
+        }
+        var opened = openCaseViewForSelectionHint();
+        setStatus(caseGenStatus, opened ? '请先在用例视图勾选需要入库的用例（已标记勾选区域）' : '请先在用例视图勾选需要入库的用例', 'warn');
+        return;
+      }
       openCaseGenDbStoreDrawer('new');
     }
 
     function openCaseGenDbStoreAppendDrawer() {
+      if (!hasSelectedGeneratedCases()) {
+        if (!hasGeneratedCases()) {
+          setStatus(caseGenStatus, '请先生成用例后再追加入库', 'warn');
+          return;
+        }
+        var opened = openCaseViewForSelectionHint();
+        setStatus(caseGenStatus, opened ? '请先在用例视图勾选需要追加的用例（已标记勾选区域）' : '请先在用例视图勾选需要追加的用例', 'warn');
+        return;
+      }
       openCaseGenDbStoreDrawer('append');
     }
 
@@ -1230,7 +1316,8 @@
       if (st.loading || st.confirming) return;
       var items = collectDbStoreSelectedItems();
       if (!items.length) {
-        setStatus(caseGenStatus, '请先勾选用例后再入库', 'warn');
+        var opened = openCaseViewForSelectionHint();
+        setStatus(caseGenStatus, opened ? '请先在用例视图勾选需要入库的用例（已标记勾选区域）' : '请先勾选用例后再入库', 'warn');
         return;
       }
       if (!st.projectId || !st.versionId) {
@@ -1395,7 +1482,8 @@
       if (st.loading || st.confirming) return;
       var items = collectDbStoreSelectedItems();
       if (!items.length) {
-        setStatus(caseGenStatus, '请先勾选用例后再追加入库', 'warn');
+        var opened = openCaseViewForSelectionHint();
+        setStatus(caseGenStatus, opened ? '请先在用例视图勾选需要追加的用例（已标记勾选区域）' : '请先勾选用例后再追加入库', 'warn');
         return;
       }
       if (!st.projectId || !st.versionId || !st.caseFileId) {
@@ -2626,6 +2714,7 @@
       var selection = ensureCaseSelectionSet(moduleId);
       if (checked) selection.add(index);
       else selection.delete(index);
+      if (selection.size > 0) setCaseGenSelectionHint(moduleId, false);
       refreshCaseSelectionUI(moduleId);
       updateSupplementButtons(moduleId, getCaseListForModule(moduleId).length > 0);
     }
@@ -2639,6 +2728,7 @@
         var rowCheckboxes = container.querySelectorAll('input[data-case-select="' + moduleId + '"]');
         rowCheckboxes.forEach(function(cb) { selection.add(Number(cb.dataset.index)); });
       }
+      if (selection.size > 0) setCaseGenSelectionHint(moduleId, false);
       refreshCaseSelectionUI(moduleId);
       updateSupplementButtons(moduleId, getCaseListForModule(moduleId).length > 0);
     }
