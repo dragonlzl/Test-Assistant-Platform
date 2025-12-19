@@ -643,6 +643,7 @@
       renderAppendTargetOptions: api.renderAppendTargetOptions || function() {},
       handleCaseSelectionChange: handleCaseSelectionChange,
       handleCaseSelectAll: handleCaseSelectAll,
+      handleCaseSelectAllModules: api.handleCaseSelectAllModules || function() {},
       exportCaseGenerationResults: exportCaseGenerationResults,
       ensureCaseGenModulesFromSplit: ensureCaseGenModulesFromSplit,
       renderCaseGeneration: renderCaseGeneration,
@@ -653,7 +654,8 @@
       refreshAppendExistingButton: 1, refreshExportCaseGenXmindButton: 1,
       setCaseGenDbStoreNewAction: 1, clearCaseGenDbStoreNewActionError: 1,
       openCaseGenAllView: 1, openCaseGenDbStoreNewDrawer: 1, openCaseGenDbStoreAppendDrawer: 1,
-      handleCaseSelectionChange: 1, handleCaseSelectAll: 1, exportCaseGenerationResults: 1, ensureCaseGenModulesFromSplit: 1, renderCaseGeneration: 1,
+      handleCaseSelectionChange: 1, handleCaseSelectAll: 1, handleCaseSelectAllModules: 1,
+      exportCaseGenerationResults: 1, ensureCaseGenModulesFromSplit: 1, renderCaseGeneration: 1,
       renderAppendTargetOptions: 1,
     }));
     window.app.casesGenApi = casesGenApi;

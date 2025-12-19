@@ -163,7 +163,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await gotoIndex(page);
     await seedCaseGenState(page, { selectIndex: 0 });
     await expect(page.locator('#caseGenStoreActionHint')).toBeVisible();
-    await expect(page.locator('#caseGenStoreActionHint')).toContainText('先到各模块右上角的【用例视图】中勾选用例');
+    await expect(page.locator('#caseGenStoreActionHint')).toContainText('在【全模块用例视图】中勾选用例');
 
     const storeBtn = page.locator('#caseGenStoreNewBtn');
     await expect(storeBtn).toBeEnabled();
@@ -171,6 +171,63 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
 
     await expect(page.locator('#caseGenStatus')).toContainText('请先选择', { timeout: 3000 });
     await expect(page.locator('#caseGenStoreActionSelect')).toHaveClass(/input-invalid/);
+  });
+
+  test('全模块用例视图：支持全选/取消全选所有模块用例', async ({ page }) => {
+    const token = 'token-casegen-select-all';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page, { selectIndex: -1 });
+
+    await page.click('#caseGenAllViewBtn');
+    await expect(page.locator('#caseGenViewDrawer')).toHaveClass(/open/);
+
+    const selectAllBtn = page.locator('#caseGenAllSelectBtn');
+    await expect(selectAllBtn).toBeVisible();
+    await selectAllBtn.click();
+
+    const checkboxes = page.locator('#caseGenViewDrawerBody input[data-case-select]');
+    const count = await checkboxes.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i += 1) {
+      await expect(checkboxes.nth(i)).toBeChecked();
+    }
+    await expect(selectAllBtn).toContainText('取消全选所有模块用例');
+
+    await selectAllBtn.click();
+    for (let i = 0; i < count; i += 1) {
+      await expect(checkboxes.nth(i)).not.toBeChecked();
+    }
   });
 
   test('新用例入库：未勾选用例时自动打开视图并提示勾选', async ({ page }) => {
@@ -214,9 +271,13 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     const viewDrawer = page.locator('#caseGenViewDrawer');
     await expect(viewDrawer).toHaveClass(/open/);
     const viewContainer = page.locator('#caseGenViewDrawerBody .caseview');
-    await expect(viewContainer).toHaveClass(/caseview-selection-hint/);
+    await expect(viewContainer).toHaveCount(2);
+    await expect(viewContainer).toHaveClass([/caseview-selection-hint/, /caseview-selection-hint/]);
     await page.click('#caseGenViewDrawerBody input[data-case-select]');
-    await expect(viewContainer).not.toHaveClass(/caseview-selection-hint/);
+    const count = await viewContainer.count();
+    for (let i = 0; i < count; i += 1) {
+      await expect(viewContainer.nth(i)).not.toHaveClass(/caseview-selection-hint/);
+    }
   });
 
   test('旧用例追加入库：未勾选用例时自动打开视图并提示勾选', async ({ page }) => {
@@ -259,9 +320,13 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     const viewDrawer = page.locator('#caseGenViewDrawer');
     await expect(viewDrawer).toHaveClass(/open/);
     const viewContainer = page.locator('#caseGenViewDrawerBody .caseview');
-    await expect(viewContainer).toHaveClass(/caseview-selection-hint/);
+    await expect(viewContainer).toHaveCount(2);
+    await expect(viewContainer).toHaveClass([/caseview-selection-hint/, /caseview-selection-hint/]);
     await page.click('#caseGenViewDrawerBody input[data-case-select]');
-    await expect(viewContainer).not.toHaveClass(/caseview-selection-hint/);
+    const count = await viewContainer.count();
+    for (let i = 0; i < count; i += 1) {
+      await expect(viewContainer.nth(i)).not.toHaveClass(/caseview-selection-hint/);
+    }
   });
 
   test('进度模块点击：有用例时打开用例视图', async ({ page }) => {

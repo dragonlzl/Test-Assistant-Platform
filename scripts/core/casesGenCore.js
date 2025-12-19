@@ -65,6 +65,7 @@
     var exportCaseGenXmindBtn = dom.exportCaseGenXmindBtn || dom.exportCaseGenXmind;
     var caseGenViewDrawerBody = dom.caseGenViewDrawerBody;
     var caseGenViewDrawerTitle = dom.caseGenViewDrawerTitle;
+    var caseGenAllSelectBtn = dom.caseGenAllSelectBtn || document.getElementById('caseGenAllSelectBtn');
     var caseGenViewDrawer = null;
     var activeCaseViewModuleId = '';
     var ALL_CASE_VIEW_ID = '__casegen_all__';
@@ -375,6 +376,7 @@
           activeCaseViewModuleId = '';
           if (caseGenViewDrawerBody) caseGenViewDrawerBody.innerHTML = '';
           if (caseGenViewDrawerTitle) caseGenViewDrawerTitle.textContent = '用例视图';
+          toggleCaseGenAllSelectButton(false);
         },
       });
       return caseGenViewDrawer;
@@ -911,6 +913,47 @@
       });
     }
 
+    function getCaseGenAllSelectionStats() {
+      var items = collectGeneratedModules();
+      var total = 0;
+      var selected = 0;
+      items.forEach(function(entry) {
+        var list = entry.list || [];
+        var selection = state.caseSelections[entry.mod.id];
+        total += list.length;
+        if (selection && selection.size) {
+          selection.forEach(function(idx) {
+            if (list[idx]) selected += 1;
+          });
+        }
+      });
+      return { total: total, selected: selected, moduleCount: items.length };
+    }
+
+    function toggleCaseGenAllSelectButton(show) {
+      if (!caseGenAllSelectBtn || !caseGenAllSelectBtn.classList) return;
+      caseGenAllSelectBtn.classList.toggle('hidden', !show);
+    }
+
+    function updateCaseGenAllSelectionButton() {
+      var buttons = [];
+      if (caseGenAllSelectBtn) buttons.push(caseGenAllSelectBtn);
+      if (caseGenViewDrawerBody) {
+        var innerBtn = caseGenViewDrawerBody.querySelector('[data-case-select-all-modules]');
+        if (innerBtn) buttons.push(innerBtn);
+      }
+      if (!buttons.length) return;
+      var stats = getCaseGenAllSelectionStats();
+      var disabled = stats.total === 0;
+      var text = stats.total > 0 && stats.selected >= stats.total
+        ? '取消全选所有模块用例'
+        : '全选所有模块用例';
+      buttons.forEach(function(btn) {
+        btn.disabled = disabled;
+        btn.textContent = text;
+      });
+    }
+
     function findFirstGeneratedModuleId() {
       if (!state.caseGenModules || !state.caseGenModules.length) return '';
       for (var i = 0; i < state.caseGenModules.length; i += 1) {
@@ -969,6 +1012,7 @@
           '<div class="caseview drawer-view visible caseview-all-section">' +
             '<p class="hint" style="margin:0;">当前没有生成用例，请先进行用例生成</p>' +
           '</div>';
+        toggleCaseGenAllSelectButton(false);
       } else {
         caseGenViewDrawerBody.innerHTML = items.map(function(entry, idx) {
           var mod = entry.mod;
@@ -988,6 +1032,8 @@
         } else {
           items.forEach(function(entry) { applyCaseGenSelectionHint(entry.mod.id); });
         }
+        toggleCaseGenAllSelectButton(true);
+        updateCaseGenAllSelectionButton();
       }
       if (caseGenViewDrawerTitle) {
         caseGenViewDrawerTitle.textContent = '全模块用例视图';
@@ -2816,6 +2862,7 @@
       }
       activeCaseViewModuleId = moduleId;
       viewBtn.textContent = '收起用例视图';
+      toggleCaseGenAllSelectButton(false);
       drawer.open();
       refreshCaseSelectionUI(moduleId);
     }
@@ -2827,6 +2874,7 @@
       if (selection.size > 0) clearAllCaseGenSelectionHints();
       refreshCaseSelectionUI(moduleId);
       updateSupplementButtons(moduleId, getCaseListForModule(moduleId).length > 0);
+      updateCaseGenAllSelectionButton();
     }
 
     function handleCaseSelectAll(moduleId, checked) {
@@ -2841,6 +2889,30 @@
       if (selection.size > 0) clearAllCaseGenSelectionHints();
       refreshCaseSelectionUI(moduleId);
       updateSupplementButtons(moduleId, getCaseListForModule(moduleId).length > 0);
+      updateCaseGenAllSelectionButton();
+    }
+
+    function handleCaseSelectAllModules() {
+      var items = collectGeneratedModules();
+      if (!items.length) return;
+      var stats = getCaseGenAllSelectionStats();
+      var shouldSelect = stats.selected < stats.total;
+      items.forEach(function(entry) {
+        var moduleId = entry.mod.id;
+        var list = entry.list || [];
+        var selection = ensureCaseSelectionSet(moduleId);
+        selection.clear();
+        if (shouldSelect) {
+          for (var i = 0; i < list.length; i += 1) selection.add(i);
+        }
+      });
+      if (shouldSelect) clearAllCaseGenSelectionHints();
+      items.forEach(function(entry) {
+        refreshCaseSelectionUI(entry.mod.id);
+        updateSupplementButtons(entry.mod.id, (entry.list || []).length > 0);
+      });
+      refreshExportCaseGenXmindButton();
+      updateCaseGenAllSelectionButton();
     }
 
     function exportSelectedCases(moduleId) {
@@ -2998,6 +3070,7 @@
       openCaseGenAllView: openCaseGenAllView,
       handleCaseSelectionChange: handleCaseSelectionChange,
       handleCaseSelectAll: handleCaseSelectAll,
+      handleCaseSelectAllModules: handleCaseSelectAllModules,
       exportSelectedCases: exportSelectedCases,
       exportSelectedCasesToXmind: exportSelectedCasesToXmind,
       exportSelectedModulesToXmind: exportSelectedModulesToXmind,

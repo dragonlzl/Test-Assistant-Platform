@@ -19,6 +19,17 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例生成全模块用例视图全选按钮  
+- 功能描述：在“用例生成”的全模块用例视图抽屉顶部新增“全选所有模块用例/取消全选”按钮，统一切换所有模块的勾选状态；按钮仅在全模块视图展示，且随勾选数量更新文案与禁用状态。  
+- 操作方式：进入“用例生成”→点击“全模块用例视图”→点击顶部“全选所有模块用例”，再次点击为取消全选。  
+- 使用效果：批量入库/导出/转执行前可一键全选或清空选择，减少逐模块勾选操作。  
+- 新增内容/接口/组件：  
+  - 前端：抽屉头部按钮与布局（`index.html`、`style.css`）、DOM 绑定（`config/domConfig.js`）、全选按钮状态联动（`scripts/core/casesGenCore.js`）、API 桥接（`scripts/core/appRuntime.js`）、事件绑定（`scripts/modules/casesgen.js`）。  
+  - 测试：补充 UI 用例覆盖（`tests/ui/casegen_db_store.spec.js`）。  
+- 复用说明：复用现有全模块勾选逻辑 `handleCaseSelectAllModules` 与选中状态管理，不新增后端接口。  
+- 测试与验证：`node --check scripts/core/casesGenCore.js scripts/modules/casesgen.js scripts/core/appRuntime.js`（通过）；`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（首轮出现 app 初始化超时，单测重跑通过）；`npm run test:ui -- tests/ui/casegen_db_store.spec.js -g 新用例入库：直接入库成功`（通过）。  
+- 更新记录：2025-12-19 用例生成全模块视图新增全选按钮与 UI 用例覆盖（`index.html`、`style.css`、`config/domConfig.js`、`scripts/core/casesGenCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/casesgen.js`、`tests/ui/casegen_db_store.spec.js`）。  
+
 - 功能名称：弹窗确认改为抽屉（同名导入/入库/归档/管理等）
 - 功能描述：
   - 同名用例导入差异确认、用例生成入库未勾选提示/追加确认、归档删除/解散、人员重置密码、新增版本、用例库批量删除等原弹窗改为右侧抽屉确认。

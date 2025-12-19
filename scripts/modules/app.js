@@ -961,6 +961,7 @@
       'toggleCaseView',
       'handleCaseSelectionChange',
       'handleCaseSelectAll',
+      'handleCaseSelectAllModules',
       'exportSelectedCases',
       'exportSelectedCasesToXmind',
       'refreshCaseSelectionUI',

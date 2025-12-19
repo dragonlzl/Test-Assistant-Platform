@@ -1220,7 +1220,10 @@
   <div class="drawer-panel">
     <div class="drawer-header">
       <h3 id="caseGenViewDrawerTitle">用例视图</h3>
-      <button class="link-toggle" id="closeCaseGenViewDrawerBtn" data-drawer-close="caseGenViewDrawer">收起</button>
+      <div class="drawer-actions">
+        <button class="secondary hidden" id="caseGenAllSelectBtn" data-case-select-all-modules="1" type="button">全选所有模块用例</button>
+        <button class="link-toggle" id="closeCaseGenViewDrawerBtn" data-drawer-close="caseGenViewDrawer">收起</button>
+      </div>
     </div>
     <div class="drawer-body" id="caseGenViewDrawerBody">
       <p class="hint" style="margin:0;">请选择模块查看用例</p>

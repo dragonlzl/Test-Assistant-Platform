@@ -28,6 +28,7 @@
     var caseGenStoreNewBtn = document.getElementById('caseGenStoreNewBtn');
     var caseGenStoreAppendBtn = document.getElementById('caseGenStoreAppendBtn');
     var caseGenAllViewBtn = document.getElementById('caseGenAllViewBtn');
+    var caseGenAllSelectBtn = document.getElementById('caseGenAllSelectBtn');
 
     function bindGoButtons() {
       if (goUsecaseGenBtn && api.goToCaseGeneration) {
@@ -49,6 +50,11 @@
         var targetView = e.target.closest('[data-view]');
         if (targetView && api.toggleCaseView) {
           api.toggleCaseView(targetView.dataset.view);
+          return;
+        }
+        var targetSelectAllModules = e.target.closest('[data-case-select-all-modules]');
+        if (targetSelectAllModules && api.handleCaseSelectAllModules) {
+          api.handleCaseSelectAllModules();
           return;
         }
         var targetExport = e.target.closest('[data-export]');
@@ -167,6 +173,9 @@
       }
       if (caseGenAllViewBtn && api.openCaseGenAllView) {
         caseGenAllViewBtn.addEventListener('click', api.openCaseGenAllView);
+      }
+      if (caseGenAllSelectBtn && api.handleCaseSelectAllModules) {
+        caseGenAllSelectBtn.addEventListener('click', api.handleCaseSelectAllModules);
       }
       if (caseGenStoreNewBtn && api.openCaseGenDbStoreNewDrawer) {
         caseGenStoreNewBtn.addEventListener('click', api.openCaseGenDbStoreNewDrawer);

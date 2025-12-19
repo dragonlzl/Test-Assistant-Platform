@@ -2958,6 +2958,11 @@ body {
   border-bottom: 1px solid #e5e7eb;
   background: #f8fafc;
 }
+.drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .drawer .drawer-body {
   padding: 14px 16px 24px;
   overflow-y: auto;

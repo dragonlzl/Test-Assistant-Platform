@@ -17,7 +17,7 @@
       'toSplitFromCaseGen', 'appendToExistingCases', 'appendTargetSelect', 'transferSelectedToExec', 'saveRawDebugBtn', 'importRawDebugBtn', 'saveCleanDebugBtn', 'importCleanDebugBtn', 'saveSplitDebugBtn',
       'importSplitDebugBtn', 'saveCaseDebugBtn', 'importCaseDebugBtn', 'scrollTopBtn', 'scrollBottomBtn', 'xmindStructureToggle',
       'xmindStructureCard', 'caseFileInput', 'caseDropZone', 'caseStatus', 'caseViewBtn', 'caseViewContainer', 'caseViewHint',
-      'caseGenViewDrawer', 'caseGenViewDrawerBody', 'caseGenViewDrawerTitle', 'closeCaseGenViewDrawerBtn',
+      'caseGenViewDrawer', 'caseGenViewDrawerBody', 'caseGenViewDrawerTitle', 'caseGenAllSelectBtn', 'closeCaseGenViewDrawerBtn',
       'reviewViewDrawer', 'reviewViewDrawerBody', 'reviewViewDrawerTitle', 'closeReviewViewDrawerBtn',
       'cleanViewDrawer', 'cleanViewDrawerBody', 'cleanViewDrawerTitle', 'closeCleanViewDrawerBtn',
       'splitViewDrawer', 'splitViewDrawerBody', 'splitViewDrawerTitle', 'closeSplitViewDrawerBtn',
