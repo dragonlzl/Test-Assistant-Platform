@@ -92,9 +92,10 @@
       var settingsKey = getConfigValue('settingsKey', 'usecase-settings-v1');
       var tempExecPageSizeKey = getConfigValue('tempExecPageSizeStorageKey', 'tempexec-page-size');
       var opsLogViewKey = getConfigValue('opsLogViewStorageKey', 'tap-ops-log-view-v1');
+      var opsActivityViewKey = getConfigValue('opsActivityViewStorageKey', 'tap-ops-activity-view-v1');
       var legacyCleanKey = getConfigValue('legacyCleanKey', 'cleaner-config-v1');
       var legacyCompareKey = getConfigValue('legacyCompareKey', 'cleaner-compare-config-v1');
-      var keysToClear = [modelsKey, assignmentKey, settingsKey, tempExecPageSizeKey, opsLogViewKey, legacyCleanKey, legacyCompareKey];
+      var keysToClear = [modelsKey, assignmentKey, settingsKey, tempExecPageSizeKey, opsLogViewKey, opsActivityViewKey, legacyCleanKey, legacyCompareKey];
       try {
         if (typeof localStorage !== 'undefined') {
           keysToClear.forEach(function(key) {

@@ -6,6 +6,8 @@
   var appConfig = window.app && window.app.config ? window.app.config : {};
 
   var STORAGE_KEY = appConfig.opsLogViewStorageKey || 'tap-ops-log-view-v1';
+  var ACTIVITY_STORAGE_KEY = appConfig.opsActivityViewStorageKey || 'tap-ops-activity-view-v1';
+  var DEFAULT_ACTIVITY_RANGE = 'week';
 
   var TARGETS = [
     { key: 'all', label: '全部' },
@@ -28,6 +30,20 @@
     hasViewed: false,
     pendingAuth: false,
     loading: false,
+    activity: {
+      drawer: null,
+      usersLoaded: false,
+      logsLoaded: false,
+      loading: false,
+      selectedUserIds: [],
+      draftUserIds: [],
+      selectedBehaviors: { all: true },
+      timeRange: DEFAULT_ACTIVITY_RANGE,
+      hasSelection: false,
+      logs: [],
+      behaviors: [],
+      colorMap: {},
+    },
   };
 
   var dom = {
@@ -43,6 +59,18 @@
     paginationBottom: document.getElementById('opsLogPaginationBottom'),
     tableBody: document.getElementById('opsLogDrawerTableBody'),
     emptyHint: document.getElementById('opsLogDrawerEmpty'),
+    activityDrawerStatus: document.getElementById('opsActivityDrawerStatus'),
+    activityUserGrid: document.getElementById('opsActivityUserGrid'),
+    activitySelectAll: document.getElementById('opsActivitySelectAll'),
+    activityApplyBtn: document.getElementById('opsActivityApplyBtn'),
+    activityUserEmpty: document.getElementById('opsActivityUserEmpty'),
+    activityTimeRange: document.getElementById('opsActivityTimeRangeSelect'),
+    activityBehaviorGrid: document.getElementById('opsActivityBehaviorFilterGrid'),
+    activityStatus: document.getElementById('opsActivityStatus'),
+    activitySelectionText: document.getElementById('opsActivitySelectionText'),
+    activityRefreshBtn: document.getElementById('opsActivityRefreshBtn'),
+    activityList: document.getElementById('opsActivityList'),
+    activityEmpty: document.getElementById('opsActivityEmpty'),
   };
 
   function setStatus(el, text, type) {
@@ -75,23 +103,36 @@
       .replace(/'/g, '&#39;');
   }
 
+  function normalizeTimeInput(input) {
+    if (!input) return '';
+    if (typeof input === 'number') return input;
+    var raw = String(input || '').trim();
+    if (!raw) return '';
+    if (raw.indexOf('T') === -1 && raw.indexOf(' ') !== -1) {
+      raw = raw.replace(' ', 'T');
+    }
+    raw = raw.replace(/(\.\d{3})\d+/, '$1');
+    raw = raw.replace(/([+-]\d{2}):(\d{2})$/, '$1$2');
+    var hasTz = /Z$/i.test(raw) || /[+-]\d{2}\d{2}$/.test(raw) || /[+-]\d{2}:\d{2}$/.test(raw);
+    var isIsoWithTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw);
+    if (isIsoWithTime && !hasTz) raw += 'Z';
+    return raw;
+  }
+
+  function parseTimeMs(value) {
+    if (!value && value !== 0) return null;
+    try {
+      var normalized = normalizeTimeInput(value);
+      var d = typeof normalized === 'number' ? new Date(normalized) : new Date(normalized || value);
+      if (!d || isNaN(d.getTime())) return null;
+      return d.getTime();
+    } catch (err) {
+      return null;
+    }
+  }
+
   function formatTime(value) {
     if (!value) return '--';
-    function normalizeTimeInput(input) {
-      if (!input) return '';
-      if (typeof input === 'number') return input;
-      var raw = String(input || '').trim();
-      if (!raw) return '';
-      if (raw.indexOf('T') === -1 && raw.indexOf(' ') !== -1) {
-        raw = raw.replace(' ', 'T');
-      }
-      raw = raw.replace(/(\.\d{3})\d+/, '$1');
-      raw = raw.replace(/([+-]\d{2}):(\d{2})$/, '$1$2');
-      var hasTz = /Z$/i.test(raw) || /[+-]\d{2}\d{2}$/.test(raw) || /[+-]\d{2}:\d{2}$/.test(raw);
-      var isIsoWithTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw);
-      if (isIsoWithTime && !hasTz) raw += 'Z';
-      return raw;
-    }
     try {
       var normalized = normalizeTimeInput(value);
       var d = typeof normalized === 'number' ? new Date(normalized) : new Date(normalized || value);
@@ -144,6 +185,45 @@
         state.selectedTargets[String(key)] = true;
       });
       syncAllTargetSelection();
+    }
+  }
+
+  function readActivityPersisted() {
+    if (!storage || typeof storage.getJson !== 'function') return null;
+    return storage.getJson(ACTIVITY_STORAGE_KEY, null);
+  }
+
+  function persistActivityState() {
+    if (!storage || typeof storage.setJson !== 'function') return;
+    var selected = getSelectedActivityBehaviorKeys();
+    var payload = {
+      userIds: Array.isArray(state.activity.selectedUserIds) ? state.activity.selectedUserIds.slice() : [],
+      timeRange: state.activity.timeRange || DEFAULT_ACTIVITY_RANGE,
+      behaviors: selected,
+      behaviorAll: Boolean(state.activity.selectedBehaviors && state.activity.selectedBehaviors.all),
+      hasSelection: Boolean(state.activity.hasSelection),
+      savedAt: Date.now(),
+    };
+    storage.setJson(ACTIVITY_STORAGE_KEY, payload);
+  }
+
+  function restoreActivityState() {
+    var saved = readActivityPersisted();
+    if (!saved || typeof saved !== 'object') return;
+    var ids = Array.isArray(saved.userIds) ? saved.userIds : [];
+    state.activity.selectedUserIds = ids.map(function(id) { return String(id); }).filter(Boolean);
+    state.activity.draftUserIds = state.activity.selectedUserIds.slice();
+    state.activity.timeRange = saved.timeRange ? String(saved.timeRange) : DEFAULT_ACTIVITY_RANGE;
+    state.activity.hasSelection = Boolean(saved.hasSelection || state.activity.selectedUserIds.length);
+    state.activity.selectedBehaviors = { all: true };
+    if (saved.behaviorAll === true) return;
+    var behaviors = Array.isArray(saved.behaviors) ? saved.behaviors : [];
+    if (behaviors.length) {
+      state.activity.selectedBehaviors = { all: false };
+      behaviors.forEach(function(key) {
+        if (!key) return;
+        state.activity.selectedBehaviors[String(key)] = true;
+      });
     }
   }
 
@@ -379,6 +459,331 @@
     }).join('');
   }
 
+  function getActivityPalette() {
+    var palette = appConfig && Array.isArray(appConfig.cleanHighlightColors) ? appConfig.cleanHighlightColors : null;
+    if (palette && palette.length) return palette;
+    return ['#5b8def', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316', '#3b82f6', '#ec4899', '#84cc16'];
+  }
+
+  function getActivityColor(label) {
+    var key = String(label || '').trim().toLowerCase();
+    if (!key) return '#9ca3af';
+    if (state.activity.colorMap[key]) return state.activity.colorMap[key];
+    var hash = 0;
+    for (var i = 0; i < key.length; i += 1) {
+      hash = (hash * 31 + key.charCodeAt(i)) | 0;
+    }
+    var palette = getActivityPalette();
+    var idx = Math.abs(hash) % palette.length;
+    var color = palette[idx];
+    state.activity.colorMap[key] = color;
+    return color;
+  }
+
+  function getActivityUserNameMap() {
+    var map = {};
+    var list = Array.isArray(state.users) ? state.users : [];
+    list.forEach(function(u) {
+      if (!u || u.id === null || u.id === undefined) return;
+      var id = String(u.id);
+      map[id] = String(u.username || ('用户#' + id));
+    });
+    return map;
+  }
+
+  function getActivityUserIds() {
+    var list = Array.isArray(state.users) ? state.users : [];
+    var ids = [];
+    list.forEach(function(u) {
+      if (!u || u.id === null || u.id === undefined) return;
+      ids.push(String(u.id));
+    });
+    return ids;
+  }
+
+  function setActivityDraftUserIds(ids) {
+    var map = {};
+    var list = [];
+    (Array.isArray(ids) ? ids : []).forEach(function(id) {
+      var key = String(id || '').trim();
+      if (!key || map[key]) return;
+      map[key] = true;
+      list.push(key);
+    });
+    state.activity.draftUserIds = list;
+  }
+
+  function syncActivitySelectionText() {
+    if (!dom.activitySelectionText) return;
+    var selected = Array.isArray(state.activity.selectedUserIds) ? state.activity.selectedUserIds : [];
+    if (!selected.length) {
+      dom.activitySelectionText.textContent = '未选择人员';
+      return;
+    }
+    var nameMap = getActivityUserNameMap();
+    var names = selected.map(function(id) { return nameMap[id] || ('用户#' + id); });
+    var shown = names.slice(0, 3);
+    var suffix = names.length > shown.length ? (' 等' + names.length + ' 人') : (' 共' + names.length + ' 人');
+    dom.activitySelectionText.textContent = '已选：' + shown.join('、') + suffix;
+  }
+
+  function syncActivityUserGrid() {
+    if (!dom.activityUserGrid) return;
+    var list = Array.isArray(state.users) ? state.users : [];
+    var draft = Array.isArray(state.activity.draftUserIds) ? state.activity.draftUserIds : [];
+    var selectedMap = {};
+    draft.forEach(function(id) { selectedMap[String(id)] = true; });
+    if (!list.length) {
+      dom.activityUserGrid.innerHTML = '';
+      if (dom.activityUserEmpty) dom.activityUserEmpty.classList.remove('hidden');
+      if (dom.activitySelectAll) dom.activitySelectAll.checked = false;
+      return;
+    }
+    if (dom.activityUserEmpty) dom.activityUserEmpty.classList.add('hidden');
+    dom.activityUserGrid.innerHTML = list.map(function(u) {
+      if (!u || u.id === null || u.id === undefined) return '';
+      var id = String(u.id);
+      var checked = selectedMap[id] ? ' checked' : '';
+      return (
+        '<label class="ops-activity-user-chip">' +
+          '<input type="checkbox" data-ops-activity-user="' + escapeHtml(id) + '"' + checked + ' />' +
+          '<span>' + escapeHtml(u.username || ('用户#' + id)) + '</span>' +
+        '</label>'
+      );
+    }).join('');
+    if (dom.activitySelectAll) {
+      dom.activitySelectAll.checked = draft.length && draft.length === list.length;
+    }
+  }
+
+  function getSelectedActivityBehaviorKeys() {
+    var selected = state.activity.selectedBehaviors || {};
+    if (selected.all) return [];
+    var keys = [];
+    Object.keys(selected).forEach(function(key) {
+      if (key === 'all') return;
+      if (selected[key]) keys.push(key);
+    });
+    if (!keys.length) return [];
+    return keys;
+  }
+
+  function syncActivityBehaviorSelection() {
+    var behaviors = Array.isArray(state.activity.behaviors) ? state.activity.behaviors : [];
+    var selected = state.activity.selectedBehaviors || { all: true };
+    if (selected.all) return;
+    var available = {};
+    behaviors.forEach(function(item) {
+      if (!item || !item.key) return;
+      available[item.key] = true;
+    });
+    var keys = [];
+    Object.keys(selected).forEach(function(key) {
+      if (key === 'all') return;
+      if (selected[key] && available[key]) keys.push(key);
+    });
+    if (!keys.length) {
+      state.activity.selectedBehaviors = { all: true };
+      return;
+    }
+    var next = { all: false };
+    keys.forEach(function(key) { next[key] = true; });
+    state.activity.selectedBehaviors = next;
+  }
+
+  function syncActivityBehaviorFilters() {
+    if (!dom.activityBehaviorGrid) return;
+    var selected = state.activity.selectedBehaviors || { all: true };
+    var list = Array.isArray(state.activity.behaviors) ? state.activity.behaviors : [];
+    if (!list.length) {
+      dom.activityBehaviorGrid.innerHTML = '<span class="hint">暂无可用行为</span>';
+      return;
+    }
+    var html = [];
+    var allChecked = selected.all ? ' checked' : '';
+    html.push(
+      '<label class="ops-activity-filter-chip">' +
+        '<input type="checkbox" data-ops-activity-behavior="all"' + allChecked + ' />' +
+        '<span>全部</span>' +
+      '</label>'
+    );
+    list.forEach(function(item) {
+      if (!item || !item.key) return;
+      var checked = '';
+      if (selected.all) checked = '';
+      else if (selected[item.key]) checked = ' checked';
+      html.push(
+        '<label class="ops-activity-filter-chip">' +
+          '<input type="checkbox" data-ops-activity-behavior="' + escapeHtml(item.key) + '"' + checked + ' />' +
+          '<span>' + escapeHtml(item.label || item.key) + ' ' + item.count + '</span>' +
+        '</label>'
+      );
+    });
+    dom.activityBehaviorGrid.innerHTML = html.join('');
+  }
+
+  function syncActivityTimeRange() {
+    if (!dom.activityTimeRange) return;
+    var value = state.activity.timeRange || DEFAULT_ACTIVITY_RANGE;
+    dom.activityTimeRange.value = value;
+  }
+
+  function getActivityRangeStartMs() {
+    var range = state.activity.timeRange || DEFAULT_ACTIVITY_RANGE;
+    if (range === 'all') return null;
+    var now = new Date();
+    if (range === 'year') return new Date(now.getFullYear(), 0, 1).getTime();
+    if (range === 'month') return new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    if (range === 'day') return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    if (range === 'week') {
+      var base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      var day = base.getDay();
+      var diff = day === 0 ? 6 : day - 1;
+      base.setDate(base.getDate() - diff);
+      return base.getTime();
+    }
+    return null;
+  }
+
+  function getFilteredActivityLogs() {
+    var list = Array.isArray(state.activity.logs) ? state.activity.logs : [];
+    var selectedIds = Array.isArray(state.activity.selectedUserIds) ? state.activity.selectedUserIds : [];
+    if (!selectedIds.length) return [];
+    var allowed = {};
+    selectedIds.forEach(function(id) { allowed[String(id)] = true; });
+    var startMs = getActivityRangeStartMs();
+    return list.filter(function(log) {
+      if (!log || !isAllowedLog(log)) return false;
+      var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
+      if (!userId || !allowed[userId]) return false;
+      if (startMs) {
+        var t = parseTimeMs(log.created_at);
+        if (!t || t < startMs) return false;
+      }
+      return true;
+    });
+  }
+
+  function buildActivityViewData(logs) {
+    var nameMap = getActivityUserNameMap();
+    var userMap = {};
+    var behaviorTotals = {};
+    logs.forEach(function(log) {
+      var label = resolveActivityActionLabel(log);
+      if (!label) return;
+      var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
+      if (!userId) return;
+      var entry = userMap[userId];
+      if (!entry) {
+        var fallbackName = nameMap[userId] || ('用户#' + userId);
+        entry = { id: userId, name: String(log.username || fallbackName), total: 0, behaviors: {} };
+        userMap[userId] = entry;
+      }
+      entry.total += 1;
+      entry.behaviors[label] = (entry.behaviors[label] || 0) + 1;
+      behaviorTotals[label] = (behaviorTotals[label] || 0) + 1;
+    });
+
+    var behaviorList = Object.keys(behaviorTotals).map(function(key) {
+      return { key: key, label: key, count: behaviorTotals[key] };
+    }).sort(function(a, b) {
+      if (b.count !== a.count) return b.count - a.count;
+      return String(a.label || '').localeCompare(String(b.label || ''));
+    });
+    state.activity.behaviors = behaviorList;
+    syncActivityBehaviorSelection();
+
+    var selected = state.activity.selectedBehaviors || { all: true };
+    var allowAll = selected.all;
+    var allowMap = {};
+    if (!allowAll) {
+      Object.keys(selected).forEach(function(key) {
+        if (key === 'all') return;
+        if (selected[key]) allowMap[key] = true;
+      });
+    }
+
+    var users = [];
+    Object.keys(userMap).forEach(function(id) {
+      var entry = userMap[id];
+      var actions = [];
+      var total = 0;
+      Object.keys(entry.behaviors).forEach(function(label) {
+        if (!allowAll && !allowMap[label]) return;
+        var count = entry.behaviors[label];
+        if (!count) return;
+        total += count;
+        actions.push({ label: label, count: count });
+      });
+      if (!total) return;
+      actions.sort(function(a, b) {
+        if (b.count !== a.count) return b.count - a.count;
+        return String(a.label || '').localeCompare(String(b.label || ''));
+      });
+      users.push({ id: entry.id, name: entry.name, total: total, actions: actions });
+    });
+    if (users.length > 1) {
+      users.sort(function(a, b) {
+        if (b.total !== a.total) return b.total - a.total;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      });
+    }
+    return users;
+  }
+
+  function renderActivityView() {
+    if (!dom.activityList || !dom.activityEmpty) return;
+    syncActivitySelectionText();
+    if (!canView()) {
+      dom.activityList.innerHTML = '';
+      dom.activityEmpty.textContent = '仅管理员可查看活跃度';
+      dom.activityEmpty.classList.remove('hidden');
+      setStatus(dom.activityStatus, '仅管理员可查看活跃度', 'warn');
+      state.activity.behaviors = [];
+      syncActivityBehaviorFilters();
+      return;
+    }
+    if (!state.activity.hasSelection || !state.activity.selectedUserIds.length) {
+      dom.activityList.innerHTML = '';
+      dom.activityEmpty.textContent = '请先选择人员查看活跃度';
+      dom.activityEmpty.classList.remove('hidden');
+      setStatus(dom.activityStatus, '', '');
+      state.activity.behaviors = [];
+      syncActivityBehaviorFilters();
+      return;
+    }
+    var filteredLogs = getFilteredActivityLogs();
+    var users = buildActivityViewData(filteredLogs);
+    syncActivityBehaviorFilters();
+    if (!users.length) {
+      dom.activityList.innerHTML = '';
+      dom.activityEmpty.textContent = filteredLogs.length ? '筛选后暂无活跃度数据' : '暂无活跃度数据';
+      dom.activityEmpty.classList.remove('hidden');
+      return;
+    }
+    dom.activityEmpty.classList.add('hidden');
+    dom.activityList.innerHTML = users.map(function(user) {
+      var total = user.total || 0;
+      var segments = user.actions.map(function(item) {
+        var width = total ? (item.count / total) * 100 : 0;
+        var label = item.label || '';
+        var title = label + ' ' + item.count;
+        return (
+          '<span class="ops-activity-bar-seg" title="' + escapeHtml(title) + '" style="width:' + width.toFixed(2) + '%;background:' + getActivityColor(label) + ';"></span>'
+        );
+      }).join('');
+      return (
+        '<div class="ops-activity-row">' +
+          '<div class="ops-activity-user">' + escapeHtml(user.name) + '</div>' +
+          '<div class="ops-activity-bar">' +
+            '<div class="ops-activity-bar-track">' + segments + '</div>' +
+            '<div class="ops-activity-count">' + total + '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
   function setPagination(html) {
     if (dom.paginationTop) dom.paginationTop.innerHTML = html || '';
     if (dom.paginationBottom) dom.paginationBottom.innerHTML = html || '';
@@ -471,11 +876,12 @@
     return [];
   }
 
-  function resolveActionLabel(log) {
+  function resolveActionLabel(log, options) {
     var l = log && typeof log === 'object' ? log : null;
     if (!l) return '';
     var action = normalizeAction(l.action);
     var detail = l.detail && typeof l.detail === 'object' ? l.detail : {};
+    var preferVersionLabel = options && options.preferVersionLabel === true;
 
     // 系统平台
     if (action === 'login') return '登录';
@@ -529,6 +935,7 @@
 
     // 版本
     if (action === 'create_version') {
+      if (preferVersionLabel) return '新增版本';
       var selected = state.selectedTargets || { all: true };
       // 默认更贴近“项目维度”的描述：新增版本；当明确只看“版本”时，使用“新增”。
       if (!selected.all && selected.version && !selected.project) return '新增';
@@ -544,6 +951,10 @@
     if (action === 'reset_password') return '重置密码';
 
     return '';
+  }
+
+  function resolveActivityActionLabel(log) {
+    return resolveActionLabel(log, { preferVersionLabel: true });
   }
 
   function isAllowedLog(log) {
@@ -683,12 +1094,18 @@
       .listUsers()
       .then(function(list) {
         state.users = Array.isArray(list) ? list : [];
+        state.activity.usersLoaded = true;
         syncUserSelect();
+        syncActivityUserGrid();
+        syncActivitySelectionText();
         return state.users;
       })
       .catch(function() {
         state.users = [];
+        state.activity.usersLoaded = true;
         syncUserSelect();
+        syncActivityUserGrid();
+        syncActivitySelectionText();
         return [];
       });
   }
@@ -734,6 +1151,60 @@
       });
   }
 
+  function loadActivityLogs(force) {
+    if (!apiClient.listOperationLogs) return Promise.resolve([]);
+    if (!canView()) {
+      state.activity.logs = [];
+      state.activity.logsLoaded = true;
+      renderActivityView();
+      setStatus(dom.activityStatus, '仅管理员可查看活跃度', 'warn');
+      return Promise.resolve([]);
+    }
+    if (state.activity.loading) return Promise.resolve(state.activity.logs);
+    if (state.activity.logsLoaded && !force) return Promise.resolve(state.activity.logs);
+    state.activity.loading = true;
+    if (dom.activityRefreshBtn) dom.activityRefreshBtn.disabled = true;
+    setStatus(dom.activityStatus, '加载中...', '');
+    return apiClient
+      .listOperationLogs({ limit: 500, offset: 0 })
+      .then(function(list) {
+        state.activity.logs = (Array.isArray(list) ? list : []).filter(function(row) { return !isAutoOperation(row); });
+        state.activity.logsLoaded = true;
+        setStatus(dom.activityStatus, '已加载 ' + state.activity.logs.length + ' 条记录（最多 500 条）', 'ok');
+        return state.activity.logs;
+      })
+      .catch(function(err) {
+        state.activity.logs = [];
+        state.activity.logsLoaded = true;
+        setStatus(dom.activityStatus, err && err.message ? err.message : '加载失败', 'err');
+        return [];
+      })
+      .finally(function() {
+        state.activity.loading = false;
+        if (dom.activityRefreshBtn) dom.activityRefreshBtn.disabled = false;
+      });
+  }
+
+  function refreshActivityView(force) {
+    if (!state.activity.hasSelection || !state.activity.selectedUserIds.length) {
+      renderActivityView();
+      return Promise.resolve([]);
+    }
+    var ensureUsers = state.activity.usersLoaded ? Promise.resolve([]) : loadUsers();
+    if (!state.activity.logsLoaded || force) {
+      return ensureUsers.then(function() {
+        return loadActivityLogs(true).then(function() {
+          renderActivityView();
+          return state.activity.logs;
+        });
+      });
+    }
+    return ensureUsers.then(function() {
+      renderActivityView();
+      return state.activity.logs;
+    });
+  }
+
   function ensureDrawer() {
     if (state.drawer) return state.drawer;
     if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
@@ -752,6 +1223,30 @@
       },
     });
     return state.drawer;
+  }
+
+  function ensureActivityDrawer() {
+    if (state.activity.drawer) return state.activity.drawer;
+    if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+    state.activity.drawer = window.app.drawer.createDrawer({
+      drawerId: 'opsActivityDrawer',
+      openButtons: ['openOpsActivityDrawerBtn', 'openOpsActivityDrawerBtnInline'],
+      onOpen: function() {
+        setStatus(dom.activityDrawerStatus, '', '');
+        setActivityDraftUserIds(state.activity.selectedUserIds);
+        syncActivityUserGrid();
+        if (!state.activity.usersLoaded) {
+          loadUsers().then(function() {
+            syncActivityUserGrid();
+          });
+        }
+      },
+      onClose: function() {
+        setActivityDraftUserIds(state.activity.selectedUserIds);
+        syncActivityUserGrid();
+      },
+    });
+    return state.activity.drawer;
   }
 
   function openDrawerIfNeeded() {
@@ -806,6 +1301,90 @@
         renderList();
       });
     }
+    if (dom.activitySelectAll) {
+      dom.activitySelectAll.addEventListener('change', function() {
+        if (dom.activitySelectAll.checked) {
+          setActivityDraftUserIds(getActivityUserIds());
+        } else {
+          setActivityDraftUserIds([]);
+        }
+        syncActivityUserGrid();
+      });
+    }
+    if (dom.activityUserGrid) {
+      dom.activityUserGrid.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        var key = t && t.dataset ? String(t.dataset.opsActivityUser || '') : '';
+        if (!key) return;
+        var draft = Array.isArray(state.activity.draftUserIds) ? state.activity.draftUserIds.slice() : [];
+        var idx = draft.indexOf(key);
+        if (t.checked) {
+          if (idx === -1) draft.push(key);
+        } else if (idx !== -1) {
+          draft.splice(idx, 1);
+        }
+        state.activity.draftUserIds = draft;
+        syncActivityUserGrid();
+      });
+    }
+    if (dom.activityApplyBtn) {
+      dom.activityApplyBtn.addEventListener('click', function() {
+        var draft = Array.isArray(state.activity.draftUserIds) ? state.activity.draftUserIds : [];
+        if (!draft.length) {
+          setStatus(dom.activityDrawerStatus, '请至少选择一位人员', 'warn');
+          return;
+        }
+        state.activity.selectedUserIds = draft.slice();
+        state.activity.hasSelection = true;
+        persistActivityState();
+        syncActivitySelectionText();
+        if (state.activity.drawer && typeof state.activity.drawer.close === 'function') {
+          state.activity.drawer.close();
+        }
+        refreshActivityView(true);
+      });
+    }
+    if (dom.activityTimeRange) {
+      dom.activityTimeRange.addEventListener('change', function() {
+        state.activity.timeRange = dom.activityTimeRange.value || DEFAULT_ACTIVITY_RANGE;
+        persistActivityState();
+        renderActivityView();
+      });
+    }
+    if (dom.activityBehaviorGrid) {
+      dom.activityBehaviorGrid.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        var key = t && t.dataset ? String(t.dataset.opsActivityBehavior || '') : '';
+        if (!key) return;
+        if (key === 'all') {
+          state.activity.selectedBehaviors = { all: Boolean(t.checked) };
+          if (!t.checked) state.activity.selectedBehaviors = { all: true };
+          syncActivityBehaviorFilters();
+          persistActivityState();
+          renderActivityView();
+          return;
+        }
+        if (!state.activity.selectedBehaviors || typeof state.activity.selectedBehaviors !== 'object') {
+          state.activity.selectedBehaviors = { all: true };
+        }
+        if (state.activity.selectedBehaviors.all) {
+          var next = { all: false };
+          next[key] = Boolean(t.checked);
+          state.activity.selectedBehaviors = next;
+        } else {
+          state.activity.selectedBehaviors[key] = Boolean(t.checked);
+        }
+        syncActivityBehaviorSelection();
+        syncActivityBehaviorFilters();
+        persistActivityState();
+        renderActivityView();
+      });
+    }
+    if (dom.activityRefreshBtn) {
+      dom.activityRefreshBtn.addEventListener('click', function() {
+        refreshActivityView(true);
+      });
+    }
     function bindPaginationContainer(container) {
       if (!container || !container.addEventListener) return;
       container.addEventListener('click', function(e) {
@@ -854,6 +1433,7 @@
         }
         setStatus(dom.statusEl, '', '');
         openDrawerIfNeeded();
+        refreshActivityView(false);
       });
       window.addEventListener('app-auth-ready', function() {
         if (!state.pendingAuth) return;
@@ -862,6 +1442,7 @@
         if (!visible) return;
         setStatus(dom.statusEl, '', '');
         openDrawerIfNeeded();
+        refreshActivityView(false);
       });
     }
   }
@@ -875,15 +1456,24 @@
     if (!apiClient || !globalState) return;
 
     restoreViewState();
+    restoreActivityState();
     ensureDrawer();
+    ensureActivityDrawer();
     syncTargetGrid();
+    syncActivityTimeRange();
+    setActivityDraftUserIds(state.activity.selectedUserIds);
+    syncActivityUserGrid();
+    syncActivityBehaviorFilters();
+    syncActivitySelectionText();
     bindEvents();
 
     if (!canView()) {
       setStatus(dom.statusEl, '仅管理员可查看操作记录', 'warn');
+      renderActivityView();
       return;
     }
     setStatus(dom.statusEl, '已启用操作记录（仅管理员）', 'ok');
+    refreshActivityView(false);
   }
 
   var started = false;

@@ -19,6 +19,20 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：操作记录活跃度视图  
+- 功能描述：在“操作记录”导航新增“活跃度视图”入口，抽屉选择人员并支持全选；选择后在主页面展示按操作行为分段的横向柱状图，按人员总操作次数排序；支持历史至今/年/月/周/日时间过滤与行为过滤；视图与筛选持久化。  
+- 操作方式：进入“操作记录”→点击“活跃度视图”→抽屉勾选人员并确认→在页面查看活跃度；可切换时间范围与行为筛选，点击“选择人员”重新调整。  
+- 使用效果：直观展示人员活跃度与行为分布，鼠标悬停图块查看具体行为与次数，视图不会溢出页面。  
+- 新增内容/接口/组件：  
+  - 前端：活跃度入口/抽屉与视图结构（`index.html`）、样式（`style.css`）、活跃度计算/过滤/持久化（`scripts/modules/opsLog.js`）、持久化配置与用户切换清理（`config/constants.js`、`scripts/modules/authGuard.js`）。  
+  - 测试：UI 用例 `tests/ui/ops_activity.spec.js`，API 用例更新 `tests/api/ops_log.spec.js`。  
+- 复用说明：复用既有操作记录列表接口 `/api/ops` 与人员列表 `/api/users`，复用通用抽屉机制，无新增后端接口。  
+- 测试与验证：  
+  - `node --check scripts/modules/opsLog.js scripts/modules/authGuard.js`（通过）  
+  - `npx playwright test --config tests/playwright.config.js tests/ui/ops_activity.spec.js`（通过）  
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8080` 后执行 `npx playwright test --config tests/api/playwright.api.config.js tests/api/ops_log.spec.js`（通过）  
+- 更新记录：2025-12-19 操作记录活跃度视图上线（`index.html`、`style.css`、`scripts/modules/opsLog.js`、`config/constants.js`、`scripts/modules/authGuard.js`、`tests/ui/ops_activity.spec.js`、`tests/api/ops_log.spec.js`）。  
+
 - 功能名称：执行分配/项目管理删除确认抽屉化与居中提示  
 - 功能描述：执行分配页版本盒子“×”关闭版本（包含归档占位时提示解散归档）与项目管理删除版本的确认弹窗统一改为抽屉；解散归档占位与删除版本成功后均显示 3 秒居中提示。  
 - 操作方式：  

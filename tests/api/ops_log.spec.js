@@ -147,6 +147,12 @@ test.describe('operation logs', () => {
       : '';
     expect(deleteProjectLabel).toBe(deleteProjectName);
 
+    const userOnlyList = await ctx.get(`${apiBase}/api/ops?limit=50&user_id=${userId}`, { headers: adminHeaders });
+    expect(userOnlyList.status()).toBe(200);
+    const userLogs = await userOnlyList.json();
+    expect(userLogs.length).toBeGreaterThan(0);
+    expect(userLogs.every((row) => row && row.user_id === userId)).toBeTruthy();
+
     const delUser = await ctx.post(`${apiBase}/api/users/${userId}/delete`, {
       headers: adminHeaders,
       data: { admin_password: adminPass },

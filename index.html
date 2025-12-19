@@ -285,6 +285,20 @@
             <span class="nav-entry-desc">按人员/操作对象筛选并分页查看</span>
           </span>
         </button>
+        <button class="nav-entry-card nav-entry-overview" id="openOpsActivityDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <rect class="fill" x="4.5" y="12.5" width="3.5" height="5" rx="1.2"></rect>
+              <rect class="fill" x="10.25" y="9" width="3.5" height="8.5" rx="1.2"></rect>
+              <rect class="fill" x="16" y="6" width="3.5" height="11.5" rx="1.2"></rect>
+              <path d="M4.5 18.5h15"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">活跃度视图</span>
+            <span class="nav-entry-desc">选择人员并查看操作行为活跃度</span>
+          </span>
+        </button>
       </div>
     </div>
   </div>
@@ -2441,6 +2455,28 @@
 </div>
 </div>
 </div>
+<div class="drawer" id="opsActivityDrawer" data-tab-section="ops-log" data-role="admin-only">
+  <div class="drawer-mask" data-drawer-close="opsActivityDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>人员活跃度选择</h3>
+      <button class="link-toggle" data-drawer-close="opsActivityDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" style="margin:0 0 10px;">选择人员后将展示操作活跃度视图。</p>
+      <div class="ops-activity-drawer-toolbar">
+        <label class="inline"><input id="opsActivitySelectAll" type="checkbox"/> 全选</label>
+        <span class="status" id="opsActivityDrawerStatus"></span>
+      </div>
+      <div class="ops-activity-user-grid" id="opsActivityUserGrid"></div>
+      <p class="hint hidden" id="opsActivityUserEmpty">暂无人员</p>
+      <div class="actions user-form-actions">
+        <button class="primary" id="opsActivityApplyBtn" type="button">确认</button>
+        <button class="ghost-btn" data-drawer-close="opsActivityDrawer" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="drawer" id="opsLogDrawer" data-tab-section="ops-log" data-role="admin-only">
   <div class="drawer-mask" data-drawer-close="opsLogDrawer"></div>
   <div class="drawer-panel drawer-panel-wide">
@@ -2489,6 +2525,36 @@
 <h2>操作记录</h2>
 <div class="card-body">
   <p class="hint">提示：使用顶部导航中的【查看记录】进行筛选与查看。</p>
+  <div class="ops-activity-card">
+    <div class="ops-activity-header">
+      <h3>人员活跃度</h3>
+      <button class="secondary slim" id="openOpsActivityDrawerBtnInline" type="button">选择人员</button>
+    </div>
+    <div class="ops-activity-toolbar">
+      <div class="ops-activity-controls">
+        <label class="inline">时间
+          <select id="opsActivityTimeRangeSelect">
+            <option value="all">历史至今</option>
+            <option value="year">年</option>
+            <option value="month">月</option>
+            <option value="week" selected>周</option>
+            <option value="day">日</option>
+          </select>
+        </label>
+        <button class="ghost-btn slim" id="opsActivityRefreshBtn" type="button">刷新</button>
+      </div>
+      <span class="hint" id="opsActivitySelectionText"></span>
+      <span class="status" id="opsActivityStatus"></span>
+    </div>
+    <div class="ops-activity-filters">
+      <div class="ops-activity-filter-title">操作行为</div>
+      <div class="ops-activity-filter-grid" id="opsActivityBehaviorFilterGrid"></div>
+    </div>
+    <div class="ops-activity-view" id="opsActivityView">
+      <div class="ops-activity-list" id="opsActivityList"></div>
+      <p class="hint hidden" id="opsActivityEmpty">暂无活跃度数据</p>
+    </div>
+  </div>
   <p class="status" id="opsLogStatus"></p>
 </div>
 	</section>
