@@ -31,6 +31,7 @@
   - `node --check scripts/modules/execOverview.js`（通过）  
   - `npx playwright test --config tests/playwright.config.js tests/ui/exec_overview.spec.js`（通过）  
 - 更新记录：2025-12-19 执行总览版本总览盒子上线（`index.html`、`style.css`、`scripts/modules/execOverview.js`、`tests/ui/exec_overview.spec.js`）。  
+- 更新记录：2025-12-19 执行总览版本筛选同步过滤版本总览汇总（`scripts/modules/execOverview.js`、`tests/ui/exec_overview.spec.js`）。  
 
 - 功能名称：操作记录活跃度视图  
 - 功能描述：在“操作记录”导航新增“活跃度视图”入口，抽屉选择人员并支持全选；选择后在主页面展示按操作行为分段的横向柱状图，按人员总操作次数排序；支持历史至今/年/月/周/日时间过滤与行为过滤；视图与筛选持久化。  

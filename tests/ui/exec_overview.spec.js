@@ -303,9 +303,11 @@ test.describe('执行总览页（DB 接口接入）', () => {
 	    );
 	    expect(Math.abs(singleChipHeight - multiChipHeight)).toBeLessThanOrEqual(2);
 
-	    await page.selectOption('#execOverviewVersionSelect', String(versionV1.id));
-	    await expect(page.locator('#execOverviewUserCards')).toContainText('总数 3');
-	    await expect(page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row')).toHaveCount(2);
+    await page.selectOption('#execOverviewVersionSelect', String(versionV1.id));
+    await expect(page.locator('#execOverviewUserCards')).toContainText('总数 3');
+    await expect(page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row')).toHaveCount(1);
+    await expect(page.locator('#execOverviewVersionSummary')).toContainText('v1');
+    await expect(page.locator('#execOverviewVersionSummary')).not.toContainText('v2');
 
     await page.click('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]');
     await expect(page.locator('#execOverviewExecSetDrawer')).toHaveClass(/open/);

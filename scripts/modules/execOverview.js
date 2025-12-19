@@ -749,6 +749,7 @@
   function renderVersionSummary() {
     if (!dom.versionSummaryBody) return;
     var list = Array.isArray(state.versionSummaryRows) ? state.versionSummaryRows : [];
+    list = filterVersionSummaryRows(list);
     if (!list.length) {
       dom.versionSummaryBody.innerHTML = '';
       if (dom.versionSummaryEmpty) dom.versionSummaryEmpty.classList.remove('hidden');
@@ -781,6 +782,16 @@
         '</div>'
       );
     }).join('');
+  }
+
+  function filterVersionSummaryRows(rows) {
+    var list = Array.isArray(rows) ? rows : [];
+    var current = state.currentVersionId;
+    if (current === null || current === undefined || current === '') return list;
+    var key = normalizeVersionKey(current);
+    return list.filter(function(row) {
+      return normalizeVersionKey(row && row.version_id) === key;
+    });
   }
 
   function loadVersionSummary(projectId) {
@@ -1057,9 +1068,10 @@
 	        openProjectById(pid);
 	      });
 	    }
-	    if (dom.versionSelect) {
+    if (dom.versionSelect) {
       dom.versionSelect.addEventListener('change', function() {
         state.currentVersionId = normalizeVersionId(dom.versionSelect.value);
+        renderVersionSummary();
         loadOverview();
         var pid = state.currentProject && state.currentProject.id ? state.currentProject.id : null;
         if (pid || pid === 0) loadVersionSummary(pid);
