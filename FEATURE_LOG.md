@@ -19,6 +19,19 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行视图顶部切换与快捷归档  
+- 功能描述：用例执行页顶部工具栏新增上一份/下一份循环切换按钮与归档按钮；归档流程复用“归档操作&进度预览”逻辑（含未通过原因抽屉/通过确认），归档成功后自动切换到下一份用例。  
+- 操作方式：进入用例执行 → 在顶部工具栏点击“上一份/下一份”切换用例 → 点击“归档”按提示确认或填写原因后归档并自动跳到下一份。  
+- 使用效果：不离开执行视图即可连续切换与归档，减少抽屉切换与页面跳转，提高处理效率。  
+- 新增内容/接口/组件：  
+  - 前端：工具栏切换/归档按钮与顺序计算（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`），样式补充（`style.css`）。  
+  - 测试：UI 用例覆盖切换与归档后自动切换（`tests/ui/tempexec_archive_stay_project.spec.js`）。  
+- 复用说明：复用现有归档抽屉与归档接口逻辑，不新增后端接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_archive_stay_project.spec.js --workers=1`（通过）  
+- 更新记录：2025-12-19 执行视图顶部切换/归档按钮上线（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_archive_stay_project.spec.js`）。  
+
 - 功能名称：用例库转执行确认抽屉与总览归档置底  
 - 功能描述：  
   - 用例库转到执行时若已存在执行记录，二次确认由浏览器弹窗改为右侧确认抽屉，并支持挂起上层抽屉；批量转执行同样改为抽屉确认。  

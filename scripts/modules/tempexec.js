@@ -127,6 +127,41 @@
       }
       return null;
     }
+    function getTempExecOrderedFileIdsSafe() {
+      if (api && typeof api.getTempExecOrderedFileIds === 'function') {
+        var ordered = api.getTempExecOrderedFileIds();
+        return Array.isArray(ordered) ? ordered.slice() : [];
+      }
+      return (state.tempExecFiles || [])
+        .map(function(file) { return file && file.id !== null && file.id !== undefined ? String(file.id) : ''; })
+        .filter(Boolean);
+    }
+    function resolveTempExecCycleId(direction, requireDifferent) {
+      var orderedIds = getTempExecOrderedFileIdsSafe();
+      if (!orderedIds.length) return '';
+      if (requireDifferent && orderedIds.length < 2) return '';
+      var currentId = state && state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
+      var idx = orderedIds.indexOf(currentId);
+      if (idx === -1) idx = 0;
+      var nextIdx = direction === 'prev' ? idx - 1 : idx + 1;
+      if (nextIdx < 0) nextIdx = orderedIds.length - 1;
+      if (nextIdx >= orderedIds.length) nextIdx = 0;
+      var targetId = orderedIds[nextIdx] || '';
+      if (requireDifferent && targetId && String(targetId) === String(currentId)) return '';
+      return targetId;
+    }
+    function applyTempExecAfterArchive(nextId) {
+      if (!api || typeof api.setTempExecActive !== 'function') return;
+      var candidate = nextId ? String(nextId) : '';
+      if (candidate && api.getTempExecFile && api.getTempExecFile(candidate)) {
+        api.setTempExecActive(candidate);
+        return;
+      }
+      var orderedIds = getTempExecOrderedFileIdsSafe();
+      if (orderedIds.length) {
+        api.setTempExecActive(orderedIds[0]);
+      }
+    }
     function promptTempVersionName(prevDrawer) {
       var drawerApi = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
       if (drawerApi && typeof drawerApi.open === 'function') {
@@ -305,6 +340,7 @@
         client: options.client || null,
         payloadBase: options.payloadBase || {},
         resumeOverview: options.resumeOverview !== false,
+        afterArchive: options.afterArchive || null,
         submitting: false,
       };
       if (tempExecArchiveReasonStatus) setStatus(tempExecArchiveReasonStatus, '', '');
@@ -368,6 +404,136 @@
         // ignore
       }
     }
+    function showTempExecArchiveSuccessToast() {
+      try {
+        var app = window.app || {};
+        window.app = app;
+        var key = '__tapArchiveSuccessToast';
+        var store = app[key] && typeof app[key] === 'object' ? app[key] : {};
+        if (store.timer) {
+          clearTimeout(store.timer);
+          store.timer = 0;
+        }
+        if (store.fadeTimer) {
+          clearTimeout(store.fadeTimer);
+          store.fadeTimer = 0;
+        }
+        if (store.el && store.el.parentNode) {
+          try { store.el.parentNode.removeChild(store.el); } catch (_) {}
+        }
+        var el = document.createElement('div');
+        el.className = 'temp-center-toast ok';
+        el.textContent = '归档成功，可到 用例相关 -> 用例归档 -> 查看归档 内查看详情。';
+        document.body.appendChild(el);
+        store.el = el;
+        store.timer = setTimeout(function() {
+          if (!store.el) return;
+          store.el.classList.add('fade-out');
+          store.fadeTimer = setTimeout(function() {
+            if (store.el && store.el.parentNode) {
+              try { store.el.parentNode.removeChild(store.el); } catch (_) {}
+            }
+            store.el = null;
+            store.timer = 0;
+            store.fadeTimer = 0;
+          }, 260);
+        }, 5000);
+        app[key] = store;
+      } catch (err) {
+        // ignore
+      }
+    }
+    function finalizeTempExecArchive(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var resumeOverview = opts.resumeOverview !== false;
+      var afterArchive = typeof opts.afterArchive === 'function' ? opts.afterArchive : null;
+      var loadPromise = null;
+      try {
+        if (api && typeof api.loadTempExecState === 'function') loadPromise = api.loadTempExecState();
+      } catch (_) {
+        loadPromise = null;
+      }
+      try {
+        if (api && typeof api.renderTempExecOverview === 'function') api.renderTempExecOverview();
+      } catch (_) {}
+      if (resumeOverview) {
+        try { showTempExecOverview(); } catch (_) {}
+      }
+      return Promise.resolve(loadPromise).then(function() {
+        if (afterArchive) afterArchive();
+      });
+    }
+    function requestTempExecArchive(fileForArchive, options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      if (!fileForArchive) {
+        if (tempExecStatus) setStatus(tempExecStatus, '未找到要归档的用例', 'warn');
+        return;
+      }
+      if (fileForArchive._casesLoading) {
+        if (tempExecStatus) setStatus(tempExecStatus, '用例加载中，请稍后再试', 'warn');
+        return;
+      }
+      var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+      if (!client || typeof client.archiveExecSet !== 'function') {
+        if (tempExecStatus) setStatus(tempExecStatus, '当前模式不支持归档（需启用 DB 后端）', 'warn');
+        return;
+      }
+      var sid = Number(opts.execSetId || fileForArchive.execSetId || fileForArchive.id);
+      if (!Number.isFinite(sid) || sid <= 0) {
+        if (tempExecStatus) setStatus(tempExecStatus, '归档失败：执行集 ID 无效', 'err');
+        return;
+      }
+      var counts = { pending: 0, failed: 0, blocked: 0, total: 0 };
+      if (Array.isArray(fileForArchive.cases)) {
+        counts.total = fileForArchive.cases.length;
+        fileForArchive.cases.forEach(function(item) {
+          var disp = api.getCaseExecutionDisplay ? api.getCaseExecutionDisplay(fileForArchive, item) : null;
+          var st = disp && disp.label ? String(disp.label || '').trim() : '';
+          if (!st) st = '未执行';
+          if (st === '通过' || st === '不适用') return;
+          if (st === '失败') counts.failed += 1;
+          else if (st === '阻塞') counts.blocked += 1;
+          else counts.pending += 1;
+        });
+      }
+      var needReason = Boolean(counts.failed || counts.blocked || counts.pending);
+      var payload = {};
+      var resumeOverview = opts.resumeOverview !== false;
+      var afterArchive = typeof opts.afterArchive === 'function' ? opts.afterArchive : null;
+      if (needReason) {
+        var hintText =
+          '仍存在未通过用例（未执行 ' +
+          counts.pending +
+          ' / 失败 ' +
+          counts.failed +
+          ' / 阻塞 ' +
+          counts.blocked +
+          '），请填写归档原因后继续。';
+        openTempExecArchiveReasonDrawerForArchive({
+          execSetId: sid,
+          client: client,
+          payloadBase: payload,
+          resumeOverview: resumeOverview,
+          hintText: hintText,
+          afterArchive: afterArchive,
+        });
+        return;
+      } else if (counts.total > 0) {
+        var okPassed = window.confirm('用例已全部执行通过（或通过+不适用），归档后无法更改测试结果，是否确认归档？');
+        if (!okPassed) return;
+      }
+      if (tempExecStatus) setStatus(tempExecStatus, '归档中...', '');
+      client
+        .archiveExecSet(sid, payload)
+        .then(function() {
+          if (tempExecStatus) setStatus(tempExecStatus, '归档成功', 'ok');
+          showTempExecArchiveSuccessToast();
+          finalizeTempExecArchive({ resumeOverview: resumeOverview, afterArchive: afterArchive });
+        })
+        .catch(function(err) {
+          if (tempExecStatus) setStatus(tempExecStatus, err && err.message ? err.message : '归档失败', 'err');
+        });
+    }
 
     function submitTempExecArchiveReason() {
       if (!tempExecArchiveReasonContext) return;
@@ -406,42 +572,10 @@
         .archiveExecSet(sid, payload)
         .then(function() {
           if (tempExecStatus) setStatus(tempExecStatus, '归档成功', 'ok');
-          try {
-            var app = window.app || {};
-            window.app = app;
-            var key = '__tapArchiveSuccessToast';
-            var store = app[key] && typeof app[key] === 'object' ? app[key] : {};
-            if (store.timer) {
-              clearTimeout(store.timer);
-              store.timer = 0;
-            }
-            if (store.fadeTimer) {
-              clearTimeout(store.fadeTimer);
-              store.fadeTimer = 0;
-            }
-            if (store.el && store.el.parentNode) {
-              try { store.el.parentNode.removeChild(store.el); } catch (_) {}
-            }
-            var el = document.createElement('div');
-            el.className = 'temp-center-toast ok';
-            el.textContent = '归档成功，可到 用例相关 -> 用例归档 -> 查看归档 内查看详情。';
-            document.body.appendChild(el);
-            store.el = el;
-            store.timer = setTimeout(function() {
-              if (!store.el) return;
-              store.el.classList.add('fade-out');
-              store.fadeTimer = setTimeout(function() {
-                if (store.el && store.el.parentNode) {
-                  try { store.el.parentNode.removeChild(store.el); } catch (_) {}
-                }
-                store.el = null;
-                store.timer = 0;
-                store.fadeTimer = 0;
-              }, 260);
-            }, 5000);
-            app[key] = store;
-          } catch (eToast) {}
+          showTempExecArchiveSuccessToast();
           ctx0.submitting = false;
+          var resumeOverview = ctx0.resumeOverview !== false;
+          var afterArchive = typeof ctx0.afterArchive === 'function' ? ctx0.afterArchive : null;
           try {
             if (tempExecArchiveReasonDrawer && typeof tempExecArchiveReasonDrawer.close === 'function') {
               tempExecArchiveReasonDrawer.close();
@@ -450,9 +584,7 @@
             // ignore close errors
           }
           try { if (window.app) window.app.__drawerSkipRestoreOnce = true; } catch (_) {}
-          try { if (api.loadTempExecState) api.loadTempExecState(); } catch (_) {}
-          try { if (api.renderTempExecOverview) api.renderTempExecOverview(); } catch (_) {}
-          try { showTempExecOverview(); } catch (_) {}
+          finalizeTempExecArchive({ resumeOverview: resumeOverview, afterArchive: afterArchive });
         })
         .catch(function(err) {
           ctx0.submitting = false;
@@ -2508,6 +2640,31 @@
 
     if (tempExecToolbar) {
       tempExecToolbar.addEventListener('click', function(e) {
+        var navBtn = e.target.closest('[data-temp-file-nav]');
+        if (navBtn) {
+          if (navBtn.disabled) return;
+          var dir = navBtn.dataset ? (navBtn.dataset.tempFileNav || '') : '';
+          if (dir !== 'prev' && dir !== 'next') return;
+          var targetId = resolveTempExecCycleId(dir, true);
+          if (targetId && api.setTempExecActive) {
+            api.setTempExecActive(targetId);
+          }
+          return;
+        }
+        var archiveBtn = e.target.closest('[data-temp-file-archive]');
+        if (archiveBtn) {
+          if (archiveBtn.disabled) return;
+          var archiveFileId = archiveBtn.dataset ? (archiveBtn.dataset.tempFileArchive || '') : '';
+          if (!archiveFileId) archiveFileId = state && state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
+          var fileForArchive = archiveFileId && api.getTempExecFile ? api.getTempExecFile(archiveFileId) : null;
+          var nextId = resolveTempExecCycleId('next', true);
+          requestTempExecArchive(fileForArchive, {
+            execSetId: fileForArchive ? (fileForArchive.execSetId || fileForArchive.id) : '',
+            resumeOverview: false,
+            afterArchive: function() { applyTempExecAfterArchive(nextId); },
+          });
+          return;
+        }
         var statusPill = e.target.closest('[data-temp-status-filter]');
         if (statusPill && api.setTempExecStatusFilter) {
           var sfFileId = statusPill.dataset.tempStatusFile;
@@ -3790,115 +3947,15 @@
 	            return;
 	          }
 	        }
-	        var archiveBtn = e.target.closest('[data-temp-overview-archive]');
-	        if (archiveBtn) {
-	          e.preventDefault();
-	          e.stopPropagation();
+        var archiveBtn = e.target.closest('[data-temp-overview-archive]');
+        if (archiveBtn) {
+          e.preventDefault();
+          e.stopPropagation();
           var execSetId = archiveBtn.dataset ? (archiveBtn.dataset.tempOverviewArchive || '') : '';
           var cardForArchive = archiveBtn.closest('[data-temp-file]');
           var fileIdForArchive = cardForArchive && cardForArchive.dataset ? (cardForArchive.dataset.tempFile || '') : '';
           var fileForArchive = fileIdForArchive && api.getTempExecFile ? api.getTempExecFile(fileIdForArchive) : null;
-          if (!fileForArchive) {
-            if (tempExecStatus) setStatus(tempExecStatus, '未找到要归档的用例', 'warn');
-            return;
-          }
-          if (fileForArchive._casesLoading) {
-            if (tempExecStatus) setStatus(tempExecStatus, '用例加载中，请稍后再试', 'warn');
-            return;
-          }
-          var client = window.app && window.app.apiClient ? window.app.apiClient : null;
-          if (!client || typeof client.archiveExecSet !== 'function') {
-            if (tempExecStatus) setStatus(tempExecStatus, '当前模式不支持归档（需启用 DB 后端）', 'warn');
-            return;
-          }
-          var sid = Number(execSetId || (fileForArchive.execSetId || fileForArchive.id));
-          if (!Number.isFinite(sid) || sid <= 0) {
-            if (tempExecStatus) setStatus(tempExecStatus, '归档失败：执行集 ID 无效', 'err');
-            return;
-          }
-          var counts = { pending: 0, failed: 0, blocked: 0, total: 0 };
-          if (Array.isArray(fileForArchive.cases)) {
-            counts.total = fileForArchive.cases.length;
-            fileForArchive.cases.forEach(function(item) {
-              var disp = api.getCaseExecutionDisplay ? api.getCaseExecutionDisplay(fileForArchive, item) : null;
-              var st = disp && disp.label ? String(disp.label || '').trim() : '';
-              if (!st) st = '未执行';
-              if (st === '通过' || st === '不适用') return;
-              if (st === '失败') counts.failed += 1;
-              else if (st === '阻塞') counts.blocked += 1;
-              else counts.pending += 1;
-            });
-          }
-          var needReason = Boolean(counts.failed || counts.blocked || counts.pending);
-          var payload = {};
-          if (needReason) {
-            var hintText =
-              '仍存在未通过用例（未执行 ' +
-              counts.pending +
-              ' / 失败 ' +
-              counts.failed +
-              ' / 阻塞 ' +
-              counts.blocked +
-              '），请填写归档原因后继续。';
-            openTempExecArchiveReasonDrawerForArchive({
-              execSetId: sid,
-              client: client,
-              payloadBase: payload,
-              resumeOverview: true,
-              hintText: hintText,
-            });
-            return;
-          } else if (counts.total > 0) {
-            var okPassed = window.confirm('用例已全部执行通过（或通过+不适用），归档后无法更改测试结果，是否确认归档？');
-            if (!okPassed) return;
-          }
-          if (tempExecStatus) setStatus(tempExecStatus, '归档中...', '');
-          client
-            .archiveExecSet(sid, payload)
-            .then(function() {
-              if (tempExecStatus) setStatus(tempExecStatus, '归档成功', 'ok');
-              try {
-                // 归档成功提示：不受抽屉遮挡，也不被其他中心提示打断（固定展示满 5 秒）。
-                var app = window.app || {};
-                window.app = app;
-                var key = '__tapArchiveSuccessToast';
-                var store = app[key] && typeof app[key] === 'object' ? app[key] : {};
-                if (store.timer) {
-                  clearTimeout(store.timer);
-                  store.timer = 0;
-                }
-                if (store.fadeTimer) {
-                  clearTimeout(store.fadeTimer);
-                  store.fadeTimer = 0;
-                }
-                if (store.el && store.el.parentNode) {
-                  try { store.el.parentNode.removeChild(store.el); } catch (_) {}
-                }
-                var el = document.createElement('div');
-                el.className = 'temp-center-toast ok';
-                el.textContent = '归档成功，可到 用例相关 -> 用例归档 -> 查看归档 内查看详情。';
-                document.body.appendChild(el);
-                store.el = el;
-                store.timer = setTimeout(function() {
-                  if (!store.el) return;
-                  store.el.classList.add('fade-out');
-                  store.fadeTimer = setTimeout(function() {
-                    if (store.el && store.el.parentNode) {
-                      try { store.el.parentNode.removeChild(store.el); } catch (_) {}
-                    }
-                    store.el = null;
-                    store.timer = 0;
-                    store.fadeTimer = 0;
-                  }, 260);
-                }, 5000);
-                app[key] = store;
-              } catch (eToast) {}
-              if (api.loadTempExecState) api.loadTempExecState();
-              if (api.renderTempExecOverview) api.renderTempExecOverview();
-            })
-            .catch(function(err) {
-              if (tempExecStatus) setStatus(tempExecStatus, err && err.message ? err.message : '归档失败', 'err');
-            });
+          requestTempExecArchive(fileForArchive, { execSetId: execSetId, resumeOverview: true });
           return;
         }
         var projectBtn = e.target.closest('[data-temp-overview-project]');

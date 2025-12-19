@@ -2497,6 +2497,116 @@
       return summary;
     }
 
+    function getTempExecOrderedFileIds() {
+      var files = Array.isArray(state.tempExecFiles) ? state.tempExecFiles.slice() : [];
+      if (!files.length) return [];
+      var ordered = [];
+      var added = new Set();
+      if (isTempExecProjectLayoutEnabled()) {
+        var projectMeta = new Map();
+        var projectIdSet = new Set();
+        var fallbackFiles = [];
+        files.forEach(function(file) {
+          if (!file) return;
+          var pid = file && file.projectId ? String(file.projectId) : '';
+          if (!pid) {
+            fallbackFiles.push(file);
+            return;
+          }
+          projectIdSet.add(pid);
+          var ts = Number(file && file.createdAt) || 0;
+          var prev = projectMeta.has(pid) ? Number(projectMeta.get(pid) || 0) : 0;
+          if (ts > prev) projectMeta.set(pid, ts);
+        });
+        var orderedProjects = ensureProjectOrder(Array.from(projectIdSet.values()), projectMeta);
+        orderedProjects.forEach(function(pid) {
+          var projectFiles = files.filter(function(file) { return file && String(file.projectId || '') === String(pid); });
+          if (!projectFiles.length) return;
+          var versionMap = new Map();
+          var versionMeta = new Map();
+          projectFiles.forEach(function(file) {
+            var vid = file && file.versionId !== null && file.versionId !== undefined ? String(file.versionId || '') : '';
+            if (!versionMap.has(vid)) versionMap.set(vid, []);
+            versionMap.get(vid).push(file);
+            var ts = Number(file && file.createdAt) || 0;
+            var prev = versionMeta.has(vid) ? Number(versionMeta.get(vid) || 0) : 0;
+            if (ts > prev) versionMeta.set(vid, ts);
+          });
+          var orderedVersions = ensureProjectVersionOrder(pid, Array.from(versionMap.keys()), versionMeta);
+          orderedVersions.forEach(function(vid) {
+            var list = versionMap.get(vid) || [];
+            if (!list.length) return;
+            var fileMeta = new Map();
+            list.forEach(function(file) {
+              var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+              if (!fid) return;
+              var ts = Number(file && file.createdAt) || 0;
+              fileMeta.set(fid, ts);
+            });
+            var orderedIds = ensureProjectVersionFileOrder(
+              pid,
+              vid,
+              list
+                .map(function(file) { return file && file.id !== null && file.id !== undefined ? String(file.id) : ''; })
+                .filter(Boolean),
+              fileMeta
+            );
+            orderedIds.forEach(function(fid) {
+              if (!fid || added.has(fid)) return;
+              added.add(fid);
+              ordered.push(fid);
+            });
+          });
+        });
+        if (fallbackFiles.length) {
+          fallbackFiles
+            .slice()
+            .sort(function(a, b) {
+              var ta = Number(a && a.createdAt) || 0;
+              var tb = Number(b && b.createdAt) || 0;
+              if (ta !== tb) return tb - ta;
+              var na = a && a.name ? String(a.name) : '';
+              var nb = b && b.name ? String(b.name) : '';
+              return na.localeCompare(nb, 'zh-Hans-CN');
+            })
+            .forEach(function(file) {
+              var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+              if (!fid || added.has(fid)) return;
+              added.add(fid);
+              ordered.push(fid);
+            });
+        }
+      } else {
+        var reqMap = new Map();
+        files.forEach(function(file) {
+          if (!file) return;
+          var req = normalizeRequirementName(file && file.requirement) || '未标识需求';
+          if (!reqMap.has(req)) reqMap.set(req, []);
+          reqMap.get(req).push(file);
+        });
+        var reqOrderList = ensureRequirementOrder(Array.from(reqMap.keys()));
+        reqOrderList.forEach(function(req) {
+          var list = reqMap.get(req) || [];
+          var orderedIds = ensureFileOrder(
+            req,
+            list.map(function(file) { return file && file.id !== null && file.id !== undefined ? String(file.id) : ''; }).filter(Boolean)
+          );
+          orderedIds.forEach(function(fid) {
+            if (!fid || added.has(fid)) return;
+            added.add(fid);
+            ordered.push(fid);
+          });
+        });
+      }
+      files.forEach(function(file) {
+        var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+        if (!fid || added.has(fid)) return;
+        added.add(fid);
+        ordered.push(fid);
+      });
+      return ordered;
+    }
+
     function renderTempExecToolbar(file) {
       if (!tempExecToolbar || !tempExecToolbarCard) return;
       if (!file) {
@@ -2509,6 +2619,29 @@
       var activeFilter = statusFilter.fileId === file.id ? statusFilter.status : '';
       var searchState = state.tempExecSearch || { fileId: '', term: '', raw: '' };
       var searchRaw = searchState.fileId === file.id ? (searchState.raw || '') : '';
+      var orderedIds = getTempExecOrderedFileIds();
+      var navDisabled = orderedIds.length < 2;
+      var navAttr = navDisabled ? ' disabled' : '';
+      var navHintPrev = navDisabled ? '暂无可切换用例' : '切换上一份用例';
+      var navHintNext = navDisabled ? '暂无可切换用例' : '切换下一份用例';
+      var navHtml =
+        '<div class="toolbar-nav" role="group" aria-label="切换用例">' +
+          '<button type="button" class="pill secondary nav-btn prev" data-temp-file-nav="prev"' + navAttr + ' title="' + escapeHtml(navHintPrev) + '">' +
+            '上一份' +
+          '</button>' +
+          '<button type="button" class="pill primary nav-btn next" data-temp-file-nav="next"' + navAttr + ' title="' + escapeHtml(navHintNext) + '">' +
+            '下一份' +
+          '</button>' +
+        '</div>';
+      var archiveHtml = '';
+      if (isDbMode() && !(file && String(file.status || '') === 'archived')) {
+        var disabled = file && file._casesLoading ? ' disabled' : '';
+        var tip = file && file._casesLoading ? '用例加载中，稍后再试' : '归档当前用例';
+        archiveHtml =
+          '<button type="button" class="pill accent toolbar-archive" data-temp-file-archive="' + escapeHtml(file.id) + '"' + disabled + ' title="' + escapeHtml(tip) + '">' +
+            '归档' +
+          '</button>';
+      }
       var toolbarHtml = [
         '<div class="toolbar-file">当前文件：<strong>' + escapeHtml(file.name) + '</strong></div>',
         '<span class="summary-pill executed ' + (activeFilter === 'executed' ? 'active' : '') + '" data-temp-status-filter="executed" data-temp-status-file="' + file.id + '">已执行 ' + summary.executed + '</span>',
@@ -2517,11 +2650,13 @@
         '<span class="summary-pill failed ' + (activeFilter === 'failed' ? 'active' : '') + '" data-temp-status-filter="failed" data-temp-status-file="' + file.id + '">失败 ' + summary.failed + '</span>',
         '<span class="summary-pill blocked ' + (activeFilter === 'blocked' ? 'active' : '') + '" data-temp-status-filter="blocked" data-temp-status-file="' + file.id + '">阻塞 ' + summary.blocked + '</span>',
         '<span class="summary-pill unspecified ' + (activeFilter === 'unspecified' ? 'active' : '') + '" data-temp-status-filter="unspecified" data-temp-status-file="' + file.id + '">不适用 ' + summary.unspecified + '</span>',
+        navHtml,
         '<div class="toolbar-search">',
           '<input class="temp-search-input" data-temp-search-input="' + file.id + '" value="' + escapeHtml(searchRaw) + '" placeholder="搜索用例关键字">',
           '<button type="button" class="pill secondary" data-temp-search-btn="' + file.id + '">搜索</button>',
           '<button type="button" class="pill secondary" data-temp-search-clear="' + file.id + '">清除</button>',
         '</div>',
+        archiveHtml,
       ].join('');
       tempExecToolbar.innerHTML = toolbarHtml;
       tempExecToolbarCard.classList.remove('hidden');
@@ -7088,6 +7223,7 @@
       applyTempExecSearch: applyTempExecSearch,
       setTempExecStatusFilter: setTempExecStatusFilter,
       getTempExecFile: getTempExecFile,
+      getTempExecOrderedFileIds: getTempExecOrderedFileIds,
       getTempExecFilesByRequirement: getTempExecFilesByRequirement,
       setTempExecActive: setTempExecActive,
       updateTempExecResult: updateTempExecResult,
