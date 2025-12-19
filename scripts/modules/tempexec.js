@@ -2662,6 +2662,7 @@
           var targetId = resolveTempExecCycleId(dir, true);
           if (targetId && api.setTempExecActive) {
             api.setTempExecActive(targetId);
+            scrollToTempExecViewTop({ waitForDrawerUnlock: true });
           }
           return;
         }
