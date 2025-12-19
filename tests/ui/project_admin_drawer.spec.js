@@ -59,7 +59,15 @@ test.describe('项目管理列表与抽屉', () => {
       return route.continue();
     });
     await page.route('**/api/projects/*/versions', (route) => {
-      route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ id: 21, name: 'v2.0', created_at: new Date().toISOString() }) });
+      const url = route.request().url();
+      const match = url.match(/projects\/(\d+)\/versions/);
+      const pid = match ? Number(match[1]) : 0;
+      const created = { id: Date.now(), name: 'v2.0', created_at: new Date().toISOString() };
+      const target = projects.find((item) => item && item.id === pid);
+      if (target && Array.isArray(target.versions)) {
+        target.versions.push({ id: created.id, name: created.name });
+      }
+      route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(created) });
     });
     await page.route('**/api/projects/*', (route) => {
       if (route.request().method().toUpperCase() === 'PATCH') {
@@ -164,6 +172,24 @@ test.describe('项目管理列表与抽屉', () => {
       if (closer && typeof closer.click === 'function') closer.click();
     });
     await expect(drawer).not.toHaveClass(/open/);
+  });
+
+  test('新增版本成功后显示居中提示', async ({ page }) => {
+    const manageBtn = page.locator('.tab-group-btn', { hasText: '管理' });
+    await manageBtn.click();
+    await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
+    await page.click('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
+    await expect(page.locator('section[data-tab-section="project-admin"]')).toBeVisible();
+
+    await page.locator('[data-action="add-version"][data-id="1"]').click();
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await page.fill('#appConfirmDrawerInput', 'v2.0');
+    await page.click('#appConfirmDrawerConfirmBtn');
+
+    const toast = page.locator('.temp-center-toast', { hasText: '新增版本成功' });
+    await expect(toast).toBeVisible();
+    await page.waitForTimeout(3400);
+    await expect(toast).toHaveCount(0);
   });
 
   test('非管理员组员仅可见所属项目且无项目编辑/删除', async ({ page }) => {

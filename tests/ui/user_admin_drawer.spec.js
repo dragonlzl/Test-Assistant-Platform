@@ -240,6 +240,10 @@ test.describe('人员管理列表与抽屉', () => {
     await page.locator('[data-action="reset-password"][data-id="2"]').click();
     await confirmDrawer(page, '重置该用户密码为默认值');
     await expect(page.locator('#userStatus')).toContainText('密码已重置', { timeout: 5000 });
+    const toast = page.locator('.temp-center-toast', { hasText: '重置密码成功' });
+    await expect(toast).toBeVisible();
+    await page.waitForTimeout(3400);
+    await expect(toast).toHaveCount(0);
     expect(resetCalled).toBe(true);
   });
 });

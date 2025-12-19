@@ -40,6 +40,11 @@ test.describe('admin projects & users', () => {
     const verBody = await verRes.json();
     const versionId = verBody.id;
 
+    const versionListRes = await ctx.get(`${apiBase}/api/projects/${projectId}/versions`, { headers });
+    expect(versionListRes.status()).toBe(200);
+    const versionList = await versionListRes.json();
+    expect(versionList.some(v => v && v.id === versionId)).toBeTruthy();
+
     // create user
     const createUser = await ctx.post(`${apiBase}/api/users`, {
       headers,

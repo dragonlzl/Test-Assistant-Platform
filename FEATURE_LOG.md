@@ -1444,3 +1444,16 @@
 - 复用说明：复用既有通用确认抽屉与现有业务流程，不新增后端接口。  
 - 测试与验证：`node --check scripts/modules/tempexec.js scripts/modules/caseLibrary.js scripts/core/casesGenCore.js`（通过）；`npm run test:ui -- tests/ui/tempexec_progress.spec.js tests/ui/tempexec_drag.spec.js tests/ui/casegen_db_store.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_delete.spec.js`（通过）。  
 - 更新记录：2025-12-19 多处确认弹窗改为抽屉并处理抽屉挂起（`scripts/core/casesGenCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`tests/ui/tempexec_progress.spec.js`、`tests/ui/casegen_db_store.spec.js`、`tests/ui/case_library_batch_delete.spec.js`）。  
+
+- 功能名称：用例生成追加入库可重复触发与管理页成功提示  
+- 功能描述：修复用例生成页面追加入库成功/取消后无法再次追加入库的问题；执行页版本盒子“解散归档”提示语改为单行并展示待解散用例名；人员管理重置密码、项目管理新增版本成功后补充居中提示（3 秒后自动消失）。  
+- 操作方式：用例生成→勾选用例→旧用例追加入库→成功/取消后可再次追加入库；用例执行→版本卡片→解散归档查看提示；管理→人员管理→重置密码；管理→项目管理→新增版本。  
+- 使用效果：追加入库流程可重复触发；提示语更直观；管理页成功反馈明确。  
+- 新增内容/接口/组件：前端状态复位与取消回调（`scripts/core/casesGenCore.js`、`scripts/modules/caseLibrary.js`）；提示文案调整（`scripts/modules/tempexec.js`）；居中提示复用（`scripts/modules/admin.js`）；UI 用例更新（`tests/ui/casegen_db_store.spec.js`、`tests/ui/tempexec_archived_placeholder.spec.js`、`tests/ui/user_admin_drawer.spec.js`、`tests/ui/project_admin_drawer.spec.js`）；API 用例补充（`tests/api/admin_entities.spec.js`）。  
+- 复用说明：复用通用确认抽屉与居中提示样式，不改后端接口。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js tests/ui/tempexec_archived_placeholder.spec.js tests/ui/user_admin_drawer.spec.js tests/ui/project_admin_drawer.spec.js`（通过）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080`（通过）；`API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/admin_entities.spec.js`（通过）。  
+- 更新记录：2025-12-19 用例生成追加入库复位、归档提示文案与管理页成功提示更新（`scripts/`、`tests/`）。  
+- 更新记录：2025-12-19 确认抽屉清理遗留挂起状态，避免追加入库后页面锁死（`scripts/base/confirmDrawer.js`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  
+- 更新记录：2025-12-19 追加入库流程减少重复确认：缺失模块确认后直接进入追加/差异覆盖（`scripts/core/casesGenCore.js`、`scripts/modules/caseLibrary.js`、`tests/ui/casegen_db_store.spec.js`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  

@@ -1483,70 +1483,55 @@
 
     if (mode === 'append_overwrite') {
       var caseFileId = state.importDiff.caseFileId;
-      var cleanName2 = state.importDiff.cleanName || ('用例#' + caseFileId);
       var items2 = Array.isArray(state.importDiff.importItems) ? state.importDiff.importItems : [];
       if (!caseFileId || !items2.length) {
         setStatus(dom.importDiffStatus, '差异数据未就绪，请稍后重试', 'warn');
         return;
       }
-      var confirmMsg2 = '检测到重复用例，是否确认覆盖并追加入库：' + cleanName2 + '？';
-      state.importDiff.confirming = true;
+      state.importDiff.confirming = false;
+      state.importDiff.loading = true;
       syncImportDiffControls();
-      openConfirmDrawer({
-        title: '确认覆盖并追加入库',
-        message: confirmMsg2,
-        confirmText: '确认覆盖并追加入库',
-        cancelText: '取消',
-        previousDrawer: importDiffDrawerInstance,
-      }).then(function(res2) {
-        state.importDiff.confirming = false;
-        syncImportDiffControls();
-        if (!res2 || res2.ok !== true) return;
+      setStatus(dom.importDiffStatus, '覆盖并追加入库中...', '');
 
-        state.importDiff.loading = true;
-        syncImportDiffControls();
-        setStatus(dom.importDiffStatus, '覆盖并追加入库中...', '');
-
-        apiClient
-          .appendCaseItems(caseFileId, { items: items2, overwrite_existing: true })
-          .then(function(res) {
-            var appended = res && (res.appended || res.appended_count) ? Number(res.appended || res.appended_count) : 0;
-            var overwritten = res && (res.overwritten || res.overwritten_count) ? Number(res.overwritten || res.overwritten_count) : 0;
-            var msg = '追加入库成功：新增 ' + appended + ' 条，覆盖 ' + overwritten + ' 条';
-            setStatus(dom.importDiffStatus, msg, 'ok');
-            var external = state.importDiff.external || null;
-            if (external && typeof external.resolve === 'function') {
-              state.importDiff.external = null;
-              try {
-                external.resolve({ ok: true, overwrite: true, result: res || null });
-              } catch (e) {
-                // ignore
-              }
+      apiClient
+        .appendCaseItems(caseFileId, { items: items2, overwrite_existing: true })
+        .then(function(res) {
+          var appended = res && (res.appended || res.appended_count) ? Number(res.appended || res.appended_count) : 0;
+          var overwritten = res && (res.overwritten || res.overwritten_count) ? Number(res.overwritten || res.overwritten_count) : 0;
+          var msg = '追加入库成功：新增 ' + appended + ' 条，覆盖 ' + overwritten + ' 条';
+          setStatus(dom.importDiffStatus, msg, 'ok');
+          var external = state.importDiff.external || null;
+          if (external && typeof external.resolve === 'function') {
+            state.importDiff.external = null;
+            try {
+              external.resolve({ ok: true, overwrite: true, result: res || null });
+            } catch (e) {
+              // ignore
             }
-            var q = state.importDiff && state.importDiff.queue ? state.importDiff.queue : null;
-            var keepOpen = Boolean(q && q.active && Number(q.total) > 0 && Number(q.index) < Number(q.total) - 1);
-            if (!keepOpen && importDiffDrawerInstance && typeof importDiffDrawerInstance.close === 'function') {
-              importDiffDrawerInstance.close();
+          }
+          var q = state.importDiff && state.importDiff.queue ? state.importDiff.queue : null;
+          var keepOpen = Boolean(q && q.active && Number(q.total) > 0 && Number(q.index) < Number(q.total) - 1);
+          if (!keepOpen && importDiffDrawerInstance && typeof importDiffDrawerInstance.close === 'function') {
+            importDiffDrawerInstance.close();
+          }
+        })
+        .catch(function(err) {
+          var msg = err && err.message ? err.message : '追加入库失败';
+          setStatus(dom.importDiffStatus, '追加入库失败：' + msg, 'err');
+          var external = state.importDiff.external || null;
+          if (external && typeof external.resolve === 'function') {
+            state.importDiff.external = null;
+            try {
+              external.resolve({ ok: false, reason: 'append_overwrite_failed', error: err || null });
+            } catch (e) {
+              // ignore
             }
-          })
-          .catch(function(err) {
-            var msg = err && err.message ? err.message : '追加入库失败';
-            setStatus(dom.importDiffStatus, '追加入库失败：' + msg, 'err');
-            var external = state.importDiff.external || null;
-            if (external && typeof external.resolve === 'function') {
-              state.importDiff.external = null;
-              try {
-                external.resolve({ ok: false, reason: 'append_overwrite_failed', error: err || null });
-              } catch (e) {
-                // ignore
-              }
-            }
-          })
-          .finally(function() {
-            state.importDiff.loading = false;
-            syncImportDiffControls();
-          });
-      });
+          }
+        })
+        .finally(function() {
+          state.importDiff.loading = false;
+          syncImportDiffControls();
+        });
       return;
     }
     var projectId = state.importDiff.projectId;

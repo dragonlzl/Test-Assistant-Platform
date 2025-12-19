@@ -1136,6 +1136,7 @@
       }
       var st = ensureDbStoreState();
       st.mode = mode || '';
+      st.loading = false;
       st.confirming = false;
       st.projectId = '';
       st.versionId = '';
@@ -1548,29 +1549,21 @@
       st.confirming = true;
       syncCaseGenDbStoreControls();
       maybeConfirmIncompleteModulesBeforeStore('追加入库', drawerRef).then(function(okMissing) {
+        st.confirming = false;
+        syncCaseGenDbStoreControls();
         if (!okMissing) {
-          st.confirming = false;
-          syncCaseGenDbStoreControls();
           if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消追加入库', 'warn');
           return null;
         }
-        var confirmMsg = '确认将 ' + items.length + ' 条用例追加到【' + (selectedName || '目标用例') + '】吗？';
-        return openConfirmDrawer({
-          title: '确认追加入库',
-          message: confirmMsg,
-          confirmText: '确认追加',
-          cancelText: '取消',
-          previousDrawer: drawerRef,
-        });
-      }).then(function(res) {
-        if (!res) return;
-        st.confirming = false;
-        syncCaseGenDbStoreControls();
-        if (!res.ok) {
-          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消追加入库', 'warn');
-          return;
-        }
         proceedAppend();
+        return null;
+      }).catch(function(err) {
+        st.confirming = false;
+        st.loading = false;
+        syncCaseGenDbStoreControls();
+        var msg = err && err.message ? err.message : '追加入库失败';
+        if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '追加入库失败：' + msg, 'err');
+        setStatus(caseGenStatus, '追加入库失败：' + msg, 'err');
       });
     }
     function collectSelectedCaseEntries() {

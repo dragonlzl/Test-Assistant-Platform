@@ -58,10 +58,17 @@
       suspended = null;
       return;
     }
-    if (!suspended.already) {
-      suspended.element.classList.remove('drawer-suspended');
-    }
+    suspended.element.classList.remove('drawer-suspended');
     suspended = null;
+  }
+
+  function clearSuspendedDrawers() {
+    if (typeof document === 'undefined' || !document.querySelectorAll) return;
+    var list = document.querySelectorAll('.drawer.drawer-suspended');
+    for (var i = 0; i < list.length; i += 1) {
+      var el = list[i];
+      if (el && el.classList) el.classList.remove('drawer-suspended');
+    }
   }
 
   function ensureDrawer() {
@@ -189,6 +196,9 @@
     }
     resolved = false;
     resolveFn = null;
+    // 清理上一次确认抽屉遗留的挂起状态，避免叠加导致页面不可操作。
+    resumeDrawer();
+    clearSuspendedDrawers();
     applyOptions(options);
     var prevDrawer = options && (options.previousDrawer || options.prevDrawer || options.drawer) ? (options.previousDrawer || options.prevDrawer || options.drawer) : null;
     suspended = suspendDrawer(prevDrawer);

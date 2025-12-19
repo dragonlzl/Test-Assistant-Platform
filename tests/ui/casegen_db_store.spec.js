@@ -101,6 +101,21 @@ async function confirmDrawer(page, options) {
   }, prevMessage);
 }
 
+async function cancelConfirmDrawer(page, options) {
+  const opts = options || {};
+  const drawer = page.locator('#appConfirmDrawer');
+  await expect(drawer).toHaveClass(/open/);
+  if (opts.messageIncludes && opts.messageIncludes.length) {
+    for (const msg of opts.messageIncludes) {
+      await expect(page.locator('#appConfirmDrawerMessage')).toContainText(msg);
+    }
+  } else if (opts.message) {
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText(opts.message);
+  }
+  await page.click('#appConfirmDrawerCancelBtn');
+  await expect(drawer).not.toHaveClass(/open/);
+}
+
 test.describe('用例生成-新用例入库/旧用例追加入库', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -434,12 +449,80 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await page.selectOption('#caseGenDbStoreCaseFileSelect', String(caseFiles[0].id));
     await page.click('#caseGenDbStoreConfirmBtn');
     await confirmDrawer(page, { messageIncludes: ['支付', '没有选择用例'] });
-    await confirmDrawer(page, { messageIncludes: ['追加到【旧用例A】'] });
 
     await expect(page.locator('#caseGenStatus')).toContainText('追加入库成功', { timeout: 5000 });
     expect(appendPayload && Array.isArray(appendPayload.items) && appendPayload.items.length).toBe(1);
     expect(String(appendPayload.items[0].module || '')).toContain('登录');
+    const drawer = page.locator('#caseGenDbStoreDrawer');
+    await page.click('#caseGenStoreAppendBtn');
+    await expect(drawer).toHaveClass(/open/);
 
+  });
+
+  test('旧用例追加入库：取消确认后仍可再次追加入库', async ({ page }) => {
+    const token = 'token-casegen-append-cancel';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+    const caseFiles = [{ id: 300, project_id: project.id, version_id: versions[0].id, file_name_clean: '旧用例A', imported_at: new Date().toISOString(), updated_at: new Date().toISOString() }];
+    let appendPayload = null;
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, caseFiles);
+      if (pathName === `/api/case-files/${caseFiles[0].id}/items/append` && method === 'POST') {
+        appendPayload = route.request().postDataJSON();
+        return respond(200, { appended: 1 });
+      }
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page, { requirement: 'UI自动化需求-追加取消', selectIndex: 0, noGenerateIndex: 1 });
+
+    await page.click('#caseGenStoreAppendBtn');
+    await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
+    await page.selectOption('#caseGenDbStoreProjectSelect', String(project.id));
+    await page.selectOption('#caseGenDbStoreVersionSelect', String(versions[0].id));
+    await page.selectOption('#caseGenDbStoreCaseFileSelect', String(caseFiles[0].id));
+    await page.click('#caseGenDbStoreConfirmBtn');
+    await cancelConfirmDrawer(page, { messageIncludes: ['支付', '没有选择用例'] });
+    await expect(page.locator('#caseGenDbStoreStatus')).toContainText('已取消追加入库');
+    const drawer = page.locator('#caseGenDbStoreDrawer');
+    const wasOpen = await drawer.evaluate((el) => el.classList.contains('open'));
+    if (wasOpen) {
+      await page.evaluate(() => {
+        if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+          window.app.drawer.closeAllDrawers();
+        }
+      });
+      await expect(drawer).not.toHaveClass(/open/);
+    }
+
+    await page.click('#caseGenStoreAppendBtn');
+    await expect(drawer).toHaveClass(/open/);
+    expect(appendPayload).toBeNull();
   });
 
   test('旧用例追加入库：目标用例存在重复时打开diff并确认覆盖', async ({ page }) => {
@@ -509,11 +592,9 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await page.selectOption('#caseGenDbStoreCaseFileSelect', String(caseFiles[0].id));
     await page.click('#caseGenDbStoreConfirmBtn');
     await confirmDrawer(page, { messageIncludes: ['支付', '没有选择用例'] });
-    await confirmDrawer(page, { messageIncludes: ['追加到【旧用例A】'] });
 
     await expect(page.locator('#caseLibraryImportDiffDrawer')).toHaveClass(/open/);
     await page.click('#caseLibraryImportDiffOverwriteBtn');
-    await confirmDrawer(page, { messageIncludes: ['覆盖并追加入库'] });
 
     await expect(page.locator('#caseGenStatus')).toContainText('追加入库成功', { timeout: 5000 });
     expect(appendPayload && appendPayload.overwrite_existing).toBe(true);

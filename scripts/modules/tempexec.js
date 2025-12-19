@@ -2940,7 +2940,8 @@
                 return String(f.name || f.fileName || f.caseFileName || '').trim();
               }).filter(Boolean)
             : [];
-          var dissolveMsg = '确定解散版本【' + versionLabel0 + '】下的已归档占位吗？\\n（不影响归档记录，仅清除占位）';
+          var archivedLabel0 = archivedNames0.length ? archivedNames0.join(' 、') : '暂无';
+          var dissolveMsg = '确定解散版本【' + versionLabel0 + '】吗？版本包括待解散用例 ' + archivedLabel0;
           var prevDrawer = resolveTempExecActiveDrawer();
           openConfirmDrawer({
             title: '确认解散归档',

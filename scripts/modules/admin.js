@@ -670,6 +670,7 @@
         api.createVersion(id, { name: name }).then(function() {
           return loadProjects().then(function() {
             notifyProjectsUpdated('version-created', { project_id: id, version_name: name });
+            showCenterToast('新增版本成功', 'ok');
           });
         }).catch(function(err) {
           setStatus(dom.projectStatus, err && err.message ? err.message : '新增版本失败', 'err');
@@ -800,6 +801,7 @@
         if (!res || res.ok !== true) return;
         api.resetUserPassword(id).then(function() {
           setStatus(dom.userStatus, '密码已重置', 'ok');
+          showCenterToast('重置密码成功', 'ok');
         }).catch(function(err) {
           setStatus(dom.userStatus, err && err.message ? err.message : '重置失败', 'err');
         });

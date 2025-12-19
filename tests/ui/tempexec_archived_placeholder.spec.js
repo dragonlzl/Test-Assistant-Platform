@@ -115,7 +115,11 @@ test.describe('用例执行-归档占位与解散归档', () => {
 
     await v1Card.locator('.archived-dissolve').click();
     await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('解散版本');
+    const dissolveMsg = await page.locator('#appConfirmDrawerMessage').innerText();
+    expect(dissolveMsg).toContain('确定解散版本【v1】吗？版本包括待解散用例');
+    expect(dissolveMsg).toContain('归档用例1');
+    expect(dissolveMsg).toContain('归档用例2');
+    expect(dissolveMsg.indexOf('\n')).toBe(-1);
     await page.click('#appConfirmDrawerConfirmBtn');
     await expect(page.locator('#tempVersionGrid .temp-req-row.archived')).toHaveCount(0);
     await expect(page.locator('#tempVersionGrid .archived-dissolve')).toHaveCount(0);
