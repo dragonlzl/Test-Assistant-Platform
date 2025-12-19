@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from .api import api_router
+from .audit import reset_operation_context, set_operation_context
 from .config import BASE_DIR, settings
 from .db import Base, SessionLocal, engine
 from .initial_data import init_db
@@ -23,6 +24,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def bind_operation_context(request, call_next):
+    page = request.headers.get("x-tap-page")
+    batch_flag = request.headers.get("x-tap-batch")
+    batch = None
+    if batch_flag is not None:
+        raw = str(batch_flag or "").strip().lower()
+        batch = raw in ("1", "true", "yes", "y", "on")
+    tokens = set_operation_context(page=page, batch=batch)
+    try:
+        return await call_next(request)
+    finally:
+        reset_operation_context(tokens)
+
 
 @app.middleware("http")
 async def disable_static_cache(request, call_next):

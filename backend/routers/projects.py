@@ -137,6 +137,7 @@ def delete_project(
         action="delete_project",
         target_type="project",
         target_id=project_id,
+        detail={"name": project.name, "project_name": project.name},
     )
     db.commit()
     return {"detail": "项目已删除"}
@@ -206,7 +207,7 @@ def create_version(
         action="create_version",
         target_type="project_version",
         target_id=version.id,
-        detail={"project_id": project.id, "name": version.name},
+        detail={"project_id": project.id, "project_name": project.name, "name": version.name},
     )
     db.commit()
     return version
@@ -222,7 +223,7 @@ def delete_version(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_accessible_project(project_id, user, db)
+    project = _get_accessible_project(project_id, user, db)
     version = (
         db.query(models.ProjectVersion)
         .filter(
@@ -312,6 +313,9 @@ def delete_version(
         target_id=version_id,
         detail={
             "project_id": project_id,
+            "project_name": project.name,
+            "name": version.name,
+            "version_name": version.name,
             "case_file_count": int(case_file_count),
             "moved_case_files": int(moved_count),
             "moved_exec_sets": int(moved_exec_sets),

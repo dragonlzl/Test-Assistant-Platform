@@ -81,7 +81,7 @@ def update_user(
         action="update_user",
         target_type="user",
         target_id=user.id,
-        detail=payload.dict(exclude_none=True),
+        detail={"username": user.username, **payload.dict(exclude_none=True)},
     )
     db.commit()
     return user
@@ -152,6 +152,7 @@ def reset_password(
         action="reset_password",
         target_type="user",
         target_id=user.id,
+        detail={"username": user.username},
     )
     db.commit()
     return {"detail": "密码已重置"}
@@ -189,7 +190,7 @@ def assign_projects(
         action="assign_projects",
         target_type="user",
         target_id=user.id,
-        detail={"project_ids": payload.project_ids},
+        detail={"username": user.username, "project_ids": payload.project_ids},
     )
     db.commit()
     return {"detail": "项目分配已更新"}

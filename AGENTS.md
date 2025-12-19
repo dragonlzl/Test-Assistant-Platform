@@ -8,6 +8,7 @@
 
 ## 构建、开发与测试命令
 - `python3 -m http.server 8080`：启动轻量 HTTP 服务并访问 `http://localhost:8080/index.html`，保证文件 API 可用。
+- 一键启动（后端 + 静态页）：macOS/Linux 运行 `./start.sh`，Windows 运行 `start.bat`。可用环境变量：`APP_DB_FILE`、`API_HOST`、`API_PORT`、`ADMIN_USER`、`ADMIN_PASS`、`DEFAULT_USER_PASS`、`RELOAD`。
 - `node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js`：快速语法检查，避免旧浏览器报错。
 - 数据库（本地）：后端默认使用 `data/app.db`（正式）。任何测试/造数必须使用测试库（如 `data/apitest.db`），启动示例：`APP_DB_FILE=apitest.db uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080`。
 - 若需要 GUI 预览，也可使用 `npx serve` 等静态服务器；新增工具务必在此文件补充说明。

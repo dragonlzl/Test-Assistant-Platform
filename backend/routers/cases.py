@@ -338,6 +338,7 @@ def import_case_file(
         detail={
             "project_id": project.id,
             "file_name": case_file.file_name_clean,
+            "source": payload.source,
             "overwrite": bool(exists and overwrite),
             "prev_version_id": prev_version_id,
             "linked_exec_sets": int(linked_exec_sets or 0),

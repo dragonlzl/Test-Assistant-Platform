@@ -443,7 +443,7 @@
         // 管理类页面/执行页需要自己的顶部导航，隐藏默认“AI一键步骤”导航栏。
         dom.flowNav.classList.toggle(
           'hidden',
-          name === 'tempexec' || name === 'project-admin' || name === 'user-admin' || name === 'exec-overview' || name === 'case-library' || name === 'case-archive'
+          name === 'tempexec' || name === 'project-admin' || name === 'user-admin' || name === 'exec-overview' || name === 'case-library' || name === 'case-archive' || name === 'ops-log'
         );
       }
       if (dom.tempexecFlowNav) {

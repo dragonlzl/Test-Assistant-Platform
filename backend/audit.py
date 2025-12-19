@@ -1,9 +1,42 @@
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from contextvars import ContextVar
 from sqlalchemy.orm import Session
 
 from . import models
+
+_op_page_var: ContextVar[Optional[str]] = ContextVar("tap_op_page", default=None)
+_op_batch_var: ContextVar[Optional[bool]] = ContextVar("tap_op_batch", default=None)
+
+
+def set_operation_context(page: Optional[str] = None, batch: Optional[bool] = None):
+    token_page = _op_page_var.set(page.strip() if page else None)
+    token_batch = _op_batch_var.set(bool(batch) if batch is not None else None)
+    return token_page, token_batch
+
+
+def reset_operation_context(tokens):
+    if not tokens:
+        return
+    try:
+        token_page, token_batch = tokens
+    except Exception:
+        return
+    try:
+        _op_page_var.reset(token_page)
+    except Exception:
+        pass
+    try:
+        _op_batch_var.reset(token_batch)
+    except Exception:
+        pass
+
+
+def _get_operation_context():
+    page = _op_page_var.get()
+    batch = _op_batch_var.get()
+    return page, batch
 
 
 def log_operation(
@@ -15,6 +48,20 @@ def log_operation(
     result: str = "success",
     detail: Optional[Any] = None,
 ) -> models.OperationLog:
+    page, batch = _get_operation_context()
+    if page and detail is None:
+        detail = {"page": page}
+    elif page and isinstance(detail, dict):
+        merged = dict(detail)
+        if "page" not in merged:
+            merged["page"] = page
+        detail = merged
+    if batch is True and isinstance(detail, dict):
+        merged2 = dict(detail)
+        if "batch" not in merged2:
+            merged2["batch"] = True
+        detail = merged2
+
     entry = models.OperationLog(
         user_id=user_id,
         action=action,

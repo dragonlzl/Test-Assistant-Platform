@@ -7,20 +7,15 @@
 
   var STORAGE_KEY = appConfig.opsLogViewStorageKey || 'tap-ops-log-view-v1';
 
-  var BEHAVIORS = [
+  var TARGETS = [
     { key: 'all', label: '全部' },
-    { key: 'login', label: '登录' },
-    { key: 'logout', label: '退出登录' },
-    { key: 'view', label: '查看' },
-    { key: 'create', label: '新增' },
-    { key: 'delete', label: '删除' },
-    { key: 'update', label: '修改' },
-    { key: 'archive', label: '归档' },
-    { key: 'import', label: '导入' },
-    { key: 'export', label: '导出' },
-    { key: 'export_template', label: '导出模板' },
-    { key: 'to_exec', label: '转执行' },
-    { key: 'other', label: '其他' },
+    { key: 'platform', label: '系统平台' },
+    { key: 'case', label: '用例' },
+    { key: 'case_item', label: '用例（子项）' },
+    { key: 'case_template', label: '用例模版' },
+    { key: 'project', label: '项目' },
+    { key: 'version', label: '版本' },
+    { key: 'user', label: '人员' },
   ];
 
   var state = {
@@ -29,7 +24,7 @@
     logs: [],
     pageIndex: 0,
     selectedUserId: '',
-    selectedBehaviors: { all: true },
+    selectedTargets: { all: true },
     hasViewed: false,
     pendingAuth: false,
     loading: false,
@@ -43,7 +38,7 @@
     drawerRefreshBtn: document.getElementById('opsLogDrawerRefreshBtn'),
     drawerStatusEl: document.getElementById('opsLogDrawerStatus'),
     userSelect: document.getElementById('opsLogUserSelect'),
-    behaviorGrid: document.getElementById('opsLogActionFilterGrid'),
+    targetGrid: document.getElementById('opsLogTargetFilterGrid'),
     paginationTop: document.getElementById('opsLogPaginationTop'),
     paginationBottom: document.getElementById('opsLogPaginationBottom'),
     tableBody: document.getElementById('opsLogDrawerTableBody'),
@@ -107,6 +102,10 @@
     }
   }
 
+  function normalizeAction(value) {
+    return String(value || '').trim().toLowerCase();
+  }
+
   function canView() {
     return globalState && globalState.currentUser && String(globalState.currentUser.role || '') === 'admin';
   }
@@ -118,10 +117,10 @@
 
   function persistViewState() {
     if (!storage || typeof storage.setJson !== 'function') return;
-    var selected = getSelectedBehaviorKeys();
+    var selected = getSelectedTargetKeys();
     var payload = {
       userId: state.selectedUserId || '',
-      behaviors: selected,
+      targets: selected,
       pageIndex: Number(state.pageIndex) || 0,
       hasViewed: Boolean(state.hasViewed),
       savedAt: Date.now(),
@@ -135,48 +134,17 @@
     state.selectedUserId = saved.userId ? String(saved.userId || '') : '';
     state.pageIndex = Number(saved.pageIndex) || 0;
     state.hasViewed = Boolean(saved.hasViewed);
-    state.selectedBehaviors = { all: true };
-    var list = Array.isArray(saved.behaviors) ? saved.behaviors : [];
+    state.selectedTargets = { all: true };
+    // 兼容：旧版字段为 behaviors（操作行为筛选），新版为 targets（操作对象筛选）。
+    var list = Array.isArray(saved.targets) ? saved.targets : [];
     if (list.length) {
-      state.selectedBehaviors = { all: false };
+      state.selectedTargets = { all: false };
       list.forEach(function(key) {
         if (!key) return;
-        state.selectedBehaviors[String(key)] = true;
+        state.selectedTargets[String(key)] = true;
       });
-      syncAllBehaviorSelection();
+      syncAllTargetSelection();
     }
-  }
-
-  function resolveBehaviorKey(action) {
-    var a = String(action || '').trim().toLowerCase();
-    if (!a) return 'other';
-    if (a === 'login') return 'login';
-    if (a === 'logout') return 'logout';
-    if (a.indexOf('view_') === 0) return 'view';
-    if (a.indexOf('export_case_template') === 0) return 'export_template';
-    if (a.indexOf('export_template') === 0) return 'export_template';
-    if (a === 'upsert_exec_set_from_case_file') return 'to_exec';
-    if (a.indexOf('archive') !== -1) return 'archive';
-    if (a.indexOf('export') === 0) return 'export';
-    if (a.indexOf('import') === 0) return 'import';
-    if (a.indexOf('overwrite') === 0) return 'import';
-    if (a.indexOf('append') === 0) return 'import';
-    if (a === 'add_exec_cases') return 'import';
-    if (a.indexOf('delete') === 0) return 'delete';
-    if (a.indexOf('create') === 0) return 'create';
-    if (a.indexOf('update') === 0) return 'update';
-    if (a.indexOf('change') === 0) return 'update';
-    if (a.indexOf('reset') === 0) return 'update';
-    if (a.indexOf('assign') === 0) return 'update';
-    return 'other';
-  }
-
-  function getBehaviorLabel(key) {
-    var k = String(key || '');
-    for (var i = 0; i < BEHAVIORS.length; i += 1) {
-      if (BEHAVIORS[i].key === k) return BEHAVIORS[i].label;
-    }
-    return k || '--';
   }
 
   function isAutoOperation(log) {
@@ -218,73 +186,115 @@
   function buildTargetLabel(log) {
     var l = log && typeof log === 'object' ? log : null;
     if (!l) return '--';
-    var type = String(l.target_type || '').trim();
+    var type = normalizeAction(l.target_type);
     var id = (l.target_id || l.target_id === 0) ? String(l.target_id) : '';
     var detail = l.detail && typeof l.detail === 'object' ? l.detail : {};
-    var action = String(l.action || '').trim().toLowerCase();
+    var action = normalizeAction(l.action);
 
-    if (type === 'auth') return '平台系统';
-    if (type === 'settings') {
-      var items = detail && Array.isArray(detail.items) ? detail.items : [];
-      var labels = items.map(function(it) { return formatSettingsItemLabel(it); }).filter(Boolean);
-      if (!labels.length) {
-        var keys = detail && Array.isArray(detail.keys) ? detail.keys : [];
-        labels = keys.map(function(k) { return getSettingsKeyLabel(k); }).filter(Boolean);
-      }
-      if (labels.length) return '其他设置：' + labels.join('、');
-      return '其他设置';
-    }
-    if (type === 'model_config' || type === 'models') return '模型管理';
-    if (type === 'feature_assignment' || type === 'features') return '功能指派';
-    if (type === 'case_template') return '用例模板';
+    // 系统平台
+    if (action === 'login' || action === 'logout' || action === 'change_password') return '系统平台';
 
-    if (type === 'case_file') {
-      var fileName = String(detail.file_name || detail.file_name_clean || '').trim();
-      if (fileName) return '用例文件：' + fileName;
-      return id ? ('用例文件#' + id) : '用例文件';
+    // 解散归档占位（执行页版本盒子）
+    if (action === 'dissolve_exec_archived_placeholders') {
+      var projName0 = String(detail.project_name || '').trim();
+      var verName0 = String(detail.version_name || detail.name || '').trim();
+      var label0 = (projName0 || verName0) ? (projName0 + verName0) : '';
+      var cnt0 = Number(detail.count);
+      if (!Number.isFinite(cnt0) || cnt0 <= 0) cnt0 = 0;
+      if (label0) return '用例：归档占位（' + label0 + '）';
+      if (cnt0) return '用例：归档占位（' + cnt0 + ' 份）';
+      return '用例：归档占位';
     }
-    if (type === 'case_item') {
-      var fileName2 = String(detail.file_name || detail.file_name_clean || '').trim();
-      if (fileName2) return '用例文件：' + fileName2;
-      var caseFileId = (detail.case_file_id || detail.case_file_id === 0) ? String(detail.case_file_id) : '';
-      if (caseFileId) return '用例文件#' + caseFileId;
-      return '用例文件';
-    }
-    if (type === 'exec_set') {
-      if (action === 'upsert_exec_set_from_case_file' || action === 'sync_exec_set_from_case_file') {
-        var fileName3 = String(detail.case_file_name || detail.file_name || detail.file_name_clean || '').trim();
-        if (fileName3) return '用例文件：' + fileName3;
-      }
-      var execName = String(detail.name || '').trim();
-      if (!execName) execName = String(detail.exec_set_name || '').trim();
-      if (execName) return '执行用例：' + execName;
-      return id ? ('执行用例#' + id) : '执行用例';
-    }
+
+    // 用例模版
+    if (type === 'case_template' || action.indexOf('export_case_template_') === 0) return '用例模版';
+
+    // 人员
     if (type === 'user') {
       var userName = String(detail.username || '').trim();
       if (userName) return '人员：' + userName;
-      return id ? ('用户#' + id) : '人员';
+      return id ? ('人员#' + id) : '人员';
     }
+
+    // 项目
     if (type === 'project') {
-      var projectName = String(detail.name || '').trim();
+      var projectName = String(detail.name || detail.project_name || '').trim();
       if (projectName) return '项目：' + projectName;
       return id ? ('项目#' + id) : '项目';
     }
-    if (type === 'project_version') {
-      var versionName = String(detail.name || '').trim();
+
+    // 新增版本：倾向展示为“项目”，便于在项目维度回溯。
+    if (action === 'create_version') {
+      var projectId = (detail.project_id || detail.project_id === 0) ? String(detail.project_id) : '';
+      var projName = String(detail.project_name || '').trim();
+      var verName = String(detail.name || '').trim();
+      var base = projName ? ('项目：' + projName) : (projectId ? ('项目#' + projectId) : '项目');
+      if (verName) return base + '（版本：' + verName + '）';
+      return base;
+    }
+
+    // 版本
+    if (type === 'project_version' || action === 'delete_version') {
+      var projectName2 = String(detail.project_name || '').trim();
+      var versionName = String(detail.version_name || detail.name || '').trim();
+      if (action === 'delete_version' && (projectName2 || versionName)) {
+        return '版本 ' + (projectName2 + versionName);
+      }
       if (versionName) return '版本：' + versionName;
       return id ? ('版本#' + id) : '版本';
+    }
+
+    // 用例（子项）：优先用 action 判断，避免 create_case_item 的 target_type=case_file 导致误判。
+    if (
+      action === 'update_case_item' ||
+      action === 'create_case_item' ||
+      action === 'delete_case_item' ||
+      action === 'batch_create_case_items' ||
+      action === 'batch_delete_case_items'
+    ) {
+      var fileNameChild = String(detail.file_name || detail.case_file_name || detail.file_name_clean || '').trim();
+      if (fileNameChild) return '用例：' + fileNameChild + '（子项）';
+      var cfid = (detail.case_file_id || detail.case_file_id === 0) ? String(detail.case_file_id) : '';
+      if (cfid) return '用例#' + cfid + '（子项）';
+      return id ? ('用例#' + id + '（子项）') : '用例（子项）';
+    }
+
+    // 用例（文件）
+    if (type === 'case_file') {
+      var fileName = String(detail.file_name || detail.file_name_clean || '').trim();
+      if (fileName) return '用例：' + fileName;
+      var fileNames = Array.isArray(detail.file_names) ? detail.file_names : [];
+      fileNames = fileNames.map(function(v) { return String(v || '').trim(); }).filter(Boolean);
+      if (fileNames.length) {
+        var shown = fileNames.slice(0, 3);
+        var suffix = fileNames.length > shown.length ? (' 等（' + fileNames.length + ' 份）') : '';
+        return '用例：' + shown.join('、') + suffix;
+      }
+      return id ? ('用例#' + id) : '用例';
+    }
+    if (type === 'case_item') {
+      var fileName2 = String(detail.file_name || detail.file_name_clean || '').trim();
+      if (fileName2) return '用例：' + fileName2;
+      var caseFileId = (detail.case_file_id || detail.case_file_id === 0) ? String(detail.case_file_id) : '';
+      if (caseFileId) return '用例#' + caseFileId;
+      return '用例';
+    }
+    if (type === 'exec_set') {
+      var fileName3 = String(detail.case_file_name || detail.file_name || detail.file_name_clean || '').trim();
+      if (!fileName3) fileName3 = String(detail.exec_set_name || detail.name || '').trim();
+      if (fileName3) return '用例：' + fileName3;
+      return id ? ('用例#' + id) : '用例';
     }
 
     if (type) return id ? (type + '#' + id) : type;
     return id ? ('#' + id) : '--';
   }
 
-  function getSelectedBehaviorKeys() {
+  function getSelectedTargetKeys() {
     var keys = [];
-    var selected = state.selectedBehaviors || {};
+    var selected = state.selectedTargets || {};
     if (selected.all) return [];
-    BEHAVIORS.forEach(function(b) {
+    TARGETS.forEach(function(b) {
       if (!b || b.key === 'all') return;
       if (selected[b.key]) keys.push(b.key);
     });
@@ -293,26 +303,26 @@
     return keys;
   }
 
-  function syncAllBehaviorSelection() {
-    var selected = state.selectedBehaviors || {};
+  function syncAllTargetSelection() {
+    var selected = state.selectedTargets || {};
     var any = false;
-    for (var i = 0; i < BEHAVIORS.length; i += 1) {
-      var key = BEHAVIORS[i].key;
+    for (var i = 0; i < TARGETS.length; i += 1) {
+      var key = TARGETS[i].key;
       if (key === 'all') continue;
       if (selected[key]) {
         any = true;
         break;
       }
     }
-    // 未选任何具体行为：回到“全部”。
+    // 未选任何具体对象：回到“全部”。
     if (!any) {
-      state.selectedBehaviors = { all: true };
+      state.selectedTargets = { all: true };
       return;
     }
-    // 选中了全部具体行为：也视为“全部”。
+    // 选中了全部具体对象：也视为“全部”。
     var allSelected = true;
-    for (var j = 0; j < BEHAVIORS.length; j += 1) {
-      var key2 = BEHAVIORS[j].key;
+    for (var j = 0; j < TARGETS.length; j += 1) {
+      var key2 = TARGETS[j].key;
       if (key2 === 'all') continue;
       if (!selected[key2]) {
         allSelected = false;
@@ -320,9 +330,9 @@
       }
     }
     if (allSelected) {
-      state.selectedBehaviors = { all: true };
+      state.selectedTargets = { all: true };
     } else {
-      state.selectedBehaviors.all = false;
+      state.selectedTargets.all = false;
     }
   }
 
@@ -341,15 +351,17 @@
     if (dom.userSelect.value !== active) dom.userSelect.value = active;
   }
 
-  function syncBehaviorGrid() {
-    if (!dom.behaviorGrid) return;
-    var selected = state.selectedBehaviors || { all: true };
-    dom.behaviorGrid.innerHTML = BEHAVIORS.map(function(b) {
+  function syncTargetGrid() {
+    if (!dom.targetGrid) return;
+    var selected = state.selectedTargets || { all: true };
+    dom.targetGrid.innerHTML = TARGETS.map(function(b) {
       var key = b.key;
-      var checked = selected.all ? ' checked' : (selected[key] ? ' checked' : '');
+      var checked = '';
+      if (selected.all) checked = key === 'all' ? ' checked' : '';
+      else checked = selected[key] ? ' checked' : '';
       return (
         '<label class="ops-log-filter-chip">' +
-          '<input type="checkbox" data-ops-log-behavior="' + escapeHtml(key) + '"' + checked + ' />' +
+          '<input type="checkbox" data-ops-log-target="' + escapeHtml(key) + '"' + checked + ' />' +
           '<span>' + escapeHtml(b.label) + '</span>' +
         '</label>'
       );
@@ -385,18 +397,229 @@
     );
   }
 
+  function resolveLogTargetKeys(log) {
+    var l = log && typeof log === 'object' ? log : null;
+    if (!l) return [];
+    var action = normalizeAction(l.action);
+    if (!action) return [];
+
+    // 系统平台
+    if (action === 'login' || action === 'logout' || action === 'change_password') return ['platform'];
+
+    // 用例模版
+    if (action.indexOf('export_case_template_') === 0) return ['case_template'];
+
+    // 用例（文件）
+    if (
+      action === 'import_case_file' ||
+      action === 'overwrite_case_file' ||
+      action === 'delete_case_file' ||
+      action === 'append_case_items' ||
+      action === 'create_exec_set' ||
+      action === 'upsert_exec_set_from_case_file' ||
+      action === 'archive_exec_set' ||
+      action === 'delete_exec_set' ||
+      action === 'delete_exec_archive' ||
+      action === 'dissolve_exec_archived_placeholders' ||
+      action === 'export_case_files_xmind' ||
+      action === 'export_case_files_excel' ||
+      action === 'export_exec_xmind' ||
+      action === 'export_exec_snapshot' ||
+      action === 'export_cases_xmind'
+    ) {
+      return ['case'];
+    }
+
+    // 用例（子项）
+    if (
+      action === 'update_case_item' ||
+      action === 'create_case_item' ||
+      action === 'delete_case_item' ||
+      action === 'batch_create_case_items' ||
+      action === 'batch_delete_case_items'
+    ) {
+      return ['case_item'];
+    }
+
+    // 项目/版本
+    if (action === 'create_project' || action === 'delete_project') return ['project'];
+    if (action === 'create_version') return ['project', 'version'];
+    if (action === 'delete_version') return ['version'];
+
+    // 人员
+    if (
+      action === 'create_user' ||
+      action === 'delete_user' ||
+      action === 'update_user' ||
+      action === 'assign_projects' ||
+      action === 'reset_password'
+    ) {
+      return ['user'];
+    }
+
+    return [];
+  }
+
+  function resolveActionLabel(log) {
+    var l = log && typeof log === 'object' ? log : null;
+    if (!l) return '';
+    var action = normalizeAction(l.action);
+    var detail = l.detail && typeof l.detail === 'object' ? l.detail : {};
+
+    // 系统平台
+    if (action === 'login') return '登录';
+    if (action === 'logout') return '登出';
+    if (action === 'change_password') return '修改密码';
+
+    // 用例（文件）
+    if (action === 'import_case_file') {
+      var source = String(detail.source || '').trim();
+      if (detail && detail.overwrite === true) return '覆盖入库';
+      if (source === 'tempexec') return '执行页面入库';
+      return '用例库页面入库';
+    }
+    if (action === 'overwrite_case_file') return '覆盖入库';
+    if (action === 'delete_case_file') return '删除';
+    if (action === 'append_case_items') return '追加';
+    if (action === 'create_exec_set') return '执行页面入库';
+    if (action === 'upsert_exec_set_from_case_file') return '转执行';
+    if (action === 'archive_exec_set') return '归档';
+    if (action === 'delete_exec_set') return '直接解散';
+    if (action === 'delete_exec_archive') return '删除归档';
+    if (action === 'dissolve_exec_archived_placeholders') return '解散归档';
+    if (action === 'export_case_files_xmind') return '导出xmind';
+    if (action === 'export_case_files_excel') return '导出excel';
+    if (action === 'export_cases_xmind') return '导出xmind';
+    if (action === 'export_exec_xmind') return '导出xmind（含结果）';
+    if (action === 'export_exec_snapshot') return '导出excel（含结果）';
+
+    // 用例（子项）
+    if (action === 'batch_create_case_items') return '批量新增';
+    if (action === 'batch_delete_case_items') return '批量删除';
+    if (action === 'create_case_item') return detail && detail.batch === true ? '' : '新增';
+    if (action === 'update_case_item') return '修改';
+    if (action === 'delete_case_item') return detail && detail.batch === true ? '' : '删除';
+
+    // 用例模版
+    if (action === 'export_case_template_xmind') return '导出xmind';
+    if (action === 'export_case_template_excel') return '导出excel';
+
+    // 项目
+    if (action === 'create_project') return '新增';
+    if (action === 'delete_project') return '删除';
+
+    // 版本
+    if (action === 'create_version') {
+      var selected = state.selectedTargets || { all: true };
+      // 默认更贴近“项目维度”的描述：新增版本；当明确只看“版本”时，使用“新增”。
+      if (!selected.all && selected.version && !selected.project) return '新增';
+      return '新增版本';
+    }
+    if (action === 'delete_version') return '删除';
+
+    // 人员
+    if (action === 'create_user') return '新增';
+    if (action === 'delete_user') return '删除';
+    if (action === 'update_user') return '编辑';
+    if (action === 'assign_projects') return '分配权限';
+    if (action === 'reset_password') return '重置密码';
+
+    return '';
+  }
+
+  function isAllowedLog(log) {
+    return Boolean(resolveActionLabel(log));
+  }
+
+  function resolvePageLabel(log) {
+    var l = log && typeof log === 'object' ? log : null;
+    if (!l) return '--';
+    var detail = l.detail && typeof l.detail === 'object' ? l.detail : {};
+    var raw = String(detail.page || '').trim();
+    var action = normalizeAction(l.action);
+
+    function fromTabKey(key) {
+      var k = String(key || '').trim();
+      if (!k) return '';
+      if (k === 'tempexec') return '用例执行';
+      if (k === 'case-library') return '用例库';
+      if (k === 'case-archive') return '用例归档';
+      if (k === 'exec-overview') return '执行总览';
+      if (k === 'project-admin') return '项目管理';
+      if (k === 'user-admin') return '人员管理';
+      if (k === 'ops-log') return '操作记录';
+      if (k === 'settings') return '其他配置';
+      if (k === 'models') return '模型管理';
+      if (k === 'assign') return '功能指派';
+      if (k === 'casesgen') return '用例生成';
+      if (k === 'auto') return 'AI一键需求&用例评审';
+      if (k === 'clean') return '功能工作流';
+      if (k === 'login') return '系统平台';
+      return k;
+    }
+
+    var fromDetail = fromTabKey(raw);
+    if (fromDetail) return fromDetail;
+
+    // 兜底：老日志缺少 page 时按 action 推断
+    if (action === 'login' || action === 'logout' || action === 'change_password') return '系统平台';
+    if (
+      action === 'create_user' ||
+      action === 'delete_user' ||
+      action === 'update_user' ||
+      action === 'assign_projects' ||
+      action === 'reset_password'
+    ) {
+      return '人员管理';
+    }
+    if (
+      action === 'create_project' ||
+      action === 'delete_project' ||
+      action === 'create_version' ||
+      action === 'delete_version'
+    ) {
+      return '项目管理';
+    }
+    if (action === 'delete_exec_archive') return '用例归档';
+    if (
+      action === 'archive_exec_set' ||
+      action === 'delete_exec_set' ||
+      action === 'export_exec_xmind' ||
+      action === 'export_exec_snapshot' ||
+      action === 'export_cases_xmind' ||
+      action === 'dissolve_exec_archived_placeholders'
+    ) {
+      return '用例执行';
+    }
+    if (action === 'import_case_file' || action === 'overwrite_case_file') {
+      var source = String(detail.source || '').trim();
+      if (source === 'tempexec') return '用例执行';
+      return '用例库';
+    }
+    if (action.indexOf('export_case_template_') === 0) return '用例库';
+    if (action === 'export_case_files_xmind' || action === 'export_case_files_excel') return '用例库';
+    if (action.indexOf('batch_') === 0) return '用例库';
+    if (action.indexOf('_case_item') !== -1) return '用例库';
+
+    return '--';
+  }
+
   function getFilteredLogs() {
     var list = Array.isArray(state.logs) ? state.logs : [];
-    var selected = state.selectedBehaviors || { all: true };
+    list = list.filter(isAllowedLog);
+    var selected = state.selectedTargets || { all: true };
     if (selected.all) return list;
     var allow = {};
-    BEHAVIORS.forEach(function(b) {
+    TARGETS.forEach(function(b) {
       if (!b || b.key === 'all') return;
       if (selected[b.key]) allow[b.key] = true;
     });
     return list.filter(function(log) {
-      var key = resolveBehaviorKey(log && log.action ? log.action : '');
-      return Boolean(allow[key] || allow.other && key === 'other');
+      var keys = resolveLogTargetKeys(log);
+      for (var i = 0; i < keys.length; i += 1) {
+        if (allow[keys[i]]) return true;
+      }
+      return false;
     });
   }
 
@@ -423,13 +646,13 @@
     setPagination(buildPagination(total, state.pageIndex, totalPages, start, end));
     dom.tableBody.innerHTML = view.map(function(log) {
       var operator = log && (log.username || log.user_id) ? String(log.username || log.user_id) : '--';
-      var behaviorKey = resolveBehaviorKey(log && log.action ? log.action : '');
       return (
         '<tr>' +
           '<td>' + escapeHtml(formatTime(log.created_at)) + '</td>' +
           '<td>' + escapeHtml(operator) + '</td>' +
+          '<td>' + escapeHtml(resolvePageLabel(log)) + '</td>' +
           '<td>' + escapeHtml(buildTargetLabel(log)) + '</td>' +
-          '<td>' + escapeHtml(getBehaviorLabel(behaviorKey)) + '</td>' +
+          '<td>' + escapeHtml(resolveActionLabel(log) || '--') + '</td>' +
         '</tr>'
       );
     }).join('');
@@ -475,7 +698,8 @@
         state.logs = (Array.isArray(list) ? list : []).filter(function(row) { return !isAutoOperation(row); });
         state.pageIndex = 0;
         renderList();
-        setStatus(dom.drawerStatusEl, '已加载 ' + state.logs.length + ' 条记录（最多 500 条）', 'ok');
+        var allowedCount = state.logs.filter(isAllowedLog).length;
+        setStatus(dom.drawerStatusEl, '已加载 ' + allowedCount + ' 条记录（最多 500 条）', 'ok');
         return state.logs;
       })
       .catch(function(err) {
@@ -501,7 +725,7 @@
         state.hasViewed = true;
         persistViewState();
         setStatus(dom.drawerStatusEl, '加载中...', '');
-        syncBehaviorGrid();
+        syncTargetGrid();
         loadUsers().then(function() {
           syncUserSelect();
           return loadLogs();
@@ -534,34 +758,30 @@
         loadLogs();
       });
     }
-    if (dom.behaviorGrid) {
-      dom.behaviorGrid.addEventListener('change', function(e) {
+    if (dom.targetGrid) {
+      dom.targetGrid.addEventListener('change', function(e) {
         var t = e && e.target ? e.target : null;
-        var key = t && t.dataset ? String(t.dataset.opsLogBehavior || '') : '';
+        var key = t && t.dataset ? String(t.dataset.opsLogTarget || '') : '';
         if (!key) return;
         if (key === 'all') {
-          state.selectedBehaviors = { all: Boolean(t.checked) };
-          if (!t.checked) state.selectedBehaviors = { all: true };
-          syncBehaviorGrid();
+          state.selectedTargets = { all: Boolean(t.checked) };
+          if (!t.checked) state.selectedTargets = { all: true };
+          syncTargetGrid();
           state.pageIndex = 0;
           persistViewState();
           renderList();
           return;
         }
-        if (!state.selectedBehaviors || typeof state.selectedBehaviors !== 'object') state.selectedBehaviors = { all: true };
-        if (state.selectedBehaviors.all) {
+        if (!state.selectedTargets || typeof state.selectedTargets !== 'object') state.selectedTargets = { all: true };
+        if (state.selectedTargets.all) {
           var next = { all: false };
-          BEHAVIORS.forEach(function(b) {
-            if (!b || b.key === 'all') return;
-            next[b.key] = true;
-          });
           next[key] = Boolean(t.checked);
-          state.selectedBehaviors = next;
+          state.selectedTargets = next;
         } else {
-          state.selectedBehaviors[key] = Boolean(t.checked);
+          state.selectedTargets[key] = Boolean(t.checked);
         }
-        syncAllBehaviorSelection();
-        syncBehaviorGrid();
+        syncAllTargetSelection();
+        syncTargetGrid();
         state.pageIndex = 0;
         persistViewState();
         renderList();
@@ -637,7 +857,7 @@
 
     restoreViewState();
     ensureDrawer();
-    syncBehaviorGrid();
+    syncTargetGrid();
     bindEvents();
 
     if (!canView()) {

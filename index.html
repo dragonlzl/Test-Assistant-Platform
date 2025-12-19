@@ -268,7 +268,7 @@
   <div class="tempexec-head hidden" data-tab-section="ops-log" data-role="admin-only" id="opsLogHead">
     <div class="flow" id="opsLogFlowNav">
       <div class="flow-title">操作记录导航</div>
-      <p class="hint" style="margin:0 0 6px;">用于查看人员在平台内的关键操作记录，支持按人员/行为筛选。</p>
+      <p class="hint" style="margin:0 0 6px;">用于查看人员在平台内的关键操作记录，支持按人员/操作对象筛选。</p>
       <div class="nav-entry-grid">
         <button class="nav-entry-card nav-entry-view" id="openOpsLogDrawerBtn" type="button">
           <span class="nav-entry-icon" aria-hidden="true">
@@ -282,7 +282,7 @@
           </span>
           <span class="nav-entry-text">
             <span class="nav-entry-title">查看记录</span>
-            <span class="nav-entry-desc">按人员/操作行为筛选并分页查看</span>
+            <span class="nav-entry-desc">按人员/操作对象筛选并分页查看</span>
           </span>
         </button>
       </div>
@@ -2432,8 +2432,8 @@
             <span class="status" id="opsLogDrawerStatus"></span>
           </div>
           <div class="ops-log-filters">
-            <div class="ops-log-filter-title">操作行为</div>
-            <div class="ops-log-filter-grid" id="opsLogActionFilterGrid"></div>
+            <div class="ops-log-filter-title">操作对象</div>
+            <div class="ops-log-filter-grid" id="opsLogTargetFilterGrid"></div>
           </div>
           <div id="opsLogPaginationTop"></div>
           <div class="admin-table-wrapper" style="margin-top:10px;">
@@ -2442,6 +2442,7 @@
                 <tr>
                   <th>操作时间</th>
                   <th>操作人员</th>
+                  <th>操作页面</th>
                   <th>操作项</th>
                   <th>操作行为</th>
                 </tr>

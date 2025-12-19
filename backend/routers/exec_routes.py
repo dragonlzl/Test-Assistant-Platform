@@ -244,6 +244,16 @@ def delete_exec_set(
     target_id = exec_set.id
     project_id = exec_set.project_id
     name = exec_set.name
+    case_file_id = exec_set.case_file_id
+    case_file_name = None
+    if case_file_id:
+        case_file = (
+            db.query(models.CaseFile)
+            .filter(models.CaseFile.id == int(case_file_id))
+            .first()
+        )
+        if case_file:
+            case_file_name = str(case_file.file_name_clean or "") or None
     db.delete(exec_set)
     log_operation(
         db=db,
@@ -251,7 +261,12 @@ def delete_exec_set(
         action="delete_exec_set",
         target_type="exec_set",
         target_id=target_id,
-        detail={"project_id": project_id, "name": name},
+        detail={
+            "project_id": project_id,
+            "name": name,
+            "case_file_id": (int(case_file_id) if case_file_id else None),
+            "case_file_name": case_file_name,
+        },
     )
     db.commit()
     return {"status": "ok"}
@@ -352,6 +367,15 @@ def archive_exec_set(
         exec_set.archived_reason = reason if reason else None
         exec_set.updated_at = now
         db.add(exec_set)
+        case_file_name = None
+        if exec_set.case_file_id:
+            case_file = (
+                db.query(models.CaseFile)
+                .filter(models.CaseFile.id == int(exec_set.case_file_id))
+                .first()
+            )
+            if case_file:
+                case_file_name = str(case_file.file_name_clean or "") or None
         log_operation(
             db=db,
             user_id=user.id,
@@ -361,6 +385,8 @@ def archive_exec_set(
             detail={
                 "project_id": exec_set.project_id,
                 "name": exec_set.name,
+                "case_file_id": (int(exec_set.case_file_id) if exec_set.case_file_id else None),
+                "case_file_name": case_file_name,
                 "counts": counts,
                 "reason": (reason if reason else None),
             },
@@ -2425,6 +2451,16 @@ def delete_exec_archive(
     target_id = exec_set.id
     project_id = exec_set.project_id
     name = exec_set.name
+    case_file_id = exec_set.case_file_id
+    case_file_name = None
+    if case_file_id:
+        case_file = (
+            db.query(models.CaseFile)
+            .filter(models.CaseFile.id == int(case_file_id))
+            .first()
+        )
+        if case_file:
+            case_file_name = str(case_file.file_name_clean or "") or None
     db.delete(exec_set)
     log_operation(
         db=db,
@@ -2432,7 +2468,12 @@ def delete_exec_archive(
         action="delete_exec_archive",
         target_type="exec_set",
         target_id=target_id,
-        detail={"project_id": project_id, "name": name},
+        detail={
+            "project_id": project_id,
+            "name": name,
+            "case_file_id": (int(case_file_id) if case_file_id else None),
+            "case_file_name": case_file_name,
+        },
     )
     db.commit()
     return {"status": "ok"}

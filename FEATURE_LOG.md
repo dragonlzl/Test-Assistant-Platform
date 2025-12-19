@@ -1392,12 +1392,26 @@
 - 测试与验证：`node --check scripts/core/casesGenCore.js`（通过）；`npm run test:ui -- tests/ui/casegen_display_format.spec.js`（通过）。  
 
 - 功能名称：操作记录页面（管理员）增强：抽屉查看 + 筛选分页 + 前端操作留痕  
-- 功能描述：完善“操作记录”页面，仅管理员可见可用；顶部新增“操作记录导航”并提供【查看记录】入口，打开抽屉后以列表展示操作时间/操作人员/操作项/操作行为；支持按人员筛选、按操作行为平铺复选筛选（默认全部），分页每页条数复用“其他设置→全局分页设置”；补充 `POST /api/ops/event` 用于记录仅发生在前端的关键操作（如导出/导出模板/查看用例文件等），供管理员在操作记录中回溯；对系统自动同步类日志做隐藏处理，避免刷屏。  
-- 操作方式：进入“管理→操作记录”→点击顶部导航【查看记录】→在抽屉中选择人员/操作行为→翻页查看；导出用例文件（XMind/Excel）、导出执行 XMind、导出用例导入模板（Excel/XMind）、以及在用例库点击“查看&编辑”进入编辑视图时会写入操作记录。  
-- 使用效果：管理员可按人员/行为快速回溯关键操作（登录/登出/增删改/归档/导入/导出等），并与全局分页设置保持一致；导出类操作也可留痕。  
+- 功能描述：完善“操作记录”页面，仅管理员可见可用；顶部新增“操作记录导航”并提供【查看记录】入口，打开抽屉后以列表展示操作时间/操作人员/操作项/操作行为；支持按人员筛选、按操作对象平铺复选筛选（默认全部），分页每页条数复用“其他设置→全局分页设置”；并将“操作对象/操作行为”收敛为需求清单中列出的组合，未列出的行为暂不展示；对系统自动同步类日志做隐藏处理，避免刷屏。  
+- 操作方式：进入“管理→操作记录”→点击顶部导航【查看记录】→在抽屉中选择人员/操作对象→翻页查看；导出用例文件（XMind/Excel）、导出执行 XMind、导出用例导入模板（Excel/XMind）等会写入操作记录。  
+- 使用效果：管理员可按人员/对象快速回溯关键操作，并与全局分页设置保持一致；非需求范围的日志先隐藏，避免干扰排查。  
 - 新增内容/接口/组件：  
   - 后端：新增 `POST /api/ops/event`（`backend/routers/ops.py`、`backend/schemas.py`、`backend/audit.py`）；同步更新 API 文档（`API_DOC.md`）。  
   - 前端：操作记录顶部导航与抽屉列表（`index.html`、`scripts/modules/opsLog.js`、`style.css`）；前端导出操作自动写入日志（`services/apiClient.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`）。  
   - 测试：API 用例（`tests/api/ops_log.spec.js`）与 UI 用例（`tests/ui/ops_log.spec.js`）。  
 - 复用说明：复用既有 `operation_logs` 表与 `/api/ops` 管理员查询接口；分页条数复用“其他设置→全局分页设置（tempExecPageSize）”；抽屉交互复用通用 drawer 组件。  
 - 更新记录：2025-12-18 操作记录页增强上线（`backend/`、`services/apiClient.js`、`index.html`、`style.css`、`scripts/`、`tests/`、`API_DOC.md`）。  
+- 更新记录：2025-12-19 操作记录页筛选改为按操作对象平铺，并收敛展示对象/行为；操作记录导航置顶显示并隐藏默认“AI 一键步骤”导航（`index.html`、`scripts/modules/opsLog.js`、`scripts/core/appRuntime.js`、`backend/routers/cases.py`、`backend/routers/exec_routes.py`、`tests/ui/ops_log.spec.js`、`tests/api/ops_log.spec.js`）。  
+- 测试与验证：`node --check scripts/modules/opsLog.js`（通过）；`npm run test:ui -- tests/ui/ops_log.spec.js`（通过）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080 ...` 后执行 `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/ops_log.spec.js`（通过）。  
+
+- 功能名称：操作记录补齐操作页面/对象名称/行为文案  
+- 功能描述：操作记录列表新增并统一展示“操作页面”，补齐人员首次分配权限、重置密码、删除项目/版本、用例库导出等场景的对象名称；同名用例覆盖导入行为显示为“覆盖入库”；执行页版本盒子“解散归档”记录为“解散归档”，删除版本操作对象展示“版本 {项目名}{版本名}”。  
+- 操作方式：管理员进入“操作记录”→查看抽屉列表；在人员管理/项目管理/用例库/执行页完成相关操作后查看记录。  
+- 使用效果：操作记录字段更完整、行为更清晰，便于审计与回溯。  
+- 新增内容/接口/组件：  
+  - 后端：日志明细补齐（`backend/routers/ops.py`、`backend/routers/projects.py`）。  
+  - 前端：操作记录行为文案与导出文件名补齐（`scripts/modules/opsLog.js`、`scripts/modules/caseLibrary.js`）。  
+  - 测试：API/UI 用例更新（`tests/api/ops_log.spec.js`、`tests/ui/ops_log.spec.js`）。  
+- 复用说明：复用既有 `operation_logs` 表与 `/api/ops` 查询接口，不新增表结构。  
+- 测试与验证：`node --check scripts/modules/opsLog.js scripts/modules/caseLibrary.js`（通过）；`APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 18080` 后执行 `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/ops_log.spec.js`（通过）；`npm run test:ui -- tests/ui/ops_log.spec.js`（通过）。  
+- 更新记录：2025-12-19 操作记录补齐操作页面/对象名称/行为文案（`backend/`、`scripts/`、`tests/`）。  

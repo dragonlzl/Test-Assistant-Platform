@@ -63,6 +63,29 @@
     if (authToken) {
       headers.Authorization = 'Bearer ' + authToken;
     }
+    try {
+      var page = '';
+      if (typeof window !== 'undefined') {
+        if (window.app && window.app.state && window.app.state.activeTab) {
+          page = String(window.app.state.activeTab || '');
+        } else {
+          var path = window.location && window.location.pathname ? String(window.location.pathname) : '';
+          if (path && path.indexOf('login.html') !== -1) page = 'login';
+        }
+      }
+      if (page) headers['X-TAP-Page'] = page;
+    } catch (err) {
+      // ignore
+    }
+    return headers;
+  }
+
+  function buildHeadersWithOptions(options) {
+    var headers = buildHeaders();
+    var opts = options && typeof options === 'object' ? options : {};
+    if (opts.batch === true) {
+      headers['X-TAP-Batch'] = '1';
+    }
     return headers;
   }
 
@@ -266,10 +289,10 @@
     }).then(handleResponse);
   }
 
-  function createCaseItem(caseFileId, payload) {
+  function createCaseItem(caseFileId, payload, options) {
     return fetch('/api/case-files/' + caseFileId + '/items', {
       method: 'POST',
-      headers: buildHeaders(),
+      headers: buildHeadersWithOptions(options),
       body: JSON.stringify(payload || {}),
     }).then(handleResponse);
   }
@@ -282,10 +305,10 @@
     }).then(handleResponse);
   }
 
-  function deleteCaseItem(caseItemId) {
+  function deleteCaseItem(caseItemId, options) {
     return fetch('/api/case-files/items/' + caseItemId, {
       method: 'DELETE',
-      headers: buildHeaders(),
+      headers: buildHeadersWithOptions(options),
     }).then(handleResponse);
   }
 

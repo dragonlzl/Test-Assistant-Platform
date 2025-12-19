@@ -4,13 +4,14 @@
 
   var utils = window.app && window.app.utils ? window.app.utils : {};
 
-  function safeLogOperation(action, targetType, targetId, detail) {
+  function safeLogOperation(action, targetType, targetId, detail, result) {
     if (!apiClient || typeof apiClient.createOperationLogEvent !== 'function') return;
     try {
       apiClient.createOperationLogEvent({
         action: action,
         target_type: targetType,
         target_id: targetId,
+        result: result || undefined,
         detail: detail || null,
       }).catch(function() {
         // ignore
@@ -4157,7 +4158,11 @@
     var chain = Promise.resolve();
     files.forEach(function(f) {
       chain = chain.then(function() {
-        var baseName = f && f.file_name_clean ? String(f.file_name_clean) : ('用例#' + (f && f.id ? f.id : ''));
+        var fallbackName = '';
+        if (f) {
+          fallbackName = f.file_name_clean || f.file_name || f.name || '';
+        }
+        var baseName = fallbackName ? String(fallbackName) : ('用例#' + (f && f.id ? f.id : ''));
         return apiClient
           .listCaseItems(f.id)
           .then(function(items) { return builder(items || [], baseName, ''); })
@@ -4190,12 +4195,20 @@
       .then(function() {
         setStatus(dom.editDrawerStatus, '导出完成：成功 ' + success + ' 份，失败 ' + fail + ' 份', fail ? 'warn' : 'ok');
         if (success) {
+          var fileNames = files
+            .map(function(f) {
+              if (!f) return '';
+              return String(f.file_name_clean || f.file_name || f.name || '').trim();
+            })
+            .filter(Boolean);
           safeLogOperation('export_case_files_xmind', 'case_file', files.length === 1 ? files[0].id : null, {
             format: 'xmind',
             count: files.length,
             success: success,
             fail: fail,
             case_file_ids: files.map(function(f) { return f && f.id ? f.id : null; }).filter(function(v) { return v !== null; }),
+            file_name: files.length === 1 && fileNames.length ? fileNames[0] : null,
+            file_names: fileNames,
           });
         }
       })
@@ -4230,7 +4243,11 @@
     var chain = Promise.resolve();
     files.forEach(function(f) {
       chain = chain.then(function() {
-        var baseName = f && f.file_name_clean ? String(f.file_name_clean) : ('用例#' + (f && f.id ? f.id : ''));
+        var fallbackName = '';
+        if (f) {
+          fallbackName = f.file_name_clean || f.file_name || f.name || '';
+        }
+        var baseName = fallbackName ? String(fallbackName) : ('用例#' + (f && f.id ? f.id : ''));
         return apiClient
           .listCaseItems(f.id)
           .then(function(items) { return buildCaseLibraryExcelBlob(items || [], baseName); })
@@ -4262,12 +4279,20 @@
       .then(function() {
         setStatus(dom.editDrawerStatus, '导出完成：成功 ' + success + ' 份，失败 ' + fail + ' 份', fail ? 'warn' : 'ok');
         if (success) {
+          var fileNames = files
+            .map(function(f) {
+              if (!f) return '';
+              return String(f.file_name_clean || f.file_name || f.name || '').trim();
+            })
+            .filter(Boolean);
           safeLogOperation('export_case_files_excel', 'case_file', files.length === 1 ? files[0].id : null, {
             format: 'xlsx',
             count: files.length,
             success: success,
             fail: fail,
             case_file_ids: files.map(function(f) { return f && f.id ? f.id : null; }).filter(function(v) { return v !== null; }),
+            file_name: files.length === 1 && fileNames.length ? fileNames[0] : null,
+            file_names: fileNames,
           });
         }
       })
@@ -5783,7 +5808,7 @@
       }
 
       var promises = toDelete.map(function(entry) {
-        return settle(apiClient.deleteCaseItem(entry.id));
+        return settle(apiClient.deleteCaseItem(entry.id, { batch: true }));
       });
 
 	      Promise.all(promises).then(function(results) {
@@ -5791,6 +5816,19 @@
 	        for (var i = 0; i < results.length; i += 1) {
 	          if (results[i] && results[i].status === 'rejected') failures.push(toDelete[i]);
 	        }
+        safeLogOperation(
+          'batch_delete_case_items',
+          'case_item',
+          null,
+          {
+            case_file_id: file.id,
+            file_name: file.file_name_clean || '',
+            count: toDelete.length,
+            success: toDelete.length - failures.length,
+            fail: failures.length,
+          },
+          failures.length ? 'partial' : 'success'
+        );
 
         if (!failures.length) {
           setStatus(dom.editStatus, '批量删除已入库（' + toDelete.length + '条）', 'ok');
@@ -5867,7 +5905,7 @@
           remark: normalizeEditorText(item.remark) || null,
         };
 
-        return settle(apiClient.createCaseItem(file.id, payload).then(function(created) {
+        return settle(apiClient.createCaseItem(file.id, payload, { batch: true }).then(function(created) {
           if (!created) return created;
           ensureNonEnumerableKey(created, '__uiKey', uiKey || '');
           ed.items[entry.index] = created;
@@ -5881,6 +5919,19 @@
 	        for (var i = 0; i < results.length; i += 1) {
 	          if (results[i] && results[i].status === 'rejected') failures.push(entries[i]);
 	        }
+        safeLogOperation(
+          'batch_create_case_items',
+          'case_item',
+          null,
+          {
+            case_file_id: file.id,
+            file_name: file.file_name_clean || '',
+            count: entries.length,
+            success: entries.length - failures.length,
+            fail: failures.length,
+          },
+          failures.length ? 'partial' : 'success'
+        );
         if (!failures.length) {
           setStatus(dom.editStatus, '批量新增已入库（' + entries.length + '条）', 'ok');
           renderEditorTable();
