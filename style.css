@@ -2776,6 +2776,21 @@ body {
   color: #fff;
   border-color: var(--primary);
 }
+.tabs .tab-group-btn.hovering {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+.tabs .tab-group-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.tabs .tab-group-btn.active.hovering {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
 .tabs.vertical button::before {
   content: '◆';
   font-size: 10px;

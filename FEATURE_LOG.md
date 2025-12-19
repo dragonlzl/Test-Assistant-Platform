@@ -1416,3 +1416,4 @@
 - 测试与验证：`node --check scripts/modules/opsLog.js scripts/modules/caseLibrary.js`（通过）；`APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 18080` 后执行 `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/ops_log.spec.js`（通过）；`npm run test:ui -- tests/ui/ops_log.spec.js`（通过）。  
 - 更新记录：2025-12-19 操作记录补齐操作页面/对象名称/行为文案（`backend/`、`scripts/`、`tests/`）。  
 - 更新记录：2025-12-19 操作记录批量行为显示数量，解散归档操作项展示用例名（`scripts/modules/opsLog.js`、`scripts/modules/tempexec.js`、`tests/ui/ops_log.spec.js`）。  
+- 更新记录：2025-12-19 侧边一级菜单与二级入口同步高亮，悬停一级入口显示独立颜色区分当前页面（`scripts/core/appRuntime.js`、`style.css`、`tests/ui/sidebar_menu.spec.js`）。  

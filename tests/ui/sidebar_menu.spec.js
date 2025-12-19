@@ -59,6 +59,35 @@ test.describe('侧边分级菜单', () => {
 
     await submenu.locator('[data-tab-btn="casesgen"]').click();
     await expect(page.locator('[data-tab-section="casesgen"]').first()).toBeVisible();
+    const activeGroup = await page.evaluate(() => {
+      var activeBtn = document.querySelector('.tab-group-btn.active');
+      return activeBtn && activeBtn.dataset ? activeBtn.dataset.group : '';
+    });
+    expect(activeGroup).toBe('ai');
+
+    await page.hover('.tab-group-btn[data-group="cases"]');
+    const hoverState = await page.evaluate(() => {
+      var activeBtn = document.querySelector('.tab-group-btn.active');
+      var hoveringBtn = document.querySelector('.tab-group-btn.hovering');
+      return {
+        activeGroup: activeBtn && activeBtn.dataset ? activeBtn.dataset.group : '',
+        hoveringGroup: hoveringBtn && hoveringBtn.dataset ? hoveringBtn.dataset.group : '',
+      };
+    });
+    expect(hoverState.activeGroup).toBe('ai');
+    expect(hoverState.hoveringGroup).toBe('cases');
+
+    await page.hover('main');
+    const hoverCleared = await page.evaluate(() => {
+      var activeBtn = document.querySelector('.tab-group-btn.active');
+      var hoveringBtn = document.querySelector('.tab-group-btn.hovering');
+      return {
+        activeGroup: activeBtn && activeBtn.dataset ? activeBtn.dataset.group : '',
+        hoveringGroup: hoveringBtn && hoveringBtn.dataset ? hoveringBtn.dataset.group : '',
+      };
+    });
+    expect(hoverCleared.activeGroup).toBe('ai');
+    expect(hoverCleared.hoveringGroup).toBe('');
 
     await page.locator('main').click();
     await expect(submenu).toBeHidden();

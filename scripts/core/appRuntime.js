@@ -271,7 +271,7 @@
         menu.style.display = 'none';
         var btn = group && group.querySelector('.tab-group-btn');
         if (btn && btn.setAttribute) btn.setAttribute('aria-expanded', 'false');
-        if (btn && btn.classList) btn.classList.remove('active');
+        if (btn && btn.classList) btn.classList.remove('hovering');
       });
       if (!name) return;
       var target = document.querySelector('[data-group-menu="' + name + '"]');
@@ -283,11 +283,7 @@
         targetGroup.classList.add('open');
         if (tBtn && tBtn.setAttribute) tBtn.setAttribute('aria-expanded', 'true');
       }
-      // 高亮当前一级按钮，其余取消
-      var btns = Array.prototype.slice.call(document.querySelectorAll('.tab-group-btn'));
-      btns.forEach(function(b) {
-        b.classList.toggle('active', b === tBtn);
-      });
+      if (expand && tBtn && tBtn.classList) tBtn.classList.add('hovering');
       if (keepTabActive) {
         var activeTabName = state && state.activeTab;
         if (activeTabName) {
