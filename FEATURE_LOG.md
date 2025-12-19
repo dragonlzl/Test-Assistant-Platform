@@ -32,6 +32,9 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/ops_activity.spec.js`（通过）  
   - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8080` 后执行 `npx playwright test --config tests/api/playwright.api.config.js tests/api/ops_log.spec.js`（通过）  
 - 更新记录：2025-12-19 操作记录活跃度视图上线（`index.html`、`style.css`、`scripts/modules/opsLog.js`、`config/constants.js`、`scripts/modules/authGuard.js`、`tests/ui/ops_activity.spec.js`、`tests/api/ops_log.spec.js`）。  
+- 更新记录：2025-12-19 优化活跃度视图布局与柱状图比例展示（`index.html`、`style.css`、`scripts/modules/opsLog.js`）。  
+- 更新记录：2025-12-19 调整活跃度标题/已选人员布局与柱图长度显示（`index.html`、`style.css`、`scripts/modules/opsLog.js`）。  
+- 更新记录：2025-12-19 统一已选人员展示与按钮样式，移除柱内数字标签（`index.html`、`style.css`、`scripts/modules/opsLog.js`）。  
 
 - 功能名称：执行分配/项目管理删除确认抽屉化与居中提示  
 - 功能描述：执行分配页版本盒子“×”关闭版本（包含归档占位时提示解散归档）与项目管理删除版本的确认弹窗统一改为抽屉；解散归档占位与删除版本成功后均显示 3 秒居中提示。  

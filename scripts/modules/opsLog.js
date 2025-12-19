@@ -8,6 +8,7 @@
   var STORAGE_KEY = appConfig.opsLogViewStorageKey || 'tap-ops-log-view-v1';
   var ACTIVITY_STORAGE_KEY = appConfig.opsActivityViewStorageKey || 'tap-ops-activity-view-v1';
   var DEFAULT_ACTIVITY_RANGE = 'week';
+  var ACTIVITY_BAR_MAX_RATIO = 82;
 
   var TARGETS = [
     { key: 'all', label: '全部' },
@@ -517,14 +518,14 @@
     if (!dom.activitySelectionText) return;
     var selected = Array.isArray(state.activity.selectedUserIds) ? state.activity.selectedUserIds : [];
     if (!selected.length) {
-      dom.activitySelectionText.textContent = '未选择人员';
+      dom.activitySelectionText.textContent = '未选择';
       return;
     }
     var nameMap = getActivityUserNameMap();
     var names = selected.map(function(id) { return nameMap[id] || ('用户#' + id); });
     var shown = names.slice(0, 3);
-    var suffix = names.length > shown.length ? (' 等' + names.length + ' 人') : (' 共' + names.length + ' 人');
-    dom.activitySelectionText.textContent = '已选：' + shown.join('、') + suffix;
+    var suffix = names.length > shown.length ? (' 等' + names.length + ' 人') : '';
+    dom.activitySelectionText.textContent = shown.join('、') + suffix;
   }
 
   function syncActivityUserGrid() {
@@ -761,9 +762,14 @@
       dom.activityEmpty.classList.remove('hidden');
       return;
     }
+    var maxTotal = 0;
+    users.forEach(function(user) {
+      if (user.total > maxTotal) maxTotal = user.total;
+    });
     dom.activityEmpty.classList.add('hidden');
     dom.activityList.innerHTML = users.map(function(user) {
       var total = user.total || 0;
+      var trackWidth = maxTotal ? (total / maxTotal) * ACTIVITY_BAR_MAX_RATIO : 0;
       var segments = user.actions.map(function(item) {
         var width = total ? (item.count / total) * 100 : 0;
         var label = item.label || '';
@@ -776,7 +782,7 @@
         '<div class="ops-activity-row">' +
           '<div class="ops-activity-user">' + escapeHtml(user.name) + '</div>' +
           '<div class="ops-activity-bar">' +
-            '<div class="ops-activity-bar-track">' + segments + '</div>' +
+            '<div class="ops-activity-bar-track" style="width:' + trackWidth.toFixed(2) + '%;">' + segments + '</div>' +
             '<div class="ops-activity-count">' + total + '</div>' +
           '</div>' +
         '</div>'

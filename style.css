@@ -3409,14 +3409,35 @@ tr.diff-locate-active td {
   background: #fff;
 }
 .ops-activity-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   margin-bottom: 10px;
 }
-.ops-activity-header h3 {
+.ops-activity-title-text {
   margin: 0;
+  font-size: 18px;
+  color: #111827;
+}
+.ops-activity-selected-label {
+  min-width: 0;
+  color: #374151;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ops-activity-selected-text {
+  display: inline-block;
+  margin-left: 6px;
+  max-width: 100%;
+  vertical-align: middle;
+}
+.ops-activity-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .ops-activity-toolbar {
   display: flex;
@@ -3437,8 +3458,24 @@ tr.diff-locate-active td {
   align-items: center;
   gap: 8px;
 }
-.ops-activity-controls select {
+.ops-activity-select {
   min-width: 96px;
+  padding: 6px 28px 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #6b7280 50%),
+    linear-gradient(135deg, #6b7280 50%, transparent 50%),
+    linear-gradient(to right, #e5e7eb, #e5e7eb);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 8px) 50%,
+    calc(100% - 26px) 50%;
+  background-size: 6px 6px, 6px 6px, 1px 16px;
+  background-repeat: no-repeat;
+  appearance: none;
+  font-size: 14px;
 }
 .ops-activity-filters {
   margin-top: 8px;
@@ -3481,17 +3518,18 @@ tr.diff-locate-active td {
   border-radius: 12px;
   background: #fff;
   max-height: 420px;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 .ops-activity-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
 .ops-activity-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .ops-activity-user {
   flex: 0 0 140px;
@@ -3509,16 +3547,19 @@ tr.diff-locate-active td {
   gap: 10px;
 }
 .ops-activity-bar-track {
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
-  height: 14px;
+  width: 100%;
+  height: 28px;
   background: #eef2f7;
-  border-radius: 999px;
+  border-radius: 0;
   overflow: hidden;
   display: flex;
+  position: relative;
 }
 .ops-activity-bar-seg {
   height: 100%;
+  border-radius: 0;
   transition: opacity 0.2s ease;
 }
 .ops-activity-bar-seg:hover {

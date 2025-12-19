@@ -2527,13 +2527,19 @@
   <p class="hint">提示：使用顶部导航中的【查看记录】进行筛选与查看。</p>
   <div class="ops-activity-card">
     <div class="ops-activity-header">
-      <h3>人员活跃度</h3>
-      <button class="secondary slim" id="openOpsActivityDrawerBtnInline" type="button">选择人员</button>
+      <h2 class="ops-activity-title-text">人员活跃度</h2>
+      <label class="inline ops-activity-selected-label">已选人员
+        <span class="ops-activity-selected-text" id="opsActivitySelectionText"></span>
+      </label>
+      <div class="ops-activity-actions">
+        <button class="secondary" id="openOpsActivityDrawerBtnInline" type="button">重新选择人员</button>
+        <button class="secondary" id="opsActivityRefreshBtn" type="button">刷新</button>
+      </div>
     </div>
     <div class="ops-activity-toolbar">
       <div class="ops-activity-controls">
         <label class="inline">时间
-          <select id="opsActivityTimeRangeSelect">
+          <select class="ops-activity-select" id="opsActivityTimeRangeSelect">
             <option value="all">历史至今</option>
             <option value="year">年</option>
             <option value="month">月</option>
@@ -2541,9 +2547,7 @@
             <option value="day">日</option>
           </select>
         </label>
-        <button class="ghost-btn slim" id="opsActivityRefreshBtn" type="button">刷新</button>
       </div>
-      <span class="hint" id="opsActivitySelectionText"></span>
       <span class="status" id="opsActivityStatus"></span>
     </div>
     <div class="ops-activity-filters">
