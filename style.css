@@ -1978,6 +1978,20 @@ body {
       cursor: not-allowed;
       box-shadow: none;
     }
+    .pill.accent {
+      background: linear-gradient(120deg, #f97316, #fbbf24);
+      color: #fff;
+      box-shadow: 0 10px 22px rgba(249,115,22,0.32);
+    }
+    .pill.accent:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 26px rgba(249,115,22,0.38);
+    }
+    .pill.accent:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
 .temp-overview {
   display: flex;
   flex-direction: column;
@@ -4256,6 +4270,29 @@ tr.diff-locate-active td {
     }
     .caseview tbody tr:last-child td {
       border-bottom: none;
+    }
+    .caseview-module-title {
+      font-weight: 700;
+      color: var(--text);
+      margin: 4px 0 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .caseview-module-title::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #f97316;
+      box-shadow: 0 0 0 4px rgba(249,115,22,0.18);
+    }
+    .caseview-all-section {
+      padding: 8px 0 14px;
+    }
+    .caseview-all-section + .caseview-all-section {
+      border-top: 1px dashed rgba(148,163,184,0.45);
+      margin-top: 10px;
     }
     .caseview.caseview-selection-hint input[type="checkbox"] {
       box-shadow: 0 0 0 2px #ef4444;

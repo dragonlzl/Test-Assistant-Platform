@@ -27,6 +27,7 @@
     var caseGenStoreActionSelect = document.getElementById('caseGenStoreActionSelect');
     var caseGenStoreNewBtn = document.getElementById('caseGenStoreNewBtn');
     var caseGenStoreAppendBtn = document.getElementById('caseGenStoreAppendBtn');
+    var caseGenAllViewBtn = document.getElementById('caseGenAllViewBtn');
 
     function bindGoButtons() {
       if (goUsecaseGenBtn && api.goToCaseGeneration) {
@@ -163,6 +164,9 @@
             api.clearCaseGenDbStoreNewActionError();
           }
         });
+      }
+      if (caseGenAllViewBtn && api.openCaseGenAllView) {
+        caseGenAllViewBtn.addEventListener('click', api.openCaseGenAllView);
       }
       if (caseGenStoreNewBtn && api.openCaseGenDbStoreNewDrawer) {
         caseGenStoreNewBtn.addEventListener('click', api.openCaseGenDbStoreNewDrawer);

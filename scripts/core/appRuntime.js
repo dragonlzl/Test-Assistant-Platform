@@ -637,6 +637,7 @@
       refreshExportCaseGenXmindButton: api.refreshExportCaseGenXmindButton || function() {},
       setCaseGenDbStoreNewAction: api.setCaseGenDbStoreNewAction || function() {},
       clearCaseGenDbStoreNewActionError: api.clearCaseGenDbStoreNewActionError || function() {},
+      openCaseGenAllView: api.openCaseGenAllView || function() {},
       openCaseGenDbStoreNewDrawer: api.openCaseGenDbStoreNewDrawer || function() {},
       openCaseGenDbStoreAppendDrawer: api.openCaseGenDbStoreAppendDrawer || function() {},
       renderAppendTargetOptions: api.renderAppendTargetOptions || function() {},
@@ -651,7 +652,7 @@
       appendSelectedCasesToImported: 1, transferSelectedCasesToExec: 1,
       refreshAppendExistingButton: 1, refreshExportCaseGenXmindButton: 1,
       setCaseGenDbStoreNewAction: 1, clearCaseGenDbStoreNewActionError: 1,
-      openCaseGenDbStoreNewDrawer: 1, openCaseGenDbStoreAppendDrawer: 1,
+      openCaseGenAllView: 1, openCaseGenDbStoreNewDrawer: 1, openCaseGenDbStoreAppendDrawer: 1,
       handleCaseSelectionChange: 1, handleCaseSelectAll: 1, exportCaseGenerationResults: 1, ensureCaseGenModulesFromSplit: 1, renderCaseGeneration: 1,
       renderAppendTargetOptions: 1,
     }));

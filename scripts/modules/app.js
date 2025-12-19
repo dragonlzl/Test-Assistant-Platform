@@ -971,6 +971,7 @@
       'clearCaseGenDbStoreNewActionError',
       'openCaseGenDbStoreNewDrawer',
       'openCaseGenDbStoreAppendDrawer',
+      'openCaseGenAllView',
       'refreshExportCaseGenXmindButton',
     ]);
 

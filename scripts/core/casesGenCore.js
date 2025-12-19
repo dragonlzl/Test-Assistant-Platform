@@ -67,6 +67,7 @@
     var caseGenViewDrawerTitle = dom.caseGenViewDrawerTitle;
     var caseGenViewDrawer = null;
     var activeCaseViewModuleId = '';
+    var ALL_CASE_VIEW_ID = '__casegen_all__';
 
     var setStatus = ctx.setStatus || function() {};
     var downloadText = handlers.downloadText || function() {};
@@ -795,6 +796,15 @@
       return false;
     }
 
+    function hasRunningCaseModules() {
+      if (!state.caseGenModules || !state.caseGenModules.length) return false;
+      for (var i = 0; i < state.caseGenModules.length; i += 1) {
+        var mod = state.caseGenModules[i];
+        if (mod && mod.id && isCaseModuleRunning(mod.id)) return true;
+      }
+      return false;
+    }
+
     function refreshAppendExistingButton() {
       var hasGenerated = hasGeneratedCases();
       if (caseGenStoreNewBtn) caseGenStoreNewBtn.disabled = !hasGenerated || !isDbStoreReady();
@@ -869,6 +879,38 @@
       container.classList.toggle('caseview-selection-hint', shouldShow);
     }
 
+    function clearAllCaseGenSelectionHints() {
+      var map = ensureCaseGenSelectionHintState();
+      var cleared = false;
+      for (var key in map) {
+        if (!Object.prototype.hasOwnProperty.call(map, key)) continue;
+        delete map[key];
+        cleared = true;
+      }
+      if (cleared && Array.isArray(state.caseGenModules)) {
+        state.caseGenModules.forEach(function(mod) {
+          if (mod && mod.id) applyCaseGenSelectionHint(mod.id);
+        });
+      }
+    }
+
+    function setCaseGenSelectionHintsForAllModules() {
+      var map = ensureCaseGenSelectionHintState();
+      for (var key in map) {
+        if (!Object.prototype.hasOwnProperty.call(map, key)) continue;
+        delete map[key];
+      }
+      if (!Array.isArray(state.caseGenModules)) return;
+      state.caseGenModules.forEach(function(mod) {
+        if (!mod || !mod.id) return;
+        var list = getCaseListForModule(mod.id);
+        if (list && list.length) map[mod.id] = true;
+      });
+      state.caseGenModules.forEach(function(mod) {
+        if (mod && mod.id) applyCaseGenSelectionHint(mod.id);
+      });
+    }
+
     function findFirstGeneratedModuleId() {
       if (!state.caseGenModules || !state.caseGenModules.length) return '';
       for (var i = 0; i < state.caseGenModules.length; i += 1) {
@@ -877,6 +919,17 @@
         if (list && list.length) return mod.id;
       }
       return '';
+    }
+
+    function collectGeneratedModules() {
+      var modules = [];
+      if (!Array.isArray(state.caseGenModules)) return modules;
+      state.caseGenModules.forEach(function(mod) {
+        if (!mod || !mod.id) return;
+        var list = getCaseListForModule(mod.id);
+        if (list && list.length) modules.push({ mod: mod, list: list });
+      });
+      return modules;
     }
 
     function openCaseViewForModule(moduleId) {
@@ -890,15 +943,64 @@
       return true;
     }
 
+    function openCaseGenAllView(options) {
+      options = options || {};
+      var withHint = Boolean(options.selectionHint);
+      var forceOpen = Boolean(options.force);
+      if (hasRunningCaseModules() && hasGeneratedCases()) {
+        setStatus(caseGenStatus, '当前仍有用例生成中，请等待生成完毕后再查看全模块用例视图', 'warn');
+        return { opened: false, blocked: true };
+      }
+      var drawer = ensureCaseGenDrawer();
+      if (!drawer || !drawer.element || !caseGenViewDrawerBody) return { opened: false, blocked: false };
+      var drawerEl = drawer.element;
+      var isOpenAll = drawerEl.classList.contains('open') && activeCaseViewModuleId === ALL_CASE_VIEW_ID;
+      if (isOpenAll && !forceOpen) {
+        drawer.close();
+        return { opened: false, blocked: false };
+      }
+      if (activeCaseViewModuleId && activeCaseViewModuleId !== ALL_CASE_VIEW_ID) {
+        resetCaseViewButton(activeCaseViewModuleId);
+      }
+      activeCaseViewModuleId = ALL_CASE_VIEW_ID;
+      var items = collectGeneratedModules();
+      if (!items.length) {
+        caseGenViewDrawerBody.innerHTML = '' +
+          '<div class="caseview drawer-view visible caseview-all-section">' +
+            '<p class="hint" style="margin:0;">当前没有生成用例，请先进行用例生成</p>' +
+          '</div>';
+      } else {
+        caseGenViewDrawerBody.innerHTML = items.map(function(entry, idx) {
+          var mod = entry.mod;
+          var list = entry.list;
+          var moduleTitle = resolveModuleTitle(mod && (mod.title || mod.module)) || ('模块' + (idx + 1));
+          return '' +
+            '<div class="caseview drawer-view visible caseview-all-section" data-view-container="' + mod.id + '">' +
+              '<div class="caseview-module-title">' + escapeHtml(moduleTitle) + '</div>' +
+              renderCaseTable(mod, list, { selectable: true, moduleId: mod.id, showRemark: true }) +
+            '</div>';
+        }).join('');
+        items.forEach(function(entry) {
+          refreshCaseSelectionUI(entry.mod.id);
+        });
+        if (withHint) {
+          setCaseGenSelectionHintsForAllModules();
+        } else {
+          items.forEach(function(entry) { applyCaseGenSelectionHint(entry.mod.id); });
+        }
+      }
+      if (caseGenViewDrawerTitle) {
+        caseGenViewDrawerTitle.textContent = '全模块用例视图';
+      }
+      drawer.open();
+      return { opened: true, blocked: false };
+    }
+
     function openCaseViewForSelectionHint() {
-      var moduleId = findFirstGeneratedModuleId();
-      if (!moduleId) return false;
       if (caseGenDbStoreDrawer && caseGenDbStoreDrawer.element && caseGenDbStoreDrawer.element.classList.contains('open')) {
         caseGenDbStoreDrawer.close();
       }
-      setCaseGenSelectionHint(moduleId, true);
-      openCaseViewForModule(moduleId);
-      return true;
+      return openCaseGenAllView({ selectionHint: true, force: true });
     }
 
     function listCaseGenModulesMissingSelectionOrGeneration() {
@@ -1291,8 +1393,10 @@
           setStatus(caseGenStatus, '请先生成用例后再入库', 'warn');
           return;
         }
-        var opened = openCaseViewForSelectionHint();
-        setStatus(caseGenStatus, opened ? '请先在用例视图勾选需要入库的用例（已标记勾选区域）' : '请先在用例视图勾选需要入库的用例', 'warn');
+        var viewState = openCaseViewForSelectionHint();
+        if (viewState && viewState.blocked) return;
+        var opened = viewState && viewState.opened;
+        setStatus(caseGenStatus, opened ? '请先在全模块用例视图勾选需要入库的用例（已标记勾选区域）' : '请先在全模块用例视图勾选需要入库的用例', 'warn');
         return;
       }
       openCaseGenDbStoreDrawer('new');
@@ -1304,8 +1408,10 @@
           setStatus(caseGenStatus, '请先生成用例后再追加入库', 'warn');
           return;
         }
-        var opened = openCaseViewForSelectionHint();
-        setStatus(caseGenStatus, opened ? '请先在用例视图勾选需要追加的用例（已标记勾选区域）' : '请先在用例视图勾选需要追加的用例', 'warn');
+        var viewState = openCaseViewForSelectionHint();
+        if (viewState && viewState.blocked) return;
+        var opened = viewState && viewState.opened;
+        setStatus(caseGenStatus, opened ? '请先在全模块用例视图勾选需要追加的用例（已标记勾选区域）' : '请先在全模块用例视图勾选需要追加的用例', 'warn');
         return;
       }
       openCaseGenDbStoreDrawer('append');
@@ -1316,8 +1422,10 @@
       if (st.loading || st.confirming) return;
       var items = collectDbStoreSelectedItems();
       if (!items.length) {
-        var opened = openCaseViewForSelectionHint();
-        setStatus(caseGenStatus, opened ? '请先在用例视图勾选需要入库的用例（已标记勾选区域）' : '请先勾选用例后再入库', 'warn');
+        var viewState = openCaseViewForSelectionHint();
+        if (viewState && viewState.blocked) return;
+        var opened = viewState && viewState.opened;
+        setStatus(caseGenStatus, opened ? '请先在全模块用例视图勾选需要入库的用例（已标记勾选区域）' : '请先勾选用例后再入库', 'warn');
         return;
       }
       if (!st.projectId || !st.versionId) {
@@ -1482,8 +1590,10 @@
       if (st.loading || st.confirming) return;
       var items = collectDbStoreSelectedItems();
       if (!items.length) {
-        var opened = openCaseViewForSelectionHint();
-        setStatus(caseGenStatus, opened ? '请先在用例视图勾选需要追加的用例（已标记勾选区域）' : '请先勾选用例后再追加入库', 'warn');
+        var viewState = openCaseViewForSelectionHint();
+        if (viewState && viewState.blocked) return;
+        var opened = viewState && viewState.opened;
+        setStatus(caseGenStatus, opened ? '请先在全模块用例视图勾选需要追加的用例（已标记勾选区域）' : '请先勾选用例后再追加入库', 'warn');
         return;
       }
       if (!st.projectId || !st.versionId || !st.caseFileId) {
@@ -2714,7 +2824,7 @@
       var selection = ensureCaseSelectionSet(moduleId);
       if (checked) selection.add(index);
       else selection.delete(index);
-      if (selection.size > 0) setCaseGenSelectionHint(moduleId, false);
+      if (selection.size > 0) clearAllCaseGenSelectionHints();
       refreshCaseSelectionUI(moduleId);
       updateSupplementButtons(moduleId, getCaseListForModule(moduleId).length > 0);
     }
@@ -2728,7 +2838,7 @@
         var rowCheckboxes = container.querySelectorAll('input[data-case-select="' + moduleId + '"]');
         rowCheckboxes.forEach(function(cb) { selection.add(Number(cb.dataset.index)); });
       }
-      if (selection.size > 0) setCaseGenSelectionHint(moduleId, false);
+      if (selection.size > 0) clearAllCaseGenSelectionHints();
       refreshCaseSelectionUI(moduleId);
       updateSupplementButtons(moduleId, getCaseListForModule(moduleId).length > 0);
     }
@@ -2885,6 +2995,7 @@
       transferModuleToTempExec: transferModuleToTempExec,
       clearModuleCases: clearModuleCases,
       toggleCaseView: toggleCaseView,
+      openCaseGenAllView: openCaseGenAllView,
       handleCaseSelectionChange: handleCaseSelectionChange,
       handleCaseSelectAll: handleCaseSelectAll,
       exportSelectedCases: exportSelectedCases,
