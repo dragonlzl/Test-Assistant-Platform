@@ -57,6 +57,9 @@ test.describe('用例执行-个人总览对齐执行总览风格', () => {
       { id: 2003, project_id: 1, version_id: 12, case_file_id: 103, case_count: 1, name: '用例C', status: 'active', created_at: iso(now - 25000), updated_at: iso(now - 300) },
       { id: 2001, project_id: 1, version_id: 11, case_file_id: 101, case_count: 2, name: '用例A', status: 'active', created_at: iso(now - 30000), updated_at: iso(now - 500) },
     ];
+    const archivedExecSets = [
+      { id: 2004, project_id: 1, version_id: 11, case_file_id: 104, case_count: 1, name: '归档用例', status: 'archived', created_at: iso(now - 35000), updated_at: iso(now - 600), archived_at: iso(now - 100) },
+    ];
     const casesBySetId = {
       2001: [
         { id: 3001, exec_set_id: 2001, case_item_id: 1, module: '模块', title: '标题1', expected: '预期', priority: null, precondition: null, steps: null, actual_result: null, defect_link: null, reuse_details: null, defect_links: null, remark: null, status: '通过', order_no: 1, executor_id: user.id, created_at: iso(now - 30000), updated_at: iso(now - 500) },
@@ -68,6 +71,9 @@ test.describe('用例执行-个人总览对齐执行总览风格', () => {
       2002: [
         { id: 3003, exec_set_id: 2002, case_item_id: 1, module: '模块', title: '标题1', expected: '预期', priority: null, precondition: null, steps: null, actual_result: null, defect_link: null, reuse_details: null, defect_links: null, remark: null, status: '失败', order_no: 1, executor_id: user.id, created_at: iso(now - 20000), updated_at: iso(now - 200) },
         { id: 3004, exec_set_id: 2002, case_item_id: 2, module: '模块', title: '标题2', expected: '预期', priority: null, precondition: null, steps: null, actual_result: null, defect_link: null, reuse_details: null, defect_links: null, remark: null, status: '未执行', order_no: 2, executor_id: user.id, created_at: iso(now - 20000), updated_at: iso(now - 200) },
+      ],
+      2004: [
+        { id: 3006, exec_set_id: 2004, case_item_id: 1, module: '模块', title: '标题归档', expected: '预期', priority: null, precondition: null, steps: null, actual_result: null, defect_link: null, reuse_details: null, defect_links: null, remark: null, status: '通过', order_no: 1, executor_id: user.id, created_at: iso(now - 35000), updated_at: iso(now - 600) },
       ],
     };
 
@@ -95,7 +101,11 @@ test.describe('用例执行-个人总览对齐执行总览风格', () => {
       if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
       if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
 
-      if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, execSets.slice());
+      if (pathName === '/api/exec/sets' && method === 'GET') {
+        const statusFilter = url.searchParams.get('status_filter') || '';
+        if (statusFilter === 'archived') return respond(200, archivedExecSets.slice());
+        return respond(200, execSets.slice());
+      }
       const execCasesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
       if (execCasesMatch && method === 'GET') {
         const execSetId = Number(execCasesMatch[1]);
@@ -128,6 +138,11 @@ test.describe('用例执行-个人总览对齐执行总览风格', () => {
     await expect(page.locator('#tempExecOverview .exec-overview-version-box', { hasText: 'v1' }).first()).toBeVisible();
     await expect(page.locator('#tempExecOverview .exec-overview-file-chip', { hasText: '用例A' }).first()).toBeVisible();
     await expect(page.locator('#tempExecOverview .exec-overview-version-box', { hasText: 'vX' }).first()).toBeVisible();
+
+    const v1Box = page.locator('#tempExecOverview .exec-overview-version-box', { hasText: 'v1' }).first();
+    const v1ChipTitles = (await v1Box.locator('.exec-overview-file-chip .text').allInnerTexts()).map((t) => t.trim());
+    expect(v1ChipTitles.length).toBeGreaterThanOrEqual(2);
+    expect(v1ChipTitles[v1ChipTitles.length - 1]).toBe('归档用例');
 
     await page.locator('#tempExecOverview [data-temp-overview-version-select]').selectOption('11');
     await expect(page.locator('#tempExecOverview .exec-overview-version-box')).toHaveCount(1);

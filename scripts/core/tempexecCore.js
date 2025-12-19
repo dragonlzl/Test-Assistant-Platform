@@ -2749,6 +2749,16 @@
       if (!pid || !list.length) {
         return '<p class="hint">暂无执行数据</p>';
       }
+      function reorderArchivedToBottom(ids, fileMap) {
+        var activeIds = [];
+        var archivedIds = [];
+        ids.forEach(function(fid) {
+          var file = fileMap && fid ? fileMap[fid] : null;
+          if (file && String(file.status || '') === 'archived') archivedIds.push(fid);
+          else activeIds.push(fid);
+        });
+        return activeIds.concat(archivedIds);
+      }
       var canUsePlacement = pid && pid !== 'unknown';
       var verMap = new Map();
       var unassigned = [];
@@ -2855,6 +2865,7 @@
           var fid = f && f.id !== null && f.id !== undefined ? String(f.id) : '';
           if (fid) byId[fid] = f;
         });
+        orderedFileIds = reorderArchivedToBottom(orderedFileIds, byId);
         var chips = orderedFileIds
           .map(function(fid) {
             var file = byId[fid];
@@ -2874,11 +2885,24 @@
       });
 
       if (!filterVid && unassigned.length) {
-        var chips2 = unassigned
+        var unassignedSorted = unassigned
           .slice()
-          .sort(function(a, b) { return Number(b && b.createdAt ? b.createdAt : 0) - Number(a && a.createdAt ? a.createdAt : 0); })
-          .map(function(file) {
-            var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+          .sort(function(a, b) { return Number(b && b.createdAt ? b.createdAt : 0) - Number(a && a.createdAt ? a.createdAt : 0); });
+        var unassignedMap = {};
+        unassignedSorted.forEach(function(file) {
+          var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+          if (fid) unassignedMap[fid] = file;
+        });
+        var unassignedIds = reorderArchivedToBottom(
+          unassignedSorted
+            .map(function(file) { return file && file.id !== null && file.id !== undefined ? String(file.id) : ''; })
+            .filter(Boolean),
+          unassignedMap
+        );
+        var chips2 = unassignedIds
+          .map(function(fid) {
+            var file = unassignedMap[fid];
+            if (!file) return '';
             var summary = summaryByFileId && typeof summaryByFileId.get === 'function' ? summaryByFileId.get(fid) : null;
             if (!summary) summary = buildTempExecSummary(file);
             return renderTempExecOverviewExecSetChip(file, summary);

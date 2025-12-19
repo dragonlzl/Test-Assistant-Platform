@@ -19,6 +19,24 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例库转执行确认抽屉与总览归档置底  
+- 功能描述：  
+  - 用例库转到执行时若已存在执行记录，二次确认由浏览器弹窗改为右侧确认抽屉，并支持挂起上层抽屉；批量转执行同样改为抽屉确认。  
+  - 用例执行个人总览（项目/版本盒子）中归档用例自动置底，避免归档项混在执行中的用例之间。  
+- 操作方式：  
+  - 用例库：选择单条/批量转到执行 → 若存在执行记录，抽屉提示“继续转到执行/取消”。  
+  - 用例执行：打开“归档操作&进度预览”→ 归档成功后在版本盒子内查看归档条目置底。  
+- 使用效果：确认交互与其他抽屉统一，减少浏览器弹窗打断；总览中归档条目始终靠后，执行中的用例更易查看。  
+- 新增内容/接口/组件：  
+  - 前端：转执行确认改为确认抽屉并完善同名冲突识别（`scripts/modules/caseLibrary.js`）；个人总览版本盒子内归档置底排序（`scripts/core/tempexecCore.js`）。  
+  - 测试：更新/新增 UI 用例覆盖转执行确认抽屉与归档置底（`tests/ui/case_library.spec.js`、`tests/ui/tempexec_overview_project_style.spec.js`）。  
+- 复用说明：复用通用确认抽屉组件与现有执行总览布局逻辑，无新增后端接口。  
+- 测试与验证：  
+  - `node --check scripts/modules/caseLibrary.js scripts/core/tempexecCore.js`（通过）  
+  - `npm run test:ui -- tests/ui/case_library.spec.js --workers=1`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_overview_project_style.spec.js`（通过）  
+- 更新记录：2025-12-19 用例库转执行确认抽屉与个人总览归档置底上线（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`tests/ui/case_library.spec.js`、`tests/ui/tempexec_overview_project_style.spec.js`）。  
+
 - 功能名称：执行总览版本总览盒子  
 - 功能描述：在执行总览项目区顶部新增“版本总览”盒子，汇总同项目各版本的总体进度（跨所有执行人、包含归档数据）；版本按最新到最旧排序，超出显示条数自动滚动；解散人员会动态更新汇总，全部解散/无数据时汇总消失。  
 - 操作方式：进入“执行总览”→选择项目→在个人分区上方查看版本总览；切换版本筛选时总览仍展示所有版本汇总。  

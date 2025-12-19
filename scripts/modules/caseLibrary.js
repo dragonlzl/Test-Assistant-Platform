@@ -1376,13 +1376,13 @@
 	      var msg = err && err.message ? err.message : '导入失败';
 	      setStatus(dom.importInvalidStatus, '入库失败：' + msg, 'err');
 	      setStatus(dom.importStatus, '入库失败：' + msg, 'err');
-	      if (msg.indexOf('同名') !== -1) {
+        var errPayload = err && err.payload ? err.payload : null;
+	      if (msg.indexOf('同名') !== -1 || (errPayload && errPayload.existing_case_file_id)) {
 	        // 同名冲突：复用现有差异对比抽屉（保持导入数据为已修正内容）。
 	        if (importInvalidDrawerInstance && typeof importInvalidDrawerInstance.close === 'function') {
 	          importInvalidDrawerInstance.close();
 	        }
 	        var importedCleanName = cleanCaseFileName(fileName);
-	        var errPayload = err && err.payload ? err.payload : null;
 	        var matchedCaseFileId = errPayload && errPayload.existing_case_file_id ? errPayload.existing_case_file_id : null;
 	        var matchedCleanName = errPayload && errPayload.existing_file_name_clean ? String(errPayload.existing_file_name_clean) : importedCleanName;
 	        var matchedVersionId = errPayload && (errPayload.existing_version_id || errPayload.existing_version_id === 0) ? errPayload.existing_version_id : null;
@@ -6272,6 +6272,7 @@
     var shouldSwitchTab = opts.switchTab !== false;
     var skipActiveConfirm = opts.skipActiveConfirm === true;
     var execVersionId = Object.prototype.hasOwnProperty.call(opts, 'execVersionId') ? opts.execVersionId : undefined;
+    var previousDrawer = opts.previousDrawer || null;
 
     var tempExecApi = getTempExecApi();
     if (!tempExecApi || !window.app || !window.app.state) {
@@ -6306,26 +6307,38 @@
           });
           matched.sort(function(a, b) { return Number(b.id) - Number(a.id); });
           var existingSet = matched.length ? matched[0] : null;
+          var confirmPromise = Promise.resolve(true);
           if (!skipActiveConfirm && existingSet && String(existingSet.status || '') === 'active') {
-            var ok = window.confirm(
-              '检测到执行页已存在【' + name + '】的执行记录，将同步最新用例并尽量保留结果（模块+标题+预期一致保留），是否继续？'
-            );
-            if (!ok) {
-              var cancelErr = new Error('cancelled');
-              cancelErr._cancel = true;
-              throw cancelErr;
-            }
-          }
-          if (!existingSet) return { importCases: [] };
-          return apiClient
-            .listExecCases(existingSet.id)
-            .then(function(cases) {
-              var rows = Array.isArray(cases) ? cases : [];
-              return { importCases: rows.map(mapExecCaseToImportPayload).filter(Boolean) };
-            })
-            .catch(function() {
-              return { importCases: [] };
+            confirmPromise = openConfirmDrawer({
+              title: '确认转到执行',
+              message:
+                '检测到执行页已存在【' +
+                name +
+                '】的执行记录，将同步最新用例并尽量保留结果（模块+标题+预期一致保留），是否继续？',
+              confirmText: '继续转到执行',
+              cancelText: '取消',
+              previousDrawer: previousDrawer,
+            }).then(function(res) {
+              if (!res || res.ok !== true) {
+                var cancelErr = new Error('cancelled');
+                cancelErr._cancel = true;
+                throw cancelErr;
+              }
+              return true;
             });
+          }
+          return confirmPromise.then(function() {
+            if (!existingSet) return { importCases: [] };
+            return apiClient
+              .listExecCases(existingSet.id)
+              .then(function(cases) {
+                var rows = Array.isArray(cases) ? cases : [];
+                return { importCases: rows.map(mapExecCaseToImportPayload).filter(Boolean) };
+              })
+              .catch(function() {
+                return { importCases: [] };
+              });
+          });
         })
         .then(function(ctx) {
           var importCases = ctx && ctx.importCases ? ctx.importCases : [];
@@ -6759,13 +6772,15 @@
       if (wasOpen && selectDrawerInstance && typeof selectDrawerInstance.open === 'function') selectDrawerInstance.open();
       setStatus(dom.selectStatus, '加载用例条目...', '');
       apiClient.listCaseItems(caseFile.id).then(function(items) {
-        transferItemsToTempExec(
+        var res = transferItemsToTempExec(
           caseFile,
           caseFile.file_name_clean || ('用例#' + caseFile.id),
           items || [],
-          { statusEl: dom.selectStatus, execVersionId: execVid }
+          { statusEl: dom.selectStatus, execVersionId: execVid, previousDrawer: selectDrawerInstance || null }
         );
-        if (selectDrawerInstance && typeof selectDrawerInstance.close === 'function') selectDrawerInstance.close();
+        Promise.resolve(res).then(function() {
+          if (selectDrawerInstance && typeof selectDrawerInstance.close === 'function') selectDrawerInstance.close();
+        });
       }).catch(function(err) {
         setStatus(dom.selectStatus, err && err.message ? err.message : '加载用例失败', 'err');
       });
@@ -6840,9 +6855,16 @@
               var msg =
                 '检测到以下用例已存在执行记录，将同步最新用例并尽量保留结果（模块+标题+预期一致保留），是否继续？\n' +
                 activeNames.join('\n');
-              var ok = window.confirm(msg);
-              if (!ok) return { ok: false, reason: 'cancel' };
-              return { ok: true, skipConfirm: true };
+              return openConfirmDrawer({
+                title: '确认批量转到执行',
+                message: msg,
+                confirmText: '继续转到执行',
+                cancelText: '取消',
+                previousDrawer: selectDrawerInstance || null,
+              }).then(function(res) {
+                if (!res || res.ok !== true) return { ok: false, reason: 'cancel' };
+                return { ok: true, skipConfirm: true };
+              });
             })
             .catch(function() {
               return { ok: true, skipConfirm: false };
@@ -6873,6 +6895,7 @@
                       switchTab: false,
                       skipActiveConfirm: skipConfirm,
                       execVersionId: execVid,
+                      previousDrawer: selectDrawerInstance || null,
                     }).then(function(res) {
                       if (res && res.ok) successes += 1;
                     });
@@ -7120,7 +7143,7 @@
                 file,
                 file.file_name_clean || ('用例#' + file.id),
                 state.editor.items || [],
-                { execVersionId: execVid }
+                { execVersionId: execVid, previousDrawer: editDrawerInstance || null }
               );
             });
 		      });

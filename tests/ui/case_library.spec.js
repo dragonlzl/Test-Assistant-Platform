@@ -691,11 +691,12 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await page.waitForTimeout(600);
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
-    page.on('dialog', async (dialog) => dialog.accept());
     await page.click('#caseLibraryEditToExecBtn');
     await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
     await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
     await page.click('#execVersionSelectDrawerConfirmBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await page.click('#appConfirmDrawerConfirmBtn');
     await expect(page.locator('#tempexecFlowNav')).toBeVisible();
     await expect(page.locator('#tempExecView')).toContainText('正常登录');
     await expect(page.locator('#tempExecView select.status-select[data-status="通过"]')).toHaveCount(1);
@@ -2230,5 +2231,153 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
       const names = st.tempExecFiles.map((f) => (f ? f.name : '')).filter(Boolean);
       return names.includes('用例A') && names.includes('用例B');
     });
+  });
+
+  test('选择用例执行：存在执行记录时打开确认抽屉并挂起选择抽屉', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '用例库转执行确认', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+    const now = new Date().toISOString();
+    const caseFiles = [
+      {
+        id: 100,
+        project_id: project.id,
+        version_id: versions[0].id,
+        file_name_clean: '用例A',
+        item_count: 1,
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+        last_updated_by: user.id,
+        last_updated_by_name: user.username,
+      },
+    ];
+    const caseItemsByFileId = {
+      100: [
+        {
+          id: 1000,
+          case_file_id: 100,
+          module: '模块1',
+          title: '标题A',
+          expected: '预期A',
+          priority: 'P0',
+          precondition: '',
+          steps: '1',
+          remark: '',
+          created_at: now,
+          updated_at: now,
+        },
+      ],
+    };
+    const execSet = {
+      id: 2001,
+      project_id: project.id,
+      version_id: versions[0].id,
+      case_file_id: 100,
+      name: '用例A',
+      status: 'active',
+      created_at: now,
+      updated_at: now,
+    };
+    const execCasesBySetId = {
+      2001: [
+        {
+          id: 3001,
+          exec_set_id: 2001,
+          case_item_id: 1000,
+          module: '模块1',
+          title: '标题A',
+          expected: '预期A',
+          priority: 'P0',
+          precondition: '',
+          steps: '1',
+          actual_result: 'ok',
+          defect_link: null,
+          reuse_details: null,
+          defect_links: null,
+          remark: '',
+          status: '通过',
+          order_no: 1,
+          executor_id: user.id,
+          created_at: now,
+          updated_at: now,
+        },
+      ],
+    };
+    let upsertCalls = 0;
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+
+      if (pathName === '/api/case-files' && method === 'GET') {
+        const pid = url.searchParams.get('project_id');
+        if (pid !== String(project.id)) return respond(200, []);
+        return respond(200, caseFiles.slice());
+      }
+
+      const itemsMatch = pathName.match(/^\/api\/case-files\/(\d+)\/items$/);
+      if (itemsMatch && method === 'GET') {
+        const fileId = Number(itemsMatch[1]);
+        return respond(200, caseItemsByFileId[fileId] || []);
+      }
+
+      if (pathName === '/api/exec/sets' && method === 'GET') {
+        const statusFilter = url.searchParams.get('status_filter') || '';
+        if (statusFilter === 'archived') return respond(200, []);
+        return respond(200, [execSet]);
+      }
+
+      if (pathName === '/api/exec/sets/from-case-file' && method === 'POST') {
+        upsertCalls += 1;
+        return respond(200, execSet);
+      }
+
+      const execCasesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (execCasesMatch && method === 'GET') {
+        const execSetId = Number(execCasesMatch[1]);
+        return respond(200, execCasesBySetId[execSetId] || []);
+      }
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    await ensureCaseLibraryTab(page);
+
+    await openDrawer(page, '#openCaseLibrarySelectExecDrawerBtn', '#caseLibrarySelectExecDrawer');
+    await page.selectOption('#caseLibrarySelectProjectSelect', String(project.id));
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例A');
+
+    await page.click('#caseLibrarySelectListBody [data-case-lib-exec="100"]');
+    await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
+    await page.click('#execVersionSelectDrawerConfirmBtn');
+
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('执行记录');
+    await expect(page.locator('#caseLibrarySelectExecDrawer')).toHaveClass(/drawer-suspended/);
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await expect(page.locator('#appConfirmDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempexecFlowNav')).toBeVisible();
+    await expect.poll(() => upsertCalls).toBe(1);
   });
 });
