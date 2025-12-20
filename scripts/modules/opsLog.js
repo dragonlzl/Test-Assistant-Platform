@@ -2118,6 +2118,63 @@
     return resolveActionLabel(log, { preferVersionLabel: true });
   }
 
+  function normalizeCountValue(value) {
+    var num = Number(value);
+    if (!Number.isFinite(num) || num < 0) return null;
+    return Math.floor(num);
+  }
+
+  function resolveCountChangeLabel(log) {
+    var l = log && typeof log === 'object' ? log : null;
+    if (!l) return '-';
+    var action = normalizeAction(l.action);
+    if (!action) return '-';
+    var detail = l.detail && typeof l.detail === 'object' ? l.detail : {};
+    var before = normalizeCountValue(detail.before_count);
+    var after = normalizeCountValue(detail.after_count);
+    if (action === 'update_case_item') {
+      var modifiedCount = normalizeCountValue(detail.modified_count);
+      if (modifiedCount === null) modifiedCount = 1;
+      return String(modifiedCount);
+    }
+    if (action === 'upsert_exec_set_from_case_file') {
+      var transferCount = normalizeCountValue(detail.transfer_count);
+      if (transferCount === null) transferCount = normalizeCountValue(detail.after_count);
+      if (transferCount === null) transferCount = normalizeCountValue(detail.new_cases);
+      if (transferCount === null) return '-';
+      return String(transferCount);
+    }
+
+    if (before === null || after === null) {
+      if (action === 'delete_case_file') {
+        var deleted = normalizeCountValue(detail.item_deleted_total);
+        if (deleted !== null) {
+          before = deleted;
+          after = 0;
+        }
+      } else if (action === 'import_case_file') {
+        var imported = normalizeCountValue(detail.item_imported);
+        var isOverwrite = detail.overwrite === true;
+        if (!isOverwrite && detail.overwrite !== undefined && detail.overwrite !== null) {
+          isOverwrite = String(detail.overwrite).toLowerCase() === 'true';
+        }
+        if (imported !== null && !isOverwrite) {
+          before = 0;
+          after = imported;
+        }
+      } else if (action === 'dissolve_exec_archived_placeholders') {
+        var dissolved = normalizeCountValue(detail.count);
+        if (dissolved !== null) {
+          before = dissolved;
+          after = 0;
+        }
+      }
+    }
+
+    if (before === null || after === null) return '-';
+    return String(before) + ' -> ' + String(after);
+  }
+
   function isAllowedLog(log) {
     return Boolean(resolveActionLabel(log));
   }
@@ -2251,6 +2308,7 @@
           '<td>' + escapeHtml(resolvePageLabel(log)) + '</td>' +
           '<td>' + escapeHtml(buildTargetLabel(log)) + '</td>' +
           '<td>' + escapeHtml(resolveActionLabel(log) || '--') + '</td>' +
+          '<td>' + escapeHtml(resolveCountChangeLabel(log)) + '</td>' +
         '</tr>'
       );
     }).join('');

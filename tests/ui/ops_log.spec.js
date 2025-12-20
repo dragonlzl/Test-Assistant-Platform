@@ -47,21 +47,21 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     const today = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 12, 0, 0);
     const yesterday = new Date(base.getFullYear(), base.getMonth(), base.getDate() - 1, 12, 0, 0);
     const logs = [
-      { id: 1, user_id: 2, username: 'user_b', action: 'import_case_file', target_type: 'case_file', target_id: 100, result: 'success', detail: { file_name: 'case-0', source: 'xmind' }, created_at: new Date(yesterday.getTime()).toISOString() },
+      { id: 1, user_id: 2, username: 'user_b', action: 'import_case_file', target_type: 'case_file', target_id: 100, result: 'success', detail: { file_name: 'case-0', source: 'xmind', before_count: 0, after_count: 1 }, created_at: new Date(yesterday.getTime()).toISOString() },
       { id: 2, user_id: 1, username: 'admin', action: 'login', target_type: 'auth', target_id: 1, result: 'success', detail: {}, created_at: new Date(yesterday.getTime() - 1000).toISOString() },
-      { id: 3, user_id: 2, username: 'user_b', action: 'export_case_files_xmind', target_type: 'case_file', target_id: 101, result: 'success', detail: { file_name: 'case-2' }, created_at: new Date(today.getTime() - 2 * 1000).toISOString() },
+      { id: 3, user_id: 2, username: 'user_b', action: 'upsert_exec_set_from_case_file', target_type: 'exec_set', target_id: 101, result: 'success', detail: { case_file_name: 'case-2', exec_set_name: 'case-2', before_count: 10, after_count: 88, new_cases: 78, transfer_count: 88 }, created_at: new Date(today.getTime() - 2 * 1000).toISOString() },
       { id: 4, user_id: 1, username: 'admin', action: 'update_user', target_type: 'user', target_id: 2, result: 'success', detail: { username: 'user_b' }, created_at: new Date(today.getTime() - 3 * 1000).toISOString() },
-      { id: 5, user_id: 2, username: 'user_b', action: 'archive_exec_set', target_type: 'exec_set', target_id: 77, result: 'success', detail: { name: 'exec-77', case_file_name: 'case-77' }, created_at: new Date(today.getTime() - 4 * 1000).toISOString() },
-      { id: 6, user_id: 1, username: 'admin', action: 'delete_case_file', target_type: 'case_file', target_id: 103, result: 'success', detail: { file_name: 'case-5' }, created_at: new Date(today.getTime() - 5 * 1000).toISOString() },
+      { id: 5, user_id: 2, username: 'user_b', action: 'archive_exec_set', target_type: 'exec_set', target_id: 77, result: 'success', detail: { name: 'exec-77', case_file_name: 'case-77', before_count: 12, after_count: 12 }, created_at: new Date(today.getTime() - 4 * 1000).toISOString() },
+      { id: 6, user_id: 1, username: 'admin', action: 'delete_case_file', target_type: 'case_file', target_id: 103, result: 'success', detail: { file_name: 'case-5', before_count: 9, after_count: 0 }, created_at: new Date(today.getTime() - 5 * 1000).toISOString() },
       { id: 7, user_id: 2, username: 'user_b', action: 'logout', target_type: 'auth', target_id: 2, result: 'success', detail: {}, created_at: new Date(today.getTime() - 6 * 1000).toISOString() },
       { id: 8, user_id: 1, username: 'admin', action: 'create_project', target_type: 'project', target_id: 9, result: 'success', detail: { name: 'proj-1' }, created_at: new Date(today.getTime() - 7 * 1000).toISOString() },
-      { id: 9, user_id: 1, username: 'admin', action: 'batch_create_case_items', target_type: 'case_item', target_id: null, result: 'success', detail: { file_name: 'case-batch-1', count: 3 }, created_at: new Date(today.getTime() - 8 * 1000).toISOString() },
-      { id: 10, user_id: 2, username: 'user_b', action: 'batch_delete_case_items', target_type: 'case_item', target_id: null, result: 'success', detail: { file_name: 'case-batch-2', count: 2 }, created_at: new Date(today.getTime() - 9 * 1000).toISOString() },
+      { id: 9, user_id: 1, username: 'admin', action: 'batch_create_case_items', target_type: 'case_item', target_id: null, result: 'success', detail: { file_name: 'case-batch-1', count: 3, before_count: 20, after_count: 23 }, created_at: new Date(today.getTime() - 8 * 1000).toISOString() },
+      { id: 10, user_id: 2, username: 'user_b', action: 'batch_delete_case_items', target_type: 'case_item', target_id: null, result: 'success', detail: { file_name: 'case-batch-2', count: 2, before_count: 23, after_count: 21 }, created_at: new Date(today.getTime() - 9 * 1000).toISOString() },
       { id: 11, user_id: 1, username: 'admin', action: 'create_user', target_type: 'user', target_id: 3, result: 'success', detail: { username: 'u3' }, created_at: new Date(today.getTime() - 10 * 1000).toISOString() },
       { id: 12, user_id: 1, username: 'admin', action: 'import_case_file', target_type: 'case_file', target_id: 105, result: 'success', detail: { file_name: 'case-11', source: 'tempexec' }, created_at: new Date(today.getTime() - 11 * 1000).toISOString() },
       { id: 13, user_id: 1, username: 'admin', action: 'delete_version', target_type: 'project_version', target_id: 12, result: 'success', detail: { project_name: 'proj-2', version_name: 'v2', page: 'project-admin' }, created_at: new Date(today.getTime() - 12 * 1000).toISOString() },
-      { id: 14, user_id: 1, username: 'admin', action: 'dissolve_exec_archived_placeholders', target_type: 'project_version', target_id: 13, result: 'success', detail: { project_name: 'proj-3', version_name: 'v3', count: 2, page: 'tempexec' }, created_at: new Date(today.getTime() - 13 * 1000).toISOString() },
-      { id: 15, user_id: 1, username: 'admin', action: 'import_case_file', target_type: 'case_file', target_id: 106, result: 'success', detail: { file_name: 'case-over', overwrite: true, source: 'xmind', page: 'case-library' }, created_at: new Date(today.getTime() - 14 * 1000).toISOString() },
+      { id: 14, user_id: 1, username: 'admin', action: 'dissolve_exec_archived_placeholders', target_type: 'project_version', target_id: 13, result: 'success', detail: { project_name: 'proj-3', version_name: 'v3', count: 2, before_count: 2, after_count: 0, page: 'tempexec' }, created_at: new Date(today.getTime() - 13 * 1000).toISOString() },
+      { id: 15, user_id: 1, username: 'admin', action: 'import_case_file', target_type: 'case_file', target_id: 106, result: 'success', detail: { file_name: 'case-over', overwrite: true, source: 'xmind', page: 'case-library', before_count: 100, after_count: 99 }, created_at: new Date(today.getTime() - 14 * 1000).toISOString() },
     ];
 
     await page.route('**/api/**', async (route) => {
@@ -107,16 +107,24 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     await page.click('#openOpsLogDrawerBtn');
     await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
     await expect(page.locator('.ops-log-table thead')).toContainText('操作页面');
+    await expect(page.locator('.ops-log-table thead')).toContainText('数量变化');
 
     // 使用“全局分页设置”每页 5 条。
     await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(5);
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例：case-0');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('0 -> 1');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('12 -> 12');
+    const transferRow = page.locator('#opsLogDrawerTableBody tr').filter({ hasText: '转执行' }).first();
+    await expect(transferRow).toContainText('88');
+    await expect(transferRow).not.toContainText('->');
 
     // 翻页：下一页应出现更旧的记录。
     await page.click('#opsLogPaginationTop [data-ops-log-page="next"]');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例：case-5');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('批量新增3条');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('批量删除2条');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('9 -> 0');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('20 -> 23');
     await page.click('#opsLogPaginationTop [data-ops-log-page="last"]');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('版本 proj-2v2');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('解散归档');

@@ -3123,20 +3123,22 @@
             previousDrawer: prevDrawer || null,
           }).then(function(res) {
             if (!res || res.ok !== true) return;
-            safeLogOperation(
-              'dissolve_exec_archived_placeholders',
-              'project_version',
-              parsed0.versionId ? Number(parsed0.versionId) : null,
-              {
-                project_id: parsed0.projectId ? Number(parsed0.projectId) : null,
-                project_name: resolveProjectLabel(parsed0.projectId),
-                version_id: parsed0.versionId ? Number(parsed0.versionId) : null,
-                version_name: versionLabel0,
-                count: archivedCount0,
-                file_name: archivedNames0.length === 1 ? archivedNames0[0] : null,
-                file_names: archivedNames0,
-              }
-            );
+              safeLogOperation(
+                'dissolve_exec_archived_placeholders',
+                'project_version',
+                parsed0.versionId ? Number(parsed0.versionId) : null,
+                {
+                  project_id: parsed0.projectId ? Number(parsed0.projectId) : null,
+                  project_name: resolveProjectLabel(parsed0.projectId),
+                  version_id: parsed0.versionId ? Number(parsed0.versionId) : null,
+                  version_name: versionLabel0,
+                  count: archivedCount0,
+                  before_count: archivedCount0,
+                  after_count: 0,
+                  file_name: archivedNames0.length === 1 ? archivedNames0[0] : null,
+                  file_names: archivedNames0,
+                }
+              );
             api.dissolveTempExecArchivedProjectVersion(parsed0.projectId, parsed0.versionId);
           });
           return;
@@ -3196,6 +3198,8 @@
                   version_id: parsed.versionId ? Number(parsed.versionId) : null,
                   version_name: versionLabel,
                   count: archivedCount,
+                  before_count: archivedCount,
+                  after_count: 0,
                   file_name: archivedNames.length === 1 ? archivedNames[0] : null,
                   file_names: archivedNames,
                 }

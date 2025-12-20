@@ -19,6 +19,20 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：操作记录数量变化展示  
+- 功能描述：操作记录查看记录抽屉新增“数量变化”列，覆盖入库/追加/子项增删改/转执行/归档/解散等行为展示用例数量前后变化，未提供数量的行为显示“-”。  
+- 操作方式：操作记录 → 点击“查看记录” → 在列表中查看“数量变化”列。  
+- 使用效果：管理员可快速掌握用例数量变更前后差异，便于追溯入库/删除/解散等操作影响。  
+- 新增内容/接口/组件：  
+  - 前端：操作记录抽屉表格新增数量变化列与渲染逻辑（`index.html`、`scripts/modules/opsLog.js`）；批量新增/删除与解散归档日志补充数量字段（`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`）。  
+  - 后端：用例入库/追加/子项增删改与执行归档/解散日志补充 before/after 数量字段（`backend/routers/cases.py`、`backend/routers/exec_routes.py`）。  
+  - 测试：更新 UI 用例 `tests/ui/ops_log.spec.js`、API 用例 `tests/api/ops_log.spec.js`。  
+- 复用说明：复用既有操作记录接口与抽屉列表渲染逻辑，仅扩展日志 detail 字段与展示。  
+- 测试与验证：`node --check scripts/modules/opsLog.js scripts/modules/caseLibrary.js scripts/modules/tempexec.js`（通过）；UI/API 用例已补充，未执行。  
+- 更新记录：2025-12-20 操作记录数量变化列与日志字段补充（`index.html`、`scripts/modules/opsLog.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`、`backend/routers/cases.py`、`backend/routers/exec_routes.py`、`tests/ui/ops_log.spec.js`、`tests/api/ops_log.spec.js`）。  
+- 更新记录：2025-12-20 调整“修改/转执行”数量展示为具体数量（`scripts/modules/opsLog.js`、`tests/ui/ops_log.spec.js`）。  
+- 更新记录：2025-12-20 转执行日志补充 transfer_count 避免数量为 0（`backend/routers/exec_routes.py`、`tests/ui/ops_log.spec.js`）。  
+
 - 功能名称：操作记录用例贡献视图  
 - 功能描述：操作记录页新增用例贡献入口与贡献视图，支持选择人员、时间范围与用例操作行为（导入/新增/删除），按去重导入、完整新增/删除规则统计贡献并以柱状图展示。  
 - 操作方式：操作记录 → 点击“用例贡献视图” → 选择人员 → 确认 → 在贡献视图内按时间/行为筛选查看。  

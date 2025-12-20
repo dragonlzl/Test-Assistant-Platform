@@ -144,7 +144,12 @@ def create_exec_set(
         action="create_exec_set",
         target_type="exec_set",
         target_id=exec_set.id,
-        detail={"project_id": project.id, "name": payload.name},
+        detail={
+            "project_id": project.id,
+            "name": payload.name,
+            "before_count": 0,
+            "after_count": 0,
+        },
     )
     db.commit()
     db.refresh(exec_set)
@@ -254,6 +259,12 @@ def delete_exec_set(
         )
         if case_file:
             case_file_name = str(case_file.file_name_clean or "") or None
+    before_count = (
+        db.query(func.count(models.ExecCase.id))
+        .filter(models.ExecCase.exec_set_id == exec_set.id)
+        .scalar()
+        or 0
+    )
     db.delete(exec_set)
     log_operation(
         db=db,
@@ -266,6 +277,8 @@ def delete_exec_set(
             "name": name,
             "case_file_id": (int(case_file_id) if case_file_id else None),
             "case_file_name": case_file_name,
+            "before_count": int(before_count),
+            "after_count": 0,
         },
     )
     db.commit()
@@ -410,6 +423,8 @@ def archive_exec_set(
                 "counts": counts,
                 "actual_result_count": int(actual_result_count),
                 "reason": (reason if reason else None),
+                "before_count": int(counts.get("total") or 0),
+                "after_count": int(counts.get("total") or 0),
             },
         )
         db.commit()
@@ -618,6 +633,7 @@ def upsert_exec_set_from_case_file(
         .order_by(models.ExecCase.order_no.asc(), models.ExecCase.id.asc())
         .all()
     )
+    before_count = len(existing_cases)
     if mode == "replace" and not preserve_results and existing_cases:
         # 覆盖导入等场景：强制“完全替换”，避免旧条目残留导致前端展示为追加/合并。
         # 注意：这会删除执行集中所有旧用例（包含未绑定 case_item 的临时用例）。
@@ -777,6 +793,12 @@ def upsert_exec_set_from_case_file(
     exec_set.case_file_last_synced_at = case_file.updated_at
 
     action = "upsert_exec_set_from_case_file"
+    after_count = (
+        db.query(func.count(models.ExecCase.id))
+        .filter(models.ExecCase.exec_set_id == exec_set.id)
+        .scalar()
+        or 0
+    )
     log_operation(
         db=db,
         user_id=user.id,
@@ -790,6 +812,9 @@ def upsert_exec_set_from_case_file(
             "mode": mode,
             "created": created,
             "new_cases": len(new_cases),
+            "transfer_count": len(case_items),
+            "before_count": int(before_count),
+            "after_count": int(after_count),
         },
     )
     db.commit()
@@ -2495,6 +2520,12 @@ def delete_exec_archive(
         )
         if case_file:
             case_file_name = str(case_file.file_name_clean or "") or None
+    before_count = (
+        db.query(func.count(models.ExecCase.id))
+        .filter(models.ExecCase.exec_set_id == exec_set.id)
+        .scalar()
+        or 0
+    )
     db.delete(exec_set)
     log_operation(
         db=db,
@@ -2507,6 +2538,8 @@ def delete_exec_archive(
             "name": name,
             "case_file_id": (int(case_file_id) if case_file_id else None),
             "case_file_name": case_file_name,
+            "before_count": int(before_count),
+            "after_count": 0,
         },
     )
     db.commit()

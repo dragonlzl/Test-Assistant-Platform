@@ -140,11 +140,21 @@ test.describe('operation logs', () => {
     expect(adminList.status()).toBe(200);
     const list = await adminList.json();
     expect(Array.isArray(list)).toBeTruthy();
-    expect(
-      list.some((row) => row && row.action === 'import_case_file' && row.detail && row.detail.source === 'tempexec'),
-    ).toBeTruthy();
-    expect(list.some((row) => row && row.action === 'delete_case_item' && row.target_id === deleteItemId)).toBeTruthy();
-    expect(list.some((row) => row && row.action === 'delete_case_file' && row.target_id === caseFileId)).toBeTruthy();
+    const importLog = list.find(
+      (row) => row && row.action === 'import_case_file' && row.detail && row.detail.source === 'tempexec',
+    );
+    expect(importLog).toBeTruthy();
+    expect(importLog.detail.before_count).toBe(0);
+    expect(importLog.detail.after_count).toBe(1);
+
+    const deleteItemLog = list.find((row) => row && row.action === 'delete_case_item' && row.target_id === deleteItemId);
+    expect(deleteItemLog).toBeTruthy();
+    expect(deleteItemLog.detail.before_count).toBe(1);
+    expect(deleteItemLog.detail.after_count).toBe(0);
+
+    const deleteFileLog = list.find((row) => row && row.action === 'delete_case_file' && row.target_id === caseFileId);
+    expect(deleteFileLog).toBeTruthy();
+    expect(deleteFileLog.detail).toEqual(expect.objectContaining({ before_count: 0, after_count: 0 }));
     expect(list.some((row) => row && row.action === 'export_case_files_xmind' && row.user_id === userId)).toBeTruthy();
     const assignLog = list.find((row) => row && row.action === 'assign_projects' && row.target_id === userId);
     expect(assignLog && assignLog.detail && assignLog.detail.username).toBe(username);

@@ -291,6 +291,7 @@ def import_case_file(
     now = datetime.now(timezone.utc)
     linked_exec_sets = 0
     prev_version_id = None
+    before_count = 0
     if exists and overwrite:
         response.status_code = status.HTTP_200_OK
         case_file = exists
@@ -298,6 +299,12 @@ def import_case_file(
         linked_exec_sets = (
             db.query(func.count(models.ExecSet.id))
             .filter(models.ExecSet.case_file_id == case_file.id)
+            .scalar()
+            or 0
+        )
+        before_count = (
+            db.query(func.count(models.CaseItem.id))
+            .filter(models.CaseItem.case_file_id == case_file.id)
             .scalar()
             or 0
         )
@@ -397,6 +404,8 @@ def import_case_file(
             "item_imported": int(item_count),
             "item_skipped_payload_duplicates": duplicate_count,
             "item_skipped_db_conflicts": skipped_db_conflicts,
+            "before_count": int(before_count),
+            "after_count": int(item_count),
         },
     )
     try:
@@ -867,6 +876,8 @@ def delete_case_file(
             "linked_exec_sets": int(linked_exec_sets),
             "item_deleted_total": int(deleted_total),
             "item_deleted_complete": int(deleted_complete),
+            "before_count": int(deleted_total),
+            "after_count": 0,
         },
     )
     db.commit()
@@ -966,6 +977,12 @@ def update_case_item(
             meta={"changed_fields": _compute_changed_fields(old_snap or {}, new_snap or {})},
             at=now,
         )
+        case_count = (
+            db.query(func.count(models.CaseItem.id))
+            .filter(models.CaseItem.case_file_id == case_item.case_file_id)
+            .scalar()
+            or 0
+        )
         log_operation(
             db=db,
             user_id=user.id,
@@ -983,6 +1000,8 @@ def update_case_item(
                 "expected": case_item.expected,
                 "prev_complete": bool(prev_complete),
                 "next_complete": bool(next_complete),
+                "before_count": int(case_count),
+                "after_count": int(case_count),
             },
         )
         try:
@@ -1009,6 +1028,12 @@ def create_case_item(
     db: Session = Depends(get_db),
 ):
     case_file = _ensure_case_access(db, user, case_file_id)
+    before_count = (
+        db.query(func.count(models.CaseItem.id))
+        .filter(models.CaseItem.case_file_id == case_file_id)
+        .scalar()
+        or 0
+    )
     now = datetime.now(timezone.utc)
     case_item = models.CaseItem(
         case_file_id=case_file_id,
@@ -1066,6 +1091,8 @@ def create_case_item(
             "steps": case_item.steps,
             "expected": case_item.expected,
             "next_complete": bool(next_complete),
+            "before_count": int(before_count),
+            "after_count": int(before_count + 1),
         },
     )
     try:
@@ -1298,6 +1325,8 @@ def append_case_items(
             "item_skipped_payload_duplicates": int(duplicate_count),
             "item_skipped_db_conflicts": int(skipped_db_conflicts),
             "item_skipped_existing_conflicts": int(skipped_existing_conflicts),
+            "before_count": int(before_count),
+            "after_count": int(after_count),
         },
     )
     db.commit()
@@ -1328,6 +1357,12 @@ def delete_case_item(
     if not case_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用例不存在")
     case_file = _ensure_case_access(db, user, case_item.case_file_id)
+    before_count = (
+        db.query(func.count(models.CaseItem.id))
+        .filter(models.CaseItem.case_file_id == case_item.case_file_id)
+        .scalar()
+        or 0
+    )
     prev_complete = _is_case_item_complete(
         case_item.module,
         case_item.title,
@@ -1378,6 +1413,8 @@ def delete_case_item(
             "expected": case_item.expected,
             "prev_complete": bool(prev_complete),
             "prev_delete_complete": bool(prev_delete_complete),
+            "before_count": int(before_count),
+            "after_count": int(max(before_count - 1, 0)),
         },
     )
     db.commit()

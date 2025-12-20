@@ -6514,6 +6514,10 @@
 	        for (var i = 0; i < results.length; i += 1) {
 	          if (results[i] && results[i].status === 'rejected') failures.push(toDelete[i]);
 	        }
+        var currentCount = ed.items.length;
+        var successCount = toDelete.length - failures.length;
+        var beforeCount = currentCount + toDelete.length;
+        var afterCount = Math.max(beforeCount - successCount, 0);
         safeLogOperation(
           'batch_delete_case_items',
           'case_item',
@@ -6524,6 +6528,8 @@
             count: toDelete.length,
             success: toDelete.length - failures.length,
             fail: failures.length,
+            before_count: beforeCount,
+            after_count: afterCount,
           },
           failures.length ? 'partial' : 'success'
         );
@@ -6617,6 +6623,10 @@
 	        for (var i = 0; i < results.length; i += 1) {
 	          if (results[i] && results[i].status === 'rejected') failures.push(entries[i]);
 	        }
+        var currentCount2 = ed.items.length;
+        var successCount2 = entries.length - failures.length;
+        var beforeCount2 = Math.max(currentCount2 - entries.length, 0);
+        var afterCount2 = beforeCount2 + successCount2;
         safeLogOperation(
           'batch_create_case_items',
           'case_item',
@@ -6627,6 +6637,8 @@
             count: entries.length,
             success: entries.length - failures.length,
             fail: failures.length,
+            before_count: beforeCount2,
+            after_count: afterCount2,
           },
           failures.length ? 'partial' : 'success'
         );
