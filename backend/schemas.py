@@ -138,6 +138,12 @@ class CaseFileShareRequest(BaseModel):
     target_version_id: Optional[int] = None
 
 
+class CaseFileChangeVersionRequest(BaseModel):
+    project_id: int
+    target_version_id: int
+    case_file_ids: List[int]
+
+
 class CaseFileOut(BaseModel):
     id: int
     project_id: int

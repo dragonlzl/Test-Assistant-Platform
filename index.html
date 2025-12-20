@@ -2078,8 +2078,9 @@
       <button class="link-toggle" data-drawer-close="caseLibraryEditDrawer">收起</button>
     </div>
     <div class="drawer-body">
-      <div class="case-library-drawer-toolbar">
+      <div class="case-library-drawer-toolbar case-library-drawer-toolbar-primary">
         <div class="case-library-filters">
+          <span class="case-library-section-title">搜索过滤</span>
           <label class="case-library-label" for="caseLibraryEditProjectSelect">项目</label>
           <select id="caseLibraryEditProjectSelect"></select>
           <label class="case-library-label" for="caseLibraryEditVersionSelect">版本</label>
@@ -2088,9 +2089,17 @@
           <select id="caseLibraryEditOwnerFilterSelect"></select>
           <label class="case-library-label" for="caseLibraryEditFileSearchInput">用例名</label>
           <input id="caseLibraryEditFileSearchInput" type="text" placeholder="搜索用例名" />
-        </div>
-        <div class="case-library-drawer-actions">
           <button class="primary" id="caseLibraryEditConfirmBtn" type="button">刷新</button>
+        </div>
+      </div>
+      <div class="case-library-drawer-toolbar case-library-drawer-toolbar-secondary">
+        <div class="case-library-drawer-actions case-library-drawer-actions-left">
+          <span class="case-library-section-title">全局操作</span>
+          <label class="case-library-label" for="caseLibraryEditChangeVersionSelect">请选择用例变更版本</label>
+          <select id="caseLibraryEditChangeVersionSelect" disabled></select>
+          <button class="secondary" id="caseLibraryEditChangeVersionBtn" type="button" disabled>确认更换版本</button>
+        </div>
+        <div class="case-library-drawer-actions case-library-drawer-actions-right">
           <button class="secondary" id="caseLibraryEditExportXmindBtn" type="button" disabled>导出XMind</button>
           <button class="secondary" id="caseLibraryEditExportExcelBtn" type="button" disabled>导出Excel</button>
           <button class="secondary" id="caseLibraryEditDeleteBtn" data-role="admin-only" type="button" disabled>删除所选</button>

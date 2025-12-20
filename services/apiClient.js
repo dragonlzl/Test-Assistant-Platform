@@ -267,6 +267,14 @@
     }).then(handleResponse);
   }
 
+  function changeCaseFileVersion(payload) {
+    return fetch('/api/case-files/change-version', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
   function importCaseFile(payload, options) {
     var url = '/api/case-files/import';
     if (options && options.overwrite) {
@@ -684,6 +692,7 @@
     listProjectVersions: listProjectVersions,
     deleteVersion: deleteVersion,
     listCaseFiles: listCaseFiles,
+    changeCaseFileVersion: changeCaseFileVersion,
     importCaseFile: importCaseFile,
     listCaseItems: listCaseItems,
     deleteCaseFile: deleteCaseFile,

@@ -509,6 +509,101 @@ def share_case_file(
     return case_file
 
 
+@router.post("/change-version")
+def change_case_file_version(
+    payload: schemas.CaseFileChangeVersionRequest,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not payload.case_file_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请选择用例文件")
+    ensure_project_access(db, user, payload.project_id)
+    ensure_version_in_project(db, payload.project_id, payload.target_version_id)
+
+    raw_ids = payload.case_file_ids or []
+    ids = []
+    seen = set()
+    for item in raw_ids:
+        try:
+            value = int(item)
+        except Exception:
+            continue
+        if value in seen:
+            continue
+        seen.add(value)
+        ids.append(value)
+    if not ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请选择用例文件")
+
+    case_files = (
+        db.query(models.CaseFile)
+        .filter(
+            models.CaseFile.project_id == payload.project_id,
+            models.CaseFile.id.in_(ids),
+        )
+        .all()
+    )
+    if not case_files:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用例不存在")
+
+    now = datetime.now(timezone.utc)
+    updated_ids = []
+    skipped_ids = []
+    existing_ids = set()
+
+    for case_file in case_files:
+        if not case_file:
+            continue
+        existing_ids.add(case_file.id)
+        prev_version_id = case_file.version_id
+        if prev_version_id == payload.target_version_id:
+            skipped_ids.append(int(case_file.id))
+            continue
+        case_file.version_id = payload.target_version_id
+        case_file.updated_at = now
+        case_file.updated_by = user.id
+        db.add(case_file)
+        updated_ids.append(int(case_file.id))
+        log_case_library_change(
+            db=db,
+            user=user,
+            project_id=case_file.project_id,
+            version_id=payload.target_version_id,
+            file_name_clean=case_file.file_name_clean,
+            case_file_id=case_file.id,
+            kind="version_changed",
+            meta={
+                "prev_version_id": prev_version_id,
+                "next_version_id": payload.target_version_id,
+            },
+            at=now,
+        )
+
+    missing_ids = [int(item) for item in ids if item not in existing_ids]
+    log_operation(
+        db=db,
+        user_id=user.id,
+        action="change_case_file_version",
+        target_type="case_file",
+        target_id=updated_ids[0] if len(updated_ids) == 1 else None,
+        detail={
+            "project_id": payload.project_id,
+            "target_version_id": payload.target_version_id,
+            "case_file_ids": ids,
+            "updated_ids": updated_ids,
+            "skipped_ids": skipped_ids,
+            "missing_ids": missing_ids,
+        },
+    )
+    db.commit()
+    return {
+        "detail": "版本已更新",
+        "updated_ids": updated_ids,
+        "skipped_ids": skipped_ids,
+        "missing_ids": missing_ids,
+    }
+
+
 @router.get("", response_model=List[schemas.CaseFileOut])
 def list_case_files(
     project_id: int = None,

@@ -5339,6 +5339,16 @@ tr.diff-locate-active td {
   font-size: 13px;
 }
 
+.case-library-section-title {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  white-space: nowrap;
+}
+
 .case-library-filters select,
 .case-library-filters input {
   min-height: 34px;
@@ -5377,6 +5387,7 @@ tr.diff-locate-active td {
 }
 
 .case-library-filters select,
+#caseLibraryEditChangeVersionSelect,
 #execOverviewVersionSelect,
 [data-temp-overview-version-select] {
   -webkit-appearance: none;
@@ -5398,12 +5409,14 @@ tr.diff-locate-active td {
 }
 
 .case-library-filters select:hover:not(:disabled),
+#caseLibraryEditChangeVersionSelect:hover:not(:disabled),
 #execOverviewVersionSelect:hover:not(:disabled),
 [data-temp-overview-version-select]:hover:not(:disabled) {
   border-color: #cbd5e1;
 }
 
 .case-library-filters select:focus,
+#caseLibraryEditChangeVersionSelect:focus,
 #execOverviewVersionSelect:focus,
 [data-temp-overview-version-select]:focus {
   outline: none;
@@ -5412,6 +5425,7 @@ tr.diff-locate-active td {
 }
 
 .case-library-filters select:disabled,
+#caseLibraryEditChangeVersionSelect:disabled,
 #execOverviewVersionSelect:disabled,
 [data-temp-overview-version-select]:disabled {
   cursor: not-allowed;
@@ -5443,6 +5457,7 @@ tr.diff-locate-active td {
 }
 
 #caseLibraryImportVersionSelect,
+#caseLibraryEditChangeVersionSelect,
 #caseLibrarySelectVersionSelect,
 #tempExecImportVersionSelect {
   min-width: 9em;
@@ -5462,6 +5477,8 @@ tr.diff-locate-active td {
   display: inline-flex;
   gap: 6px;
   align-items: center;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .case-library-pagination {
@@ -5543,7 +5560,28 @@ tr.diff-locate-active td {
   margin: 10px 0;
 }
 
+.case-library-drawer-toolbar-primary {
+  margin-bottom: 6px;
+}
+
+.case-library-drawer-toolbar-secondary {
+  margin-top: 0;
+}
+
+.case-library-drawer-actions-left {
+  justify-content: flex-start;
+}
+
+.case-library-drawer-actions-right {
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
 .case-library-drawer-toolbar input {
+  min-height: 34px;
+}
+
+.case-library-drawer-toolbar select {
   min-height: 34px;
 }
 

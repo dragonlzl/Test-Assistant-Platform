@@ -19,6 +19,26 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例库查看&编辑更换版本  
+- 功能描述：用例库“查看&编辑”抽屉工具栏新增更换版本行，勾选用例后可选择目标版本并二次确认，一键更新所选用例所属版本。  
+- 操作方式：进入用例库 → 打开“查看&编辑”抽屉 → 勾选用例 → 选择“更换版本” → 确认更换版本 → 抽屉二次确认。  
+- 使用效果：支持在同一项目内批量调整用例版本，避免反复导入。  
+- 新增内容/接口/组件：  
+  - 前端：查看&编辑抽屉新增更换版本行与交互（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`）；操作记录动作补充（`scripts/modules/opsLog.js`）；API 封装（`services/apiClient.js`）。  
+  - 后端：新增 `POST /api/case-files/change-version`（`backend/routers/cases.py`、`backend/schemas.py`）。  
+  - 测试：新增 API 用例 `tests/api/case_library_change_version.spec.js`，更新 UI 用例 `tests/ui/case_library.spec.js`。  
+- 复用说明：复用通用确认抽屉与既有项目/版本列表，不新增前端框架型组件。  
+- 测试与验证：  
+  - `node --check scripts/modules/caseLibrary.js scripts/modules/opsLog.js services/apiClient.js`（通过）  
+  - `npm run test:ui -- tests/ui/case_library.spec.js --workers=1`（通过）  
+  - `APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080` 后执行 `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/case_library_change_version.spec.js`（通过）  
+- 更新记录：2025-12-20 用例库查看&编辑更换版本上线（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`services/apiClient.js`、`backend/routers/cases.py`、`backend/schemas.py`、`scripts/modules/opsLog.js`、`tests/api/case_library_change_version.spec.js`、`tests/ui/case_library.spec.js`）。  
+- 更新记录：2025-12-20 查看&编辑抽屉工具栏分区布局（`index.html`、`style.css`）。  
+- 更新记录：2025-12-20 更换版本选择框样式优化（`style.css`）。  
+- 更新记录：2025-12-20 查看&编辑列表操作按钮文案与主色统一（`scripts/modules/caseLibrary.js`）。  
+- 更新记录：2025-12-20 查看&编辑列表操作按钮文案保持横向展示（`style.css`）。  
+- 更新记录：2025-12-20 查看&编辑分区标题显示“搜索过滤/全局操作”（`index.html`、`style.css`）。  
+
 - 功能名称：用例库共享用例  
 - 功能描述：用例库“查看&编辑”抽屉的操作列新增共享入口，打开共享抽屉选择目标项目/版本并二次确认；共享后在目标项目入库一份新的用例；若目标项目存在清洗后的同名用例则阻止共享并提示。  
 - 操作方式：进入用例库 → 打开“查看&编辑”抽屉 → 点击用例行的“共享” → 选择目标项目与版本 → 确认共享 → 抽屉二次确认。  

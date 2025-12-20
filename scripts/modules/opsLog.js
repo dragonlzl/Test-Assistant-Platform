@@ -836,6 +836,7 @@
       action === 'import_case_file' ||
       action === 'overwrite_case_file' ||
       action === 'delete_case_file' ||
+      action === 'change_case_file_version' ||
       action === 'append_case_items' ||
       action === 'create_exec_set' ||
       action === 'upsert_exec_set_from_case_file' ||
@@ -903,6 +904,7 @@
     }
     if (action === 'overwrite_case_file') return '覆盖入库';
     if (action === 'delete_case_file') return '删除';
+    if (action === 'change_case_file_version') return '更换版本';
     if (action === 'append_case_items') return '追加';
     if (action === 'create_exec_set') return '执行页面入库';
     if (action === 'upsert_exec_set_from_case_file') return '转执行';
@@ -1032,6 +1034,7 @@
       if (source === 'tempexec') return '用例执行';
       return '用例库';
     }
+    if (action === 'change_case_file_version') return '用例库';
     if (action.indexOf('export_case_template_') === 0) return '用例库';
     if (action === 'export_case_files_xmind' || action === 'export_case_files_excel') return '用例库';
     if (action.indexOf('batch_') === 0) return '用例库';

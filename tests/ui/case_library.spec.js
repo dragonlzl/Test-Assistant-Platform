@@ -296,6 +296,32 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
         return respond(existing ? 200 : 201, file);
       }
 
+      if (pathName === '/api/case-files/change-version' && method === 'POST') {
+        const payload = route.request().postDataJSON();
+        if (payload.project_id !== project.id) return respond(400, { detail: 'bad project' });
+        const targetVersionId = Number(payload.target_version_id);
+        const ids = Array.isArray(payload.case_file_ids) ? payload.case_file_ids.map((id) => Number(id)) : [];
+        const updatedIds = [];
+        const skippedIds = [];
+        const missingIds = [];
+        const now = new Date().toISOString();
+        ids.forEach((id) => {
+          const file = caseFiles.find((item) => item && item.id === id);
+          if (!file) {
+            missingIds.push(id);
+            return;
+          }
+          if (String(file.version_id || '') === String(targetVersionId)) {
+            skippedIds.push(id);
+            return;
+          }
+          file.version_id = targetVersionId;
+          file.updated_at = now;
+          updatedIds.push(id);
+        });
+        return respond(200, { updated_ids: updatedIds, skipped_ids: skippedIds, missing_ids: missingIds });
+      }
+
       const itemsMatch = pathName.match(/^\/api\/case-files\/(\d+)\/items$/);
       if (itemsMatch && method === 'GET') {
         const fileId = Number(itemsMatch[1]);
@@ -642,6 +668,18 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('case_library_import');
     // 回到“仅自己”，保证后续导出/编辑仍聚焦当前用例文件
     await page.selectOption('#caseLibraryEditOwnerFilterSelect', 'me');
+
+    await expect(page.locator('#caseLibraryEditChangeVersionSelect')).toBeVisible();
+    await expect(page.locator('#caseLibraryEditChangeVersionBtn')).toBeDisabled();
+    await page.selectOption('#caseLibraryEditChangeVersionSelect', String(versions[1].id));
+    await page.click('#caseLibraryEditListBody input[data-case-lib-edit-select]');
+    await expect(page.locator('#caseLibraryEditChangeVersionBtn')).toBeEnabled();
+    await page.click('#caseLibraryEditChangeVersionBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('更换版本为' + versions[1].name);
+    await page.click('#appConfirmDrawerConfirmBtn');
+    const changedRow = page.locator('#caseLibraryEditListBody tr', { hasText: 'case_library_import' });
+    await expect(changedRow).toContainText(versions[1].name);
 
     // 抽屉内勾选后可导出 XMind/Excel（不含执行结果，使用原名）
     await page.click('#caseLibraryEditListBody input[data-case-lib-edit-select]');
