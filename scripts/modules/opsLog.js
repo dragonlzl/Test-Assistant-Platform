@@ -681,6 +681,26 @@
     return map;
   }
 
+  function appendMissingUsers(users, selectedIds, builder) {
+    var list = Array.isArray(users) ? users.slice() : [];
+    var ids = Array.isArray(selectedIds) ? selectedIds : [];
+    if (!ids.length || typeof builder !== 'function') return list;
+    var existing = {};
+    list.forEach(function(user) {
+      if (!user || user.id === null || user.id === undefined) return;
+      existing[String(user.id)] = true;
+    });
+    ids.forEach(function(id) {
+      var key = String(id || '').trim();
+      if (!key || existing[key]) return;
+      var item = builder(key);
+      if (!item) return;
+      existing[key] = true;
+      list.push(item);
+    });
+    return list;
+  }
+
   function getActivityUserIds() {
     var list = Array.isArray(state.users) ? state.users : [];
     var ids = [];
@@ -1577,21 +1597,19 @@
     var users = [];
     Object.keys(userMap).forEach(function(id) {
       var entry = userMap[id];
-      var actions = [];
-      var total = 0;
-      Object.keys(entry.behaviors).forEach(function(key) {
-        if (!allowAll && !allowMap[key]) return;
-        var count = entry.behaviors[key];
-        if (!count) return;
-        total += count;
-        actions.push({ key: key, label: getExecContributionBehaviorLabel(key), count: count });
-      });
+      var execCount = entry.behaviors.exec || 0;
+      var archiveCount = entry.behaviors.archive || 0;
+      if (!allowAll && !allowMap.exec) execCount = 0;
+      if (!allowAll && !allowMap.archive) archiveCount = 0;
+      var total = execCount + archiveCount;
       if (!total) return;
-      actions.sort(function(a, b) {
-        if (b.count !== a.count) return b.count - a.count;
-        return String(a.label || '').localeCompare(String(b.label || ''));
+      users.push({
+        id: entry.id,
+        name: entry.name,
+        execCount: execCount,
+        archiveCount: archiveCount,
+        total: total,
       });
-      users.push({ id: entry.id, name: entry.name, total: total, actions: actions });
     });
     if (users.length > 1) {
       users.sort(function(a, b) {
@@ -1626,6 +1644,15 @@
     var filteredLogs = getFilteredActivityLogs();
     var users = buildActivityViewData(filteredLogs);
     syncActivityBehaviorFilters();
+    var nameMap = getActivityUserNameMap();
+    users = appendMissingUsers(users, state.activity.selectedUserIds, function(id) {
+      return {
+        id: id,
+        name: nameMap[id] || ('用户#' + id),
+        total: 0,
+        actions: [],
+      };
+    });
     if (!users.length) {
       dom.activityList.innerHTML = '';
       dom.activityEmpty.textContent = filteredLogs.length ? '筛选后暂无活跃度数据' : '暂无活跃度数据';
@@ -1684,6 +1711,15 @@
     var filteredLogs = getFilteredContributionLogs();
     var users = buildContributionViewData(filteredLogs);
     syncContributionBehaviorFilters();
+    var nameMap = getActivityUserNameMap();
+    users = appendMissingUsers(users, state.contribution.selectedUserIds, function(id) {
+      return {
+        id: id,
+        name: nameMap[id] || ('用户#' + id),
+        total: 0,
+        actions: [],
+      };
+    });
     if (!users.length) {
       dom.contributionList.innerHTML = '';
       dom.contributionEmpty.textContent = filteredLogs.length ? '筛选后暂无贡献数据' : '暂无贡献数据';
@@ -1739,9 +1775,26 @@
       syncExecContributionBehaviorFilters();
       return;
     }
+    var selected = state.execContribution.selectedBehaviors || { all: true };
+    var allowExec = selected.all || Boolean(selected.exec);
+    var allowArchive = selected.all || Boolean(selected.archive);
+    if (!allowExec && !allowArchive) {
+      allowExec = true;
+      allowArchive = true;
+    }
     var filteredLogs = getFilteredExecContributionLogs();
     var users = buildExecContributionViewData(filteredLogs);
     syncExecContributionBehaviorFilters();
+    var nameMap = getActivityUserNameMap();
+    users = appendMissingUsers(users, state.execContribution.selectedUserIds, function(id) {
+      return {
+        id: id,
+        name: nameMap[id] || ('用户#' + id),
+        execCount: 0,
+        archiveCount: 0,
+        total: 0,
+      };
+    });
     if (!users.length) {
       dom.execContributionList.innerHTML = '';
       dom.execContributionEmpty.textContent = filteredLogs.length ? '筛选后暂无贡献数据' : '暂无贡献数据';
@@ -1750,26 +1803,45 @@
     }
     var maxTotal = 0;
     users.forEach(function(user) {
-      if (user.total > maxTotal) maxTotal = user.total;
+      var maxItem = 0;
+      if (allowExec) maxItem = Math.max(maxItem, user.execCount || 0);
+      if (allowArchive) maxItem = Math.max(maxItem, user.archiveCount || 0);
+      if (maxItem > maxTotal) maxTotal = maxItem;
     });
     dom.execContributionEmpty.classList.add('hidden');
     dom.execContributionList.innerHTML = users.map(function(user) {
-      var total = user.total || 0;
-      var trackWidth = maxTotal ? (total / maxTotal) * ACTIVITY_BAR_MAX_RATIO : 0;
-      var segments = user.actions.map(function(item) {
-        var width = total ? (item.count / total) * 100 : 0;
-        var label = item.label || '';
-        var title = label + ' ' + item.count;
-        return (
-          '<span class="ops-activity-bar-seg" title="' + escapeHtml(title) + '" style="width:' + width.toFixed(2) + '%;background:' + getExecContributionColor(label) + ';"></span>'
+      var execCount = user.execCount || 0;
+      var archiveCount = user.archiveCount || 0;
+      var execTrackWidth = maxTotal ? (execCount / maxTotal) * ACTIVITY_BAR_MAX_RATIO : 0;
+      var archiveTrackWidth = maxTotal ? (archiveCount / maxTotal) * ACTIVITY_BAR_MAX_RATIO : 0;
+      var bars = [];
+      if (allowExec) {
+        bars.push(
+          '<div class="ops-activity-bar-item">' +
+            '<div class="ops-activity-bar-label">执行</div>' +
+            '<div class="ops-activity-bar-track exec-contribution" style="width:' + execTrackWidth.toFixed(2) + '%;">' +
+              (execCount ? '<span class="ops-activity-bar-seg" title="执行 ' + execCount + '" style="width:100%;background:#3b82f6;"></span>' : '') +
+            '</div>' +
+            '<div class="ops-activity-count compact">' + execCount + '</div>' +
+          '</div>'
         );
-      }).join('');
+      }
+      if (allowArchive) {
+        bars.push(
+          '<div class="ops-activity-bar-item">' +
+            '<div class="ops-activity-bar-label">归档</div>' +
+            '<div class="ops-activity-bar-track exec-contribution" style="width:' + archiveTrackWidth.toFixed(2) + '%;">' +
+              (archiveCount ? '<span class="ops-activity-bar-seg" title="归档 ' + archiveCount + '" style="width:100%;background:#10b981;"></span>' : '') +
+            '</div>' +
+            '<div class="ops-activity-count compact">' + archiveCount + '</div>' +
+          '</div>'
+        );
+      }
       return (
-        '<div class="ops-activity-row">' +
+        '<div class="ops-activity-row ops-activity-row-stacked">' +
           '<div class="ops-activity-user">' + escapeHtml(user.name) + '</div>' +
-          '<div class="ops-activity-bar">' +
-            '<div class="ops-activity-bar-track" style="width:' + trackWidth.toFixed(2) + '%;">' + segments + '</div>' +
-            '<div class="ops-activity-count">' + total + '</div>' +
+          '<div class="ops-activity-bar ops-activity-bar-stack">' +
+            bars.join('') +
           '</div>' +
         '</div>'
       );

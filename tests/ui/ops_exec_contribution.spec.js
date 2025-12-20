@@ -175,6 +175,7 @@ test.describe('操作记录-用例执行贡献视图', () => {
     await page.click('#openOpsExecContributionDrawerBtn');
     await expect(page.locator('#opsExecContributionDrawer')).toHaveClass(/open/);
 
+    await page.click('input[data-ops-exec-contribution-user="1"]');
     await page.click('input[data-ops-exec-contribution-user="2"]');
     await page.click('#opsExecContributionApplyBtn');
     await expect(page.locator('#opsExecContributionDrawer')).not.toHaveClass(/open/);
@@ -182,9 +183,15 @@ test.describe('操作记录-用例执行贡献视图', () => {
     await expect(page.locator('#opsExecContributionCard')).toBeVisible();
     await expect(page.locator('#opsExecContributionBehaviorFilterGrid')).toContainText('用例执行 2');
     await expect(page.locator('#opsExecContributionBehaviorFilterGrid')).toContainText('归档用例 2');
-    await expect(page.locator('#opsExecContributionList .ops-activity-row')).toHaveCount(1);
-    await expect(page.locator('#opsExecContributionList .ops-activity-row').first()).toContainText('user_b');
-    await expect(page.locator('#opsExecContributionList .ops-activity-count')).toHaveText('4');
+    await expect(page.locator('#opsExecContributionList .ops-activity-row')).toHaveCount(2);
+    await expect(page.locator('#opsExecContributionList .ops-activity-row', { hasText: 'user_b' })).toContainText('user_b');
+    await expect(page.locator('#opsExecContributionList .ops-activity-row', { hasText: 'admin' })).toContainText('admin');
+    await expect(
+      page.locator('#opsExecContributionList .ops-activity-row', { hasText: 'user_b' }).locator('.ops-activity-count'),
+    ).toHaveText(['2', '2']);
+    await expect(
+      page.locator('#opsExecContributionList .ops-activity-row', { hasText: 'admin' }).locator('.ops-activity-count'),
+    ).toHaveText(['0', '0']);
     await expect.poll(() => opsCalls).toBeGreaterThanOrEqual(1);
 
     const beforeRefreshCalls = opsCalls;
@@ -195,6 +202,10 @@ test.describe('操作记录-用例执行贡献视图', () => {
     await expect(page.locator('#opsExecContributionDrawer')).not.toHaveClass(/open/);
 
     await page.click('input[data-ops-exec-contribution-behavior="archive"]');
-    await expect(page.locator('#opsExecContributionList .ops-activity-count')).toHaveText('2');
+    await expect(page.locator('#opsExecContributionList .ops-activity-row')).toHaveCount(2);
+    await expect(page.locator('#opsExecContributionList .ops-activity-bar-item')).toHaveCount(2);
+    await expect(page.locator('#opsExecContributionList .ops-activity-bar-label')).toHaveText(['归档', '归档']);
+    await expect(page.locator('#opsExecContributionList .ops-activity-row', { hasText: 'user_b' }).locator('.ops-activity-count')).toHaveText('2');
+    await expect(page.locator('#opsExecContributionList .ops-activity-row', { hasText: 'admin' }).locator('.ops-activity-count')).toHaveText('0');
   });
 });

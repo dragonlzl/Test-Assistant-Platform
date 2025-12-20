@@ -32,6 +32,7 @@ test.describe('操作记录-活跃度视图', () => {
   test('选择人员后展示活跃度，并支持行为/时间过滤', async ({ page }) => {
     const admin = { id: 1, username: 'admin', role: 'admin', level: 'leader' };
     const userB = { id: 2, username: 'user_b', role: 'user', level: 'member' };
+    const userC = { id: 3, username: 'user_c', role: 'user', level: 'member' };
     const settings = [];
     const now = Date.now();
     const logs = [
@@ -51,7 +52,7 @@ test.describe('操作记录-活跃度视图', () => {
         route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
       if (pathName === '/api/users/me') return respond(200, admin);
-      if (pathName === '/api/users' && method === 'GET') return respond(200, [admin, userB]);
+      if (pathName === '/api/users' && method === 'GET') return respond(200, [admin, userB, userC]);
       if (pathName === '/api/settings' && method === 'GET') return respond(200, settings);
       if (pathName === '/api/ops' && method === 'GET') {
         opsCalls += 1;
@@ -82,14 +83,17 @@ test.describe('操作记录-活跃度视图', () => {
     await expect(page.locator('input[data-ops-activity-user="1"]')).toBeVisible();
     await page.click('input[data-ops-activity-user="1"]');
     await page.click('input[data-ops-activity-user="2"]');
+    await page.click('input[data-ops-activity-user="3"]');
     await page.click('#opsActivityApplyBtn');
     await expect(page.locator('#opsActivityDrawer')).not.toHaveClass(/open/);
 
-    await expect(page.locator('.ops-activity-row')).toHaveCount(2);
+    await expect(page.locator('.ops-activity-row')).toHaveCount(3);
     await expect(page.locator('.ops-activity-row').nth(0)).toContainText('admin');
     await expect(page.locator('.ops-activity-row').nth(0).locator('.ops-activity-count')).toHaveText('3');
     await expect(page.locator('.ops-activity-row').nth(1)).toContainText('user_b');
     await expect(page.locator('.ops-activity-row').nth(1).locator('.ops-activity-count')).toHaveText('2');
+    await expect(page.locator('.ops-activity-row').nth(2)).toContainText('user_c');
+    await expect(page.locator('.ops-activity-row').nth(2).locator('.ops-activity-count')).toHaveText('0');
     await expect.poll(() => opsCalls).toBeGreaterThanOrEqual(1);
 
     const beforeRefreshCalls = opsCalls;
@@ -101,12 +105,16 @@ test.describe('操作记录-活跃度视图', () => {
 
     await expect(page.locator('#opsActivityBehaviorFilterGrid')).toContainText('登录');
     await page.click('input[data-ops-activity-behavior="登录"]');
-    await expect(page.locator('.ops-activity-row')).toHaveCount(2);
+    await expect(page.locator('.ops-activity-row')).toHaveCount(3);
     await expect(page.locator('.ops-activity-count').nth(0)).toHaveText('1');
     await expect(page.locator('.ops-activity-count').nth(1)).toHaveText('1');
+    await expect(page.locator('.ops-activity-count').nth(2)).toHaveText('0');
 
     await page.selectOption('#opsActivityTimeRangeSelect', 'day');
-    await expect(page.locator('.ops-activity-row')).toHaveCount(1);
+    await expect(page.locator('.ops-activity-row')).toHaveCount(3);
     await expect(page.locator('.ops-activity-row').first()).toContainText('admin');
+    await expect(page.locator('.ops-activity-count').nth(0)).toHaveText('1');
+    await expect(page.locator('.ops-activity-count').nth(1)).toHaveText('0');
+    await expect(page.locator('.ops-activity-count').nth(2)).toHaveText('0');
   });
 });

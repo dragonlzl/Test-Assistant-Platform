@@ -3582,6 +3582,9 @@ tr.diff-locate-active td {
   align-items: center;
   gap: 10px;
 }
+.ops-activity-row.ops-activity-row-stacked {
+  align-items: flex-start;
+}
 .ops-activity-user {
   flex: 0 0 140px;
   font-weight: 600;
@@ -3597,6 +3600,22 @@ tr.diff-locate-active td {
   align-items: center;
   gap: 10px;
 }
+.ops-activity-bar.ops-activity-bar-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.ops-activity-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ops-activity-bar-label {
+  flex: 0 0 40px;
+  text-align: right;
+  font-size: 12px;
+  color: #6b7280;
+}
 .ops-activity-bar-track {
   flex: 0 0 auto;
   min-width: 0;
@@ -3607,6 +3626,9 @@ tr.diff-locate-active td {
   overflow: hidden;
   display: flex;
   position: relative;
+}
+.ops-activity-bar-track.exec-contribution {
+  height: 18px;
 }
 .ops-activity-bar-seg {
   height: 100%;
@@ -3621,6 +3643,10 @@ tr.diff-locate-active td {
   text-align: right;
   color: #6b7280;
   font-weight: 600;
+}
+.ops-activity-count.compact {
+  min-width: 28px;
+  font-size: 12px;
 }
 .ops-activity-drawer-toolbar {
   display: flex;

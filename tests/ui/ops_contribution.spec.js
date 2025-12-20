@@ -77,6 +77,7 @@ test.describe('操作记录-用例贡献视图', () => {
     await page.click('#openOpsContributionDrawerBtn');
     await expect(page.locator('#opsContributionDrawer')).toHaveClass(/open/);
 
+    await page.click('input[data-ops-contribution-user="1"]');
     await page.click('input[data-ops-contribution-user="2"]');
     await page.click('#opsContributionApplyBtn');
     await expect(page.locator('#opsContributionDrawer')).not.toHaveClass(/open/);
@@ -86,9 +87,15 @@ test.describe('操作记录-用例贡献视图', () => {
     await expect(page.locator('#opsContributionBehaviorFilterGrid')).toContainText('新增用例 1');
     await expect(page.locator('#opsContributionBehaviorFilterGrid')).toContainText('删除用例 3');
 
-    await expect(page.locator('#opsContributionList .ops-activity-row')).toHaveCount(1);
-    await expect(page.locator('#opsContributionList .ops-activity-row').first()).toContainText('user_b');
-    await expect(page.locator('#opsContributionList .ops-activity-count')).toHaveText('7');
+    await expect(page.locator('#opsContributionList .ops-activity-row')).toHaveCount(2);
+    await expect(page.locator('#opsContributionList .ops-activity-row', { hasText: 'user_b' })).toContainText('user_b');
+    await expect(page.locator('#opsContributionList .ops-activity-row', { hasText: 'admin' })).toContainText('admin');
+    await expect(
+      page.locator('#opsContributionList .ops-activity-row', { hasText: 'user_b' }).locator('.ops-activity-count'),
+    ).toHaveText('7');
+    await expect(
+      page.locator('#opsContributionList .ops-activity-row', { hasText: 'admin' }).locator('.ops-activity-count'),
+    ).toHaveText('0');
     await expect.poll(() => opsCalls).toBeGreaterThanOrEqual(1);
 
     const beforeRefreshCalls = opsCalls;

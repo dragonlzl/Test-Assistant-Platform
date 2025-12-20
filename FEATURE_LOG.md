@@ -1637,3 +1637,7 @@
 - 测试与验证：`node --check scripts/modules/opsLog.js`（通过）；`npm run test:ui -- tests/ui/ops_activity.spec.js tests/ui/ops_contribution.spec.js tests/ui/ops_exec_contribution.spec.js tests/ui/ops_log_drawer_restore.spec.js`（通过）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18081` 后执行 `API_BASE_URL=http://127.0.0.1:18081 npm run test:api -- tests/api/ops_log.spec.js`（通过）。  
 - 更新记录：2025-12-20 操作记录新增用例执行贡献视图与执行日志细节（`backend/routers/exec_routes.py`、`config/constants.js`、`index.html`、`scripts/modules/opsLog.js`、`tests/`）。  
 - 更新记录：2025-12-20 操作记录抽屉仅在刷新前打开时自动恢复，归档贡献按执行状态统计（`backend/routers/exec_routes.py`、`scripts/modules/opsLog.js`、`tests/ui/ops_log_drawer_restore.spec.js`、`tests/api/ops_log.spec.js`）。  
+- 更新记录：2025-12-20 用例执行贡献视图改为双柱展示执行/归档（`scripts/modules/opsLog.js`、`style.css`、`tests/ui/ops_exec_contribution.spec.js`）。  
+- 更新记录：2025-12-20 用例执行贡献筛选时隐藏未选柱状项（`scripts/modules/opsLog.js`、`tests/ui/ops_exec_contribution.spec.js`）。  
+- 更新记录：2025-12-20 用例执行贡献筛选单项时保留 0 计数人员展示（`scripts/modules/opsLog.js`、`tests/ui/ops_exec_contribution.spec.js`）。  
+- 更新记录：2025-12-20 活跃度/用例贡献/执行贡献视图补齐 0 计数人员展示（`scripts/modules/opsLog.js`、`tests/ui/ops_activity.spec.js`、`tests/ui/ops_contribution.spec.js`、`tests/ui/ops_exec_contribution.spec.js`）。  
