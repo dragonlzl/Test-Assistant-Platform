@@ -1,6 +1,8 @@
 const { test, expect } = require('@playwright/test');
 
 test.describe('项目管理列表与抽屉', () => {
+  let projects;
+
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
@@ -27,7 +29,7 @@ test.describe('项目管理列表与抽屉', () => {
       };
     });
 
-    const projects = [
+    projects = [
       {
         id: 1,
         name: 'Alpha',
@@ -70,8 +72,18 @@ test.describe('项目管理列表与抽屉', () => {
       route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(created) });
     });
     await page.route('**/api/projects/*', (route) => {
-      if (route.request().method().toUpperCase() === 'PATCH') {
+      const method = route.request().method().toUpperCase();
+      if (method === 'PATCH') {
         return route.fulfill({ status: 200, contentType: 'application/json', body: route.request().postData() || '{}' });
+      }
+      if (method === 'DELETE') {
+        const url = route.request().url();
+        const match = url.match(/projects\/(\d+)/);
+        const pid = match ? Number(match[1]) : 0;
+        if (pid) {
+          projects = projects.filter((item) => item && item.id !== pid);
+        }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
       }
       return route.continue();
     });
@@ -174,6 +186,33 @@ test.describe('项目管理列表与抽屉', () => {
     await expect(drawer).not.toHaveClass(/open/);
   });
 
+  test('删除项目使用确认抽屉并刷新列表', async ({ page }) => {
+    const manageBtn = page.locator('.tab-group-btn', { hasText: '管理' });
+    await manageBtn.click();
+    await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
+    await page.click('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
+    await expect(page.locator('#projectAdminHead')).toBeVisible();
+
+    const rows = page.locator('#projectTableBody tr');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toContainText('Alpha');
+
+    await rows.first().locator('[data-action="delete-project"]').click();
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerTitle')).toContainText('确认删除项目');
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('Alpha');
+    await page.click('#appConfirmDrawerConfirmBtn');
+
+    const toast = page.locator('.temp-center-toast', { hasText: '删除项目成功' });
+    await expect(toast).toBeVisible();
+    await page.waitForTimeout(3400);
+    await expect(toast).toHaveCount(0);
+
+    await expect(page.locator('#appConfirmDrawer')).not.toHaveClass(/open/);
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).not.toContainText('Alpha');
+  });
+
   test('新增版本成功后显示居中提示', async ({ page }) => {
     const manageBtn = page.locator('.tab-group-btn', { hasText: '管理' });
     await manageBtn.click();
@@ -211,6 +250,7 @@ test.describe('项目管理列表与抽屉', () => {
     await page.route('**/api/projects/*/versions', (route) => {
       route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ id: 22, name: 'v2.1', created_at: new Date().toISOString() }) });
     });
+    await page.unroute('**/api/projects/*');
     await page.route('**/api/projects/*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
@@ -261,6 +301,7 @@ test.describe('项目管理列表与抽屉', () => {
     await page.route('**/api/projects/*/versions', (route) => {
       route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ id: 32, name: 'v3.1', created_at: new Date().toISOString() }) });
     });
+    await page.unroute('**/api/projects/*');
     await page.route('**/api/projects/*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');

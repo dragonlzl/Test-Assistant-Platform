@@ -562,7 +562,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryImportStatus')).toContainText('覆盖导入成功');
     await expect(page.locator('#caseLibraryImportDiffDrawer')).not.toHaveClass(/open/);
 
-    // 额外构造一份“非当前用户”的用例文件，用于验证编辑抽屉的“归属”过滤默认只看自己。
+    // 额外构造一份“非当前用户”的用例文件，以及一份“其他项目导入”文件，用于验证编辑抽屉归属过滤。
     {
       const now = new Date().toISOString();
       const id = nextCaseFileId++;
@@ -582,6 +582,26 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
       });
       caseItemsByFileId[id] = [];
     }
+    {
+      const now = new Date().toISOString();
+      const id = nextCaseFileId++;
+      caseFiles.push({
+        id,
+        project_id: project.id,
+        version_id: versions[0].id,
+        file_name_clean: 'shared_case_file',
+        source: 'share:55',
+        item_count: 0,
+        reuse_enabled: false,
+        importer_id: 88,
+        importer_name: 'share_user',
+        imported_at: now,
+        updated_at: now,
+        last_updated_by: 88,
+        last_updated_by_name: 'share_user',
+      });
+      caseItemsByFileId[id] = [];
+    }
 
     // 关闭导入抽屉再进入编辑抽屉，避免遮罩拦截点击
     if (await page.locator('#caseLibraryImportDrawer').evaluate((el) => el.classList.contains('open'))) {
@@ -592,17 +612,26 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await expect(page.locator('#caseLibraryEditOwnerFilterSelect')).toBeVisible();
     await expect(page.locator('#caseLibraryEditFileSearchInput')).toBeVisible();
-    await expect(page.locator('#caseLibraryEditOwnerFilterSelect')).toHaveValue('me');
+    await expect(page.locator('#caseLibraryEditOwnerFilterSelect')).toHaveValue('all');
     await expect(page.locator('#caseLibraryEditOwnerFilterSelect option[value="me"]')).toHaveText(user.username);
     await expect(page.locator('#caseLibraryEditOwnerFilterSelect option[value="all"]')).toHaveText('全部');
+    await expect(page.locator('#caseLibraryEditOwnerFilterSelect option[value="shared"]')).toHaveText('其他项目导入');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('case_library_import');
-    await expect(page.locator('#caseLibraryEditListBody')).not.toContainText('other_user_case_file');
-
-    await page.selectOption('#caseLibraryEditOwnerFilterSelect', 'all');
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('other_user_case_file');
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('shared_case_file');
+
     await page.selectOption('#caseLibraryEditOwnerFilterSelect', 'me');
     await expect(page.locator('#caseLibraryEditListBody')).not.toContainText('other_user_case_file');
+    await expect(page.locator('#caseLibraryEditListBody')).not.toContainText('shared_case_file');
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('case_library_import');
+
+    await page.selectOption('#caseLibraryEditOwnerFilterSelect', 'shared');
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('shared_case_file');
+    await expect(page.locator('#caseLibraryEditListBody')).not.toContainText('case_library_import');
+    await expect(page.locator('#caseLibraryEditListBody')).not.toContainText('other_user_case_file');
+    await page.selectOption('#caseLibraryEditOwnerFilterSelect', 'all');
+    await expect(page.locator('#caseLibraryEditListBody')).toContainText('other_user_case_file');
 
     // 用例名搜索：在“全部”范围内可快速定位目标用例文件
     await page.selectOption('#caseLibraryEditOwnerFilterSelect', 'all');
@@ -611,7 +640,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryEditListBody')).not.toContainText('case_library_import');
     await page.fill('#caseLibraryEditFileSearchInput', '');
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('case_library_import');
-    // 回到默认“仅自己”，保证后续导出/编辑仍聚焦当前用例文件
+    // 回到“仅自己”，保证后续导出/编辑仍聚焦当前用例文件
     await page.selectOption('#caseLibraryEditOwnerFilterSelect', 'me');
 
     // 抽屉内勾选后可导出 XMind/Excel（不含执行结果，使用原名）

@@ -19,6 +19,23 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例库共享用例  
+- 功能描述：用例库“查看&编辑”抽屉的操作列新增共享入口，打开共享抽屉选择目标项目/版本并二次确认；共享后在目标项目入库一份新的用例；若目标项目存在清洗后的同名用例则阻止共享并提示。  
+- 操作方式：进入用例库 → 打开“查看&编辑”抽屉 → 点击用例行的“共享” → 选择目标项目与版本 → 确认共享 → 抽屉二次确认。  
+- 使用效果：支持跨项目/版本复制用例文件；非管理员在共享抽屉内可查看全部项目；重复同名时 5 秒悬浮提示“该项目已有此用例…”。  
+- 新增内容/接口/组件：  
+  - 前端：共享抽屉结构（`index.html`）、列表操作按钮与共享逻辑（`scripts/modules/caseLibrary.js`）、操作列样式（`style.css`）、API 封装 `shareCaseFile` 与项目/版本全量查询参数（`services/apiClient.js`）。  
+  - 后端：`POST /api/case-files/share` 共享入库；项目/版本列表支持 `scope=share`（`backend/routers/cases.py`、`backend/routers/projects.py`、`backend/schemas.py`）。  
+  - 测试：新增 API 用例 `tests/api/case_library_share.spec.js` 与 UI 用例 `tests/ui/case_library_share.spec.js`。  
+- 复用说明：复用用例库清洗/入库结构与通用确认抽屉，不新增前端框架型组件。  
+- 测试与验证：  
+  - `node --check scripts/modules/caseLibrary.js services/apiClient.js`（通过）  
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8080` 后执行 `API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/case_library_share.spec.js`（通过）  
+  - `npm run test:ui -- tests/ui/case_library_share.spec.js --workers=1`（通过，需放开本地端口权限）  
+  - `npm run test:ui -- tests/ui/case_library.spec.js --workers=1`（通过）  
+- 更新记录：2025-12-20 用例库共享用例与重复拦截提示上线（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`services/apiClient.js`、`backend/routers/cases.py`、`backend/routers/projects.py`、`backend/schemas.py`、`tests/api/case_library_share.spec.js`、`tests/ui/case_library_share.spec.js`）。  
+- 更新记录：2025-12-20 归属默认改为全部并新增“其他项目导入”筛选（`scripts/modules/caseLibrary.js`、`backend/routers/cases.py`、`backend/schemas.py`、`tests/ui/case_library.spec.js`）。  
+
 - 功能名称：执行视图顶部切换与快捷归档  
 - 功能描述：用例执行页顶部工具栏新增上一份/下一份循环切换按钮与归档按钮；归档流程复用“归档操作&进度预览”逻辑（含未通过原因抽屉/通过确认），归档成功后自动切换到下一份用例。  
 - 操作方式：进入用例执行 → 在顶部工具栏点击“上一份/下一份”切换用例 → 点击“归档”按提示确认或填写原因后归档并自动跳到下一份。  
@@ -1535,6 +1552,9 @@
 - 复用说明：复用既有通用确认抽屉与现有业务流程，不新增后端接口。  
 - 测试与验证：`node --check scripts/modules/tempexec.js scripts/modules/caseLibrary.js scripts/core/casesGenCore.js`（通过）；`npm run test:ui -- tests/ui/tempexec_progress.spec.js tests/ui/tempexec_drag.spec.js tests/ui/casegen_db_store.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_delete.spec.js`（通过）。  
 - 更新记录：2025-12-19 多处确认弹窗改为抽屉并处理抽屉挂起（`scripts/core/casesGenCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`tests/ui/tempexec_progress.spec.js`、`tests/ui/casegen_db_store.spec.js`、`tests/ui/case_library_batch_delete.spec.js`）。  
+- 更新记录：2025-12-20 删除项目确认改为抽屉提示（`scripts/modules/admin.js`、`tests/ui/project_admin_drawer.spec.js`）。  
+- 更新记录：2025-12-20 删除项目成功后增加悬浮提示（`scripts/modules/admin.js`、`tests/ui/project_admin_drawer.spec.js`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/project_admin_drawer.spec.js --workers=1`（通过）。  
 
 - 功能名称：用例生成追加入库可重复触发与管理页成功提示  
 - 功能描述：修复用例生成页面追加入库成功/取消后无法再次追加入库的问题；执行页版本盒子“解散归档”提示语改为单行并展示待解散用例名；人员管理重置密码、项目管理新增版本成功后补充居中提示（3 秒后自动消失）。  

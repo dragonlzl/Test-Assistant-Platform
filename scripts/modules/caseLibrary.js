@@ -92,6 +92,13 @@
     editDrawerSelectAll: document.getElementById('caseLibraryEditSelectAll'),
     editDrawerStatus: document.getElementById('caseLibraryEditDrawerStatus'),
     editDrawerListBody: document.getElementById('caseLibraryEditListBody'),
+    shareDrawerCaseName: document.getElementById('caseLibraryShareCaseName'),
+    shareDrawerSourceProject: document.getElementById('caseLibraryShareSourceProject'),
+    shareDrawerSourceVersion: document.getElementById('caseLibraryShareSourceVersion'),
+    shareDrawerProjectSelect: document.getElementById('caseLibraryShareProjectSelect'),
+    shareDrawerVersionSelect: document.getElementById('caseLibraryShareVersionSelect'),
+    shareDrawerConfirmBtn: document.getElementById('caseLibraryShareConfirmBtn'),
+    shareDrawerStatus: document.getElementById('caseLibraryShareStatus'),
 
     selectProjectSelect: document.getElementById('caseLibrarySelectProjectSelect'),
     selectVersionSelect: document.getElementById('caseLibrarySelectVersionSelect'),
@@ -174,13 +181,28 @@
     editDrawer: {
       projectId: null,
       versionId: null,
-      ownerFilter: 'me',
+      ownerFilter: 'all',
+      ownerFilterTouched: false,
       fileSearchText: '',
       files: [],
       execByFileId: {},
       loading: false,
       selection: new Set(),
       restoring: false,
+    },
+
+    shareDrawer: {
+      caseFile: null,
+      projectId: null,
+      versionId: null,
+      loading: false,
+      versionLoadFailed: false,
+      projects: [],
+      projectNameById: {},
+      versionsByProject: {},
+      versionNameByProject: {},
+      previousDrawer: null,
+      reopenPrevious: false,
     },
 
     selectDrawer: {
@@ -234,6 +256,7 @@
   var importDiffDrawerOpenTimer = 0;
 	  var importInvalidDrawerInstance = null;
 	  var editDrawerInstance = null;
+    var shareDrawerInstance = null;
 	  var selectDrawerInstance = null;
     var historyDrawerInstance = null;
 
@@ -2236,7 +2259,17 @@
     raw = raw.trim().toLowerCase();
     if (raw === 'all') return 'all';
     if (raw === 'me') return 'me';
-    return 'me';
+    if (raw === 'shared') return 'shared';
+    return 'all';
+  }
+
+  function isSharedCaseFile(file) {
+    if (!file) return false;
+    var source = file.source !== null && file.source !== undefined ? String(file.source) : '';
+    source = source.trim().toLowerCase();
+    if (!source) return false;
+    if (source.indexOf('share:') === 0) return true;
+    return source === 'share';
   }
 
   function syncEditDrawerOwnerFilterOptions() {
@@ -2244,10 +2277,14 @@
     var username = getCurrentUsername();
     dom.editDrawerOwnerFilterSelect.innerHTML =
       '<option value="all">全部</option>' +
+      '<option value="shared">其他项目导入</option>' +
       '<option value="me">' + escapeHtml(username || '我') + '</option>';
-    var desired = normalizeEditDrawerOwnerFilter(state.editDrawer && state.editDrawer.ownerFilter ? state.editDrawer.ownerFilter : 'me');
+    var desired = normalizeEditDrawerOwnerFilter(state.editDrawer && state.editDrawer.ownerFilter ? state.editDrawer.ownerFilter : 'all');
+    var touched = state.editDrawer && state.editDrawer.ownerFilterTouched ? true : false;
+    // 未手动选择时，默认“全部”，避免继承旧默认“仅自己”造成误过滤。
+    if (!touched && desired === 'me') desired = 'all';
     // 若未登录或拿不到用户信息，则默认“全部”，避免误过滤导致列表为空。
-    if (!username) desired = 'all';
+    if (!username && desired === 'me') desired = 'all';
     state.editDrawer.ownerFilter = desired;
     dom.editDrawerOwnerFilterSelect.value = desired;
   }
@@ -2792,7 +2829,8 @@
     if (!userId) return;
     var projectId = state.editDrawer && state.editDrawer.projectId ? state.editDrawer.projectId : null;
     var versionId = state.editDrawer && state.editDrawer.versionId ? state.editDrawer.versionId : null;
-    var ownerFilter = normalizeEditDrawerOwnerFilter(state.editDrawer && state.editDrawer.ownerFilter ? state.editDrawer.ownerFilter : 'me');
+    var ownerFilter = normalizeEditDrawerOwnerFilter(state.editDrawer && state.editDrawer.ownerFilter ? state.editDrawer.ownerFilter : 'all');
+    var ownerFilterTouched = state.editDrawer && state.editDrawer.ownerFilterTouched ? true : false;
     var selection = state.editDrawer && state.editDrawer.selection instanceof Set ? state.editDrawer.selection : new Set();
     state.editDrawer.selection = selection;
     // 保护：避免“初始化/刷新期间 state 为空”时把已持久化的选择覆盖成空，导致无法恢复。
@@ -2804,7 +2842,11 @@
         var existingVersionId = normalizeId(existing.version_id);
         if (!versionId && existingVersionId) versionId = existingVersionId;
         var existingOwnerFilter = normalizeEditDrawerOwnerFilter(existing.owner_filter || '');
-        if (!ownerFilter && existingOwnerFilter) ownerFilter = existingOwnerFilter;
+        var existingOwnerFilterTouched = Boolean(existing.owner_filter_touched);
+        if (!ownerFilterTouched && existingOwnerFilterTouched) {
+          ownerFilter = existingOwnerFilter;
+          ownerFilterTouched = true;
+        }
         if (!selection.size && Array.isArray(existing.selected_ids) && existing.selected_ids.length) {
           selection = new Set(existing.selected_ids.map(function(v) { return String(v); }));
           state.editDrawer.selection = selection;
@@ -2816,6 +2858,7 @@
       project_id: projectId || '',
       version_id: versionId || '',
       owner_filter: ownerFilter,
+      owner_filter_touched: Boolean(ownerFilterTouched),
       selected_ids: Array.from(selection),
       drawer_open: Boolean(opts.drawer_open),
       saved_at: Date.now(),
@@ -2833,6 +2876,8 @@
     var projectId = normalizeId(persisted.project_id);
     var versionId = normalizeId(persisted.version_id);
     var ownerFilter = normalizeEditDrawerOwnerFilter(persisted.owner_filter || '');
+    var ownerFilterTouched = Boolean(persisted.owner_filter_touched);
+    if (!ownerFilterTouched && ownerFilter === 'me') ownerFilter = 'all';
     var ids = Array.isArray(persisted.selected_ids) ? persisted.selected_ids.map(function(v) { return String(v); }) : [];
     if (!projectId) return Promise.resolve(false);
 
@@ -2841,6 +2886,7 @@
     state.editDrawer.projectId = projectId;
     state.editDrawer.versionId = versionId || null;
     state.editDrawer.ownerFilter = ownerFilter;
+    state.editDrawer.ownerFilterTouched = ownerFilterTouched;
     state.editDrawer.selection = new Set(ids);
     if (dom.editDrawerProjectSelect) dom.editDrawerProjectSelect.value = String(projectId);
     if (dom.editDrawerVersionSelect) {
@@ -3003,6 +3049,40 @@
     return { open: open, close: close, toggle: toggle, element: drawer };
   }
 
+  function ensureShareDrawer() {
+    if (shareDrawerInstance) return shareDrawerInstance;
+    shareDrawerInstance = ensureDrawer(
+      'caseLibraryShareDrawer',
+      [],
+      function() {
+        resetShareDrawerControls();
+        renderShareDrawerMeta();
+        ensureShareProjectsReady()
+          .then(function() {
+            if (dom.shareDrawerProjectSelect) dom.shareDrawerProjectSelect.value = '';
+          })
+          .finally(function() {
+            syncShareDrawerControls();
+          });
+      },
+      function() {
+        var prevDrawer = state.shareDrawer.previousDrawer;
+        var shouldReopen = Boolean(
+          state.shareDrawer.reopenPrevious &&
+          prevDrawer &&
+          prevDrawer.element &&
+          prevDrawer.element.classList &&
+          !prevDrawer.element.classList.contains('open')
+        );
+        clearShareDrawerState();
+        if (shouldReopen && typeof prevDrawer.open === 'function') {
+          prevDrawer.open();
+        }
+      }
+    );
+    return shareDrawerInstance;
+  }
+
   function syncProjectOptions(selectEl, placeholder) {
     if (!selectEl) return;
     var list = Array.isArray(state.projects) ? state.projects : [];
@@ -3050,6 +3130,88 @@
     var map = projectId && state.versionNameByProject[projectId] ? state.versionNameByProject[projectId] : null;
     if (map && map[versionId]) return map[versionId];
     return '版本#' + versionId;
+  }
+
+  function syncShareProjectOptions(selectEl, placeholder) {
+    if (!selectEl) return;
+    var list = Array.isArray(state.shareDrawer.projects) ? state.shareDrawer.projects : [];
+    if (utils && typeof utils.sortProjectsByUserSettings === 'function') {
+      list = utils.sortProjectsByUserSettings(list);
+    }
+    var options = ['<option value=\"\">' + escapeHtml(placeholder || '请选择项目') + '</option>'];
+    state.shareDrawer.projectNameById = {};
+    list.forEach(function(p) {
+      if (!p) return;
+      state.shareDrawer.projectNameById[p.id] = p.name || ('项目#' + p.id);
+      options.push('<option value=\"' + escapeHtml(p.id) + '\">' + escapeHtml(state.shareDrawer.projectNameById[p.id]) + '</option>');
+    });
+    selectEl.innerHTML = options.join('');
+  }
+
+  function syncShareVersionOptions(selectEl, projectId, placeholder) {
+    if (!selectEl) return;
+    var list = projectId && state.shareDrawer.versionsByProject[projectId] ? state.shareDrawer.versionsByProject[projectId] : [];
+    var options = ['<option value=\"\">' + escapeHtml(placeholder || '请选择版本') + '</option>'];
+    if (!state.shareDrawer.versionNameByProject[projectId]) state.shareDrawer.versionNameByProject[projectId] = {};
+    (list || []).forEach(function(v) {
+      if (!v) return;
+      state.shareDrawer.versionNameByProject[projectId][v.id] = v.name || ('版本#' + v.id);
+      options.push('<option value=\"' + escapeHtml(v.id) + '\">' + escapeHtml(state.shareDrawer.versionNameByProject[projectId][v.id]) + '</option>');
+    });
+    selectEl.innerHTML = options.join('');
+  }
+
+  function getShareVersionName(projectId, versionId) {
+    if (!versionId) return '--';
+    var map = projectId && state.shareDrawer.versionNameByProject[projectId] ? state.shareDrawer.versionNameByProject[projectId] : null;
+    if (map && map[versionId]) return map[versionId];
+    return '版本#' + versionId;
+  }
+
+  function loadShareProjects() {
+    if (!apiClient || typeof apiClient.listProjects !== 'function') return Promise.resolve([]);
+    return apiClient.listProjects({ scope: 'share' }).then(function(list) {
+      var shareSelected = dom.shareDrawerProjectSelect ? String(dom.shareDrawerProjectSelect.value || '') : '';
+      var projects = Array.isArray(list) ? list : [];
+      if (utils && typeof utils.sortProjectsByUserSettings === 'function') {
+        projects = utils.sortProjectsByUserSettings(projects);
+      }
+      state.shareDrawer.projects = projects;
+      syncShareProjectOptions(dom.shareDrawerProjectSelect, '请选择项目');
+      if (dom.shareDrawerProjectSelect && shareSelected) dom.shareDrawerProjectSelect.value = shareSelected;
+      return projects;
+    });
+  }
+
+  function loadShareVersions(projectId) {
+    if (!projectId) return Promise.resolve([]);
+    if (state.shareDrawer.versionsByProject[projectId]) return Promise.resolve(state.shareDrawer.versionsByProject[projectId]);
+    return apiClient.listProjectVersions(projectId, { scope: 'share' }).then(function(list) {
+      state.shareDrawer.versionsByProject[projectId] = Array.isArray(list) ? list : [];
+      state.shareDrawer.versionNameByProject[projectId] = {};
+      (state.shareDrawer.versionsByProject[projectId] || []).forEach(function(v) {
+        if (!v) return;
+        state.shareDrawer.versionNameByProject[projectId][v.id] = v.name || ('版本#' + v.id);
+      });
+      return state.shareDrawer.versionsByProject[projectId];
+    });
+  }
+
+  function ensureShareProjectsReady() {
+    if (state.shareDrawer.projects && state.shareDrawer.projects.length) {
+      syncShareProjectOptions(dom.shareDrawerProjectSelect, '请选择项目');
+      return Promise.resolve(state.shareDrawer.projects);
+    }
+    setStatus(dom.shareDrawerStatus, '加载项目中...', '');
+    return loadShareProjects()
+      .then(function(list) {
+        setStatus(dom.shareDrawerStatus, '', '');
+        return list;
+      })
+      .catch(function(err) {
+        setStatus(dom.shareDrawerStatus, err && err.message ? err.message : '加载项目失败', 'err');
+        return [];
+      });
   }
 
   function loadProjects() {
@@ -3109,6 +3271,10 @@
     state.projectNameById = {};
     state.versionsByProject = {};
     state.versionNameByProject = {};
+    state.shareDrawer.projects = [];
+    state.shareDrawer.projectNameById = {};
+    state.shareDrawer.versionsByProject = {};
+    state.shareDrawer.versionNameByProject = {};
   }
 
   function bindProjectsUpdated() {
@@ -4083,7 +4249,11 @@
     state.editDrawer.execByFileId = {};
     state.editDrawer.loading = false;
     state.editDrawer.selection = new Set();
-    if (!state.editDrawer.ownerFilter) state.editDrawer.ownerFilter = 'me';
+    state.editDrawer.ownerFilterTouched = false;
+    if (!state.editDrawer.ownerFilter) state.editDrawer.ownerFilter = 'all';
+    if (state.editDrawer.ownerFilter === 'me' && !state.editDrawer.ownerFilterTouched) {
+      state.editDrawer.ownerFilter = 'all';
+    }
     state.editDrawer.fileSearchText = '';
     setStatus(dom.editDrawerStatus, '', '');
     syncProjectOptions(dom.editDrawerProjectSelect, '请选择项目');
@@ -4113,6 +4283,7 @@
 
   function handleEditDrawerOwnerFilterChange() {
     state.editDrawer.ownerFilter = normalizeEditDrawerOwnerFilter(dom.editDrawerOwnerFilterSelect ? dom.editDrawerOwnerFilterSelect.value : '');
+    state.editDrawer.ownerFilterTouched = true;
     // 切换过滤后，仅保留当前可见列表里的勾选，避免隐藏项仍被导出/删除。
     var visibleIds = {};
     getEditDrawerVisibleFiles().forEach(function(f) {
@@ -4367,8 +4538,10 @@
     if (state.editDrawer.versionId) {
       visible = visible.filter(function(f) { return String(f && f.version_id || '') === String(state.editDrawer.versionId || ''); });
     }
-    var ownerFilter = normalizeEditDrawerOwnerFilter(state.editDrawer && state.editDrawer.ownerFilter ? state.editDrawer.ownerFilter : 'me');
-    if (ownerFilter === 'me') {
+    var ownerFilter = normalizeEditDrawerOwnerFilter(state.editDrawer && state.editDrawer.ownerFilter ? state.editDrawer.ownerFilter : 'all');
+    if (ownerFilter === 'shared') {
+      visible = visible.filter(function(f) { return isSharedCaseFile(f); });
+    } else if (ownerFilter === 'me') {
       var userId = getCurrentUserId();
       if (userId) {
         visible = visible.filter(function(f) {
@@ -4478,7 +4651,12 @@
           '<td>' + escapeHtml(importedAt) + '</td>' +
           '<td>' + escapeHtml(updaterName) + '</td>' +
           '<td>' + escapeHtml(updatedAt) + '</td>' +
-          '<td><button class=\"secondary\" type=\"button\" data-case-lib-edit=\"' + escapeHtml(f && f.id ? f.id : '') + '\">查看&amp;编辑</button></td>' +
+          '<td>' +
+            '<div class=\"case-library-row-actions\">' +
+              '<button class=\"secondary\" type=\"button\" data-case-lib-edit=\"' + escapeHtml(f && f.id ? f.id : '') + '\">查看&amp;编辑</button>' +
+              '<button class=\"secondary\" type=\"button\" data-case-lib-share=\"' + escapeHtml(f && f.id ? f.id : '') + '\">共享</button>' +
+            '</div>' +
+          '</td>' +
         '</tr>'
       );
     }).join('');
@@ -4500,6 +4678,220 @@
         );
       })
       .join('');
+  }
+
+  function resetShareDrawerControls() {
+    state.shareDrawer.projectId = null;
+    state.shareDrawer.versionId = null;
+    state.shareDrawer.loading = false;
+    state.shareDrawer.versionLoadFailed = false;
+    if (dom.shareDrawerProjectSelect) {
+      dom.shareDrawerProjectSelect.innerHTML = '<option value=\"\">请选择项目</option>';
+      dom.shareDrawerProjectSelect.value = '';
+    }
+    if (dom.shareDrawerVersionSelect) {
+      dom.shareDrawerVersionSelect.disabled = true;
+      dom.shareDrawerVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
+      dom.shareDrawerVersionSelect.value = '';
+    }
+    if (dom.shareDrawerStatus) setStatus(dom.shareDrawerStatus, '', '');
+    syncShareDrawerControls();
+  }
+
+  function clearShareDrawerState() {
+    resetShareDrawerControls();
+    state.shareDrawer.caseFile = null;
+    state.shareDrawer.previousDrawer = null;
+    state.shareDrawer.reopenPrevious = false;
+  }
+
+  function renderShareDrawerMeta() {
+    var file = state.shareDrawer.caseFile;
+    var fileName = file ? (file.file_name_clean || ('用例#' + file.id)) : '--';
+    if (dom.shareDrawerCaseName) dom.shareDrawerCaseName.textContent = fileName;
+    var projectName = '--';
+    if (file && (file.project_id || file.project_id === 0)) {
+      projectName = state.projectNameById[file.project_id] || ('项目#' + file.project_id);
+    }
+    if (dom.shareDrawerSourceProject) dom.shareDrawerSourceProject.textContent = projectName;
+    var versionName = file ? getVersionName(file.project_id, file.version_id) : '--';
+    if (dom.shareDrawerSourceVersion) dom.shareDrawerSourceVersion.textContent = versionName;
+  }
+
+  function shareRequiresVersion(projectId) {
+    var list = projectId && state.shareDrawer.versionsByProject[projectId] ? state.shareDrawer.versionsByProject[projectId] : [];
+    return Array.isArray(list) && list.length > 0;
+  }
+
+  function syncShareDrawerControls() {
+    if (!dom.shareDrawerConfirmBtn) return;
+    var pid = state.shareDrawer.projectId;
+    var vid = state.shareDrawer.versionId;
+    var needVersion = pid && shareRequiresVersion(pid);
+    var disabled = Boolean(state.shareDrawer.loading) || Boolean(state.shareDrawer.versionLoadFailed) || !pid || (needVersion && !vid);
+    dom.shareDrawerConfirmBtn.disabled = disabled;
+  }
+
+  function handleShareProjectChange() {
+    state.shareDrawer.projectId = normalizeId(dom.shareDrawerProjectSelect ? dom.shareDrawerProjectSelect.value : '');
+    state.shareDrawer.versionId = null;
+    state.shareDrawer.versionLoadFailed = false;
+    setStatus(dom.shareDrawerStatus, '', '');
+    if (dom.shareDrawerVersionSelect) {
+      dom.shareDrawerVersionSelect.disabled = true;
+      dom.shareDrawerVersionSelect.innerHTML = '<option value=\"\">加载版本中...</option>';
+    }
+    syncShareDrawerControls();
+    var pid = state.shareDrawer.projectId;
+    if (!pid) {
+      if (dom.shareDrawerVersionSelect) {
+        dom.shareDrawerVersionSelect.disabled = true;
+        dom.shareDrawerVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
+        dom.shareDrawerVersionSelect.value = '';
+      }
+      syncShareDrawerControls();
+      return;
+    }
+    loadShareVersions(pid)
+      .then(function(list) {
+        var versions = Array.isArray(list) ? list : [];
+        if (dom.shareDrawerVersionSelect) {
+          if (versions.length) {
+            dom.shareDrawerVersionSelect.disabled = false;
+            syncShareVersionOptions(dom.shareDrawerVersionSelect, pid, '请选择版本');
+            dom.shareDrawerVersionSelect.value = '';
+          } else {
+            dom.shareDrawerVersionSelect.disabled = true;
+            dom.shareDrawerVersionSelect.innerHTML = '<option value=\"\">无需选择版本</option>';
+            dom.shareDrawerVersionSelect.value = '';
+          }
+        }
+        syncShareDrawerControls();
+      })
+      .catch(function(err) {
+        state.shareDrawer.versionLoadFailed = true;
+        if (dom.shareDrawerVersionSelect) {
+          dom.shareDrawerVersionSelect.disabled = true;
+          dom.shareDrawerVersionSelect.innerHTML = '<option value=\"\">加载版本失败</option>';
+        }
+        setStatus(dom.shareDrawerStatus, err && err.message ? err.message : '加载版本失败', 'err');
+        syncShareDrawerControls();
+      });
+  }
+
+  function handleShareVersionChange() {
+    state.shareDrawer.versionId = normalizeId(dom.shareDrawerVersionSelect ? dom.shareDrawerVersionSelect.value : '');
+    syncShareDrawerControls();
+  }
+
+  function openShareDrawer(caseFile, options) {
+    if (!caseFile || !caseFile.id) return;
+    var drawer = ensureShareDrawer();
+    if (!drawer) {
+      setStatus(dom.editDrawerStatus, '共享抽屉不可用', 'warn');
+      return;
+    }
+    state.shareDrawer.caseFile = caseFile;
+    state.shareDrawer.projectId = null;
+    state.shareDrawer.versionId = null;
+    state.shareDrawer.loading = false;
+    state.shareDrawer.previousDrawer = options && (options.previousDrawer || options.prevDrawer || options.drawer)
+      ? (options.previousDrawer || options.prevDrawer || options.drawer)
+      : null;
+    state.shareDrawer.reopenPrevious = false;
+    if (
+      state.shareDrawer.previousDrawer &&
+      state.shareDrawer.previousDrawer.element &&
+      state.shareDrawer.previousDrawer.element.classList &&
+      state.shareDrawer.previousDrawer.element.classList.contains('open')
+    ) {
+      state.shareDrawer.reopenPrevious = true;
+      if (typeof state.shareDrawer.previousDrawer.close === 'function') {
+        state.shareDrawer.previousDrawer.close();
+      }
+    }
+    if (typeof drawer.open === 'function') drawer.open();
+  }
+
+  function submitShareCaseFile(anchorRect) {
+    var file = state.shareDrawer.caseFile;
+    var pid = state.shareDrawer.projectId;
+    var vid = state.shareDrawer.versionId;
+    var projectName = state.shareDrawer.projectNameById[pid] || ('项目#' + pid);
+    if (!apiClient || typeof apiClient.shareCaseFile !== 'function') {
+      setStatus(dom.shareDrawerStatus, '共享接口未就绪', 'warn');
+      return;
+    }
+    state.shareDrawer.loading = true;
+    syncShareDrawerControls();
+    setStatus(dom.shareDrawerStatus, '共享中...', '');
+    apiClient
+      .shareCaseFile({
+        case_file_id: file.id,
+        target_project_id: pid,
+        target_version_id: vid,
+      })
+      .then(function(res) {
+        setStatus(dom.shareDrawerStatus, '已共享至项目「' + projectName + '」', 'ok');
+      })
+      .catch(function(err) {
+        var payload = err && err.payload ? err.payload : null;
+        var detail = payload && payload.detail ? String(payload.detail || '') : '';
+        if (err && (err.status === 409 || detail === 'case_file_duplicate')) {
+          var rect = anchorRect || captureCaseLibraryAnchorRect(dom.shareDrawerConfirmBtn);
+          if (rect) {
+            showCaseLibraryBlockHint(rect, '该项目已有此用例，如有相关改动，请通知该项目人员。', 5000);
+          }
+          setStatus(dom.shareDrawerStatus, '共享失败：该项目已有同名用例', 'warn');
+          return;
+        }
+        setStatus(dom.shareDrawerStatus, err && err.message ? err.message : '共享失败', 'err');
+      })
+      .finally(function() {
+        state.shareDrawer.loading = false;
+        syncShareDrawerControls();
+      });
+  }
+
+  function confirmShareCaseFile() {
+    if (state.shareDrawer.loading) return;
+    var file = state.shareDrawer.caseFile;
+    if (!file || !file.id) {
+      setStatus(dom.shareDrawerStatus, '未选择用例', 'warn');
+      return;
+    }
+    var pid = normalizeId(dom.shareDrawerProjectSelect ? dom.shareDrawerProjectSelect.value : '');
+    state.shareDrawer.projectId = pid;
+    if (!pid) {
+      setStatus(dom.shareDrawerStatus, '请先选择项目', 'warn');
+      syncShareDrawerControls();
+      return;
+    }
+    var vid = normalizeId(dom.shareDrawerVersionSelect ? dom.shareDrawerVersionSelect.value : '');
+    state.shareDrawer.versionId = vid;
+    if (shareRequiresVersion(pid) && !vid) {
+      setStatus(dom.shareDrawerStatus, '请先选择版本', 'warn');
+      syncShareDrawerControls();
+      return;
+    }
+    var projectName = state.shareDrawer.projectNameById[pid] || ('项目#' + pid);
+    var versionName = vid ? getShareVersionName(pid, vid) : '';
+    var fileName = file.file_name_clean || ('用例#' + file.id);
+    var msg = '确认将用例【' + fileName + '】分享给项目「' + projectName + '」' + (vid ? ('（版本：' + versionName + '）') : '') + '吗？';
+    var anchorRect = captureCaseLibraryAnchorRect(dom.shareDrawerConfirmBtn);
+    openConfirmDrawer({
+      title: '共享用例',
+      message: msg,
+      confirmText: '确认共享',
+      cancelText: '取消',
+      previousDrawer: shareDrawerInstance || null,
+    }).then(function(res) {
+      if (!res || res.ok !== true) {
+        setStatus(dom.shareDrawerStatus, '已取消共享', 'warn');
+        return;
+      }
+      submitShareCaseFile(anchorRect);
+    });
   }
 
   function deleteSelectedCaseFiles() {
@@ -5621,7 +6013,7 @@
     hintEl.style.top = Math.round(top) + 'px';
   }
 
-  function showCaseLibraryBlockHint(anchorRect, message) {
+  function showCaseLibraryBlockHint(anchorRect, message, durationMs) {
     if (!anchorRect) return;
     cleanupCaseLibraryBlockHint();
     var hint = document.createElement('div');
@@ -5632,11 +6024,13 @@
     document.body.appendChild(hint);
     caseLibraryBlockHintEl = hint;
     positionCaseLibraryBlockHint(hint, anchorRect);
+    var duration = Number(durationMs);
+    if (!isFinite(duration) || duration <= 0) duration = 3000;
     caseLibraryBlockHintTimer = setTimeout(function() {
       if (!caseLibraryBlockHintEl) return;
       try { caseLibraryBlockHintEl.classList.add('fade-out'); } catch (_) {}
       setTimeout(function() { cleanupCaseLibraryBlockHint(); }, 220);
-    }, 3000);
+    }, duration);
   }
 
   function captureCaseLibraryAnchorRect(anchorEl) {
@@ -7039,7 +7433,18 @@
         persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
       });
       dom.editDrawerListBody.addEventListener('click', function(e) {
-        var btn = e && e.target && e.target.closest ? e.target.closest('[data-case-lib-edit]') : null;
+        var target = e && e.target ? e.target : null;
+        var shareBtn = target && target.closest ? target.closest('[data-case-lib-share]') : null;
+        if (shareBtn) {
+          var shareId = shareBtn.getAttribute('data-case-lib-share');
+          var shareFile = findCaseFileInEditDrawer(shareId);
+          if (shareFile) {
+            safeLogOperation('open_share_case_file', 'case_file', shareFile.id, { file_name: shareFile.file_name_clean || '' });
+            openShareDrawer(shareFile, { previousDrawer: editDrawerInstance || null });
+          }
+          return;
+        }
+        var btn = target && target.closest ? target.closest('[data-case-lib-edit]') : null;
         if (!btn) return;
         var id = btn.getAttribute('data-case-lib-edit');
         var file = findCaseFileInEditDrawer(id);
@@ -7048,6 +7453,15 @@
           openEditorForCaseFile(file);
         }
       });
+    }
+    if (dom.shareDrawerProjectSelect) {
+      dom.shareDrawerProjectSelect.addEventListener('change', handleShareProjectChange);
+    }
+    if (dom.shareDrawerVersionSelect) {
+      dom.shareDrawerVersionSelect.addEventListener('change', handleShareVersionChange);
+    }
+    if (dom.shareDrawerConfirmBtn) {
+      dom.shareDrawerConfirmBtn.addEventListener('click', confirmShareCaseFile);
     }
 
     if (dom.editSearchInput) {
@@ -7494,12 +7908,12 @@
 	        }
 	      }
 	    );
-	    editDrawerInstance = ensureDrawer(
-	      'caseLibraryEditDrawer',
-	      ['openCaseLibraryEditDrawerBtn'],
-	      function() {
-	        var prevPersisted = readEditDrawerPersistedState();
-	        ensureProjectsReady().then(function() {
+    editDrawerInstance = ensureDrawer(
+      'caseLibraryEditDrawer',
+      ['openCaseLibraryEditDrawerBtn'],
+      function() {
+        var prevPersisted = readEditDrawerPersistedState();
+        ensureProjectsReady().then(function() {
 	          // 进入“查看&编辑”抽屉也视为 editor 视图，刷新应能按最后操作恢复并自动打开抽屉。
 	          persistCaseLibraryLastView('editor');
 	          resetEditDrawer();
@@ -7528,6 +7942,7 @@
         persistEditDrawerState({ drawer_open: false });
       }
     );
+    shareDrawerInstance = ensureShareDrawer();
     selectDrawerInstance = ensureDrawer('caseLibrarySelectExecDrawer', ['openCaseLibrarySelectExecDrawerBtn'], function() {
       ensureProjectsReady().then(function() {
         resetSelectDrawer();

@@ -132,11 +132,18 @@ class CaseFileImportRequest(BaseModel):
     items: List[CaseItemPayload]
 
 
+class CaseFileShareRequest(BaseModel):
+    case_file_id: int
+    target_project_id: int
+    target_version_id: Optional[int] = None
+
+
 class CaseFileOut(BaseModel):
     id: int
     project_id: int
     version_id: Optional[int]
     file_name_clean: str
+    source: Optional[str] = None
     reuse_enabled: bool = False
     item_count: Optional[int] = None
     importer_id: Optional[int]

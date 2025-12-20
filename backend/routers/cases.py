@@ -369,6 +369,146 @@ def import_case_file(
     return case_file
 
 
+@router.post("/share", response_model=schemas.CaseFileOut, status_code=status.HTTP_201_CREATED)
+def share_case_file(
+    payload: schemas.CaseFileShareRequest,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    source_case_file = (
+        db.query(models.CaseFile)
+        .filter(models.CaseFile.id == payload.case_file_id)
+        .first()
+    )
+    if not source_case_file:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用例不存在")
+    ensure_project_access(db, user, source_case_file.project_id)
+
+    target_project = (
+        db.query(models.Project)
+        .filter(models.Project.id == payload.target_project_id)
+        .first()
+    )
+    if not target_project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="目标项目不存在")
+    ensure_version_in_project(db, target_project.id, payload.target_version_id)
+
+    clean_name = clean_case_file_name(source_case_file.file_name_clean)
+    exists = (
+        db.query(models.CaseFile)
+        .filter(
+            models.CaseFile.project_id == target_project.id,
+            models.CaseFile.file_name_clean == clean_name,
+        )
+        .first()
+    )
+    if exists:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "detail": "case_file_duplicate",
+                "existing_case_file_id": exists.id,
+                "existing_file_name_clean": exists.file_name_clean,
+            },
+        )
+
+    items = (
+        db.query(models.CaseItem)
+        .filter(models.CaseItem.case_file_id == source_case_file.id)
+        .all()
+    )
+    if not items:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用例为空")
+
+    now = datetime.now(timezone.utc)
+    case_file = models.CaseFile(
+        project_id=target_project.id,
+        version_id=payload.target_version_id,
+        file_name_clean=clean_name,
+        reuse_enabled=bool(getattr(source_case_file, "reuse_enabled", False)),
+        importer_id=user.id,
+        updated_by=user.id,
+        imported_at=now,
+        updated_at=now,
+        source="share:" + str(source_case_file.id),
+    )
+    db.add(case_file)
+    db.flush()
+
+    values = []
+    for item in items:
+        values.append(
+            {
+                "case_file_id": case_file.id,
+                "module": item.module,
+                "title": item.title,
+                "priority": item.priority,
+                "precondition": item.precondition if item.precondition is not None else "",
+                "steps": item.steps if item.steps is not None else "",
+                "expected": item.expected,
+                "remark": item.remark,
+                "created_by": user.id,
+                "updated_by": user.id,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+    if values:
+        db.execute(sqlite_insert(models.CaseItem).values(values).prefix_with("OR IGNORE"))
+    item_count = (
+        db.query(func.count(models.CaseItem.id))
+        .filter(models.CaseItem.case_file_id == case_file.id)
+        .scalar()
+        or 0
+    )
+    if item_count <= 0:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用例为空")
+
+    log_case_library_change(
+        db=db,
+        user=user,
+        project_id=target_project.id,
+        version_id=payload.target_version_id,
+        file_name_clean=case_file.file_name_clean,
+        case_file_id=case_file.id,
+        kind="import",
+        meta={
+            "source": "share",
+            "source_case_file_id": source_case_file.id,
+            "source_project_id": source_case_file.project_id,
+            "source_version_id": source_case_file.version_id,
+        },
+    )
+    log_operation(
+        db=db,
+        user_id=user.id,
+        action="share_case_file",
+        target_type="case_file",
+        target_id=case_file.id,
+        detail={
+            "case_file_id": case_file.id,
+            "file_name": case_file.file_name_clean,
+            "source_case_file_id": source_case_file.id,
+            "source_project_id": source_case_file.project_id,
+            "source_version_id": source_case_file.version_id,
+            "target_project_id": target_project.id,
+            "target_version_id": payload.target_version_id,
+        },
+    )
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"detail": "case_file_duplicate"},
+        )
+    db.refresh(case_file)
+    setattr(case_file, "item_count", int(item_count))
+    return case_file
+
+
 @router.get("", response_model=List[schemas.CaseFileOut])
 def list_case_files(
     project_id: int = None,
@@ -437,6 +577,7 @@ def list_case_files(
                 "project_id": case_file.project_id,
                 "version_id": case_file.version_id,
                 "file_name_clean": case_file.file_name_clean,
+                "source": case_file.source,
                 "reuse_enabled": bool(getattr(case_file, "reuse_enabled", False)),
                 "item_count": int(item_count or 0),
                 "importer_id": case_file.importer_id,

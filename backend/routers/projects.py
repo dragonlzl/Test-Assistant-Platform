@@ -36,10 +36,15 @@ def _get_accessible_project(
 
 @router.get("", response_model=List[schemas.ProjectOut])
 def list_projects(
-    user: models.User = Depends(get_current_user), db: Session = Depends(get_db)
+    scope: Optional[str] = Query(None),
+    include_all: bool = Query(False),
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     query = db.query(models.Project)
-    if user.role != "admin":
+    scope_text = str(scope or "").strip().lower()
+    allow_all = bool(include_all) or scope_text in ("share", "all")
+    if user.role != "admin" and not allow_all:
         query = query.join(models.UserProject).filter(models.UserProject.user_id == user.id)
     projects = query.order_by(models.Project.id.desc()).all()
     return projects
@@ -146,10 +151,18 @@ def delete_project(
 @router.get("/{project_id}/versions", response_model=List[schemas.ProjectVersionOut])
 def list_versions(
     project_id: int,
+    scope: Optional[str] = Query(None),
+    include_all: bool = Query(False),
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _get_accessible_project(project_id, user, db)
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="项目不存在")
+    scope_text = str(scope or "").strip().lower()
+    allow_all = bool(include_all) or scope_text in ("share", "all")
+    if user.role != "admin" and not allow_all:
+        _get_accessible_project(project_id, user, db)
     return (
         db.query(models.ProjectVersion)
         .filter(models.ProjectVersion.project_id == project_id)

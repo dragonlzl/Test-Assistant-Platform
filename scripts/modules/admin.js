@@ -657,13 +657,26 @@
     } else if (action === 'delete-project') {
       if (!canDeleteProject) return;
       const id = Number(btn.dataset.id);
-      if (!confirm('确认删除该项目？相关版本将被删除。')) return;
-      api.deleteProject(id).then(function() {
-        return loadProjects().then(function() {
-          notifyProjectsUpdated('project-deleted', { project_id: id });
+      const project = state.projects.find(function(p) { return p && Number(p.id) === Number(id); });
+      const projectName = project && project.name ? project.name : ('项目#' + id);
+      var prevDrawer = resolveAdminActiveDrawer();
+      openConfirmDrawer({
+        title: '确认删除项目',
+        message: '确认删除项目【' + projectName + '】？相关版本将被删除。',
+        confirmText: '确认删除',
+        cancelText: '取消',
+        danger: true,
+        previousDrawer: prevDrawer || null,
+      }).then(function(res) {
+        if (!res || res.ok !== true) return;
+        api.deleteProject(id).then(function() {
+          return loadProjects().then(function() {
+            notifyProjectsUpdated('project-deleted', { project_id: id });
+            showCenterToast('删除项目成功', 'ok');
+          });
+        }).catch(function(err) {
+          setStatus(dom.projectStatus, err && err.message ? err.message : '删除失败', 'err');
         });
-      }).catch(function(err) {
-        setStatus(dom.projectStatus, err && err.message ? err.message : '删除失败', 'err');
       });
     } else if (action === 'add-version') {
       if (!canManageVersions) return;

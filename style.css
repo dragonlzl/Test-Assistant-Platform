@@ -5458,6 +5458,12 @@ tr.diff-locate-active td {
   align-items: center;
 }
 
+.case-library-row-actions {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
 .case-library-pagination {
   display: flex;
   gap: 10px;

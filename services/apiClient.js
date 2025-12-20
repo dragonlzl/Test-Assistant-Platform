@@ -199,8 +199,14 @@
     }).then(handleResponse);
   }
 
-  function listProjects() {
-    return fetch('/api/projects', {
+  function listProjects(params) {
+    var query = [];
+    var p = params && typeof params === 'object' ? params : null;
+    if (p && p.scope) query.push('scope=' + encodeURIComponent(p.scope));
+    if (p && p.include_all) query.push('include_all=1');
+    var url = '/api/projects';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
       method: 'GET',
       headers: buildHeaders(),
     }).then(handleResponse);
@@ -237,8 +243,14 @@
     }).then(handleResponse);
   }
 
-  function listProjectVersions(projectId) {
-    return fetch('/api/projects/' + projectId + '/versions', {
+  function listProjectVersions(projectId, params) {
+    var query = [];
+    var p = params && typeof params === 'object' ? params : null;
+    if (p && p.scope) query.push('scope=' + encodeURIComponent(p.scope));
+    if (p && p.include_all) query.push('include_all=1');
+    var url = '/api/projects/' + projectId + '/versions';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
       method: 'GET',
       headers: buildHeaders(),
     }).then(handleResponse);
@@ -299,6 +311,14 @@
 
   function appendCaseItems(caseFileId, payload) {
     return fetch('/api/case-files/' + caseFileId + '/items/append', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function shareCaseFile(payload) {
+    return fetch('/api/case-files/share', {
       method: 'POST',
       headers: buildHeaders(),
       body: JSON.stringify(payload || {}),
@@ -670,6 +690,7 @@
     updateCaseItem: updateCaseItem,
     createCaseItem: createCaseItem,
     appendCaseItems: appendCaseItems,
+    shareCaseFile: shareCaseFile,
     deleteCaseItem: deleteCaseItem,
     listCaseLibraryChangeFiles: listCaseLibraryChangeFiles,
     getCaseLibraryChangeHistory: getCaseLibraryChangeHistory,

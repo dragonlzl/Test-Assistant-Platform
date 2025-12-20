@@ -2126,6 +2126,47 @@
     </div>
   </div>
 </div>
+<div class="drawer" id="caseLibraryShareDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryShareDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseLibraryShareDrawerTitle">共享用例</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryShareDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <div class="case-library-drawer-meta">
+        <div class="meta-line">
+          <span class="label">当前用例</span>
+          <span class="value" id="caseLibraryShareCaseName">--</span>
+        </div>
+        <div class="meta-line">
+          <span class="label">来源项目</span>
+          <span class="value" id="caseLibraryShareSourceProject">--</span>
+        </div>
+        <div class="meta-line">
+          <span class="label">来源版本</span>
+          <span class="value" id="caseLibraryShareSourceVersion">--</span>
+        </div>
+      </div>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryShareProjectSelect">项目</label>
+          <select id="caseLibraryShareProjectSelect"></select>
+          <label class="case-library-label" for="caseLibraryShareVersionSelect">版本</label>
+          <select id="caseLibraryShareVersionSelect" disabled></select>
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="primary" id="caseLibraryShareConfirmBtn" type="button" disabled>确认共享</button>
+        </div>
+      </div>
+      <p class="hint">若目标项目已存在同名用例，将无法共享。</p>
+      <p class="status" id="caseLibraryShareStatus"></p>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibraryShareDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="drawer" id="caseLibraryImportDuplicateDrawer" data-tab-section="case-library">
   <div class="drawer-mask" data-drawer-close="caseLibraryImportDuplicateDrawer"></div>
   <div class="drawer-panel drawer-panel-wide">
