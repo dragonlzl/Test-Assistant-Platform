@@ -563,6 +563,7 @@
           runConcurrent,
           ensureCaseGenModulesFromSplit: api.ensureCaseGenModulesFromSplit,
           persistWorkflowState: requestPersistWorkflowState,
+          persistWorkflowStateNow: requestPersistWorkflowStateNow,
         },
       })
       : null;

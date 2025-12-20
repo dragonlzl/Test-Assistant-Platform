@@ -68,6 +68,7 @@
     var setStepInProgress = handlers.setStepInProgress || function() {};
     var clearStepInProgress = handlers.clearStepInProgress || function() {};
     var persistWorkflowState = handlers.persistWorkflowState || function() {};
+    var persistWorkflowStateNow = handlers.persistWorkflowStateNow || null;
     var runConcurrent = handlers.runConcurrent || function(items, concurrency, worker) {
       if (!Array.isArray(items) || !items.length) return Promise.resolve([]);
       var limit = Math.max(1, Number(concurrency) || 1);
@@ -133,6 +134,16 @@
         }
       }
       return '';
+    }
+
+    function persistWorkflowSnapshot() {
+      if (typeof persistWorkflowStateNow === 'function') {
+        persistWorkflowStateNow();
+        return;
+      }
+      if (typeof persistWorkflowState === 'function') {
+        persistWorkflowState();
+      }
     }
 
     function aggregateModuleCompareResults(results, moduleList) {
@@ -730,6 +741,7 @@
         casesCompareResultEl.value = JSON.stringify(wrapDataWithRequirement(parsed, 'cases_compare'), null, 2);
         setStatus(casesCoverageStatus, '已导入覆盖对比结果', 'ok');
         updateMissingView();
+        persistWorkflowSnapshot();
         updateFlowStatus();
       } catch (err) {
         console.error(err);
@@ -801,6 +813,7 @@
         setStatus(compareStatus, '已导入对比结果', 'ok');
         if (typeof resetAutoCompareUserInputs === 'function') resetAutoCompareUserInputs();
         if (typeof syncAutoCompareStatus === 'function') syncAutoCompareStatus();
+        persistWorkflowSnapshot();
       } catch (err) {
         console.error(err);
         setStatus(compareStatus, '导入失败：' + err.message, 'err');
@@ -883,6 +896,7 @@
         syncAutoCompareStatus();
         setStatus(compareStatus, '对比完成', 'ok');
         updateFlowStatus();
+        persistWorkflowSnapshot();
       } catch (err) {
         console.error(err);
         updateModelTiming(compareTimingEl);
@@ -968,6 +982,7 @@
         if (casesCompareResultEl) casesCompareResultEl.value = JSON.stringify(summary, null, 2);
         setStatus(casesCoverageStatus, '覆盖对比完成', 'ok');
         updateMissingView();
+        persistWorkflowSnapshot();
       } catch (err) {
         console.error(err);
         setStatus(casesCoverageStatus, '覆盖对比失败：' + (err && err.message ? err.message : '请重试'), 'err');

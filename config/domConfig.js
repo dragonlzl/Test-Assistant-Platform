@@ -47,6 +47,7 @@
       { name: 'copyBtn', id: 'copyCleaned' },
       { name: 'cleanedTextEl', id: 'cleanedText' },
       { name: 'compareResultEl', id: 'compareResult' },
+      { name: 'casesCompareResultEl', id: 'casesCompareResult' },
       { name: 'splitResultEl', id: 'splitResult' },
       { name: 'caseFileListEl', id: 'caseFileList' },
       { name: 'caseTextEl', id: 'caseText' },
