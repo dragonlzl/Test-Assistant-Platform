@@ -54,6 +54,7 @@
     opsLogViewStorageKey: 'tap-ops-log-view-v1',
     opsActivityViewStorageKey: 'tap-ops-activity-view-v1',
     opsContributionViewStorageKey: 'tap-ops-contribution-view-v1',
+    opsExecContributionViewStorageKey: 'tap-ops-exec-contribution-view-v1',
     defaultTempExecPageSize: 20,
     tempExecResultOptions: ['未执行', '通过', '失败', '阻塞', '不适用'],
     defaultPlacement: {

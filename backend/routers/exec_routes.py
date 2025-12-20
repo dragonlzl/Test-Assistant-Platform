@@ -11,7 +11,7 @@ from ..audit import log_case_library_change, log_operation
 from ..db import get_db
 from ..dependencies import get_current_user
 from ..utils import ensure_project_access, ensure_version_in_project
-from sqlalchemy import func, case, and_, cast, Integer
+from sqlalchemy import func, case, and_, cast, Integer, or_
 from sqlalchemy.exc import IntegrityError
 
 
@@ -360,6 +360,26 @@ def archive_exec_set(
                     "counts": counts,
                 },
             )
+        pending_statuses = ["", "pending", "未执行", "变更重跑", "有改动"]
+        actual_result_count = (
+            db.query(func.count(models.ExecCase.id))
+            .filter(models.ExecCase.exec_set_id == exec_set.id)
+            .filter(
+                or_(
+                    and_(
+                        models.ExecCase.actual_result.isnot(None),
+                        func.trim(models.ExecCase.actual_result) != "",
+                    ),
+                    and_(
+                        models.ExecCase.status.isnot(None),
+                        func.trim(models.ExecCase.status) != "",
+                        ~models.ExecCase.status.in_(pending_statuses),
+                    ),
+                )
+            )
+            .scalar()
+            or 0
+        )
         now = datetime.now(timezone.utc)
         exec_set.status = "archived"
         exec_set.archived_by = user.id
@@ -388,6 +408,7 @@ def archive_exec_set(
                 "case_file_id": (int(exec_set.case_file_id) if exec_set.case_file_id else None),
                 "case_file_name": case_file_name,
                 "counts": counts,
+                "actual_result_count": int(actual_result_count),
                 "reason": (reason if reason else None),
             },
         )
@@ -1759,6 +1780,7 @@ def update_exec_case(
         "executor_id",
     ]
     changed = False
+    changed_fields = []
     payload_data = payload.model_dump(exclude_unset=True)
     for field in fields:
         if field not in payload_data:
@@ -1790,6 +1812,7 @@ def update_exec_case(
             )
             setattr(exec_case, field, value)
             changed = True
+            changed_fields.append(field)
     if changed:
         exec_case.updated_by = user.id
         exec_case.updated_at = datetime.now(timezone.utc)
@@ -1909,6 +1932,17 @@ def update_exec_case(
             action="update_exec_case",
             target_type="exec_case",
             target_id=exec_case.id,
+            detail={
+                "exec_set_id": exec_case.exec_set_id,
+                "module": exec_case.module,
+                "title": exec_case.title,
+                "precondition": exec_case.precondition,
+                "steps": exec_case.steps,
+                "expected": exec_case.expected,
+                "status": exec_case.status,
+                "actual_result": exec_case.actual_result,
+                "changed_fields": changed_fields,
+            },
         )
         try:
             db.commit()

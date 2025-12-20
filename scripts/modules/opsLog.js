@@ -8,6 +8,7 @@
   var STORAGE_KEY = appConfig.opsLogViewStorageKey || 'tap-ops-log-view-v1';
   var ACTIVITY_STORAGE_KEY = appConfig.opsActivityViewStorageKey || 'tap-ops-activity-view-v1';
   var CONTRIBUTION_STORAGE_KEY = appConfig.opsContributionViewStorageKey || 'tap-ops-contribution-view-v1';
+  var EXEC_CONTRIBUTION_STORAGE_KEY = appConfig.opsExecContributionViewStorageKey || 'tap-ops-exec-contribution-view-v1';
   var DEFAULT_ACTIVITY_RANGE = 'week';
   var ACTIVITY_BAR_MAX_RATIO = 82;
 
@@ -28,6 +29,11 @@
     { key: 'delete', label: '删除用例' },
   ];
 
+  var EXEC_CONTRIBUTION_BEHAVIORS = [
+    { key: 'exec', label: '用例执行' },
+    { key: 'archive', label: '归档用例' },
+  ];
+
   var state = {
     drawer: null,
     users: [],
@@ -37,6 +43,7 @@
     selectedTargets: { all: true },
     overviewView: 'activity',
     hasViewed: false,
+    drawerOpen: false,
     pendingAuth: false,
     loading: false,
     activity: {
@@ -54,6 +61,20 @@
       colorMap: {},
     },
     contribution: {
+      drawer: null,
+      usersLoaded: false,
+      logsLoaded: false,
+      loading: false,
+      selectedUserIds: [],
+      draftUserIds: [],
+      selectedBehaviors: { all: true },
+      timeRange: DEFAULT_ACTIVITY_RANGE,
+      hasSelection: false,
+      logs: [],
+      behaviors: [],
+      colorMap: {},
+    },
+    execContribution: {
       drawer: null,
       usersLoaded: false,
       logsLoaded: false,
@@ -108,6 +129,19 @@
     contributionList: document.getElementById('opsContributionList'),
     contributionEmpty: document.getElementById('opsContributionEmpty'),
     contributionCard: document.getElementById('opsContributionCard'),
+    execContributionDrawerStatus: document.getElementById('opsExecContributionDrawerStatus'),
+    execContributionUserGrid: document.getElementById('opsExecContributionUserGrid'),
+    execContributionSelectAll: document.getElementById('opsExecContributionSelectAll'),
+    execContributionApplyBtn: document.getElementById('opsExecContributionApplyBtn'),
+    execContributionUserEmpty: document.getElementById('opsExecContributionUserEmpty'),
+    execContributionTimeRange: document.getElementById('opsExecContributionTimeRangeSelect'),
+    execContributionBehaviorGrid: document.getElementById('opsExecContributionBehaviorFilterGrid'),
+    execContributionStatus: document.getElementById('opsExecContributionStatus'),
+    execContributionSelectionText: document.getElementById('opsExecContributionSelectionText'),
+    execContributionRefreshBtn: document.getElementById('opsExecContributionRefreshBtn'),
+    execContributionList: document.getElementById('opsExecContributionList'),
+    execContributionEmpty: document.getElementById('opsExecContributionEmpty'),
+    execContributionCard: document.getElementById('opsExecContributionCard'),
   };
 
   function setStatus(el, text, type) {
@@ -187,6 +221,7 @@
   function normalizeOpsOverviewView(value) {
     var raw = String(value || '').trim().toLowerCase();
     if (raw === 'contribution') return 'contribution';
+    if (raw === 'exec' || raw === 'exec-contribution' || raw === 'execution') return 'exec-contribution';
     return 'activity';
   }
 
@@ -207,6 +242,7 @@
       targets: selected,
       pageIndex: Number(state.pageIndex) || 0,
       hasViewed: Boolean(state.hasViewed),
+      drawerOpen: Boolean(state.drawerOpen),
       overviewView: state.overviewView || 'activity',
       savedAt: Date.now(),
     };
@@ -219,6 +255,7 @@
     state.selectedUserId = saved.userId ? String(saved.userId || '') : '';
     state.pageIndex = Number(saved.pageIndex) || 0;
     state.hasViewed = Boolean(saved.hasViewed);
+    state.drawerOpen = Boolean(saved.drawerOpen);
     state.overviewView = normalizeOpsOverviewView(saved.overviewView);
     state.selectedTargets = { all: true };
     // 兼容：旧版字段为 behaviors（操作行为筛选），新版为 targets（操作对象筛选）。
@@ -307,6 +344,45 @@
       behaviors.forEach(function(key) {
         if (!key) return;
         state.contribution.selectedBehaviors[String(key)] = true;
+      });
+    }
+  }
+
+  function readExecContributionPersisted() {
+    if (!storage || typeof storage.getJson !== 'function') return null;
+    return storage.getJson(EXEC_CONTRIBUTION_STORAGE_KEY, null);
+  }
+
+  function persistExecContributionState() {
+    if (!storage || typeof storage.setJson !== 'function') return;
+    var selected = getSelectedExecContributionBehaviorKeys();
+    var payload = {
+      userIds: Array.isArray(state.execContribution.selectedUserIds) ? state.execContribution.selectedUserIds.slice() : [],
+      timeRange: state.execContribution.timeRange || DEFAULT_ACTIVITY_RANGE,
+      behaviors: selected,
+      behaviorAll: Boolean(state.execContribution.selectedBehaviors && state.execContribution.selectedBehaviors.all),
+      hasSelection: Boolean(state.execContribution.hasSelection),
+      savedAt: Date.now(),
+    };
+    storage.setJson(EXEC_CONTRIBUTION_STORAGE_KEY, payload);
+  }
+
+  function restoreExecContributionState() {
+    var saved = readExecContributionPersisted();
+    if (!saved || typeof saved !== 'object') return;
+    var ids = Array.isArray(saved.userIds) ? saved.userIds : [];
+    state.execContribution.selectedUserIds = ids.map(function(id) { return String(id); }).filter(Boolean);
+    state.execContribution.draftUserIds = state.execContribution.selectedUserIds.slice();
+    state.execContribution.timeRange = saved.timeRange ? String(saved.timeRange) : DEFAULT_ACTIVITY_RANGE;
+    state.execContribution.hasSelection = Boolean(saved.hasSelection || state.execContribution.selectedUserIds.length);
+    state.execContribution.selectedBehaviors = { all: true };
+    if (saved.behaviorAll === true) return;
+    var behaviors = Array.isArray(saved.behaviors) ? saved.behaviors : [];
+    if (behaviors.length) {
+      state.execContribution.selectedBehaviors = { all: false };
+      behaviors.forEach(function(key) {
+        if (!key) return;
+        state.execContribution.selectedBehaviors[String(key)] = true;
       });
     }
   }
@@ -579,6 +655,21 @@
     return color;
   }
 
+  function getExecContributionColor(label) {
+    var key = String(label || '').trim().toLowerCase();
+    if (!key) return '#9ca3af';
+    if (state.execContribution.colorMap[key]) return state.execContribution.colorMap[key];
+    var hash = 0;
+    for (var i = 0; i < key.length; i += 1) {
+      hash = (hash * 31 + key.charCodeAt(i)) | 0;
+    }
+    var palette = getActivityPalette();
+    var idx = Math.abs(hash) % palette.length;
+    var color = palette[idx];
+    state.execContribution.colorMap[key] = color;
+    return color;
+  }
+
   function getActivityUserNameMap() {
     var map = {};
     var list = Array.isArray(state.users) ? state.users : [];
@@ -710,6 +801,61 @@
     }
   }
 
+  function setExecContributionDraftUserIds(ids) {
+    var map = {};
+    var list = [];
+    (Array.isArray(ids) ? ids : []).forEach(function(id) {
+      var key = String(id || '').trim();
+      if (!key || map[key]) return;
+      map[key] = true;
+      list.push(key);
+    });
+    state.execContribution.draftUserIds = list;
+  }
+
+  function syncExecContributionSelectionText() {
+    if (!dom.execContributionSelectionText) return;
+    var selected = Array.isArray(state.execContribution.selectedUserIds) ? state.execContribution.selectedUserIds : [];
+    if (!selected.length) {
+      dom.execContributionSelectionText.textContent = '未选择';
+      return;
+    }
+    var nameMap = getActivityUserNameMap();
+    var names = selected.map(function(id) { return nameMap[id] || ('用户#' + id); });
+    var shown = names.slice(0, 3);
+    var suffix = names.length > shown.length ? (' 等' + names.length + ' 人') : '';
+    dom.execContributionSelectionText.textContent = shown.join('、') + suffix;
+  }
+
+  function syncExecContributionUserGrid() {
+    if (!dom.execContributionUserGrid) return;
+    var list = Array.isArray(state.users) ? state.users : [];
+    var draft = Array.isArray(state.execContribution.draftUserIds) ? state.execContribution.draftUserIds : [];
+    var selectedMap = {};
+    draft.forEach(function(id) { selectedMap[String(id)] = true; });
+    if (!list.length) {
+      dom.execContributionUserGrid.innerHTML = '';
+      if (dom.execContributionUserEmpty) dom.execContributionUserEmpty.classList.remove('hidden');
+      if (dom.execContributionSelectAll) dom.execContributionSelectAll.checked = false;
+      return;
+    }
+    if (dom.execContributionUserEmpty) dom.execContributionUserEmpty.classList.add('hidden');
+    dom.execContributionUserGrid.innerHTML = list.map(function(u) {
+      if (!u || u.id === null || u.id === undefined) return '';
+      var id = String(u.id);
+      var checked = selectedMap[id] ? ' checked' : '';
+      return (
+        '<label class="ops-activity-user-chip">' +
+          '<input type="checkbox" data-ops-exec-contribution-user="' + escapeHtml(id) + '"' + checked + ' />' +
+          '<span>' + escapeHtml(u.username || ('用户#' + id)) + '</span>' +
+        '</label>'
+      );
+    }).join('');
+    if (dom.execContributionSelectAll) {
+      dom.execContributionSelectAll.checked = draft.length && draft.length === list.length;
+    }
+  }
+
   function applyOpsOverviewView(view, options) {
     var next = normalizeOpsOverviewView(view);
     state.overviewView = next;
@@ -719,8 +865,12 @@
     if (dom.contributionCard && dom.contributionCard.classList) {
       dom.contributionCard.classList.toggle('hidden', next !== 'contribution');
     }
+    if (dom.execContributionCard && dom.execContributionCard.classList) {
+      dom.execContributionCard.classList.toggle('hidden', next !== 'exec-contribution');
+    }
     if (!options || options.refresh !== false) {
       if (next === 'contribution') refreshContributionView(true);
+      else if (next === 'exec-contribution') refreshExecContributionView(true);
       else refreshActivityView(true);
     }
     if (!options || options.persist !== false) {
@@ -871,6 +1021,77 @@
     dom.contributionTimeRange.value = value;
   }
 
+  function getSelectedExecContributionBehaviorKeys() {
+    var selected = state.execContribution.selectedBehaviors || {};
+    if (selected.all) return [];
+    var keys = [];
+    Object.keys(selected).forEach(function(key) {
+      if (key === 'all') return;
+      if (selected[key]) keys.push(key);
+    });
+    if (!keys.length) return [];
+    return keys;
+  }
+
+  function syncExecContributionBehaviorSelection() {
+    var behaviors = Array.isArray(state.execContribution.behaviors) ? state.execContribution.behaviors : [];
+    var selected = state.execContribution.selectedBehaviors || { all: true };
+    if (selected.all) return;
+    var available = {};
+    behaviors.forEach(function(item) {
+      if (!item || !item.key) return;
+      available[item.key] = true;
+    });
+    var keys = [];
+    Object.keys(selected).forEach(function(key) {
+      if (key === 'all') return;
+      if (selected[key] && available[key]) keys.push(key);
+    });
+    if (!keys.length) {
+      state.execContribution.selectedBehaviors = { all: true };
+      return;
+    }
+    var next = { all: false };
+    keys.forEach(function(key) { next[key] = true; });
+    state.execContribution.selectedBehaviors = next;
+  }
+
+  function syncExecContributionBehaviorFilters() {
+    if (!dom.execContributionBehaviorGrid) return;
+    var selected = state.execContribution.selectedBehaviors || { all: true };
+    var list = Array.isArray(state.execContribution.behaviors) ? state.execContribution.behaviors : [];
+    var html = [];
+    var allChecked = selected.all ? ' checked' : '';
+    html.push(
+      '<label class="ops-activity-filter-chip">' +
+        '<input type="checkbox" data-ops-exec-contribution-behavior="all"' + allChecked + ' />' +
+        '<span>全部</span>' +
+      '</label>'
+    );
+    var source = list.length ? list : EXEC_CONTRIBUTION_BEHAVIORS.map(function(item) {
+      return { key: item.key, label: item.label, count: 0 };
+    });
+    source.forEach(function(item) {
+      if (!item || !item.key) return;
+      var checked = '';
+      if (selected.all) checked = '';
+      else if (selected[item.key]) checked = ' checked';
+      html.push(
+        '<label class="ops-activity-filter-chip">' +
+          '<input type="checkbox" data-ops-exec-contribution-behavior="' + escapeHtml(item.key) + '"' + checked + ' />' +
+          '<span>' + escapeHtml(item.label || item.key) + ' ' + item.count + '</span>' +
+        '</label>'
+      );
+    });
+    dom.execContributionBehaviorGrid.innerHTML = html.join('');
+  }
+
+  function syncExecContributionTimeRange() {
+    if (!dom.execContributionTimeRange) return;
+    var value = state.execContribution.timeRange || DEFAULT_ACTIVITY_RANGE;
+    dom.execContributionTimeRange.value = value;
+  }
+
   function getActivityRangeStartMs() {
     var range = state.activity.timeRange || DEFAULT_ACTIVITY_RANGE;
     if (range === 'all') return null;
@@ -890,6 +1111,23 @@
 
   function getContributionRangeStartMs() {
     var range = state.contribution.timeRange || DEFAULT_ACTIVITY_RANGE;
+    if (range === 'all') return null;
+    var now = new Date();
+    if (range === 'year') return new Date(now.getFullYear(), 0, 1).getTime();
+    if (range === 'month') return new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    if (range === 'day') return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    if (range === 'week') {
+      var base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      var day = base.getDay();
+      var diff = day === 0 ? 6 : day - 1;
+      base.setDate(base.getDate() - diff);
+      return base.getTime();
+    }
+    return null;
+  }
+
+  function getExecContributionRangeStartMs() {
+    var range = state.execContribution.timeRange || DEFAULT_ACTIVITY_RANGE;
     if (range === 'all') return null;
     var now = new Date();
     if (range === 'year') return new Date(now.getFullYear(), 0, 1).getTime();
@@ -962,6 +1200,12 @@
     return match && match.label ? match.label : k;
   }
 
+  function getExecContributionBehaviorLabel(key) {
+    var k = String(key || '').trim();
+    var match = EXEC_CONTRIBUTION_BEHAVIORS.filter(function(item) { return item.key === k; })[0];
+    return match && match.label ? match.label : k;
+  }
+
   function getFilteredActivityLogs() {
     var list = Array.isArray(state.activity.logs) ? state.activity.logs : [];
     var selectedIds = Array.isArray(state.activity.selectedUserIds) ? state.activity.selectedUserIds : [];
@@ -988,6 +1232,25 @@
     var allowed = {};
     selectedIds.forEach(function(id) { allowed[String(id)] = true; });
     var startMs = getContributionRangeStartMs();
+    return list.filter(function(log) {
+      if (!log) return false;
+      var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
+      if (!userId || !allowed[userId]) return false;
+      if (startMs) {
+        var t = parseTimeMs(log.created_at);
+        if (!t || t < startMs) return false;
+      }
+      return true;
+    });
+  }
+
+  function getFilteredExecContributionLogs() {
+    var list = Array.isArray(state.execContribution.logs) ? state.execContribution.logs : [];
+    var selectedIds = Array.isArray(state.execContribution.selectedUserIds) ? state.execContribution.selectedUserIds : [];
+    if (!selectedIds.length) return [];
+    var allowed = {};
+    selectedIds.forEach(function(id) { allowed[String(id)] = true; });
+    var startMs = getExecContributionRangeStartMs();
     return list.filter(function(log) {
       if (!log) return false;
       var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
@@ -1053,6 +1316,64 @@
       var deletedComplete = getPositiveNumber(detail.item_deleted_complete);
       if (!deletedComplete) return null;
       return { key: 'delete', label: getContributionBehaviorLabel('delete'), count: deletedComplete };
+    }
+    return null;
+  }
+
+  function normalizeExecCaseKey(detail) {
+    if (!detail || typeof detail !== 'object') return '';
+    var moduleText = normalizeCaseText(detail.module);
+    var titleText = normalizeCaseText(detail.title);
+    var preText = normalizeCaseText(detail.precondition);
+    var stepsText = normalizeCaseText(detail.steps);
+    var expectedText = normalizeCaseText(detail.expected);
+    return [moduleText, titleText, preText, stepsText, expectedText].join('::');
+  }
+
+  function readChangedFields(detail) {
+    if (!detail || typeof detail !== 'object') return [];
+    var raw = detail.changed_fields;
+    if (Array.isArray(raw)) return raw.map(function(item) { return String(item || '').trim(); }).filter(Boolean);
+    if (typeof raw === 'string') {
+      var parts = raw.split(',').map(function(item) { return String(item || '').trim(); }).filter(Boolean);
+      if (parts.length) return parts;
+    }
+    return [];
+  }
+
+  function isExecCaseExecuted(detail) {
+    if (!detail || typeof detail !== 'object') return false;
+    var changed = readChangedFields(detail);
+    var hasChanged = changed.indexOf('status') !== -1 || changed.indexOf('actual_result') !== -1;
+    var statusRaw = String(detail.status || '').trim();
+    var statusLower = statusRaw.toLowerCase();
+    var pendingMap = {
+      '': true,
+      'pending': true,
+      '未执行': true,
+      '变更重跑': true,
+      '有改动': true,
+    };
+    var hasStatus = Boolean(statusRaw) && !pendingMap[statusRaw] && !pendingMap[statusLower];
+    var actualText = normalizeCaseText(detail.actual_result);
+    if (hasChanged || hasStatus || actualText) return true;
+    return false;
+  }
+
+  function resolveExecContributionEntry(log) {
+    if (!log || typeof log !== 'object') return null;
+    var action = normalizeAction(log.action);
+    var detail = log.detail && typeof log.detail === 'object' ? log.detail : {};
+    if (action === 'update_exec_case') {
+      if (!isExecCaseExecuted(detail)) return null;
+      var caseKey = normalizeExecCaseKey(detail);
+      if (!caseKey) return null;
+      return { key: 'exec', label: getExecContributionBehaviorLabel('exec'), count: 1, caseKey: caseKey };
+    }
+    if (action === 'archive_exec_set') {
+      var archived = getPositiveNumber(detail.actual_result_count);
+      if (!archived) return null;
+      return { key: 'archive', label: getExecContributionBehaviorLabel('archive'), count: archived };
     }
     return null;
   }
@@ -1198,6 +1519,89 @@
     return users;
   }
 
+  function buildExecContributionViewData(logs) {
+    var nameMap = getActivityUserNameMap();
+    var userMap = {};
+    var behaviorTotals = {};
+    var execCaseDedup = {};
+    EXEC_CONTRIBUTION_BEHAVIORS.forEach(function(item) {
+      if (!item || !item.key) return;
+      behaviorTotals[item.key] = 0;
+    });
+
+    logs.forEach(function(log) {
+      var entry = resolveExecContributionEntry(log);
+      if (!entry || !entry.key) return;
+      var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
+      if (!userId) return;
+      var entryCount = getPositiveNumber(entry.count);
+      if (entry.key === 'exec') {
+        var caseKey = String(entry.caseKey || '').trim();
+        if (!caseKey) return;
+        if (!execCaseDedup[userId]) execCaseDedup[userId] = {};
+        if (execCaseDedup[userId][caseKey]) return;
+        execCaseDedup[userId][caseKey] = true;
+        entryCount = 1;
+      }
+      if (!entryCount) return;
+      var record = userMap[userId];
+      if (!record) {
+        var fallbackName = nameMap[userId] || ('用户#' + userId);
+        record = { id: userId, name: String(log.username || fallbackName), total: 0, behaviors: {} };
+        userMap[userId] = record;
+      }
+      record.total += entryCount;
+      record.behaviors[entry.key] = (record.behaviors[entry.key] || 0) + entryCount;
+      behaviorTotals[entry.key] = (behaviorTotals[entry.key] || 0) + entryCount;
+    });
+
+    state.execContribution.behaviors = EXEC_CONTRIBUTION_BEHAVIORS.map(function(item) {
+      return {
+        key: item.key,
+        label: item.label,
+        count: behaviorTotals[item.key] || 0,
+      };
+    });
+    syncExecContributionBehaviorSelection();
+
+    var selected = state.execContribution.selectedBehaviors || { all: true };
+    var allowAll = selected.all;
+    var allowMap = {};
+    if (!allowAll) {
+      Object.keys(selected).forEach(function(key) {
+        if (key === 'all') return;
+        if (selected[key]) allowMap[key] = true;
+      });
+    }
+
+    var users = [];
+    Object.keys(userMap).forEach(function(id) {
+      var entry = userMap[id];
+      var actions = [];
+      var total = 0;
+      Object.keys(entry.behaviors).forEach(function(key) {
+        if (!allowAll && !allowMap[key]) return;
+        var count = entry.behaviors[key];
+        if (!count) return;
+        total += count;
+        actions.push({ key: key, label: getExecContributionBehaviorLabel(key), count: count });
+      });
+      if (!total) return;
+      actions.sort(function(a, b) {
+        if (b.count !== a.count) return b.count - a.count;
+        return String(a.label || '').localeCompare(String(b.label || ''));
+      });
+      users.push({ id: entry.id, name: entry.name, total: total, actions: actions });
+    });
+    if (users.length > 1) {
+      users.sort(function(a, b) {
+        if (b.total !== a.total) return b.total - a.total;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      });
+    }
+    return users;
+  }
+
   function renderActivityView() {
     if (!dom.activityList || !dom.activityEmpty) return;
     syncActivitySelectionText();
@@ -1300,6 +1704,64 @@
         var title = label + ' ' + item.count;
         return (
           '<span class="ops-activity-bar-seg" title="' + escapeHtml(title) + '" style="width:' + width.toFixed(2) + '%;background:' + getContributionColor(label) + ';"></span>'
+        );
+      }).join('');
+      return (
+        '<div class="ops-activity-row">' +
+          '<div class="ops-activity-user">' + escapeHtml(user.name) + '</div>' +
+          '<div class="ops-activity-bar">' +
+            '<div class="ops-activity-bar-track" style="width:' + trackWidth.toFixed(2) + '%;">' + segments + '</div>' +
+            '<div class="ops-activity-count">' + total + '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function renderExecContributionView() {
+    if (!dom.execContributionList || !dom.execContributionEmpty) return;
+    syncExecContributionSelectionText();
+    if (!canView()) {
+      dom.execContributionList.innerHTML = '';
+      dom.execContributionEmpty.textContent = '仅管理员可查看用例执行贡献';
+      dom.execContributionEmpty.classList.remove('hidden');
+      setStatus(dom.execContributionStatus, '仅管理员可查看用例执行贡献', 'warn');
+      state.execContribution.behaviors = [];
+      syncExecContributionBehaviorFilters();
+      return;
+    }
+    if (!state.execContribution.hasSelection || !state.execContribution.selectedUserIds.length) {
+      dom.execContributionList.innerHTML = '';
+      dom.execContributionEmpty.textContent = '请先选择人员查看用例执行贡献';
+      dom.execContributionEmpty.classList.remove('hidden');
+      setStatus(dom.execContributionStatus, '', '');
+      state.execContribution.behaviors = [];
+      syncExecContributionBehaviorFilters();
+      return;
+    }
+    var filteredLogs = getFilteredExecContributionLogs();
+    var users = buildExecContributionViewData(filteredLogs);
+    syncExecContributionBehaviorFilters();
+    if (!users.length) {
+      dom.execContributionList.innerHTML = '';
+      dom.execContributionEmpty.textContent = filteredLogs.length ? '筛选后暂无贡献数据' : '暂无贡献数据';
+      dom.execContributionEmpty.classList.remove('hidden');
+      return;
+    }
+    var maxTotal = 0;
+    users.forEach(function(user) {
+      if (user.total > maxTotal) maxTotal = user.total;
+    });
+    dom.execContributionEmpty.classList.add('hidden');
+    dom.execContributionList.innerHTML = users.map(function(user) {
+      var total = user.total || 0;
+      var trackWidth = maxTotal ? (total / maxTotal) * ACTIVITY_BAR_MAX_RATIO : 0;
+      var segments = user.actions.map(function(item) {
+        var width = total ? (item.count / total) * 100 : 0;
+        var label = item.label || '';
+        var title = label + ' ' + item.count;
+        return (
+          '<span class="ops-activity-bar-seg" title="' + escapeHtml(title) + '" style="width:' + width.toFixed(2) + '%;background:' + getExecContributionColor(label) + ';"></span>'
         );
       }).join('');
       return (
@@ -1629,22 +2091,28 @@
         state.users = Array.isArray(list) ? list : [];
         state.activity.usersLoaded = true;
         state.contribution.usersLoaded = true;
+        state.execContribution.usersLoaded = true;
         syncUserSelect();
         syncActivityUserGrid();
         syncContributionUserGrid();
         syncActivitySelectionText();
         syncContributionSelectionText();
+        syncExecContributionUserGrid();
+        syncExecContributionSelectionText();
         return state.users;
       })
       .catch(function() {
         state.users = [];
         state.activity.usersLoaded = true;
         state.contribution.usersLoaded = true;
+        state.execContribution.usersLoaded = true;
         syncUserSelect();
         syncActivityUserGrid();
         syncContributionUserGrid();
         syncActivitySelectionText();
         syncContributionSelectionText();
+        syncExecContributionUserGrid();
+        syncExecContributionSelectionText();
         return [];
       });
   }
@@ -1758,6 +2226,40 @@
       });
   }
 
+  function loadExecContributionLogs(force) {
+    if (!apiClient.listOperationLogs) return Promise.resolve([]);
+    if (!canView()) {
+      state.execContribution.logs = [];
+      state.execContribution.logsLoaded = true;
+      renderExecContributionView();
+      setStatus(dom.execContributionStatus, '仅管理员可查看用例执行贡献', 'warn');
+      return Promise.resolve([]);
+    }
+    if (state.execContribution.loading) return Promise.resolve(state.execContribution.logs);
+    if (state.execContribution.logsLoaded && !force) return Promise.resolve(state.execContribution.logs);
+    state.execContribution.loading = true;
+    if (dom.execContributionRefreshBtn) dom.execContributionRefreshBtn.disabled = true;
+    setStatus(dom.execContributionStatus, '加载中...', '');
+    return apiClient
+      .listOperationLogs({ limit: 500, offset: 0 })
+      .then(function(list) {
+        state.execContribution.logs = (Array.isArray(list) ? list : []).filter(function(row) { return !isAutoOperation(row); });
+        state.execContribution.logsLoaded = true;
+        setStatus(dom.execContributionStatus, '已加载 ' + state.execContribution.logs.length + ' 条记录（最多 500 条）', 'ok');
+        return state.execContribution.logs;
+      })
+      .catch(function(err) {
+        state.execContribution.logs = [];
+        state.execContribution.logsLoaded = true;
+        setStatus(dom.execContributionStatus, err && err.message ? err.message : '加载失败', 'err');
+        return [];
+      })
+      .finally(function() {
+        state.execContribution.loading = false;
+        if (dom.execContributionRefreshBtn) dom.execContributionRefreshBtn.disabled = false;
+      });
+  }
+
   function refreshActivityView(force) {
     if (!state.activity.hasSelection || !state.activity.selectedUserIds.length) {
       renderActivityView();
@@ -1798,6 +2300,26 @@
     });
   }
 
+  function refreshExecContributionView(force) {
+    if (!state.execContribution.hasSelection || !state.execContribution.selectedUserIds.length) {
+      renderExecContributionView();
+      return Promise.resolve([]);
+    }
+    var ensureUsers = state.execContribution.usersLoaded ? Promise.resolve([]) : loadUsers();
+    if (!state.execContribution.logsLoaded || force) {
+      return ensureUsers.then(function() {
+        return loadExecContributionLogs(true).then(function() {
+          renderExecContributionView();
+          return state.execContribution.logs;
+        });
+      });
+    }
+    return ensureUsers.then(function() {
+      renderExecContributionView();
+      return state.execContribution.logs;
+    });
+  }
+
   function ensureDrawer() {
     if (state.drawer) return state.drawer;
     if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
@@ -1806,6 +2328,7 @@
       openButtons: ['openOpsLogDrawerBtn'],
       onOpen: function() {
         state.hasViewed = true;
+        state.drawerOpen = true;
         persistViewState();
         setStatus(dom.drawerStatusEl, '加载中...', '');
         syncTargetGrid();
@@ -1813,6 +2336,10 @@
           syncUserSelect();
           return loadLogs();
         });
+      },
+      onClose: function() {
+        state.drawerOpen = false;
+        persistViewState();
       },
     });
     return state.drawer;
@@ -1868,8 +2395,33 @@
     return state.contribution.drawer;
   }
 
+  function ensureExecContributionDrawer() {
+    if (state.execContribution.drawer) return state.execContribution.drawer;
+    if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+    state.execContribution.drawer = window.app.drawer.createDrawer({
+      drawerId: 'opsExecContributionDrawer',
+      openButtons: ['openOpsExecContributionDrawerBtn', 'openOpsExecContributionDrawerBtnInline'],
+      onOpen: function() {
+        applyOpsOverviewView('exec-contribution');
+        setStatus(dom.execContributionDrawerStatus, '', '');
+        setExecContributionDraftUserIds(state.execContribution.selectedUserIds);
+        syncExecContributionUserGrid();
+        if (!state.execContribution.usersLoaded) {
+          loadUsers().then(function() {
+            syncExecContributionUserGrid();
+          });
+        }
+      },
+      onClose: function() {
+        setExecContributionDraftUserIds(state.execContribution.selectedUserIds);
+        syncExecContributionUserGrid();
+      },
+    });
+    return state.execContribution.drawer;
+  }
+
   function openDrawerIfNeeded() {
-    if (!state.hasViewed) return;
+    if (!state.drawerOpen) return;
     var drawer = ensureDrawer();
     if (!drawer || typeof drawer.open !== 'function') return;
     drawer.open();
@@ -2088,6 +2640,90 @@
         refreshContributionView(true);
       });
     }
+    if (dom.execContributionSelectAll) {
+      dom.execContributionSelectAll.addEventListener('change', function() {
+        if (dom.execContributionSelectAll.checked) {
+          setExecContributionDraftUserIds(getActivityUserIds());
+        } else {
+          setExecContributionDraftUserIds([]);
+        }
+        syncExecContributionUserGrid();
+      });
+    }
+    if (dom.execContributionUserGrid) {
+      dom.execContributionUserGrid.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        var key = t && t.dataset ? String(t.dataset.opsExecContributionUser || '') : '';
+        if (!key) return;
+        var draft = Array.isArray(state.execContribution.draftUserIds) ? state.execContribution.draftUserIds.slice() : [];
+        var idx = draft.indexOf(key);
+        if (t.checked) {
+          if (idx === -1) draft.push(key);
+        } else if (idx !== -1) {
+          draft.splice(idx, 1);
+        }
+        state.execContribution.draftUserIds = draft;
+        syncExecContributionUserGrid();
+      });
+    }
+    if (dom.execContributionApplyBtn) {
+      dom.execContributionApplyBtn.addEventListener('click', function() {
+        var draft = Array.isArray(state.execContribution.draftUserIds) ? state.execContribution.draftUserIds : [];
+        if (!draft.length) {
+          setStatus(dom.execContributionDrawerStatus, '请至少选择一位人员', 'warn');
+          return;
+        }
+        state.execContribution.selectedUserIds = draft.slice();
+        state.execContribution.hasSelection = true;
+        persistExecContributionState();
+        syncExecContributionSelectionText();
+        if (state.execContribution.drawer && typeof state.execContribution.drawer.close === 'function') {
+          state.execContribution.drawer.close();
+        }
+        refreshExecContributionView(true);
+      });
+    }
+    if (dom.execContributionTimeRange) {
+      dom.execContributionTimeRange.addEventListener('change', function() {
+        state.execContribution.timeRange = dom.execContributionTimeRange.value || DEFAULT_ACTIVITY_RANGE;
+        persistExecContributionState();
+        renderExecContributionView();
+      });
+    }
+    if (dom.execContributionBehaviorGrid) {
+      dom.execContributionBehaviorGrid.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        var key = t && t.dataset ? String(t.dataset.opsExecContributionBehavior || '') : '';
+        if (!key) return;
+        if (key === 'all') {
+          state.execContribution.selectedBehaviors = { all: Boolean(t.checked) };
+          if (!t.checked) state.execContribution.selectedBehaviors = { all: true };
+          syncExecContributionBehaviorFilters();
+          persistExecContributionState();
+          renderExecContributionView();
+          return;
+        }
+        if (!state.execContribution.selectedBehaviors || typeof state.execContribution.selectedBehaviors !== 'object') {
+          state.execContribution.selectedBehaviors = { all: true };
+        }
+        if (state.execContribution.selectedBehaviors.all) {
+          var next = { all: false };
+          next[key] = Boolean(t.checked);
+          state.execContribution.selectedBehaviors = next;
+        } else {
+          state.execContribution.selectedBehaviors[key] = Boolean(t.checked);
+        }
+        syncExecContributionBehaviorSelection();
+        syncExecContributionBehaviorFilters();
+        persistExecContributionState();
+        renderExecContributionView();
+      });
+    }
+    if (dom.execContributionRefreshBtn) {
+      dom.execContributionRefreshBtn.addEventListener('click', function() {
+        refreshExecContributionView(true);
+      });
+    }
     function bindPaginationContainer(container) {
       if (!container || !container.addEventListener) return;
       container.addEventListener('click', function(e) {
@@ -2137,6 +2773,7 @@
         setStatus(dom.statusEl, '', '');
         openDrawerIfNeeded();
         if (state.overviewView === 'contribution') refreshContributionView(true);
+        else if (state.overviewView === 'exec-contribution') refreshExecContributionView(true);
         else refreshActivityView(true);
       });
       window.addEventListener('app-auth-ready', function() {
@@ -2147,6 +2784,7 @@
         setStatus(dom.statusEl, '', '');
         openDrawerIfNeeded();
         if (state.overviewView === 'contribution') refreshContributionView(true);
+        else if (state.overviewView === 'exec-contribution') refreshExecContributionView(true);
         else refreshActivityView(true);
       });
     }
@@ -2163,13 +2801,16 @@
     restoreViewState();
     restoreActivityState();
     restoreContributionState();
+    restoreExecContributionState();
     ensureDrawer();
     ensureActivityDrawer();
     ensureContributionDrawer();
+    ensureExecContributionDrawer();
     applyOpsOverviewView(state.overviewView, { persist: false });
     syncTargetGrid();
     syncActivityTimeRange();
     syncContributionTimeRange();
+    syncExecContributionTimeRange();
     setActivityDraftUserIds(state.activity.selectedUserIds);
     syncActivityUserGrid();
     syncActivityBehaviorFilters();
@@ -2178,17 +2819,23 @@
     syncContributionUserGrid();
     syncContributionBehaviorFilters();
     syncContributionSelectionText();
+    setExecContributionDraftUserIds(state.execContribution.selectedUserIds);
+    syncExecContributionUserGrid();
+    syncExecContributionBehaviorFilters();
+    syncExecContributionSelectionText();
     bindEvents();
 
     if (!canView()) {
       setStatus(dom.statusEl, '仅管理员可查看操作记录', 'warn');
       renderActivityView();
       renderContributionView();
+      renderExecContributionView();
       return;
     }
     setStatus(dom.statusEl, '已启用操作记录（仅管理员）', 'ok');
     refreshActivityView(false);
     refreshContributionView(false);
+    refreshExecContributionView(false);
   }
 
   var started = false;

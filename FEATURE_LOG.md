@@ -1624,3 +1624,16 @@
 - 更新记录：2025-12-20 修复删除用例贡献计数，单条删除确认改为抽屉（`scripts/modules/opsLog.js`、`scripts/modules/caseLibrary.js`、`backend/routers/cases.py`、`tests/`）。  
 - 更新记录：2025-12-20 活跃度/贡献视图进入时自动刷新数据（`scripts/modules/opsLog.js`、`tests/ui/ops_activity.spec.js`、`tests/ui/ops_contribution.spec.js`）。  
 - 测试与验证：`node --check scripts/modules/opsLog.js`（通过）；`npm run test:ui -- tests/ui/ops_activity.spec.js tests/ui/ops_contribution.spec.js`（通过）。  
+
+- 功能名称：操作记录新增用例执行贡献视图  
+- 功能描述：操作记录页新增“用例执行贡献视图”入口与抽屉选择；选择人员后展示执行贡献柱状图，支持按时间与用例执行行为筛选；用例执行按“模块/用例描述/前提/步骤/预期”去重计数，归档用例统计含实际结果的条数（同名重复归档也计数）。  
+- 操作方式：管理员进入“管理→操作记录”→点击“用例执行贡献视图”→勾选人员确认→在视图中按时间与行为筛选查看。  
+- 使用效果：用例执行贡献统计与活跃度视图保持一致风格，可区分执行与归档贡献情况。  
+- 新增内容/接口/组件：  
+  - 后端：执行用例更新日志补齐变更字段与用例快照，归档日志新增实际结果条数（`backend/routers/exec_routes.py`）。  
+  - 前端：操作记录导航入口、抽屉选择与贡献视图扩展（`index.html`、`scripts/modules/opsLog.js`、`config/constants.js`）。  
+  - 测试：UI 用例（`tests/ui/ops_exec_contribution.spec.js`）；API 用例更新（`tests/api/ops_log.spec.js`）。  
+- 复用说明：复用操作记录 `/api/ops` 与活跃度视图布局/抽屉组件，不新增表结构。  
+- 测试与验证：`node --check scripts/modules/opsLog.js`（通过）；`npm run test:ui -- tests/ui/ops_activity.spec.js tests/ui/ops_contribution.spec.js tests/ui/ops_exec_contribution.spec.js tests/ui/ops_log_drawer_restore.spec.js`（通过）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18081` 后执行 `API_BASE_URL=http://127.0.0.1:18081 npm run test:api -- tests/api/ops_log.spec.js`（通过）。  
+- 更新记录：2025-12-20 操作记录新增用例执行贡献视图与执行日志细节（`backend/routers/exec_routes.py`、`config/constants.js`、`index.html`、`scripts/modules/opsLog.js`、`tests/`）。  
+- 更新记录：2025-12-20 操作记录抽屉仅在刷新前打开时自动恢复，归档贡献按执行状态统计（`backend/routers/exec_routes.py`、`scripts/modules/opsLog.js`、`tests/ui/ops_log_drawer_restore.spec.js`、`tests/api/ops_log.spec.js`）。  

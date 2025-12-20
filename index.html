@@ -313,6 +313,20 @@
             <span class="nav-entry-desc">选择人员并查看用例贡献情况</span>
           </span>
         </button>
+        <button class="nav-entry-card nav-entry-overview" id="openOpsExecContributionDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <rect class="fill" x="4.5" y="12.5" width="3.5" height="5" rx="1.2"></rect>
+              <rect class="fill" x="10.25" y="9" width="3.5" height="8.5" rx="1.2"></rect>
+              <rect class="fill" x="16" y="6" width="3.5" height="11.5" rx="1.2"></rect>
+              <path d="M4.5 18.5h15"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">用例执行贡献视图</span>
+            <span class="nav-entry-desc">选择人员并查看用例执行贡献</span>
+          </span>
+        </button>
       </div>
     </div>
   </div>
@@ -2577,6 +2591,28 @@
     </div>
   </div>
 </div>
+<div class="drawer" id="opsExecContributionDrawer" data-tab-section="ops-log" data-role="admin-only">
+  <div class="drawer-mask" data-drawer-close="opsExecContributionDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>人员用例执行贡献选择</h3>
+      <button class="link-toggle" data-drawer-close="opsExecContributionDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" style="margin:0 0 10px;">选择人员后将展示用例执行贡献视图。</p>
+      <div class="ops-activity-drawer-toolbar">
+        <label class="inline"><input id="opsExecContributionSelectAll" type="checkbox"/> 全选</label>
+        <span class="status" id="opsExecContributionDrawerStatus"></span>
+      </div>
+      <div class="ops-activity-user-grid" id="opsExecContributionUserGrid"></div>
+      <p class="hint hidden" id="opsExecContributionUserEmpty">暂无人员</p>
+      <div class="actions user-form-actions">
+        <button class="primary" id="opsExecContributionApplyBtn" type="button">确认</button>
+        <button class="ghost-btn" data-drawer-close="opsExecContributionDrawer" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="drawer" id="opsLogDrawer" data-tab-section="ops-log" data-role="admin-only">
   <div class="drawer-mask" data-drawer-close="opsLogDrawer"></div>
   <div class="drawer-panel drawer-panel-wide">
@@ -2691,6 +2727,40 @@
     <div class="ops-activity-view" id="opsContributionView">
       <div class="ops-activity-list" id="opsContributionList"></div>
       <p class="hint hidden" id="opsContributionEmpty">暂无贡献数据</p>
+    </div>
+  </div>
+  <div class="ops-activity-card hidden" id="opsExecContributionCard">
+    <div class="ops-activity-header">
+      <h2 class="ops-activity-title-text">人员用例执行贡献</h2>
+      <label class="inline ops-activity-selected-label">已选人员
+        <span class="ops-activity-selected-text" id="opsExecContributionSelectionText"></span>
+      </label>
+      <div class="ops-activity-actions">
+        <button class="secondary" id="openOpsExecContributionDrawerBtnInline" type="button">重新选择人员</button>
+        <button class="secondary" id="opsExecContributionRefreshBtn" type="button">刷新</button>
+      </div>
+    </div>
+    <div class="ops-activity-toolbar">
+      <div class="ops-activity-controls">
+        <label class="inline">时间
+          <select class="ops-activity-select" id="opsExecContributionTimeRangeSelect">
+            <option value="all">历史至今</option>
+            <option value="year">年</option>
+            <option value="month">月</option>
+            <option value="week" selected>周</option>
+            <option value="day">日</option>
+          </select>
+        </label>
+      </div>
+      <span class="status" id="opsExecContributionStatus"></span>
+    </div>
+    <div class="ops-activity-filters">
+      <div class="ops-activity-filter-title">用例执行行为</div>
+      <div class="ops-activity-filter-grid" id="opsExecContributionBehaviorFilterGrid"></div>
+    </div>
+    <div class="ops-activity-view" id="opsExecContributionView">
+      <div class="ops-activity-list" id="opsExecContributionList"></div>
+      <p class="hint hidden" id="opsExecContributionEmpty">暂无贡献数据</p>
     </div>
   </div>
   <p class="status" id="opsLogStatus"></p>
