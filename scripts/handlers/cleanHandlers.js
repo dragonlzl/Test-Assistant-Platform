@@ -28,6 +28,7 @@
     var extractJsonPayload = handlers.extractJsonPayload || function(text) { return text; };
     var setStepInProgress = handlers.setStepInProgress || function() {};
     var clearStepInProgress = handlers.clearStepInProgress || function() {};
+    var persistWorkflowState = handlers.persistWorkflowState || function() {};
     var basicClean = handlers.basicClean || function(text) {
       var normalized = (text || '')
         .replace(/\r\n/g, '\n')
@@ -193,6 +194,7 @@
       if (!state.lastRawImportName) renderAutoRawInfoImpl();
       renderCleanRawView(state.cleanViewSelection);
       updateFlowStatus();
+      persistWorkflowState();
     }
 
     function handleCleanInput() {
@@ -204,6 +206,7 @@
       renderCleanView();
       renderCleanRawView(null);
       updateFlowStatus();
+      persistWorkflowState();
     }
 
     function handleSplitInput() {
@@ -219,6 +222,7 @@
       setStatus(casesCoverageStatus, '', '');
       setStatus(caseGenStatus, '', '');
       refreshMissingSmartFillButton();
+      persistWorkflowState();
     }
 
     function handleCaseTextInput() {
@@ -231,6 +235,7 @@
       }
       if (!hasImportedCases()) resetImportedCaseView();
       updateFlowStatus();
+      persistWorkflowState();
     }
 
     function wrapCleanedText(text) {

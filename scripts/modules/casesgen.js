@@ -7,6 +7,7 @@
     var api = ctx.casesGenApi || {};
     var setStatus = core.setStatus || utils.setStatus || function() {};
     var debounce = utils.debounce || function(fn) { return fn; };
+    var persistWorkflowState = core.persistWorkflowState || function() {};
     var switchTab = core.switchTab || function() {};
     var updateAssignmentStatuses = core.updateAssignmentStatuses || function() {};
     var updateReasoningVisibility = core.updateReasoningVisibility || function() {};
@@ -115,6 +116,7 @@
         var area = e.target.closest('textarea[data-suggestion]');
         if (area) {
           state.caseGenSuggestions[area.dataset.suggestion] = area.value;
+          persistWorkflowState();
         }
       }
       casesGenerationContainer.addEventListener('click', handleCaseGenClick);

@@ -12,6 +12,7 @@
     const modelsKey = appConfig.modelsKey || 'cleaner-models-v1';
     const assignmentKey = appConfig.assignmentKey || 'cleaner-assignment-v1';
     const activeTabKey = appConfig.activeTabKey || 'usecase-active-tab';
+    const workflowStorageKey = appConfig.workflowStorageKey || 'usecase-workflow-state-v1';
     const tempExecStorageKey = appConfig.tempExecStorageKey || 'usecase-temp-exec-v1';
     const tempExecFocusStorageKey = appConfig.tempExecFocusStorageKey || 'tempexec-focus-v1';
     const tempExecPageSizeStorageKey = appConfig.tempExecPageSizeStorageKey || 'tempexec-page-size';
@@ -199,6 +200,14 @@
       if (api && typeof api.switchTab === 'function') return api.switchTab(name);
       return null;
     };
+    var persistWorkflowState = function() {};
+    var persistWorkflowStateNow = function() {};
+    function requestPersistWorkflowState() {
+      return persistWorkflowState();
+    }
+    function requestPersistWorkflowStateNow() {
+      return persistWorkflowStateNow();
+    }
 
     function clampTimeoutSeconds(value) {
       const num = Math.round(Number(value));
@@ -497,6 +506,7 @@
     function updateFlowStatusWithValidation() {
       validateFlowData();
       renderFlowStatus();
+      requestPersistWorkflowState();
     }
     if (flowCore && flowCore.updateFlowStatus) api.updateFlowStatus = updateFlowStatusWithValidation;
     if (flowCore && flowCore.scrollToSection) api.scrollToSection = flowCore.scrollToSection;
@@ -552,6 +562,7 @@
           clearStepInProgress,
           runConcurrent,
           ensureCaseGenModulesFromSplit: api.ensureCaseGenModulesFromSplit,
+          persistWorkflowState: requestPersistWorkflowState,
         },
       })
       : null;
@@ -667,6 +678,7 @@
           updateFlowStatus,
           setStepInProgress,
           clearStepInProgress,
+          persistWorkflowState: requestPersistWorkflowState,
         },
       })
       : null;
@@ -837,6 +849,7 @@
           waitForAutoClarification: proxyApi('waitForAutoClarification'),
           updateAutoClarifyVisibility: proxyApi('updateAutoClarifyVisibility'),
           jumpToCleanHighlightView: proxyApi('jumpToCleanHighlightView'),
+          persistWorkflowState: requestPersistWorkflowState,
         },
         utils: { escapeHtml },
       })
@@ -937,6 +950,7 @@
           setCaseViewHint: proxyApi('setCaseViewHint'),
           parseCaseList,
           extractJsonObjects,
+          persistWorkflowState: requestPersistWorkflowState,
         },
         config: { defaultPrompts },
         sanitizeCasesForExport,
@@ -1424,10 +1438,180 @@
     api.clearStepFailed = clearStepFailed;
     api.clearAllFailedSteps = clearAllFailedSteps;
 
+    function hasWorkflowData() {
+      var rawTextVal = dom.rawText && dom.rawText.value ? dom.rawText.value.trim() : '';
+      var reviewTextVal = dom.reviewResultEl && dom.reviewResultEl.value ? dom.reviewResultEl.value.trim() : '';
+      var cleanedTextVal = dom.cleanedTextEl && dom.cleanedTextEl.value ? dom.cleanedTextEl.value.trim() : '';
+      var compareTextVal = dom.compareResultEl && dom.compareResultEl.value ? dom.compareResultEl.value.trim() : '';
+      var splitTextVal = dom.splitResultEl && dom.splitResultEl.value ? dom.splitResultEl.value.trim() : '';
+      var casesCompareVal = dom.casesCompareResultEl && dom.casesCompareResultEl.value ? dom.casesCompareResultEl.value.trim() : '';
+      var caseTextVal = dom.caseTextEl && dom.caseTextEl.value ? dom.caseTextEl.value.trim() : '';
+      var hasImported = Array.isArray(state.importedCases) && state.importedCases.length > 0;
+      var hasCaseGenModules = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
+      var hasAutoClarify = Boolean(state.autoRequireClarifications);
+      var hasCaseGenResults = false;
+      var hasCaseGenSuggestions = false;
+      if (state.caseGenResults && typeof state.caseGenResults === 'object') {
+        Object.keys(state.caseGenResults).some(function(key) {
+          var val = (state.caseGenResults[key] || '').trim();
+          if (val && !/^\[\s*\]$/.test(val)) {
+            hasCaseGenResults = true;
+            return true;
+          }
+          return false;
+        });
+      }
+      if (state.caseGenSuggestions && typeof state.caseGenSuggestions === 'object') {
+        Object.keys(state.caseGenSuggestions).some(function(key) {
+          var val = (state.caseGenSuggestions[key] || '').trim();
+          if (val) {
+            hasCaseGenSuggestions = true;
+            return true;
+          }
+          return false;
+        });
+      }
+      var hasClarify = state.reviewClarifications && state.reviewClarifications.size > 0;
+      var hasAutoSuggestion = state.autoCompareSuggestion && state.autoCompareSuggestion.trim();
+      var hasLabel = false;
+      if (state.requirementLabel && state.requirementLabel.trim()) {
+        var labelText = state.requirementLabel.trim();
+        var labelSource = state.requirementLabelSource ? String(state.requirementLabelSource).trim() : '';
+        if (labelSource && labelSource !== 'default') {
+          hasLabel = true;
+        } else if (labelText !== '当前需求') {
+          hasLabel = true;
+        }
+      }
+      return Boolean(
+        rawTextVal || reviewTextVal || cleanedTextVal || compareTextVal || splitTextVal || casesCompareVal ||
+        caseTextVal || hasImported || hasCaseGenModules || hasCaseGenResults || hasCaseGenSuggestions ||
+        hasClarify || hasAutoSuggestion || hasLabel || hasAutoClarify
+      );
+    }
+
+    function clearWorkflowStatuses() {
+      var statusIds = [
+        'parseStatus',
+        'reviewStatus',
+        'clarifyStatus',
+        'cleanStatus',
+        'compareStatus',
+        'splitStatus',
+        'caseStatus',
+        'casesCoverageStatus',
+        'caseGenStatus',
+        'autoWorkflowStatus',
+        'autoCompareStatus',
+        'autoRecleanStatus',
+        'autoMissingStatus',
+        'missingViewStatus',
+        'autoClarifyStatus',
+      ];
+      statusIds.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) setStatus(el, '', '');
+      });
+    }
+
+    function resetWorkflowData() {
+      if (dom.rawText) dom.rawText.value = '';
+      if (dom.reviewResultEl) dom.reviewResultEl.value = '';
+      if (dom.cleanedTextEl) dom.cleanedTextEl.value = '';
+      if (dom.compareResultEl) dom.compareResultEl.value = '';
+      if (dom.splitResultEl) dom.splitResultEl.value = '';
+      if (dom.casesCompareResultEl) dom.casesCompareResultEl.value = '';
+      if (dom.caseTextEl) dom.caseTextEl.value = '';
+      if (dom.fileName) dom.fileName.textContent = '未选择文件';
+      state.lastRawImportName = '';
+      state.requirementLabel = '';
+      state.requirementLabelSource = '';
+      state.autoRunning = false;
+      state.inProgressStep = '';
+      state.inProgressSteps = {};
+      state.failedSteps = {};
+      state.waitingSteps = {};
+      state.validationFailedSteps = {};
+      state.reviewRows = [];
+      state.reviewClarifications = new Map();
+      state.reviewSelections = new Set();
+      state.reviewExpanded = new Set();
+      state.cleanEntries = [];
+      state.cleanViewSelection = -1;
+      state.cleanHighlightAll = false;
+      state.cleanActiveHighlights = {};
+      state.missingSelections = new Set();
+      state.missingRowCache = [];
+      state.missingLastList = [];
+      state.autoCompareMissingList = [];
+      state.autoCompareSelections = new Set();
+      state.autoCompareSelectionTouched = false;
+      state.autoCompareSuggestion = '';
+      state.autoRequireClarifications = false;
+      state.autoClarifyResolver = null;
+      state.caseGenModules = [];
+      state.caseGenSource = '';
+      state.caseGenResults = {};
+      state.caseSelections = {};
+      state.caseGenSuggestions = {};
+      state.caseGenModuleStatus = {};
+      state.caseGenProgress = {};
+      state.caseGenRunning = new Set();
+      state.importedCases = [];
+      var autoCompareSuggestionInput = document.getElementById('autoCompareSuggestion');
+      if (autoCompareSuggestionInput) autoCompareSuggestionInput.value = '';
+      if (dom.autoClarifyToggle) dom.autoClarifyToggle.checked = false;
+      clearWorkflowStatuses();
+      if (typeof renderImportedCaseList === 'function') renderImportedCaseList();
+      if (typeof resetImportedCaseView === 'function') resetImportedCaseView();
+      if (typeof syncCaseTextWithImports === 'function') syncCaseTextWithImports();
+      if (typeof renderCaseGeneration === 'function') renderCaseGeneration();
+      if (typeof renderCaseGenProgressBoard === 'function') renderCaseGenProgressBoard();
+      if (typeof renderCleanView === 'function') renderCleanView();
+      if (typeof renderCleanRawView === 'function') renderCleanRawView(null);
+      if (typeof syncReviewViewFromResult === 'function') syncReviewViewFromResult();
+      if (typeof syncSplitView === 'function') syncSplitView();
+      if (typeof updateMissingView === 'function') updateMissingView();
+      if (typeof syncAutoCompareStatus === 'function') syncAutoCompareStatus();
+      if (typeof updateAutoClarifyVisibility === 'function') updateAutoClarifyVisibility(false);
+      if (typeof updateAutoMissingCard === 'function') updateAutoMissingCard();
+      if (typeof renderAutoRawInfo === 'function') renderAutoRawInfo();
+      if (typeof setCaseViewHint === 'function') {
+        setCaseViewHint('请先上传或输入 XMind 测试用例');
+      }
+      triggerUpdateFlowStatus();
+      requestPersistWorkflowStateNow();
+    }
+
+    function guardRequirementImport() {
+      if (!hasWorkflowData()) return Promise.resolve(true);
+      var confirmDrawer = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
+      var message = '新导入需求后页面数据会被清空（含用例生成数据），需要重新执行全部操作，是否确认导入新需求？';
+      if (!confirmDrawer || typeof confirmDrawer.open !== 'function') {
+        var ok = window.confirm(message);
+        if (ok) resetWorkflowData();
+        return Promise.resolve(ok);
+      }
+      return confirmDrawer.open({
+        title: '确认导入新需求',
+        message: message,
+        confirmText: '确认导入',
+        cancelText: '取消',
+        danger: true,
+      }).then(function(result) {
+        if (result && result.ok) {
+          resetWorkflowData();
+          return true;
+        }
+        return false;
+      });
+    }
+
     const uploadModule = window.app.upload && typeof window.app.upload.init === 'function'
       ? window.app.upload.init({
         state,
         handlers: {
+          guardRequirementImport: guardRequirementImport,
           handleCaseFiles,
           removeImportedCase,
           setStepInProgress,
@@ -1439,6 +1623,7 @@
           updateFlowStatus,
           setStatus,
           renderCleanRawView,
+          persistWorkflowState: requestPersistWorkflowState,
           parseDocx: xmindCore && xmindCore.parseDocx ? function(file) { return xmindCore.parseDocx(file); } : null,
         },
         dom,
@@ -1498,6 +1683,7 @@
           extractJsonPayload,
           setStepInProgress,
           clearStepInProgress,
+          persistWorkflowState: requestPersistWorkflowState,
         },
         dom,
       })
@@ -1567,6 +1753,7 @@
         updateFlowStatus: triggerUpdateFlowStatus,
         setCaseViewHint,
         renderCaseGenProgressBoard,
+        workflowStorageKey,
         loadModels,
         loadAssignments,
         renderModels,
@@ -1589,5 +1776,15 @@
         testModel,
       })
       : null;
+    if (window.app && typeof window.app.persistWorkflowState === 'function') {
+      persistWorkflowState = window.app.persistWorkflowState;
+    } else if (api && typeof api.persistWorkflowState === 'function') {
+      persistWorkflowState = api.persistWorkflowState;
+    }
+    if (window.app && typeof window.app.persistWorkflowStateNow === 'function') {
+      persistWorkflowStateNow = window.app.persistWorkflowStateNow;
+    } else if (api && typeof api.persistWorkflowStateNow === 'function') {
+      persistWorkflowStateNow = api.persistWorkflowStateNow;
+    }
     if (runtime && runtime.switchTab) switchTab = runtime.switchTab;
     window.app.switchTab = switchTab;

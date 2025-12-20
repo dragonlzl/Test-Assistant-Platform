@@ -33,6 +33,7 @@
     var updateFlowStatus = handlers.updateFlowStatus || function() {};
     var setStepInProgress = handlers.setStepInProgress || function() {};
     var clearStepInProgress = handlers.clearStepInProgress || function() {};
+    var persistWorkflowState = handlers.persistWorkflowState || function() {};
 
     var rawText = dom.rawText;
     var reviewStatus = dom.reviewStatus;
@@ -165,6 +166,7 @@
         }
         renderAutoClarifyView();
       }
+      persistWorkflowState();
     }
 
     function renderAutoClarifyView() {
@@ -422,6 +424,7 @@
       var value = normalizeReviewText(textarea.value);
       state.reviewClarifications.set(idx, value);
       textarea.value = value;
+      persistWorkflowState();
     }
 
     function handleClarifyClickEvent(e) {

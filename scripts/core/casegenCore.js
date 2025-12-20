@@ -23,6 +23,7 @@
     var scrollElementIntoView = handlers.scrollElementIntoView || function() {};
     var parseSplitModules = handlers.parseSplitModules || function() { return []; };
     var scrollToSection = handlers.scrollToSection;
+    var persistWorkflowState = handlers.persistWorkflowState || function() {};
 
     function hasGeneratedCasesForModule(moduleId) {
       if (!moduleId) return false;
@@ -88,14 +89,17 @@
         setStatus(caseGenStatus, '', '');
         renderCaseGeneration();
         updateFlowStatus();
+        persistWorkflowState();
         if (typeof handlers.syncSplitView === 'function') handlers.syncSplitView();
       } else if (state.caseGenModules.length) {
         setStatus(caseGenStatus, '', '');
         renderCaseGeneration();
         updateFlowStatus();
+        persistWorkflowState();
         if (typeof handlers.syncSplitView === 'function') handlers.syncSplitView();
       } else {
         updateFlowStatus();
+        persistWorkflowState();
         if (typeof handlers.syncSplitView === 'function') handlers.syncSplitView();
       }
       switchTab('casesgen');
@@ -141,6 +145,7 @@
         if (filled && typeof handlers.renderCaseGeneration === 'function') {
           setStatus(caseGenStatus, '', '');
           handlers.renderCaseGeneration();
+          persistWorkflowState();
         }
       }
     }

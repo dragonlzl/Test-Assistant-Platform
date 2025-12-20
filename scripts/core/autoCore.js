@@ -19,6 +19,7 @@
     var clearStepWaiting = handlers.clearStepWaiting || function() {};
     var clearAllWaitingSteps = handlers.clearAllWaitingSteps || function() {};
     var updateFlowStatus = handlers.updateFlowStatus || function() {};
+    var persistWorkflowState = handlers.persistWorkflowState || function() {};
     var parseMissingModules = handlers.parseMissingModules || function() { return []; };
     var buildMissingRows = handlers.buildMissingRows || function(list) { return list || []; };
     var pickMissingSelections = handlers.pickMissingSelections || function() { return []; };
@@ -312,6 +313,7 @@
       if (checked) state.missingSelections.add(index);
       else state.missingSelections.delete(index);
       refreshAutoMissingSelectionUI();
+      persistWorkflowState();
     }
 
     function handleMissingSelectAll(checked) {
@@ -320,6 +322,7 @@
         state.missingRowCache.forEach(function(_, idx) { state.missingSelections.add(idx); });
       }
       refreshAutoMissingSelectionUI();
+      persistWorkflowState();
     }
 
     function closeMissingDrawersAfterFill() {

@@ -118,6 +118,7 @@
     var setCaseProgressGroupState = handlers.setCaseProgressGroupState || function() {};
     var setCaseProgressStep = handlers.setCaseProgressStep || function() {};
     var markAllCaseProgressGroups = handlers.markAllCaseProgressGroups || function() {};
+    var persistWorkflowState = handlers.persistWorkflowState || function() {};
     var setCaseModuleRunning = handlers.setCaseModuleRunning || function() {};
     var isCaseModuleRunning = handlers.isCaseModuleRunning || function() { return false; };
     function ensureCaseModuleStatusState() {
@@ -1984,6 +1985,7 @@
       renderCaseGenProgressBoard();
       refreshAppendExistingButton();
       renderAppendTargetOptions();
+      persistWorkflowState();
     }
 
     async function generateCasesForModule(moduleId) {
@@ -2377,6 +2379,7 @@
         updateSupplementButtons(moduleId, true);
         setCaseModuleStatus(moduleId, '已导入【' + moduleTitle + '】的用例', 'ok');
         refreshAppendExistingButton();
+        persistWorkflowState();
       } catch (err) {
         console.error(err);
         setCaseModuleStatus(moduleId, '导入失败：' + err.message, 'err');
@@ -2633,6 +2636,7 @@
         if (appendTargetSelect) appendTargetSelect.value = '';
         state.caseGenAppendTarget = '';
         renderAppendTargetOptions();
+        persistWorkflowState();
       } catch (err) {
         console.error(err);
         setStatus(caseGenStatus, '追加失败：' + err.message, 'err');
@@ -2825,6 +2829,7 @@
       refreshExportCaseGenButton();
       refreshAppendExistingButton();
       refreshExportCaseGenXmindButton();
+      persistWorkflowState();
     }
 
     function toggleCaseView(moduleId) {
@@ -2875,6 +2880,7 @@
       refreshCaseSelectionUI(moduleId);
       updateSupplementButtons(moduleId, getCaseListForModule(moduleId).length > 0);
       updateCaseGenAllSelectionButton();
+      persistWorkflowState();
     }
 
     function handleCaseSelectAll(moduleId, checked) {
@@ -2890,6 +2896,7 @@
       refreshCaseSelectionUI(moduleId);
       updateSupplementButtons(moduleId, getCaseListForModule(moduleId).length > 0);
       updateCaseGenAllSelectionButton();
+      persistWorkflowState();
     }
 
     function handleCaseSelectAllModules() {
@@ -2913,6 +2920,7 @@
       });
       refreshExportCaseGenXmindButton();
       updateCaseGenAllSelectionButton();
+      persistWorkflowState();
     }
 
     function exportSelectedCases(moduleId) {

@@ -10,10 +10,12 @@
     var setStepInProgress = handlers.setStepInProgress || function() {};
     var clearStepInProgress = handlers.clearStepInProgress || function() {};
     var setRequirementLabel = handlers.setRequirementLabel || function() {};
+    var guardRequirementImport = handlers.guardRequirementImport || function() { return Promise.resolve(true); };
     var renderAutoRawInfo = handlers.renderAutoRawInfo || function() {};
     var updateAutoCompareActions = handlers.updateAutoCompareActions || function() {};
     var updateAutoMissingCard = handlers.updateAutoMissingCard || function() {};
     var updateFlowStatus = handlers.updateFlowStatus || function() {};
+    var persistWorkflowState = handlers.persistWorkflowState || function() {};
     var setStatus = handlers.setStatus || function() {};
     var renderCleanRawView = handlers.renderCleanRawView || function() {};
     var rawText = dom.rawText;
@@ -31,6 +33,7 @@
       renderAutoRawInfo();
       renderCleanRawView(state.cleanViewSelection);
       updateFlowStatus();
+      persistWorkflowState();
     };
     var removeImportedCase = handlers.removeImportedCase;
 
@@ -76,13 +79,24 @@
         updateAutoCompareActions();
         updateAutoMissingCard();
         updateFlowStatus();
+        persistWorkflowState();
       }
     }
 
-    function maybeHandleFile(file) {
+    async function maybeHandleFile(file) {
       if (!file) return;
+      var ok = true;
+      if (typeof guardRequirementImport === 'function') {
+        try {
+          ok = await guardRequirementImport(file);
+        } catch (err) {
+          ok = false;
+        }
+      }
+      if (!ok) return;
       if (typeof handleFile === 'function') {
         handleFile(file);
+        persistWorkflowState();
         return;
       }
       handleFileWithParse(file);

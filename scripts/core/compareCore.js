@@ -67,6 +67,7 @@
     var ensureCaseGenModulesFromSplit = handlers.ensureCaseGenModulesFromSplit || function() { return false; };
     var setStepInProgress = handlers.setStepInProgress || function() {};
     var clearStepInProgress = handlers.clearStepInProgress || function() {};
+    var persistWorkflowState = handlers.persistWorkflowState || function() {};
     var runConcurrent = handlers.runConcurrent || function(items, concurrency, worker) {
       if (!Array.isArray(items) || !items.length) return Promise.resolve([]);
       var limit = Math.max(1, Number(concurrency) || 1);
@@ -614,6 +615,7 @@
       refreshMissingSelectionUI();
       refreshMissingSmartFillButton();
       if (typeof updateAutoMissingCard === 'function') updateAutoMissingCard();
+      persistWorkflowState();
     }
 
     function handleMissingSelectAll(checked) {
@@ -634,6 +636,7 @@
       refreshMissingSelectionUI();
       refreshMissingSmartFillButton();
       if (typeof updateAutoMissingCard === 'function') updateAutoMissingCard();
+      persistWorkflowState();
     }
 
     function copyMissingJson() {

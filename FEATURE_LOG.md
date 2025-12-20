@@ -19,6 +19,18 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：工作流/自动评审/用例生成数据持久化与导入确认  
+- 功能描述：用例生成、AI 一键需求&用例评审、功能工作流页面的核心输入与生成结果持久化；导入新需求时若页面已有数据，弹出确认抽屉提示清空并在确认后重置所有模块数据（含用例生成）。  
+- 操作方式：导入/输入需求并执行流程 → 刷新页面数据自动恢复；再次导入新需求时出现“清空提示”抽屉，确认后重新导入并清空旧数据。  
+- 使用效果：刷新不丢失工作流数据；避免误覆盖已有流程结果，确认后可安全导入新需求。  
+- 新增内容/接口/组件：  
+  - 前端：新增工作流持久化 key 与用户切换清理（`config/constants.js`、`scripts/modules/authGuard.js`）；工作流数据持久化/恢复与监听（`scripts/core/appRuntime.js`）；导入确认与数据清空逻辑（`scripts/modules/app.js`、`scripts/modules/upload.js`）；各模块触发持久化（`scripts/handlers/cleanHandlers.js`、`scripts/core/reviewCore.js`、`scripts/modules/auto.js`、`scripts/modules/casesgen.js`、`scripts/core/casegenCore.js`、`scripts/core/casesGenCore.js`）。  
+  - 测试：新增 UI 用例 `tests/ui/workflow_persistence_import_guard.spec.js`。  
+- 复用说明：复用通用确认抽屉与本地存储服务，无新增后端接口。  
+- 测试与验证：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js scripts/core/appRuntime.js scripts/core/casegenCore.js scripts/core/casesGenCore.js scripts/core/reviewCore.js scripts/handlers/cleanHandlers.js scripts/modules/auto.js scripts/modules/casesgen.js scripts/modules/upload.js`（通过）；UI 用例未执行。  
+- 更新记录：2025-12-20 工作流/自动评审/用例生成持久化与导入确认（`config/constants.js`、`scripts/modules/authGuard.js`、`scripts/modules/app.js`、`scripts/modules/upload.js`、`scripts/core/appRuntime.js`、`scripts/handlers/cleanHandlers.js`、`scripts/core/reviewCore.js`、`scripts/modules/auto.js`、`scripts/modules/casesgen.js`、`scripts/core/casegenCore.js`、`scripts/core/casesGenCore.js`、`tests/ui/workflow_persistence_import_guard.spec.js`）。  
+- 更新记录：2025-12-20 补齐用例覆盖对比缺失勾选持久化与用例生成进度恢复（`scripts/core/appRuntime.js`、`scripts/core/compareCore.js`、`scripts/core/autoCore.js`、`scripts/modules/app.js`、`tests/ui/workflow_persistence_import_guard.spec.js`）。  
+
 - 功能名称：操作记录数量变化展示  
 - 功能描述：操作记录查看记录抽屉新增“数量变化”列，覆盖入库/追加/子项增删改/转执行/归档/解散等行为展示用例数量前后变化，未提供数量的行为显示“-”。  
 - 操作方式：操作记录 → 点击“查看记录” → 在列表中查看“数量变化”列。  

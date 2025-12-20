@@ -18,6 +18,7 @@
     var buildFilteredComparePayload = handlers.buildFilteredComparePayload || function() { return null; };
     var updateAutoCompareActions = handlers.updateAutoCompareActions || function() {};
     var syncAutoCompareStatus = handlers.syncAutoCompareStatus || function() { return null; };
+    var persistWorkflowState = handlers.persistWorkflowState || function() {};
     var resetAutoCompareMissingView = handlers.resetAutoCompareMissingView || function() {};
     var resetAutoCompareUserInputs = handlers.resetAutoCompareUserInputs || function() {};
     var jumpToCleanHighlightView = handlers.jumpToCleanHighlightView || function() {};
@@ -132,6 +133,7 @@
       autoCompareSuggestionInput.addEventListener('input', function() {
         state.autoCompareSuggestion = autoCompareSuggestionInput.value;
         updateAutoCompareActions();
+        persistWorkflowState();
       });
     }
     if (autoFillCleanBtn) {

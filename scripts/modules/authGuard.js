@@ -95,7 +95,8 @@
       var opsActivityViewKey = getConfigValue('opsActivityViewStorageKey', 'tap-ops-activity-view-v1');
       var legacyCleanKey = getConfigValue('legacyCleanKey', 'cleaner-config-v1');
       var legacyCompareKey = getConfigValue('legacyCompareKey', 'cleaner-compare-config-v1');
-      var keysToClear = [modelsKey, assignmentKey, settingsKey, tempExecPageSizeKey, opsLogViewKey, opsActivityViewKey, legacyCleanKey, legacyCompareKey];
+      var workflowKey = getConfigValue('workflowStorageKey', 'usecase-workflow-state-v1');
+      var keysToClear = [modelsKey, assignmentKey, settingsKey, tempExecPageSizeKey, opsLogViewKey, opsActivityViewKey, legacyCleanKey, legacyCompareKey, workflowKey];
       try {
         if (typeof localStorage !== 'undefined') {
           keysToClear.forEach(function(key) {

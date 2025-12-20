@@ -48,6 +48,7 @@
     modelsKey: 'cleaner-models-v1',
     assignmentKey: 'cleaner-assignment-v1',
     activeTabKey: 'usecase-active-tab',
+    workflowStorageKey: 'usecase-workflow-state-v1',
     tempExecStorageKey: 'usecase-temp-exec-v1',
     tempExecFocusStorageKey: 'tempexec-focus-v1',
     tempExecPageSizeStorageKey: 'tempexec-page-size',
