@@ -29,6 +29,10 @@
     if (utils && typeof utils.openConfirmDrawer === 'function') {
       return utils.openConfirmDrawer(options || {});
     }
+    var drawerApi = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
+    if (drawerApi && typeof drawerApi.open === 'function') {
+      return drawerApi.open(options || {});
+    }
     var msg = options && options.message ? String(options.message) : '';
     var ok = true;
     if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
@@ -6803,16 +6807,24 @@
     var idx = Math.max(0, Math.min(Number(index), ed.items.length - 1));
     var item = ed.items[idx];
     if (!item) return;
-    var confirmed = window.confirm('确定删除该用例吗？可在 8 秒内撤回。');
-    if (!confirmed) return;
-    unmarkCaseLibraryNewAdded(ed.caseFile ? ed.caseFile.id : null, item);
-    ed.items.splice(idx, 1);
-    ed.selection = new Set();
-    ed.remarkOpen = new Set();
-    ed.pendingOp = { type: 'remove', item: item, index: idx };
+    openConfirmDrawer({
+      title: '确认删除用例',
+      message: '确定删除该用例吗？可在 8 秒内撤回。',
+      confirmText: '确认删除',
+      cancelText: '取消',
+      danger: true,
+      previousDrawer: editDrawerInstance || null,
+    }).then(function(res) {
+      if (!res || res.ok !== true) return;
+      unmarkCaseLibraryNewAdded(ed.caseFile ? ed.caseFile.id : null, item);
+      ed.items.splice(idx, 1);
+      ed.selection = new Set();
+      ed.remarkOpen = new Set();
+      ed.pendingOp = { type: 'remove', item: item, index: idx };
 	    renderEditorTable();
 	    startPendingToast('已删除用例，超时将自动入库', { anchorRect: anchorRect });
-	  }
+    });
+  }
 
 	  function removeSelectedCaseItems(anchorEl) {
 	    var ed = state.editor;

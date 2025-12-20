@@ -19,6 +19,20 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：操作记录用例贡献视图  
+- 功能描述：操作记录页新增用例贡献入口与贡献视图，支持选择人员、时间范围与用例操作行为（导入/新增/删除），按去重导入、完整新增/删除规则统计贡献并以柱状图展示。  
+- 操作方式：操作记录 → 点击“用例贡献视图” → 选择人员 → 确认 → 在贡献视图内按时间/行为筛选查看。  
+- 使用效果：管理员可快速对比成员用例导入、新增与删除贡献情况。  
+- 新增内容/接口/组件：  
+  - 前端：新增用例贡献入口/抽屉/视图卡片与统计逻辑（`index.html`、`scripts/modules/opsLog.js`）；配置新增持久化 Key（`config/constants.js`）。  
+  - 后端：用例增删改操作日志补充完整度标记与字段（`backend/routers/cases.py`）。  
+- 复用说明：复用活跃度视图样式与操作记录接口，不新增页面级框架组件。  
+- 测试与验证：未运行自动化测试（仅新增 UI 与统计逻辑）。  
+- 更新记录：2025-12-20 操作记录新增用例贡献视图与统计逻辑（`index.html`、`scripts/modules/opsLog.js`、`config/constants.js`、`backend/routers/cases.py`）。  
+- 更新记录：2025-12-20 追加入库计入新增贡献并补充完整度统计（`scripts/modules/opsLog.js`、`backend/routers/cases.py`）。  
+- 更新记录：2025-12-20 用例贡献与活跃度视图分离展示（`index.html`、`scripts/modules/opsLog.js`）。  
+- 更新记录：2025-12-20 删除用例贡献统计覆盖批量/整份删除且按完整字段计数（`scripts/modules/opsLog.js`、`backend/routers/cases.py`）。  
+
 - 功能名称：用例库查看&编辑更换版本  
 - 功能描述：用例库“查看&编辑”抽屉工具栏新增更换版本行，勾选用例后可选择目标版本并二次确认，一键更新所选用例所属版本。  
 - 操作方式：进入用例库 → 打开“查看&编辑”抽屉 → 勾选用例 → 选择“更换版本” → 确认更换版本 → 抽屉二次确认。  
@@ -1596,3 +1610,17 @@
 - 更新记录：2025-12-19 进度跳转打开用例视图时不回滚滚动位置（`scripts/core/casegenCore.js`）。  
 - 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  
 - 更新记录：2025-12-19 执行分配关闭版本提示补充归档用例名、删除版本转移提示改为抽屉下拉选择（`scripts/modules/tempexec.js`、`scripts/modules/admin.js`、`scripts/base/confirmDrawer.js`、`index.html`、`tests/ui/tempexec_archived_placeholder.spec.js`、`tests/ui/project_admin_drawer.spec.js`）。  
+
+- 功能名称：用例贡献统计与单条删除确认优化  
+- 功能描述：修复删除用例未计入人员用例贡献统计的问题；用例库编辑视图通过“−”删除用例时改为通用确认抽屉。  
+- 操作方式：管理员进入“管理→操作记录→用例贡献视图”选择人员查看导入/新增/删除贡献；用例库编辑视图点击单条用例的“−”按钮，抽屉确认后 8 秒内可撤回。  
+- 使用效果：删除贡献可正确统计；删除确认不再被浏览器弹窗打断。  
+- 新增内容/接口/组件：  
+  - 前端：用例贡献统计过滤（`scripts/modules/opsLog.js`）；用例库单条删除确认抽屉与兜底调用（`scripts/modules/caseLibrary.js`）。  
+  - 后端：补齐用例删除日志完整度判断字段（`backend/routers/cases.py`）。  
+  - 测试：UI 用例（`tests/ui/ops_contribution.spec.js`、`tests/ui/case_library_single_delete_drawer.spec.js`）；API 用例更新（`tests/api/ops_log.spec.js`）。  
+- 复用说明：复用通用确认抽屉 `appConfirmDrawer` 与现有操作记录接口，不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/opsLog.js scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/ops_contribution.spec.js tests/ui/case_library_single_delete_drawer.spec.js`（通过）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080` 后执行 `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/ops_log.spec.js`（通过）。  
+- 更新记录：2025-12-20 修复删除用例贡献计数，单条删除确认改为抽屉（`scripts/modules/opsLog.js`、`scripts/modules/caseLibrary.js`、`backend/routers/cases.py`、`tests/`）。  
+- 更新记录：2025-12-20 活跃度/贡献视图进入时自动刷新数据（`scripts/modules/opsLog.js`、`tests/ui/ops_activity.spec.js`、`tests/ui/ops_contribution.spec.js`）。  
+- 测试与验证：`node --check scripts/modules/opsLog.js`（通过）；`npm run test:ui -- tests/ui/ops_activity.spec.js tests/ui/ops_contribution.spec.js`（通过）。  

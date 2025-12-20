@@ -58,6 +58,20 @@ test.describe('operation logs', () => {
       },
     });
     expect(importRes.status()).toBe(201);
+    const importedCaseFile = await importRes.json();
+    const caseFileId = importedCaseFile.id;
+
+    const caseHeaders = { ...adminHeaders, 'X-TAP-Page': 'case-library' };
+    const listItems = await ctx.get(`${apiBase}/api/case-files/${caseFileId}/items`, { headers: caseHeaders });
+    expect(listItems.status()).toBe(200);
+    const items = await listItems.json();
+    const deleteItemId = items && items.length ? items[0].id : null;
+    expect(deleteItemId).toBeTruthy();
+    const deleteItemRes = await ctx.delete(`${apiBase}/api/case-files/items/${deleteItemId}`, { headers: caseHeaders });
+    expect(deleteItemRes.status()).toBe(200);
+
+    const deleteFileRes = await ctx.delete(`${apiBase}/api/case-files/${caseFileId}`, { headers: caseHeaders });
+    expect(deleteFileRes.status()).toBe(200);
 
     const username = 'ops_user_' + Date.now();
     const password = 'Pwd123456';
@@ -129,6 +143,8 @@ test.describe('operation logs', () => {
     expect(
       list.some((row) => row && row.action === 'import_case_file' && row.detail && row.detail.source === 'tempexec'),
     ).toBeTruthy();
+    expect(list.some((row) => row && row.action === 'delete_case_item' && row.target_id === deleteItemId)).toBeTruthy();
+    expect(list.some((row) => row && row.action === 'delete_case_file' && row.target_id === caseFileId)).toBeTruthy();
     expect(list.some((row) => row && row.action === 'export_case_files_xmind' && row.user_id === userId)).toBeTruthy();
     const assignLog = list.find((row) => row && row.action === 'assign_projects' && row.target_id === userId);
     expect(assignLog && assignLog.detail && assignLog.detail.username).toBe(username);

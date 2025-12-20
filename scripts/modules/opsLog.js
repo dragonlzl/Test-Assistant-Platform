@@ -7,6 +7,7 @@
 
   var STORAGE_KEY = appConfig.opsLogViewStorageKey || 'tap-ops-log-view-v1';
   var ACTIVITY_STORAGE_KEY = appConfig.opsActivityViewStorageKey || 'tap-ops-activity-view-v1';
+  var CONTRIBUTION_STORAGE_KEY = appConfig.opsContributionViewStorageKey || 'tap-ops-contribution-view-v1';
   var DEFAULT_ACTIVITY_RANGE = 'week';
   var ACTIVITY_BAR_MAX_RATIO = 82;
 
@@ -21,6 +22,12 @@
     { key: 'user', label: '人员' },
   ];
 
+  var CONTRIBUTION_BEHAVIORS = [
+    { key: 'import', label: '用例导入' },
+    { key: 'add', label: '新增用例' },
+    { key: 'delete', label: '删除用例' },
+  ];
+
   var state = {
     drawer: null,
     users: [],
@@ -28,10 +35,25 @@
     pageIndex: 0,
     selectedUserId: '',
     selectedTargets: { all: true },
+    overviewView: 'activity',
     hasViewed: false,
     pendingAuth: false,
     loading: false,
     activity: {
+      drawer: null,
+      usersLoaded: false,
+      logsLoaded: false,
+      loading: false,
+      selectedUserIds: [],
+      draftUserIds: [],
+      selectedBehaviors: { all: true },
+      timeRange: DEFAULT_ACTIVITY_RANGE,
+      hasSelection: false,
+      logs: [],
+      behaviors: [],
+      colorMap: {},
+    },
+    contribution: {
       drawer: null,
       usersLoaded: false,
       logsLoaded: false,
@@ -72,6 +94,20 @@
     activityRefreshBtn: document.getElementById('opsActivityRefreshBtn'),
     activityList: document.getElementById('opsActivityList'),
     activityEmpty: document.getElementById('opsActivityEmpty'),
+    activityCard: document.getElementById('opsActivityCard'),
+    contributionDrawerStatus: document.getElementById('opsContributionDrawerStatus'),
+    contributionUserGrid: document.getElementById('opsContributionUserGrid'),
+    contributionSelectAll: document.getElementById('opsContributionSelectAll'),
+    contributionApplyBtn: document.getElementById('opsContributionApplyBtn'),
+    contributionUserEmpty: document.getElementById('opsContributionUserEmpty'),
+    contributionTimeRange: document.getElementById('opsContributionTimeRangeSelect'),
+    contributionBehaviorGrid: document.getElementById('opsContributionBehaviorFilterGrid'),
+    contributionStatus: document.getElementById('opsContributionStatus'),
+    contributionSelectionText: document.getElementById('opsContributionSelectionText'),
+    contributionRefreshBtn: document.getElementById('opsContributionRefreshBtn'),
+    contributionList: document.getElementById('opsContributionList'),
+    contributionEmpty: document.getElementById('opsContributionEmpty'),
+    contributionCard: document.getElementById('opsContributionCard'),
   };
 
   function setStatus(el, text, type) {
@@ -148,6 +184,12 @@
     return String(value || '').trim().toLowerCase();
   }
 
+  function normalizeOpsOverviewView(value) {
+    var raw = String(value || '').trim().toLowerCase();
+    if (raw === 'contribution') return 'contribution';
+    return 'activity';
+  }
+
   function canView() {
     return globalState && globalState.currentUser && String(globalState.currentUser.role || '') === 'admin';
   }
@@ -165,6 +207,7 @@
       targets: selected,
       pageIndex: Number(state.pageIndex) || 0,
       hasViewed: Boolean(state.hasViewed),
+      overviewView: state.overviewView || 'activity',
       savedAt: Date.now(),
     };
     storage.setJson(STORAGE_KEY, payload);
@@ -176,6 +219,7 @@
     state.selectedUserId = saved.userId ? String(saved.userId || '') : '';
     state.pageIndex = Number(saved.pageIndex) || 0;
     state.hasViewed = Boolean(saved.hasViewed);
+    state.overviewView = normalizeOpsOverviewView(saved.overviewView);
     state.selectedTargets = { all: true };
     // 兼容：旧版字段为 behaviors（操作行为筛选），新版为 targets（操作对象筛选）。
     var list = Array.isArray(saved.targets) ? saved.targets : [];
@@ -224,6 +268,45 @@
       behaviors.forEach(function(key) {
         if (!key) return;
         state.activity.selectedBehaviors[String(key)] = true;
+      });
+    }
+  }
+
+  function readContributionPersisted() {
+    if (!storage || typeof storage.getJson !== 'function') return null;
+    return storage.getJson(CONTRIBUTION_STORAGE_KEY, null);
+  }
+
+  function persistContributionState() {
+    if (!storage || typeof storage.setJson !== 'function') return;
+    var selected = getSelectedContributionBehaviorKeys();
+    var payload = {
+      userIds: Array.isArray(state.contribution.selectedUserIds) ? state.contribution.selectedUserIds.slice() : [],
+      timeRange: state.contribution.timeRange || DEFAULT_ACTIVITY_RANGE,
+      behaviors: selected,
+      behaviorAll: Boolean(state.contribution.selectedBehaviors && state.contribution.selectedBehaviors.all),
+      hasSelection: Boolean(state.contribution.hasSelection),
+      savedAt: Date.now(),
+    };
+    storage.setJson(CONTRIBUTION_STORAGE_KEY, payload);
+  }
+
+  function restoreContributionState() {
+    var saved = readContributionPersisted();
+    if (!saved || typeof saved !== 'object') return;
+    var ids = Array.isArray(saved.userIds) ? saved.userIds : [];
+    state.contribution.selectedUserIds = ids.map(function(id) { return String(id); }).filter(Boolean);
+    state.contribution.draftUserIds = state.contribution.selectedUserIds.slice();
+    state.contribution.timeRange = saved.timeRange ? String(saved.timeRange) : DEFAULT_ACTIVITY_RANGE;
+    state.contribution.hasSelection = Boolean(saved.hasSelection || state.contribution.selectedUserIds.length);
+    state.contribution.selectedBehaviors = { all: true };
+    if (saved.behaviorAll === true) return;
+    var behaviors = Array.isArray(saved.behaviors) ? saved.behaviors : [];
+    if (behaviors.length) {
+      state.contribution.selectedBehaviors = { all: false };
+      behaviors.forEach(function(key) {
+        if (!key) return;
+        state.contribution.selectedBehaviors[String(key)] = true;
       });
     }
   }
@@ -481,6 +564,21 @@
     return color;
   }
 
+  function getContributionColor(label) {
+    var key = String(label || '').trim().toLowerCase();
+    if (!key) return '#9ca3af';
+    if (state.contribution.colorMap[key]) return state.contribution.colorMap[key];
+    var hash = 0;
+    for (var i = 0; i < key.length; i += 1) {
+      hash = (hash * 31 + key.charCodeAt(i)) | 0;
+    }
+    var palette = getActivityPalette();
+    var idx = Math.abs(hash) % palette.length;
+    var color = palette[idx];
+    state.contribution.colorMap[key] = color;
+    return color;
+  }
+
   function getActivityUserNameMap() {
     var map = {};
     var list = Array.isArray(state.users) ? state.users : [];
@@ -557,6 +655,79 @@
     }
   }
 
+  function setContributionDraftUserIds(ids) {
+    var map = {};
+    var list = [];
+    (Array.isArray(ids) ? ids : []).forEach(function(id) {
+      var key = String(id || '').trim();
+      if (!key || map[key]) return;
+      map[key] = true;
+      list.push(key);
+    });
+    state.contribution.draftUserIds = list;
+  }
+
+  function syncContributionSelectionText() {
+    if (!dom.contributionSelectionText) return;
+    var selected = Array.isArray(state.contribution.selectedUserIds) ? state.contribution.selectedUserIds : [];
+    if (!selected.length) {
+      dom.contributionSelectionText.textContent = '未选择';
+      return;
+    }
+    var nameMap = getActivityUserNameMap();
+    var names = selected.map(function(id) { return nameMap[id] || ('用户#' + id); });
+    var shown = names.slice(0, 3);
+    var suffix = names.length > shown.length ? (' 等' + names.length + ' 人') : '';
+    dom.contributionSelectionText.textContent = shown.join('、') + suffix;
+  }
+
+  function syncContributionUserGrid() {
+    if (!dom.contributionUserGrid) return;
+    var list = Array.isArray(state.users) ? state.users : [];
+    var draft = Array.isArray(state.contribution.draftUserIds) ? state.contribution.draftUserIds : [];
+    var selectedMap = {};
+    draft.forEach(function(id) { selectedMap[String(id)] = true; });
+    if (!list.length) {
+      dom.contributionUserGrid.innerHTML = '';
+      if (dom.contributionUserEmpty) dom.contributionUserEmpty.classList.remove('hidden');
+      if (dom.contributionSelectAll) dom.contributionSelectAll.checked = false;
+      return;
+    }
+    if (dom.contributionUserEmpty) dom.contributionUserEmpty.classList.add('hidden');
+    dom.contributionUserGrid.innerHTML = list.map(function(u) {
+      if (!u || u.id === null || u.id === undefined) return '';
+      var id = String(u.id);
+      var checked = selectedMap[id] ? ' checked' : '';
+      return (
+        '<label class="ops-activity-user-chip">' +
+          '<input type="checkbox" data-ops-contribution-user="' + escapeHtml(id) + '"' + checked + ' />' +
+          '<span>' + escapeHtml(u.username || ('用户#' + id)) + '</span>' +
+        '</label>'
+      );
+    }).join('');
+    if (dom.contributionSelectAll) {
+      dom.contributionSelectAll.checked = draft.length && draft.length === list.length;
+    }
+  }
+
+  function applyOpsOverviewView(view, options) {
+    var next = normalizeOpsOverviewView(view);
+    state.overviewView = next;
+    if (dom.activityCard && dom.activityCard.classList) {
+      dom.activityCard.classList.toggle('hidden', next !== 'activity');
+    }
+    if (dom.contributionCard && dom.contributionCard.classList) {
+      dom.contributionCard.classList.toggle('hidden', next !== 'contribution');
+    }
+    if (!options || options.refresh !== false) {
+      if (next === 'contribution') refreshContributionView(true);
+      else refreshActivityView(true);
+    }
+    if (!options || options.persist !== false) {
+      persistViewState();
+    }
+  }
+
   function getSelectedActivityBehaviorKeys() {
     var selected = state.activity.selectedBehaviors || {};
     if (selected.all) return [];
@@ -629,6 +800,77 @@
     dom.activityTimeRange.value = value;
   }
 
+  function getSelectedContributionBehaviorKeys() {
+    var selected = state.contribution.selectedBehaviors || {};
+    if (selected.all) return [];
+    var keys = [];
+    Object.keys(selected).forEach(function(key) {
+      if (key === 'all') return;
+      if (selected[key]) keys.push(key);
+    });
+    if (!keys.length) return [];
+    return keys;
+  }
+
+  function syncContributionBehaviorSelection() {
+    var behaviors = Array.isArray(state.contribution.behaviors) ? state.contribution.behaviors : [];
+    var selected = state.contribution.selectedBehaviors || { all: true };
+    if (selected.all) return;
+    var available = {};
+    behaviors.forEach(function(item) {
+      if (!item || !item.key) return;
+      available[item.key] = true;
+    });
+    var keys = [];
+    Object.keys(selected).forEach(function(key) {
+      if (key === 'all') return;
+      if (selected[key] && available[key]) keys.push(key);
+    });
+    if (!keys.length) {
+      state.contribution.selectedBehaviors = { all: true };
+      return;
+    }
+    var next = { all: false };
+    keys.forEach(function(key) { next[key] = true; });
+    state.contribution.selectedBehaviors = next;
+  }
+
+  function syncContributionBehaviorFilters() {
+    if (!dom.contributionBehaviorGrid) return;
+    var selected = state.contribution.selectedBehaviors || { all: true };
+    var list = Array.isArray(state.contribution.behaviors) ? state.contribution.behaviors : [];
+    var html = [];
+    var allChecked = selected.all ? ' checked' : '';
+    html.push(
+      '<label class="ops-activity-filter-chip">' +
+        '<input type="checkbox" data-ops-contribution-behavior="all"' + allChecked + ' />' +
+        '<span>全部</span>' +
+      '</label>'
+    );
+    var source = list.length ? list : CONTRIBUTION_BEHAVIORS.map(function(item) {
+      return { key: item.key, label: item.label, count: 0 };
+    });
+    source.forEach(function(item) {
+      if (!item || !item.key) return;
+      var checked = '';
+      if (selected.all) checked = '';
+      else if (selected[item.key]) checked = ' checked';
+      html.push(
+        '<label class="ops-activity-filter-chip">' +
+          '<input type="checkbox" data-ops-contribution-behavior="' + escapeHtml(item.key) + '"' + checked + ' />' +
+          '<span>' + escapeHtml(item.label || item.key) + ' ' + item.count + '</span>' +
+        '</label>'
+      );
+    });
+    dom.contributionBehaviorGrid.innerHTML = html.join('');
+  }
+
+  function syncContributionTimeRange() {
+    if (!dom.contributionTimeRange) return;
+    var value = state.contribution.timeRange || DEFAULT_ACTIVITY_RANGE;
+    dom.contributionTimeRange.value = value;
+  }
+
   function getActivityRangeStartMs() {
     var range = state.activity.timeRange || DEFAULT_ACTIVITY_RANGE;
     if (range === 'all') return null;
@@ -644,6 +886,80 @@
       return base.getTime();
     }
     return null;
+  }
+
+  function getContributionRangeStartMs() {
+    var range = state.contribution.timeRange || DEFAULT_ACTIVITY_RANGE;
+    if (range === 'all') return null;
+    var now = new Date();
+    if (range === 'year') return new Date(now.getFullYear(), 0, 1).getTime();
+    if (range === 'month') return new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    if (range === 'day') return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    if (range === 'week') {
+      var base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      var day = base.getDay();
+      var diff = day === 0 ? 6 : day - 1;
+      base.setDate(base.getDate() - diff);
+      return base.getTime();
+    }
+    return null;
+  }
+
+  var INVISIBLE_MARKER_RE = /[\u200b\u200c\u200d\u2060\ufeff]/g;
+
+  function normalizeCaseText(value) {
+    if (value === null || value === undefined) return '';
+    try {
+      return String(value).replace(INVISIBLE_MARKER_RE, '').trim();
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function readDetailBool(detail, key) {
+    if (!detail || typeof detail !== 'object') return null;
+    if (!(key in detail)) return null;
+    var raw = detail[key];
+    if (raw === true || raw === false) return raw;
+    if (typeof raw === 'string') {
+      var v = raw.trim().toLowerCase();
+      if (v === 'true') return true;
+      if (v === 'false') return false;
+    }
+    return null;
+  }
+
+  function getPositiveNumber(value) {
+    var n = Number(value);
+    if (!isFinite(n) || n <= 0) return 0;
+    return n;
+  }
+
+  function isCaseItemCompleteFromDetail(detail) {
+    if (!detail || typeof detail !== 'object') return null;
+    var moduleText = normalizeCaseText(detail.module);
+    var titleText = normalizeCaseText(detail.title);
+    var preText = normalizeCaseText(detail.precondition);
+    var stepsText = normalizeCaseText(detail.steps);
+    var expectedText = normalizeCaseText(detail.expected);
+    if (!moduleText || !titleText || !preText || !stepsText || !expectedText) return false;
+    return true;
+  }
+
+  function isCaseItemDeleteCompleteFromDetail(detail) {
+    if (!detail || typeof detail !== 'object') return null;
+    var titleText = normalizeCaseText(detail.title);
+    var preText = normalizeCaseText(detail.precondition);
+    var stepsText = normalizeCaseText(detail.steps);
+    var expectedText = normalizeCaseText(detail.expected);
+    if (!titleText || !preText || !stepsText || !expectedText) return false;
+    return true;
+  }
+
+  function getContributionBehaviorLabel(key) {
+    var k = String(key || '').trim();
+    var match = CONTRIBUTION_BEHAVIORS.filter(function(item) { return item.key === k; })[0];
+    return match && match.label ? match.label : k;
   }
 
   function getFilteredActivityLogs() {
@@ -663,6 +979,82 @@
       }
       return true;
     });
+  }
+
+  function getFilteredContributionLogs() {
+    var list = Array.isArray(state.contribution.logs) ? state.contribution.logs : [];
+    var selectedIds = Array.isArray(state.contribution.selectedUserIds) ? state.contribution.selectedUserIds : [];
+    if (!selectedIds.length) return [];
+    var allowed = {};
+    selectedIds.forEach(function(id) { allowed[String(id)] = true; });
+    var startMs = getContributionRangeStartMs();
+    return list.filter(function(log) {
+      if (!log) return false;
+      var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
+      if (!userId || !allowed[userId]) return false;
+      if (startMs) {
+        var t = parseTimeMs(log.created_at);
+        if (!t || t < startMs) return false;
+      }
+      return true;
+    });
+  }
+
+  function resolveContributionEntry(log) {
+    if (!log || typeof log !== 'object') return null;
+    var action = normalizeAction(log.action);
+    var detail = log.detail && typeof log.detail === 'object' ? log.detail : {};
+    if (action === 'import_case_file' || action === 'overwrite_case_file') {
+      var imported = getPositiveNumber(detail.item_imported);
+      if (!imported) imported = getPositiveNumber(detail.item_unique);
+      if (!imported) return null;
+      return { key: 'import', label: getContributionBehaviorLabel('import'), count: imported };
+    }
+    if (action === 'append_case_items') {
+      var appendedComplete = getPositiveNumber(detail.item_appended_complete);
+      var appended = appendedComplete || getPositiveNumber(detail.item_appended);
+      if (!appended) return null;
+      return { key: 'add', label: getContributionBehaviorLabel('add'), count: appended };
+    }
+    if (action === 'create_case_item') {
+      var createdComplete = readDetailBool(detail, 'next_complete');
+      if (createdComplete === null) createdComplete = readDetailBool(detail, 'complete');
+      if (createdComplete === null) {
+        var resolvedCreate = isCaseItemCompleteFromDetail(detail);
+        if (resolvedCreate !== null) createdComplete = resolvedCreate;
+      }
+      if (!createdComplete) return null;
+      return { key: 'add', label: getContributionBehaviorLabel('add'), count: 1 };
+    }
+    if (action === 'update_case_item') {
+      var prevComplete = readDetailBool(detail, 'prev_complete');
+      var nextComplete = readDetailBool(detail, 'next_complete');
+      if (prevComplete === null || nextComplete === null) {
+        var resolvedUpdate = isCaseItemCompleteFromDetail(detail);
+        if (nextComplete === null && resolvedUpdate !== null) nextComplete = resolvedUpdate;
+      }
+      if (prevComplete === false && nextComplete === true) {
+        return { key: 'add', label: getContributionBehaviorLabel('add'), count: 1 };
+      }
+      return null;
+    }
+    if (action === 'delete_case_item') {
+      var deleteComplete = readDetailBool(detail, 'prev_delete_complete');
+      if (deleteComplete === null) deleteComplete = readDetailBool(detail, 'prev_complete');
+      if (deleteComplete === null) deleteComplete = readDetailBool(detail, 'complete');
+      if (deleteComplete === null) {
+        var resolvedDelete = isCaseItemDeleteCompleteFromDetail(detail);
+        if (resolvedDelete !== null) deleteComplete = resolvedDelete;
+      }
+      if (!deleteComplete) return null;
+      return { key: 'delete', label: getContributionBehaviorLabel('delete'), count: 1 };
+    }
+    if (action === 'delete_case_file') {
+      var deletedComplete = getPositiveNumber(detail.item_deleted_complete);
+      if (!deletedComplete) return null;
+      return { key: 'delete', label: getContributionBehaviorLabel('delete'), count: deletedComplete };
+    }
+    return null;
   }
 
   function buildActivityViewData(logs) {
@@ -732,6 +1124,80 @@
     return users;
   }
 
+  function buildContributionViewData(logs) {
+    var nameMap = getActivityUserNameMap();
+    var userMap = {};
+    var behaviorTotals = {};
+    CONTRIBUTION_BEHAVIORS.forEach(function(item) {
+      if (!item || !item.key) return;
+      behaviorTotals[item.key] = 0;
+    });
+
+    logs.forEach(function(log) {
+      var entry = resolveContributionEntry(log);
+      if (!entry || !entry.key) return;
+      var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
+      if (!userId) return;
+      var entryCount = getPositiveNumber(entry.count);
+      if (!entryCount) return;
+      var record = userMap[userId];
+      if (!record) {
+        var fallbackName = nameMap[userId] || ('用户#' + userId);
+        record = { id: userId, name: String(log.username || fallbackName), total: 0, behaviors: {} };
+        userMap[userId] = record;
+      }
+      record.total += entryCount;
+      record.behaviors[entry.key] = (record.behaviors[entry.key] || 0) + entryCount;
+      behaviorTotals[entry.key] = (behaviorTotals[entry.key] || 0) + entryCount;
+    });
+
+    state.contribution.behaviors = CONTRIBUTION_BEHAVIORS.map(function(item) {
+      return {
+        key: item.key,
+        label: item.label,
+        count: behaviorTotals[item.key] || 0,
+      };
+    });
+    syncContributionBehaviorSelection();
+
+    var selected = state.contribution.selectedBehaviors || { all: true };
+    var allowAll = selected.all;
+    var allowMap = {};
+    if (!allowAll) {
+      Object.keys(selected).forEach(function(key) {
+        if (key === 'all') return;
+        if (selected[key]) allowMap[key] = true;
+      });
+    }
+
+    var users = [];
+    Object.keys(userMap).forEach(function(id) {
+      var entry = userMap[id];
+      var actions = [];
+      var total = 0;
+      Object.keys(entry.behaviors).forEach(function(key) {
+        if (!allowAll && !allowMap[key]) return;
+        var count = entry.behaviors[key];
+        if (!count) return;
+        total += count;
+        actions.push({ key: key, label: getContributionBehaviorLabel(key), count: count });
+      });
+      if (!total) return;
+      actions.sort(function(a, b) {
+        if (b.count !== a.count) return b.count - a.count;
+        return String(a.label || '').localeCompare(String(b.label || ''));
+      });
+      users.push({ id: entry.id, name: entry.name, total: total, actions: actions });
+    });
+    if (users.length > 1) {
+      users.sort(function(a, b) {
+        if (b.total !== a.total) return b.total - a.total;
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      });
+    }
+    return users;
+  }
+
   function renderActivityView() {
     if (!dom.activityList || !dom.activityEmpty) return;
     syncActivitySelectionText();
@@ -776,6 +1242,64 @@
         var title = label + ' ' + item.count;
         return (
           '<span class="ops-activity-bar-seg" title="' + escapeHtml(title) + '" style="width:' + width.toFixed(2) + '%;background:' + getActivityColor(label) + ';"></span>'
+        );
+      }).join('');
+      return (
+        '<div class="ops-activity-row">' +
+          '<div class="ops-activity-user">' + escapeHtml(user.name) + '</div>' +
+          '<div class="ops-activity-bar">' +
+            '<div class="ops-activity-bar-track" style="width:' + trackWidth.toFixed(2) + '%;">' + segments + '</div>' +
+            '<div class="ops-activity-count">' + total + '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function renderContributionView() {
+    if (!dom.contributionList || !dom.contributionEmpty) return;
+    syncContributionSelectionText();
+    if (!canView()) {
+      dom.contributionList.innerHTML = '';
+      dom.contributionEmpty.textContent = '仅管理员可查看用例贡献';
+      dom.contributionEmpty.classList.remove('hidden');
+      setStatus(dom.contributionStatus, '仅管理员可查看用例贡献', 'warn');
+      state.contribution.behaviors = [];
+      syncContributionBehaviorFilters();
+      return;
+    }
+    if (!state.contribution.hasSelection || !state.contribution.selectedUserIds.length) {
+      dom.contributionList.innerHTML = '';
+      dom.contributionEmpty.textContent = '请先选择人员查看用例贡献';
+      dom.contributionEmpty.classList.remove('hidden');
+      setStatus(dom.contributionStatus, '', '');
+      state.contribution.behaviors = [];
+      syncContributionBehaviorFilters();
+      return;
+    }
+    var filteredLogs = getFilteredContributionLogs();
+    var users = buildContributionViewData(filteredLogs);
+    syncContributionBehaviorFilters();
+    if (!users.length) {
+      dom.contributionList.innerHTML = '';
+      dom.contributionEmpty.textContent = filteredLogs.length ? '筛选后暂无贡献数据' : '暂无贡献数据';
+      dom.contributionEmpty.classList.remove('hidden');
+      return;
+    }
+    var maxTotal = 0;
+    users.forEach(function(user) {
+      if (user.total > maxTotal) maxTotal = user.total;
+    });
+    dom.contributionEmpty.classList.add('hidden');
+    dom.contributionList.innerHTML = users.map(function(user) {
+      var total = user.total || 0;
+      var trackWidth = maxTotal ? (total / maxTotal) * ACTIVITY_BAR_MAX_RATIO : 0;
+      var segments = user.actions.map(function(item) {
+        var width = total ? (item.count / total) * 100 : 0;
+        var label = item.label || '';
+        var title = label + ' ' + item.count;
+        return (
+          '<span class="ops-activity-bar-seg" title="' + escapeHtml(title) + '" style="width:' + width.toFixed(2) + '%;background:' + getContributionColor(label) + ';"></span>'
         );
       }).join('');
       return (
@@ -1104,17 +1628,23 @@
       .then(function(list) {
         state.users = Array.isArray(list) ? list : [];
         state.activity.usersLoaded = true;
+        state.contribution.usersLoaded = true;
         syncUserSelect();
         syncActivityUserGrid();
+        syncContributionUserGrid();
         syncActivitySelectionText();
+        syncContributionSelectionText();
         return state.users;
       })
       .catch(function() {
         state.users = [];
         state.activity.usersLoaded = true;
+        state.contribution.usersLoaded = true;
         syncUserSelect();
         syncActivityUserGrid();
+        syncContributionUserGrid();
         syncActivitySelectionText();
+        syncContributionSelectionText();
         return [];
       });
   }
@@ -1194,6 +1724,40 @@
       });
   }
 
+  function loadContributionLogs(force) {
+    if (!apiClient.listOperationLogs) return Promise.resolve([]);
+    if (!canView()) {
+      state.contribution.logs = [];
+      state.contribution.logsLoaded = true;
+      renderContributionView();
+      setStatus(dom.contributionStatus, '仅管理员可查看用例贡献', 'warn');
+      return Promise.resolve([]);
+    }
+    if (state.contribution.loading) return Promise.resolve(state.contribution.logs);
+    if (state.contribution.logsLoaded && !force) return Promise.resolve(state.contribution.logs);
+    state.contribution.loading = true;
+    if (dom.contributionRefreshBtn) dom.contributionRefreshBtn.disabled = true;
+    setStatus(dom.contributionStatus, '加载中...', '');
+    return apiClient
+      .listOperationLogs({ limit: 500, offset: 0 })
+      .then(function(list) {
+        state.contribution.logs = (Array.isArray(list) ? list : []).filter(function(row) { return !isAutoOperation(row); });
+        state.contribution.logsLoaded = true;
+        setStatus(dom.contributionStatus, '已加载 ' + state.contribution.logs.length + ' 条记录（最多 500 条）', 'ok');
+        return state.contribution.logs;
+      })
+      .catch(function(err) {
+        state.contribution.logs = [];
+        state.contribution.logsLoaded = true;
+        setStatus(dom.contributionStatus, err && err.message ? err.message : '加载失败', 'err');
+        return [];
+      })
+      .finally(function() {
+        state.contribution.loading = false;
+        if (dom.contributionRefreshBtn) dom.contributionRefreshBtn.disabled = false;
+      });
+  }
+
   function refreshActivityView(force) {
     if (!state.activity.hasSelection || !state.activity.selectedUserIds.length) {
       renderActivityView();
@@ -1211,6 +1775,26 @@
     return ensureUsers.then(function() {
       renderActivityView();
       return state.activity.logs;
+    });
+  }
+
+  function refreshContributionView(force) {
+    if (!state.contribution.hasSelection || !state.contribution.selectedUserIds.length) {
+      renderContributionView();
+      return Promise.resolve([]);
+    }
+    var ensureUsers = state.contribution.usersLoaded ? Promise.resolve([]) : loadUsers();
+    if (!state.contribution.logsLoaded || force) {
+      return ensureUsers.then(function() {
+        return loadContributionLogs(true).then(function() {
+          renderContributionView();
+          return state.contribution.logs;
+        });
+      });
+    }
+    return ensureUsers.then(function() {
+      renderContributionView();
+      return state.contribution.logs;
     });
   }
 
@@ -1241,6 +1825,7 @@
       drawerId: 'opsActivityDrawer',
       openButtons: ['openOpsActivityDrawerBtn', 'openOpsActivityDrawerBtnInline'],
       onOpen: function() {
+        applyOpsOverviewView('activity');
         setStatus(dom.activityDrawerStatus, '', '');
         setActivityDraftUserIds(state.activity.selectedUserIds);
         syncActivityUserGrid();
@@ -1256,6 +1841,31 @@
       },
     });
     return state.activity.drawer;
+  }
+
+  function ensureContributionDrawer() {
+    if (state.contribution.drawer) return state.contribution.drawer;
+    if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+    state.contribution.drawer = window.app.drawer.createDrawer({
+      drawerId: 'opsContributionDrawer',
+      openButtons: ['openOpsContributionDrawerBtn', 'openOpsContributionDrawerBtnInline'],
+      onOpen: function() {
+        applyOpsOverviewView('contribution');
+        setStatus(dom.contributionDrawerStatus, '', '');
+        setContributionDraftUserIds(state.contribution.selectedUserIds);
+        syncContributionUserGrid();
+        if (!state.contribution.usersLoaded) {
+          loadUsers().then(function() {
+            syncContributionUserGrid();
+          });
+        }
+      },
+      onClose: function() {
+        setContributionDraftUserIds(state.contribution.selectedUserIds);
+        syncContributionUserGrid();
+      },
+    });
+    return state.contribution.drawer;
   }
 
   function openDrawerIfNeeded() {
@@ -1394,6 +2004,90 @@
         refreshActivityView(true);
       });
     }
+    if (dom.contributionSelectAll) {
+      dom.contributionSelectAll.addEventListener('change', function() {
+        if (dom.contributionSelectAll.checked) {
+          setContributionDraftUserIds(getActivityUserIds());
+        } else {
+          setContributionDraftUserIds([]);
+        }
+        syncContributionUserGrid();
+      });
+    }
+    if (dom.contributionUserGrid) {
+      dom.contributionUserGrid.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        var key = t && t.dataset ? String(t.dataset.opsContributionUser || '') : '';
+        if (!key) return;
+        var draft = Array.isArray(state.contribution.draftUserIds) ? state.contribution.draftUserIds.slice() : [];
+        var idx = draft.indexOf(key);
+        if (t.checked) {
+          if (idx === -1) draft.push(key);
+        } else if (idx !== -1) {
+          draft.splice(idx, 1);
+        }
+        state.contribution.draftUserIds = draft;
+        syncContributionUserGrid();
+      });
+    }
+    if (dom.contributionApplyBtn) {
+      dom.contributionApplyBtn.addEventListener('click', function() {
+        var draft = Array.isArray(state.contribution.draftUserIds) ? state.contribution.draftUserIds : [];
+        if (!draft.length) {
+          setStatus(dom.contributionDrawerStatus, '请至少选择一位人员', 'warn');
+          return;
+        }
+        state.contribution.selectedUserIds = draft.slice();
+        state.contribution.hasSelection = true;
+        persistContributionState();
+        syncContributionSelectionText();
+        if (state.contribution.drawer && typeof state.contribution.drawer.close === 'function') {
+          state.contribution.drawer.close();
+        }
+        refreshContributionView(true);
+      });
+    }
+    if (dom.contributionTimeRange) {
+      dom.contributionTimeRange.addEventListener('change', function() {
+        state.contribution.timeRange = dom.contributionTimeRange.value || DEFAULT_ACTIVITY_RANGE;
+        persistContributionState();
+        renderContributionView();
+      });
+    }
+    if (dom.contributionBehaviorGrid) {
+      dom.contributionBehaviorGrid.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        var key = t && t.dataset ? String(t.dataset.opsContributionBehavior || '') : '';
+        if (!key) return;
+        if (key === 'all') {
+          state.contribution.selectedBehaviors = { all: Boolean(t.checked) };
+          if (!t.checked) state.contribution.selectedBehaviors = { all: true };
+          syncContributionBehaviorFilters();
+          persistContributionState();
+          renderContributionView();
+          return;
+        }
+        if (!state.contribution.selectedBehaviors || typeof state.contribution.selectedBehaviors !== 'object') {
+          state.contribution.selectedBehaviors = { all: true };
+        }
+        if (state.contribution.selectedBehaviors.all) {
+          var next = { all: false };
+          next[key] = Boolean(t.checked);
+          state.contribution.selectedBehaviors = next;
+        } else {
+          state.contribution.selectedBehaviors[key] = Boolean(t.checked);
+        }
+        syncContributionBehaviorSelection();
+        syncContributionBehaviorFilters();
+        persistContributionState();
+        renderContributionView();
+      });
+    }
+    if (dom.contributionRefreshBtn) {
+      dom.contributionRefreshBtn.addEventListener('click', function() {
+        refreshContributionView(true);
+      });
+    }
     function bindPaginationContainer(container) {
       if (!container || !container.addEventListener) return;
       container.addEventListener('click', function(e) {
@@ -1442,7 +2136,8 @@
         }
         setStatus(dom.statusEl, '', '');
         openDrawerIfNeeded();
-        refreshActivityView(false);
+        if (state.overviewView === 'contribution') refreshContributionView(true);
+        else refreshActivityView(true);
       });
       window.addEventListener('app-auth-ready', function() {
         if (!state.pendingAuth) return;
@@ -1451,7 +2146,8 @@
         if (!visible) return;
         setStatus(dom.statusEl, '', '');
         openDrawerIfNeeded();
-        refreshActivityView(false);
+        if (state.overviewView === 'contribution') refreshContributionView(true);
+        else refreshActivityView(true);
       });
     }
   }
@@ -1466,23 +2162,33 @@
 
     restoreViewState();
     restoreActivityState();
+    restoreContributionState();
     ensureDrawer();
     ensureActivityDrawer();
+    ensureContributionDrawer();
+    applyOpsOverviewView(state.overviewView, { persist: false });
     syncTargetGrid();
     syncActivityTimeRange();
+    syncContributionTimeRange();
     setActivityDraftUserIds(state.activity.selectedUserIds);
     syncActivityUserGrid();
     syncActivityBehaviorFilters();
     syncActivitySelectionText();
+    setContributionDraftUserIds(state.contribution.selectedUserIds);
+    syncContributionUserGrid();
+    syncContributionBehaviorFilters();
+    syncContributionSelectionText();
     bindEvents();
 
     if (!canView()) {
       setStatus(dom.statusEl, '仅管理员可查看操作记录', 'warn');
       renderActivityView();
+      renderContributionView();
       return;
     }
     setStatus(dom.statusEl, '已启用操作记录（仅管理员）', 'ok');
     refreshActivityView(false);
+    refreshContributionView(false);
   }
 
   var started = false;

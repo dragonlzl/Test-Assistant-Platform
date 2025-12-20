@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set, Tuple
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import JSONResponse
@@ -22,6 +23,55 @@ def _normalize_text(value: str) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+_INVISIBLE_MARKER_RE = re.compile(r"[\u200b\u200c\u200d\u2060\ufeff]")
+
+
+def _normalize_case_text(value: Optional[str]) -> str:
+    if value is None:
+        return ""
+    try:
+        return _INVISIBLE_MARKER_RE.sub("", str(value)).strip()
+    except Exception:
+        return ""
+
+
+def _is_case_item_complete(
+    module: Optional[str],
+    title: Optional[str],
+    precondition: Optional[str],
+    steps: Optional[str],
+    expected: Optional[str],
+) -> bool:
+    if not _normalize_case_text(module):
+        return False
+    if not _normalize_case_text(title):
+        return False
+    if not _normalize_case_text(precondition):
+        return False
+    if not _normalize_case_text(steps):
+        return False
+    if not _normalize_case_text(expected):
+        return False
+    return True
+
+
+def _is_case_item_delete_complete(
+    title: Optional[str],
+    precondition: Optional[str],
+    steps: Optional[str],
+    expected: Optional[str],
+) -> bool:
+    if not _normalize_case_text(title):
+        return False
+    if not _normalize_case_text(precondition):
+        return False
+    if not _normalize_case_text(steps):
+        return False
+    if not _normalize_case_text(expected):
+        return False
+    return True
 
 
 def _collect_import_modules(items: List[schemas.CaseItemPayload]) -> Set[str]:
@@ -775,6 +825,23 @@ def delete_case_file(
         .scalar()
         or 0
     )
+    items = (
+        db.query(models.CaseItem)
+        .filter(models.CaseItem.case_file_id == case_file.id)
+        .all()
+    )
+    deleted_total = len(items)
+    deleted_complete = 0
+    for item in items or []:
+        if not item:
+            continue
+        if _is_case_item_delete_complete(
+            item.title,
+            item.precondition,
+            item.steps,
+            item.expected,
+        ):
+            deleted_complete += 1
     log_case_library_change(
         db=db,
         user=admin,
@@ -798,6 +865,8 @@ def delete_case_file(
             "version_id": case_file.version_id,
             "file_name": case_file.file_name_clean,
             "linked_exec_sets": int(linked_exec_sets),
+            "item_deleted_total": int(deleted_total),
+            "item_deleted_complete": int(deleted_complete),
         },
     )
     db.commit()
@@ -819,7 +888,40 @@ def update_case_item(
     if not case_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用例不存在")
     case_file = _ensure_case_access(db, user, case_item.case_file_id)
+    prev_complete = _is_case_item_complete(
+        case_item.module,
+        case_item.title,
+        case_item.precondition,
+        case_item.steps,
+        case_item.expected,
+    )
+    prev_delete_complete = _is_case_item_delete_complete(
+        case_item.title,
+        case_item.precondition,
+        case_item.steps,
+        case_item.expected,
+    )
     old_snap = _snapshot_case_item(case_item)
+    prev_complete = _is_case_item_complete(
+        case_item.module,
+        case_item.title,
+        case_item.precondition,
+        case_item.steps,
+        case_item.expected,
+    )
+    prev_delete_complete = _is_case_item_delete_complete(
+        case_item.title,
+        case_item.precondition,
+        case_item.steps,
+        case_item.expected,
+    )
+    prev_complete = _is_case_item_complete(
+        case_item.module,
+        case_item.title,
+        case_item.precondition,
+        case_item.steps,
+        case_item.expected,
+    )
     payload_data = payload.model_dump(exclude_unset=True)
     changed = False
     for field in ["module", "title", "priority", "precondition", "steps", "expected", "remark"]:
@@ -843,6 +945,13 @@ def update_case_item(
         )
         db.add(case_item)
         new_snap = _snapshot_case_item(case_item)
+        next_complete = _is_case_item_complete(
+            case_item.module,
+            case_item.title,
+            case_item.precondition,
+            case_item.steps,
+            case_item.expected,
+        )
         log_case_library_change(
             db=db,
             user=user,
@@ -869,6 +978,11 @@ def update_case_item(
                 "case_item_id": case_item.id,
                 "module": case_item.module,
                 "title": case_item.title,
+                "precondition": case_item.precondition,
+                "steps": case_item.steps,
+                "expected": case_item.expected,
+                "prev_complete": bool(prev_complete),
+                "next_complete": bool(next_complete),
             },
         )
         try:
@@ -910,6 +1024,13 @@ def create_case_item(
         created_at=now,
         updated_at=now,
     )
+    next_complete = _is_case_item_complete(
+        case_item.module,
+        case_item.title,
+        case_item.precondition,
+        case_item.steps,
+        case_item.expected,
+    )
     db.add(case_item)
     db.flush()
     db.query(models.CaseFile).filter(models.CaseFile.id == case_file_id).update(
@@ -941,6 +1062,10 @@ def create_case_item(
             "case_item_id": case_item.id,
             "module": case_item.module,
             "title": case_item.title,
+            "precondition": case_item.precondition,
+            "steps": case_item.steps,
+            "expected": case_item.expected,
+            "next_complete": bool(next_complete),
         },
     )
     try:
@@ -1103,6 +1228,28 @@ def append_case_items(
         or 0
     )
     appended = max(0, int(after_count) - int(before_count))
+    appended_complete = 0
+    if appended > 0:
+        inserted_rows = (
+            db.query(models.CaseItem)
+            .filter(
+                models.CaseItem.case_file_id == case_file.id,
+                models.CaseItem.created_by == user.id,
+                models.CaseItem.created_at == now,
+            )
+            .all()
+        )
+        for row in inserted_rows or []:
+            if not row:
+                continue
+            if _is_case_item_complete(
+                row.module,
+                row.title,
+                row.precondition,
+                row.steps,
+                row.expected,
+            ):
+                appended_complete += 1
     skipped_db_conflicts = max(0, int(len(values)) - int(appended))
 
     case_file.updated_at = now
@@ -1122,6 +1269,7 @@ def append_case_items(
             "item_total": int(len(items)),
             "item_unique": int(len(unique_items)),
             "item_appended": int(appended),
+            "item_appended_complete": int(appended_complete),
             "item_overwritten": int(overwritten),
             "item_overwritten_changed": int(overwritten_changed),
             "item_skipped_payload_duplicates": int(duplicate_count),
@@ -1144,6 +1292,7 @@ def append_case_items(
             "item_total": int(len(items)),
             "item_unique": int(len(unique_items)),
             "item_appended": int(appended),
+            "item_appended_complete": int(appended_complete),
             "item_overwritten": int(overwritten),
             "item_overwritten_changed": int(overwritten_changed),
             "item_skipped_payload_duplicates": int(duplicate_count),
@@ -1179,6 +1328,19 @@ def delete_case_item(
     if not case_item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用例不存在")
     case_file = _ensure_case_access(db, user, case_item.case_file_id)
+    prev_complete = _is_case_item_complete(
+        case_item.module,
+        case_item.title,
+        case_item.precondition,
+        case_item.steps,
+        case_item.expected,
+    )
+    prev_delete_complete = _is_case_item_delete_complete(
+        case_item.title,
+        case_item.precondition,
+        case_item.steps,
+        case_item.expected,
+    )
     old_snap = _snapshot_case_item(case_item)
     now = datetime.now(timezone.utc)
     log_case_library_change(
@@ -1211,6 +1373,11 @@ def delete_case_item(
             "case_item_id": case_item.id,
             "module": case_item.module,
             "title": case_item.title,
+            "precondition": case_item.precondition,
+            "steps": case_item.steps,
+            "expected": case_item.expected,
+            "prev_complete": bool(prev_complete),
+            "prev_delete_complete": bool(prev_delete_complete),
         },
     )
     db.commit()

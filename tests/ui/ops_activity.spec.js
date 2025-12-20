@@ -41,6 +41,7 @@ test.describe('操作记录-活跃度视图', () => {
       { id: 4, user_id: 2, username: 'user_b', action: 'login', target_type: 'auth', target_id: 2, result: 'success', detail: {}, created_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString() },
       { id: 5, user_id: 2, username: 'user_b', action: 'export_case_files_excel', target_type: 'case_file', target_id: 11, result: 'success', detail: { file_name: 'case-2' }, created_at: new Date(now - 2 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString() },
     ];
+    let opsCalls = 0;
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -52,7 +53,10 @@ test.describe('操作记录-活跃度视图', () => {
       if (pathName === '/api/users/me') return respond(200, admin);
       if (pathName === '/api/users' && method === 'GET') return respond(200, [admin, userB]);
       if (pathName === '/api/settings' && method === 'GET') return respond(200, settings);
-      if (pathName === '/api/ops' && method === 'GET') return respond(200, logs);
+      if (pathName === '/api/ops' && method === 'GET') {
+        opsCalls += 1;
+        return respond(200, logs);
+      }
 
       if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
       if (pathName === '/api/models' && method === 'GET') return respond(200, []);
@@ -86,6 +90,14 @@ test.describe('操作记录-活跃度视图', () => {
     await expect(page.locator('.ops-activity-row').nth(0).locator('.ops-activity-count')).toHaveText('3');
     await expect(page.locator('.ops-activity-row').nth(1)).toContainText('user_b');
     await expect(page.locator('.ops-activity-row').nth(1).locator('.ops-activity-count')).toHaveText('2');
+    await expect.poll(() => opsCalls).toBeGreaterThanOrEqual(1);
+
+    const beforeRefreshCalls = opsCalls;
+    await page.click('#openOpsActivityDrawerBtnInline');
+    await expect(page.locator('#opsActivityDrawer')).toHaveClass(/open/);
+    await expect.poll(() => opsCalls).toBeGreaterThan(beforeRefreshCalls);
+    await page.click('#opsActivityDrawer [data-drawer-close="opsActivityDrawer"]');
+    await expect(page.locator('#opsActivityDrawer')).not.toHaveClass(/open/);
 
     await expect(page.locator('#opsActivityBehaviorFilterGrid')).toContainText('登录');
     await page.click('input[data-ops-activity-behavior="登录"]');
