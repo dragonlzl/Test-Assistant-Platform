@@ -13,6 +13,13 @@ async function waitAppReady(page, timeoutMs) {
   await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout });
 }
 
+function formatDateInput(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 test.describe('操作记录-用例执行贡献视图', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -32,7 +39,9 @@ test.describe('操作记录-用例执行贡献视图', () => {
   test('选择人员后展示用例执行贡献，并支持去重/归档统计', async ({ page }) => {
     const admin = { id: 1, username: 'admin', role: 'admin', level: 'leader' };
     const userB = { id: 2, username: 'user_b', role: 'user', level: 'member' };
-    const now = Date.now();
+    const base = new Date();
+    const today = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 12, 0, 0);
+    const yesterday = new Date(base.getFullYear(), base.getMonth(), base.getDate() - 1, 12, 0, 0);
     const logs = [
       {
         id: 1,
@@ -52,7 +61,7 @@ test.describe('操作记录-用例执行贡献视图', () => {
           actual_result: 'OK',
           changed_fields: ['status', 'actual_result'],
         },
-        created_at: new Date(now - 1000).toISOString(),
+        created_at: new Date(today.getTime() - 1000).toISOString(),
       },
       {
         id: 2,
@@ -72,7 +81,7 @@ test.describe('操作记录-用例执行贡献视图', () => {
           actual_result: 'OK-2',
           changed_fields: ['actual_result'],
         },
-        created_at: new Date(now - 2000).toISOString(),
+        created_at: new Date(today.getTime() - 2000).toISOString(),
       },
       {
         id: 3,
@@ -92,7 +101,7 @@ test.describe('操作记录-用例执行贡献视图', () => {
           actual_result: 'NG',
           changed_fields: ['status', 'actual_result'],
         },
-        created_at: new Date(now - 3000).toISOString(),
+        created_at: new Date(yesterday.getTime() - 1000).toISOString(),
       },
       {
         id: 4,
@@ -112,7 +121,7 @@ test.describe('操作记录-用例执行贡献视图', () => {
           actual_result: '',
           changed_fields: [],
         },
-        created_at: new Date(now - 4000).toISOString(),
+        created_at: new Date(today.getTime() - 4000).toISOString(),
       },
       {
         id: 5,
@@ -122,8 +131,8 @@ test.describe('操作记录-用例执行贡献视图', () => {
         target_type: 'exec_set',
         target_id: 20,
         result: 'success',
-        detail: { name: 'exec-a', actual_result_count: 2 },
-        created_at: new Date(now - 5000).toISOString(),
+        detail: { name: 'exec-a', actual_result_count: 1 },
+        created_at: new Date(today.getTime() - 5000).toISOString(),
       },
       {
         id: 6,
@@ -133,8 +142,8 @@ test.describe('操作记录-用例执行贡献视图', () => {
         target_type: 'exec_set',
         target_id: 21,
         result: 'success',
-        detail: { name: 'exec-b', actual_result_count: 0 },
-        created_at: new Date(now - 6000).toISOString(),
+        detail: { name: 'exec-b', actual_result_count: 1 },
+        created_at: new Date(yesterday.getTime() - 2000).toISOString(),
       },
     ];
     let opsCalls = 0;
@@ -207,5 +216,17 @@ test.describe('操作记录-用例执行贡献视图', () => {
     await expect(page.locator('#opsExecContributionList .ops-activity-bar-label')).toHaveText(['归档', '归档']);
     await expect(page.locator('#opsExecContributionList .ops-activity-row', { hasText: 'user_b' }).locator('.ops-activity-count')).toHaveText('2');
     await expect(page.locator('#opsExecContributionList .ops-activity-row', { hasText: 'admin' }).locator('.ops-activity-count')).toHaveText('0');
+
+    await page.click('input[data-ops-exec-contribution-behavior="all"]');
+    const todayInput = formatDateInput(today);
+    await page.fill('#opsExecContributionDateStart', todayInput);
+    await page.fill('#opsExecContributionDateEnd', todayInput);
+    await expect(page.locator('#opsExecContributionList .ops-activity-row')).toHaveCount(2);
+    await expect(
+      page.locator('#opsExecContributionList .ops-activity-row', { hasText: 'user_b' }).locator('.ops-activity-count'),
+    ).toHaveText(['1', '1']);
+    await expect(
+      page.locator('#opsExecContributionList .ops-activity-row', { hasText: 'admin' }).locator('.ops-activity-count'),
+    ).toHaveText(['0', '0']);
   });
 });

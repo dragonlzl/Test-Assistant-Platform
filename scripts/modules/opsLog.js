@@ -44,6 +44,8 @@
     overviewView: 'activity',
     hasViewed: false,
     drawerOpen: false,
+    dateStart: '',
+    dateEnd: '',
     pendingAuth: false,
     loading: false,
     activity: {
@@ -55,6 +57,8 @@
       draftUserIds: [],
       selectedBehaviors: { all: true },
       timeRange: DEFAULT_ACTIVITY_RANGE,
+      dateStart: '',
+      dateEnd: '',
       hasSelection: false,
       logs: [],
       behaviors: [],
@@ -69,6 +73,8 @@
       draftUserIds: [],
       selectedBehaviors: { all: true },
       timeRange: DEFAULT_ACTIVITY_RANGE,
+      dateStart: '',
+      dateEnd: '',
       hasSelection: false,
       logs: [],
       behaviors: [],
@@ -83,6 +89,8 @@
       draftUserIds: [],
       selectedBehaviors: { all: true },
       timeRange: DEFAULT_ACTIVITY_RANGE,
+      dateStart: '',
+      dateEnd: '',
       hasSelection: false,
       logs: [],
       behaviors: [],
@@ -98,6 +106,8 @@
     drawerRefreshBtn: document.getElementById('opsLogDrawerRefreshBtn'),
     drawerStatusEl: document.getElementById('opsLogDrawerStatus'),
     userSelect: document.getElementById('opsLogUserSelect'),
+    dateStart: document.getElementById('opsLogDateStart'),
+    dateEnd: document.getElementById('opsLogDateEnd'),
     targetGrid: document.getElementById('opsLogTargetFilterGrid'),
     paginationTop: document.getElementById('opsLogPaginationTop'),
     paginationBottom: document.getElementById('opsLogPaginationBottom'),
@@ -109,6 +119,8 @@
     activityApplyBtn: document.getElementById('opsActivityApplyBtn'),
     activityUserEmpty: document.getElementById('opsActivityUserEmpty'),
     activityTimeRange: document.getElementById('opsActivityTimeRangeSelect'),
+    activityDateStart: document.getElementById('opsActivityDateStart'),
+    activityDateEnd: document.getElementById('opsActivityDateEnd'),
     activityBehaviorGrid: document.getElementById('opsActivityBehaviorFilterGrid'),
     activityStatus: document.getElementById('opsActivityStatus'),
     activitySelectionText: document.getElementById('opsActivitySelectionText'),
@@ -122,6 +134,8 @@
     contributionApplyBtn: document.getElementById('opsContributionApplyBtn'),
     contributionUserEmpty: document.getElementById('opsContributionUserEmpty'),
     contributionTimeRange: document.getElementById('opsContributionTimeRangeSelect'),
+    contributionDateStart: document.getElementById('opsContributionDateStart'),
+    contributionDateEnd: document.getElementById('opsContributionDateEnd'),
     contributionBehaviorGrid: document.getElementById('opsContributionBehaviorFilterGrid'),
     contributionStatus: document.getElementById('opsContributionStatus'),
     contributionSelectionText: document.getElementById('opsContributionSelectionText'),
@@ -135,6 +149,8 @@
     execContributionApplyBtn: document.getElementById('opsExecContributionApplyBtn'),
     execContributionUserEmpty: document.getElementById('opsExecContributionUserEmpty'),
     execContributionTimeRange: document.getElementById('opsExecContributionTimeRangeSelect'),
+    execContributionDateStart: document.getElementById('opsExecContributionDateStart'),
+    execContributionDateEnd: document.getElementById('opsExecContributionDateEnd'),
     execContributionBehaviorGrid: document.getElementById('opsExecContributionBehaviorFilterGrid'),
     execContributionStatus: document.getElementById('opsExecContributionStatus'),
     execContributionSelectionText: document.getElementById('opsExecContributionSelectionText'),
@@ -202,6 +218,40 @@
     }
   }
 
+  function parseDateInputValue(value, isEnd) {
+    if (!value) return null;
+    var raw = String(value || '').trim();
+    if (!raw) return null;
+    var parts = raw.split('-');
+    if (parts.length !== 3) return null;
+    var year = Number(parts[0]);
+    var month = Number(parts[1]) - 1;
+    var day = Number(parts[2]);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+    if (isEnd) return new Date(year, month, day, 23, 59, 59, 999).getTime();
+    return new Date(year, month, day).getTime();
+  }
+
+  function getDateRangeMs(startValue, endValue) {
+    var startMs = parseDateInputValue(startValue, false);
+    var endMs = parseDateInputValue(endValue, true);
+    if (startMs !== null && endMs !== null && endMs < startMs) {
+      var tmp = startMs;
+      startMs = endMs;
+      endMs = tmp;
+    }
+    return { startMs: startMs, endMs: endMs };
+  }
+
+  function isTimeInRange(value, range) {
+    if (!range || (range.startMs === null && range.endMs === null)) return true;
+    var t = parseTimeMs(value);
+    if (!t) return false;
+    if (range.startMs !== null && t < range.startMs) return false;
+    if (range.endMs !== null && t > range.endMs) return false;
+    return true;
+  }
+
   function formatTime(value) {
     if (!value) return '--';
     try {
@@ -244,6 +294,8 @@
       hasViewed: Boolean(state.hasViewed),
       drawerOpen: Boolean(state.drawerOpen),
       overviewView: state.overviewView || 'activity',
+      dateStart: state.dateStart || '',
+      dateEnd: state.dateEnd || '',
       savedAt: Date.now(),
     };
     storage.setJson(STORAGE_KEY, payload);
@@ -257,6 +309,8 @@
     state.hasViewed = Boolean(saved.hasViewed);
     state.drawerOpen = Boolean(saved.drawerOpen);
     state.overviewView = normalizeOpsOverviewView(saved.overviewView);
+    state.dateStart = saved.dateStart ? String(saved.dateStart || '') : '';
+    state.dateEnd = saved.dateEnd ? String(saved.dateEnd || '') : '';
     state.selectedTargets = { all: true };
     // 兼容：旧版字段为 behaviors（操作行为筛选），新版为 targets（操作对象筛选）。
     var list = Array.isArray(saved.targets) ? saved.targets : [];
@@ -281,6 +335,8 @@
     var payload = {
       userIds: Array.isArray(state.activity.selectedUserIds) ? state.activity.selectedUserIds.slice() : [],
       timeRange: state.activity.timeRange || DEFAULT_ACTIVITY_RANGE,
+      dateStart: state.activity.dateStart || '',
+      dateEnd: state.activity.dateEnd || '',
       behaviors: selected,
       behaviorAll: Boolean(state.activity.selectedBehaviors && state.activity.selectedBehaviors.all),
       hasSelection: Boolean(state.activity.hasSelection),
@@ -296,6 +352,8 @@
     state.activity.selectedUserIds = ids.map(function(id) { return String(id); }).filter(Boolean);
     state.activity.draftUserIds = state.activity.selectedUserIds.slice();
     state.activity.timeRange = saved.timeRange ? String(saved.timeRange) : DEFAULT_ACTIVITY_RANGE;
+    state.activity.dateStart = saved.dateStart ? String(saved.dateStart || '') : '';
+    state.activity.dateEnd = saved.dateEnd ? String(saved.dateEnd || '') : '';
     state.activity.hasSelection = Boolean(saved.hasSelection || state.activity.selectedUserIds.length);
     state.activity.selectedBehaviors = { all: true };
     if (saved.behaviorAll === true) return;
@@ -320,6 +378,8 @@
     var payload = {
       userIds: Array.isArray(state.contribution.selectedUserIds) ? state.contribution.selectedUserIds.slice() : [],
       timeRange: state.contribution.timeRange || DEFAULT_ACTIVITY_RANGE,
+      dateStart: state.contribution.dateStart || '',
+      dateEnd: state.contribution.dateEnd || '',
       behaviors: selected,
       behaviorAll: Boolean(state.contribution.selectedBehaviors && state.contribution.selectedBehaviors.all),
       hasSelection: Boolean(state.contribution.hasSelection),
@@ -335,6 +395,8 @@
     state.contribution.selectedUserIds = ids.map(function(id) { return String(id); }).filter(Boolean);
     state.contribution.draftUserIds = state.contribution.selectedUserIds.slice();
     state.contribution.timeRange = saved.timeRange ? String(saved.timeRange) : DEFAULT_ACTIVITY_RANGE;
+    state.contribution.dateStart = saved.dateStart ? String(saved.dateStart || '') : '';
+    state.contribution.dateEnd = saved.dateEnd ? String(saved.dateEnd || '') : '';
     state.contribution.hasSelection = Boolean(saved.hasSelection || state.contribution.selectedUserIds.length);
     state.contribution.selectedBehaviors = { all: true };
     if (saved.behaviorAll === true) return;
@@ -359,6 +421,8 @@
     var payload = {
       userIds: Array.isArray(state.execContribution.selectedUserIds) ? state.execContribution.selectedUserIds.slice() : [],
       timeRange: state.execContribution.timeRange || DEFAULT_ACTIVITY_RANGE,
+      dateStart: state.execContribution.dateStart || '',
+      dateEnd: state.execContribution.dateEnd || '',
       behaviors: selected,
       behaviorAll: Boolean(state.execContribution.selectedBehaviors && state.execContribution.selectedBehaviors.all),
       hasSelection: Boolean(state.execContribution.hasSelection),
@@ -374,6 +438,8 @@
     state.execContribution.selectedUserIds = ids.map(function(id) { return String(id); }).filter(Boolean);
     state.execContribution.draftUserIds = state.execContribution.selectedUserIds.slice();
     state.execContribution.timeRange = saved.timeRange ? String(saved.timeRange) : DEFAULT_ACTIVITY_RANGE;
+    state.execContribution.dateStart = saved.dateStart ? String(saved.dateStart || '') : '';
+    state.execContribution.dateEnd = saved.dateEnd ? String(saved.dateEnd || '') : '';
     state.execContribution.hasSelection = Boolean(saved.hasSelection || state.execContribution.selectedUserIds.length);
     state.execContribution.selectedBehaviors = { all: true };
     if (saved.behaviorAll === true) return;
@@ -617,6 +683,11 @@
         '</label>'
       );
     }).join('');
+  }
+
+  function syncOpsLogDateRange() {
+    if (dom.dateStart) dom.dateStart.value = state.dateStart || '';
+    if (dom.dateEnd) dom.dateEnd.value = state.dateEnd || '';
   }
 
   function getActivityPalette() {
@@ -970,6 +1041,11 @@
     dom.activityTimeRange.value = value;
   }
 
+  function syncActivityDateRange() {
+    if (dom.activityDateStart) dom.activityDateStart.value = state.activity.dateStart || '';
+    if (dom.activityDateEnd) dom.activityDateEnd.value = state.activity.dateEnd || '';
+  }
+
   function getSelectedContributionBehaviorKeys() {
     var selected = state.contribution.selectedBehaviors || {};
     if (selected.all) return [];
@@ -1039,6 +1115,11 @@
     if (!dom.contributionTimeRange) return;
     var value = state.contribution.timeRange || DEFAULT_ACTIVITY_RANGE;
     dom.contributionTimeRange.value = value;
+  }
+
+  function syncContributionDateRange() {
+    if (dom.contributionDateStart) dom.contributionDateStart.value = state.contribution.dateStart || '';
+    if (dom.contributionDateEnd) dom.contributionDateEnd.value = state.contribution.dateEnd || '';
   }
 
   function getSelectedExecContributionBehaviorKeys() {
@@ -1112,6 +1193,11 @@
     dom.execContributionTimeRange.value = value;
   }
 
+  function syncExecContributionDateRange() {
+    if (dom.execContributionDateStart) dom.execContributionDateStart.value = state.execContribution.dateStart || '';
+    if (dom.execContributionDateEnd) dom.execContributionDateEnd.value = state.execContribution.dateEnd || '';
+  }
+
   function getActivityRangeStartMs() {
     var range = state.activity.timeRange || DEFAULT_ACTIVITY_RANGE;
     if (range === 'all') return null;
@@ -1127,6 +1213,12 @@
       return base.getTime();
     }
     return null;
+  }
+
+  function getActivityDateRangeMs() {
+    var range = getDateRangeMs(state.activity.dateStart, state.activity.dateEnd);
+    if (range.startMs !== null || range.endMs !== null) return range;
+    return { startMs: getActivityRangeStartMs(), endMs: null };
   }
 
   function getContributionRangeStartMs() {
@@ -1146,6 +1238,12 @@
     return null;
   }
 
+  function getContributionDateRangeMs() {
+    var range = getDateRangeMs(state.contribution.dateStart, state.contribution.dateEnd);
+    if (range.startMs !== null || range.endMs !== null) return range;
+    return { startMs: getContributionRangeStartMs(), endMs: null };
+  }
+
   function getExecContributionRangeStartMs() {
     var range = state.execContribution.timeRange || DEFAULT_ACTIVITY_RANGE;
     if (range === 'all') return null;
@@ -1161,6 +1259,12 @@
       return base.getTime();
     }
     return null;
+  }
+
+  function getExecContributionDateRangeMs() {
+    var range = getDateRangeMs(state.execContribution.dateStart, state.execContribution.dateEnd);
+    if (range.startMs !== null || range.endMs !== null) return range;
+    return { startMs: getExecContributionRangeStartMs(), endMs: null };
   }
 
   var INVISIBLE_MARKER_RE = /[\u200b\u200c\u200d\u2060\ufeff]/g;
@@ -1232,15 +1336,12 @@
     if (!selectedIds.length) return [];
     var allowed = {};
     selectedIds.forEach(function(id) { allowed[String(id)] = true; });
-    var startMs = getActivityRangeStartMs();
+    var range = getActivityDateRangeMs();
     return list.filter(function(log) {
       if (!log || !isAllowedLog(log)) return false;
       var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
       if (!userId || !allowed[userId]) return false;
-      if (startMs) {
-        var t = parseTimeMs(log.created_at);
-        if (!t || t < startMs) return false;
-      }
+      if (!isTimeInRange(log.created_at, range)) return false;
       return true;
     });
   }
@@ -1251,15 +1352,12 @@
     if (!selectedIds.length) return [];
     var allowed = {};
     selectedIds.forEach(function(id) { allowed[String(id)] = true; });
-    var startMs = getContributionRangeStartMs();
+    var range = getContributionDateRangeMs();
     return list.filter(function(log) {
       if (!log) return false;
       var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
       if (!userId || !allowed[userId]) return false;
-      if (startMs) {
-        var t = parseTimeMs(log.created_at);
-        if (!t || t < startMs) return false;
-      }
+      if (!isTimeInRange(log.created_at, range)) return false;
       return true;
     });
   }
@@ -1270,15 +1368,12 @@
     if (!selectedIds.length) return [];
     var allowed = {};
     selectedIds.forEach(function(id) { allowed[String(id)] = true; });
-    var startMs = getExecContributionRangeStartMs();
+    var range = getExecContributionDateRangeMs();
     return list.filter(function(log) {
       if (!log) return false;
       var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
       if (!userId || !allowed[userId]) return false;
-      if (startMs) {
-        var t = parseTimeMs(log.created_at);
-        if (!t || t < startMs) return false;
-      }
+      if (!isTimeInRange(log.created_at, range)) return false;
       return true;
     });
   }
@@ -2104,14 +2199,20 @@
   function getFilteredLogs() {
     var list = Array.isArray(state.logs) ? state.logs : [];
     list = list.filter(isAllowedLog);
+    var range = getDateRangeMs(state.dateStart, state.dateEnd);
     var selected = state.selectedTargets || { all: true };
-    if (selected.all) return list;
+    if (selected.all) {
+      return list.filter(function(log) {
+        return isTimeInRange(log && log.created_at, range);
+      });
+    }
     var allow = {};
     TARGETS.forEach(function(b) {
       if (!b || b.key === 'all') return;
       if (selected[b.key]) allow[b.key] = true;
     });
     return list.filter(function(log) {
+      if (!isTimeInRange(log && log.created_at, range)) return false;
       var keys = resolveLogTargetKeys(log);
       for (var i = 0; i < keys.length; i += 1) {
         if (allow[keys[i]]) return true;
@@ -2515,6 +2616,22 @@
         loadLogs();
       });
     }
+    if (dom.dateStart) {
+      dom.dateStart.addEventListener('change', function() {
+        state.dateStart = dom.dateStart.value || '';
+        state.pageIndex = 0;
+        persistViewState();
+        renderList();
+      });
+    }
+    if (dom.dateEnd) {
+      dom.dateEnd.addEventListener('change', function() {
+        state.dateEnd = dom.dateEnd.value || '';
+        state.pageIndex = 0;
+        persistViewState();
+        renderList();
+      });
+    }
     if (dom.targetGrid) {
       dom.targetGrid.addEventListener('change', function(e) {
         var t = e && e.target ? e.target : null;
@@ -2590,6 +2707,20 @@
     if (dom.activityTimeRange) {
       dom.activityTimeRange.addEventListener('change', function() {
         state.activity.timeRange = dom.activityTimeRange.value || DEFAULT_ACTIVITY_RANGE;
+        persistActivityState();
+        renderActivityView();
+      });
+    }
+    if (dom.activityDateStart) {
+      dom.activityDateStart.addEventListener('change', function() {
+        state.activity.dateStart = dom.activityDateStart.value || '';
+        persistActivityState();
+        renderActivityView();
+      });
+    }
+    if (dom.activityDateEnd) {
+      dom.activityDateEnd.addEventListener('change', function() {
+        state.activity.dateEnd = dom.activityDateEnd.value || '';
         persistActivityState();
         renderActivityView();
       });
@@ -2678,6 +2809,20 @@
         renderContributionView();
       });
     }
+    if (dom.contributionDateStart) {
+      dom.contributionDateStart.addEventListener('change', function() {
+        state.contribution.dateStart = dom.contributionDateStart.value || '';
+        persistContributionState();
+        renderContributionView();
+      });
+    }
+    if (dom.contributionDateEnd) {
+      dom.contributionDateEnd.addEventListener('change', function() {
+        state.contribution.dateEnd = dom.contributionDateEnd.value || '';
+        persistContributionState();
+        renderContributionView();
+      });
+    }
     if (dom.contributionBehaviorGrid) {
       dom.contributionBehaviorGrid.addEventListener('change', function(e) {
         var t = e && e.target ? e.target : null;
@@ -2758,6 +2903,20 @@
     if (dom.execContributionTimeRange) {
       dom.execContributionTimeRange.addEventListener('change', function() {
         state.execContribution.timeRange = dom.execContributionTimeRange.value || DEFAULT_ACTIVITY_RANGE;
+        persistExecContributionState();
+        renderExecContributionView();
+      });
+    }
+    if (dom.execContributionDateStart) {
+      dom.execContributionDateStart.addEventListener('change', function() {
+        state.execContribution.dateStart = dom.execContributionDateStart.value || '';
+        persistExecContributionState();
+        renderExecContributionView();
+      });
+    }
+    if (dom.execContributionDateEnd) {
+      dom.execContributionDateEnd.addEventListener('change', function() {
+        state.execContribution.dateEnd = dom.execContributionDateEnd.value || '';
         persistExecContributionState();
         renderExecContributionView();
       });
@@ -2880,9 +3039,13 @@
     ensureExecContributionDrawer();
     applyOpsOverviewView(state.overviewView, { persist: false });
     syncTargetGrid();
+    syncOpsLogDateRange();
     syncActivityTimeRange();
+    syncActivityDateRange();
     syncContributionTimeRange();
+    syncContributionDateRange();
     syncExecContributionTimeRange();
+    syncExecContributionDateRange();
     setActivityDraftUserIds(state.activity.selectedUserIds);
     syncActivityUserGrid();
     syncActivityBehaviorFilters();

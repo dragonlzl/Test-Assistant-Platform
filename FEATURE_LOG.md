@@ -1641,3 +1641,5 @@
 - 更新记录：2025-12-20 用例执行贡献筛选时隐藏未选柱状项（`scripts/modules/opsLog.js`、`tests/ui/ops_exec_contribution.spec.js`）。  
 - 更新记录：2025-12-20 用例执行贡献筛选单项时保留 0 计数人员展示（`scripts/modules/opsLog.js`、`tests/ui/ops_exec_contribution.spec.js`）。  
 - 更新记录：2025-12-20 活跃度/用例贡献/执行贡献视图补齐 0 计数人员展示（`scripts/modules/opsLog.js`、`tests/ui/ops_activity.spec.js`、`tests/ui/ops_contribution.spec.js`、`tests/ui/ops_exec_contribution.spec.js`）。  
+- 更新记录：2025-12-20 操作记录查看记录/活跃度/用例贡献/用例执行贡献视图支持日期范围筛选（`index.html`、`style.css`、`scripts/modules/opsLog.js`、`tests/ui/ops_log.spec.js`、`tests/ui/ops_activity.spec.js`、`tests/ui/ops_contribution.spec.js`、`tests/ui/ops_exec_contribution.spec.js`）。  
+- 测试与验证：`node --check scripts/modules/opsLog.js`（通过）；`npm run test:ui -- tests/ui/ops_log.spec.js tests/ui/ops_exec_contribution.spec.js`（通过）；`npm run test:ui -- tests/ui/ops_activity.spec.js`（通过，需允许本地服务监听权限）；`npm run test:ui -- tests/ui/ops_contribution.spec.js`（通过，需允许本地服务监听权限）。  

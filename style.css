@@ -3528,6 +3528,17 @@ tr.diff-locate-active td {
   appearance: none;
   font-size: 14px;
 }
+.ops-activity-date-input {
+  min-width: 140px;
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background-color: #fff;
+  font-size: 14px;
+}
+.ops-activity-date-sep {
+  color: #6b7280;
+}
 .ops-activity-filters {
   margin-top: 8px;
   padding: 10px;

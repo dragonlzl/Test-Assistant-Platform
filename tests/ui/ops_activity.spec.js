@@ -13,6 +13,13 @@ async function waitAppReady(page, timeoutMs) {
   await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout });
 }
 
+function formatDateInput(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 test.describe('操作记录-活跃度视图', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -34,13 +41,15 @@ test.describe('操作记录-活跃度视图', () => {
     const userB = { id: 2, username: 'user_b', role: 'user', level: 'member' };
     const userC = { id: 3, username: 'user_c', role: 'user', level: 'member' };
     const settings = [];
-    const now = Date.now();
+    const base = new Date();
+    const today = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 12, 0, 0);
+    const yesterday = new Date(base.getFullYear(), base.getMonth(), base.getDate() - 1, 12, 0, 0);
     const logs = [
-      { id: 1, user_id: 1, username: 'admin', action: 'login', target_type: 'auth', target_id: 1, result: 'success', detail: {}, created_at: new Date(now - 1 * 60 * 60 * 1000).toISOString() },
-      { id: 2, user_id: 1, username: 'admin', action: 'export_case_files_xmind', target_type: 'case_file', target_id: 10, result: 'success', detail: { file_name: 'case-1' }, created_at: new Date(now - 2 * 60 * 60 * 1000).toISOString() },
-      { id: 3, user_id: 1, username: 'admin', action: 'create_project', target_type: 'project', target_id: 20, result: 'success', detail: { name: 'proj-1' }, created_at: new Date(now - 3 * 60 * 60 * 1000).toISOString() },
-      { id: 4, user_id: 2, username: 'user_b', action: 'login', target_type: 'auth', target_id: 2, result: 'success', detail: {}, created_at: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString() },
-      { id: 5, user_id: 2, username: 'user_b', action: 'export_case_files_excel', target_type: 'case_file', target_id: 11, result: 'success', detail: { file_name: 'case-2' }, created_at: new Date(now - 2 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000).toISOString() },
+      { id: 1, user_id: 1, username: 'admin', action: 'login', target_type: 'auth', target_id: 1, result: 'success', detail: {}, created_at: new Date(today.getTime() - 1 * 60 * 60 * 1000).toISOString() },
+      { id: 2, user_id: 1, username: 'admin', action: 'export_case_files_xmind', target_type: 'case_file', target_id: 10, result: 'success', detail: { file_name: 'case-1' }, created_at: new Date(today.getTime() - 2 * 60 * 60 * 1000).toISOString() },
+      { id: 3, user_id: 1, username: 'admin', action: 'create_project', target_type: 'project', target_id: 20, result: 'success', detail: { name: 'proj-1' }, created_at: new Date(yesterday.getTime()).toISOString() },
+      { id: 4, user_id: 2, username: 'user_b', action: 'login', target_type: 'auth', target_id: 2, result: 'success', detail: {}, created_at: new Date(yesterday.getTime() + 60 * 60 * 1000).toISOString() },
+      { id: 5, user_id: 2, username: 'user_b', action: 'export_case_files_excel', target_type: 'case_file', target_id: 11, result: 'success', detail: { file_name: 'case-2' }, created_at: new Date(yesterday.getTime() + 2 * 60 * 60 * 1000).toISOString() },
     ];
     let opsCalls = 0;
 
@@ -116,5 +125,14 @@ test.describe('操作记录-活跃度视图', () => {
     await expect(page.locator('.ops-activity-count').nth(0)).toHaveText('1');
     await expect(page.locator('.ops-activity-count').nth(1)).toHaveText('0');
     await expect(page.locator('.ops-activity-count').nth(2)).toHaveText('0');
+
+    await page.click('input[data-ops-activity-behavior="all"]');
+    const yesterdayInput = formatDateInput(yesterday);
+    await page.fill('#opsActivityDateStart', yesterdayInput);
+    await page.fill('#opsActivityDateEnd', yesterdayInput);
+    await expect(page.locator('.ops-activity-row')).toHaveCount(3);
+    await expect(page.locator('.ops-activity-row', { hasText: 'admin' }).locator('.ops-activity-count')).toHaveText('1');
+    await expect(page.locator('.ops-activity-row', { hasText: 'user_b' }).locator('.ops-activity-count')).toHaveText('2');
+    await expect(page.locator('.ops-activity-row', { hasText: 'user_c' }).locator('.ops-activity-count')).toHaveText('0');
   });
 });
