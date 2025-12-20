@@ -55,6 +55,7 @@
   - `npm run test:ui -- tests/ui/case_library.spec.js --workers=1`（通过）  
 - 更新记录：2025-12-20 用例库共享用例与重复拦截提示上线（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`services/apiClient.js`、`backend/routers/cases.py`、`backend/routers/projects.py`、`backend/schemas.py`、`tests/api/case_library_share.spec.js`、`tests/ui/case_library_share.spec.js`）。  
 - 更新记录：2025-12-20 归属默认改为全部并新增“其他项目导入”筛选（`scripts/modules/caseLibrary.js`、`backend/routers/cases.py`、`backend/schemas.py`、`tests/ui/case_library.spec.js`）。  
+- 更新记录：2025-12-20 共享入口移至全局操作并支持多选共享结果汇总提示（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_share.spec.js`）。  
 
 - 功能名称：执行视图顶部切换与快捷归档  
 - 功能描述：用例执行页顶部工具栏新增上一份/下一份循环切换按钮与归档按钮；归档流程复用“归档操作&进度预览”逻辑（含未通过原因抽屉/通过确认），归档成功后自动切换到下一份用例。  

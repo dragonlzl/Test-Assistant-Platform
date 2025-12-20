@@ -88,6 +88,7 @@
     editDrawerChangeVersionSelect: document.getElementById('caseLibraryEditChangeVersionSelect'),
     editDrawerChangeVersionBtn: document.getElementById('caseLibraryEditChangeVersionBtn'),
     editDrawerConfirmBtn: document.getElementById('caseLibraryEditConfirmBtn'),
+    editDrawerShareBtn: document.getElementById('caseLibraryEditShareBtn'),
     editDrawerExportXmindBtn: document.getElementById('caseLibraryEditExportXmindBtn'),
     editDrawerExportExcelBtn: document.getElementById('caseLibraryEditExportExcelBtn'),
     editDrawerDeleteBtn: document.getElementById('caseLibraryEditDeleteBtn'),
@@ -196,6 +197,7 @@
 
     shareDrawer: {
       caseFile: null,
+      caseFiles: [],
       projectId: null,
       versionId: null,
       loading: false,
@@ -4297,6 +4299,7 @@
     }
     syncEditDrawerOwnerFilterOptions();
     if (dom.editDrawerFileSearchInput) dom.editDrawerFileSearchInput.value = '';
+    if (dom.editDrawerShareBtn) dom.editDrawerShareBtn.disabled = true;
     if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = true;
     if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = true;
     if (dom.editDrawerListBody) {
@@ -4362,6 +4365,21 @@
     if (!selection.size) return [];
     var list = Array.isArray(state.editDrawer.files) ? state.editDrawer.files : [];
     return list.filter(function(f) { return f && f.id !== null && f.id !== undefined && selection.has(String(f.id)); });
+  }
+
+  function openShareDrawerFromSelection() {
+    if (state.editDrawer.loading) return;
+    var files = getSelectedEditDrawerCaseFiles();
+    if (!files.length) {
+      setStatus(dom.editDrawerStatus, '请先勾选要共享的用例文件', 'warn');
+      return;
+    }
+    var first = files[0];
+    safeLogOperation('open_share_case_file', 'case_file', first.id, {
+      file_name: first.file_name_clean || '',
+      selected_count: files.length,
+    });
+    openShareDrawer(files, { previousDrawer: editDrawerInstance || null });
   }
 
   function exportEditDrawerSelectionToXmind() {
@@ -4619,6 +4637,9 @@
     if (dom.editDrawerExportExcelBtn) {
       dom.editDrawerExportExcelBtn.disabled = Boolean(state.editDrawer.loading) || selection.size === 0;
     }
+    if (dom.editDrawerShareBtn) {
+      dom.editDrawerShareBtn.disabled = Boolean(state.editDrawer.loading) || selection.size === 0;
+    }
     if (dom.editDrawerChangeVersionBtn) {
       var changeVersionId = normalizeId(dom.editDrawerChangeVersionSelect ? dom.editDrawerChangeVersionSelect.value : '');
       var canChangeVersion = Boolean(changeVersionId) && selection.size > 0 && !state.editDrawer.loading;
@@ -4705,7 +4726,6 @@
           '<td>' +
             '<div class=\"case-library-row-actions\">' +
               '<button class=\"primary\" type=\"button\" data-case-lib-edit=\"' + escapeHtml(f && f.id ? f.id : '') + '\">编辑</button>' +
-              '<button class=\"primary\" type=\"button\" data-case-lib-share=\"' + escapeHtml(f && f.id ? f.id : '') + '\">共享</button>' +
             '</div>' +
           '</td>' +
         '</tr>'
@@ -4752,20 +4772,50 @@
   function clearShareDrawerState() {
     resetShareDrawerControls();
     state.shareDrawer.caseFile = null;
+    state.shareDrawer.caseFiles = [];
     state.shareDrawer.previousDrawer = null;
     state.shareDrawer.reopenPrevious = false;
   }
 
+  function getShareDrawerCaseFiles() {
+    if (Array.isArray(state.shareDrawer.caseFiles) && state.shareDrawer.caseFiles.length) {
+      return state.shareDrawer.caseFiles;
+    }
+    if (state.shareDrawer.caseFile) return [state.shareDrawer.caseFile];
+    return [];
+  }
+
   function renderShareDrawerMeta() {
-    var file = state.shareDrawer.caseFile;
-    var fileName = file ? (file.file_name_clean || ('用例#' + file.id)) : '--';
+    var files = getShareDrawerCaseFiles();
+    var count = files.length;
+    var fileName = '--';
+    if (count === 1) {
+      fileName = files[0].file_name_clean || ('用例#' + files[0].id);
+    } else if (count > 1) {
+      fileName = '已选 ' + count + ' 份用例';
+    }
     if (dom.shareDrawerCaseName) dom.shareDrawerCaseName.textContent = fileName;
+
     var projectName = '--';
-    if (file && (file.project_id || file.project_id === 0)) {
-      projectName = state.projectNameById[file.project_id] || ('项目#' + file.project_id);
+    if (count) {
+      var projectId = files[0].project_id;
+      var sameProject = files.every(function(item) {
+        return item && String(item.project_id) === String(projectId);
+      });
+      if (!sameProject) projectName = '多个项目';
+      else projectName = state.projectNameById[projectId] || ('项目#' + projectId);
     }
     if (dom.shareDrawerSourceProject) dom.shareDrawerSourceProject.textContent = projectName;
-    var versionName = file ? getVersionName(file.project_id, file.version_id) : '--';
+
+    var versionName = '--';
+    if (count) {
+      var versionId = files[0].version_id;
+      var sameVersion = files.every(function(item) {
+        return item && String(item.version_id) === String(versionId);
+      });
+      if (!sameVersion) versionName = '多个版本';
+      else versionName = getVersionName(files[0].project_id, versionId);
+    }
     if (dom.shareDrawerSourceVersion) dom.shareDrawerSourceVersion.textContent = versionName;
   }
 
@@ -4776,10 +4826,12 @@
 
   function syncShareDrawerControls() {
     if (!dom.shareDrawerConfirmBtn) return;
+    var files = getShareDrawerCaseFiles();
+    var hasFiles = files.length > 0;
     var pid = state.shareDrawer.projectId;
     var vid = state.shareDrawer.versionId;
     var needVersion = pid && shareRequiresVersion(pid);
-    var disabled = Boolean(state.shareDrawer.loading) || Boolean(state.shareDrawer.versionLoadFailed) || !pid || (needVersion && !vid);
+    var disabled = Boolean(state.shareDrawer.loading) || Boolean(state.shareDrawer.versionLoadFailed) || !hasFiles || !pid || (needVersion && !vid);
     dom.shareDrawerConfirmBtn.disabled = disabled;
   }
 
@@ -4835,14 +4887,24 @@
     syncShareDrawerControls();
   }
 
-  function openShareDrawer(caseFile, options) {
-    if (!caseFile || !caseFile.id) return;
+  function normalizeShareCaseFiles(caseFiles) {
+    if (Array.isArray(caseFiles)) {
+      return caseFiles.filter(function(item) { return item && item.id; });
+    }
+    if (caseFiles && caseFiles.id) return [caseFiles];
+    return [];
+  }
+
+  function openShareDrawer(caseFiles, options) {
+    var list = normalizeShareCaseFiles(caseFiles);
+    if (!list.length) return;
     var drawer = ensureShareDrawer();
     if (!drawer) {
       setStatus(dom.editDrawerStatus, '共享抽屉不可用', 'warn');
       return;
     }
-    state.shareDrawer.caseFile = caseFile;
+    state.shareDrawer.caseFiles = list;
+    state.shareDrawer.caseFile = list[0] || null;
     state.shareDrawer.projectId = null;
     state.shareDrawer.versionId = null;
     state.shareDrawer.loading = false;
@@ -4864,8 +4926,32 @@
     if (typeof drawer.open === 'function') drawer.open();
   }
 
-  function submitShareCaseFile(anchorRect) {
-    var file = state.shareDrawer.caseFile;
+  function getShareCaseFileName(file) {
+    if (!file) return '';
+    return file.file_name_clean || ('用例#' + file.id);
+  }
+
+  function formatShareCaseFileNames(list, limit) {
+    var names = Array.isArray(list) ? list.map(getShareCaseFileName).filter(Boolean) : [];
+    if (!names.length) return '';
+    var cap = Number(limit);
+    if (!isFinite(cap) || cap <= 0) cap = 3;
+    if (names.length <= cap) return names.join('、');
+    return names.slice(0, cap).join('、') + '等' + names.length + '份';
+  }
+
+  function isShareCaseFileDuplicateError(err) {
+    var payload = err && err.payload ? err.payload : null;
+    var detail = payload && payload.detail ? String(payload.detail || '') : '';
+    return Boolean(err && (err.status === 409 || detail === 'case_file_duplicate'));
+  }
+
+  function submitShareCaseFiles(anchorRect) {
+    var files = getShareDrawerCaseFiles();
+    if (!files.length) {
+      setStatus(dom.shareDrawerStatus, '未选择用例', 'warn');
+      return;
+    }
     var pid = state.shareDrawer.projectId;
     var vid = state.shareDrawer.versionId;
     var projectName = state.shareDrawer.projectNameById[pid] || ('项目#' + pid);
@@ -4876,27 +4962,56 @@
     state.shareDrawer.loading = true;
     syncShareDrawerControls();
     setStatus(dom.shareDrawerStatus, '共享中...', '');
-    apiClient
-      .shareCaseFile({
-        case_file_id: file.id,
-        target_project_id: pid,
-        target_version_id: vid,
-      })
-      .then(function(res) {
-        setStatus(dom.shareDrawerStatus, '已共享至项目「' + projectName + '」', 'ok');
-      })
-      .catch(function(err) {
-        var payload = err && err.payload ? err.payload : null;
-        var detail = payload && payload.detail ? String(payload.detail || '') : '';
-        if (err && (err.status === 409 || detail === 'case_file_duplicate')) {
+
+    var successFiles = [];
+    var duplicateFiles = [];
+    var failedFiles = [];
+
+    var chain = Promise.resolve();
+    files.forEach(function(file) {
+      chain = chain.then(function() {
+        return apiClient
+          .shareCaseFile({
+            case_file_id: file.id,
+            target_project_id: pid,
+            target_version_id: vid,
+          })
+          .then(function() {
+            successFiles.push(file);
+          })
+          .catch(function(err) {
+            if (isShareCaseFileDuplicateError(err)) {
+              duplicateFiles.push(file);
+              return;
+            }
+            failedFiles.push(file);
+          });
+      });
+    });
+
+    chain
+      .then(function() {
+        var parts = [];
+        if (successFiles.length) {
+          parts.push('共享成功：' + formatShareCaseFileNames(successFiles));
+        }
+        if (duplicateFiles.length) {
+          parts.push('已存在未共享：' + formatShareCaseFileNames(duplicateFiles));
+        }
+        if (failedFiles.length) {
+          parts.push('共享失败：' + formatShareCaseFileNames(failedFiles));
+        }
+        var message = parts.join('；') || ('已共享至项目「' + projectName + '」');
+        var level = 'ok';
+        if (failedFiles.length) level = 'err';
+        else if (duplicateFiles.length) level = 'warn';
+        setStatus(dom.shareDrawerStatus, message, level);
+        if (duplicateFiles.length) {
           var rect = anchorRect || captureCaseLibraryAnchorRect(dom.shareDrawerConfirmBtn);
           if (rect) {
             showCaseLibraryBlockHint(rect, '该项目已有此用例，如有相关改动，请通知该项目人员。', 5000);
           }
-          setStatus(dom.shareDrawerStatus, '共享失败：该项目已有同名用例', 'warn');
-          return;
         }
-        setStatus(dom.shareDrawerStatus, err && err.message ? err.message : '共享失败', 'err');
       })
       .finally(function() {
         state.shareDrawer.loading = false;
@@ -4906,8 +5021,8 @@
 
   function confirmShareCaseFile() {
     if (state.shareDrawer.loading) return;
-    var file = state.shareDrawer.caseFile;
-    if (!file || !file.id) {
+    var files = getShareDrawerCaseFiles();
+    if (!files.length) {
       setStatus(dom.shareDrawerStatus, '未选择用例', 'warn');
       return;
     }
@@ -4927,8 +5042,13 @@
     }
     var projectName = state.shareDrawer.projectNameById[pid] || ('项目#' + pid);
     var versionName = vid ? getShareVersionName(pid, vid) : '';
-    var fileName = file.file_name_clean || ('用例#' + file.id);
-    var msg = '确认将用例【' + fileName + '】分享给项目「' + projectName + '」' + (vid ? ('（版本：' + versionName + '）') : '') + '吗？';
+    var msgPrefix = '';
+    if (files.length === 1) {
+      msgPrefix = '用例【' + getShareCaseFileName(files[0]) + '】';
+    } else {
+      msgPrefix = '已选 ' + files.length + ' 份用例';
+    }
+    var msg = '确认将' + msgPrefix + '分享给项目「' + projectName + '」' + (vid ? ('（版本：' + versionName + '）') : '') + '吗？';
     var anchorRect = captureCaseLibraryAnchorRect(dom.shareDrawerConfirmBtn);
     openConfirmDrawer({
       title: '共享用例',
@@ -4941,7 +5061,7 @@
         setStatus(dom.shareDrawerStatus, '已取消共享', 'warn');
         return;
       }
-      submitShareCaseFile(anchorRect);
+      submitShareCaseFiles(anchorRect);
     });
   }
 
@@ -7564,6 +7684,9 @@
     if (dom.editDrawerChangeVersionBtn) {
       dom.editDrawerChangeVersionBtn.addEventListener('click', confirmEditDrawerChangeVersion);
     }
+    if (dom.editDrawerShareBtn) {
+      dom.editDrawerShareBtn.addEventListener('click', openShareDrawerFromSelection);
+    }
     if (dom.editDrawerDeleteBtn) {
       dom.editDrawerDeleteBtn.addEventListener('click', deleteSelectedCaseFiles);
     }
@@ -7586,16 +7709,6 @@
       });
       dom.editDrawerListBody.addEventListener('click', function(e) {
         var target = e && e.target ? e.target : null;
-        var shareBtn = target && target.closest ? target.closest('[data-case-lib-share]') : null;
-        if (shareBtn) {
-          var shareId = shareBtn.getAttribute('data-case-lib-share');
-          var shareFile = findCaseFileInEditDrawer(shareId);
-          if (shareFile) {
-            safeLogOperation('open_share_case_file', 'case_file', shareFile.id, { file_name: shareFile.file_name_clean || '' });
-            openShareDrawer(shareFile, { previousDrawer: editDrawerInstance || null });
-          }
-          return;
-        }
         var btn = target && target.closest ? target.closest('[data-case-lib-edit]') : null;
         if (!btn) return;
         var id = btn.getAttribute('data-case-lib-edit');

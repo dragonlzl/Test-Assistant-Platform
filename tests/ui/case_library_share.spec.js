@@ -83,6 +83,7 @@ test.describe('用例库共享用例', () => {
     const now = new Date().toISOString();
 
     const caseFileId = 100;
+    const caseFileId2 = 101;
     const caseFiles = [
       {
         id: caseFileId,
@@ -98,9 +99,21 @@ test.describe('用例库共享用例', () => {
         last_updated_by: user.id,
         last_updated_by_name: user.username,
       },
+      {
+        id: caseFileId2,
+        project_id: projectA.id,
+        version_id: versionsA[0].id,
+        file_name_clean: '注册用例',
+        reuse_enabled: false,
+        item_count: 1,
+        importer_id: user.id,
+        importer_name: user.username,
+        imported_at: now,
+        updated_at: now,
+        last_updated_by: user.id,
+        last_updated_by_name: user.username,
+      },
     ];
-
-    let shareCalls = 0;
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -145,13 +158,14 @@ test.describe('用例库共享用例', () => {
 
       if (pathName === '/api/case-files/share' && method === 'POST') {
         if (!authed) return respond(401, { detail: 'unauthorized' });
-        shareCalls += 1;
-        if (shareCalls === 1) return respond(409, { detail: 'case_file_duplicate' });
+        let payload = {};
+        try { payload = route.request().postDataJSON() || {}; } catch (_) { payload = {}; }
+        if (payload.case_file_id === caseFileId) return respond(409, { detail: 'case_file_duplicate' });
         return respond(201, {
           id: 200,
           project_id: projectB.id,
           version_id: versionsB[0].id,
-          file_name_clean: '登录用例',
+          file_name_clean: '注册用例',
           reuse_enabled: false,
           item_count: 2,
           importer_id: user.id,
@@ -180,7 +194,9 @@ test.describe('用例库共享用例', () => {
     await page.selectOption('#caseLibraryEditProjectSelect', String(projectA.id));
     await page.waitForTimeout(200);
 
-    await page.click(`#caseLibraryEditListBody [data-case-lib-share="${caseFileId}"]`);
+    await page.check(`#caseLibraryEditListBody [data-case-lib-edit-select="${caseFileId}"]`);
+    await page.check(`#caseLibraryEditListBody [data-case-lib-edit-select="${caseFileId2}"]`);
+    await page.click('#caseLibraryEditShareBtn');
     await expect(page.locator('#caseLibraryShareDrawer')).toHaveClass(/open/);
 
     await page.selectOption('#caseLibraryShareProjectSelect', String(projectB.id));
@@ -194,15 +210,9 @@ test.describe('用例库共享用例', () => {
     await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
     await expect(page.locator('#appConfirmDrawerMessage')).toContainText(projectB.name);
     await page.click('#appConfirmDrawerConfirmBtn');
-
     const hint = page.locator('.temp-click-hint');
     await expect(hint).toContainText('该项目已有此用例');
-    await page.waitForTimeout(5200);
-    await expect(hint).toHaveCount(0);
-
-    await page.click('#caseLibraryShareConfirmBtn');
-    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
-    await page.click('#appConfirmDrawerConfirmBtn');
-    await expect(page.locator('#caseLibraryShareStatus')).toContainText('已共享至项目');
+    await expect(page.locator('#caseLibraryShareStatus')).toContainText('共享成功');
+    await expect(page.locator('#caseLibraryShareStatus')).toContainText('已存在未共享');
   });
 });
