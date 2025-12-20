@@ -230,7 +230,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     }
   });
 
-  test('新用例入库：未勾选用例时自动打开视图并提示勾选', async ({ page }) => {
+  test('新用例入库：视图勾选后关闭自动进入入库抽屉', async ({ page }) => {
     const token = 'token-casegen-store-unchecked';
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
     const project = { id: 1, name: '项目A', description: '' };
@@ -273,14 +273,25 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     const viewContainer = page.locator('#caseGenViewDrawerBody .caseview');
     await expect(viewContainer).toHaveCount(2);
     await expect(viewContainer).toHaveClass([/caseview-selection-hint/, /caseview-selection-hint/]);
+
+    await page.click('#closeCaseGenViewDrawerBtn');
+    await expect(viewDrawer).not.toHaveClass(/open/);
+    await expect(page.locator('#caseGenDbStoreDrawer')).not.toHaveClass(/open/);
+
+    await page.click('#caseGenStoreNewBtn');
+    await expect(viewDrawer).toHaveClass(/open/);
     await page.click('#caseGenViewDrawerBody input[data-case-select]');
     const count = await viewContainer.count();
     for (let i = 0; i < count; i += 1) {
       await expect(viewContainer.nth(i)).not.toHaveClass(/caseview-selection-hint/);
     }
+    await page.click('#closeCaseGenViewDrawerBtn');
+    await expect(viewDrawer).not.toHaveClass(/open/);
+    await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseGenDbStoreDrawerTitle')).toContainText('新用例入库');
   });
 
-  test('旧用例追加入库：未勾选用例时自动打开视图并提示勾选', async ({ page }) => {
+  test('旧用例追加入库：视图勾选后关闭自动进入入库抽屉', async ({ page }) => {
     const token = 'token-casegen-append-unchecked';
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
     const project = { id: 1, name: '项目A', description: '' };
@@ -327,6 +338,10 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     for (let i = 0; i < count; i += 1) {
       await expect(viewContainer.nth(i)).not.toHaveClass(/caseview-selection-hint/);
     }
+    await page.click('#closeCaseGenViewDrawerBtn');
+    await expect(viewDrawer).not.toHaveClass(/open/);
+    await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseGenDbStoreDrawerTitle')).toContainText('旧用例追加入库');
   });
 
   test('进度模块点击：有用例时打开用例视图', async ({ page }) => {

@@ -30,6 +30,7 @@
 - 测试与验证：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js scripts/core/appRuntime.js scripts/core/casegenCore.js scripts/core/casesGenCore.js scripts/core/reviewCore.js scripts/handlers/cleanHandlers.js scripts/modules/auto.js scripts/modules/casesgen.js scripts/modules/upload.js`（通过）；UI 用例未执行。  
 - 更新记录：2025-12-20 工作流/自动评审/用例生成持久化与导入确认（`config/constants.js`、`scripts/modules/authGuard.js`、`scripts/modules/app.js`、`scripts/modules/upload.js`、`scripts/core/appRuntime.js`、`scripts/handlers/cleanHandlers.js`、`scripts/core/reviewCore.js`、`scripts/modules/auto.js`、`scripts/modules/casesgen.js`、`scripts/core/casegenCore.js`、`scripts/core/casesGenCore.js`、`tests/ui/workflow_persistence_import_guard.spec.js`）。  
 - 更新记录：2025-12-20 补齐用例覆盖对比缺失勾选持久化与用例生成进度恢复（`scripts/core/appRuntime.js`、`scripts/core/compareCore.js`、`scripts/core/autoCore.js`、`scripts/modules/app.js`、`tests/ui/workflow_persistence_import_guard.spec.js`）。  
+- 更新记录：2025-12-20 用例生成入库前全模块视图勾选后自动续接入库抽屉（`scripts/core/casesGenCore.js`、`tests/ui/casegen_db_store.spec.js`）。  
 
 - 功能名称：操作记录数量变化展示  
 - 功能描述：操作记录查看记录抽屉新增“数量变化”列，覆盖入库/追加/子项增删改/转执行/归档/解散等行为展示用例数量前后变化，未提供数量的行为显示“-”。  

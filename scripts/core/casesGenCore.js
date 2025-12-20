@@ -69,6 +69,7 @@
     var caseGenViewDrawer = null;
     var activeCaseViewModuleId = '';
     var ALL_CASE_VIEW_ID = '__casegen_all__';
+    var pendingCaseGenDbStoreAction = '';
 
     var setStatus = ctx.setStatus || function() {};
     var downloadText = handlers.downloadText || function() {};
@@ -366,6 +367,16 @@
       syncCaseModuleTiming(moduleId);
     }
 
+    function setPendingCaseGenDbStoreAction(action) {
+      pendingCaseGenDbStoreAction = action ? String(action) : '';
+    }
+
+    function consumePendingCaseGenDbStoreAction() {
+      var next = pendingCaseGenDbStoreAction;
+      pendingCaseGenDbStoreAction = '';
+      return next;
+    }
+
     function ensureCaseGenDrawer() {
       if (caseGenViewDrawer) return caseGenViewDrawer;
       if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
@@ -378,6 +389,16 @@
           if (caseGenViewDrawerBody) caseGenViewDrawerBody.innerHTML = '';
           if (caseGenViewDrawerTitle) caseGenViewDrawerTitle.textContent = '用例视图';
           toggleCaseGenAllSelectButton(false);
+          var pending = consumePendingCaseGenDbStoreAction();
+          if (!pending) return;
+          if (!hasSelectedGeneratedCases()) return;
+          setTimeout(function() {
+            if (pending === 'append') {
+              openCaseGenDbStoreAppendDrawer();
+            } else if (pending === 'new') {
+              openCaseGenDbStoreNewDrawer();
+            }
+          }, 0);
         },
       });
       return caseGenViewDrawer;
@@ -1043,11 +1064,15 @@
       return { opened: true, blocked: false };
     }
 
-    function openCaseViewForSelectionHint() {
+    function openCaseViewForSelectionHint(action) {
       if (caseGenDbStoreDrawer && caseGenDbStoreDrawer.element && caseGenDbStoreDrawer.element.classList.contains('open')) {
         caseGenDbStoreDrawer.close();
       }
-      return openCaseGenAllView({ selectionHint: true, force: true });
+      var result = openCaseGenAllView({ selectionHint: true, force: true });
+      if (action && result && result.opened) {
+        setPendingCaseGenDbStoreAction(action);
+      }
+      return result;
     }
 
     function listCaseGenModulesMissingSelectionOrGeneration() {
@@ -1440,7 +1465,7 @@
           setStatus(caseGenStatus, '请先生成用例后再入库', 'warn');
           return;
         }
-        var viewState = openCaseViewForSelectionHint();
+        var viewState = openCaseViewForSelectionHint('new');
         if (viewState && viewState.blocked) return;
         var opened = viewState && viewState.opened;
         setStatus(caseGenStatus, opened ? '请先在全模块用例视图勾选需要入库的用例（已标记勾选区域）' : '请先在全模块用例视图勾选需要入库的用例', 'warn');
@@ -1455,7 +1480,7 @@
           setStatus(caseGenStatus, '请先生成用例后再追加入库', 'warn');
           return;
         }
-        var viewState = openCaseViewForSelectionHint();
+        var viewState = openCaseViewForSelectionHint('append');
         if (viewState && viewState.blocked) return;
         var opened = viewState && viewState.opened;
         setStatus(caseGenStatus, opened ? '请先在全模块用例视图勾选需要追加的用例（已标记勾选区域）' : '请先在全模块用例视图勾选需要追加的用例', 'warn');
