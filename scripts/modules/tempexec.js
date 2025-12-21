@@ -4158,6 +4158,9 @@
 
     function bindFocusZoneScroll(zone) {
       if (!zone) return;
+      ensureFocusScrollbar(zone);
+      syncFocusScrollbar(zone);
+      bindFocusScrollbarDrag(zone);
       var timer = 0;
       zone.addEventListener('scroll', function() {
         zone.classList.add('scrolling');
@@ -4165,6 +4168,10 @@
         timer = setTimeout(function() {
           zone.classList.remove('scrolling');
         }, 800);
+        syncFocusScrollbar(zone);
+      });
+      zone.addEventListener('mouseenter', function() {
+        syncFocusScrollbar(zone);
       });
       zone.addEventListener('wheel', function(e) {
         if (!e) return;
@@ -4177,6 +4184,121 @@
           e.preventDefault();
         }
       }, { passive: false });
+      var syncDebounced = debounce(function() {
+        syncFocusScrollbar(zone);
+      }, 120);
+      window.addEventListener('resize', syncDebounced);
+      if (typeof MutationObserver !== 'undefined' && !zone._focusScrollbarObserver) {
+        var observer = new MutationObserver(function() {
+          syncFocusScrollbar(zone);
+        });
+        observer.observe(zone, { childList: true, subtree: true });
+        zone._focusScrollbarObserver = observer;
+      }
+    }
+
+    function ensureFocusScrollbar(zone) {
+      if (!zone || !zone.querySelector) return null;
+      var bar = zone.querySelector('.temp-focus-scrollbar');
+      if (!bar) {
+        bar = document.createElement('div');
+        bar.className = 'temp-focus-scrollbar';
+        var thumb = document.createElement('div');
+        thumb.className = 'temp-focus-scrollbar-thumb';
+        bar.appendChild(thumb);
+        zone.appendChild(bar);
+      }
+      return bar;
+    }
+
+    function syncFocusScrollbar(zone) {
+      if (!zone) return;
+      var bar = ensureFocusScrollbar(zone);
+      if (!bar) return;
+      bindFocusScrollbarDrag(zone);
+      bar.style.transform = 'translateX(' + (zone.scrollLeft || 0) + 'px)';
+      var thumb = bar.querySelector('.temp-focus-scrollbar-thumb');
+      if (!thumb) return;
+      var total = zone.scrollWidth || 0;
+      var visible = zone.clientWidth || 0;
+      if (!visible || total <= visible + 1) {
+        bar.style.display = 'none';
+        return;
+      }
+      bar.style.display = '';
+      var track = bar.clientWidth || 0;
+      if (!track) {
+        var rect = bar.getBoundingClientRect();
+        track = rect ? rect.width : 0;
+      }
+      if (!track) return;
+      var thumbWidth = Math.floor(track * visible / total);
+      if (thumbWidth < 24) thumbWidth = 24;
+      if (thumbWidth > track) thumbWidth = track;
+      var maxScroll = total - visible;
+      var maxThumb = track - thumbWidth;
+      var left = maxScroll > 0 ? (zone.scrollLeft / maxScroll) * maxThumb : 0;
+      thumb.style.width = thumbWidth + 'px';
+      thumb.style.transform = 'translateX(' + left + 'px)';
+    }
+
+    function bindFocusScrollbarDrag(zone) {
+      if (!zone) return;
+      var bar = ensureFocusScrollbar(zone);
+      if (!bar || bar._bound) return;
+      bar._bound = true;
+      var thumb = bar.querySelector('.temp-focus-scrollbar-thumb');
+      if (!thumb) return;
+      var dragging = false;
+      var startX = 0;
+      var startScroll = 0;
+      function onMove(e) {
+        if (!dragging) return;
+        if (!e) return;
+        var rect = bar.getBoundingClientRect();
+        var track = rect ? rect.width : 0;
+        var total = zone.scrollWidth || 0;
+        var visible = zone.clientWidth || 0;
+        var maxScroll = total - visible;
+        if (!track || maxScroll <= 0) return;
+        var thumbWidth = thumb.offsetWidth || 0;
+        var maxThumb = track - thumbWidth;
+        if (maxThumb <= 0) return;
+        var delta = e.clientX - startX;
+        var scrollDelta = delta * (maxScroll / maxThumb);
+        var next = startScroll + scrollDelta;
+        if (next < 0) next = 0;
+        if (next > maxScroll) next = maxScroll;
+        zone.scrollLeft = next;
+      }
+      function onUp() {
+        if (!dragging) return;
+        dragging = false;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      thumb.addEventListener('mousedown', function(e) {
+        if (!e || e.button !== 0) return;
+        dragging = true;
+        startX = e.clientX;
+        startScroll = zone.scrollLeft;
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        e.preventDefault();
+      });
+      bar.addEventListener('click', function(e) {
+        if (!e || e.target === thumb) return;
+        var rect = bar.getBoundingClientRect();
+        var track = rect ? rect.width : 0;
+        if (!track) return;
+        var offset = e.clientX - rect.left;
+        var ratio = offset / track;
+        if (ratio < 0) ratio = 0;
+        if (ratio > 1) ratio = 1;
+        var maxScroll = (zone.scrollWidth || 0) - (zone.clientWidth || 0);
+        if (maxScroll <= 0) return;
+        zone.scrollLeft = Math.round(maxScroll * ratio);
+      });
     }
 
     function cleanupAllFocusIndicators() {

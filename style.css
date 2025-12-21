@@ -1463,7 +1463,7 @@ body {
     }
     .temp-focus-block.compact .temp-focus-zone {
       min-height: 32px;
-      padding: 6px;
+      padding: 6px 6px 12px;
       gap: 6px;
     }
     .temp-focus-block.compact .temp-focus-zone button {
@@ -1480,7 +1480,7 @@ body {
       min-height: 60px;
       border: 1px dashed var(--border);
       border-radius: 10px;
-      padding: 8px;
+      padding: 8px 8px 14px;
       display: flex;
       flex-wrap: nowrap;
       gap: 8px;
@@ -1488,25 +1488,51 @@ body {
       background: #fff;
       overflow-x: auto;
       overflow-y: hidden;
-      scrollbar-width: thin;
-      scrollbar-color: rgba(148, 163, 184, 0.75) transparent;
+      scrollbar-width: none;
+      scrollbar-color: rgba(148, 163, 184, 0.8) transparent;
       max-width: 100%;
       min-width: 0;
+      position: relative;
       transition: border-color 0.15s ease, background 0.15s ease;
     }
     .temp-focus-zone::-webkit-scrollbar {
-      height: 8px;
+      height: 0;
     }
     .temp-focus-zone::-webkit-scrollbar-track {
       background: transparent;
     }
     .temp-focus-zone::-webkit-scrollbar-thumb {
-      background: rgba(148, 163, 184, 0.65);
+      background: transparent;
       border-radius: 999px;
     }
-    .temp-focus-zone:hover::-webkit-scrollbar-thumb,
-    .temp-focus-zone.scrolling::-webkit-scrollbar-thumb {
+    .temp-focus-scrollbar {
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      bottom: 6px;
+      height: 6px;
+      background: rgba(148, 163, 184, 0.18);
+      border-radius: 999px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+    }
+    .temp-focus-scrollbar-thumb {
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      border-radius: 999px;
       background: rgba(100, 116, 139, 0.9);
+      cursor: grab;
+    }
+    .temp-focus-scrollbar-thumb:active {
+      cursor: grabbing;
+    }
+    .temp-focus-zone:hover .temp-focus-scrollbar,
+    .temp-focus-zone.scrolling .temp-focus-scrollbar {
+      opacity: 1;
+      pointer-events: auto;
     }
     .temp-focus-zone.dragover {
       border-color: #2563eb;
