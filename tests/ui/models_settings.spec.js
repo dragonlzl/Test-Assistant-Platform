@@ -71,10 +71,9 @@ test.describe('模型管理与全局设置', () => {
     await expect(page.locator('#feishuWebhookStatus')).toContainText('已保存');
 
     const moduleCheckbox = page.locator('input[data-temp-exec-col="module"]');
-    const stepsCheckbox = page.locator('input[data-temp-exec-col="steps"]');
+    await moduleCheckbox.uncheck();
+    await expect(page.locator('#tempExecColumnStatus')).toContainText('已保存');
     await moduleCheckbox.check();
-    await stepsCheckbox.check();
-    await page.click('#saveTempExecColumns');
     await expect(page.locator('#tempExecColumnStatus')).toContainText('已保存');
 
     await page.fill('#tempExecPageSizeInput', '25');

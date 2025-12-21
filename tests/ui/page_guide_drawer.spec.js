@@ -19,6 +19,7 @@ test.describe('页面说明抽屉', () => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
     await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForFunction(() => window.app && window.app.pageGuide && window.app.drawer && typeof window.app.drawer.createDrawer === 'function');
   });
 
   test('自动弹出与设置开关', async ({ page }) => {
@@ -79,5 +80,34 @@ test.describe('页面说明抽屉', () => {
     await page.waitForFunction(() => window.app && window.app._inited === true);
     await page.waitForTimeout(200);
     await expect(page.locator('#pageGuideDrawer')).not.toHaveClass(/open/);
+  });
+
+  test('页面说明按钮主动打开', async ({ page }) => {
+    const drawer = page.locator('#pageGuideDrawer');
+    const trigger = page.locator('#pageGuideTrigger');
+
+    if (await drawer.evaluate((el) => el.classList.contains('open'))) {
+      await page.click('#closePageGuideDrawerBtn');
+      await expect(drawer).not.toHaveClass(/open/);
+    }
+
+    await page.click('[data-group="settings"]');
+    await page.click('[data-tab-btn="settings"]');
+    await expect(trigger).toBeDisabled();
+
+    await page.click('[data-group="cases"]');
+    await page.click('[data-tab-btn="tempexec"]');
+    await expect(trigger).toBeEnabled();
+    if (await drawer.evaluate((el) => el.classList.contains('open'))) {
+      await page.click('#closePageGuideDrawerBtn');
+      await expect(drawer).not.toHaveClass(/open/);
+    }
+    await trigger.click();
+    await expect(drawer).toHaveClass(/open/);
+    await expect(page.locator('#pageGuideDrawer [data-guide-template="excel"]')).toBeVisible();
+    await expect(page.locator('#pageGuideDrawer [data-guide-template="xmind"]')).toBeVisible();
+    await expect(page.locator('#pageGuideDrawer [data-guide-xmind="open"]')).toBeVisible();
+    await page.click('#closePageGuideDrawerBtn');
+    await expect(drawer).not.toHaveClass(/open/);
   });
 });

@@ -523,6 +523,60 @@
       return '';
     }
 
+    var currentPathEl = dom.currentPath || document.getElementById('currentPath');
+    var currentPathTextEl = dom.currentPathText || document.getElementById('currentPathText');
+    var pathSubMap = { tempexec: '执行分配' };
+
+    function getTabLabel(tabName) {
+      if (!tabName) return '';
+      var btn = document.querySelector('[data-tab-btn="' + tabName + '"]');
+      return btn && btn.textContent ? String(btn.textContent).trim() : '';
+    }
+
+    function getGroupLabel(tabName) {
+      var groupName = getGroupNameForTab(tabName);
+      if (!groupName) return '';
+      var btn = document.querySelector('.tab-group-btn[data-group="' + groupName + '"]');
+      return btn && btn.textContent ? String(btn.textContent).trim() : '';
+    }
+
+    function renderCurrentPath(parts) {
+      if (!currentPathTextEl) return;
+      while (currentPathTextEl.firstChild) {
+        currentPathTextEl.removeChild(currentPathTextEl.firstChild);
+      }
+      if (!parts || !parts.length) return;
+      parts.forEach(function(part) {
+        var item = document.createElement('span');
+        item.className = 'path-item';
+        item.textContent = part;
+        currentPathTextEl.appendChild(item);
+      });
+    }
+
+    function updateCurrentPath(tabName, subLabel) {
+      if (!currentPathEl || !currentPathTextEl) return;
+      var tab = tabName || (state && state.activeTab ? state.activeTab : '');
+      if (!tab) {
+        renderCurrentPath([]);
+        return;
+      }
+      var groupLabel = getGroupLabel(tab);
+      var tabLabel = getTabLabel(tab) || tab;
+      var parts = [];
+      if (groupLabel) parts.push(groupLabel);
+      if (tabLabel) parts.push(tabLabel);
+      if (subLabel) parts.push(subLabel);
+      renderCurrentPath(parts);
+    }
+
+    function setCurrentPathSub(label, tabName) {
+      var tab = tabName || (state && state.activeTab ? state.activeTab : '');
+      if (!tab) return;
+      pathSubMap[tab] = label ? String(label) : '';
+      updateCurrentPath(tab, pathSubMap[tab]);
+    }
+
     function showTabGroup(name, opts) {
       opts = opts || {};
       var keepTabActive = Boolean(opts.keepTabActive);
@@ -765,6 +819,7 @@
         }
       }
       markActiveTabGroup(name);
+      updateCurrentPath(name, pathSubMap[name] || '');
       var grp = getGroupNameForTab(name);
       showTabGroup(grp, { keepTabActive: true, expand: false });
       // 给各业务模块一个统一的“页签激活”钩子：用于刷新后恢复页签时也能自动拉取数据。
@@ -854,6 +909,8 @@
       escapeHtml: escapeHtml,
       escapeHtmlPreserve: escapeHtmlPreserve,
       updateFlowStatus: updateFlowStatus,
+      updateCurrentPath: updateCurrentPath,
+      setCurrentPathSub: setCurrentPathSub,
       callModelWithConfig: callModelWithConfig,
       getAssignedModel: getAssignedModel,
       updateModelTiming: updateModelTiming,
@@ -870,7 +927,7 @@
     }, Object.keys({
       state: 1, config: 1, utils: 1, setStatus: 1, switchTab: 1, scrollToSection: 1, hasCaseSource: 1, getCombinedCaseList: 1,
       getCombinedCaseText: 1, deriveCaseListFromText: 1, parseCaseList: 1, renderCaseTable: 1, formatCompactTimestamp: 1, escapeHtml: 1,
-      escapeHtmlPreserve: 1, updateFlowStatus: 1, callModelWithConfig: 1, getAssignedModel: 1, updateModelTiming: 1, setCaseViewHint: 1,
+      escapeHtmlPreserve: 1, updateFlowStatus: 1, updateCurrentPath: 1, setCurrentPathSub: 1, callModelWithConfig: 1, getAssignedModel: 1, updateModelTiming: 1, setCaseViewHint: 1,
       downloadBlob: 1, parseXmindFile: 1, scrollElementIntoView: 1, updateAssignmentStatuses: 1, updateReasoningVisibility: 1, testModel: 1,
       renderCaseGeneration: 1, persistWorkflowState: 1, persistWorkflowStateNow: 1,
     }));

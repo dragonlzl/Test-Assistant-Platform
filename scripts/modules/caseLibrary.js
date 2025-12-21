@@ -8311,6 +8311,8 @@
     window.app.caseLibraryApi = window.app.caseLibraryApi || {};
     window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
     window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;
+    window.app.caseLibraryApi.downloadImportExcelTemplate = downloadImportExcelTemplate;
+    window.app.caseLibraryApi.downloadImportXmindTemplate = downloadImportXmindTemplate;
     window.app.caseLibraryBound = true;
   }
 

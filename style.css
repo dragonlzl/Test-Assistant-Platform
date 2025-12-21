@@ -104,6 +104,8 @@ body {
   flex-direction: column;
   gap: 12px;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding-top: var(--sticky-offset, 12px);
   position: relative;
   background: var(--bg);
@@ -195,11 +197,70 @@ body {
       color: var(--muted);
       font-size: 14px;
     }
+    .path-panel {
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #fff;
+      box-shadow: 0 10px 20px rgba(15,23,42,0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .path-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .path-title-label {
+      font-weight: 700;
+      color: #1e293b;
+      font-size: 14px;
+      letter-spacing: 0.02em;
+    }
+    .path-items {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-height: 24px;
+      align-items: center;
+    }
+    .path-items:empty::before {
+      content: '暂无路径';
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .path-item {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #eef2ff;
+      border: 1px solid #c7d2fe;
+      color: #1e293b;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .current-path {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .current-path-label {
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .current-path-text {
+      color: var(--text);
+      font-weight: 600;
+    }
     main {
       padding: 0 12px 16px;
       display: flex;
       flex-direction: column;
       gap: 16px;
+      max-width: 100%;
+      min-width: 0;
     }
     .card {
       background: var(--card);
@@ -1390,6 +1451,7 @@ body {
       display: flex;
       align-items: center;
       gap: 6px;
+      flex-wrap: wrap;
     }
     .temp-focus-desc {
       color: var(--muted);
@@ -1426,27 +1488,25 @@ body {
       background: #fff;
       overflow-x: auto;
       overflow-y: hidden;
-      scrollbar-width: none;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148, 163, 184, 0.75) transparent;
+      max-width: 100%;
+      min-width: 0;
       transition: border-color 0.15s ease, background 0.15s ease;
     }
-    .temp-focus-zone:hover,
-    .temp-focus-zone.scrolling {
-      scrollbar-width: thin;
-      scrollbar-color: rgba(148, 163, 184, 0.9) transparent;
-    }
     .temp-focus-zone::-webkit-scrollbar {
-      height: 6px;
+      height: 8px;
     }
     .temp-focus-zone::-webkit-scrollbar-track {
       background: transparent;
     }
     .temp-focus-zone::-webkit-scrollbar-thumb {
-      background: transparent;
+      background: rgba(148, 163, 184, 0.65);
       border-radius: 999px;
     }
     .temp-focus-zone:hover::-webkit-scrollbar-thumb,
     .temp-focus-zone.scrolling::-webkit-scrollbar-thumb {
-      background: rgba(148, 163, 184, 0.9);
+      background: rgba(100, 116, 139, 0.9);
     }
     .temp-focus-zone.dragover {
       border-color: #2563eb;

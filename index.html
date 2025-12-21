@@ -21,18 +21,23 @@
 </div>
 <div class="sidebar-header">
 <h1>用例助手</h1>
-<button class="help-pill" data-tab-btn="help" type="button">
+<button class="help-pill" id="pageGuideTrigger" type="button">
 <span class="icon">?</span>
-<span>使用帮助</span>
+<span>页面说明</span>
 </button>
 </div>
-<p class="sub">上传需求与测试用例，清洗、拆分、覆盖对比、生成、执行一站式完成，版本分组+总览直观掌握进度。</p>
+<div class="path-panel" id="currentPath">
+  <div class="path-title">
+    <span class="path-title-label">页面路径</span>
+  </div>
+  <div class="path-items" id="currentPathText"></div>
+</div>
 <nav class="tabs vertical">
 <div class="tab-group">
 <button class="tab-group-btn" data-group="ai">AI 功能</button>
 <div class="tab-submenu hidden" data-group-menu="ai">
-<button class="active" data-tab-btn="auto">AI一键需求&用例评审</button>
-<button data-tab-btn="clean">功能工作流</button>
+<button class="active" data-tab-btn="auto">一键执行</button>
+<button data-tab-btn="clean">功能流程</button>
 <button data-tab-btn="casesgen">用例生成</button>
 <button data-tab-btn="assign">功能指派</button>
 <button data-tab-btn="models">模型管理</button>
@@ -76,7 +81,7 @@
 </aside>
 <div class="content-shell">
   <div class="flow" id="flowNav">
-    <div class="flow-title">AI一键需求&用例评审步骤</div>
+    <div class="flow-title">一键执行步骤</div>
     <div class="flow-steps">
       <div class="step active" data-target="import"><span class="badge">1</span><span class="step-label">导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
       <div class="progress-line"></div>
@@ -407,17 +412,13 @@
 <main>
 <section class="card hidden" data-section-id="help" data-tab-section="help">
 <div class="help-header">
-<h2>使用说明</h2>
-<button class="structure-pill" id="xmindStructureToggle" type="button">
-<span class="icon">!</span>
-<span>XMind 用例结构</span>
-</button>
+<h2>页面说明</h2>
 </div>
 <div class="card-body">
 <div class="notice-card">
 <h3>使用前须知</h3>
 <ul>
-<li><strong>先点击右上角“XMind 用例结构”按钮，务必阅读用例格式要求，这是用例执行的基础！</strong></li>
+<li><strong>XMind 用例结构要求已并入“用例执行/用例库”的页面说明，请先阅读格式要求，这是用例执行的基础！</strong></li>
 <li>请先在<a data-jump="models" href="#">“模型管理”</a>中添加 <strong>DeepSeek-R1</strong>，并将 <code>Max Tokens</code> 设为 <strong>16,000</strong>。</li>
 <li>在<a data-jump="assign" href="#">“功能指派”</a>页将所有功能统一指派为上述模型，保持行为一致。</li>
 <li>如需自动通知，请前往<a data-jump="settings" href="#">“其他配置”</a>填写飞书 Webhook，建议使用群机器人同步执行结果。</li>
@@ -433,23 +434,23 @@
 <li>执行分配标题右侧的“用例执行情况总览”按钮一键进入总览，信息分区更清晰。</li>
 </ul>
 </div>
-<p class="hint">按照下列步骤依次完成需求清洗、缺口补全与用例生成，过程中可随时回到“功能工作流”查看各卡片详情。</p>
+<p class="hint">按照下列步骤依次完成需求清洗、缺口补全与用例生成，过程中可随时回到“功能流程”查看各卡片详情。</p>
 <ul class="help-steps">
 <li>在“导入”卡片上传原始需求与 XMind/文本测试用例，系统会自动在相关卡片同步内容。</li>
 <li>执行“需求评审”识别模糊点，可选地填写澄清结果后进入“需求清洗”。</li>
 <li>完成清洗后查看“清洗结果视图”与原文高亮，确认结构化字段及定位按钮是否准确。</li>
 <li>运行“对比完整性”→“测试模块拆分”→“XMind 覆盖对比”，根据覆盖率决定补全或重洗。</li>
 <li>当覆盖率达标后，进入“用例生成/用例补全”卡片，为拆分模块批量生成高质量测试用例。</li>
-<li>若需要省时，可在“AI一键需求&用例评审”页直接串联上述流程，并使用补全/重新清洗按钮修复缺口。</li>
+<li>若需要省时，可在“一键执行”页直接串联上述流程，并使用补全/重新清洗按钮修复缺口。</li>
 </ul>
 <div class="help-grid">
 <article class="help-card">
 <h3>导入区</h3>
-<p>左列导入原始需求（支持 doc/docx/txt/md），右列导入多个 XMind 或文本用例。导入后的内容会同步到功能工作流中的对应区域。</p>
+<p>左列导入原始需求（支持 doc/docx/txt/md），右列导入多个 XMind 或文本用例。导入后的内容会同步到功能流程中的对应区域。</p>
 </article>
 <article class="help-card">
 <h3>需求评审</h3>
-<p>点击“分析需求模糊点”即可输出模型评审 JSON，必要时手工补写澄清结果，在 AI 一键模式下会强制确认后继续。</p>
+<p>点击“分析需求模糊点”即可输出模型评审 JSON，必要时手工补写澄清结果，在一键执行模式下会强制确认后继续。</p>
 </article>
 <article class="help-card">
 <h3>需求清洗</h3>
@@ -472,7 +473,7 @@
 <p>用例导入用于入库；执行分配用于项目/版本分组与专注区整理；执行视图用于录入结果并实时保存。可在“用例执行情况总览”中查看彩色进度条。</p>
 </article>
 <article class="help-card">
-<h3>AI一键需求&用例评审</h3>
+<h3>一键执行</h3>
 <p>在“自动执行工作流”卡片配置启动选项，一次性跑通评审→清洗→对比→拆分→覆盖的链路。失败时卡片会提示需要补齐的步骤。</p>
 </article>
 <article class="help-card">
@@ -481,69 +482,11 @@
 </article>
 <article class="help-card">
 <h3>其他配置 / 通知</h3>
-<p>在“其他配置”里填写飞书 Webhook 或其它偏好。AI 一键流程完成或失败都会自动推送通知，方便团队成员第一时间了解结果。</p>
+<p>在“其他配置”里填写飞书 Webhook 或其它偏好。一键执行流程完成或失败都会自动推送通知，方便团队成员第一时间了解结果。</p>
 </article>
 </div>
 </div>
 </section>
-<div class="drawer" id="xmindStructureDrawer" data-tab-section="help">
-<div class="drawer-mask" data-drawer-close="xmindStructureDrawer"></div>
-<div class="drawer-panel">
-<div class="drawer-header">
-<h3>XMind 用例结构</h3>
-<button class="link-toggle" id="closeXmindStructureDrawerBtn" data-drawer-close="xmindStructureDrawer">收起</button>
-</div>
-<div class="drawer-body">
-<section class="card structure-card" data-tab-section="help" id="xmindStructureCard">
-<h3 style="margin:0 0 10px;">XMind 用例层级要求</h3>
-<p class="hint" style="margin:0 0 12px;">请严格按照“需求（根节点） → 模块 → 用例标题 → 优先级 → 前置条件 → 操作步骤 → 预期结果”七层结构填写。少任一层都会影响字段解析。</p>
-<div class="structure-diagram">
-<div class="structure-node node-root">需求（根）</div>
-<div class="structure-node node-module">模块</div>
-<div class="structure-node node-title">用例标题</div>
-<div class="structure-node node-priority">优先级 (P0/P1/P2)</div>
-<div class="structure-node node-pre">前置条件</div>
-<div class="structure-node node-steps">操作步骤</div>
-<div class="structure-node node-expected">预期结果</div>
-</div>
-<div class="structure-example">
-<strong>编写示例</strong>
-<div class="structure-image">
-<img alt="XMind 用例结构示例：武器皮肤根节点与两条解锁用例" src="帮助例子.png"/>
-</div>
-<strong style="display:block;margin-top:10px;">导出结构</strong>
-<code>[
-  {
-    "module": "解锁方式",
-    "title": "人民币解锁",
-    "priority": "P1",
-    "preconditions": "未解锁皮肤",
-    "steps": "进入商城或角色选择界面，选中皮肤，观察解锁方式",
-    "expected": "解锁方式为人民币解锁"
-  },
-  {
-    "module": "解锁方式",
-    "title": "蓝币解锁",
-    "priority": "P1",
-    "preconditions": "未解锁皮肤",
-    "steps": "进入商城或角色选择界面，选中皮肤，观察解锁方式",
-    "expected": "解锁方式为蓝币解锁"
-  },
-  {
-    "module": "通用",
-    "title": "皮肤名字展示",
-    "priority": "P1",
-    "preconditions": "已拥有皮肤",
-    "steps": "进入皮肤选择界面，观察皮肤在列表中的名称展示",
-    "expected": "皮肤名称展示正常"
-  }
-]</code>
-<p style="margin-top:8px;">同一根节点下可以继续添加其他模块与用例；若缺少根节点或其中某层，系统会降级为普通文本或字段缺失，建议严格遵循此结构，或直接上传拥有相同字段的 JSON/文本文件。</p>
-</div>
-</section>
-</div>
-</div>
-</div>
 <section class="card hidden" data-section-id="auto-import" data-tab-section="auto">
 <h2>导入数据</h2>
 <div class="card-body">
@@ -591,7 +534,7 @@
 <span>需要人工确认需求澄清后再继续自动流程</span>
 </label>
 <div class="actions">
-<button id="runAutoWorkflow">AI一键需求&用例评审</button>
+<button id="runAutoWorkflow">一键执行</button>
 </div>
 <p class="status" id="autoWorkflowStatus"></p>
 </div>
@@ -599,7 +542,7 @@
 <section class="card hidden" data-section-id="auto-clarify" data-tab-section="auto">
 <h2>需求澄清（人工确认）</h2>
 <div class="card-body">
-<p class="hint">当勾选“需要人工确认”后，AI 一键流程会在需求评审后暂停，请打开右侧抽屉补充并填写每条澄清结果，再点“确认澄清”继续。</p>
+<p class="hint">当勾选“需要人工确认”后，一键执行流程会在需求评审后暂停，请打开右侧抽屉补充并填写每条澄清结果，再点“确认澄清”继续。</p>
 <div class="actions">
 <button class="secondary" disabled="" id="autoClarifyToggleBtn">前往展开视图并确认澄清</button>
 </div>
@@ -619,7 +562,7 @@
 <section class="card hidden" data-section-id="auto-cases-missing" data-tab-section="auto">
 <h2>用例缺失测试点</h2>
 <div class="card-body">
-<p class="hint">同步显示“测试用例覆盖对比”后的缺失模块详情，与功能工作流中的“缺失模块视图”一致，点击右侧抽屉查看并处理。</p>
+<p class="hint">同步显示“测试用例覆盖对比”后的缺失模块详情，与功能流程中的“缺失模块视图”一致，点击右侧抽屉查看并处理。</p>
 <div class="actions" style="margin-bottom:8px;">
 <button class="secondary" disabled="" id="autoMissingToggle">前往勾选缺失模块生成缺失用例</button>
 </div>
@@ -1766,7 +1709,7 @@
 <section class="card hidden" data-tab-section="settings">
 <h2>飞书通知配置</h2>
 <div class="card-body">
-<p class="hint">仅“AI一键需求&用例评审”流程会触发通知：覆盖率不足 100% 会推送失败提醒，完整执行成功会推送成功提醒。</p>
+<p class="hint">仅“一键执行”流程会触发通知：覆盖率不足 100% 会推送失败提醒，完整执行成功会推送成功提醒。</p>
 <div class="row column">
 <label>飞书机器人</label>
 <div class="row" style="align-items:center; gap:8px; max-width:520px;">
@@ -1803,9 +1746,6 @@
 <label class="disabled">备注（必选）</label>
 <label class="disabled">缺陷链接（必选）</label>
 </form>
-<div class="actions" style="margin-top:8px;">
-<button class="secondary" id="saveTempExecColumns">保存列显示设置</button>
-</div>
 <p class="status" id="tempExecColumnStatus"></p>
 </div>
 </section>
@@ -1828,11 +1768,11 @@
 
 <div class="settings-divider"></div>
 <h3>页面说明自动弹出</h3>
-<p class="hint">进入主要功能页面时自动弹出使用说明，可按页面独立关闭。</p>
+<p class="hint">进入主要功能页面时自动弹出页面说明，可按页面独立关闭。</p>
 <form class="settings-grid" id="pageGuideSettingsGrid">
   <label><input type="checkbox" id="pageGuideSelectAll" data-page-guide-all="1"/> 全部</label>
-  <label><input type="checkbox" data-page-guide="auto"/> AI一键需求&用例评审</label>
-  <label><input type="checkbox" data-page-guide="clean"/> 功能工作流</label>
+  <label><input type="checkbox" data-page-guide="auto"/> 一键执行</label>
+  <label><input type="checkbox" data-page-guide="clean"/> 功能流程</label>
   <label><input type="checkbox" data-page-guide="casesgen"/> 用例生成</label>
   <label><input type="checkbox" data-page-guide="assign"/> 功能指派</label>
   <label><input type="checkbox" data-page-guide="models"/> 模型管理</label>
@@ -2886,6 +2826,16 @@
       <div class="drawer-body" id="pageGuideDrawerBody">
         <p class="hint" style="margin:0;">暂无页面说明</p>
       </div>
+    </div>
+  </div>
+  <div class="drawer hidden" id="xmindStructureDrawer">
+    <div class="drawer-mask" data-drawer-close="xmindStructureDrawer"></div>
+    <div class="drawer-panel drawer-panel-wide">
+      <div class="drawer-header">
+        <h3 id="xmindStructureDrawerTitle">XMind 用例结构</h3>
+        <button class="link-toggle" id="closeXmindStructureDrawerBtn" data-drawer-close="xmindStructureDrawer">收起</button>
+      </div>
+      <div class="drawer-body" id="xmindStructureDrawerBody"></div>
     </div>
   </div>
 </main>

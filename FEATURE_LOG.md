@@ -1705,3 +1705,24 @@
 - 复用说明：复用执行分配专注区渲染逻辑与通用确认抽屉，无新增后端接口。  
 - 测试与验证：`node --check scripts/modules/tempexec.js scripts/core/tempexecCore.js scripts/modules/app.js`（通过）；`npm run test:ui -- tests/ui/tempexec_focus_sync.spec.js tests/ui/tempexec_drag.spec.js`（通过，需允许本地服务监听权限）。  
 - 更新记录：2025-12-20 执行视图专注区同步与移出确认抽屉（`index.html`、`scripts/modules/app.js`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_focus_sync.spec.js`、`tests/ui/tempexec_drag.spec.js`）。2025-12-21 专注区紧凑布局、横向滚动与拖拽高亮（`index.html`、`style.css`、`scripts/modules/tempexec.js`）。2025-12-21 专注区拖拽插入指示器与切换滚动顶部（`style.css`、`scripts/modules/tempexec.js`、`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：页面说明与侧边栏路径优化、执行视图列显示即时保存  
+- 功能描述：AI 功能页签“AI一键需求&用例评审”改为“一键执行”，“功能工作流”改为“功能流程”；侧边栏说明区替换为当前页面路径；“页面说明”按钮可主动打开当前页抽屉说明（不受设置开关影响），无说明页时灰显不可点；用例执行/用例库页面说明新增模板下载入口与 XMind 用例结构说明；设置页执行视图列显示改为勾选即生效并入库，移除保存按钮。  
+- 操作方式：侧边栏点击“页面说明”即可打开当前页抽屉说明；用例执行/用例库抽屉说明可直接下载 Excel/XMind 导入模板并查看结构示例；在“其他配置→执行视图列显示”勾选列即可即时生效。  
+- 使用效果：路径提示更清晰，说明抽屉可主动打开；执行/用例库导入模板入口集中；列显示设置即时保存减少操作步骤。  
+- 新增内容/接口/组件：  
+  - 前端：侧边栏路径与文案调整、页面说明抽屉扩展、设置页即时保存（`index.html`、`style.css`、`scripts/core/appRuntime.js`、`scripts/modules/pageGuide.js`、`scripts/modules/tempexec.js`、`scripts/modules/settings.js`、`scripts/modules/caseLibrary.js`、`scripts/core/autoCore.js`、`scripts/core/casesGenCore.js`、`scripts/modules/opsLog.js`）。  
+  - 测试：UI 用例（`tests/ui/page_guide_drawer.spec.js`、`tests/ui/help_structure_drawer.spec.js`、`tests/ui/sidebar_path.spec.js`、`tests/ui/models_settings.spec.js`、`tests/ui/models_persist_db.spec.js`）；API 用例（`tests/api/settings_temp_exec_columns.spec.js`）。  
+- 复用说明：复用用例库导入模板下载逻辑与通用页面说明抽屉/设置持久化接口，不新增后端接口。  
+- 测试与验证：  
+  - `node --check scripts/core/appRuntime.js scripts/core/autoCore.js scripts/core/casesGenCore.js scripts/modules/pageGuide.js scripts/modules/settings.js scripts/modules/tempexec.js scripts/modules/caseLibrary.js scripts/modules/opsLog.js`（通过）  
+  - `npm run test:ui -- tests/ui/help_structure_drawer.spec.js`（通过）  
+  - `npm run test:ui -- tests/ui/page_guide_drawer.spec.js --workers=1`（通过）  
+  - `npm run test:ui -- tests/ui/sidebar_path.spec.js tests/ui/models_settings.spec.js --workers=1`（通过）  
+  - `npm run test:ui -- tests/ui/models_persist_db.spec.js -g 登录态忽略本地缓存 --workers=1`（通过）  
+  - `npm run test:ui -- tests/ui/models_persist_db.spec.js -g 已登录会话在重新获得焦点时刷新远端设置 --workers=1`（通过）  
+  - `API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/settings_temp_exec_columns.spec.js`（通过）  
+  - `node --check scripts/modules/tempexec.js`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_focus_sync.spec.js tests/ui/tempexec_drag.spec.js --workers=1`（通过）  
+- 更新记录：2025-12-21 页面说明/路径/列显示优化上线（`index.html`、`style.css`、`config/domConfig.js`、`scripts/`、`tests/`）。  
+- 更新记录：2025-12-21 页面路径样式优化、XMind 结构改为按钮打开抽屉、执行视图专注区补充左右滚动按钮（`index.html`、`style.css`、`scripts/core/appRuntime.js`、`scripts/modules/pageGuide.js`、`scripts/modules/tempexec.js`、`tests/ui/`）。2025-12-21 执行视图专注区改为横向滚动条+滚轮滚动并移除按钮（`style.css`、`scripts/modules/tempexec.js`）。2025-12-21 修复专注区用例过多导致页面横向撑宽（`style.css`）。2025-12-21 专注区点击同一用例也可回到执行视图顶部（`scripts/modules/tempexec.js`）。  

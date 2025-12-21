@@ -15,6 +15,10 @@
     var skipInitialConsumed = false;
     var titleEl = document.getElementById('pageGuideDrawerTitle');
     var bodyEl = document.getElementById('pageGuideDrawerBody');
+    var guideTriggerBtn = document.getElementById('pageGuideTrigger');
+    var xmindDrawerInstance = null;
+    var xmindTitleEl = document.getElementById('xmindStructureDrawerTitle');
+    var xmindBodyEl = document.getElementById('xmindStructureDrawerBody');
 
     var guideTipHtml = ''
       + '<div class="notice-card highlight page-guide-tip">'
@@ -28,6 +32,80 @@
       return '<div class="page-guide-section">'
         + '<h4>' + title + '</h4>'
         + innerHtml
+        + '</div>';
+    }
+
+    function buildTemplateDownloadBlock() {
+      return ''
+        + '<div class="notice-card highlight page-guide-template">'
+        + '<p style="margin:0 0 10px;">可在【用例库】的【用例导入】页面，下载用例模板，也可以在此处下载模板。</p>'
+        + '<div class="actions" style="gap:8px;">'
+        + '<button type="button" class="secondary" data-guide-template="excel">Excel导入模板</button>'
+        + '<button type="button" class="secondary" data-guide-template="xmind">XMind导入模板</button>'
+        + '</div>'
+        + '</div>';
+    }
+
+    function buildXmindEntryBlock() {
+      return ''
+        + '<div class="notice-card highlight page-guide-xmind">'
+        + '<p style="margin:0 0 10px;">点击下方按钮查看 XMind 用例结构要求，确保层级完整便于系统解析。</p>'
+        + '<button type="button" class="structure-pill" data-guide-xmind="open">'
+        + '<span class="icon">?</span>'
+        + '<span>查看 XMind 用例结构</span>'
+        + '</button>'
+        + '</div>';
+    }
+
+    function buildXmindStructureBlock() {
+      var exampleCode = '[\n'
+        + '  {\n'
+        + '    "module": "解锁方式",\n'
+        + '    "title": "人民币解锁",\n'
+        + '    "priority": "P1",\n'
+        + '    "preconditions": "未解锁皮肤",\n'
+        + '    "steps": "进入商城或角色选择界面，选中皮肤，观察解锁方式",\n'
+        + '    "expected": "解锁方式为人民币解锁"\n'
+        + '  },\n'
+        + '  {\n'
+        + '    "module": "解锁方式",\n'
+        + '    "title": "蓝币解锁",\n'
+        + '    "priority": "P1",\n'
+        + '    "preconditions": "未解锁皮肤",\n'
+        + '    "steps": "进入商城或角色选择界面，选中皮肤，观察解锁方式",\n'
+        + '    "expected": "解锁方式为蓝币解锁"\n'
+        + '  },\n'
+        + '  {\n'
+        + '    "module": "通用",\n'
+        + '    "title": "皮肤名字展示",\n'
+        + '    "priority": "P1",\n'
+        + '    "preconditions": "已拥有皮肤",\n'
+        + '    "steps": "进入皮肤选择界面，观察皮肤在列表中的名称展示",\n'
+        + '    "expected": "皮肤名称展示正常"\n'
+        + '  }\n'
+        + ']';
+      return ''
+        + '<div class="structure-card">'
+        + '<h3 style="margin:0 0 10px;">XMind 用例层级要求</h3>'
+        + '<p class="hint" style="margin:0 0 12px;">请严格按照“需求（根节点） → 模块 → 用例标题 → 优先级 → 前置条件 → 操作步骤 → 预期结果”七层结构填写。少任一层都会影响字段解析。</p>'
+        + '<div class="structure-diagram">'
+        + '<div class="structure-node node-root">需求（根）</div>'
+        + '<div class="structure-node node-module">模块</div>'
+        + '<div class="structure-node node-title">用例标题</div>'
+        + '<div class="structure-node node-priority">优先级 (P0/P1/P2)</div>'
+        + '<div class="structure-node node-pre">前置条件</div>'
+        + '<div class="structure-node node-steps">操作步骤</div>'
+        + '<div class="structure-node node-expected">预期结果</div>'
+        + '</div>'
+        + '<div class="structure-example">'
+        + '<strong>编写示例</strong>'
+        + '<div class="structure-image">'
+        + '<img alt="XMind 用例结构示例：武器皮肤根节点与两条解锁用例" src="帮助例子.png"/>'
+        + '</div>'
+        + '<strong style="display:block;margin-top:10px;">导出结构</strong>'
+        + '<code>' + exampleCode + '</code>'
+        + '<p style="margin-top:8px;">同一根节点下可以继续添加其他模块与用例；若缺少根节点或其中某层，系统会降级为普通文本或字段缺失，建议严格遵循此结构，或直接上传拥有相同字段的 JSON/文本文件。</p>'
+        + '</div>'
         + '</div>';
     }
 
@@ -116,12 +194,30 @@
       return drawerInstance;
     }
 
+    function ensureXmindDrawer() {
+      if (xmindDrawerInstance) return xmindDrawerInstance;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      xmindDrawerInstance = window.app.drawer.createDrawer({
+        drawerId: 'xmindStructureDrawer',
+        closeButtons: ['closeXmindStructureDrawerBtn'],
+      });
+      return xmindDrawerInstance;
+    }
+
+    function openXmindDrawer() {
+      var drawer = ensureXmindDrawer();
+      if (!drawer) return;
+      if (xmindTitleEl) xmindTitleEl.textContent = 'XMind 用例结构';
+      if (xmindBodyEl) xmindBodyEl.innerHTML = buildXmindStructureBlock();
+      drawer.open();
+    }
+
     function buildAutoGuide() {
       var intro = '<p>用于一键执行，对导入的需求和用例进行评审，分析需求不明确点，并指出用例缺漏。</p>';
       var flow = ''
         + '<ol class="page-guide-steps">'
         + '<li>Step1 导入需求、导入用例。</li>'
-        + '<li>Step2 点击“自动执行工作流”模块的 <span class="page-guide-button">【AI一键需求&用例评审】</span> 按钮。'
+        + '<li>Step2 点击“自动执行工作流”模块的 <span class="page-guide-button">【一键执行】</span> 按钮。'
         + '<ul>'
         + '<li>可选操作：勾选 <span class="page-guide-button">【需要人工确认需求澄清后再继续自动流程】</span>。</li>'
         + '<li>勾选后，在需求评审完成后会暂停，需人工确认澄清后才继续执行进入 Step3。</li>'
@@ -144,7 +240,7 @@
       var notes = ''
         + '<ul class="page-guide-notes">'
         + '<li><span class="page-guide-button">【需要人工确认需求澄清后再继续自动流程】</span>：可选操作，勾选后流程在评审后暂停，需在澄清抽屉确认完成才会继续。</li>'
-        + '<li><span class="page-guide-button">【AI一键需求&用例评审】</span>：按顺序执行评审、清洗、对比、拆分与覆盖对比流程。</li>'
+        + '<li><span class="page-guide-button">【一键执行】</span>：按顺序执行评审、清洗、对比、拆分与覆盖对比流程。</li>'
         + '<li><span class="page-guide-button">【覆盖缺失视图】</span>：展示清洗后需求缺失点，便于判断是否重新清洗。</li>'
         + '<li><span class="page-guide-button">【前往勾选缺失模块生成缺失用例】</span>：打开缺失模块视图并支持勾选生成用例。</li>'
         + '</ul>';
@@ -156,7 +252,7 @@
     }
 
     function buildWorkflowGuide() {
-      var intro = '<p>AI 一键需求&用例评审的拆分工作流，可独立使用；后一步功能依赖上一步结果。</p>';
+      var intro = '<p>一键执行的拆分流程，可独立使用；后一步功能依赖上一步结果。</p>';
       var flow = ''
         + '<ol class="page-guide-steps">'
         + '<li>导入需求文档（前置：无）<ul><li>拖拽或点击导入需求，右侧可手工补充原始需求。</li></ul></li>'
@@ -294,6 +390,8 @@
         + wrapSection('页面功能简介', intro)
         + wrapSection('操作流程', flow)
         + wrapSection('必要说明', notes)
+        + wrapSection('用例导入模板', buildTemplateDownloadBlock())
+        + wrapSection('XMind 用例结构', buildXmindEntryBlock())
         + guideTipHtml;
     }
 
@@ -316,6 +414,8 @@
         + wrapSection('页面功能简介', intro)
         + wrapSection('操作流程', flow)
         + wrapSection('必要说明', notes)
+        + wrapSection('用例导入模板', buildTemplateDownloadBlock())
+        + wrapSection('XMind 用例结构', buildXmindEntryBlock())
         + guideTipHtml;
     }
 
@@ -373,8 +473,8 @@
     };
 
     var guideTitles = {
-      auto: 'AI一键需求&用例评审说明',
-      clean: '功能工作流说明',
+      auto: '一键执行说明',
+      clean: '功能流程说明',
       casesgen: '用例生成说明',
       assign: '功能指派说明',
       models: '模型管理说明',
@@ -383,6 +483,45 @@
       'case-archive': '用例归档说明',
       'exec-overview': '执行总览说明',
     };
+
+    function hasGuide(tab) {
+      if (!tab) return false;
+      return Boolean(guideTemplates[tab]);
+    }
+
+    function triggerTemplateDownload(kind) {
+      var api = window.app && window.app.caseLibraryApi ? window.app.caseLibraryApi : null;
+      if (!api) return;
+      if (kind === 'excel' && typeof api.downloadImportExcelTemplate === 'function') {
+        api.downloadImportExcelTemplate();
+        return;
+      }
+      if (kind === 'xmind' && typeof api.downloadImportXmindTemplate === 'function') {
+        api.downloadImportXmindTemplate();
+      }
+    }
+
+    function bindGuideActions(tab) {
+      if (!bodyEl || !tab) return;
+      var excelBtn = bodyEl.querySelector('[data-guide-template="excel"]');
+      if (excelBtn) {
+        excelBtn.addEventListener('click', function() {
+          triggerTemplateDownload('excel');
+        });
+      }
+      var xmindBtn = bodyEl.querySelector('[data-guide-template="xmind"]');
+      if (xmindBtn) {
+        xmindBtn.addEventListener('click', function() {
+          triggerTemplateDownload('xmind');
+        });
+      }
+      var xmindGuideBtn = bodyEl.querySelector('[data-guide-xmind="open"]');
+      if (xmindGuideBtn) {
+        xmindGuideBtn.addEventListener('click', function() {
+          openXmindDrawer();
+        });
+      }
+    }
 
     function renderGuide(tab) {
       if (!bodyEl) return;
@@ -393,6 +532,7 @@
         bodyEl.innerHTML = '<div class="page-guide-content">' + content + '</div>';
       }
       if (titleEl) titleEl.textContent = guideTitles[tab] || '页面说明';
+      bindGuideActions(tab);
     }
 
     function openGuide(tab) {
@@ -401,6 +541,22 @@
       if (!drawer) return;
       renderGuide(tab);
       drawer.open();
+    }
+
+    function updateGuideTrigger(tab) {
+      if (!guideTriggerBtn) return;
+      var available = hasGuide(tab);
+      guideTriggerBtn.disabled = !available;
+      if (guideTriggerBtn.setAttribute) {
+        guideTriggerBtn.setAttribute('aria-disabled', available ? 'false' : 'true');
+        guideTriggerBtn.setAttribute('title', available ? '打开页面说明' : '当前页面暂无说明');
+      }
+    }
+
+    function handleGuideTriggerClick() {
+      var tab = getActiveTab();
+      if (!tab || !hasGuide(tab)) return;
+      openGuide(tab);
     }
 
     function shouldAutoOpen(tab) {
@@ -420,6 +576,7 @@
       if (!tab) return;
       if (shouldAutoOpen(tab)) openGuide(tab);
       lastTab = tab;
+      updateGuideTrigger(tab);
     }
 
     ensureSwitches();
@@ -434,7 +591,11 @@
       setTimeout(function() {
         if (shouldAutoOpen(initialTab)) openGuide(initialTab);
         lastTab = initialTab;
+        updateGuideTrigger(initialTab);
       }, 0);
+    }
+    if (guideTriggerBtn) {
+      guideTriggerBtn.addEventListener('click', handleGuideTriggerClick);
     }
 
     return {

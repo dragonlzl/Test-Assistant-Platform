@@ -15,7 +15,7 @@
       'casesGoUsecaseGenBtn', 'casesGenerationContainer', 'caseGenProgressPanel', 'caseGenProgressList', 'cleanStatus', 'compareStatus',
       'splitStatus', 'casesCoverageStatus', 'caseGenStatus', 'autoWorkflowStatus', 'casesModuleProgress', 'exportCaseGen', 'exportCaseGenXmind',
       'toSplitFromCaseGen', 'appendToExistingCases', 'appendTargetSelect', 'transferSelectedToExec', 'saveRawDebugBtn', 'importRawDebugBtn', 'saveCleanDebugBtn', 'importCleanDebugBtn', 'saveSplitDebugBtn',
-      'importSplitDebugBtn', 'saveCaseDebugBtn', 'importCaseDebugBtn', 'scrollTopBtn', 'scrollBottomBtn', 'xmindStructureToggle',
+      'importSplitDebugBtn', 'saveCaseDebugBtn', 'importCaseDebugBtn', 'scrollTopBtn', 'scrollBottomBtn', 'currentPath', 'currentPathText', 'xmindStructureToggle',
       'xmindStructureCard', 'caseFileInput', 'caseDropZone', 'caseStatus', 'caseViewBtn', 'caseViewContainer', 'caseViewHint',
       'caseGenViewDrawer', 'caseGenViewDrawerBody', 'caseGenViewDrawerTitle', 'caseGenAllSelectBtn', 'closeCaseGenViewDrawerBtn',
       'reviewViewDrawer', 'reviewViewDrawerBody', 'reviewViewDrawerTitle', 'closeReviewViewDrawerBtn',

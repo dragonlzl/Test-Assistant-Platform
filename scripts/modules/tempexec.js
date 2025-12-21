@@ -8,6 +8,7 @@
     var api = ctx.tempExecApi || {};
     var setStatus = core.setStatus || utils.setStatus || function() {};
     var switchTab = core.switchTab || function() {};
+    var setCurrentPathSub = core.setCurrentPathSub || function() {};
     var scrollElementIntoView = core.scrollElementIntoView || function() {};
     var downloadText = utils.downloadText || core.downloadText || function() {};
     var formatCompactTimestamp = core.formatCompactTimestamp || function() { return Date.now().toString(); };
@@ -322,17 +323,26 @@
       drawerId: 'tempExecImportDrawer',
       openButtons: ['openTempExecImportDrawerBtn'],
       closeButtons: ['closeTempExecImportDrawerBtn'],
+      onOpen: function() {
+        setCurrentPathSub('用例导入', 'tempexec');
+      },
       onClose: closeTemplateDropdown,
     });
     var tempExecAssignDrawer = window.app.drawer && window.app.drawer.createDrawer({
       drawerId: 'tempExecAssignDrawer',
       openButtons: ['openTempExecAssignDrawerBtn'],
       closeButtons: ['closeTempExecAssignDrawerBtn'],
+      onOpen: function() {
+        setCurrentPathSub('执行分配', 'tempexec');
+      },
     });
     var tempExecOverviewDrawer = window.app.drawer && window.app.drawer.createDrawer({
       drawerId: 'tempExecOverviewDrawer',
       openButtons: ['openTempExecOverviewNavBtn', 'tempExecOverviewBtn'],
       closeButtons: ['closeTempExecOverviewDrawerBtn'],
+      onOpen: function() {
+        setCurrentPathSub('归档操作&进度预览', 'tempexec');
+      },
     });
     var tempExecArchiveReasonContext = null;
     var tempExecArchiveReasonDrawer = window.app.drawer && window.app.drawer.createDrawer({
@@ -673,6 +683,7 @@
       if (!state || String(state.activeTab || '') !== 'tempexec') {
         switchTab('tempexec');
       }
+      setCurrentPathSub('执行视图', 'tempexec');
       updateTempExecToolbarOffset();
       if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
       if (tempExecImportDrawer) tempExecImportDrawer.close();
@@ -705,6 +716,7 @@
     }
     function showTempExecOverview() {
       switchTab('tempexec');
+      setCurrentPathSub('归档操作&进度预览', 'tempexec');
       updateTempExecToolbarOffset();
       if (tempExecImportDrawer) tempExecImportDrawer.close();
       if (tempExecAssignDrawer) tempExecAssignDrawer.close();
@@ -3985,9 +3997,11 @@
         var btn = e.target.closest('button[data-temp-file]');
         if (!btn) return;
         var fileId = btn.dataset.tempFile;
-        if (!fileId || fileId === state.tempExecActiveId) return;
+        if (!fileId) return;
         if (!api.getTempExecFile(fileId)) return;
-        api.setTempExecActive(fileId);
+        if (fileId !== state.tempExecActiveId) {
+          api.setTempExecActive(fileId);
+        }
         if (shouldSwitchTab) switchTab('tempexec');
         if (shouldScrollTop) scrollToTempExecViewTop({ waitForDrawerUnlock: true });
       });
@@ -4152,6 +4166,17 @@
           zone.classList.remove('scrolling');
         }, 800);
       });
+      zone.addEventListener('wheel', function(e) {
+        if (!e) return;
+        if (zone.scrollWidth <= zone.clientWidth) return;
+        var deltaX = Number(e.deltaX) || 0;
+        var deltaY = Number(e.deltaY) || 0;
+        if (!deltaX && !deltaY) return;
+        if (Math.abs(deltaY) >= Math.abs(deltaX)) {
+          zone.scrollLeft += deltaY;
+          e.preventDefault();
+        }
+      }, { passive: false });
     }
 
     function cleanupAllFocusIndicators() {

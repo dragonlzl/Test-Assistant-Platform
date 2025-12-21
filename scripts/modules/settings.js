@@ -967,10 +967,8 @@
         setStatus(feishuWebhookStatus, '', '');
       });
       if (tempExecColumnForm) tempExecColumnForm.addEventListener('change', function() {
-        dirtyDrafts.tempExecColumns = true;
-        setStatus(tempExecColumnStatus, '', '');
+        saveTempExecColumnsSetting();
       });
-      if (saveTempExecColumnsBtn) saveTempExecColumnsBtn.addEventListener('click', saveTempExecColumnsSetting);
       if (saveTempExecPageSizeBtn) saveTempExecPageSizeBtn.addEventListener('click', saveTempExecPageSize);
       if (tempExecPageSizeInput) tempExecPageSizeInput.addEventListener('input', function() {
         dirtyDrafts.tempExecPageSize = true;

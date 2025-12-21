@@ -2200,8 +2200,8 @@
       if (k === 'models') return '模型管理';
       if (k === 'assign') return '功能指派';
       if (k === 'casesgen') return '用例生成';
-      if (k === 'auto') return 'AI一键需求&用例评审';
-      if (k === 'clean') return '功能工作流';
+      if (k === 'auto') return '一键执行';
+      if (k === 'clean') return '功能流程';
       if (k === 'login') return '系统平台';
       return k;
     }

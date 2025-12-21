@@ -114,6 +114,12 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     };
   }
 
+  async function waitForAppReady(page) {
+    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 30000 });
+    await page.waitForFunction(() => window.app && window.app.state && window.app.apiClient, null, { timeout: 30000 });
+    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout: 30000 });
+  }
+
   async function setupPage(context, apiHandler, options) {
     const opts = options || {};
     const page = await context.newPage();
@@ -141,7 +147,7 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await page.goto(base + '/index.html');
     await page.waitForLoadState('domcontentloaded');
     // 等待核心全局对象就绪即可，避免依赖 bootstrap/initApp 时序造成测试波动。
-    await page.waitForFunction(() => window.app && window.app.state && window.app.apiClient, null, { timeout: 20000 });
+    await waitForAppReady(page);
     await page.evaluate(() => {
       document.querySelectorAll('.tab-group .tab-submenu').forEach(function(menu) {
         menu.classList.remove('hidden');
@@ -206,7 +212,6 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await pageA.click('#saveFeishuWebhook');
     const priorityCheckboxA = pageA.locator('input[data-temp-exec-col="priority"]');
     await priorityCheckboxA.uncheck();
-    await pageA.click('#saveTempExecColumns');
     await pageA.fill('#tempExecPageSizeInput', '33');
     await pageA.click('#saveTempExecPageSize');
     await expect.poll(() => {
@@ -286,7 +291,7 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     // A 刷新（草稿丢弃）后应看到 50。
     await pageA.reload();
     await pageA.waitForLoadState('domcontentloaded');
-    await pageA.waitForFunction(() => window.app && window.app.state && window.app.apiClient, null, { timeout: 20000 });
+    await waitForAppReady(pageA);
     await pageA.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
     await expect(pageA.locator('#tempExecPageSizeInput')).toHaveValue('50', { timeout: 20000 });
 
@@ -316,7 +321,6 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await pageB.fill('#tempExecPageSizeInput', '20');
     const priorityCheckboxB = pageB.locator('input[data-temp-exec-col="priority"]');
     await priorityCheckboxB.uncheck();
-    await pageB.click('#saveTempExecColumns');
 
     await expect.poll(() => {
       const pageSize = serverState.settings.find((item) => item.key === 'tempExecPageSize');
