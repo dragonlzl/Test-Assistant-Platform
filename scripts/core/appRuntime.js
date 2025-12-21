@@ -830,6 +830,24 @@
       } catch (err) {
         // ignore
       }
+      try {
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+          var pageSize = state && Number.isFinite(Number(state.tempExecPageSize)) ? Number(state.tempExecPageSize) : null;
+          if (pageSize !== null) {
+            try {
+              window.dispatchEvent(new CustomEvent('app-page-size-changed', { detail: { size: pageSize } }));
+            } catch (err2) {
+              if (typeof document !== 'undefined' && typeof document.createEvent === 'function') {
+                var evt = document.createEvent('CustomEvent');
+                evt.initCustomEvent('app-page-size-changed', false, false, { size: pageSize });
+                window.dispatchEvent(evt);
+              }
+            }
+          }
+        }
+      } catch (err3) {
+        // ignore
+      }
     }
     api.switchTab = switchTab;
     // 兜底：页面刷新/关闭前再写一次 activeTab，避免少数情况下首次切页后未落到 sessionStorage 的问题。

@@ -1190,11 +1190,23 @@
     restoreDetailFromPersistedState();
   }
 
+  function handlePageSizeChanged() {
+    if (Array.isArray(state.rows) && state.rows.length) {
+      renderList();
+    }
+    if (state.selected) {
+      renderCases(state.selected);
+    }
+  }
+
   function bindTabActivation() {
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     window.addEventListener('app-tab-activated', function(e) {
       var tabName = e && e.detail ? e.detail.tab : '';
       handleTabActivated(tabName);
+    });
+    window.addEventListener('app-page-size-changed', function() {
+      handlePageSizeChanged();
     });
   }
 

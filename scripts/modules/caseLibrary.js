@@ -6254,6 +6254,17 @@
     return Boolean(dom.editCard && dom.editCard.classList && !dom.editCard.classList.contains('hidden'));
   }
 
+  function handlePageSizeChanged() {
+    var hasHistory = state.historyDetail && (state.historyDetail.fileNameClean || (state.historyDetail.history && state.historyDetail.history.length));
+    if (hasHistory) {
+      renderCaseLibraryHistory();
+    }
+    var hasEditor = state.editor && state.editor.caseFile && state.editor.caseFile.id;
+    if (hasEditor) {
+      renderEditorTable();
+    }
+  }
+
   function bindUnloadPersistence() {
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     window.addEventListener('beforeunload', function() {
@@ -8183,6 +8194,9 @@
       var tabName = e && e.detail ? e.detail.tab : '';
       if (tabName !== 'case-library') return;
       restoreCaseLibraryAfterActivated();
+    });
+    window.addEventListener('app-page-size-changed', function() {
+      handlePageSizeChanged();
     });
     window.addEventListener('app-auth-ready', function() {
       var globalState = window.app && window.app.state ? window.app.state : {};

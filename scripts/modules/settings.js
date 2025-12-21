@@ -885,10 +885,27 @@
       }
       dirtyDrafts.tempExecPageSize = false;
       persistSettings(['tempExecPageSize']);
+      notifyPageSizeChange(size);
       if (result.changed) {
         setStatus(tempExecPageSizeStatus, '全局分页设置已更新', 'ok');
       } else {
         setStatus(tempExecPageSizeStatus, '全局分页设置未变化', '');
+      }
+    }
+
+    function notifyPageSizeChange(size) {
+      if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+      var detail = { size: size };
+      try {
+        window.dispatchEvent(new CustomEvent('app-page-size-changed', { detail: detail }));
+      } catch (err) {
+        try {
+          var evt = document.createEvent('CustomEvent');
+          evt.initCustomEvent('app-page-size-changed', false, false, detail);
+          window.dispatchEvent(evt);
+        } catch (err2) {
+          // ignore
+        }
       }
     }
 

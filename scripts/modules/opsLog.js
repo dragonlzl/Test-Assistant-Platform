@@ -2314,6 +2314,18 @@
     }).join('');
   }
 
+  function handlePageSizeChanged() {
+    if (state.overviewView === 'contribution') {
+      renderContributionView();
+      return;
+    }
+    if (state.overviewView === 'exec-contribution') {
+      renderExecContributionView();
+      return;
+    }
+    renderActivityView();
+  }
+
   function loadUsers() {
     if (!apiClient.listUsers) return Promise.resolve([]);
     return apiClient
@@ -3050,11 +3062,11 @@
     bindPaginationContainer(dom.paginationTop);
     bindPaginationContainer(dom.paginationBottom);
 
-    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-      window.addEventListener('app-tab-activated', function(e) {
-        var tabName = e && e.detail ? e.detail.tab : '';
-        if (tabName !== 'ops-log') return;
-        if (window.app && window.app.authReady !== true) {
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('app-tab-activated', function(e) {
+      var tabName = e && e.detail ? e.detail.tab : '';
+      if (tabName !== 'ops-log') return;
+      if (window.app && window.app.authReady !== true) {
           state.pendingAuth = true;
           setStatus(dom.statusEl, '登录信息加载中...', '');
           return;
@@ -3152,5 +3164,10 @@
     });
   } else {
     setTimeout(attemptInit, 0);
+  }
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('app-page-size-changed', function() {
+      handlePageSizeChanged();
+    });
   }
 })();

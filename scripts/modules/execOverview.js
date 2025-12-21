@@ -1108,11 +1108,20 @@
     });
   }
 
+  function handlePageSizeChanged() {
+    if (dom.execSetDrawer && dom.execSetDrawer.classList && dom.execSetDrawer.classList.contains('open')) {
+      renderExecSetDrawer();
+    }
+  }
+
   function bindTabActivation() {
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     window.addEventListener('app-tab-activated', function(e) {
       var tabName = e && e.detail ? e.detail.tab : '';
       handleTabActivated(tabName);
+    });
+    window.addEventListener('app-page-size-changed', function() {
+      handlePageSizeChanged();
     });
   }
 

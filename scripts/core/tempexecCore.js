@@ -1313,7 +1313,10 @@
       }
       saveTempExecPageSizeSetting(size);
       resetTempExecPages();
-      if (changed) renderTempExecView();
+      if (changed) {
+        renderTempExecView();
+        scheduleTempExecUiSave();
+      }
       return { size: size, changed: changed };
     }
 
@@ -4327,13 +4330,24 @@
       if (!client || typeof client.listExecSets !== 'function') return;
       if (tempExecStatus) setStatus(tempExecStatus, '加载执行数据中...', '');
       var uiState = null;
+      var hasSettingsPageSize = false;
+      var settingsPageSize = null;
       if (typeof client.listSettings === 'function') {
         try {
           var settings = await client.listSettings('user');
-          var match = Array.isArray(settings)
-            ? settings.find(function(item) { return item && item.key === 'tempexec_ui_v1'; })
-            : null;
-          uiState = match && match.value_json && typeof match.value_json === 'object' ? match.value_json : null;
+          if (Array.isArray(settings)) {
+            settings.forEach(function(item) {
+              if (!item || !item.key) return;
+              if (item.key === 'tempexec_ui_v1') {
+                uiState = item.value_json && typeof item.value_json === 'object' ? item.value_json : null;
+                return;
+              }
+              if (item.key === 'tempExecPageSize') {
+                settingsPageSize = item.value_json;
+                hasSettingsPageSize = true;
+              }
+            });
+          }
         } catch (err) {
           uiState = null;
         }
@@ -4572,8 +4586,21 @@
       }
       // DB 模式下 versionId 代表“项目版本ID”，不再复用旧的“临时版本分组”能力，避免覆盖 versionId。
       state.tempExecVersions = [];
-      if (uiState && uiState.pageSize) {
-        state.tempExecPageSize = clampTempExecPageSize(uiState.pageSize);
+      var resolvedPageSize = null;
+      if (hasSettingsPageSize) {
+        resolvedPageSize = clampTempExecPageSize(settingsPageSize);
+      } else if (uiState && uiState.pageSize !== null && uiState.pageSize !== undefined) {
+        resolvedPageSize = clampTempExecPageSize(uiState.pageSize);
+      }
+      if (resolvedPageSize !== null) {
+        state.tempExecPageSize = resolvedPageSize;
+        if (hasSettingsPageSize && uiState) {
+          var uiPageSize = clampTempExecPageSize(uiState.pageSize);
+          if (uiPageSize !== resolvedPageSize) {
+            uiState.pageSize = resolvedPageSize;
+            scheduleTempExecUiSave();
+          }
+        }
       }
       if (uiState && uiState.importProjectFilterId !== null && uiState.importProjectFilterId !== undefined) {
         state.tempExecImportProjectFilterId = normalizeTempExecImportProjectFilterId(uiState.importProjectFilterId);

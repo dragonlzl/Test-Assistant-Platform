@@ -1725,4 +1725,18 @@
   - `node --check scripts/modules/tempexec.js`（通过）  
   - `npm run test:ui -- tests/ui/tempexec_focus_sync.spec.js tests/ui/tempexec_drag.spec.js --workers=1`（通过）  
 - 更新记录：2025-12-21 页面说明/路径/列显示优化上线（`index.html`、`style.css`、`config/domConfig.js`、`scripts/`、`tests/`）。  
-- 更新记录：2025-12-21 页面路径样式优化、XMind 结构改为按钮打开抽屉、执行视图专注区补充左右滚动按钮（`index.html`、`style.css`、`scripts/core/appRuntime.js`、`scripts/modules/pageGuide.js`、`scripts/modules/tempexec.js`、`tests/ui/`）。2025-12-21 执行视图专注区改为横向滚动条+滚轮滚动并移除按钮（`style.css`、`scripts/modules/tempexec.js`）。2025-12-21 修复专注区用例过多导致页面横向撑宽（`style.css`）。2025-12-21 专注区点击同一用例也可回到执行视图顶部（`scripts/modules/tempexec.js`）。2025-12-21 专注区悬停展示自定义滚动条（`style.css`、`scripts/modules/tempexec.js`）。2025-12-21 修复专注区滚动条交互绑定在重绘后失效（`scripts/modules/tempexec.js`）。2025-12-21 修复专注区滚动条位置跟随滚动错位（`scripts/modules/tempexec.js`）。  
+- 更新记录：2025-12-21 页面路径样式优化、XMind 结构改为按钮打开抽屉、执行视图专注区补充左右滚动按钮（`index.html`、`style.css`、`scripts/core/appRuntime.js`、`scripts/modules/pageGuide.js`、`scripts/modules/tempexec.js`、`tests/ui/`）。2025-12-21 执行视图专注区改为横向滚动条+滚轮滚动并移除按钮（`style.css`、`scripts/modules/tempexec.js`）。2025-12-21 修复专注区用例过多导致页面横向撑宽（`style.css`）。2025-12-21 专注区点击同一用例也可回到执行视图顶部（`scripts/modules/tempexec.js`）。2025-12-21 专注区悬停展示自定义滚动条（`style.css`、`scripts/modules/tempexec.js`）。2025-12-21 修复专注区滚动条交互绑定在重绘后失效（`scripts/modules/tempexec.js`）。2025-12-21 修复专注区滚动条位置跟随滚动错位（`scripts/modules/tempexec.js`）。2025-12-21 全局分页设置变更后同步刷新分页视图（`scripts/modules/settings.js`、`scripts/modules/caseArchive.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/opsLog.js`、`scripts/modules/execOverview.js`）。2025-12-21 切换页签时补发分页设置变更通知确保即时生效（`scripts/core/appRuntime.js`）。  
+
+- 功能名称：全局分页设置 DB 同步修复  
+- 功能描述：执行页读取 DB 侧 UI 状态时，优先采用设置页保存的分页值，并在变更时回写 tempexec_ui_v1，避免被旧值覆盖。  
+- 操作方式：在“设置→其他设置”修改分页条数并保存，切换到执行/归档/总览等页面即时生效。  
+- 使用效果：分页条数在 5-200 范围内保存后立即生效，并随账号持久化。  
+- 新增内容/接口/组件：  
+  - 前端：分页设置优先级与 UI 状态同步（`scripts/core/tempexecCore.js`）。  
+  - 测试：UI 用例（`tests/ui/settings_page_size_db.spec.js`）；API 用例（`tests/api/settings_temp_exec_page_size.spec.js`）。  
+- 复用说明：复用 `/api/settings` 设置持久化接口，无新增后端接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+  - `npm run test:ui -- tests/ui/settings_page_size_db.spec.js`（通过）  
+  - `APP_DB_FILE=apitest.db python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 18082` 后执行 `API_BASE_URL=http://127.0.0.1:18082 npm run test:api -- tests/api/settings_temp_exec_page_size.spec.js`（未通过：当前环境 Python 3.7 无法安装 fastapi==0.104.1，需升级至 Python 3.8+ 后重试）  
+- 更新记录：2025-12-21 全局分页设置 DB 同步修复（`scripts/core/tempexecCore.js`、`tests/ui/settings_page_size_db.spec.js`、`tests/api/settings_temp_exec_page_size.spec.js`）。  
