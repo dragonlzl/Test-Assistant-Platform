@@ -1671,3 +1671,14 @@
 - 更新记录：2025-12-20 活跃度/用例贡献/执行贡献视图补齐 0 计数人员展示（`scripts/modules/opsLog.js`、`tests/ui/ops_activity.spec.js`、`tests/ui/ops_contribution.spec.js`、`tests/ui/ops_exec_contribution.spec.js`）。  
 - 更新记录：2025-12-20 操作记录查看记录/活跃度/用例贡献/用例执行贡献视图支持日期范围筛选（`index.html`、`style.css`、`scripts/modules/opsLog.js`、`tests/ui/ops_log.spec.js`、`tests/ui/ops_activity.spec.js`、`tests/ui/ops_contribution.spec.js`、`tests/ui/ops_exec_contribution.spec.js`）。  
 - 测试与验证：`node --check scripts/modules/opsLog.js`（通过）；`npm run test:ui -- tests/ui/ops_log.spec.js tests/ui/ops_exec_contribution.spec.js`（通过）；`npm run test:ui -- tests/ui/ops_activity.spec.js`（通过，需允许本地服务监听权限）；`npm run test:ui -- tests/ui/ops_contribution.spec.js`（通过，需允许本地服务监听权限）。  
+
+- 功能名称：版本下拉新增版本入口  
+- 功能描述：执行页/用例库/用例生成的版本选择新增“＋新增版本”选项，支持在确认抽屉输入版本号创建并自动选中，重复版本提示不可添加。  
+- 操作方式：在版本下拉中选择“＋新增版本”→抽屉输入版本号确认→提示“添加版本成功”并自动选中新增版本；重复版本会提示并阻止创建。  
+- 使用效果：版本创建无需跳转项目管理；新增版本即时回填并可用于导入/执行分配/入库。  
+- 新增内容/接口/组件：  
+  - 前端：版本新增入口与逻辑复用（`scripts/base/utils.js`、`scripts/base/execVersionDrawer.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`scripts/core/casesGenCore.js`）。  
+  - 测试：UI 用例（`tests/ui/version_add_selects.spec.js`）；API 用例（`tests/api/project_version_duplicate.spec.js`）。  
+- 复用说明：复用通用确认抽屉与项目版本 API（`/api/projects/{id}/versions`），无新增后端接口。  
+- 测试与验证：`node --check scripts/base/utils.js scripts/base/execVersionDrawer.js scripts/modules/tempexec.js scripts/modules/caseLibrary.js scripts/core/casesGenCore.js`（通过）；`npm run test:ui -- tests/ui/version_add_selects.spec.js`（通过，需允许本地服务监听权限）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18082` 后执行 `API_BASE_URL=http://127.0.0.1:18082 npm run test:api -- tests/api/project_version_duplicate.spec.js`（通过）。  
+- 更新记录：2025-12-20 版本下拉新增版本入口与自动选中（`scripts/base/utils.js`、`scripts/base/execVersionDrawer.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`scripts/core/casesGenCore.js`、`tests/ui/version_add_selects.spec.js`、`tests/api/project_version_duplicate.spec.js`）。  

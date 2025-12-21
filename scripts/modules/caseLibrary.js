@@ -2483,7 +2483,7 @@
 
     return loadVersions(projectId)
       .then(function() {
-        syncVersionOptions(dom.importVersionSelect, projectId, '请选择版本');
+        syncVersionOptions(dom.importVersionSelect, projectId, '请选择版本', true);
         dom.importVersionSelect.disabled = false;
         if (versionId) {
           // 仅当版本存在于下拉选项时才回填。
@@ -3131,7 +3131,7 @@
     selectEl.innerHTML = options.join('');
   }
 
-  function syncVersionOptions(selectEl, projectId, placeholder) {
+  function syncVersionOptions(selectEl, projectId, placeholder, includeAdd) {
     if (!selectEl) return;
     var list = projectId && state.versionsByProject[projectId] ? state.versionsByProject[projectId] : [];
     var options = ['<option value=\"\">' + escapeHtml(placeholder || '请选择版本') + '</option>'];
@@ -3141,6 +3141,13 @@
       state.versionNameByProject[projectId][v.id] = v.name || ('版本#' + v.id);
       options.push('<option value=\"' + escapeHtml(v.id) + '\">' + escapeHtml(state.versionNameByProject[projectId][v.id]) + '</option>');
     });
+    if (includeAdd) {
+      if (utils && typeof utils.buildAddVersionOption === 'function') {
+        options.push(utils.buildAddVersionOption('＋ 新增版本'));
+      } else {
+        options.push('<option value="__add_version__">＋ 新增版本</option>');
+      }
+    }
     selectEl.innerHTML = options.join('');
   }
 
@@ -3920,7 +3927,7 @@
     setStatus(dom.importStatus, '加载版本中...', '');
     loadVersions(projectId)
       .then(function() {
-        syncVersionOptions(dom.importVersionSelect, projectId, '请选择版本');
+        syncVersionOptions(dom.importVersionSelect, projectId, '请选择版本', true);
         dom.importVersionSelect.disabled = false;
         setStatus(dom.importStatus, '', '');
       })
@@ -3930,7 +3937,55 @@
   }
 
   function handleImportVersionChange() {
-    state.importDrawer.versionId = normalizeId(dom.importVersionSelect ? dom.importVersionSelect.value : '');
+    var raw = dom.importVersionSelect ? dom.importVersionSelect.value : '';
+    if (utils && typeof utils.isAddVersionOption === 'function' && utils.isAddVersionOption(raw)) {
+      var projectId = state.importDrawer.projectId;
+      if (!projectId) {
+        setStatus(dom.importStatus, '请先选择项目', 'warn');
+        if (dom.importVersionSelect) dom.importVersionSelect.value = state.importDrawer.versionId || '';
+        return;
+      }
+      if (!utils || typeof utils.openAddProjectVersionDrawer !== 'function') {
+        setStatus(dom.importStatus, '新增版本组件未就绪，请刷新后重试', 'err');
+        if (dom.importVersionSelect) dom.importVersionSelect.value = state.importDrawer.versionId || '';
+        return;
+      }
+      var prevValue = state.importDrawer.versionId || '';
+      if (dom.importVersionSelect) dom.importVersionSelect.value = prevValue ? String(prevValue) : '';
+      if (dom.importVersionSelect) dom.importVersionSelect.disabled = true;
+      if (dom.importConfirmBtn) dom.importConfirmBtn.disabled = true;
+      var projectName = state.projectNameById && state.projectNameById[projectId]
+        ? state.projectNameById[projectId]
+        : ('项目#' + projectId);
+      utils
+        .openAddProjectVersionDrawer({
+          projectId: projectId,
+          projectName: projectName,
+          previousDrawer: importDrawerInstance || null,
+        })
+        .then(function(res) {
+          if (!res || res.ok !== true || !res.version) return;
+          var list = state.versionsByProject[projectId];
+          if (!Array.isArray(list)) list = [];
+          var exists = list.some(function(v) { return v && String(v.id) === String(res.version.id); });
+          if (!exists) list.unshift(res.version);
+          state.versionsByProject[projectId] = list;
+          if (!state.versionNameByProject[projectId]) state.versionNameByProject[projectId] = {};
+          state.versionNameByProject[projectId][res.version.id] = res.version.name || ('版本#' + res.version.id);
+          syncVersionOptions(dom.importVersionSelect, projectId, '请选择版本', true);
+          if (dom.importVersionSelect) dom.importVersionSelect.value = String(res.version.id);
+          state.importDrawer.versionId = normalizeId(res.version.id);
+          if (state.importDrawer.projectId && state.importDrawer.versionId) {
+            persistImportDrawerState(state.importDrawer.projectId, state.importDrawer.versionId);
+          }
+        })
+        .finally(function() {
+          if (dom.importVersionSelect) dom.importVersionSelect.disabled = false;
+          syncImportConfirmEnabled();
+        });
+      return;
+    }
+    state.importDrawer.versionId = normalizeId(raw);
     if (state.importDrawer.projectId && state.importDrawer.versionId) {
       persistImportDrawerState(state.importDrawer.projectId, state.importDrawer.versionId);
     }

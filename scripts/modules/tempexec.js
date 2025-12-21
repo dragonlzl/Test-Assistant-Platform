@@ -2028,6 +2028,11 @@
         var name = v.name || ('版本#' + id);
         html.push('<option value=\"' + escapeHtml(id) + '\">' + escapeHtml(name) + '</option>');
       });
+      if (utils && typeof utils.buildAddVersionOption === 'function') {
+        html.push(utils.buildAddVersionOption('＋ 新增版本'));
+      } else {
+        html.push('<option value="__add_version__">＋ 新增版本</option>');
+      }
       tempExecImportVersionSelect.innerHTML = html.join('');
       tempExecImportVersionSelect.value = importState.versionId || '';
       tempExecImportVersionSelect.disabled = Boolean(importState.loading) || !projectId;
@@ -2124,7 +2129,59 @@
 
     function handleImportVersionChange() {
       if (!isDbImportEnabled()) return;
-      importState.versionId = tempExecImportVersionSelect ? String(tempExecImportVersionSelect.value || '') : '';
+      var raw = tempExecImportVersionSelect ? String(tempExecImportVersionSelect.value || '') : '';
+      if (utils && typeof utils.isAddVersionOption === 'function' && utils.isAddVersionOption(raw)) {
+        var pid = importState.projectId;
+        if (!pid) {
+          setStatus(tempExecStatus, '请先选择项目', 'warn');
+          if (tempExecImportVersionSelect) tempExecImportVersionSelect.value = importState.versionId || '';
+          return;
+        }
+        if (!utils || typeof utils.openAddProjectVersionDrawer !== 'function') {
+          setStatus(tempExecStatus, '新增版本组件未就绪，请刷新后重试', 'err');
+          if (tempExecImportVersionSelect) tempExecImportVersionSelect.value = importState.versionId || '';
+          return;
+        }
+        var prevValue = importState.versionId || '';
+        if (tempExecImportVersionSelect) tempExecImportVersionSelect.value = prevValue;
+        if (tempExecImportVersionSelect) tempExecImportVersionSelect.disabled = true;
+        if (tempExecImportConfirmBtn) tempExecImportConfirmBtn.disabled = true;
+        var projectLabel = '';
+        try {
+          var opt = tempExecImportProjectSelect && tempExecImportProjectSelect.options
+            ? tempExecImportProjectSelect.options[tempExecImportProjectSelect.selectedIndex]
+            : null;
+          projectLabel = opt ? String(opt.textContent || '').trim() : '';
+        } catch (_) {
+          projectLabel = '';
+        }
+        utils
+          .openAddProjectVersionDrawer({
+            projectId: pid,
+            projectName: projectLabel || ('项目#' + pid),
+            previousDrawer: tempExecImportDrawer || null,
+          })
+          .then(function(res) {
+            if (!res || res.ok !== true || !res.version) return;
+            var list = importState.versionsByProject[pid];
+            if (!Array.isArray(list)) list = [];
+            var exists = list.some(function(v) { return v && String(v.id) === String(res.version.id); });
+            if (!exists) list.unshift(res.version);
+            importState.versionsByProject[pid] = list;
+            importState.versionId = String(res.version.id);
+            renderVersionOptions(pid, list);
+            if (tempExecImportVersionSelect) tempExecImportVersionSelect.value = importState.versionId;
+            persistImportSelection(importState.projectId, importState.versionId);
+          })
+          .finally(function() {
+            if (tempExecImportVersionSelect) {
+              tempExecImportVersionSelect.disabled = Boolean(importState.loading) || !importState.projectId;
+            }
+            syncImportConfirmState();
+          });
+        return;
+      }
+      importState.versionId = raw;
       persistImportSelection(importState.projectId, importState.versionId);
       syncImportConfirmState();
     }

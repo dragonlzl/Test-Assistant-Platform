@@ -1162,6 +1162,7 @@
       var pid = st.projectId || '';
       var list = pid && st.versionsByProject && st.versionsByProject[pid] ? st.versionsByProject[pid] : [];
       list = Array.isArray(list) ? list : [];
+      var appUtils = window.app && window.app.utils ? window.app.utils : null;
       caseGenDbStoreVersionSelect.innerHTML = ['<option value=\"\">请选择版本</option>']
         .concat(
           list.map(function(v) {
@@ -1171,6 +1172,11 @@
           })
         )
         .join('');
+      if (appUtils && typeof appUtils.buildAddVersionOption === 'function') {
+        caseGenDbStoreVersionSelect.innerHTML += appUtils.buildAddVersionOption('＋ 新增版本');
+      } else {
+        caseGenDbStoreVersionSelect.innerHTML += '<option value="__add_version__">＋ 新增版本</option>';
+      }
       caseGenDbStoreVersionSelect.value = st.versionId || '';
       caseGenDbStoreVersionSelect.disabled = Boolean(st.loading || !pid);
     }
@@ -1422,7 +1428,63 @@
       if (caseGenDbStoreVersionSelect) {
         caseGenDbStoreVersionSelect.addEventListener('change', function() {
           var st = ensureDbStoreState();
-          st.versionId = caseGenDbStoreVersionSelect.value || '';
+          var raw = caseGenDbStoreVersionSelect.value || '';
+          var appUtils = window.app && window.app.utils ? window.app.utils : null;
+          if (appUtils && typeof appUtils.isAddVersionOption === 'function' && appUtils.isAddVersionOption(raw)) {
+            var pid = st.projectId;
+            if (!pid) {
+              if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '请先选择项目', 'warn');
+              caseGenDbStoreVersionSelect.value = st.versionId || '';
+              return;
+            }
+            if (!appUtils || typeof appUtils.openAddProjectVersionDrawer !== 'function') {
+              if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '新增版本组件未就绪，请刷新后重试', 'err');
+              caseGenDbStoreVersionSelect.value = st.versionId || '';
+              return;
+            }
+            var prevValue = st.versionId || '';
+            caseGenDbStoreVersionSelect.value = prevValue;
+            st.loading = true;
+            syncCaseGenDbStoreControls();
+            var projectLabel = '';
+            try {
+              var list = Array.isArray(st.projects) ? st.projects : [];
+              var found = list.find(function(p) { return p && String(p.id) === String(pid); }) || null;
+              projectLabel = found && found.name ? String(found.name) : '';
+            } catch (_) {
+              projectLabel = '';
+            }
+            appUtils
+              .openAddProjectVersionDrawer({
+                projectId: pid,
+                projectName: projectLabel || ('项目#' + pid),
+                previousDrawer: ensureCaseGenDbStoreDrawer(),
+              })
+              .then(function(res) {
+                if (!res || res.ok !== true || !res.version) return;
+                st.versionsByProject = st.versionsByProject && typeof st.versionsByProject === 'object' ? st.versionsByProject : {};
+                var list = st.versionsByProject[pid];
+                if (!Array.isArray(list)) list = [];
+                var exists = list.some(function(v) { return v && String(v.id) === String(res.version.id); });
+                if (!exists) list.push(res.version);
+                list.sort(function(a, b) {
+                  var na = a && a.name ? String(a.name) : '';
+                  var nb = b && b.name ? String(b.name) : '';
+                  return na.localeCompare(nb, 'zh-Hans-CN');
+                });
+                st.versionsByProject[pid] = list;
+                st.versionId = String(res.version.id);
+                st.caseFileId = '';
+                renderCaseGenDbStoreVersions();
+                renderCaseGenDbStoreCaseFiles();
+              })
+              .finally(function() {
+                st.loading = false;
+                syncCaseGenDbStoreControls();
+              });
+            return;
+          }
+          st.versionId = raw;
           st.caseFileId = '';
           renderCaseGenDbStoreCaseFiles();
           syncCaseGenDbStoreControls();

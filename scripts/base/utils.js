@@ -296,6 +296,122 @@
     }, duration);
   }
 
+  var addVersionOptionValue = '__add_version__';
+  function isAddVersionOption(value) {
+    return String(value || '') === addVersionOptionValue;
+  }
+  function buildAddVersionOption(label) {
+    var text = label ? String(label) : '＋ 新增版本';
+    return '<option value="' + addVersionOptionValue + '">' + escapeHtml(text) + '</option>';
+  }
+  function openAddProjectVersionDrawer(options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var projectId = opts.projectId || opts.project_id || '';
+    if (projectId === null || projectId === undefined || projectId === '') {
+      return Promise.resolve({ ok: false, reason: 'no_project' });
+    }
+    var projectName = opts.projectName || opts.project_name || ('项目#' + projectId);
+    var apiClient = window.app && window.app.apiClient ? window.app.apiClient : null;
+    if (!apiClient || typeof apiClient.listProjectVersions !== 'function' || typeof apiClient.createVersion !== 'function') {
+      return Promise.resolve({ ok: false, reason: 'api_unavailable' });
+    }
+
+    function normalizeName(value) {
+      return String(value || '').trim();
+    }
+
+    function buildMessage(name) {
+      var label = name ? ('【' + name + '】') : '版本';
+      return '确认在' + projectName + '下添加' + label + '吗？';
+    }
+
+    function createVersionByName(name) {
+      return apiClient
+        .createVersion(projectId, { name: name })
+        .then(function(version) {
+          showCenterToast('添加版本成功', 'ok', 3000);
+          return { ok: true, version: version, name: name };
+        })
+        .catch(function(err) {
+          var msg = err && err.message ? err.message : '新增版本失败';
+          showCenterToast(msg, 'err', 3000);
+          return { ok: false, reason: 'error', error: err, message: msg };
+        });
+    }
+
+    return apiClient.listProjectVersions(projectId).then(function(list) {
+      var versions = Array.isArray(list) ? list : [];
+      var nameMap = {};
+      versions.forEach(function(v) {
+        var name = normalizeName(v && v.name ? v.name : '');
+        if (!name) return;
+        nameMap[name] = true;
+      });
+
+      var confirmDrawer = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
+      if (!confirmDrawer || typeof confirmDrawer.open !== 'function') {
+        var raw = typeof window !== 'undefined' && typeof window.prompt === 'function'
+          ? window.prompt('请输入版本号')
+          : '';
+        var trimmed = normalizeName(raw);
+        if (!trimmed) return { ok: false, reason: 'empty' };
+        if (nameMap[trimmed]) {
+          showCenterToast('版本已存在，无法添加', 'warn', 3000);
+          return { ok: false, reason: 'duplicate' };
+        }
+        return createVersionByName(trimmed);
+      }
+
+      var inputHandler = null;
+      var inputEl = null;
+      var messageEl = null;
+      var openPromise = confirmDrawer.open({
+        title: '新增版本',
+        message: buildMessage(''),
+        confirmText: '确认新增',
+        cancelText: '取消',
+        previousDrawer: opts.previousDrawer || opts.prevDrawer || null,
+        input: {
+          label: '版本号',
+          placeholder: '请输入版本号',
+          required: true,
+          requiredMessage: '请输入版本号',
+          maxLength: 50,
+          validate: function(value) {
+            var name = normalizeName(value);
+            if (!name) return '';
+            if (nameMap[name]) return '版本已存在，请换一个';
+            return '';
+          },
+        },
+      });
+
+      setTimeout(function() {
+        inputEl = document.getElementById('appConfirmDrawerInput');
+        messageEl = document.getElementById('appConfirmDrawerMessage');
+        if (!inputEl || !messageEl) return;
+        inputHandler = function() {
+          var name = normalizeName(inputEl.value || '');
+          messageEl.textContent = buildMessage(name);
+        };
+        inputEl.addEventListener('input', inputHandler);
+        inputHandler();
+      }, 0);
+
+      return openPromise.then(function(res) {
+        if (inputEl && inputHandler) inputEl.removeEventListener('input', inputHandler);
+        if (!res || res.ok !== true) return { ok: false, reason: 'cancel' };
+        var trimmed = normalizeName(res.value);
+        if (!trimmed) return { ok: false, reason: 'empty' };
+        if (nameMap[trimmed]) {
+          showCenterToast('版本已存在，无法添加', 'warn', 3000);
+          return { ok: false, reason: 'duplicate' };
+        }
+        return createVersionByName(trimmed);
+      });
+    });
+  }
+
   function openConfirmDrawer(options) {
     var drawerApi = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
     if (drawerApi && typeof drawerApi.open === 'function') {
@@ -417,6 +533,9 @@
     formatCompactTimestamp: formatCompactTimestamp,
     scrollElementIntoView: scrollElementIntoView,
     showCenterToast: showCenterToast,
+    isAddVersionOption: isAddVersionOption,
+    buildAddVersionOption: buildAddVersionOption,
+    openAddProjectVersionDrawer: openAddProjectVersionDrawer,
     openConfirmDrawer: openConfirmDrawer,
     getUserProjectSortSettings: getUserProjectSortSettings,
     sortProjectsByOrder: sortProjectsByOrder,

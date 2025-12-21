@@ -21,6 +21,22 @@
       return window.app && window.app.utils ? window.app.utils : null;
     }
 
+    function isAddVersionOption(value) {
+      var utils = getUtils();
+      if (utils && typeof utils.isAddVersionOption === 'function') {
+        return utils.isAddVersionOption(value);
+      }
+      return String(value || '') === '__add_version__';
+    }
+
+    function buildAddVersionOption() {
+      var utils = getUtils();
+      if (utils && typeof utils.buildAddVersionOption === 'function') {
+        return utils.buildAddVersionOption('＋ 新增版本');
+      }
+      return '<option value="__add_version__">＋ 新增版本</option>';
+    }
+
     function setStatus(text, type) {
       var utils = getUtils();
       if (utils && typeof utils.setStatus === 'function') {
@@ -95,6 +111,7 @@
         var name = v.name ? String(v.name) : ('版本#' + id);
         opts.push('<option value=\"' + id.replace(/\"/g, '&quot;') + '\">' + name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</option>');
       });
+      opts.push(buildAddVersionOption());
       dom.versionSelect.innerHTML = opts.join('');
       dom.versionSelect.value = selectedId || '';
     }
@@ -189,6 +206,7 @@
             var selectedId = normalizedPreferred;
             if (!selectedId) selectedId = guessLatestVersionId(versions);
             renderVersionOptions(versions, selectedId, allowUnassigned);
+            if (ctxState) ctxState.lastSelectedId = dom.versionSelect ? dom.versionSelect.value : (selectedId || '');
             if (dom.versionSelect) dom.versionSelect.disabled = false;
             if (dom.confirmBtn) dom.confirmBtn.disabled = false;
             setStatus('', '');
@@ -223,6 +241,46 @@
         var drawerInstance = ensureDrawer();
         if (drawerInstance) drawerInstance.close();
       });
+      if (dom.versionSelect) {
+        dom.versionSelect.addEventListener('change', function() {
+          if (!ctxState || !ctxState.projectId) return;
+          var value = dom.versionSelect ? dom.versionSelect.value : '';
+          if (isAddVersionOption(value)) {
+            var utils = getUtils();
+            if (!utils || typeof utils.openAddProjectVersionDrawer !== 'function') {
+              dom.versionSelect.value = ctxState.lastSelectedId || '';
+              return;
+            }
+            var prevValue = ctxState.lastSelectedId || '';
+            dom.versionSelect.value = prevValue;
+            if (dom.versionSelect) dom.versionSelect.disabled = true;
+            if (dom.confirmBtn) dom.confirmBtn.disabled = true;
+            setStatus('', '');
+            var projectName = dom.project ? dom.project.textContent : ('项目#' + ctxState.projectId);
+            utils
+              .openAddProjectVersionDrawer({
+                projectId: ctxState.projectId,
+                projectName: projectName,
+                previousDrawer: ensureDrawer(),
+              })
+              .then(function(res) {
+                if (!res || res.ok !== true || !res.version) return;
+                return loadVersions(ctxState.projectId).then(function(list) {
+                  var versions = sortVersionsByLatest(list);
+                  var newId = res.version && (res.version.id || res.version.id === 0) ? String(res.version.id) : '';
+                  renderVersionOptions(versions, newId, ctxState.allowUnassigned);
+                  ctxState.lastSelectedId = newId;
+                });
+              })
+              .finally(function() {
+                if (dom.versionSelect) dom.versionSelect.disabled = false;
+                if (dom.confirmBtn) dom.confirmBtn.disabled = false;
+              });
+            return;
+          }
+          ctxState.lastSelectedId = value || '';
+        });
+      }
     }
 
     bindEvents();
