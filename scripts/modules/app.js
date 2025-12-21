@@ -339,6 +339,10 @@
     const domConfig = window.app.domConfig || {};
     const dom = buildDom(domConfig.ids, domConfig.alias);
     dom.tempFocusZone = dom.tempFocusBlock ? dom.tempFocusBlock.querySelector('[data-temp-focus-zone]') : null;
+    dom.tempExecViewFocusBlock = document.getElementById('tempExecViewFocusBlock');
+    dom.tempExecViewFocusZone = dom.tempExecViewFocusBlock
+      ? dom.tempExecViewFocusBlock.querySelector('[data-temp-focus-zone]')
+      : null;
     dom.tempExecOverviewSection = document.querySelector('[data-section-id="tempexec-overview"]');
     dom.tempExecViewSection = document.querySelector('[data-section-id="tempexec-view"]');
     dom.autoClarifySection = document.querySelector('[data-section-id="auto-clarify"]');

@@ -43,6 +43,7 @@
     var tempVersionGrid = deps && deps.dom && deps.dom.tempVersionGrid ? deps.dom.tempVersionGrid : null;
     var tempExecNav = deps && deps.dom && deps.dom.tempExecNav ? deps.dom.tempExecNav : null;
     var tempFocusZone = deps && deps.dom && deps.dom.tempFocusZone ? deps.dom.tempFocusZone : null;
+    var tempExecViewFocusZone = deps && deps.dom && deps.dom.tempExecViewFocusZone ? deps.dom.tempExecViewFocusZone : null;
     var tempExecOverview = deps && deps.dom && deps.dom.tempExecOverview ? deps.dom.tempExecOverview : null;
     var tempExecView = deps && deps.dom && deps.dom.tempExecView ? deps.dom.tempExecView : null;
     var tempExecToolbar = deps && deps.dom && deps.dom.tempExecToolbar ? deps.dom.tempExecToolbar : null;
@@ -3300,8 +3301,8 @@
       );
     }
 
-    function renderTempFocusZone() {
-      if (!tempFocusZone) return;
+    function renderTempFocusZoneWithHint(zone, hintText) {
+      if (!zone) return;
       var focusList = state.tempExecFocus
         .map(function(id) { return getTempExecFile(id); })
         .filter(Boolean);
@@ -3315,9 +3316,14 @@
               '</button>'
             );
           }).join('')
-        : '<span class="hint">拖拽用例到此区域，专注处理关键用例</span>';
-      tempFocusZone.innerHTML = html;
-      enforceTempFileDraggable(tempFocusZone);
+        : '<span class="hint">' + escapeHtml(hintText || '') + '</span>';
+      zone.innerHTML = html;
+      enforceTempFileDraggable(zone);
+    }
+
+    function renderTempFocusZone() {
+      renderTempFocusZoneWithHint(tempFocusZone, '拖拽用例到此区域，专注处理关键用例');
+      renderTempFocusZoneWithHint(tempExecViewFocusZone, '暂无专注用例');
     }
 
     function renderTempExecNav() {
@@ -6610,6 +6616,26 @@
       renderTempFocusZone();
     }
 
+    function insertTempExecFocus(fileId, insertIndex) {
+      var file = getTempExecFile(fileId);
+      if (!file) return;
+      var list = (state.tempExecFocus || []).filter(function(id) { return id !== fileId; });
+      var idx = Number(insertIndex);
+      if (!Number.isFinite(idx)) idx = list.length;
+      if (idx < 0) idx = 0;
+      if (idx > list.length) idx = list.length;
+      list.splice(idx, 0, fileId);
+      state.tempExecFocus = list;
+      saveTempExecFocus();
+      if (state.tempExecActiveId !== fileId) {
+        setTempExecActive(fileId);
+      } else {
+        renderTempExecNav();
+        renderTempVersionGrid();
+        renderTempFocusZone();
+      }
+    }
+
     function removeTempExecFocus(fileId, requireConfirm) {
       var file = getTempExecFile(fileId);
       if (!file) return;
@@ -7281,6 +7307,7 @@
       saveTempExecFocus: saveTempExecFocus,
       syncTempExecFocus: syncTempExecFocus,
       addTempExecFocus: addTempExecFocus,
+      insertTempExecFocus: insertTempExecFocus,
       removeTempExecFocus: removeTempExecFocus,
       prioritizeTempExecUnassignedRequirements: prioritizeTempExecUnassignedRequirements,
       openTempExecCaseLibraryDiffDrawer: openTempExecCaseLibraryDiffDrawer,

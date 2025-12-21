@@ -242,7 +242,7 @@ test.describe('执行视图导入导出与拖拽', () => {
     await versionBox.dragTo(navPool);
     await expect(page.locator('#tempExecNav')).toContainText('UI执行需求');
 
-    const focusZone = page.locator('[data-temp-focus-zone]');
+    const focusZone = page.locator('#tempFocusBlock [data-temp-focus-zone]');
     const navFileRow = page.locator('#tempExecNav .temp-req-row[data-temp-file]', { hasText: 'execA.json' });
     await navFileRow.dragTo(focusZone);
     await expect(focusZone.locator('button[data-temp-file]')).toHaveCount(1);

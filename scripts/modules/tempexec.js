@@ -38,6 +38,10 @@
     var toggleTempReqBtn = document.getElementById('toggleTempReq');
     var toggleTempVersionBtn = document.getElementById('toggleTempVersion');
     var createTempVersionBtn = document.getElementById('createTempVersionBtn');
+    var tempExecViewFocusBlock = document.getElementById('tempExecViewFocusBlock');
+    var tempExecViewFocusZone = tempExecViewFocusBlock
+      ? tempExecViewFocusBlock.querySelector('[data-temp-focus-zone]')
+      : null;
     var tempExecImportDrawerEl = document.getElementById('tempExecImportDrawer');
     var tempExecAssignDrawerEl = document.getElementById('tempExecAssignDrawer');
     var tempExecOverviewDrawerEl = document.getElementById('tempExecOverviewDrawer');
@@ -112,6 +116,24 @@
         ok = window.confirm(msg);
       }
       return Promise.resolve({ ok: ok });
+    }
+
+    function confirmRemoveFocus(fileId) {
+      if (!fileId || !api || typeof api.getTempExecFile !== 'function' || typeof api.removeTempExecFocus !== 'function') return;
+      var file = api.getTempExecFile(fileId);
+      if (!file) return;
+      var name = file && file.name ? String(file.name) : '测试用例';
+      var prevDrawer = resolveTempExecActiveDrawer();
+      openConfirmDrawer({
+        title: '移出专注区',
+        message: '确定将【' + name + '】移出专注区吗？',
+        confirmText: '确认移出',
+        cancelText: '取消',
+        previousDrawer: prevDrawer || null,
+      }).then(function(res) {
+        if (!res || res.ok !== true) return;
+        api.removeTempExecFocus(fileId, false);
+      });
     }
     function resolveTempExecActiveDrawer() {
       var candidates = [
@@ -2776,10 +2798,10 @@
     if (tempExecNav && api.getTempExecFile && api.setTempExecActive) {
       tempExecNav.addEventListener('click', function(e) {
         var focusRemoveBtn = e.target.closest('[data-temp-focus-remove]');
-        if (focusRemoveBtn && api.removeTempExecFocus) {
+        if (focusRemoveBtn) {
           e.preventDefault();
           e.stopPropagation();
-          api.removeTempExecFocus(focusRemoveBtn.dataset.tempFocusRemove);
+          confirmRemoveFocus(focusRemoveBtn.dataset.tempFocusRemove);
           return;
         }
         var removeBtn = e.target.closest('[data-temp-remove]');
@@ -3947,13 +3969,17 @@
       tempMouseDragFromNav = false;
     });
 
-    if (tempFocusBlock && api.getTempExecFile && api.setTempExecActive) {
-      tempFocusBlock.addEventListener('click', function(e) {
+    function bindFocusBlockEvents(block, options) {
+      if (!block || !api.getTempExecFile || !api.setTempExecActive) return;
+      var opts = options && typeof options === 'object' ? options : {};
+      var shouldSwitchTab = opts.switchTab !== false;
+      var shouldScrollTop = opts.scrollTop === true;
+      block.addEventListener('click', function(e) {
         var removeBtn = e.target.closest('[data-temp-focus-remove]');
-        if (removeBtn && api.removeTempExecFocus) {
+        if (removeBtn) {
           e.preventDefault();
           e.stopPropagation();
-          api.removeTempExecFocus(removeBtn.dataset.tempFocusRemove);
+          confirmRemoveFocus(removeBtn.dataset.tempFocusRemove);
           return;
         }
         var btn = e.target.closest('button[data-temp-file]');
@@ -3962,33 +3988,140 @@
         if (!fileId || fileId === state.tempExecActiveId) return;
         if (!api.getTempExecFile(fileId)) return;
         api.setTempExecActive(fileId);
-        switchTab('tempexec');
+        if (shouldSwitchTab) switchTab('tempexec');
+        if (shouldScrollTop) scrollToTempExecViewTop({ waitForDrawerUnlock: true });
       });
-      tempFocusBlock.addEventListener('dragstart', function(e) {
+      block.addEventListener('dragstart', function(e) {
         var btn = e.target.closest('button[data-temp-file]');
         if (!btn || !e.dataTransfer) return;
         if (btn.dataset && String(btn.dataset.tempArchived || '') === '1') {
           e.preventDefault();
           return;
         }
+        var fid = btn.dataset.tempFile || '';
         e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', btn.dataset.tempFile || '');
+        e.dataTransfer.setData('text/plain', fid);
+        if (fid) {
+          setTempDragContext({ type: 'file', fileId: fid });
+        }
+      });
+      block.addEventListener('dragend', function() {
+        setTempDragContext(null);
       });
     }
 
-    if (tempFocusZone && api.addTempExecFocus) {
-      tempFocusZone.addEventListener('dragover', function(e) {
-        e.preventDefault();
-        tempFocusZone.classList.add('dragover');
+    bindFocusBlockEvents(tempFocusBlock, { switchTab: true, scrollTop: true });
+    bindFocusBlockEvents(tempExecViewFocusBlock, { switchTab: false, scrollTop: true });
+
+    function cleanupFocusZoneIndicator(zone) {
+      if (!zone) return;
+      var indicator = zone._focusIndicator || null;
+      if (indicator && indicator.parentNode) {
+        try { indicator.parentNode.removeChild(indicator); } catch (_) {}
+      }
+      zone._focusIndicator = null;
+    }
+
+    function ensureFocusZoneIndicator(zone) {
+      if (!zone) return null;
+      if (zone._focusIndicator) return zone._focusIndicator;
+      var el = document.createElement('span');
+      el.className = 'temp-focus-indicator';
+      el.setAttribute('aria-hidden', 'true');
+      zone._focusIndicator = el;
+      return el;
+    }
+
+    function getFocusButtons(zone, draggingId) {
+      if (!zone) return [];
+      var nodes = Array.prototype.slice.call(zone.querySelectorAll('button[data-temp-file]'));
+      if (!draggingId) return nodes;
+      return nodes.filter(function(btn) {
+        return !btn || !btn.dataset || String(btn.dataset.tempFile || '') !== String(draggingId);
       });
-      tempFocusZone.addEventListener('dragleave', function() {
-        tempFocusZone.classList.remove('dragover');
-      });
-      tempFocusZone.addEventListener('drop', function(e) {
+    }
+
+    function updateFocusZoneIndicator(zone, draggingId, clientX) {
+      var buttons = getFocusButtons(zone, draggingId);
+      var indicator = ensureFocusZoneIndicator(zone);
+      if (!indicator) return;
+      var index = buttons.length;
+      var ref = null;
+      var x = (typeof clientX === 'number' && Number.isFinite(clientX)) ? clientX : 0;
+      if (buttons.length) {
+        for (var i = 0; i < buttons.length; i += 1) {
+          var rect = buttons[i].getBoundingClientRect ? buttons[i].getBoundingClientRect() : null;
+          if (!rect) continue;
+          if (x <= rect.left + rect.width / 2) {
+            index = i;
+            ref = buttons[i];
+            break;
+          }
+        }
+      } else {
+        index = 0;
+      }
+      if (indicator.dataset) indicator.dataset.dropIndex = String(index);
+      if (ref) {
+        if (ref !== indicator) {
+          try { zone.insertBefore(indicator, ref); } catch (_) {}
+        }
+        return;
+      }
+      if (indicator.parentNode !== zone) {
+        try { zone.appendChild(indicator); } catch (_) {}
+      } else if (zone.lastChild !== indicator) {
+        try { zone.appendChild(indicator); } catch (_) {}
+      }
+    }
+
+    function resolveFocusDropIndex(zone, draggingId, clientX) {
+      if (!zone) return 0;
+      var indicator = zone._focusIndicator || null;
+      if (indicator && indicator.parentNode === zone && indicator.dataset && indicator.dataset.dropIndex !== undefined) {
+        var parsed = parseInt(indicator.dataset.dropIndex, 10);
+        if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+      }
+      var buttons = getFocusButtons(zone, draggingId);
+      if (!buttons.length) return 0;
+      var x = (typeof clientX === 'number' && Number.isFinite(clientX)) ? clientX : 0;
+      for (var i = 0; i < buttons.length; i += 1) {
+        var rect = buttons[i].getBoundingClientRect ? buttons[i].getBoundingClientRect() : null;
+        if (!rect) continue;
+        if (x <= rect.left + rect.width / 2) return i;
+      }
+      return buttons.length;
+    }
+
+    function bindFocusZoneDragDrop(zone) {
+      if (!zone || !api.addTempExecFocus) return;
+      zone.addEventListener('dragover', function(e) {
+        var dragId = '';
+        if (e && e.dataTransfer) {
+          try { dragId = e.dataTransfer.getData('text/plain') || ''; } catch (_) {}
+        }
+        if (!dragId && window.app && window.app.tempDragContext && window.app.tempDragContext.type === 'file') {
+          dragId = window.app.tempDragContext.fileId || '';
+        }
+        if (!dragId) return;
         e.preventDefault();
-        tempFocusZone.classList.remove('dragover');
-        if (!e.dataTransfer) return;
-        var fileId = e.dataTransfer.getData('text/plain');
+        zone.classList.add('dragover');
+        updateFocusZoneIndicator(zone, dragId, e.clientX);
+      });
+      zone.addEventListener('dragleave', function(e) {
+        if (!e || e.currentTarget !== zone) return;
+        if (e.target !== zone) return;
+        zone.classList.remove('dragover');
+        cleanupFocusZoneIndicator(zone);
+      });
+      zone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        zone.classList.remove('dragover');
+        var dragId = '';
+        var fileId = '';
+        if (e.dataTransfer) {
+          fileId = e.dataTransfer.getData('text/plain');
+        }
         if (!fileId && window.app && window.app.tempDragContext && window.app.tempDragContext.type === 'file') {
           fileId = window.app.tempDragContext.fileId || '';
         }
@@ -3996,10 +4129,43 @@
           var navFile = tempExecNav.querySelector('[data-temp-file]');
           fileId = navFile && navFile.dataset ? navFile.dataset.tempFile : '';
         }
+        cleanupFocusZoneIndicator(zone);
+        setTempDragContext(null);
         if (!fileId) return;
-        api.addTempExecFocus(fileId);
+        dragId = fileId;
+        var insertIndex = resolveFocusDropIndex(zone, dragId, e.clientX);
+        if (api && typeof api.insertTempExecFocus === 'function') {
+          api.insertTempExecFocus(fileId, insertIndex);
+        } else {
+          api.addTempExecFocus(fileId);
+        }
       });
     }
+
+    function bindFocusZoneScroll(zone) {
+      if (!zone) return;
+      var timer = 0;
+      zone.addEventListener('scroll', function() {
+        zone.classList.add('scrolling');
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(function() {
+          zone.classList.remove('scrolling');
+        }, 800);
+      });
+    }
+
+    function cleanupAllFocusIndicators() {
+      if (tempFocusZone && tempFocusZone.classList) tempFocusZone.classList.remove('dragover');
+      if (tempExecViewFocusZone && tempExecViewFocusZone.classList) tempExecViewFocusZone.classList.remove('dragover');
+      cleanupFocusZoneIndicator(tempFocusZone);
+      cleanupFocusZoneIndicator(tempExecViewFocusZone);
+    }
+
+    bindFocusZoneDragDrop(tempFocusZone);
+    bindFocusZoneDragDrop(tempExecViewFocusZone);
+    bindFocusZoneScroll(tempFocusZone);
+    bindFocusZoneScroll(tempExecViewFocusZone);
+    document.addEventListener('dragend', cleanupAllFocusIndicators);
 
     if (tempExecOverviewBtn) {
       tempExecOverviewBtn.addEventListener('click', function() {

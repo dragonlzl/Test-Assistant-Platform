@@ -1682,3 +1682,14 @@
 - 复用说明：复用通用确认抽屉与项目版本 API（`/api/projects/{id}/versions`），无新增后端接口。  
 - 测试与验证：`node --check scripts/base/utils.js scripts/base/execVersionDrawer.js scripts/modules/tempexec.js scripts/modules/caseLibrary.js scripts/core/casesGenCore.js`（通过）；`npm run test:ui -- tests/ui/version_add_selects.spec.js`（通过，需允许本地服务监听权限）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18082` 后执行 `API_BASE_URL=http://127.0.0.1:18082 npm run test:api -- tests/api/project_version_duplicate.spec.js`（通过）。  
 - 更新记录：2025-12-20 版本下拉新增版本入口与自动选中（`scripts/base/utils.js`、`scripts/base/execVersionDrawer.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`scripts/core/casesGenCore.js`、`tests/ui/version_add_selects.spec.js`、`tests/api/project_version_duplicate.spec.js`）。  
+
+- 功能名称：执行视图专注区同步  
+- 功能描述：用例执行视图在搜索栏下方新增专注区，实时同步执行分配的专注用例；两处专注区移除用例改为确认抽屉。  
+- 操作方式：在执行分配页拖拽用例到专注区后，执行视图专注区同步展示；点击专注用例切换执行视图，点击“×”经抽屉确认后移出。  
+- 使用效果：执行视图可快速切换专注用例并保持与执行分配一致；移出操作统一抽屉确认。  
+- 新增内容/接口/组件：  
+  - 前端：执行视图专注区与移出确认抽屉接入（`index.html`、`scripts/modules/app.js`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）。  
+  - 测试：UI 用例（`tests/ui/tempexec_focus_sync.spec.js`、`tests/ui/tempexec_drag.spec.js`）。  
+- 复用说明：复用执行分配专注区渲染逻辑与通用确认抽屉，无新增后端接口。  
+- 测试与验证：`node --check scripts/modules/tempexec.js scripts/core/tempexecCore.js scripts/modules/app.js`（通过）；`npm run test:ui -- tests/ui/tempexec_focus_sync.spec.js tests/ui/tempexec_drag.spec.js`（通过，需允许本地服务监听权限）。  
+- 更新记录：2025-12-20 执行视图专注区同步与移出确认抽屉（`index.html`、`scripts/modules/app.js`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_focus_sync.spec.js`、`tests/ui/tempexec_drag.spec.js`）。2025-12-21 专注区紧凑布局、横向滚动与拖拽高亮（`index.html`、`style.css`、`scripts/modules/tempexec.js`）。2025-12-21 专注区拖拽插入指示器与切换滚动顶部（`style.css`、`scripts/modules/tempexec.js`、`scripts/core/tempexecCore.js`）。  
