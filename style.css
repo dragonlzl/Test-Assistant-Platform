@@ -507,6 +507,46 @@ body {
       font-size: 13px;
       line-height: 1.6;
     }
+    .page-guide-content {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .page-guide-section h4 {
+      margin: 0 0 6px;
+      font-size: 15px;
+      color: var(--text);
+    }
+    .page-guide-section p {
+      margin: 0;
+      color: var(--text);
+      line-height: 1.65;
+    }
+    .page-guide-section ol,
+    .page-guide-section ul {
+      margin: 6px 0 0 18px;
+      color: var(--text);
+      line-height: 1.65;
+    }
+    .page-guide-section li {
+      margin: 6px 0;
+    }
+    .page-guide-steps ul,
+    .page-guide-notes ul {
+      margin-top: 6px;
+    }
+    .page-guide-button {
+      color: var(--primary);
+      font-weight: 600;
+    }
+    .page-guide-star {
+      color: #ef4444;
+      font-weight: 700;
+      margin-right: 4px;
+    }
+    .page-guide-tip {
+      margin-top: 6px;
+    }
     .help-header {
       display: flex;
       align-items: center;

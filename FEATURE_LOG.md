@@ -19,6 +19,17 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：主要功能页面使用说明抽屉与开关  
+- 功能描述：AI 一键评审、功能工作流、用例生成、功能指派、模型管理、用例执行、用例库、用例归档、执行总览新增自动弹出的页面说明抽屉，内容包含功能简介/操作流程/必要说明；执行相关流程以“*”突出关键步骤，并提示可在设置中关闭。  
+- 操作方式：进入上述页面会自动弹出说明抽屉；在“设置 → 其他设置”中按页面勾选/关闭；切换到其他页面再返回会重新弹出，刷新当前页不触发。  
+- 使用效果：新用户进入页面即可获得功能指引，提示可按账号独立关闭，避免重复打扰。  
+- 新增内容/接口/组件：  
+  - 前端：新增说明抽屉与设置项（`index.html`、`style.css`、`scripts/modules/pageGuide.js`、`scripts/modules/settings.js`、`scripts/modules/app.js`、`config/constants.js`、`scripts/base/state.js`）。  
+  - 测试：UI 用例（`tests/ui/page_guide_drawer.spec.js`）；API 用例更新（`tests/api/settings_models.spec.js`）。  
+- 复用说明：复用现有 drawer 组件与 `/api/settings` 持久化，无新增后端接口。  
+- 测试与验证：`node --check scripts/modules/pageGuide.js scripts/modules/settings.js scripts/base/state.js scripts/modules/app.js`（通过）；`npm run test:ui -- tests/ui/page_guide_drawer.spec.js`（通过）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18083` 后执行 `API_BASE_URL=http://127.0.0.1:18083 npm run test:api -- tests/api/settings_models.spec.js`（通过）。  
+- 更新记录：2025-12-22 主要功能页面说明抽屉与设置开关（`index.html`、`style.css`、`scripts/modules/pageGuide.js`、`scripts/modules/settings.js`、`scripts/modules/app.js`、`config/constants.js`、`scripts/base/state.js`、`tests/`）。  
+
 - 功能名称：工作流/自动评审/用例生成数据持久化与导入确认  
 - 功能描述：用例生成、AI 一键需求&用例评审、功能工作流页面的核心输入与生成结果持久化；导入新需求时若页面已有数据，弹出确认抽屉提示清空并在确认后重置所有模块数据（含用例生成）。  
 - 操作方式：导入/输入需求并执行流程 → 刷新页面数据自动恢复；再次导入新需求时出现“清空提示”抽屉，确认后重新导入并清空旧数据。  

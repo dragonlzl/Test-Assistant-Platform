@@ -20,6 +20,17 @@
         expected: true,
         ops: true,
       },
+      pageGuideSwitches: {
+        auto: true,
+        clean: true,
+        casesgen: true,
+        assign: true,
+        models: true,
+        tempexec: true,
+        'case-library': true,
+        'case-archive': true,
+        'exec-overview': true,
+      },
     };
   }
 
@@ -40,6 +51,9 @@
     var settingsCopy = Object.assign({}, defaultSettings);
     if (defaultSettings && typeof defaultSettings.tempExecColumns === 'object') {
       settingsCopy.tempExecColumns = Object.assign({}, defaultSettings.tempExecColumns);
+    }
+    if (defaultSettings && typeof defaultSettings.pageGuideSwitches === 'object') {
+      settingsCopy.pageGuideSwitches = Object.assign({}, defaultSettings.pageGuideSwitches);
     }
     return {
       authToken: '',

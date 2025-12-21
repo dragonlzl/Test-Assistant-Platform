@@ -1829,6 +1829,28 @@
 <div class="settings-divider"></div>
 <div class="settings-inline" style="align-items:flex-start;">
   <div class="meta">
+    <strong>页面说明自动弹出</strong>
+    <p>进入主要功能页面时自动弹出使用说明，可按页面独立关闭。</p>
+  </div>
+  <div class="control">
+    <div class="settings-grid settings-guide-grid" id="pageGuideSettingsGrid">
+      <label><input type="checkbox" data-page-guide="auto"/> AI一键需求&用例评审</label>
+      <label><input type="checkbox" data-page-guide="clean"/> 功能工作流</label>
+      <label><input type="checkbox" data-page-guide="casesgen"/> 用例生成</label>
+      <label><input type="checkbox" data-page-guide="assign"/> 功能指派</label>
+      <label><input type="checkbox" data-page-guide="models"/> 模型管理</label>
+      <label><input type="checkbox" data-page-guide="tempexec"/> 用例执行</label>
+      <label><input type="checkbox" data-page-guide="case-library"/> 用例库</label>
+      <label><input type="checkbox" data-page-guide="case-archive"/> 用例归档</label>
+      <label><input type="checkbox" data-page-guide="exec-overview"/> 执行总览</label>
+    </div>
+  </div>
+</div>
+<p class="status" id="pageGuideSettingsStatus"></p>
+
+<div class="settings-divider"></div>
+<div class="settings-inline" style="align-items:flex-start;">
+  <div class="meta">
     <strong>项目排序</strong>
     <p>拖拽项目卡片调整展示顺序；点击卡片可设置默认项目（影响各页面项目卡片/下拉框的顺序与默认选中）。</p>
   </div>
@@ -2859,6 +2881,18 @@
       </div>
     </div>
   </div>
+  <div class="drawer hidden" id="pageGuideDrawer">
+    <div class="drawer-mask" data-drawer-close="pageGuideDrawer"></div>
+    <div class="drawer-panel">
+      <div class="drawer-header">
+        <h3 id="pageGuideDrawerTitle">页面说明</h3>
+        <button class="link-toggle" id="closePageGuideDrawerBtn" data-drawer-close="pageGuideDrawer">收起</button>
+      </div>
+      <div class="drawer-body" id="pageGuideDrawerBody">
+        <p class="hint" style="margin:0;">暂无页面说明</p>
+      </div>
+    </div>
+  </div>
 </main>
 </div>
 </div>
@@ -2913,6 +2947,7 @@
 <script src="./scripts/modules/opsLog.js" defer></script>
 <script src="./scripts/modules/admin.js" defer></script>
 <script src="./scripts/modules/authGuard.js" defer></script>
+<script src="./scripts/modules/pageGuide.js" defer></script>
 <script src="./scripts/modules/app.js" defer></script>
 <script src="./scripts/modules/bootstrap.js" defer></script>
 <script>

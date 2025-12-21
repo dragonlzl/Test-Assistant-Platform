@@ -45,9 +45,13 @@
     var tempExecPageSizeStatus = dom.tempExecPageSizeStatus || document.getElementById('tempExecPageSizeStatus');
     var projectSortGrid = dom.projectSortGrid || document.getElementById('projectSortGrid');
     var projectSortStatus = dom.projectSortStatus || document.getElementById('projectSortStatus');
+    var pageGuideSettingsGrid = dom.pageGuideSettingsGrid || document.getElementById('pageGuideSettingsGrid');
+    var pageGuideSettingsStatus = dom.pageGuideSettingsStatus || document.getElementById('pageGuideSettingsStatus');
 
     var defaultSettings = config.defaultSettings || {};
     var defaultTempExecColumns = config.defaultTempExecColumns || {};
+    var defaultPageGuideSwitches = config.defaultPageGuideSwitches
+      || (defaultSettings && typeof defaultSettings.pageGuideSwitches === 'object' ? defaultSettings.pageGuideSwitches : {});
     var defaultTempExecPageSize = config.defaultTempExecPageSize || 20;
     var settingsKey = config.settingsKey || 'usecase-settings-v1';
     var minModelTimeoutSec = config.minModelTimeoutSec || 30;
@@ -110,6 +114,23 @@
       return cols;
     }
 
+    function ensurePageGuideSwitches() {
+      if (!state.settings) state.settings = Object.assign({}, defaultSettings);
+      var base = defaultPageGuideSwitches && typeof defaultPageGuideSwitches === 'object'
+        ? defaultPageGuideSwitches
+        : {};
+      var current = state.settings.pageGuideSwitches && typeof state.settings.pageGuideSwitches === 'object'
+        ? state.settings.pageGuideSwitches
+        : {};
+      var merged = Object.assign({}, base);
+      Object.keys(current).forEach(function(key) {
+        var val = current[key];
+        if (typeof val === 'boolean') merged[key] = val;
+      });
+      state.settings.pageGuideSwitches = merged;
+      return merged;
+    }
+
     function mergeServerSettings(list) {
       // owner_id 可能是 number 或 string；同时在 authReady 时序下 currentUser 可能暂未填充。
       var userId = null;
@@ -159,6 +180,7 @@
         state.tempExecPageSize = size;
         state.settings.tempExecPageSize = size;
       }
+      ensurePageGuideSwitches();
       ensureTempExecColumns();
       // 如果执行页已打开，主动刷新以应用远端列/分页设置。
       try {
@@ -352,6 +374,7 @@
         state.tempExecPageSize = defaultTempExecPageSize;
         state.settings.tempExecPageSize = defaultTempExecPageSize;
       }
+      ensurePageGuideSwitches();
       ensureTempExecColumns();
 
       if (!Array.isArray(state.settings.projectOrder)) state.settings.projectOrder = [];
@@ -389,6 +412,18 @@
       setStatus(tempExecColumnStatus, '', '');
     }
 
+    function renderPageGuideSettings() {
+      if (!pageGuideSettingsGrid) return;
+      var switches = ensurePageGuideSwitches();
+      var inputs = pageGuideSettingsGrid.querySelectorAll('input[data-page-guide]');
+      inputs.forEach(function(input) {
+        var key = input && input.dataset ? input.dataset.pageGuide : '';
+        if (!key) return;
+        input.checked = switches[key] !== false;
+      });
+      setStatus(pageGuideSettingsStatus, '', '');
+    }
+
     function renderSettingsUI() {
       if (modelTimeoutInput) {
         if (!dirtyDrafts.timeoutSec) {
@@ -411,6 +446,7 @@
         }
       }
       renderTempExecColumnSettings();
+      renderPageGuideSettings();
       renderProjectSortSetting();
     }
 
@@ -854,6 +890,17 @@
       }
     }
 
+    function handlePageGuideChange(e) {
+      var target = e && e.target;
+      if (!target || !target.dataset || !target.dataset.pageGuide) return;
+      var key = target.dataset.pageGuide;
+      var switches = ensurePageGuideSwitches();
+      switches[key] = Boolean(target.checked);
+      state.settings.pageGuideSwitches = switches;
+      persistSettings(['pageGuideSwitches']);
+      setStatus(pageGuideSettingsStatus, '页面说明设置已保存', 'ok');
+    }
+
     function bindEvents() {
       if (saveModelTimeoutBtn) saveModelTimeoutBtn.addEventListener('click', saveTimeoutSetting);
       if (modelTimeoutInput) modelTimeoutInput.addEventListener('input', function() {
@@ -880,6 +927,7 @@
         dirtyDrafts.tempExecPageSize = true;
         setStatus(tempExecPageSizeStatus, '', '');
       });
+      if (pageGuideSettingsGrid) pageGuideSettingsGrid.addEventListener('change', handlePageGuideChange);
       bindProjectSortEvents();
     }
 

@@ -1793,3 +1793,12 @@
     }
     if (runtime && runtime.switchTab) switchTab = runtime.switchTab;
     window.app.switchTab = switchTab;
+    initModule('pageGuide', {
+      state: state,
+      config: {
+        defaultPageGuideSwitches: appConfig.defaultPageGuideSwitches || {},
+        defaultSettings: defaultSettings,
+      },
+      utils: appUtils,
+      setStatus: setStatus,
+    });
