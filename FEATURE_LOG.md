@@ -29,6 +29,7 @@
 - 复用说明：复用现有 drawer 组件与 `/api/settings` 持久化，无新增后端接口。  
 - 测试与验证：`node --check scripts/modules/pageGuide.js scripts/modules/settings.js scripts/base/state.js scripts/modules/app.js`（通过）；`npm run test:ui -- tests/ui/page_guide_drawer.spec.js`（通过）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18083` 后执行 `API_BASE_URL=http://127.0.0.1:18083 npm run test:api -- tests/api/settings_models.spec.js`（通过）。  
 - 更新记录：2025-12-22 主要功能页面说明抽屉与设置开关（`index.html`、`style.css`、`scripts/modules/pageGuide.js`、`scripts/modules/settings.js`、`scripts/modules/app.js`、`config/constants.js`、`scripts/base/state.js`、`tests/`）。  
+- 更新记录：2025-12-22 页面说明设置新增全选/全取消并优化布局展示（`index.html`、`style.css`、`scripts/modules/settings.js`、`tests/ui/page_guide_drawer.spec.js`）。  
 
 - 功能名称：工作流/自动评审/用例生成数据持久化与导入确认  
 - 功能描述：用例生成、AI 一键需求&用例评审、功能工作流页面的核心输入与生成结果持久化；导入新需求时若页面已有数据，弹出确认抽屉提示清空并在确认后重置所有模块数据（含用例生成）。  

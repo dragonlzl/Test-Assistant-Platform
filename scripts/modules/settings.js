@@ -47,6 +47,7 @@
     var projectSortStatus = dom.projectSortStatus || document.getElementById('projectSortStatus');
     var pageGuideSettingsGrid = dom.pageGuideSettingsGrid || document.getElementById('pageGuideSettingsGrid');
     var pageGuideSettingsStatus = dom.pageGuideSettingsStatus || document.getElementById('pageGuideSettingsStatus');
+    var pageGuideSelectAllInput = dom.pageGuideSelectAllInput || document.getElementById('pageGuideSelectAll');
 
     var defaultSettings = config.defaultSettings || {};
     var defaultTempExecColumns = config.defaultTempExecColumns || {};
@@ -421,6 +422,7 @@
         if (!key) return;
         input.checked = switches[key] !== false;
       });
+      updatePageGuideSelectAllState();
       setStatus(pageGuideSettingsStatus, '', '');
     }
 
@@ -892,13 +894,60 @@
 
     function handlePageGuideChange(e) {
       var target = e && e.target;
-      if (!target || !target.dataset || !target.dataset.pageGuide) return;
+      if (!target) return;
+      if (target.dataset && target.dataset.pageGuideAll) {
+        setAllPageGuideSwitches(Boolean(target.checked));
+        return;
+      }
+      if (!target.dataset || !target.dataset.pageGuide) return;
       var key = target.dataset.pageGuide;
       var switches = ensurePageGuideSwitches();
       switches[key] = Boolean(target.checked);
       state.settings.pageGuideSwitches = switches;
       persistSettings(['pageGuideSwitches']);
+      updatePageGuideSelectAllState();
       setStatus(pageGuideSettingsStatus, '页面说明设置已保存', 'ok');
+    }
+
+    function setAllPageGuideSwitches(enabled) {
+      var switches = ensurePageGuideSwitches();
+      Object.keys(switches).forEach(function(key) {
+        switches[key] = Boolean(enabled);
+      });
+      state.settings.pageGuideSwitches = switches;
+      if (pageGuideSettingsGrid) {
+        var inputs = pageGuideSettingsGrid.querySelectorAll('input[data-page-guide]');
+        inputs.forEach(function(input) {
+          input.checked = Boolean(enabled);
+        });
+      }
+      if (pageGuideSelectAllInput) {
+        pageGuideSelectAllInput.checked = Boolean(enabled);
+        pageGuideSelectAllInput.indeterminate = false;
+      }
+      persistSettings(['pageGuideSwitches']);
+      setStatus(pageGuideSettingsStatus, enabled ? '已全部开启' : '已全部关闭', 'ok');
+    }
+
+    function updatePageGuideSelectAllState() {
+      if (!pageGuideSelectAllInput || !pageGuideSettingsGrid) return;
+      var inputs = pageGuideSettingsGrid.querySelectorAll('input[data-page-guide]');
+      var allChecked = true;
+      var anyChecked = false;
+      inputs.forEach(function(input) {
+        if (input.checked) {
+          anyChecked = true;
+        } else {
+          allChecked = false;
+        }
+      });
+      if (!inputs.length) {
+        pageGuideSelectAllInput.checked = false;
+        pageGuideSelectAllInput.indeterminate = false;
+        return;
+      }
+      pageGuideSelectAllInput.checked = allChecked;
+      pageGuideSelectAllInput.indeterminate = !allChecked && anyChecked;
     }
 
     function bindEvents() {

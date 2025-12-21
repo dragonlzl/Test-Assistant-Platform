@@ -48,6 +48,11 @@ test.describe('页面说明抽屉', () => {
     await openGroup('settings', 'settings');
     await page.click('[data-tab-btn="settings"]');
     const autoToggle = page.locator('#pageGuideSettingsGrid input[data-page-guide="auto"]');
+    const selectAllToggle = page.locator('#pageGuideSelectAll');
+    await selectAllToggle.check();
+    await selectAllToggle.uncheck();
+    await expect(autoToggle).not.toBeChecked();
+    await selectAllToggle.check();
     await expect(autoToggle).toBeChecked();
     await autoToggle.uncheck();
     await expect(autoToggle).not.toBeChecked();
