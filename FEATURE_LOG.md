@@ -1740,3 +1740,16 @@
   - `npm run test:ui -- tests/ui/settings_page_size_db.spec.js`（通过）  
   - `APP_DB_FILE=apitest.db python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 18082` 后执行 `API_BASE_URL=http://127.0.0.1:18082 npm run test:api -- tests/api/settings_temp_exec_page_size.spec.js`（未通过：当前环境 Python 3.7 无法安装 fastapi==0.104.1，需升级至 Python 3.8+ 后重试）  
 - 更新记录：2025-12-21 全局分页设置 DB 同步修复（`scripts/core/tempexecCore.js`、`tests/ui/settings_page_size_db.spec.js`、`tests/api/settings_temp_exec_page_size.spec.js`）。  
+
+- 功能名称：用例库抽屉分页  
+- 功能描述：用例库“查看&编辑”“选择用例执行”“用例改动历史”抽屉内列表增加分页，分页大小统一使用“其他设置”的全局分页值。  
+- 操作方式：进入用例库后分别打开三个抽屉，列表顶部/底部分页条可切页与跳页，显示每页条数来自全局分页设置。  
+- 使用效果：抽屉列表与其他页面保持一致的分页条数，长列表可快速翻页查看。  
+- 新增内容/接口/组件：  
+  - 前端：抽屉分页渲染与事件处理（`index.html`、`scripts/modules/caseLibrary.js`）。  
+  - 测试：UI 用例（`tests/ui/case_library_drawer_pagination.spec.js`）。  
+- 复用说明：复用现有全局分页设置与分页控件样式，无新增后端接口。  
+- 测试与验证：  
+  - `node --check scripts/modules/caseLibrary.js`（通过）  
+  - `npm run test:ui -- tests/ui/case_library_drawer_pagination.spec.js`（通过；提示 8080 端口已占用但测试复用了现有服务）  
+- 更新记录：2025-12-21 用例库抽屉分页接入全局分页设置（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_drawer_pagination.spec.js`）。  

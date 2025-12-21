@@ -99,6 +99,8 @@
     editDrawerSelectAll: document.getElementById('caseLibraryEditSelectAll'),
     editDrawerStatus: document.getElementById('caseLibraryEditDrawerStatus'),
     editDrawerListBody: document.getElementById('caseLibraryEditListBody'),
+    editDrawerPaginationTop: document.getElementById('caseLibraryEditDrawerPaginationTop'),
+    editDrawerPaginationBottom: document.getElementById('caseLibraryEditDrawerPaginationBottom'),
     shareDrawerCaseName: document.getElementById('caseLibraryShareCaseName'),
     shareDrawerSourceProject: document.getElementById('caseLibraryShareSourceProject'),
     shareDrawerSourceVersion: document.getElementById('caseLibraryShareSourceVersion'),
@@ -114,6 +116,8 @@
     selectBatchExecBtn: document.getElementById('caseLibrarySelectBatchExecBtn'),
     selectStatus: document.getElementById('caseLibrarySelectDrawerStatus'),
     selectListBody: document.getElementById('caseLibrarySelectListBody'),
+    selectPaginationTop: document.getElementById('caseLibrarySelectDrawerPaginationTop'),
+    selectPaginationBottom: document.getElementById('caseLibrarySelectDrawerPaginationBottom'),
 
     historyDrawerProjectSelect: document.getElementById('caseLibraryHistoryProjectSelect'),
     historyDrawerVersionSelect: document.getElementById('caseLibraryHistoryVersionSelect'),
@@ -122,6 +126,8 @@
     historyDrawerClearBtn: document.getElementById('caseLibraryHistoryClearBtn'),
     historyDrawerStatus: document.getElementById('caseLibraryHistoryDrawerStatus'),
     historyDrawerListBody: document.getElementById('caseLibraryHistoryDrawerListBody'),
+    historyDrawerPaginationTop: document.getElementById('caseLibraryHistoryDrawerPaginationTop'),
+    historyDrawerPaginationBottom: document.getElementById('caseLibraryHistoryDrawerPaginationBottom'),
 
     historyDetailCard: document.getElementById('caseLibraryHistoryDetailCard'),
     historyStatus: document.getElementById('caseLibraryHistoryStatus'),
@@ -196,6 +202,7 @@
       execByFileId: {},
       loading: false,
       selection: new Set(),
+      pageIndex: 0,
       restoring: false,
     },
 
@@ -222,6 +229,7 @@
       loading: false,
       processing: false,
       selection: new Set(),
+      pageIndex: 0,
     },
 
     historyQueryDrawer: {
@@ -230,6 +238,7 @@
       files: [],
       loading: false,
       searchText: '',
+      pageIndex: 0,
     },
 
     historyDetail: {
@@ -1910,12 +1919,100 @@
     persistHistoryDetailSelection();
   }
 
+  function handleEditDrawerPaginationAction(action) {
+    var list = getEditDrawerVisibleFiles();
+    var total = list.length;
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    if (!action) return;
+    if (action === 'prev') state.editDrawer.pageIndex -= 1;
+    else if (action === 'next') state.editDrawer.pageIndex += 1;
+    else if (action === 'first') state.editDrawer.pageIndex = 0;
+    else if (action === 'last') state.editDrawer.pageIndex = totalPages - 1;
+    if (state.editDrawer.pageIndex < 0) state.editDrawer.pageIndex = 0;
+    if (state.editDrawer.pageIndex >= totalPages) state.editDrawer.pageIndex = Math.max(totalPages - 1, 0);
+    renderEditDrawerList();
+    syncEditDrawerControls();
+  }
+
+  function handleEditDrawerPaginationJump(value) {
+    var list = getEditDrawerVisibleFiles();
+    var total = list.length;
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    var n = Number(value);
+    if (!isFinite(n)) return;
+    var idx = Math.max(0, Math.min(totalPages - 1, Math.floor(n - 1)));
+    state.editDrawer.pageIndex = idx;
+    renderEditDrawerList();
+    syncEditDrawerControls();
+  }
+
+  function handleSelectDrawerPaginationAction(action) {
+    var list = getSelectDrawerVisibleFiles();
+    var total = list.length;
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    if (!action) return;
+    if (action === 'prev') state.selectDrawer.pageIndex -= 1;
+    else if (action === 'next') state.selectDrawer.pageIndex += 1;
+    else if (action === 'first') state.selectDrawer.pageIndex = 0;
+    else if (action === 'last') state.selectDrawer.pageIndex = totalPages - 1;
+    if (state.selectDrawer.pageIndex < 0) state.selectDrawer.pageIndex = 0;
+    if (state.selectDrawer.pageIndex >= totalPages) state.selectDrawer.pageIndex = Math.max(totalPages - 1, 0);
+    renderSelectDrawerList();
+    syncSelectDrawerControls();
+  }
+
+  function handleSelectDrawerPaginationJump(value) {
+    var list = getSelectDrawerVisibleFiles();
+    var total = list.length;
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    var n = Number(value);
+    if (!isFinite(n)) return;
+    var idx = Math.max(0, Math.min(totalPages - 1, Math.floor(n - 1)));
+    state.selectDrawer.pageIndex = idx;
+    renderSelectDrawerList();
+    syncSelectDrawerControls();
+  }
+
+  function handleHistoryQueryPaginationAction(action) {
+    var list = getHistoryQueryVisibleFiles();
+    var total = list.length;
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    if (!action) return;
+    if (action === 'prev') state.historyQueryDrawer.pageIndex -= 1;
+    else if (action === 'next') state.historyQueryDrawer.pageIndex += 1;
+    else if (action === 'first') state.historyQueryDrawer.pageIndex = 0;
+    else if (action === 'last') state.historyQueryDrawer.pageIndex = totalPages - 1;
+    if (state.historyQueryDrawer.pageIndex < 0) state.historyQueryDrawer.pageIndex = 0;
+    if (state.historyQueryDrawer.pageIndex >= totalPages) {
+      state.historyQueryDrawer.pageIndex = Math.max(totalPages - 1, 0);
+    }
+    renderHistoryQueryDrawerList();
+  }
+
+  function handleHistoryQueryPaginationJump(value) {
+    var list = getHistoryQueryVisibleFiles();
+    var total = list.length;
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    var n = Number(value);
+    if (!isFinite(n)) return;
+    var idx = Math.max(0, Math.min(totalPages - 1, Math.floor(n - 1)));
+    state.historyQueryDrawer.pageIndex = idx;
+    renderHistoryQueryDrawerList();
+  }
+
   function resetHistoryQueryDrawer() {
     state.historyQueryDrawer.projectId = null;
     state.historyQueryDrawer.versionId = null;
     state.historyQueryDrawer.searchText = '';
     state.historyQueryDrawer.files = [];
     state.historyQueryDrawer.loading = false;
+    state.historyQueryDrawer.pageIndex = 0;
     setStatus(dom.historyDrawerStatus, '', '');
     syncProjectOptions(dom.historyDrawerProjectSelect, '请选择项目');
     if (dom.historyDrawerProjectSelect) dom.historyDrawerProjectSelect.value = '';
@@ -1928,6 +2025,7 @@
     if (dom.historyDrawerListBody) {
       dom.historyDrawerListBody.innerHTML = '<tr><td colspan=\"8\"><p class=\"hint\">请选择项目与版本后点击“查询”。</p></td></tr>';
     }
+    setDrawerPagination(dom.historyDrawerPaginationTop, dom.historyDrawerPaginationBottom, '');
   }
 
   function getHistoryQueryVisibleFiles() {
@@ -1940,11 +2038,26 @@
     });
   }
 
+  function getHistoryQueryPagedFiles() {
+    var visible = getHistoryQueryVisibleFiles();
+    var page = resolveDrawerPage(visible.length, state.historyQueryDrawer.pageIndex);
+    state.historyQueryDrawer.pageIndex = page.pageIndex;
+    return {
+      page: page,
+      list: visible.slice(page.start, page.end),
+      total: visible.length,
+    };
+  }
+
   function renderHistoryQueryDrawerList() {
     if (!dom.historyDrawerListBody) return;
-    var visible = getHistoryQueryVisibleFiles();
-    if (!visible.length) {
+    var result = getHistoryQueryPagedFiles();
+    var visible = result.list;
+    var total = result.total;
+    var page = result.page;
+    if (!total) {
       dom.historyDrawerListBody.innerHTML = '<tr><td colspan=\"8\"><p class=\"hint\">暂无有改动记录的用例文件</p></td></tr>';
+      setDrawerPagination(dom.historyDrawerPaginationTop, dom.historyDrawerPaginationBottom, '');
       return;
     }
     dom.historyDrawerListBody.innerHTML = visible.map(function(f) {
@@ -1973,12 +2086,18 @@
         '</tr>'
       );
     }).join('');
+    setDrawerPagination(
+      dom.historyDrawerPaginationTop,
+      dom.historyDrawerPaginationBottom,
+      buildDrawerPagination(total, page.pageIndex, page.totalPages, page.start, page.end, 'history-query')
+    );
   }
 
   function handleHistoryQueryProjectChange() {
     state.historyQueryDrawer.projectId = normalizeId(dom.historyDrawerProjectSelect ? dom.historyDrawerProjectSelect.value : '');
     state.historyQueryDrawer.versionId = null;
     state.historyQueryDrawer.files = [];
+    state.historyQueryDrawer.pageIndex = 0;
     setStatus(dom.historyDrawerStatus, '', '');
     persistHistoryQueryState();
     if (dom.historyDrawerVersionSelect) {
@@ -2008,17 +2127,20 @@
 
   function handleHistoryQueryVersionChange() {
     state.historyQueryDrawer.versionId = normalizeId(dom.historyDrawerVersionSelect ? dom.historyDrawerVersionSelect.value : '');
+    state.historyQueryDrawer.pageIndex = 0;
     persistHistoryQueryState();
   }
 
   function handleHistoryQuerySearchInput() {
     state.historyQueryDrawer.searchText = String(dom.historyDrawerSearchInput ? dom.historyDrawerSearchInput.value : '');
+    state.historyQueryDrawer.pageIndex = 0;
     renderHistoryQueryDrawerList();
     persistHistoryQueryState();
   }
 
   function clearHistoryQuerySearch() {
     state.historyQueryDrawer.searchText = '';
+    state.historyQueryDrawer.pageIndex = 0;
     if (dom.historyDrawerSearchInput) dom.historyDrawerSearchInput.value = '';
     renderHistoryQueryDrawerList();
     persistHistoryQueryState();
@@ -2038,6 +2160,7 @@
       return Promise.resolve([]);
     }
     state.historyQueryDrawer.loading = true;
+    state.historyQueryDrawer.pageIndex = 0;
     setStatus(dom.historyDrawerStatus, '加载中...', '');
     return apiClient
       .listCaseLibraryChangeFiles({ project_id: pid, version_id: vid, limit: 500 })
@@ -2592,6 +2715,7 @@
     state.historyQueryDrawer.projectId = projectId;
     state.historyQueryDrawer.versionId = (versionId || versionId === 0) ? versionId : null;
     state.historyQueryDrawer.searchText = persisted.search_text ? String(persisted.search_text) : '';
+    state.historyQueryDrawer.pageIndex = 0;
     if (dom.historyDrawerProjectSelect) dom.historyDrawerProjectSelect.value = String(projectId);
     if (dom.historyDrawerSearchInput) dom.historyDrawerSearchInput.value = state.historyQueryDrawer.searchText || '';
     renderHistoryQueryDrawerList();
@@ -2773,6 +2897,7 @@
     state.selectDrawer.execByFileId = {};
     state.selectDrawer.processing = false;
     state.selectDrawer.selection = new Set();
+    state.selectDrawer.pageIndex = 0;
 
     if (dom.selectProjectSelect) dom.selectProjectSelect.value = String(projectId);
     if (dom.selectVersionSelect) {
@@ -2919,6 +3044,7 @@
     state.editDrawer.ownerFilter = ownerFilter;
     state.editDrawer.ownerFilterTouched = ownerFilterTouched;
     state.editDrawer.selection = new Set(ids);
+    state.editDrawer.pageIndex = 0;
     if (dom.editDrawerProjectSelect) dom.editDrawerProjectSelect.value = String(projectId);
     if (dom.editDrawerVersionSelect) {
       dom.editDrawerVersionSelect.disabled = true;
@@ -4336,6 +4462,7 @@
     state.editDrawer.execByFileId = {};
     state.editDrawer.loading = false;
     state.editDrawer.selection = new Set();
+    state.editDrawer.pageIndex = 0;
     state.editDrawer.ownerFilterTouched = false;
     state.editDrawer.changeVersionId = null;
     if (!state.editDrawer.ownerFilter) state.editDrawer.ownerFilter = 'all';
@@ -4364,12 +4491,14 @@
     if (dom.editDrawerListBody) {
       dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"12\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
     }
+    setDrawerPagination(dom.editDrawerPaginationTop, dom.editDrawerPaginationBottom, '');
     syncEditDrawerControls();
   }
 
   function handleEditDrawerVersionChange() {
     state.editDrawer.versionId = normalizeId(dom.editDrawerVersionSelect ? dom.editDrawerVersionSelect.value : '');
     state.editDrawer.selection = new Set();
+    state.editDrawer.pageIndex = 0;
     renderEditDrawerList();
     syncEditDrawerControls();
     persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
@@ -4383,6 +4512,7 @@
   function handleEditDrawerOwnerFilterChange() {
     state.editDrawer.ownerFilter = normalizeEditDrawerOwnerFilter(dom.editDrawerOwnerFilterSelect ? dom.editDrawerOwnerFilterSelect.value : '');
     state.editDrawer.ownerFilterTouched = true;
+    state.editDrawer.pageIndex = 0;
     // 切换过滤后，仅保留当前可见列表里的勾选，避免隐藏项仍被导出/删除。
     var visibleIds = {};
     getEditDrawerVisibleFiles().forEach(function(f) {
@@ -4402,6 +4532,7 @@
   function handleEditDrawerFileSearchInput() {
     if (!dom.editDrawerFileSearchInput) return;
     state.editDrawer.fileSearchText = String(dom.editDrawerFileSearchInput.value || '');
+    state.editDrawer.pageIndex = 0;
     // 搜索同样视为筛选：仅保留可见项的勾选。
     var visibleIds = {};
     getEditDrawerVisibleFiles().forEach(function(f) {
@@ -4622,6 +4753,7 @@
     state.editDrawer.files = [];
     state.editDrawer.execByFileId = {};
     state.editDrawer.selection = new Set();
+    state.editDrawer.pageIndex = 0;
     state.editDrawer.changeVersionId = null;
     if (dom.editDrawerVersionSelect) {
       dom.editDrawerVersionSelect.disabled = true;
@@ -4641,6 +4773,7 @@
       if (dom.editDrawerListBody) {
         dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"12\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
       }
+      setDrawerPagination(dom.editDrawerPaginationTop, dom.editDrawerPaginationBottom, '');
       syncEditDrawerControls();
       persistEditDrawerState({
         drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')),
@@ -4681,8 +4814,20 @@
     });
   }
 
+  function getEditDrawerPagedFiles() {
+    var visible = getEditDrawerVisibleFiles();
+    var page = resolveDrawerPage(visible.length, state.editDrawer.pageIndex);
+    state.editDrawer.pageIndex = page.pageIndex;
+    return {
+      page: page,
+      list: visible.slice(page.start, page.end),
+      total: visible.length,
+    };
+  }
+
   function syncEditDrawerControls() {
-    var list = getEditDrawerVisibleFiles();
+    var pageData = getEditDrawerPagedFiles();
+    var list = pageData.list;
     var selection = state.editDrawer.selection instanceof Set ? state.editDrawer.selection : new Set();
     state.editDrawer.selection = selection;
     var canDelete = isAdminUser();
@@ -4713,7 +4858,10 @@
         dom.editDrawerSelectAll.indeterminate = false;
       } else {
         var total = list.length;
-        var selected = selection.size;
+        var selected = list.reduce(function(count, f) {
+          if (!f || f.id === null || f.id === undefined) return count;
+          return selection.has(String(f.id)) ? count + 1 : count;
+        }, 0);
         dom.editDrawerSelectAll.checked = selected === total;
         dom.editDrawerSelectAll.indeterminate = selected > 0 && selected < total;
       }
@@ -4722,13 +4870,18 @@
   }
 
   function setEditDrawerSelectionAll(checked) {
-    var list = getEditDrawerVisibleFiles();
+    var pageData = getEditDrawerPagedFiles();
+    var list = pageData.list;
     state.editDrawer.selection = state.editDrawer.selection instanceof Set ? state.editDrawer.selection : new Set();
-    state.editDrawer.selection.clear();
     if (checked) {
       list.forEach(function(f) {
         if (!f || f.id === null || f.id === undefined) return;
         state.editDrawer.selection.add(String(f.id));
+      });
+    } else {
+      list.forEach(function(f) {
+        if (!f || f.id === null || f.id === undefined) return;
+        state.editDrawer.selection.delete(String(f.id));
       });
     }
     renderEditDrawerList();
@@ -4738,13 +4891,17 @@
 
   function renderEditDrawerList() {
     if (!dom.editDrawerListBody) return;
-    var list = getEditDrawerVisibleFiles();
-    if (!list.length) {
+    var result = getEditDrawerPagedFiles();
+    var list = result.list;
+    var total = result.total;
+    var page = result.page;
+    if (!total) {
       var hint = '暂无用例文件';
       var term = String(state.editDrawer && state.editDrawer.fileSearchText ? state.editDrawer.fileSearchText : '').trim();
       if (term) hint = '未找到匹配的用例文件';
       else if (state.editDrawer.versionId) hint = '该版本暂无用例文件';
       dom.editDrawerListBody.innerHTML = '<tr><td colspan=\"12\"><p class=\"hint\">' + escapeHtml(hint) + '</p></td></tr>';
+      setDrawerPagination(dom.editDrawerPaginationTop, dom.editDrawerPaginationBottom, '');
       syncEditDrawerControls();
       return;
     }
@@ -4790,6 +4947,11 @@
         '</tr>'
       );
     }).join('');
+    setDrawerPagination(
+      dom.editDrawerPaginationTop,
+      dom.editDrawerPaginationBottom,
+      buildDrawerPagination(total, page.pageIndex, page.totalPages, page.start, page.end, 'edit')
+    );
     syncEditDrawerControls();
   }
 
@@ -5934,6 +6096,48 @@
     );
   }
 
+  function resolveDrawerPage(total, pageIndex) {
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    var idx = Number(pageIndex);
+    if (!isFinite(idx)) idx = 0;
+    if (idx < 0) idx = 0;
+    if (idx >= totalPages) idx = Math.max(totalPages - 1, 0);
+    var start = idx * pageSize;
+    var end = Math.min(total, start + pageSize);
+    return { pageSize: pageSize, totalPages: totalPages, pageIndex: idx, start: start, end: end };
+  }
+
+  function buildDrawerPagination(total, pageIndex, totalPages, start, end, scope) {
+    var displayStart = total ? start + 1 : 0;
+    var displayEnd = total ? Math.min(end, total) : 0;
+    var maxPage = Math.max(totalPages, 1);
+    var currentPage = totalPages ? pageIndex + 1 : 1;
+    var rangeInfo = total
+      ? '显示 ' + displayStart + '-' + displayEnd + ' / ' + total + ' 条'
+      : '暂无记录';
+    var scopeTag = scope ? String(scope) : '';
+    return (
+      '<div class=\"temp-pagination\" data-case-lib-drawer-pagination=\"' + escapeHtml(scopeTag) + '\">' +
+        '<div class=\"temp-pagination-info\">' + escapeHtml(rangeInfo) + '，每页 ' + getPageSize() + ' 条</div>' +
+        '<div class=\"temp-pagination-controls\">' +
+          '<button type=\"button\" class=\"secondary\" data-case-lib-drawer-page=\"prev\" data-case-lib-drawer-scope=\"' + escapeHtml(scopeTag) + '\" ' + (pageIndex <= 0 ? 'disabled' : '') + '>上一页</button>' +
+          '<span>第 ' + currentPage + ' / ' + maxPage + ' 页</span>' +
+          '<button type=\"button\" class=\"secondary\" data-case-lib-drawer-page=\"next\" data-case-lib-drawer-scope=\"' + escapeHtml(scopeTag) + '\" ' + (pageIndex >= totalPages - 1 ? 'disabled' : '') + '>下一页</button>' +
+          '<label>跳至' +
+            '<input type=\"number\" min=\"1\" max=\"' + maxPage + '\" value=\"' + Math.min(currentPage, maxPage) + '\" data-case-lib-drawer-page-input data-case-lib-drawer-scope=\"' + escapeHtml(scopeTag) + '\">' +
+            '页' +
+          '</label>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function setDrawerPagination(topEl, bottomEl, html) {
+    if (topEl) topEl.innerHTML = html || '';
+    if (bottomEl) bottomEl.innerHTML = html || '';
+  }
+
   function scrollEditorToIndex(index) {
     if (!dom.editView || typeof dom.editView.querySelector !== 'function') return;
     var idx = Number(index);
@@ -6262,6 +6466,15 @@
     var hasEditor = state.editor && state.editor.caseFile && state.editor.caseFile.id;
     if (hasEditor) {
       renderEditorTable();
+    }
+    if (state.editDrawer && state.editDrawer.projectId) {
+      renderEditDrawerList();
+    }
+    if (state.selectDrawer && state.selectDrawer.projectId) {
+      renderSelectDrawerList();
+    }
+    if (state.historyQueryDrawer && state.historyQueryDrawer.projectId) {
+      renderHistoryQueryDrawerList();
     }
   }
 
@@ -7239,11 +7452,25 @@
     return list;
   }
 
+  function getSelectDrawerPagedFiles() {
+    var visible = getSelectDrawerVisibleFiles();
+    var page = resolveDrawerPage(visible.length, state.selectDrawer.pageIndex);
+    state.selectDrawer.pageIndex = page.pageIndex;
+    return {
+      page: page,
+      list: visible.slice(page.start, page.end),
+      total: visible.length,
+    };
+  }
+
   function syncSelectDrawerControls() {
     if (!dom.selectBatchExecBtn && !dom.selectSelectAll) return;
     state.selectDrawer.selection = state.selectDrawer.selection instanceof Set ? state.selectDrawer.selection : new Set();
 
     var visible = getSelectDrawerVisibleFiles();
+    var page = resolveDrawerPage(visible.length, state.selectDrawer.pageIndex);
+    state.selectDrawer.pageIndex = page.pageIndex;
+    var paged = visible.slice(page.start, page.end);
     var visibleIds = {};
     visible.forEach(function(f) {
       if (!f || !f.id) return;
@@ -7264,14 +7491,20 @@
       dom.selectBatchExecBtn.disabled = loading || selected === 0;
     }
     if (dom.selectSelectAll) {
-      dom.selectSelectAll.checked = Boolean(total && selected === total);
-      dom.selectSelectAll.indeterminate = Boolean(selected && selected < total);
+      var pageTotal = paged.length;
+      var pageSelected = paged.reduce(function(count, f) {
+        if (!f || !f.id) return count;
+        return state.selectDrawer.selection.has(String(f.id)) ? count + 1 : count;
+      }, 0);
+      dom.selectSelectAll.checked = Boolean(pageTotal && pageSelected === pageTotal);
+      dom.selectSelectAll.indeterminate = Boolean(pageSelected && pageSelected < pageTotal);
     }
   }
 
   function setSelectDrawerSelectionAll(checked) {
     state.selectDrawer.selection = state.selectDrawer.selection instanceof Set ? state.selectDrawer.selection : new Set();
-    var visible = getSelectDrawerVisibleFiles();
+    var pageData = getSelectDrawerPagedFiles();
+    var visible = pageData.list;
     if (checked) {
       visible.forEach(function(f) {
         if (!f || !f.id) return;
@@ -7296,6 +7529,7 @@
     state.selectDrawer.processing = false;
     state.selectDrawer.loadSeq = 0;
     state.selectDrawer.selection = new Set();
+    state.selectDrawer.pageIndex = 0;
     setStatus(dom.selectStatus, '', '');
     syncProjectOptions(dom.selectProjectSelect, '请选择项目');
     if (dom.selectProjectSelect) dom.selectProjectSelect.value = '';
@@ -7307,6 +7541,7 @@
     if (dom.selectListBody) {
       dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
     }
+    setDrawerPagination(dom.selectPaginationTop, dom.selectPaginationBottom, '');
     if (dom.selectSelectAll) {
       dom.selectSelectAll.checked = false;
       dom.selectSelectAll.indeterminate = false;
@@ -7323,6 +7558,7 @@
     state.selectDrawer.execByFileId = {};
     state.selectDrawer.processing = false;
     state.selectDrawer.selection = new Set();
+    state.selectDrawer.pageIndex = 0;
     if (dom.selectSelectAll) {
       dom.selectSelectAll.checked = false;
       dom.selectSelectAll.indeterminate = false;
@@ -7363,6 +7599,7 @@
   function handleSelectVersionChange() {
     state.selectDrawer.versionId = normalizeId(dom.selectVersionSelect ? dom.selectVersionSelect.value : '');
     persistSelectDrawerState({ projectId: state.selectDrawer.projectId || '', versionId: state.selectDrawer.versionId || '' });
+    state.selectDrawer.pageIndex = 0;
     renderSelectDrawerList();
   }
 
@@ -7370,17 +7607,23 @@
     if (!dom.selectListBody) return;
     if (!state.selectDrawer.projectId) {
       dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
+      setDrawerPagination(dom.selectPaginationTop, dom.selectPaginationBottom, '');
       syncSelectDrawerControls();
       return;
     }
     if (state.selectDrawer.loading) {
       dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">加载中...</p></td></tr>';
+      setDrawerPagination(dom.selectPaginationTop, dom.selectPaginationBottom, '');
       syncSelectDrawerControls();
       return;
     }
-    var list = getSelectDrawerVisibleFiles();
-    if (!list.length) {
+    var result = getSelectDrawerPagedFiles();
+    var list = result.list;
+    var total = result.total;
+    var page = result.page;
+    if (!total) {
       dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">暂无用例文件</p></td></tr>';
+      setDrawerPagination(dom.selectPaginationTop, dom.selectPaginationBottom, '');
       syncSelectDrawerControls();
       return;
     }
@@ -7413,11 +7656,16 @@
 	          '<td>' + escapeHtml(importedAt) + '</td>' +
 	          '<td>' + escapeHtml(updatedAt) + '</td>' +
 	          '<td><button class=\"primary\" type=\"button\" data-case-lib-exec=\"' + escapeHtml(f && f.id ? f.id : '') + '\">转到执行</button></td>' +
-	        '</tr>'
-	      );
-	    }).join('');
-	    syncSelectDrawerControls();
-	  }
+        '</tr>'
+      );
+    }).join('');
+    setDrawerPagination(
+      dom.selectPaginationTop,
+      dom.selectPaginationBottom,
+      buildDrawerPagination(total, page.pageIndex, page.totalPages, page.start, page.end, 'select')
+    );
+    syncSelectDrawerControls();
+  }
 
 	  function buildExecMapByFileId(rows) {
 	    var list = Array.isArray(rows) ? rows : [];
@@ -8106,6 +8354,28 @@
         if (!t || !t.hasAttribute) return;
         if (!t.hasAttribute('data-case-lib-history-page-input')) return;
         handleHistoryDetailPaginationJump(t.value);
+      });
+    }
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      document.addEventListener('click', function(e) {
+        var target = e && e.target ? e.target : null;
+        var btn = target && target.closest ? target.closest('[data-case-lib-drawer-page]') : null;
+        if (!btn || !btn.getAttribute) return;
+        var scope = btn.getAttribute('data-case-lib-drawer-scope') || '';
+        var action = btn.getAttribute('data-case-lib-drawer-page') || '';
+        if (!action) return;
+        if (scope === 'edit') handleEditDrawerPaginationAction(action);
+        else if (scope === 'select') handleSelectDrawerPaginationAction(action);
+        else if (scope === 'history-query') handleHistoryQueryPaginationAction(action);
+      });
+      document.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        if (!t || !t.hasAttribute) return;
+        if (!t.hasAttribute('data-case-lib-drawer-page-input')) return;
+        var scope = t.getAttribute('data-case-lib-drawer-scope') || '';
+        if (scope === 'edit') handleEditDrawerPaginationJump(t.value);
+        else if (scope === 'select') handleSelectDrawerPaginationJump(t.value);
+        else if (scope === 'history-query') handleHistoryQueryPaginationJump(t.value);
       });
     }
     [
