@@ -278,10 +278,6 @@ body {
       display: flex;
       align-items: center;
       gap: 8px;
-      cursor: pointer;
-      user-select: none;
-      position: relative;
-      padding-right: 18px;
     }
     .card-title-row {
       display: flex;
@@ -295,19 +291,6 @@ body {
       cursor: default;
     }
     .card-title-row h2::after { display: none; }
-    .card h2::after {
-      content: '▾';
-      position: absolute;
-      right: 0;
-      font-size: 14px;
-      transition: transform 0.15s ease;
-    }
-    .card.collapsed h2::after {
-      transform: rotate(-90deg);
-    }
-    .card.collapsed .card-body {
-      display: none;
-    }
     .assign-save-bar {
       position: sticky;
       top: 96px;

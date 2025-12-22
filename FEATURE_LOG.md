@@ -19,6 +19,17 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：卡片收起三角标识移除  
+- 功能描述：各页面卡片标题右上角小三角收起标识与点击折叠能力移除，卡片内容保持展开。  
+- 操作方式：无需操作；点击卡片标题不再触发收起。  
+- 使用效果：避免误收起造成困惑，页面内容始终可见。  
+- 新增内容/接口/组件：  
+  - 前端：移除卡片标题折叠样式与交互（`style.css`、`scripts/handlers/layoutHandlers.js`）。  
+  - 测试：更新 UI 用例（`tests/ui/layout_persistence.spec.js`）。  
+- 复用说明：复用现有卡片结构与布局逻辑，无新增组件或接口。  
+- 测试与验证：`node --check scripts/handlers/layoutHandlers.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/layout_persistence.spec.js`（通过）。  
+- 更新记录：2025-12-22 卡片收起三角标识移除（`style.css`、`scripts/handlers/layoutHandlers.js`、`tests/ui/layout_persistence.spec.js`）。  
+
 - 功能名称：主要功能页面使用说明抽屉与开关  
 - 功能描述：AI 一键评审、功能工作流、用例生成、功能指派、模型管理、用例执行、用例库、用例归档、执行总览新增自动弹出的页面说明抽屉，内容包含功能简介/操作流程/必要说明；执行相关流程以“*”突出关键步骤，并提示可在设置中关闭。  
 - 操作方式：进入上述页面会自动弹出说明抽屉；在“设置 → 其他设置”中按页面勾选/关闭；切换到其他页面再返回会重新弹出，刷新当前页不触发。  

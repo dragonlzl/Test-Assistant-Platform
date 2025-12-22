@@ -3,72 +3,11 @@
     if (!ctx) return {};
     var dom = ctx.dom || {};
     var handlers = ctx.handlers || {};
-    var updateFlowStatus = ctx.updateFlowStatus || function() {};
     var scrollToSection = ctx.scrollToSection || function() {};
     var switchTab = ctx.switchTab || function() {};
     var toggleSplitView = handlers.toggleSplitView || function() {};
     var toggleImportedCaseView = handlers.toggleImportedCaseView || function() {};
     var scrollElementIntoView = handlers.scrollElementIntoView || function() {};
-    var collapseStorageKey = 'usecase-card-collapse-v1';
-
-    function loadCollapseState() {
-      try {
-        var saved = JSON.parse(localStorage.getItem(collapseStorageKey) || '{}');
-        if (saved && typeof saved === 'object') return saved;
-      } catch (err) {
-        console.warn('卡片折叠状态解析失败', err);
-      }
-      return {};
-    }
-
-    var collapseState = loadCollapseState();
-
-    function persistCollapseState() {
-      try {
-        localStorage.setItem(collapseStorageKey, JSON.stringify(collapseState));
-      } catch (err) {
-        console.warn('卡片折叠状态保存失败', err);
-      }
-    }
-
-    function getCardKey(card) {
-      if (!card) return '';
-      if (card.dataset && card.dataset.sectionId) return card.dataset.sectionId;
-      if (card.id) return card.id;
-      return '';
-    }
-
-    function setCardCollapsed(card, collapsed) {
-      var key = getCardKey(card);
-      if (!key) return;
-      if (collapsed) card.classList.add('collapsed');
-      else card.classList.remove('collapsed');
-      collapseState[key] = Boolean(collapsed);
-      persistCollapseState();
-    }
-
-    function applySavedCollapse(card) {
-      var key = getCardKey(card);
-      if (!key) return;
-      var saved = collapseState[key];
-      if (saved === true) card.classList.add('collapsed');
-      else if (saved === false) card.classList.remove('collapsed');
-    }
-
-    function setCollapsedBySectionId(sectionId, collapsed) {
-      if (!sectionId) return;
-      var target = document.querySelector('[data-section-id="' + sectionId + '"]');
-      if (!target) return;
-      setCardCollapsed(target, collapsed);
-    }
-
-    window.app = window.app || {};
-    window.app.cardCollapseStore = {
-      setCardCollapsed: setCardCollapsed,
-      setBySectionId: setCollapsedBySectionId,
-      applySavedCollapse: applySavedCollapse,
-      getState: function() { return Object.assign({}, collapseState); },
-    };
 
     var flowNavSteps = dom.flowNavSteps || document.querySelectorAll('#flowNav .step');
     var scrollTopBtn = dom.scrollTopBtn;
@@ -116,15 +55,7 @@
     }
 
     document.querySelectorAll('section.card').forEach(function(card) {
-      var header = card.querySelector('h2');
-      var body = card.querySelector('.card-body');
-      if (!header || !body) return;
-      applySavedCollapse(card);
-      header.addEventListener('click', function() {
-        var willCollapse = !card.classList.contains('collapsed');
-        setCardCollapsed(card, willCollapse);
-        updateFlowStatus();
-      });
+      if (card.classList.contains('collapsed')) card.classList.remove('collapsed');
     });
 
     if (flowNavSteps && typeof flowNavSteps.forEach === 'function') {

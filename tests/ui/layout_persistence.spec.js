@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 
-test.describe('卡片折叠持久化', () => {
+test.describe('卡片折叠移除', () => {
   test.beforeEach(async ({ page }) => {
     page.__promptAnswers = [];
     await page.route('**/*', (route) => {
@@ -27,26 +27,20 @@ test.describe('卡片折叠持久化', () => {
     });
   });
 
-  test('折叠状态刷新后保持', async ({ page }) => {
+  test('标题不再触发折叠且无三角标识', async ({ page }) => {
     await page.click('[data-group="ai"]');
     await page.click('[data-tab-btn="clean"]');
     const importCard = page.locator('section[data-section-id="import"]');
     await importCard.scrollIntoViewIfNeeded();
-    await importCard.locator('h2').click();
-    await expect(importCard).toHaveClass(/collapsed/);
-    const savedState = await page.evaluate(() => JSON.parse(localStorage.getItem('usecase-card-collapse-v1') || '{}'));
-    expect(savedState && savedState.import).toBe(true);
+    const header = importCard.locator('h2');
+    await expect(importCard.locator('.card-body')).toBeVisible();
+    await header.click();
+    await expect(importCard).not.toHaveClass(/collapsed/);
+    await expect(importCard.locator('.card-body')).toBeVisible();
 
-    await page.reload();
-    await page.waitForFunction(() => window.app && window.app._inited === true);
-    await page.click('[data-group="ai"]');
-    await page.click('[data-tab-btn="clean"]');
-    const importCardAfter = page.locator('section[data-section-id="import"]');
-    await expect(importCardAfter).toHaveClass(/collapsed/);
-
-    await importCardAfter.locator('h2').click();
-    await expect(importCardAfter).not.toHaveClass(/collapsed/);
-    const restoredState = await page.evaluate(() => JSON.parse(localStorage.getItem('usecase-card-collapse-v1') || '{}'));
-    expect(restoredState && restoredState.import).toBe(false);
+    const afterContent = await header.evaluate((el) => window.getComputedStyle(el, '::after').content);
+    expect(afterContent).not.toContain('▾');
+    const savedState = await page.evaluate(() => localStorage.getItem('usecase-card-collapse-v1'));
+    expect(savedState).toBe(null);
   });
 });
