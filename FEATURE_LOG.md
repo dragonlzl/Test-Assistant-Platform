@@ -19,6 +19,17 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行视图复用/缺陷删除确认抽屉化  
+- 功能描述：执行视图中复用测试项与缺陷链接删除的二次确认由浏览器弹窗改为右侧确认抽屉。  
+- 操作方式：在执行视图点击复用测试项/缺陷链接的“删除” → 抽屉确认删除。  
+- 使用效果：确认交互统一为抽屉，避免浏览器弹窗打断。  
+- 新增内容/接口/组件：  
+  - 前端：复用/缺陷删除改为确认抽屉（`scripts/core/tempexecCore.js`）。  
+  - 测试：更新 UI 用例（`tests/ui/tempexec_search.spec.js`）。  
+- 复用说明：复用通用确认抽屉组件 `appConfirmDrawer`，无新增接口。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/tempexec_search.spec.js`（通过）。  
+- 更新记录：2025-12-22 执行视图复用/缺陷删除确认抽屉化（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_search.spec.js`）。  
+
 - 功能名称：页面说明登录后尊重设置开关  
 - 功能描述：当“页面说明”开关在设置中关闭时，重新登录不再自动弹出对应页面说明。  
 - 操作方式：在设置中取消页面说明勾选 → 重新登录系统。  

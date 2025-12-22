@@ -1876,15 +1876,26 @@
       if (!file || !file.cases[index]) return;
       var caseItem = file.cases[index];
       if (!Array.isArray(caseItem.defectLinks)) return;
-      var confirmed = window.confirm('确定删除该缺陷链接吗？');
-      if (!confirmed) return;
-      caseItem.defectLinks = caseItem.defectLinks.filter(function(link) { return link && link.id !== linkId; });
-      if (isDbMode()) {
-        var caseId = caseItem && (caseItem.execCaseId || caseItem.id);
-        if (caseId) queueExecCasePatch(caseId, { defect_links: caseItem.defectLinks });
-      }
-      persistTempExecState();
-      renderTempExecView();
+      openConfirmDrawer({
+        title: '删除缺陷链接',
+        message: '确定删除该缺陷链接吗？',
+        confirmText: '确认删除',
+        cancelText: '取消',
+        danger: true,
+      }).then(function(result) {
+        if (!result || result.ok !== true) return;
+        var nextFile = getTempExecFile(fileId);
+        if (!nextFile || !nextFile.cases[index]) return;
+        var nextCase = nextFile.cases[index];
+        if (!Array.isArray(nextCase.defectLinks)) return;
+        nextCase.defectLinks = nextCase.defectLinks.filter(function(link) { return link && link.id !== linkId; });
+        if (isDbMode()) {
+          var caseId = nextCase && (nextCase.execCaseId || nextCase.id);
+          if (caseId) queueExecCasePatch(caseId, { defect_links: nextCase.defectLinks });
+        }
+        persistTempExecState();
+        renderTempExecView();
+      });
     }
 
     function updateTempExecDefectLink(fileId, index, linkId, value) {
@@ -7106,16 +7117,27 @@
       if (!file || !file.cases[index]) return;
       var targetCase = file.cases[index];
       if (!Array.isArray(targetCase.reuseDetails)) return;
-      var confirmed = window.confirm('确定删除该复用测试项吗？该操作不可撤销。');
-      if (!confirmed) return;
-      targetCase.reuseDetails = targetCase.reuseDetails.filter(function(item) { return item.id !== detailId; });
-      targetCase.actual = resolveReuseAggregateStatus(targetCase.reuseDetails);
-      if (isDbMode()) {
-        var caseId = targetCase && (targetCase.execCaseId || targetCase.id);
-        if (caseId) queueExecCasePatch(caseId, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
-      }
-      persistTempExecState();
-      renderTempExecView();
+      openConfirmDrawer({
+        title: '删除复用测试项',
+        message: '确定删除该复用测试项吗？该操作不可撤销。',
+        confirmText: '确认删除',
+        cancelText: '取消',
+        danger: true,
+      }).then(function(result) {
+        if (!result || result.ok !== true) return;
+        var nextFile = getTempExecFile(fileId);
+        if (!nextFile || !nextFile.cases[index]) return;
+        var nextCase = nextFile.cases[index];
+        if (!Array.isArray(nextCase.reuseDetails)) return;
+        nextCase.reuseDetails = nextCase.reuseDetails.filter(function(item) { return item.id !== detailId; });
+        nextCase.actual = resolveReuseAggregateStatus(nextCase.reuseDetails);
+        if (isDbMode()) {
+          var caseId = nextCase && (nextCase.execCaseId || nextCase.id);
+          if (caseId) queueExecCasePatch(caseId, { reuse_details: nextCase.reuseDetails, status: nextCase.actual });
+        }
+        persistTempExecState();
+        renderTempExecView();
+      });
     }
 
     function updateTempExecReuseStatus(fileId, index, detailId, value) {
