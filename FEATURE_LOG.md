@@ -19,6 +19,17 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：侧边栏页面路径可点击跳转  
+- 功能描述：左侧导航面板“页面路径”区域支持点击路径项进行跳转，并在执行页路径子项点击后打开对应抽屉/视图。  
+- 操作方式：在“页面路径”中点击路径项（如“执行分配”）即可跳转到对应页面或视图。  
+- 使用效果：路径区域可作为快捷导航，提升页面内跳转效率。  
+- 新增内容/接口/组件：  
+  - 前端：路径项渲染与点击跳转逻辑（`scripts/core/appRuntime.js`）、执行页路径子项跳转响应（`scripts/modules/tempexec.js`）、路径项可点击样式（`style.css`）。  
+  - 测试：UI 用例更新（`tests/ui/sidebar_path.spec.js`）。  
+- 复用说明：复用现有页签切换/抽屉组件，无新增接口。  
+- 测试与验证：`node --check scripts/core/appRuntime.js scripts/modules/tempexec.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/sidebar_path.spec.js`（通过）。  
+- 更新记录：2025-12-22 侧边栏路径点击跳转（`scripts/core/appRuntime.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/sidebar_path.spec.js`）。  
+
 - 功能名称：卡片收起三角标识移除  
 - 功能描述：各页面卡片标题右上角小三角收起标识与点击折叠能力移除，卡片内容保持展开。  
 - 操作方式：无需操作；点击卡片标题不再触发收起。  

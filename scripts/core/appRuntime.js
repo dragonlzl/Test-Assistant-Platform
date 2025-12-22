@@ -526,6 +526,7 @@
     var currentPathEl = dom.currentPath || document.getElementById('currentPath');
     var currentPathTextEl = dom.currentPathText || document.getElementById('currentPathText');
     var pathSubMap = { tempexec: '执行分配' };
+    var lastTabByGroup = {};
 
     function getTabLabel(tabName) {
       if (!tabName) return '';
@@ -547,9 +548,25 @@
       }
       if (!parts || !parts.length) return;
       parts.forEach(function(part) {
-        var item = document.createElement('span');
-        item.className = 'path-item';
-        item.textContent = part;
+        var meta = (part && typeof part === 'object') ? part : null;
+        var label = meta ? (meta.label || '') : String(part || '');
+        if (!label) return;
+        var type = meta ? (meta.type || '') : '';
+        var isLink = false;
+        if (type === 'group' && meta.group) isLink = true;
+        if (type === 'tab' && meta.tab) isLink = true;
+        if (type === 'sub' && meta.tab && meta.sub) isLink = true;
+        var item = document.createElement(isLink ? 'button' : 'span');
+        item.className = 'path-item' + (isLink ? ' is-link' : '');
+        if (isLink) item.setAttribute('type', 'button');
+        if (isLink && type) item.setAttribute('data-path-type', type);
+        if (isLink && type === 'group' && meta.group) item.setAttribute('data-path-group', meta.group);
+        if (isLink && type === 'tab' && meta.tab) item.setAttribute('data-path-tab', meta.tab);
+        if (isLink && type === 'sub') {
+          if (meta.tab) item.setAttribute('data-path-tab', meta.tab);
+          if (meta.sub) item.setAttribute('data-path-sub', meta.sub);
+        }
+        item.textContent = label;
         currentPathTextEl.appendChild(item);
       });
     }
@@ -561,12 +578,13 @@
         renderCurrentPath([]);
         return;
       }
+      var groupName = getGroupNameForTab(tab);
       var groupLabel = getGroupLabel(tab);
       var tabLabel = getTabLabel(tab) || tab;
       var parts = [];
-      if (groupLabel) parts.push(groupLabel);
-      if (tabLabel) parts.push(tabLabel);
-      if (subLabel) parts.push(subLabel);
+      if (groupLabel) parts.push({ label: groupLabel, type: 'group', group: groupName });
+      if (tabLabel) parts.push({ label: tabLabel, type: 'tab', tab: tab });
+      if (subLabel) parts.push({ label: subLabel, type: 'sub', tab: tab, sub: subLabel });
       renderCurrentPath(parts);
     }
 
@@ -575,6 +593,68 @@
       if (!tab) return;
       pathSubMap[tab] = label ? String(label) : '';
       updateCurrentPath(tab, pathSubMap[tab]);
+    }
+
+    function resolveTabForGroup(groupName) {
+      if (!groupName) return '';
+      if (lastTabByGroup[groupName]) return lastTabByGroup[groupName];
+      var menu = document.querySelector('[data-group-menu="' + groupName + '"]');
+      if (!menu) return '';
+      var buttons = Array.prototype.slice.call(menu.querySelectorAll('[data-tab-btn]'));
+      for (var i = 0; i < buttons.length; i++) {
+        var btn = buttons[i];
+        if (btn && btn.dataset && btn.dataset.tabBtn && !btn.classList.contains('hidden')) {
+          return btn.dataset.tabBtn;
+        }
+      }
+      if (buttons.length && buttons[0].dataset && buttons[0].dataset.tabBtn) {
+        return buttons[0].dataset.tabBtn;
+      }
+      return '';
+    }
+
+    function dispatchPathSubJump(tabName, subLabel) {
+      if (!subLabel) return;
+      try {
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+          window.dispatchEvent(new CustomEvent('app-path-sub-jump', { detail: { tab: tabName || '', sub: subLabel } }));
+        }
+      } catch (err) {
+        try {
+          if (typeof document !== 'undefined' && typeof document.createEvent === 'function' && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+            var evt = document.createEvent('CustomEvent');
+            evt.initCustomEvent('app-path-sub-jump', false, false, { tab: tabName || '', sub: subLabel });
+            window.dispatchEvent(evt);
+          }
+        } catch (err2) {
+          // ignore
+        }
+      }
+    }
+
+    if (currentPathTextEl) {
+      currentPathTextEl.addEventListener('click', function(e) {
+        if (blockSidebarIfDrawerOpen(e)) return;
+        var target = e && e.target && e.target.closest ? e.target.closest('.path-item.is-link') : null;
+        if (!target || !currentPathTextEl.contains(target)) return;
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+        var type = target.getAttribute('data-path-type') || '';
+        if (type === 'group') {
+          var group = target.getAttribute('data-path-group') || '';
+          var tab = resolveTabForGroup(group);
+          if (tab) switchTab(tab);
+          else if (group) showTabGroup(group);
+        } else if (type === 'tab') {
+          var tabName = target.getAttribute('data-path-tab') || '';
+          if (tabName) switchTab(tabName);
+        } else if (type === 'sub') {
+          var subTab = target.getAttribute('data-path-tab') || '';
+          var subLabel = target.getAttribute('data-path-sub') || '';
+          if (subTab) switchTab(subTab);
+          if (subLabel) dispatchPathSubJump(subTab, subLabel);
+        }
+      });
     }
 
     function showTabGroup(name, opts) {
@@ -741,6 +821,8 @@
         window.app.drawer.closeAllDrawers();
       }
       state.activeTab = name;
+      var activeGroupName = getGroupNameForTab(name);
+      if (activeGroupName) lastTabByGroup[activeGroupName] = name;
       // Only persist within the current tab session:
       // - refresh should restore the current tab
       // - re-login should go back to default (login flow clears sessionStorage)

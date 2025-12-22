@@ -31,4 +31,13 @@ test.describe('侧边栏当前路径', () => {
     await page.click('#openTempExecAssignDrawerBtn');
     await expect(pathItems.nth(2)).toHaveText('执行分配');
   });
+
+  test('点击路径可打开执行分配抽屉', async ({ page }) => {
+    await page.click('[data-group="cases"]');
+    await page.click('[data-tab-btn="tempexec"]');
+    const assignDrawer = page.locator('#tempExecAssignDrawer');
+    await expect(assignDrawer).not.toHaveClass(/open/);
+    await page.locator('#currentPathText .path-item', { hasText: '执行分配' }).click();
+    await expect(assignDrawer).toHaveClass(/open/);
+  });
 });

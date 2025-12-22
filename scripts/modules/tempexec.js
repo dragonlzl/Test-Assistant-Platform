@@ -728,6 +728,30 @@
       if (drawerBody) drawerBody.scrollTop = 0;
     }
 
+    function handlePathSubJump(event) {
+      var detail = event && event.detail ? event.detail : null;
+      if (!detail || detail.tab !== 'tempexec') return;
+      var label = detail.sub ? String(detail.sub) : '';
+      if (!label) return;
+      if (label.indexOf('用例导入') !== -1) {
+        if (tempExecImportDrawer && typeof tempExecImportDrawer.open === 'function') tempExecImportDrawer.open();
+        return;
+      }
+      if (label.indexOf('执行分配') !== -1) {
+        if (tempExecAssignDrawer && typeof tempExecAssignDrawer.open === 'function') tempExecAssignDrawer.open();
+        return;
+      }
+      if (label.indexOf('归档操作') !== -1) {
+        showTempExecOverview();
+        return;
+      }
+      if (label.indexOf('执行视图') !== -1) {
+        showTempExecView();
+      }
+    }
+
+    window.addEventListener('app-path-sub-jump', handlePathSubJump);
+
     function scrollToTempExecCaseRow(fileId, idx, options) {
       var opts = options && typeof options === 'object' ? options : {};
       var attempts = 0;
