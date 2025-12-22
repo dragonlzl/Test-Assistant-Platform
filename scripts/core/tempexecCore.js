@@ -118,6 +118,16 @@
     var downloadText = deps && deps.downloadText ? deps.downloadText : function() {};
     var downloadBlob = deps && deps.downloadBlob ? deps.downloadBlob : function() {};
     var scrollElementIntoView = deps && deps.scrollElementIntoView ? deps.scrollElementIntoView : function() {};
+    var openConfirmDrawer = deps && deps.openConfirmDrawer
+      ? deps.openConfirmDrawer
+      : function(options) {
+        var msg = options && options.message ? String(options.message) : '';
+        var ok = true;
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+          ok = window.confirm(msg);
+        }
+        return Promise.resolve({ ok: ok });
+      };
     var tempExecResultOptions = deps && deps.tempExecResultOptions ? deps.tempExecResultOptions : ['未执行', '通过', '失败', '阻塞', '不适用'];
     var deriveCaseListFromText = deps && deps.deriveCaseListFromText ? deps.deriveCaseListFromText : function() { return []; };
     var parseXmindFile = deps && deps.parseXmindFile ? deps.parseXmindFile : function() { return Promise.resolve({ text: '', list: [] }); };
@@ -6257,24 +6267,33 @@
       if (!file || !Array.isArray(file.cases) || !file.cases[index]) return;
       var anchorRect = captureTempExecAnchorRect(anchorEl);
       var shouldHint = Boolean(anchorRect && tempExecUndoTimer);
-      var confirmed = window.confirm('确定删除该条用例吗？此操作不可撤销。');
-      if (!confirmed) return;
-      if (shouldHint) showTempExecBlockHint(anchorRect, '当前有待确认的增删操作，请先撤回或等待入库');
-      var removed = file.cases.splice(index, 1);
-      var newAddedKeys = [];
-      removed.forEach(function(item) {
-        if (!isTempExecNewAdded(fileId, item)) return;
-        getTempExecCaseUiKeys(item).forEach(function(k) { if (k && newAddedKeys.indexOf(k) === -1) newAddedKeys.push(k); });
-        unmarkTempExecNewAdded(fileId, item);
+      openConfirmDrawer({
+        title: '删除用例',
+        message: '确定删除该条用例吗？此操作不可撤销。',
+        confirmText: '确认删除',
+        cancelText: '取消',
+        danger: true,
+      }).then(function(result) {
+        if (!result || result.ok !== true) return;
+        var targetFile = getTempExecFile(fileId);
+        if (!targetFile || !Array.isArray(targetFile.cases) || !targetFile.cases[index]) return;
+        if (shouldHint) showTempExecBlockHint(anchorRect, '当前有待确认的增删操作，请先撤回或等待入库');
+        var removed = targetFile.cases.splice(index, 1);
+        var newAddedKeys = [];
+        removed.forEach(function(item) {
+          if (!isTempExecNewAdded(fileId, item)) return;
+          getTempExecCaseUiKeys(item).forEach(function(k) { if (k && newAddedKeys.indexOf(k) === -1) newAddedKeys.push(k); });
+          unmarkTempExecNewAdded(fileId, item);
+        });
+        pushTempExecUndo({ type: 'remove', fileId: fileId, index: index, cases: removed, newAddedKeys: newAddedKeys });
+        clearTempExecCaseStates(fileId);
+        persistTempExecState();
+        renderTempExecView();
+        if (tempExecStatus) {
+          setStatus(tempExecStatus, '用例已删除', 'ok');
+          startTempExecUndoTimer('用例已删除', { anchorRect: anchorRect });
+        }
       });
-      pushTempExecUndo({ type: 'remove', fileId: fileId, index: index, cases: removed, newAddedKeys: newAddedKeys });
-      clearTempExecCaseStates(fileId);
-      persistTempExecState();
-      renderTempExecView();
-      if (tempExecStatus) {
-        setStatus(tempExecStatus, '用例已删除', 'ok');
-        startTempExecUndoTimer('用例已删除', { anchorRect: anchorRect });
-      }
     }
 
     function updateTempExecCaseField(fileId, index, field, value) {

@@ -1110,6 +1110,7 @@
         scrollElementIntoView,
         tempExecResultOptions,
         buildXmindPackageFromCases: lazyBuildCasesXmindPackage,
+        openConfirmDrawer: appUtils.openConfirmDrawer,
         dom,
       })
       : null;

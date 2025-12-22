@@ -19,6 +19,17 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行页用例删除确认抽屉化  
+- 功能描述：执行页“−”删除用例的确认由浏览器弹窗改为右侧确认抽屉。  
+- 操作方式：在执行页点击用例行“−”删除按钮 → 抽屉确认删除。  
+- 使用效果：确认交互与其他操作一致，避免浏览器弹窗打断。  
+- 新增内容/接口/组件：  
+  - 前端：执行页删除用例改用确认抽屉（`scripts/core/tempexecCore.js`、`scripts/modules/app.js`）。  
+  - 测试：更新 UI 用例（`tests/ui/tempexec_search.spec.js`）。  
+- 复用说明：复用通用确认抽屉组件 `appConfirmDrawer`，无新增接口。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/app.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/tempexec_search.spec.js`（通过）。  
+- 更新记录：2025-12-22 执行页用例删除确认抽屉化（`scripts/core/tempexecCore.js`、`scripts/modules/app.js`、`tests/ui/tempexec_search.spec.js`）。  
+
 - 功能名称：侧边栏页面路径可点击跳转  
 - 功能描述：左侧导航面板“页面路径”区域支持点击路径项进行跳转，并在执行页路径子项点击后打开对应抽屉/视图。  
 - 操作方式：在“页面路径”中点击路径项（如“执行分配”）即可跳转到对应页面或视图。  
