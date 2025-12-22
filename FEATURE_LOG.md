@@ -19,6 +19,19 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：归档用例自动移除专注区  
+- 功能描述：执行视图归档用例后，若该用例在专注区，会自动从专注区移除。  
+- 操作方式：在执行视图/归档总览归档用例。  
+- 使用效果：已归档用例不再出现在专注区，避免误操作。  
+- 新增内容/接口/组件：  
+  - 前端：归档后同步清理专注区（`scripts/modules/tempexec.js`）。  
+  - 测试：UI 用例（`tests/ui/tempexec_archive_stay_project.spec.js`）。  
+- 复用说明：复用现有归档流程与专注区渲染逻辑，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/modules/tempexec.js`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_archive_stay_project.spec.js -g "归档后自动移除专注区用例"`（通过）  
+- 更新记录：2025-12-22 归档用例自动移除专注区（`scripts/modules/tempexec.js`、`tests/ui/tempexec_archive_stay_project.spec.js`）。  
+
 - 功能名称：执行总览 NA 标识改为不适用  
 - 功能描述：执行总览页版本总览与执行集统计中，原 “NA” 标识改为 “不适用”，解释更清晰。  
 - 操作方式：进入执行总览页，查看版本总览/执行集统计。  

@@ -186,6 +186,122 @@ test.describe('用例执行-归档后不自动切换项目', () => {
     await expect(page.locator('#tempExecView')).not.toContainText('标题B');
   });
 
+  test('归档后自动移除专注区用例', async ({ page }) => {
+    const user = { id: 3, username: 'ui_focus', role: 'user', level: 'member' };
+    const projects = [{ id: 1, name: '项目A', description: '' }];
+    const versionsByProject = { 1: [{ id: 11, project_id: 1, name: 'v1' }] };
+    const now = Date.now();
+    const iso = (ms) => new Date(ms).toISOString();
+    const setA = { id: 1001, project_id: 1, version_id: 11, case_file_id: 101, case_count: 1, name: '用例A', status: 'active', created_at: iso(now - 1000), updated_at: iso(now - 900) };
+    let archived = false;
+    const casesBySetId = {
+      1001: [
+        {
+          id: 10011,
+          exec_set_id: 1001,
+          case_item_id: null,
+          module: '模块',
+          title: '标题A',
+          expected: '预期',
+          priority: 'P1',
+          precondition: '前提',
+          steps: '步骤',
+          actual_result: null,
+          defect_link: null,
+          reuse_details: null,
+          defect_links: null,
+          remark: null,
+          status: '通过',
+          order_no: 1,
+          executor_id: user.id,
+          created_at: setA.created_at,
+          updated_at: setA.updated_at,
+        },
+      ],
+    };
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') return respond(200, user);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, projects);
+      const verMatch = pathName.match(/^\/api\/projects\/(\d+)\/versions$/);
+      if (verMatch && method === 'GET') {
+        const pid = Number(verMatch[1]);
+        return respond(200, versionsByProject[pid] || []);
+      }
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/exec/sets' && method === 'GET') {
+        const statusFilter = url.searchParams.get('status_filter') || '';
+        if (statusFilter === 'archived') {
+          if (!archived) return respond(200, []);
+          return respond(200, [Object.assign({}, setA, { status: 'archived', archived_at: iso(now - 100) })]);
+        }
+        return respond(200, archived ? [] : [setA]);
+      }
+
+      const casesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (casesMatch && method === 'GET') {
+        const execSetId = Number(casesMatch[1]);
+        return respond(200, casesBySetId[execSetId] || []);
+      }
+
+      const archiveMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/archive$/);
+      if (archiveMatch && method === 'POST') {
+        archived = true;
+        return respond(200, { ok: true });
+      }
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await switchToTempExec(page);
+
+    await expect(page.locator('#tempVersionGrid .temp-req-row[data-temp-file="1001"]')).toBeVisible();
+    await page.click('#tempVersionGrid .temp-req-row[data-temp-file="1001"]');
+    await page.waitForFunction(() => {
+      const st = window.app && window.app.state ? window.app.state : null;
+      if (!st) return false;
+      const file = (st.tempExecFiles || []).find((f) => String(f && f.id) === '1001');
+      return file && file._casesLoading === false;
+    });
+
+    await page.evaluate(() => {
+      const st = window.app && window.app.state ? window.app.state : null;
+      const api = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      if (!st || !api) return;
+      st.tempExecFocus = ['1001'];
+      if (typeof api.renderTempFocusZone === 'function') api.renderTempFocusZone();
+    });
+
+    await expect(page.locator('#tempFocusBlock button[data-temp-file="1001"]')).toHaveCount(1);
+    await expect(page.locator('#tempExecViewFocusBlock button[data-temp-file="1001"]')).toHaveCount(1);
+
+    await page.click('#tempExecOverviewBtn', { force: true });
+    await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
+    const waitArchive = page.waitForResponse((res) =>
+      res.url().includes('/api/exec/sets/1001/archive') && res.status() === 200
+    );
+    await page.click('[data-temp-overview-archive="1001"]');
+    await waitArchive;
+    await expect(page.locator('#tempFocusBlock button[data-temp-file]')).toHaveCount(0, { timeout: 10000 });
+    await expect(page.locator('#tempExecViewFocusBlock button[data-temp-file]')).toHaveCount(0, { timeout: 10000 });
+  });
+
   test('执行视图上一份/下一份循环切换，归档后自动切到下一份', async ({ page }) => {
     const user = { id: 2, username: 'ui_member', role: 'user', level: 'member' };
     const projects = [{ id: 1, name: '项目A', description: '' }];

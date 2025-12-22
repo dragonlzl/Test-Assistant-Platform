@@ -370,6 +370,7 @@
       }
       tempExecArchiveReasonContext = {
         execSetId: options.execSetId || '',
+        fileId: options.fileId || '',
         client: options.client || null,
         payloadBase: options.payloadBase || {},
         resumeOverview: options.resumeOverview !== false,
@@ -393,6 +394,21 @@
         if (tempExecArchiveReasonInput) tempExecArchiveReasonInput.focus();
       } catch (_) {}
       return true;
+    }
+
+    function removeTempExecFocusAfterArchive(fileId) {
+      if (!fileId) return;
+      var id = String(fileId);
+      var focusList = Array.isArray(state.tempExecFocus) ? state.tempExecFocus : [];
+      if (!focusList.length) return;
+      var next = focusList.filter(function(fid) { return String(fid) !== id; });
+      if (next.length === focusList.length) return;
+      state.tempExecFocus = next;
+      if (api && typeof api.persistTempExecState === 'function') api.persistTempExecState();
+      if (api && typeof api.saveTempExecFocus === 'function') api.saveTempExecFocus();
+      if (api && typeof api.renderTempExecNav === 'function') api.renderTempExecNav();
+      if (api && typeof api.renderTempVersionGrid === 'function') api.renderTempVersionGrid();
+      if (api && typeof api.renderTempFocusZone === 'function') api.renderTempFocusZone();
     }
 
     function showTempExecCenterToast(text, level) {
@@ -517,6 +533,9 @@
         return;
       }
       var counts = { pending: 0, failed: 0, blocked: 0, total: 0 };
+      var focusFileId = fileForArchive && fileForArchive.id !== null && fileForArchive.id !== undefined
+        ? String(fileForArchive.id)
+        : '';
       if (Array.isArray(fileForArchive.cases)) {
         counts.total = fileForArchive.cases.length;
         fileForArchive.cases.forEach(function(item) {
@@ -544,6 +563,7 @@
           '），请填写归档原因后继续。';
         openTempExecArchiveReasonDrawerForArchive({
           execSetId: sid,
+          fileId: focusFileId,
           client: client,
           payloadBase: payload,
           resumeOverview: resumeOverview,
@@ -561,6 +581,7 @@
         .then(function() {
           if (tempExecStatus) setStatus(tempExecStatus, '归档成功', 'ok');
           showTempExecArchiveSuccessToast();
+          removeTempExecFocusAfterArchive(focusFileId);
           finalizeTempExecArchive({ resumeOverview: resumeOverview, afterArchive: afterArchive });
         })
         .catch(function(err) {
@@ -606,6 +627,7 @@
         .then(function() {
           if (tempExecStatus) setStatus(tempExecStatus, '归档成功', 'ok');
           showTempExecArchiveSuccessToast();
+          if (ctx0 && ctx0.fileId) removeTempExecFocusAfterArchive(ctx0.fileId);
           ctx0.submitting = false;
           var resumeOverview = ctx0.resumeOverview !== false;
           var afterArchive = typeof ctx0.afterArchive === 'function' ? ctx0.afterArchive : null;
