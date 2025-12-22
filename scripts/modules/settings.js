@@ -87,6 +87,33 @@
       defaultProjectId: false,
     };
 
+    function setSettingsReady(source) {
+      state.settingsReady = true;
+      if (!window.app) window.app = {};
+      window.app.settingsReady = true;
+      try {
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+          window.dispatchEvent(new CustomEvent('app-settings-loaded', { detail: { source: source || '' } }));
+        }
+      } catch (err) {
+        try {
+          if (typeof document !== 'undefined' && typeof document.createEvent === 'function' && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+            var evt = document.createEvent('CustomEvent');
+            evt.initCustomEvent('app-settings-loaded', false, false, { source: source || '' });
+            window.dispatchEvent(evt);
+          }
+        } catch (err2) {
+          // ignore
+        }
+      }
+    }
+
+    function setSettingsPending() {
+      state.settingsReady = false;
+      if (!window.app) window.app = {};
+      window.app.settingsReady = false;
+    }
+
     var projectSortState = {
       loading: false,
       projects: [],
@@ -183,6 +210,7 @@
       }
       ensurePageGuideSwitches();
       ensureTempExecColumns();
+      setSettingsReady('server');
       // 如果执行页已打开，主动刷新以应用远端列/分页设置。
       try {
         renderTempExecView();
@@ -318,6 +346,7 @@
     }
 
     function loadSettings() {
+      setSettingsPending();
       if (!state.settings || typeof state.settings !== 'object') {
         state.settings = Object.assign({}, defaultSettings);
       }
@@ -387,6 +416,7 @@
       } else {
         state.settings.defaultProjectId = String(state.settings.defaultProjectId || '');
       }
+      if (shouldUseLocal) setSettingsReady('local');
     }
 
     function persistSettings(keys) {

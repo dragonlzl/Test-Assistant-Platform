@@ -19,6 +19,17 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：页面说明登录后尊重设置开关  
+- 功能描述：当“页面说明”开关在设置中关闭时，重新登录不再自动弹出对应页面说明。  
+- 操作方式：在设置中取消页面说明勾选 → 重新登录系统。  
+- 使用效果：登录后仅对开启的页面说明自动弹出，避免被动弹窗干扰。  
+- 新增内容/接口/组件：  
+  - 前端：设置加载完成标记与事件派发（`scripts/modules/settings.js`）、页面说明自动弹出等待设置就绪（`scripts/modules/pageGuide.js`）。  
+  - 测试：UI 用例新增（`tests/ui/page_guide_drawer.spec.js`）。  
+- 复用说明：复用现有设置加载与页面说明抽屉组件，无新增接口。  
+- 测试与验证：`node --check scripts/modules/settings.js scripts/modules/pageGuide.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/page_guide_drawer.spec.js`（通过）。  
+- 更新记录：2025-12-22 页面说明登录后尊重设置开关（`scripts/modules/settings.js`、`scripts/modules/pageGuide.js`、`tests/ui/page_guide_drawer.spec.js`）。  
+
 - 功能名称：执行页用例删除确认抽屉化  
 - 功能描述：执行页“−”删除用例的确认由浏览器弹窗改为右侧确认抽屉。  
 - 操作方式：在执行页点击用例行“−”删除按钮 → 抽屉确认删除。  

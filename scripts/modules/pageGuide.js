@@ -132,6 +132,20 @@
       return switches[tab] !== false;
     }
 
+    function isSettingsReady() {
+      if (state && state.settingsReady === true) return true;
+      if (window.app && window.app.settingsReady === true) return true;
+      return false;
+    }
+
+    function shouldWaitForSettings() {
+      if (isSettingsReady()) return false;
+      var api = window.app && window.app.apiClient;
+      if (!api || typeof api.getStoredToken !== 'function' || typeof api.listSettings !== 'function') return false;
+      var token = api.getStoredToken();
+      return Boolean(token);
+    }
+
     function shouldSkipAutoOpen() {
       // 自动化运行时默认不弹出，避免遮挡交互；如需验证可通过本地标记强制开启。
       var isAutomation = false;
@@ -574,6 +588,10 @@
     function handleTabActivated(e) {
       var tab = e && e.detail ? e.detail.tab : '';
       if (!tab) return;
+      if (shouldWaitForSettings()) {
+        updateGuideTrigger(tab);
+        return;
+      }
       if (shouldAutoOpen(tab)) openGuide(tab);
       lastTab = tab;
       updateGuideTrigger(tab);
@@ -586,9 +604,24 @@
     } catch (err) {
       // ignore
     }
+    try {
+      window.addEventListener('app-settings-loaded', function() {
+        var activeTab = getActiveTab();
+        if (!activeTab) return;
+        if (shouldAutoOpen(activeTab)) openGuide(activeTab);
+        lastTab = activeTab;
+        updateGuideTrigger(activeTab);
+      });
+    } catch (err) {
+      // ignore
+    }
     var initialTab = getActiveTab();
     if (initialTab) {
       setTimeout(function() {
+        if (shouldWaitForSettings()) {
+          updateGuideTrigger(initialTab);
+          return;
+        }
         if (shouldAutoOpen(initialTab)) openGuide(initialTab);
         lastTab = initialTab;
         updateGuideTrigger(initialTab);

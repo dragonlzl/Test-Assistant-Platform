@@ -111,3 +111,53 @@ test.describe('页面说明抽屉', () => {
     await expect(drawer).not.toHaveClass(/open/);
   });
 });
+
+test.describe('页面说明登录设置', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      if (url.includes('/api/')) {
+        const parsed = new URL(url);
+        const pathName = parsed.pathname;
+        const method = route.request().method();
+        const respond = (status, body) =>
+          route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+        if (pathName === '/api/users/me' && method === 'GET') {
+          return respond(200, { id: 0, username: 'ui_user', role: 'user', level: 'member' });
+        }
+        if (pathName === '/api/settings' && method === 'GET') {
+          return respond(200, [{
+            key: 'pageGuideSwitches',
+            scope: 'user',
+            owner_id: 0,
+            value_json: { auto: false, clean: true, tempexec: true },
+          }]);
+        }
+        if (pathName.startsWith('/api/')) return respond(200, []);
+        return respond(404, { detail: 'not found' });
+      }
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.continue();
+      }
+      return route.abort();
+    });
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tap-auth-token', 'test-token');
+        localStorage.setItem('tap-e2e-skip-auth', '1');
+        localStorage.setItem('tap-e2e-force-guide', '1');
+      } catch (_) {}
+    });
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+  });
+
+  test('登录后关闭默认页不再自动弹出', async ({ page }) => {
+    await page.waitForFunction(() => window.app && window.app.authReady === true);
+    await page.waitForFunction(() => window.app && window.app.settingsReady === true);
+    await page.waitForTimeout(200);
+    await expect(page.locator('#pageGuideDrawer')).not.toHaveClass(/open/);
+  });
+});
