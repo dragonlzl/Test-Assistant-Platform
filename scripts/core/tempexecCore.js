@@ -6237,9 +6237,14 @@
       var file = getTempExecFile(fileId);
       if (!file || !Array.isArray(file.cases)) return;
       var anchorRect = captureTempExecAnchorRect(anchorEl);
-      // 8 秒待确认期内重复操作：在点击处提醒（不阻止本次操作）。
-      if (anchorRect && tempExecUndoTimer) {
-        showTempExecBlockHint(anchorRect, '当前有待确认的增删操作，请先撤回或等待入库');
+      if (tempExecUndoTimer) {
+        if (tempExecStatus) {
+          setStatus(tempExecStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+        }
+        if (anchorRect) {
+          showTempExecBlockHint(anchorRect, '当前有待确认的增删操作，请先撤回或等待入库');
+        }
+        return;
       }
       var base = file.cases[index] || {};
       var moduleName = base.module || '';
@@ -6277,7 +6282,15 @@
       var file = getTempExecFile(fileId);
       if (!file || !Array.isArray(file.cases) || !file.cases[index]) return;
       var anchorRect = captureTempExecAnchorRect(anchorEl);
-      var shouldHint = Boolean(anchorRect && tempExecUndoTimer);
+      if (tempExecUndoTimer) {
+        if (tempExecStatus) {
+          setStatus(tempExecStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+        }
+        if (anchorRect) {
+          showTempExecBlockHint(anchorRect, '当前有待确认的增删操作，请先撤回或等待入库');
+        }
+        return;
+      }
       openConfirmDrawer({
         title: '删除用例',
         message: '确定删除该条用例吗？此操作不可撤销。',
@@ -6286,9 +6299,17 @@
         danger: true,
       }).then(function(result) {
         if (!result || result.ok !== true) return;
+        if (tempExecUndoTimer) {
+          if (tempExecStatus) {
+            setStatus(tempExecStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+          }
+          if (anchorRect) {
+            showTempExecBlockHint(anchorRect, '当前有待确认的增删操作，请先撤回或等待入库');
+          }
+          return;
+        }
         var targetFile = getTempExecFile(fileId);
         if (!targetFile || !Array.isArray(targetFile.cases) || !targetFile.cases[index]) return;
-        if (shouldHint) showTempExecBlockHint(anchorRect, '当前有待确认的增删操作，请先撤回或等待入库');
         var removed = targetFile.cases.splice(index, 1);
         var newAddedKeys = [];
         removed.forEach(function(item) {

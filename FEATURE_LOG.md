@@ -19,6 +19,33 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行视图新增待确认期间阻止连续操作  
+- 功能描述：执行视图新增用例进入 8 秒待确认期后，继续新增或删除均会被阻止，删除/新增组合操作不再累计撤回数量。  
+- 操作方式：执行视图点击“＋”插入空用例后，再次点击“＋”或点击“−”删除。  
+- 使用效果：第二次操作提示阻塞，不会增加待撤回数量或触发删除确认。  
+- 新增内容/接口/组件：  
+  - 前端：新增待确认期阻塞逻辑（`scripts/core/tempexecCore.js`）。  
+  - 测试：UI 用例（`tests/ui/tempexec_search.spec.js`）。  
+- 复用说明：复用执行视图撤回计时与阻塞提示逻辑，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_search.spec.js -g "执行视图(删除待确认期间阻止连续删除|新增待确认期间阻止新增与删除)"`（首次失败：app 初始化超时；重跑见下）  
+  - `npm run test:ui -- tests/ui/tempexec_search.spec.js -g "执行视图新增待确认期间阻止新增与删除"`（通过）  
+- 更新记录：2025-12-22 执行视图新增待确认期间阻止连续操作（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_search.spec.js`）。  
+
+- 功能名称：执行视图删除待确认期间阻止连续删除  
+- 功能描述：执行视图点击“-”删除用例后，8 秒待确认期内再次删除会被阻止，删除计数不增加，与用例库一致。  
+- 操作方式：执行视图删除一条用例后，在 8 秒内再点另一条删除按钮。  
+- 使用效果：第二次点击提示阻塞但不进入删除流程，撤回计数保持不变。  
+- 新增内容/接口/组件：  
+  - 前端：删除待确认期拦截（`scripts/core/tempexecCore.js`）。  
+  - 测试：UI 用例（`tests/ui/tempexec_search.spec.js`）。  
+- 复用说明：复用执行视图撤回计时与阻塞提示逻辑，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_search.spec.js -g "执行视图删除待确认期间阻止连续删除"`（通过）  
+- 更新记录：2025-12-22 执行视图删除待确认期间阻止连续删除（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_search.spec.js`）。  
+
 - 功能名称：登录 token 过期延长至 7 天  
 - 功能描述：登录成功后颁发的 access token 有效期由 8 小时延长至 7 天。  
 - 操作方式：正常登录获取 token，后端返回的 expires_at 距登录时间约 7 天。  
@@ -29,7 +56,7 @@
 - 复用说明：复用 `generate_token` 与现有登录接口，无新增接口。  
 - 测试与验证：  
   - `npm run test:ui -- tests/ui/auth_login_expiry.spec.js`（通过）  
-  - `APP_DB_FILE=apitest.db python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 18082` 后执行 `API_BASE_URL=http://127.0.0.1:18082 npm run test:api -- tests/api/auth_login_expiry.spec.js`（未通过：本机 Python 3.7 无法安装 fastapi==0.104.1，导致后端依赖缺失，服务启动失败）  
+  - `APP_DB_FILE=apitest.db python3.12 -m uvicorn backend.main:app --host 127.0.0.1 --port 18082` 后执行 `API_BASE_URL=http://127.0.0.1:18082 npm run test:api -- tests/api/auth_login_expiry.spec.js`（通过）  
 - 更新记录：2025-12-22 登录 token 过期延长至 7 天（`backend/routers/auth.py`、`tests/ui/auth_login_expiry.spec.js`、`tests/api/auth_login_expiry.spec.js`）。  
 
 - 功能名称：执行视图复用/缺陷删除确认抽屉化  
