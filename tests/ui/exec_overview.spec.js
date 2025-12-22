@@ -314,6 +314,102 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('正常登录');
   });
 
+  test('版本总览 NA 标识展示为不适用', async ({ page }) => {
+    const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const projects = [{ id: 1, name: '战魂铭人', description: '用于执行总览' }];
+    const versionV1 = { id: 11, name: 'v1' };
+    const versionsByProject = { 1: [versionV1] };
+    const now = Date.now();
+    const iso = (ms) => new Date(ms).toISOString();
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const path = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (path === '/api/users/me') return respond(200, user);
+      if (path === '/api/projects') return respond(200, projects);
+      var versionsMatch = path.match(/^\/api\/projects\/(\d+)\/versions$/);
+      if (versionsMatch) {
+        var pid = Number(versionsMatch[1]);
+        return respond(200, versionsByProject[pid] || []);
+      }
+      if (path === '/api/exec/overview' && method === 'GET') {
+        return respond(200, [
+          {
+            project_id: 1,
+            version_id: versionV1.id,
+            user_id: user.id,
+            username: user.username,
+            total: 5,
+            pending: 1,
+            passed: 2,
+            failed: 0,
+            blocked: 0,
+            not_applicable: 2,
+          },
+        ]);
+      }
+      if (path === '/api/exec/overview/layout' && method === 'GET') {
+        return respond(200, [
+          {
+            project_id: 1,
+            version_id: versionV1.id,
+            user_id: user.id,
+            username: user.username,
+            level: user.level,
+            user_created_at: new Date('2020-01-01T00:00:00Z').toISOString(),
+            total: 5,
+            pending: 1,
+            passed: 2,
+            failed: 0,
+            blocked: 0,
+            not_applicable: 2,
+            ui_placement: { versionOrderByProject: { 1: ['11'] }, fileOrderByProjectVersion: { 1: { 11: ['200'] } } },
+            exec_sets: [
+              {
+                exec_set_id: 200,
+                exec_set_name: '需求-登录',
+                version_id: 11,
+                status: 'active',
+                requirement: '',
+                total: 5,
+                pending: 1,
+                passed: 2,
+                failed: 0,
+                blocked: 0,
+                not_applicable: 2,
+                created_at: iso(now - 20000),
+                updated_at: iso(now - 2000),
+              },
+            ],
+          },
+        ]);
+      }
+      if (path === '/api/auth/logout') return respond(200, {});
+      if (path.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForSelector('.tab-group-btn[data-group="cases"]', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', { timeout: 20000 });
+
+    await page.click('.tab-group-btn[data-group="cases"]');
+    await page.click('[data-group-menu="cases"] [data-tab-btn="exec-overview"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('exec-overview'); });
+
+    await expect(page.locator('#execOverviewNavProjects [data-project-id="1"]')).toBeVisible();
+    await page.click('#execOverviewNavProjects [data-project-id="1"]');
+    const summaryRows = page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row');
+    await expect(summaryRows).toHaveCount(1);
+    const naTag = summaryRows.locator('.exec-overview-kv.kv-na');
+    await expect(naTag).toHaveText('不适用2');
+  });
+
   test('执行列表抽屉支持搜索与分页（分页大小读取“其他设置”）', async ({ page }) => {
     const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
     const projects = [{ id: 1, name: '战魂铭人', description: '用于执行总览' }];

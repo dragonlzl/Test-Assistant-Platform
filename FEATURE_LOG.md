@@ -19,6 +19,19 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行总览 NA 标识改为不适用  
+- 功能描述：执行总览页版本总览与执行集统计中，原 “NA” 标识改为 “不适用”，解释更清晰。  
+- 操作方式：进入执行总览页，查看版本总览/执行集统计。  
+- 使用效果：蓝色 “NA” 显示为 “不适用”，避免误解。  
+- 新增内容/接口/组件：  
+  - 前端：执行总览统计展示（`scripts/modules/execOverview.js`）。  
+  - 测试：UI 用例（`tests/ui/exec_overview.spec.js`）。  
+- 复用说明：复用既有统计与样式组件，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/modules/execOverview.js`（通过）  
+  - `npm run test:ui -- tests/ui/exec_overview.spec.js -g "版本总览 NA 标识展示为不适用"`（首次失败：index.html 空响应；重跑通过）  
+- 更新记录：2025-12-22 执行总览 NA 标识改为不适用（`scripts/modules/execOverview.js`、`tests/ui/exec_overview.spec.js`）。  
+
 - 功能名称：执行视图新增待确认期间阻止连续操作  
 - 功能描述：执行视图新增用例进入 8 秒待确认期后，继续新增或删除均会被阻止，删除/新增组合操作不再累计撤回数量。  
 - 操作方式：执行视图点击“＋”插入空用例后，再次点击“＋”或点击“−”删除。  

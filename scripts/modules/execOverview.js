@@ -260,14 +260,14 @@
     parts.push('过' + passed);
     parts.push('失' + failed);
     parts.push('阻' + blocked);
-    if (na > 0) parts.push('NA' + na);
+    if (na > 0) parts.push('不适用' + na);
     var counts = [
       '<span class="exec-overview-kv kv-done">已' + executed + '/' + total + '</span>',
       '<span class="exec-overview-kv kv-pending">待' + pending + '</span>',
       '<span class="exec-overview-kv kv-passed">过' + passed + '</span>',
       '<span class="exec-overview-kv kv-failed">失' + failed + '</span>',
       '<span class="exec-overview-kv kv-blocked">阻' + blocked + '</span>',
-      (na > 0 ? '<span class="exec-overview-kv kv-na">NA' + na + '</span>' : ''),
+      (na > 0 ? '<span class="exec-overview-kv kv-na">不适用' + na + '</span>' : ''),
     ].filter(Boolean).join('');
 
     return (
