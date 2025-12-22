@@ -19,7 +19,7 @@ def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.username == payload.username).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="账号或密码错误")
-    token, expires_at = generate_token(ttl_minutes=8 * 60)
+    token, expires_at = generate_token(ttl_minutes=7 * 24 * 60)
     session = models.UserSession(
         user_id=user.id,
         token=token,

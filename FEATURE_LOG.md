@@ -19,6 +19,19 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：登录 token 过期延长至 7 天  
+- 功能描述：登录成功后颁发的 access token 有效期由 8 小时延长至 7 天。  
+- 操作方式：正常登录获取 token，后端返回的 expires_at 距登录时间约 7 天。  
+- 使用效果：减少频繁重新登录的打断。  
+- 新增内容/接口/组件：  
+  - 后端：登录 token TTL 调整（`backend/routers/auth.py`）。  
+  - 测试：UI 用例（`tests/ui/auth_login_expiry.spec.js`）；API 用例（`tests/api/auth_login_expiry.spec.js`）。  
+- 复用说明：复用 `generate_token` 与现有登录接口，无新增接口。  
+- 测试与验证：  
+  - `npm run test:ui -- tests/ui/auth_login_expiry.spec.js`（通过）  
+  - `APP_DB_FILE=apitest.db python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 18082` 后执行 `API_BASE_URL=http://127.0.0.1:18082 npm run test:api -- tests/api/auth_login_expiry.spec.js`（未通过：本机 Python 3.7 无法安装 fastapi==0.104.1，导致后端依赖缺失，服务启动失败）  
+- 更新记录：2025-12-22 登录 token 过期延长至 7 天（`backend/routers/auth.py`、`tests/ui/auth_login_expiry.spec.js`、`tests/api/auth_login_expiry.spec.js`）。  
+
 - 功能名称：执行视图复用/缺陷删除确认抽屉化  
 - 功能描述：执行视图中复用测试项与缺陷链接删除的二次确认由浏览器弹窗改为右侧确认抽屉。  
 - 操作方式：在执行视图点击复用测试项/缺陷链接的“删除” → 抽屉确认删除。  
