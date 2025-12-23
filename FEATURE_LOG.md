@@ -19,6 +19,19 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：DeepSeek JSON 模式自动附加 response_format
+- 功能描述：模型指派选择 DeepSeek 时，模型调用会根据提示词包含 JSON 自动附加 response_format=json_object，并在 JSON 数组场景追加系统提示与严格校验，确保输出符合提示词格式。
+- 操作方式：在模型指派页选择 DeepSeek，并在提示词中要求输出 JSON（含 JSON 数组）后触发模型调用（清洗/对比/拆分等）。
+- 使用效果：DeepSeek 输出稳定为 JSON；当要求输出 JSON 数组时，结果需为数组格式。
+- 新增内容/接口/组件：
+  - 前端：DeepSeek JSON 模式 response_format + JSON 数组严格校验（`services/modelClient.js`）。
+  - 测试：DeepSeek JSON 模式请求体与数组校验（`tests/ui/model_response_strip.spec.js`）。
+- 复用说明：复用现有模型调用与提示词逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/model_response_strip.spec.js`（通过）
+- 更新记录：2025-02-18 DeepSeek JSON 模式自动附加 response_format（`services/modelClient.js`、`tests/ui/model_response_strip.spec.js`）。
+- 更新记录：2025-02-18 DeepSeek JSON 数组输出严格校验（`services/modelClient.js`、`tests/ui/model_response_strip.spec.js`）。
+
 - 功能名称：执行页多用户用例库变更同步修复  
 - 功能描述：多用户交替修改用例库后，执行页同步不再因历史混合时区导致 500，变更抽屉可展示完整 diff。  
 - 操作方式：A 修改 → B 刷新 → B 修改 → A 刷新 → B 刷新 → 点击“用例库变更”。  
