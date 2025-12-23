@@ -2090,3 +2090,14 @@
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8081 API_BASE_URL=http://127.0.0.1:8081 npx playwright test --config tests/playwright.config.js tests/ui/tempexec_case_library_multi_user.spec.js`（通过）
   - `API_BASE_URL=http://127.0.0.1:8081 npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_case_library_sync.spec.js`（2 项失败，详见测试输出）
 - 更新记录：2025-12-23 执行视图用例变更自动弹窗稳定触发（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）。
+
+- 功能名称：用例库同步测试场景修正
+- 功能描述：将“其他执行集同步不重复新增”用例调整为同步非创建方执行集，确保测试语义与行为一致。
+- 操作方式：执行新增用例后，改为同步另一执行集并校验不产生重复新增。
+- 使用效果：API 自动化用例更符合场景含义。
+- 新增内容/接口/组件：
+  - 测试：用例库同步场景修正（`tests/api/exec_case_library_sync.spec.js`）。
+- 复用说明：复用现有同步接口与测试工具链，无新增接口。
+- 测试与验证：
+  - `API_BASE_URL=http://127.0.0.1:8081 npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_case_library_sync.spec.js`（通过）
+- 更新记录：2025-12-23 用例库同步测试场景修正（`tests/api/exec_case_library_sync.spec.js`）。

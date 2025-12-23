@@ -423,7 +423,7 @@ test.describe('exec case library sync api', () => {
     expect(aManual && aManual.case_item_id).toBeTruthy();
     expect(aManual.case_item_id).toBe(bManual.case_item_id);
 
-    const syncRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetBId}/case-library-sync`, { headers: headersB, data: {} });
+    const syncRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetAId}/case-library-sync`, { headers: headersA, data: {} });
     expect(syncRes.status()).toBe(200);
     const sync = await syncRes.json();
     expect(sync && sync.has_new_diff).toBeFalsy();
@@ -431,11 +431,11 @@ test.describe('exec case library sync api', () => {
     expect(sync && sync.summary && sync.summary.updated).toBe(0);
     expect(sync && sync.summary && sync.summary.deleted).toBe(0);
 
-    const listBRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetBId}/cases`, { headers: headersB });
-    expect(listBRes.status()).toBe(200);
-    const listB = await listBRes.json();
-    expect(listB.length).toBe(2);
-    const sameTitle = listB.filter((row) => row && row.title === manualPayload.title);
+    const listARes = await ctx.get(`${apiBase}/api/exec/sets/${execSetAId}/cases`, { headers: headersA });
+    expect(listARes.status()).toBe(200);
+    const listA = await listARes.json();
+    expect(listA.length).toBe(2);
+    const sameTitle = listA.filter((row) => row && row.title === manualPayload.title);
     expect(sameTitle.length).toBe(1);
     expect(sameTitle[0] && sameTitle[0].case_item_id).toBeTruthy();
 
