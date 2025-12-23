@@ -320,4 +320,108 @@ test.describe('用例执行-项目/版本分组布局', () => {
     expect(projectTitlesAfterReorder[0]).toBe('项目A');
     expect(projectTitlesAfterReorder[1]).toBe('项目B');
   });
+
+  test('执行分配版本盒子删除子项使用确认抽屉', async ({ page }) => {
+    const user = { id: 1, username: 'ui_admin', role: 'admin', level: 'leader' };
+    const projects = [{ id: 1, name: '项目A', description: '' }];
+    const versionsByProject = {
+      1: [{ id: 11, project_id: 1, name: 'v1' }],
+    };
+    const now = Date.now();
+    const iso = (ms) => new Date(ms).toISOString();
+    const execSets = [
+      { id: 1001, project_id: 1, version_id: 11, case_file_id: 101, case_count: 1, name: '用例A', status: 'active', created_at: iso(now - 20000), updated_at: iso(now - 1000) },
+    ];
+    const casesBySet = {
+      1001: [
+        {
+          id: 10011,
+          exec_set_id: 1001,
+          case_item_id: null,
+          module: '模块',
+          title: '标题',
+          expected: '预期',
+          priority: 'P1',
+          precondition: '前提',
+          steps: '步骤',
+          actual_result: null,
+          defect_link: null,
+          reuse_details: null,
+          defect_links: null,
+          remark: null,
+          status: '未执行',
+          order_no: 1,
+          executor_id: user.id,
+          created_at: execSets[0].created_at,
+          updated_at: execSets[0].updated_at,
+        },
+      ],
+    };
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, user);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, projects);
+      const verMatch = pathName.match(/^\/api\/projects\/(\d+)\/versions$/);
+      if (verMatch && method === 'GET') {
+        const pid = Number(verMatch[1]);
+        return respond(200, versionsByProject[pid] || []);
+      }
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, execSets.slice());
+      const casesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (casesMatch && method === 'GET') {
+        const execSetId = Number(casesMatch[1]);
+        return respond(200, casesBySet[execSetId] || []);
+      }
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/') && method === 'GET') return respond(200, []);
+      return respond(200, {});
+    });
+
+    page.on('dialog', async (dialog) => {
+      await dialog.accept();
+    });
+
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true && window.app.authReady === true);
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await page.click('#openTempExecAssignDrawerBtn');
+    const assignDrawer = page.locator('#tempExecAssignDrawer');
+    await expect(assignDrawer).toHaveClass(/open/);
+
+    await page.waitForFunction(() => {
+      const row = document.querySelector('#tempVersionGrid .temp-project-version .temp-req-row[data-temp-file]');
+      return Boolean(row);
+    });
+    const row = page.locator('#tempVersionGrid .temp-project-version .temp-req-row[data-temp-file]').first();
+    await expect(row).toContainText('用例A');
+
+    await row.locator('[data-temp-remove]').click();
+    const confirmDrawer = page.locator('#appConfirmDrawer');
+    await expect(confirmDrawer).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toHaveText('确定要删除【用例A】吗？此操作不可撤销。');
+    await expect(assignDrawer).toHaveClass(/drawer-suspended/);
+
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await expect(confirmDrawer).not.toHaveClass(/open/);
+    await expect(assignDrawer).not.toHaveClass(/drawer-suspended/);
+    await expect(page.locator('#tempVersionGrid .temp-project-version .temp-req-row[data-temp-file]')).toHaveCount(0);
+  });
 });

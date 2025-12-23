@@ -3361,9 +3361,18 @@
           var fileId = fileRemoveBtn.dataset.tempRemove;
           var targetFile = api.getTempExecFile ? api.getTempExecFile(fileId) : null;
           if (!targetFile) return;
-          var confirmed3 = window.confirm("确定要删除【" + targetFile.name + "】吗？此操作不可撤销。");
-          if (!confirmed3) return;
-          api.removeTempExecFile(fileId);
+          var name = targetFile.name ? String(targetFile.name) : '测试用例';
+          var prevDrawer3 = resolveTempExecActiveDrawer();
+          openConfirmDrawer({
+            title: '删除用例',
+            message: '确定要删除【' + name + '】吗？此操作不可撤销。',
+            confirmText: '确认删除',
+            cancelText: '取消',
+            previousDrawer: prevDrawer3 || null,
+          }).then(function(res) {
+            if (!res || res.ok !== true) return;
+            api.removeTempExecFile(fileId);
+          });
           return;
         }
         // 支持点击整行（含条数徽标/标签），不仅限于按钮本体

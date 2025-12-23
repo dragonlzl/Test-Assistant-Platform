@@ -19,6 +19,18 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行分配版本盒子删除子项确认抽屉
+- 功能描述：执行分配页版本盒子内删除子项改为确认抽屉弹窗，并挂起当前打开的抽屉避免遮挡。
+- 操作方式：在执行分配页版本盒子中点击子项删除（×），在确认抽屉中确认或取消。
+- 使用效果：删除操作使用统一抽屉确认，且不会干扰当前打开的执行分配抽屉。
+- 新增内容/接口/组件：
+  - 前端：版本盒子子项删除改为确认抽屉（`scripts/modules/tempexec.js`）。
+  - 测试：执行分配版本盒子删除子项确认抽屉（`tests/ui/tempexec_project_layout.spec.js`）。
+- 复用说明：复用现有确认抽屉组件与执行分配流程，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_project_layout.spec.js -g "执行分配版本盒子删除子项使用确认抽屉"`（通过）
+- 更新记录：2025-02-18 执行分配版本盒子删除子项确认抽屉（`scripts/modules/tempexec.js`、`tests/ui/tempexec_project_layout.spec.js`）。
+
 - 功能名称：DeepSeek JSON 模式自动附加 response_format
 - 功能描述：模型指派选择 DeepSeek 时，模型调用会根据提示词包含 JSON 自动附加 response_format=json_object，并在 JSON 数组场景追加系统提示与严格校验，确保输出符合提示词格式。
 - 操作方式：在模型指派页选择 DeepSeek，并在提示词中要求输出 JSON（含 JSON 数组）后触发模型调用（清洗/对比/拆分等）。
