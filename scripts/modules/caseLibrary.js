@@ -41,9 +41,63 @@
     return Promise.resolve({ ok: ok });
   }
 
+  function isCaseLibraryActive() {
+    var globalState = window.app && window.app.state ? window.app.state : {};
+    var tabName = globalState && globalState.activeTab ? globalState.activeTab : '';
+    if (tabName === 'case-library') return true;
+    var visible = document.querySelector('section[data-tab-section="case-library"]:not(.hidden)');
+    return Boolean(visible);
+  }
+
+  function markSelectExecDrawerRequest() {
+    try {
+      if (window.app) window.app.__caseLibrarySelectExecRequest = true;
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function consumeSelectExecDrawerRequest() {
+    try {
+      if (window.app && window.app.__caseLibrarySelectExecRequest) {
+        window.app.__caseLibrarySelectExecRequest = false;
+        return true;
+      }
+    } catch (err) {
+      // ignore
+    }
+    return false;
+  }
+
+  function openSelectExecDrawerDirect() {
+    if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+      window.app.drawer.closeAllDrawers();
+    }
+    if (selectDrawerInstance && typeof selectDrawerInstance.open === 'function') {
+      selectDrawerInstance.open();
+      return true;
+    }
+    var fallbackBtn = document.getElementById('openCaseLibrarySelectExecDrawerBtn');
+    if (fallbackBtn && typeof fallbackBtn.click === 'function') {
+      fallbackBtn.click();
+      return true;
+    }
+    return false;
+  }
+
+  function openSelectExecDrawer() {
+    if (!isCaseLibraryActive()) {
+      markSelectExecDrawerRequest();
+      return false;
+    }
+    consumeSelectExecDrawerRequest();
+    return openSelectExecDrawerDirect();
+  }
+
   var dom = {
     root: document.getElementById('caseLibrary'),
     status: document.getElementById('caseLibraryStatus'),
+    jumpToExecBtn: document.getElementById('caseLibraryJumpExecBtn'),
 
     editCard: document.getElementById('caseLibraryEditCard'),
     editCardTitle: document.getElementById('caseLibraryEditCardTitle'),
@@ -8000,6 +8054,19 @@
         item[field] = value;
       });
     }
+    if (dom.jumpToExecBtn) {
+      dom.jumpToExecBtn.addEventListener('click', function() {
+        try { if (window.app) window.app.__drawerSkipRestoreOnce = true; } catch (_) {}
+        if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+          window.app.drawer.closeAllDrawers();
+        }
+        var coreApi = getCore();
+        var switchTab = window.app && typeof window.app.switchTab === 'function'
+          ? window.app.switchTab
+          : (coreApi && typeof coreApi.switchTab === 'function' ? coreApi.switchTab : null);
+        if (typeof switchTab === 'function') switchTab('tempexec');
+      });
+    }
 
     if (dom.editDrawerConfirmBtn) {
       dom.editDrawerConfirmBtn.addEventListener('click', loadEditDrawerFiles);
@@ -8413,6 +8480,10 @@
 		      return ensureProjectsReady()
 		        .then(function() { return restoreCaseLibraryLastSelection(); })
 		        .then(function(view) {
+		          if (consumeSelectExecDrawerRequest()) {
+		            openSelectExecDrawerDirect();
+		            return view;
+		          }
 		          var persisted = readEditDrawerPersistedState();
 		          var userId = getCurrentUserId();
 		          var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
@@ -8593,6 +8664,7 @@
     scheduleAutoRestoreProbe();
     window.app = window.app || {};
     window.app.caseLibraryApi = window.app.caseLibraryApi || {};
+    window.app.caseLibraryApi.openSelectExecDrawer = openSelectExecDrawer;
     window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
     window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;
     window.app.caseLibraryApi.downloadImportExcelTemplate = downloadImportExcelTemplate;

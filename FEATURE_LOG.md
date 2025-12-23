@@ -2164,3 +2164,27 @@
 - 测试与验证：
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8092 npx playwright test tests/ui/auth_login_expiry.spec.js`（通过）
 - 更新记录：2025-12-23 登录校验失败时保留登录态（`scripts/modules/authGuard.js`、`tests/ui/auth_login_expiry.spec.js`）。
+
+- 功能名称：执行分配页快速添加执行用例与用例库跳转执行页
+- 功能描述：执行分配页版本分组新增“添加执行用例”按钮，点击跳转用例库并自动打开“选择用例执行”抽屉；用例库导航新增“跳转用例执行页”，仅跳转不打开抽屉，并在跳转时关闭当前抽屉避免残留状态。
+- 操作方式：在执行分配页点击“添加执行用例”进入用例库并看到“选择用例执行”抽屉自动展开；在用例库点击“跳转用例执行页”仅进入执行页且不自动展开抽屉。
+- 使用效果：执行分配与用例库切换更顺滑，抽屉状态不会残留或误触发。
+- 新增内容/接口/组件：
+  - 前端：入口按钮与跨页打开抽屉逻辑（`index.html`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`）。
+  - 测试：用例库跳转与自动打开抽屉 UI 用例（`tests/ui/case_library_jump_exec.spec.js`）。
+- 复用说明：复用现有抽屉组件与 tab 切换逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/case_library_jump_exec.spec.js`（通过）
+- 更新记录：2025-12-23 执行分配页快速添加执行用例与用例库跳转执行页（`index.html`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_jump_exec.spec.js`）。
+
+- 功能名称：执行分配入口精简与用例库入口顺序调整
+- 功能描述：执行分配页移除“收起需求区”与“用例执行情况总览”按钮，“添加执行用例”移至执行分配标题行；用例库入口“跳转用例执行页/选择用例执行”按钮顺序互换。
+- 操作方式：进入执行分配抽屉，标题行显示“添加执行用例”，需求区不再显示收起按钮；用例库导航中“跳转用例执行页”位于“选择用例执行”之前。
+- 使用效果：执行分配入口更聚焦，导航顺序更符合预期。
+- 新增内容/接口/组件：
+  - 前端：执行分配按钮与用例库入口排序调整（`index.html`、`scripts/modules/tempexec.js`、`config/domConfig.js`）。
+  - 测试：执行分配入口与用例库顺序 UI 校验（`tests/ui/case_library_jump_exec.spec.js`），更新相关用例入口（`tests/ui/tempexec_progress.spec.js`、`tests/ui/tempexec_overview_project_style.spec.js`、`tests/ui/tempexec_archive_stay_project.spec.js`、`tests/ui/tempexec_drag.spec.js`、`tests/ui/files_layout.spec.js`）。
+- 复用说明：复用现有导航与抽屉组件，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/case_library_jump_exec.spec.js tests/ui/tempexec_progress.spec.js tests/ui/tempexec_overview_project_style.spec.js tests/ui/tempexec_archive_stay_project.spec.js tests/ui/tempexec_drag.spec.js tests/ui/files_layout.spec.js`（通过）
+- 更新记录：2025-12-23 执行分配入口精简与用例库入口顺序调整（`index.html`、`scripts/modules/tempexec.js`、`config/domConfig.js`、`tests/ui/case_library_jump_exec.spec.js`、`tests/ui/tempexec_progress.spec.js`、`tests/ui/tempexec_overview_project_style.spec.js`、`tests/ui/tempexec_archive_stay_project.spec.js`、`tests/ui/tempexec_drag.spec.js`、`tests/ui/files_layout.spec.js`）。

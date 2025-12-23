@@ -17,6 +17,22 @@ async function switchToTempExec(page) {
   await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
 }
 
+async function openTempExecOverview(page) {
+  await page.evaluate(() => {
+    if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+      window.app.drawer.closeAllDrawers();
+    }
+    try {
+      window.dispatchEvent(new CustomEvent('app-path-sub-jump', { detail: { tab: 'tempexec', sub: '归档操作&进度预览' } }));
+    } catch (err) {
+      var evt = document.createEvent('CustomEvent');
+      evt.initCustomEvent('app-path-sub-jump', false, false, { tab: 'tempexec', sub: '归档操作&进度预览' });
+      window.dispatchEvent(evt);
+    }
+  });
+  await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
+}
+
 test.describe('用例执行-归档后不自动切换项目', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -170,9 +186,7 @@ test.describe('用例执行-归档后不自动切换项目', () => {
       return file && file._casesLoading === false;
     });
 
-    await page.click('#tempExecOverviewBtn');
-    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
-    await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
+    await openTempExecOverview(page);
     await page.click('[data-temp-overview-archive="1001"]');
 
     await expect.poll(
@@ -291,8 +305,7 @@ test.describe('用例执行-归档后不自动切换项目', () => {
     await expect(page.locator('#tempFocusBlock button[data-temp-file="1001"]')).toHaveCount(1);
     await expect(page.locator('#tempExecViewFocusBlock button[data-temp-file="1001"]')).toHaveCount(1);
 
-    await page.click('#tempExecOverviewBtn', { force: true });
-    await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
+    await openTempExecOverview(page);
     const waitArchive = page.waitForResponse((res) =>
       res.url().includes('/api/exec/sets/1001/archive') && res.status() === 200
     );
@@ -484,9 +497,7 @@ test.describe('用例执行-归档后不自动切换项目', () => {
 
     await gotoIndex(page);
     await switchToTempExec(page);
-    await page.click('#tempExecOverviewBtn');
-    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
-    await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
+    await openTempExecOverview(page);
 
     const archivedChip = page.locator('.exec-overview-file-chip[data-temp-archived="1"] .tag-archived').first();
     await expect(archivedChip).toBeVisible();

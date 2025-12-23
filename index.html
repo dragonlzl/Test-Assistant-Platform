@@ -215,6 +215,20 @@
             <span class="nav-entry-desc">查看并编辑用例库条目，支持搜索/导出/删除</span>
           </span>
         </button>
+        <button class="nav-entry-card nav-entry-overview" id="caseLibraryJumpExecBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M5 12h12"></path>
+              <path d="M13 7l4 5-4 5"></path>
+              <path d="M5 5h6"></path>
+              <path d="M5 19h6"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">跳转用例执行页</span>
+            <span class="nav-entry-desc">仅跳转到执行页，不打开抽屉</span>
+          </span>
+        </button>
         <button class="nav-entry-card nav-entry-overview" id="openCaseLibrarySelectExecDrawerBtn" type="button">
           <span class="nav-entry-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
@@ -1365,15 +1379,12 @@
 <section class="card" data-section-id="tempexec-assign" data-tab-section="tempexec">
 <div class="card-title-row">
 <h2>执行分配</h2>
-<button class="pill primary" id="tempExecOverviewBtn" type="button">用例执行情况总览</button>
+<button class="pill accent" id="tempExecAddCaseFromLibraryBtn" type="button">＋ 添加执行用例</button>
 </div>
 <div class="card-body">
 <p class="hint">在此页面进行执行分配：可按需求查看用例列表、创建版本分组、拖拽需求盒子进版本、拖拽用例到专注区；也可在执行视图进行执行人分配与结果录入。</p>
 <div class="temp-exec-header">
 <p class="hint">需求用例组（可拖拽操作）</p>
-<div class="temp-header-actions">
-<button class="link-toggle" id="toggleTempReq" aria-label="收起需求区" title="收起需求区">收起需求区</button>
-</div>
 </div>
 <div class="temp-case-nav" id="tempExecNav">
 <span class="hint">暂无导入的测试用例</span>

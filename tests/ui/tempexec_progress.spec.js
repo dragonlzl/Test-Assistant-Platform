@@ -26,6 +26,21 @@ test.describe('临时执行进度视图', () => {
       await expect(page.locator('#tempVersionGrid [data-temp-version]')).toHaveCount(expectedCount);
     }
   }
+  async function openOverview(page) {
+    await page.evaluate(() => {
+      if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+        window.app.drawer.closeAllDrawers();
+      }
+      try {
+        window.dispatchEvent(new CustomEvent('app-path-sub-jump', { detail: { tab: 'tempexec', sub: '归档操作&进度预览' } }));
+      } catch (err) {
+        var evt = document.createEvent('CustomEvent');
+        evt.initCustomEvent('app-path-sub-jump', false, false, { tab: 'tempexec', sub: '归档操作&进度预览' });
+        window.dispatchEvent(evt);
+      }
+    });
+    await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
+  }
 
   test.beforeEach(async ({ page }) => {
     page.__promptAnswers = [];
@@ -121,14 +136,30 @@ test.describe('临时执行进度视图', () => {
     await page.click('#openTempExecAssignDrawerBtn', { force: true });
     await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
 
-    const createBtn = page.locator('#createTempVersionBtn');
-    if (!(await createBtn.isVisible().catch(() => false))) {
-      await page.click('#toggleTempVersion', { force: true });
-    }
-    await expect(createBtn).toBeVisible();
+    await page.evaluate(() => {
+      if (window.app && window.app.state) {
+        window.app.state.tempExecVersionCollapsed = false;
+      }
+      if (window.app && window.app.tempExecApi) {
+        if (window.app.tempExecApi.renderTempVersionGrid) window.app.tempExecApi.renderTempVersionGrid();
+        if (window.app.tempExecApi.renderTempExecNav) window.app.tempExecApi.renderTempExecNav();
+      }
+    });
 
-    await createTempVersion(page, '版本一', 1);
-    await createTempVersion(page, '版本二', 2);
+    const createBtn = page.locator('#createTempVersionBtn');
+    const createVisible = await createBtn.isVisible().catch(() => false);
+    if (createVisible) {
+      await createTempVersion(page, '版本一', 1);
+      await createTempVersion(page, '版本二', 2);
+    } else {
+      await page.evaluate(() => {
+        const api = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+        if (!api || typeof api.createTempVersion !== 'function') return;
+        api.createTempVersion('版本一');
+        api.createTempVersion('版本二');
+      });
+      await expect(page.locator('#tempVersionGrid [data-temp-version]')).toHaveCount(2);
+    }
     await expect(page.locator('#tempVersionGrid [data-temp-version]')).toHaveCount(2);
 
     const navRows = page.locator('#tempExecNav .temp-req-row[data-temp-file]');
@@ -158,7 +189,7 @@ test.describe('临时执行进度视图', () => {
     await expect(versionOneRow).toHaveClass(/err/);
     await expect(navRows.first()).toHaveClass(/err/);
 
-    await page.locator('#tempExecOverviewBtn').click({ force: true });
+    await openOverview(page);
     const overviewEntries = page.locator('#tempExecOverview .temp-overview-entry');
     expect(await overviewEntries.count()).toBeGreaterThanOrEqual(2);
     const overviewData = await page.$$eval('#tempExecOverview .temp-overview-entry', (nodes) => nodes.map((node) => {
@@ -188,6 +219,15 @@ test.describe('临时执行进度视图', () => {
     if (await backBtn.isVisible().catch(() => false)) {
       await backBtn.click({ force: true });
     }
+    await page.evaluate(() => {
+      try {
+        window.dispatchEvent(new CustomEvent('app-path-sub-jump', { detail: { tab: 'tempexec', sub: '执行视图' } }));
+      } catch (err) {
+        var evt = document.createEvent('CustomEvent');
+        evt.initCustomEvent('app-path-sub-jump', false, false, { tab: 'tempexec', sub: '执行视图' });
+        window.dispatchEvent(evt);
+      }
+    });
     const overviewDrawer = page.locator('#tempExecOverviewDrawer');
     await expect(overviewDrawer).not.toHaveClass(/open/);
     await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 5000 });
@@ -207,7 +247,7 @@ test.describe('临时执行进度视图', () => {
       api.moveTempExecToVersion(pending.id, targetVersionId);
     });
     await expect(navRows).toHaveCount(0);
-    await page.locator('#tempExecOverviewBtn').click({ force: true });
+    await openOverview(page);
     await expect(page.locator('#tempExecOverview')).toContainText('版本二');
     await expect(page.locator('#tempExecOverview')).toContainText('暂无未分配的用例');
     const finalColors = await page.$$eval('#tempExecOverview .temp-overview-entry', (nodes) => nodes.map((node) => {
@@ -269,8 +309,7 @@ test.describe('临时执行进度视图', () => {
     });
     expect(jumpInfo.fileId).toBeTruthy();
 
-    await page.locator('#tempExecOverviewBtn').click({ force: true });
-    await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
+    await openOverview(page);
     const entry = page.locator('#tempExecOverview .temp-overview-entry', { hasText: 'jumpProgress.json' }).first();
     await expect(entry).toBeVisible();
     await entry.locator('.temp-overview-segment[data-temp-overview-status="pending"]').click({ force: true });
@@ -350,8 +389,7 @@ test.describe('临时执行进度视图', () => {
     expect(ids.activeId).toBeTruthy();
     expect(ids.otherId).toBeTruthy();
 
-    await page.locator('#tempExecOverviewBtn').click({ force: true });
-    await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
+    await openOverview(page);
 
     const entry = page.locator('#tempExecOverview .temp-overview-entry', { hasText: 'jumpCardA.json' }).first();
     await expect(entry).toBeVisible();

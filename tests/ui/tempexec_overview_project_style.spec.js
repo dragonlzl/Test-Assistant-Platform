@@ -120,8 +120,7 @@ test.describe('用例执行-个人总览对齐执行总览风格', () => {
     await gotoIndex(page);
     await waitAppReady(page, 30000);
     await switchToTab(page, 'tempexec');
-    await page.click('#openTempExecAssignDrawerBtn');
-    await page.click('#tempExecOverviewBtn');
+    await page.click('#openTempExecOverviewNavBtn');
     await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
 
     const projectButtons = page.locator('#tempExecOverview [data-temp-overview-project]');

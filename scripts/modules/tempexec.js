@@ -39,6 +39,7 @@
     var toggleTempReqBtn = document.getElementById('toggleTempReq');
     var toggleTempVersionBtn = document.getElementById('toggleTempVersion');
     var createTempVersionBtn = document.getElementById('createTempVersionBtn');
+    var tempExecAddCaseFromLibraryBtn = document.getElementById('tempExecAddCaseFromLibraryBtn');
     var tempExecViewFocusBlock = document.getElementById('tempExecViewFocusBlock');
     var tempExecViewFocusZone = tempExecViewFocusBlock
       ? tempExecViewFocusBlock.querySelector('[data-temp-focus-zone]')
@@ -338,7 +339,7 @@
     });
     var tempExecOverviewDrawer = window.app.drawer && window.app.drawer.createDrawer({
       drawerId: 'tempExecOverviewDrawer',
-      openButtons: ['openTempExecOverviewNavBtn', 'tempExecOverviewBtn'],
+      openButtons: ['openTempExecOverviewNavBtn'],
       closeButtons: ['closeTempExecOverviewDrawerBtn'],
       onOpen: function() {
         setCurrentPathSub('归档操作&进度预览', 'tempexec');
@@ -901,6 +902,26 @@
       }
       switchTab('case-library');
     }
+    function openCaseLibrarySelectExecFromTempExec() {
+      try {
+        if (window.app) window.app.__drawerSkipRestoreOnce = true;
+      } catch (err) {
+        // ignore
+      }
+      if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+        window.app.drawer.closeAllDrawers();
+      }
+      if (window.app && window.app.caseLibraryApi && typeof window.app.caseLibraryApi.openSelectExecDrawer === 'function') {
+        window.app.caseLibraryApi.openSelectExecDrawer({ source: 'tempexec' });
+      } else {
+        try {
+          if (window.app) window.app.__caseLibrarySelectExecRequest = true;
+        } catch (err) {
+          // ignore
+        }
+      }
+      switchTab('case-library');
+    }
     if (openTempExecViewNavBtn) {
       openTempExecViewNavBtn.addEventListener('click', function() {
         showTempExecView();
@@ -1158,7 +1179,6 @@
     }
     var tempExecView = document.getElementById('tempExecView');
     var tempExecMindBtn = document.getElementById('tempExecMindBtn');
-    var tempExecOverviewBtn = document.getElementById('tempExecOverviewBtn');
     var tempExecOverviewSection = document.querySelector('[data-section-id="tempexec-overview"]');
     var tempExecViewSection = document.querySelector('[data-section-id="tempexec-view"]');
     var tempExecBackBtn = document.getElementById('tempExecBackBtn');
@@ -4372,11 +4392,6 @@
     bindFocusZoneScroll(tempExecViewFocusZone);
     document.addEventListener('dragend', cleanupAllFocusIndicators);
 
-    if (tempExecOverviewBtn) {
-      tempExecOverviewBtn.addEventListener('click', function() {
-        showTempExecOverview();
-      });
-    }
 	    if (tempExecOverview && api.setTempExecActive) {
 	      tempExecOverview.addEventListener('click', function(e) {
 	        var archivedTag = e.target.closest('.tag-archived');
@@ -4517,6 +4532,11 @@
           var id = api.createTempVersion(res.value || '');
           if (id && tempExecStatus) setStatus(tempExecStatus, '版本已创建，可拖拽需求到对应版本', 'ok');
         });
+      });
+    }
+    if (tempExecAddCaseFromLibraryBtn) {
+      tempExecAddCaseFromLibraryBtn.addEventListener('click', function() {
+        openCaseLibrarySelectExecFromTempExec();
       });
     }
 
