@@ -7621,6 +7621,42 @@
       var file = getTempExecFile(fileId);
       if (!file) return;
       if (enabled === Boolean(file.reuseEnabled)) return;
+      function applyReuseToggle(nextEnabled) {
+        if (nextEnabled) {
+          file.reuseEnabled = true;
+          ensureReusePresets(file);
+        } else {
+          file.reuseEnabled = false;
+          file.cases.forEach(function(item) {
+            item.reuseDetails = [];
+          });
+          file.reusePresets = [];
+          if (state.tempExecPresetDraft && state.tempExecPresetDraft.fileId === fileId) {
+            state.tempExecPresetDraft = null;
+          }
+          resetTempExecReuseOpen(fileId);
+        }
+        if (isDbMode()) {
+          var execSetId = file.execSetId || Number(file.id);
+          if (execSetId) {
+            queueExecSetPatch(execSetId, { reuse_enabled: Boolean(file.reuseEnabled), reuse_presets: file.reusePresets || [] });
+          }
+          if (nextEnabled) {
+            file.cases.forEach(function(item) {
+              if (!item) return;
+              queueExecCasePatchForItem(item, { status: '未执行', remark: '' });
+            });
+          } else {
+            file.cases.forEach(function(item) {
+              if (!item) return;
+              queueExecCasePatchForItem(item, { reuse_details: [], status: normalizeExecStatus(item.actual) });
+            });
+          }
+        }
+        persistTempExecState();
+        renderTempExecView();
+      }
+
       if (enabled) {
         var hasExecution = file.cases.some(function(item) {
           var status = getCaseExecutionStatus(file, item);
@@ -7628,55 +7664,44 @@
         });
         if (hasExecution) {
           var confirmMsg = '开启“用例复用”会清空当前执行结果与备注，是否继续？';
-          if (!window.confirm(confirmMsg)) {
-            if (checkboxEl) checkboxEl.checked = false;
-            return;
-          }
-          file.cases.forEach(function(item) {
-            item.actual = '未执行';
-            item.remark = '';
+          openConfirmDrawer({
+            title: '开启用例复用',
+            message: confirmMsg,
+            danger: true,
+          }).then(function(res) {
+            if (!res || res.ok !== true) {
+              if (checkboxEl) checkboxEl.checked = false;
+              return;
+            }
+            file.cases.forEach(function(item) {
+              item.actual = '未执行';
+              item.remark = '';
+            });
+            applyReuseToggle(true);
           });
+          return;
         }
-        file.reuseEnabled = true;
-        ensureReusePresets(file);
-      } else {
-        var hasReuse = file.cases.some(function(item) { return Array.isArray(item.reuseDetails) && item.reuseDetails.length; });
-        if (hasReuse) {
-          var confirmClose = '关闭“用例复用”会删除所有复用测试项与预设子项，是否继续？';
-          if (!window.confirm(confirmClose)) {
+        applyReuseToggle(true);
+        return;
+      }
+
+      var hasReuse = file.cases.some(function(item) { return Array.isArray(item.reuseDetails) && item.reuseDetails.length; });
+      if (hasReuse) {
+        var confirmClose = '关闭“用例复用”会删除所有复用测试项与预设子项，是否继续？';
+        openConfirmDrawer({
+          title: '关闭用例复用',
+          message: confirmClose,
+          danger: true,
+        }).then(function(res2) {
+          if (!res2 || res2.ok !== true) {
             if (checkboxEl) checkboxEl.checked = true;
             return;
           }
-        }
-        file.reuseEnabled = false;
-        file.cases.forEach(function(item) {
-          item.reuseDetails = [];
+          applyReuseToggle(false);
         });
-        file.reusePresets = [];
-        if (state.tempExecPresetDraft && state.tempExecPresetDraft.fileId === fileId) {
-          state.tempExecPresetDraft = null;
-        }
-        resetTempExecReuseOpen(fileId);
+        return;
       }
-      if (isDbMode()) {
-        var execSetId = file.execSetId || Number(file.id);
-        if (execSetId) {
-          queueExecSetPatch(execSetId, { reuse_enabled: Boolean(file.reuseEnabled), reuse_presets: file.reusePresets || [] });
-        }
-        if (enabled) {
-          file.cases.forEach(function(item) {
-            if (!item) return;
-            queueExecCasePatchForItem(item, { status: '未执行', remark: '' });
-          });
-        } else {
-          file.cases.forEach(function(item) {
-            if (!item) return;
-            queueExecCasePatchForItem(item, { reuse_details: [], status: normalizeExecStatus(item.actual) });
-          });
-        }
-      }
-      persistTempExecState();
-      renderTempExecView();
+      applyReuseToggle(false);
     }
 
     return {

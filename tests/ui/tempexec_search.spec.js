@@ -292,4 +292,61 @@ test.describe('临时执行搜索功能', () => {
     await expect(confirmDrawer).not.toHaveClass(/open/);
     await expect(defectRow.locator('[data-temp-defect-remove]')).toHaveCount(0);
   });
+
+  test('复用切换存在执行记录时使用确认抽屉', async ({ page }) => {
+    await page.click('[data-group="cases"]');
+    await page.click('[data-tab-btn="tempexec"]');
+    await page.click('#openTempExecImportDrawerBtn');
+    await page.evaluate(() => {
+      window.app.state.requirementLabel = '搜索需求';
+      window.app.state.requirementLabelSource = 'ui-test';
+    });
+
+    const execFile = {
+      name: 'search.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify([
+        { module: '模块A', title: '登录功能', steps: 'step', expected: 'ok' },
+        { module: '模块A', title: '退出功能', steps: 'step', expected: 'ok' },
+      ], null, 2)),
+    };
+    page.__promptAnswers.push('搜索需求');
+    await page.setInputFiles('#tempExecInput', execFile);
+    await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
+
+    await page.click('#closeTempExecImportDrawerBtn', { force: true });
+    await page.click('#openTempExecAssignDrawerBtn', { force: true });
+    const navButtons = page.locator('#tempExecNav button[data-temp-file]');
+    await expect(navButtons).toHaveCount(1, { timeout: 5000 });
+    await navButtons.first().click({ force: true });
+    await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 15000 });
+
+    const statusSelect = page.locator('#tempExecView select[data-temp-result]').first();
+    await statusSelect.selectOption('通过');
+
+    const reuseToggle = page.locator('#tempExecView input[data-temp-reuse-toggle]').first();
+    await expect(reuseToggle).toBeVisible();
+    await reuseToggle.check();
+    const confirmDrawer = page.locator('#appConfirmDrawer');
+    await expect(confirmDrawer).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toHaveText('开启“用例复用”会清空当前执行结果与备注，是否继续？');
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await expect(confirmDrawer).not.toHaveClass(/open/);
+    await expect(reuseToggle).toBeChecked();
+    await expect(page.locator('#tempExecView button.reuse-status').first()).toHaveText('未执行');
+
+    await page.locator('#tempExecView button[data-temp-reuse-panel]').first().click();
+    const reuseRow = page.locator('#tempExecView tr.reuse-row.visible').first();
+    await expect(reuseRow).toBeVisible();
+    await reuseRow.locator('[data-temp-reuse-add]').click();
+    await expect(reuseRow.locator('[data-temp-reuse-remove]')).toHaveCount(1);
+
+    await reuseToggle.uncheck();
+    await expect(confirmDrawer).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toHaveText('关闭“用例复用”会删除所有复用测试项与预设子项，是否继续？');
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await expect(confirmDrawer).not.toHaveClass(/open/);
+    await expect(reuseToggle).not.toBeChecked();
+    await expect(page.locator('#tempExecView select[data-temp-result]').first()).toBeVisible();
+  });
 });
