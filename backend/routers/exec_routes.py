@@ -32,6 +32,18 @@ def _snapshot_case_item_for_history(case_item: models.CaseItem):
     }
 
 
+def _build_reuse_type_snapshot(enabled: bool):
+    return {
+        "module": "用例类型",
+        "title": "复用" if enabled else "非复用",
+        "priority": None,
+        "precondition": "-",
+        "steps": "-",
+        "expected": "-",
+        "remark": None,
+    }
+
+
 def _compute_case_item_changed_fields(old_snap: dict, new_snap: dict):
     keys = ["module", "title", "precondition", "steps", "expected"]
     changed = []
@@ -448,6 +460,10 @@ def update_exec_set(
     turned_on_reuse = False
     turned_off_reuse = False
     prev_reuse_enabled = bool(getattr(exec_set, "reuse_enabled", False))
+    case_file_reuse_changed = False
+    case_file_reuse_before = None
+    case_file_reuse_after = None
+    case_file_reuse_target = None
     for field in ["status", "requirement", "reuse_enabled", "reuse_presets"]:
         if field not in data:
             continue
@@ -493,12 +509,69 @@ def update_exec_set(
                 .first()
             )
             if case_file and int(case_file.project_id) == int(exec_set.project_id):
+                case_file_reuse_target = case_file
+                case_file_reuse_before = bool(getattr(case_file, "reuse_enabled", False))
                 desired = True if turned_on_reuse else False
                 if bool(getattr(case_file, "reuse_enabled", False)) != desired:
                     case_file.reuse_enabled = desired
                     case_file.updated_by = user.id
                     case_file.updated_at = exec_set.updated_at
                     db.add(case_file)
+                    case_file_reuse_changed = True
+                    case_file_reuse_after = desired
+                else:
+                    case_file_reuse_after = case_file_reuse_before
+        if turned_on_reuse or turned_off_reuse:
+            case_name = (
+                str(case_file_reuse_target.file_name_clean)
+                if case_file_reuse_target and case_file_reuse_target.file_name_clean
+                else str(exec_set.name or "")
+            )
+            detail = {
+                "case_file_id": int(resolved_case_file_id) if resolved_case_file_id else None,
+                "case_file_name": case_name,
+                "file_name": case_name,
+                "file_name_clean": case_name,
+                "before_reuse_enabled": bool(prev_reuse_enabled),
+                "after_reuse_enabled": bool(exec_set.reuse_enabled),
+                "reuse_enabled": bool(exec_set.reuse_enabled),
+            }
+            log_operation(
+                db=db,
+                user_id=user.id,
+                action="change_case_reuse_type",
+                target_type=("case_file" if case_file_reuse_target else "exec_set"),
+                target_id=(
+                    int(case_file_reuse_target.id)
+                    if case_file_reuse_target
+                    else int(exec_set.id)
+                ),
+                detail=detail,
+            )
+        if case_file_reuse_changed and case_file_reuse_target:
+            old_snap = _build_reuse_type_snapshot(bool(case_file_reuse_before))
+            new_snap = _build_reuse_type_snapshot(bool(case_file_reuse_after))
+            log_case_library_change(
+                db=db,
+                user=user,
+                project_id=case_file_reuse_target.project_id,
+                file_name_clean=case_file_reuse_target.file_name_clean,
+                kind="updated",
+                version_id=case_file_reuse_target.version_id,
+                case_file_id=case_file_reuse_target.id,
+                case_item_id=None,
+                old=old_snap,
+                new=new_snap,
+                meta={
+                    "reuse_change": {
+                        "before": bool(case_file_reuse_before),
+                        "after": bool(case_file_reuse_after),
+                    },
+                    "changed_fields": ["title"],
+                    "no_notify": True,
+                },
+                at=exec_set.updated_at,
+            )
         log_operation(
             db=db,
             user_id=user.id,

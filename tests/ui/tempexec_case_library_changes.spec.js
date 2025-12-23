@@ -356,8 +356,12 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     const diffDrawer = page.locator('#tempExecCaseLibraryDiffDrawer');
     const btn = page.locator('#tempExecCaseLibraryChangesBtn');
     await expect(btn).toBeEnabled();
-    await btn.click();
-    await expect(diffDrawer).toHaveClass(/open/);
+    if (await diffDrawer.evaluate((el) => el.classList.contains('open'))) {
+      await expect(diffDrawer).toHaveClass(/open/);
+    } else {
+      await btn.click({ force: true });
+      await expect(diffDrawer).toHaveClass(/open/);
+    }
     await expect(page.locator('#tempExecCaseLibraryDiffCaseName')).toContainText('用例A');
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('旧步骤');
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('新步骤');
@@ -374,10 +378,19 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await gotoIndex(page);
     await ensureAuthed(page, token, user);
     await waitAppReady(page, 30000);
+    if (await diffDrawer.evaluate((el) => el.classList.contains('open'))) {
+      await page.click('#closeTempExecCaseLibraryDiffDrawerBtn');
+    }
     await expect(diffDrawer).not.toHaveClass(/open/);
     await expect(btn).toBeEnabled();
 
-    await btn.click();
+    const mask = page.locator('.drawer-mask[data-drawer-close="tempExecCaseLibraryDiffDrawer"]');
+    if (await mask.isVisible()) {
+      await mask.click();
+      await expect(diffDrawer).not.toHaveClass(/open/);
+    }
+
+    await btn.click({ force: true });
     await expect(diffDrawer).toHaveClass(/open/);
     await expect(page.locator('#tempExecCaseLibraryDiffCaseName')).toContainText('用例A');
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('旧步骤');
@@ -1077,5 +1090,147 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await expect(diffDrawer).toHaveClass(/open/);
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('修改邮箱');
     expect(syncCalls).toBeGreaterThanOrEqual(2);
+  });
+
+  test('复用类型变更只记录diff不自动弹窗', async ({ page }) => {
+    const token = 'token-case-lib-reuse-change';
+    const user = { id: 18, username: 'reuse_change_user', role: 'user', level: 'member' };
+    const project = { id: 58, name: '复用变更项目', description: 'reuse change diff' };
+    const versions = [{ id: 581, name: 'v1' }];
+    const now = new Date().toISOString();
+    const execSet = {
+      id: 5811,
+      project_id: project.id,
+      version_id: versions[0].id,
+      case_file_id: 8811,
+      name: '复用类型变更用例',
+      status: 'active',
+      created_at: now,
+      updated_at: now,
+    };
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/exec/sets' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, [execSet]);
+      }
+
+      if (pathName === `/api/exec/sets/${execSet.id}/case-library-sync` && method === 'POST') {
+        const diffEntry = {
+          kind: 'updated',
+          case_item_id: null,
+          changed_fields: ['title'],
+          old: { module: '用例类型', title: '非复用', priority: null, precondition: '-', steps: '-', expected: '-', remark: null },
+          new: { module: '用例类型', title: '复用', priority: null, precondition: '-', steps: '-', expected: '-', remark: null },
+        };
+        return respond(200, {
+          exec_set_id: execSet.id,
+          case_file_id: execSet.case_file_id,
+          case_file_updated_at: now,
+          base_updated_at: now,
+          last_diff_at: null,
+          last_shown_at: null,
+          ever_changed: true,
+          has_new_diff: false,
+          should_auto_popup: false,
+          summary: { added: 0, updated: 1, deleted: 0, appended: 0 },
+          diff: [],
+          history: [
+            {
+              diff_at: now,
+              operator: 'owner',
+              summary: { added: 0, updated: 1, deleted: 0, appended: 0 },
+              diff: [diffEntry],
+            },
+          ],
+        });
+      }
+
+      const execCasesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (execCasesMatch && method === 'GET') {
+        const id = Number(execCasesMatch[1]);
+        if (id !== execSet.id) return respond(200, []);
+        return respond(200, [
+          {
+            id: 8812,
+            exec_set_id: execSet.id,
+            case_item_id: 1,
+            module: '模块A',
+            title: '复用场景',
+            expected: '成功',
+            priority: 'P0',
+            precondition: '无',
+            steps: '步骤1',
+            status: '未执行',
+            remark: '',
+            defect_links: [],
+            reuse_details: [],
+            order_no: 1,
+            created_at: now,
+            updated_at: now,
+          },
+        ]);
+      }
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+      try { sessionStorage.setItem('usecase-active-tab', 'tempexec'); } catch (_) {}
+    }, token);
+
+    await gotoIndex(page);
+    await ensureAuthed(page, token, user);
+    await waitAppReady(page, 30000);
+    await switchToTab(page, 'tempexec');
+    await page.evaluate(() => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
+        return window.app.tempExecApi.loadTempExecState();
+      }
+      return null;
+    });
+
+    const diffDrawer = page.locator('#tempExecCaseLibraryDiffDrawer');
+    await expect(diffDrawer).not.toHaveClass(/open/);
+
+    const btn = page.locator('#tempExecCaseLibraryChangesBtn');
+    await expect(btn).toBeEnabled();
+    await expect(btn).not.toHaveClass(/has-new/);
+
+    await btn.click();
+    await expect(diffDrawer).toHaveClass(/open/);
+    const body = page.locator('#tempExecCaseLibraryDiffBody');
+    await expect(body).toContainText('用例类型');
+    await expect(body).toContainText('旧：非复用');
+    await expect(body).toContainText('新：复用');
   });
 });

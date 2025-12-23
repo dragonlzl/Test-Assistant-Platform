@@ -97,17 +97,16 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     await page.evaluate(() => {
       if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
     });
+    await expect(page.locator('#openOpsLogDrawerBtn')).toBeVisible();
+    await page.click('#openOpsLogDrawerBtn');
     await page.waitForFunction(() => {
       const grid = document.getElementById('opsLogTargetFilterGrid');
       return grid && grid.querySelectorAll('label').length > 0;
     });
-
     await expect(page.locator('#flowNav')).toHaveClass(/hidden/);
-    await expect(page.locator('#openOpsLogDrawerBtn')).toBeVisible();
-    await page.click('#openOpsLogDrawerBtn');
     await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
     await expect(page.locator('.ops-log-table thead')).toContainText('操作页面');
-    await expect(page.locator('.ops-log-table thead')).toContainText('数量变化');
+    await expect(page.locator('.ops-log-table thead')).toContainText('变化');
 
     // 使用“全局分页设置”每页 5 条。
     await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(5);
@@ -149,5 +148,71 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(2);
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例：case-0');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('系统平台');
+  });
+
+  test('用例类型变更记录显示为转为复用/非复用', async ({ page }) => {
+    const admin = { id: 1, username: 'admin', role: 'admin', level: 'leader' };
+    const now = new Date().toISOString();
+    const logs = [
+      {
+        id: 101,
+        user_id: 1,
+        username: 'admin',
+        action: 'change_case_reuse_type',
+        target_type: 'case_file',
+        target_id: 501,
+        result: 'success',
+        detail: { case_file_name: '用例A', file_name: '用例A', reuse_enabled: true },
+        created_at: now,
+      },
+      {
+        id: 102,
+        user_id: 1,
+        username: 'admin',
+        action: 'change_case_reuse_type',
+        target_type: 'case_file',
+        target_id: 502,
+        result: 'success',
+        detail: { case_file_name: '用例B', file_name: '用例B', reuse_enabled: false },
+        created_at: new Date(Date.now() - 1000).toISOString(),
+      },
+    ];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, admin);
+      if (pathName === '/api/users' && method === 'GET') return respond(200, [admin]);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, logs);
+
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitAppReady(page, 30000);
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
+    });
+
+    await page.click('#openOpsLogDrawerBtn');
+    await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
+    await expect(page.locator('.ops-log-table thead')).toContainText('变化');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例类型变更');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例：用例A');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('转为复用');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('转为非复用');
   });
 });

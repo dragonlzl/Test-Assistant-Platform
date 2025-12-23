@@ -1997,6 +1997,7 @@
       action === 'delete_exec_set' ||
       action === 'delete_exec_archive' ||
       action === 'dissolve_exec_archived_placeholders' ||
+      action === 'change_case_reuse_type' ||
       action === 'export_case_files_xmind' ||
       action === 'export_case_files_excel' ||
       action === 'export_exec_xmind' ||
@@ -2061,6 +2062,7 @@
     if (action === 'append_case_items') return '追加';
     if (action === 'create_exec_set') return '执行页面入库';
     if (action === 'upsert_exec_set_from_case_file') return '转执行';
+    if (action === 'change_case_reuse_type') return '用例类型变更';
     if (action === 'archive_exec_set') return '归档';
     if (action === 'delete_exec_set') return '直接解散';
     if (action === 'delete_exec_archive') return '删除归档';
@@ -2130,6 +2132,17 @@
     var action = normalizeAction(l.action);
     if (!action) return '-';
     var detail = l.detail && typeof l.detail === 'object' ? l.detail : {};
+    if (action === 'change_case_reuse_type') {
+      var nextReuse = null;
+      if (detail.reuse_enabled !== undefined && detail.reuse_enabled !== null) {
+        nextReuse = detail.reuse_enabled === true;
+      } else if (detail.after_reuse_enabled !== undefined && detail.after_reuse_enabled !== null) {
+        nextReuse = detail.after_reuse_enabled === true;
+      }
+      if (nextReuse === true) return '转为复用';
+      if (nextReuse === false) return '转为非复用';
+      return '-';
+    }
     var before = normalizeCountValue(detail.before_count);
     var after = normalizeCountValue(detail.after_count);
     if (action === 'update_case_item') {

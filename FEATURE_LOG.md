@@ -2101,3 +2101,17 @@
 - 测试与验证：
   - `API_BASE_URL=http://127.0.0.1:8081 npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_case_library_sync.spec.js`（通过）
 - 更新记录：2025-12-23 用例库同步测试场景修正（`tests/api/exec_case_library_sync.spec.js`）。
+
+- 功能名称：执行页复用类型变更记录与操作日志展示
+- 功能描述：执行页切换复用/非复用时同步用例库复用状态，记录到“用例变更”历史但不触发自动弹窗；操作记录新增“用例类型变更”并展示“转为复用/转为非复用”，操作记录表头“数量变化”改为“变化”。
+- 操作方式：在执行页勾选/取消复用；其他成员刷新执行页后，在“用例变更”历史中可查看“用例类型”变更；操作记录抽屉可查看对应条目。
+- 使用效果：用例库同步且记录可追溯，其他成员不被提醒；操作记录展示更清晰。
+- 新增内容/接口/组件：
+  - 后端：执行页复用变更写入用例库变更历史与操作记录（`backend/routers/exec_routes.py`）。
+  - 前端：操作记录行为/变化展示与表头文案更新（`scripts/modules/opsLog.js`、`index.html`）。
+  - 测试：复用变更 diff 与操作记录 UI 用例（`tests/ui/tempexec_case_library_changes.spec.js`、`tests/ui/ops_log.spec.js`），API 用例（`tests/api/exec_case_library_sync.spec.js`）。
+- 复用说明：复用现有用例库变更历史与操作记录机制，无新增接口。
+- 测试与验证：
+  - `API_BASE_URL=http://127.0.0.1:8081 npx playwright test tests/api/exec_case_library_sync.spec.js`（通过）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8091 npx playwright test tests/ui/tempexec_case_library_changes.spec.js tests/ui/ops_log.spec.js`（通过）
+- 更新记录：2025-12-23 执行页复用类型变更记录与操作日志展示（`backend/routers/exec_routes.py`、`scripts/modules/opsLog.js`、`index.html`、`tests/api/exec_case_library_sync.spec.js`、`tests/ui/tempexec_case_library_changes.spec.js`、`tests/ui/ops_log.spec.js`）。
