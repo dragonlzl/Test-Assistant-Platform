@@ -104,6 +104,7 @@
     tabSection: document.querySelector('[data-tab-section="ops-log"]'),
     drawerEl: document.getElementById('opsLogDrawer'),
     drawerRefreshBtn: document.getElementById('opsLogDrawerRefreshBtn'),
+    drawerExportBtn: document.getElementById('opsLogDrawerExportBtn'),
     drawerStatusEl: document.getElementById('opsLogDrawerStatus'),
     userSelect: document.getElementById('opsLogUserSelect'),
     dateStart: document.getElementById('opsLogDateStart'),
@@ -2291,6 +2292,99 @@
     });
   }
 
+  function getDownloadBlob() {
+    if (utils && typeof utils.downloadBlob === 'function') return utils.downloadBlob;
+    return null;
+  }
+
+  function getSimpleXlsxBuilder() {
+    var api = window.app && window.app.caseLibraryApi ? window.app.caseLibraryApi : null;
+    if (api && typeof api.buildSimpleXlsxBlob === 'function') return api.buildSimpleXlsxBlob;
+    var coreApi = window.app && window.app.xlsxCoreApi ? window.app.xlsxCoreApi : null;
+    if (coreApi && typeof coreApi.buildSimpleXlsxBlob === 'function') return coreApi.buildSimpleXlsxBlob;
+    return null;
+  }
+
+  function formatExportTimestamp() {
+    if (utils && typeof utils.formatCompactTimestamp === 'function') return utils.formatCompactTimestamp(new Date());
+    var d = new Date();
+    function pad(num) { return num < 10 ? '0' + num : String(num); }
+    return (
+      d.getFullYear() +
+      pad(d.getMonth() + 1) +
+      pad(d.getDate()) +
+      '_' +
+      pad(d.getHours()) +
+      pad(d.getMinutes()) +
+      pad(d.getSeconds())
+    );
+  }
+
+  function sanitizeDownloadName(base) {
+    var name = String(base || '').trim() || '操作记录';
+    name = name.replace(/\.[^.]+$/, '');
+    name = name.replace(/[\\/:*?"<>|]/g, '_').trim();
+    if (!name) name = '操作记录';
+    return name;
+  }
+
+  function buildOpsLogExportRows(rows) {
+    var header = ['操作时间', '操作人员', '操作页面', '操作项', '操作行为', '变化'];
+    var list = Array.isArray(rows) ? rows : [];
+    var body = list.map(function(log) {
+      var operator = log && (log.username || log.user_id) ? String(log.username || log.user_id) : '--';
+      return [
+        formatTime(log && log.created_at),
+        operator,
+        resolvePageLabel(log),
+        buildTargetLabel(log),
+        resolveActionLabel(log) || '--',
+        resolveCountChangeLabel(log),
+      ];
+    });
+    return [header].concat(body);
+  }
+
+  function exportDrawerLogs() {
+    if (!canView()) {
+      setStatus(dom.drawerStatusEl, '仅管理员可导出操作记录', 'warn');
+      return;
+    }
+    var builder = getSimpleXlsxBuilder();
+    if (!builder) {
+      setStatus(dom.drawerStatusEl, 'Excel 导出能力未就绪', 'err');
+      return;
+    }
+    var downloadBlob = getDownloadBlob();
+    if (!downloadBlob) {
+      setStatus(dom.drawerStatusEl, '导出失败：缺少下载能力', 'err');
+      return;
+    }
+    var rows = getFilteredLogs();
+    if (!rows.length) {
+      setStatus(dom.drawerStatusEl, '暂无记录可导出', 'warn');
+      return;
+    }
+    var fileName = sanitizeDownloadName('操作记录_' + formatExportTimestamp()) + '.xlsx';
+    if (dom.drawerExportBtn) dom.drawerExportBtn.disabled = true;
+    setStatus(dom.drawerStatusEl, '导出中：' + rows.length + ' 条记录', '');
+    builder({
+      sheets: [
+        { name: '操作记录', rows: buildOpsLogExportRows(rows) },
+      ],
+    })
+      .then(function(blob) {
+        downloadBlob(fileName, blob);
+        setStatus(dom.drawerStatusEl, '导出完成：' + rows.length + ' 条记录', 'ok');
+      })
+      .catch(function(err) {
+        setStatus(dom.drawerStatusEl, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+      })
+      .finally(function() {
+        if (dom.drawerExportBtn) dom.drawerExportBtn.disabled = false;
+      });
+  }
+
   function renderList() {
     if (!dom.tableBody) return;
     var rows = getFilteredLogs();
@@ -2689,6 +2783,11 @@
         state.pageIndex = 0;
         persistViewState();
         loadLogs();
+      });
+    }
+    if (dom.drawerExportBtn) {
+      dom.drawerExportBtn.addEventListener('click', function() {
+        exportDrawerLogs();
       });
     }
     if (dom.userSelect) {

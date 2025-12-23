@@ -2203,3 +2203,15 @@
 - 更新记录：2025-12-23 复用子项执行下拉恢复原始尺寸（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
 - 更新记录：2025-12-23 复用子项执行下拉与删除按钮间距调整（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
 - 更新记录：2025-12-23 复用子项删除按钮靠右对齐（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
+
+- 功能名称：操作记录导出 Excel
+- 功能描述：操作记录“查看记录”抽屉新增“导出记录Excel”，按当前字段导出为 Excel，每行一条记录。
+- 操作方式：进入“操作记录 → 查看记录”抽屉，点击“导出记录Excel”下载文件。
+- 使用效果：可按当前筛选结果导出操作记录，便于线下查看与留档。
+- 新增内容/接口/组件：
+  - 前端：查看记录抽屉新增导出按钮与导出逻辑（`index.html`、`scripts/modules/opsLog.js`、`scripts/modules/caseLibrary.js`）。
+  - 测试：操作记录导出 Excel UI 用例（`tests/ui/ops_log.spec.js`）。
+- 复用说明：复用现有 Excel 导出构建逻辑与下载能力，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/ops_log.spec.js -g "导出记录Excel"`（通过）
+- 更新记录：2025-12-23 操作记录导出 Excel（`index.html`、`scripts/modules/opsLog.js`、`scripts/modules/caseLibrary.js`、`tests/ui/ops_log.spec.js`）。

@@ -8669,6 +8669,7 @@
     window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;
     window.app.caseLibraryApi.downloadImportExcelTemplate = downloadImportExcelTemplate;
     window.app.caseLibraryApi.downloadImportXmindTemplate = downloadImportXmindTemplate;
+    window.app.caseLibraryApi.buildSimpleXlsxBlob = buildSimpleXlsxBlob;
     window.app.caseLibraryBound = true;
   }
 

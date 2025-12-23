@@ -215,4 +215,59 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('转为复用');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('转为非复用');
   });
+
+  test('查看记录：导出记录Excel', async ({ page }) => {
+    const admin = { id: 1, username: 'admin', role: 'admin', level: 'leader' };
+    const settings = [
+      { id: 1, scope: 'user', owner_id: 1, key: 'tempExecPageSize', value_json: 20, updated_at: new Date().toISOString() },
+    ];
+    const now = new Date();
+    const logs = [
+      { id: 1, user_id: 1, username: 'admin', action: 'login', target_type: 'auth', target_id: 1, result: 'success', detail: {}, created_at: new Date(now.getTime() - 1000).toISOString() },
+      { id: 2, user_id: 1, username: 'admin', action: 'create_project', target_type: 'project', target_id: 9, result: 'success', detail: { name: 'proj-1' }, created_at: new Date(now.getTime() - 2000).toISOString() },
+    ];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, admin);
+      if (pathName === '/api/users' && method === 'GET') return respond(200, [admin]);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, settings);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, logs);
+
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitAppReady(page, 30000);
+
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
+    });
+    await page.click('#openOpsLogDrawerBtn');
+    await page.waitForFunction(() => {
+      const grid = document.getElementById('opsLogTargetFilterGrid');
+      return grid && grid.querySelectorAll('label').length > 0;
+    });
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.click('#opsLogDrawerExportBtn'),
+    ]);
+    await expect(page.locator('#opsLogDrawerStatus')).toContainText('导出完成：2 条记录');
+    expect(download.suggestedFilename()).toMatch(/操作记录_/);
+    expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
+  });
 });
