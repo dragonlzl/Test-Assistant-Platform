@@ -414,6 +414,49 @@ test.describe('执行视图导入导出与拖拽', () => {
     await expect(statusBtn).toHaveClass(/passed/);
     await expect(statusBtn).toContainText('通过');
 
+    await expect(page.locator('.reuse-row.visible')).toHaveCount(1);
+    const noteMetrics = await page.evaluate(() => {
+      var note = document.querySelector('.reuse-entry .reuse-note');
+      var input = document.querySelector('.reuse-entry .reuse-input');
+      var status = document.querySelector('.reuse-entry .status-select');
+      var remove = document.querySelector('.reuse-entry .reuse-remove');
+      if (!note || !input || !status || !remove) return null;
+      var noteRect = note.getBoundingClientRect();
+      var inputRect = input.getBoundingClientRect();
+      var statusRect = status.getBoundingClientRect();
+      var removeRect = remove.getBoundingClientRect();
+      var entryRect = note.closest('.reuse-entry') ? note.closest('.reuse-entry').getBoundingClientRect() : null;
+      var fontSize = parseFloat(window.getComputedStyle(note).fontSize || '0') || 0;
+      var expectedMin = 56 * fontSize;
+      var expectedGap = 2 * fontSize;
+      var expectedRemoveGap = 2 * fontSize;
+      var inputNoteGap = Math.abs(noteRect.left - inputRect.right);
+      var expectedStatusMin = 4.6 * fontSize;
+      return {
+        noteWidth: noteRect.width,
+        inputWidth: inputRect.width,
+        expectedMin: expectedMin,
+        statusWidth: statusRect.width,
+        expectedStatusMin: expectedStatusMin,
+        gap: statusRect.left - noteRect.right,
+        expectedGap: expectedGap,
+        inputNoteGap: inputNoteGap,
+        removeGap: removeRect.left - statusRect.right,
+        expectedRemoveGap: expectedRemoveGap,
+        removeRightGap: entryRect ? Math.abs(entryRect.right - removeRect.right) : null,
+      };
+    });
+    expect(noteMetrics).not.toBeNull();
+    expect(noteMetrics.noteWidth).toBeGreaterThan(noteMetrics.inputWidth);
+    expect(noteMetrics.noteWidth).toBeGreaterThanOrEqual(noteMetrics.expectedMin - 8);
+    expect(noteMetrics.statusWidth).toBeGreaterThanOrEqual(noteMetrics.expectedStatusMin - 4);
+    expect(noteMetrics.gap).toBeGreaterThanOrEqual(noteMetrics.expectedGap - 4);
+    expect(noteMetrics.gap).toBeLessThanOrEqual(noteMetrics.expectedGap + 4);
+    expect(noteMetrics.inputNoteGap).toBeLessThanOrEqual(4);
+    expect(noteMetrics.removeGap).toBeGreaterThanOrEqual(noteMetrics.expectedRemoveGap - 4);
+    expect(noteMetrics.removeRightGap).not.toBeNull();
+    expect(noteMetrics.removeRightGap).toBeLessThanOrEqual(4);
+
     await statusSelectSecond.selectOption('失败');
     await expect(statusBtn).toHaveClass(/failed/);
     await expect(statusBtn).toContainText('失败');

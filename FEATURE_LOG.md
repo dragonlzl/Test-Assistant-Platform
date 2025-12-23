@@ -2188,3 +2188,18 @@
 - 测试与验证：
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/case_library_jump_exec.spec.js tests/ui/tempexec_progress.spec.js tests/ui/tempexec_overview_project_style.spec.js tests/ui/tempexec_archive_stay_project.spec.js tests/ui/tempexec_drag.spec.js tests/ui/files_layout.spec.js`（通过）
 - 更新记录：2025-12-23 执行分配入口精简与用例库入口顺序调整（`index.html`、`scripts/modules/tempexec.js`、`config/domConfig.js`、`tests/ui/case_library_jump_exec.spec.js`、`tests/ui/tempexec_progress.spec.js`、`tests/ui/tempexec_overview_project_style.spec.js`、`tests/ui/tempexec_archive_stay_project.spec.js`、`tests/ui/tempexec_drag.spec.js`、`tests/ui/files_layout.spec.js`）。
+
+- 功能名称：复用子项备注输入放大与执行按钮间距调整
+- 功能描述：复用子项区域保持原布局，子项输入框恢复原始长度，备注输入框放大为原始长度的 3.5 倍；子项执行下拉恢复原始尺寸，与备注框、删除按钮各保持 2 个汉字间距，删除按钮靠右对齐。
+- 操作方式：在执行视图开启复用并展开子项列表，子项输入框恢复原长度，备注框明显变长；执行下拉与备注框保持约 2 个汉字间距。
+- 使用效果：备注输入更充裕，执行下拉尺寸回归原样且删除按钮靠右更易定位。
+- 新增内容/接口/组件：
+  - 前端：复用子项备注长度与执行按钮尺寸/间距调整（`style.css`）。
+  - 测试：复用子项备注与间距/尺寸 UI 校验（`tests/ui/tempexec_drag.spec.js`）。
+- 复用说明：复用现有执行视图与复用渲染逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_drag.spec.js`（通过）
+- 更新记录：2025-12-23 复用子项备注输入放大与执行按钮间距调整（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
+- 更新记录：2025-12-23 复用子项执行下拉恢复原始尺寸（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
+- 更新记录：2025-12-23 复用子项执行下拉与删除按钮间距调整（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
+- 更新记录：2025-12-23 复用子项删除按钮靠右对齐（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
