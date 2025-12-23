@@ -2723,6 +2723,9 @@
         if (tabName !== 'tempexec') return;
         ensureImportProjects();
         // 切到“用例执行”时的刷新/同步由 core/appRuntime 统一触发（避免时序差导致漏触发或重复触发）。
+        if (typeof api.tryAutoOpenTempExecCaseLibraryDiff === 'function') {
+          api.tryAutoOpenTempExecCaseLibraryDiff();
+        }
       });
       window.addEventListener('app-auth-ready', function() {
         ensureImportProjects();

@@ -139,6 +139,78 @@ test.describe('exec case library sync api', () => {
     expect(cleanupRes.status()).toBe(200);
   });
 
+  test('用例库改动首次同步应触发自动弹窗', async () => {
+    const ctx = await request.newContext();
+    const token = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(health && health.status).toBe('ok');
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'autotest-case-lib-auto-popup-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'exec case lib auto popup' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers,
+      data: { name: 'v1' },
+    });
+    expect(verRes.status()).toBe(201);
+    const versionId = (await verRes.json()).id;
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '自动弹窗测试_' + Date.now() + '.json',
+        source: 'api-test',
+        items: [
+          { module: '登录', title: '登录成功', priority: 'P0', precondition: '无', steps: '步骤0', expected: '成功', remark: '' },
+        ],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFile = await importRes.json();
+    const caseFileId = caseFile.id;
+
+    const listItemsRes = await ctx.get(`${apiBase}/api/case-files/${caseFileId}/items`, { headers });
+    expect(listItemsRes.status()).toBe(200);
+    const items = await listItemsRes.json();
+    expect(items.length).toBe(1);
+    const caseItemId = items[0].id;
+
+    const createExecSetRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: { case_file_id: caseFileId, mode: 'replace', preserve_results: true, prefer_result_source: 'db' },
+    });
+    expect(createExecSetRes.status()).toBe(200);
+    const execSetId = (await createExecSetRes.json()).id;
+
+    const updateItemRes = await ctx.patch(`${apiBase}/api/case-files/items/${caseItemId}`, {
+      headers,
+      data: { steps: '步骤1' },
+    });
+    expect(updateItemRes.status()).toBe(200);
+
+    const syncRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/case-library-sync`, { headers, data: {} });
+    expect(syncRes.status()).toBe(200);
+    const sync = await syncRes.json();
+    expect(sync && sync.exec_set_id).toBe(execSetId);
+    expect(sync && sync.has_new_diff).toBeTruthy();
+    expect(sync && sync.should_auto_popup).toBeTruthy();
+
+    const cleanupRes = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
+    expect(cleanupRes.status()).toBe(200);
+  });
+
   test('用例库删除条目后：sync 返回 deleted diff，并移除执行用例', async () => {
     const ctx = await request.newContext();
     const token = await login(ctx, adminUser, adminPass);

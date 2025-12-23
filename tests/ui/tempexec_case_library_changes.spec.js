@@ -194,8 +194,33 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await expect(diffDrawer).toHaveClass(/open/);
 
     const btn = page.locator('#tempExecCaseLibraryChangesBtn');
+    await expect(btn).toHaveText('用例变更');
     await expect(btn).toHaveClass(/has-new/);
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('取消支付');
+
+    const toolbarOrder = await page.evaluate(() => {
+      var actions = document.querySelector('#tempExecToolbar .toolbar-actions');
+      if (!actions) return null;
+      var blocks = Array.prototype.slice.call(actions.children).map(function(el) { return el.className || ''; });
+      var middle = actions.querySelector('.toolbar-middle');
+      var middleOrder = [];
+      if (middle) {
+        middleOrder = Array.prototype.slice.call(middle.children).map(function(el) { return el.className || ''; });
+      }
+      var exportSlot = actions.querySelector('#tempExecExportSlot');
+      var exportIds = exportSlot
+        ? Array.prototype.slice.call(exportSlot.querySelectorAll('button')).map(function(btn) { return btn.id || ''; })
+        : [];
+      return { blocks: blocks, middle: middleOrder, exportIds: exportIds };
+    });
+    expect(toolbarOrder && toolbarOrder.blocks).toBeTruthy();
+    expect(toolbarOrder.blocks.length).toBe(3);
+    expect(toolbarOrder.blocks[1]).toContain('toolbar-middle');
+    expect(toolbarOrder.middle.join(' ')).toContain('toolbar-change-slot');
+    expect(toolbarOrder.middle.join(' ')).toContain('toolbar-nav');
+    expect(toolbarOrder.middle.join(' ')).toContain('toolbar-archive-wrap');
+    expect(toolbarOrder.exportIds).toContain('exportTempExecXmindBtn');
+    expect(toolbarOrder.exportIds).toContain('exportTempExecCasesXmindBtn');
   });
 
   test('进入/刷新执行页时自动同步并弹出diff；无新变更时不自动弹但可手动打开', async ({ page }) => {

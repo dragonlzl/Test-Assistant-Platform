@@ -1950,20 +1950,30 @@ body {
 }
 .temp-exec-toolbar .toolbar-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
   align-items: center;
   gap: 12px;
   width: 100%;
+}
+.temp-exec-toolbar .toolbar-actions .toolbar-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .temp-exec-toolbar .toolbar-actions .toolbar-search {
   margin-left: 0;
   justify-self: start;
 }
-.temp-exec-toolbar .toolbar-actions .toolbar-nav {
+.temp-exec-toolbar .toolbar-actions .toolbar-middle {
+  gap: 10px;
   justify-self: center;
+  flex-wrap: wrap;
+}
+.temp-exec-toolbar .toolbar-actions .toolbar-export {
+  justify-self: end;
+  flex-wrap: wrap;
 }
 .temp-exec-toolbar .toolbar-actions .toolbar-archive-wrap {
-  justify-self: end;
   display: inline-flex;
   align-items: center;
   min-height: 32px;

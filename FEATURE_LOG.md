@@ -2031,3 +2031,62 @@
   - `API_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/api/exec_case_library_sync.spec.js -g "执行页连续改动两次"`（通过）
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 API_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_case_library_multi_user.spec.js`（通过）
 - 更新记录：2025-12-23 执行页多次改动历史回补（`backend/routers/exec_routes.py`、`tests/api/exec_case_library_sync.spec.js`、`tests/ui/tempexec_case_library_multi_user.spec.js`）。
+
+- 功能名称：执行页用例变更按钮改名与重导入自动清空
+- 功能描述：执行页“用例库变更”按钮与抽屉标题改为“用例变更”；删除执行集后重新入库时清理缓存的变更记录，避免旧 diff 保留。
+- 操作方式：执行页点击“用例变更”；在版本盒子中删除用例后重新导入，打开“用例变更”抽屉查看内容。
+- 使用效果：按钮名称一致；删除后重导入不再保留旧变更记录，抽屉内容自动刷新。
+- 新增内容/接口/组件：
+  - 前端：用例变更文案调整与变更记录缓存清理（`index.html`、`scripts/core/tempexecCore.js`）。
+  - 测试：删除后重导入场景 UI 用例（`tests/ui/tempexec_case_library_multi_user.spec.js`）。
+- 复用说明：复用现有执行页同步与导入逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 API_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_case_library_multi_user.spec.js -g "版本盒子删除后重新导入"`（通过）
+- 更新记录：2025-12-23 执行页用例变更按钮改名与重导入自动清空（`index.html`、`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_multi_user.spec.js`）。
+
+- 功能名称：执行视图按钮布局与导出命名调整
+- 功能描述：执行视图搜索行拆分为四块布局；“用例库变更”按钮改名为“用例变更”；导出按钮去掉“执行/用例”字样。
+- 操作方式：进入执行视图，确认搜索区、用例变更+上一份/下一份、导出XMind/导出XMind（无结果）、归档按钮分区展示。
+- 使用效果：按钮分区更清晰，命名简化一致。
+- 新增内容/接口/组件：
+  - 前端：执行视图工具栏布局调整与按钮文案更新（`index.html`、`scripts/core/tempexecCore.js`、`style.css`）。
+  - 测试：按钮文案 UI 用例更新（`tests/ui/tempexec_case_library_changes.spec.js`）。
+- 复用说明：复用现有执行视图与用例变更逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_case_library_changes.spec.js -g "刷新回到执行页时自动弹出 diff"`（通过）
+- 更新记录：2025-12-23 执行视图按钮布局与导出命名调整（`index.html`、`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_case_library_changes.spec.js`）。
+
+- 功能名称：执行视图按钮布局细化
+- 功能描述：执行视图搜索行调整为“搜索输入在左、中部用例变更+用例切换+归档、右侧导出”的单行布局。
+- 操作方式：进入执行视图，观察搜索区在左，中间包含“用例变更/上一份/下一份/归档”，导出按钮最右。
+- 使用效果：布局分区明确，常用操作集中在中部。
+- 新增内容/接口/组件：
+  - 前端：工具栏结构与样式调整（`scripts/core/tempexecCore.js`、`style.css`）。
+  - 测试：工具栏布局断言（`tests/ui/tempexec_case_library_changes.spec.js`）。
+- 复用说明：复用现有执行视图与用例变更逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_case_library_changes.spec.js -g "刷新回到执行页时自动弹出 diff"`（通过）
+- 更新记录：2025-12-23 执行视图按钮布局细化（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_case_library_changes.spec.js`）。
+
+- 功能名称：执行视图中部区域居中对齐
+- 功能描述：调整工具栏网格列分配，保证“用例变更+用例切换+归档”区域居中展示。
+- 操作方式：进入执行视图，观察搜索区左侧，中部区块居中，导出按钮靠右。
+- 使用效果：中部操作区不再靠右，视觉对齐更稳定。
+- 新增内容/接口/组件：
+  - 前端：工具栏网格布局调整（`style.css`）。
+- 复用说明：复用现有工具栏结构，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_case_library_changes.spec.js -g "刷新回到执行页时自动弹出 diff"`（通过）
+- 更新记录：2025-12-23 执行视图中部区域居中对齐（`style.css`）。
+
+- 功能名称：执行视图用例变更自动弹窗稳定触发
+- 功能描述：用例库同步时增加自动弹窗队列与即时触发机制，避免多次加载覆盖导致自动弹窗漏触发；切换到执行页时补一次自动弹窗尝试。
+- 操作方式：A 在用例库修改用例后，B 刷新执行页，自动弹出“用例变更”抽屉并展示 diff。
+- 使用效果：执行页自动弹窗不再遗漏，且仍可手动打开查看。
+- 新增内容/接口/组件：
+  - 前端：自动弹窗队列/触发逻辑（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）。
+- 复用说明：复用现有执行页同步接口与抽屉逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8081 API_BASE_URL=http://127.0.0.1:8081 npx playwright test --config tests/playwright.config.js tests/ui/tempexec_case_library_multi_user.spec.js`（通过）
+  - `API_BASE_URL=http://127.0.0.1:8081 npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_case_library_sync.spec.js`（2 项失败，详见测试输出）
+- 更新记录：2025-12-23 执行视图用例变更自动弹窗稳定触发（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）。

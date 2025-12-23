@@ -1807,6 +1807,8 @@ def sync_exec_set_case_library(
 
     last_diff_at = exec_set.case_file_last_diff_at
     last_shown_at = exec_set.case_file_last_diff_shown_at
+    last_diff_ts = _safe_dt_to_ts(last_diff_at)
+    last_shown_ts = _safe_dt_to_ts(last_shown_at)
     ever_changed = bool(base_ts and file_ts and file_ts > base_ts)
     should_auto_popup = bool(
         has_new_diff and last_diff_ts and (not last_shown_ts or last_diff_ts > last_shown_ts)

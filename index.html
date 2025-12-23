@@ -399,6 +399,11 @@
   <section class="card hidden temp-exec-toolbar-card" id="tempExecToolbarCard" data-tab-section="tempexec">
     <div class="card-body">
       <div class="temp-exec-toolbar" id="tempExecToolbar"></div>
+      <div class="temp-exec-toolbar-stash hidden" id="tempExecToolbarStash">
+        <button class="secondary case-library-changes-btn" disabled="" id="tempExecCaseLibraryChangesBtn">用例变更</button>
+        <button class="secondary" disabled="" id="exportTempExecXmindBtn">导出XMind</button>
+        <button class="secondary" disabled="" id="exportTempExecCasesXmindBtn">导出XMind（无结果）</button>
+      </div>
       <div class="temp-focus-block compact" id="tempExecViewFocusBlock">
         <div class="temp-focus-header">
           <span class="temp-case-group-label">专注区：</span>
@@ -1479,11 +1484,6 @@
 	<section class="card" data-section-id="tempexec-view" data-tab-section="tempexec">
 	<h2>执行视图</h2>
 	<div class="card-body">
-	<div class="actions" style="margin-bottom:12px;">
-	<button class="secondary" disabled="" id="exportTempExecXmindBtn">导出执行XMind</button>
-	<button class="secondary" disabled="" id="exportTempExecCasesXmindBtn">导出用例XMind（无结果）</button>
-<button class="secondary case-library-changes-btn" disabled="" id="tempExecCaseLibraryChangesBtn">用例库变更</button>
-</div>
 <div class="temp-case-view" id="tempExecView">
 <div class="temp-case-empty">暂无执行用例，请在“用例导入”中导入，或在“执行分配”中选择历史记录</div>
 </div>
@@ -1493,11 +1493,11 @@
   <div class="drawer-mask" data-drawer-close="tempExecCaseLibraryDiffDrawer"></div>
   <div class="drawer-panel">
     <div class="drawer-header">
-      <h3>用例库变更</h3>
+      <h3>用例变更</h3>
       <button class="link-toggle" id="closeTempExecCaseLibraryDiffDrawerBtn" data-drawer-close="tempExecCaseLibraryDiffDrawer">收起</button>
     </div>
     <div class="drawer-body">
-      <p class="hint">进入执行页或刷新执行页时会同步用例库增删改，此处展示最近一次变更差异；可通过“用例库变更”按钮重复查看。</p>
+      <p class="hint">进入执行页或刷新执行页时会同步用例库增删改，此处展示最近一次变更差异；可通过“用例变更”按钮重复查看。</p>
       <p class="status" id="tempExecCaseLibraryDiffStatus"></p>
       <div class="case-lib-diff-header">
         <div class="case-lib-diff-case">
