@@ -1,4 +1,6 @@
 const { test, expect, request } = require('@playwright/test');
+const { execSync } = require('child_process');
+const path = require('path');
 
 test.describe('exec case library sync api', () => {
   const adminUser = process.env.ADMIN_USER || 'admin';
@@ -224,6 +226,322 @@ test.describe('exec case library sync api', () => {
     expect(cleanupRes.status()).toBe(200);
   });
 
+  test('执行页新增用例入库后：其他执行集同步不重复新增', async () => {
+    const ctx = await request.newContext();
+    const token = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(health && health.status).toBe('ok');
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'autotest-exec-dedupe-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'exec dedupe on case library sync' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers,
+      data: { name: 'v1' },
+    });
+    expect(verRes.status()).toBe(201);
+    const versionId = (await verRes.json()).id;
+
+    const memberPass = 'Pwd123456';
+    const memberAName = 'member_exec_dedupe_a_' + Date.now();
+    const memberBName = 'member_exec_dedupe_b_' + Date.now();
+
+    const createUserA = await ctx.post(`${apiBase}/api/users`, {
+      headers,
+      data: { username: memberAName, password: memberPass, role: 'user', level: 'member', is_active: true },
+    });
+    expect(createUserA.status()).toBe(201);
+    const memberAId = (await createUserA.json()).id;
+
+    const createUserB = await ctx.post(`${apiBase}/api/users`, {
+      headers,
+      data: { username: memberBName, password: memberPass, role: 'user', level: 'member', is_active: true },
+    });
+    expect(createUserB.status()).toBe(201);
+    const memberBId = (await createUserB.json()).id;
+
+    const assignA = await ctx.post(`${apiBase}/api/users/assign-projects`, {
+      headers,
+      data: { user_id: memberAId, project_ids: [projectId] },
+    });
+    expect(assignA.status()).toBe(200);
+    const assignB = await ctx.post(`${apiBase}/api/users/assign-projects`, {
+      headers,
+      data: { user_id: memberBId, project_ids: [projectId] },
+    });
+    expect(assignB.status()).toBe(200);
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '执行同步去重_' + Date.now() + '.json',
+        source: 'api-test',
+        items: [
+          { module: '基础', title: '初始化', priority: 'P0', precondition: '无', steps: '步骤1', expected: '成功', remark: '' },
+        ],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFile = await importRes.json();
+    const caseFileId = caseFile.id;
+
+    const authA = await ctx.post(`${apiBase}/api/auth/login`, {
+      data: { username: memberAName, password: memberPass },
+    });
+    expect(authA.status()).toBe(200);
+    const authABody = await authA.json();
+    const headersA = { Authorization: `Bearer ${authABody.access_token}`, 'Content-Type': 'application/json' };
+
+    const authB = await ctx.post(`${apiBase}/api/auth/login`, {
+      data: { username: memberBName, password: memberPass },
+    });
+    expect(authB.status()).toBe(200);
+    const authBBody = await authB.json();
+    const headersB = { Authorization: `Bearer ${authBBody.access_token}`, 'Content-Type': 'application/json' };
+
+    const createExecSetARes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers: headersA,
+      data: { case_file_id: caseFileId, mode: 'replace', preserve_results: true, prefer_result_source: 'db' },
+    });
+    expect(createExecSetARes.status()).toBe(200);
+    const execSetAId = (await createExecSetARes.json()).id;
+
+    const createExecSetBRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers: headersB,
+      data: { case_file_id: caseFileId, mode: 'replace', preserve_results: true, prefer_result_source: 'db' },
+    });
+    expect(createExecSetBRes.status()).toBe(200);
+    const execSetBId = (await createExecSetBRes.json()).id;
+
+    const manualPayload = {
+      module: '订单',
+      title: '新增订单',
+      expected: '成功',
+      priority: 'P1',
+      precondition: '已登录',
+      steps: '步骤A',
+    };
+
+    const addBRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetBId}/cases`, {
+      headers: headersB,
+      data: manualPayload,
+    });
+    expect(addBRes.status()).toBe(201);
+    const bManual = await addBRes.json();
+    expect(bManual && bManual.case_item_id).toBeTruthy();
+
+    const addARes = await ctx.post(`${apiBase}/api/exec/sets/${execSetAId}/cases`, {
+      headers: headersA,
+      data: manualPayload,
+    });
+    expect(addARes.status()).toBe(201);
+    const aManual = await addARes.json();
+    expect(aManual && aManual.case_item_id).toBeTruthy();
+    expect(aManual.case_item_id).toBe(bManual.case_item_id);
+
+    const syncRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetBId}/case-library-sync`, { headers: headersB, data: {} });
+    expect(syncRes.status()).toBe(200);
+    const sync = await syncRes.json();
+    expect(sync && sync.has_new_diff).toBeFalsy();
+    expect(sync && sync.summary && sync.summary.added).toBe(0);
+    expect(sync && sync.summary && sync.summary.updated).toBe(0);
+    expect(sync && sync.summary && sync.summary.deleted).toBe(0);
+
+    const listBRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetBId}/cases`, { headers: headersB });
+    expect(listBRes.status()).toBe(200);
+    const listB = await listBRes.json();
+    expect(listB.length).toBe(2);
+    const sameTitle = listB.filter((row) => row && row.title === manualPayload.title);
+    expect(sameTitle.length).toBe(1);
+    expect(sameTitle[0] && sameTitle[0].case_item_id).toBeTruthy();
+
+    const cleanupRes = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
+    expect(cleanupRes.status()).toBe(200);
+    const delUserA = await ctx.post(`${apiBase}/api/users/${memberAId}/delete`, {
+      headers,
+      data: { admin_password: adminPass },
+    });
+    expect(delUserA.status()).toBe(200);
+    const delUserB = await ctx.post(`${apiBase}/api/users/${memberBId}/delete`, {
+      headers,
+      data: { admin_password: adminPass },
+    });
+    expect(delUserB.status()).toBe(200);
+  });
+
+  test('执行页删除用例后：用例库记录删除并同步', async () => {
+    const ctx = await request.newContext();
+    const token = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(health && health.status).toBe('ok');
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'autotest-exec-delete-sync-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'exec delete sync to case library' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers,
+      data: { name: 'v1' },
+    });
+    expect(verRes.status()).toBe(201);
+    const versionId = (await verRes.json()).id;
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '执行删除同步_' + Date.now() + '.json',
+        source: 'api-test',
+        items: [
+          { module: '账户', title: '注销账号', priority: 'P0', precondition: '已登录', steps: '步骤1', expected: '成功', remark: '' },
+        ],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFile = await importRes.json();
+    const caseFileId = caseFile.id;
+    const fileNameClean = caseFile.file_name_clean;
+
+    const createExecSetRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: { case_file_id: caseFileId, mode: 'replace', preserve_results: true, prefer_result_source: 'db' },
+    });
+    expect(createExecSetRes.status()).toBe(200);
+    const execSetId = (await createExecSetRes.json()).id;
+
+    const listExecCasesRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers });
+    expect(listExecCasesRes.status()).toBe(200);
+    const execCases = await listExecCasesRes.json();
+    expect(execCases.length).toBe(1);
+    const execCaseId = execCases[0].id;
+
+    const delRes = await ctx.delete(`${apiBase}/api/exec/cases/${execCaseId}`, { headers });
+    expect(delRes.status()).toBe(200);
+
+    const listItemsRes = await ctx.get(`${apiBase}/api/case-files/${caseFileId}/items`, { headers });
+    expect(listItemsRes.status()).toBe(200);
+    const items = await listItemsRes.json();
+    expect(items.length).toBe(0);
+
+    const historyRes = await ctx.get(
+      `${apiBase}/api/case-files/change-history?project_id=${projectId}&file_name_clean=${encodeURIComponent(fileNameClean)}&limit=50`,
+      { headers }
+    );
+    expect(historyRes.status()).toBe(200);
+    const history = await historyRes.json();
+    expect(history && Array.isArray(history.history)).toBeTruthy();
+    expect(history.history.some((h) => h && h.kind === 'deleted' && h.old && h.old.title === '注销账号')).toBeTruthy();
+
+    const cleanupRes = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
+    expect(cleanupRes.status()).toBe(200);
+  });
+
+  test('执行页新增用例自动入库：本人 sync 不触发新 diff 但可查看记录', async () => {
+    const ctx = await request.newContext();
+    const token = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(health && health.status).toBe('ok');
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'autotest-exec-add-self-ack-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'exec add case auto bind diff history' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers,
+      data: { name: 'v1' },
+    });
+    expect(verRes.status()).toBe(201);
+    const versionId = (await verRes.json()).id;
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '执行新增同步_' + Date.now() + '.json',
+        source: 'api-test',
+        items: [
+          { module: '账户', title: '注册账号', priority: 'P0', precondition: '无', steps: '步骤1', expected: '成功', remark: '' },
+        ],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFile = await importRes.json();
+    const caseFileId = caseFile.id;
+
+    const createExecSetRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: { case_file_id: caseFileId, mode: 'replace', preserve_results: true, prefer_result_source: 'db' },
+    });
+    expect(createExecSetRes.status()).toBe(200);
+    const execSetId = (await createExecSetRes.json()).id;
+
+    const addRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/cases`, {
+      headers,
+      data: {
+        module: '账户',
+        title: '解绑手机号',
+        expected: '成功',
+        priority: 'P1',
+        precondition: '已登录',
+        steps: '步骤A',
+      },
+    });
+    expect(addRes.status()).toBe(201);
+    const added = await addRes.json();
+    expect(added && added.case_item_id).toBeTruthy();
+
+    const itemsRes = await ctx.get(`${apiBase}/api/case-files/${caseFileId}/items`, { headers });
+    expect(itemsRes.status()).toBe(200);
+    const items = await itemsRes.json();
+    expect(items.length).toBe(2);
+
+    const syncRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/case-library-sync`, { headers, data: {} });
+    expect(syncRes.status()).toBe(200);
+    const sync = await syncRes.json();
+    expect(sync && sync.has_new_diff).toBeFalsy();
+    expect(sync && sync.should_auto_popup).toBeFalsy();
+    expect(sync && sync.summary && sync.summary.added).toBe(1);
+    expect(Array.isArray(sync.diff)).toBeTruthy();
+    expect(sync.diff.some((d) => d && d.kind === 'added')).toBeTruthy();
+    expect(Array.isArray(sync.history)).toBeTruthy();
+    expect(sync.history.some((h) => h && Array.isArray(h.diff) && h.diff.some((d) => d && d.kind === 'added'))).toBeTruthy();
+
+    const cleanupRes = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
+    expect(cleanupRes.status()).toBe(200);
+  });
+
   test('多次变更会记录历史：最新变更排在最前', async () => {
     const ctx = await request.newContext();
     const token = await login(ctx, adminUser, adminPass);
@@ -306,6 +624,126 @@ test.describe('exec case library sync api', () => {
 
     const cleanupRes = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
     expect(cleanupRes.status()).toBe(200);
+  });
+
+  test('执行页连续改动两次：其他执行集同步可看到两条记录', async () => {
+    const ctx = await request.newContext();
+    const token = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(health && health.status).toBe('ok');
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'autotest-exec-sync-history-multi-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'exec double update history sync' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers,
+      data: { name: 'v1' },
+    });
+    expect(verRes.status()).toBe(201);
+    const versionId = (await verRes.json()).id;
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '执行页双次改动_' + Date.now() + '.json',
+        source: 'api-test',
+        items: [
+          { module: '账户', title: '修改资料', priority: 'P0', precondition: '已登录', steps: '步骤0', expected: '成功', remark: '' },
+        ],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFile = await importRes.json();
+    const caseFileId = caseFile.id;
+
+    const memberPass = 'Pwd123456';
+    const memberBName = 'api_case_lib_b_' + Date.now();
+    const createUserB = await ctx.post(`${apiBase}/api/users`, {
+      headers,
+      data: { username: memberBName, password: memberPass, role: 'user', level: 'member', is_active: true },
+    });
+    expect(createUserB.status()).toBe(201);
+    const memberBId = (await createUserB.json()).id;
+
+    const assignB = await ctx.post(`${apiBase}/api/users/assign-projects`, {
+      headers,
+      data: { user_id: memberBId, project_ids: [projectId] },
+    });
+    expect(assignB.status()).toBe(200);
+
+    const tokenB = await login(ctx, memberBName, memberPass);
+    const headersB = { Authorization: `Bearer ${tokenB}`, 'Content-Type': 'application/json' };
+
+    const createExecSetA = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: { case_file_id: caseFileId, mode: 'replace', preserve_results: true, prefer_result_source: 'db' },
+    });
+    expect(createExecSetA.status()).toBe(200);
+    const execSetAId = (await createExecSetA.json()).id;
+
+    const createExecSetB = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers: headersB,
+      data: { case_file_id: caseFileId, mode: 'replace', preserve_results: true, prefer_result_source: 'db' },
+    });
+    expect(createExecSetB.status()).toBe(200);
+    const execSetBId = (await createExecSetB.json()).id;
+
+    const listExecCasesRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetAId}/cases`, { headers });
+    expect(listExecCasesRes.status()).toBe(200);
+    const execCases = await listExecCasesRes.json();
+    expect(execCases.length).toBe(1);
+    const execCaseId = execCases[0].id;
+
+    const step1 = '步骤A_' + Date.now();
+    const step2 = '步骤B_' + Date.now();
+    const update1 = await ctx.patch(`${apiBase}/api/exec/cases/${execCaseId}`, {
+      headers,
+      data: { steps: step1 },
+    });
+    expect(update1.status()).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    const update2 = await ctx.patch(`${apiBase}/api/exec/cases/${execCaseId}`, {
+      headers,
+      data: { steps: step2 },
+    });
+    expect(update2.status()).toBe(200);
+
+    const syncRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetBId}/case-library-sync`, { headers: headersB, data: {} });
+    expect(syncRes.status()).toBe(200);
+    const sync = await syncRes.json();
+    expect(sync && sync.exec_set_id).toBe(execSetBId);
+    expect(Array.isArray(sync.history)).toBeTruthy();
+    expect(sync.history.length).toBeGreaterThanOrEqual(2);
+
+    const diffSteps = [];
+    sync.history.forEach((batch) => {
+      const diffs = batch && Array.isArray(batch.diff) ? batch.diff : [];
+      diffs.forEach((entry) => {
+        if (entry && entry.new && entry.new.steps) diffSteps.push(entry.new.steps);
+      });
+    });
+    expect(diffSteps).toContain(step1);
+    expect(diffSteps).toContain(step2);
+
+    const cleanupRes = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
+    expect(cleanupRes.status()).toBe(200);
+    const delUserB = await ctx.post(`${apiBase}/api/users/${memberBId}/delete`, {
+      headers,
+      data: { admin_password: adminPass },
+    });
+    expect(delUserB.status()).toBe(200);
   });
 
   test('追加入库：sync 返回 appended diff，且不影响已执行结果', async () => {
@@ -406,6 +844,171 @@ test.describe('exec case library sync api', () => {
     expect(afterCases.length).toBe(2);
     const keep = afterCases.find((it) => it && it.title === '正常登录');
     expect(keep && keep.status).toBe('通过');
+
+    const cleanupRes = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
+    expect(cleanupRes.status()).toBe(200);
+  });
+
+  test('用例库同步支持混合时区时间戳', async () => {
+    const ctx = await request.newContext();
+    const token = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(health && health.status).toBe('ok');
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'autotest-case-lib-sync-tz-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'exec case library sync timezone' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers,
+      data: { name: 'v1' },
+    });
+    expect(verRes.status()).toBe(201);
+    const versionId = (await verRes.json()).id;
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '同步时区测试_' + Date.now() + '.json',
+        source: 'api-test',
+        items: [
+          { module: '登录', title: '登录成功', priority: 'P0', precondition: '无', steps: '步骤', expected: '成功', remark: '' },
+        ],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFile = await importRes.json();
+    const caseFileId = caseFile.id;
+
+    const createExecSetRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: { case_file_id: caseFileId, mode: 'replace', preserve_results: true, prefer_result_source: 'db' },
+    });
+    expect(createExecSetRes.status()).toBe(200);
+    const execSet = await createExecSetRes.json();
+    const execSetId = execSet.id;
+
+    const dbPath = path.resolve(__dirname, '..', '..', 'data', 'apitest.db');
+    const script = `
+import sqlite3
+db = r"""${dbPath}"""
+conn = sqlite3.connect(db)
+cur = conn.cursor()
+cur.execute("UPDATE exec_sets SET case_file_base_updated_at=? WHERE id=?", ("2025-02-18T12:00:00+00:00", ${execSetId}))
+cur.execute("UPDATE case_files SET updated_at=? WHERE id=?", ("2025-02-18 12:00:01", ${caseFileId}))
+conn.commit()
+conn.close()
+`;
+    execSync(`python3 - <<'PY'\n${script}\nPY`);
+
+    const syncRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/case-library-sync`, { headers, data: {} });
+    expect(syncRes.status()).toBe(200);
+    const sync = await syncRes.json();
+    expect(sync && sync.exec_set_id).toBe(execSetId);
+    expect(sync && sync.case_file_id).toBe(caseFileId);
+
+    const cleanupRes = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
+    expect(cleanupRes.status()).toBe(200);
+  });
+
+  test('用例库历史排序兼容混合时区', async () => {
+    const ctx = await request.newContext();
+    const token = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(health && health.status).toBe('ok');
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'autotest-case-lib-sync-history-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'exec case library history sort' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers,
+      data: { name: 'v1' },
+    });
+    expect(verRes.status()).toBe(201);
+    const versionId = (await verRes.json()).id;
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '同步历史排序_' + Date.now() + '.json',
+        source: 'api-test',
+        items: [
+          { module: '登录', title: '登录成功', priority: 'P0', precondition: '无', steps: '步骤', expected: '成功', remark: '' },
+        ],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFile = await importRes.json();
+    const caseFileId = caseFile.id;
+
+    const createExecSetRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: { case_file_id: caseFileId, mode: 'replace', preserve_results: true, prefer_result_source: 'db' },
+    });
+    expect(createExecSetRes.status()).toBe(200);
+    const execSet = await createExecSetRes.json();
+    const execSetId = execSet.id;
+
+    const dbPath = path.resolve(__dirname, '..', '..', 'data', 'apitest.db');
+    const historyPayload = [
+      {
+        diff_at: '2025-02-18 10:00:00',
+        operator: 'admin',
+        summary: { appended: 0, added: 0, updated: 1, deleted: 0 },
+        diff: [],
+      },
+      {
+        diff_at: '2025-02-18T10:00:05+00:00',
+        operator: 'admin',
+        summary: { appended: 0, added: 1, updated: 0, deleted: 0 },
+        diff: [],
+      },
+    ];
+    const script = `
+import sqlite3, json
+db = r"""${dbPath}"""
+conn = sqlite3.connect(db)
+cur = conn.cursor()
+cur.execute("UPDATE exec_sets SET case_file_diff_history_json=? WHERE id=?", (json.dumps(${JSON.stringify(historyPayload)}), ${execSetId}))
+conn.commit()
+conn.close()
+`;
+    execSync(`python3 - <<'PY'\n${script}\nPY`);
+
+    const syncRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/case-library-sync`, { headers, data: {} });
+    expect(syncRes.status()).toBe(200);
+    const sync = await syncRes.json();
+    expect(sync && sync.exec_set_id).toBe(execSetId);
+    expect(Array.isArray(sync.history)).toBeTruthy();
+    expect(sync.history.length).toBeGreaterThanOrEqual(2);
+    const firstTs = Date.parse(sync.history[0].diff_at || sync.history[0].diffAt || '');
+    const secondTs = Date.parse(sync.history[1].diff_at || sync.history[1].diffAt || '');
+    expect(Number.isFinite(firstTs)).toBeTruthy();
+    expect(Number.isFinite(secondTs)).toBeTruthy();
+    expect(firstTs).toBeGreaterThanOrEqual(secondTs);
 
     const cleanupRes = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
     expect(cleanupRes.status()).toBe(200);

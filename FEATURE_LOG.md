@@ -19,6 +19,45 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行页多用户用例库变更同步修复  
+- 功能描述：多用户交替修改用例库后，执行页同步不再因历史混合时区导致 500，变更抽屉可展示完整 diff。  
+- 操作方式：A 修改 → B 刷新 → B 修改 → A 刷新 → B 刷新 → 点击“用例库变更”。  
+- 使用效果：变更抽屉可正常打开并展示完整 diff，不再提示 500。  
+- 新增内容/接口/组件：  
+  - 后端：用例库变更历史排序与时间戳兼容（`backend/routers/exec_routes.py`）。  
+  - 测试：API 用例新增（`tests/api/exec_case_library_sync.spec.js`）；UI 用例新增（`tests/ui/tempexec_case_library_multi_user.spec.js`）。  
+- 复用说明：复用既有同步接口与 diff 计算逻辑，无新增接口。  
+- 测试与验证：  
+  - `API_BASE_URL=http://127.0.0.1:8090 npm run test:api -- tests/api/exec_case_library_sync.spec.js -g "用例库同步支持混合时区时间戳|用例库历史排序兼容混合时区"`（通过）  
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 API_BASE_URL=http://127.0.0.1:8090 npm run test:ui -- tests/ui/tempexec_case_library_multi_user.spec.js`（通过）  
+- 更新记录：2025-02-18 执行页多用户用例库变更同步修复（`backend/routers/exec_routes.py`、`tests/api/exec_case_library_sync.spec.js`、`tests/ui/tempexec_case_library_multi_user.spec.js`）。  
+
+- 功能名称：用例库同步兼容混合时区时间戳  
+- 功能描述：执行页同步用例库时，统一使用安全时间戳比较，避免混合时区/空时间导致 500，保证 diff 正常返回。  
+- 操作方式：执行页点击“用例库变更”，或刷新执行页触发同步。  
+- 使用效果：同步接口稳定返回 diff，不再出现 500，变更抽屉可正常展示内容。  
+- 新增内容/接口/组件：  
+  - 后端：同步时间戳安全比较与 fallback（`backend/routers/exec_routes.py`）。  
+  - 测试：API 用例新增（`tests/api/exec_case_library_sync.spec.js`）。  
+- 复用说明：复用既有同步接口与 diff 计算逻辑，无新增接口。  
+- 测试与验证：  
+  - `API_BASE_URL=http://127.0.0.1:8090 npm run test:api -- tests/api/exec_case_library_sync.spec.js -g "用例库同步支持混合时区时间戳"`（通过）  
+- 更新记录：2025-02-18 用例库同步兼容混合时区时间戳（`backend/routers/exec_routes.py`、`tests/api/exec_case_library_sync.spec.js`）。  
+
+- 功能名称：执行页用例库变更按钮支持重试同步  
+- 功能描述：执行页首次同步失败或未拿到 diff 元数据时，仍可点击“用例库变更”按钮触发重试同步并打开 diff 抽屉，避免多用户刷新后按钮不可点。  
+- 操作方式：在执行页点击“用例库变更”按钮（同步失败/未完成时也可点击）。  
+- 使用效果：按钮保持可点击，触发同步后展示用例库变更明细。  
+- 新增内容/接口/组件：  
+  - 前端：执行页用例库变更按钮重试与同步兜底（`scripts/core/tempexecCore.js`）。  
+  - 测试：UI 用例新增（`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 复用说明：复用既有用例库同步与 diff 抽屉逻辑，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_case_library_changes.spec.js -g "用例库同步失败时：变更按钮仍可点击并触发重试"`（通过）  
+- 更新记录：2025-02-18 执行页用例库变更按钮支持重试同步（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 更新记录：2025-02-18 手动点击立即打开抽屉并同步最新变更（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+
 - 功能名称：归档用例自动移除专注区  
 - 功能描述：执行视图归档用例后，若该用例在专注区，会自动从专注区移除。  
 - 操作方式：在执行视图/归档总览归档用例。  
@@ -1874,3 +1913,121 @@
   - `node --check scripts/modules/caseLibrary.js`（通过）  
   - `npm run test:ui -- tests/ui/case_library_drawer_pagination.spec.js`（通过；提示 8080 端口已占用但测试复用了现有服务）  
 - 更新记录：2025-12-21 用例库抽屉分页接入全局分页设置（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_drawer_pagination.spec.js`）。  
+
+- 功能名称：执行页用例库同步去重与删除同步  
+- 功能描述：执行页同步用例库时，若本地已有未绑定但内容一致的用例，则自动绑定并避免重复新增；执行页删除用例时同步删除用例库条目并记录变更历史。  
+- 操作方式：A 在执行页新增并编辑用例入库后，B 刷新执行页同步；删除执行页用例后查看用例库变更记录与其他执行集同步。  
+- 使用效果：同步时不再出现重复新增的用例，变更提示不再误指向自身手工新增；执行页删除会在用例库变更历史中记录“删除”并触发同步移除。  
+- 新增内容/接口/组件：  
+  - 后端：执行集同步匹配未绑定用例、执行页删除同步用例库（`backend/routers/exec_routes.py`）。  
+  - 测试：API 用例（`tests/api/exec_case_library_sync.spec.js`）；UI 用例（`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 复用说明：复用现有用例库变更记录与同步接口（`/api/exec/sets/*/case-library-sync`、`log_case_library_change`），未新增接口。  
+- 测试与验证：  
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npm run test:ui -- tests/ui/tempexec_case_library_changes.spec.js`（未通过：`存在多份变更时可切换用例diff；自动弹不影响当前选中用例；可点击“选择用例”切换执行视图` 在 `waitAppReady` 阶段未检测到 `tempExecApi`，其余 2 条通过）  
+  - `API_BASE_URL=http://127.0.0.1:18082 npm run test:api -- tests/api/exec_case_library_sync.spec.js`（通过）  
+- 更新记录：2025-12-21 执行页用例库同步去重与删除同步（`backend/routers/exec_routes.py`、`tests/api/exec_case_library_sync.spec.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+
+- 功能名称：执行页新增/编辑/删除与用例库同步补强  
+- 功能描述：执行页新增用例在模块/标题/优先级/前置条件/步骤/预期结果齐全时自动写入用例库并绑定；执行页修改/删除会记录为用例库变更并写入执行集 diff 历史；首次回到执行页刷新时可自动弹出 diff，自己执行页改动不再弹窗/高亮但仍可查看记录。  
+- 操作方式：在执行页点击“+”新增并补全字段，或直接编辑/删除用例；刷新执行页或切回执行页查看“用例库变更”。  
+- 使用效果：执行页与用例库保持一致；新增/删除记录完整；他人改动首次刷新自动弹 diff，自己改动不强弹但可查看历史。  
+- 新增内容/接口/组件：  
+  - 后端：执行用例创建自动落库/绑定、执行页变更写入 diff 历史并自动 ack（`backend/routers/exec_routes.py`）。  
+  - 前端：执行页同步触发序号消费，避免刷新漏弹（`scripts/core/tempexecCore.js`）。  
+  - 测试：API 用例（`tests/api/exec_case_library_sync.spec.js`、`tests/api/exec_persistence.spec.js`）；UI 用例（`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 复用说明：复用用例库变更记录与执行集同步接口（`/api/exec/sets/*/case-library-sync`、`log_case_library_change`），无新增接口。  
+- 测试与验证：未执行（需在测试库/前端服务环境下运行）。  
+- 更新记录：2025-12-23 执行页新增/编辑/删除与用例库同步补强（`backend/routers/exec_routes.py`、`scripts/core/tempexecCore.js`、`tests/api/exec_case_library_sync.spec.js`、`tests/api/exec_persistence.spec.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+
+- 功能名称：执行页用例库 diff 自动弹窗与同步判定补漏  
+- 功能描述：执行页同步用例库时，若用例库更新时间与上次同步一致但存在差异仍触发 diff 计算；刷新来源为执行页时优先消费同步触发并允许同步；用例库变更按钮在仅有历史记录时保持可点击。  
+- 操作方式：执行页或用例库修改用例后，回到执行页刷新；查看“用例库变更”按钮与自动弹出的 diff 抽屉。  
+- 使用效果：多人快速变更时不再漏同步；刷新回到执行页时能触发同步与自动弹 diff；变更按钮不会因历史存在而失效。  
+- 新增内容/接口/组件：  
+  - 后端：执行集与用例库同步判定补漏（`backend/routers/exec_routes.py`）。  
+  - 前端：执行页刷新来源判定与按钮可用性补强（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用执行集同步接口与用例库变更记录，无新增接口。  
+- 测试与验证：  
+  - `npm run test:ui -- tests/ui/tempexec_case_library_changes.spec.js`（通过）  
+- 更新记录：2025-12-24 执行页用例库 diff 自动弹窗与同步判定补漏（`backend/routers/exec_routes.py`、`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：执行页空用例编辑补漏与同步稳定性  
+- 功能描述：新增空用例时，未落库前的字段编辑会缓存并在创建完成后补写；执行页同步用例库不再依赖页签状态，保证变更按钮可用。  
+- 操作方式：执行页新增空用例后逐步补全字段并刷新；观察“用例库变更”按钮可点击与字段不再被刷新置空。  
+- 使用效果：空用例补全后字段可稳定保存，刷新不再丢失预期结果；执行页刷新后变更按钮保持可点击。  
+- 新增内容/接口/组件：  
+  - 前端：空用例创建期间的补丁缓冲与同步策略优化（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用现有执行用例更新接口与同步接口，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+- 更新记录：2025-12-24 执行页空用例编辑补漏与同步稳定性（`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：执行页变更按钮状态保底  
+- 功能描述：同步返回空 diff 时保留已有变更元信息，避免按钮被误禁用。  
+- 操作方式：多人在执行页/用例库交替修改后刷新执行页，观察“用例库变更”按钮仍可点击查看历史。  
+- 使用效果：变更按钮不会因短暂空返回而变灰不可点。  
+- 新增内容/接口/组件：  
+  - 前端：同步元数据合并（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用执行集同步接口，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+- 更新记录：2025-12-24 执行页变更按钮状态保底（`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：执行页变更按钮可用性判定补强  
+- 功能描述：变更按钮的可用性增加“用例库更新时间 vs 基线时间”判断，避免同步元信息不足时误禁用。  
+- 操作方式：多人交替修改用例库后刷新执行页，观察“用例库变更”按钮保持可点击。  
+- 使用效果：按钮不会因瞬时空 diff 而禁用。  
+- 新增内容/接口/组件：  
+  - 前端：变更按钮可用性判定补强（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用现有同步接口，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+- 更新记录：2025-12-24 执行页变更按钮可用性判定补强（`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：执行页变更按钮 lastDiffAt 保底  
+- 功能描述：同步返回 lastDiffAt 但 diff/history 空时，仍保持按钮可点击。  
+- 操作方式：多人交替修改同一用例标题后刷新执行页，检查变更按钮仍可点击。  
+- 使用效果：lastDiffAt 存在时按钮不再误禁用。  
+- 新增内容/接口/组件：  
+  - 前端：变更按钮判定补充 lastDiffAt（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用现有同步接口，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+- 更新记录：2025-12-24 执行页变更按钮 lastDiffAt 保底（`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：执行页变更按钮摘要信号补强  
+- 功能描述：用例库同步仅返回摘要时，仍可识别变更并展示摘要，避免按钮灰掉。  
+- 操作方式：执行页刷新时仅返回摘要（无 diff/history），查看“用例库变更”按钮与摘要 pill。  
+- 使用效果：摘要存在时按钮可点击且展示改动统计。  
+- 新增内容/接口/组件：  
+  - 前端：摘要信号判定与摘要回填（`scripts/core/tempexecCore.js`）。  
+  - 测试：用例库变更摘要场景 UI 用例（`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 复用说明：复用执行集同步接口，无新增接口。  
+- 测试与验证：  
+  - `npm run test:ui -- tests/ui/tempexec_case_library_changes.spec.js`（通过）  
+- 更新记录：2025-12-24 执行页变更按钮摘要信号补强（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+
+- 功能名称：执行页变更按钮空元信息可打开  
+- 功能描述：同步返回空 diff/历史时仍允许手动打开变更抽屉，避免多人交替刷新后按钮变灰不可点。  
+- 操作方式：多人交替修改并刷新执行页，点击“用例库变更”按钮查看 diff/空态。  
+- 使用效果：按钮保持可点击，空元信息时展示“暂无变更”，不影响自动弹窗逻辑。  
+- 新增内容/接口/组件：  
+  - 前端：按钮可用性与抽屉打开逻辑兜底（`scripts/core/tempexecCore.js`）。  
+  - 测试：多人交替刷新空元信息 UI 用例（`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 复用说明：复用执行集同步接口，无新增接口。  
+- 测试与验证：  
+  - `npm run test:ui -- tests/ui/tempexec_case_library_changes.spec.js`（通过）  
+- 更新记录：2025-12-24 执行页变更按钮空元信息可打开（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+
+- 功能名称：执行页多次改动历史回补
+- 功能描述：执行页同步时回补用例库变更事件，避免他人连续改动后只看到最新一条 diff。
+- 操作方式：A 在执行页连续修改同一用例两次，B 刷新执行页打开“用例库变更”抽屉查看历史。
+- 使用效果：B 可打开抽屉并看到两条变更记录，diff 内容包含两次改动。
+- 新增内容/接口/组件：
+  - 后端：执行集同步回补用例库事件历史（`backend/routers/exec_routes.py`）。
+  - 测试：多次改动跨执行集同步 API/UI 用例（`tests/api/exec_case_library_sync.spec.js`、`tests/ui/tempexec_case_library_multi_user.spec.js`）。
+- 复用说明：复用用例库变更事件与执行集同步接口，无新增接口。
+- 测试与验证：
+  - `API_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/api/exec_case_library_sync.spec.js -g "执行页连续改动两次"`（通过）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 API_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_case_library_multi_user.spec.js`（通过）
+- 更新记录：2025-12-23 执行页多次改动历史回补（`backend/routers/exec_routes.py`、`tests/api/exec_case_library_sync.spec.js`、`tests/ui/tempexec_case_library_multi_user.spec.js`）。

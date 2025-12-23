@@ -226,6 +226,7 @@
 
     var execCasePatchTimers = {};
     var execCasePatchQueue = {};
+    var pendingExecCasePatchByTempId = {};
 
     function queueExecCasePatch(execCaseId, patch, options) {
       if (!execCaseId) return;
@@ -252,6 +253,37 @@
           }
         });
       }, 320);
+    }
+
+    function queueExecCasePatchForItem(item, patch) {
+      if (!item || !patch || typeof patch !== 'object') return;
+      var caseId = item.execCaseId || item.id;
+      if (caseId) {
+        queueExecCasePatch(caseId, patch);
+        return;
+      }
+      var tempId = item._tempId ? String(item._tempId) : '';
+      if (!tempId) return;
+      if (!pendingExecCasePatchByTempId[tempId] || typeof pendingExecCasePatchByTempId[tempId] !== 'object') {
+        pendingExecCasePatchByTempId[tempId] = {};
+      }
+      Object.keys(patch).forEach(function(key) {
+        pendingExecCasePatchByTempId[tempId][key] = patch[key];
+      });
+    }
+
+    function consumePendingExecCasePatch(tempId) {
+      var key = tempId ? String(tempId) : '';
+      if (!key) return null;
+      var payload = pendingExecCasePatchByTempId[key] || null;
+      if (payload) delete pendingExecCasePatchByTempId[key];
+      return payload;
+    }
+
+    function clearPendingExecCasePatch(tempId) {
+      var key = tempId ? String(tempId) : '';
+      if (!key) return;
+      if (pendingExecCasePatchByTempId[key]) delete pendingExecCasePatchByTempId[key];
     }
 
     var execSetPatchTimer = null;
@@ -1864,8 +1896,7 @@
       var openSet = ensureTempExecDefectOpen(fileId);
       openSet.add(index);
       if (isDbMode()) {
-        var caseId = caseItem && (caseItem.execCaseId || caseItem.id);
-        if (caseId) queueExecCasePatch(caseId, { defect_links: caseItem.defectLinks });
+        queueExecCasePatchForItem(caseItem, { defect_links: caseItem.defectLinks });
       }
       persistTempExecState();
       renderTempExecView();
@@ -1890,8 +1921,7 @@
         if (!Array.isArray(nextCase.defectLinks)) return;
         nextCase.defectLinks = nextCase.defectLinks.filter(function(link) { return link && link.id !== linkId; });
         if (isDbMode()) {
-          var caseId = nextCase && (nextCase.execCaseId || nextCase.id);
-          if (caseId) queueExecCasePatch(caseId, { defect_links: nextCase.defectLinks });
+          queueExecCasePatchForItem(nextCase, { defect_links: nextCase.defectLinks });
         }
         persistTempExecState();
         renderTempExecView();
@@ -1907,8 +1937,7 @@
       if (!entry) return;
       entry.url = value || '';
       if (isDbMode()) {
-        var caseId = caseItem && (caseItem.execCaseId || caseItem.id);
-        if (caseId) queueExecCasePatch(caseId, { defect_links: caseItem.defectLinks });
+        queueExecCasePatchForItem(caseItem, { defect_links: caseItem.defectLinks });
       }
       persistTempExecState();
     }
@@ -2401,9 +2430,7 @@
         }
         (file.cases || []).forEach(function(item) {
           if (!item) return;
-          var caseId = item.execCaseId || item.id;
-          if (!caseId) return;
-          queueExecCasePatch(caseId, { reuse_details: item.reuseDetails || [] });
+          queueExecCasePatchForItem(item, { reuse_details: item.reuseDetails || [] });
         });
       }
       persistTempExecState();
@@ -2425,9 +2452,7 @@
           }
           (file.cases || []).forEach(function(item) {
             if (!item) return;
-            var caseId = item.execCaseId || item.id;
-            if (!caseId) return;
-            queueExecCasePatch(caseId, { reuse_details: item.reuseDetails || [] });
+            queueExecCasePatchForItem(item, { reuse_details: item.reuseDetails || [] });
           });
         }
         persistTempExecState();
@@ -3694,6 +3719,82 @@
       };
     }
 
+    function hasCaseLibraryChangeSignal(meta) {
+      if (!meta) return false;
+      if (meta.everChanged === true) return true;
+      if (Array.isArray(meta.diff) && meta.diff.length) return true;
+      if (Array.isArray(meta.history) && meta.history.length) return true;
+      if (meta.summary) {
+        var summary = meta.summary || {};
+        if (Number(summary.appended) || Number(summary.added) || Number(summary.updated) || Number(summary.deleted)) {
+          return true;
+        }
+      }
+      if (meta.lastDiffAt) return true;
+      var baseTs = parseDbTimeMs(meta.baseUpdatedAt);
+      var fileTs = parseDbTimeMs(meta.caseFileUpdatedAt);
+      if (baseTs && fileTs && fileTs > baseTs) return true;
+      return false;
+    }
+
+    function mergeCaseLibrarySyncMeta(prev, next) {
+      if (!prev) return next;
+      if (!next) return prev;
+      var nextSummary = next.summary || {};
+      var nextSummarySignal = Boolean(
+        Number(nextSummary.appended) ||
+        Number(nextSummary.added) ||
+        Number(nextSummary.updated) ||
+        Number(nextSummary.deleted)
+      );
+      var nextHasSignal = Boolean(
+        next.everChanged === true ||
+        (Array.isArray(next.diff) && next.diff.length) ||
+        (Array.isArray(next.history) && next.history.length) ||
+        next.lastDiffAt ||
+        nextSummarySignal
+      );
+      if (nextHasSignal) return next;
+      var merged = {};
+      Object.keys(next).forEach(function(key) { merged[key] = next[key]; });
+      if (prev.everChanged) merged.everChanged = true;
+      if ((!merged.diff || !merged.diff.length) && Array.isArray(prev.diff) && prev.diff.length) {
+        merged.diff = prev.diff;
+      }
+      if ((!merged.history || !merged.history.length) && Array.isArray(prev.history) && prev.history.length) {
+        merged.history = prev.history;
+      }
+      if (!merged.lastDiffAt && prev.lastDiffAt) merged.lastDiffAt = prev.lastDiffAt;
+      if (!merged.lastShownAt && prev.lastShownAt) merged.lastShownAt = prev.lastShownAt;
+      if (merged.summary && prev.summary) {
+        var sum = merged.summary;
+        var empty = !(sum.appended || sum.added || sum.updated || sum.deleted);
+        if (empty) merged.summary = prev.summary;
+      }
+      if (!merged.caseFileId && prev.caseFileId) merged.caseFileId = prev.caseFileId;
+      return merged;
+    }
+
+    function applyTempExecCaseLibrarySyncMeta(file, syncRes) {
+      var meta = normalizeCaseLibrarySyncMeta(syncRes);
+      var execSetId = meta && meta.execSetId ? meta.execSetId : (file && file.execSetId ? file.execSetId : null);
+      if (!execSetId) return null;
+      if (!meta.execSetId) meta.execSetId = execSetId;
+      if (!meta.caseFileId && file && (file.caseFileId || file.caseFileId === 0)) {
+        meta.caseFileId = file.caseFileId;
+      }
+      var store = ensureTempExecCaseLibraryDiffState();
+      var prevMeta = store.byExecSetId[String(execSetId)] || null;
+      meta = mergeCaseLibrarySyncMeta(prevMeta, meta);
+      store.byExecSetId[String(execSetId)] = meta;
+      var latestFile = file || getTempExecFile(String(execSetId));
+      if (latestFile) latestFile.caseLibraryMeta = meta;
+      if (String(state.tempExecActiveId || '') === String(execSetId)) {
+        syncTempExecCaseLibraryChangesButton(getTempExecFile(state.tempExecActiveId));
+      }
+      return meta;
+    }
+
     function getTempExecFileNameByExecSetId(execSetId) {
       if (!execSetId) return '';
       var file = getTempExecFile(String(execSetId));
@@ -3711,7 +3812,7 @@
           if (!meta) return null;
           var hasHistory = Boolean(meta && Array.isArray(meta.history) && meta.history.length);
           var hasDiff = hasHistory || Boolean(meta && Array.isArray(meta.diff) && meta.diff.length);
-          var available = Boolean(meta && (meta.everChanged === true || hasDiff));
+          var available = Boolean(meta && (hasDiff || hasCaseLibraryChangeSignal(meta)));
           if (!available) return null;
           var ts = 0;
           if (hasHistory && meta.history[0] && meta.history[0].diffAt) {
@@ -3780,8 +3881,7 @@
       }
       var store = ensureTempExecCaseLibraryDiffState();
       var meta = store.byExecSetId[String(file.execSetId)] || (file.caseLibraryMeta || null);
-      var hasDiff = Boolean(meta && Array.isArray(meta.diff) && meta.diff.length);
-      tempExecCaseLibraryChangesBtn.disabled = !meta || !(meta.everChanged === true || hasDiff);
+      tempExecCaseLibraryChangesBtn.disabled = false;
       try {
         tempExecCaseLibraryChangesBtn.classList.toggle('has-new', hasUnackedCaseLibraryDiff(meta));
       } catch (err) {
@@ -3899,6 +3999,17 @@
           rows.push({ entry: entry, diffAt: diffAt, operator: operator, ts: batchTs });
         });
       });
+      if (!rows.length && meta && meta.summary) {
+        var fallbackSummary = meta.summary || {};
+        var hasFallback = Number(fallbackSummary.appended) || Number(fallbackSummary.added) || Number(fallbackSummary.updated) || Number(fallbackSummary.deleted);
+        var emptyTotals = !(totalSummary.appended || totalSummary.added || totalSummary.updated || totalSummary.deleted);
+        if (hasFallback && emptyTotals) {
+          totalSummary.appended = Number(fallbackSummary.appended) || 0;
+          totalSummary.added = Number(fallbackSummary.added) || 0;
+          totalSummary.updated = Number(fallbackSummary.updated) || 0;
+          totalSummary.deleted = Number(fallbackSummary.deleted) || 0;
+        }
+      }
 
       rows.sort(function(a, b) {
         var ta = a && a.ts ? Number(a.ts) : 0;
@@ -3937,16 +4048,17 @@
 
       if (tempExecCaseLibraryDiffStatus) {
         var statusText = '';
+        var hasSignal = hasCaseLibraryChangeSignal(meta);
         if (!meta) {
           statusText = '暂无用例库变更数据';
         } else if (meta.hasNewDiff) {
           statusText = '已同步用例库变更到执行页：追加 ' + totalSummary.appended + '，新增 ' + totalSummary.added + '，改动 ' + totalSummary.updated + '，删除 ' + totalSummary.deleted;
-        } else if (meta.everChanged) {
+        } else if (meta.everChanged || hasSignal) {
           statusText = '暂无新的用例库变更，可查看历史差异：追加 ' + totalSummary.appended + '，新增 ' + totalSummary.added + '，改动 ' + totalSummary.updated + '，删除 ' + totalSummary.deleted;
         } else {
           statusText = '当前用例未发生用例库变更';
         }
-        setStatus(tempExecCaseLibraryDiffStatus, statusText, meta && meta.everChanged ? 'ok' : '');
+        setStatus(tempExecCaseLibraryDiffStatus, statusText, meta && (meta.everChanged || hasSignal) ? 'ok' : '');
       }
 
       if (!visible.length) {
@@ -4049,20 +4161,77 @@
       // 用户在执行视图点击“用例库变更”时：优先打开当前用例的变更（并清除当前用例的醒目提醒）。
       // 避免出现“上次选中过其他用例 -> 本次点击仍打开旧用例 -> 当前按钮一直醒目”的错觉。
       var execSetId = desired || (manual ? (activeExecSetId || saved) : (saved || activeExecSetId)) || '';
+      if (!execSetId && active && (active.execSetId || active.id)) {
+        execSetId = String(active.execSetId || active.id || '');
+      }
+      if (!execSetId && Array.isArray(state.tempExecFiles) && state.tempExecFiles.length) {
+        var fallback = state.tempExecFiles[0];
+        if (fallback && (fallback.execSetId || fallback.id)) {
+          execSetId = String(fallback.execSetId || fallback.id || '');
+        }
+      }
       if (!execSetId) return false;
       if (manual) setTempExecCaseLibraryDiffSelectedExecSetId(execSetId);
       var store = ensureTempExecCaseLibraryDiffState();
       var meta = store.byExecSetId[String(execSetId)] || null;
       var hasDiff = Boolean(meta && Array.isArray(meta.diff) && meta.diff.length);
-      if (!meta || !(meta.everChanged === true || hasDiff)) {
+      var hasHistory = Boolean(meta && Array.isArray(meta.history) && meta.history.length);
+      var hasSignal = Boolean(meta && (hasDiff || hasHistory || hasCaseLibraryChangeSignal(meta)));
+      if (manual && isDbMode()) {
+        var client = getApiClient();
+        if (client && typeof client.syncExecSetCaseLibrary === 'function') {
+          ensureTempExecCaseLibraryDiffDrawer();
+          renderTempExecCaseLibraryDiff(execSetId);
+          if (tempExecCaseLibraryDiffStatus) {
+            setStatus(tempExecCaseLibraryDiffStatus, '正在同步用例库变更...', '');
+          }
+          if (tempExecCaseLibraryDiffBody && (!meta || !hasSignal)) {
+            tempExecCaseLibraryDiffBody.innerHTML = '<tr><td colspan="8"><p class="hint">正在同步用例库变更...</p></td></tr>';
+          }
+          if (tempExecCaseLibraryDiffDrawer && typeof tempExecCaseLibraryDiffDrawer.open === 'function') {
+            tempExecCaseLibraryDiffDrawer.open();
+          }
+          client
+            .syncExecSetCaseLibrary(execSetId)
+            .then(function(syncRes) {
+              var nextMeta = applyTempExecCaseLibrarySyncMeta(getTempExecFile(String(execSetId)), syncRes);
+              if (!nextMeta) return;
+              renderTempExecCaseLibraryDiff(execSetId);
+              if (nextMeta.lastDiffAt) {
+                nextMeta.lastShownAt = nextMeta.lastDiffAt;
+                nextMeta.hasNewDiff = false;
+                nextMeta.shouldAutoPopup = false;
+                store.byExecSetId[String(execSetId)] = nextMeta;
+                if (active && String(active.execSetId || '') === String(execSetId)) {
+                  syncTempExecCaseLibraryChangesButton(active);
+                }
+                renderTempExecCaseLibraryDiffCaseTabs(execSetId);
+                if (client && typeof client.ackExecSetCaseLibraryDiff === 'function') {
+                  client.ackExecSetCaseLibraryDiff(execSetId).catch(function() {});
+                }
+              }
+            })
+            .catch(function(err) {
+              if (tempExecCaseLibraryDiffStatus) {
+                var msg = err && err.message ? err.message : '同步失败';
+                setStatus(tempExecCaseLibraryDiffStatus, '用例库同步失败：' + msg, 'err');
+              }
+            });
+          return true;
+        }
+      }
+      if (!meta || !hasSignal) {
         var fallbacks = listTempExecCaseLibraryDiffExecSetIds();
         if (fallbacks.length) {
           execSetId = String(fallbacks[0]);
           meta = store.byExecSetId[String(execSetId)] || null;
           hasDiff = Boolean(meta && Array.isArray(meta.diff) && meta.diff.length);
+          hasHistory = Boolean(meta && Array.isArray(meta.history) && meta.history.length);
+          hasSignal = Boolean(meta && (hasDiff || hasHistory || hasCaseLibraryChangeSignal(meta)));
         }
       }
-      if (!meta || !(meta.everChanged === true || hasDiff)) return false;
+      if (!meta) return false;
+      if (!manual && !hasSignal) return false;
       ensureTempExecCaseLibraryDiffDrawer();
       renderTempExecCaseLibraryDiff(execSetId);
       if (tempExecCaseLibraryDiffDrawer && typeof tempExecCaseLibraryDiffDrawer.open === 'function') {
@@ -4676,10 +4845,34 @@
           if (tempExecStatus) setStatus(tempExecStatus, '', '');
           return;
         }
-        var allowCaseLibrarySync = false;
-        // 仅在“用例执行（tempexec）”页签内才同步用例库变更并考虑自动弹窗。
-        // 其他页面触发的执行数据加载（例如 authReady 初始化）不应打扰用户。
-        try { allowCaseLibrarySync = String(state && state.activeTab ? state.activeTab : '') === 'tempexec'; } catch (err) { allowCaseLibrarySync = false; }
+        var allowCaseLibrarySync = true;
+        var allowAutoPopup = false;
+        var isTempExecTab = false;
+        try {
+          isTempExecTab = String(state && state.activeTab ? state.activeTab : '') === 'tempexec';
+        } catch (err) {
+          isTempExecTab = false;
+        }
+        if (!isTempExecTab) {
+          try {
+            if (typeof sessionStorage !== 'undefined') {
+              var cfg = window.app && window.app.config ? window.app.config : {};
+              var key = cfg && cfg.activeTabKey ? cfg.activeTabKey : 'usecase-active-tab';
+              var saved = key ? String(sessionStorage.getItem(key) || '') : '';
+              if (saved === 'tempexec') isTempExecTab = true;
+              if (!isTempExecTab) {
+                var reloadSource = String(sessionStorage.getItem('tap-reload-source-tab') || '');
+                if (reloadSource === 'tempexec') isTempExecTab = true;
+              }
+            }
+          } catch (err2) {
+            // ignore
+          }
+        }
+        // 用例库同步触发序号：用于解决刷新后 activeTab 尚未恢复时的“漏同步”问题。
+        var syncTriggered = consumeTempExecCaseLibrarySyncTrigger();
+        // 用例库同步：始终执行以保持 meta/历史可用；自动弹窗仅在执行页或触发序号命中时生效。
+        allowAutoPopup = isTempExecTab || syncTriggered;
         // 多版本执行同一份用例时：同一批变更只自动弹窗一次（按 case_file_id 去重）。
         var autoPopupByCaseFileId = {};
         var autoPopupCaseFileOrder = [];
@@ -4704,19 +4897,9 @@
               syncChain = client
                 .syncExecSetCaseLibrary(file.execSetId)
                 .then(function(syncRes) {
-                  var meta = normalizeCaseLibrarySyncMeta(syncRes);
+                  var meta = applyTempExecCaseLibrarySyncMeta(file, syncRes);
                   var execSetId = meta && meta.execSetId ? meta.execSetId : (file.execSetId || null);
                   if (!execSetId) return;
-                  // 用例库 diff 元数据是 exec_set 级别的“全局状态”，即便本次 load 被后续 load 覆盖，也应保留并可用于手动查看。
-                  // 因此这里不强制依赖 loadSeq，避免并发刷新导致错过自动弹窗/按钮不可用。
-                  var store = ensureTempExecCaseLibraryDiffState();
-                  store.byExecSetId[String(execSetId)] = meta;
-                  var latestFile = getTempExecFile(String(execSetId));
-                  if (latestFile) latestFile.caseLibraryMeta = meta;
-                  // 若当前激活文件就是该执行集，则同步刷新按钮可用性。
-                  if (String(state.tempExecActiveId || '') === String(execSetId)) {
-                    syncTempExecCaseLibraryChangesButton(getTempExecFile(state.tempExecActiveId));
-                  }
                   if (meta && meta.shouldAutoPopup) {
                     var cfKey = '';
                     if (meta && meta.caseFileId !== null && meta.caseFileId !== undefined) {
@@ -4798,7 +4981,7 @@
         var autoPopupExecSetIds = autoPopupCaseFileOrder
           .map(function(key) { return autoPopupByCaseFileId[key]; })
           .filter(Boolean);
-        if (allowCaseLibrarySync && autoPopupExecSetIds.length) {
+        if (allowAutoPopup && autoPopupExecSetIds.length) {
           var openExecSetId = '';
           if (activeId && autoPopupExecSetIds.indexOf(String(activeId)) !== -1) openExecSetId = String(activeId);
           if (!openExecSetId) openExecSetId = String(autoPopupExecSetIds[0]);
@@ -5933,9 +6116,8 @@
       if (isDbMode()) {
         targets.forEach(function(idx) {
           var item = file.cases[idx];
-          var caseId = item && (item.execCaseId || item.id);
-          if (!caseId) return;
-          queueExecCasePatch(caseId, { status: value });
+          if (!item) return;
+          queueExecCasePatchForItem(item, { status: value });
         });
       }
       persistTempExecState();
@@ -5950,8 +6132,7 @@
       file.cases[index].remark = value;
       if (isDbMode()) {
         var item = file.cases[index];
-        var caseId = item && (item.execCaseId || item.id);
-        if (caseId) queueExecCasePatch(caseId, { remark: value });
+        if (item) queueExecCasePatchForItem(item, { remark: value });
       }
       persistTempExecState();
     }
@@ -5995,6 +6176,7 @@
         if (file.cases[payload.index]) {
           var removed = file.cases.splice(payload.index, 1);
           if (removed && removed[0]) unmarkTempExecNewAdded(file.id, removed[0]);
+          if (payload.tempId) clearPendingExecCasePatch(payload.tempId);
           clearTempExecCaseStates(file.id);
           persistTempExecState();
           renderTempExecView();
@@ -6018,6 +6200,10 @@
           if (!payload || !payload.type) return;
           if (payload.type === 'remove' && Array.isArray(payload.cases)) {
             var removes = payload.cases.slice();
+            removes.forEach(function(item) {
+              if (!item) return;
+              if (!item.execCaseId && !item.id && item._tempId) clearPendingExecCasePatch(item._tempId);
+            });
             var sub = Promise.resolve();
             removes.forEach(function(item) {
               sub = sub.then(function() {
@@ -6040,6 +6226,7 @@
             }
             if (!insertCase) return;
             if (insertCase.execCaseId || insertCase.id) return;
+            var tempId = insertCase._tempId ? String(insertCase._tempId) : '';
             var idx = file.cases.indexOf(insertCase);
             var afterCaseId = null;
             for (var i = idx - 1; i >= 0; i -= 1) {
@@ -6071,6 +6258,8 @@
               insertCase.id = created.id;
               insertCase.caseItemId = created.case_item_id || null;
               insertCase.pendingCreate = false;
+              var pendingPatch = tempId ? consumePendingExecCasePatch(tempId) : null;
+              if (pendingPatch) queueExecCasePatch(created.id, pendingPatch);
               delete insertCase._tempId;
               // 入库后补充 id 标记：确保同一页面生命周期内即便触发 reload/load，也仍能保持高亮。
               markTempExecNewAdded(file.id, insertCase);
@@ -6342,15 +6531,14 @@
       }
       if (isDbMode()) {
         var item = file.cases[index];
-        var caseId = item && (item.execCaseId || item.id);
-        if (caseId) {
+        if (item) {
           var payload = {};
           if (field === 'title') payload.title = file.cases[index].title;
           if (field === 'priority') payload.priority = file.cases[index].priority;
           if (field === 'preconditions') payload.precondition = file.cases[index].preconditions;
           if (field === 'steps') payload.steps = file.cases[index].steps;
           if (field === 'expected') payload.expected = file.cases[index].expected;
-          queueExecCasePatch(caseId, payload);
+          queueExecCasePatchForItem(item, payload);
         }
       }
       persistTempExecState();
@@ -7126,8 +7314,7 @@
       // 复用模式下同时维护 exec_case.status，方便总览统计与清除“变更重跑”系统态。
       targetCase.actual = resolveReuseAggregateStatus(targetCase.reuseDetails);
       if (isDbMode()) {
-        var caseId = targetCase && (targetCase.execCaseId || targetCase.id);
-        if (caseId) queueExecCasePatch(caseId, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
+        queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
       }
       persistTempExecState();
       renderTempExecView();
@@ -7153,8 +7340,7 @@
         nextCase.reuseDetails = nextCase.reuseDetails.filter(function(item) { return item.id !== detailId; });
         nextCase.actual = resolveReuseAggregateStatus(nextCase.reuseDetails);
         if (isDbMode()) {
-          var caseId = nextCase && (nextCase.execCaseId || nextCase.id);
-          if (caseId) queueExecCasePatch(caseId, { reuse_details: nextCase.reuseDetails, status: nextCase.actual });
+          queueExecCasePatchForItem(nextCase, { reuse_details: nextCase.reuseDetails, status: nextCase.actual });
         }
         persistTempExecState();
         renderTempExecView();
@@ -7171,8 +7357,7 @@
       entry.status = tempExecResultOptions.indexOf(value) !== -1 ? value : '未执行';
       targetCase.actual = resolveReuseAggregateStatus(targetCase.reuseDetails);
       if (isDbMode()) {
-        var caseId = targetCase && (targetCase.execCaseId || targetCase.id);
-        if (caseId) queueExecCasePatch(caseId, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
+        queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
       }
       persistTempExecState();
       renderTempExecView();
@@ -7187,8 +7372,7 @@
       if (!entry) return;
       entry.text = text || '';
       if (isDbMode()) {
-        var caseId = targetCase && (targetCase.execCaseId || targetCase.id);
-        if (caseId) queueExecCasePatch(caseId, { reuse_details: targetCase.reuseDetails });
+        queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails });
       }
       persistTempExecState();
     }
@@ -7202,8 +7386,7 @@
       if (!entry) return;
       entry.note = text || '';
       if (isDbMode()) {
-        var caseId = targetCase && (targetCase.execCaseId || targetCase.id);
-        if (caseId) queueExecCasePatch(caseId, { reuse_details: targetCase.reuseDetails });
+        queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails });
       }
       persistTempExecState();
     }
@@ -7256,15 +7439,13 @@
         }
         if (enabled) {
           file.cases.forEach(function(item) {
-            var caseId = item && (item.execCaseId || item.id);
-            if (!caseId) return;
-            queueExecCasePatch(caseId, { status: '未执行', remark: '' });
+            if (!item) return;
+            queueExecCasePatchForItem(item, { status: '未执行', remark: '' });
           });
         } else {
           file.cases.forEach(function(item) {
-            var caseId = item && (item.execCaseId || item.id);
-            if (!caseId) return;
-            queueExecCasePatch(caseId, { reuse_details: [], status: normalizeExecStatus(item.actual) });
+            if (!item) return;
+            queueExecCasePatchForItem(item, { reuse_details: [], status: normalizeExecStatus(item.actual) });
           });
         }
       }

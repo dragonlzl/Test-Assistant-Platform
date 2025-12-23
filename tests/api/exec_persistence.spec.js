@@ -352,7 +352,7 @@ test.describe('exec persistence api', () => {
 
     const autoBindRes = await ctx.patch(`${apiBase}/api/exec/cases/${blankExec.id}`, {
       headers,
-      data: { module: '模块Z', title: '临时用例', expected: 'ok-auto', priority: 'P1' },
+      data: { module: '模块Z', title: '临时用例', expected: 'ok-auto', priority: 'P1', precondition: '已登录', steps: '步骤Z' },
     });
     expect(autoBindRes.status()).toBe(200);
     const autoBound = await autoBindRes.json();

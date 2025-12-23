@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 import json
 import re
 
@@ -42,7 +42,280 @@ def _compute_case_item_changed_fields(old_snap: dict, new_snap: dict):
             changed.append(k)
     return changed
 
+
+def _exec_case_ready_for_library(exec_case: models.ExecCase) -> bool:
+    if not exec_case:
+        return False
+    required = [
+        (exec_case.module or "").strip(),
+        (exec_case.title or "").strip(),
+        (exec_case.expected or "").strip(),
+        (exec_case.priority or "").strip(),
+        (exec_case.precondition or "").strip(),
+        (exec_case.steps or "").strip(),
+    ]
+    return all(required)
+
+
+def _find_case_item_by_exec_case(
+    db: Session, case_file_id: int, exec_case: models.ExecCase
+) -> models.CaseItem:
+    if not case_file_id or not exec_case:
+        return None
+    return (
+        db.query(models.CaseItem)
+        .filter(models.CaseItem.case_file_id == int(case_file_id))
+        .filter(models.CaseItem.module == (exec_case.module or ""))
+        .filter(models.CaseItem.title == (exec_case.title or ""))
+        .filter(models.CaseItem.precondition == (exec_case.precondition or ""))
+        .filter(models.CaseItem.steps == (exec_case.steps or ""))
+        .filter(models.CaseItem.expected == (exec_case.expected or ""))
+        .first()
+    )
+
+
+def _build_case_snapshot_from_history(data: dict):
+    if not data:
+        return None
+    return _case_snapshot(
+        data.get("module"),
+        data.get("title"),
+        data.get("expected"),
+        data.get("priority"),
+        data.get("precondition"),
+        data.get("steps"),
+        data.get("remark"),
+    )
+
+
+def _collect_case_snapshot_changed_fields(
+    old_snap: schemas.CaseLibraryCaseSnapshot,
+    new_snap: schemas.CaseLibraryCaseSnapshot,
+):
+    if not old_snap or not new_snap:
+        return []
+    changed = []
+    if old_snap.module != new_snap.module:
+        changed.append("module")
+    if old_snap.title != new_snap.title:
+        changed.append("title")
+    if (old_snap.priority or "") != (new_snap.priority or ""):
+        changed.append("priority")
+    if old_snap.precondition != new_snap.precondition:
+        changed.append("precondition")
+    if old_snap.steps != new_snap.steps:
+        changed.append("steps")
+    if old_snap.expected != new_snap.expected:
+        changed.append("expected")
+    return changed
+
+
+def _build_exec_case_library_diff_entry(
+    kind: str,
+    case_item_id: int,
+    old_snap: dict,
+    new_snap: dict,
+):
+    old_case = _build_case_snapshot_from_history(old_snap)
+    new_case = _build_case_snapshot_from_history(new_snap)
+    changed_fields = []
+    if str(kind or "") == "updated":
+        changed_fields = _collect_case_snapshot_changed_fields(old_case, new_case)
+    return schemas.ExecCaseLibraryDiffEntry(
+        kind=str(kind or ""),
+        case_item_id=int(case_item_id) if case_item_id is not None else None,
+        changed_fields=changed_fields,
+        old=old_case,
+        new=new_case,
+    )
+
+
+def _append_exec_set_case_library_history(
+    exec_set: models.ExecSet,
+    case_file: models.CaseFile,
+    user: models.User,
+    entries: List[schemas.ExecCaseLibraryDiffEntry],
+    summary: schemas.ExecCaseLibraryDiffSummary,
+    diff_at: datetime,
+    auto_ack: bool = True,
+):
+    if not exec_set or not case_file or not diff_at:
+        return
+    normalized_diff_at = diff_at
+    if isinstance(normalized_diff_at, datetime) and normalized_diff_at.tzinfo is None:
+        try:
+            normalized_diff_at = normalized_diff_at.replace(tzinfo=timezone.utc)
+        except Exception:
+            normalized_diff_at = diff_at
+    history_batches = _normalize_exec_set_case_library_history(
+        getattr(exec_set, "case_file_diff_history_json", None)
+    )
+    try:
+        batch = schemas.ExecCaseLibraryDiffHistoryBatch(
+            diff_at=normalized_diff_at,
+            operator=user.username if user else None,
+            summary=summary,
+            diff=entries or [],
+        )
+        if not history_batches or history_batches[0].diff_at != batch.diff_at:
+            history_batches.insert(0, batch)
+    except Exception:
+        history_batches = history_batches or []
+
+    exec_set.case_file_last_diff_at = diff_at
+    exec_set.case_file_last_diff_json = {
+        "case_file_id": int(case_file.id),
+        "case_file_updated_at": case_file.updated_at.isoformat() if case_file.updated_at else None,
+        "summary": summary.model_dump(),
+        "diff": [e.model_dump() for e in (entries or [])],
+    }
+    exec_set.case_file_diff_history_json = _dump_exec_set_case_library_history(history_batches)
+    exec_set.case_file_last_synced_at = case_file.updated_at or diff_at
+    if auto_ack:
+        exec_set.case_file_last_diff_shown_at = diff_at
+    exec_set.updated_at = diff_at
+
 _case_file_source_pattern = re.compile(r"^case_file:(\d+)$")
+
+
+def _safe_dt_to_ts(value: Optional[datetime]):
+    if not value:
+        return None
+    raw = value
+    if isinstance(raw, str):
+        try:
+            raw = datetime.fromisoformat(raw)
+        except Exception:
+            return None
+    if not isinstance(raw, datetime):
+        return None
+    if raw.tzinfo is None:
+        try:
+            return raw.replace(tzinfo=timezone.utc).timestamp()
+        except Exception:
+            return None
+    try:
+        return raw.astimezone(timezone.utc).timestamp()
+    except Exception:
+        try:
+            return raw.timestamp()
+        except Exception:
+            return None
+
+
+def _normalize_event_dt(value: Optional[datetime]):
+    if not value:
+        return None
+    if isinstance(value, datetime) and value.tzinfo is None:
+        try:
+            return value.replace(tzinfo=timezone.utc)
+        except Exception:
+            return value
+    return value
+
+
+def _build_exec_set_case_library_event_batches(
+    db: Session,
+    case_file: models.CaseFile,
+    since_ts: Optional[float],
+    until_ts: Optional[float],
+    limit: int = 2000,
+) -> List[schemas.ExecCaseLibraryDiffHistoryBatch]:
+    if not case_file:
+        return []
+    resolved_limit = int(limit or 0)
+    if resolved_limit <= 0:
+        resolved_limit = 2000
+    events = (
+        db.query(models.CaseLibraryChangeEvent)
+        .filter(models.CaseLibraryChangeEvent.project_id == case_file.project_id)
+        .filter(models.CaseLibraryChangeEvent.file_name_clean == case_file.file_name_clean)
+        .filter(models.CaseLibraryChangeEvent.kind.in_(("added", "updated", "deleted")))
+        .order_by(models.CaseLibraryChangeEvent.created_at.desc())
+        .limit(resolved_limit)
+        .all()
+    )
+    if not events:
+        return []
+    buckets = {}
+    order = []
+    for ev in events:
+        ts = _safe_dt_to_ts(getattr(ev, "created_at", None))
+        if not ts:
+            continue
+        if since_ts and ts <= since_ts:
+            continue
+        if until_ts and ts > until_ts:
+            continue
+        kind = str(getattr(ev, "kind", "") or "").strip()
+        if kind not in ("added", "updated", "deleted"):
+            continue
+        old_snap = ev.old_json if isinstance(getattr(ev, "old_json", None), dict) else None
+        new_snap = ev.new_json if isinstance(getattr(ev, "new_json", None), dict) else None
+        entry = _build_exec_case_library_diff_entry(kind, getattr(ev, "case_item_id", None), old_snap, new_snap)
+        if not entry:
+            continue
+        bucket = buckets.get(ts)
+        if not bucket:
+            diff_at = _normalize_event_dt(getattr(ev, "created_at", None))
+            if not diff_at:
+                continue
+            bucket = {
+                "diff_at": diff_at,
+                "operator": (str(ev.operator_name) if getattr(ev, "operator_name", None) else None),
+                "summary": {"appended": 0, "added": 0, "updated": 0, "deleted": 0},
+                "diff": [],
+            }
+            buckets[ts] = bucket
+            order.append(ts)
+        bucket["diff"].append(entry)
+        if kind == "added":
+            bucket["summary"]["added"] += 1
+        elif kind == "updated":
+            bucket["summary"]["updated"] += 1
+        elif kind == "deleted":
+            bucket["summary"]["deleted"] += 1
+    batches: List[schemas.ExecCaseLibraryDiffHistoryBatch] = []
+    for key in order:
+        bucket = buckets.get(key) or {}
+        try:
+            batches.append(
+                schemas.ExecCaseLibraryDiffHistoryBatch(
+                    diff_at=bucket.get("diff_at"),
+                    operator=bucket.get("operator"),
+                    summary=schemas.ExecCaseLibraryDiffSummary(**(bucket.get("summary") or {})),
+                    diff=bucket.get("diff") or [],
+                )
+            )
+        except Exception:
+            continue
+    batches.sort(key=lambda b: _safe_dt_to_ts(getattr(b, "diff_at", None)) or 0, reverse=True)
+    return batches
+
+
+def _merge_exec_set_case_library_history(
+    history_batches: List[schemas.ExecCaseLibraryDiffHistoryBatch],
+    extra_batches: List[schemas.ExecCaseLibraryDiffHistoryBatch],
+):
+    if not extra_batches:
+        return history_batches, False
+    existing_ts = set()
+    for batch in history_batches:
+        ts = _safe_dt_to_ts(getattr(batch, "diff_at", None))
+        if ts:
+            existing_ts.add(ts)
+    changed = False
+    for batch in extra_batches:
+        ts = _safe_dt_to_ts(getattr(batch, "diff_at", None))
+        if ts and ts in existing_ts:
+            continue
+        history_batches.append(batch)
+        if ts:
+            existing_ts.add(ts)
+        changed = True
+    if changed:
+        history_batches.sort(key=lambda b: _safe_dt_to_ts(getattr(b, "diff_at", None)) or 0, reverse=True)
+    return history_batches, changed
 
 
 def _ensure_exec_set_access(
@@ -971,6 +1244,7 @@ def _diff_exec_set_against_case_file(
     )
     item_by_id = {int(it.id): it for it in case_items if it and it.id}
     exec_by_item_id = {}
+    unbound_by_key = {}
     for c in exec_cases:
         if not c:
             continue
@@ -978,8 +1252,20 @@ def _diff_exec_set_against_case_file(
         if source_id is None and c.case_item_id:
             source_id = int(c.case_item_id)
         if source_id is None:
+            key = _normalize_match_key(c.module, c.title, c.precondition, c.steps, c.expected)
+            if key and key not in unbound_by_key:
+                unbound_by_key[key] = c
             continue
         exec_by_item_id[int(source_id)] = c
+
+    if unbound_by_key:
+        for item_id, item in item_by_id.items():
+            if item_id in exec_by_item_id:
+                continue
+            key = _normalize_match_key(item.module, item.title, item.precondition, item.steps, item.expected)
+            matched = unbound_by_key.get(key)
+            if matched:
+                exec_by_item_id[item_id] = matched
 
     entries: List[schemas.ExecCaseLibraryDiffEntry] = []
     appended = 0
@@ -1109,6 +1395,7 @@ def _sync_exec_set_from_case_file(
         .all()
     )
     existing_by_item_id = {}
+    unbound_by_key = {}
     for item in existing_cases:
         if not item:
             continue
@@ -1116,6 +1403,9 @@ def _sync_exec_set_from_case_file(
         if source_id is None and item.case_item_id:
             source_id = int(item.case_item_id)
         if source_id is None:
+            key = _normalize_match_key(item.module, item.title, item.precondition, item.steps, item.expected)
+            if key and key not in unbound_by_key:
+                unbound_by_key[key] = item
             continue
         existing_by_item_id[int(source_id)] = item
 
@@ -1127,6 +1417,12 @@ def _sync_exec_set_from_case_file(
         if not item or not item.id:
             continue
         existing = existing_by_item_id.get(int(item.id))
+        if not existing and unbound_by_key:
+            key = _normalize_match_key(item.module, item.title, item.precondition, item.steps, item.expected)
+            existing = unbound_by_key.get(key)
+            if existing:
+                unbound_by_key.pop(key, None)
+                existing_by_item_id[int(item.id)] = existing
         if existing:
             before_module = existing.module
             before_title = existing.title
@@ -1300,7 +1596,7 @@ def _normalize_exec_set_case_library_history(raw) -> List[schemas.ExecCaseLibrar
             batches.append(batch)
         except Exception:
             continue
-    batches.sort(key=lambda b: b.diff_at, reverse=True)
+    batches.sort(key=lambda b: _safe_dt_to_ts(getattr(b, "diff_at", None)) or 0, reverse=True)
     return batches
 
 
@@ -1336,8 +1632,9 @@ def sync_exec_set_case_library(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用例文件不存在")
     ensure_project_access(db, user, case_file.project_id)
 
+    file_updated_at = case_file.updated_at or exec_set.created_at or datetime.now(timezone.utc)
     if exec_set.case_file_base_updated_at is None:
-        exec_set.case_file_base_updated_at = exec_set.created_at or case_file.updated_at
+        exec_set.case_file_base_updated_at = file_updated_at
         db.add(exec_set)
         db.commit()
         db.refresh(exec_set)
@@ -1363,15 +1660,36 @@ def sync_exec_set_case_library(
             stored_summary = schemas.ExecCaseLibraryDiffSummary()
 
     history_batches = _normalize_exec_set_case_library_history(getattr(exec_set, "case_file_diff_history_json", None))
+    history_latest_ts = None
+    if history_batches:
+        history_latest_ts = _safe_dt_to_ts(getattr(history_batches[0], "diff_at", None))
 
     last_synced_at = exec_set.case_file_last_synced_at
-    file_updated_at = case_file.updated_at
     base_updated_at = exec_set.case_file_base_updated_at
+    last_diff_at = exec_set.case_file_last_diff_at
+    last_shown_at = exec_set.case_file_last_diff_shown_at
+    file_ts = _safe_dt_to_ts(file_updated_at)
+    last_synced_ts = _safe_dt_to_ts(last_synced_at)
+    base_ts = _safe_dt_to_ts(base_updated_at)
+    last_diff_ts = _safe_dt_to_ts(last_diff_at)
+    last_shown_ts = _safe_dt_to_ts(last_shown_at)
+    since_ts = history_latest_ts
+    if base_ts and (since_ts is None or base_ts > since_ts):
+        since_ts = base_ts
+    event_batches = _build_exec_set_case_library_event_batches(db, case_file, since_ts, file_ts)
+    history_dirty = False
+    if event_batches:
+        history_batches, history_dirty = _merge_exec_set_case_library_history(history_batches, event_batches)
+
     library_changed = False
-    if last_synced_at and file_updated_at and file_updated_at > last_synced_at:
-        library_changed = True
-    elif not last_synced_at:
-        if base_updated_at and file_updated_at and file_updated_at > base_updated_at:
+    if last_synced_ts and file_ts:
+        if file_ts > last_synced_ts:
+            library_changed = True
+        elif file_ts == last_synced_ts:
+            if not last_diff_ts or (last_diff_ts and last_diff_ts < file_ts):
+                library_changed = True
+    elif not last_synced_ts:
+        if base_ts and file_ts and file_ts > base_ts:
             library_changed = True
         else:
             exec_set.case_file_last_synced_at = file_updated_at
@@ -1380,14 +1698,21 @@ def sync_exec_set_case_library(
             db.refresh(exec_set)
 
     if not library_changed:
+        if history_dirty:
+            exec_set.case_file_diff_history_json = _dump_exec_set_case_library_history(history_batches)
+            db.add(exec_set)
+            db.commit()
+            db.refresh(exec_set)
+        has_history = bool(history_batches)
+        ever_changed = bool(base_ts and file_ts and file_ts > base_ts) or has_history
         return schemas.ExecCaseLibrarySyncOut(
             exec_set_id=int(exec_set.id),
             case_file_id=int(case_file.id),
-            case_file_updated_at=case_file.updated_at,
+            case_file_updated_at=file_updated_at,
             base_updated_at=base_updated_at,
-            last_diff_at=exec_set.case_file_last_diff_at,
-            last_shown_at=exec_set.case_file_last_diff_shown_at,
-            ever_changed=bool(base_updated_at and file_updated_at and file_updated_at > base_updated_at),
+            last_diff_at=last_diff_at,
+            last_shown_at=last_shown_at,
+            ever_changed=ever_changed,
             has_new_diff=False,
             should_auto_popup=False,
             summary=stored_summary,
@@ -1422,7 +1747,7 @@ def sync_exec_set_case_library(
     summary = diff_result.get("summary") or schemas.ExecCaseLibraryDiffSummary()
     has_new_diff = bool(summary.appended or summary.added or summary.updated or summary.deleted)
     if has_new_diff:
-        exec_set.case_file_last_diff_at = case_file.updated_at
+        exec_set.case_file_last_diff_at = file_updated_at
         operator_name = None
         try:
             if getattr(case_file, "updated_by", None):
@@ -1443,7 +1768,7 @@ def sync_exec_set_case_library(
             operator_name = None
         latest_payload = {
             "case_file_id": int(case_file.id),
-            "case_file_updated_at": case_file.updated_at.isoformat() if case_file.updated_at else None,
+            "case_file_updated_at": file_updated_at.isoformat() if file_updated_at else None,
             "summary": summary.model_dump(),
             "diff": [e.model_dump() for e in new_entries],
         }
@@ -1451,20 +1776,28 @@ def sync_exec_set_case_library(
         # 追加到 diff 历史（最新在前）。并发重复写入时，用 diff_at 去重。
         try:
             batch = schemas.ExecCaseLibraryDiffHistoryBatch(
-                diff_at=case_file.updated_at,
+                diff_at=file_updated_at,
                 operator=operator_name,
                 summary=summary,
                 diff=new_entries,
             )
-            if not history_batches or history_batches[0].diff_at != batch.diff_at:
+            top_ts = _safe_dt_to_ts(history_batches[0].diff_at) if history_batches else None
+            batch_ts = _safe_dt_to_ts(batch.diff_at)
+            if not top_ts or not batch_ts or top_ts != batch_ts:
                 history_batches.insert(0, batch)
+                history_dirty = True
         except Exception:
             # ignore
             pass
-        exec_set.case_file_diff_history_json = _dump_exec_set_case_library_history(history_batches)
+        if history_dirty:
+            exec_set.case_file_diff_history_json = _dump_exec_set_case_library_history(history_batches)
         db.add(exec_set)
         db.commit()
         db.refresh(exec_set)
+
+    if (not has_new_diff) and history_dirty:
+        exec_set.case_file_diff_history_json = _dump_exec_set_case_library_history(history_batches)
+        db.add(exec_set)
 
     _sync_exec_set_from_case_file(db, user, exec_set, case_file)
     exec_set.case_file_last_synced_at = file_updated_at
@@ -1474,8 +1807,10 @@ def sync_exec_set_case_library(
 
     last_diff_at = exec_set.case_file_last_diff_at
     last_shown_at = exec_set.case_file_last_diff_shown_at
-    ever_changed = bool(base_updated_at and case_file.updated_at and case_file.updated_at > base_updated_at)
-    should_auto_popup = bool(has_new_diff and last_diff_at and (not last_shown_at or last_diff_at > last_shown_at))
+    ever_changed = bool(base_ts and file_ts and file_ts > base_ts)
+    should_auto_popup = bool(
+        has_new_diff and last_diff_ts and (not last_shown_ts or last_diff_ts > last_shown_ts)
+    )
 
     stored = exec_set.case_file_last_diff_json if exec_set.case_file_last_diff_json else None
     diff_entries = []
@@ -1499,7 +1834,7 @@ def sync_exec_set_case_library(
     return schemas.ExecCaseLibrarySyncOut(
         exec_set_id=int(exec_set.id),
         case_file_id=int(case_file.id),
-        case_file_updated_at=case_file.updated_at,
+        case_file_updated_at=file_updated_at,
         base_updated_at=base_updated_at,
         last_diff_at=last_diff_at,
         last_shown_at=last_shown_at,
@@ -1640,6 +1975,107 @@ def create_exec_case(
         updated_at=now,
     )
     db.add(exec_case)
+    diff_entries = []
+    diff_summary = None
+    case_file = None
+    if not payload.case_item_id and exec_set.case_file_id and _exec_case_ready_for_library(exec_case):
+        case_file = (
+            db.query(models.CaseFile)
+            .filter(models.CaseFile.id == int(exec_set.case_file_id))
+            .first()
+        )
+        if case_file:
+            existing = _find_case_item_by_exec_case(db, case_file.id, exec_case)
+            if existing:
+                old_snap = _snapshot_case_item_for_history(existing)
+                updated_case = False
+                if exec_case.priority != existing.priority:
+                    existing.priority = exec_case.priority
+                    updated_case = True
+                if exec_case.remark is not None and exec_case.remark != existing.remark:
+                    existing.remark = exec_case.remark
+                    updated_case = True
+                exec_case.case_item_id = existing.id
+                exec_case.case_item_source_id = int(existing.id)
+                if updated_case:
+                    existing.updated_by = user.id
+                    existing.updated_at = now
+                    case_file.updated_by = user.id
+                    case_file.updated_at = now
+                    db.add(existing)
+                    db.add(case_file)
+                    new_snap = _snapshot_case_item_for_history(existing)
+                    log_case_library_change(
+                        db=db,
+                        user=user,
+                        project_id=case_file.project_id,
+                        version_id=case_file.version_id,
+                        file_name_clean=case_file.file_name_clean,
+                        case_file_id=case_file.id,
+                        case_item_id=existing.id,
+                        kind="updated",
+                        old=old_snap,
+                        new=new_snap,
+                        meta={"source": "exec_case_create"},
+                        at=now,
+                    )
+                    diff_entries = [
+                        _build_exec_case_library_diff_entry("updated", existing.id, old_snap, new_snap)
+                    ]
+                    diff_summary = schemas.ExecCaseLibraryDiffSummary(updated=1)
+            else:
+                case_item = models.CaseItem(
+                    case_file_id=case_file.id,
+                    module=exec_case.module,
+                    title=exec_case.title,
+                    expected=exec_case.expected,
+                    priority=exec_case.priority,
+                    precondition=exec_case.precondition or "",
+                    steps=exec_case.steps or "",
+                    remark=exec_case.remark,
+                    created_by=user.id,
+                    updated_by=user.id,
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(case_item)
+                db.flush()
+                exec_case.case_item_id = case_item.id
+                exec_case.case_item_source_id = int(case_item.id)
+                case_file.updated_by = user.id
+                case_file.updated_at = now
+                db.add(case_file)
+                log_case_library_change(
+                    db=db,
+                    user=user,
+                    project_id=case_file.project_id,
+                    version_id=case_file.version_id,
+                    file_name_clean=case_file.file_name_clean,
+                    case_file_id=case_file.id,
+                    case_item_id=case_item.id,
+                    kind="added",
+                    old=None,
+                    new=_snapshot_case_item_for_history(case_item),
+                    meta={"source": "exec_case_create"},
+                    at=now,
+                )
+                diff_entries = [
+                    _build_exec_case_library_diff_entry(
+                        "added", case_item.id, None, _snapshot_case_item_for_history(case_item)
+                    )
+                ]
+                diff_summary = schemas.ExecCaseLibraryDiffSummary(added=1)
+
+    if diff_entries and diff_summary and case_file:
+        _append_exec_set_case_library_history(
+            exec_set,
+            case_file,
+            user,
+            diff_entries,
+            diff_summary,
+            now,
+            auto_ack=True,
+        )
     log_operation(
         db=db,
         user_id=user.id,
@@ -1664,6 +2100,61 @@ def delete_exec_case(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="执行用例不存在")
     exec_set = _ensure_exec_set_access(db, user, exec_case.exec_set_id)
     removed_order = int(exec_case.order_no or 0)
+    deleted_case_item = False
+    case_item_id = None
+    source_id = getattr(exec_case, "case_item_source_id", None)
+    if source_id is None and exec_case.case_item_id:
+        source_id = int(exec_case.case_item_id)
+    if source_id is not None:
+        case_item_id = int(source_id)
+    if case_item_id is not None:
+        case_item = db.query(models.CaseItem).filter(models.CaseItem.id == case_item_id).first()
+        if case_item:
+            case_file = (
+                db.query(models.CaseFile)
+                .filter(models.CaseFile.id == case_item.case_file_id)
+                .first()
+            )
+            now = datetime.now(timezone.utc)
+            if case_file:
+                old_snap = _snapshot_case_item_for_history(case_item)
+                log_case_library_change(
+                    db=db,
+                    user=user,
+                    project_id=case_file.project_id,
+                    version_id=case_file.version_id,
+                    file_name_clean=case_file.file_name_clean,
+                    case_file_id=case_file.id,
+                    case_item_id=case_item.id,
+                    kind="deleted",
+                    old=old_snap,
+                    new=None,
+                    meta={"source": "exec_case_delete"},
+                    at=now,
+                )
+                case_file.updated_by = user.id
+                case_file.updated_at = now
+                diff_entries = [
+                    _build_exec_case_library_diff_entry(
+                        "deleted", case_item.id, old_snap, None
+                    )
+                ]
+                diff_summary = schemas.ExecCaseLibraryDiffSummary(deleted=1)
+                _append_exec_set_case_library_history(
+                    exec_set,
+                    case_file,
+                    user,
+                    diff_entries,
+                    diff_summary,
+                    now,
+                    auto_ack=True,
+                )
+            db.delete(case_item)
+            db.query(models.CaseFile).filter(models.CaseFile.id == case_item.case_file_id).update(
+                {models.CaseFile.updated_at: now, models.CaseFile.updated_by: user.id},
+                synchronize_session=False,
+            )
+            deleted_case_item = True
     db.delete(exec_case)
     if removed_order:
         db.query(models.ExecCase).filter(
@@ -1679,6 +2170,11 @@ def delete_exec_case(
         action="delete_exec_case",
         target_type="exec_case",
         target_id=case_id,
+        detail={
+            "exec_set_id": exec_set.id,
+            "case_item_id": case_item_id,
+            "case_item_deleted": bool(deleted_case_item),
+        },
     )
     db.commit()
     return {"status": "ok"}
@@ -1788,7 +2284,7 @@ def update_exec_case(
     exec_case = db.query(models.ExecCase).filter(models.ExecCase.id == case_id).first()
     if not exec_case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="执行用例不存在")
-    _ensure_exec_set_access(db, user, exec_case.exec_set_id)
+    exec_set = _ensure_exec_set_access(db, user, exec_case.exec_set_id)
     fields = [
         "module",
         "title",
@@ -1852,6 +2348,8 @@ def update_exec_case(
                 .first()
             )
             if case_item:
+                if exec_case.case_item_source_id is None:
+                    exec_case.case_item_source_id = int(case_item.id)
                 old_snap = _snapshot_case_item_for_history(case_item)
                 updated_case = False
                 for key in case_fields:
@@ -1868,7 +2366,8 @@ def update_exec_case(
                     case_item.updated_by = user.id
                     case_item.updated_at = now
                     db.query(models.CaseFile).filter(models.CaseFile.id == case_item.case_file_id).update(
-                        {models.CaseFile.updated_at: now}, synchronize_session=False
+                        {models.CaseFile.updated_at: now, models.CaseFile.updated_by: user.id},
+                        synchronize_session=False,
                     )
                     db.add(case_item)
                     try:
@@ -1878,6 +2377,8 @@ def update_exec_case(
                             .first()
                         )
                         if case_file:
+                            case_file.updated_by = user.id
+                            case_file.updated_at = now
                             new_snap = _snapshot_case_item_for_history(case_item)
                             log_case_library_change(
                                 db=db,
@@ -1893,48 +2394,107 @@ def update_exec_case(
                                 meta={"changed_fields": _compute_case_item_changed_fields(old_snap or {}, new_snap or {})},
                                 at=now,
                             )
+                            diff_entries = [
+                                _build_exec_case_library_diff_entry(
+                                    "updated", case_item.id, old_snap, new_snap
+                                )
+                            ]
+                            diff_summary = schemas.ExecCaseLibraryDiffSummary(updated=1)
+                            _append_exec_set_case_library_history(
+                                exec_set,
+                                case_file,
+                                user,
+                                diff_entries,
+                                diff_summary,
+                                now,
+                                auto_ack=True,
+                            )
                     except Exception:
                         # 历史记录不应影响执行用例更新主流程
                         pass
         else:
             # 新增的执行用例可能尚未绑定 case_item：当必填字段齐全时自动落库到用例库并绑定。
-            required_ready = (
-                (exec_case.module or "").strip()
-                and (exec_case.title or "").strip()
-                and (exec_case.expected or "").strip()
-            )
+            required_ready = _exec_case_ready_for_library(exec_case)
             if required_ready:
-                exec_set = db.query(models.ExecSet).filter(models.ExecSet.id == exec_case.exec_set_id).first()
                 if exec_set and exec_set.case_file_id:
                     now = exec_case.updated_at
-                    case_item = models.CaseItem(
-                        case_file_id=exec_set.case_file_id,
-                        module=exec_case.module,
-                        title=exec_case.title,
-                        expected=exec_case.expected,
-                        priority=exec_case.priority,
-                        precondition=exec_case.precondition or "",
-                        steps=exec_case.steps or "",
-                        remark=exec_case.remark,
-                        created_by=user.id,
-                        updated_by=user.id,
-                        created_at=now,
-                        updated_at=now,
+                    case_file = (
+                        db.query(models.CaseFile)
+                        .filter(models.CaseFile.id == int(exec_set.case_file_id))
+                        .first()
                     )
-                    db.add(case_item)
-                    db.flush()
-                    exec_case.case_item_id = case_item.id
-                    db.query(models.CaseFile).filter(models.CaseFile.id == exec_set.case_file_id).update(
-                        {models.CaseFile.updated_at: now}, synchronize_session=False
-                    )
-                    db.add(exec_case)
-                    try:
-                        case_file = (
-                            db.query(models.CaseFile)
-                            .filter(models.CaseFile.id == exec_set.case_file_id)
-                            .first()
-                        )
-                        if case_file:
+                    if case_file:
+                        existing = _find_case_item_by_exec_case(db, case_file.id, exec_case)
+                        if existing:
+                            old_snap = _snapshot_case_item_for_history(existing)
+                            updated_case = False
+                            if exec_case.priority != existing.priority:
+                                existing.priority = exec_case.priority
+                                updated_case = True
+                            if exec_case.remark is not None and exec_case.remark != existing.remark:
+                                existing.remark = exec_case.remark
+                                updated_case = True
+                            exec_case.case_item_id = existing.id
+                            exec_case.case_item_source_id = int(existing.id)
+                            if updated_case:
+                                existing.updated_by = user.id
+                                existing.updated_at = now
+                                case_file.updated_by = user.id
+                                case_file.updated_at = now
+                                db.add(existing)
+                                db.add(case_file)
+                                new_snap = _snapshot_case_item_for_history(existing)
+                                log_case_library_change(
+                                    db=db,
+                                    user=user,
+                                    project_id=case_file.project_id,
+                                    version_id=case_file.version_id,
+                                    file_name_clean=case_file.file_name_clean,
+                                    case_file_id=case_file.id,
+                                    case_item_id=existing.id,
+                                    kind="updated",
+                                    old=old_snap,
+                                    new=new_snap,
+                                    meta={"source": "exec_case_auto_bind"},
+                                    at=now,
+                                )
+                                diff_entries = [
+                                    _build_exec_case_library_diff_entry(
+                                        "updated", existing.id, old_snap, new_snap
+                                    )
+                                ]
+                                diff_summary = schemas.ExecCaseLibraryDiffSummary(updated=1)
+                                _append_exec_set_case_library_history(
+                                    exec_set,
+                                    case_file,
+                                    user,
+                                    diff_entries,
+                                    diff_summary,
+                                    now,
+                                    auto_ack=True,
+                                )
+                        else:
+                            case_item = models.CaseItem(
+                                case_file_id=case_file.id,
+                                module=exec_case.module,
+                                title=exec_case.title,
+                                expected=exec_case.expected,
+                                priority=exec_case.priority,
+                                precondition=exec_case.precondition or "",
+                                steps=exec_case.steps or "",
+                                remark=exec_case.remark,
+                                created_by=user.id,
+                                updated_by=user.id,
+                                created_at=now,
+                                updated_at=now,
+                            )
+                            db.add(case_item)
+                            db.flush()
+                            exec_case.case_item_id = case_item.id
+                            exec_case.case_item_source_id = int(case_item.id)
+                            case_file.updated_by = user.id
+                            case_file.updated_at = now
+                            db.add(case_file)
                             log_case_library_change(
                                 db=db,
                                 user=user,
@@ -1949,8 +2509,25 @@ def update_exec_case(
                                 meta={"source": "exec_case_auto_bind"},
                                 at=now,
                             )
-                    except Exception:
-                        pass
+                            diff_entries = [
+                                _build_exec_case_library_diff_entry(
+                                    "added",
+                                    case_item.id,
+                                    None,
+                                    _snapshot_case_item_for_history(case_item),
+                                )
+                            ]
+                            diff_summary = schemas.ExecCaseLibraryDiffSummary(added=1)
+                            _append_exec_set_case_library_history(
+                                exec_set,
+                                case_file,
+                                user,
+                                diff_entries,
+                                diff_summary,
+                                now,
+                                auto_ack=True,
+                            )
+                    db.add(exec_case)
         log_operation(
             db=db,
             user_id=user.id,
