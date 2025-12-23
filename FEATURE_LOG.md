@@ -2115,3 +2115,15 @@
   - `API_BASE_URL=http://127.0.0.1:8081 npx playwright test tests/api/exec_case_library_sync.spec.js`（通过）
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8091 npx playwright test tests/ui/tempexec_case_library_changes.spec.js tests/ui/ops_log.spec.js`（通过）
 - 更新记录：2025-12-23 执行页复用类型变更记录与操作日志展示（`backend/routers/exec_routes.py`、`scripts/modules/opsLog.js`、`index.html`、`tests/api/exec_case_library_sync.spec.js`、`tests/ui/tempexec_case_library_changes.spec.js`、`tests/ui/ops_log.spec.js`）。
+
+- 功能名称：登录校验失败时保留登录态
+- 功能描述：当登录态校验接口出现非 401/403 的异常（如后端短暂不可用）时，不再清除 token 并强制跳转登录页，改为保留 token 并提示重试。
+- 操作方式：登录后刷新页面，若后端短暂异常则提示“登录校验失败”且不跳转；恢复后刷新可继续使用。
+- 使用效果：避免因后端短暂不可用导致每天需要重新登录。
+- 新增内容/接口/组件：
+  - 前端：登录校验异常分支处理（`scripts/modules/authGuard.js`）。
+  - 测试：登录校验异常不清 token（`tests/ui/auth_login_expiry.spec.js`）。
+- 复用说明：复用现有登录校验逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8092 npx playwright test tests/ui/auth_login_expiry.spec.js`（通过）
+- 更新记录：2025-12-23 登录校验失败时保留登录态（`scripts/modules/authGuard.js`、`tests/ui/auth_login_expiry.spec.js`）。

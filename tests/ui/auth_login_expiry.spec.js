@@ -3,8 +3,10 @@ const { test, expect } = require('@playwright/test');
 test.describe('登录过期时间返回', () => {
   let loginResponseBody = null;
   let expectedExpiresAt = '';
+  let forceUserMeError = false;
 
   test.beforeEach(async ({ page }) => {
+    forceUserMeError = false;
     await page.route('**/*', (route) => {
       const url = route.request().url();
       if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
@@ -28,6 +30,7 @@ test.describe('登录过期时间返回', () => {
         return respond(200, loginResponseBody);
       }
       if (path === '/api/users/me') {
+        if (forceUserMeError) return respond(500, { detail: 'server error' });
         return respond(200, { id: 1, username: 'test_user', role: 'admin', level: 'leader' });
       }
       if (path === '/api/auth/logout') return respond(200, {});
@@ -58,5 +61,25 @@ test.describe('登录过期时间返回', () => {
       }
     });
     expect(stored).toBe('login-expire-token');
+  });
+
+  test('校验接口异常时不清除 token、不跳转登录页', async ({ page }) => {
+    forceUserMeError = true;
+    await page.addInitScript(() => {
+      try { localStorage.setItem('tap-auth-token', 'keep-token'); } catch (_) {}
+    });
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+
+    await page.waitForTimeout(800);
+    await expect(page).toHaveURL(/index\.html/);
+    const stored = await page.evaluate(() => {
+      try {
+        return localStorage.getItem('tap-auth-token');
+      } catch (err) {
+        return '';
+      }
+    });
+    expect(stored).toBe('keep-token');
   });
 });

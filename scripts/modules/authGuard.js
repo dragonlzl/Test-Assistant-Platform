@@ -481,9 +481,26 @@
       var tab = liveState.activeTab || 'auto';
       liveState.activeTab = tab;
       switchToTab(tab);
-    }).catch(function() {
-      apiClient.clearToken();
-      redirectToLogin();
+    }).catch(function(err) {
+      var status = err && err.status ? Number(err.status) : 0;
+      if (status === 401 || status === 403) {
+        apiClient.clearToken();
+        redirectToLogin();
+        return;
+      }
+      liveState.authReady = false;
+      window.app = window.app || {};
+      window.app.authReady = false;
+      updateUserDisplay();
+      var msg = err && err.message ? err.message : '服务不可用';
+      try {
+        var toast = window.app && window.app.utils ? window.app.utils : null;
+        if (toast && typeof toast.showCenterToast === 'function') {
+          toast.showCenterToast('登录校验失败：' + msg + '，请稍后刷新重试', 'warn', 3000);
+        }
+      } catch (e) {
+        // ignore
+      }
     });
   }
 
