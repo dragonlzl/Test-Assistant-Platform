@@ -88,4 +88,28 @@ test.describe('操作记录-查看记录抽屉恢复', () => {
 
     await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
   });
+
+  test('查看记录抽屉宽度与其他抽屉一致', async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 800 });
+    await mockApi(page);
+    await gotoIndex(page);
+    await waitAppReady(page, 30000);
+
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
+    });
+    await page.click('#openOpsLogDrawerBtn');
+    await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
+
+    const metrics = await page.evaluate(() => {
+      const panel = document.querySelector('#opsLogDrawer .drawer-panel');
+      if (!panel) return null;
+      const rect = panel.getBoundingClientRect();
+      return { width: rect.width, viewport: window.innerWidth };
+    });
+    expect(metrics).not.toBeNull();
+    const ratio = metrics.width / metrics.viewport;
+    expect(ratio).toBeGreaterThan(0.6);
+    expect(ratio).toBeLessThan(0.75);
+  });
 });

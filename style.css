@@ -4530,7 +4530,9 @@ tr.diff-locate-active td {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      max-height: 320px;
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: none;
       overflow: hidden;
     }
     .casegen-progress-panel .panel-head {
@@ -4553,6 +4555,8 @@ tr.diff-locate-active td {
       display: flex;
       flex-direction: column;
       gap: 6px;
+      flex: 1 1 auto;
+      min-height: 0;
       overflow-y: auto;
       padding-right: 4px;
     }

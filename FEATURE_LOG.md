@@ -2215,3 +2215,27 @@
 - 测试与验证：
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/ops_log.spec.js -g "导出记录Excel"`（通过）
 - 更新记录：2025-12-23 操作记录导出 Excel（`index.html`、`scripts/modules/opsLog.js`、`scripts/modules/caseLibrary.js`、`tests/ui/ops_log.spec.js`）。
+
+- 功能名称：用例生成进度面板自适应高度
+- 功能描述：左侧导航的“用例生成进度”面板高度随页面自适应；可展示全部模块时完整展示，超出视口时列表自动滚动。
+- 操作方式：进入任意页面，左侧“用例生成进度”随窗口高度调整；模块数多时列表出现滚动。
+- 使用效果：进度面板与页面高度一致，模块多时仍可查看全部进度。
+- 新增内容/接口/组件：
+  - 前端：进度面板高度与滚动策略调整（`style.css`）。
+  - 测试：进度面板自适应高度 UI 用例（`tests/ui/casegen_db_store.spec.js`）。
+- 复用说明：复用现有进度面板结构与渲染逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/casegen_db_store.spec.js -g "进度面板高度自适应并可滚动"`（通过）
+- 更新记录：2025-12-23 用例生成进度面板自适应高度（`style.css`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：操作记录查看记录抽屉宽度统一
+- 功能描述：查看记录抽屉宽度调整为默认抽屉宽度（约屏幕 2/3），与其他抽屉保持一致。
+- 操作方式：进入“操作记录 → 查看记录”打开抽屉，宽度与其他抽屉一致。
+- 使用效果：抽屉宽度统一，视觉一致性更好。
+- 新增内容/接口/组件：
+  - 前端：查看记录抽屉宽度回归默认（`index.html`）。
+  - 测试：查看记录抽屉宽度 UI 用例（`tests/ui/ops_log_drawer_restore.spec.js`）。
+- 复用说明：复用抽屉默认样式，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/ops_log_drawer_restore.spec.js -g "查看记录抽屉宽度与其他抽屉一致"`（通过）
+- 更新记录：2025-12-23 操作记录查看记录抽屉宽度统一（`index.html`、`tests/ui/ops_log_drawer_restore.spec.js`）。
