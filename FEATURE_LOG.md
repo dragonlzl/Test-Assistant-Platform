@@ -2337,3 +2337,4 @@
 - 更新记录：2025-12-24 修正执行总览版本进度条暗色背景（`style.css`）。
 - 更新记录：2025-12-24 新增页面 favicon（`assets/favicon.svg`、`index.html`、`login.html`）。
 - 更新记录：2025-12-24 favicon 调整为测试主题图标（`assets/favicon.svg`）。
+- 更新记录：2025-12-24 favicon 调整为“测试”文字图标（`assets/favicon.svg`）。

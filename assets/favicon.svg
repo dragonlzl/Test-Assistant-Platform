@@ -1,13 +1,12 @@
 <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="test-gradient" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="0" stop-color="#2563eb"/>
       <stop offset="1" stop-color="#22c55e"/>
     </linearGradient>
   </defs>
   <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#test-gradient)"/>
-  <rect x="18" y="16" width="28" height="32" rx="6" stroke="#ffffff" stroke-width="3" fill="none"/>
-  <rect x="24" y="12" width="16" height="8" rx="4" fill="#ffffff"/>
-  <path d="M24 28L28 32L35 25" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M24 38L28 42L35 35" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="8" y="8" width="48" height="48" rx="12" fill="rgba(15,23,42,0.2)"/>
+  <text x="32" y="40" text-anchor="middle" font-size="22" font-weight="800" fill="#ffffff"
+    font-family="PingFang SC, Microsoft YaHei, Noto Sans SC, sans-serif">测试</text>
 </svg>
