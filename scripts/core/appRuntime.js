@@ -1048,6 +1048,7 @@
     assignIfPresent(casesGenApi, {
       goToCaseGeneration: goToCaseGeneration,
       generateCasesForModule: generateCasesForModule,
+      generateAllCaseGenModules: api.generateAllCaseGenModules || function() {},
       toggleCaseView: toggleCaseView,
       exportModuleCases: exportModuleCases,
       exportSelectedCases: exportSelectedCases,
@@ -1058,6 +1059,7 @@
       importModuleCases: importModuleCases,
       clearModuleCases: clearModuleCases,
       topUpCasesForModule: topUpCasesForModule,
+      topUpAllCaseGenModules: api.topUpAllCaseGenModules || function() {},
       appendSelectedCasesToImported: appendSelectedCasesToImported,
       refreshAppendExistingButton: api.refreshAppendExistingButton || function() {},
       refreshExportCaseGenXmindButton: api.refreshExportCaseGenXmindButton || function() {},
@@ -1074,8 +1076,9 @@
       ensureCaseGenModulesFromSplit: ensureCaseGenModulesFromSplit,
       renderCaseGeneration: renderCaseGeneration,
     }, Object.keys({
-      goToCaseGeneration: 1, generateCasesForModule: 1, toggleCaseView: 1, exportModuleCases: 1, exportSelectedCases: 1,
+      goToCaseGeneration: 1, generateCasesForModule: 1, generateAllCaseGenModules: 1, toggleCaseView: 1, exportModuleCases: 1, exportSelectedCases: 1,
       exportSelectedCasesToXmind: 1, exportSelectedModulesToXmind: 1, transferModuleToTempExec: 1, importModuleCases: 1, clearModuleCases: 1, topUpCasesForModule: 1,
+      topUpAllCaseGenModules: 1,
       appendSelectedCasesToImported: 1, transferSelectedCasesToExec: 1,
       refreshAppendExistingButton: 1, refreshExportCaseGenXmindButton: 1,
       setCaseGenDbStoreNewAction: 1, clearCaseGenDbStoreNewActionError: 1,
@@ -1084,6 +1087,9 @@
       exportCaseGenerationResults: 1, ensureCaseGenModulesFromSplit: 1, renderCaseGeneration: 1,
       renderAppendTargetOptions: 1,
     }));
+    if (!casesGenApi.renderCaseGeneration && typeof api.renderCaseGeneration === 'function') {
+      casesGenApi.renderCaseGeneration = api.renderCaseGeneration;
+    }
     window.app.casesGenApi = casesGenApi;
 
     function initApp() {

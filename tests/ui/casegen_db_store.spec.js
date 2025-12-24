@@ -127,6 +127,102 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     });
   });
 
+  test('用例生成说明包含生成与补全规则', async ({ page }) => {
+    const token = 'token-casegen-guide';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('casesgen');
+      }
+    });
+    await page.click('#pageGuideTrigger');
+    const drawer = page.locator('#pageGuideDrawer');
+    await expect(drawer).toHaveClass(/open/);
+    const guide = page.locator('#pageGuideDrawerBody');
+    await expect(guide).toContainText('生成用例');
+    await expect(guide).toContainText('补全生成');
+    await expect(guide).toContainText('全模块直接生成');
+    await expect(guide).toContainText('全模块补全生成');
+    await expect(guide).toContainText('生成规则与区别');
+  });
+
+  test('新用例入库未勾选时标红全选按钮', async ({ page }) => {
+    const token = 'token-casegen-store-select-all-hint';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page, { selectIndex: -1 });
+    await page.selectOption('#caseGenStoreActionSelect', 'store');
+    await page.click('#caseGenStoreNewBtn');
+
+    const drawer = page.locator('#caseGenViewDrawer');
+    await expect(drawer).toHaveClass(/open/);
+    const selectAllBtn = page.locator('#caseGenAllSelectBtn');
+    await expect(selectAllBtn).toHaveClass(/casegen-select-all-hint/);
+    await selectAllBtn.click();
+    await expect(selectAllBtn).not.toHaveClass(/casegen-select-all-hint/);
+  });
+
   test('新用例入库：未选择“入库后动作”会提示并标红', async ({ page }) => {
     const token = 'token-casegen-store-action';
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
@@ -507,6 +603,221 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     expect(metrics.panelHeight).toBeLessThanOrEqual(metrics.sidebarHeight);
     expect(metrics.panelBottom).toBeLessThanOrEqual(metrics.sidebarBottom + 2);
     expect(metrics.listScrollHeight).toBeGreaterThan(metrics.listClientHeight + 10);
+  });
+
+  test('全模块生成按钮提示覆盖并支持取消', async ({ page }) => {
+    const token = 'token-casegen-batch-generate';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+    const modules = [
+      { module: '模块A', key_scenarios: [], test_points: [], coupled_modules: [] },
+      { module: '模块B', key_scenarios: [], test_points: [], coupled_modules: [] },
+      { module: '模块C', key_scenarios: [], test_points: [], coupled_modules: [] },
+    ];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page, { selectIndex: -1, noGenerateIndex: 2, modules });
+
+    await expect(page.locator('#caseGenAllGenerateBtn')).toBeEnabled();
+    await expect(page.locator('#caseGenAllTopupBtn')).toBeEnabled();
+    await page.click('#caseGenAllGenerateBtn');
+    await cancelConfirmDrawer(page, { messageIncludes: ['模块A', '模块B', '已有生成数据'] });
+
+    const runningCount = await page.evaluate(() => {
+      const st = window.app && window.app.state ? window.app.state : null;
+      const running = st && st.caseGenRunning ? st.caseGenRunning : null;
+      return running && typeof running.size === 'number' ? running.size : 0;
+    });
+    expect(runningCount).toBe(0);
+  });
+
+  test('全模块生成按钮：模块全生成中时不可点击', async ({ page }) => {
+    const token = 'token-casegen-batch-running';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+    const modules = [
+      { module: '模块A', key_scenarios: [], test_points: [], coupled_modules: [] },
+      { module: '模块B', key_scenarios: [], test_points: [], coupled_modules: [] },
+    ];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page, { selectIndex: -1, noGenerateIndex: 1, modules });
+    await page.evaluate(() => {
+      const st = window.app && window.app.state ? window.app.state : null;
+      if (!st || !Array.isArray(st.caseGenModules)) return;
+      st.caseGenModules.forEach((mod) => {
+        if (!st.caseGenModuleStatus || typeof st.caseGenModuleStatus !== 'object') {
+          st.caseGenModuleStatus = {};
+        }
+        st.caseGenModuleStatus[mod.id] = { text: '生成中...', type: '' };
+        if (window.app && typeof window.app.setCaseModuleRunning === 'function') {
+          window.app.setCaseModuleRunning(mod.id, true);
+          return;
+        }
+        if (!(st.caseGenRunning instanceof Set)) st.caseGenRunning = new Set();
+        st.caseGenRunning.add(mod.id);
+      });
+      if (window.app.casesGenApi && typeof window.app.casesGenApi.renderCaseGeneration === 'function') {
+        window.app.casesGenApi.renderCaseGeneration();
+      }
+    });
+
+    await expect(page.locator('#caseGenAllGenerateBtn')).toBeDisabled();
+    await expect(page.locator('#caseGenAllTopupBtn')).toBeDisabled();
+  });
+
+  test('全模块生成按钮：全部已有生成结果仍可点击', async ({ page }) => {
+    const token = 'token-casegen-batch-all-generated';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+    const modules = [
+      { module: '模块A', key_scenarios: [], test_points: [], coupled_modules: [] },
+      { module: '模块B', key_scenarios: [], test_points: [], coupled_modules: [] },
+    ];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page, { selectIndex: -1, modules });
+
+    await expect(page.locator('#caseGenAllGenerateBtn')).toBeEnabled();
+    await expect(page.locator('#caseGenAllTopupBtn')).toBeEnabled();
+  });
+
+  test('全模块生成按钮：覆盖后触发全部模块生成', async ({ page }) => {
+    const token = 'token-casegen-batch-overwrite';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+    const modules = [
+      { module: '模块A', key_scenarios: [], test_points: [], coupled_modules: [] },
+      { module: '模块B', key_scenarios: [], test_points: [], coupled_modules: [] },
+    ];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page, { selectIndex: -1, modules });
+
+    await page.click('#caseGenAllGenerateBtn');
+    await confirmDrawer(page, { messageIncludes: ['模块A', '模块B', '已有生成数据'] });
+
+    await page.waitForFunction(() => {
+      const st = window.app && window.app.state ? window.app.state : null;
+      if (!st || !Array.isArray(st.caseGenModules) || !st.caseGenModules.length) return false;
+      return st.caseGenModules.every((mod) => {
+        const status = st.caseGenModuleStatus && st.caseGenModuleStatus[mod.id];
+        const text = status && status.text ? String(status.text) : '';
+        return text.indexOf('未找到用例生成模型') !== -1;
+      });
+    });
   });
 
   test('新用例入库：直接入库成功，且会校验未选模块二次确认', async ({ page }) => {

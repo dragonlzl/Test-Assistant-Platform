@@ -303,6 +303,14 @@
         + '<li>选择入库方式（直接入库 / 入库并转到执行），点击 <span class="page-guide-button">【新用例入库】</span> 或 <span class="page-guide-button">【旧用例追加入库】</span> 完成入库。</li>'
         + '<li>可按需导出 TXT / XMind 文件用于外部共享。</li>'
         + '</ol>';
+      var rules = ''
+        + '<ul class="page-guide-notes">'
+        + '<li><span class="page-guide-button">【生成用例】</span>：对单个模块生成用例，会覆盖该模块已有结果。</li>'
+        + '<li><span class="page-guide-button">【补全生成】</span>：仅对已有结果的模块补充用例，不覆盖原结果。</li>'
+        + '<li><span class="page-guide-button">【全模块直接生成】</span>：对未生成中的模块批量执行“生成用例”；存在已生成数据时会二次确认，取消则全部不执行。</li>'
+        + '<li><span class="page-guide-button">【全模块补全生成】</span>：仅对已有结果且未生成中的模块批量补全，无可补全模块时不可点击。</li>'
+        + '<li>模块生成中会被跳过；全部生成中时全模块按钮不可点击。</li>'
+        + '</ul>';
       var notes = ''
         + '<ul class="page-guide-notes">'
         + '<li><span class="page-guide-button">【全模块用例视图】</span>：汇总当前勾选用例，支持批量选中与入库。</li>'
@@ -313,6 +321,7 @@
       return ''
         + wrapSection('页面功能简介', intro)
         + wrapSection('操作流程', flow)
+        + wrapSection('生成规则与区别', rules)
         + wrapSection('必要说明', notes)
         + guideTipHtml;
     }

@@ -2239,3 +2239,42 @@
 - 测试与验证：
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/ops_log_drawer_restore.spec.js -g "查看记录抽屉宽度与其他抽屉一致"`（通过）
 - 更新记录：2025-12-23 操作记录查看记录抽屉宽度统一（`index.html`、`tests/ui/ops_log_drawer_restore.spec.js`）。
+
+- 功能名称：全模块直接生成/补全生成
+- 功能描述：用例生成页通用操作区新增“全模块直接生成/全模块补全生成”，当存在未生成模块时可一键触发；若检测到已生成模块会提示覆盖确认，确认后执行全模块生成，取消则不执行；若模块生成中则跳过并对其余模块执行。
+- 操作方式：进入用例生成页，在通用操作区点击“全模块直接生成/全模块补全生成”，根据提示确认或取消。
+- 使用效果：一键完成多模块生成或补全，避免逐个点击；覆盖风险可控。
+- 新增内容/接口/组件：
+  - 前端：全模块生成按钮与批量生成逻辑（`index.html`、`scripts/modules/casesgen.js`、`scripts/core/casesGenCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`）。
+  - 测试：全模块生成按钮覆盖提示与禁用规则 UI 用例（`tests/ui/casegen_db_store.spec.js`）。
+- 复用说明：复用现有模块生成/补全逻辑与确认抽屉，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/casegen_db_store.spec.js -g "全模块生成按钮"`（通过，提权执行）
+- 更新记录：2025-12-23 全模块直接生成/补全生成（`index.html`、`scripts/modules/casesgen.js`、`scripts/core/casesGenCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`tests/ui/casegen_db_store.spec.js`）。
+- 更新记录：2025-12-23 修复 casesGenApi 的 renderCaseGeneration 绑定，确保全模块禁用状态可刷新（`scripts/core/appRuntime.js`、`tests/ui/casegen_db_store.spec.js`）。
+- 更新记录：2025-12-23 全模块按钮在已有生成结果时可点击，避免误禁用（`scripts/core/casesGenCore.js`、`tests/ui/casegen_db_store.spec.js`）。
+- 更新记录：2025-12-23 修复全模块生成仅触发首个模块的问题（`scripts/core/casesGenCore.js`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：用例生成页说明完善
+- 功能描述：在用例生成页“页面说明”抽屉补充生成用例、补全生成、全模块直接生成、全模块补全生成的功能说明、区别与使用规则。
+- 操作方式：进入用例生成页，点击左侧导航的“页面说明”打开抽屉查看。
+- 使用效果：用户可直观看到单模块与全模块操作的差异、覆盖规则与可用条件。
+- 新增内容/接口/组件：
+  - 前端：用例生成页说明内容调整（`scripts/modules/pageGuide.js`）。
+  - 测试：用例生成说明 UI 用例（`tests/ui/casegen_db_store.spec.js`）。
+- 复用说明：复用现有提示样式与用例生成逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/casegen_db_store.spec.js -g "用例生成说明"`（通过，提权执行）
+- 更新记录：2025-12-23 用例生成页说明完善（`scripts/modules/pageGuide.js`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：用例生成入库勾选提醒强化
+- 功能描述：生成用例但未勾选时，点击“新用例入库/旧用例追加入库”打开全模块视图，右上角“全选所有模块用例”按钮同步标红提示；一旦点击全选或任意勾选，红框消失。
+- 操作方式：用例生成完成但不勾选，点击入库按钮查看全模块视图提示；点击全选或勾选用例后提示消失。
+- 使用效果：入库前的勾选引导更明显，避免遗漏勾选导致无法入库。
+- 新增内容/接口/组件：
+  - 前端：全选按钮红框提示联动（`scripts/core/casesGenCore.js`、`style.css`）。
+  - 测试：入库未勾选时全选按钮标红 UI 用例（`tests/ui/casegen_db_store.spec.js`）。
+- 复用说明：复用已有勾选提示状态与入库入口逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/casegen_db_store.spec.js -g "全选按钮"`（通过，提权执行）
+- 更新记录：2025-12-23 用例生成入库勾选提醒强化（`scripts/core/casesGenCore.js`、`style.css`、`tests/ui/casegen_db_store.spec.js`）。

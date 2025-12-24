@@ -63,6 +63,8 @@
     var caseGenRequirementDrawer = null;
     var caseGenRequirementDrawerExternal = null;
     var exportCaseGenXmindBtn = dom.exportCaseGenXmindBtn || dom.exportCaseGenXmind;
+    var caseGenAllGenerateBtn = document.getElementById('caseGenAllGenerateBtn');
+    var caseGenAllTopupBtn = document.getElementById('caseGenAllTopupBtn');
     var caseGenViewDrawerBody = dom.caseGenViewDrawerBody;
     var caseGenViewDrawerTitle = dom.caseGenViewDrawerTitle;
     var caseGenAllSelectBtn = dom.caseGenAllSelectBtn || document.getElementById('caseGenAllSelectBtn');
@@ -829,11 +831,165 @@
       return false;
     }
 
+    function buildCaseGenModuleMeta() {
+      var meta = [];
+      if (!Array.isArray(state.caseGenModules)) return meta;
+      state.caseGenModules.forEach(function(mod) {
+        if (!mod || !mod.id) return;
+        var title = resolveModuleTitle(mod.title || mod.module || '');
+        var list = getCaseListForModule(mod.id);
+        var running = isCaseModuleRunning(mod.id);
+        if (!running && state.caseGenRunning instanceof Set) {
+          if (state.caseGenRunning.has(mod.id)) {
+            running = true;
+          } else if (state.caseGenRunning.has(String(mod.id))) {
+            running = true;
+          } else {
+            var numericId = Number(mod.id);
+            if (Number.isFinite(numericId) && state.caseGenRunning.has(numericId)) {
+              running = true;
+            }
+          }
+        }
+        if (!running) {
+          var statusInfo = ensureCaseModuleStatusState()[mod.id];
+          var statusText = statusInfo && statusInfo.text ? String(statusInfo.text) : '';
+          if (statusText.indexOf('生成中') !== -1 || statusText.indexOf('补全中') !== -1) {
+            running = true;
+          }
+        }
+        meta.push({
+          id: mod.id,
+          title: title,
+          hasResult: Boolean(list && list.length),
+          running: running,
+        });
+      });
+      return meta;
+    }
+
+    function listGeneratedCaseGenModuleTitles(meta) {
+      return (meta || []).filter(function(entry) {
+        return entry && entry.hasResult;
+      }).map(function(entry) {
+        return entry.title;
+      });
+    }
+
+    function refreshCaseGenBatchButtons() {
+      if (!caseGenAllGenerateBtn) caseGenAllGenerateBtn = document.getElementById('caseGenAllGenerateBtn');
+      if (!caseGenAllTopupBtn) caseGenAllTopupBtn = document.getElementById('caseGenAllTopupBtn');
+      if (!caseGenAllGenerateBtn && !caseGenAllTopupBtn) return;
+      var meta = buildCaseGenModuleMeta();
+      var hasGenerateTarget = false;
+      var hasTopupTarget = false;
+      var allRunning = meta.length > 0;
+      meta.forEach(function(entry) {
+        if (!entry) return;
+        if (!entry.running) {
+          hasGenerateTarget = true;
+          if (entry.hasResult) hasTopupTarget = true;
+          allRunning = false;
+        }
+      });
+      if (caseGenAllGenerateBtn) caseGenAllGenerateBtn.disabled = !meta.length || !hasGenerateTarget || allRunning;
+      if (caseGenAllTopupBtn) caseGenAllTopupBtn.disabled = !meta.length || !hasTopupTarget || allRunning;
+    }
+
     function refreshAppendExistingButton() {
       var hasGenerated = hasGeneratedCases();
       if (caseGenStoreNewBtn) caseGenStoreNewBtn.disabled = !hasGenerated || !isDbStoreReady();
       if (caseGenStoreAppendBtn) caseGenStoreAppendBtn.disabled = !hasGenerated || !isDbStoreReady();
       refreshExportCaseGenXmindButton();
+    }
+
+    function confirmCaseGenBatchOverwrite(actionLabel, moduleNames) {
+      if (!moduleNames.length) return Promise.resolve(true);
+      var nameText = moduleNames.join('、');
+      var label = actionLabel || '生成';
+      var message = '检测到以下模块已有生成数据：' + nameText + '。继续将覆盖已有生成数据并执行全模块' + label + '，是否继续？';
+      return openConfirmDrawer({
+        title: '确认全模块' + label,
+        message: message,
+        confirmText: '继续' + label,
+        cancelText: '取消',
+        previousDrawer: resolveCaseGenActiveDrawer(),
+      }).then(function(res) {
+        return Boolean(res && res.ok === true);
+      });
+    }
+
+    function runCaseGenBatch(action) {
+      var meta = buildCaseGenModuleMeta();
+      var actionLabel = action === 'topup' ? '补全生成' : '直接生成';
+      if (!meta.length) {
+        setStatus(caseGenStatus, '请先在“测试模块拆分”中生成模块', 'warn');
+        return Promise.resolve(false);
+      }
+      var allRunning = meta.length > 0 && meta.every(function(entry) { return entry && entry.running; });
+      if (allRunning) {
+        setStatus(caseGenStatus, '全部模块正在生成中，无法执行全模块' + actionLabel, 'warn');
+        return Promise.resolve(false);
+      }
+      if (action === 'topup') {
+        var hasTopupTarget = meta.some(function(entry) {
+          return entry && entry.hasResult && !entry.running;
+        });
+        if (!hasTopupTarget) {
+          setStatus(caseGenStatus, '暂无可补全的模块，无法执行全模块' + actionLabel, 'warn');
+          return Promise.resolve(false);
+        }
+      } else {
+        var hasGenerateTarget = meta.some(function(entry) {
+          return entry && !entry.running;
+        });
+        if (!hasGenerateTarget) {
+          setStatus(caseGenStatus, '暂无可生成的模块，无法执行全模块' + actionLabel, 'warn');
+          return Promise.resolve(false);
+        }
+      }
+      var generatedModules = listGeneratedCaseGenModuleTitles(meta);
+      return confirmCaseGenBatchOverwrite(actionLabel, generatedModules).then(function(ok) {
+        if (!ok) {
+          setStatus(caseGenStatus, '已取消全模块' + actionLabel, 'warn');
+          return false;
+        }
+        var candidates = [];
+        if (action === 'topup') {
+          candidates = meta.filter(function(entry) {
+            return entry && entry.hasResult && !entry.running;
+          });
+        } else if (generatedModules.length) {
+          candidates = meta.filter(function(entry) { return entry && !entry.running; });
+        } else {
+          candidates = meta.filter(function(entry) {
+            return entry && !entry.hasResult && !entry.running;
+          });
+        }
+        if (!candidates.length) {
+          var emptyMsg = action === 'topup' ? '暂无可补全的模块' : '暂无可生成的模块';
+          setStatus(caseGenStatus, emptyMsg, 'warn');
+          return false;
+        }
+        var skipped = meta.filter(function(entry) { return entry && entry.running; }).length;
+        var hint = '已触发全模块' + actionLabel + '（' + candidates.length + '个模块）';
+        if (skipped) hint += '，已跳过' + skipped + '个生成中的模块';
+        setStatus(caseGenStatus, hint, 'ok');
+        var concurrency = candidates.length;
+        return runConcurrent(candidates, concurrency, function(entry) {
+          if (!entry || !entry.id) return Promise.resolve(false);
+          if (action === 'topup') return topUpCasesForModule(entry.id);
+          return generateCasesForModule(entry.id);
+        });
+      });
+    }
+
+    function generateAllCaseGenModules() {
+      return runCaseGenBatch('generate');
+    }
+
+    function topUpAllCaseGenModules() {
+      return runCaseGenBatch('topup');
     }
 
     function buildCaseItemPayloadFromGenerated(item, fallbackModule) {
@@ -966,6 +1122,14 @@
       }
       if (!buttons.length) return;
       var stats = getCaseGenAllSelectionStats();
+      var hintMap = ensureCaseGenSelectionHintState();
+      var hasHint = false;
+      for (var key in hintMap) {
+        if (Object.prototype.hasOwnProperty.call(hintMap, key)) {
+          hasHint = true;
+          break;
+        }
+      }
       var disabled = stats.total === 0;
       var text = stats.total > 0 && stats.selected >= stats.total
         ? '取消全选所有模块用例'
@@ -973,6 +1137,7 @@
       buttons.forEach(function(btn) {
         btn.disabled = disabled;
         btn.textContent = text;
+        if (btn.classList) btn.classList.toggle('casegen-select-all-hint', hasHint);
       });
     }
 
@@ -2020,6 +2185,7 @@
         refreshExportCaseGenButton();
         refreshExportCaseGenXmindButton();
         refreshAppendExistingButton();
+        refreshCaseGenBatchButtons();
         return;
       }
       casesGenerationContainer.innerHTML = state.caseGenModules.map(function(mod, idx) {
@@ -2071,6 +2237,7 @@
       refreshExportCaseGenXmindButton();
       renderCaseGenProgressBoard();
       refreshAppendExistingButton();
+      refreshCaseGenBatchButtons();
       renderAppendTargetOptions();
       persistWorkflowState();
     }
@@ -2095,6 +2262,7 @@
       }
       setCaseModuleTiming(moduleId);
       setCaseModuleRunning(moduleId, true);
+      refreshCaseGenBatchButtons();
       var textarea = casesGenerationContainer && casesGenerationContainer.querySelector('textarea[data-result="' + moduleId + '"]');
       if (textarea) textarea.value = '';
       var generateBtn = casesGenerationContainer && casesGenerationContainer.querySelector('button[data-generate="' + moduleId + '"]');
@@ -2236,6 +2404,7 @@
       }
       setCaseModuleTiming(moduleId);
       setCaseModuleRunning(moduleId, true);
+      refreshCaseGenBatchButtons();
       updateSupplementButtons(moduleId, false);
       var topupBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-topup="' + moduleId + '"]');
       var generateBtn = casesGenerationContainer && casesGenerationContainer.querySelector('button[data-generate="' + moduleId + '"]');
@@ -2916,6 +3085,7 @@
       refreshExportCaseGenButton();
       refreshAppendExistingButton();
       refreshExportCaseGenXmindButton();
+      refreshCaseGenBatchButtons();
       persistWorkflowState();
     }
 
@@ -3155,7 +3325,9 @@
     return {
       renderCaseGeneration: renderCaseGeneration,
       generateCasesForModule: generateCasesForModule,
+      generateAllCaseGenModules: generateAllCaseGenModules,
       topUpCasesForModule: topUpCasesForModule,
+      topUpAllCaseGenModules: topUpAllCaseGenModules,
       exportCaseGenerationResults: exportCaseGenerationResults,
       exportModuleCases: exportModuleCases,
       importModuleCases: importModuleCases,

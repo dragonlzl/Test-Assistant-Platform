@@ -22,6 +22,8 @@
   var caseGenAssignStatus = document.getElementById('caseGenAssignStatus');
   var caseGenPromptEl = document.getElementById('caseGenPrompt');
   var caseGenReasoningSelect = document.getElementById('caseGenReasoning');
+    var caseGenAllGenerateBtn = document.getElementById('caseGenAllGenerateBtn');
+    var caseGenAllTopupBtn = document.getElementById('caseGenAllTopupBtn');
     var exportCaseGenBtn = document.getElementById('exportCaseGen');
     var exportCaseGenXmindBtn = document.getElementById('exportCaseGenXmind');
     var testCaseGenModelBtn = document.getElementById('testCaseGenModel');
@@ -162,6 +164,15 @@
     }
   }
 
+    function bindBatchButtons() {
+      if (caseGenAllGenerateBtn && api.generateAllCaseGenModules) {
+        caseGenAllGenerateBtn.addEventListener('click', api.generateAllCaseGenModules);
+      }
+      if (caseGenAllTopupBtn && api.topUpAllCaseGenModules) {
+        caseGenAllTopupBtn.addEventListener('click', api.topUpAllCaseGenModules);
+      }
+    }
+
     function bindStoreButtons() {
       if (caseGenStoreActionSelect) {
         caseGenStoreActionSelect.addEventListener('change', function() {
@@ -196,6 +207,7 @@
     bindContainerEvents();
     bindModelSelectors();
     bindExportButtons();
+    bindBatchButtons();
     bindStoreButtons();
   }
 
