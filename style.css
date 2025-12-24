@@ -4900,7 +4900,7 @@ tr.diff-locate-active td {
       box-sizing: border-box;
       min-width: 0;
     }
-    /* 子项输入：恢复原始长度，备注放大为原始长度的 3.5 倍 */
+    /* 子项输入：恢复原始长度，备注默认放大为原始长度的 3.5 倍（执行视图另行自适应） */
     .reuse-entry .reuse-input {
       /* 复用子项：子项描述回到基础长度 */
       flex: 0 0 calc(110px + 10em);
@@ -4911,6 +4911,36 @@ tr.diff-locate-active td {
       max-width: calc(70em);
       margin-right: 2em;
       background: #f8fafc;
+    }
+    /* 执行视图：复用备注自适应，执行选择框贴近备注右侧，删除按钮保持最右 */
+    .card[data-section-id="tempexec-view"] .reuse-entry {
+      display: grid;
+      grid-template-columns: calc(110px + 10em) minmax(0, 1fr) 14em 7em 6em 6em 40px;
+      align-items: center;
+    }
+    .card[data-section-id="tempexec-view"] .reuse-entry .reuse-input {
+      grid-column: 1;
+      width: 100%;
+    }
+    .card[data-section-id="tempexec-view"] .reuse-entry .reuse-note {
+      grid-column: 2;
+      width: 100%;
+      flex: 0 0 auto;
+      max-width: none;
+      margin-right: 0;
+    }
+    .card[data-section-id="tempexec-view"] .reuse-entry .status-select {
+      grid-column: 3;
+      margin-left: 1em;
+      margin-right: 0;
+      width: 7em;
+      min-width: 7em;
+      justify-self: start;
+    }
+    .card[data-section-id="tempexec-view"] .reuse-entry .reuse-remove {
+      grid-column: 7;
+      margin-left: 0;
+      justify-self: end;
     }
     .reuse-entry .status-select {
       flex: 0 0 4.6em;

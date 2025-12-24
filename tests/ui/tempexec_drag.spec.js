@@ -427,33 +427,32 @@ test.describe('执行视图导入导出与拖拽', () => {
       var removeRect = remove.getBoundingClientRect();
       var entryRect = note.closest('.reuse-entry') ? note.closest('.reuse-entry').getBoundingClientRect() : null;
       var fontSize = parseFloat(window.getComputedStyle(note).fontSize || '0') || 0;
-      var expectedMin = 56 * fontSize;
-      var expectedGap = 2 * fontSize;
-      var expectedRemoveGap = 2 * fontSize;
+      var expectedGap = 1 * fontSize;
+      var expectedRemoveGap = (32 * fontSize) - statusRect.width + 40 - removeRect.width;
+      if (expectedRemoveGap < 0) expectedRemoveGap = 0;
       var inputNoteGap = Math.abs(noteRect.left - inputRect.right);
-      var expectedStatusMin = 4.6 * fontSize;
+      var expectedStatusMin = 7 * fontSize;
       return {
         noteWidth: noteRect.width,
         inputWidth: inputRect.width,
-        expectedMin: expectedMin,
         statusWidth: statusRect.width,
         expectedStatusMin: expectedStatusMin,
         gap: statusRect.left - noteRect.right,
-        expectedGap: expectedGap,
         inputNoteGap: inputNoteGap,
         removeGap: removeRect.left - statusRect.right,
         expectedRemoveGap: expectedRemoveGap,
         removeRightGap: entryRect ? Math.abs(entryRect.right - removeRect.right) : null,
+        expectedGap: expectedGap,
       };
     });
     expect(noteMetrics).not.toBeNull();
     expect(noteMetrics.noteWidth).toBeGreaterThan(noteMetrics.inputWidth);
-    expect(noteMetrics.noteWidth).toBeGreaterThanOrEqual(noteMetrics.expectedMin - 8);
     expect(noteMetrics.statusWidth).toBeGreaterThanOrEqual(noteMetrics.expectedStatusMin - 4);
-    expect(noteMetrics.gap).toBeGreaterThanOrEqual(noteMetrics.expectedGap - 4);
+    expect(noteMetrics.gap).toBeGreaterThanOrEqual(noteMetrics.expectedGap - 2);
     expect(noteMetrics.gap).toBeLessThanOrEqual(noteMetrics.expectedGap + 4);
     expect(noteMetrics.inputNoteGap).toBeLessThanOrEqual(4);
-    expect(noteMetrics.removeGap).toBeGreaterThanOrEqual(noteMetrics.expectedRemoveGap - 4);
+    expect(noteMetrics.removeGap).toBeGreaterThanOrEqual(noteMetrics.expectedRemoveGap - 6);
+    expect(noteMetrics.removeGap).toBeLessThanOrEqual(noteMetrics.expectedRemoveGap + 6);
     expect(noteMetrics.removeRightGap).not.toBeNull();
     expect(noteMetrics.removeRightGap).toBeLessThanOrEqual(4);
 

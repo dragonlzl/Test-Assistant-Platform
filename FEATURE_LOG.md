@@ -2278,3 +2278,15 @@
 - 测试与验证：
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/casegen_db_store.spec.js -g "全选按钮"`（通过，提权执行）
 - 更新记录：2025-12-23 用例生成入库勾选提醒强化（`scripts/core/casesGenCore.js`、`style.css`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：执行页复用子项备注自适应
+- 功能描述：执行视图复用子项备注输入框改为自适应，执行选择框宽度为 7 个汉字并与备注间隔 1 个汉字，删除按钮保持最右侧，保持子项输入框长度不变。
+- 操作方式：进入执行页启用用例复用，展开子项查看备注输入框宽度。
+- 使用效果：备注与执行选择框间距明确且更紧凑，删除按钮对齐右侧，执行项排列更清晰。
+- 新增内容/接口/组件：
+  - 前端：执行页复用子项备注布局自适应（`style.css`）。
+  - 测试：复用子项布局断言更新（`tests/ui/tempexec_drag.spec.js`）。
+- 复用说明：复用现有复用子项结构与样式规则，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_drag.spec.js -g "用例复用状态选择展示颜色"`（通过，提权执行）
+- 更新记录：2025-12-24 执行页复用子项备注自适应（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
