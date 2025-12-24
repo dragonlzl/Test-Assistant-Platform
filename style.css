@@ -453,12 +453,15 @@ body {
         min-width: 0;
       }
     }
-    .hint {
-      margin: 0 0 12px;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.6;
-    }
+.hint {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.hint.err {
+  color: #ef4444;
+}
     .module-progress {
       margin-top: 8px;
       border: 1px dashed var(--border);
@@ -5683,6 +5686,7 @@ tr.diff-locate-active td {
 }
 
 .case-library-filters select,
+#caseLibraryImportExcelTemplateType,
 #caseLibraryEditChangeVersionSelect,
 #execOverviewVersionSelect,
 [data-temp-overview-version-select] {
@@ -5705,6 +5709,7 @@ tr.diff-locate-active td {
 }
 
 .case-library-filters select:hover:not(:disabled),
+#caseLibraryImportExcelTemplateType:hover:not(:disabled),
 #caseLibraryEditChangeVersionSelect:hover:not(:disabled),
 #execOverviewVersionSelect:hover:not(:disabled),
 [data-temp-overview-version-select]:hover:not(:disabled) {
@@ -5712,6 +5717,7 @@ tr.diff-locate-active td {
 }
 
 .case-library-filters select:focus,
+#caseLibraryImportExcelTemplateType:focus,
 #caseLibraryEditChangeVersionSelect:focus,
 #execOverviewVersionSelect:focus,
 [data-temp-overview-version-select]:focus {
@@ -5721,6 +5727,7 @@ tr.diff-locate-active td {
 }
 
 .case-library-filters select:disabled,
+#caseLibraryImportExcelTemplateType:disabled,
 #caseLibraryEditChangeVersionSelect:disabled,
 #execOverviewVersionSelect:disabled,
 [data-temp-overview-version-select]:disabled {
@@ -6672,6 +6679,7 @@ button.exec-overview-file-chip,
   color: rgba(229,231,235,0.45);
 }
 :root[data-theme="dark"] .case-library-filters select,
+:root[data-theme="dark"] #caseLibraryImportExcelTemplateType,
 :root[data-theme="dark"] #caseLibraryEditChangeVersionSelect,
 :root[data-theme="dark"] #execOverviewVersionSelect,
 :root[data-theme="dark"] [data-temp-overview-version-select] {
@@ -6682,12 +6690,14 @@ button.exec-overview-file-chip,
   box-shadow: inset 0 1px 2px rgba(0,0,0,0.35);
 }
 :root[data-theme="dark"] .case-library-filters select:hover:not(:disabled),
+:root[data-theme="dark"] #caseLibraryImportExcelTemplateType:hover:not(:disabled),
 :root[data-theme="dark"] #caseLibraryEditChangeVersionSelect:hover:not(:disabled),
 :root[data-theme="dark"] #execOverviewVersionSelect:hover:not(:disabled),
 :root[data-theme="dark"] [data-temp-overview-version-select]:hover:not(:disabled) {
   border-color: rgba(125,180,255,0.5);
 }
 :root[data-theme="dark"] .case-library-filters select:focus,
+:root[data-theme="dark"] #caseLibraryImportExcelTemplateType:focus,
 :root[data-theme="dark"] #caseLibraryEditChangeVersionSelect:focus,
 :root[data-theme="dark"] #execOverviewVersionSelect:focus,
 :root[data-theme="dark"] [data-temp-overview-version-select]:focus {
@@ -6695,6 +6705,7 @@ button.exec-overview-file-chip,
   box-shadow: 0 0 0 3px rgba(125,180,255,0.2);
 }
 :root[data-theme="dark"] .case-library-filters select:disabled,
+:root[data-theme="dark"] #caseLibraryImportExcelTemplateType:disabled,
 :root[data-theme="dark"] #caseLibraryEditChangeVersionSelect:disabled,
 :root[data-theme="dark"] #execOverviewVersionSelect:disabled,
 :root[data-theme="dark"] [data-temp-overview-version-select]:disabled {

@@ -2345,3 +2345,32 @@
 - 更新记录：2025-12-24 favicon “测”字放大占比（`assets/favicon.svg`）。
 - 更新记录：2025-12-24 favicon “测”字进一步放大占比（`assets/favicon.svg`）。
 - 更新记录：2025-12-24 favicon “测”字再放大占比（`assets/favicon.svg`）。
+
+- 功能名称：用例库导入模板下拉与版本删除提示
+- 功能描述：暗色主题修正 Excel 模板下拉箭头；
+  删除版本无可转移时改为抽屉提示；
+  添加版本后重试即可选择新版本。
+- 操作方式：暗色主题查看用例库导入 Excel 模板下拉；
+  仅有一个版本且有用例时点击删除版本。
+- 使用效果：下拉箭头正常；无可转移版本提示可见。
+  提示包含“添加版本后重试”说明。
+- 新增内容/接口/组件：
+  - 前端：模板下拉样式补齐、删除版本提示抽屉化。
+    文件：`style.css`、`scripts/modules/admin.js`。
+  - 测试：主题/版本删除抽屉提示 UI 用例更新。
+    文件：`tests/ui/theme_setting.spec.js`、`tests/ui/project_admin_drawer.spec.js`。
+- 复用说明：复用确认抽屉与删除版本逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/theme_setting.spec.js`
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/project_admin_drawer.spec.js`
+- 更新记录：2025-12-24 用例库导入模板下拉与版本删除提示完善。
+  文件：`style.css`、`scripts/modules/admin.js`。
+- 更新记录：2025-12-24 对应 UI 用例更新。
+  文件：`tests/ui/theme_setting.spec.js`、
+  `tests/ui/project_admin_drawer.spec.js`。
+
+- 更新记录：2025-12-24 删除版本无可转移提示改为红字提醒。
+  文件：`scripts/base/confirmDrawer.js`、
+  `style.css`。
+  文件：`scripts/modules/admin.js`、
+  `tests/ui/project_admin_drawer.spec.js`。

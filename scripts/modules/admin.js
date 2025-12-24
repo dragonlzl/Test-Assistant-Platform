@@ -736,6 +736,16 @@
               })
               .filter(function(opt) { return opt.value; });
             if (!options.length) {
+              var infoDrawer = resolveAdminActiveDrawer();
+              openConfirmDrawer({
+                title: '暂无可转移版本',
+                message: '该版本下已有用例文件，无法删除。',
+                hint: '暂无可转移版本。添加版本后，重新进行删除操作，即可选择新添加的版本。',
+                hintType: 'err',
+                confirmText: '知道了',
+                cancelText: '关闭',
+                previousDrawer: infoDrawer || null,
+              });
               setStatus(dom.projectStatus, '暂无可转移版本，请先创建版本', 'warn');
               return;
             }

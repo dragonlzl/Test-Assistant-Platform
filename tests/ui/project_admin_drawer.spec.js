@@ -478,4 +478,61 @@ test.describe('项目管理列表与抽屉', () => {
     await expect(page.locator('.temp-center-toast', { hasText: '已转移用例并删除版本' })).toBeVisible();
     await expect(row).not.toContainText('v1.0');
   });
+
+  test('删除版本：存在用例但无可转移版本时抽屉提示', async ({ page }) => {
+    const projects = [
+      {
+        id: 1,
+        name: 'Gamma',
+        description: '只有一个版本',
+        created_at: '2024-10-01T12:00:00Z',
+        versions: [
+          { id: 21, name: 'v2.0' },
+        ],
+      },
+    ];
+
+    await page.unroute('**/api/projects');
+    await page.route('**/api/projects', (route) => {
+      if (route.request().method().toUpperCase() !== 'GET') return route.continue();
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(projects) });
+    });
+
+    await page.route('**/api/projects/1/versions/21**', (route) => {
+      const req = route.request();
+      if (req.method().toUpperCase() !== 'DELETE') return route.continue();
+      return route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          detail: {
+            detail: '版本下已存在用例，请先指定转移版本',
+            code: 'VERSION_IN_USE',
+            case_file_count: 2,
+          },
+        }),
+      });
+    });
+
+    await page.click('.tab-group-btn[data-group="manage"]');
+    await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
+    await page.click('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
+    await expect(page.locator('#projectAdminHead')).toBeVisible();
+
+    const row = page.locator('#projectTableBody tr').first();
+    await expect(row).toContainText('Gamma');
+    await expect(row.locator('[data-action="delete-version"]').first()).toBeVisible();
+
+    await row.locator('[data-action="delete-version"]').first().click();
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('确认删除该版本');
+    await page.click('#appConfirmDrawerConfirmBtn');
+
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerTitle')).toContainText('暂无可转移版本');
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('无法删除');
+    await expect(page.locator('#appConfirmDrawerHint')).toContainText('暂无可转移版本');
+    await expect(page.locator('#appConfirmDrawerHint')).toContainText('添加版本后，重新进行删除操作，即可选择新添加的版本');
+    await expect(page.locator('#appConfirmDrawerHint')).toHaveClass(/err/);
+  });
 });

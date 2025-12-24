@@ -108,5 +108,13 @@ test.describe('主题设置', () => {
       const record = serverState.settings.find((item) => item.key === 'theme');
       return record ? record.value_json : null;
     }).toBe('dark');
+
+    const excelSelectStyle = await page.$eval('#caseLibraryImportExcelTemplateType', (el) => {
+      const style = window.getComputedStyle(el);
+      const appearance = style.getPropertyValue('appearance') || style.appearance || '';
+      return { bg: style.backgroundImage, appearance: appearance };
+    });
+    expect(excelSelectStyle.bg).toContain('data:image/svg+xml');
+    expect(excelSelectStyle.appearance).toBe('none');
   });
 });

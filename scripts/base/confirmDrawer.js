@@ -178,8 +178,9 @@
     if (dom.message) dom.message.textContent = options.message ? String(options.message) : '';
     if (dom.hint) {
       var hintText = options.hint ? String(options.hint) : '';
+      var hintType = options.hintType ? String(options.hintType) : '';
       dom.hint.textContent = hintText;
-      dom.hint.classList.toggle('hidden', !hintText);
+      dom.hint.className = ['hint', hintType, hintText ? '' : 'hidden'].filter(Boolean).join(' ');
     }
     if (dom.confirmBtn) {
       dom.confirmBtn.textContent = options.confirmText ? String(options.confirmText) : '确认';
