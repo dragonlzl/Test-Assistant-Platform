@@ -12,7 +12,7 @@
       'toggleTempVersion',
       'tempExecToolbarCard', 'tempExecToolbar',
       'openTempExecDrawerBtn', 'closeTempExecDrawerBtn', 'tempExecDrawer',
-      'casesGoUsecaseGenBtn', 'casesGenerationContainer', 'caseGenProgressPanel', 'caseGenProgressList', 'cleanStatus', 'compareStatus',
+      'casesGoUsecaseGenBtn', 'casesGenerationContainer', 'caseGenProgressPanel', 'caseGenProgressList', 'caseGenProgressToggle', 'cleanStatus', 'compareStatus',
       'splitStatus', 'casesCoverageStatus', 'caseGenStatus', 'autoWorkflowStatus', 'casesModuleProgress', 'exportCaseGen', 'exportCaseGenXmind',
       'toSplitFromCaseGen', 'appendToExistingCases', 'appendTargetSelect', 'transferSelectedToExec', 'saveRawDebugBtn', 'importRawDebugBtn', 'saveCleanDebugBtn', 'importCleanDebugBtn', 'saveSplitDebugBtn',
       'importSplitDebugBtn', 'saveCaseDebugBtn', 'importCaseDebugBtn', 'scrollTopBtn', 'scrollBottomBtn', 'currentPath', 'currentPathText', 'xmindStructureToggle',

@@ -605,6 +605,121 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     expect(metrics.listScrollHeight).toBeGreaterThan(metrics.listClientHeight + 10);
   });
 
+  test('进度面板支持收起与展开', async ({ page }) => {
+    const token = 'token-casegen-progress-toggle';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page, { selectIndex: -1 });
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.renderCaseGenProgressBoard === 'function') {
+        window.app.renderCaseGenProgressBoard();
+      }
+    });
+
+    const toggle = page.locator('#caseGenProgressToggle');
+    const panel = page.locator('#caseGenProgressPanel');
+    const title = page.locator('#caseGenProgressPanel .panel-head .title');
+    await expect(toggle).toHaveText('收起');
+    await expect(panel).not.toHaveClass(/is-collapsed/);
+    await expect(page.locator('#caseGenProgressList')).toBeVisible();
+    await expect(title).toBeVisible();
+
+    const before = await page.evaluate(() => {
+      const panelEl = document.getElementById('caseGenProgressPanel');
+      const titleRow = panelEl ? panelEl.querySelector('.panel-title-row') : null;
+      const titleEl = panelEl ? panelEl.querySelector('.title') : null;
+      if (!panelEl || !titleRow || !titleEl) return null;
+      const panelRect = panelEl.getBoundingClientRect();
+      const rowRect = titleRow.getBoundingClientRect();
+      const titleRect = titleEl.getBoundingClientRect();
+      const styles = window.getComputedStyle(panelEl);
+      const paddingLeft = parseFloat(styles.paddingLeft) || 0;
+      const paddingRight = parseFloat(styles.paddingRight) || 0;
+      return {
+        panelWidth: panelRect.width,
+        rowWidth: rowRect.width,
+        titleTop: titleRect.top,
+        titleLeft: titleRect.left,
+        titleHeight: titleRect.height,
+        paddingLeft: paddingLeft,
+        paddingRight: paddingRight,
+      };
+    });
+    expect(before).not.toBeNull();
+
+    await toggle.click();
+
+    await expect(panel).toHaveClass(/is-collapsed/);
+    await expect(page.locator('#caseGenProgressList')).toBeHidden();
+    await expect(page.locator('#caseGenProgressPanel .panel-head .meta')).toBeHidden();
+    await expect(toggle).toHaveText('展开');
+    await expect(title).toBeVisible();
+
+    const afterCollapse = await page.evaluate(() => {
+      const panelEl = document.getElementById('caseGenProgressPanel');
+      const titleRow = panelEl ? panelEl.querySelector('.panel-title-row') : null;
+      const titleEl = panelEl ? panelEl.querySelector('.title') : null;
+      if (!panelEl || !titleRow || !titleEl) return null;
+      const panelRect = panelEl.getBoundingClientRect();
+      const rowRect = titleRow.getBoundingClientRect();
+      const titleRect = titleEl.getBoundingClientRect();
+      const styles = window.getComputedStyle(panelEl);
+      const paddingLeft = parseFloat(styles.paddingLeft) || 0;
+      const paddingRight = parseFloat(styles.paddingRight) || 0;
+      return {
+        panelWidth: panelRect.width,
+        rowWidth: rowRect.width,
+        titleTop: titleRect.top,
+        titleLeft: titleRect.left,
+        titleHeight: titleRect.height,
+        paddingLeft: paddingLeft,
+        paddingRight: paddingRight,
+      };
+    });
+    expect(afterCollapse).not.toBeNull();
+    expect(Math.abs(afterCollapse.titleTop - before.titleTop)).toBeLessThanOrEqual(1);
+    expect(Math.abs(afterCollapse.titleLeft - before.titleLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(afterCollapse.titleHeight - before.titleHeight)).toBeLessThanOrEqual(1);
+    expect(Math.abs(afterCollapse.rowWidth + afterCollapse.paddingLeft + afterCollapse.paddingRight - afterCollapse.panelWidth))
+      .toBeLessThanOrEqual(2);
+
+    await toggle.click();
+
+    await expect(panel).not.toHaveClass(/is-collapsed/);
+    await expect(page.locator('#caseGenProgressList')).toBeVisible();
+    await expect(toggle).toHaveText('收起');
+  });
+
   test('全模块生成按钮提示覆盖并支持取消', async ({ page }) => {
     const token = 'token-casegen-batch-generate';
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };

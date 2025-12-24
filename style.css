@@ -4557,15 +4557,56 @@ tr.diff-locate-active td {
       align-items: flex-start;
       gap: 6px;
     }
+    .casegen-progress-panel .panel-head .panel-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+    }
     .casegen-progress-panel .panel-head .title {
       font-weight: 800;
       color: var(--text);
       font-size: 15px;
       line-height: 1.3;
     }
+    .casegen-progress-panel .panel-head .panel-toggle {
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.1;
+      padding: 4px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+      flex-shrink: 0;
+    }
+    .casegen-progress-panel .panel-head .panel-toggle:hover {
+      border-color: rgba(37,99,235,0.35);
+      box-shadow: 0 4px 10px rgba(37,99,235,0.12);
+      transform: translateY(-1px);
+    }
+    .casegen-progress-panel .panel-head .panel-toggle:active {
+      transform: translateY(0);
+    }
     .casegen-progress-panel .panel-head .meta {
       font-size: 12px;
       color: var(--muted);
+    }
+    .casegen-progress-panel.is-collapsed {
+      gap: 0;
+      flex: 0 0 auto;
+    }
+    .casegen-progress-panel.is-collapsed .panel-head {
+      gap: 0;
+    }
+    .casegen-progress-panel.is-collapsed .panel-head .meta {
+      display: none;
+    }
+    .casegen-progress-panel.is-collapsed .casegen-progress-list {
+      display: none;
     }
     .casegen-progress-list {
       display: flex;
@@ -7008,6 +7049,16 @@ button.exec-overview-file-chip,
   background: linear-gradient(135deg, #1b2433 0%, #202b3d 100%);
   border-color: var(--border);
   box-shadow: 0 12px 24px rgba(0,0,0,0.35);
+}
+:root[data-theme="dark"] .casegen-progress-panel .panel-head .panel-toggle {
+  background: rgba(26,34,49,0.9);
+  border-color: rgba(125,180,255,0.3);
+  color: var(--text);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
+}
+:root[data-theme="dark"] .casegen-progress-panel .panel-head .panel-toggle:hover {
+  border-color: rgba(125,180,255,0.6);
+  box-shadow: 0 8px 14px rgba(0,0,0,0.35);
 }
 :root[data-theme="dark"] .casegen-progress-item {
   background: rgba(26,34,49,0.92);

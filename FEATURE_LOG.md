@@ -19,6 +19,18 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例生成进度面板收起/展开
+- 功能描述：左侧“用例生成进度”标题右侧新增收起按钮，支持折叠/展开进度列表。
+- 操作方式：在左侧“用例生成进度”标题右侧点击“收起/展开”按钮切换状态。
+- 使用效果：进度列表可折叠隐藏，标题行保持原位置与宽度，再次点击可恢复展开。
+- 新增内容/接口/组件：
+  - 前端：进度面板收起按钮与折叠逻辑（`index.html`、`style.css`、`scripts/handlers/casegenHandlers.js`、`config/domConfig.js`）。
+  - 测试：进度面板收起/展开 UI 用例（`tests/ui/casegen_db_store.spec.js`）。
+- 复用说明：复用用例生成进度面板结构与跳转逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/casegen_db_store.spec.js -g "进度面板支持收起与展开"`（通过，提权执行）
+- 更新记录：2025-12-24 新增用例生成进度面板收起/展开（`index.html`、`style.css`、`scripts/handlers/casegenHandlers.js`、`config/domConfig.js`、`tests/ui/casegen_db_store.spec.js`）。
+
 - 功能名称：一键执行/功能流程用例库导入
 - 功能描述：在一键执行与功能流程的用例导入区支持从用例库选择用例，并以抽屉形式筛选项目/版本/用例名后批量导入。
 - 操作方式：在“一键执行/功能流程”导入区点击“从用例库中选择”→ 选择项目与版本 → 输入用例名（可选）→ 点击“查询”→ 勾选用例或点击“选择”→ 点击“批量选择”或直接关闭抽屉。
