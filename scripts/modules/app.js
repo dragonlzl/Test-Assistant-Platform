@@ -414,6 +414,13 @@
       ensureTempExecColumns: function fallbackEnsure() { return { ...defaultTempExecColumns }; },
     };
     loadSettings();
+    initModule('memoPad', {
+      state: state,
+      dom: dom,
+      utils: appUtils,
+      confirmDrawer: window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null,
+      persistSettings: persistSettings,
+    });
 
     const defaultScrollOffset = 200;
     const scrollElementIntoView = function(el, behavior, offset) {
@@ -1766,6 +1773,7 @@
         setCaseViewHint,
         renderCaseGenProgressBoard,
         workflowStorageKey,
+        persistSettings,
         loadModels,
         loadAssignments,
         renderModels,

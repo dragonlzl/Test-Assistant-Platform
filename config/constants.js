@@ -48,6 +48,12 @@
     feishuWebhook: '',
     feishuMention: '',
     theme: 'light',
+    caseGenProgressCollapsed: false,
+    memoPad: {
+      collapsed: false,
+      activeTabId: 'memo-tab-1',
+      tabs: [{ id: 'memo-tab-1', name: '', items: [] }],
+    },
     tempExecColumns: Object.assign({}, defaultTempExecColumns),
     pageGuideSwitches: Object.assign({}, defaultPageGuideSwitches),
   };

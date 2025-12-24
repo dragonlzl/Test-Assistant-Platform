@@ -154,6 +154,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
       if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
       if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
       if (pathName === '/api/models' && method === 'GET') return respond(200, []);
       if (pathName === '/api/features' && method === 'GET') return respond(200, []);
       if (pathName.startsWith('/api/')) return respond(200, []);
@@ -684,6 +685,10 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await expect(page.locator('#caseGenProgressPanel .panel-head .meta')).toBeHidden();
     await expect(toggle).toHaveText('展开');
     await expect(title).toBeVisible();
+    await page.waitForFunction(() => {
+      return window.app && window.app.state && window.app.state.settings
+        && window.app.state.settings.caseGenProgressCollapsed === true;
+    });
 
     const afterCollapse = await page.evaluate(() => {
       const panelEl = document.getElementById('caseGenProgressPanel');
@@ -718,6 +723,15 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await expect(panel).not.toHaveClass(/is-collapsed/);
     await expect(page.locator('#caseGenProgressList')).toBeVisible();
     await expect(toggle).toHaveText('收起');
+
+    await toggle.click();
+    await page.waitForFunction(() => {
+      return window.app && window.app.state && window.app.state.settings
+        && window.app.state.settings.caseGenProgressCollapsed === true;
+    });
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+    await expect(page.locator('#caseGenProgressPanel')).toHaveClass(/is-collapsed/);
   });
 
   test('全模块生成按钮提示覆盖并支持取消', async ({ page }) => {

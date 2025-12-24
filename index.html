@@ -82,6 +82,19 @@
 <p class="hint">暂无用例生成任务，请先完成“测试模块拆分”并生成用例</p>
 </div>
 </div>
+<div class="memo-pad-panel" id="memoPadPanel">
+<div class="panel-head">
+<div class="panel-title-row">
+<span class="title">个人备忘</span>
+<button class="panel-toggle" type="button" id="memoPadToggle" aria-expanded="true" aria-controls="memoPadBody">收起</button>
+</div>
+</div>
+<div class="memo-tabs" id="memoTabLayer">
+<div class="memo-tab-list" id="memoTabList"></div>
+<button class="memo-tab-add" type="button" id="memoTabAddBtn" aria-label="新增备忘页">+</button>
+</div>
+<div class="memo-pad-body" id="memoPadBody"></div>
+</div>
 </aside>
 <div class="content-shell">
   <div class="flow" id="flowNav">
@@ -2980,6 +2993,7 @@
 <script src="./scripts/handlers/casegenHandlers.js" defer></script>
 <script src="./scripts/core/casegenCore.js" defer></script>
 <script src="./scripts/modules/casegenProgress.js" defer></script>
+<script src="./scripts/modules/memoPad.js" defer></script>
 <script src="./scripts/handlers/layoutHandlers.js" defer></script>
 <script src="./scripts/modules/auto.js" defer></script>
 <script src="./scripts/modules/casesgen.js" defer></script>

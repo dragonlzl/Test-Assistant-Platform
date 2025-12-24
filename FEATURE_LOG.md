@@ -2386,3 +2386,17 @@
   `style.css`。
   文件：`scripts/modules/admin.js`、
   `tests/ui/project_admin_drawer.spec.js`。
+
+- 功能名称：侧边栏个人备忘区与进度区动态分配
+- 功能描述：左侧导航新增个人备忘区，支持最多 3 个页签、条目新增/已办/删除与抽屉二次确认；用例生成进度与备忘区支持收起/展开并记忆状态；当一方数据不足且另一方数据较多时自动扩展占用空余空间，双方数据均少/均多时保持 1:1 分配。
+- 操作方式：在左侧导航“个人备忘”中新增/命名页签、录入条目并点击已办或删除；点击区块右侧“收起/展开”按钮折叠/展开面板。
+- 使用效果：备忘区可随账号持久保存个人待办，进度区与备忘区根据数据量动态分配空间，收起时另一侧可获得更多可视区域。
+- 新增内容/接口/组件：
+  - 前端：侧边栏结构与交互（`index.html`、`scripts/modules/memoPad.js`、`scripts/modules/casegenProgress.js`、`scripts/handlers/casegenHandlers.js`）。
+  - 配置：默认设置与 DOM 映射（`config/constants.js`、`config/domConfig.js`）。
+  - 样式：备忘区样式与按钮对齐/动态布局（`style.css`）。
+  - 测试：备忘区 UI 用例与布局断言（`tests/ui/memo_pad.spec.js`）。
+- 复用说明：复用现有设置持久化、确认抽屉与居中提示能力，无新增后端接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/memo_pad.spec.js`（通过，提权执行）
+- 更新记录：2025-12-24 侧边栏个人备忘区与进度区动态分配（`index.html`、`style.css`、`config/constants.js`、`config/domConfig.js`、`scripts/modules/memoPad.js`、`scripts/modules/casegenProgress.js`、`scripts/handlers/casegenHandlers.js`、`tests/ui/memo_pad.spec.js`）。

@@ -1,8 +1,10 @@
 (function() {
   function init(ctx) {
     if (!ctx) return {};
+    var state = ctx.state || {};
     var handlers = ctx.handlers || {};
     var dom = ctx.dom || {};
+    var persistSettings = ctx.persistSettings || function() {};
     var caseGenProgressList = dom.caseGenProgressList;
     var caseGenProgressPanel = dom.caseGenProgressPanel;
     var caseGenProgressToggle = dom.caseGenProgressToggle;
@@ -11,6 +13,15 @@
     var goCasesGenAndScroll = handlers.goCasesGenAndScroll;
     var scrollToSection = handlers.scrollToSection;
     var switchTab = handlers.switchTab;
+    function requestLayoutSync() {
+      try {
+        if (window.app && window.app.sidebarPanels && typeof window.app.sidebarPanels.requestLayoutSync === 'function') {
+          window.app.sidebarPanels.requestLayoutSync();
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
 
     function jumpToSplit() {
       if (typeof switchTab === 'function') switchTab('clean');
@@ -24,11 +35,30 @@
       }
     }
 
-    function setCaseGenProgressCollapsed(collapsed) {
+    function ensureSettings() {
+      if (!state.settings || typeof state.settings !== 'object') {
+        state.settings = {};
+      }
+      return state.settings;
+    }
+
+    function getStoredProgressCollapsed() {
+      var settings = ensureSettings();
+      return settings.caseGenProgressCollapsed === true;
+    }
+
+    function setCaseGenProgressCollapsed(collapsed, shouldPersist) {
       if (!caseGenProgressPanel || !caseGenProgressToggle) return;
       caseGenProgressPanel.classList.toggle('is-collapsed', collapsed);
       caseGenProgressToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       caseGenProgressToggle.textContent = collapsed ? '展开' : '收起';
+      requestLayoutSync();
+      if (shouldPersist === false) return;
+      var settings = ensureSettings();
+      settings.caseGenProgressCollapsed = collapsed === true;
+      if (typeof persistSettings === 'function') {
+        persistSettings(['caseGenProgressCollapsed']);
+      }
     }
 
     if (caseGenProgressList && typeof goCasesGenAndScroll === 'function') {
@@ -40,11 +70,19 @@
     }
 
     if (caseGenProgressPanel && caseGenProgressToggle) {
-      setCaseGenProgressCollapsed(caseGenProgressPanel.classList.contains('is-collapsed'));
+      setCaseGenProgressCollapsed(getStoredProgressCollapsed(), false);
       caseGenProgressToggle.addEventListener('click', function(e) {
         e.stopPropagation();
-        setCaseGenProgressCollapsed(!caseGenProgressPanel.classList.contains('is-collapsed'));
+        setCaseGenProgressCollapsed(!caseGenProgressPanel.classList.contains('is-collapsed'), true);
       });
+    }
+
+    try {
+      window.addEventListener('app-settings-loaded', function() {
+        setCaseGenProgressCollapsed(getStoredProgressCollapsed(), false);
+      });
+    } catch (err) {
+      // ignore
     }
 
     if (caseGenProgressPanel && typeof goCasesGenAndScroll === 'function') {

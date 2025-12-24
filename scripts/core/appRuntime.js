@@ -76,6 +76,7 @@
     var updateFlowStatus = ctx.updateFlowStatus || function() {};
     var setCaseViewHint = ctx.setCaseViewHint || function() {};
     var renderCaseGenProgressBoard = api.renderCaseGenProgressBoard || ctx.renderCaseGenProgressBoard || function() {};
+    var persistSettings = ctx.persistSettings || function() {};
     var loadModels = ctx.loadModels || function() {};
     var loadAssignments = ctx.loadAssignments || function() {};
     var renderModels = ctx.renderModels || function() {};
@@ -1192,11 +1193,13 @@
 
       const casegenHandlersModule = window.app.casegenHandlers && typeof window.app.casegenHandlers.init === 'function'
         ? window.app.casegenHandlers.init({
+          state: state,
           handlers: {
             goCasesGenAndScroll: api.goCasesGenAndScroll || goCasesGenAndScroll,
             scrollToSection: scrollToSection,
             switchTab: switchTab,
           },
+          persistSettings: persistSettings,
           dom: dom,
         })
         : null;
