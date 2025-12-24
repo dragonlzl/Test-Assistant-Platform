@@ -2789,6 +2789,19 @@ body {
   flex-wrap: wrap;
   margin: 12px 0;
 }
+.case-library-import-actions {
+  margin-top: 8px;
+}
+.case-library-import-btn {
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.95), rgba(248, 250, 252, 0.98));
+  color: #1e3a8a;
+  font-weight: 600;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.12);
+}
+.case-library-import-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(219, 234, 254, 0.95), rgba(241, 245, 249, 0.98));
+}
 .casegen-zones {
   display: flex;
   flex-direction: column;

@@ -19,6 +19,21 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：一键执行/功能流程用例库导入
+- 功能描述：在一键执行与功能流程的用例导入区支持从用例库选择用例，并以抽屉形式筛选项目/版本/用例名后批量导入。
+- 操作方式：在“一键执行/功能流程”导入区点击“从用例库中选择”→ 选择项目与版本 → 输入用例名（可选）→ 点击“查询”→ 勾选用例或点击“选择”→ 点击“批量选择”或直接关闭抽屉。
+- 使用效果：选中的用例文件将导入到一键执行的用例导入列表，同时同步到功能流程的用例导入列表。
+- 新增内容/接口/组件：
+  - 前端：用例库选择抽屉与按钮样式（`index.html`、`style.css`）、导入逻辑与批量选择（`scripts/modules/caseLibrary.js`）、暴露用例导入 API（`scripts/modules/app.js`）。
+  - 测试：新增 UI 用例（`tests/ui/auto_case_library_import.spec.js`），补充 API 断言（`tests/api/case_library.spec.js`）。
+- 复用说明：复用用例库现有接口 `listCaseFiles`/`listCaseItems` 与抽屉样式，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/auto_case_library_import.spec.js`（未执行）
+  - `API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/case_library.spec.js -g "import/list/update/to-exec basic flow"`（未执行）
+- 更新记录：2025-12-24 新增一键执行/功能流程用例库导入（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`scripts/modules/app.js`、`tests/ui/auto_case_library_import.spec.js`、`tests/api/case_library.spec.js`）。
+- 更新记录：2025-12-24 一键执行导入用例库抽屉版本选择支持“全部版本”（`scripts/modules/caseLibrary.js`、`tests/ui/auto_case_library_import.spec.js`）。
+- 更新记录：2025-12-24 一键执行导入用例库抽屉按钮“选择”调整为“导入”，点击即导入并关闭，批量按钮改为“批量导入”（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/auto_case_library_import.spec.js`）。
+
 - 功能名称：用例复用切换确认抽屉
 - 功能描述：执行视图在存在执行记录时，开启/关闭“用例复用”由浏览器确认弹窗改为确认抽屉，保持二次确认行为。
 - 操作方式：在执行视图勾选/取消“用例复用”开关，若已有执行记录或复用子项，会弹出确认抽屉。

@@ -193,6 +193,8 @@ test.describe('case library api', () => {
     const listed = listFiles.find((f) => f.id === caseFileId);
     expect(listed.importer_name).toBe(adminUser);
     expect(listed.last_updated_by_name).toBe(adminUser);
+    expect(listed.item_count).toBe(1);
+    expect(listed.reuse_enabled).toBe(false);
 
     const listItemsRes = await ctx.get(`${apiBase}/api/case-files/${caseFileId}/items`, { headers });
     expect(listItemsRes.status()).toBe(200);

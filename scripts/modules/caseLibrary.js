@@ -98,6 +98,8 @@
     root: document.getElementById('caseLibrary'),
     status: document.getElementById('caseLibraryStatus'),
     jumpToExecBtn: document.getElementById('caseLibraryJumpExecBtn'),
+    autoCaseLibrarySelectBtn: document.getElementById('autoCaseLibrarySelectBtn'),
+    caseLibraryImportSelectBtn: document.getElementById('caseLibraryImportSelectBtn'),
 
     editCard: document.getElementById('caseLibraryEditCard'),
     editCardTitle: document.getElementById('caseLibraryEditCardTitle'),
@@ -172,6 +174,17 @@
     selectListBody: document.getElementById('caseLibrarySelectListBody'),
     selectPaginationTop: document.getElementById('caseLibrarySelectDrawerPaginationTop'),
     selectPaginationBottom: document.getElementById('caseLibrarySelectDrawerPaginationBottom'),
+
+    importSelectProjectSelect: document.getElementById('caseLibraryImportSelectProjectSelect'),
+    importSelectVersionSelect: document.getElementById('caseLibraryImportSelectVersionSelect'),
+    importSelectSearchInput: document.getElementById('caseLibraryImportSelectSearchInput'),
+    importSelectQueryBtn: document.getElementById('caseLibraryImportSelectQueryBtn'),
+    importSelectBatchBtn: document.getElementById('caseLibraryImportSelectBatchBtn'),
+    importSelectSelectAll: document.getElementById('caseLibraryImportSelectSelectAll'),
+    importSelectStatus: document.getElementById('caseLibraryImportSelectStatus'),
+    importSelectListBody: document.getElementById('caseLibraryImportSelectListBody'),
+    importSelectPaginationTop: document.getElementById('caseLibraryImportSelectPaginationTop'),
+    importSelectPaginationBottom: document.getElementById('caseLibraryImportSelectPaginationBottom'),
 
     historyDrawerProjectSelect: document.getElementById('caseLibraryHistoryProjectSelect'),
     historyDrawerVersionSelect: document.getElementById('caseLibraryHistoryVersionSelect'),
@@ -286,6 +299,18 @@
       pageIndex: 0,
     },
 
+    importSelectDrawer: {
+      projectId: null,
+      versionId: null,
+      searchText: '',
+      files: [],
+      loading: false,
+      processing: false,
+      selection: new Set(),
+      pageIndex: 0,
+      loadSeq: 0,
+    },
+
     historyQueryDrawer: {
       projectId: null,
       versionId: null,
@@ -330,6 +355,7 @@
 	  var editDrawerInstance = null;
     var shareDrawerInstance = null;
 	  var selectDrawerInstance = null;
+    var importSelectDrawerInstance = null;
     var historyDrawerInstance = null;
 
   function setStatus(el, text, type) {
@@ -2031,6 +2057,37 @@
     syncSelectDrawerControls();
   }
 
+  function handleImportSelectDrawerPaginationAction(action) {
+    var list = getImportSelectDrawerVisibleFiles();
+    var total = list.length;
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    if (!action) return;
+    if (action === 'prev') state.importSelectDrawer.pageIndex -= 1;
+    else if (action === 'next') state.importSelectDrawer.pageIndex += 1;
+    else if (action === 'first') state.importSelectDrawer.pageIndex = 0;
+    else if (action === 'last') state.importSelectDrawer.pageIndex = totalPages - 1;
+    if (state.importSelectDrawer.pageIndex < 0) state.importSelectDrawer.pageIndex = 0;
+    if (state.importSelectDrawer.pageIndex >= totalPages) {
+      state.importSelectDrawer.pageIndex = Math.max(totalPages - 1, 0);
+    }
+    renderImportSelectDrawerList();
+    syncImportSelectDrawerControls();
+  }
+
+  function handleImportSelectDrawerPaginationJump(value) {
+    var list = getImportSelectDrawerVisibleFiles();
+    var total = list.length;
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    var n = Number(value);
+    if (!isFinite(n)) return;
+    var idx = Math.max(0, Math.min(totalPages - 1, Math.floor(n - 1)));
+    state.importSelectDrawer.pageIndex = idx;
+    renderImportSelectDrawerList();
+    syncImportSelectDrawerControls();
+  }
+
   function handleHistoryQueryPaginationAction(action) {
     var list = getHistoryQueryVisibleFiles();
     var total = list.length;
@@ -3438,6 +3495,7 @@
       var importSelected = dom.importProjectSelect ? String(dom.importProjectSelect.value || '') : '';
       var editSelected = dom.editDrawerProjectSelect ? String(dom.editDrawerProjectSelect.value || '') : '';
       var selectSelected = dom.selectProjectSelect ? String(dom.selectProjectSelect.value || '') : '';
+      var importSelectSelected = dom.importSelectProjectSelect ? String(dom.importSelectProjectSelect.value || '') : '';
       var historySelected = dom.historyDrawerProjectSelect ? String(dom.historyDrawerProjectSelect.value || '') : '';
       var projects = Array.isArray(list) ? list : [];
       if (utils && typeof utils.sortProjectsByUserSettings === 'function') {
@@ -3447,11 +3505,13 @@
       syncProjectOptions(dom.importProjectSelect, '请选择项目');
       syncProjectOptions(dom.editDrawerProjectSelect, '请选择项目');
       syncProjectOptions(dom.selectProjectSelect, '请选择项目');
+      syncProjectOptions(dom.importSelectProjectSelect, '请选择项目');
       syncProjectOptions(dom.historyDrawerProjectSelect, '请选择项目');
       // 仅刷新 option 列表，不强制清空用户已选项目；若新列表不含该值，浏览器会自动回到空值。
       if (dom.importProjectSelect && importSelected) dom.importProjectSelect.value = importSelected;
       if (dom.editDrawerProjectSelect && editSelected) dom.editDrawerProjectSelect.value = editSelected;
       if (dom.selectProjectSelect && selectSelected) dom.selectProjectSelect.value = selectSelected;
+      if (dom.importSelectProjectSelect && importSelectSelected) dom.importSelectProjectSelect.value = importSelectSelected;
       if (dom.historyDrawerProjectSelect && historySelected) dom.historyDrawerProjectSelect.value = historySelected;
       return state.projects;
     });
@@ -7721,7 +7781,405 @@
     syncSelectDrawerControls();
   }
 
-	  function buildExecMapByFileId(rows) {
+  function getImportSelectDrawerVisibleFiles() {
+    var list = Array.isArray(state.importSelectDrawer.files) ? state.importSelectDrawer.files : [];
+    if (state.importSelectDrawer.versionId) {
+      list = list.filter(function(f) {
+        return String(f && f.version_id || '') === String(state.importSelectDrawer.versionId || '');
+      });
+    }
+    var term = String(state.importSelectDrawer.searchText || '').trim().toLowerCase();
+    if (term) {
+      list = list.filter(function(f) {
+        var name = f && f.file_name_clean ? String(f.file_name_clean) : '';
+        return name.toLowerCase().indexOf(term) !== -1;
+      });
+    }
+    return list;
+  }
+
+  function getImportSelectDrawerPagedFiles() {
+    var visible = getImportSelectDrawerVisibleFiles();
+    var page = resolveDrawerPage(visible.length, state.importSelectDrawer.pageIndex);
+    state.importSelectDrawer.pageIndex = page.pageIndex;
+    return {
+      page: page,
+      list: visible.slice(page.start, page.end),
+      total: visible.length,
+    };
+  }
+
+  function syncImportSelectDrawerControls() {
+    if (!dom.importSelectBatchBtn && !dom.importSelectSelectAll) return;
+    state.importSelectDrawer.selection = state.importSelectDrawer.selection instanceof Set ? state.importSelectDrawer.selection : new Set();
+
+    var visible = getImportSelectDrawerVisibleFiles();
+    var page = resolveDrawerPage(visible.length, state.importSelectDrawer.pageIndex);
+    state.importSelectDrawer.pageIndex = page.pageIndex;
+    var paged = visible.slice(page.start, page.end);
+    var visibleIds = {};
+    visible.forEach(function(f) {
+      if (!f || !f.id) return;
+      visibleIds[String(f.id)] = true;
+    });
+
+    var nextSel = new Set();
+    state.importSelectDrawer.selection.forEach(function(id) {
+      if (visibleIds[String(id)]) nextSel.add(String(id));
+    });
+    state.importSelectDrawer.selection = nextSel;
+
+    var selected = state.importSelectDrawer.selection.size;
+    var loading = Boolean(state.importSelectDrawer.loading || state.importSelectDrawer.processing);
+
+    if (dom.importSelectBatchBtn) {
+      dom.importSelectBatchBtn.disabled = loading || selected === 0;
+    }
+    if (dom.importSelectSelectAll) {
+      var pageTotal = paged.length;
+      var pageSelected = paged.reduce(function(count, f) {
+        if (!f || !f.id) return count;
+        return state.importSelectDrawer.selection.has(String(f.id)) ? count + 1 : count;
+      }, 0);
+      dom.importSelectSelectAll.checked = Boolean(pageTotal && pageSelected === pageTotal);
+      dom.importSelectSelectAll.indeterminate = Boolean(pageSelected && pageSelected < pageTotal);
+    }
+  }
+
+  function setImportSelectDrawerSelectionAll(checked) {
+    state.importSelectDrawer.selection = state.importSelectDrawer.selection instanceof Set ? state.importSelectDrawer.selection : new Set();
+    var pageData = getImportSelectDrawerPagedFiles();
+    var visible = pageData.list;
+    if (checked) {
+      visible.forEach(function(f) {
+        if (!f || !f.id) return;
+        state.importSelectDrawer.selection.add(String(f.id));
+      });
+    } else {
+      visible.forEach(function(f) {
+        if (!f || !f.id) return;
+        state.importSelectDrawer.selection.delete(String(f.id));
+      });
+    }
+    renderImportSelectDrawerList();
+    syncImportSelectDrawerControls();
+  }
+
+  function resetImportSelectDrawer() {
+    state.importSelectDrawer.projectId = null;
+    state.importSelectDrawer.versionId = null;
+    state.importSelectDrawer.searchText = '';
+    state.importSelectDrawer.files = [];
+    state.importSelectDrawer.loading = false;
+    state.importSelectDrawer.processing = false;
+    state.importSelectDrawer.selection = new Set();
+    state.importSelectDrawer.pageIndex = 0;
+    state.importSelectDrawer.loadSeq = 0;
+    setStatus(dom.importSelectStatus, '', '');
+    syncProjectOptions(dom.importSelectProjectSelect, '请选择项目');
+    if (dom.importSelectProjectSelect) dom.importSelectProjectSelect.value = '';
+    if (dom.importSelectVersionSelect) {
+      dom.importSelectVersionSelect.disabled = true;
+      dom.importSelectVersionSelect.innerHTML = '<option value=\"\">请选择版本</option><option value=\"0\">全部版本</option>';
+      dom.importSelectVersionSelect.value = '';
+    }
+    if (dom.importSelectSearchInput) dom.importSelectSearchInput.value = '';
+    if (dom.importSelectListBody) {
+      dom.importSelectListBody.innerHTML = '<tr><td colspan=\"7\"><p class=\"hint\">请选择项目后点击“查询”。</p></td></tr>';
+    }
+    setDrawerPagination(dom.importSelectPaginationTop, dom.importSelectPaginationBottom, '');
+    if (dom.importSelectSelectAll) {
+      dom.importSelectSelectAll.checked = false;
+      dom.importSelectSelectAll.indeterminate = false;
+    }
+    if (dom.importSelectBatchBtn) dom.importSelectBatchBtn.disabled = true;
+  }
+
+  function handleImportSelectProjectChange() {
+    var projectId = normalizeId(dom.importSelectProjectSelect ? dom.importSelectProjectSelect.value : '');
+    state.importSelectDrawer.projectId = projectId;
+    state.importSelectDrawer.versionId = null;
+    state.importSelectDrawer.files = [];
+    state.importSelectDrawer.processing = false;
+    state.importSelectDrawer.selection = new Set();
+    state.importSelectDrawer.pageIndex = 0;
+    state.importSelectDrawer.searchText = '';
+    if (dom.importSelectSearchInput) dom.importSelectSearchInput.value = '';
+    if (dom.importSelectSelectAll) {
+      dom.importSelectSelectAll.checked = false;
+      dom.importSelectSelectAll.indeterminate = false;
+    }
+    if (dom.importSelectVersionSelect) {
+      dom.importSelectVersionSelect.disabled = true;
+      dom.importSelectVersionSelect.innerHTML = '<option value=\"\">请选择版本</option><option value=\"0\">全部版本</option>';
+      dom.importSelectVersionSelect.value = '';
+    }
+    setStatus(dom.importSelectStatus, '', '');
+    renderImportSelectDrawerList();
+    if (!projectId) return;
+    loadVersions(projectId)
+      .then(function() {
+        if (!dom.importSelectVersionSelect) return;
+        syncVersionOptionsWithAll(dom.importSelectVersionSelect, projectId);
+        dom.importSelectVersionSelect.disabled = false;
+      })
+      .catch(function(err) {
+        setStatus(dom.importSelectStatus, err && err.message ? err.message : '加载版本失败', 'err');
+      });
+  }
+
+  function handleImportSelectVersionChange() {
+    state.importSelectDrawer.versionId = normalizeId(dom.importSelectVersionSelect ? dom.importSelectVersionSelect.value : '');
+    state.importSelectDrawer.pageIndex = 0;
+    renderImportSelectDrawerList();
+    syncImportSelectDrawerControls();
+  }
+
+  function handleImportSelectSearchInput() {
+    state.importSelectDrawer.searchText = dom.importSelectSearchInput ? dom.importSelectSearchInput.value : '';
+    state.importSelectDrawer.pageIndex = 0;
+    renderImportSelectDrawerList();
+    syncImportSelectDrawerControls();
+  }
+
+  function renderImportSelectDrawerList() {
+    if (!dom.importSelectListBody) return;
+    if (!state.importSelectDrawer.projectId) {
+      dom.importSelectListBody.innerHTML = '<tr><td colspan=\"7\"><p class=\"hint\">请选择项目后点击“查询”。</p></td></tr>';
+      setDrawerPagination(dom.importSelectPaginationTop, dom.importSelectPaginationBottom, '');
+      syncImportSelectDrawerControls();
+      return;
+    }
+    if (state.importSelectDrawer.loading) {
+      dom.importSelectListBody.innerHTML = '<tr><td colspan=\"7\"><p class=\"hint\">加载中...</p></td></tr>';
+      setDrawerPagination(dom.importSelectPaginationTop, dom.importSelectPaginationBottom, '');
+      syncImportSelectDrawerControls();
+      return;
+    }
+    var result = getImportSelectDrawerPagedFiles();
+    var list = result.list;
+    var total = result.total;
+    var page = result.page;
+    if (!total) {
+      var term = String(state.importSelectDrawer.searchText || '').trim();
+      var hint = term ? '未找到匹配的用例文件' : '暂无用例文件';
+      dom.importSelectListBody.innerHTML = '<tr><td colspan=\"7\"><p class=\"hint\">' + escapeHtml(hint) + '</p></td></tr>';
+      setDrawerPagination(dom.importSelectPaginationTop, dom.importSelectPaginationBottom, '');
+      syncImportSelectDrawerControls();
+      return;
+    }
+    state.importSelectDrawer.selection = state.importSelectDrawer.selection instanceof Set ? state.importSelectDrawer.selection : new Set();
+    var disabled = Boolean(state.importSelectDrawer.processing);
+    dom.importSelectListBody.innerHTML = list.map(function(f) {
+      var rowProjectId = f && (f.project_id || f.project_id === 0) ? f.project_id : state.importSelectDrawer.projectId;
+      var projectName = state.projectNameById[rowProjectId] || ('项目#' + rowProjectId);
+      var versionName = getVersionName(rowProjectId, f && f.version_id ? f.version_id : null);
+      var idStr = f && f.id ? String(f.id) : '';
+      var checked = idStr && state.importSelectDrawer.selection.has(idStr) ? ' checked' : '';
+      var fileName = f && f.file_name_clean ? f.file_name_clean : ('文件#' + (f && f.id ? f.id : ''));
+      var reuseText = (f && f.reuse_enabled) ? '复用' : '普通';
+      var itemCount = (f && (f.item_count || f.item_count === 0)) ? String(f.item_count) : '--';
+      return (
+        '<tr>' +
+          '<td><input type=\"checkbox\" data-case-lib-import-select=\"' + escapeHtml(idStr) + '\"' + checked + (disabled ? ' disabled' : '') + '/></td>' +
+          '<td>' + escapeHtml(projectName) + '</td>' +
+          '<td>' + escapeHtml(versionName) + '</td>' +
+          '<td>' + escapeHtml(fileName) + '</td>' +
+          '<td>' + escapeHtml(reuseText) + '</td>' +
+          '<td>' + escapeHtml(itemCount) + '</td>' +
+          '<td><button class=\"primary\" type=\"button\" data-case-lib-import-pick=\"' + escapeHtml(idStr) + '\"' + (disabled ? ' disabled' : '') + '>导入</button></td>' +
+        '</tr>'
+      );
+    }).join('');
+    setDrawerPagination(
+      dom.importSelectPaginationTop,
+      dom.importSelectPaginationBottom,
+      buildDrawerPagination(total, page.pageIndex, page.totalPages, page.start, page.end, 'import-select')
+    );
+    syncImportSelectDrawerControls();
+  }
+
+  function loadImportSelectDrawerFiles() {
+    var projectId = normalizeId(dom.importSelectProjectSelect ? dom.importSelectProjectSelect.value : '');
+    var versionId = normalizeId(dom.importSelectVersionSelect ? dom.importSelectVersionSelect.value : '');
+    state.importSelectDrawer.projectId = projectId;
+    state.importSelectDrawer.versionId = versionId;
+    state.importSelectDrawer.searchText = dom.importSelectSearchInput ? dom.importSelectSearchInput.value : '';
+    state.importSelectDrawer.files = [];
+    state.importSelectDrawer.processing = false;
+    state.importSelectDrawer.selection = new Set();
+    state.importSelectDrawer.pageIndex = 0;
+    renderImportSelectDrawerList();
+    if (!projectId) {
+      setStatus(dom.importSelectStatus, '请先选择项目', 'warn');
+      return;
+    }
+    setStatus(dom.importSelectStatus, '加载用例库...', '');
+    state.importSelectDrawer.loading = true;
+    state.importSelectDrawer.loadSeq = Number(state.importSelectDrawer.loadSeq || 0) + 1;
+    var seq = state.importSelectDrawer.loadSeq;
+    Promise.all([apiClient.listCaseFiles(projectId), loadVersions(projectId)])
+      .then(function(res) {
+        if (seq !== state.importSelectDrawer.loadSeq) return;
+        var files = Array.isArray(res && res[0]) ? res[0] : [];
+        state.importSelectDrawer.files = files;
+        if (dom.importSelectVersionSelect) {
+          syncVersionOptionsWithAll(dom.importSelectVersionSelect, projectId);
+          dom.importSelectVersionSelect.disabled = false;
+          if (versionId === 0) {
+            dom.importSelectVersionSelect.value = '0';
+          } else if (versionId) {
+            var ok = (state.versionsByProject[projectId] || []).some(function(v) { return v && String(v.id) === String(versionId); });
+            if (ok) {
+              dom.importSelectVersionSelect.value = String(versionId);
+            } else {
+              dom.importSelectVersionSelect.value = '';
+              state.importSelectDrawer.versionId = null;
+            }
+          } else {
+            dom.importSelectVersionSelect.value = '';
+            state.importSelectDrawer.versionId = null;
+          }
+        }
+        setStatus(dom.importSelectStatus, '已加载 ' + files.length + ' 份用例文件', files.length ? 'ok' : 'warn');
+      })
+      .catch(function(err) {
+        if (seq !== state.importSelectDrawer.loadSeq) return;
+        state.importSelectDrawer.files = [];
+        setStatus(dom.importSelectStatus, err && err.message ? err.message : '加载失败', 'err');
+      })
+      .finally(function() {
+        if (seq !== state.importSelectDrawer.loadSeq) return;
+        state.importSelectDrawer.loading = false;
+        renderImportSelectDrawerList();
+      });
+  }
+
+  function findCaseFileInImportSelectDrawer(id) {
+    var fileId = Number(id);
+    if (!isFinite(fileId)) return null;
+    return (state.importSelectDrawer.files || []).find(function(f) { return f && f.id === fileId; }) || null;
+  }
+
+  function normalizeCaseItemValue(value) {
+    if (value === null || value === undefined) return '';
+    return String(value).replace(/\r\n/g, '\n').trim();
+  }
+
+  function mapCaseItemToWorkflowCase(item) {
+    if (!item) return null;
+    return {
+      module: normalizeCaseItemValue(item.module || ''),
+      title: normalizeCaseItemValue(item.title || ''),
+      priority: normalizeCaseItemValue(item.priority || ''),
+      preconditions: normalizeCaseItemValue(item.precondition || item.preconditions || ''),
+      steps: normalizeCaseItemValue(item.steps || ''),
+      expected: normalizeCaseItemValue(item.expected || ''),
+    };
+  }
+
+  function importCaseFilesToWorkflow(files) {
+    var list = Array.isArray(files) ? files.filter(Boolean) : [];
+    if (!list.length) {
+      setStatus(dom.importSelectStatus, '请先选择用例', 'warn');
+      return Promise.resolve(false);
+    }
+    if (!apiClient || typeof apiClient.listCaseItems !== 'function') {
+      setStatus(dom.importSelectStatus, '缺少用例明细接口（apiClient.listCaseItems）', 'err');
+      return Promise.resolve(false);
+    }
+    var casesApi = window.app && window.app.casesCoreApi ? window.app.casesCoreApi : null;
+    if (!casesApi || typeof casesApi.addImportedCase !== 'function') {
+      setStatus(dom.importSelectStatus, '缺少用例导入能力（casesCore）', 'err');
+      return Promise.resolve(false);
+    }
+    state.importSelectDrawer.processing = true;
+    renderImportSelectDrawerList();
+    syncImportSelectDrawerControls();
+    setStatus(dom.importSelectStatus, '正在导入 ' + list.length + ' 份用例...', '');
+    var successCount = 0;
+    var failCount = 0;
+    var caseStatusEl = document.getElementById('caseStatus');
+    return Promise.all(list.map(function(file) {
+      if (!file || !file.id) {
+        failCount += 1;
+        return Promise.resolve();
+      }
+      return apiClient.listCaseItems(file.id)
+        .then(function(items) {
+          var mapped = (Array.isArray(items) ? items : []).map(mapCaseItemToWorkflowCase).filter(function(item) {
+            return item && item.module && item.title;
+          });
+          if (!mapped.length) {
+            failCount += 1;
+            return;
+          }
+          var name = file.file_name_clean || ('用例#' + file.id);
+          var text = JSON.stringify(mapped, null, 2);
+          casesApi.addImportedCase(name, text, mapped);
+          successCount += 1;
+        })
+        .catch(function() {
+          failCount += 1;
+        });
+    })).then(function() {
+      var msg = '已导入 ' + successCount + ' 份用例';
+      var type = successCount ? 'ok' : 'warn';
+      if (failCount) {
+        msg += '，失败 ' + failCount + ' 份';
+        type = 'warn';
+      }
+      setStatus(dom.importSelectStatus, msg, type);
+      if (caseStatusEl) setStatus(caseStatusEl, msg, type);
+      return successCount > 0;
+    }).finally(function() {
+      state.importSelectDrawer.processing = false;
+      renderImportSelectDrawerList();
+      syncImportSelectDrawerControls();
+    });
+  }
+
+  function importSelectedCaseFilesFromImportDrawer(options) {
+    options = options || {};
+    state.importSelectDrawer.selection = state.importSelectDrawer.selection instanceof Set ? state.importSelectDrawer.selection : new Set();
+    var ids = Array.from(state.importSelectDrawer.selection);
+    if (!ids.length) {
+      setStatus(dom.importSelectStatus, '请先勾选需要导入的用例', 'warn');
+      return Promise.resolve(false);
+    }
+    var files = ids.map(findCaseFileInImportSelectDrawer).filter(Boolean);
+    state.importSelectDrawer.selection = new Set();
+    if (dom.importSelectSelectAll) {
+      dom.importSelectSelectAll.checked = false;
+      dom.importSelectSelectAll.indeterminate = false;
+    }
+    renderImportSelectDrawerList();
+    syncImportSelectDrawerControls();
+    return importCaseFilesToWorkflow(files).then(function(ok) {
+      if (ok && options.closeAfter && importSelectDrawerInstance && typeof importSelectDrawerInstance.close === 'function') {
+        importSelectDrawerInstance.close();
+      }
+      return ok;
+    });
+  }
+
+  function openImportSelectDrawer() {
+    if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+      window.app.drawer.closeAllDrawers();
+    }
+    if (importSelectDrawerInstance && typeof importSelectDrawerInstance.open === 'function') {
+      importSelectDrawerInstance.open();
+      return true;
+    }
+    return false;
+  }
+
+  function handleImportSelectDrawerClose() {
+    if (!state.importSelectDrawer.selection || !state.importSelectDrawer.selection.size) return;
+    importSelectedCaseFilesFromImportDrawer({ closeAfter: false });
+  }
+
+  function buildExecMapByFileId(rows) {
 	    var list = Array.isArray(rows) ? rows : [];
 	    var byFileId = {};
 	    list.forEach(function(item) {
@@ -8067,6 +8525,16 @@
         if (typeof switchTab === 'function') switchTab('tempexec');
       });
     }
+    if (dom.autoCaseLibrarySelectBtn) {
+      dom.autoCaseLibrarySelectBtn.addEventListener('click', function() {
+        openImportSelectDrawer();
+      });
+    }
+    if (dom.caseLibraryImportSelectBtn) {
+      dom.caseLibraryImportSelectBtn.addEventListener('click', function() {
+        openImportSelectDrawer();
+      });
+    }
 
     if (dom.editDrawerConfirmBtn) {
       dom.editDrawerConfirmBtn.addEventListener('click', loadEditDrawerFiles);
@@ -8360,6 +8828,54 @@
       });
     }
 
+    if (dom.importSelectProjectSelect) {
+      dom.importSelectProjectSelect.addEventListener('change', handleImportSelectProjectChange);
+    }
+    if (dom.importSelectVersionSelect) {
+      dom.importSelectVersionSelect.addEventListener('change', handleImportSelectVersionChange);
+    }
+    if (dom.importSelectSearchInput) {
+      dom.importSelectSearchInput.addEventListener('input', handleImportSelectSearchInput);
+    }
+    if (dom.importSelectQueryBtn) {
+      dom.importSelectQueryBtn.addEventListener('click', loadImportSelectDrawerFiles);
+    }
+    if (dom.importSelectBatchBtn) {
+      dom.importSelectBatchBtn.addEventListener('click', function() {
+        importSelectedCaseFilesFromImportDrawer({ closeAfter: true });
+      });
+    }
+    if (dom.importSelectSelectAll) {
+      dom.importSelectSelectAll.addEventListener('change', function() {
+        setImportSelectDrawerSelectionAll(Boolean(dom.importSelectSelectAll && dom.importSelectSelectAll.checked));
+      });
+    }
+    if (dom.importSelectListBody) {
+      dom.importSelectListBody.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        if (!t || !t.getAttribute) return;
+        var id = t.getAttribute('data-case-lib-import-select');
+        if (!id) return;
+        state.importSelectDrawer.selection = state.importSelectDrawer.selection instanceof Set ? state.importSelectDrawer.selection : new Set();
+        if (t.checked) state.importSelectDrawer.selection.add(String(id));
+        else state.importSelectDrawer.selection.delete(String(id));
+        syncImportSelectDrawerControls();
+      });
+      dom.importSelectListBody.addEventListener('click', function(e) {
+        var btn = e && e.target && e.target.closest ? e.target.closest('[data-case-lib-import-pick]') : null;
+        if (!btn) return;
+        var id = btn.getAttribute('data-case-lib-import-pick');
+        if (!id) return;
+        var file = findCaseFileInImportSelectDrawer(id);
+        if (!file) return;
+        importCaseFilesToWorkflow([file]).then(function(ok) {
+          if (ok && importSelectDrawerInstance && typeof importSelectDrawerInstance.close === 'function') {
+            importSelectDrawerInstance.close();
+          }
+        });
+      });
+    }
+
     if (dom.historyDrawerProjectSelect) {
       dom.historyDrawerProjectSelect.addEventListener('change', handleHistoryQueryProjectChange);
     }
@@ -8433,6 +8949,7 @@
         if (!action) return;
         if (scope === 'edit') handleEditDrawerPaginationAction(action);
         else if (scope === 'select') handleSelectDrawerPaginationAction(action);
+        else if (scope === 'import-select') handleImportSelectDrawerPaginationAction(action);
         else if (scope === 'history-query') handleHistoryQueryPaginationAction(action);
       });
       document.addEventListener('change', function(e) {
@@ -8442,6 +8959,7 @@
         var scope = t.getAttribute('data-case-lib-drawer-scope') || '';
         if (scope === 'edit') handleEditDrawerPaginationJump(t.value);
         else if (scope === 'select') handleSelectDrawerPaginationJump(t.value);
+        else if (scope === 'import-select') handleImportSelectDrawerPaginationJump(t.value);
         else if (scope === 'history-query') handleHistoryQueryPaginationJump(t.value);
       });
     }
@@ -8648,6 +9166,11 @@
         return restoreSelectDrawerFromPersistedState();
       });
     });
+    importSelectDrawerInstance = ensureDrawer('caseLibraryImportSelectDrawer', [], function() {
+      ensureProjectsReady().then(function() {
+        resetImportSelectDrawer();
+      });
+    }, handleImportSelectDrawerClose);
     historyDrawerInstance = ensureDrawer('caseLibraryHistoryDrawer', ['openCaseLibraryHistoryDrawerBtn'], function() {
       ensureProjectsReady().then(function() {
         resetHistoryQueryDrawer();
@@ -8665,6 +9188,7 @@
     window.app = window.app || {};
     window.app.caseLibraryApi = window.app.caseLibraryApi || {};
     window.app.caseLibraryApi.openSelectExecDrawer = openSelectExecDrawer;
+    window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
     window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
     window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;
     window.app.caseLibraryApi.downloadImportExcelTemplate = downloadImportExcelTemplate;

@@ -540,6 +540,9 @@
 <div class="file-list" id="autoCaseFileList">
 <span class="hint" data-auto-case-placeholder="">未导入文件</span>
 </div>
+<div class="actions case-library-import-actions">
+  <button class="secondary case-library-import-btn" id="autoCaseLibrarySelectBtn" type="button">从用例库中选择</button>
+</div>
 </div>
 </div>
 </div>
@@ -811,6 +814,9 @@
 <span class="hint" data-placeholder="">未导入文件</span>
 </div>
 </label>
+<div class="actions case-library-import-actions">
+  <button class="secondary case-library-import-btn" id="caseLibraryImportSelectBtn" type="button">从用例库中选择</button>
+</div>
 <p class="status" id="caseStatus"></p>
 </div>
 <div class="pane">
@@ -2320,6 +2326,56 @@
       </div>
     </div>
 </div>
+</div>
+<div class="drawer" id="caseLibraryImportSelectDrawer">
+  <div class="drawer-mask" data-drawer-close="caseLibraryImportSelectDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>从用例库中选择</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryImportSelectDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">选择项目与版本后查询，用例将导入“一键执行/功能流程”的测试用例中。</p>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryImportSelectProjectSelect">项目</label>
+          <select id="caseLibraryImportSelectProjectSelect"></select>
+          <label class="case-library-label" for="caseLibraryImportSelectVersionSelect">版本</label>
+          <select id="caseLibraryImportSelectVersionSelect" disabled></select>
+          <label class="case-library-label" for="caseLibraryImportSelectSearchInput">用例名</label>
+          <input id="caseLibraryImportSelectSearchInput" type="text" placeholder="搜索用例名" />
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="primary" id="caseLibraryImportSelectQueryBtn" type="button">查询</button>
+          <button class="secondary" id="caseLibraryImportSelectBatchBtn" type="button" disabled>批量导入</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibraryImportSelectStatus"></p>
+      <div id="caseLibraryImportSelectPaginationTop"></div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="caseLibraryImportSelectSelectAll" aria-label="全选/全不选"/></th>
+              <th>所属项目</th>
+              <th>版本</th>
+              <th>用例名</th>
+              <th>复用类型</th>
+              <th>条目数</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryImportSelectListBody">
+            <tr><td colspan="7"><p class="hint">请选择项目后点击“查询”。</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="caseLibraryImportSelectPaginationBottom"></div>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibraryImportSelectDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="drawer hidden" id="execVersionSelectDrawer">

@@ -759,6 +759,9 @@
         utils: { escapeHtml },
       })
       : null;
+    if (casesCore) {
+      window.app.casesCoreApi = casesCore;
+    }
     const parseCaseList = casesCore && casesCore.parseCaseList
       ? casesCore.parseCaseList
       : function missingParseCaseList() { throw new Error('casesCore.parseCaseList 不可用'); };
