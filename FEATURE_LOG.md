@@ -2400,3 +2400,7 @@
 - 测试与验证：
   - `npx playwright test tests/ui/memo_pad.spec.js`（通过，提权执行）
 - 更新记录：2025-12-24 侧边栏个人备忘区与进度区动态分配（`index.html`、`style.css`、`config/constants.js`、`config/domConfig.js`、`scripts/modules/memoPad.js`、`scripts/modules/casegenProgress.js`、`scripts/handlers/casegenHandlers.js`、`tests/ui/memo_pad.spec.js`）。
+- 更新记录：2025-12-24 备忘区已办条目自动下沉、页签进度展示与页签上限扩展（`index.html`、`style.css`、`config/domConfig.js`、`scripts/modules/memoPad.js`、`tests/ui/memo_pad.spec.js`）。
+- 更新记录：2025-12-24 备忘条目完成排序与新条目自动下沉适配（`scripts/modules/memoPad.js`、`tests/ui/memo_pad.spec.js`）。
+- 更新记录：2025-12-24 备忘区页签上限恢复为 3（`scripts/modules/memoPad.js`、`tests/ui/memo_pad.spec.js`）。
+- 更新记录：2025-12-24 修正备忘页签重命名时点击输入框不再提前保存（`scripts/modules/memoPad.js`、`tests/ui/memo_pad.spec.js`）。

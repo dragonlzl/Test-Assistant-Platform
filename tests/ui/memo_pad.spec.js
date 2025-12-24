@@ -85,7 +85,11 @@ test.describe('个人备忘区', () => {
     await firstTab.click();
     await firstTab.click();
     const tabInput = page.locator('.memo-tab.editing .memo-tab-input');
+    await tabInput.click();
+    await expect(page.locator('.memo-tab.editing')).toBeVisible();
     await tabInput.fill('日常备忘');
+    await tabInput.click();
+    await expect(page.locator('.memo-tab.editing')).toBeVisible();
     await page.click('#memoPadPanel');
     await expect(page.locator('.memo-tab').first().locator('.memo-tab-label')).toContainText('日常备忘');
   });
@@ -97,31 +101,60 @@ test.describe('个人备忘区', () => {
 
     await page.click('.memo-item-add');
     await expect(page.locator('.memo-item')).toHaveCount(1);
-    await page.evaluate(() => {
-      var input = document.querySelector('.memo-item-input');
-      if (!input) return;
-      input.value = '待办事项A';
-      input.dispatchEvent(new Event('blur', { bubbles: true }));
-    });
-    await expect(page.locator('.memo-item-text')).toContainText('待办事项A');
 
     await page.evaluate(() => {
-      const btn = document.querySelector('[data-memo-item-toggle]');
-      if (btn) btn.click();
+      if (!window.app || !window.app.state || !window.app.state.settings) return;
+      var memo = window.app.state.settings.memoPad;
+      if (!memo || !memo.tabs || !memo.tabs[0]) return;
+      memo.tabs[0].items = [
+        { id: 'item-a', text: '待办事项A', done: false },
+        { id: 'item-b', text: '待办事项B', done: false },
+      ];
+      if (window.app.memoPadApi && typeof window.app.memoPadApi.renderMemoPad === 'function') {
+        window.app.memoPadApi.renderMemoPad();
+      }
     });
-    await expect(page.locator('.memo-item')).toHaveClass(/is-done/);
-    await page.evaluate(() => {
-      const btn = document.querySelector('[data-memo-item-toggle]');
-      if (btn) btn.click();
-    });
-    await expect(page.locator('.memo-item')).not.toHaveClass(/is-done/);
+    await expect(page.locator('.memo-item')).toHaveCount(2);
+    await expect(page.locator('#memoTabProgress')).toHaveText('0/2');
 
     await page.evaluate(() => {
-      const btn = document.querySelector('[data-memo-item-remove]');
+      var btn = document.querySelector('[data-memo-item-toggle="item-a"]');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#memoTabProgress')).toHaveText('1/2');
+    const order = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('.memo-item-text')).map(function(el) {
+        return (el.textContent || '').trim();
+      });
+    });
+    expect(order[order.length - 1]).toBe('待办事项A');
+
+    await page.evaluate(() => {
+      if (!window.app || !window.app.state || !window.app.state.settings) return;
+      var memo = window.app.state.settings.memoPad;
+      if (!memo || !memo.tabs || !memo.tabs[0]) return;
+      var items = Array.isArray(memo.tabs[0].items) ? memo.tabs[0].items.slice() : [];
+      items.push({ id: 'item-c', text: '待办事项C', done: false });
+      memo.tabs[0].items = items;
+      if (window.app.memoPadApi && typeof window.app.memoPadApi.renderMemoPad === 'function') {
+        window.app.memoPadApi.renderMemoPad();
+      }
+    });
+    await expect(page.locator('#memoTabProgress')).toHaveText('1/3');
+    const orderAfter = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('.memo-item-text')).map(function(el) {
+        return (el.textContent || '').trim();
+      });
+    });
+    expect(orderAfter[orderAfter.length - 1]).toBe('待办事项A');
+
+    await page.evaluate(() => {
+      var btn = document.querySelector('[data-memo-item-remove="item-b"]');
       if (btn) btn.click();
     });
     await confirmDrawer(page, '确认删除该备忘条目');
-    await expect(page.locator('.memo-item')).toHaveCount(0);
+    await expect(page.locator('.memo-item-text', { hasText: '待办事项A' })).toBeVisible();
+    await expect(page.locator('.memo-item-text', { hasText: '待办事项B' })).toHaveCount(0);
   });
 
   test('删除页签时提示待办事项', async ({ page }) => {

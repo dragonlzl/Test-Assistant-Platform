@@ -13,7 +13,7 @@
       'tempExecToolbarCard', 'tempExecToolbar',
       'openTempExecDrawerBtn', 'closeTempExecDrawerBtn', 'tempExecDrawer',
       'casesGoUsecaseGenBtn', 'casesGenerationContainer', 'caseGenProgressPanel', 'caseGenProgressList', 'caseGenProgressToggle',
-      'memoPadPanel', 'memoPadToggle', 'memoTabLayer', 'memoTabList', 'memoTabAddBtn', 'memoPadBody',
+      'memoPadPanel', 'memoPadToggle', 'memoTabLayer', 'memoTabList', 'memoTabAddBtn', 'memoPadBody', 'memoTabProgress',
       'cleanStatus', 'compareStatus',
       'splitStatus', 'casesCoverageStatus', 'caseGenStatus', 'autoWorkflowStatus', 'casesModuleProgress', 'exportCaseGen', 'exportCaseGenXmind',
       'toSplitFromCaseGen', 'appendToExistingCases', 'appendTargetSelect', 'transferSelectedToExec', 'saveRawDebugBtn', 'importRawDebugBtn', 'saveCleanDebugBtn', 'importCleanDebugBtn', 'saveSplitDebugBtn',

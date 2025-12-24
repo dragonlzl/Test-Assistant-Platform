@@ -22,6 +22,7 @@
     var tabList = dom.memoTabList;
     var tabAddBtn = dom.memoTabAddBtn;
     var body = dom.memoPadBody;
+    var tabProgress = dom.memoTabProgress;
     var caseGenProgressPanel = dom.caseGenProgressPanel;
     var caseGenProgressList = dom.caseGenProgressList;
 
@@ -197,6 +198,26 @@
       };
     }
 
+    function getItemSortWeight(item) {
+      if (item && item.done === true) return 2;
+      var text = String((item && item.text) || '').trim();
+      if (!text) return 1;
+      return 0;
+    }
+
+    function orderItems(list) {
+      if (!Array.isArray(list)) return [];
+      if (list.length <= 1) return list;
+      var mapped = list.map(function(item, idx) {
+        return { item: item, idx: idx, weight: getItemSortWeight(item) };
+      });
+      mapped.sort(function(a, b) {
+        if (a.weight !== b.weight) return a.weight - b.weight;
+        return a.idx - b.idx;
+      });
+      return mapped.map(function(entry) { return entry.item; });
+    }
+
     function normalizeTab(tab) {
       if (!tab || typeof tab !== 'object') {
         return { id: createId('memo-tab'), name: '', items: [] };
@@ -263,6 +284,22 @@
       return active;
     }
 
+    function renderTabProgress(memo) {
+      if (!tabProgress) return;
+      var activeTab = getActiveTab(memo);
+      var doneCount = 0;
+      var totalCount = 0;
+      if (activeTab && Array.isArray(activeTab.items)) {
+        activeTab.items.forEach(function(item) {
+          var text = String((item && item.text) || '').trim();
+          if (!text) return;
+          totalCount += 1;
+          if (item && item.done === true) doneCount += 1;
+        });
+      }
+      tabProgress.textContent = doneCount + '/' + totalCount;
+    }
+
     function renderTabs(memo) {
       var activeId = memo.activeTabId;
       var html = memo.tabs.map(function(tab) {
@@ -289,7 +326,9 @@
         body.innerHTML = '<div class="memo-items"></div><button class="memo-item-add" type="button">+ 增加子项</button>';
         return;
       }
-      var itemsHtml = activeTab.items.map(function(item, idx) {
+      var orderedItems = orderItems(activeTab.items);
+      if (activeTab.items !== orderedItems) activeTab.items = orderedItems;
+      var itemsHtml = orderedItems.map(function(item, idx) {
         var text = typeof item.text === 'string' ? item.text : '';
         var trimmed = text.trim();
         var displayText = trimmed ? escapeHtml(text) : defaultItemPlaceholder;
@@ -333,6 +372,7 @@
       var memo = getMemoPadState();
       renderTabs(memo);
       renderItems(memo);
+      renderTabProgress(memo);
       setCollapsed(memo.collapsed, false);
       focusPending();
       requestLayoutSync();
@@ -490,9 +530,23 @@
       var memo = getMemoPadState();
       var activeTab = getActiveTab(memo);
       if (!activeTab) return;
-      var item = (activeTab.items || []).find(function(entry) { return entry.id === itemId; });
+      var items = activeTab.items || [];
+      var item = null;
+      var idx = -1;
+      for (var i = 0; i < items.length; i += 1) {
+        if (items[i] && items[i].id === itemId) {
+          item = items[i];
+          idx = i;
+          break;
+        }
+      }
       if (!item) return;
-      item.done = item.done !== true;
+      var wasDone = item.done === true;
+      item.done = !wasDone;
+      if (!wasDone && item.done === true && idx >= 0 && idx < items.length - 1) {
+        items.splice(idx, 1);
+        items.push(item);
+      }
       renderMemoPad();
       saveMemoPad();
     }
@@ -546,6 +600,8 @@
     });
 
     tabList.addEventListener('click', function(e) {
+      var inputEl = e.target && e.target.closest ? e.target.closest('.memo-tab-input') : null;
+      if (inputEl) return;
       var closeBtn = e.target && e.target.closest ? e.target.closest('[data-memo-tab-close]') : null;
       if (closeBtn && closeBtn.dataset) {
         deleteTab(closeBtn.dataset.memoTabClose || '');
@@ -560,6 +616,7 @@
         setActiveTab(tabId);
         return;
       }
+      if (editingTabId === tabId) return;
       startTabEditing(tabId);
     });
 
