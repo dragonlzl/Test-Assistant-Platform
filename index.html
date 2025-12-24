@@ -5,71 +5,459 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>用例助手</title>
+<link rel="icon" href="./assets/favicon.svg" type="image/svg+xml"/>
 <link rel="stylesheet" href="./style.css"/>
 </head>
 <body>
 <div class="app-layout">
 <aside class="sidebar">
+<div class="user-banner" id="userBanner">
+<span class="user-prefix">当前用户</span>
+<strong id="currentUsername">未登录</strong>
+<span class="user-role" id="currentUserRole"></span>
+<button class="pill-btn" id="userMenuToggle" type="button" aria-label="用户菜单">设置</button>
+<div class="user-menu" id="userMenu">
+<button class="ghost-btn" id="logoutBtn" type="button">登出</button>
+</div>
+</div>
 <div class="sidebar-header">
 <h1>用例助手</h1>
-<button class="help-pill" data-tab-btn="help" type="button">
+<button class="help-pill" id="pageGuideTrigger" type="button">
 <span class="icon">?</span>
-<span>使用帮助</span>
+<span>页面说明</span>
 </button>
 </div>
-<p class="sub">上传需求与测试用例，清洗、拆分、覆盖对比、生成、执行一站式完成，版本分组+总览直观掌握进度。</p>
-<button class="scroll-top-btn" type="button" id="scrollTopBtn">回到顶部</button>
-<button class="scroll-top-btn" type="button" id="scrollBottomBtn">跳到底部</button>
+<div class="path-panel" id="currentPath">
+  <div class="path-title">
+    <span class="path-title-label">页面路径</span>
+  </div>
+  <div class="path-items" id="currentPathText"></div>
+</div>
 <nav class="tabs vertical">
+<div class="tab-group">
+<button class="tab-group-btn" data-group="ai">AI 功能</button>
+<div class="tab-submenu hidden" data-group-menu="ai">
 <button class="active" data-tab-btn="auto">一键执行</button>
-<button data-tab-btn="clean">功能工作流</button>
+<button data-tab-btn="clean">功能流程</button>
 <button data-tab-btn="casesgen">用例生成</button>
-<button data-tab-btn="tempexec">用例执行</button>
 <button data-tab-btn="assign">功能指派</button>
 <button data-tab-btn="models">模型管理</button>
+</div>
+</div>
+<div class="tab-group">
+<button class="tab-group-btn" data-group="cases">用例相关</button>
+<div class="tab-submenu hidden" data-group-menu="cases">
+<button data-tab-btn="tempexec">用例执行</button>
+<button data-tab-btn="case-library">用例库</button>
+<button data-tab-btn="case-archive">用例归档</button>
+<button data-tab-btn="exec-overview">执行总览</button>
+</div>
+</div>
+<div class="tab-group">
+<button class="tab-group-btn" data-group="manage">管理</button>
+<div class="tab-submenu hidden" data-group-menu="manage">
+<button class="hidden" data-tab-btn="project-admin" data-role="admin-only">项目管理</button>
+<button class="hidden" data-tab-btn="user-admin" data-role="admin-only">人员管理</button>
+<button class="hidden" data-tab-btn="ops-log" data-role="admin-only">操作记录</button>
+</div>
+</div>
+<div class="tab-group">
+<button class="tab-group-btn" data-group="settings">设置</button>
+<div class="tab-submenu hidden" data-group-menu="settings">
 <button data-tab-btn="settings">其他配置</button>
+</div>
+</div>
 </nav>
+<button class="scroll-top-btn" type="button" id="scrollTopBtn">回到顶部</button>
+<button class="scroll-top-btn" type="button" id="scrollBottomBtn">跳到底部</button>
 <div class="casegen-progress-panel" id="caseGenProgressPanel">
 <div class="panel-head">
+<div class="panel-title-row">
 <span class="title">用例生成进度</span>
+<button class="panel-toggle" type="button" id="caseGenProgressToggle" aria-expanded="true" aria-controls="caseGenProgressList">收起</button>
+</div>
 <span class="meta">点击跳转对应模块</span>
 </div>
 <div class="casegen-progress-list" id="caseGenProgressList">
 <p class="hint">暂无用例生成任务，请先完成“测试模块拆分”并生成用例</p>
 </div>
 </div>
+<div class="memo-pad-panel" id="memoPadPanel">
+<div class="panel-head">
+<div class="panel-title-row">
+<div class="panel-title-main">
+<span class="title">个人备忘</span>
+<span class="memo-tab-progress" id="memoTabProgress">0/0</span>
+</div>
+<button class="panel-toggle" type="button" id="memoPadToggle" aria-expanded="true" aria-controls="memoPadBody">收起</button>
+</div>
+</div>
+<div class="memo-tabs" id="memoTabLayer">
+<div class="memo-tab-list" id="memoTabList"></div>
+<button class="memo-tab-add" type="button" id="memoTabAddBtn" aria-label="新增备忘页">+</button>
+</div>
+<div class="memo-pad-body" id="memoPadBody"></div>
+</div>
 </aside>
 <div class="content-shell">
-<div class="flow" id="flowNav">
-  <div class="flow-title">一键执行操作步骤</div>
-  <div class="flow-steps">
-    <div class="step active" data-target="import"><span class="badge">1</span> 导入</div>
-    <div class="progress-line"></div>
-    <div class="step" data-target="review"><span class="badge">2</span> 评审</div>
-    <div class="progress-line"></div>
-    <div class="step" data-target="clean"><span class="badge">3</span> 清洗</div>
-    <div class="progress-line"></div>
-    <div class="step" data-target="split"><span class="badge">4</span> 拆分</div>
-    <div class="progress-line"></div>
-    <div class="step" data-target="cases-upload"><span class="badge">5</span> 用例导入</div>
-    <div class="progress-line"></div>
-    <div class="step" data-target="cases"><span class="badge">6</span> 覆盖对比</div>
+  <div class="flow" id="flowNav">
+    <div class="flow-title">一键执行步骤</div>
+    <div class="flow-steps">
+      <div class="step active" data-target="import"><span class="badge">1</span><span class="step-label">导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+      <div class="progress-line"></div>
+      <div class="step" data-target="review"><span class="badge">2</span><span class="step-label">评审</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+      <div class="progress-line"></div>
+      <div class="step" data-target="clean"><span class="badge">3</span><span class="step-label">清洗</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+      <div class="progress-line"></div>
+      <div class="step" data-target="compare"><span class="badge">4</span><span class="step-label">对比完整性</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+      <div class="progress-line"></div>
+      <div class="step" data-target="split"><span class="badge">5</span><span class="step-label">拆分</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+      <div class="progress-line"></div>
+      <div class="step" data-target="cases-upload"><span class="badge">6</span><span class="step-label">用例导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+      <div class="progress-line"></div>
+      <div class="step" data-target="cases"><span class="badge">7</span><span class="step-label">覆盖对比</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+    </div>
   </div>
+<div class="tempexec-head hidden" data-tab-section="project-admin" id="projectAdminHead">
+  <div class="flow" id="projectAdminFlowNav">
+    <div class="flow-title">项目管理导航</div>
+    <p class="hint" style="margin:0 0 6px;">项目与版本维护入口汇总，点击卡片快速操作。</p>
+    <div class="nav-entry-grid">
+      <button class="nav-entry-card nav-entry-import" id="projectRefreshBtn" type="button">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <path d="M20 12a8 8 0 1 1-2.3-5.7"></path>
+            <path d="M20 4v6h-6"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">刷新项目</span>
+          <span class="nav-entry-desc">拉取最新项目与版本</span>
+        </span>
+      </button>
+      <button class="nav-entry-card nav-entry-view" id="projectCreateBtn" type="button">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <path d="M12 5v14"></path>
+            <path d="M5 12h14"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">新建项目</span>
+          <span class="nav-entry-desc">创建新项目并配置版本</span>
+        </span>
+      </button>
+    </div>
+  </div>
+</div>
+	<div class="tempexec-head hidden" data-tab-section="user-admin" id="userAdminHead">
+	  <div class="flow" id="userAdminFlowNav">
+	    <div class="flow-title">人员管理导航</div>
+	    <p class="hint" style="margin:0 0 6px;">人员与权限维护入口汇总，点击卡片快速操作。</p>
+	    <div class="nav-entry-grid">
+      <button class="nav-entry-card nav-entry-import" id="userRefreshBtn" type="button">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <path d="M20 12a8 8 0 1 1-2.3-5.7"></path>
+            <path d="M20 4v6h-6"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">刷新人员</span>
+          <span class="nav-entry-desc">拉取最新人员与归属</span>
+        </span>
+      </button>
+      <button class="nav-entry-card nav-entry-view" id="userCreateBtn" type="button">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <path d="M12 5v14"></path>
+            <path d="M5 12h14"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">新增人员</span>
+          <span class="nav-entry-desc">创建账号并分配项目</span>
+        </span>
+      </button>
+	    </div>
+	  </div>
+	</div>
+	<div class="tempexec-head hidden" data-tab-section="exec-overview" id="execOverviewHead">
+	  <div class="flow" id="execOverviewFlowNav">
+	    <div class="flow-title">执行总览导航</div>
+	    <p class="hint" style="margin:0 0 6px;">按项目/版本查看各人员执行进度，点击卡片快速操作。</p>
+	    <div class="nav-entry-grid" id="execOverviewNavGrid">
+	      <div class="exec-overview-nav-projects" id="execOverviewNavProjects"></div>
+	      <button class="nav-entry-card nav-entry-import" id="execOverviewRefreshBtn" type="button">
+	        <span class="nav-entry-icon" aria-hidden="true">
+	          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+	            <path d="M20 12a8 8 0 1 1-2.3-5.7"></path>
+	            <path d="M20 4v6h-6"></path>
+	          </svg>
+	        </span>
+	        <span class="nav-entry-text">
+	          <span class="nav-entry-title">刷新</span>
+	          <span class="nav-entry-desc">重新拉取可访问项目与总览</span>
+	        </span>
+	      </button>
+	    </div>
+	  </div>
+	</div>
+  <div class="tempexec-head hidden" data-tab-section="case-library" id="caseLibraryHead">
+    <div class="flow" id="caseLibraryFlowNav">
+      <div class="flow-title">用例库导航</div>
+      <p class="hint" style="margin:0 0 6px;">用例库相关入口汇总于此，点击卡片快速打开。</p>
+      <div class="nav-entry-grid">
+        <button class="nav-entry-card nav-entry-import" id="openCaseLibraryImportDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M12 3v9"></path>
+              <path d="M9.5 9.5 12 12l2.5-2.5"></path>
+              <rect x="5" y="13" width="14" height="6" rx="2"></rect>
+              <path d="M9 16h6"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">导入用例</span>
+            <span class="nav-entry-desc">选择文件并入库（需选项目/版本）</span>
+          </span>
+        </button>
+        <button class="nav-entry-card nav-entry-view" id="openCaseLibraryEditDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M4 20h4"></path>
+              <path d="M13.5 6.5 17.5 10.5"></path>
+              <path d="M6 18 14.5 9.5l4 4L10 22H6z"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">查看&amp;编辑</span>
+            <span class="nav-entry-desc">查看并编辑用例库条目，支持搜索/导出/删除</span>
+          </span>
+        </button>
+        <button class="nav-entry-card nav-entry-overview" id="caseLibraryJumpExecBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M5 12h12"></path>
+              <path d="M13 7l4 5-4 5"></path>
+              <path d="M5 5h6"></path>
+              <path d="M5 19h6"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">跳转用例执行页</span>
+            <span class="nav-entry-desc">仅跳转到执行页，不打开抽屉</span>
+          </span>
+        </button>
+        <button class="nav-entry-card nav-entry-overview" id="openCaseLibrarySelectExecDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M8 5h8"></path>
+              <path d="M8 9h5"></path>
+              <path d="M8 13h8"></path>
+              <path d="M8 17h5"></path>
+              <path d="M18 8v8"></path>
+              <path d="M15.5 10.5 18 8l2.5 2.5"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">选择用例执行</span>
+            <span class="nav-entry-desc">从用例库选择用例并转到执行页</span>
+          </span>
+        </button>
+        <button class="nav-entry-card nav-entry-backup" id="openCaseLibraryHistoryDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M12 7v6"></path>
+              <path d="M12 13l4 2"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">用例改动历史</span>
+            <span class="nav-entry-desc">查看导入/编辑/删除产生的历史记录</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="tempexec-head hidden" data-tab-section="case-archive" id="caseArchiveHead">
+    <div class="flow" id="caseArchiveFlowNav">
+      <div class="flow-title">用例归档导航</div>
+      <p class="hint" style="margin:0 0 6px;">用于查看各项目/版本的归档用例记录，点击卡片快速打开。</p>
+      <div class="nav-entry-grid">
+        <button class="nav-entry-card nav-entry-view" id="openCaseArchiveDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M8 5h8"></path>
+              <path d="M8 9h8"></path>
+              <path d="M8 13h8"></path>
+              <path d="M8 17h5"></path>
+              <path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">查看归档</span>
+            <span class="nav-entry-desc">按项目/版本筛选并查看归档用例</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="tempexec-head hidden" data-tab-section="ops-log" data-role="admin-only" id="opsLogHead">
+    <div class="flow" id="opsLogFlowNav">
+      <div class="flow-title">操作记录导航</div>
+      <p class="hint" style="margin:0 0 6px;">用于查看人员在平台内的关键操作记录，支持按人员/操作对象筛选。</p>
+      <div class="nav-entry-grid">
+        <button class="nav-entry-card nav-entry-view" id="openOpsLogDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M8 5h8"></path>
+              <path d="M8 9h8"></path>
+              <path d="M8 13h8"></path>
+              <path d="M8 17h5"></path>
+              <path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">查看记录</span>
+            <span class="nav-entry-desc">按人员/操作对象筛选并分页查看</span>
+          </span>
+        </button>
+        <button class="nav-entry-card nav-entry-overview" id="openOpsActivityDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <rect class="fill" x="4.5" y="12.5" width="3.5" height="5" rx="1.2"></rect>
+              <rect class="fill" x="10.25" y="9" width="3.5" height="8.5" rx="1.2"></rect>
+              <rect class="fill" x="16" y="6" width="3.5" height="11.5" rx="1.2"></rect>
+              <path d="M4.5 18.5h15"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">活跃度视图</span>
+            <span class="nav-entry-desc">选择人员并查看操作行为活跃度</span>
+          </span>
+        </button>
+        <button class="nav-entry-card nav-entry-overview" id="openOpsContributionDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <rect class="fill" x="4.5" y="12.5" width="3.5" height="5" rx="1.2"></rect>
+              <rect class="fill" x="10.25" y="9" width="3.5" height="8.5" rx="1.2"></rect>
+              <rect class="fill" x="16" y="6" width="3.5" height="11.5" rx="1.2"></rect>
+              <path d="M4.5 18.5h15"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">用例贡献视图</span>
+            <span class="nav-entry-desc">选择人员并查看用例贡献情况</span>
+          </span>
+        </button>
+        <button class="nav-entry-card nav-entry-overview" id="openOpsExecContributionDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <rect class="fill" x="4.5" y="12.5" width="3.5" height="5" rx="1.2"></rect>
+              <rect class="fill" x="10.25" y="9" width="3.5" height="8.5" rx="1.2"></rect>
+              <rect class="fill" x="16" y="6" width="3.5" height="11.5" rx="1.2"></rect>
+              <path d="M4.5 18.5h15"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">用例执行贡献视图</span>
+            <span class="nav-entry-desc">选择人员并查看用例执行贡献</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+		<div class="tempexec-head hidden" data-tab-section="tempexec">
+		  <div class="flow" id="tempexecFlowNav">
+		    <div class="flow-title">功能导航</div>
+		    <p class="hint" style="margin:0 0 6px;">用例执行相关入口汇总于此，点击卡片快速打开。</p>
+	    <div class="nav-entry-grid">
+	      <button class="nav-entry-card nav-entry-import" id="openTempExecImportDrawerBtn" type="button">
+	        <span class="nav-entry-icon" aria-hidden="true">
+	          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+	            <path d="M12 3v9"></path>
+	            <path d="M9.5 9.5 12 12l2.5-2.5"></path>
+	            <rect x="5" y="13" width="14" height="6" rx="2"></rect>
+	            <path d="M9 16h6"></path>
+	          </svg>
+	        </span>
+	        <span class="nav-entry-text">
+	          <span class="nav-entry-title">用例导入</span>
+	          <span class="nav-entry-desc">导入用例并确认入库</span>
+	        </span>
+	      </button>
+	      <button class="nav-entry-card nav-entry-view" id="openTempExecAssignDrawerBtn" type="button">
+	        <span class="nav-entry-icon" aria-hidden="true">
+	          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+	            <path d="M16 11a4 4 0 1 0-8 0"></path>
+	            <path d="M12 3v4"></path>
+	            <path d="M4 21v-1a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v1"></path>
+	          </svg>
+	        </span>
+	        <span class="nav-entry-text">
+	          <span class="nav-entry-title">执行分配</span>
+	          <span class="nav-entry-desc">项目/版本分组、专注区与执行人分配</span>
+	        </span>
+	      </button>
+	      <button class="nav-entry-card nav-entry-view" id="openTempExecCaseLibraryBtn" type="button">
+	        <span class="nav-entry-icon" aria-hidden="true">
+	          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+	            <path d="M4 20h4"></path>
+	            <path d="M13.5 6.5 17.5 10.5"></path>
+	            <path d="M6 18 14.5 9.5l4 4L10 22H6z"></path>
+	          </svg>
+	        </span>
+	        <span class="nav-entry-text">
+	          <span class="nav-entry-title">用例库</span>
+	          <span class="nav-entry-desc">快速进入用例库查看与管理</span>
+	        </span>
+	      </button>
+	      <button class="nav-entry-card nav-entry-overview" id="openTempExecOverviewNavBtn" type="button">
+	        <span class="nav-entry-icon" aria-hidden="true">
+	          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+	            <rect class="fill" x="4.5" y="12.5" width="3.5" height="5" rx="1.2"></rect>
+            <rect class="fill" x="10.25" y="9" width="3.5" height="8.5" rx="1.2"></rect>
+            <rect class="fill" x="16" y="6" width="3.5" height="11.5" rx="1.2"></rect>
+            <path d="M4.5 18.5h15"></path>
+          </svg>
+	        </span>
+	        <span class="nav-entry-text">
+	          <span class="nav-entry-title">归档操作&进度预览</span>
+	          <span class="nav-entry-desc">预览进度并归档用例（可跳转归档详情）</span>
+	        </span>
+	      </button>
+	    </div>
+	  </div>
+  <section class="card hidden temp-exec-toolbar-card" id="tempExecToolbarCard" data-tab-section="tempexec">
+    <div class="card-body">
+      <div class="temp-exec-toolbar" id="tempExecToolbar"></div>
+      <div class="temp-exec-toolbar-stash hidden" id="tempExecToolbarStash">
+        <button class="secondary case-library-changes-btn" disabled="" id="tempExecCaseLibraryChangesBtn">用例变更</button>
+        <button class="secondary" disabled="" id="exportTempExecXmindBtn">导出XMind</button>
+        <button class="secondary" disabled="" id="exportTempExecCasesXmindBtn">导出XMind（无结果）</button>
+      </div>
+      <div class="temp-focus-block compact" id="tempExecViewFocusBlock">
+        <div class="temp-focus-header">
+          <span class="temp-case-group-label">专注区：</span>
+          <span class="temp-focus-desc">同步展示【执行分配】中的专注区用例。</span>
+        </div>
+        <div class="temp-focus-zone" data-temp-focus-zone="exec-view"></div>
+      </div>
+    </div>
+  </section>
 </div>
 <main>
 <section class="card hidden" data-section-id="help" data-tab-section="help">
 <div class="help-header">
-<h2>使用说明</h2>
-<button class="structure-pill" id="xmindStructureToggle" type="button">
-<span class="icon">!</span>
-<span>XMind 用例结构</span>
-</button>
+<h2>页面说明</h2>
 </div>
 <div class="card-body">
 <div class="notice-card">
 <h3>使用前须知</h3>
 <ul>
-<li><strong>先点击右上角“XMind 用例结构”按钮，务必阅读用例格式要求，这是用例执行的基础！</strong></li>
+<li><strong>XMind 用例结构要求已并入“用例执行/用例库”的页面说明，请先阅读格式要求，这是用例执行的基础！</strong></li>
 <li>请先在<a data-jump="models" href="#">“模型管理”</a>中添加 <strong>DeepSeek-R1</strong>，并将 <code>Max Tokens</code> 设为 <strong>16,000</strong>。</li>
 <li>在<a data-jump="assign" href="#">“功能指派”</a>页将所有功能统一指派为上述模型，保持行为一致。</li>
 <li>如需自动通知，请前往<a data-jump="settings" href="#">“其他配置”</a>填写飞书 Webhook，建议使用群机器人同步执行结果。</li>
@@ -78,14 +466,14 @@
 <div class="notice-card highlight">
 <h3>新增亮点（用例执行 & 总览）</h3>
 <ul>
-<li>“用例导入&分配”支持<strong>版本分组</strong>：新建版本后可拖拽需求盒子入版本，右上角“×”可移出，版本卡内需求盒子原样展示。</li>
+<li>“执行分配”支持<strong>版本分组</strong>：新建版本后可拖拽需求盒子入版本，右上角“×”可移出，版本卡内需求盒子原样展示。</li>
 <li>总览视图全新分区：<strong>版本区</strong>按版本→需求分组、两列布局；<strong>需求区</strong>展示未分配版本的需求，四列布局，用例按执行进度升序自动排序。</li>
 <li>执行视图可自定义列显示：在“设置”→“执行视图列显示”中勾选表头，标题/实际结果/备注/缺陷/选择列为必选，其余可自由隐藏。</li>
 <li>总览卡片可点击跳转执行视图；专注用例在总览中以渐变标识高亮。</li>
-<li>用例导入标题右侧的“用例执行情况总览”按钮一键进入总览，信息分区更清晰。</li>
+<li>执行分配标题右侧的“用例执行情况总览”按钮一键进入总览，信息分区更清晰。</li>
 </ul>
 </div>
-<p class="hint">按照下列步骤依次完成需求清洗、缺口补全与用例生成，过程中可随时回到“功能工作流”查看各卡片详情。</p>
+<p class="hint">按照下列步骤依次完成需求清洗、缺口补全与用例生成，过程中可随时回到“功能流程”查看各卡片详情。</p>
 <ul class="help-steps">
 <li>在“导入”卡片上传原始需求与 XMind/文本测试用例，系统会自动在相关卡片同步内容。</li>
 <li>执行“需求评审”识别模糊点，可选地填写澄清结果后进入“需求清洗”。</li>
@@ -97,7 +485,7 @@
 <div class="help-grid">
 <article class="help-card">
 <h3>导入区</h3>
-<p>左列导入原始需求（支持 doc/docx/txt/md），右列导入多个 XMind 或文本用例。导入后的内容会同步到功能工作流中的对应区域。</p>
+<p>左列导入原始需求（支持 doc/docx/txt/md），右列导入多个 XMind 或文本用例。导入后的内容会同步到功能流程中的对应区域。</p>
 </article>
 <article class="help-card">
 <h3>需求评审</h3>
@@ -117,11 +505,11 @@
 </article>
 <article class="help-card">
 <h3>用例生成</h3>
-<p>选择模块后即可批量生成 JSON 用例；若覆盖对比仍有缺失，可使用补全按钮按选定缺失点补写。支持导出调试文件或继续流转。</p>
+<p>选择模块后即可批量生成 JSON 用例；也可导入模块用例文件（会弹出“需求标识”抽屉确认归属）；若覆盖对比仍有缺失，可使用补全按钮按选定缺失点补写。</p>
 </article>
 <article class="help-card">
 <h3>用例执行</h3>
-<p>导入 XMind/JSON 用例即可直接执行，结果实时保存。可切换当前/历史文件、批量更新执行状态，并在“用例执行情况总览”中查看彩色进度条。</p>
+<p>用例导入用于入库；执行分配用于项目/版本分组与专注区整理；执行视图用于录入结果并实时保存。可在“用例执行情况总览”中查看彩色进度条。</p>
 </article>
 <article class="help-card">
 <h3>一键执行</h3>
@@ -133,56 +521,9 @@
 </article>
 <article class="help-card">
 <h3>其他配置 / 通知</h3>
-<p>在“其他配置”里填写飞书 Webhook 或其它偏好。一键执行完成或失败都会自动推送通知，方便团队成员第一时间了解结果。</p>
+<p>在“其他配置”里填写飞书 Webhook 或其它偏好。一键执行流程完成或失败都会自动推送通知，方便团队成员第一时间了解结果。</p>
 </article>
 </div>
-</div>
-</section>
-<section class="card hidden structure-card collapsed-card" data-tab-section="help" id="xmindStructureCard">
-<h3 style="margin:0 0 10px;">XMind 用例层级要求</h3>
-<p class="hint" style="margin:0 0 12px;">请严格按照“需求（根节点） → 模块 → 用例标题 → 优先级 → 前置条件 → 操作步骤 → 预期结果”七层结构填写。少任一层都会影响字段解析。</p>
-<div class="structure-diagram">
-<div class="structure-node node-root">需求（根）</div>
-<div class="structure-node node-module">模块</div>
-<div class="structure-node node-title">用例标题</div>
-<div class="structure-node node-priority">优先级 (P0/P1/P2)</div>
-<div class="structure-node node-pre">前置条件</div>
-<div class="structure-node node-steps">操作步骤</div>
-<div class="structure-node node-expected">预期结果</div>
-</div>
-<div class="structure-example">
-<strong>编写示例</strong>
-<div class="structure-image">
-<img alt="XMind 用例结构示例：武器皮肤根节点与两条解锁用例" src="帮助例子.png"/>
-</div>
-<strong style="display:block;margin-top:10px;">导出结构</strong>
-<code>[
-  {
-    "module": "解锁方式",
-    "title": "人民币解锁",
-    "priority": "P1",
-    "preconditions": "未解锁皮肤",
-    "steps": "进入商城或角色选择界面，选中皮肤，观察解锁方式",
-    "expected": "解锁方式为人民币解锁"
-  },
-  {
-    "module": "解锁方式",
-    "title": "蓝币解锁",
-    "priority": "P1",
-    "preconditions": "未解锁皮肤",
-    "steps": "进入商城或角色选择界面，选中皮肤，观察解锁方式",
-    "expected": "解锁方式为蓝币解锁"
-  },
-  {
-    "module": "通用",
-    "title": "皮肤名字展示",
-    "priority": "P1",
-    "preconditions": "已拥有皮肤",
-    "steps": "进入皮肤选择界面，观察皮肤在列表中的名称展示",
-    "expected": "皮肤名称展示正常"
-  }
-]</code>
-<p style="margin-top:8px;">同一根节点下可以继续添加其他模块与用例；若缺少根节点或其中某层，系统会降级为普通文本或字段缺失，建议严格遵循此结构，或直接上传拥有相同字段的 JSON/文本文件。</p>
 </div>
 </section>
 <section class="card hidden" data-section-id="auto-import" data-tab-section="auto">
@@ -219,6 +560,9 @@
 <div class="file-list" id="autoCaseFileList">
 <span class="hint" data-auto-case-placeholder="">未导入文件</span>
 </div>
+<div class="actions case-library-import-actions">
+  <button class="secondary case-library-import-btn" id="autoCaseLibrarySelectBtn" type="button">从用例库中选择</button>
+</div>
 </div>
 </div>
 </div>
@@ -240,13 +584,9 @@
 <section class="card hidden" data-section-id="auto-clarify" data-tab-section="auto">
 <h2>需求澄清（人工确认）</h2>
 <div class="card-body">
-<p class="hint">当勾选“需要人工确认”后，一键执行会在需求评审后暂停，请展开下方视图编辑澄清结果，再点“确认澄清”继续。</p>
+<p class="hint">当勾选“需要人工确认”后，一键执行流程会在需求评审后暂停，请打开右侧抽屉补充并填写每条澄清结果，再点“确认澄清”继续。</p>
 <div class="actions">
-<button class="secondary" disabled="" id="autoClarifyToggleBtn">展开澄清视图</button>
-</div>
-<div class="review-view hidden" id="autoClarifyContainer"></div>
-<div class="actions">
-<button class="secondary" disabled="" id="autoClarifyConfirm">确认澄清</button>
+<button class="secondary" disabled="" id="autoClarifyToggleBtn">前往展开视图并确认澄清</button>
 </div>
 <p class="status" id="autoClarifyStatus"></p>
 </div>
@@ -255,35 +595,78 @@
 <h2>清洗后需求覆盖率</h2>
 <div class="card-body">
 <p class="hint">展示“对比完整性”步骤返回的覆盖率；低于 100% 表示清洗结果缺失，需要重新清洗并修正。</p>
-<div class="status" id="autoCompareStatus">尚未执行</div>
-<div class="review-view hidden" id="autoCompareMissing"></div>
-<div class="auto-compare-suggestion">
-<p class="hint">可输入对缺失项的补充说明（选填）。</p>
-<textarea class="small-textarea" id="autoCompareSuggestion" placeholder="如需说明额外上下文，可在此输入"></textarea>
+<div class="actions" style="margin-bottom:8px;">
+<button class="secondary" disabled="" id="autoCompareToggleBtn">覆盖缺失视图</button>
 </div>
-<div class="actions">
-<button class="secondary" disabled="" id="autoFillCleanBtn">补全清洗并继续</button>
-<button class="secondary" disabled="" id="autoRecleanBtn">重新清洗并继续</button>
-<button class="secondary" disabled="" id="autoIgnoreCoverageBtn">忽略覆盖率继续</button>
-<button class="secondary" disabled="" id="autoJumpCleanView">查看高亮差异</button>
-</div>
-<p class="status" id="autoRecleanStatus"></p>
+<p class="status" id="autoCompareStatusSummary">尚未执行</p>
 </div>
 </section>
 <section class="card hidden" data-section-id="auto-cases-missing" data-tab-section="auto">
 <h2>用例缺失测试点</h2>
 <div class="card-body">
-<p class="hint">同步显示“测试用例覆盖对比”后的缺失模块详情，与功能工作流中的“缺失模块视图”一致。</p>
+<p class="hint">同步显示“测试用例覆盖对比”后的缺失模块详情，与功能流程中的“缺失模块视图”一致，点击右侧抽屉查看并处理。</p>
 <div class="actions" style="margin-bottom:8px;">
-<button class="secondary" disabled="" id="autoMissingToggle">缺失模块视图</button>
-<button class="secondary" disabled="" id="autoMissingCopy">复制缺失模块JSON</button>
-<button class="secondary" disabled="" id="autoMissingSmartFill">智能生成填充</button>
-<button class="secondary" disabled="" id="autoMissingGoUsecase">生成用例</button>
+<button class="secondary" disabled="" id="autoMissingToggle">前往勾选缺失模块生成缺失用例</button>
 </div>
-<p class="status" id="autoMissingStatus"></p>
-<div class="missing-view hidden" id="autoMissingView"></div>
 </div>
 </section>
+<div class="drawer" id="autoClarifyDrawer" data-tab-section="auto">
+  <div class="drawer-mask" data-drawer-close="autoClarifyDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="autoClarifyDrawerTitle">需求澄清视图</h3>
+      <button class="link-toggle" id="closeAutoClarifyDrawerBtn" data-drawer-close="autoClarifyDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="autoClarifyDrawerBody">
+      <div class="review-view hidden" id="autoClarifyContainer"></div>
+      <div class="actions" style="margin-top:12px; justify-content:flex-end;">
+        <button class="pill primary" disabled="" id="autoClarifyConfirm">确认澄清</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="autoCompareDrawer" data-tab-section="auto">
+  <div class="drawer-mask" data-drawer-close="autoCompareDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="autoCompareDrawerTitle">覆盖缺失视图</h3>
+      <button class="link-toggle" id="closeAutoCompareDrawerBtn" data-drawer-close="autoCompareDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="autoCompareDrawerBody">
+      <p class="status" id="autoCompareStatus">尚未执行</p>
+      <div class="review-view hidden" id="autoCompareMissing"></div>
+      <div class="auto-compare-suggestion">
+        <p class="hint">可输入对缺失项的补充说明（选填）。</p>
+        <textarea class="small-textarea" id="autoCompareSuggestion" placeholder="如需说明额外上下文，可在此输入"></textarea>
+      </div>
+      <div class="actions">
+        <button class="secondary" disabled="" id="autoFillCleanBtn">补全清洗并继续</button>
+        <button class="secondary" disabled="" id="autoRecleanBtn">重新清洗并继续</button>
+        <button class="secondary" disabled="" id="autoIgnoreCoverageBtn">忽略覆盖率继续</button>
+        <button class="secondary" disabled="" id="autoJumpCleanView">查看高亮差异</button>
+      </div>
+      <p class="status" id="autoRecleanStatus"></p>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="autoMissingDrawer" data-tab-section="auto">
+  <div class="drawer-mask" data-drawer-close="autoMissingDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="autoMissingDrawerTitle">缺失模块视图</h3>
+      <button class="link-toggle" id="closeAutoMissingDrawerBtn" data-drawer-close="autoMissingDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="autoMissingDrawerBody">
+      <p class="status" id="autoMissingStatus"></p>
+      <div class="missing-view hidden" id="autoMissingView"></div>
+      <div class="actions" style="margin-top:12px; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+        <button class="secondary" disabled="" id="autoMissingCopy">复制缺失模块JSON</button>
+        <button class="pill primary" disabled="" id="autoMissingSmartFill">智能生成填充</button>
+        <button class="secondary" disabled="" id="autoMissingGoUsecase">生成用例</button>
+      </div>
+    </div>
+  </div>
+</div>
 <section class="card" data-section-id="import" data-tab-section="clean">
 <h2>导入需求文档</h2>
 <div class="card-body">
@@ -339,11 +722,10 @@
 <h2>需求澄清点视图</h2>
 <div class="card-body">
 <p class="hint">汇总所有评审中发现的不明确点，可逐条补充澄清结果并同步回评审 JSON。</p>
-<div class="review-view hidden" id="reviewViewContainer"></div>
 <div class="actions">
-<button class="secondary" disabled="" id="toggleReviewView">展开澄清视图</button>
-<button class="secondary" disabled="" id="confirmClarifications">确认澄清</button>
+<button class="secondary" disabled="" id="toggleReviewView">前往视图确认澄清</button>
 </div>
+<p class="status" id="clarifyStatus"></p>
 </div>
 </section>
 <section class="card" data-section-id="clean" data-tab-section="clean">
@@ -373,27 +755,9 @@
 <section class="card" data-section-id="clean-view" data-tab-section="clean">
 <h2>清洗结果视图</h2>
 <div class="card-body">
-<div class="clean-view-header">
 <p class="hint">列表展示清洗条目，可点击定位相关原始需求段落，快速核对清洗准确性。</p>
-<div class="clean-view-actions">
-<button class="secondary" id="toggleCleanViewBtn">收起视图</button>
-<button class="secondary" disabled="" id="cleanHighlightAllBtn">全部高亮</button>
-</div>
-</div>
-<div class="review-view visible" id="cleanViewContainer">
-<p class="hint" style="padding:12px;">暂无清洗数据，请先完成需求清洗</p>
-</div>
-<div class="clean-raw-panel">
-<div class="clean-raw-header">
-<p class="hint">原始需求全文将在下方展示，点击上方条目或选择文字后反向定位。</p>
-<div class="clean-view-actions">
-<button class="secondary" id="toggleCleanRawViewBtn">收起原文</button>
-<button class="secondary" disabled="" id="cleanRawLocateBtn">反向定位到条目</button>
-</div>
-</div>
-<div class="review-view visible clean-raw-view" id="cleanRawView">
-<p class="hint" style="padding:12px;">暂无原始需求，请先导入或填写</p>
-</div>
+<div class="actions">
+<button class="secondary" id="toggleCleanViewBtn">展开视图</button>
 </div>
 </div>
 </section>
@@ -452,7 +816,6 @@
 <div class="actions">
 <button class="secondary" disabled="" id="toggleSplitView">展开拆分视图</button>
 </div>
-<div class="review-view hidden" id="splitViewContainer"></div>
 </div>
 </section>
 <section class="card" data-section-id="cases-upload" data-tab-section="clean">
@@ -471,6 +834,9 @@
 <span class="hint" data-placeholder="">未导入文件</span>
 </div>
 </label>
+<div class="actions case-library-import-actions">
+  <button class="secondary case-library-import-btn" id="caseLibraryImportSelectBtn" type="button">从用例库中选择</button>
+</div>
 <p class="status" id="caseStatus"></p>
 </div>
 <div class="pane">
@@ -489,10 +855,9 @@
 <div class="card-body">
 <p class="hint">基于当前 XMind/文本内容渲染列表视图，可快速查看模块、用例标题、优先级等字段。</p>
 <div class="actions">
-<button class="secondary" id="caseViewBtn">刷新视图</button>
+<button class="secondary" id="caseViewBtn">打开用例视图</button>
 <span class="hint" id="caseViewHint" style="margin:0;">请先上传或输入 XMind 测试用例</span>
 </div>
-<div class="caseview hidden" id="caseViewContainer"></div>
 </div>
 </section>
 <section class="card" data-section-id="cases" data-tab-section="clean">
@@ -525,19 +890,107 @@
 <div class="card-body">
 <p class="hint">运行“测试用例覆盖对比”后，可在此查看缺失模块详情，并复制 <code>missing</code> 字段 JSON。</p>
 <div class="actions" style="margin-bottom:8px;">
-<button class="secondary" disabled="" id="missingViewBtn">缺失模块视图</button>
-<button class="secondary" disabled="" id="copyMissingBtn">复制缺失模块JSON</button>
-<button class="secondary" disabled="" id="missingSmartFillBtn">智能生成填充</button>
-<button class="secondary" id="casesGoUsecaseGen">生成用例</button>
+<button class="secondary" disabled="" id="missingViewBtn">前往勾选缺失模块生成缺失用例</button>
 </div>
 <p class="status" id="missingViewStatus"></p>
-<div class="missing-view hidden" id="missingViewContainer"></div>
 </div>
 </section>
+<div class="drawer" id="reviewViewDrawer" data-tab-section="clean">
+  <div class="drawer-mask" data-drawer-close="reviewViewDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="reviewViewDrawerTitle">需求澄清点视图</h3>
+      <button class="link-toggle" id="closeReviewViewDrawerBtn" data-drawer-close="reviewViewDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="reviewViewDrawerBody">
+      <div class="review-view hidden" id="reviewViewContainer"></div>
+      <div class="actions" style="margin-top:12px; justify-content:flex-end;">
+        <button class="pill primary" disabled id="confirmClarifications">确认澄清</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="cleanViewDrawer" data-tab-section="clean">
+  <div class="drawer-mask" data-drawer-close="cleanViewDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="cleanViewDrawerTitle">清洗结果视图</h3>
+      <button class="link-toggle" id="closeCleanViewDrawerBtn" data-drawer-close="cleanViewDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="cleanViewDrawerBody">
+      <div class="clean-view-header">
+        <p class="hint">列表展示清洗条目，可点击定位相关原始需求段落，快速核对清洗准确性。</p>
+        <div class="clean-view-actions">
+          <button class="secondary" disabled id="cleanHighlightAllBtn">全部高亮</button>
+        </div>
+      </div>
+      <div class="review-view visible" id="cleanViewContainer">
+        <p class="hint" style="padding:12px;">暂无清洗数据，请先完成需求清洗</p>
+      </div>
+      <div class="clean-raw-panel">
+        <div class="clean-raw-header">
+          <p class="hint">原始需求全文将在下方展示，点击上方条目或选择文字后反向定位。</p>
+          <div class="clean-view-actions">
+            <button class="secondary" id="toggleCleanRawViewBtn">收起原文</button>
+            <button class="secondary" disabled id="cleanRawLocateBtn">反向定位到条目</button>
+          </div>
+        </div>
+        <div class="review-view visible clean-raw-view" id="cleanRawView">
+          <p class="hint" style="padding:12px;">暂无原始需求，请先导入或填写</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="splitViewDrawer" data-tab-section="clean">
+  <div class="drawer-mask" data-drawer-close="splitViewDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="splitViewDrawerTitle">拆分视图</h3>
+      <button class="link-toggle" id="closeSplitViewDrawerBtn" data-drawer-close="splitViewDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="splitViewDrawerBody">
+      <div class="review-view hidden" id="splitViewContainer"></div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseViewDrawer" data-tab-section="clean">
+  <div class="drawer-mask" data-drawer-close="caseViewDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseViewDrawerTitle">测试用例视图</h3>
+      <button class="link-toggle" id="closeCaseViewDrawerBtn" data-drawer-close="caseViewDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="caseViewDrawerBody">
+      <div class="caseview hidden" id="caseViewContainer"></div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="missingViewDrawer" data-tab-section="clean">
+  <div class="drawer-mask" data-drawer-close="missingViewDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="missingViewDrawerTitle">缺失模块视图</h3>
+      <button class="link-toggle" id="closeMissingViewDrawerBtn" data-drawer-close="missingViewDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="missingViewDrawerBody">
+      <div class="missing-view hidden" id="missingViewContainer"></div>
+      <div class="actions" style="margin-top:12px; justify-content:flex-end; gap:8px;">
+        <button class="secondary" disabled id="copyMissingBtn">复制缺失模块JSON</button>
+        <button class="pill primary" disabled id="missingSmartFillBtn">智能生成填充</button>
+        <button class="secondary" id="casesGoUsecaseGen">生成用例</button>
+      </div>
+    </div>
+  </div>
+</div>
 <section class="card hidden" data-tab-section="assign">
 <h2>功能指派</h2>
 <div class="card-body">
 <p class="hint">先在“模型管理”中创建模型，再为每个功能指派具体模型。</p>
+<div class="assign-save-bar hidden" id="assignSaveBar">
+<div class="assign-save-text">未保存指派模型，请先保存指派</div>
+<button class="primary" id="saveAssignmentsTop">保存指派</button>
+</div>
 <div class="notice-card" style="background:linear-gradient(120deg,rgba(248,113,113,0.15),rgba(249,115,22,0.12));border-color:rgba(249,115,22,0.35);">
 <strong style="display:block;margin-bottom:6px;color:#b91c1c;">注意事项</strong>
 <p style="margin:0;color:#7c2d12;font-weight:600;">提示词内的 JSON 数据结构需要严格遵循，改动提示词时，请不要影响到 JSON 的数据结构要求！！！</p>
@@ -558,6 +1011,11 @@
 <div class="row column">
 <label for="cleanPrompt">提示词</label>
 <textarea class="small-textarea" id="cleanPrompt" placeholder="为空则使用默认清洗提示词"></textarea>
+</div>
+<div class="row">
+<label for="cleanTemperature">Temperature</label>
+<input id="cleanTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
 </div>
 <div class="row hidden" data-reasoning="clean">
 <label for="cleanReasoning">Reasoning Effort</label>
@@ -583,6 +1041,11 @@
 <div class="row column">
 <label for="reviewPrompt">提示词</label>
 <textarea class="small-textarea" id="reviewPrompt" placeholder="为空则使用默认评审提示词"></textarea>
+</div>
+<div class="row">
+<label for="reviewTemperature">Temperature</label>
+<input id="reviewTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
 </div>
 <div class="row hidden" data-reasoning="review">
 <label for="reviewReasoning">Reasoning Effort</label>
@@ -610,6 +1073,11 @@
 <label for="comparePrompt">提示词</label>
 <textarea class="small-textarea" id="comparePrompt" placeholder="为空则使用默认对比提示词"></textarea>
 </div>
+<div class="row">
+<label for="compareTemperature">Temperature</label>
+<input id="compareTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
 <div class="row hidden" data-reasoning="compare">
 <label for="compareReasoning">Reasoning Effort</label>
 <select id="compareReasoning">
@@ -634,6 +1102,11 @@
 <div class="row column">
 <label for="splitPrompt">提示词</label>
 <textarea class="small-textarea" id="splitPrompt" placeholder="为空则使用默认拆分提示词"></textarea>
+</div>
+<div class="row">
+<label for="splitTemperature">Temperature</label>
+<input id="splitTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
 </div>
 <div class="row hidden" data-reasoning="split">
 <label for="splitReasoning">Reasoning Effort</label>
@@ -660,6 +1133,11 @@
 <label for="casesPrompt">提示词</label>
 <textarea class="small-textarea" id="casesPrompt" placeholder="为空则使用默认覆盖对比提示词"></textarea>
 </div>
+<div class="row">
+<label for="casesTemperature">Temperature</label>
+<input id="casesTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
 <div class="row hidden" data-reasoning="cases">
 <label for="casesReasoning">Reasoning Effort</label>
 <select id="casesReasoning">
@@ -684,6 +1162,11 @@
 <div class="row column">
 <label for="caseGenPrompt">提示词</label>
 <textarea class="small-textarea" id="caseGenPrompt" placeholder="为空则使用默认用例生成提示词"></textarea>
+</div>
+<div class="row">
+<label for="caseGenTemperature">Temperature</label>
+<input id="caseGenTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
 </div>
 <div class="row hidden" data-reasoning="casegen">
 <label for="caseGenReasoning">Reasoning Effort</label>
@@ -710,6 +1193,11 @@
 <label for="caseFilterPrompt">提示词</label>
 <textarea class="small-textarea" id="caseFilterPrompt" placeholder="为空则使用默认相似度对比提示词"></textarea>
 </div>
+<div class="row">
+<label for="caseFilterTemperature">Temperature</label>
+<input id="caseFilterTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
 <div class="row hidden" data-reasoning="casefilter">
 <label for="caseFilterReasoning">Reasoning Effort</label>
 <select id="caseFilterReasoning">
@@ -731,34 +1219,145 @@
 </section>
 <section class="card hidden" data-section-id="casesgen" data-tab-section="casesgen">
 <h2>用例生成</h2>
+  <div class="card-body">
+  <p class="hint">根据测试模块拆分的结果生成结构化测试用例，每个模块可单独调用模型生成 JSON 格式用例。</p>
+  <div class="casegen-zones">
+    <div class="casegen-zone" data-casegen-zone="general">
+      <div class="casegen-zone-head">
+        <div class="casegen-zone-title">通用操作区</div>
+        <div class="hint" style="margin:0;">导出/跳转等通用操作</div>
+      </div>
+      <div class="actions casegen-zone-actions">
+        <button class="secondary" id="caseGenAllGenerateBtn">全模块直接生成</button>
+        <button class="secondary" id="caseGenAllTopupBtn">全模块补全生成</button>
+        <button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
+        <button class="secondary" id="exportCaseGenXmind">导出全部勾选用例XMind</button>
+        <button class="secondary" id="toSplitFromCaseGen">前往测试模块拆分</button>
+      </div>
+    </div>
+
+    <div class="casegen-zone" data-casegen-zone="store">
+      <div class="casegen-zone-head">
+        <div class="casegen-zone-title">入库操作区</div>
+        <div class="hint" style="margin:0;">新用例入库 / 旧用例追加入库</div>
+      </div>
+      <div class="actions casegen-zone-actions">
+        <button class="pill accent" id="caseGenAllViewBtn" type="button">全模块用例视图</button>
+        <span class="hint" style="margin:0;" id="caseGenStoreActionHint">在【全模块用例视图】中勾选用例</span>
+        <span class="hint" style="margin:0;">新用例入库后</span>
+        <select id="caseGenStoreActionSelect" class="casegen-store-action-select">
+          <option value="">请选择</option>
+          <option value="store">直接入库</option>
+          <option value="store_to_exec">入库并转到执行</option>
+        </select>
+        <button class="pill primary" disabled id="caseGenStoreNewBtn">新用例入库</button>
+        <button class="pill secondary" disabled id="caseGenStoreAppendBtn">旧用例追加入库</button>
+      </div>
+      <p class="status" id="caseGenStatus"></p>
+    </div>
+
+    <div class="casegen-zone" data-casegen-zone="modules">
+      <div class="casegen-zone-head">
+        <div class="casegen-zone-title">模块区</div>
+        <div class="hint" style="margin:0;">按模块生成/勾选/导出用例</div>
+      </div>
+      <div class="usecase-modules" id="casesGenerationContainer"></div>
+      <p class="hint timing">模型用时：<strong><span id="caseGenTiming">--</span> 秒</strong></p>
+    </div>
+  </div>
+  </div>
+  </section>
+<div class="drawer" id="caseGenViewDrawer" data-tab-section="casesgen">
+  <div class="drawer-mask" data-drawer-close="caseGenViewDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseGenViewDrawerTitle">用例视图</h3>
+      <div class="drawer-actions">
+        <button class="secondary hidden" id="caseGenAllSelectBtn" data-case-select-all-modules="1" type="button">全选所有模块用例</button>
+        <button class="link-toggle" id="closeCaseGenViewDrawerBtn" data-drawer-close="caseGenViewDrawer">收起</button>
+      </div>
+    </div>
+    <div class="drawer-body" id="caseGenViewDrawerBody">
+      <p class="hint" style="margin:0;">请选择模块查看用例</p>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseGenDbStoreDrawer" data-tab-section="casesgen">
+  <div class="drawer-mask" data-drawer-close="caseGenDbStoreDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseGenDbStoreDrawerTitle">入库</h3>
+      <button class="link-toggle" id="closeCaseGenDbStoreDrawerBtn" data-drawer-close="caseGenDbStoreDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="caseGenDbStoreDrawerBody">
+      <p class="hint" style="margin:0 0 10px;">选择项目与版本后写入用例库；“旧用例追加入库”需额外选择目标用例。</p>
+      <div class="case-library-filters" style="margin-bottom:8px;">
+        <span class="case-library-label">项目</span>
+        <select id="caseGenDbStoreProjectSelect">
+          <option value="">请选择项目</option>
+        </select>
+        <span class="case-library-label">版本</span>
+        <select id="caseGenDbStoreVersionSelect" disabled>
+          <option value="">请选择版本</option>
+        </select>
+      </div>
+      <div class="case-library-filters hidden" style="margin-bottom:8px;" id="caseGenDbStoreCaseFileRow">
+        <span class="case-library-label">用例</span>
+        <select id="caseGenDbStoreCaseFileSelect" disabled style="min-width:240px;">
+          <option value="">请选择用例</option>
+        </select>
+      </div>
+      <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px;">
+        <button class="pill primary" id="caseGenDbStoreConfirmBtn" disabled type="button">确认入库</button>
+      </div>
+      <p class="status" id="caseGenDbStoreStatus"></p>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseGenRequirementDrawer" data-tab-section="casesgen">
+  <div class="drawer-mask" data-drawer-close="caseGenRequirementDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseGenRequirementDrawerTitle">填写需求标识</h3>
+      <button class="link-toggle" id="closeCaseGenRequirementDrawerBtn" data-drawer-close="caseGenRequirementDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" id="caseGenRequirementDrawerHint" style="margin:0 0 10px;"></p>
+      <div class="row column" style="margin:0;">
+        <label class="inline">需求标识
+          <input id="caseGenRequirementDrawerInput" maxlength="20" placeholder="例如：登录改造 / 订单导出"/>
+        </label>
+      </div>
+      <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px;">
+        <button class="pill primary" id="caseGenRequirementDrawerConfirmBtn" type="button">确认</button>
+        <button class="ghost-btn" id="caseGenRequirementDrawerCancelBtn" type="button">取消</button>
+      </div>
+      <p class="status" id="caseGenRequirementDrawerStatus"></p>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="tempExecImportDrawer" data-tab-section="tempexec">
+<div class="drawer-mask" data-drawer-close="tempExecImportDrawer"></div>
+<div class="drawer-panel">
+<div class="drawer-header">
+<h3>用例导入</h3>
+<button class="link-toggle" id="closeTempExecImportDrawerBtn" data-drawer-close="tempExecImportDrawer">收起</button>
+</div>
+<div class="drawer-body">
+<section class="card" data-section-id="tempexec-import" data-tab-section="tempexec">
+<h2>用例导入</h2>
 <div class="card-body">
-<p class="hint">根据测试模块拆分的结果生成结构化测试用例，每个模块可单独调用模型生成 JSON 格式用例。</p>
-<div class="actions">
-<button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
-<button class="secondary hidden" id="toSplitFromCaseGen">前往测试模块拆分</button>
-</div>
-<div class="usecase-modules" id="casesGenerationContainer"></div>
-<p class="status" id="caseGenStatus"></p>
-<p class="hint timing">模型用时：<strong><span id="caseGenTiming">--</span> 秒</strong></p>
-</div>
-</section>
-<section class="card hidden" data-section-id="tempexec-import" data-tab-section="tempexec">
-<div class="card-title-row">
-<h2>用例导入&分配</h2>
-<button class="pill primary" id="tempExecOverviewBtn">用例执行情况总览</button>
-</div>
-<div class="card-body">
-<p class="hint">导入 XMind/JSON/文本测试用例后，可在下方直接执行并记录实际结果。支持多份文件切换，执行数据会自动保存。</p>
+<p class="hint">导入 XMind/JSON/文本测试用例后，可在“执行视图”直接执行并记录实际结果；支持多份文件切换，执行数据会自动保存。</p>
 <div class="notice-card highlight" style="margin-bottom:12px;">
 <strong>温馨提示</strong>
-<p style="margin:4px 0 0;">点击下方“导出执行页面配置”可一键备份当前执行页面，若数据丢失，可通过导入该文件 100% 还原；导入时会覆盖当前数据，请谨慎操作。</p>
+<p style="margin:4px 0 0;">导入用例后需要点击“确认入库”，入库完成后才能进行下一步操作（如：执行分配 / 进入执行视图）。</p>
 </div>
 <div class="actions" style="margin-bottom:12px;">
-<button class="pill success" disabled="" id="exportTempExecConfigBtn">导出执行页面配置</button>
-<button class="secondary" id="importTempExecConfigBtn">导入执行页面配置</button>
+<button class="pill success" disabled hidden id="exportTempExecConfigBtn">导出执行页面配置</button>
+<button class="secondary" disabled hidden id="importTempExecConfigBtn">导入执行页面配置</button>
 <input accept=".json" hidden="" id="importTempExecConfigFile" type="file"/>
 <div class="template-dropdown" id="caseTemplateDropdown">
-  <button class="pill template-toggle" id="caseTemplateToggle" type="button">
+  <button class="pill template-toggle" id="caseTemplateToggle" type="button" disabled title="常用用例模版功能暂时停用">
     <span>常用用例模版</span>
     <span class="template-caret">▼</span>
   </button>
@@ -770,16 +1369,48 @@
 <div class="temp-case-layout">
 <div class="pane">
 <label class="zone" id="tempExecDropZone">
-<input accept=".xmind,.txt,.md,.json" hidden="" id="tempExecInput" multiple="" type="file"/>
+<input accept=".xmind,.txt,.md,.json,.xlsx" hidden="" id="tempExecInput" multiple="" type="file"/>
 <div class="zone-line">
 <strong>测试用例</strong>
 <span>拖拽或点击选择</span>
 </div>
-<div class="status">支持多份导入，解析后自动出现在下方视图</div>
+<div class="status">拖拽或点击选择文件后，还需要选择项目与版本并确认才会入库</div>
 </label>
+<p class="hint" id="tempExecImportFileHint" style="margin:8px 0 6px;">未选择文件</p>
+<div class="case-library-filters" style="margin-bottom:8px;">
+  <span class="case-library-label">项目</span>
+  <select id="tempExecImportProjectSelect">
+    <option value="">请选择项目</option>
+  </select>
+  <span class="case-library-label">版本</span>
+  <select id="tempExecImportVersionSelect" disabled>
+    <option value="">请选择版本</option>
+  </select>
+  <button class="pill primary" id="tempExecImportConfirmBtn" disabled type="button">确认入库</button>
+</div>
 <p class="status" id="tempExecStatus"></p>
 </div>
 </div>
+</div>
+</section>
+</div>
+</div>
+</div>
+<div class="drawer" id="tempExecAssignDrawer" data-tab-section="tempexec">
+<div class="drawer-mask" data-drawer-close="tempExecAssignDrawer"></div>
+<div class="drawer-panel">
+<div class="drawer-header">
+<h3>执行分配</h3>
+<button class="link-toggle" id="closeTempExecAssignDrawerBtn" data-drawer-close="tempExecAssignDrawer">收起</button>
+</div>
+<div class="drawer-body">
+<section class="card" data-section-id="tempexec-assign" data-tab-section="tempexec">
+<div class="card-title-row">
+<h2>执行分配</h2>
+<button class="pill accent" id="tempExecAddCaseFromLibraryBtn" type="button">＋ 添加执行用例</button>
+</div>
+<div class="card-body">
+<p class="hint">在此页面进行执行分配：可按需求查看用例列表、创建版本分组、拖拽需求盒子进版本、拖拽用例到专注区；也可在执行视图进行执行人分配与结果录入。</p>
 <div class="temp-exec-header">
 <p class="hint">需求用例组（可拖拽操作）</p>
 </div>
@@ -788,7 +1419,10 @@
 </div>
 <div class="temp-version-header">
 <div class="temp-version-title">版本分组</div>
+<div class="temp-version-actions">
 <button class="pill primary temp-version-create" id="createTempVersionBtn">＋ 新建版本</button>
+<button class="link-toggle" id="toggleTempVersion" aria-label="收起版本区" title="收起版本区">收起版本区</button>
+</div>
 </div>
 <div class="temp-version-grid" id="tempVersionGrid">
 <span class="hint">暂无版本，点击“新建版本”创建</span>
@@ -798,26 +1432,160 @@
 <div class="temp-focus-zone" data-temp-focus-zone>
 <span class="hint">拖拽用例到此区域，专注处理关键用例</span>
 </div>
-<p class="hint">可从上方需求或版本盒子拖拽用例到此，移出时用例会回到需求区</p>
+<p class="hint">可从上方列表拖拽用例到此，移出专注不会影响用例原本的分组与顺序</p>
 </div>
 </div>
 </section>
-<section class="card hidden" data-section-id="tempexec-view" data-tab-section="tempexec">
-<h2>执行视图</h2>
-<div class="card-body">
-<div class="actions" style="margin-bottom:12px;">
-<button class="secondary" disabled="" id="exportTempExecBtn">导出本次执行JSON</button>
-<button class="secondary" id="importTempExecBtn">导入执行JSON</button>
-<button class="secondary" disabled="" id="exportTempExecXmindBtn">导出执行XMind</button>
-
-<input accept=".json,.txt" hidden="" id="importTempExecFile" type="file"/>
 </div>
+</div>
+</div>
+<div class="drawer" id="tempExecImportDiffDrawer" data-tab-section="tempexec">
+<div class="drawer-mask" data-drawer-close="tempExecImportDiffDrawer"></div>
+<div class="drawer-panel">
+<div class="drawer-header">
+<h3 id="tempExecImportDiffTitle">同名用例差异对比</h3>
+<button class="link-toggle" data-drawer-close="tempExecImportDiffDrawer">收起</button>
+</div>
+<div class="drawer-body">
+<p class="hint">同一列表展示导入与执行中差异：绿色表示新增，红色表示差异或将被覆盖/移除。</p>
+<p class="status" id="tempExecImportDiffStatus"></p>
+<div class="case-library-diff-head">
+<p class="hint" id="tempExecImportDiffMeta"></p>
+</div>
+<div class="diff-locate-bar" id="tempExecImportDiffLocateBar"></div>
+<div class="admin-table-wrapper">
+<table class="admin-table diff-table">
+<thead>
+<tr>
+<th>#</th>
+<th>模块</th>
+<th>用例标题</th>
+<th>优先级</th>
+<th>前提条件</th>
+<th>操作步骤</th>
+<th>预期结果</th>
+<th data-tempexec-diff-result>实际结果</th>
+<th data-tempexec-diff-result>备注</th>
+<th data-tempexec-diff-result>缺陷链接</th>
+</tr>
+</thead>
+<tbody id="tempExecImportDiffBody">
+<tr><td colspan="10"><p class="hint">暂无数据</p></td></tr>
+</tbody>
+</table>
+</div>
+<div class="actions user-form-actions">
+<button class="primary" id="tempExecImportDiffOverwriteBtn" type="button">确认覆盖导入</button>
+<button class="ghost-btn" data-drawer-close="tempExecImportDiffDrawer" type="button">关闭</button>
+</div>
+</div>
+</div>
+	</div>
+	<div class="drawer" id="tempExecImportDuplicateDrawer" data-tab-section="tempexec">
+  <div class="drawer-mask" data-drawer-close="tempExecImportDuplicateDrawer"></div>
+  <div class="drawer-panel drawer-panel-wide">
+    <div class="drawer-header">
+      <h3 id="tempExecImportDuplicateTitle">导入用例重复校验</h3>
+      <button class="link-toggle" data-drawer-close="tempExecImportDuplicateDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">检测到导入文件内存在重复条目（按 模块+用例标题+预期结果 判重），数据库不支持重复条目，将在确认后自动去重。</p>
+      <p class="status" id="tempExecImportDuplicateStatus"></p>
+      <div class="admin-table-wrapper">
+        <table class="admin-table tempexec-dup-table">
+          <thead>
+            <tr>
+              <th>行号</th>
+              <th>模块</th>
+              <th>用例标题</th>
+              <th>优先级</th>
+              <th>前提条件</th>
+              <th>操作步骤</th>
+              <th>预期结果</th>
+              <th>实际结果</th>
+              <th>备注</th>
+              <th>缺陷链接</th>
+              <th>处理</th>
+            </tr>
+          </thead>
+          <tbody id="tempExecImportDuplicateBody">
+            <tr><td colspan="11"><p class="hint">暂无数据</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="primary" id="tempExecImportDuplicateConfirmBtn" type="button">确认继续入库（自动去重）</button>
+        <button class="ghost-btn" data-drawer-close="tempExecImportDuplicateDrawer" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+	<section class="card" data-section-id="tempexec-view" data-tab-section="tempexec">
+	<h2>执行视图</h2>
+	<div class="card-body">
 <div class="temp-case-view" id="tempExecView">
-<div class="temp-case-empty">请先在上方导入测试用例或点击历史用例</div>
+<div class="temp-case-empty">暂无执行用例，请在“用例导入”中导入，或在“执行分配”中选择历史记录</div>
 </div>
 
 </div></section>
-<section class="card hidden" data-section-id="tempexec-overview" data-tab-section="tempexec">
+<div class="drawer" id="tempExecCaseLibraryDiffDrawer" data-tab-section="tempexec">
+  <div class="drawer-mask" data-drawer-close="tempExecCaseLibraryDiffDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>用例变更</h3>
+      <button class="link-toggle" id="closeTempExecCaseLibraryDiffDrawerBtn" data-drawer-close="tempExecCaseLibraryDiffDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">进入执行页或刷新执行页时会同步用例库增删改，此处展示最近一次变更差异；可通过“用例变更”按钮重复查看。</p>
+      <p class="status" id="tempExecCaseLibraryDiffStatus"></p>
+      <div class="case-lib-diff-header">
+        <div class="case-lib-diff-case">
+          <span class="hint">用例：</span>
+          <span class="case-lib-diff-case-name" id="tempExecCaseLibraryDiffCaseName"></span>
+        </div>
+        <button type="button" class="pill secondary" id="tempExecCaseLibraryDiffSelectCaseBtn">选择用例</button>
+      </div>
+      <div class="case-lib-diff-case-tabs" id="tempExecCaseLibraryDiffCaseTabs"></div>
+      <div class="actions" style="margin:8px 0 12px;">
+        <button type="button" class="summary-pill case-lib-diff-pill appended" data-case-lib-diff-filter="appended" id="tempExecCaseLibraryDiffAppendedPill">追加 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill added" data-case-lib-diff-filter="added" id="tempExecCaseLibraryDiffAddedPill">新增 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill updated" data-case-lib-diff-filter="updated" id="tempExecCaseLibraryDiffUpdatedPill">改动 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill deleted" data-case-lib-diff-filter="deleted" id="tempExecCaseLibraryDiffDeletedPill">删除 0</button>
+      </div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table case-lib-diff-table">
+          <thead>
+            <tr>
+              <th style="width:70px;">类型</th>
+              <th style="width:160px;">修改时间</th>
+              <th style="width:120px;">操作人员</th>
+              <th style="width:180px;">模块</th>
+              <th style="width:220px;">用例标题</th>
+              <th>前提条件</th>
+              <th>操作步骤</th>
+              <th>预期结果</th>
+            </tr>
+          </thead>
+          <tbody id="tempExecCaseLibraryDiffBody">
+            <tr><td colspan="8"><p class="hint">暂无变更</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="tempExecCaseLibraryDiffDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="tempExecOverviewDrawer" data-tab-section="tempexec">
+<div class="drawer-mask" data-drawer-close="tempExecOverviewDrawer"></div>
+<div class="drawer-panel">
+<div class="drawer-header">
+<h3>用例执行总览</h3>
+<button class="link-toggle" id="closeTempExecOverviewDrawerBtn" data-drawer-close="tempExecOverviewDrawer">收起</button>
+</div>
+<div class="drawer-body">
+<section class="card" data-section-id="tempexec-overview" data-tab-section="tempexec">
 <h2>用例执行总览</h2>
 <div class="card-body">
 <p class="hint">按文件汇总执行进度（当前导入与历史导入），颜色区分不同执行状态。</p>
@@ -829,17 +1597,98 @@
 </div>
 </div>
 </section>
+</div>
+</div>
+</div>
+<div class="drawer" id="tempExecArchiveReasonDrawer" data-tab-section="tempexec">
+  <div class="drawer-mask" data-drawer-close="tempExecArchiveReasonDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>填写归档原因</h3>
+      <button class="link-toggle" id="closeTempExecArchiveReasonDrawerBtn" data-drawer-close="tempExecArchiveReasonDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" id="tempExecArchiveReasonHint" style="margin:0 0 10px;">原则上归档前需全部执行通过；如仍有未通过/未执行用例，请填写归档原因后继续。</p>
+      <div class="row column" style="margin:0;">
+        <label class="inline">归档原因
+          <textarea id="tempExecArchiveReasonInput" placeholder="请说明原因（必填）" style="min-height:140px;"></textarea>
+        </label>
+      </div>
+      <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px;">
+        <button class="pill primary" id="tempExecArchiveReasonConfirmBtn" type="button">确认归档</button>
+        <button class="ghost-btn" id="tempExecArchiveReasonCancelBtn" type="button">取消</button>
+      </div>
+      <p class="status" id="tempExecArchiveReasonStatus"></p>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseArchiveDrawer" data-tab-section="case-archive">
+<div class="drawer-mask" data-drawer-close="caseArchiveDrawer"></div>
+<div class="drawer-panel">
+<div class="drawer-header">
+<h3>归档用例</h3>
+<button class="link-toggle" id="closeCaseArchiveDrawerBtn" data-drawer-close="caseArchiveDrawer">收起</button>
+</div>
+<div class="drawer-body">
+<section class="card" data-tab-section="case-archive">
+<h2>查看归档</h2>
+<div class="card-body">
+<p class="hint">请选择项目/版本并搜索用例名，查看已归档用例列表。</p>
+<div class="row" style="gap:10px; flex-wrap:wrap; align-items:flex-end;">
+  <label class="inline">项目
+    <select id="caseArchiveProjectSelect"></select>
+  </label>
+  <label class="inline">版本
+    <select id="caseArchiveVersionSelect" disabled></select>
+  </label>
+</div>
+<div class="row" style="gap:10px; flex-wrap:wrap; align-items:flex-end; margin-top:8px;">
+  <label class="inline">搜索
+    <input id="caseArchiveSearchInput" placeholder="输入用例名关键字"/>
+  </label>
+  <button class="pill secondary" id="caseArchiveSearchBtn" type="button">搜索</button>
+  <button class="pill secondary" id="caseArchiveSearchClearBtn" type="button">清除</button>
+</div>
+<p class="status" id="caseArchiveDrawerStatus"></p>
+<div id="caseArchiveListPaginationTop"></div>
+<div class="admin-table-wrapper" style="margin-top:10px;">
+<table class="admin-table">
+  <thead>
+    <tr>
+      <th>编号</th>
+      <th>所属项目</th>
+      <th>版本</th>
+      <th>用例名</th>
+      <th>用例条目数</th>
+      <th>复用类型</th>
+      <th>导入人员</th>
+      <th>导入时间</th>
+      <th>归档人</th>
+      <th>归档时间</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody id="caseArchiveListBody"></tbody>
+</table>
+</div>
+<div id="caseArchiveListPaginationBottom"></div>
+<p class="hint hidden" id="caseArchiveListEmpty">暂无归档记录</p>
+</div>
+</section>
+</div>
+</div>
+</div>
 <section class="card hidden" data-tab-section="models">
 <h2>模型管理</h2>
 <div class="card-body">
-<div class="notice-card highlight" style="margin: 0 0 12px;">
-  <h3>推荐配置</h3>
-  <ul>
-    <li>优先指派 <strong>DeepSeek-R1</strong>，输出质量更好。</li>
-    <li>请将 <code>Max Tokens</code> 设置为 <strong>16384</strong> 或更高，避免长回复被截断。</li>
-    <li>为每个功能统一指派此模型，保持行为一致。</li>
-  </ul>
-</div>
+  <div class="notice-card highlight" style="margin: 0 0 12px;">
+    <h3>推荐配置</h3>
+    <ul>
+      <li>优先指派 <strong>DeepSeek-R1</strong>（模型 ID：<code>deepseek-reasoner</code>），输出质量更好。</li>
+      <li>请将 <code>Max Tokens</code> 设置为 <strong>16384</strong> 或更高，避免长回复被截断。<span class="token-hint hidden" id="deepseekTokenHint"></span></li>
+      <li>为每个功能统一指派此模型，保持行为一致。</li>
+    </ul>
+  </div>
 <p class="hint">为不同供应商配置多个模型，可随时分配给清洗或对比任务。API Key 等敏感信息仅保存在本地浏览器。</p>
 <div class="actions">
 <button id="createModelBtn">新增模型</button>
@@ -936,9 +1785,6 @@
 <label class="disabled">备注（必选）</label>
 <label class="disabled">缺陷链接（必选）</label>
 </form>
-<div class="actions" style="margin-top:8px;">
-<button class="secondary" id="saveTempExecColumns">保存列显示设置</button>
-</div>
 <p class="status" id="tempExecColumnStatus"></p>
 </div>
 </section>
@@ -947,8 +1793,8 @@
 <div class="card-body">
 <div class="settings-inline">
 <div class="meta">
-<strong>执行视图分页</strong>
-<p>设置“用例执行”表格每页展示的用例条数，范围 5-200 条，默认为 20。</p>
+<strong>全局分页设置</strong>
+<p>设置列表类视图每页展示条数（用例执行 / 用例归档 / 执行总览等），范围 5-200 条，默认为 20。</p>
 </div>
 <div class="control">
 <input id="tempExecPageSizeInput" type="number" min="5" max="200" step="5" placeholder="请输入条数"/>
@@ -958,13 +1804,1162 @@
 <button class="secondary" id="saveTempExecPageSize">保存分页设置</button>
 </div>
 <p class="status" id="tempExecPageSizeStatus"></p>
+
+<div class="settings-divider"></div>
+<div class="settings-inline">
+<div class="meta">
+<strong>页面主题</strong>
+<p>选择页面配色主题，保存后生效并同步到账号。</p>
+</div>
+<div class="control">
+<select id="themeSelect">
+<option value="light">白色主题</option>
+<option value="dark">黑色主题</option>
+</select>
+</div>
+</div>
+<div class="actions">
+<button class="secondary" id="saveThemeSetting">保存主题</button>
+</div>
+<p class="status" id="themeSettingStatus"></p>
+
+<div class="settings-divider"></div>
+<h3>页面说明自动弹出</h3>
+<p class="hint">进入主要功能页面时自动弹出页面说明，可按页面独立关闭。</p>
+<form class="settings-grid" id="pageGuideSettingsGrid">
+  <label><input type="checkbox" id="pageGuideSelectAll" data-page-guide-all="1"/> 全部</label>
+  <label><input type="checkbox" data-page-guide="auto"/> 一键执行</label>
+  <label><input type="checkbox" data-page-guide="clean"/> 功能流程</label>
+  <label><input type="checkbox" data-page-guide="casesgen"/> 用例生成</label>
+  <label><input type="checkbox" data-page-guide="assign"/> 功能指派</label>
+  <label><input type="checkbox" data-page-guide="models"/> 模型管理</label>
+  <label><input type="checkbox" data-page-guide="tempexec"/> 用例执行</label>
+  <label><input type="checkbox" data-page-guide="case-library"/> 用例库</label>
+  <label><input type="checkbox" data-page-guide="case-archive"/> 用例归档</label>
+  <label><input type="checkbox" data-page-guide="exec-overview"/> 执行总览</label>
+</form>
+<p class="status" id="pageGuideSettingsStatus"></p>
+
+<div class="settings-divider"></div>
+<div class="settings-inline" style="align-items:flex-start;">
+  <div class="meta">
+    <strong>项目排序</strong>
+    <p>拖拽项目卡片调整展示顺序；点击卡片可设置默认项目（影响各页面项目卡片/下拉框的顺序与默认选中）。</p>
+  </div>
+</div>
+<div class="project-sort-grid" id="projectSortGrid"></div>
+<p class="status" id="projectSortStatus"></p>
 </div>
 </section>
+<section class="card hidden" data-tab-section="case-archive">
+<h2>用例归档</h2>
+<div class="card-body">
+<div class="case-archive" id="caseArchive">
+  <p class="hint">提示：使用顶部导航中的【查看归档】选择归档用例记录。</p>
+  <p class="status" id="caseArchiveStatus"></p>
+  <div class="card hidden" id="caseArchiveDetailCard">
+    <h3 id="caseArchiveDetailTitle">归档用例视图</h3>
+    <div class="card-body">
+      <div class="case-archive-meta">
+        <div class="meta-line"><span class="label">项目</span><span class="value" id="caseArchiveDetailProject">--</span></div>
+        <div class="meta-line"><span class="label">版本</span><span class="value" id="caseArchiveDetailVersion">--</span></div>
+        <div class="meta-line"><span class="label">用例名</span><span class="value" id="caseArchiveDetailName">--</span></div>
+        <div class="meta-line"><span class="label">用例类型</span><span class="value" id="caseArchiveDetailReuse">--</span></div>
+        <div class="meta-line"><span class="label">用例条目数</span><span class="value" id="caseArchiveDetailCount">--</span></div>
+        <div class="meta-line"><span class="label">导入人员</span><span class="value" id="caseArchiveDetailImporter">--</span></div>
+        <div class="meta-line"><span class="label">导入时间</span><span class="value" id="caseArchiveDetailImportedAt">--</span></div>
+        <div class="meta-line"><span class="label">归档人</span><span class="value" id="caseArchiveDetailArchiver">--</span></div>
+        <div class="meta-line"><span class="label">归档时间</span><span class="value" id="caseArchiveDetailArchivedAt">--</span></div>
+        <div class="meta-line"><span class="label">归档原因</span><span class="value" id="caseArchiveDetailReason">--</span></div>
+      </div>
+      <div class="actions" style="margin:10px 0 8px;">
+        <button class="pill secondary" id="caseArchiveOpenDrawerFromDetailBtn" type="button">返回查看归档</button>
+      </div>
+      <div class="row" style="gap:10px; flex-wrap:wrap; align-items:flex-end; margin: 6px 0 10px;">
+        <label class="inline">搜索
+          <input id="caseArchiveDetailSearchInput" type="text" placeholder="搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果 / 实际结果 / 备注 / 缺陷链接"/>
+        </label>
+        <button class="pill secondary" id="caseArchiveDetailSearchClearBtn" type="button">清空搜索</button>
+      </div>
+      <div id="caseArchiveCasesPaginationTop"></div>
+      <div class="admin-table-wrapper temp-case-view case-archive-cases-view">
+        <table class="case-archive-cases-table">
+          <thead>
+            <tr>
+              <th class="index">编号</th>
+              <th class="module">模块</th>
+              <th class="title">用例标题</th>
+              <th>优先级</th>
+              <th>前提条件</th>
+              <th>操作步骤</th>
+              <th>预期结果</th>
+              <th class="actual">实际结果</th>
+              <th>备注</th>
+              <th>缺陷链接</th>
+            </tr>
+          </thead>
+          <tbody id="caseArchiveCasesBody"></tbody>
+        </table>
+      </div>
+      <div id="caseArchiveCasesPaginationBottom"></div>
+      <p class="hint hidden" id="caseArchiveCasesEmpty">暂无用例条目</p>
+    </div>
+  </div>
+</div>
+</div>
+</section>
+<section class="card hidden" data-tab-section="case-library">
+<h2>用例库</h2>
+<div class="card-body">
+<div class="case-library" id="caseLibrary">
+  <p class="hint">提示：请使用顶部导航进行导入、查看&amp;编辑或选择用例转到执行。</p>
+  <p class="status" id="caseLibraryStatus"></p>
+
+  <div class="card hidden" id="caseLibraryEditCard">
+    <h3 id="caseLibraryEditCardTitle">用例编辑视图</h3>
+    <div class="card-body">
+      <div class="case-library-drawer-meta">
+        <div class="meta-line">
+          <span class="label">项目</span>
+          <span class="value" id="caseLibraryEditProject">--</span>
+        </div>
+        <div class="meta-line">
+          <span class="label">版本</span>
+          <span class="value" id="caseLibraryEditVersion">--</span>
+        </div>
+        <div class="meta-line">
+          <span class="label">用例名</span>
+          <span class="value" id="caseLibraryEditFileName">--</span>
+        </div>
+      </div>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-search">
+          <span class="case-library-search-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <circle cx="11" cy="11" r="7"></circle>
+              <path d="M20 20l-3.5-3.5"></path>
+            </svg>
+          </span>
+          <input id="caseLibraryEditSearchInput" type="text" placeholder="搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果"/>
+        </div>
+		        <div class="case-library-drawer-actions">
+		          <button class="secondary" id="caseLibraryEditClearSearchBtn" type="button">清空搜索</button>
+		          <input class="case-library-count-input" id="caseLibraryEditBatchAddCountInput" type="text" inputmode="numeric" placeholder="1-10" value="5" autocomplete="off" maxlength="2" aria-label="批量新增数量" title="批量新增数量（1-10）" />
+		          <button class="secondary" id="caseLibraryEditBatchAddBtn" type="button">批量新增</button>
+		          <button class="secondary" id="caseLibraryEditBatchDeleteBtn" type="button" disabled>批量删除</button>
+		          <button class="primary" id="caseLibraryEditToExecBtn" type="button">转到执行</button>
+		        </div>
+		      </div>
+      <p class="status" id="caseLibraryEditStatus"></p>
+      <div class="temp-case-view" id="caseLibraryEditView"></div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="caseLibraryHistoryDetailCard">
+    <h3>用例改动历史详情</h3>
+    <div class="card-body">
+      <p class="hint">展示用例库导入/覆盖导入/增删改/删除的历史记录（永久保留）。</p>
+      <p class="status" id="caseLibraryHistoryStatus"></p>
+      <div class="case-lib-diff-header">
+        <div class="case-lib-diff-case">
+          <span class="hint">用例：</span>
+          <span class="case-lib-diff-case-name" id="caseLibraryHistoryCaseName"></span>
+        </div>
+        <div class="case-library-drawer-actions">
+          <button type="button" class="pill secondary" id="caseLibraryHistoryRefreshBtn">刷新</button>
+          <button type="button" class="pill secondary" id="caseLibraryHistoryHideBtn">收起详情</button>
+        </div>
+      </div>
+      <div class="actions" style="margin:8px 0 12px;">
+        <button type="button" class="summary-pill case-lib-diff-pill appended" data-case-lib-history-filter="append" id="caseLibraryHistoryAppendPill">追加 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill added" data-case-lib-history-filter="added" id="caseLibraryHistoryAddedPill">新增 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill updated" data-case-lib-history-filter="updated" id="caseLibraryHistoryUpdatedPill">改动 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill deleted" data-case-lib-history-filter="deleted" id="caseLibraryHistoryDeletedPill">删除 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill import" data-case-lib-history-filter="import" id="caseLibraryHistoryImportPill">导入 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill reimport" data-case-lib-history-filter="reimport" id="caseLibraryHistoryReimportPill">重导 0</button>
+        <button type="button" class="summary-pill case-lib-diff-pill file-deleted" data-case-lib-history-filter="file_deleted" id="caseLibraryHistoryFileDeletedPill">整份删除 0</button>
+      </div>
+      <div id="caseLibraryHistoryPaginationTop"></div>
+      <div class="admin-table-wrapper">
+	        <table class="admin-table case-lib-diff-table">
+	          <thead>
+	            <tr>
+	              <th style="width:70px;">类型</th>
+	              <th style="width:160px;">修改时间</th>
+	              <th style="width:120px;">操作人员</th>
+	              <th style="width:220px;">用例名</th>
+	              <th style="width:180px;">模块</th>
+	              <th style="width:220px;">用例标题</th>
+	              <th>前提条件</th>
+	              <th>操作步骤</th>
+	              <th>预期结果</th>
+	            </tr>
+	          </thead>
+	          <tbody id="caseLibraryHistoryBody">
+	            <tr><td colspan="9"><p class="hint">暂无记录</p></td></tr>
+	          </tbody>
+	        </table>
+	      </div>
+      <div id="caseLibraryHistoryPaginationBottom"></div>
+    </div>
+  </div>
+</div>
+</div>
+</section>
+<div class="drawer" id="caseLibraryImportDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryImportDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>导入用例</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryImportDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">拖拽或选择文件后，还需要选择项目与版本，点击确认才会入库。</p>
+      <label class="zone" id="caseLibraryImportDropZone">
+        <input accept=".xmind,.json,.txt,.csv,.xlsx" hidden="" id="caseLibraryImportInput" multiple="" type="file"/>
+        <div class="zone-line"><strong>拖拽</strong><span>用例文件到此处，或点击选择</span></div>
+        <p class="hint" id="caseLibraryImportFileHint">未选择文件</p>
+      </label>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryImportProjectSelect">项目</label>
+          <select id="caseLibraryImportProjectSelect"></select>
+          <label class="case-library-label" for="caseLibraryImportVersionSelect">版本</label>
+          <select id="caseLibraryImportVersionSelect" disabled></select>
+          <label class="case-library-label" for="caseLibraryImportExcelTemplateType">Excel模板</label>
+          <select id="caseLibraryImportExcelTemplateType">
+            <option value="normal" selected>非复用模板</option>
+            <option value="reuse">复用模板</option>
+          </select>
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="secondary" id="caseLibraryImportExcelTemplateBtn" type="button">Excel导入模板</button>
+          <button class="secondary" id="caseLibraryImportXmindTemplateBtn" type="button">XMind导入模板</button>
+          <button class="primary" id="caseLibraryImportConfirmBtn" type="button" disabled>确认入库</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibraryImportStatus"></p>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibraryImportDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+	  <div class="drawer" id="caseLibraryImportDiffDrawer" data-tab-section="case-library">
+	    <div class="drawer-mask" data-drawer-close="caseLibraryImportDiffDrawer"></div>
+	    <div class="drawer-panel">
+	    <div class="drawer-header">
+	      <h3 id="caseLibraryImportDiffTitle">同名用例差异对比</h3>
+	      <button class="link-toggle" data-drawer-close="caseLibraryImportDiffDrawer">收起</button>
+	    </div>
+    <div class="drawer-body">
+      <p class="hint">同一列表展示导入与库中差异：绿色表示新增，红色表示差异或将被覆盖/移除。</p>
+      <p class="status" id="caseLibraryImportDiffStatus"></p>
+      <div class="case-library-diff-head">
+        <p class="hint" id="caseLibraryImportDiffMeta"></p>
+      </div>
+      <div class="diff-locate-bar" id="caseLibraryImportDiffLocateBar"></div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table diff-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>模块</th>
+              <th>用例标题</th>
+              <th>优先级</th>
+              <th>前提条件</th>
+              <th>操作步骤</th>
+              <th>预期结果</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryImportDiffBody">
+            <tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="primary" id="caseLibraryImportDiffOverwriteBtn" type="button">确认覆盖导入</button>
+        <button class="ghost-btn" data-drawer-close="caseLibraryImportDiffDrawer" type="button">关闭</button>
+      </div>
+    </div>
+	  </div>
+	</div>
+<div class="drawer" id="caseLibraryImportInvalidDrawer" data-tab-section="case-library">
+	  <div class="drawer-mask" data-drawer-close="caseLibraryImportInvalidDrawer"></div>
+	  <div class="drawer-panel drawer-panel-wide">
+	    <div class="drawer-header">
+	      <h3 id="caseLibraryImportInvalidTitle">导入用例格式校验</h3>
+	      <button class="link-toggle" data-drawer-close="caseLibraryImportInvalidDrawer">收起</button>
+	    </div>
+	    <div class="drawer-body">
+	      <p class="hint">以下用例存在必填字段为空（模块/用例标题/优先级/前提条件/操作步骤/预期结果），请点击单元格直接修改。</p>
+	      <p class="status" id="caseLibraryImportInvalidStatus"></p>
+	      <div class="admin-table-wrapper">
+	        <table class="admin-table diff-table">
+	          <thead>
+	            <tr>
+	              <th style="width:64px;">行号</th>
+	              <th>模块</th>
+	              <th>用例标题</th>
+	              <th>优先级</th>
+	              <th>前提条件</th>
+	              <th>操作步骤</th>
+	              <th>预期结果</th>
+	            </tr>
+	          </thead>
+	          <tbody id="caseLibraryImportInvalidBody">
+	            <tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>
+	          </tbody>
+	        </table>
+	      </div>
+	      <div class="actions user-form-actions">
+	        <button class="primary" id="caseLibraryImportInvalidConfirmBtn" type="button">确认修改并入库</button>
+	        <button class="ghost-btn" data-drawer-close="caseLibraryImportInvalidDrawer" type="button">关闭</button>
+	      </div>
+	    </div>
+	  </div>
+	</div>
+	<div class="drawer" id="caseLibraryEditDrawer" data-tab-section="case-library">
+	  <div class="drawer-mask" data-drawer-close="caseLibraryEditDrawer"></div>
+	  <div class="drawer-panel">
+	    <div class="drawer-header">
+	      <h3>查看&amp;编辑</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryEditDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <div class="case-library-drawer-toolbar case-library-drawer-toolbar-primary">
+        <div class="case-library-filters">
+          <span class="case-library-section-title">搜索过滤</span>
+          <label class="case-library-label" for="caseLibraryEditProjectSelect">项目</label>
+          <select id="caseLibraryEditProjectSelect"></select>
+          <label class="case-library-label" for="caseLibraryEditVersionSelect">版本</label>
+          <select id="caseLibraryEditVersionSelect" disabled></select>
+          <label class="case-library-label" for="caseLibraryEditOwnerFilterSelect">归属</label>
+          <select id="caseLibraryEditOwnerFilterSelect"></select>
+          <label class="case-library-label" for="caseLibraryEditFileSearchInput">用例名</label>
+          <input id="caseLibraryEditFileSearchInput" type="text" placeholder="搜索用例名" />
+          <button class="primary" id="caseLibraryEditConfirmBtn" type="button">刷新</button>
+        </div>
+      </div>
+      <div class="case-library-drawer-toolbar case-library-drawer-toolbar-secondary">
+        <div class="case-library-drawer-actions case-library-drawer-actions-left">
+          <span class="case-library-section-title">全局操作</span>
+          <label class="case-library-label" for="caseLibraryEditChangeVersionSelect">请选择用例变更版本</label>
+          <select id="caseLibraryEditChangeVersionSelect" disabled></select>
+          <button class="secondary" id="caseLibraryEditChangeVersionBtn" type="button" disabled>确认更换版本</button>
+        </div>
+        <div class="case-library-drawer-actions case-library-drawer-actions-right">
+          <button class="secondary" id="caseLibraryEditShareBtn" type="button" disabled>共享</button>
+          <button class="secondary" id="caseLibraryEditExportXmindBtn" type="button" disabled>导出XMind</button>
+          <button class="secondary" id="caseLibraryEditExportExcelBtn" type="button" disabled>导出Excel</button>
+          <button class="secondary" id="caseLibraryEditDeleteBtn" data-role="admin-only" type="button" disabled>删除所选</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibraryEditDrawerStatus"></p>
+      <div id="caseLibraryEditDrawerPaginationTop"></div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="caseLibraryEditSelectAll" aria-label="全选/全不选"/></th>
+              <th>所属项目</th>
+              <th>版本</th>
+              <th>用例名</th>
+              <th>执行页状态</th>
+              <th>用例条目数</th>
+              <th>复用类型</th>
+              <th>导入人员</th>
+              <th>导入时间</th>
+              <th>最近更新人员</th>
+              <th>更新时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryEditListBody">
+            <tr><td colspan="12"><p class="hint">请选择项目后自动刷新。</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="caseLibraryEditDrawerPaginationBottom"></div>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibraryEditDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseLibraryShareDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryShareDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseLibraryShareDrawerTitle">共享用例</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryShareDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <div class="case-library-drawer-meta">
+        <div class="meta-line">
+          <span class="label">已选用例</span>
+          <span class="value" id="caseLibraryShareCaseName">--</span>
+        </div>
+        <div class="meta-line">
+          <span class="label">来源项目</span>
+          <span class="value" id="caseLibraryShareSourceProject">--</span>
+        </div>
+        <div class="meta-line">
+          <span class="label">来源版本</span>
+          <span class="value" id="caseLibraryShareSourceVersion">--</span>
+        </div>
+      </div>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryShareProjectSelect">项目</label>
+          <select id="caseLibraryShareProjectSelect"></select>
+          <label class="case-library-label" for="caseLibraryShareVersionSelect">版本</label>
+          <select id="caseLibraryShareVersionSelect" disabled></select>
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="primary" id="caseLibraryShareConfirmBtn" type="button" disabled>确认共享</button>
+        </div>
+      </div>
+      <p class="hint">若目标项目已存在同名用例，将无法共享。</p>
+      <p class="status" id="caseLibraryShareStatus"></p>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibraryShareDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseLibraryImportDuplicateDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryImportDuplicateDrawer"></div>
+  <div class="drawer-panel drawer-panel-wide">
+    <div class="drawer-header">
+      <h3 id="caseLibraryImportDuplicateTitle">导入用例重复校验</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryImportDuplicateDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">检测到导入文件内存在重复条目（按 模块+用例标题+预期结果 判重），数据库不支持重复条目，将在确认后自动去重。</p>
+      <p class="status" id="caseLibraryImportDuplicateStatus"></p>
+      <div class="admin-table-wrapper">
+        <table class="admin-table case-library-dup-table">
+          <thead>
+            <tr>
+              <th>行号</th>
+              <th>模块</th>
+              <th>用例标题</th>
+              <th>优先级</th>
+              <th>前提条件</th>
+              <th>操作步骤</th>
+              <th>预期结果</th>
+              <th>备注</th>
+              <th>处理</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryImportDuplicateBody">
+            <tr><td colspan="9"><p class="hint">暂无数据</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="primary" id="caseLibraryImportDuplicateConfirmBtn" type="button">确认继续入库（自动去重）</button>
+        <button class="ghost-btn" data-drawer-close="caseLibraryImportDuplicateDrawer" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseLibrarySelectExecDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibrarySelectExecDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>选择用例执行</h3>
+      <button class="link-toggle" data-drawer-close="caseLibrarySelectExecDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibrarySelectProjectSelect">项目</label>
+          <select id="caseLibrarySelectProjectSelect"></select>
+          <label class="case-library-label" for="caseLibrarySelectVersionSelect">版本</label>
+          <select id="caseLibrarySelectVersionSelect" disabled></select>
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="primary" id="caseLibrarySelectConfirmBtn" type="button">刷新</button>
+          <button class="secondary" id="caseLibrarySelectBatchExecBtn" type="button" disabled>批量转到执行</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibrarySelectDrawerStatus"></p>
+      <div id="caseLibrarySelectDrawerPaginationTop"></div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="caseLibrarySelectSelectAll" aria-label="全选/全不选"/></th>
+              <th>所属项目</th>
+              <th>版本</th>
+              <th>用例名</th>
+              <th>执行页状态</th>
+              <th>导入人员</th>
+              <th>导入时间</th>
+              <th>更新时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibrarySelectListBody">
+            <tr><td colspan="9"><p class="hint">请选择项目后自动刷新。</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="caseLibrarySelectDrawerPaginationBottom"></div>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibrarySelectExecDrawer" type="button">关闭</button>
+      </div>
+    </div>
+</div>
+</div>
+<div class="drawer" id="caseLibraryHistoryDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryHistoryDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>用例改动历史</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryHistoryDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">选择项目与版本后查询，仅展示有历史改动记录的用例文件。</p>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryHistoryProjectSelect">项目</label>
+          <select id="caseLibraryHistoryProjectSelect"></select>
+          <label class="case-library-label" for="caseLibraryHistoryVersionSelect">版本</label>
+          <select id="caseLibraryHistoryVersionSelect" disabled></select>
+          <label class="case-library-label" for="caseLibraryHistorySearchInput">用例名</label>
+          <input id="caseLibraryHistorySearchInput" type="text" placeholder="搜索用例名" />
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="primary" id="caseLibraryHistoryQueryBtn" type="button">查询</button>
+          <button class="secondary" id="caseLibraryHistoryClearBtn" type="button">清空搜索</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibraryHistoryDrawerStatus"></p>
+      <div id="caseLibraryHistoryDrawerPaginationTop"></div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th style="width:160px;">修改时间</th>
+              <th>用例名</th>
+              <th style="width:120px;">版本</th>
+              <th style="width:120px;">导入人员</th>
+              <th style="width:160px;">导入时间</th>
+              <th style="width:120px;">更新人员</th>
+              <th style="width:160px;">更新时间</th>
+              <th style="width:120px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryHistoryDrawerListBody">
+            <tr><td colspan="8"><p class="hint">请选择项目与版本后点击“查询”。</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="caseLibraryHistoryDrawerPaginationBottom"></div>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibraryHistoryDrawer" type="button">关闭</button>
+      </div>
+    </div>
+</div>
+</div>
+<div class="drawer" id="caseLibraryImportSelectDrawer">
+  <div class="drawer-mask" data-drawer-close="caseLibraryImportSelectDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>从用例库中选择</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryImportSelectDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">选择项目与版本后查询，用例将导入“一键执行/功能流程”的测试用例中。</p>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryImportSelectProjectSelect">项目</label>
+          <select id="caseLibraryImportSelectProjectSelect"></select>
+          <label class="case-library-label" for="caseLibraryImportSelectVersionSelect">版本</label>
+          <select id="caseLibraryImportSelectVersionSelect" disabled></select>
+          <label class="case-library-label" for="caseLibraryImportSelectSearchInput">用例名</label>
+          <input id="caseLibraryImportSelectSearchInput" type="text" placeholder="搜索用例名" />
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="primary" id="caseLibraryImportSelectQueryBtn" type="button">查询</button>
+          <button class="secondary" id="caseLibraryImportSelectBatchBtn" type="button" disabled>批量导入</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibraryImportSelectStatus"></p>
+      <div id="caseLibraryImportSelectPaginationTop"></div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="caseLibraryImportSelectSelectAll" aria-label="全选/全不选"/></th>
+              <th>所属项目</th>
+              <th>版本</th>
+              <th>用例名</th>
+              <th>复用类型</th>
+              <th>条目数</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryImportSelectListBody">
+            <tr><td colspan="7"><p class="hint">请选择项目后点击“查询”。</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="caseLibraryImportSelectPaginationBottom"></div>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibraryImportSelectDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="drawer hidden" id="execVersionSelectDrawer">
+  <div class="drawer-mask" data-drawer-close="execVersionSelectDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="execVersionSelectDrawerTitle">选择执行版本</h3>
+      <button class="link-toggle" data-drawer-close="execVersionSelectDrawer" type="button">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" style="margin:0 0 10px;" id="execVersionSelectDrawerHint">
+        导入版本仅用于记录用例库归属；执行版本用于“用例执行”页面的版本分组、归档筛选等展示与统计。
+      </p>
+      <div class="case-library-drawer-meta" style="margin-bottom:10px;">
+        <div class="meta-line">
+          <span class="label">项目</span>
+          <span class="value" id="execVersionSelectDrawerProject">--</span>
+        </div>
+        <div class="meta-line">
+          <span class="label">导入版本</span>
+          <span class="value" id="execVersionSelectDrawerImportVersion">--</span>
+        </div>
+      </div>
+      <div class="case-library-filters" style="margin-bottom:8px;">
+        <span class="case-library-label">执行版本</span>
+        <select id="execVersionSelectDrawerVersionSelect" disabled>
+          <option value="">加载中...</option>
+        </select>
+      </div>
+      <p class="status" id="execVersionSelectDrawerStatus"></p>
+      <div class="actions user-form-actions" style="justify-content:flex-end; gap:8px;">
+        <button class="primary" id="execVersionSelectDrawerConfirmBtn" type="button" disabled>确认并继续</button>
+        <button class="ghost-btn" id="execVersionSelectDrawerCancelBtn" data-drawer-close="execVersionSelectDrawer" type="button">取消</button>
+      </div>
+</div>
+</div>
+</div>
+<div class="drawer" id="appConfirmDrawer">
+  <div class="drawer-mask" data-drawer-close="appConfirmDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="appConfirmDrawerTitle">确认操作</h3>
+      <button class="link-toggle" data-drawer-close="appConfirmDrawer" type="button">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="confirm-drawer-message" id="appConfirmDrawerMessage"></p>
+      <div class="row column hidden" id="appConfirmDrawerInputRow">
+        <label class="inline" id="appConfirmDrawerInputLabel">输入内容
+          <input id="appConfirmDrawerInput" type="text" placeholder="请输入内容"/>
+          <select id="appConfirmDrawerSelect" class="hidden"></select>
+        </label>
+      </div>
+      <p class="hint hidden" id="appConfirmDrawerHint"></p>
+      <p class="status" id="appConfirmDrawerStatus"></p>
+      <div class="actions user-form-actions" style="justify-content:flex-end; gap:8px;">
+        <button class="primary" id="appConfirmDrawerConfirmBtn" type="button">确认</button>
+        <button class="ghost-btn" id="appConfirmDrawerCancelBtn" data-drawer-close="appConfirmDrawer" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+<section class="card hidden" data-tab-section="project-admin" data-role="admin-only">
+<h2>项目管理</h2>
+<div class="card-body" id="projectAdmin">
+<div class="admin-toolbar">
+<p class="status" id="projectStatus"></p>
+</div>
+<div class="admin-table-wrapper">
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>项目名称</th>
+        <th>描述</th>
+        <th>版本</th>
+        <th>创建时间</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="projectTableBody">
+      <tr><td colspan="5"><p class="hint">暂无项目，请先新建。</p></td></tr>
+    </tbody>
+  </table>
+</div>
+</div>
+</section>
+<div class="drawer" id="projectDrawer" data-tab-section="project-admin">
+  <div class="drawer-mask" data-drawer-close="projectDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="projectDrawerTitle">新建项目</h3>
+      <button class="link-toggle" data-drawer-close="projectDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="projectForm">
+      <div class="form-row">
+        <label>项目名称</label>
+        <input id="projectNameInput" type="text" placeholder="请输入项目名称"/>
+      </div>
+      <div class="form-row">
+        <label>项目描述</label>
+        <input id="projectDescInput" type="text" placeholder="可选：项目描述"/>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="primary" id="projectSaveBtn" type="button">保存</button>
+        <button class="ghost-btn" data-drawer-close="projectDrawer" type="button">取消</button>
+      </div>
+      <p class="status" id="projectFormStatus"></p>
+    </div>
+  </div>
+</div>
+<section class="card hidden" data-tab-section="user-admin" data-role="admin-only">
+<h2>人员管理</h2>
+<div class="card-body" id="userAdmin">
+  <div class="admin-toolbar">
+    <p class="status" id="userStatus"></p>
+  </div>
+  <div class="admin-table-wrapper">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>账号</th>
+          <th>角色</th>
+          <th>级别</th>
+          <th>状态</th>
+          <th>所属项目</th>
+          <th>创建时间</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="userTableBody">
+        <tr><td colspan="7"><p class="hint">暂无人员，请先新增。</p></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</section>
+<div class="drawer" id="userDrawer" data-tab-section="user-admin">
+  <div class="drawer-mask" data-drawer-close="userDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="userDrawerTitle">新增人员</h3>
+      <button class="link-toggle" data-drawer-close="userDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="userForm">
+      <div class="form-row">
+        <label>账号</label>
+        <input id="userNameInput" type="text" placeholder="请输入账号"/>
+      </div>
+      <div class="form-row" id="userPasswordRow">
+        <label>初始密码</label>
+        <input id="userPasswordInput" type="password" placeholder="可填留空使用默认"/>
+      </div>
+      <div class="form-row">
+        <label>角色</label>
+        <select id="userRoleSelect">
+          <option value="admin">管理员</option>
+          <option value="user" selected>普通用户</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>级别</label>
+        <select id="userLevelSelect">
+          <option value="leader">组长</option>
+          <option value="member" selected>组员</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>状态</label>
+        <label class="inline"><input id="userActiveCheckbox" type="checkbox" checked/> 启用</label>
+      </div>
+      <div class="form-row">
+        <label>所属项目</label>
+        <div id="userProjectsSelect" class="user-projects-select"></div>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="primary" id="userSaveBtn" type="button">保存</button>
+        <button class="ghost-btn" data-drawer-close="userDrawer" type="button">取消</button>
+      </div>
+      <p class="status" id="userFormStatus"></p>
+</div>
+</div>
+</div>
+<div class="drawer" id="userDeleteDrawer" data-tab-section="user-admin">
+  <div class="drawer-mask" data-drawer-close="userDeleteDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>删除用户确认</h3>
+      <button class="link-toggle" data-drawer-close="userDeleteDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <div class="notice-card highlight" style="margin:0 0 12px;">
+        <strong>删除后果（不可恢复）</strong>
+        <ul style="margin:8px 0 0 16px;">
+          <li>该用户账号将被彻底删除，无法再登录。</li>
+          <li>该用户的项目归属会被移除；相关个人执行数据可能失去归属，普通用户可能无法再访问，只能由管理员查看/清理。</li>
+          <li>该操作不可撤销，请谨慎确认。</li>
+        </ul>
+      </div>
+      <p class="hint" style="margin:0 0 10px;">待删除用户：<strong id="userDeleteTargetText"></strong></p>
+      <div class="form-row">
+        <label>管理员密码</label>
+        <input id="userDeleteAdminPasswordInput" type="password" placeholder="请输入当前登录管理员密码"/>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="danger" id="userDeleteConfirmBtn" type="button" disabled>确认删除</button>
+        <button class="ghost-btn" data-drawer-close="userDeleteDrawer" type="button">取消</button>
+      </div>
+      <p class="status" id="userDeleteStatus"></p>
+</div>
+</div>
+</div>
+<div class="drawer" id="opsActivityDrawer" data-tab-section="ops-log" data-role="admin-only">
+  <div class="drawer-mask" data-drawer-close="opsActivityDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>人员活跃度选择</h3>
+      <button class="link-toggle" data-drawer-close="opsActivityDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" style="margin:0 0 10px;">选择人员后将展示操作活跃度视图。</p>
+      <div class="ops-activity-drawer-toolbar">
+        <label class="inline"><input id="opsActivitySelectAll" type="checkbox"/> 全选</label>
+        <span class="status" id="opsActivityDrawerStatus"></span>
+      </div>
+      <div class="ops-activity-user-grid" id="opsActivityUserGrid"></div>
+      <p class="hint hidden" id="opsActivityUserEmpty">暂无人员</p>
+      <div class="actions user-form-actions">
+        <button class="primary" id="opsActivityApplyBtn" type="button">确认</button>
+        <button class="ghost-btn" data-drawer-close="opsActivityDrawer" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="opsContributionDrawer" data-tab-section="ops-log" data-role="admin-only">
+  <div class="drawer-mask" data-drawer-close="opsContributionDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>人员用例贡献选择</h3>
+      <button class="link-toggle" data-drawer-close="opsContributionDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" style="margin:0 0 10px;">选择人员后将展示用例贡献视图。</p>
+      <div class="ops-activity-drawer-toolbar">
+        <label class="inline"><input id="opsContributionSelectAll" type="checkbox"/> 全选</label>
+        <span class="status" id="opsContributionDrawerStatus"></span>
+      </div>
+      <div class="ops-activity-user-grid" id="opsContributionUserGrid"></div>
+      <p class="hint hidden" id="opsContributionUserEmpty">暂无人员</p>
+      <div class="actions user-form-actions">
+        <button class="primary" id="opsContributionApplyBtn" type="button">确认</button>
+        <button class="ghost-btn" data-drawer-close="opsContributionDrawer" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="opsExecContributionDrawer" data-tab-section="ops-log" data-role="admin-only">
+  <div class="drawer-mask" data-drawer-close="opsExecContributionDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>人员用例执行贡献选择</h3>
+      <button class="link-toggle" data-drawer-close="opsExecContributionDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" style="margin:0 0 10px;">选择人员后将展示用例执行贡献视图。</p>
+      <div class="ops-activity-drawer-toolbar">
+        <label class="inline"><input id="opsExecContributionSelectAll" type="checkbox"/> 全选</label>
+        <span class="status" id="opsExecContributionDrawerStatus"></span>
+      </div>
+      <div class="ops-activity-user-grid" id="opsExecContributionUserGrid"></div>
+      <p class="hint hidden" id="opsExecContributionUserEmpty">暂无人员</p>
+      <div class="actions user-form-actions">
+        <button class="primary" id="opsExecContributionApplyBtn" type="button">确认</button>
+        <button class="ghost-btn" data-drawer-close="opsExecContributionDrawer" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="opsLogDrawer" data-tab-section="ops-log" data-role="admin-only">
+  <div class="drawer-mask" data-drawer-close="opsLogDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>操作记录</h3>
+      <button class="link-toggle" data-drawer-close="opsLogDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <section class="card" data-tab-section="ops-log">
+        <h2>操作记录列表</h2>
+        <div class="card-body">
+          <div class="toolbar">
+            <button class="secondary" id="opsLogDrawerRefreshBtn" type="button">刷新</button>
+            <button class="secondary" id="opsLogDrawerExportBtn" type="button">导出记录Excel</button>
+            <label class="inline">人员
+              <select id="opsLogUserSelect"></select>
+            </label>
+            <label class="inline">日期
+              <input class="ops-activity-date-input" id="opsLogDateStart" type="date"/>
+              <span class="ops-activity-date-sep">-</span>
+              <input class="ops-activity-date-input" id="opsLogDateEnd" type="date"/>
+            </label>
+            <span class="status" id="opsLogDrawerStatus"></span>
+          </div>
+          <div class="ops-log-filters">
+            <div class="ops-log-filter-title">操作对象</div>
+            <div class="ops-log-filter-grid" id="opsLogTargetFilterGrid"></div>
+          </div>
+          <div id="opsLogPaginationTop"></div>
+          <div class="admin-table-wrapper" style="margin-top:10px;">
+            <table class="admin-table ops-log-table">
+              <thead>
+                <tr>
+                  <th>操作时间</th>
+                  <th>操作人员</th>
+                  <th>操作页面</th>
+                  <th>操作项</th>
+                  <th>操作行为</th>
+                  <th>变化</th>
+                </tr>
+              </thead>
+              <tbody id="opsLogDrawerTableBody"></tbody>
+            </table>
+          </div>
+          <div id="opsLogPaginationBottom"></div>
+          <p class="hint hidden" id="opsLogDrawerEmpty">暂无操作记录</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<section class="card hidden" data-tab-section="ops-log" data-role="admin-only">
+<h2>操作记录</h2>
+<div class="card-body">
+  <p class="hint">提示：使用顶部导航中的【查看记录】进行筛选与查看。</p>
+  <div class="ops-activity-card" id="opsActivityCard">
+    <div class="ops-activity-header">
+      <h2 class="ops-activity-title-text">人员活跃度</h2>
+      <label class="inline ops-activity-selected-label">已选人员
+        <span class="ops-activity-selected-text" id="opsActivitySelectionText"></span>
+      </label>
+      <div class="ops-activity-actions">
+        <button class="secondary" id="openOpsActivityDrawerBtnInline" type="button">重新选择人员</button>
+        <button class="secondary" id="opsActivityRefreshBtn" type="button">刷新</button>
+      </div>
+    </div>
+    <div class="ops-activity-toolbar">
+      <div class="ops-activity-controls">
+        <label class="inline">时间
+          <select class="ops-activity-select" id="opsActivityTimeRangeSelect">
+            <option value="all">历史至今</option>
+            <option value="year">年</option>
+            <option value="month">月</option>
+            <option value="week" selected>周</option>
+            <option value="day">日</option>
+          </select>
+        </label>
+        <label class="inline">日期
+          <input class="ops-activity-date-input" id="opsActivityDateStart" type="date"/>
+          <span class="ops-activity-date-sep">-</span>
+          <input class="ops-activity-date-input" id="opsActivityDateEnd" type="date"/>
+        </label>
+      </div>
+      <span class="status" id="opsActivityStatus"></span>
+    </div>
+    <div class="ops-activity-filters">
+      <div class="ops-activity-filter-title">操作行为</div>
+      <div class="ops-activity-filter-grid" id="opsActivityBehaviorFilterGrid"></div>
+    </div>
+    <div class="ops-activity-view" id="opsActivityView">
+      <div class="ops-activity-list" id="opsActivityList"></div>
+      <p class="hint hidden" id="opsActivityEmpty">暂无活跃度数据</p>
+    </div>
+  </div>
+  <div class="ops-activity-card hidden" id="opsContributionCard">
+    <div class="ops-activity-header">
+      <h2 class="ops-activity-title-text">人员用例贡献</h2>
+      <label class="inline ops-activity-selected-label">已选人员
+        <span class="ops-activity-selected-text" id="opsContributionSelectionText"></span>
+      </label>
+      <div class="ops-activity-actions">
+        <button class="secondary" id="openOpsContributionDrawerBtnInline" type="button">重新选择人员</button>
+        <button class="secondary" id="opsContributionRefreshBtn" type="button">刷新</button>
+      </div>
+    </div>
+    <div class="ops-activity-toolbar">
+      <div class="ops-activity-controls">
+        <label class="inline">时间
+          <select class="ops-activity-select" id="opsContributionTimeRangeSelect">
+            <option value="all">历史至今</option>
+            <option value="year">年</option>
+            <option value="month">月</option>
+            <option value="week" selected>周</option>
+            <option value="day">日</option>
+          </select>
+        </label>
+        <label class="inline">日期
+          <input class="ops-activity-date-input" id="opsContributionDateStart" type="date"/>
+          <span class="ops-activity-date-sep">-</span>
+          <input class="ops-activity-date-input" id="opsContributionDateEnd" type="date"/>
+        </label>
+      </div>
+      <span class="status" id="opsContributionStatus"></span>
+    </div>
+    <div class="ops-activity-filters">
+      <div class="ops-activity-filter-title">用例操作行为</div>
+      <div class="ops-activity-filter-grid" id="opsContributionBehaviorFilterGrid"></div>
+    </div>
+    <div class="ops-activity-view" id="opsContributionView">
+      <div class="ops-activity-list" id="opsContributionList"></div>
+      <p class="hint hidden" id="opsContributionEmpty">暂无贡献数据</p>
+    </div>
+  </div>
+  <div class="ops-activity-card hidden" id="opsExecContributionCard">
+    <div class="ops-activity-header">
+      <h2 class="ops-activity-title-text">人员用例执行贡献</h2>
+      <label class="inline ops-activity-selected-label">已选人员
+        <span class="ops-activity-selected-text" id="opsExecContributionSelectionText"></span>
+      </label>
+      <div class="ops-activity-actions">
+        <button class="secondary" id="openOpsExecContributionDrawerBtnInline" type="button">重新选择人员</button>
+        <button class="secondary" id="opsExecContributionRefreshBtn" type="button">刷新</button>
+      </div>
+    </div>
+    <div class="ops-activity-toolbar">
+      <div class="ops-activity-controls">
+        <label class="inline">时间
+          <select class="ops-activity-select" id="opsExecContributionTimeRangeSelect">
+            <option value="all">历史至今</option>
+            <option value="year">年</option>
+            <option value="month">月</option>
+            <option value="week" selected>周</option>
+            <option value="day">日</option>
+          </select>
+        </label>
+        <label class="inline">日期
+          <input class="ops-activity-date-input" id="opsExecContributionDateStart" type="date"/>
+          <span class="ops-activity-date-sep">-</span>
+          <input class="ops-activity-date-input" id="opsExecContributionDateEnd" type="date"/>
+        </label>
+      </div>
+      <span class="status" id="opsExecContributionStatus"></span>
+    </div>
+    <div class="ops-activity-filters">
+      <div class="ops-activity-filter-title">用例执行行为</div>
+      <div class="ops-activity-filter-grid" id="opsExecContributionBehaviorFilterGrid"></div>
+    </div>
+    <div class="ops-activity-view" id="opsExecContributionView">
+      <div class="ops-activity-list" id="opsExecContributionList"></div>
+      <p class="hint hidden" id="opsExecContributionEmpty">暂无贡献数据</p>
+    </div>
+  </div>
+  <p class="status" id="opsLogStatus"></p>
+</div>
+	</section>
+	<section class="card hidden" data-tab-section="exec-overview">
+	<h2>执行总览</h2>
+	<div class="card-body" id="execOverview">
+	  <div class="toolbar exec-overview-toolbar">
+	    <span class="status" id="execOverviewStatus"></span>
+	  </div>
+	  <div class="exec-overview-project-grid" id="execOverviewProjects"></div>
+	  <p class="hint hidden" id="execOverviewEmptyProjects">暂无可用项目</p>
+  <div class="exec-overview-detail hidden" id="execOverviewDetail">
+    <div class="exec-overview-detail-head">
+      <h3 id="execOverviewProjectTitle">项目</h3>
+      <label class="inline">
+        版本
+        <select id="execOverviewVersionSelect"></select>
+      </label>
+    </div>
+    <div class="exec-overview-version-summary" id="execOverviewVersionSummary">
+      <div class="exec-overview-version-summary-head">
+        <h4>版本总览</h4>
+        <span class="hint">汇总该项目所有执行人进度</span>
+      </div>
+      <div class="exec-overview-version-summary-body" id="execOverviewVersionSummaryBody"></div>
+      <p class="hint hidden" id="execOverviewVersionSummaryEmpty">暂无版本汇总</p>
+    </div>
+    <div class="exec-overview-user-grid" id="execOverviewUserCards"></div>
+    <p class="hint hidden" id="execOverviewEmptyUsers">暂无执行数据</p>
+  </div>
+</div>
+</section>
+
+  <div class="drawer hidden" id="execOverviewExecSetDrawer" data-tab-section="exec-overview">
+    <div class="drawer-mask" data-drawer-close="execOverviewExecSetDrawer"></div>
+    <div class="drawer-panel drawer-panel-wide">
+      <div class="drawer-header">
+        <h3 id="execOverviewExecSetTitle">执行列表</h3>
+        <button class="link-toggle" id="execOverviewExecSetClose" type="button" data-drawer-close="execOverviewExecSetDrawer">收起</button>
+      </div>
+      <div class="drawer-body">
+        <div class="exec-overview-drawer-actions">
+          <div class="temp-search-bar">
+            <input class="temp-search-input" id="execOverviewExecSetSearchInput" type="text" placeholder="搜索模块 / 用例标题 / 状态 / 实际结果"/>
+            <button class="secondary" id="execOverviewExecSetSearchClearBtn" type="button" disabled>清空</button>
+          </div>
+          <span class="status" id="execOverviewExecSetStatus"></span>
+        </div>
+        <div id="execOverviewExecSetPaginationTop"></div>
+        <div class="table-wrapper">
+          <table class="admin-table exec-overview-exec-set-table">
+            <thead>
+              <tr>
+                <th>模块</th>
+                <th>用例标题</th>
+                <th>状态</th>
+                <th>实际结果</th>
+                <th>更新时间</th>
+              </tr>
+            </thead>
+            <tbody id="execOverviewExecSetTableBody"></tbody>
+          </table>
+          <p class="hint hidden" id="execOverviewExecSetEmpty">暂无用例</p>
+        </div>
+        <div id="execOverviewExecSetPaginationBottom"></div>
+      </div>
+    </div>
+  </div>
+  <div class="drawer hidden" id="pageGuideDrawer">
+    <div class="drawer-mask" data-drawer-close="pageGuideDrawer"></div>
+    <div class="drawer-panel">
+      <div class="drawer-header">
+        <h3 id="pageGuideDrawerTitle">页面说明</h3>
+        <button class="link-toggle" id="closePageGuideDrawerBtn" data-drawer-close="pageGuideDrawer">收起</button>
+      </div>
+      <div class="drawer-body" id="pageGuideDrawerBody">
+        <p class="hint" style="margin:0;">暂无页面说明</p>
+      </div>
+    </div>
+  </div>
+  <div class="drawer hidden" id="xmindStructureDrawer">
+    <div class="drawer-mask" data-drawer-close="xmindStructureDrawer"></div>
+    <div class="drawer-panel drawer-panel-wide">
+      <div class="drawer-header">
+        <h3 id="xmindStructureDrawerTitle">XMind 用例结构</h3>
+        <button class="link-toggle" id="closeXmindStructureDrawerBtn" data-drawer-close="xmindStructureDrawer">收起</button>
+      </div>
+      <div class="drawer-body" id="xmindStructureDrawerBody"></div>
+    </div>
+  </div>
 </main>
 </div>
 </div>
 <script src="./scripts/vendor/jszip.min.js" defer></script>
 <script src="./config/constants.js" defer></script>
+<script src="./config/domConfig.js" defer></script>
+<script src="./scripts/core/appInitHelpers.js" defer></script>
+<script src="./scripts/core/appRuntime.js" defer></script>
 <script src="./scripts/core/splitCore.js" defer></script>
 <script src="./scripts/core/cleanCore.js" defer></script>
 <script src="./scripts/core/compareCore.js" defer></script>
@@ -972,16 +2967,23 @@
 <script src="./scripts/core/casesCore.js" defer></script>
 <script src="./scripts/core/autoCore.js" defer></script>
 <script src="./scripts/core/xmindCore.js" defer></script>
+<script src="./scripts/core/xlsxCore.js" defer></script>
+<script src="./scripts/core/tempexecDefaults.js" defer></script>
 <script src="./scripts/core/tempexecCore.js" defer></script>
 <script src="./scripts/core/casesGenCore.js" defer></script>
 <script src="./scripts/core/debugCore.js" defer></script>
 <script src="./scripts/core/requirementCore.js" defer></script>
+<script src="./scripts/core/flowCore.js" defer></script>
 <script src="./scripts/handlers/cleanHandlers.js" defer></script>
 <script src="./scripts/base/state.js" defer></script>
 <script src="./scripts/base/utils.js" defer></script>
-<script src="./scripts/modules/settings.js" defer></script>
+<script src="./scripts/base/drawer.js" defer></script>
+<script src="./scripts/base/confirmDrawer.js" defer></script>
+<script src="./scripts/base/execVersionDrawer.js" defer></script>
 <script src="./services/storage.js" defer></script>
 <script src="./services/modelClient.js" defer></script>
+<script src="./services/apiClient.js" defer></script>
+<script src="./scripts/modules/settings.js" defer></script>
 <script src="./scripts/modules/models.js" defer></script>
 <script src="./scripts/handlers/assignHandlers.js" defer></script>
 <script src="./scripts/modules/assign.js" defer></script>
@@ -994,11 +2996,64 @@
 <script src="./scripts/handlers/casegenHandlers.js" defer></script>
 <script src="./scripts/core/casegenCore.js" defer></script>
 <script src="./scripts/modules/casegenProgress.js" defer></script>
+<script src="./scripts/modules/memoPad.js" defer></script>
 <script src="./scripts/handlers/layoutHandlers.js" defer></script>
 <script src="./scripts/modules/auto.js" defer></script>
 <script src="./scripts/modules/casesgen.js" defer></script>
 <script src="./scripts/modules/tempexec.js" defer></script>
+<script src="./scripts/modules/caseLibrary.js" defer></script>
+<script src="./scripts/modules/caseArchive.js" defer></script>
+<script src="./scripts/modules/execOverview.js" defer></script>
+<script src="./scripts/modules/opsLog.js" defer></script>
+<script src="./scripts/modules/admin.js" defer></script>
+<script src="./scripts/modules/authGuard.js" defer></script>
+<script src="./scripts/modules/pageGuide.js" defer></script>
 <script src="./scripts/modules/app.js" defer></script>
 <script src="./scripts/modules/bootstrap.js" defer></script>
+<script>
+  (function() {
+    // 兜底：本地静态资源偶发“空响应”会导致关键脚本缺失（如 switchTab/drawer），自动刷新一次可恢复。
+    var retryKey = 'tap_bootstrap_reload_retry';
+    function getRetryCount() {
+      try {
+        return Number(sessionStorage.getItem(retryKey) || '0') || 0;
+      } catch (e) {
+        return 0;
+      }
+    }
+    function setRetryCount(n) {
+      try {
+        sessionStorage.setItem(retryKey, String(n || 0));
+      } catch (e) {
+        // ignore
+      }
+    }
+    function clearRetryCount() {
+      try {
+        sessionStorage.removeItem(retryKey);
+      } catch (e) {
+        // ignore
+      }
+    }
+    function isAppReady() {
+      if (!window.app) return false;
+      if (typeof window.app.switchTab !== 'function') return false;
+      if (!window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return false;
+      return true;
+    }
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        if (isAppReady()) {
+          clearRetryCount();
+          return;
+        }
+        var count = getRetryCount();
+        if (count >= 2) return;
+        setRetryCount(count + 1);
+        try { window.location.reload(); } catch (e) {}
+      }, 1800);
+    });
+  })();
+</script>
 </body>
 </html>

@@ -20,6 +20,17 @@
         expected: true,
         ops: true,
       },
+      pageGuideSwitches: {
+        auto: true,
+        clean: true,
+        casesgen: true,
+        assign: true,
+        models: true,
+        tempexec: true,
+        'case-library': true,
+        'case-archive': true,
+        'exec-overview': true,
+      },
     };
   }
 
@@ -41,7 +52,14 @@
     if (defaultSettings && typeof defaultSettings.tempExecColumns === 'object') {
       settingsCopy.tempExecColumns = Object.assign({}, defaultSettings.tempExecColumns);
     }
+    if (defaultSettings && typeof defaultSettings.pageGuideSwitches === 'object') {
+      settingsCopy.pageGuideSwitches = Object.assign({}, defaultSettings.pageGuideSwitches);
+    }
     return {
+      authToken: '',
+      currentUser: null,
+      userProjects: [],
+      projectList: [],
       models: [],
       assignments: {
         cleanId: '',
@@ -64,7 +82,14 @@
         splitReasoning: '',
         casesReasoning: '',
         caseGenReasoning: '',
-        caseFilterReasoning: ''
+        caseFilterReasoning: '',
+        cleanTemperature: 0.2,
+        reviewTemperature: 0.2,
+        compareTemperature: 0.2,
+        splitTemperature: 0.2,
+        casesTemperature: 0.2,
+        caseGenTemperature: 0.2,
+        caseFilterTemperature: 0.2,
       },
       settings: settingsCopy,
       editingId: null,
@@ -92,8 +117,11 @@
       missingSelections: new Set(),
       missingRowCache: [],
       missingLastList: [],
-      activeTab: 'clean',
+      activeTab: 'auto',
       inProgressStep: '',
+      inProgressSteps: {},
+      failedSteps: {},
+      waitingSteps: {},
       autoRunning: false,
       lastRawImportName: '',
       autoRequireClarifications: false,
@@ -106,6 +134,7 @@
       tempExecMindMode: false,
       tempExecPages: {},
       tempExecPageSize: defaultTempExecPageSize,
+      tempExecImportProjectFilterId: '',
       tempExecFocus: [],
       tempExecVersions: [],
       tempExecPlacement: Object.assign({}, defaultPlacement),
@@ -113,6 +142,9 @@
       tempExecDefectOpen: {},
       tempExecUndoStack: [],
       tempExecSearch: { fileId: '', term: '', raw: '' },
+      tempExecStatusFilter: { fileId: '', status: '' },
+      tempExecReqCollapsed: false,
+      tempExecVersionCollapsed: false,
       autoExpandMissing: false,
       requirementLabel: '',
       requirementLabelSource: '',

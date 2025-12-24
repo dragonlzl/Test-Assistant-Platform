@@ -21,25 +21,70 @@
     };
     var stringifyCaseField = deps && deps.stringifyCaseField ? deps.stringifyCaseField : function(val) { return (val || '').toString(); };
     var defaultTempExecColumns = deps && deps.defaultTempExecColumns ? deps.defaultTempExecColumns : {};
-    var defaultPlacement = deps && deps.defaultPlacement ? deps.defaultPlacement : { requirementOrder: [], fileOrder: {}, versionOrder: [] };
+    var defaultPlacement = deps && deps.defaultPlacement
+      ? deps.defaultPlacement
+      : {
+        requirementOrder: [],
+        fileOrder: {},
+        versionOrder: [],
+        projectOrder: [],
+        versionOrderByProject: {},
+        fileOrderByProjectVersion: {},
+      };
     var state = deps && deps.state ? deps.state : {};
     var tempExecStorageKey = deps && deps.tempExecStorageKey ? deps.tempExecStorageKey : 'usecase-temp-exec-v1';
     var tempExecFocusStorageKey = deps && deps.tempExecFocusStorageKey ? deps.tempExecFocusStorageKey : 'tempexec-focus-v1';
     var tempExecPageSizeStorageKey = deps && deps.tempExecPageSizeStorageKey ? deps.tempExecPageSizeStorageKey : 'tempexec-page-size';
+    var modelsStorageKey = deps && deps.modelsKey ? deps.modelsKey : 'cleaner-models-v1';
+    var assignmentStorageKey = deps && deps.assignmentKey ? deps.assignmentKey : 'cleaner-assignment-v1';
     var navPrefersUnassigned = false;
     var defaultTempExecPageSize = deps && deps.defaultTempExecPageSize ? deps.defaultTempExecPageSize : 20;
     var tempExecStatus = deps && deps.dom && deps.dom.tempExecStatus ? deps.dom.tempExecStatus : null;
     var tempVersionGrid = deps && deps.dom && deps.dom.tempVersionGrid ? deps.dom.tempVersionGrid : null;
     var tempExecNav = deps && deps.dom && deps.dom.tempExecNav ? deps.dom.tempExecNav : null;
     var tempFocusZone = deps && deps.dom && deps.dom.tempFocusZone ? deps.dom.tempFocusZone : null;
+    var tempExecViewFocusZone = deps && deps.dom && deps.dom.tempExecViewFocusZone ? deps.dom.tempExecViewFocusZone : null;
     var tempExecOverview = deps && deps.dom && deps.dom.tempExecOverview ? deps.dom.tempExecOverview : null;
     var tempExecView = deps && deps.dom && deps.dom.tempExecView ? deps.dom.tempExecView : null;
+    var tempExecToolbar = deps && deps.dom && deps.dom.tempExecToolbar ? deps.dom.tempExecToolbar : null;
+    var tempExecToolbarCard = deps && deps.dom && deps.dom.tempExecToolbarCard ? deps.dom.tempExecToolbarCard : null;
+    var tempReqToggleBtn = deps && deps.dom && deps.dom.toggleTempReq ? deps.dom.toggleTempReq : null;
+    var tempVersionToggleBtn = deps && deps.dom && deps.dom.toggleTempVersion ? deps.dom.toggleTempVersion : null;
+    var createTempVersionBtn = deps && deps.dom && deps.dom.createTempVersionBtn ? deps.dom.createTempVersionBtn : null;
     var tempExecViewSection = deps && deps.dom && deps.dom.tempExecViewSection ? deps.dom.tempExecViewSection : null;
     var tempExecMindContainer = deps && deps.dom && deps.dom.tempExecMindContainer ? deps.dom.tempExecMindContainer : null;
     var tempExecMindBtn = deps && deps.dom && deps.dom.tempExecMindBtn ? deps.dom.tempExecMindBtn : null;
     var exportTempExecBtn = deps && deps.dom && deps.dom.exportTempExecBtn ? deps.dom.exportTempExecBtn : null;
     var exportTempExecConfigBtn = deps && deps.dom && deps.dom.exportTempExecConfigBtn ? deps.dom.exportTempExecConfigBtn : null;
     var exportTempExecXmindBtn = deps && deps.dom && deps.dom.exportTempExecXmindBtn ? deps.dom.exportTempExecXmindBtn : null;
+    var exportTempExecCasesXmindBtn = deps && deps.dom && deps.dom.exportTempExecCasesXmindBtn ? deps.dom.exportTempExecCasesXmindBtn : null;
+    var tempExecCaseLibraryChangesBtn = null;
+    var tempExecCaseLibraryDiffStatus = null;
+    var tempExecCaseLibraryDiffBody = null;
+    var tempExecCaseLibraryDiffAppendedPill = null;
+    var tempExecCaseLibraryDiffAddedPill = null;
+    var tempExecCaseLibraryDiffUpdatedPill = null;
+    var tempExecCaseLibraryDiffDeletedPill = null;
+    var tempExecCaseLibraryDiffCaseName = null;
+    var tempExecCaseLibraryDiffCaseTabs = null;
+    var tempExecCaseLibraryDiffSelectCaseBtn = null;
+    var tempExecCaseLibraryDiffDrawer = null;
+    try {
+      if (typeof document !== 'undefined') {
+        tempExecCaseLibraryChangesBtn = document.getElementById('tempExecCaseLibraryChangesBtn');
+        tempExecCaseLibraryDiffStatus = document.getElementById('tempExecCaseLibraryDiffStatus');
+        tempExecCaseLibraryDiffBody = document.getElementById('tempExecCaseLibraryDiffBody');
+        tempExecCaseLibraryDiffAppendedPill = document.getElementById('tempExecCaseLibraryDiffAppendedPill');
+        tempExecCaseLibraryDiffAddedPill = document.getElementById('tempExecCaseLibraryDiffAddedPill');
+        tempExecCaseLibraryDiffUpdatedPill = document.getElementById('tempExecCaseLibraryDiffUpdatedPill');
+        tempExecCaseLibraryDiffDeletedPill = document.getElementById('tempExecCaseLibraryDiffDeletedPill');
+        tempExecCaseLibraryDiffCaseName = document.getElementById('tempExecCaseLibraryDiffCaseName');
+        tempExecCaseLibraryDiffCaseTabs = document.getElementById('tempExecCaseLibraryDiffCaseTabs');
+        tempExecCaseLibraryDiffSelectCaseBtn = document.getElementById('tempExecCaseLibraryDiffSelectCaseBtn');
+      }
+    } catch (err) {
+      // ignore
+    }
     var escapeHtml = deps && deps.escapeHtml ? deps.escapeHtml : function(text) {
       if (text === null || text === undefined) return '';
       return String(text)
@@ -71,8 +116,633 @@
           + pad(now.getSeconds());
       };
     var downloadText = deps && deps.downloadText ? deps.downloadText : function() {};
+    var downloadBlob = deps && deps.downloadBlob ? deps.downloadBlob : function() {};
     var scrollElementIntoView = deps && deps.scrollElementIntoView ? deps.scrollElementIntoView : function() {};
+    var openConfirmDrawer = deps && deps.openConfirmDrawer
+      ? deps.openConfirmDrawer
+      : function(options) {
+        var msg = options && options.message ? String(options.message) : '';
+        var ok = true;
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+          ok = window.confirm(msg);
+        }
+        return Promise.resolve({ ok: ok });
+      };
     var tempExecResultOptions = deps && deps.tempExecResultOptions ? deps.tempExecResultOptions : ['未执行', '通过', '失败', '阻塞', '不适用'];
+    var deriveCaseListFromText = deps && deps.deriveCaseListFromText ? deps.deriveCaseListFromText : function() { return []; };
+    var parseXmindFile = deps && deps.parseXmindFile ? deps.parseXmindFile : function() { return Promise.resolve({ text: '', list: [] }); };
+    var parseXlsxFileToRows = deps && deps.parseXlsxFileToRows ? deps.parseXlsxFileToRows : null;
+    var extractRequirementLabelFromText = deps && deps.extractRequirementLabelFromText ? deps.extractRequirementLabelFromText : function() { return ''; };
+    var promptTempExecRequirement = deps && deps.promptTempExecRequirement
+      ? deps.promptTempExecRequirement
+      : function(fileName, fallbackLabel) {
+        var base = normalizeRequirementName(fallbackLabel || '')
+          || normalizeRequirementName(getRequirementLabel())
+          || normalizeRequirementName((fileName || '').replace(/\.[^.]+$/, ''));
+        var input = window.prompt('请输入需求标识', base);
+        return input ? normalizeRequirementName(input) : '';
+    };
+    var ensureRequirementLabel = deps && deps.ensureRequirementLabel ? deps.ensureRequirementLabel : function() {
+      return normalizeRequirementName(getRequirementLabel());
+    };
+    var buildTempExecXmindPackage = deps && deps.buildTempExecXmindPackage ? deps.buildTempExecXmindPackage : null;
+    var buildXmindPackageFromCases = deps && deps.buildXmindPackageFromCases ? deps.buildXmindPackageFromCases : null;
+    var stripTimestampSuffix = deps && deps.stripTimestampSuffix ? deps.stripTimestampSuffix : function(text) { return text || ''; };
+    var getSafeFileBaseName = deps && deps.getSafeFileBaseName
+      ? deps.getSafeFileBaseName
+      : function(name, fallback) {
+        var raw = typeof name === 'string' ? name : (name && name.toString ? name.toString() : '');
+        var trimmed = raw.trim();
+        var withoutExt = trimmed.replace(/\.[^.]+$/, '');
+        var candidate = stripTimestampSuffix(withoutExt || trimmed) || withoutExt || trimmed || (fallback || '');
+        if (!candidate) candidate = 'temp_exec';
+        var safe = candidate.replace(/[\\/:*?"<>|]/g, '_');
+        return safe || 'temp_exec';
+      };
+    var ensureTempExecReplacement = deps && deps.ensureTempExecReplacement
+      ? function(entry, pendingList) { return deps.ensureTempExecReplacement(entry, pendingList || []); }
+      : function(entry, pendingList) {
+        var normalized = normalizeTempExecName(entry && entry.name);
+        var duplicates = state.tempExecFiles.filter(function(file) {
+          return normalizeTempExecName(file && file.name) === normalized;
+        });
+        var pendingDuplicates = (pendingList || []).filter(function(item) {
+          return normalizeTempExecName(item && item.name) === normalized;
+        });
+        if (duplicates.length || pendingDuplicates.length) {
+          var confirmMsg = '检测到名称为【' + (entry && entry.name ? entry.name : '') + '】的用例已存在，替换将清除原有执行结果，是否继续？';
+          if (!window.confirm(confirmMsg)) return false;
+          duplicates.forEach(function(file) { removeTempExecFile(file && file.id); });
+          pendingDuplicates.forEach(function(item) {
+            var idx = pendingList.indexOf(item);
+            if (idx !== -1) pendingList.splice(idx, 1);
+          });
+        }
+        return true;
+      };
+    var tempExecUndoTimer = null;
+    var tempExecUndoInterval = null;
+    var tempExecUndoEl = null;
+
+    function getApiClient() {
+      if (typeof window === 'undefined') return null;
+      return window.app && window.app.apiClient ? window.app.apiClient : null;
+    }
+
+    function isDbMode() {
+      if (typeof window === 'undefined') return false;
+      if (!window.app || window.app.authReady !== true) return false;
+      var liveState = window.app && window.app.state ? window.app.state : state;
+      var user = liveState && liveState.currentUser ? liveState.currentUser : null;
+      // 约定：e2e skip auth 用 user.id = 0，不走 DB 入库，避免静态模式误触发 API。
+      if (!user || !user.id) return false;
+      var client = getApiClient();
+      return Boolean(
+        client &&
+          typeof client.listExecSets === 'function' &&
+          typeof client.listExecCases === 'function' &&
+          typeof client.updateExecCase === 'function'
+      );
+    }
+
+    function ensureTempExecCaseLibraryDiffState() {
+      if (!state.tempExecCaseLibraryDiffByExecSetId || typeof state.tempExecCaseLibraryDiffByExecSetId !== 'object') {
+        state.tempExecCaseLibraryDiffByExecSetId = {};
+      }
+      if (!state.tempExecCaseLibraryDiffFilterByExecSetId || typeof state.tempExecCaseLibraryDiffFilterByExecSetId !== 'object') {
+        state.tempExecCaseLibraryDiffFilterByExecSetId = {};
+      }
+      return {
+        byExecSetId: state.tempExecCaseLibraryDiffByExecSetId,
+        filterByExecSetId: state.tempExecCaseLibraryDiffFilterByExecSetId,
+      };
+    }
+
+    function ensureTempExecCaseLibraryAutoPopupState() {
+      if (!state.tempExecCaseLibraryAutoPopupByKey || typeof state.tempExecCaseLibraryAutoPopupByKey !== 'object') {
+        state.tempExecCaseLibraryAutoPopupByKey = {};
+      }
+      if (!Array.isArray(state.tempExecCaseLibraryAutoPopupOrder)) {
+        state.tempExecCaseLibraryAutoPopupOrder = [];
+      }
+      return {
+        byKey: state.tempExecCaseLibraryAutoPopupByKey,
+        order: state.tempExecCaseLibraryAutoPopupOrder,
+      };
+    }
+
+    function getTempExecCaseLibraryAutoPopupKey(execSetId, meta) {
+      var key = '';
+      if (meta && meta.caseFileId !== null && meta.caseFileId !== undefined) {
+        key = String(meta.caseFileId);
+      }
+      if (!key && execSetId) key = 'execset:' + String(execSetId);
+      return key;
+    }
+
+    function queueTempExecCaseLibraryAutoPopup(execSetId, meta) {
+      if (!execSetId || !meta || !meta.shouldAutoPopup) return;
+      var key = getTempExecCaseLibraryAutoPopupKey(execSetId, meta);
+      if (!key) return;
+      var store = ensureTempExecCaseLibraryAutoPopupState();
+      store.byKey[key] = String(execSetId);
+      if (store.order.indexOf(key) === -1) store.order.push(key);
+    }
+
+    function clearTempExecCaseLibraryAutoPopup(execSetId, meta) {
+      var store = ensureTempExecCaseLibraryAutoPopupState();
+      var key = getTempExecCaseLibraryAutoPopupKey(execSetId, meta);
+      var resolved = key;
+      if (!resolved && execSetId) {
+        var id = String(execSetId);
+        for (var i = 0; i < store.order.length; i += 1) {
+          var k = store.order[i];
+          if (store.byKey[k] === id) {
+            resolved = k;
+            break;
+          }
+        }
+      }
+      if (!resolved) return;
+      if (Object.prototype.hasOwnProperty.call(store.byKey, resolved)) delete store.byKey[resolved];
+      var idx = store.order.indexOf(resolved);
+      if (idx !== -1) store.order.splice(idx, 1);
+    }
+
+    function pruneTempExecCaseLibraryAutoPopupQueue(keepIds) {
+      var keepList = normalizeExecSetIdList(keepIds);
+      if (!keepList.length) {
+        var store = ensureTempExecCaseLibraryAutoPopupState();
+        store.byKey = {};
+        store.order = [];
+        state.tempExecCaseLibraryAutoPopupByKey = store.byKey;
+        state.tempExecCaseLibraryAutoPopupOrder = store.order;
+        return;
+      }
+      var keepMap = {};
+      keepList.forEach(function(id) { keepMap[id] = true; });
+      var store2 = ensureTempExecCaseLibraryAutoPopupState();
+      var next = [];
+      store2.order.forEach(function(key) {
+        var execSetId = store2.byKey[key] ? String(store2.byKey[key]) : '';
+        if (!execSetId || !keepMap[execSetId]) {
+          if (Object.prototype.hasOwnProperty.call(store2.byKey, key)) delete store2.byKey[key];
+          return;
+        }
+        next.push(key);
+      });
+      store2.order = next;
+      state.tempExecCaseLibraryAutoPopupOrder = store2.order;
+    }
+
+    function pickTempExecCaseLibraryAutoPopupExecSetId(activeId) {
+      var store = ensureTempExecCaseLibraryAutoPopupState();
+      var ids = store.order.map(function(key) { return store.byKey[key]; }).filter(Boolean);
+      var active = activeId ? String(activeId) : '';
+      if (active && ids.indexOf(active) !== -1) return active;
+      return ids.length ? String(ids[0]) : '';
+    }
+
+    function maybeOpenTempExecCaseLibraryAutoPopup(allowAutoPopup, activeId) {
+      if (!allowAutoPopup) return false;
+      var execSetId = pickTempExecCaseLibraryAutoPopupExecSetId(activeId);
+      if (!execSetId) return false;
+      var opened = openTempExecCaseLibraryDiffDrawer({ auto: true, execSetId: execSetId });
+      if (opened) {
+        clearTempExecCaseLibraryAutoPopup(execSetId);
+      }
+      return opened;
+    }
+
+    function isTempExecTabActive() {
+      var isTempExecTab = false;
+      try {
+        isTempExecTab = String(state && state.activeTab ? state.activeTab : '') === 'tempexec';
+      } catch (err) {
+        isTempExecTab = false;
+      }
+      if (!isTempExecTab) {
+        try {
+          if (typeof sessionStorage !== 'undefined') {
+            var cfg = window.app && window.app.config ? window.app.config : {};
+            var key = cfg && cfg.activeTabKey ? cfg.activeTabKey : 'usecase-active-tab';
+            var saved = key ? String(sessionStorage.getItem(key) || '') : '';
+            if (saved === 'tempexec') isTempExecTab = true;
+            if (!isTempExecTab) {
+              var reloadSource = String(sessionStorage.getItem('tap-reload-source-tab') || '');
+              if (reloadSource === 'tempexec') isTempExecTab = true;
+            }
+          }
+        } catch (err2) {
+          // ignore
+        }
+      }
+      return isTempExecTab;
+    }
+
+    function normalizeExecSetIdList(raw) {
+      var list = Array.isArray(raw) ? raw.slice() : (raw ? [raw] : []);
+      var result = [];
+      list.forEach(function(id) {
+        var key = String(id || '').trim();
+        if (!key) return;
+        if (result.indexOf(key) !== -1) return;
+        result.push(key);
+      });
+      return result;
+    }
+
+    function clearTempExecCaseLibraryDiffMeta(execSetIds, options) {
+      var ids = normalizeExecSetIdList(execSetIds);
+      if (!ids.length) return false;
+      var opts = options || {};
+      var store = ensureTempExecCaseLibraryDiffState();
+      var changed = false;
+      ids.forEach(function(id) {
+        if (store.byExecSetId && Object.prototype.hasOwnProperty.call(store.byExecSetId, id)) {
+          delete store.byExecSetId[id];
+          changed = true;
+        }
+        if (store.filterByExecSetId && Object.prototype.hasOwnProperty.call(store.filterByExecSetId, id)) {
+          delete store.filterByExecSetId[id];
+          changed = true;
+        }
+        var file = getTempExecFile(id);
+        if (file && file.caseLibraryMeta) file.caseLibraryMeta = null;
+        if (String(state.tempExecCaseLibraryDiffSelectedExecSetId || '') === id) {
+          state.tempExecCaseLibraryDiffSelectedExecSetId = '';
+        }
+        if (String(state.tempExecCaseLibraryDiffLastRenderedExecSetId || '') === id) {
+          state.tempExecCaseLibraryDiffLastRenderedExecSetId = '';
+        }
+        clearTempExecCaseLibraryAutoPopup(id);
+        if (file && String(file.id || '') === String(state.tempExecActiveId || '')) {
+          syncTempExecCaseLibraryChangesButton(file);
+        }
+      });
+      if (changed && opts.render && typeof renderTempExecCaseLibraryDiffCaseTabs === 'function') {
+        var selected = getTempExecCaseLibraryDiffSelectedExecSetId();
+        if (selected) renderTempExecCaseLibraryDiffCaseTabs(selected);
+      }
+      return changed;
+    }
+
+    function pruneTempExecCaseLibraryDiffStore(keepIds) {
+      var keepList = normalizeExecSetIdList(keepIds);
+      var keepMap = {};
+      keepList.forEach(function(id) { keepMap[id] = true; });
+      var store = ensureTempExecCaseLibraryDiffState();
+      Object.keys(store.byExecSetId || {}).forEach(function(id) {
+        if (!keepMap[id]) delete store.byExecSetId[id];
+      });
+      Object.keys(store.filterByExecSetId || {}).forEach(function(id) {
+        if (!keepMap[id]) delete store.filterByExecSetId[id];
+      });
+      var selected = getTempExecCaseLibraryDiffSelectedExecSetId();
+      if (selected && !keepMap[selected]) state.tempExecCaseLibraryDiffSelectedExecSetId = '';
+      var lastRendered = state.tempExecCaseLibraryDiffLastRenderedExecSetId
+        ? String(state.tempExecCaseLibraryDiffLastRenderedExecSetId)
+        : '';
+      if (lastRendered && !keepMap[lastRendered]) state.tempExecCaseLibraryDiffLastRenderedExecSetId = '';
+      pruneTempExecCaseLibraryAutoPopupQueue(keepList);
+    }
+
+    function queueTempExecCaseLibraryDiffReset(execSetIds) {
+      var ids = normalizeExecSetIdList(execSetIds);
+      if (!ids.length) return;
+      if (!Array.isArray(state.tempExecCaseLibraryDiffResetIds)) state.tempExecCaseLibraryDiffResetIds = [];
+      ids.forEach(function(id) {
+        if (state.tempExecCaseLibraryDiffResetIds.indexOf(id) !== -1) return;
+        state.tempExecCaseLibraryDiffResetIds.push(id);
+      });
+    }
+
+    function applyTempExecCaseLibraryDiffReset() {
+      var ids = normalizeExecSetIdList(state.tempExecCaseLibraryDiffResetIds || []);
+      if (!ids.length) return;
+      clearTempExecCaseLibraryDiffMeta(ids);
+      state.tempExecCaseLibraryDiffResetIds = [];
+    }
+
+    function mountTempExecToolbarButtons() {
+      if (!tempExecToolbar) return;
+      var stash = document.getElementById('tempExecToolbarStash');
+      var changeSlot = tempExecToolbar.querySelector('#tempExecCaseLibraryChangeSlot');
+      var exportSlot = tempExecToolbar.querySelector('#tempExecExportSlot');
+      if (tempExecCaseLibraryChangesBtn && changeSlot && tempExecCaseLibraryChangesBtn.parentNode !== changeSlot) {
+        changeSlot.appendChild(tempExecCaseLibraryChangesBtn);
+      }
+      if (exportSlot) {
+        if (exportTempExecXmindBtn && exportTempExecXmindBtn.parentNode !== exportSlot) {
+          exportSlot.appendChild(exportTempExecXmindBtn);
+        }
+        if (exportTempExecCasesXmindBtn && exportTempExecCasesXmindBtn.parentNode !== exportSlot) {
+          exportSlot.appendChild(exportTempExecCasesXmindBtn);
+        }
+      }
+      if (stash && stash.classList.contains('hidden')) {
+        // keep stash hidden
+      }
+    }
+
+    function stashTempExecToolbarButtons() {
+      var stash = document.getElementById('tempExecToolbarStash');
+      if (!stash) return;
+      var items = [tempExecCaseLibraryChangesBtn, exportTempExecXmindBtn, exportTempExecCasesXmindBtn];
+      items.forEach(function(btn) {
+        if (!btn) return;
+        if (btn.parentNode !== stash) stash.appendChild(btn);
+      });
+    }
+
+    function normalizeDiffKind(raw) {
+      var kind = String(raw || '').trim().toLowerCase();
+      if (kind === 'appended' || kind === 'added' || kind === 'updated' || kind === 'deleted') return kind;
+      return '';
+    }
+
+    var execCasePatchTimers = {};
+    var execCasePatchQueue = {};
+    var pendingExecCasePatchByTempId = {};
+
+    function queueExecCasePatch(execCaseId, patch, options) {
+      if (!execCaseId) return;
+      if (!patch || typeof patch !== 'object') return;
+      if (!execCasePatchQueue[execCaseId]) execCasePatchQueue[execCaseId] = {};
+      Object.keys(patch).forEach(function(key) {
+        execCasePatchQueue[execCaseId][key] = patch[key];
+      });
+      if (execCasePatchTimers[execCaseId]) clearTimeout(execCasePatchTimers[execCaseId]);
+      execCasePatchTimers[execCaseId] = setTimeout(function() {
+        var payload = execCasePatchQueue[execCaseId] || null;
+        delete execCasePatchQueue[execCaseId];
+        delete execCasePatchTimers[execCaseId];
+        if (!payload) return;
+        var client = getApiClient();
+        if (!client || typeof client.updateExecCase !== 'function') return;
+        client.updateExecCase(execCaseId, payload).catch(function(err) {
+          if (tempExecStatus) {
+            var msg = err && err.message ? err.message : '执行数据保存失败';
+            setStatus(tempExecStatus, msg, 'err');
+          }
+          if (options && typeof options.onError === 'function') {
+            try { options.onError(err); } catch (e) {}
+          }
+        });
+      }, 320);
+    }
+
+    function queueExecCasePatchForItem(item, patch) {
+      if (!item || !patch || typeof patch !== 'object') return;
+      var caseId = item.execCaseId || item.id;
+      if (caseId) {
+        queueExecCasePatch(caseId, patch);
+        return;
+      }
+      var tempId = item._tempId ? String(item._tempId) : '';
+      if (!tempId) return;
+      if (!pendingExecCasePatchByTempId[tempId] || typeof pendingExecCasePatchByTempId[tempId] !== 'object') {
+        pendingExecCasePatchByTempId[tempId] = {};
+      }
+      Object.keys(patch).forEach(function(key) {
+        pendingExecCasePatchByTempId[tempId][key] = patch[key];
+      });
+    }
+
+    function consumePendingExecCasePatch(tempId) {
+      var key = tempId ? String(tempId) : '';
+      if (!key) return null;
+      var payload = pendingExecCasePatchByTempId[key] || null;
+      if (payload) delete pendingExecCasePatchByTempId[key];
+      return payload;
+    }
+
+    function clearPendingExecCasePatch(tempId) {
+      var key = tempId ? String(tempId) : '';
+      if (!key) return;
+      if (pendingExecCasePatchByTempId[key]) delete pendingExecCasePatchByTempId[key];
+    }
+
+    var execSetPatchTimer = null;
+    var execSetPatchQueue = {};
+    function queueExecSetPatch(execSetId, patch) {
+      if (!execSetId) return;
+      if (!patch || typeof patch !== 'object') return;
+      Object.keys(patch).forEach(function(key) {
+        execSetPatchQueue[key] = patch[key];
+      });
+      if (execSetPatchTimer) clearTimeout(execSetPatchTimer);
+      execSetPatchTimer = setTimeout(function() {
+        execSetPatchTimer = null;
+        var payload = execSetPatchQueue;
+        execSetPatchQueue = {};
+        var client = getApiClient();
+        if (!client || typeof client.updateExecSet !== 'function') return;
+        client.updateExecSet(execSetId, payload).catch(function(err) {
+          if (tempExecStatus) {
+            var msg = err && err.message ? err.message : '执行集保存失败';
+            setStatus(tempExecStatus, msg, 'err');
+          }
+        });
+      }, 400);
+    }
+
+    var tempExecUiSaveTimer = null;
+    function scheduleTempExecUiSave() {
+      if (!isDbMode()) return;
+      var client = getApiClient();
+      if (!client || typeof client.saveSettings !== 'function') return;
+      if (tempExecUiSaveTimer) clearTimeout(tempExecUiSaveTimer);
+      tempExecUiSaveTimer = setTimeout(function() {
+        tempExecUiSaveTimer = null;
+        var payload = {
+          type: 'tempexec_ui_v1',
+          activeId: state.tempExecActiveId || '',
+          placement: state.tempExecPlacement || defaultPlacement,
+          collapsed: {
+            req: Boolean(state.tempExecReqCollapsed),
+            version: Boolean(state.tempExecVersionCollapsed),
+          },
+          focus: Array.isArray(state.tempExecFocus) ? state.tempExecFocus : [],
+          versions: serializeTempExecVersions(state),
+          pageSize: state.tempExecPageSize || defaultTempExecPageSize,
+          importProjectFilterId: state.tempExecImportProjectFilterId ? String(state.tempExecImportProjectFilterId) : '',
+          archivedHidden: Array.isArray(state.tempExecArchivedHidden) ? state.tempExecArchivedHidden : [],
+        };
+        client.saveSettings('user', [{ key: 'tempexec_ui_v1', value_json: payload }]).catch(function() {});
+      }, 500);
+    }
+
+    var tempExecImportDuplicateDrawer = null;
+    var tempExecImportDuplicateResolve = null;
+    var tempExecImportDuplicateResolved = false;
+    var tempExecImportDuplicateConfirmBound = false;
+
+    function ensureTempExecImportDuplicateDrawer() {
+      if (tempExecImportDuplicateDrawer) return tempExecImportDuplicateDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      tempExecImportDuplicateDrawer = window.app.drawer.createDrawer({
+        drawerId: 'tempExecImportDuplicateDrawer',
+        onClose: function() {
+          if (tempExecImportDuplicateResolved) return;
+          if (typeof tempExecImportDuplicateResolve === 'function') {
+            tempExecImportDuplicateResolved = true;
+            try { tempExecImportDuplicateResolve(false); } catch (e) {}
+            tempExecImportDuplicateResolve = null;
+          }
+        },
+      });
+      if (!tempExecImportDuplicateConfirmBound) {
+        tempExecImportDuplicateConfirmBound = true;
+        var confirmBtn = document.getElementById('tempExecImportDuplicateConfirmBtn');
+        if (confirmBtn && typeof confirmBtn.addEventListener === 'function') {
+          confirmBtn.addEventListener('click', function() {
+            if (tempExecImportDuplicateResolved) return;
+            if (typeof tempExecImportDuplicateResolve !== 'function') return;
+            tempExecImportDuplicateResolved = true;
+            var resolve = tempExecImportDuplicateResolve;
+            tempExecImportDuplicateResolve = null;
+            try { resolve(true); } catch (e) {}
+            if (tempExecImportDuplicateDrawer && typeof tempExecImportDuplicateDrawer.close === 'function') {
+              tempExecImportDuplicateDrawer.close();
+            }
+          });
+        }
+      }
+      return tempExecImportDuplicateDrawer;
+    }
+
+    function renderTempExecImportDuplicateDrawer(payload) {
+      var titleEl = document.getElementById('tempExecImportDuplicateTitle');
+      var statusEl = document.getElementById('tempExecImportDuplicateStatus');
+      var bodyEl = document.getElementById('tempExecImportDuplicateBody');
+      var confirmBtn = document.getElementById('tempExecImportDuplicateConfirmBtn');
+
+      var fileName = payload && payload.fileName ? String(payload.fileName) : '用例';
+      var total = payload && Number.isFinite(Number(payload.total)) ? Number(payload.total) : 0;
+      var uniqueCount = payload && Number.isFinite(Number(payload.uniqueCount)) ? Number(payload.uniqueCount) : 0;
+      var duplicateCount = payload && Number.isFinite(Number(payload.duplicateCount)) ? Number(payload.duplicateCount) : 0;
+      var rows = payload && Array.isArray(payload.rows) ? payload.rows : [];
+
+      if (titleEl) titleEl.textContent = '导入用例重复校验：' + fileName;
+      if (statusEl) {
+        var msg = '检测到重复条目 ' + duplicateCount + ' 条（模块/用例描述/前提条件/操作步骤/预期结果均相同），将自动去重：原 ' + total + ' 条 → 去重后 ' + uniqueCount + ' 条。';
+        setStatus(statusEl, msg, 'warn');
+      }
+      if (confirmBtn) confirmBtn.disabled = !duplicateCount;
+
+      if (!bodyEl) return;
+      if (!rows.length) {
+        bodyEl.innerHTML = '<tr><td colspan="11"><p class="hint">暂无重复条目</p></td></tr>';
+        return;
+      }
+
+      function toHtml(val) {
+        var text = val === null || val === undefined ? '' : String(val);
+        return escapeHtml(text).replace(/\n/g, '<br>');
+      }
+      function formatDefects(list) {
+        if (!Array.isArray(list) || !list.length) return '';
+        var urls = list.map(function(d) {
+          if (!d) return '';
+          if (typeof d === 'string') return d;
+          if (d.url) return String(d.url);
+          if (d.value) return String(d.value);
+          return '';
+        }).filter(Boolean);
+        return urls.join('\n');
+      }
+
+      bodyEl.innerHTML = rows.map(function(entry) {
+        var item = entry && entry.payload ? entry.payload : null;
+        var src = entry && entry.source ? entry.source : null;
+        var line = entry && Number.isFinite(Number(entry.line)) ? Number(entry.line) : 0;
+        var keep = entry && entry.keep ? true : false;
+
+        var module = item && item.module ? String(item.module) : '';
+        var title = item && item.title ? String(item.title) : '';
+        var priority = item && item.priority ? String(item.priority) : '';
+        var pre = item && item.precondition ? String(item.precondition) : '';
+        var steps = item && item.steps ? String(item.steps) : '';
+        var expected = item && item.expected ? String(item.expected) : '';
+        var actual = src && src.actual ? String(src.actual) : '';
+        var remark = src && src.remark ? String(src.remark) : (item && item.remark ? String(item.remark) : '');
+        var defect = formatDefects(src && src.defectLinks ? src.defectLinks : []);
+        var action = keep ? '保留' : '移除';
+        return (
+          '<tr>' +
+            '<td>' + (line ? String(line) : '-') + '</td>' +
+            '<td>' + toHtml(module) + '</td>' +
+            '<td>' + toHtml(title) + '</td>' +
+            '<td>' + toHtml(priority) + '</td>' +
+            '<td>' + toHtml(pre) + '</td>' +
+            '<td>' + toHtml(steps) + '</td>' +
+            '<td>' + toHtml(expected) + '</td>' +
+            '<td>' + toHtml(actual) + '</td>' +
+            '<td>' + toHtml(remark) + '</td>' +
+            '<td>' + toHtml(defect) + '</td>' +
+            '<td>' + escapeHtml(action) + '</td>' +
+          '</tr>'
+        );
+      }).join('');
+    }
+
+    function confirmTempExecImportDuplicateByDrawer(payload) {
+      var drawer = ensureTempExecImportDuplicateDrawer();
+      if (!drawer) return Promise.resolve(false);
+
+      tempExecImportDuplicateResolved = false;
+      renderTempExecImportDuplicateDrawer(payload);
+      drawer.open();
+
+      return new Promise(function(resolve) {
+        tempExecImportDuplicateResolve = resolve;
+      });
+    }
+    function syncTempSectionToggleButtons() {
+      var isProjectLayout = isTempExecProjectLayoutEnabled();
+      if (tempReqToggleBtn) {
+        // DB 模式下不展示“需求区”，但保留旧逻辑以便未来再次启用
+        tempReqToggleBtn.classList.toggle('hidden', Boolean(isProjectLayout));
+        tempReqToggleBtn.classList.toggle('collapsed', Boolean(state.tempExecReqCollapsed));
+        var reqLabel = state.tempExecReqCollapsed ? '展开需求区' : '收起需求区';
+        tempReqToggleBtn.setAttribute('aria-label', reqLabel);
+        tempReqToggleBtn.setAttribute('title', reqLabel);
+        tempReqToggleBtn.textContent = reqLabel;
+      }
+      if (tempVersionToggleBtn) {
+        tempVersionToggleBtn.classList.toggle('collapsed', Boolean(state.tempExecVersionCollapsed));
+        var verLabel = isProjectLayout
+          ? (state.tempExecVersionCollapsed ? '展开项目区' : '收起项目区')
+          : (state.tempExecVersionCollapsed ? '展开版本区' : '收起版本区');
+        tempVersionToggleBtn.setAttribute('aria-label', verLabel);
+        tempVersionToggleBtn.setAttribute('title', verLabel);
+        tempVersionToggleBtn.textContent = verLabel;
+      }
+      if (createTempVersionBtn) {
+        createTempVersionBtn.classList.toggle('hidden', Boolean(state.tempExecVersionCollapsed) || Boolean(isProjectLayout));
+        createTempVersionBtn.disabled = Boolean(isProjectLayout);
+      }
+      if (tempExecNav) {
+        var header = tempExecNav.previousElementSibling;
+        if (header && header.classList && header.classList.contains('temp-exec-header')) {
+          header.classList.toggle('hidden', Boolean(isProjectLayout));
+        }
+        tempExecNav.classList.toggle('hidden', Boolean(isProjectLayout));
+      }
+      if (tempVersionGrid) {
+        tempVersionGrid.classList.toggle('temp-project-layout', Boolean(isProjectLayout));
+        var header2 = tempVersionGrid.previousElementSibling;
+        if (header2 && header2.querySelector) {
+          var titleEl = header2.querySelector('.temp-version-title');
+          if (titleEl) titleEl.textContent = isProjectLayout ? '项目分组' : '版本分组';
+        }
+      }
+    }
+
+    function isTempExecProjectLayoutEnabled() {
+      return isDbMode();
+    }
 
     function normalizeReuseDetails(list) {
       if (!Array.isArray(list)) return [];
@@ -113,6 +783,13 @@
           return { id: id, url: url };
         })
         .filter(Boolean);
+    }
+
+    function getTempExecFileBaseName(file, requirementLabel) {
+      var requirement = normalizeRequirementName(requirementLabel) || '';
+      var name = file && file.name ? file.name : '';
+      var fallback = requirement || 'temp_exec';
+      return getSafeFileBaseName(name, fallback);
     }
 
     function normalizeTempExecCase(item, fileId, idx) {
@@ -159,10 +836,41 @@
       var versionOrder = Array.isArray(placement.versionOrder)
         ? placement.versionOrder.map(function(id) { return id && id.toString(); }).filter(Boolean)
         : [];
+      var projectOrder = Array.isArray(placement.projectOrder)
+        ? placement.projectOrder.map(function(id) { return id && id.toString(); }).filter(Boolean)
+        : [];
+      var versionOrderByProject = placement.versionOrderByProject && typeof placement.versionOrderByProject === 'object'
+        ? Object.keys(placement.versionOrderByProject).reduce(function(acc, projectId) {
+            var pid = projectId && projectId.toString ? projectId.toString() : '';
+            if (!pid) return acc;
+            var arr = Array.isArray(placement.versionOrderByProject[projectId]) ? placement.versionOrderByProject[projectId] : [];
+            acc[pid] = arr.map(function(id) { return id && id.toString(); }).filter(Boolean);
+            return acc;
+          }, {})
+        : {};
+      var fileOrderByProjectVersion = placement.fileOrderByProjectVersion && typeof placement.fileOrderByProjectVersion === 'object'
+        ? Object.keys(placement.fileOrderByProjectVersion).reduce(function(acc, projectId) {
+            var pid = projectId && projectId.toString ? projectId.toString() : '';
+            if (!pid) return acc;
+            var versions = placement.fileOrderByProjectVersion[projectId];
+            if (!versions || typeof versions !== 'object') return acc;
+            acc[pid] = Object.keys(versions).reduce(function(vacc, verId) {
+              var vid = verId && verId.toString ? verId.toString() : '';
+              if (vid === null || vid === undefined) return vacc;
+              var arr = Array.isArray(versions[verId]) ? versions[verId] : [];
+              vacc[vid] = arr.map(function(id) { return id && id.toString(); }).filter(Boolean);
+              return vacc;
+            }, {});
+            return acc;
+          }, {})
+        : {};
       return {
         requirementOrder: requirementOrder,
         fileOrder: fileOrder,
         versionOrder: versionOrder,
+        projectOrder: projectOrder,
+        versionOrderByProject: versionOrderByProject,
+        fileOrderByProjectVersion: fileOrderByProjectVersion,
       };
     }
 
@@ -175,6 +883,7 @@
         requirement: file.requirement || getRequirementLabel(true),
         reuseEnabled: Boolean(file.reuseEnabled),
         createdAt: file.createdAt || Date.now(),
+        projectId: file.projectId || '',
         versionId: file.versionId || '',
         reusePresets: Array.isArray(file.reusePresets)
           ? file.reusePresets.map(function(preset) {
@@ -249,6 +958,58 @@
         .filter(Boolean);
     }
 
+    function serializeModelList(list) {
+      if (!Array.isArray(list)) return [];
+      return list
+        .map(function(item) {
+          if (!item || typeof item !== 'object') return null;
+          var model = {};
+          Object.keys(item).forEach(function(key) {
+            var val = item[key];
+            if (val === undefined || typeof val === 'function') return;
+            model[key] = val;
+          });
+          if (!model.id) {
+            model.id = 'model-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6);
+          }
+          return model;
+        })
+        .filter(Boolean);
+    }
+
+    function serializeAssignments(raw) {
+      if (!raw || typeof raw !== 'object') return {};
+      var result = {};
+      Object.keys(raw).forEach(function(key) {
+        var val = raw[key];
+        if (val === undefined || typeof val === 'function') return;
+        result[key] = val;
+      });
+      return result;
+    }
+
+    function applyImportedModels(list) {
+      var models = serializeModelList(list);
+      if (!models.length) return;
+      state.models = models;
+      try {
+        localStorage.setItem(modelsStorageKey, JSON.stringify(models));
+      } catch (err) {
+        console.warn('保存模型配置失败', err);
+      }
+    }
+
+    function applyImportedAssignments(assignments) {
+      if (!assignments || typeof assignments !== 'object') return;
+      var merged = Object.assign({}, state.assignments || {}, serializeAssignments(assignments));
+      state.assignments = merged;
+      try {
+        localStorage.setItem(assignmentStorageKey, JSON.stringify(merged));
+      } catch (err) {
+        console.warn('保存模型指派失败', err);
+      }
+    }
+
     function serializeTempExecSnapshot(state, getPageSize, columns) {
       return {
         type: 'tempexec_snapshot_v1',
@@ -261,6 +1022,8 @@
         columns: columns || {},
         activeId: state.tempExecActiveId || '',
         placement: state.tempExecPlacement || defaultPlacement,
+        models: serializeModelList(state.models || []),
+        assignments: serializeAssignments(state.assignments || {}),
       };
     }
 
@@ -313,6 +1076,12 @@
 
     function applyTempExecSnapshot(snapshot) {
       if (!snapshot || typeof snapshot !== 'object') throw new Error('导入内容为空或格式不正确');
+      if (snapshot.models) {
+        applyImportedModels(snapshot.models);
+      }
+      if (snapshot.assignments && typeof snapshot.assignments === 'object') {
+        applyImportedAssignments(snapshot.assignments);
+      }
       var filesRaw = Array.isArray(snapshot.files) ? snapshot.files : [];
       var versionsRaw = Array.isArray(snapshot.versions) ? snapshot.versions : [];
       var usedIds = new Set();
@@ -347,6 +1116,7 @@
       state.tempExecReuseOpen = {};
       state.tempExecDefectOpen = {};
       state.tempExecPresetDraft = null;
+      state.tempExecStatusFilter = { fileId: '', status: '' };
       resetTempExecPages();
       state.tempExecMindMode = false;
       var focusList = Array.isArray(snapshot.focus) ? snapshot.focus : [];
@@ -361,7 +1131,8 @@
         state.settings = state.settings || {};
         state.settings.tempExecColumns = columns;
         ensureTempExecColumns();
-        persistSettings();
+        // 仅持久化列设置，避免覆盖其他设备的设置项。
+        persistSettings(['tempExecColumns']);
       }
       if (Number.isFinite(Number(snapshot.pageSize))) {
         applyTempExecPageSize(Number(snapshot.pageSize));
@@ -382,14 +1153,142 @@
 
     function ensureTempExecPlacement() {
       if (!state.tempExecPlacement || typeof state.tempExecPlacement !== 'object') {
-        state.tempExecPlacement = Object.assign({}, defaultPlacement);
+        state.tempExecPlacement = normalizeTempExecPlacement(defaultPlacement);
       }
       if (!Array.isArray(state.tempExecPlacement.requirementOrder)) state.tempExecPlacement.requirementOrder = [];
       if (!state.tempExecPlacement.fileOrder || typeof state.tempExecPlacement.fileOrder !== 'object') {
         state.tempExecPlacement.fileOrder = {};
       }
       if (!Array.isArray(state.tempExecPlacement.versionOrder)) state.tempExecPlacement.versionOrder = [];
+      if (!Array.isArray(state.tempExecPlacement.projectOrder)) state.tempExecPlacement.projectOrder = [];
+      if (!state.tempExecPlacement.versionOrderByProject || typeof state.tempExecPlacement.versionOrderByProject !== 'object') {
+        state.tempExecPlacement.versionOrderByProject = {};
+      }
+      if (!state.tempExecPlacement.fileOrderByProjectVersion || typeof state.tempExecPlacement.fileOrderByProjectVersion !== 'object') {
+        state.tempExecPlacement.fileOrderByProjectVersion = {};
+      }
       return state.tempExecPlacement;
+    }
+
+    function resolveProjectName(projectId) {
+      var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+      if (!pid) return '项目#未知';
+      var list = Array.isArray(state.projects) ? state.projects : [];
+      var found = list.find(function(p) { return p && String(p.id) === pid; });
+      var name = found && found.name ? String(found.name) : '';
+      return name.trim() || ('项目#' + pid);
+    }
+
+    function resolveVersionName(projectId, versionId) {
+      var vid = versionId === null || versionId === undefined ? '' : String(versionId);
+      if (!vid) return '版本#未知';
+      var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+      var byProject = state.projectVersionsByProject && typeof state.projectVersionsByProject === 'object'
+        ? state.projectVersionsByProject
+        : {};
+      var list = byProject && pid && Array.isArray(byProject[pid]) ? byProject[pid] : [];
+      var found = list.find(function(v) { return v && String(v.id) === vid; });
+      var name = found && found.name ? String(found.name) : '';
+      return name.trim() || ('版本#' + vid);
+    }
+
+    function updateTempExecFileCountBadge(fileId) {
+      if (!fileId) return;
+      var file = getTempExecFile(fileId);
+      if (!file) return;
+      var count = getTempExecFileCaseCount(file);
+      var badgeText = count + ' 条';
+      try {
+        var nodes = [];
+        if (tempVersionGrid && tempVersionGrid.querySelectorAll) {
+          nodes = nodes.concat(Array.prototype.slice.call(tempVersionGrid.querySelectorAll('.temp-req-row[data-temp-file="' + String(fileId) + '"] .temp-req-count-badge')));
+        }
+        if (tempExecNav && tempExecNav.querySelectorAll) {
+          nodes = nodes.concat(Array.prototype.slice.call(tempExecNav.querySelectorAll('.temp-req-row[data-temp-file="' + String(fileId) + '"] .temp-req-count-badge')));
+        }
+        nodes.forEach(function(node) {
+          if (!node) return;
+          node.textContent = badgeText;
+        });
+      } catch (err) {
+        // ignore dom update errors
+      }
+    }
+
+    function ensureProjectOrder(projectIds, projectMeta) {
+      var placement = ensureTempExecPlacement();
+      var list = Array.isArray(projectIds) ? projectIds : [];
+      var normalized = list.map(function(id) { return id === null || id === undefined ? '' : String(id); }).filter(Boolean);
+      var globalState = window.app && window.app.state ? window.app.state : {};
+      var settings = globalState && globalState.settings && typeof globalState.settings === 'object' ? globalState.settings : {};
+      var userOrder = Array.isArray(settings.projectOrder) ? settings.projectOrder.slice() : [];
+      userOrder = userOrder.map(function(id) { return id === null || id === undefined ? '' : String(id); }).filter(Boolean);
+      var useUserOrder = userOrder.length > 0;
+
+      var existing = useUserOrder
+        ? userOrder.filter(function(id) { return normalized.includes(id); })
+        : placement.projectOrder.filter(function(id) { return normalized.includes(id); });
+      var missing = normalized.filter(function(id) { return existing.indexOf(id) === -1; });
+      if (missing.length) {
+        var metaMap = projectMeta && typeof projectMeta.get === 'function' ? projectMeta : null;
+        missing.sort(function(a, b) {
+          var ta = metaMap ? Number(metaMap.get(a) || 0) : 0;
+          var tb = metaMap ? Number(metaMap.get(b) || 0) : 0;
+          if (ta !== tb) return tb - ta;
+          return a.localeCompare(b, 'zh-Hans-CN');
+        });
+      }
+      // 用户已在“项目排序”设置中明确配置时：按用户排序为准，新增项目自动追加到末尾。
+      // 未配置时：延续旧逻辑（新出现的项目优先靠前）。
+      placement.projectOrder = useUserOrder ? existing.concat(missing) : missing.concat(existing);
+      return placement.projectOrder.slice();
+    }
+
+    function ensureProjectVersionOrder(projectId, versionIds, metaMap) {
+      var placement = ensureTempExecPlacement();
+      var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+      if (!pid) return [];
+      if (!placement.versionOrderByProject[pid]) placement.versionOrderByProject[pid] = [];
+      var list = Array.isArray(versionIds) ? versionIds : [];
+      var normalized = list.map(function(id) { return id === null || id === undefined ? '' : String(id || ''); });
+      normalized = normalized.filter(function(id) { return id !== null && id !== undefined; });
+      var existing = placement.versionOrderByProject[pid].filter(function(id) { return normalized.includes(id); });
+      var missing = normalized.filter(function(id) { return existing.indexOf(id) === -1; });
+      if (missing.length) {
+        var meta = metaMap && typeof metaMap.get === 'function' ? metaMap : null;
+        missing.sort(function(a, b) {
+          var ta = meta ? Number(meta.get(a) || 0) : 0;
+          var tb = meta ? Number(meta.get(b) || 0) : 0;
+          if (ta !== tb) return tb - ta;
+          return a.localeCompare(b, 'zh-Hans-CN');
+        });
+      }
+      placement.versionOrderByProject[pid] = missing.concat(existing);
+      return placement.versionOrderByProject[pid].slice();
+    }
+
+    function ensureProjectVersionFileOrder(projectId, versionId, fileIds, metaMap) {
+      var placement = ensureTempExecPlacement();
+      var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+      if (!pid) return [];
+      var vid = versionId === null || versionId === undefined ? '' : String(versionId || '');
+      if (!placement.fileOrderByProjectVersion[pid]) placement.fileOrderByProjectVersion[pid] = {};
+      if (!placement.fileOrderByProjectVersion[pid][vid]) placement.fileOrderByProjectVersion[pid][vid] = [];
+      var list = Array.isArray(fileIds) ? fileIds : [];
+      var normalized = list.map(function(id) { return id === null || id === undefined ? '' : String(id); }).filter(Boolean);
+      var existing = placement.fileOrderByProjectVersion[pid][vid].filter(function(id) { return normalized.includes(id); });
+      var missing = normalized.filter(function(id) { return existing.indexOf(id) === -1; });
+      if (missing.length) {
+        var meta = metaMap && typeof metaMap.get === 'function' ? metaMap : null;
+        missing.sort(function(a, b) {
+          var ta = meta ? Number(meta.get(a) || 0) : 0;
+          var tb = meta ? Number(meta.get(b) || 0) : 0;
+          if (ta !== tb) return tb - ta;
+          return a.localeCompare(b, 'zh-Hans-CN');
+        });
+      }
+      placement.fileOrderByProjectVersion[pid][vid] = missing.concat(existing);
+      return placement.fileOrderByProjectVersion[pid][vid].slice();
     }
 
     function ensureRequirementOrder(reqList) {
@@ -500,6 +1399,48 @@
         ensureFileOrder(req, ids);
       });
       ensureVersionOrder((state.tempExecVersions || []).map(function(ver) { return ver.id; }));
+
+      if (isTempExecProjectLayoutEnabled()) {
+        var files = Array.isArray(state.tempExecFiles) ? state.tempExecFiles.slice() : [];
+        var projects = new Map();
+        var projectMeta = new Map();
+        files.forEach(function(file) {
+          var pid = file && file.projectId ? String(file.projectId) : '';
+          if (!pid) return;
+          if (!projects.has(pid)) projects.set(pid, new Map());
+          var vid = file && file.versionId !== null && file.versionId !== undefined ? String(file.versionId || '') : '';
+          if (!projects.get(pid).has(vid)) projects.get(pid).set(vid, []);
+          projects.get(pid).get(vid).push(String(file.id));
+          var ts = Number(file && file.createdAt) || 0;
+          if (!Number.isFinite(ts)) ts = 0;
+          var prev = projectMeta.has(pid) ? Number(projectMeta.get(pid) || 0) : 0;
+          if (ts > prev) projectMeta.set(pid, ts);
+        });
+        ensureProjectOrder(Array.from(projects.keys()), projectMeta);
+        projects.forEach(function(vmap, pid) {
+          var versionMeta = new Map();
+          vmap.forEach(function(idList, vid) {
+            var ts = 0;
+            idList.forEach(function(id) {
+              var file = getTempExecFile(id);
+              var fts = Number(file && file.createdAt) || 0;
+              if (Number.isFinite(fts) && fts > ts) ts = fts;
+            });
+            versionMeta.set(String(vid || ''), ts);
+          });
+          ensureProjectVersionOrder(pid, Array.from(vmap.keys()), versionMeta);
+          vmap.forEach(function(idList, vid) {
+            var fileMeta = new Map();
+            idList.forEach(function(id) {
+              var file = getTempExecFile(id);
+              var ts = Number(file && file.createdAt) || 0;
+              if (!Number.isFinite(ts)) ts = 0;
+              fileMeta.set(String(id), ts);
+            });
+            ensureProjectVersionFileOrder(pid, String(vid || ''), idList, fileMeta);
+          });
+        });
+      }
     }
 
     function moveTempExecFileToRequirement(fileId, requirement, beforeId, opts) {
@@ -601,13 +1542,60 @@
       scrollTempExecViewTop();
     }
 
+    function jumpToTempExecCase(fileId, caseIndex, options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      if (!fileId) return { ok: false, reason: 'missing_file_id' };
+      var file = getTempExecFile(fileId);
+      if (!file) return { ok: false, reason: 'file_not_found' };
+      var idx = Math.floor(Number(caseIndex));
+      if (!Number.isFinite(idx) || idx < 0) idx = 0;
+
+      if (opts.clearFilters !== false) {
+        var statusFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
+        if (statusFilter.fileId === fileId && statusFilter.status) {
+          state.tempExecStatusFilter = { fileId: '', status: '' };
+        }
+        var searchState = state.tempExecSearch || { fileId: '', term: '', raw: '' };
+        if (searchState.fileId === fileId && (searchState.term || searchState.raw)) {
+          state.tempExecSearch = { fileId: '', term: '', raw: '' };
+        }
+      }
+
+      if (!state.tempExecPages || typeof state.tempExecPages !== 'object') state.tempExecPages = {};
+      var size = getTempExecPageSize();
+      if (!Number.isFinite(size) || size <= 0) size = defaultTempExecPageSize;
+      var totalCases = Array.isArray(file.cases) ? file.cases.length : 0;
+      var totalPages = totalCases ? Math.ceil(totalCases / size) : 1;
+      var pageIndex = totalCases ? Math.floor(idx / size) : 0;
+      if (!Number.isFinite(pageIndex) || pageIndex < 0) pageIndex = 0;
+      if (pageIndex >= totalPages) pageIndex = Math.max(totalPages - 1, 0);
+      state.tempExecPages[fileId] = pageIndex;
+
+      setTempExecActive(fileId);
+      return { ok: true, fileId: fileId, index: idx, pageIndex: pageIndex, pageSize: size };
+    }
+
     function applyTempExecPageSize(value) {
       var size = clampTempExecPageSize(value);
       var changed = state.tempExecPageSize !== size;
       state.tempExecPageSize = size;
+      // Keep settings in sync so cross-device persistence works even when page size
+      // is changed from the execution view.
+      if (state.settings && typeof state.settings === 'object') {
+        state.settings.tempExecPageSize = size;
+        try {
+          // 仅持久化分页设置，避免覆盖其他设备的设置项。
+          persistSettings(['tempExecPageSize']);
+        } catch (err) {
+          // ignore persistence failures here; UI layer will show status if needed
+        }
+      }
       saveTempExecPageSizeSetting(size);
       resetTempExecPages();
-      if (changed) renderTempExecView();
+      if (changed) {
+        renderTempExecView();
+        scheduleTempExecUiSave();
+      }
       return { size: size, changed: changed };
     }
 
@@ -658,6 +1646,61 @@
         if (excludeId && ver.id === excludeId) return false;
         return normalizeTempExecName(ver.name) === normalized;
       });
+    }
+
+    function buildTempExecCasesFromXmindPaths(paths) {
+      var map = new Map();
+      var hasResult = false;
+      var reuseFound = false;
+      if (!Array.isArray(paths) || !paths.length) return { cases: [], hasResult: false, reuseEnabled: false };
+      paths.forEach(function(path) {
+        if (!Array.isArray(path)) return;
+        var clean = path.filter(Boolean);
+        if (clean.length < 7) return;
+        var trimmed = clean.slice(0);
+        if (trimmed.length > 0) trimmed = trimmed.slice(1);
+        if (trimmed.length < 6) trimmed = clean.slice(clean.length - 6);
+        if (!trimmed || trimmed.length < 6) return;
+        var base = trimmed.slice(0, 6);
+        var extras = trimmed.slice(6);
+        var key = base.join('||');
+        if (!map.has(key)) {
+          map.set(key, {
+            module: base[0] || '',
+            title: base[1] || '',
+            priority: base[2] || '',
+            preconditions: base[3] || '',
+            steps: base[4] || '',
+            expected: base[5] || '',
+            actual: '',
+            remark: '',
+            reuseDetails: [],
+            defectLinks: [],
+          });
+        }
+        var entry = map.get(key);
+        if (extras && extras.length) {
+          hasResult = true;
+          if (extras.length > 1) {
+            reuseFound = true;
+            entry.reuseDetails = entry.reuseDetails || [];
+            entry.reuseDetails.push({
+              id: generateReuseDetailId(),
+              text: extras[0] || '',
+              note: extras.length > 2 ? extras.slice(2).join('；') : '',
+              status: extras[1] || '未执行',
+              presetId: '',
+            });
+          } else if (!entry.reuseDetails || !entry.reuseDetails.length) {
+            entry.actual = extras[0] || entry.actual || '';
+          }
+        }
+      });
+      return {
+        cases: Array.from(map.values()),
+        hasResult: hasResult,
+        reuseEnabled: reuseFound,
+      };
     }
 
     function createTempVersion(name) {
@@ -914,8 +1957,6 @@
       if (targetRequirement) {
         reorderRequirementOrder(tgtReq, targetRequirement);
       }
-      var placement = ensureTempExecPlacement();
-      placement.versionOrder = placement.versionOrder.filter(function(id) { return id !== versionId; });
       persistTempExecState();
       renderTempExecNav();
       renderTempVersionGrid();
@@ -1091,6 +2132,9 @@
       links.push({ id: generateDefectLinkId(), url: '' });
       var openSet = ensureTempExecDefectOpen(fileId);
       openSet.add(index);
+      if (isDbMode()) {
+        queueExecCasePatchForItem(caseItem, { defect_links: caseItem.defectLinks });
+      }
       persistTempExecState();
       renderTempExecView();
     }
@@ -1100,11 +2144,25 @@
       if (!file || !file.cases[index]) return;
       var caseItem = file.cases[index];
       if (!Array.isArray(caseItem.defectLinks)) return;
-      var confirmed = window.confirm('确定删除该缺陷链接吗？');
-      if (!confirmed) return;
-      caseItem.defectLinks = caseItem.defectLinks.filter(function(link) { return link && link.id !== linkId; });
-      persistTempExecState();
-      renderTempExecView();
+      openConfirmDrawer({
+        title: '删除缺陷链接',
+        message: '确定删除该缺陷链接吗？',
+        confirmText: '确认删除',
+        cancelText: '取消',
+        danger: true,
+      }).then(function(result) {
+        if (!result || result.ok !== true) return;
+        var nextFile = getTempExecFile(fileId);
+        if (!nextFile || !nextFile.cases[index]) return;
+        var nextCase = nextFile.cases[index];
+        if (!Array.isArray(nextCase.defectLinks)) return;
+        nextCase.defectLinks = nextCase.defectLinks.filter(function(link) { return link && link.id !== linkId; });
+        if (isDbMode()) {
+          queueExecCasePatchForItem(nextCase, { defect_links: nextCase.defectLinks });
+        }
+        persistTempExecState();
+        renderTempExecView();
+      });
     }
 
     function updateTempExecDefectLink(fileId, index, linkId, value) {
@@ -1115,6 +2173,9 @@
       var entry = caseItem.defectLinks.find(function(link) { return link && link.id === linkId; });
       if (!entry) return;
       entry.url = value || '';
+      if (isDbMode()) {
+        queueExecCasePatchForItem(caseItem, { defect_links: caseItem.defectLinks });
+      }
       persistTempExecState();
     }
 
@@ -1176,31 +2237,57 @@
       return '';
     }
 
+    function getTempExecFileCaseCount(file) {
+      if (!file) return 0;
+      if (Array.isArray(file.cases) && file.cases.length) return file.cases.length;
+      var fallback = file.caseCount;
+      if (fallback === null || fallback === undefined) fallback = file.case_count;
+      if (fallback === null || fallback === undefined) fallback = file.itemCount;
+      if (fallback === null || fallback === undefined) fallback = file.item_count;
+      var num = Number(fallback);
+      if (!Number.isFinite(num) || num < 0) return 0;
+      return Math.round(num);
+    }
+
     function renderTempExecItemRow(file, options) {
       var opts = options || {};
+      var isArchived = Boolean(file && String(file.status || '') === 'archived');
       var active = opts.activeId === file.id ? 'active' : '';
       var focusSet = opts.focusSet || new Set();
       var stateClass = resolveTempExecState(file);
       var tagHtml = buildTempExecTag(file, focusSet.has(file.id));
-      var removeHtml = opts.hideRemove ? '' : '<span class="remove" title="删除" data-temp-remove="' + file.id + '">×</span>';
+      var removeHtml = (opts.hideRemove || isArchived) ? '' : '<span class="remove" title="删除" data-temp-remove="' + file.id + '">×</span>';
       var reqKey = normalizeRequirementName(file && file.requirement) || '未标识需求';
+      var archivedMask = isArchived ? '<div class="temp-archived-mask">已归档</div>' : '';
       return (
-        '<div class="temp-req-row ' + stateClass + '" data-temp-file="' + file.id + '" data-temp-req="' + reqKey + '" draggable="true">' +
+        '<div class="temp-req-row ' + stateClass + (isArchived ? ' archived' : '') + '" data-temp-file="' + file.id + '" data-temp-req="' + reqKey + '"' + (isArchived ? ' data-temp-archived="1"' : '') + ' draggable="' + (isArchived ? 'false' : 'true') + '">' +
           tagHtml +
-          '<span class="temp-req-count-badge">' + (file && file.cases ? file.cases.length : 0) + ' 条</span>' +
-          '<button type="button" data-temp-file="' + file.id + '" class="temp-req-item ' + active + '">' +
+          '<span class="temp-req-count-badge">' + getTempExecFileCaseCount(file) + ' 条</span>' +
+          '<button type="button" data-temp-file="' + file.id + '"' + (isArchived ? ' data-temp-archived="1"' : '') + ' class="temp-req-item ' + active + '" draggable="' + (isArchived ? 'false' : 'true') + '">' +
             '<div class="temp-req-line">' +
               '<span class="name" title="' + escapeHtml(file && file.name ? file.name : '测试用例') + '"><span class="name-text">' + escapeHtml(file && file.name ? file.name : '测试用例') + '</span></span>' +
             '</div>' +
             removeHtml +
           '</button>' +
+          archivedMask +
         '</div>'
       );
     }
 
     function renderTempVersionGrid() {
       if (!tempVersionGrid) return;
+      if (isTempExecProjectLayoutEnabled()) {
+        renderTempProjectGrid();
+        return;
+      }
       ensureTempVersionList();
+      syncTempSectionToggleButtons();
+      if (state.tempExecVersionCollapsed) {
+        tempVersionGrid.classList.add('collapsed');
+        tempVersionGrid.innerHTML = '<span class="hint">版本区已收起，点击“展开版本区”查看</span>';
+        return;
+      }
+      tempVersionGrid.classList.remove('collapsed');
       if (!state.tempExecVersions.length) {
         tempVersionGrid.innerHTML = '<span class="hint">暂无版本，点击“新建版本”创建</span>';
         return;
@@ -1266,10 +2353,233 @@
       enforceTempFileDraggable(tempVersionGrid);
     }
 
+    function normalizeTempExecImportProjectFilterId(raw) {
+      var pid = raw === null || raw === undefined ? '' : String(raw);
+      if (!pid) return '';
+      var list = Array.isArray(state.projects) ? state.projects : [];
+      if (list.length) {
+        var ok = list.some(function(project) { return project && String(project.id) === pid; });
+        return ok ? pid : '';
+      }
+      var files = Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      var ok2 = files.some(function(file) { return file && file.projectId && String(file.projectId) === pid; });
+      return ok2 ? pid : '';
+    }
+
+    function getTempExecImportProjectFilterProjectIds(fallbackIds) {
+      var list = Array.isArray(state.projects) ? state.projects : [];
+      if (list.length) {
+        var utils = window.app && window.app.utils ? window.app.utils : {};
+        var globalState = window.app && window.app.state ? window.app.state : {};
+        if (utils && typeof utils.sortProjectsByUserSettings === 'function') {
+          list = utils.sortProjectsByUserSettings(list, globalState);
+        }
+      }
+      var ids = list
+        .map(function(project) { return project && project.id !== null && project.id !== undefined ? String(project.id) : ''; })
+        .filter(Boolean);
+      if (ids.length) return ids;
+      return Array.isArray(fallbackIds) ? fallbackIds.slice() : [];
+    }
+
+    function renderTempExecImportProjectFilterBlock(projectIds, activeProjectId) {
+      var list = Array.isArray(projectIds) ? projectIds : [];
+      if (!list.length) return '';
+      var active = activeProjectId ? String(activeProjectId) : '';
+      var icon =
+        '<span class="nav-entry-icon" aria-hidden="true">' +
+          '<svg viewBox="0 0 24 24" role="presentation" focusable="false">' +
+            '<path d="M3 6h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"></path>' +
+          '</svg>' +
+        '</span>';
+      var allCls = 'nav-entry-card nav-entry-overview' + (!active ? ' active' : '');
+      var allBtn =
+        '<button type="button" class="' + allCls + '" data-tempexec-import-project-filter="" data-tempexec-import-project-filter-all="1">' +
+          icon +
+          '<span class="nav-entry-text">' +
+            '<span class="nav-entry-title">全部项目</span>' +
+            '<span class="nav-entry-desc">显示所有项目分组</span>' +
+          '</span>' +
+        '</button>';
+      var cards = list.map(function(pid) {
+        var name = resolveProjectName(pid);
+        var cls = 'nav-entry-card nav-entry-overview' + (String(pid) === String(active) ? ' active' : '');
+        return (
+          '<button type="button" class="' + cls + '" data-tempexec-import-project-filter="' + escapeHtml(pid) + '">' +
+            icon +
+            '<span class="nav-entry-text">' +
+              '<span class="nav-entry-title">' + escapeHtml(name) + '</span>' +
+              '<span class="nav-entry-desc">仅展示该项目分组</span>' +
+            '</span>' +
+          '</button>'
+        );
+      }).join('');
+      return (
+        '<div class="tempexec-project-filter">' +
+          '<div class="tempexec-project-filter-title">项目</div>' +
+          '<div class="nav-entry-grid tempexec-project-filter-grid">' + allBtn + cards + '</div>' +
+        '</div>'
+      );
+    }
+
+    function renderTempProjectGrid() {
+      if (!tempVersionGrid) return;
+      syncTempSectionToggleButtons();
+
+      if (state.tempExecVersionCollapsed) {
+        tempVersionGrid.classList.add('collapsed');
+        tempVersionGrid.innerHTML = '<span class="hint">项目区已收起，点击“展开项目区”查看</span>';
+        return;
+      }
+      tempVersionGrid.classList.remove('collapsed');
+
+      var activeFiles = Array.isArray(state.tempExecFiles) ? state.tempExecFiles.slice() : [];
+      activeFiles = activeFiles.filter(function(file) { return file && file.projectId; });
+      // 已归档执行集：作为“占位”渲染在版本盒子底部（用于避免“全部归档导致版本盒子消失无法关闭/解散”）
+      var archivedFiles = Array.isArray(state.tempExecArchivedFiles) ? state.tempExecArchivedFiles.slice() : [];
+      archivedFiles = archivedFiles.filter(function(file) { return file && file.projectId; });
+      var files = activeFiles.concat(archivedFiles);
+      var activeFilterProjectId = normalizeTempExecImportProjectFilterId(state.tempExecImportProjectFilterId);
+      state.tempExecImportProjectFilterId = activeFilterProjectId;
+
+      var focusSet = new Set(state.tempExecFocus || []);
+      var activeFileMap = new Map(activeFiles.map(function(file) { return [String(file.id), file]; }));
+      var archivedFileMap = new Map(archivedFiles.map(function(file) { return [String(file.id), file]; }));
+
+      if (!files.length) {
+        var emptyFilterProjectIds = getTempExecImportProjectFilterProjectIds([]);
+        var emptyFilterBlock = renderTempExecImportProjectFilterBlock(emptyFilterProjectIds, activeFilterProjectId);
+        tempVersionGrid.innerHTML = emptyFilterBlock + '<span class="hint">暂无用例，导入用例后会按项目与版本自动分组</span>';
+        return;
+      }
+
+      var projectMeta = new Map();
+      var projectIdSet = new Set();
+      files.forEach(function(file) {
+        var pid = file && file.projectId ? String(file.projectId) : '';
+        if (!pid) return;
+        projectIdSet.add(pid);
+        var ts = Number(file && (file.archivedAt || file.createdAt)) || 0;
+        if (!Number.isFinite(ts)) ts = 0;
+        var prev = projectMeta.has(pid) ? Number(projectMeta.get(pid) || 0) : 0;
+        if (ts > prev) projectMeta.set(pid, ts);
+      });
+      var orderedProjects = ensureProjectOrder(Array.from(projectIdSet.values()), projectMeta);
+      var filterProjectIds = getTempExecImportProjectFilterProjectIds(orderedProjects);
+      var filterBlockHtml = renderTempExecImportProjectFilterBlock(filterProjectIds, activeFilterProjectId);
+
+      var visibleProjects = activeFilterProjectId
+        ? orderedProjects.filter(function(pid) { return String(pid) === String(activeFilterProjectId); })
+        : orderedProjects.slice();
+      if (!visibleProjects.length) {
+        tempVersionGrid.innerHTML = filterBlockHtml + '<span class="hint">当前项目暂无用例，可切换其他项目或继续导入</span>';
+        return;
+      }
+
+      var html = visibleProjects.map(function(pid) {
+        var projectFiles = files.filter(function(file) { return file && String(file.projectId) === pid; });
+        var versionMap = new Map();
+        var versionMeta = new Map();
+        projectFiles.forEach(function(file) {
+          var vid = file && file.versionId !== null && file.versionId !== undefined ? String(file.versionId || '') : '';
+          if (!versionMap.has(vid)) versionMap.set(vid, []);
+          versionMap.get(vid).push(file);
+          var ts = Number(file && (file.archivedAt || file.createdAt)) || 0;
+          if (!Number.isFinite(ts)) ts = 0;
+          var prev = versionMeta.has(vid) ? Number(versionMeta.get(vid) || 0) : 0;
+          if (ts > prev) versionMeta.set(vid, ts);
+        });
+        var orderedVersions = ensureProjectVersionOrder(pid, Array.from(versionMap.keys()), versionMeta);
+
+        var versionsHtml = orderedVersions.map(function(vid) {
+          var list = versionMap.get(vid) || [];
+          var archivedList = list.filter(function(file) { return file && String(file.status || '') === 'archived'; });
+          var activeList = list.filter(function(file) { return file && String(file.status || '') !== 'archived'; });
+
+          // 排序规则：
+          // - 未归档：沿用用户自定义顺序（placement.fileOrderByProjectVersion）与最近更新时间补齐
+          // - 已归档：固定在版本盒子底部，按“最近归档时间”倒序（最近归档在上）
+          var fileMeta = new Map();
+          activeList.forEach(function(file) {
+            var ts = Number(file && file.createdAt) || 0;
+            if (!Number.isFinite(ts)) ts = 0;
+            fileMeta.set(String(file.id), ts);
+          });
+          var orderedActiveIds = ensureProjectVersionFileOrder(pid, vid, activeList.map(function(file) { return String(file.id); }), fileMeta);
+          var orderedActiveFiles = orderedActiveIds
+            .map(function(id) { return activeFileMap.get(id); })
+            .filter(function(file) { return file && String(file.projectId) === pid && String(file.versionId || '') === String(vid || ''); });
+
+          archivedList = archivedList.slice().sort(function(a, b) {
+            var ta = Number(a && (a.archivedAt || a.createdAt)) || 0;
+            var tb = Number(b && (b.archivedAt || b.createdAt)) || 0;
+            if (ta !== tb) return tb - ta;
+            return String(a && a.id ? a.id : '').localeCompare(String(b && b.id ? b.id : ''), 'zh-Hans-CN');
+          });
+          var orderedArchivedFiles = archivedList
+            .map(function(file) { return archivedFileMap.get(String(file.id)); })
+            .filter(Boolean);
+
+          var orderedFiles = orderedActiveFiles.concat(orderedArchivedFiles);
+
+          var rows = orderedFiles.length
+            ? orderedFiles.map(function(file) {
+                return renderTempExecItemRow(file, {
+                  focusSet: focusSet,
+                  activeId: state.tempExecActiveId,
+                });
+              }).join('')
+            : '<span class="hint">暂无用例</span>';
+
+          var versionName = resolveVersionName(pid, vid);
+          var archivedCount = orderedArchivedFiles.length;
+          var dissolveBtn = archivedCount
+            ? (
+              '<button type="button" class="archived-dissolve" data-temp-project-version-archived-dissolve="' + escapeHtml(pid + '||' + vid) + '" title="仅清除已归档占位，不影响归档记录">' +
+                '解散归档' +
+              '</button>'
+            )
+            : '';
+          var actionsHtml = (
+            '<span class="temp-project-version-actions">' +
+              dissolveBtn +
+              '<span class="remove" title="关闭版本" data-temp-project-version-remove="' + escapeHtml(pid + '||' + vid) + '">×</span>' +
+            '</span>'
+          );
+          return (
+            '<div class="temp-project-version" data-temp-project-version-card="' + escapeHtml(pid + '||' + vid) + '">' +
+              '<div class="temp-project-version-header" data-temp-project-version-drag="' + escapeHtml(pid + '||' + vid) + '" draggable="true">' +
+                '<span class="title" title="' + escapeHtml(versionName) + '">' + escapeHtml(versionName) + '</span>' +
+                actionsHtml +
+              '</div>' +
+              '<div class="temp-project-version-body">' + rows + '</div>' +
+            '</div>'
+          );
+        }).join('');
+
+        var projectName = resolveProjectName(pid);
+        return (
+          '<div class="temp-project-card" data-temp-project-card="' + escapeHtml(pid) + '">' +
+            '<div class="temp-project-header" data-temp-project-drag="' + escapeHtml(pid) + '" draggable="true">' +
+              '<span class="title" title="' + escapeHtml(projectName) + '">' + escapeHtml(projectName) + '</span>' +
+              '<span class="remove" title="关闭项目" data-temp-project-remove="' + escapeHtml(pid) + '">×</span>' +
+            '</div>' +
+            '<div class="temp-project-body">' +
+              '<div class="temp-project-versions">' + versionsHtml + '</div>' +
+            '</div>' +
+          '</div>'
+        );
+      }).join('');
+
+      tempVersionGrid.innerHTML = filterBlockHtml + html;
+      enforceTempFileDraggable(tempVersionGrid);
+    }
+
     function enforceTempFileDraggable(root) {
       if (!root) return;
       var list = root.querySelectorAll('[data-temp-file], [data-temp-file-group]');
       list.forEach(function(el) {
+        if (el && el.dataset && String(el.dataset.tempArchived || '') === '1') return;
         if (!el.getAttribute('draggable')) {
           el.setAttribute('draggable', 'true');
         }
@@ -1350,6 +2660,16 @@
       presets.push(preset);
       applyPresetToCases(file, preset);
       state.tempExecPresetDraft = null;
+      if (isDbMode()) {
+        var execSetId = file.execSetId || Number(file.id);
+        if (execSetId) {
+          queueExecSetPatch(execSetId, { reuse_presets: file.reusePresets || [], reuse_enabled: Boolean(file.reuseEnabled) });
+        }
+        (file.cases || []).forEach(function(item) {
+          if (!item) return;
+          queueExecCasePatchForItem(item, { reuse_details: item.reuseDetails || [] });
+        });
+      }
       persistTempExecState();
       renderTempExecView();
     }
@@ -1362,6 +2682,16 @@
       file.reusePresets = presets.filter(function(item) { return item && item.id !== presetId; });
       if (before !== file.reusePresets.length) {
         removePresetFromCases(file, presetId);
+        if (isDbMode()) {
+          var execSetId = file.execSetId || Number(file.id);
+          if (execSetId) {
+            queueExecSetPatch(execSetId, { reuse_presets: file.reusePresets || [], reuse_enabled: Boolean(file.reuseEnabled) });
+          }
+          (file.cases || []).forEach(function(item) {
+            if (!item) return;
+            queueExecCasePatchForItem(item, { reuse_details: item.reuseDetails || [] });
+          });
+        }
         persistTempExecState();
         renderTempExecView();
       }
@@ -1374,20 +2704,40 @@
       var completionCount = summary.passed + summary.unspecified;
       var hasFailure = summary.failed > 0 || summary.blocked > 0;
       if (total && completionCount === total && !hasFailure) return 'ok';
-      if (total && summary.pending === 0 && hasFailure) return 'err';
+      // 只要存在失败/阻塞，就用红色标识（不要求“全部执行完”），方便在项目/版本盒子里快速定位风险用例。
+      if (hasFailure) return 'err';
       if (summary.executed > 0) return 'running';
       return 'pending';
     }
 
+    function updateTempExecFileStateClass(fileId) {
+      if (!fileId) return;
+      var file = getTempExecFile(fileId);
+      if (!file) return;
+      var stateClass = resolveTempExecState(file);
+      var known = ['ok', 'err', 'warn', 'running', 'pending'];
+      function patchRoot(root) {
+        if (!root || !root.querySelectorAll) return;
+        var nodes = root.querySelectorAll('.temp-req-row[data-temp-file="' + String(fileId) + '"]');
+        Array.prototype.slice.call(nodes || []).forEach(function(node) {
+          if (!node || !node.classList) return;
+          known.forEach(function(cls) { node.classList.remove(cls); });
+          node.classList.add(stateClass);
+        });
+      }
+      patchRoot(tempVersionGrid);
+      patchRoot(tempExecNav);
+    }
+
     function getCaseExecutionStatus(file, caseItem) {
       if (!file || !caseItem) return '未执行';
-      if (!file.reuseEnabled) return caseItem.actual || '未执行';
-      var aggregate = aggregateReuseDetails(caseItem.reuseDetails);
-      if (aggregate.passed) return '通过';
-      if (aggregate.failed) return '失败';
-      if (aggregate.blocked) return '阻塞';
-      if (aggregate.unspecified) return '不适用';
-      return '未执行';
+      // 系统态：后端可能标记为“变更重跑/有改动”，该状态统计与过滤均按“未执行”处理。
+      var raw = caseItem.actual || '未执行';
+      try { raw = String(raw).trim(); } catch (err) { raw = raw || '未执行'; }
+      if (raw === 'pending') raw = '未执行';
+      if (raw === '变更重跑' || raw === '有改动') return '未执行';
+      if (!file.reuseEnabled) return raw;
+      return resolveReuseAggregateStatus(caseItem.reuseDetails);
     }
 
     function aggregateReuseDetails(details) {
@@ -1396,6 +2746,7 @@
       details.forEach(function(detail) {
         if (!detail) return;
         var status = detail.status || '未执行';
+        try { status = String(status).trim(); } catch (err) { status = status || '未执行'; }
         if (status === '通过') stats.passed += 1;
         else if (status === '失败') stats.failed += 1;
         else if (status === '阻塞') stats.blocked += 1;
@@ -1403,6 +2754,18 @@
         else stats.pending += 1;
       });
       return stats;
+    }
+
+    function resolveReuseAggregateStatus(details) {
+      var aggregate = aggregateReuseDetails(details);
+      var total = aggregate.passed + aggregate.failed + aggregate.blocked + aggregate.unspecified + aggregate.pending;
+      if (!total) return '未执行';
+      if (aggregate.failed) return '失败';
+      if (aggregate.blocked) return '阻塞';
+      if (aggregate.pending) return '未执行';
+      if (aggregate.passed) return '通过';
+      if (aggregate.unspecified && !aggregate.passed) return '不适用';
+      return '未执行';
     }
 
     function buildTempExecSummary(file) {
@@ -1421,29 +2784,231 @@
       return summary;
     }
 
+    function getTempExecOrderedFileIds() {
+      var files = Array.isArray(state.tempExecFiles) ? state.tempExecFiles.slice() : [];
+      if (!files.length) return [];
+      var ordered = [];
+      var added = new Set();
+      if (isTempExecProjectLayoutEnabled()) {
+        var projectMeta = new Map();
+        var projectIdSet = new Set();
+        var fallbackFiles = [];
+        files.forEach(function(file) {
+          if (!file) return;
+          var pid = file && file.projectId ? String(file.projectId) : '';
+          if (!pid) {
+            fallbackFiles.push(file);
+            return;
+          }
+          projectIdSet.add(pid);
+          var ts = Number(file && file.createdAt) || 0;
+          var prev = projectMeta.has(pid) ? Number(projectMeta.get(pid) || 0) : 0;
+          if (ts > prev) projectMeta.set(pid, ts);
+        });
+        var orderedProjects = ensureProjectOrder(Array.from(projectIdSet.values()), projectMeta);
+        orderedProjects.forEach(function(pid) {
+          var projectFiles = files.filter(function(file) { return file && String(file.projectId || '') === String(pid); });
+          if (!projectFiles.length) return;
+          var versionMap = new Map();
+          var versionMeta = new Map();
+          projectFiles.forEach(function(file) {
+            var vid = file && file.versionId !== null && file.versionId !== undefined ? String(file.versionId || '') : '';
+            if (!versionMap.has(vid)) versionMap.set(vid, []);
+            versionMap.get(vid).push(file);
+            var ts = Number(file && file.createdAt) || 0;
+            var prev = versionMeta.has(vid) ? Number(versionMeta.get(vid) || 0) : 0;
+            if (ts > prev) versionMeta.set(vid, ts);
+          });
+          var orderedVersions = ensureProjectVersionOrder(pid, Array.from(versionMap.keys()), versionMeta);
+          orderedVersions.forEach(function(vid) {
+            var list = versionMap.get(vid) || [];
+            if (!list.length) return;
+            var fileMeta = new Map();
+            list.forEach(function(file) {
+              var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+              if (!fid) return;
+              var ts = Number(file && file.createdAt) || 0;
+              fileMeta.set(fid, ts);
+            });
+            var orderedIds = ensureProjectVersionFileOrder(
+              pid,
+              vid,
+              list
+                .map(function(file) { return file && file.id !== null && file.id !== undefined ? String(file.id) : ''; })
+                .filter(Boolean),
+              fileMeta
+            );
+            orderedIds.forEach(function(fid) {
+              if (!fid || added.has(fid)) return;
+              added.add(fid);
+              ordered.push(fid);
+            });
+          });
+        });
+        if (fallbackFiles.length) {
+          fallbackFiles
+            .slice()
+            .sort(function(a, b) {
+              var ta = Number(a && a.createdAt) || 0;
+              var tb = Number(b && b.createdAt) || 0;
+              if (ta !== tb) return tb - ta;
+              var na = a && a.name ? String(a.name) : '';
+              var nb = b && b.name ? String(b.name) : '';
+              return na.localeCompare(nb, 'zh-Hans-CN');
+            })
+            .forEach(function(file) {
+              var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+              if (!fid || added.has(fid)) return;
+              added.add(fid);
+              ordered.push(fid);
+            });
+        }
+      } else {
+        var reqMap = new Map();
+        files.forEach(function(file) {
+          if (!file) return;
+          var req = normalizeRequirementName(file && file.requirement) || '未标识需求';
+          if (!reqMap.has(req)) reqMap.set(req, []);
+          reqMap.get(req).push(file);
+        });
+        var reqOrderList = ensureRequirementOrder(Array.from(reqMap.keys()));
+        reqOrderList.forEach(function(req) {
+          var list = reqMap.get(req) || [];
+          var orderedIds = ensureFileOrder(
+            req,
+            list.map(function(file) { return file && file.id !== null && file.id !== undefined ? String(file.id) : ''; }).filter(Boolean)
+          );
+          orderedIds.forEach(function(fid) {
+            if (!fid || added.has(fid)) return;
+            added.add(fid);
+            ordered.push(fid);
+          });
+        });
+      }
+      files.forEach(function(file) {
+        var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+        if (!fid || added.has(fid)) return;
+        added.add(fid);
+        ordered.push(fid);
+      });
+      return ordered;
+    }
+
+    function renderTempExecToolbar(file) {
+      if (!tempExecToolbar || !tempExecToolbarCard) return;
+      if (!file) {
+        stashTempExecToolbarButtons();
+        tempExecToolbar.innerHTML = '';
+        tempExecToolbarCard.classList.add('hidden');
+        return;
+      }
+      var summary = buildTempExecSummary(file);
+      var statusFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
+      var activeFilter = statusFilter.fileId === file.id ? statusFilter.status : '';
+      var searchState = state.tempExecSearch || { fileId: '', term: '', raw: '' };
+      var searchRaw = searchState.fileId === file.id ? (searchState.raw || '') : '';
+      var orderedIds = getTempExecOrderedFileIds();
+      var navDisabled = orderedIds.length < 2;
+      var navAttr = navDisabled ? ' disabled' : '';
+      var navHintPrev = navDisabled ? '暂无可切换用例' : '切换上一份用例';
+      var navHintNext = navDisabled ? '暂无可切换用例' : '切换下一份用例';
+      var navHtml =
+        '<div class="toolbar-nav" role="group" aria-label="切换用例">' +
+          '<span class="nav-label">用例切换：</span>' +
+          '<button type="button" class="pill secondary nav-btn prev" data-temp-file-nav="prev"' + navAttr + ' title="' + escapeHtml(navHintPrev) + '">' +
+            '上一份' +
+          '</button>' +
+          '<button type="button" class="pill primary nav-btn next" data-temp-file-nav="next"' + navAttr + ' title="' + escapeHtml(navHintNext) + '">' +
+            '下一份' +
+          '</button>' +
+        '</div>';
+      var archiveHtml = '';
+      if (isDbMode() && !(file && String(file.status || '') === 'archived')) {
+        var disabled = file && file._casesLoading ? ' disabled' : '';
+        var tip = file && file._casesLoading ? '用例加载中，稍后再试' : '归档当前用例';
+        archiveHtml =
+          '<button type="button" class="pill accent toolbar-archive" data-temp-file-archive="' + escapeHtml(file.id) + '"' + disabled + ' title="' + escapeHtml(tip) + '">' +
+            '归档' +
+          '</button>';
+      }
+      var actionsHtml =
+        '<div class="toolbar-actions">' +
+          '<div class="toolbar-block toolbar-search">' +
+            '<input class="temp-search-input" data-temp-search-input="' + file.id + '" value="' + escapeHtml(searchRaw) + '" placeholder="搜索用例关键字">' +
+            '<button type="button" class="pill secondary" data-temp-search-btn="' + file.id + '">搜索</button>' +
+            '<button type="button" class="pill secondary" data-temp-search-clear="' + file.id + '">清除</button>' +
+          '</div>' +
+          '<div class="toolbar-block toolbar-middle">' +
+            '<div class="toolbar-change-slot" id="tempExecCaseLibraryChangeSlot"></div>' +
+            navHtml +
+            '<div class="toolbar-archive-wrap">' + archiveHtml + '</div>' +
+          '</div>' +
+          '<div class="toolbar-block toolbar-export" id="tempExecExportSlot"></div>' +
+        '</div>';
+      var toolbarHtml = [
+        '<div class="toolbar-file">当前文件：<strong>' + escapeHtml(file.name) + '</strong></div>',
+        '<span class="summary-pill executed ' + (activeFilter === 'executed' ? 'active' : '') + '" data-temp-status-filter="executed" data-temp-status-file="' + file.id + '">已执行 ' + summary.executed + '</span>',
+        '<span class="summary-pill pending ' + (activeFilter === 'pending' ? 'active' : '') + '" data-temp-status-filter="pending" data-temp-status-file="' + file.id + '">未执行 ' + summary.pending + '</span>',
+        '<span class="summary-pill passed ' + (activeFilter === 'passed' ? 'active' : '') + '" data-temp-status-filter="passed" data-temp-status-file="' + file.id + '">通过 ' + summary.passed + '</span>',
+        '<span class="summary-pill failed ' + (activeFilter === 'failed' ? 'active' : '') + '" data-temp-status-filter="failed" data-temp-status-file="' + file.id + '">失败 ' + summary.failed + '</span>',
+        '<span class="summary-pill blocked ' + (activeFilter === 'blocked' ? 'active' : '') + '" data-temp-status-filter="blocked" data-temp-status-file="' + file.id + '">阻塞 ' + summary.blocked + '</span>',
+        '<span class="summary-pill unspecified ' + (activeFilter === 'unspecified' ? 'active' : '') + '" data-temp-status-filter="unspecified" data-temp-status-file="' + file.id + '">不适用 ' + summary.unspecified + '</span>',
+        actionsHtml,
+      ].join('');
+      tempExecToolbar.innerHTML = toolbarHtml;
+      mountTempExecToolbarButtons();
+      tempExecToolbarCard.classList.remove('hidden');
+    }
+
+    function mapFilterToStatus(matchKey, status) {
+      if (matchKey === 'executed') return status !== '未执行';
+      if (matchKey === 'pending') return status === '未执行';
+      if (matchKey === 'passed') return status === '通过';
+      if (matchKey === 'failed') return status === '失败';
+      if (matchKey === 'blocked') return status === '阻塞';
+      if (matchKey === 'unspecified') return status === '不适用';
+      return true;
+    }
+
+    function setTempExecStatusFilter(fileId, filterKey) {
+      var current = state.tempExecStatusFilter || { fileId: '', status: '' };
+      var next = { fileId: '', status: '' };
+      if (fileId && filterKey && (current.fileId !== fileId || current.status !== filterKey)) {
+        next = { fileId: fileId, status: filterKey };
+      }
+      state.tempExecStatusFilter = next;
+      renderTempExecView();
+    }
+
     function mapStatusToClass(status) {
-      if (status === '通过') return 'ok';
-      if (status === '失败') return 'err';
-      if (status === '阻塞') return 'warn';
-      if (status === '不适用') return 'info';
-      return '';
+      var text = status === null || status === undefined ? '' : String(status);
+      text = text.trim();
+      if (text === '通过') return 'passed';
+      if (text === '失败') return 'failed';
+      if (text === '阻塞') return 'blocked';
+      if (text === '不适用') return 'unspecified';
+      return 'pending';
     }
 
     function getCaseExecutionDisplay(file, caseItem) {
+      var raw = caseItem && caseItem.actual ? String(caseItem.actual) : '未执行';
+      raw = raw.trim();
+      if (raw === 'pending') raw = '未执行';
+      if (raw === '变更重跑' || raw === '有改动') {
+        return { label: raw, className: 'changed' };
+      }
       var status = getCaseExecutionStatus(file, caseItem);
-      var map = {
-        通过: { label: '通过', className: 'status-ok' },
-        失败: { label: '失败', className: 'status-err' },
-        阻塞: { label: '阻塞', className: 'status-warn' },
-        不适用: { label: '不适用', className: 'status-info' },
-        未执行: { label: '未执行', className: 'status-pending' },
-      };
-      return map[status] || { label: status, className: 'status-pending' };
+      var className = mapStatusToClass(status);
+      var label = status || '未执行';
+      return { label: label, className: className || 'pending' };
     }
 
     function renderTempExecOverview() {
       if (!tempExecOverview) return;
-      var files = state.tempExecFiles.slice().sort(function(a, b) {
+      var isProjectLayout = isTempExecProjectLayoutEnabled();
+      var archived = Array.isArray(state.tempExecArchivedFiles) ? state.tempExecArchivedFiles : [];
+      var combined = state.tempExecFiles.concat(archived);
+      var files = combined.slice().sort(function(a, b) {
         var sa = buildTempExecSummary(a);
         var sb = buildTempExecSummary(b);
         var pa = sa.total ? sa.executed / sa.total : 0;
@@ -1455,31 +3020,467 @@
         tempExecOverview.innerHTML = '<p class="hint">暂无用例执行数据</p>';
         return;
       }
+      var currentFile = getTempExecFile(state.tempExecActiveId);
+      var currentBlock = currentFile
+        ? '<div class="temp-overview-grid two-cols">' + renderTempExecOverviewEntry(currentFile) + '</div>'
+        : '<p class="hint">暂无正在执行的用例</p>';
+      if (isProjectLayout) {
+        // DB 模式个人总览：按项目卡片 + 版本盒子展示（风格对齐执行总览）。
+        tempExecOverview.innerHTML = (
+          '<div class="temp-overview-section temp-overview-current">' +
+            '<h3 class="temp-overview-section-title">当前执行区</h3>' +
+            currentBlock +
+          '</div>' +
+          renderTempExecOverviewProjectLayout(files, currentFile)
+        );
+        return;
+      }
       var versionMap = new Map();
       files.forEach(function(file) {
-        var verName = getTempVersionName(file.versionId) || '未分配版本';
-        if (!versionMap.has(verName)) versionMap.set(verName, []);
-        versionMap.get(verName).push(file);
+        var label = '';
+        if (isProjectLayout) {
+          var pid = file && file.projectId ? String(file.projectId) : '';
+          var vid = file && file.versionId !== null && file.versionId !== undefined ? String(file.versionId || '') : '';
+          label = resolveProjectName(pid) + ' / ' + resolveVersionName(pid, vid);
+        } else {
+          label = getTempVersionName(file.versionId) || '未分配版本';
+        }
+        if (!versionMap.has(label)) versionMap.set(label, []);
+        versionMap.get(label).push(file);
       });
       var versionList = Array.from(versionMap.entries()).map(function(entry) {
         return { name: entry[0], list: entry[1] };
       });
       versionList.sort(function(a, b) { return a.name.localeCompare(b.name, 'zh-Hans-CN'); });
       var versionBlock = versionList
-        .filter(function(group) { return group.name !== '未分配版本'; })
+        .filter(function(group) { return !isProjectLayout && group.name === '未分配版本' ? false : true; })
         .map(function(group) { return renderTempExecOverviewVersion(group.name, group.list); })
         .join('') || '<p class="hint">暂无分配到版本的用例</p>';
-      var unassigned = versionList.find(function(group) { return group.name === '未分配版本'; });
+      var unassigned = !isProjectLayout ? versionList.find(function(group) { return group.name === '未分配版本'; }) : null;
       var unassignedBlock = unassigned ? renderTempExecOverviewUnassigned(unassigned.list) : '<p class="hint">暂无未分配的用例</p>';
       tempExecOverview.innerHTML = (
-        '<div class="temp-overview-section">' +
-          '<h3 class="temp-overview-section-title">版本区</h3>' +
-          '<div class="temp-overview-version-grid">' + versionBlock + '</div>' +
+        '<div class="temp-overview-section temp-overview-current">' +
+          '<h3 class="temp-overview-section-title">当前执行区</h3>' +
+          currentBlock +
         '</div>' +
         '<div class="temp-overview-section">' +
-          '<h3 class="temp-overview-section-title">需求区（未分配版本）</h3>' +
-          unassignedBlock +
+          '<h3 class="temp-overview-section-title">' + (isProjectLayout ? '项目/版本区' : '版本区') + '</h3>' +
+          '<div class="temp-overview-version-grid">' + versionBlock + '</div>' +
+        '</div>' +
+        (isProjectLayout
+          ? ''
+          : (
+            '<div class="temp-overview-section">' +
+              '<h3 class="temp-overview-section-title">需求区（未分配版本）</h3>' +
+              unassignedBlock +
+            '</div>'
+          )
+        )
+      );
+    }
+
+    function renderTempExecOverviewProjectLayout(files, currentFile) {
+      var list = Array.isArray(files) ? files : [];
+      if (!list.length) {
+        return (
+          '<div class="temp-overview-section">' +
+            '<h3 class="temp-overview-section-title">项目/版本区</h3>' +
+            '<p class="hint">暂无项目执行数据</p>' +
+          '</div>'
+        );
+      }
+      var summaryByFileId = new Map();
+      var filesByProject = new Map();
+      var projectMeta = new Map();
+      list.forEach(function(file) {
+        if (!file) return;
+        var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+        if (!fid) return;
+        var summary = buildTempExecSummary(file);
+        summaryByFileId.set(fid, summary);
+        var pid = file && file.projectId !== null && file.projectId !== undefined ? String(file.projectId) : '';
+        if (!pid) pid = 'unknown';
+        if (!filesByProject.has(pid)) filesByProject.set(pid, []);
+        filesByProject.get(pid).push(file);
+        var t = Number(file && file.createdAt ? file.createdAt : 0) || 0;
+        var prev = Number(projectMeta.get(pid) || 0) || 0;
+        if (t > prev) projectMeta.set(pid, t);
+      });
+
+      var projectIds = Array.from(filesByProject.keys());
+      var orderedProjects = projectIds.slice();
+      if (projectIds.length) {
+        if (typeof ensureProjectOrder === 'function') {
+          try {
+            var normalized = projectIds.filter(function(pid) { return pid && pid !== 'unknown'; });
+            var ordered = ensureProjectOrder(normalized, projectMeta);
+            var tail = projectIds.indexOf('unknown') !== -1 ? ['unknown'] : [];
+            orderedProjects = (ordered || []).concat(tail);
+          } catch (err) {
+            orderedProjects.sort(function(a, b) { return String(a).localeCompare(String(b), 'zh-Hans-CN'); });
+          }
+        } else {
+          orderedProjects.sort(function(a, b) { return String(a).localeCompare(String(b), 'zh-Hans-CN'); });
+        }
+      }
+
+      var defaultProjectId = '';
+      if (state && state.tempExecOverviewProjectId) defaultProjectId = String(state.tempExecOverviewProjectId || '');
+      if (!defaultProjectId || !filesByProject.has(defaultProjectId)) {
+        var fromCurrent = currentFile && currentFile.projectId ? String(currentFile.projectId) : '';
+        if (fromCurrent && filesByProject.has(fromCurrent)) defaultProjectId = fromCurrent;
+        else defaultProjectId = orderedProjects.length ? orderedProjects[0] : '';
+      }
+      if (state) state.tempExecOverviewProjectId = defaultProjectId;
+      var versionFilter = state && state.tempExecOverviewVersionId ? String(state.tempExecOverviewVersionId || '') : '';
+
+      var projectCards = renderTempExecOverviewProjectCards(orderedProjects, defaultProjectId);
+      var detail = renderTempExecOverviewProjectDetail(defaultProjectId, filesByProject.get(defaultProjectId) || [], summaryByFileId, versionFilter);
+
+      return (
+        '<div class="temp-overview-section">' +
+          '<h3 class="temp-overview-section-title">项目区</h3>' +
+          '<div class="nav-entry-grid">' + (projectCards || '<p class="hint">暂无项目</p>') + '</div>' +
+        '</div>' +
+        '<div class="temp-overview-section">' +
+          '<h3 class="temp-overview-section-title">版本区</h3>' +
+          detail +
         '</div>'
+      );
+    }
+
+    function renderTempExecOverviewProjectCards(projectIds, activeProjectId) {
+      var list = Array.isArray(projectIds) ? projectIds : [];
+      if (!list.length) return '';
+      var icon =
+        '<span class="nav-entry-icon" aria-hidden="true">' +
+          '<svg viewBox="0 0 24 24" role="presentation" focusable="false">' +
+            '<path d="M3 6h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"></path>' +
+          '</svg>' +
+        '</span>';
+      return list
+        .map(function(pid) {
+          var resolved = pid === 'unknown' ? '' : pid;
+          var name = pid === 'unknown' ? '项目#未知' : resolveProjectName(resolved);
+          var cls = 'nav-entry-card nav-entry-overview' + (String(pid) === String(activeProjectId) ? ' active' : '');
+          return (
+            '<button type="button" class="' + cls + '" data-temp-overview-project="' + escapeHtml(pid) + '">' +
+              icon +
+              '<span class="nav-entry-text">' +
+                '<span class="nav-entry-title">' + escapeHtml(name) + '</span>' +
+                '<span class="nav-entry-desc">查看版本与执行进度</span>' +
+              '</span>' +
+            '</button>'
+          );
+        })
+        .join('');
+    }
+
+    function renderTempExecOverviewProjectDetail(projectId, files, summaryByFileId, versionFilter) {
+      var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+      var list = Array.isArray(files) ? files : [];
+      if (!pid || !list.length) {
+        return '<p class="hint">暂无执行数据</p>';
+      }
+      function reorderArchivedToBottom(ids, fileMap) {
+        var activeIds = [];
+        var archivedIds = [];
+        ids.forEach(function(fid) {
+          var file = fileMap && fid ? fileMap[fid] : null;
+          if (file && String(file.status || '') === 'archived') archivedIds.push(fid);
+          else activeIds.push(fid);
+        });
+        return activeIds.concat(archivedIds);
+      }
+      var canUsePlacement = pid && pid !== 'unknown';
+      var verMap = new Map();
+      var unassigned = [];
+      list.forEach(function(file) {
+        if (!file) return;
+        var vid = file && file.versionId !== null && file.versionId !== undefined ? String(file.versionId || '') : '';
+        if (!vid) {
+          unassigned.push(file);
+          return;
+        }
+        if (!verMap.has(vid)) verMap.set(vid, []);
+        verMap.get(vid).push(file);
+      });
+
+      var versionIds = Array.from(verMap.keys());
+      var versionMeta = new Map();
+      versionIds.forEach(function(vid) {
+        var filesIn = verMap.get(vid) || [];
+        var max = 0;
+        filesIn.forEach(function(f) {
+          var t = Number(f && f.createdAt ? f.createdAt : 0) || 0;
+          if (t > max) max = t;
+        });
+        versionMeta.set(vid, max);
+      });
+      var orderedVersions = [];
+      if (canUsePlacement && typeof ensureProjectVersionOrder === 'function') {
+        try {
+          orderedVersions = ensureProjectVersionOrder(pid, versionIds, versionMeta) || [];
+        } catch (err) {
+          orderedVersions = versionIds.slice().sort(function(a, b) { return String(a).localeCompare(String(b), 'zh-Hans-CN'); });
+        }
+      } else {
+        orderedVersions = versionIds.slice().sort(function(a, b) { return String(a).localeCompare(String(b), 'zh-Hans-CN'); });
+      }
+
+      var filterVid = versionFilter ? String(versionFilter) : '';
+      if (filterVid && orderedVersions.indexOf(filterVid) === -1) filterVid = '';
+
+      var selectHtml = '';
+      if (orderedVersions.length) {
+        var opts = ['<option value=""' + (filterVid ? '' : ' selected') + '>全部版本</option>'];
+        orderedVersions.forEach(function(vid) {
+          var name = pid === 'unknown' ? ('版本#' + String(vid)) : resolveVersionName(pid, vid);
+          var selected = filterVid && String(vid) === String(filterVid) ? ' selected' : '';
+          opts.push('<option value="' + escapeHtml(vid) + '"' + selected + '>' + escapeHtml(name) + '</option>');
+        });
+        selectHtml =
+          '<div class="exec-overview-detail-head" style="margin:0 0 12px;">' +
+            '<h3 style="margin:0;font-size:16px;">' + escapeHtml(pid === 'unknown' ? '项目#未知' : resolveProjectName(pid)) + '</h3>' +
+            '<label class="inline">版本 <select data-temp-overview-version-select="1">' + opts.join('') + '</select></label>' +
+          '</div>';
+      }
+
+      var total = 0;
+      var pending = 0;
+      var passed = 0;
+      var failed = 0;
+      var blocked = 0;
+      var na = 0;
+      list.forEach(function(file) {
+        if (!file) return;
+        var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+        var s = summaryByFileId && typeof summaryByFileId.get === 'function' ? summaryByFileId.get(fid) : null;
+        if (!s) s = buildTempExecSummary(file);
+        total += Number(s.total) || 0;
+        pending += Number(s.pending) || 0;
+        passed += Number(s.passed) || 0;
+        failed += Number(s.failed) || 0;
+        blocked += Number(s.blocked) || 0;
+        na += Number(s.unspecified) || 0;
+      });
+
+      var versionBoxes = [];
+      orderedVersions.forEach(function(vid) {
+        if (filterVid && String(vid) !== String(filterVid)) return;
+        var filesIn = verMap.get(vid) || [];
+        var fileIds = filesIn.map(function(f) { return f && f.id !== null && f.id !== undefined ? String(f.id) : ''; }).filter(Boolean);
+        var fileMeta = new Map();
+        filesIn.forEach(function(f) {
+          var fid = f && f.id !== null && f.id !== undefined ? String(f.id) : '';
+          if (!fid) return;
+          var t = Number(f && f.createdAt ? f.createdAt : 0) || 0;
+          fileMeta.set(fid, t);
+        });
+        var orderedFileIds = [];
+        if (canUsePlacement && typeof ensureProjectVersionFileOrder === 'function') {
+          try {
+            orderedFileIds = ensureProjectVersionFileOrder(pid, vid, fileIds, fileMeta) || [];
+          } catch (err) {
+            orderedFileIds = fileIds.slice();
+          }
+        } else {
+          orderedFileIds = fileIds.slice();
+          orderedFileIds.sort(function(a, b) {
+            var ta = Number(fileMeta.get(a) || 0) || 0;
+            var tb = Number(fileMeta.get(b) || 0) || 0;
+            if (ta !== tb) return tb - ta;
+            return String(a).localeCompare(String(b), 'zh-Hans-CN');
+          });
+        }
+        var byId = {};
+        filesIn.forEach(function(f) {
+          var fid = f && f.id !== null && f.id !== undefined ? String(f.id) : '';
+          if (fid) byId[fid] = f;
+        });
+        orderedFileIds = reorderArchivedToBottom(orderedFileIds, byId);
+        var chips = orderedFileIds
+          .map(function(fid) {
+            var file = byId[fid];
+            if (!file) return '';
+            var summary = summaryByFileId && typeof summaryByFileId.get === 'function' ? summaryByFileId.get(fid) : null;
+            if (!summary) summary = buildTempExecSummary(file);
+            return renderTempExecOverviewExecSetChip(file, summary);
+          })
+          .join('');
+        var vname = pid === 'unknown' ? ('版本#' + String(vid)) : resolveVersionName(pid, vid);
+        versionBoxes.push(
+          '<div class="exec-overview-version-box">' +
+            '<div class="head"><span class="title" title="' + escapeHtml(vname) + '">' + escapeHtml(vname) + '</span></div>' +
+            '<div class="body">' + (chips || '<span class="hint">暂无用例</span>') + '</div>' +
+          '</div>'
+        );
+      });
+
+      if (!filterVid && unassigned.length) {
+        var unassignedSorted = unassigned
+          .slice()
+          .sort(function(a, b) { return Number(b && b.createdAt ? b.createdAt : 0) - Number(a && a.createdAt ? a.createdAt : 0); });
+        var unassignedMap = {};
+        unassignedSorted.forEach(function(file) {
+          var fid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+          if (fid) unassignedMap[fid] = file;
+        });
+        var unassignedIds = reorderArchivedToBottom(
+          unassignedSorted
+            .map(function(file) { return file && file.id !== null && file.id !== undefined ? String(file.id) : ''; })
+            .filter(Boolean),
+          unassignedMap
+        );
+        var chips2 = unassignedIds
+          .map(function(fid) {
+            var file = unassignedMap[fid];
+            if (!file) return '';
+            var summary = summaryByFileId && typeof summaryByFileId.get === 'function' ? summaryByFileId.get(fid) : null;
+            if (!summary) summary = buildTempExecSummary(file);
+            return renderTempExecOverviewExecSetChip(file, summary);
+          })
+          .join('');
+        versionBoxes.push(
+          '<div class="exec-overview-version-box">' +
+            '<div class="head"><span class="title" title="未分配版本">未分配版本</span></div>' +
+            '<div class="body">' + (chips2 || '<span class="hint">暂无用例</span>') + '</div>' +
+          '</div>'
+        );
+      }
+
+      var metaLine =
+        '<div class="meta">' +
+          '<span>总数 ' + total + '</span>' +
+          '<span>待执行 ' + pending + '</span>' +
+          '<span>通过 ' + passed + '</span>' +
+          '<span>失败 ' + failed + '</span>' +
+          '<span>阻塞 ' + blocked + '</span>' +
+          '<span>不适用 ' + na + '</span>' +
+        '</div>';
+
+      var detail =
+        '<div class="exec-overview-user-grid layout-mode">' +
+          '<div class="exec-overview-user-card">' +
+            '<div class="head"><div class="name">个人总览</div></div>' +
+            metaLine +
+            '<div class="exec-overview-layout">' + versionBoxes.join('') + '</div>' +
+          '</div>' +
+        '</div>';
+
+      return selectHtml + detail;
+    }
+
+    function renderTempExecOverviewExecSetChip(file, summary) {
+      var safe = function(n) { return Math.max(0, Number(n) || 0); };
+      var total = safe(summary && summary.total);
+      var pending = safe(summary && summary.pending);
+      var passed = safe(summary && summary.passed);
+      var failed = safe(summary && summary.failed);
+      var blocked = safe(summary && summary.blocked);
+      var na = safe(summary && summary.unspecified);
+      if (!total) {
+        var fallbackTotal = getTempExecFileCaseCount(file);
+        if (fallbackTotal > 0) {
+          total = fallbackTotal;
+          pending = fallbackTotal;
+          passed = 0;
+          failed = 0;
+          blocked = 0;
+          na = 0;
+        }
+      }
+      var executed = Math.max(0, total - pending);
+      var done = passed + na;
+      var pct = total ? Math.round((done / total) * 100) : 0;
+
+      var statusText = '未执行';
+      var statusCls = 'pending';
+      if (total > 0 && (failed > 0 || blocked > 0)) {
+        if (failed > 0 && blocked > 0) statusText = '失败/阻塞';
+        else if (failed > 0) statusText = '失败';
+        else statusText = '阻塞';
+        statusCls = 'err';
+      } else if (total > 0 && pending === 0) {
+        statusText = '已完成';
+        statusCls = 'ok';
+      } else if (executed > 0) {
+        statusText = '进行中';
+        statusCls = 'running';
+      }
+
+      function findFirstIndex(key) {
+        if (!file || !Array.isArray(file.cases)) return -1;
+        for (var i = 0; i < file.cases.length; i += 1) {
+          var s = getCaseExecutionStatus(file, file.cases[i]);
+          if (mapFilterToStatus(key, s)) return i;
+        }
+        return -1;
+      }
+
+      var segs = [
+        { key: 'passed', className: 'status-passed', count: passed },
+        { key: 'failed', className: 'status-failed', count: failed },
+        { key: 'blocked', className: 'status-blocked', count: blocked },
+        { key: 'unspecified', className: 'status-unspecified', count: na },
+        { key: 'pending', className: 'status-pending', count: pending },
+      ].filter(function(seg) { return seg && seg.count > 0; });
+      var barHtml = segs.length
+        ? segs
+          .map(function(seg) {
+            var firstIndex = findFirstIndex(seg.key);
+            return (
+              '<div class="temp-overview-segment ' + seg.className + '" style="flex:' + seg.count + ';" data-temp-overview-file="' + escapeHtml(file.id) + '" data-temp-overview-status="' + escapeHtml(seg.key) + '" data-temp-overview-index="' + String(firstIndex) + '">' +
+                '<span>' + String(seg.count) + '</span>' +
+              '</div>'
+            );
+          })
+          .join('')
+        : '<div class="temp-overview-segment status-pending" style="flex:1;"><span>0</span></div>';
+
+      var progress =
+        '<div class="exec-overview-file-progress" title="执行进度 ' + pct + '%（' + done + '/' + total + '）">' +
+          '<div class="temp-overview-bar">' + barHtml + '</div>' +
+          '<div class="label">' + pct + '%</div>' +
+        '</div>';
+
+      var kvs = [
+        '<span class="exec-overview-kv kv-done">已' + executed + '/' + total + '</span>',
+        '<span class="exec-overview-kv kv-pending">待' + pending + '</span>',
+        '<span class="exec-overview-kv kv-passed">过' + passed + '</span>',
+        '<span class="exec-overview-kv kv-failed">失' + failed + '</span>',
+        '<span class="exec-overview-kv kv-blocked">阻' + blocked + '</span>',
+        (na > 0 ? '<span class="exec-overview-kv kv-na">NA' + na + '</span>' : ''),
+      ].filter(Boolean);
+
+      var meta =
+        '<div class="exec-overview-file-meta">' +
+          '<span class="exec-overview-file-status status-' + statusCls + '">' + escapeHtml(statusText) + '</span>' +
+          '<span class="exec-overview-file-counts" title="' + escapeHtml(kvs.join(' ')) + '">' + kvs.join('') + '</span>' +
+        '</div>';
+
+      var label = file && file.name ? String(file.name) : '测试用例';
+      var isArchived = file && String(file.status || '') === 'archived';
+      var archiveTag = isArchived ? '<span class="tag tag-archived">归</span>' : '';
+      var archiveAction = '';
+      if (!isArchived && isDbMode()) {
+        var execSetId = file && (file.execSetId || file.id) ? String(file.execSetId || file.id) : '';
+        if (execSetId) {
+          archiveAction =
+            '<span class="exec-overview-chip-action" data-temp-overview-archive="' + escapeHtml(execSetId) + '" title="归档该份用例">归档</span>';
+        }
+      }
+      return (
+        '<button type="button" class="exec-overview-file-chip state-' + statusCls + '" data-temp-file="' + escapeHtml(file.id) + '"' + (isArchived ? ' data-temp-archived="1"' : '') + '>' +
+          '<div class="row">' +
+            archiveTag +
+            '<span class="text" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
+            archiveAction +
+            '<span class="badge">' + total + '</span>' +
+          '</div>' +
+          progress +
+          meta +
+        '</button>'
       );
     }
 
@@ -1534,16 +3535,25 @@
       var completionCount = summary.passed + summary.unspecified;
       var executedPercent = total ? Math.round((completionCount / total) * 100) : 0;
       var segments = [
-        { label: '通过', count: summary.passed, className: 'status-passed' },
-        { label: '失败', count: summary.failed, className: 'status-failed' },
-        { label: '阻塞', count: summary.blocked, className: 'status-blocked' },
-        { label: '不适用', count: summary.unspecified, className: 'status-unspecified' },
-        { label: '未执行', count: summary.pending, className: 'status-pending' },
+        { key: 'passed', label: '通过', count: summary.passed, className: 'status-passed' },
+        { key: 'failed', label: '失败', count: summary.failed, className: 'status-failed' },
+        { key: 'blocked', label: '阻塞', count: summary.blocked, className: 'status-blocked' },
+        { key: 'unspecified', label: '不适用', count: summary.unspecified, className: 'status-unspecified' },
+        { key: 'pending', label: '未执行', count: summary.pending, className: 'status-pending' },
       ];
+      function findFirstCaseIndexForOverview(key) {
+        if (!file || !Array.isArray(file.cases)) return -1;
+        for (var i = 0; i < file.cases.length; i += 1) {
+          var status = getCaseExecutionStatus(file, file.cases[i]);
+          if (mapFilterToStatus(key, status)) return i;
+        }
+        return -1;
+      }
       var segmentHtml = total
         ? segments.filter(function(seg) { return seg.count > 0; }).map(function(seg) {
+            var firstIndex = findFirstCaseIndexForOverview(seg.key);
             return (
-              '<div class="temp-overview-segment ' + seg.className + '" style="flex:' + seg.count + ';">' +
+              '<div class="temp-overview-segment ' + seg.className + '" style="flex:' + seg.count + ';" data-temp-overview-file="' + file.id + '" data-temp-overview-status="' + seg.key + '" data-temp-overview-index="' + firstIndex + '">' +
                 '<span>' + seg.count + '</span>' +
               '</div>'
             );
@@ -1553,13 +3563,29 @@
         return '<span><span class="dot ' + (seg.className ? seg.className.replace('status-', '') : '') + '"></span>' + seg.label + ' ' + seg.count + '</span>';
       }).join('');
       var tags = [];
+      if (file && String(file.status || '') === 'archived') tags.push('<span class="tag tag-archived">归</span>');
       if (state.tempExecFocus.indexOf(file.id) !== -1) tags.push('<span class="tag tag-focus">专注</span>');
       var tagHtml = tags.join(' ');
+      var archiveBtn = '';
+      if (isDbMode() && !(file && String(file.status || '') === 'archived')) {
+        var execSetId = file && (file.execSetId || file.id) ? String(file.execSetId || file.id) : '';
+        if (execSetId) {
+          var disabled = file && file._casesLoading ? ' disabled' : '';
+          var tip = file && file._casesLoading ? '用例加载中，稍后再试' : '归档该份用例';
+          archiveBtn =
+            '<button type="button" class="pill secondary tiny" data-temp-overview-archive="' + escapeHtml(execSetId) + '"' + disabled + ' title="' + escapeHtml(tip) + '">' +
+              '归档' +
+            '</button>';
+        }
+      }
       return (
-        '<div class="temp-overview-entry" data-temp-file="' + file.id + '">' +
+        '<div class="temp-overview-entry" data-temp-file="' + file.id + '"' + (file && String(file.status || '') === 'archived' ? ' data-temp-archived="1"' : '') + '>' +
           '<div class="temp-overview-header">' +
             '<span>' + tagHtml + ' ' + escapeHtml(file && file.name ? file.name : '测试用例') + '</span>' +
-            '<span class="temp-overview-rate">执行进度 ' + executedPercent + '%（' + completionCount + '/' + summary.total + '）</span>' +
+            '<span class="temp-overview-actions">' +
+              archiveBtn +
+              '<span class="temp-overview-rate">执行进度 ' + executedPercent + '%（' + completionCount + '/' + summary.total + '）</span>' +
+            '</span>' +
           '</div>' +
           '<div class="temp-overview-bar">' + segmentHtml + '</div>' +
           '<div class="temp-overview-meta">' + metaHtml + '</div>' +
@@ -1567,8 +3593,8 @@
       );
     }
 
-    function renderTempFocusZone() {
-      if (!tempFocusZone) return;
+    function renderTempFocusZoneWithHint(zone, hintText) {
+      if (!zone) return;
       var focusList = state.tempExecFocus
         .map(function(id) { return getTempExecFile(id); })
         .filter(Boolean);
@@ -1577,19 +3603,38 @@
             return (
               '<button type="button" draggable="true" data-temp-file="' + file.id + '" class="' + (state.tempExecActiveId === file.id ? 'active' : '') + '">' +
                 '<span class="tag tag-focus">专注</span>' +
-                '<span>' + escapeHtml(file && file.name ? file.name : '测试用例') + '（' + (file && file.cases ? file.cases.length : 0) + '）</span>' +
+                '<span>' + escapeHtml(file && file.name ? file.name : '测试用例') + '（' + getTempExecFileCaseCount(file) + '）</span>' +
                 '<span class="remove" title="移出专注区" data-temp-focus-remove="' + file.id + '">×</span>' +
               '</button>'
             );
           }).join('')
-        : '<span class="hint">拖拽用例到此区域，专注处理关键用例</span>';
-      tempFocusZone.innerHTML = html;
-      enforceTempFileDraggable(tempFocusZone);
+        : '<span class="hint">' + escapeHtml(hintText || '') + '</span>';
+      zone.innerHTML = html;
+      enforceTempFileDraggable(zone);
+    }
+
+    function renderTempFocusZone() {
+      renderTempFocusZoneWithHint(tempFocusZone, '拖拽用例到此区域，专注处理关键用例');
+      renderTempFocusZoneWithHint(tempExecViewFocusZone, '暂无专注用例');
     }
 
     function renderTempExecNav() {
       if (!tempExecNav) return;
+      syncTempSectionToggleButtons();
       var focusSet = new Set(state.tempExecFocus || []);
+      if (state.tempExecReqCollapsed) {
+        tempExecNav.classList.add('collapsed');
+        tempExecNav.innerHTML = '<span class="hint temp-req-empty">需求区已收起，点击“展开需求区”查看</span>';
+        if (exportTempExecBtn) exportTempExecBtn.disabled = !state.tempExecActiveId;
+        if (exportTempExecConfigBtn) exportTempExecConfigBtn.disabled = !state.tempExecFiles.length;
+        if (exportTempExecXmindBtn) exportTempExecXmindBtn.disabled = !state.tempExecActiveId;
+        if (exportTempExecCasesXmindBtn) exportTempExecCasesXmindBtn.disabled = !state.tempExecActiveId;
+        if (tempExecMindBtn) tempExecMindBtn.disabled = !state.tempExecActiveId;
+        renderTempExecOverview();
+        renderTempFocusZone();
+        return;
+      }
+      tempExecNav.classList.remove('collapsed');
       var files = state.tempExecFiles
         .filter(function(file) { return !file.versionId; })
         .slice()
@@ -1677,10 +3722,32 @@
       if (exportTempExecBtn) exportTempExecBtn.disabled = !state.tempExecActiveId;
       if (exportTempExecConfigBtn) exportTempExecConfigBtn.disabled = !state.tempExecFiles.length;
       if (exportTempExecXmindBtn) exportTempExecXmindBtn.disabled = !state.tempExecActiveId;
+      if (exportTempExecCasesXmindBtn) exportTempExecCasesXmindBtn.disabled = !state.tempExecActiveId;
       if (tempExecMindBtn) tempExecMindBtn.disabled = !state.tempExecActiveId;
       renderTempExecOverview();
       renderTempFocusZone();
       enforceTempFileDraggable(tempExecNav);
+    }
+
+    function toggleTempExecRequirementZone() {
+      state.tempExecReqCollapsed = !state.tempExecReqCollapsed;
+      persistTempExecState();
+      renderTempExecNav();
+    }
+
+    function toggleTempExecVersionZone() {
+      state.tempExecVersionCollapsed = !state.tempExecVersionCollapsed;
+      persistTempExecState();
+      renderTempVersionGrid();
+    }
+
+    function setTempExecImportProjectFilter(projectId) {
+      var next = normalizeTempExecImportProjectFilterId(projectId);
+      var current = state.tempExecImportProjectFilterId ? String(state.tempExecImportProjectFilterId) : '';
+      if (String(current) === String(next)) return;
+      state.tempExecImportProjectFilterId = next;
+      renderTempVersionGrid();
+      scheduleTempExecUiSave();
     }
 
     function prioritizeTempExecUnassignedRequirements() {
@@ -1729,21 +3796,73 @@
 
     function renderTempExecView() {
       if (!tempExecView) return;
+      var preserveScroll = Boolean(state.tempExecPreserveScrollOnce);
+      var scrollSnapshot = null;
+      if (preserveScroll && typeof window !== 'undefined' && tempExecView.getBoundingClientRect) {
+        scrollSnapshot = {
+          top: tempExecView.getBoundingClientRect().top,
+          scrollY: window.pageYOffset || document.documentElement.scrollTop || 0,
+        };
+      }
+      var restoreScroll = function() {
+        if (!preserveScroll) return;
+        state.tempExecPreserveScrollOnce = false;
+        if (!scrollSnapshot || !tempExecView.getBoundingClientRect) return;
+        var afterTop = tempExecView.getBoundingClientRect().top;
+        var delta = afterTop - scrollSnapshot.top;
+        if (Math.abs(delta) > 1 && typeof window !== 'undefined' && window.scrollTo) {
+          window.scrollTo(0, scrollSnapshot.scrollY + delta);
+        }
+      };
       var active = getTempExecFile(state.tempExecActiveId);
+      if (active) {
+        try {
+          state.tempExecLastActiveContext = {
+            projectId: active.projectId ? String(active.projectId) : '',
+            versionId: active.versionId !== null && active.versionId !== undefined ? String(active.versionId || '') : '',
+          };
+        } catch (err) {
+          // ignore
+        }
+      }
+      var ctx = state.tempExecLastActiveContext && typeof state.tempExecLastActiveContext === 'object'
+        ? state.tempExecLastActiveContext
+        : null;
+      var ctxProjectId = active && active.projectId ? String(active.projectId) : (ctx && ctx.projectId ? String(ctx.projectId) : '');
+      var ctxVersionId = active && active.versionId !== null && active.versionId !== undefined
+        ? String(active.versionId || '')
+        : (ctx && ctx.versionId !== null && ctx.versionId !== undefined ? String(ctx.versionId || '') : '');
+      var ctxProjectName = ctxProjectId ? resolveProjectName(ctxProjectId) : '';
+      var ctxVersionName = (ctxProjectId && ctxVersionId) ? resolveVersionName(ctxProjectId, ctxVersionId) : '';
+      var ctxHtml = '';
+      if (ctxProjectId || ctxVersionId) {
+        ctxHtml =
+          '<div class="temp-exec-context">' +
+            '<span class="temp-exec-context-label">当前用例归属：</span>' +
+            '<span class="temp-exec-context-kv">' +
+              (ctxProjectName ? ('项目 ' + escapeHtml(ctxProjectName)) : '') +
+              (ctxVersionName ? (' / 版本 ' + escapeHtml(ctxVersionName)) : '') +
+            '</span>' +
+          '</div>';
+      }
       if (!active) {
-        tempExecView.innerHTML = '<div class="temp-case-empty">请先在上方导入测试用例或点击历史用例</div>';
+        renderTempExecToolbar(null);
+        tempExecView.innerHTML = ctxHtml + '<div class="temp-case-empty">暂无执行用例，请通过“用例导入”抽屉导入，或在“执行分配”中选择历史记录</div>';
         if (tempExecMindContainer) tempExecMindContainer.classList.add('hidden');
         state.tempExecMindMode = false;
         if (exportTempExecBtn) exportTempExecBtn.disabled = true;
         if (exportTempExecXmindBtn) exportTempExecXmindBtn.disabled = true;
+        if (tempExecCaseLibraryChangesBtn) tempExecCaseLibraryChangesBtn.disabled = true;
         if (tempExecMindBtn) {
           tempExecMindBtn.disabled = true;
           tempExecMindBtn.textContent = '切换思维导图视图';
         }
         tempExecView.classList.remove('hidden');
+        restoreScroll();
         return;
       }
-      tempExecView.innerHTML = renderTempExecTable(active);
+      renderTempExecToolbar(active);
+      tempExecView.innerHTML = ctxHtml + renderTempExecTable(active);
       if (state.tempExecMindMode && tempExecMindContainer) {
         tempExecMindContainer.innerHTML = '';
         tempExecMindContainer.classList.remove('hidden');
@@ -1756,13 +3875,715 @@
       }
       if (exportTempExecBtn) exportTempExecBtn.disabled = false;
       if (exportTempExecXmindBtn) exportTempExecXmindBtn.disabled = false;
+      if (exportTempExecCasesXmindBtn) exportTempExecCasesXmindBtn.disabled = false;
       if (tempExecMindBtn) tempExecMindBtn.disabled = false;
+      syncTempExecCaseLibraryChangesButton(active);
       renderTempExecOverview();
+      restoreScroll();
+    }
+
+    function normalizeDbTimeInput(input) {
+      if (!input) return '';
+      if (typeof input === 'number') return input;
+      var text = String(input || '').trim();
+      if (!text) return '';
+      // 兼容 SQLite/Pydantic 输出：若时间不含时区信息，默认按 UTC 解释（避免展示少 8 小时）。
+      if (text.indexOf('T') === -1 && text.indexOf(' ') !== -1) {
+        text = text.replace(' ', 'T');
+      }
+      // 毫秒统一裁剪为 3 位，避免部分浏览器解析失败。
+      text = text.replace(/(\.\d{3})\d+/, '$1');
+      // Safari 兼容：将 +08:00 转为 +0800
+      text = text.replace(/([+-]\d{2}):(\d{2})$/, '$1$2');
+      var hasTz = /Z$/i.test(text) || /[+-]\d{2}\d{2}$/.test(text) || /[+-]\d{2}:\d{2}$/.test(text);
+      var isIsoWithTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text);
+      if (isIsoWithTime && !hasTz) text += 'Z';
+      return text;
+    }
+
+    function parseDbTimeMs(value) {
+      if (!value) return 0;
+      if (typeof value === 'number') {
+        return Number.isFinite(value) && value > 0 ? value : 0;
+      }
+      var normalized = normalizeDbTimeInput(value);
+      var ts = 0;
+      try { ts = Date.parse(normalized || value); } catch (err) { ts = 0; }
+      if (!isFinite(ts) || ts <= 0) return 0;
+      return ts;
+    }
+
+    function normalizeCaseLibrarySyncMeta(raw) {
+      var res = raw && typeof raw === 'object' ? raw : {};
+      var summary = res.summary && typeof res.summary === 'object' ? res.summary : {};
+      var diff = Array.isArray(res.diff) ? res.diff : [];
+      var historyRaw = Array.isArray(res.history) ? res.history : [];
+      var history = historyRaw
+        .map(function(item) {
+          var it = item && typeof item === 'object' ? item : {};
+          var diffAt = it.diff_at || it.diffAt || it.last_diff_at || it.lastDiffAt || '';
+          var operator = it.operator || it.operator_name || it.operatorName || '';
+          var sum = it.summary && typeof it.summary === 'object' ? it.summary : {};
+          var d = Array.isArray(it.diff) ? it.diff : [];
+          return {
+            diffAt: diffAt ? String(diffAt) : '',
+            operator: operator ? String(operator) : '',
+            summary: {
+              appended: Number(sum.appended) || 0,
+              added: Number(sum.added) || 0,
+              updated: Number(sum.updated) || 0,
+              deleted: Number(sum.deleted) || 0,
+            },
+            diff: d,
+          };
+        })
+        .filter(function(item) { return item && item.diffAt; });
+      history.sort(function(a, b) {
+        return parseDbTimeMs(b && b.diffAt) - parseDbTimeMs(a && a.diffAt);
+      });
+      return {
+        execSetId: res.exec_set_id || res.execSetId || null,
+        caseFileId: res.case_file_id || res.caseFileId || null,
+        caseFileUpdatedAt: res.case_file_updated_at || res.caseFileUpdatedAt || null,
+        baseUpdatedAt: res.base_updated_at || res.baseUpdatedAt || null,
+        lastDiffAt: res.last_diff_at || res.lastDiffAt || null,
+        lastShownAt: res.last_shown_at || res.lastShownAt || null,
+        everChanged: Boolean(res.ever_changed || res.everChanged),
+        hasNewDiff: Boolean(res.has_new_diff || res.hasNewDiff),
+        shouldAutoPopup: Boolean(res.should_auto_popup || res.shouldAutoPopup),
+        summary: {
+          appended: Number(summary.appended) || 0,
+          added: Number(summary.added) || 0,
+          updated: Number(summary.updated) || 0,
+          deleted: Number(summary.deleted) || 0,
+        },
+        diff: diff,
+        history: history,
+      };
+    }
+
+    function hasCaseLibraryChangeSignal(meta) {
+      if (!meta) return false;
+      if (meta.everChanged === true) return true;
+      if (Array.isArray(meta.diff) && meta.diff.length) return true;
+      if (Array.isArray(meta.history) && meta.history.length) return true;
+      if (meta.summary) {
+        var summary = meta.summary || {};
+        if (Number(summary.appended) || Number(summary.added) || Number(summary.updated) || Number(summary.deleted)) {
+          return true;
+        }
+      }
+      if (meta.lastDiffAt) return true;
+      var baseTs = parseDbTimeMs(meta.baseUpdatedAt);
+      var fileTs = parseDbTimeMs(meta.caseFileUpdatedAt);
+      if (baseTs && fileTs && fileTs > baseTs) return true;
+      return false;
+    }
+
+    function mergeCaseLibrarySyncMeta(prev, next) {
+      if (!prev) return next;
+      if (!next) return prev;
+      var nextSummary = next.summary || {};
+      var nextSummarySignal = Boolean(
+        Number(nextSummary.appended) ||
+        Number(nextSummary.added) ||
+        Number(nextSummary.updated) ||
+        Number(nextSummary.deleted)
+      );
+      var nextHasSignal = Boolean(
+        next.everChanged === true ||
+        (Array.isArray(next.diff) && next.diff.length) ||
+        (Array.isArray(next.history) && next.history.length) ||
+        next.lastDiffAt ||
+        nextSummarySignal
+      );
+      if (nextHasSignal) return next;
+      var merged = {};
+      Object.keys(next).forEach(function(key) { merged[key] = next[key]; });
+      if (prev.everChanged) merged.everChanged = true;
+      if ((!merged.diff || !merged.diff.length) && Array.isArray(prev.diff) && prev.diff.length) {
+        merged.diff = prev.diff;
+      }
+      if ((!merged.history || !merged.history.length) && Array.isArray(prev.history) && prev.history.length) {
+        merged.history = prev.history;
+      }
+      if (!merged.lastDiffAt && prev.lastDiffAt) merged.lastDiffAt = prev.lastDiffAt;
+      if (!merged.lastShownAt && prev.lastShownAt) merged.lastShownAt = prev.lastShownAt;
+      if (merged.summary && prev.summary) {
+        var sum = merged.summary;
+        var empty = !(sum.appended || sum.added || sum.updated || sum.deleted);
+        if (empty) merged.summary = prev.summary;
+      }
+      if (!merged.caseFileId && prev.caseFileId) merged.caseFileId = prev.caseFileId;
+      return merged;
+    }
+
+    function applyTempExecCaseLibrarySyncMeta(file, syncRes) {
+      var meta = normalizeCaseLibrarySyncMeta(syncRes);
+      var execSetId = meta && meta.execSetId ? meta.execSetId : (file && file.execSetId ? file.execSetId : null);
+      if (!execSetId) return null;
+      if (!meta.execSetId) meta.execSetId = execSetId;
+      if (!meta.caseFileId && file && (file.caseFileId || file.caseFileId === 0)) {
+        meta.caseFileId = file.caseFileId;
+      }
+      var store = ensureTempExecCaseLibraryDiffState();
+      var prevMeta = store.byExecSetId[String(execSetId)] || null;
+      meta = mergeCaseLibrarySyncMeta(prevMeta, meta);
+      store.byExecSetId[String(execSetId)] = meta;
+      var latestFile = file || getTempExecFile(String(execSetId));
+      if (latestFile) latestFile.caseLibraryMeta = meta;
+      if (meta && meta.shouldAutoPopup) {
+        queueTempExecCaseLibraryAutoPopup(execSetId, meta);
+      } else {
+        clearTempExecCaseLibraryAutoPopup(execSetId, meta);
+      }
+      if (String(state.tempExecActiveId || '') === String(execSetId)) {
+        syncTempExecCaseLibraryChangesButton(getTempExecFile(state.tempExecActiveId));
+      }
+      return meta;
+    }
+
+    function getTempExecFileNameByExecSetId(execSetId) {
+      if (!execSetId) return '';
+      var file = getTempExecFile(String(execSetId));
+      if (file && file.name) return String(file.name);
+      return '执行集#' + String(execSetId);
+    }
+
+    function listTempExecCaseLibraryDiffExecSetIds(options) {
+      options = options || {};
+      var store = ensureTempExecCaseLibraryDiffState();
+      var ids = Object.keys(store.byExecSetId || {});
+      var list = ids
+        .map(function(id) {
+          var meta = store.byExecSetId[id] || null;
+          if (!meta) return null;
+          var hasHistory = Boolean(meta && Array.isArray(meta.history) && meta.history.length);
+          var hasDiff = hasHistory || Boolean(meta && Array.isArray(meta.diff) && meta.diff.length);
+          var available = Boolean(meta && (hasDiff || hasCaseLibraryChangeSignal(meta)));
+          if (!available) return null;
+          var ts = 0;
+          if (hasHistory && meta.history[0] && meta.history[0].diffAt) {
+            ts = parseDbTimeMs(meta.history[0].diffAt);
+          } else if (meta.lastDiffAt) {
+            ts = parseDbTimeMs(meta.lastDiffAt);
+          }
+          if (!isFinite(ts)) ts = 0;
+          return {
+            execSetId: String(id),
+            name: getTempExecFileNameByExecSetId(id),
+            unacked: hasUnackedCaseLibraryDiff(meta),
+            hasNew: Boolean(meta && meta.hasNewDiff),
+            shouldAuto: Boolean(meta && meta.shouldAutoPopup),
+            lastTs: ts,
+          };
+        })
+        .filter(Boolean);
+      list.sort(function(a, b) {
+        if (a.unacked !== b.unacked) return a.unacked ? -1 : 1;
+        if (a.shouldAuto !== b.shouldAuto) return a.shouldAuto ? -1 : 1;
+        if (a.hasNew !== b.hasNew) return a.hasNew ? -1 : 1;
+        if (a.lastTs !== b.lastTs) return b.lastTs - a.lastTs;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN');
+      });
+      return list.map(function(it) { return it.execSetId; });
+    }
+
+    function setTempExecCaseLibraryDiffSelectedExecSetId(execSetId) {
+      state.tempExecCaseLibraryDiffSelectedExecSetId = execSetId ? String(execSetId) : '';
+    }
+
+    function getTempExecCaseLibraryDiffSelectedExecSetId() {
+      var id = state.tempExecCaseLibraryDiffSelectedExecSetId ? String(state.tempExecCaseLibraryDiffSelectedExecSetId) : '';
+      return id;
+    }
+
+    function updateTempExecFileCaseLibraryMeta(file, meta) {
+      if (!file) return;
+      file.caseLibraryMeta = meta || null;
+      var store = ensureTempExecCaseLibraryDiffState();
+      var execSetId = file.execSetId || (meta && meta.execSetId) || null;
+      if (!execSetId) return;
+      store.byExecSetId[String(execSetId)] = meta || null;
+    }
+
+    function hasUnackedCaseLibraryDiff(meta) {
+      if (!meta) return false;
+      var lastDiffAt = meta.lastDiffAt ? String(meta.lastDiffAt) : '';
+      if (!lastDiffAt) return false;
+      var lastShownAt = meta.lastShownAt ? String(meta.lastShownAt) : '';
+      if (!lastShownAt) return true;
+      var diffTs = parseDbTimeMs(lastDiffAt);
+      var shownTs = parseDbTimeMs(lastShownAt);
+      if (!diffTs) return false;
+      if (!shownTs) return true;
+      return diffTs > shownTs;
+    }
+
+    function syncTempExecCaseLibraryChangesButton(file) {
+      if (!tempExecCaseLibraryChangesBtn) return;
+      if (!file || !file.execSetId || !isDbMode()) {
+        tempExecCaseLibraryChangesBtn.disabled = true;
+        try { tempExecCaseLibraryChangesBtn.classList.remove('has-new'); } catch (err) {}
+        return;
+      }
+      var store = ensureTempExecCaseLibraryDiffState();
+      var meta = store.byExecSetId[String(file.execSetId)] || (file.caseLibraryMeta || null);
+      tempExecCaseLibraryChangesBtn.disabled = false;
+      try {
+        tempExecCaseLibraryChangesBtn.classList.toggle('has-new', hasUnackedCaseLibraryDiff(meta));
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function getCaseLibDiffKindLabel(kind) {
+      if (kind === 'appended') return '追加';
+      if (kind === 'added') return '新增';
+      if (kind === 'updated') return '改动';
+      if (kind === 'deleted') return '删除';
+      return '';
+    }
+
+    function renderTempExecCaseLibraryDiffCaseTabs(selectedExecSetId) {
+      if (!tempExecCaseLibraryDiffCaseTabs) return;
+      var ids = listTempExecCaseLibraryDiffExecSetIds();
+      if (!ids.length) {
+        tempExecCaseLibraryDiffCaseTabs.innerHTML = '';
+        return;
+      }
+      tempExecCaseLibraryDiffCaseTabs.innerHTML = ids
+        .map(function(id) {
+          var store = ensureTempExecCaseLibraryDiffState();
+          var meta = store.byExecSetId[String(id)] || null;
+          var cls = 'summary-pill case-lib-diff-case-pill' + (String(id) === String(selectedExecSetId || '') ? ' active' : '');
+          if (hasUnackedCaseLibraryDiff(meta)) cls += ' has-new';
+          if (meta && meta.shouldAutoPopup) cls += ' needs-attention';
+          return (
+            '<button type="button" class="' + cls + '" data-case-lib-diff-exec-set="' + escapeHtml(id) + '">' +
+              escapeHtml(getTempExecFileNameByExecSetId(id)) +
+            '</button>'
+          );
+        })
+        .join('');
+    }
+
+    function renderTempExecCaseLibraryDiff(execSetId) {
+      if (!tempExecCaseLibraryDiffBody) return;
+      var store = ensureTempExecCaseLibraryDiffState();
+      var lastRendered = state.tempExecCaseLibraryDiffLastRenderedExecSetId ? String(state.tempExecCaseLibraryDiffLastRenderedExecSetId) : '';
+      var nextRendered = execSetId ? String(execSetId) : '';
+      if (nextRendered && nextRendered !== lastRendered) {
+        store.filterByExecSetId[nextRendered] = '';
+        state.tempExecCaseLibraryDiffLastRenderedExecSetId = nextRendered;
+      }
+      var meta = execSetId ? store.byExecSetId[String(execSetId)] : null;
+      var filter = execSetId && store.filterByExecSetId[String(execSetId)]
+        ? String(store.filterByExecSetId[String(execSetId)])
+        : '';
+      if (filter !== 'added' && filter !== 'updated' && filter !== 'deleted') filter = '';
+
+      setTempExecCaseLibraryDiffSelectedExecSetId(execSetId);
+      if (tempExecCaseLibraryDiffCaseName) {
+        tempExecCaseLibraryDiffCaseName.textContent = getTempExecFileNameByExecSetId(execSetId || '');
+      }
+      renderTempExecCaseLibraryDiffCaseTabs(execSetId);
+
+      function formatCaseLibDiffTime(iso) {
+        if (!iso) return '';
+        var ts = parseDbTimeMs(iso);
+        if (!ts) return String(iso || '');
+        var d = new Date(ts);
+        var pad = function(n) { return n < 10 ? '0' + n : String(n); };
+        return (
+          d.getFullYear() + '-' +
+          pad(d.getMonth() + 1) + '-' +
+          pad(d.getDate()) + ' ' +
+          pad(d.getHours()) + ':' +
+          pad(d.getMinutes()) + ':' +
+          pad(d.getSeconds())
+        );
+      }
+
+      var batches = meta && Array.isArray(meta.history) && meta.history.length ? meta.history : [];
+      if (!batches.length) {
+        var fallbackDiff = meta && Array.isArray(meta.diff) ? meta.diff : [];
+        var fallbackSummary = meta && meta.summary ? meta.summary : { appended: 0, added: 0, updated: 0, deleted: 0 };
+        if (fallbackDiff.length) {
+          batches = [{
+            diffAt: meta && meta.lastDiffAt ? String(meta.lastDiffAt) : '',
+            summary: fallbackSummary,
+            diff: fallbackDiff,
+          }];
+        }
+      }
+
+      var totalSummary = { appended: 0, added: 0, updated: 0, deleted: 0 };
+      var rows = [];
+      batches.forEach(function(batch) {
+        if (!batch) return;
+        var diffAt = batch.diffAt ? String(batch.diffAt) : '';
+        var operator = batch.operator ? String(batch.operator) : '';
+        var batchTs = parseDbTimeMs(diffAt);
+        if (!isFinite(batchTs)) batchTs = 0;
+        var sum = batch.summary && typeof batch.summary === 'object' ? batch.summary : {};
+        var diff = Array.isArray(batch.diff) ? batch.diff : [];
+        var hasSum = Number.isFinite(Number(sum.appended)) || Number.isFinite(Number(sum.added)) || Number.isFinite(Number(sum.updated)) || Number.isFinite(Number(sum.deleted));
+        if (hasSum) {
+          totalSummary.appended += Number(sum.appended) || 0;
+          totalSummary.added += Number(sum.added) || 0;
+          totalSummary.updated += Number(sum.updated) || 0;
+          totalSummary.deleted += Number(sum.deleted) || 0;
+        } else {
+          diff.forEach(function(entry) {
+            var k = normalizeDiffKind(entry && entry.kind);
+            if (k === 'appended') totalSummary.appended += 1;
+            if (k === 'added') totalSummary.added += 1;
+            if (k === 'updated') totalSummary.updated += 1;
+            if (k === 'deleted') totalSummary.deleted += 1;
+          });
+        }
+        diff.forEach(function(entry) {
+          rows.push({ entry: entry, diffAt: diffAt, operator: operator, ts: batchTs });
+        });
+      });
+      if (!rows.length && meta && meta.summary) {
+        var fallbackSummary = meta.summary || {};
+        var hasFallback = Number(fallbackSummary.appended) || Number(fallbackSummary.added) || Number(fallbackSummary.updated) || Number(fallbackSummary.deleted);
+        var emptyTotals = !(totalSummary.appended || totalSummary.added || totalSummary.updated || totalSummary.deleted);
+        if (hasFallback && emptyTotals) {
+          totalSummary.appended = Number(fallbackSummary.appended) || 0;
+          totalSummary.added = Number(fallbackSummary.added) || 0;
+          totalSummary.updated = Number(fallbackSummary.updated) || 0;
+          totalSummary.deleted = Number(fallbackSummary.deleted) || 0;
+        }
+      }
+
+      rows.sort(function(a, b) {
+        var ta = a && a.ts ? Number(a.ts) : 0;
+        var tb = b && b.ts ? Number(b.ts) : 0;
+        if (ta !== tb) return tb - ta;
+        var ka = normalizeDiffKind(a && a.entry ? a.entry.kind : '');
+        var kb = normalizeDiffKind(b && b.entry ? b.entry.kind : '');
+        if (ka !== kb) return String(kb).localeCompare(String(ka));
+        return 0;
+      });
+
+      var visible = rows.filter(function(row) {
+        var entry = row && row.entry ? row.entry : null;
+        var kind = normalizeDiffKind(entry && entry.kind);
+        if (!kind) return false;
+        if (!filter) return true;
+        return kind === filter;
+      });
+
+      if (tempExecCaseLibraryDiffAppendedPill) {
+        tempExecCaseLibraryDiffAppendedPill.textContent = '追加 ' + (totalSummary.appended || 0);
+        tempExecCaseLibraryDiffAppendedPill.classList.toggle('active', filter === 'appended');
+      }
+      if (tempExecCaseLibraryDiffAddedPill) {
+        tempExecCaseLibraryDiffAddedPill.textContent = '新增 ' + (totalSummary.added || 0);
+        tempExecCaseLibraryDiffAddedPill.classList.toggle('active', filter === 'added');
+      }
+      if (tempExecCaseLibraryDiffUpdatedPill) {
+        tempExecCaseLibraryDiffUpdatedPill.textContent = '改动 ' + (totalSummary.updated || 0);
+        tempExecCaseLibraryDiffUpdatedPill.classList.toggle('active', filter === 'updated');
+      }
+      if (tempExecCaseLibraryDiffDeletedPill) {
+        tempExecCaseLibraryDiffDeletedPill.textContent = '删除 ' + (totalSummary.deleted || 0);
+        tempExecCaseLibraryDiffDeletedPill.classList.toggle('active', filter === 'deleted');
+      }
+
+      if (tempExecCaseLibraryDiffStatus) {
+        var statusText = '';
+        var hasSignal = hasCaseLibraryChangeSignal(meta);
+        if (!meta) {
+          statusText = '暂无用例变更数据';
+        } else if (meta.hasNewDiff) {
+          statusText = '已同步用例变更到执行页：追加 ' + totalSummary.appended + '，新增 ' + totalSummary.added + '，改动 ' + totalSummary.updated + '，删除 ' + totalSummary.deleted;
+        } else if (meta.everChanged || hasSignal) {
+          statusText = '暂无新的用例变更，可查看历史差异：追加 ' + totalSummary.appended + '，新增 ' + totalSummary.added + '，改动 ' + totalSummary.updated + '，删除 ' + totalSummary.deleted;
+        } else {
+          statusText = '当前用例未发生用例变更';
+        }
+        setStatus(tempExecCaseLibraryDiffStatus, statusText, meta && (meta.everChanged || hasSignal) ? 'ok' : '');
+      }
+
+      if (!visible.length) {
+        tempExecCaseLibraryDiffBody.innerHTML = '<tr><td colspan="8"><p class="hint">暂无变更</p></td></tr>';
+        return;
+      }
+
+      function buildCell(oldSnap, newSnap, key, changed) {
+        var oldVal = oldSnap && oldSnap[key] !== undefined && oldSnap[key] !== null ? String(oldSnap[key]) : '';
+        var newVal = newSnap && newSnap[key] !== undefined && newSnap[key] !== null ? String(newSnap[key]) : '';
+        if (!changed) {
+          var text = newVal || oldVal || '';
+          return '<div class="case-lib-diff-cell"><div class="case-lib-diff-only">' + escapeHtmlPreserve(text) + '</div></div>';
+        }
+        return (
+          '<div class="case-lib-diff-cell">' +
+            '<div class="case-lib-diff-old">旧：' + escapeHtmlPreserve(oldVal) + '</div>' +
+            '<div class="case-lib-diff-new">新：' + escapeHtmlPreserve(newVal) + '</div>' +
+          '</div>'
+        );
+      }
+
+      tempExecCaseLibraryDiffBody.innerHTML = visible.map(function(row) {
+        var entry = row && row.entry ? row.entry : null;
+        var kind = normalizeDiffKind(entry && entry.kind);
+        var oldSnap = entry && entry.old && typeof entry.old === 'object' ? entry.old : null;
+        var newSnap = entry && entry.new && typeof entry.new === 'object' ? entry.new : null;
+        var changedFields = Array.isArray(entry && entry.changed_fields) ? entry.changed_fields : [];
+        var changedMap = {};
+        changedFields.forEach(function(f) { changedMap[String(f)] = true; });
+        var typeTag = '<span class="tag case-lib-diff-kind ' + kind + '">' + escapeHtml(getCaseLibDiffKindLabel(kind)) + '</span>';
+        var timeText = formatCaseLibDiffTime(row && row.diffAt ? row.diffAt : '');
+        var operatorText = row && row.operator ? String(row.operator) : '';
+        return (
+          '<tr>' +
+            '<td>' + typeTag + '</td>' +
+            '<td class="case-lib-diff-time">' + escapeHtml(timeText) + '</td>' +
+            '<td class="case-lib-diff-operator">' + escapeHtml(operatorText) + '</td>' +
+            '<td>' + buildCell(oldSnap, newSnap, 'module', Boolean(changedMap.module)) + '</td>' +
+            '<td>' + buildCell(oldSnap, newSnap, 'title', Boolean(changedMap.title)) + '</td>' +
+            '<td>' + buildCell(oldSnap, newSnap, 'precondition', Boolean(changedMap.precondition)) + '</td>' +
+            '<td>' + buildCell(oldSnap, newSnap, 'steps', Boolean(changedMap.steps)) + '</td>' +
+            '<td>' + buildCell(oldSnap, newSnap, 'expected', Boolean(changedMap.expected)) + '</td>' +
+          '</tr>'
+        );
+      }).join('');
+    }
+
+    function ensureTempExecCaseLibraryDiffDrawer() {
+      if (tempExecCaseLibraryDiffDrawer) return tempExecCaseLibraryDiffDrawer;
+      if (typeof window === 'undefined') return null;
+      var drawerApi = window.app && window.app.drawer ? window.app.drawer : null;
+      if (!drawerApi || typeof drawerApi.createDrawer !== 'function') return null;
+      tempExecCaseLibraryDiffDrawer = drawerApi.createDrawer({ drawerId: 'tempExecCaseLibraryDiffDrawer' });
+      if (tempExecCaseLibraryDiffDrawer && tempExecCaseLibraryDiffDrawer.element) {
+        tempExecCaseLibraryDiffDrawer.element.addEventListener('click', function(e) {
+          var target = e && e.target ? e.target : null;
+          if (!target || !target.closest) return;
+          var selectBtn = target.closest('#tempExecCaseLibraryDiffSelectCaseBtn');
+          if (selectBtn) {
+            var selected = getTempExecCaseLibraryDiffSelectedExecSetId();
+            if (selected) setTempExecActive(String(selected));
+            return;
+          }
+          var caseBtn = target.closest('[data-case-lib-diff-exec-set]');
+          if (caseBtn && caseBtn.dataset && caseBtn.dataset.caseLibDiffExecSet) {
+            var nextExecSetId = String(caseBtn.dataset.caseLibDiffExecSet || '');
+            if (nextExecSetId) {
+              renderTempExecCaseLibraryDiff(nextExecSetId);
+            }
+            return;
+          }
+          var pill = target.closest('[data-case-lib-diff-filter]');
+          if (!pill) return;
+          var selectedExecSetId = getTempExecCaseLibraryDiffSelectedExecSetId();
+          var execSetId = selectedExecSetId ? String(selectedExecSetId) : '';
+          if (!execSetId) {
+            var active = getTempExecFile(state.tempExecActiveId);
+            execSetId = active && active.execSetId ? String(active.execSetId) : '';
+          }
+          if (!execSetId) return;
+          var next = String(pill.dataset.caseLibDiffFilter || '');
+          if (next !== 'appended' && next !== 'added' && next !== 'updated' && next !== 'deleted') return;
+          var store = ensureTempExecCaseLibraryDiffState();
+          var current = store.filterByExecSetId[execSetId] ? String(store.filterByExecSetId[execSetId]) : '';
+          store.filterByExecSetId[execSetId] = (current === next) ? '' : next;
+          renderTempExecCaseLibraryDiff(execSetId);
+        });
+      }
+      return tempExecCaseLibraryDiffDrawer;
+    }
+
+    function openTempExecCaseLibraryDiffDrawer(options) {
+      options = options || {};
+      var manual = Boolean(options.manual);
+      var desired = options.execSetId ? String(options.execSetId) : '';
+      var saved = getTempExecCaseLibraryDiffSelectedExecSetId();
+      var active = getTempExecFile(state.tempExecActiveId);
+      var activeExecSetId = active && active.execSetId ? String(active.execSetId) : '';
+      // 用户在执行视图点击“用例变更”时：优先打开当前用例的变更（并清除当前用例的醒目提醒）。
+      // 避免出现“上次选中过其他用例 -> 本次点击仍打开旧用例 -> 当前按钮一直醒目”的错觉。
+      var execSetId = desired || (manual ? (activeExecSetId || saved) : (saved || activeExecSetId)) || '';
+      if (!execSetId && active && (active.execSetId || active.id)) {
+        execSetId = String(active.execSetId || active.id || '');
+      }
+      if (!execSetId && Array.isArray(state.tempExecFiles) && state.tempExecFiles.length) {
+        var fallback = state.tempExecFiles[0];
+        if (fallback && (fallback.execSetId || fallback.id)) {
+          execSetId = String(fallback.execSetId || fallback.id || '');
+        }
+      }
+      if (!execSetId) return false;
+      if (manual) setTempExecCaseLibraryDiffSelectedExecSetId(execSetId);
+      var store = ensureTempExecCaseLibraryDiffState();
+      var meta = store.byExecSetId[String(execSetId)] || null;
+      var hasDiff = Boolean(meta && Array.isArray(meta.diff) && meta.diff.length);
+      var hasHistory = Boolean(meta && Array.isArray(meta.history) && meta.history.length);
+      var hasSignal = Boolean(meta && (hasDiff || hasHistory || hasCaseLibraryChangeSignal(meta)));
+      if (manual && isDbMode()) {
+        var client = getApiClient();
+        if (client && typeof client.syncExecSetCaseLibrary === 'function') {
+          ensureTempExecCaseLibraryDiffDrawer();
+          renderTempExecCaseLibraryDiff(execSetId);
+          if (tempExecCaseLibraryDiffStatus) {
+            setStatus(tempExecCaseLibraryDiffStatus, '正在同步用例变更...', '');
+          }
+          if (tempExecCaseLibraryDiffBody && (!meta || !hasSignal)) {
+            tempExecCaseLibraryDiffBody.innerHTML = '<tr><td colspan="8"><p class="hint">正在同步用例变更...</p></td></tr>';
+          }
+          if (tempExecCaseLibraryDiffDrawer && typeof tempExecCaseLibraryDiffDrawer.open === 'function') {
+            tempExecCaseLibraryDiffDrawer.open();
+          }
+          client
+            .syncExecSetCaseLibrary(execSetId)
+            .then(function(syncRes) {
+              var nextMeta = applyTempExecCaseLibrarySyncMeta(getTempExecFile(String(execSetId)), syncRes);
+              if (!nextMeta) return;
+              renderTempExecCaseLibraryDiff(execSetId);
+              if (nextMeta.lastDiffAt) {
+                nextMeta.lastShownAt = nextMeta.lastDiffAt;
+                nextMeta.hasNewDiff = false;
+                nextMeta.shouldAutoPopup = false;
+                store.byExecSetId[String(execSetId)] = nextMeta;
+                clearTempExecCaseLibraryAutoPopup(execSetId, nextMeta);
+                if (active && String(active.execSetId || '') === String(execSetId)) {
+                  syncTempExecCaseLibraryChangesButton(active);
+                }
+                renderTempExecCaseLibraryDiffCaseTabs(execSetId);
+                if (client && typeof client.ackExecSetCaseLibraryDiff === 'function') {
+                  client.ackExecSetCaseLibraryDiff(execSetId).catch(function() {});
+                }
+              }
+            })
+            .catch(function(err) {
+              if (tempExecCaseLibraryDiffStatus) {
+                var msg = err && err.message ? err.message : '同步失败';
+                setStatus(tempExecCaseLibraryDiffStatus, '用例库同步失败：' + msg, 'err');
+              }
+            });
+          return true;
+        }
+      }
+      if (!meta || !hasSignal) {
+        var fallbacks = listTempExecCaseLibraryDiffExecSetIds();
+        if (fallbacks.length) {
+          execSetId = String(fallbacks[0]);
+          meta = store.byExecSetId[String(execSetId)] || null;
+          hasDiff = Boolean(meta && Array.isArray(meta.diff) && meta.diff.length);
+          hasHistory = Boolean(meta && Array.isArray(meta.history) && meta.history.length);
+          hasSignal = Boolean(meta && (hasDiff || hasHistory || hasCaseLibraryChangeSignal(meta)));
+        }
+      }
+      if (!meta) return false;
+      if (!manual && !hasSignal) return false;
+      ensureTempExecCaseLibraryDiffDrawer();
+      renderTempExecCaseLibraryDiff(execSetId);
+      if (tempExecCaseLibraryDiffDrawer && typeof tempExecCaseLibraryDiffDrawer.open === 'function') {
+        tempExecCaseLibraryDiffDrawer.open();
+      }
+      // 仅在用户主动点击“用例变更”按钮时才清除提醒（ack），自动弹窗不清除醒目状态。
+      if (manual && isDbMode()) {
+        if (meta && meta.lastDiffAt) {
+          meta.lastShownAt = meta.lastDiffAt;
+          meta.hasNewDiff = false;
+          meta.shouldAutoPopup = false;
+          store.byExecSetId[String(execSetId)] = meta;
+          clearTempExecCaseLibraryAutoPopup(execSetId, meta);
+          if (active && String(active.execSetId || '') === String(execSetId)) {
+            syncTempExecCaseLibraryChangesButton(active);
+          }
+          renderTempExecCaseLibraryDiffCaseTabs(execSetId);
+        }
+        var client = getApiClient();
+        if (client && typeof client.ackExecSetCaseLibraryDiff === 'function') {
+          client.ackExecSetCaseLibraryDiff(execSetId).catch(function() {});
+        }
+      }
+      return true;
+    }
+
+    function tryAutoOpenTempExecCaseLibraryDiff() {
+      if (!isDbMode()) return false;
+      var allowAutoPopup = isTempExecTabActive();
+      var activeId = state.tempExecActiveId ? String(state.tempExecActiveId) : '';
+      return maybeOpenTempExecCaseLibraryAutoPopup(allowAutoPopup, activeId);
     }
 
     function getTempExecFile(fileId) {
       if (!fileId) return null;
       return state.tempExecFiles.find(function(item) { return item.id === fileId; }) || null;
+    }
+
+    async function exportTempExecToXmind() {
+      var active = getTempExecFile(state.tempExecActiveId);
+      if (!active) {
+        if (tempExecStatus) setStatus(tempExecStatus, '请选择需要导出的执行用例', 'warn');
+        return;
+      }
+      var requirement = stripTimestampSuffix(normalizeRequirementName(active.requirement) || normalizeRequirementName(getRequirementLabel(true)));
+      if (!requirement) requirement = ensureRequirementLabel('请输入需求标识后再导出执行 XMind');
+      if (!requirement) {
+        if (tempExecStatus) setStatus(tempExecStatus, '已取消导出（需求标识为空）', 'warn');
+        return;
+      }
+      active.requirement = active.requirement || requirement;
+      if (!state.requirementLabel && requirement) {
+        setRequirementLabel(requirement, 'tempexec-export');
+      }
+      try {
+        if (!buildTempExecXmindPackage) throw new Error('缺少 XMind 导出依赖');
+        var result = await buildTempExecXmindPackage(active, requirement);
+        if (result && downloadBlob && result.blob) {
+          downloadBlob(result.fileName, result.blob);
+        }
+        if (tempExecStatus) setStatus(tempExecStatus, '已导出 ' + (result && result.count ? result.count : 0) + ' 条执行用例为 XMind', 'ok');
+      } catch (err) {
+        console.error(err);
+        if (tempExecStatus) setStatus(tempExecStatus, 'XMind 导出失败：' + err.message, 'err');
+      }
+    }
+
+    async function exportTempExecCasesToXmind() {
+      var active = getTempExecFile(state.tempExecActiveId);
+      if (!active) {
+        if (tempExecStatus) setStatus(tempExecStatus, '请选择需要导出的执行用例', 'warn');
+        return;
+      }
+      var requirement = stripTimestampSuffix(normalizeRequirementName(active.requirement) || normalizeRequirementName(getRequirementLabel(true)));
+      if (!requirement) requirement = ensureRequirementLabel('请输入需求标识后再导出用例 XMind');
+      if (!requirement) {
+        if (tempExecStatus) setStatus(tempExecStatus, '已取消导出（需求标识为空）', 'warn');
+        return;
+      }
+      var strippedCases = (active.cases || []).map(function(item) {
+        var copy = {};
+        Object.keys(item || {}).forEach(function(key) { copy[key] = item[key]; });
+        delete copy.actual;
+        delete copy.remark;
+        delete copy.defectLinks;
+        delete copy.reuseDetails;
+        delete copy.reuseEnabled;
+        delete copy.result;
+        delete copy.actual_result;
+        return copy;
+      });
+      try {
+        var pkg = await buildXmindPackageFromCases(strippedCases, active.name || '用例', requirement);
+        var baseFileName = getTempExecFileBaseName(active, requirement);
+        var plainXmindName = baseFileName + '_' + formatCompactTimestamp() + '.xmind';
+        if (pkg && downloadBlob && pkg.blob) {
+          downloadBlob(plainXmindName, pkg.blob);
+        }
+        if (tempExecStatus) setStatus(tempExecStatus, '已导出用例 XMind（不含执行结果）', 'ok');
+      } catch (err) {
+        console.error(err);
+        if (tempExecStatus) setStatus(tempExecStatus, '用例 XMind 导出失败：' + err.message, 'err');
+      }
     }
 
     function getTempExecFilesByRequirement(req) {
@@ -1774,16 +4595,2471 @@
     }
 
     function persistTempExecState() {
+      if (isDbMode()) {
+        scheduleTempExecUiSave();
+        return;
+      }
       try {
         var payload = {
           files: serializeTempExecFiles(state),
           versions: serializeTempExecVersions(state),
           placement: state.tempExecPlacement || defaultPlacement,
+          collapsed: {
+            req: Boolean(state.tempExecReqCollapsed),
+            version: Boolean(state.tempExecVersionCollapsed),
+          },
+          activeId: state.tempExecActiveId || '',
         };
         localStorage.setItem(tempExecStorageKey, JSON.stringify(payload));
       } catch (err) {
         console.warn('临时执行数据保存失败', err);
       }
+    }
+
+    function createTempExecFile(name, list, scope, explicitId, createdAt, requirementLabel) {
+      var id = explicitId || generateTempExecId();
+      var cases = normalizeTempExecCases(list || [], id);
+      if (!cases.length) return null;
+      var stamp = Number(createdAt);
+      var requirement = normalizeRequirementName(requirementLabel) || getRequirementLabel(true);
+      var entry = {
+        id: id,
+        name: name || ('用例' + ((state.tempExecFiles && state.tempExecFiles.length) ? (state.tempExecFiles.length + 1) : 1)),
+        cases: cases,
+        scope: scope || 'current',
+        reuseEnabled: false,
+        createdAt: Number.isFinite(stamp) && stamp > 0 ? stamp : Date.now(),
+        reusePresets: [],
+        requirement: requirement,
+        projectId: '',
+        versionId: '',
+      };
+      insertFileIntoOrder(requirement, id);
+      ensureRequirementOrder(state.tempExecFiles.concat(entry).map(function(file) {
+        return normalizeRequirementName(file && file.requirement) || '未标识需求';
+      }));
+      return entry;
+    }
+
+    function normalizeExecStatus(value) {
+      var text = value === null || value === undefined ? '' : String(value);
+      if (!text) return '未执行';
+      if (text === 'pending') return '未执行';
+      return text;
+    }
+
+    function mapExecCaseToTempCase(item) {
+      if (!item) return null;
+      var reuse = item.reuse_details;
+      var defects = item.defect_links;
+      return {
+        id: item.id,
+        execCaseId: item.id,
+        caseItemId: item.case_item_id || null,
+        module: item.module || '',
+        title: item.title || '',
+        priority: item.priority || '',
+        preconditions: item.precondition || '',
+        steps: item.steps || '',
+        expected: item.expected || '',
+        actual: normalizeExecStatus(item.status),
+        remark: item.remark || '',
+        reuseDetails: Array.isArray(reuse) ? reuse : [],
+        defectLinks: Array.isArray(defects) ? defects : [],
+      };
+    }
+
+    // 用例库同步触发：通过序号机制“消费一次触发”，避免同一次页面生命周期内重复触发。
+    // - 刷新前处于 tempexec：appRuntime 启动时递增序号
+    // - 切到 tempexec 页签：tempexec 模块递增序号
+    var tempExecCaseLibrarySyncLastSeqConsumed = 0;
+
+    function readTempExecCaseLibrarySyncSeq() {
+      try {
+        if (typeof window === 'undefined') return 0;
+        if (!window.app) return 0;
+        var raw = Number(window.app.__tempexecCaseLibrarySyncSeq || 0);
+        if (!isFinite(raw) || raw < 0) return 0;
+        return raw;
+      } catch (err) {
+        return 0;
+      }
+    }
+
+    function consumeTempExecCaseLibrarySyncTrigger() {
+      var seq = readTempExecCaseLibrarySyncSeq();
+      if (!seq) return false;
+      if (!isFinite(tempExecCaseLibrarySyncLastSeqConsumed) || tempExecCaseLibrarySyncLastSeqConsumed < 0) {
+        tempExecCaseLibrarySyncLastSeqConsumed = 0;
+      }
+      if (seq <= tempExecCaseLibrarySyncLastSeqConsumed) return false;
+      tempExecCaseLibrarySyncLastSeqConsumed = seq;
+      return true;
+    }
+
+    var tempExecDbLoadSeq = 0;
+
+    // “＋”新增用例高亮：仅保留在本次页面生命周期（刷新后清空），避免写入 localStorage/DB。
+    var tempExecNewAddedCaseUiKeysByFileId = {};
+    function ensureTempExecNewAddedStore(fileId) {
+      var id = fileId ? String(fileId) : '';
+      if (!id) id = 'unknown';
+      if (!tempExecNewAddedCaseUiKeysByFileId[id] || typeof tempExecNewAddedCaseUiKeysByFileId[id] !== 'object') {
+        tempExecNewAddedCaseUiKeysByFileId[id] = {};
+      }
+      return tempExecNewAddedCaseUiKeysByFileId[id];
+    }
+    function ensureTempExecNonEnumerableKey(obj, keyName, value) {
+      if (!obj || typeof obj !== 'object') return '';
+      var has = false;
+      try { has = Object.prototype.hasOwnProperty.call(obj, keyName); } catch (err) { has = false; }
+      if (has) {
+        try { return String(obj[keyName] || ''); } catch (e) { return ''; }
+      }
+      var v = value || ('ui-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6));
+      try {
+        Object.defineProperty(obj, keyName, { value: v, enumerable: false, configurable: true, writable: true });
+      } catch (err2) {
+        try { obj[keyName] = v; } catch (err3) {}
+      }
+      return String(v || '');
+    }
+    function getTempExecCaseUiKeys(item) {
+      if (!item || typeof item !== 'object') return [];
+      var keys = [];
+      var uiKey = '';
+      try { uiKey = String(item.__uiKey || ''); } catch (_) { uiKey = ''; }
+      if (uiKey) keys.push(uiKey);
+      var cid = item.execCaseId || item.id || null;
+      if (cid) keys.push('id-' + String(cid));
+      var tmpId = item._tempId ? String(item._tempId) : '';
+      if (tmpId) keys.push('tmp-' + tmpId);
+      return keys;
+    }
+    function ensureTempExecNewAddedUiKey(item) {
+      if (!item || typeof item !== 'object') return '';
+      var key = '';
+      try { key = String(item.__uiKey || ''); } catch (_) { key = ''; }
+      if (key) return key;
+      return ensureTempExecNonEnumerableKey(item, '__uiKey', '');
+    }
+    function markTempExecNewAdded(fileId, item) {
+      var store = ensureTempExecNewAddedStore(fileId);
+      var keys = getTempExecCaseUiKeys(item);
+      if (!keys.length) {
+        var ensured = ensureTempExecNewAddedUiKey(item);
+        if (ensured) keys = [ensured];
+      }
+      keys.forEach(function(k) { if (k) store[k] = true; });
+    }
+    function unmarkTempExecNewAdded(fileId, item) {
+      var store = ensureTempExecNewAddedStore(fileId);
+      var keys = getTempExecCaseUiKeys(item);
+      keys.forEach(function(k) { if (k) delete store[k]; });
+      var ensured = '';
+      try { ensured = String(item && item.__uiKey ? item.__uiKey : ''); } catch (_) { ensured = ''; }
+      if (ensured) delete store[ensured];
+    }
+    function isTempExecNewAdded(fileId, item) {
+      var store = ensureTempExecNewAddedStore(fileId);
+      var keys = getTempExecCaseUiKeys(item);
+      for (var i = 0; i < keys.length; i += 1) {
+        var k = keys[i];
+        if (k && store && store[k] === true) return true;
+      }
+      return false;
+    }
+
+    async function loadTempExecStateFromDb() {
+      tempExecDbLoadSeq += 1;
+      var loadSeq = tempExecDbLoadSeq;
+      var client = getApiClient();
+      if (!client || typeof client.listExecSets !== 'function') return;
+      if (tempExecStatus) setStatus(tempExecStatus, '加载执行数据中...', '');
+      var uiState = null;
+      var hasSettingsPageSize = false;
+      var settingsPageSize = null;
+      if (typeof client.listSettings === 'function') {
+        try {
+          var settings = await client.listSettings('user');
+          if (Array.isArray(settings)) {
+            settings.forEach(function(item) {
+              if (!item || !item.key) return;
+              if (item.key === 'tempexec_ui_v1') {
+                uiState = item.value_json && typeof item.value_json === 'object' ? item.value_json : null;
+                return;
+              }
+              if (item.key === 'tempExecPageSize') {
+                settingsPageSize = item.value_json;
+                hasSettingsPageSize = true;
+              }
+            });
+          }
+        } catch (err) {
+          uiState = null;
+        }
+      }
+      var sets = [];
+      try {
+        sets = await client.listExecSets();
+      } catch (err) {
+        if (tempExecStatus) setStatus(tempExecStatus, err && err.message ? err.message : '加载执行数据失败', 'err');
+        return;
+      }
+      var list = Array.isArray(sets) ? sets : [];
+      list = list.filter(function(s) { return s && String(s.status || '') === 'active'; });
+      // 按更新时间倒序，保持“最近执行的用例”更靠前
+      list = list.slice().sort(function(a, b) {
+        return parseDbTimeMs(b && b.updated_at) - parseDbTimeMs(a && a.updated_at);
+      });
+      var archivedSets = [];
+      try {
+        archivedSets = await client.listExecSets(null, { status_filter: 'archived' });
+      } catch (err) {
+        archivedSets = [];
+      }
+      var archivedList = Array.isArray(archivedSets) ? archivedSets : [];
+      archivedList = archivedList.filter(function(s) { return s && String(s.status || '') === 'archived'; });
+      var archivedHiddenKeys = uiState && Array.isArray(uiState.archivedHidden)
+        ? uiState.archivedHidden.map(function(k) { return String(k || '').trim(); }).filter(Boolean)
+        : [];
+      // 若用户曾“关闭项目/关闭版本”，会写入 pid:: / pid::vid 隐藏键；
+      // 当该项目/版本再次出现未归档执行集时，说明用户重新启用该范围，应自动清理旧隐藏键，避免后续归档占位无法出现。
+      var prunedHiddenChanged = false;
+      if (archivedHiddenKeys.length) {
+        var activeProjectKeySet = new Set();
+        var activeVersionKeySet = new Set();
+        list.forEach(function(s) {
+          if (!s) return;
+          var pid2 = s && s.project_id !== null && s.project_id !== undefined ? String(s.project_id) : '';
+          if (!pid2) return;
+          var vid2 = s && s.version_id !== null && s.version_id !== undefined ? String(s.version_id || '') : '';
+          activeProjectKeySet.add(pid2 + '::');
+          activeVersionKeySet.add(pid2 + '::' + vid2);
+        });
+        var beforeKeys = archivedHiddenKeys.slice();
+        archivedHiddenKeys = archivedHiddenKeys.filter(function(key) {
+          var k = String(key || '').trim();
+          if (!k) return false;
+          // exec_set_id（不包含 ::）不参与此处清理
+          if (k.indexOf('::') === -1) return true;
+          if (activeProjectKeySet.has(k) || activeVersionKeySet.has(k)) return false;
+          return true;
+        });
+        prunedHiddenChanged = archivedHiddenKeys.length !== beforeKeys.length;
+      }
+      if (archivedHiddenKeys.length) {
+        var hiddenSet = new Set(archivedHiddenKeys);
+        archivedList = archivedList.filter(function(s) {
+          if (!s) return false;
+          // archivedHidden 兼容两种形态：
+          // - 项目/版本维度隐藏：pid::vid 或 pid::
+          // - 归档占位解散：exec_set_id（即 s.id）
+          var sid = s && s.id !== null && s.id !== undefined ? String(s.id) : '';
+          if (sid && hiddenSet.has(sid)) return false;
+          var pid = s && s.project_id !== null && s.project_id !== undefined ? String(s.project_id) : '';
+          if (!pid) return true;
+          var vid = s && s.version_id !== null && s.version_id !== undefined ? String(s.version_id || '') : '';
+          var exact = pid + '::' + vid;
+          var all = pid + '::';
+          return !hiddenSet.has(exact) && !hiddenSet.has(all);
+        });
+      }
+      // 归档记录可能非常多：个人总览仅展示最近 N 份，完整列表请到“用例归档”理解。
+      archivedList = archivedList
+        .slice()
+        .sort(function(a, b) {
+          var ta = parseDbTimeMs(a && (a.archived_at || a.updated_at));
+          var tb = parseDbTimeMs(b && (b.archived_at || b.updated_at));
+          return tb - ta;
+        })
+        .slice(0, 80);
+
+      // 补齐项目/版本名称缓存，避免执行页出现 “项目#null/版本#10” 等异常展示。
+      var caseFileMetaById = {};
+      var combinedSets = list.concat(archivedList);
+      var needProjectIds = Array.from(
+        new Set(
+          combinedSets
+            .map(function(set) { return set && set.project_id !== null && set.project_id !== undefined ? String(set.project_id) : ''; })
+            .filter(Boolean)
+        )
+      );
+      if (client && typeof client.listProjects === 'function') {
+        try {
+          var projects = await client.listProjects();
+          state.projects = Array.isArray(projects) ? projects : [];
+        } catch (err) {
+          state.projects = Array.isArray(state.projects) ? state.projects : [];
+        }
+      }
+      state.projectVersionsByProject = state.projectVersionsByProject && typeof state.projectVersionsByProject === 'object'
+        ? state.projectVersionsByProject
+        : {};
+      if (client && typeof client.listProjectVersions === 'function') {
+        await Promise.all(
+          needProjectIds.map(function(pid) {
+            return client
+              .listProjectVersions(pid)
+              .then(function(versions) {
+                state.projectVersionsByProject[String(pid)] = Array.isArray(versions) ? versions : [];
+              })
+              .catch(function() {});
+          })
+        );
+      }
+      // 兜底：若 exec_sets.version_id 为空，则尝试从关联的 case_files.version_id 推断
+      if (client && typeof client.listCaseFiles === 'function') {
+        await Promise.all(
+          needProjectIds.map(function(pid) {
+            return client
+              .listCaseFiles(Number(pid))
+              .then(function(files) {
+                var listFiles = Array.isArray(files) ? files : [];
+                listFiles.forEach(function(item) {
+                  if (!item || item.id === null || item.id === undefined) return;
+                  caseFileMetaById[String(item.id)] = {
+                    project_id: item.project_id,
+                    version_id: item.version_id,
+                    file_name_clean: item.file_name_clean,
+                    item_count: item.item_count,
+                  };
+                });
+              })
+              .catch(function() {});
+          })
+        );
+      }
+
+      var files = list.map(function(set) {
+        var createdAt = parseDbTimeMs(set && set.created_at);
+        if (!Number.isFinite(createdAt) || createdAt <= 0) createdAt = Date.now();
+        var cid = set && set.case_file_id !== null && set.case_file_id !== undefined ? String(set.case_file_id) : '';
+        var meta = cid && caseFileMetaById[cid] ? caseFileMetaById[cid] : null;
+        var resolvedProjectId = set && set.project_id !== null && set.project_id !== undefined
+          ? String(set.project_id)
+          : (meta && meta.project_id !== null && meta.project_id !== undefined ? String(meta.project_id) : '');
+        var resolvedVersionId = set && set.version_id !== null && set.version_id !== undefined
+          ? String(set.version_id)
+          : (meta && meta.version_id !== null && meta.version_id !== undefined ? String(meta.version_id) : '');
+        var resolvedCaseCount = null;
+        if (set && set.case_count !== null && set.case_count !== undefined) {
+          resolvedCaseCount = Number(set.case_count);
+        } else if (meta && meta.item_count !== null && meta.item_count !== undefined) {
+          resolvedCaseCount = Number(meta.item_count);
+        }
+        if (!Number.isFinite(resolvedCaseCount) || resolvedCaseCount < 0) resolvedCaseCount = 0;
+        return {
+          id: String(set.id),
+          execSetId: set.id,
+          caseFileId: set.case_file_id || null,
+          projectId: resolvedProjectId,
+          name: set.name || '测试用例',
+          cases: [],
+          caseCount: resolvedCaseCount,
+          scope: 'current',
+          status: String(set.status || 'active'),
+          requirement: normalizeRequirementName(set.requirement) || '',
+          reuseEnabled: Boolean(set.reuse_enabled),
+          createdAt: createdAt,
+          reusePresets: Array.isArray(set.reuse_presets) ? normalizeReusePresets(set.reuse_presets) : [],
+          versionId: resolvedVersionId,
+          _casesLoading: true,
+        };
+      });
+      var archivedFiles = archivedList.map(function(set) {
+        var createdAt = parseDbTimeMs(set && set.created_at);
+        if (!Number.isFinite(createdAt) || createdAt <= 0) createdAt = Date.now();
+        var archivedAt = parseDbTimeMs(set && (set.archived_at || set.updated_at || set.created_at));
+        if (!Number.isFinite(archivedAt) || archivedAt <= 0) archivedAt = createdAt;
+        var cid = set && set.case_file_id !== null && set.case_file_id !== undefined ? String(set.case_file_id) : '';
+        var meta = cid && caseFileMetaById[cid] ? caseFileMetaById[cid] : null;
+        var resolvedProjectId = set && set.project_id !== null && set.project_id !== undefined
+          ? String(set.project_id)
+          : (meta && meta.project_id !== null && meta.project_id !== undefined ? String(meta.project_id) : '');
+        var resolvedVersionId = set && set.version_id !== null && set.version_id !== undefined
+          ? String(set.version_id)
+          : (meta && meta.version_id !== null && meta.version_id !== undefined ? String(meta.version_id) : '');
+        var resolvedCaseCount = null;
+        if (set && set.case_count !== null && set.case_count !== undefined) {
+          resolvedCaseCount = Number(set.case_count);
+        } else if (meta && meta.item_count !== null && meta.item_count !== undefined) {
+          resolvedCaseCount = Number(meta.item_count);
+        }
+        if (!Number.isFinite(resolvedCaseCount) || resolvedCaseCount < 0) resolvedCaseCount = 0;
+        return {
+          id: String(set.id),
+          execSetId: set.id,
+          caseFileId: set.case_file_id || null,
+          projectId: resolvedProjectId,
+          name: set.name || '测试用例',
+          cases: [],
+          caseCount: resolvedCaseCount,
+          scope: 'archived',
+          status: 'archived',
+          requirement: normalizeRequirementName(set.requirement) || '',
+          reuseEnabled: Boolean(set.reuse_enabled),
+          createdAt: createdAt,
+          archivedAt: archivedAt,
+          reusePresets: Array.isArray(set.reuse_presets) ? normalizeReusePresets(set.reuse_presets) : [],
+          versionId: resolvedVersionId,
+          _casesLoading: true,
+        };
+      });
+
+      state.tempExecFiles = files;
+      state.tempExecArchivedFiles = archivedFiles;
+      pruneTempExecCaseLibraryDiffStore(
+        files.map(function(file) { return file && (file.execSetId || file.id) ? String(file.execSetId || file.id) : ''; })
+      );
+      applyTempExecCaseLibraryDiffReset();
+      state.tempExecSelections = {};
+      state.tempExecRemarkOpen = {};
+      state.tempExecReuseOpen = {};
+      state.tempExecDefectOpen = {};
+      state.tempExecPresetDraft = null;
+      resetTempExecPages();
+      if (uiState && uiState.placement) {
+        state.tempExecPlacement = normalizeTempExecPlacement(uiState.placement);
+      }
+      if (uiState && uiState.collapsed) {
+        state.tempExecReqCollapsed = uiState.collapsed.req ? true : false;
+        state.tempExecVersionCollapsed = uiState.collapsed.version ? true : false;
+      }
+      // DB 模式默认不展示需求区
+      state.tempExecReqCollapsed = true;
+      if (uiState && Array.isArray(uiState.focus)) {
+        state.tempExecFocus = uiState.focus.filter(function(id) {
+          return state.tempExecFiles.some(function(file) { return file && String(file.id) === String(id); });
+        });
+      } else {
+        state.tempExecFocus = Array.isArray(state.tempExecFocus) ? state.tempExecFocus : [];
+      }
+      // DB 模式下 versionId 代表“项目版本ID”，不再复用旧的“临时版本分组”能力，避免覆盖 versionId。
+      state.tempExecVersions = [];
+      var resolvedPageSize = null;
+      if (hasSettingsPageSize) {
+        resolvedPageSize = clampTempExecPageSize(settingsPageSize);
+      } else if (uiState && uiState.pageSize !== null && uiState.pageSize !== undefined) {
+        resolvedPageSize = clampTempExecPageSize(uiState.pageSize);
+      }
+      if (resolvedPageSize !== null) {
+        state.tempExecPageSize = resolvedPageSize;
+        if (hasSettingsPageSize && uiState) {
+          var uiPageSize = clampTempExecPageSize(uiState.pageSize);
+          if (uiPageSize !== resolvedPageSize) {
+            uiState.pageSize = resolvedPageSize;
+            scheduleTempExecUiSave();
+          }
+        }
+      }
+      if (uiState && uiState.importProjectFilterId !== null && uiState.importProjectFilterId !== undefined) {
+        state.tempExecImportProjectFilterId = normalizeTempExecImportProjectFilterId(uiState.importProjectFilterId);
+      } else {
+        state.tempExecImportProjectFilterId = normalizeTempExecImportProjectFilterId(state.tempExecImportProjectFilterId);
+      }
+      if (uiState && Array.isArray(uiState.archivedHidden)) {
+        state.tempExecArchivedHidden = archivedHiddenKeys.slice();
+      } else if (!Array.isArray(state.tempExecArchivedHidden)) {
+        state.tempExecArchivedHidden = [];
+      }
+      if (prunedHiddenChanged) scheduleTempExecUiSave();
+      syncTempExecPlacement();
+      var firstId = state.tempExecFiles.length ? state.tempExecFiles[0].id : '';
+      var savedActiveId = uiState && uiState.activeId ? String(uiState.activeId) : '';
+      var currentActiveId = state.tempExecActiveId ? String(state.tempExecActiveId) : '';
+      var keepActiveId = (currentActiveId && state.tempExecFiles.some(function(f) { return f && String(f.id) === currentActiveId; }))
+        ? currentActiveId
+        : '';
+      var savedExists = savedActiveId && state.tempExecFiles.some(function(f) { return f && String(f.id) === savedActiveId; });
+      var selectedActiveId = keepActiveId || (savedExists ? savedActiveId : '');
+      if (selectedActiveId) {
+        state.tempExecActiveId = selectedActiveId;
+      } else {
+        var lastCtx = state.tempExecLastActiveContext && typeof state.tempExecLastActiveContext === 'object'
+          ? state.tempExecLastActiveContext
+          : null;
+        var lastProjectId = lastCtx && lastCtx.projectId ? String(lastCtx.projectId) : '';
+        var lastVersionId = lastCtx && lastCtx.versionId !== null && lastCtx.versionId !== undefined ? String(lastCtx.versionId || '') : '';
+        if (lastProjectId) {
+          var sameProjectFiles = state.tempExecFiles.filter(function(f) { return f && String(f.projectId || '') === lastProjectId; });
+          var sameVersionFiles = lastVersionId
+            ? sameProjectFiles.filter(function(f) { return f && String(f.versionId || '') === lastVersionId; })
+            : [];
+          var preferred = sameVersionFiles.length
+            ? String(sameVersionFiles[0].id)
+            : (sameProjectFiles.length ? String(sameProjectFiles[0].id) : '');
+          // 当前项目已无可执行用例时，不自动切换到其他项目（保持空态，便于用户查看归档占位并自行选择/导入）。
+          state.tempExecActiveId = preferred;
+        } else {
+          state.tempExecActiveId = firstId;
+        }
+      }
+      renderTempExecNav();
+      renderTempExecView();
+      renderTempVersionGrid();
+      renderTempFocusZone();
+
+      // 异步加载每个执行集的用例明细，避免执行集数量多时阻塞 UI 与“转到执行”链路。
+      (async function() {
+        if (!client || typeof client.listExecCases !== 'function') {
+          if (tempExecStatus) setStatus(tempExecStatus, '', '');
+          return;
+        }
+        var allowCaseLibrarySync = true;
+        var allowAutoPopup = false;
+        var isTempExecTab = isTempExecTabActive();
+        // 用例库同步触发序号：用于解决刷新后 activeTab 尚未恢复时的“漏同步”问题。
+        var syncTriggered = consumeTempExecCaseLibrarySyncTrigger();
+        // 用例库同步：始终执行以保持 meta/历史可用；自动弹窗仅在执行页或触发序号命中时生效。
+        allowAutoPopup = isTempExecTab || syncTriggered;
+        var activeId = state.tempExecActiveId ? String(state.tempExecActiveId) : '';
+        var autoPopupOpened = false;
+        var order = [];
+        for (var i = 0; i < files.length; i += 1) order.push(i);
+        if (activeId) {
+          order.sort(function(a, b) {
+            if (String(files[a] && files[a].id) === activeId) return -1;
+            if (String(files[b] && files[b].id) === activeId) return 1;
+            return a - b;
+          });
+        }
+        var concurrency = 4;
+        for (var start = 0; start < order.length; start += concurrency) {
+          var chunk = order.slice(start, start + concurrency);
+          await Promise.all(chunk.map(function(idx) {
+            var file = files[idx];
+            if (!file) return Promise.resolve();
+            var syncChain = Promise.resolve();
+            if (allowCaseLibrarySync && client && typeof client.syncExecSetCaseLibrary === 'function' && file.execSetId) {
+              syncChain = client
+                .syncExecSetCaseLibrary(file.execSetId)
+                .then(function(syncRes) {
+                  applyTempExecCaseLibrarySyncMeta(file, syncRes);
+                  if (allowAutoPopup && !autoPopupOpened) {
+                    var latestActiveId = state.tempExecActiveId ? String(state.tempExecActiveId) : activeId;
+                    if (maybeOpenTempExecCaseLibraryAutoPopup(allowAutoPopup, latestActiveId)) {
+                      autoPopupOpened = true;
+                    }
+                  }
+                })
+                .catch(function() {});
+            }
+            return syncChain.then(function() {
+              return client
+                .listExecCases(file.execSetId)
+                .then(function(rawCases) {
+                  var cases = Array.isArray(rawCases) ? rawCases.map(mapExecCaseToTempCase).filter(Boolean) : [];
+                  // 仅在最新一次加载仍有效时写入，避免并发刷新导致状态回写错乱。
+                  if (tempExecDbLoadSeq !== loadSeq) return;
+                  file.cases = cases;
+                  file.caseCount = Array.isArray(cases) ? cases.length : 0;
+                  file._casesLoading = false;
+                  updateTempExecFileCountBadge(file.id);
+                  updateTempExecFileStateClass(file.id);
+                  if (String(file.id) === String(state.tempExecActiveId || '')) {
+                    renderTempExecView();
+                  }
+                  // 若个人总览抽屉打开，实时刷新归档/执行进度展示。
+                  renderTempExecOverview();
+                })
+                .catch(function() {
+                  if (tempExecDbLoadSeq !== loadSeq) return;
+                  file.cases = [];
+                  file.caseCount = 0;
+                  file._casesLoading = false;
+                  updateTempExecFileStateClass(file.id);
+                  renderTempExecOverview();
+                });
+            });
+          }));
+          if (tempExecDbLoadSeq !== loadSeq) return;
+        }
+        // 归档执行集：仅用于个人总览展示“归”状态与执行结果，不参与执行页视图与用例库同步。
+        if (archivedFiles && archivedFiles.length) {
+          var archivedOrder = [];
+          for (var j = 0; j < archivedFiles.length; j += 1) archivedOrder.push(j);
+          var archivedConcurrency = 3;
+          for (var start2 = 0; start2 < archivedOrder.length; start2 += archivedConcurrency) {
+            var chunk2 = archivedOrder.slice(start2, start2 + archivedConcurrency);
+            await Promise.all(chunk2.map(function(idx2) {
+              var file2 = archivedFiles[idx2];
+              if (!file2) return Promise.resolve();
+              return client
+                .listExecCases(file2.execSetId)
+                .then(function(rawCases) {
+                  var cases2 = Array.isArray(rawCases) ? rawCases.map(mapExecCaseToTempCase).filter(Boolean) : [];
+                  if (tempExecDbLoadSeq !== loadSeq) return;
+                  file2.cases = cases2;
+                  file2.caseCount = Array.isArray(cases2) ? cases2.length : 0;
+                  file2._casesLoading = false;
+                  renderTempExecOverview();
+                })
+                .catch(function() {
+                  if (tempExecDbLoadSeq !== loadSeq) return;
+                  file2.cases = [];
+                  file2.caseCount = 0;
+                  file2._casesLoading = false;
+                  renderTempExecOverview();
+                });
+            }));
+            if (tempExecDbLoadSeq !== loadSeq) return;
+          }
+        }
+        if (tempExecDbLoadSeq !== loadSeq) return;
+        if (!autoPopupOpened) {
+          maybeOpenTempExecCaseLibraryAutoPopup(allowAutoPopup, activeId);
+        }
+        if (tempExecStatus) setStatus(tempExecStatus, '', '');
+      })();
+    }
+
+    async function loadTempExecState() {
+      if (isDbMode()) {
+        await loadTempExecStateFromDb();
+        return;
+      }
+      var savedRaw = null;
+      try {
+        savedRaw = JSON.parse(localStorage.getItem(tempExecStorageKey) || '[]');
+      } catch (err) {
+        console.warn('临时执行数据解析失败', err);
+        savedRaw = [];
+      }
+      var savedFiles = [];
+      var savedVersions = [];
+      var savedPlacement = null;
+      var savedActiveId = '';
+      var savedCollapsed = null;
+      if (Array.isArray(savedRaw)) {
+        savedFiles = savedRaw;
+      } else if (savedRaw && typeof savedRaw === 'object') {
+        savedFiles = Array.isArray(savedRaw.files) ? savedRaw.files : [];
+        savedVersions = Array.isArray(savedRaw.versions) ? savedRaw.versions : [];
+        savedPlacement = savedRaw.placement && typeof savedRaw.placement === 'object' ? savedRaw.placement : null;
+        savedCollapsed = savedRaw.collapsed && typeof savedRaw.collapsed === 'object' ? savedRaw.collapsed : null;
+        if (savedRaw.activeId) savedActiveId = String(savedRaw.activeId);
+      }
+      var usedIds = new Set();
+      state.tempExecFiles = savedFiles
+        .map(function(item) {
+          if (!item || typeof item !== 'object') return null;
+          var fileId = item.id || generateTempExecId();
+          while (usedIds.has(fileId)) {
+            fileId = generateTempExecId();
+          }
+          var list = normalizeTempExecCases(item.cases || [], fileId);
+          if (!list.length) return null;
+          usedIds.add(fileId);
+          return {
+            id: fileId,
+            name: item.name || '测试用例',
+            cases: list,
+            scope: 'history',
+            requirement: normalizeRequirementName(item.requirement) || '',
+            reuseEnabled: Boolean(item.reuseEnabled),
+            createdAt: Number.isFinite(Number(item.createdAt)) ? Number(item.createdAt) : Date.now(),
+            reusePresets: item && item.reusePresets ? normalizeReusePresets(item.reusePresets) : [],
+            projectId: item && item.projectId ? String(item.projectId) : '',
+            versionId: item.versionId || '',
+          };
+        })
+        .filter(Boolean);
+      applyVersionAssignments(savedVersions);
+      state.tempExecPlacement = normalizeTempExecPlacement(savedPlacement);
+      state.tempExecReqCollapsed = savedCollapsed && savedCollapsed.req ? true : false;
+      state.tempExecVersionCollapsed = savedCollapsed && savedCollapsed.version ? true : false;
+      var firstId2 = state.tempExecFiles.length ? state.tempExecFiles[0].id : '';
+      state.tempExecActiveId = (savedActiveId && state.tempExecFiles.some(function(f) { return f.id === savedActiveId; }))
+        ? savedActiveId
+        : firstId2;
+      state.tempExecSelections = {};
+      state.tempExecRemarkOpen = {};
+      state.tempExecReuseOpen = {};
+      state.tempExecDefectOpen = {};
+      state.tempExecPresetDraft = null;
+      resetTempExecPages();
+      loadTempExecFocus();
+      syncTempExecPlacement();
+      renderTempExecNav();
+      renderTempExecView();
+      renderTempVersionGrid();
+      renderTempFocusZone();
+    }
+
+    async function importTempExecFiles(fileList) {
+      var files = Array.prototype.slice.call(fileList || []).sort(function(a, b) {
+        var nameA = (a && a.name) || '';
+        var nameB = (b && b.name) || '';
+        return nameA.localeCompare(nameB, 'zh-Hans-CN');
+      });
+      if (!files.length) return;
+      var firstImport = !state.tempExecFiles || !state.tempExecFiles.length;
+      if (firstImport) {
+        state.tempExecPlacement = {
+          requirementOrder: [],
+          fileOrder: {},
+          versionOrder: [],
+          projectOrder: [],
+          versionOrderByProject: {},
+          fileOrderByProjectVersion: {},
+        };
+        state.tempExecFocus = [];
+        saveTempExecFocus();
+      }
+      if (tempExecStatus) setStatus(tempExecStatus, '正在解析测试用例...', '');
+      var added = [];
+      for (var i = 0; i < files.length; i += 1) {
+        var file = files[i];
+        try {
+          var ext = (file && file.name && file.name.split ? (file.name.split('.').pop() || '') : '').toLowerCase();
+          var text = '';
+          var list = [];
+          var requirementFromContent = '';
+          var inferredReuse = false;
+          var hasResult = false;
+          if (ext === 'xmind') {
+            var parsed = await parseXmindFile(file);
+            text = parsed && parsed.text ? parsed.text : '';
+            list = parsed && Array.isArray(parsed.list) ? parsed.list : [];
+            var paths = parsed && Array.isArray(parsed.paths) ? parsed.paths : [];
+            var xmindRootTitle = parsed && parsed.rootTitle ? normalizeRequirementName(parsed.rootTitle) : '';
+            if (paths && paths.length) {
+              var parsedExec = buildTempExecCasesFromXmindPaths(paths);
+              if (parsedExec && parsedExec.hasResult && Array.isArray(parsedExec.cases) && parsedExec.cases.length) {
+                list = parsedExec.cases;
+                hasResult = true;
+              }
+              inferredReuse = Boolean(parsedExec && parsedExec.reuseEnabled);
+              if (!requirementFromContent && xmindRootTitle) requirementFromContent = xmindRootTitle;
+            }
+          } else if (ext === 'xlsx') {
+            if (typeof parseXlsxFileToRows !== 'function') throw new Error('缺少 Excel 解析能力');
+            var rows = await parseXlsxFileToRows(file);
+            var parsedXlsx = buildTempExecCasesFromXlsxRows(rows || []);
+            list = parsedXlsx.cases;
+            inferredReuse = Boolean(parsedXlsx.reuseEnabled);
+            hasResult = Boolean(parsedXlsx.hasResult);
+          } else if (ext === 'json') {
+            text = (await file.text()).trim();
+            var requirementRegex = /"requir[e]?ment"\s*:\s*"([^"]+)"/i;
+            var reqMatch = text.match(requirementRegex);
+            if (!requirementFromContent && reqMatch && reqMatch[1]) {
+              requirementFromContent = normalizeRequirementName(reqMatch[1]);
+            }
+            var rawJson = text;
+            try {
+              var parsedJson = JSON.parse(rawJson);
+              if (Array.isArray(parsedJson)) {
+                list = parsedJson;
+                if (!requirementFromContent && parsedJson.length && parsedJson[0]) {
+                  var candidateReq = parsedJson[0].requirement || parsedJson[0].requirment;
+                  if (typeof candidateReq === 'string') requirementFromContent = normalizeRequirementName(candidateReq);
+                }
+              } else if (parsedJson && Array.isArray(parsedJson.cases)) {
+                list = parsedJson.cases;
+                var candidate = parsedJson.requirement || parsedJson.requirment;
+                if (!requirementFromContent && typeof candidate === 'string') {
+                  requirementFromContent = normalizeRequirementName(candidate);
+                }
+              } else {
+                list = deriveCaseListFromText(text);
+              }
+            } catch (err) {
+              var start = rawJson.indexOf('{');
+              var end = rawJson.lastIndexOf('}');
+              var parsedFallback = null;
+              if (start !== -1 && end > start) {
+                var sliced = rawJson.slice(start, end + 1);
+                try {
+                  parsedFallback = JSON.parse(sliced);
+                } catch (err2) {
+                  console.warn('JSON 主体截取后仍无法解析', err2);
+                }
+              }
+              if (parsedFallback) {
+                if (Array.isArray(parsedFallback)) {
+                  list = parsedFallback;
+                  if (!requirementFromContent && parsedFallback.length && parsedFallback[0]) {
+                    var candidateReqFallback = parsedFallback[0].requirement || parsedFallback[0].requirment;
+                    if (typeof candidateReqFallback === 'string') requirementFromContent = normalizeRequirementName(candidateReqFallback);
+                  }
+                } else if (parsedFallback && Array.isArray(parsedFallback.cases)) {
+                  list = parsedFallback.cases;
+                  var candidateReq2 = parsedFallback.requirement || parsedFallback.requirment;
+                  if (!requirementFromContent && typeof candidateReq2 === 'string') {
+                    requirementFromContent = normalizeRequirementName(candidateReq2);
+                  }
+                }
+              }
+              if (!list.length) {
+                console.warn('JSON 解析失败，尝试降级处理', err);
+                list = deriveCaseListFromText(text);
+              }
+            }
+          } else {
+            text = await file.text();
+            list = deriveCaseListFromText(text);
+          }
+          var extractedRequirement = requirementFromContent || extractRequirementLabelFromText(text) || '';
+          var requirementLabel = extractedRequirement;
+          if (!requirementLabel) {
+            requirementLabel = promptTempExecRequirement(file && file.name, extractedRequirement || (file && file.name));
+            if (!requirementLabel) {
+              if (tempExecStatus) setStatus(tempExecStatus, '已取消导入（需求标识为空）', 'warn');
+              break;
+            }
+          }
+          if (requirementLabel && !state.requirementLabel) {
+            setRequirementLabel(requirementLabel, 'import');
+          }
+          var entry = createTempExecFile(file && file.name, list, 'current', null, null, requirementLabel);
+          if (hasResult && entry && Array.isArray(list)) {
+            entry.cases = list;
+          }
+          if (inferredReuse) entry.reuseEnabled = true;
+          if (entry) entry.fromImport = true;
+          if (entry && ensureTempExecReplacement(entry, added)) {
+            added.push(entry);
+          }
+        } catch (err3) {
+          console.warn('导入临时执行用例失败', err3);
+          if (tempExecStatus) setStatus(tempExecStatus, '解析 ' + (file && file.name ? file.name : '') + ' 失败：' + (err3 && err3.message ? err3.message : '未知错误'), 'warn');
+        }
+      }
+      if (!added.length) {
+        if (tempExecStatus) setStatus(tempExecStatus, '未解析到有效用例，请检查文件结构', 'warn');
+        return;
+      }
+      state.tempExecFiles = (state.tempExecFiles || []).concat(added);
+      syncTempExecFocus();
+      if (!state.tempExecPages || typeof state.tempExecPages !== 'object') state.tempExecPages = {};
+      added.forEach(function(entry) {
+        state.tempExecPages[entry.id] = 0;
+      });
+      if (firstImport) {
+        var placement = ensureTempExecPlacement();
+        var keepVersions = Array.isArray(placement.versionOrder) ? placement.versionOrder.slice() : [];
+        placement.requirementOrder = [];
+        placement.fileOrder = {};
+        placement.versionOrder = keepVersions;
+        syncTempExecPlacement();
+      }
+      persistTempExecState();
+      setTempExecActive(added[added.length - 1].id);
+      if (tempExecStatus) setStatus(tempExecStatus, '已导入 ' + added.length + ' 份测试用例', 'ok');
+    }
+
+    function buildCaseItemPayloadFromTempCase(item) {
+      if (!item) return null;
+      var moduleName = String(item.module || '').trim();
+      var title = String(item.title || '').trim();
+      var expected = String(item.expected || '').trim();
+      if (!moduleName || !title || !expected) return null;
+      return {
+        module: moduleName,
+        title: title,
+        expected: expected,
+        priority: item.priority ? String(item.priority) : null,
+        precondition: item.preconditions ? String(item.preconditions) : null,
+        steps: item.steps ? String(item.steps) : null,
+        remark: item.remark ? String(item.remark) : null,
+      };
+    }
+
+    function buildExecImportPayloadFromTempCase(item, reuseEnabled) {
+      if (!item) return null;
+      var base = buildCaseItemPayloadFromTempCase(item);
+      if (!base) return null;
+      if (reuseEnabled) {
+        base.status = resolveReuseAggregateStatus(Array.isArray(item.reuseDetails) ? item.reuseDetails : []);
+      } else {
+        base.status = item.actual ? String(item.actual) : '未执行';
+      }
+      base.reuse_details = Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
+      base.defect_links = Array.isArray(item.defectLinks) ? item.defectLinks : [];
+      return base;
+    }
+
+    function buildTempExecCasesFromXlsxRows(rows) {
+      var list = Array.isArray(rows) ? rows : [];
+      if (!list.length) throw new Error('Excel 解析失败：缺少数据行');
+      var headerRow = list[0] || [];
+      var headerIndex = {};
+      var headerMap = {
+        '模块': 'module',
+        '用例标题': 'title',
+        '优先级': 'priority',
+        '前提条件': 'preconditions',
+        '操作步骤': 'steps',
+        '预期结果': 'expected',
+        '实际结果': 'actual',
+        '备注': 'remark',
+        '缺陷链接': 'defect',
+      };
+      var headerLabelByKey = {
+        module: '模块',
+        title: '用例标题',
+        priority: '优先级',
+        preconditions: '前提条件',
+        steps: '操作步骤',
+        expected: '预期结果',
+        actual: '实际结果',
+        remark: '备注',
+        defect: '缺陷链接',
+      };
+      for (var i = 0; i < headerRow.length; i += 1) {
+        var text = headerRow[i] !== undefined && headerRow[i] !== null ? String(headerRow[i]).trim() : '';
+        if (!text) continue;
+        if (headerMap[text]) headerIndex[headerMap[text]] = i;
+      }
+      var hasBaseHeader = Boolean(
+        headerIndex.module !== undefined &&
+        headerIndex.title !== undefined &&
+        headerIndex.expected !== undefined
+      );
+      if (!hasBaseHeader) throw new Error('Excel 格式不对：缺少表头（模块/用例标题/预期结果）');
+
+      var hasResultHeader = (
+        headerIndex.actual !== undefined ||
+        headerIndex.remark !== undefined ||
+        headerIndex.defect !== undefined
+      );
+      if (hasResultHeader) {
+        if (headerIndex.actual === undefined || headerIndex.remark === undefined || headerIndex.defect === undefined) {
+          throw new Error('结果格式不对：带结果 Excel 需包含（实际结果/备注/缺陷链接）三列');
+        }
+      }
+
+      function pick(row, key) {
+        if (!row) return '';
+        var idx = headerIndex[key];
+        if (idx === undefined) return '';
+        var val = row[idx];
+        return val === undefined || val === null ? '' : String(val);
+      }
+
+      // 兼容用户复制/粘贴导致的数据区重复表头：将“看起来像表头”的行当作表头跳过，避免误当用例条目影响 diff。
+      function isHeaderLikeRow(row) {
+        if (!row) return false;
+        var module0 = pick(row, 'module').trim();
+        var title0 = pick(row, 'title').trim();
+        var expected0 = pick(row, 'expected').trim();
+        if (module0 !== headerLabelByKey.module) return false;
+        if (title0 !== headerLabelByKey.title) return false;
+        if (expected0 !== headerLabelByKey.expected) return false;
+        var keys = Object.keys(headerIndex || {});
+        for (var k = 0; k < keys.length; k += 1) {
+          var key = keys[k];
+          if (!key) continue;
+          var label = headerLabelByKey[key] ? String(headerLabelByKey[key]) : '';
+          if (!label) continue;
+          var cell = pick(row, key).trim();
+          if (!cell) continue;
+          if (cell !== label) return false;
+        }
+        return true;
+      }
+
+      function normalizeStatusInput(value) {
+        var text2 = value === null || value === undefined ? '' : String(value).trim();
+        if (!text2) return '未执行';
+        if (tempExecResultOptions.indexOf(text2) !== -1) return text2;
+        if (text2 === 'pending') return '未执行';
+        return null;
+      }
+
+      function parseDefectLinks(text3) {
+        var raw = text3 === null || text3 === undefined ? '' : String(text3);
+        raw = raw.replace(/\r\n/g, '\n');
+        var parts = raw.split(/[\s\n,;，；]+/).map(function(s) { return String(s || '').trim(); }).filter(Boolean);
+        var out = [];
+        var seen = {};
+        parts.forEach(function(url) {
+          if (!url) return;
+          if (seen[url]) return;
+          seen[url] = true;
+          out.push({ id: generateDefectLinkId(), url: url });
+        });
+        return out;
+      }
+
+      function detectHasExecResult(cases, reuseEnabled) {
+        var list2 = Array.isArray(cases) ? cases : [];
+        if (!list2.length) return false;
+        if (reuseEnabled) {
+          return list2.some(function(item) {
+            var details = item && Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
+            return details.some(function(d) {
+              var st = d && d.status ? String(d.status) : '未执行';
+              var note = d && d.note ? String(d.note) : '';
+              return (st && st !== '未执行') || (note && note.trim());
+            });
+          });
+        }
+        return list2.some(function(item2) {
+          var st2 = item2 && item2.actual ? String(item2.actual) : '未执行';
+          var remark2 = item2 && item2.remark ? String(item2.remark) : '';
+          var defects2 = item2 && Array.isArray(item2.defectLinks) ? item2.defectLinks : [];
+          return (st2 && st2 !== '未执行') || (remark2 && remark2.trim()) || defects2.length;
+        });
+      }
+
+      var out = [];
+      var reuseEnabled = false;
+      var current = null;
+      for (var r = 1; r < list.length; r += 1) {
+        var row = list[r] || [];
+        var module = pick(row, 'module').trim();
+        var title = pick(row, 'title').trim();
+        var priority = pick(row, 'priority').trim();
+        var preconditions = pick(row, 'preconditions').trim();
+        var steps = pick(row, 'steps').trim();
+        var expected = pick(row, 'expected').trim();
+        var actualRaw = pick(row, 'actual').trim();
+        var remark = pick(row, 'remark');
+        var defectRaw = pick(row, 'defect');
+
+        var allText = String(module || '') + String(title || '') + String(priority || '') + String(preconditions || '') + String(steps || '') + String(expected || '') + String(actualRaw || '') + String(remark || '') + String(defectRaw || '');
+        if (!allText.trim()) continue;
+
+        if (isHeaderLikeRow(row)) continue;
+
+        var isReuseDetailRow = Boolean(
+          !module &&
+          !title &&
+          !priority &&
+          !preconditions &&
+          !steps &&
+          expected
+        );
+        if (isReuseDetailRow) {
+          if (!hasResultHeader) throw new Error('结果格式不对：复用子项行仅允许出现在带结果的 Excel 中');
+          if (!current) throw new Error('结果格式不对：复用子项行前缺少主用例行');
+          if (defectRaw && String(defectRaw).trim()) throw new Error('结果格式不对：复用子项行“缺陷链接”必须为空');
+          var childStatus = normalizeStatusInput(actualRaw);
+          if (!childStatus) throw new Error('结果格式不对：复用子项行“实际结果”不合法');
+          reuseEnabled = true;
+          current.reuseDetails = Array.isArray(current.reuseDetails) ? current.reuseDetails : [];
+          current.reuseDetails.push({
+            id: generateReuseDetailId(),
+            text: expected,
+            note: remark || '',
+            status: childStatus,
+          });
+          continue;
+        }
+
+        if (!module || !title || !expected) {
+          throw new Error('Excel 格式不对：第 ' + (r + 1) + ' 行缺少必填字段（模块/用例标题/预期结果）');
+        }
+        var status = '未执行';
+        var defectLinks = [];
+        if (hasResultHeader) {
+          var st4 = normalizeStatusInput(actualRaw);
+          if (!st4) throw new Error('结果格式不对：第 ' + (r + 1) + ' 行“实际结果”不合法');
+          status = st4;
+          defectLinks = parseDefectLinks(defectRaw);
+        }
+        current = {
+          module: module,
+          title: title,
+          priority: priority || '',
+          preconditions: preconditions || '',
+          steps: steps || '',
+          expected: expected,
+          actual: status,
+          remark: remark || '',
+          reuseDetails: [],
+          defectLinks: defectLinks,
+        };
+        out.push(current);
+      }
+
+      if (!out.length) throw new Error('Excel 解析失败：未解析到有效用例');
+
+      if (reuseEnabled) {
+        out.forEach(function(item3) {
+          if (!item3 || !Array.isArray(item3.reuseDetails) || !item3.reuseDetails.length) return;
+          var expectedAggregate = resolveReuseAggregateStatus(item3.reuseDetails);
+          if (!item3.actual || String(item3.actual).trim() === '') {
+            throw new Error('结果格式不对：复用用例主行“实际结果”不能为空（' + (item3.title || '') + '）');
+          }
+          if (String(item3.actual) !== String(expectedAggregate)) {
+            throw new Error('结果格式不对：复用用例主行“实际结果”需与子项汇总一致（' + (item3.title || '') + '）');
+          }
+        });
+        out.forEach(function(item4) {
+          if (!item4) return;
+          if (Array.isArray(item4.reuseDetails) && item4.reuseDetails.length) {
+            item4.actual = resolveReuseAggregateStatus(item4.reuseDetails);
+          } else {
+            item4.actual = '未执行';
+          }
+        });
+      }
+
+      return { cases: out, reuseEnabled: reuseEnabled, hasResult: detectHasExecResult(out, reuseEnabled) };
+    }
+
+    async function importTempExecFilesToDb(fileList, projectId, versionId, execVersionId) {
+      if (!isDbMode()) {
+        // 静态模式：仍沿用原本的本地导入逻辑，避免影响离线使用与既有自动化。
+        await importTempExecFiles(fileList);
+        return { imported: 0, failed: [], mode: 'local' };
+      }
+      var client = getApiClient();
+      if (
+        !client ||
+        typeof client.listCaseFiles !== 'function' ||
+        typeof client.listCaseItems !== 'function' ||
+        typeof client.createCaseItem !== 'function' ||
+        typeof client.importCaseFile !== 'function' ||
+        typeof client.listExecSets !== 'function' ||
+        typeof client.listExecCases !== 'function' ||
+        typeof client.createExecCase !== 'function' ||
+        typeof client.upsertExecSetFromCaseFile !== 'function'
+      ) {
+        throw new Error('后端入库接口未就绪');
+      }
+      var pid = Number(projectId);
+      var vid = Number(versionId);
+      if (!Number.isFinite(pid) || pid <= 0) throw new Error('请选择项目');
+      if (!Number.isFinite(vid) || vid <= 0) throw new Error('请选择版本');
+      var execVid = null;
+      if (execVersionId !== null && execVersionId !== undefined && String(execVersionId) !== '') {
+        var parsedExec = Number(execVersionId);
+        execVid = Number.isFinite(parsedExec) ? parsedExec : null;
+      }
+
+      function normText(value) {
+        if (normalizeTempExecName) return normalizeTempExecName(value);
+        return String(value || '').trim().toLowerCase();
+      }
+
+      function buildMatchKey(moduleName, title, precondition, steps, expected) {
+        return (
+          normText(moduleName) + '::' +
+          normText(title) + '::' +
+          normText(precondition) + '::' +
+          normText(steps) + '::' +
+          normText(expected)
+        );
+      }
+
+      function cleanImportFileName(name) {
+        var raw = String(name || '');
+        var base = raw.split(/[\\/]/).pop() || raw;
+        var cleaned = '';
+        if (typeof getSafeFileBaseName === 'function') {
+          cleaned = getSafeFileBaseName(base, 'case');
+        } else {
+          cleaned = base.replace(/\.[^.]+$/, '');
+        }
+        // 兼容 Excel/JSON 等扩展名：无论 getSafeFileBaseName 是否已处理，都再兜底剥离一次后缀。
+        cleaned = String(cleaned || '').replace(/\.[^.]+$/, '');
+        cleaned = String(cleaned || '').replace(/^勾选用例[\s_\-\u2010-\u2015\u2212\uFE63\uFF0D]*/i, '');
+        cleaned = cleaned.trim().replace(/^[_-]+|[_-]+$/g, '');
+        return cleaned || 'case';
+      }
+
+      var files = Array.prototype.slice.call(fileList || []).filter(Boolean);
+      files = files.sort(function(a, b) {
+        var nameA = (a && a.name) || '';
+        var nameB = (b && b.name) || '';
+        return nameA.localeCompare(nameB, 'zh-Hans-CN');
+      });
+      if (!files.length) throw new Error('未选择文件');
+
+      var importedExecSetIds = [];
+      var importedNames = [];
+      var failures = [];
+      var duplicates = [];
+      if (tempExecStatus) setStatus(tempExecStatus, '正在入库用例...', '');
+
+      var existingCaseFiles = [];
+      try {
+        existingCaseFiles = await client.listCaseFiles(pid);
+      } catch (err0) {
+        existingCaseFiles = [];
+      }
+      var caseFileByName = {};
+      (existingCaseFiles || []).forEach(function(f) {
+        if (!f || !f.file_name_clean) return;
+        var keyRaw = normText(f.file_name_clean);
+        if (keyRaw) {
+          var prev = caseFileByName[keyRaw];
+          if (!prev || Number(f.id || 0) > Number(prev.id || 0)) {
+            caseFileByName[keyRaw] = f;
+          }
+        }
+        // 兼容历史数据：后端清洗规则曾未覆盖“勾选用例 ”等前缀，导入时需能匹配同一份用例。
+        var keyClean = normText(cleanImportFileName(f.file_name_clean));
+        if (keyClean) {
+          var prev2 = caseFileByName[keyClean];
+          if (!prev2 || Number(f.id || 0) > Number(prev2.id || 0)) {
+            caseFileByName[keyClean] = f;
+          }
+        }
+      });
+
+      var existingExecSets = [];
+      try {
+        existingExecSets = await client.listExecSets(pid);
+      } catch (err1) {
+        existingExecSets = [];
+      }
+      var execSetByCaseFileId = {};
+      (existingExecSets || []).forEach(function(s) {
+        if (!s || !s.case_file_id) return;
+        var cid = s.case_file_id;
+        var prev = execSetByCaseFileId[cid];
+        if (!prev || Number(s.id) > Number(prev.id)) {
+          execSetByCaseFileId[cid] = s;
+        }
+      });
+
+      for (var i = 0; i < files.length; i += 1) {
+        var file = files[i];
+        var fileName = file && file.name ? file.name : '';
+        try {
+          if (tempExecStatus) setStatus(tempExecStatus, '解析并入库：' + fileName, '');
+          var ext = (fileName && fileName.split ? (fileName.split('.').pop() || '') : '').toLowerCase();
+          var text = '';
+          var list = [];
+          var requirementFromContent = '';
+          var inferredReuse = false;
+          var hasResult = false;
+          if (ext === 'xmind') {
+            var parsed = await parseXmindFile(file);
+            text = parsed && parsed.text ? parsed.text : '';
+            list = parsed && Array.isArray(parsed.list) ? parsed.list : [];
+            var paths = parsed && Array.isArray(parsed.paths) ? parsed.paths : [];
+            var xmindRootTitle = parsed && parsed.rootTitle ? normalizeRequirementName(parsed.rootTitle) : '';
+            if (paths && paths.length) {
+              var parsedExec = buildTempExecCasesFromXmindPaths(paths);
+              if (parsedExec && parsedExec.hasResult && Array.isArray(parsedExec.cases) && parsedExec.cases.length) {
+                list = parsedExec.cases;
+                hasResult = true;
+              }
+              inferredReuse = Boolean(parsedExec && parsedExec.reuseEnabled);
+              if (!requirementFromContent && xmindRootTitle) requirementFromContent = xmindRootTitle;
+            }
+          } else if (ext === 'xlsx') {
+            if (typeof parseXlsxFileToRows !== 'function') throw new Error('缺少 Excel 解析能力');
+            var rows = await parseXlsxFileToRows(file);
+            var parsedXlsx = buildTempExecCasesFromXlsxRows(rows || []);
+            list = parsedXlsx.cases;
+            inferredReuse = Boolean(parsedXlsx.reuseEnabled);
+            hasResult = Boolean(parsedXlsx.hasResult);
+          } else if (ext === 'json') {
+            text = (await file.text()).trim();
+            var requirementRegex = /"requir[e]?ment"\s*:\s*"([^"]+)"/i;
+            var reqMatch = text.match(requirementRegex);
+            if (!requirementFromContent && reqMatch && reqMatch[1]) {
+              requirementFromContent = normalizeRequirementName(reqMatch[1]);
+            }
+            var rawJson = text;
+            var isSnapshotFile = false;
+            try {
+              var parsedJson = JSON.parse(rawJson);
+              if (
+                parsedJson &&
+                typeof parsedJson === 'object' &&
+                !Array.isArray(parsedJson) &&
+                parsedJson.type === 'tempexec_snapshot_v1' &&
+                Array.isArray(parsedJson.files)
+              ) {
+                isSnapshotFile = true;
+              }
+              if (Array.isArray(parsedJson)) {
+                list = parsedJson;
+                if (!requirementFromContent && parsedJson.length && parsedJson[0]) {
+                  var candidateReq = parsedJson[0].requirement || parsedJson[0].requirment;
+                  if (typeof candidateReq === 'string') requirementFromContent = normalizeRequirementName(candidateReq);
+                }
+              } else if (parsedJson && Array.isArray(parsedJson.cases)) {
+                list = parsedJson.cases;
+                var candidate = parsedJson.requirement || parsedJson.requirment;
+                if (!requirementFromContent && typeof candidate === 'string') {
+                  requirementFromContent = normalizeRequirementName(candidate);
+                }
+              } else {
+                list = deriveCaseListFromText(text);
+              }
+            } catch (err) {
+              var start = rawJson.indexOf('{');
+              var end = rawJson.lastIndexOf('}');
+              var parsedFallback = null;
+              if (start !== -1 && end > start) {
+                var sliced = rawJson.slice(start, end + 1);
+                try {
+                  parsedFallback = JSON.parse(sliced);
+                } catch (err2) {
+                  console.warn('JSON 主体截取后仍无法解析', err2);
+                }
+              }
+              if (parsedFallback) {
+                if (Array.isArray(parsedFallback)) {
+                  list = parsedFallback;
+                  if (!requirementFromContent && parsedFallback.length && parsedFallback[0]) {
+                    var candidateReqFallback = parsedFallback[0].requirement || parsedFallback[0].requirment;
+                    if (typeof candidateReqFallback === 'string') requirementFromContent = normalizeRequirementName(candidateReqFallback);
+                  }
+                } else if (parsedFallback && Array.isArray(parsedFallback.cases)) {
+                  list = parsedFallback.cases;
+                  var candidateReq2 = parsedFallback.requirement || parsedFallback.requirment;
+                  if (!requirementFromContent && typeof candidateReq2 === 'string') {
+                    requirementFromContent = normalizeRequirementName(candidateReq2);
+                  }
+                }
+              }
+              if (!list.length) {
+                console.warn('JSON 解析失败，尝试降级处理', err);
+                list = deriveCaseListFromText(text);
+              }
+            }
+            if (isSnapshotFile) {
+              throw new Error('检测到执行页面配置文件，请使用“导入执行页面配置”按钮导入');
+            }
+          } else {
+            text = await file.text();
+            list = deriveCaseListFromText(text);
+          }
+
+          var extractedRequirement = requirementFromContent || extractRequirementLabelFromText(text) || '';
+          var requirementLabel = extractedRequirement;
+          if (!requirementLabel) {
+            var existingLabel = state && state.requirementLabel ? normalizeRequirementName(state.requirementLabel) : '';
+            if (existingLabel) {
+              requirementLabel = existingLabel;
+            } else {
+              var fallbackLabel = cleanImportFileName(fileName);
+              if (fallbackLabel) {
+                requirementLabel = fallbackLabel;
+              } else {
+                requirementLabel = promptTempExecRequirement(fileName, extractedRequirement || fileName);
+                if (!requirementLabel) {
+                  failures.push({ file: fileName, reason: '已取消导入（需求标识为空）' });
+                  continue;
+                }
+              }
+            }
+          }
+          if (requirementLabel && !state.requirementLabel) {
+            setRequirementLabel(requirementLabel, 'tempexec-import-db');
+          }
+
+          var tempId = 'import-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6);
+          var casesList = [];
+          if (hasResult && Array.isArray(list)) {
+            casesList = list;
+          } else {
+            casesList = normalizeTempExecCases(list || [], tempId);
+          }
+          casesList = Array.isArray(casesList) ? casesList : [];
+          var casePairs = [];
+          var totalCaseCount = 0;
+          var duplicateCaseCount = 0;
+          var groupMap = {};
+          var firstByKey = {};
+          var seenCaseKeys = new Set();
+          for (var ci = 0; ci < casesList.length; ci += 1) {
+            var rawCase = casesList[ci];
+            var payloadCase = buildCaseItemPayloadFromTempCase(rawCase);
+            if (!payloadCase) continue;
+            totalCaseCount += 1;
+            var sourceLine = rawCase && Number.isFinite(Number(rawCase._sourceLine)) ? Number(rawCase._sourceLine) : 0;
+            var lineNo = sourceLine > 0 ? sourceLine : totalCaseCount;
+            var keyCase = buildMatchKey(payloadCase.module, payloadCase.title, payloadCase.precondition, payloadCase.steps, payloadCase.expected);
+            if (!groupMap[keyCase]) groupMap[keyCase] = [];
+            groupMap[keyCase].push({ line: lineNo, payload: payloadCase, source: rawCase });
+            if (seenCaseKeys.has(keyCase)) {
+              duplicateCaseCount += 1;
+              continue;
+            }
+            seenCaseKeys.add(keyCase);
+            firstByKey[keyCase] = totalCaseCount;
+            casePairs.push({ key: keyCase, payload: payloadCase, source: rawCase });
+          }
+          if (!casePairs.length) {
+            failures.push({ file: fileName, reason: '未解析到有效用例（缺少模块/标题/预期结果）' });
+            continue;
+          }
+          if (duplicateCaseCount > 0) {
+            var dupRows = [];
+            Object.keys(groupMap).forEach(function(key) {
+              var list = groupMap[key];
+              if (!Array.isArray(list) || list.length <= 1) return;
+              // 第一条保留，其余移除（去重逻辑与入库一致）
+              list.forEach(function(entry, idx) {
+                dupRows.push({
+                  line: entry && entry.line ? entry.line : 0,
+                  payload: entry && entry.payload ? entry.payload : null,
+                  source: entry && entry.source ? entry.source : null,
+                  keep: idx === 0,
+                });
+              });
+            });
+            dupRows.sort(function(a, b) {
+              var la = a && a.line ? Number(a.line) : 0;
+              var lb = b && b.line ? Number(b.line) : 0;
+              return la - lb;
+            });
+            var confirmDuplicate = await confirmTempExecImportDuplicateByDrawer({
+              fileName: fileName,
+              total: totalCaseCount,
+              uniqueCount: casePairs.length,
+              duplicateCount: duplicateCaseCount,
+              rows: dupRows.slice(0, 200),
+            });
+            if (!confirmDuplicate) {
+              failures.push({ file: fileName, reason: '已取消导入（包含重复条目，请先去重再入库）' });
+              continue;
+            }
+          }
+          var caseItemPayload = casePairs.map(function(entry) { return entry.payload; });
+          casesList = casePairs.map(function(entry) { return entry.source; });
+
+          var cleanName = cleanImportFileName(fileName);
+          var normalizedName = normText(cleanName);
+          var existingCaseFile = caseFileByName[normalizedName] || null;
+
+          // 用例执行导入与用例库导入对齐：遇到同名用例先走差异对比抽屉，再由用户确认是否覆盖导入。
+          // 多文件导入时不阻塞非同名：同名用例先加入队列，后续依次弹出 diff 抽屉处理。
+          if (existingCaseFile && existingCaseFile.id) {
+            var importExecCasesAll = casesList
+              .map(function(item) { return buildExecImportPayloadFromTempCase(item, inferredReuse); })
+              .filter(Boolean);
+            duplicates.push({
+              payload: {
+                existing_case_file_id: existingCaseFile.id,
+                existing_file_name_clean: existingCaseFile.file_name_clean || cleanName,
+                existing_version_id: existingCaseFile.version_id || null,
+              },
+              duplicate: {
+                file_name: fileName,
+                clean_name: cleanName,
+                project_id: pid,
+                version_id: vid,
+                source: (file && file.type) ? file.type : (ext ? ('file:' + ext) : 'file'),
+                ext: ext || '',
+                items: caseItemPayload,
+                exec_cases: importExecCasesAll,
+                has_result: Boolean(hasResult),
+                reuse_enabled: Boolean(inferredReuse),
+                requirement: requirementLabel || '',
+              },
+            });
+            continue;
+          }
+
+          var execSet = null;
+          if (!existingCaseFile) {
+            var caseFile = null;
+            try {
+              caseFile = await client.importCaseFile({
+                project_id: pid,
+                version_id: vid,
+                file_name: fileName || 'case',
+                source: 'tempexec',
+                items: caseItemPayload,
+              });
+            } catch (errImport) {
+              var msgImport = errImport && errImport.message ? String(errImport.message) : '';
+              if (msgImport.indexOf('同名') !== -1) {
+                var importExecCasesAll2 = casesList
+                  .map(function(item2) { return buildExecImportPayloadFromTempCase(item2, inferredReuse); })
+                  .filter(Boolean);
+                duplicates.push({
+                  payload: errImport && errImport.payload ? errImport.payload : null,
+                  duplicate: {
+                    file_name: fileName,
+                    clean_name: cleanName,
+                    project_id: pid,
+                    version_id: vid,
+                    source: (file && file.type) ? file.type : (ext ? ('file:' + ext) : 'file'),
+                    ext: ext || '',
+                    items: caseItemPayload,
+                    exec_cases: importExecCasesAll2,
+                    has_result: Boolean(hasResult),
+                    reuse_enabled: Boolean(inferredReuse),
+                    requirement: requirementLabel || '',
+                  },
+                });
+                continue;
+              }
+              throw errImport;
+            }
+            caseFileByName[normText(caseFile.file_name_clean || cleanName)] = caseFile;
+            existingCaseFile = caseFile;
+            importedNames.push(caseFile.file_name_clean || cleanName);
+
+            var importCases = null;
+            if (hasResult || inferredReuse) {
+              importCases = casesList
+                .map(function(item3) { return buildExecImportPayloadFromTempCase(item3, inferredReuse); })
+                .filter(Boolean);
+            }
+            execSet = await client.upsertExecSetFromCaseFile({
+              case_file_id: caseFile.id,
+              mode: 'replace',
+              prefer_result_source: importCases && importCases.length ? 'import' : 'db',
+              import_cases: importCases && importCases.length ? importCases : null,
+              requirement: requirementLabel || '',
+              reuse_enabled: inferredReuse ? true : false,
+              reuse_presets: null,
+              exec_version_id: execVid,
+            });
+            if (execSet && execSet.id) {
+              importedExecSetIds.push(execSet.id);
+              execSetByCaseFileId[caseFile.id] = execSet;
+            }
+            continue;
+          }
+
+          var existingItems = [];
+          try {
+            existingItems = await client.listCaseItems(existingCaseFile.id);
+          } catch (err2) {
+            existingItems = [];
+          }
+          var existingKeySet = new Set();
+          var existingModuleSet = new Set();
+          var titlesByModule = {};
+          (existingItems || []).forEach(function(it) {
+            if (!it) return;
+            var k = buildMatchKey(it.module, it.title, it.precondition, it.steps, it.expected);
+            existingKeySet.add(k);
+            var modKey = normText(it.module);
+            existingModuleSet.add(modKey);
+            if (!titlesByModule[modKey]) titlesByModule[modKey] = new Set();
+            titlesByModule[modKey].add(normText(it.title));
+          });
+
+          var importCaseMap = {};
+          casesList.forEach(function(item) {
+            var base = buildCaseItemPayloadFromTempCase(item);
+            if (!base) return;
+            var k = buildMatchKey(base.module, base.title, base.precondition, base.steps, base.expected);
+            if (!importCaseMap[k]) importCaseMap[k] = item;
+          });
+
+          var newCases = [];
+          caseItemPayload.forEach(function(payload) {
+            var k = buildMatchKey(payload.module, payload.title, payload.precondition, payload.steps, payload.expected);
+            if (!existingKeySet.has(k)) {
+              newCases.push({ key: k, payload: payload, source: importCaseMap[k] || null });
+            }
+          });
+
+          var hasNewCases = Boolean(newCases.length);
+          if (hasNewCases) {
+            var moduleMismatch = newCases.some(function(entry) {
+              return !existingModuleSet.has(normText(entry && entry.payload ? entry.payload.module : ''));
+            });
+            var titleMismatch = false;
+            if (!moduleMismatch) {
+              titleMismatch = newCases.some(function(entry) {
+                var modKey = normText(entry && entry.payload ? entry.payload.module : '');
+                var titleKey = normText(entry && entry.payload ? entry.payload.title : '');
+                var titles = titlesByModule[modKey] ? titlesByModule[modKey] : null;
+                return !titles || !titles.has(titleKey);
+              });
+            }
+            var reasonHint = moduleMismatch ? '包含新模块' : (titleMismatch ? '同模块新增用例标题' : '新增用例');
+            var ok = window.confirm(
+              '检测到【' + cleanName + '】在库中已存在，但导入文件包含新增条目（' +
+                newCases.length + ' 条，' + reasonHint + '）。\\n\\n' +
+                '确认后将把新增条目追加入库，并同步到执行页。\\n是否继续？'
+            );
+            if (!ok) {
+              failures.push({ file: fileName, reason: '已取消导入（放弃追加新增条目）' });
+              continue;
+            }
+          }
+
+          var importCases2 = null;
+          if (hasResult && preferResultSource === 'import') {
+            importCases2 = casesList
+              .map(function(item) { return buildExecImportPayloadFromTempCase(item, inferredReuse); })
+              .filter(Boolean);
+          }
+          execSet = await client.upsertExecSetFromCaseFile({
+            case_file_id: existingCaseFile.id,
+            mode: 'replace',
+            prefer_result_source: preferResultSource,
+            import_cases: importCases2,
+            requirement: requirementLabel || '',
+            reuse_enabled: inferredReuse ? true : false,
+            reuse_presets: null,
+            exec_version_id: execVid,
+          });
+          if (!execSet || !execSet.id) {
+            failures.push({ file: fileName, reason: '执行集创建失败' });
+            continue;
+          }
+          importedExecSetIds.push(execSet.id);
+          execSetByCaseFileId[existingCaseFile.id] = execSet;
+
+          if (hasNewCases) {
+            var execCases = [];
+            try {
+              execCases = await client.listExecCases(execSet.id);
+            } catch (err3) {
+              execCases = [];
+            }
+            execCases = Array.isArray(execCases) ? execCases : [];
+            newCases.sort(function(a, b) {
+              var am = normText(a && a.payload ? a.payload.module : '');
+              var bm = normText(b && b.payload ? b.payload.module : '');
+              if (am === bm) return 0;
+              return am.localeCompare(bm, 'zh-Hans-CN');
+            });
+            var moduleMismatch2 = newCases.some(function(entry) {
+              return !existingModuleSet.has(normText(entry && entry.payload ? entry.payload.module : ''));
+            });
+
+            for (var n = 0; n < newCases.length; n += 1) {
+              var entry = newCases[n];
+              var createdItem = null;
+              try {
+                createdItem = await client.createCaseItem(existingCaseFile.id, entry.payload);
+              } catch (err4) {
+                failures.push({ file: fileName, reason: '新增条目入库失败：' + (err4 && err4.message ? err4.message : '未知错误') });
+                continue;
+              }
+              if (!createdItem || !createdItem.id) continue;
+
+              var afterCaseId = null;
+              if (!moduleMismatch2) {
+                for (var r = execCases.length - 1; r >= 0; r -= 1) {
+                  var row = execCases[r];
+                  if (normText(row && row.module) === normText(entry.payload.module)) {
+                    afterCaseId = row.id;
+                    break;
+                  }
+                }
+              }
+              if (!afterCaseId && execCases.length) {
+                afterCaseId = execCases[execCases.length - 1].id;
+              }
+              var src = entry.source || null;
+              var payloadCreate = {
+                case_item_id: createdItem.id,
+                after_case_id: afterCaseId || null,
+                status: src && src.actual ? String(src.actual) : '未执行',
+                remark: src && src.remark ? String(src.remark) : (entry.payload.remark || ''),
+                reuse_details: src && Array.isArray(src.reuseDetails) ? src.reuseDetails : [],
+                defect_links: src && Array.isArray(src.defectLinks) ? src.defectLinks : [],
+              };
+              try {
+                var createdExecCase = await client.createExecCase(execSet.id, payloadCreate);
+                if (createdExecCase && createdExecCase.id) {
+                  execCases.push(createdExecCase);
+                  execCases.sort(function(a, b) {
+                    return Number(a.order_no || 0) - Number(b.order_no || 0);
+                  });
+                }
+              } catch (err5) {
+                failures.push({ file: fileName, reason: '新增条目同步到执行页失败：' + (err5 && err5.message ? err5.message : '未知错误') });
+              }
+            }
+          }
+        } catch (err3) {
+          if (err3 && err3.code === 'duplicate_case_file') {
+            throw err3;
+          }
+          console.warn('执行用例入库失败', err3);
+          failures.push({ file: fileName, reason: err3 && err3.message ? err3.message : '入库失败' });
+        }
+      }
+
+      if (importedExecSetIds.length) {
+        queueTempExecCaseLibraryDiffReset(importedExecSetIds);
+        await loadTempExecStateFromDb();
+        var latestId = String(importedExecSetIds[importedExecSetIds.length - 1]);
+        if (getTempExecFile(latestId)) setTempExecActive(latestId);
+      }
+      var summary = '入库完成：成功 ' + importedExecSetIds.length + '，失败 ' + failures.length;
+      if (duplicates.length) summary += '，同名待处理 ' + duplicates.length;
+      var lines = [summary];
+      if (failures.length) {
+        failures.slice(0, 3).forEach(function(item) {
+          var fname = item && item.file ? String(item.file) : '';
+          var reason = item && item.reason ? String(item.reason) : '入库失败';
+          lines.push(' - ' + (fname || '文件') + '：' + reason);
+        });
+        if (failures.length > 3) {
+          lines.push(' - 还有 ' + (failures.length - 3) + ' 个失败未展开');
+        }
+      }
+      if (tempExecStatus) setStatus(tempExecStatus, lines.join('\n'), failures.length ? 'warn' : 'ok');
+      return { imported: importedExecSetIds.length, failed: failures, duplicates: duplicates, imported_names: importedNames, mode: 'db' };
+    }
+
+    function setTempExecActive(fileId) {
+      if (fileId && getTempExecFile(fileId)) {
+        state.tempExecActiveId = fileId;
+        ensureTempExecPageIndex(fileId);
+        try {
+          var active = getTempExecFile(fileId);
+          if (active) {
+            state.tempExecLastActiveContext = {
+              projectId: active.projectId ? String(active.projectId) : '',
+              versionId: active.versionId !== null && active.versionId !== undefined ? String(active.versionId || '') : '',
+            };
+          }
+        } catch (err) {
+          // ignore
+        }
+      } else if (!fileId) {
+        state.tempExecActiveId = '';
+      } else {
+        state.tempExecActiveId = '';
+      }
+      state.tempExecMindMode = false;
+      if (state.tempExecPresetDraft && state.tempExecPresetDraft.fileId !== state.tempExecActiveId) {
+        state.tempExecPresetDraft = null;
+      }
+      persistTempExecState();
+      renderTempExecNav();
+      renderTempExecView();
+      renderTempVersionGrid();
+      renderTempFocusZone();
+    }
+
+    function updateTempExecResult(fileId, index, value) {
+      var file = getTempExecFile(fileId);
+      if (!file) return;
+      var selection = ensureTempExecSelection(fileId);
+      var targets = selection.size && selection.has(index) ? Array.from(selection) : [index];
+      targets.forEach(function(idx) {
+        if (file.cases[idx]) file.cases[idx].actual = value;
+      });
+      if (isDbMode()) {
+        targets.forEach(function(idx) {
+          var item = file.cases[idx];
+          if (!item) return;
+          queueExecCasePatchForItem(item, { status: value });
+        });
+      }
+      persistTempExecState();
+      renderTempExecView();
+      renderTempExecNav();
+      renderTempVersionGrid();
+    }
+
+    function updateTempExecRemark(fileId, index, value) {
+      var file = getTempExecFile(fileId);
+      if (!file || !file.cases[index]) return;
+      file.cases[index].remark = value;
+      if (isDbMode()) {
+        var item = file.cases[index];
+        if (item) queueExecCasePatchForItem(item, { remark: value });
+      }
+      persistTempExecState();
+    }
+
+    function pushTempExecUndo(payload) {
+      if (!Array.isArray(state.tempExecUndoStack)) state.tempExecUndoStack = [];
+      state.tempExecUndoStack.push({ ts: Date.now(), data: payload });
+      if (state.tempExecUndoStack.length > 20) state.tempExecUndoStack.shift();
+      return state.tempExecUndoStack.length;
+    }
+
+    function clearTempExecUndo() {
+      state.tempExecUndoStack = [];
+    }
+
+    function restoreTempExecUndo() {
+      if (!Array.isArray(state.tempExecUndoStack) || !state.tempExecUndoStack.length) return false;
+      var undo = state.tempExecUndoStack.pop();
+      if (!undo || !undo.data) return false;
+      var payload = undo.data;
+      var file = getTempExecFile(payload.fileId);
+      if (!file) return false;
+      if (payload.type === 'remove' && Array.isArray(payload.cases) && typeof payload.index === 'number') {
+        var insertAt = Math.min(Math.max(payload.index, 0), file.cases.length);
+        payload.cases.forEach(function(c, idx) {
+          file.cases.splice(insertAt + idx, 0, c);
+        });
+        if (payload.newAddedKeys && Array.isArray(payload.newAddedKeys) && payload.newAddedKeys.length) {
+          payload.cases.forEach(function(c) {
+            var keys = getTempExecCaseUiKeys(c);
+            var hit = keys.some(function(k) { return payload.newAddedKeys.indexOf(k) !== -1; });
+            if (hit) markTempExecNewAdded(file.id, c);
+          });
+        }
+        clearTempExecCaseStates(file.id);
+        persistTempExecState();
+        renderTempExecView();
+        return true;
+      }
+      if (payload.type === 'insert' && typeof payload.index === 'number') {
+        if (file.cases[payload.index]) {
+          var removed = file.cases.splice(payload.index, 1);
+          if (removed && removed[0]) unmarkTempExecNewAdded(file.id, removed[0]);
+          if (payload.tempId) clearPendingExecCasePatch(payload.tempId);
+          clearTempExecCaseStates(file.id);
+          persistTempExecState();
+          renderTempExecView();
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function commitTempExecUndoToDb() {
+      if (!isDbMode()) return;
+      var client = getApiClient();
+      if (!client || typeof client.createExecCase !== 'function' || typeof client.deleteExecCase !== 'function') return;
+      if (!Array.isArray(state.tempExecUndoStack) || !state.tempExecUndoStack.length) return;
+
+      var stack = state.tempExecUndoStack.slice();
+      var chain = Promise.resolve();
+      stack.forEach(function(entry) {
+        chain = chain.then(function() {
+          var payload = entry && entry.data ? entry.data : null;
+          if (!payload || !payload.type) return;
+          if (payload.type === 'remove' && Array.isArray(payload.cases)) {
+            var removes = payload.cases.slice();
+            removes.forEach(function(item) {
+              if (!item) return;
+              if (!item.execCaseId && !item.id && item._tempId) clearPendingExecCasePatch(item._tempId);
+            });
+            var sub = Promise.resolve();
+            removes.forEach(function(item) {
+              sub = sub.then(function() {
+                var caseId = item && (item.execCaseId || item.id);
+                if (!caseId) return;
+                return client.deleteExecCase(caseId).catch(function() {});
+              });
+            });
+            return sub;
+          }
+          if (payload.type === 'insert') {
+            var file = getTempExecFile(payload.fileId);
+            if (!file || !Array.isArray(file.cases)) return;
+            var insertCase = null;
+            if (payload.tempId) {
+              insertCase = file.cases.find(function(item) { return item && item._tempId === payload.tempId; }) || null;
+            }
+            if (!insertCase && typeof payload.index === 'number') {
+              insertCase = file.cases[payload.index] || null;
+            }
+            if (!insertCase) return;
+            if (insertCase.execCaseId || insertCase.id) return;
+            var tempId = insertCase._tempId ? String(insertCase._tempId) : '';
+            var idx = file.cases.indexOf(insertCase);
+            var afterCaseId = null;
+            for (var i = idx - 1; i >= 0; i -= 1) {
+              var prev = file.cases[i];
+              var prevId = prev && (prev.execCaseId || prev.id);
+              if (prevId) {
+                afterCaseId = prevId;
+                break;
+              }
+            }
+            var execSetId = file.execSetId || Number(file.id);
+            if (!execSetId) return;
+            var payloadCreate = {
+              after_case_id: afterCaseId || null,
+              module: insertCase.module || '',
+              title: insertCase.title || '',
+              expected: insertCase.expected || '',
+              priority: insertCase.priority || '',
+              precondition: insertCase.preconditions || '',
+              steps: insertCase.steps || '',
+              remark: insertCase.remark || '',
+              status: insertCase.actual || '未执行',
+              reuse_details: insertCase.reuseDetails || [],
+              defect_links: insertCase.defectLinks || [],
+            };
+            return client.createExecCase(execSetId, payloadCreate).then(function(created) {
+              if (!created || !created.id) return;
+              insertCase.execCaseId = created.id;
+              insertCase.id = created.id;
+              insertCase.caseItemId = created.case_item_id || null;
+              insertCase.pendingCreate = false;
+              var pendingPatch = tempId ? consumePendingExecCasePatch(tempId) : null;
+              if (pendingPatch) queueExecCasePatch(created.id, pendingPatch);
+              delete insertCase._tempId;
+              // 入库后补充 id 标记：确保同一页面生命周期内即便触发 reload/load，也仍能保持高亮。
+              markTempExecNewAdded(file.id, insertCase);
+            }).catch(function() {});
+          }
+          return;
+        });
+      });
+      chain.catch(function() {});
+    }
+
+    function cleanupTempExecUndoUI() {
+      if (tempExecUndoTimer) {
+        clearTimeout(tempExecUndoTimer);
+        tempExecUndoTimer = null;
+      }
+      if (tempExecUndoInterval) {
+        clearInterval(tempExecUndoInterval);
+        tempExecUndoInterval = null;
+      }
+      if (tempExecUndoEl && tempExecUndoEl.parentNode) {
+        tempExecUndoEl.parentNode.removeChild(tempExecUndoEl);
+      }
+      tempExecUndoEl = null;
+    }
+
+    var tempExecBlockHintEl = null;
+    var tempExecBlockHintTimer = null;
+
+    function cleanupTempExecBlockHint() {
+      if (tempExecBlockHintTimer) {
+        clearTimeout(tempExecBlockHintTimer);
+        tempExecBlockHintTimer = null;
+      }
+      if (tempExecBlockHintEl && tempExecBlockHintEl.parentNode) {
+        tempExecBlockHintEl.parentNode.removeChild(tempExecBlockHintEl);
+      }
+      tempExecBlockHintEl = null;
+    }
+
+    function positionTempExecBlockHint(hintEl, anchorRect) {
+      if (!hintEl || !anchorRect) return;
+      var rect = anchorRect;
+      var hintRect = hintEl.getBoundingClientRect ? hintEl.getBoundingClientRect() : null;
+      var hintW = hintRect && hintRect.width ? hintRect.width : 260;
+      var hintH = hintRect && hintRect.height ? hintRect.height : 44;
+      var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+      var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      var margin = 8;
+      var width = Number(rect.width) || 0;
+      var height = Number(rect.height) || 0;
+      var leftBase = Number(rect.left) || 0;
+      var topBase = Number(rect.top) || 0;
+      var bottomBase = Number.isFinite(Number(rect.bottom)) ? Number(rect.bottom) : (topBase + height);
+      var centerX = leftBase + width / 2;
+      var left = centerX - hintW / 2;
+      if (vw) left = Math.min(Math.max(margin, left), Math.max(margin, vw - hintW - margin));
+      var aboveTop = topBase - 10 - hintH;
+      var belowTop = bottomBase + 10;
+      var top = aboveTop >= margin ? aboveTop : belowTop;
+      if (vh) top = Math.min(Math.max(margin, top), Math.max(margin, vh - hintH - margin));
+      hintEl.style.left = Math.round(left) + 'px';
+      hintEl.style.top = Math.round(top) + 'px';
+    }
+
+    function showTempExecBlockHint(anchorRect, message) {
+      if (!anchorRect) return;
+      cleanupTempExecBlockHint();
+      var hint = document.createElement('div');
+      hint.className = 'temp-click-hint';
+      var text = document.createElement('span');
+      text.textContent = message || '当前有待确认的增删操作，请先撤回或等待入库';
+      hint.appendChild(text);
+      document.body.appendChild(hint);
+      tempExecBlockHintEl = hint;
+      positionTempExecBlockHint(hint, anchorRect);
+      tempExecBlockHintTimer = setTimeout(function() {
+        if (!tempExecBlockHintEl) return;
+        try { tempExecBlockHintEl.classList.add('fade-out'); } catch (_) {}
+        setTimeout(function() { cleanupTempExecBlockHint(); }, 220);
+      }, 3000);
+    }
+
+    function captureTempExecAnchorRect(anchorEl) {
+      if (!anchorEl) return null;
+      if (typeof anchorEl === 'object' && anchorEl.left !== undefined && anchorEl.top !== undefined) {
+        var left0 = Number(anchorEl.left) || 0;
+        var top0 = Number(anchorEl.top) || 0;
+        var width0 = Number(anchorEl.width) || 0;
+        var height0 = Number(anchorEl.height) || 0;
+        var bottom0 = Number.isFinite(Number(anchorEl.bottom)) ? Number(anchorEl.bottom) : (top0 + height0);
+        return { left: left0, top: top0, width: width0, height: height0, bottom: bottom0 };
+      }
+      if (typeof anchorEl.getBoundingClientRect !== 'function') return null;
+      try {
+        var rect = anchorEl.getBoundingClientRect();
+        if (!rect) return null;
+        var left = Number(rect.left) || 0;
+        var top = Number(rect.top) || 0;
+        var width = Number(rect.width) || 0;
+        var height = Number(rect.height) || 0;
+        return {
+          left: left,
+          top: top,
+          width: width,
+          height: height,
+          bottom: Number.isFinite(Number(rect.bottom)) ? Number(rect.bottom) : (top + height),
+        };
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function startTempExecUndoTimer(message, options) {
+      options = options || {};
+      var anchorRect = options.anchorRect || null;
+      cleanupTempExecUndoUI();
+      var baseMsg = message || '已应用变更';
+      var remaining = 8;
+      tempExecUndoEl = document.createElement('div');
+      tempExecUndoEl.className = 'temp-undo-toast';
+      var text = document.createElement('span');
+      var btn = document.createElement('button');
+      btn.className = 'pill secondary';
+      btn.textContent = '撤销';
+      var renderCountdown = function() {
+        var count = Array.isArray(state.tempExecUndoStack) ? state.tempExecUndoStack.length : 0;
+        var suffix = count > 1 ? '，可撤销 ' + count + ' 条' : '';
+        text.textContent = baseMsg + suffix + '（' + remaining + 's）';
+      };
+      var handleUndoClick = function() {
+        var success = restoreTempExecUndo();
+        var hasMore = Array.isArray(state.tempExecUndoStack) && state.tempExecUndoStack.length > 0;
+        if (success && hasMore) {
+          remaining = 8;
+          renderCountdown();
+          return;
+        }
+        clearTempExecUndo();
+        cleanupTempExecUndoUI();
+        if (tempExecStatus) {
+          setStatus(tempExecStatus, success ? '已撤销最近操作' : '无法撤销', success ? 'ok' : 'warn');
+        }
+      };
+      btn.addEventListener('click', handleUndoClick);
+      tempExecUndoEl.appendChild(text);
+      tempExecUndoEl.appendChild(btn);
+      document.body.appendChild(tempExecUndoEl);
+      renderCountdown();
+      tempExecUndoInterval = setInterval(function() {
+        remaining -= 1;
+        if (remaining <= 0) return;
+        renderCountdown();
+      }, 1000);
+      tempExecUndoTimer = setTimeout(function() {
+        commitTempExecUndoToDb();
+        clearTempExecUndo();
+        cleanupTempExecUndoUI();
+      }, remaining * 1000);
+      if (tempExecStatus) setStatus(tempExecStatus, baseMsg, 'ok');
+    }
+
+    function insertTempExecCase(fileId, index, anchorEl) {
+      var file = getTempExecFile(fileId);
+      if (!file || !Array.isArray(file.cases)) return;
+      var anchorRect = captureTempExecAnchorRect(anchorEl);
+      if (tempExecUndoTimer) {
+        if (tempExecStatus) {
+          setStatus(tempExecStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+        }
+        if (anchorRect) {
+          showTempExecBlockHint(anchorRect, '当前有待确认的增删操作，请先撤回或等待入库');
+        }
+        return;
+      }
+      var base = file.cases[index] || {};
+      var moduleName = base.module || '';
+      var fresh = {
+        module: moduleName,
+        title: '',
+        priority: '',
+        preconditions: '',
+        steps: '',
+        expected: '',
+        actual: '未执行',
+        remark: '',
+        reuseDetails: [],
+        defectLinks: [],
+      };
+      ensureTempExecNewAddedUiKey(fresh);
+      if (isDbMode()) {
+        fresh._tempId = generateTempExecId();
+        fresh.pendingCreate = true;
+      }
+      var insertAt = Number.isInteger(index) && index >= -1 ? index + 1 : file.cases.length;
+      file.cases.splice(insertAt, 0, fresh);
+      markTempExecNewAdded(fileId, fresh);
+      pushTempExecUndo({ type: 'insert', fileId: fileId, index: insertAt, tempId: fresh._tempId || '' });
+      clearTempExecCaseStates(fileId);
+      persistTempExecState();
+      renderTempExecView();
+      if (tempExecStatus) {
+        setStatus(tempExecStatus, '已插入空用例', 'ok');
+        startTempExecUndoTimer('已插入空用例', { anchorRect: anchorRect });
+      }
+    }
+
+    function removeTempExecCase(fileId, index, anchorEl) {
+      var file = getTempExecFile(fileId);
+      if (!file || !Array.isArray(file.cases) || !file.cases[index]) return;
+      var anchorRect = captureTempExecAnchorRect(anchorEl);
+      if (tempExecUndoTimer) {
+        if (tempExecStatus) {
+          setStatus(tempExecStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+        }
+        if (anchorRect) {
+          showTempExecBlockHint(anchorRect, '当前有待确认的增删操作，请先撤回或等待入库');
+        }
+        return;
+      }
+      openConfirmDrawer({
+        title: '删除用例',
+        message: '确定删除该条用例吗？此操作不可撤销。',
+        confirmText: '确认删除',
+        cancelText: '取消',
+        danger: true,
+      }).then(function(result) {
+        if (!result || result.ok !== true) return;
+        if (tempExecUndoTimer) {
+          if (tempExecStatus) {
+            setStatus(tempExecStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+          }
+          if (anchorRect) {
+            showTempExecBlockHint(anchorRect, '当前有待确认的增删操作，请先撤回或等待入库');
+          }
+          return;
+        }
+        var targetFile = getTempExecFile(fileId);
+        if (!targetFile || !Array.isArray(targetFile.cases) || !targetFile.cases[index]) return;
+        var removed = targetFile.cases.splice(index, 1);
+        var newAddedKeys = [];
+        removed.forEach(function(item) {
+          if (!isTempExecNewAdded(fileId, item)) return;
+          getTempExecCaseUiKeys(item).forEach(function(k) { if (k && newAddedKeys.indexOf(k) === -1) newAddedKeys.push(k); });
+          unmarkTempExecNewAdded(fileId, item);
+        });
+        pushTempExecUndo({ type: 'remove', fileId: fileId, index: index, cases: removed, newAddedKeys: newAddedKeys });
+        clearTempExecCaseStates(fileId);
+        persistTempExecState();
+        renderTempExecView();
+        if (tempExecStatus) {
+          setStatus(tempExecStatus, '用例已删除', 'ok');
+          startTempExecUndoTimer('用例已删除', { anchorRect: anchorRect });
+        }
+      });
+    }
+
+    function updateTempExecCaseField(fileId, index, field, value) {
+      var file = getTempExecFile(fileId);
+      if (!file || !file.cases[index]) return;
+      var allowed = ['title', 'priority', 'preconditions', 'steps', 'expected'];
+      if (allowed.indexOf(field) === -1) return;
+      var text = typeof value === 'string' ? value : '';
+      if (field === 'priority') {
+        var normalized = (text || '').trim().toUpperCase();
+        file.cases[index][field] = normalized;
+      } else {
+        file.cases[index][field] = text;
+      }
+      if (isDbMode()) {
+        var item = file.cases[index];
+        if (item) {
+          var payload = {};
+          if (field === 'title') payload.title = file.cases[index].title;
+          if (field === 'priority') payload.priority = file.cases[index].priority;
+          if (field === 'preconditions') payload.precondition = file.cases[index].preconditions;
+          if (field === 'steps') payload.steps = file.cases[index].steps;
+          if (field === 'expected') payload.expected = file.cases[index].expected;
+          queueExecCasePatchForItem(item, payload);
+        }
+      }
+      persistTempExecState();
+    }
+
+    function toggleTempExecSelection(fileId, index, checked) {
+      var file = getTempExecFile(fileId);
+      if (!file) return;
+      var selection = ensureTempExecSelection(fileId);
+      if (checked) {
+        selection.add(index);
+      } else {
+        selection.delete(index);
+      }
+      state.tempExecPreserveScrollOnce = true;
+      renderTempExecView();
+    }
+
+    function toggleTempExecSelectAll(fileId, checked, indexes) {
+      var file = getTempExecFile(fileId);
+      if (!file) return;
+      var selection = ensureTempExecSelection(fileId);
+      selection.clear();
+      var targets = Array.isArray(indexes) && indexes.length
+        ? indexes
+        : file.cases.map(function(_, idx) { return idx; });
+      if (checked) targets.forEach(function(idx) { selection.add(idx); });
+      state.tempExecPreserveScrollOnce = true;
+      renderTempExecView();
+    }
+
+	    function removeTempExecFile(fileId) {
+	      var idx = state.tempExecFiles.findIndex(function(item) { return item.id === fileId; });
+	      if (idx === -1) return;
+	      var targetFile = state.tempExecFiles[idx];
+	      var execSetId = targetFile && (targetFile.execSetId || targetFile.id) ? String(targetFile.execSetId || targetFile.id) : '';
+	      if (execSetId) clearTempExecCaseLibraryDiffMeta(execSetId, { render: true });
+	      if (isDbMode()) {
+	        var client = getApiClient();
+	        var execSetIdNum = targetFile && (targetFile.execSetId || Number(targetFile.id));
+	        if (client && execSetIdNum && typeof client.deleteExecSet === 'function') {
+	          client.deleteExecSet(execSetIdNum).catch(function(err) {
+	            if (tempExecStatus) {
+	              var msg = err && err.message ? err.message : '执行集删除失败，刷新后可能会再次出现';
+	              setStatus(tempExecStatus, msg, 'warn');
+	            }
+	          });
+	        }
+	      }
+	      removeTempExecFromVersion(fileId, { silent: true });
+      state.tempExecFiles.splice(idx, 1);
+      var placement = ensureTempExecPlacement();
+      Object.keys(placement.fileOrder || {}).forEach(function(req) {
+        removeFileFromOrder(req, fileId);
+      });
+      if (placement.fileOrderByProjectVersion && typeof placement.fileOrderByProjectVersion === 'object') {
+        var pid = targetFile && targetFile.projectId ? String(targetFile.projectId) : '';
+        var vid = targetFile && targetFile.versionId !== null && targetFile.versionId !== undefined ? String(targetFile.versionId || '') : '';
+        if (pid && placement.fileOrderByProjectVersion[pid] && placement.fileOrderByProjectVersion[pid][vid]) {
+          placement.fileOrderByProjectVersion[pid][vid] = placement.fileOrderByProjectVersion[pid][vid]
+            .filter(function(id) { return String(id) !== String(fileId); });
+        }
+      }
+      delete state.tempExecSelections[fileId];
+      delete state.tempExecRemarkOpen[fileId];
+      delete state.tempExecReuseOpen[fileId];
+      delete state.tempExecPages[fileId];
+      state.tempExecFocus = state.tempExecFocus.filter(function(id) { return id !== fileId; });
+      saveTempExecFocus();
+      delete state.tempExecDefectOpen[fileId];
+      if (state.tempExecPresetDraft && state.tempExecPresetDraft.fileId === fileId) {
+        state.tempExecPresetDraft = null;
+      }
+      var nextId = state.tempExecActiveId;
+      if (state.tempExecActiveId === fileId) {
+        if (isDbMode() && targetFile && targetFile.projectId) {
+          var pid2 = String(targetFile.projectId || '');
+          var sameProjectList = state.tempExecFiles.filter(function(item) {
+            if (!item) return false;
+            if (String(item.scope || '') !== 'current') return false;
+            return String(item.projectId || '') === pid2;
+          });
+          nextId = sameProjectList.length ? sameProjectList[0].id : '';
+        } else {
+          var currentList = state.tempExecFiles.filter(function(item) { return item.scope === 'current'; });
+          nextId = currentList.length ? currentList[0].id : (state.tempExecFiles[0] ? state.tempExecFiles[0].id : '');
+        }
+      }
+      persistTempExecState();
+      setTempExecActive(nextId);
+      renderTempVersionGrid();
+    }
+
+    function reorderTempExecProject(sourceProjectId, targetProjectId, opts) {
+      if (!isTempExecProjectLayoutEnabled()) return;
+      var placement = ensureTempExecPlacement();
+      var src = sourceProjectId === null || sourceProjectId === undefined ? '' : String(sourceProjectId);
+      var tgt = targetProjectId === null || targetProjectId === undefined ? '' : String(targetProjectId);
+      if (!src || !tgt || src === tgt) return;
+      var insertAfter = false;
+      if (opts && typeof opts === 'object') insertAfter = Boolean(opts.after);
+      else if (opts === true) insertAfter = true;
+      placement.projectOrder = Array.isArray(placement.projectOrder) ? placement.projectOrder : [];
+      placement.projectOrder = placement.projectOrder.filter(function(id) { return id !== src; });
+      var idx = placement.projectOrder.indexOf(tgt);
+      if (idx === -1) {
+        if (insertAfter) placement.projectOrder.push(src);
+        else placement.projectOrder.unshift(src);
+      } else {
+        placement.projectOrder.splice(insertAfter ? (idx + 1) : idx, 0, src);
+      }
+      persistTempExecState();
+      renderTempVersionGrid();
+    }
+
+    function reorderTempExecProjectVersion(projectId, sourceVersionId, targetVersionId, opts) {
+      if (!isTempExecProjectLayoutEnabled()) return;
+      var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+      if (!pid) return;
+      var placement = ensureTempExecPlacement();
+      if (!placement.versionOrderByProject[pid]) placement.versionOrderByProject[pid] = [];
+      var src = sourceVersionId === null || sourceVersionId === undefined ? '' : String(sourceVersionId || '');
+      var tgt = targetVersionId === null || targetVersionId === undefined ? '' : String(targetVersionId || '');
+      if (src === tgt) return;
+      var insertAfter = false;
+      if (opts && typeof opts === 'object') insertAfter = Boolean(opts.after);
+      else if (opts === true) insertAfter = true;
+      placement.versionOrderByProject[pid] = placement.versionOrderByProject[pid].filter(function(id) { return id !== src; });
+      var idx = placement.versionOrderByProject[pid].indexOf(tgt);
+      if (idx === -1) {
+        if (insertAfter) placement.versionOrderByProject[pid].push(src);
+        else placement.versionOrderByProject[pid].unshift(src);
+      } else {
+        placement.versionOrderByProject[pid].splice(insertAfter ? (idx + 1) : idx, 0, src);
+      }
+      persistTempExecState();
+      renderTempVersionGrid();
+    }
+
+    function reorderTempExecFileInProjectVersion(projectId, versionId, fileId, beforeId) {
+      if (!isTempExecProjectLayoutEnabled()) return;
+      var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+      if (!pid) return;
+      var vid = versionId === null || versionId === undefined ? '' : String(versionId || '');
+      var id = fileId === null || fileId === undefined ? '' : String(fileId);
+      if (!id) return;
+      var placement = ensureTempExecPlacement();
+      if (!placement.fileOrderByProjectVersion[pid]) placement.fileOrderByProjectVersion[pid] = {};
+      if (!placement.fileOrderByProjectVersion[pid][vid]) placement.fileOrderByProjectVersion[pid][vid] = [];
+      var order = placement.fileOrderByProjectVersion[pid][vid].filter(function(item) { return item !== id; });
+      var before = beforeId === null || beforeId === undefined ? '' : String(beforeId);
+      if (before && order.indexOf(before) !== -1) {
+        order.splice(order.indexOf(before), 0, id);
+      } else {
+        order.push(id);
+      }
+      placement.fileOrderByProjectVersion[pid][vid] = order;
+      persistTempExecState();
+      renderTempVersionGrid();
+    }
+
+	    function bulkRemoveTempExecFiles(fileIds, opts) {
+      var list = Array.isArray(fileIds)
+        ? fileIds.map(function(id) { return id === null || id === undefined ? '' : String(id); }).filter(Boolean)
+        : String(fileIds || '').split(',').map(function(id) { return id.trim(); }).filter(Boolean);
+      if (!list.length) return;
+      var removeSet = new Set(list.map(function(id) { return String(id); }));
+      var originalActiveId = String(state.tempExecActiveId || '');
+      var removedActive = removeSet.has(originalActiveId);
+      var placement = ensureTempExecPlacement();
+      list.forEach(function(id) {
+        var idx = state.tempExecFiles.findIndex(function(item) { return item && String(item.id) === String(id); });
+        if (idx === -1) return;
+        var targetFile = state.tempExecFiles[idx];
+	        if (isDbMode()) {
+	          var client = getApiClient();
+	          var execSetId = targetFile && (targetFile.execSetId || Number(targetFile.id));
+	          if (client && execSetId && typeof client.deleteExecSet === 'function') {
+	            client.deleteExecSet(execSetId).catch(function() {});
+	          }
+	        }
+	        removeTempExecFromVersion(String(id), { silent: true });
+        Object.keys(placement.fileOrder || {}).forEach(function(req) {
+          removeFileFromOrder(req, String(id));
+        });
+        if (placement.fileOrderByProjectVersion && typeof placement.fileOrderByProjectVersion === 'object') {
+          var pid = targetFile && targetFile.projectId ? String(targetFile.projectId) : '';
+          var vid = targetFile && targetFile.versionId !== null && targetFile.versionId !== undefined ? String(targetFile.versionId || '') : '';
+          if (pid && placement.fileOrderByProjectVersion[pid] && placement.fileOrderByProjectVersion[pid][vid]) {
+            placement.fileOrderByProjectVersion[pid][vid] = placement.fileOrderByProjectVersion[pid][vid]
+              .filter(function(item) { return String(item) !== String(id); });
+	    }
+        }
+        delete state.tempExecSelections[String(id)];
+        delete state.tempExecRemarkOpen[String(id)];
+        delete state.tempExecReuseOpen[String(id)];
+        delete state.tempExecPages[String(id)];
+        state.tempExecFocus = (state.tempExecFocus || []).filter(function(fid) { return String(fid) !== String(id); });
+        delete state.tempExecDefectOpen[String(id)];
+        if (state.tempExecPresetDraft && String(state.tempExecPresetDraft.fileId) === String(id)) {
+          state.tempExecPresetDraft = null;
+        }
+      });
+      state.tempExecFiles = state.tempExecFiles.filter(function(file) { return file && !removeSet.has(String(file.id)); });
+      saveTempExecFocus();
+      var nextId = state.tempExecActiveId;
+      if (removedActive) {
+        nextId = state.tempExecFiles.length ? state.tempExecFiles[0].id : '';
+      }
+      persistTempExecState();
+      setTempExecActive(nextId);
+      renderTempVersionGrid();
+      renderTempExecView();
+      if (tempExecStatus && !(opts && opts.silentStatus)) {
+        setStatus(tempExecStatus, '已移除 ' + list.length + ' 份用例', 'ok');
+      }
+    }
+
+    function removeTempExecProject(projectId) {
+      if (!isTempExecProjectLayoutEnabled()) return;
+      var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+      if (!pid) return;
+      if (!Array.isArray(state.tempExecArchivedHidden)) state.tempExecArchivedHidden = [];
+      var hideKey = pid + '::';
+      if (state.tempExecArchivedHidden.indexOf(hideKey) === -1) state.tempExecArchivedHidden.push(hideKey);
+      if (Array.isArray(state.tempExecArchivedFiles) && state.tempExecArchivedFiles.length) {
+        state.tempExecArchivedFiles = state.tempExecArchivedFiles.filter(function(file) {
+          return !(file && String(file.projectId) === pid);
+        });
+      }
+      var ids = (state.tempExecFiles || [])
+        .filter(function(file) { return file && String(file.projectId) === pid; })
+        .map(function(file) { return String(file.id); });
+      bulkRemoveTempExecFiles(ids, { silentStatus: false });
+      renderTempExecOverview();
+    }
+
+    function removeTempExecProjectVersion(projectId, versionId) {
+      if (!isTempExecProjectLayoutEnabled()) return;
+      var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+      var vid = versionId === null || versionId === undefined ? '' : String(versionId || '');
+      if (!pid) return;
+      if (!Array.isArray(state.tempExecArchivedHidden)) state.tempExecArchivedHidden = [];
+      var hideKey = pid + '::' + vid;
+      if (state.tempExecArchivedHidden.indexOf(hideKey) === -1) state.tempExecArchivedHidden.push(hideKey);
+      if (Array.isArray(state.tempExecArchivedFiles) && state.tempExecArchivedFiles.length) {
+        state.tempExecArchivedFiles = state.tempExecArchivedFiles.filter(function(file) {
+          if (!file) return false;
+          return !(String(file.projectId) === pid && String(file.versionId || '') === vid);
+        });
+      }
+      var ids = (state.tempExecFiles || [])
+        .filter(function(file) { return file && String(file.projectId) === pid && String(file.versionId || '') === vid; })
+        .map(function(file) { return String(file.id); });
+      bulkRemoveTempExecFiles(ids, { silentStatus: false });
+      renderTempExecOverview();
+    }
+
+    // 解散归档占位：仅移除“已归档”占位，不影响未归档用例与归档记录本身。
+    function dissolveTempExecArchivedProjectVersion(projectId, versionId) {
+      if (!isTempExecProjectLayoutEnabled()) return;
+      var pid = projectId === null || projectId === undefined ? '' : String(projectId);
+      var vid = versionId === null || versionId === undefined ? '' : String(versionId || '');
+      if (!pid) return;
+      var archived = Array.isArray(state.tempExecArchivedFiles) ? state.tempExecArchivedFiles.slice() : [];
+      var targets = archived.filter(function(file) {
+        if (!file) return false;
+        return String(file.projectId) === pid && String(file.versionId || '') === vid;
+      });
+      if (!targets.length) {
+        if (tempExecStatus) setStatus(tempExecStatus, '当前版本无已归档占位', 'ok');
+        return;
+      }
+      if (!Array.isArray(state.tempExecArchivedHidden)) state.tempExecArchivedHidden = [];
+      // 解散仅针对当前已有的归档占位（按 exec_set_id 记忆），不影响未来新归档用例再次占位。
+      targets.forEach(function(file) {
+        var sid = file && file.id !== null && file.id !== undefined ? String(file.id) : '';
+        if (!sid) return;
+        if (state.tempExecArchivedHidden.indexOf(sid) === -1) state.tempExecArchivedHidden.push(sid);
+      });
+      state.tempExecArchivedFiles = archived.filter(function(file) {
+        if (!file) return false;
+        return !(String(file.projectId) === pid && String(file.versionId || '') === vid);
+      });
+      persistTempExecState();
+      renderTempVersionGrid();
+      renderTempExecOverview();
+      if (tempExecStatus) setStatus(tempExecStatus, '已解散归档占位（' + targets.length + ' 份）', 'ok');
+    }
+
+    function reorderTempRequirement(sourceReq, targetReq) {
+      var src = normalizeRequirementName(sourceReq);
+      var tgt = normalizeRequirementName(targetReq);
+      if (!src || !tgt || src === tgt) return;
+      reorderRequirementOrder(src, tgt);
+      renderTempExecNav();
+      renderTempVersionGrid();
     }
 
     function loadTempExecFocus() {
@@ -1830,6 +7106,26 @@
         renderTempVersionGrid();
       }
       renderTempFocusZone();
+    }
+
+    function insertTempExecFocus(fileId, insertIndex) {
+      var file = getTempExecFile(fileId);
+      if (!file) return;
+      var list = (state.tempExecFocus || []).filter(function(id) { return id !== fileId; });
+      var idx = Number(insertIndex);
+      if (!Number.isFinite(idx)) idx = list.length;
+      if (idx < 0) idx = 0;
+      if (idx > list.length) idx = list.length;
+      list.splice(idx, 0, fileId);
+      state.tempExecFocus = list;
+      saveTempExecFocus();
+      if (state.tempExecActiveId !== fileId) {
+        setTempExecActive(fileId);
+      } else {
+        renderTempExecNav();
+        renderTempVersionGrid();
+        renderTempFocusZone();
+      }
     }
 
     function removeTempExecFocus(fileId, requireConfirm) {
@@ -1916,15 +7212,25 @@
       return (
         '<div class="reuse-list">' +
           details.map(function(detail) {
-            var statusClass = mapStatusToClass(detail.status);
+            var currentStatus = detail && detail.status ? String(detail.status) : '未执行';
+            currentStatus = currentStatus.trim();
+            if (currentStatus === 'pending') currentStatus = '未执行';
+            var statusClass = mapStatusToClass(currentStatus);
+            var optionsHtml = '';
+            // 系统态：展示为当前值，但不允许用户主动选择（不出现在常规选项中）。
+            if (currentStatus === '变更重跑' || currentStatus === '有改动') {
+              statusClass = 'changed';
+              optionsHtml += '<option value="' + escapeHtml(currentStatus) + '" selected disabled>' + escapeHtml(currentStatus) + '</option>';
+            }
+            optionsHtml += tempExecResultOptions.map(function(opt) {
+              return '<option value="' + opt + '" ' + (currentStatus === opt ? 'selected' : '') + '>' + opt + '</option>';
+            }).join('');
             return (
               '<div class="reuse-entry" data-detail="' + detail.id + '">' +
                 '<input class="reuse-input" data-temp-reuse-text="' + file.id + '" data-index="' + caseIndex + '" data-detail="' + detail.id + '" placeholder="输入测试项..." value="' + escapeHtml(detail.text || '') + '"/>' +
                 '<input class="reuse-note" data-temp-reuse-note="' + file.id + '" data-index="' + caseIndex + '" data-detail="' + detail.id + '" placeholder="输入独立备注..." value="' + escapeHtml(detail.note || '') + '"/>' +
                 '<select class="status-select ' + statusClass + '" data-temp-reuse-status="' + file.id + '" data-index="' + caseIndex + '" data-detail="' + detail.id + '">' +
-                  tempExecResultOptions.map(function(opt) {
-                    return '<option value="' + opt + '" ' + (detail.status === opt ? 'selected' : '') + '>' + opt + '</option>';
-                  }).join('') +
+                  optionsHtml +
                 '</select>' +
                 '<button type="button" class="reuse-remove" data-temp-reuse-remove="' + file.id + '" data-index="' + caseIndex + '" data-detail="' + detail.id + '" title="删除测试项">删除</button>' +
               '</div>'
@@ -1957,7 +7263,11 @@
     function renderTempExecTable(file) {
       var searchState = state.tempExecSearch || { fileId: '', term: '', raw: '' };
       var searchTerm = searchState.fileId === file.id ? (searchState.term || '') : '';
+      var statusFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
+      var hasFilter = statusFilter.fileId === file.id && statusFilter.status;
       var matches = file.cases.map(function(item, idx) { return { item: item, idx: idx }; }).filter(function(entry) {
+        var status = getCaseExecutionStatus(file, entry.item);
+        if (hasFilter && !mapFilterToStatus(statusFilter.status, status)) return false;
         if (!searchTerm) return true;
         var target = [
           entry.item.module,
@@ -1991,6 +7301,48 @@
       var columnOrder = ['select', 'index', 'module', 'title', 'priority', 'preconditions', 'steps', 'expected', 'actual', 'remark', 'defect', 'ops'];
       var visibleKeys = columnOrder.filter(show);
       var colCount = visibleKeys.length || 1;
+
+      // 字段列宽：对齐“归档详情”视图的字段宽度；实际/备注/缺陷链接按需求固定；隐藏字段的宽度平均补给其他可伸缩字段。
+      var baseEm = {
+        module: 8,
+        title: 9,
+        priority: 5,
+        preconditions: 12,
+        // 操作步骤减少 1 个汉字宽度；预期结果减少 2 个汉字宽度；宽度加到“实际结果”。
+        steps: 14,
+        expected: 14,
+      };
+      // 优先级列不参与“平均补宽”，保持基准宽度不变。
+      var stretchKeys = Object.keys(baseEm).filter(function(key) { return key !== 'priority'; });
+      var hiddenEm = 0;
+      Object.keys(baseEm).forEach(function(key) {
+        if (!show(key)) hiddenEm += Number(baseEm[key]) || 0;
+      });
+      // “编号”列被隐藏时，其宽度也应补给其他字段（近似按 4 个汉字宽度计算）。
+      if (!show('index')) hiddenEm += 4;
+      var stretchVisible = stretchKeys.filter(show);
+      var extraEm = stretchVisible.length ? (hiddenEm / stretchVisible.length) : 0;
+      var widthByKey = {
+        select: '36px',
+        index: '50px',
+        actual: '7em',
+        remark: '6em',
+        defect: '6em',
+        ops: '40px',
+      };
+      stretchVisible.forEach(function(key) {
+        var base = Number(baseEm[key]) || 0;
+        var w = base + extraEm;
+        // 避免产生过长小数，减少 HTML 体积
+        var fixed = Math.round(w * 100) / 100;
+        widthByKey[key] = String(fixed) + 'em';
+      });
+      if (show('priority')) widthByKey.priority = String(Number(baseEm.priority) || 5) + 'em';
+      var colgroup = '<colgroup>' + visibleKeys.map(function(key) {
+        var width = widthByKey[key] || '';
+        return width ? ('<col style="width:' + width + '">') : '<col>';
+      }).join('') + '</colgroup>';
+
       var paged = matches.filter(function(_, idx) { return idx >= start && idx < end; });
       var rows = paged.map(function(entry) {
         var item = entry.item;
@@ -2014,8 +7366,16 @@
         var defectBtnClass = ['defect-toggle'];
         if (defectOpen) defectBtnClass.push('active');
         if (hasDefects) defectBtnClass.push('filled');
-        var resultOptions = tempExecResultOptions.map(function(opt) {
-          return '<option value="' + opt + '" ' + (item.actual === opt ? 'selected' : '') + '>' + opt + '</option>';
+        var currentStatus = item && item.actual ? String(item.actual) : '未执行';
+        currentStatus = currentStatus.trim();
+        if (currentStatus === 'pending') currentStatus = '未执行';
+        var resultOptions = '';
+        // 系统态：展示为当前值，但不允许用户主动选择（不出现在常规选项中）。
+        if (currentStatus === '变更重跑' || currentStatus === '有改动') {
+          resultOptions += '<option value="' + escapeHtml(currentStatus) + '" selected disabled>' + escapeHtml(currentStatus) + '</option>';
+        }
+        resultOptions += tempExecResultOptions.map(function(opt) {
+          return '<option value="' + opt + '" ' + (currentStatus === opt ? 'selected' : '') + '>' + opt + '</option>';
         }).join('');
         var reuseStatus = getCaseExecutionDisplay(file, item);
         var actualCell = reuseEnabled
@@ -2084,8 +7444,9 @@
               '</td>' +
             '</tr>'
           : '';
+        var rowClass = 'case-row' + (isTempExecNewAdded(file.id, item) ? ' new-added' : '');
         return (
-          '<tr>' +
+          '<tr class="' + rowClass + '" data-temp-case-row="' + file.id + '" data-index="' + idx + '">' +
             cells.join('') +
           '</tr>' +
           reuseRow +
@@ -2123,14 +7484,6 @@
       );
       var presetPanel = reuseEnabled ? renderReusePresetPanel(file) : '';
       var paginationBlock = buildTempExecPagination(file, totalCases, pageIndex, totalPages, start, end);
-      var searchRaw = searchState.fileId === file.id ? (searchState.raw || '') : '';
-      var searchBar = (
-        '<div class="temp-search-bar">' +
-          '<input class="temp-search-input" data-temp-search-input="' + file.id + '" value="' + escapeHtml(searchRaw) + '" placeholder="搜索用例关键字">' +
-          '<button type="button" class="pill secondary" data-temp-search-btn="' + file.id + '">搜索</button>' +
-          '<button type="button" class="pill secondary" data-temp-search-clear="' + file.id + '">清除</button>' +
-        '</div>'
-      );
       var headerCells = [];
       if (headerCheckbox) headerCells.push(headerCheckbox);
       if (show('index')) headerCells.push('<th class="index">编号</th>');
@@ -2147,20 +7500,9 @@
       return (
         reuseToggle +
         presetPanel +
-        '<div class="temp-case-summary-row">' +
-          '<div class="temp-case-summary">' +
-            '当前文件：<strong>' + escapeHtml(file.name) + '</strong>' +
-            '<span class="summary-pill executed">已执行 ' + summary.executed + '</span>' +
-            '<span class="summary-pill pending">未执行 ' + summary.pending + '</span>' +
-            '<span class="summary-pill passed">通过 ' + summary.passed + '</span>' +
-            '<span class="summary-pill failed">失败 ' + summary.failed + '</span>' +
-            '<span class="summary-pill blocked">阻塞 ' + summary.blocked + '</span>' +
-            '<span class="summary-pill unspecified">不适用 ' + summary.unspecified + '</span>' +
-          '</div>' +
-          searchBar +
-        '</div>' +
         paginationBlock +
         '<table data-resizable-id="temp-exec-' + escapeHtml(file.id) + '" data-resizable-label="执行视图 - ' + escapeHtml(file.name || '测试用例') + '">' +
+          colgroup +
           '<thead>' +
             '<tr>' + headerCells.join('') + '</tr>' +
           '</thead>' +
@@ -2195,6 +7537,11 @@
       var targetCase = file.cases[index];
       if (!Array.isArray(targetCase.reuseDetails)) targetCase.reuseDetails = [];
       targetCase.reuseDetails.push({ id: generateReuseDetailId(), text: '', note: '', status: '未执行' });
+      // 复用模式下同时维护 exec_case.status，方便总览统计与清除“变更重跑”系统态。
+      targetCase.actual = resolveReuseAggregateStatus(targetCase.reuseDetails);
+      if (isDbMode()) {
+        queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
+      }
       persistTempExecState();
       renderTempExecView();
     }
@@ -2204,11 +7551,26 @@
       if (!file || !file.cases[index]) return;
       var targetCase = file.cases[index];
       if (!Array.isArray(targetCase.reuseDetails)) return;
-      var confirmed = window.confirm('确定删除该复用测试项吗？该操作不可撤销。');
-      if (!confirmed) return;
-      targetCase.reuseDetails = targetCase.reuseDetails.filter(function(item) { return item.id !== detailId; });
-      persistTempExecState();
-      renderTempExecView();
+      openConfirmDrawer({
+        title: '删除复用测试项',
+        message: '确定删除该复用测试项吗？该操作不可撤销。',
+        confirmText: '确认删除',
+        cancelText: '取消',
+        danger: true,
+      }).then(function(result) {
+        if (!result || result.ok !== true) return;
+        var nextFile = getTempExecFile(fileId);
+        if (!nextFile || !nextFile.cases[index]) return;
+        var nextCase = nextFile.cases[index];
+        if (!Array.isArray(nextCase.reuseDetails)) return;
+        nextCase.reuseDetails = nextCase.reuseDetails.filter(function(item) { return item.id !== detailId; });
+        nextCase.actual = resolveReuseAggregateStatus(nextCase.reuseDetails);
+        if (isDbMode()) {
+          queueExecCasePatchForItem(nextCase, { reuse_details: nextCase.reuseDetails, status: nextCase.actual });
+        }
+        persistTempExecState();
+        renderTempExecView();
+      });
     }
 
     function updateTempExecReuseStatus(fileId, index, detailId, value) {
@@ -2219,6 +7581,10 @@
       var entry = targetCase.reuseDetails.find(function(item) { return item.id === detailId; });
       if (!entry) return;
       entry.status = tempExecResultOptions.indexOf(value) !== -1 ? value : '未执行';
+      targetCase.actual = resolveReuseAggregateStatus(targetCase.reuseDetails);
+      if (isDbMode()) {
+        queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
+      }
       persistTempExecState();
       renderTempExecView();
     }
@@ -2231,6 +7597,9 @@
       var entry = targetCase.reuseDetails.find(function(item) { return item.id === detailId; });
       if (!entry) return;
       entry.text = text || '';
+      if (isDbMode()) {
+        queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails });
+      }
       persistTempExecState();
     }
 
@@ -2242,6 +7611,9 @@
       var entry = targetCase.reuseDetails.find(function(item) { return item.id === detailId; });
       if (!entry) return;
       entry.note = text || '';
+      if (isDbMode()) {
+        queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails });
+      }
       persistTempExecState();
     }
 
@@ -2249,42 +7621,87 @@
       var file = getTempExecFile(fileId);
       if (!file) return;
       if (enabled === Boolean(file.reuseEnabled)) return;
+      function applyReuseToggle(nextEnabled) {
+        if (nextEnabled) {
+          file.reuseEnabled = true;
+          ensureReusePresets(file);
+        } else {
+          file.reuseEnabled = false;
+          file.cases.forEach(function(item) {
+            item.reuseDetails = [];
+          });
+          file.reusePresets = [];
+          if (state.tempExecPresetDraft && state.tempExecPresetDraft.fileId === fileId) {
+            state.tempExecPresetDraft = null;
+          }
+          resetTempExecReuseOpen(fileId);
+        }
+        if (isDbMode()) {
+          var execSetId = file.execSetId || Number(file.id);
+          if (execSetId) {
+            queueExecSetPatch(execSetId, { reuse_enabled: Boolean(file.reuseEnabled), reuse_presets: file.reusePresets || [] });
+          }
+          if (nextEnabled) {
+            file.cases.forEach(function(item) {
+              if (!item) return;
+              queueExecCasePatchForItem(item, { status: '未执行', remark: '' });
+            });
+          } else {
+            file.cases.forEach(function(item) {
+              if (!item) return;
+              queueExecCasePatchForItem(item, { reuse_details: [], status: normalizeExecStatus(item.actual) });
+            });
+          }
+        }
+        persistTempExecState();
+        renderTempExecView();
+      }
+
       if (enabled) {
-        var hasExecution = file.cases.some(function(item) { return (item.actual && item.actual !== '未执行') || (item.remark && item.remark.trim()); });
+        var hasExecution = file.cases.some(function(item) {
+          var status = getCaseExecutionStatus(file, item);
+          return (status && status !== '未执行') || (item.remark && item.remark.trim());
+        });
         if (hasExecution) {
           var confirmMsg = '开启“用例复用”会清空当前执行结果与备注，是否继续？';
-          if (!window.confirm(confirmMsg)) {
-            if (checkboxEl) checkboxEl.checked = false;
-            return;
-          }
-          file.cases.forEach(function(item) {
-            item.actual = '未执行';
-            item.remark = '';
+          openConfirmDrawer({
+            title: '开启用例复用',
+            message: confirmMsg,
+            danger: true,
+          }).then(function(res) {
+            if (!res || res.ok !== true) {
+              if (checkboxEl) checkboxEl.checked = false;
+              return;
+            }
+            file.cases.forEach(function(item) {
+              item.actual = '未执行';
+              item.remark = '';
+            });
+            applyReuseToggle(true);
           });
+          return;
         }
-        file.reuseEnabled = true;
-        ensureReusePresets(file);
-      } else {
-        var hasReuse = file.cases.some(function(item) { return Array.isArray(item.reuseDetails) && item.reuseDetails.length; });
-        if (hasReuse) {
-          var confirmClose = '关闭“用例复用”会删除所有复用测试项与预设子项，是否继续？';
-          if (!window.confirm(confirmClose)) {
+        applyReuseToggle(true);
+        return;
+      }
+
+      var hasReuse = file.cases.some(function(item) { return Array.isArray(item.reuseDetails) && item.reuseDetails.length; });
+      if (hasReuse) {
+        var confirmClose = '关闭“用例复用”会删除所有复用测试项与预设子项，是否继续？';
+        openConfirmDrawer({
+          title: '关闭用例复用',
+          message: confirmClose,
+          danger: true,
+        }).then(function(res2) {
+          if (!res2 || res2.ok !== true) {
             if (checkboxEl) checkboxEl.checked = true;
             return;
           }
-        }
-        file.reuseEnabled = false;
-        file.cases.forEach(function(item) {
-          item.reuseDetails = [];
+          applyReuseToggle(false);
         });
-        file.reusePresets = [];
-        if (state.tempExecPresetDraft && state.tempExecPresetDraft.fileId === fileId) {
-          state.tempExecPresetDraft = null;
-        }
-        resetTempExecReuseOpen(fileId);
+        return;
       }
-      persistTempExecState();
-      renderTempExecView();
+      applyReuseToggle(false);
     }
 
     return {
@@ -2297,6 +7714,12 @@
       exportTempExecSnapshot: exportTempExecSnapshot,
       importTempExecSnapshot: importTempExecSnapshot,
       applyTempExecSnapshot: applyTempExecSnapshot,
+      createTempExecFile: createTempExecFile,
+      exportTempExecToXmind: exportTempExecToXmind,
+      exportTempExecCasesToXmind: exportTempExecCasesToXmind,
+      loadTempExecState: loadTempExecState,
+      importTempExecFiles: importTempExecFiles,
+      importTempExecFilesToDb: importTempExecFilesToDb,
       ensureTempExecPlacement: ensureTempExecPlacement,
       ensureRequirementOrder: ensureRequirementOrder,
       ensureFileOrder: ensureFileOrder,
@@ -2350,8 +7773,25 @@
       openTempExecDefectLink: openTempExecDefectLink,
       toggleTempExecDefectPanel: toggleTempExecDefectPanel,
       applyTempExecSearch: applyTempExecSearch,
+      setTempExecStatusFilter: setTempExecStatusFilter,
       getTempExecFile: getTempExecFile,
+      getTempExecOrderedFileIds: getTempExecOrderedFileIds,
       getTempExecFilesByRequirement: getTempExecFilesByRequirement,
+      setTempExecActive: setTempExecActive,
+      updateTempExecResult: updateTempExecResult,
+      updateTempExecRemark: updateTempExecRemark,
+      pushTempExecUndo: pushTempExecUndo,
+      clearTempExecUndo: clearTempExecUndo,
+      restoreTempExecUndo: restoreTempExecUndo,
+      cleanupTempExecUndoUI: cleanupTempExecUndoUI,
+      startTempExecUndoTimer: startTempExecUndoTimer,
+      insertTempExecCase: insertTempExecCase,
+      removeTempExecCase: removeTempExecCase,
+      updateTempExecCaseField: updateTempExecCaseField,
+      toggleTempExecSelection: toggleTempExecSelection,
+      toggleTempExecSelectAll: toggleTempExecSelectAll,
+      removeTempExecFile: removeTempExecFile,
+      reorderTempRequirement: reorderTempRequirement,
       persistTempExecState: persistTempExecState,
       renderTempExecNav: renderTempExecNav,
       renderTempExecView: renderTempExecView,
@@ -2359,6 +7799,16 @@
       renderTempExecTable: renderTempExecTable,
       renderTempExecOverview: renderTempExecOverview,
       renderTempFocusZone: renderTempFocusZone,
+      toggleTempExecRequirementZone: toggleTempExecRequirementZone,
+      toggleTempExecVersionZone: toggleTempExecVersionZone,
+      setTempExecImportProjectFilter: setTempExecImportProjectFilter,
+      isTempExecProjectLayoutEnabled: isTempExecProjectLayoutEnabled,
+      reorderTempExecProject: reorderTempExecProject,
+      reorderTempExecProjectVersion: reorderTempExecProjectVersion,
+      reorderTempExecFileInProjectVersion: reorderTempExecFileInProjectVersion,
+      removeTempExecProject: removeTempExecProject,
+      removeTempExecProjectVersion: removeTempExecProjectVersion,
+      dissolveTempExecArchivedProjectVersion: dissolveTempExecArchivedProjectVersion,
       scrollTempExecViewTop: scrollTempExecViewTop,
       ensureReusePresets: ensureReusePresets,
       startTempExecPresetDraft: startTempExecPresetDraft,
@@ -2378,8 +7828,12 @@
       saveTempExecFocus: saveTempExecFocus,
       syncTempExecFocus: syncTempExecFocus,
       addTempExecFocus: addTempExecFocus,
+      insertTempExecFocus: insertTempExecFocus,
       removeTempExecFocus: removeTempExecFocus,
       prioritizeTempExecUnassignedRequirements: prioritizeTempExecUnassignedRequirements,
+      openTempExecCaseLibraryDiffDrawer: openTempExecCaseLibraryDiffDrawer,
+      tryAutoOpenTempExecCaseLibraryDiff: tryAutoOpenTempExecCaseLibraryDiff,
+      jumpToTempExecCase: jumpToTempExecCase,
     };
   }
 

@@ -17,23 +17,32 @@
     };
     var state = deps && deps.state ? deps.state : {};
     var dom = deps && deps.dom ? deps.dom : {};
+    var pickEl = function(el, id) {
+      if (el) return el;
+      if (typeof document !== 'undefined') return document.getElementById(id);
+      return null;
+    };
     var handlers = deps && deps.handlers ? deps.handlers : {};
     var setStatus = deps && deps.setStatus ? deps.setStatus : function() {};
-    var rawText = dom.rawText;
-    var missingViewBtn = dom.missingViewBtn;
-    var copyMissingBtn = dom.copyMissingBtn;
-    var missingViewContainer = dom.missingViewContainer;
-    var missingSmartFillBtn = dom.missingSmartFillBtn;
-    var casesCompareResultEl = dom.casesCompareResultEl;
-    var casesCoverageStatus = dom.casesCoverageStatus;
-    var casesTimingEl = dom.casesTimingEl;
-    var casesCompareBtnEl = dom.casesCompareBtnEl;
-    var casesModuleProgress = dom.casesModuleProgress;
-    var compareResultEl = dom.compareResultEl;
-    var compareStatus = dom.compareStatus;
-    var compareTimingEl = dom.compareTimingEl;
-    var compareBtnEl = dom.compareBtnEl;
-    var splitResultEl = dom.splitResultEl;
+    var rawText = pickEl(dom.rawText, 'rawText');
+    var missingViewBtn = pickEl(dom.missingViewBtn, 'missingViewBtn');
+    var copyMissingBtn = pickEl(dom.copyMissingBtn, 'copyMissingBtn');
+    var missingViewContainer = pickEl(dom.missingViewContainer, 'missingViewContainer');
+    var missingSmartFillBtn = pickEl(dom.missingSmartFillBtn, 'missingSmartFillBtn');
+    var missingViewDrawerBody = pickEl(dom.missingViewDrawerBody, 'missingViewDrawerBody');
+    var missingViewDrawerTitle = pickEl(dom.missingViewDrawerTitle, 'missingViewDrawerTitle');
+    var missingViewDrawer = null;
+    var casesCompareResultEl = pickEl(dom.casesCompareResultEl, 'casesCompareResult');
+    var casesCoverageStatus = pickEl(dom.casesCoverageStatus, 'casesCoverageStatus');
+    var casesTimingEl = pickEl(dom.casesTimingEl, 'casesTiming');
+    var casesCompareBtnEl = pickEl(dom.casesCompareBtnEl, 'casesCompareBtn');
+    var casesModuleProgress = pickEl(dom.casesModuleProgress, 'casesModuleProgress');
+    var casesGoUsecaseGenBtn = pickEl(dom.casesGoUsecaseGenBtn, 'casesGoUsecaseGen');
+    var compareResultEl = pickEl(dom.compareResultEl, 'compareResult');
+    var compareStatus = pickEl(dom.compareStatus, 'compareStatus');
+    var compareTimingEl = pickEl(dom.compareTimingEl, 'compareTiming');
+    var compareBtnEl = pickEl(dom.compareBtnEl, 'compareBtn');
+    var splitResultEl = pickEl(dom.splitResultEl, 'splitResult');
     var updateAutoMissingCard = handlers.updateAutoMissingCard || function() {};
     var ensureRequirementLabel = handlers.ensureRequirementLabel || function() { return ''; };
     var getSafeRequirementSlug = handlers.getSafeRequirementSlug || function() { return 'requirement'; };
@@ -49,13 +58,17 @@
     var getCleanedTextForModel = handlers.getCleanedTextForModel || function() { return ''; };
     var getAssignedModel = handlers.getAssignedModel || function() { throw new Error('缺少模型配置'); };
     var getReasoningForType = handlers.getReasoningForType || function() { return ''; };
+    var getTemperatureForType = handlers.getTemperatureForType || function() { return 0.2; };
     var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
     var updateModelTiming = handlers.updateModelTiming || function() {};
     var formatJsonOrText = handlers.formatJsonOrText || function(text) { return text; };
     var buildCasesComparePayload = handlers.buildCasesComparePayload || function() { return { text: '', isJson: false }; };
     var parseSplitModules = handlers.parseSplitModules || function() { return []; };
+    var ensureCaseGenModulesFromSplit = handlers.ensureCaseGenModulesFromSplit || function() { return false; };
     var setStepInProgress = handlers.setStepInProgress || function() {};
     var clearStepInProgress = handlers.clearStepInProgress || function() {};
+    var persistWorkflowState = handlers.persistWorkflowState || function() {};
+    var persistWorkflowStateNow = handlers.persistWorkflowStateNow || null;
     var runConcurrent = handlers.runConcurrent || function(items, concurrency, worker) {
       if (!Array.isArray(items) || !items.length) return Promise.resolve([]);
       var limit = Math.max(1, Number(concurrency) || 1);
@@ -82,7 +95,6 @@
       var workers = Array.from({ length: Math.min(limit, items.length) }, function() { return workerLoop(); });
       return Promise.all(workers).then(function() { return results; });
     };
-    var updateMissingView = handlers.updateMissingView || function() {};
 
     function clampCoveragePercent(value) {
       var num = Number(value);
@@ -122,6 +134,16 @@
         }
       }
       return '';
+    }
+
+    function persistWorkflowSnapshot() {
+      if (typeof persistWorkflowStateNow === 'function') {
+        persistWorkflowStateNow();
+        return;
+      }
+      if (typeof persistWorkflowState === 'function') {
+        persistWorkflowState();
+      }
     }
 
     function aggregateModuleCompareResults(results, moduleList) {
@@ -195,6 +217,23 @@
       var hasMissing = Object.prototype.hasOwnProperty.call(data, 'missing');
       var hasExtra = Object.prototype.hasOwnProperty.call(data, 'extra');
       return hasCoverage && (hasMissing || hasExtra);
+    }
+
+    function extractCompareResultData() {
+      var raw = compareResultEl && compareResultEl.value ? compareResultEl.value.trim() : '';
+      if (!raw) return null;
+      var result = unwrapRequirementPayload(raw);
+      if (result.type && result.type !== 'compare') {
+        setStatus(compareStatus, '导入内容类型不匹配（非对比完整性结果）', 'warn');
+        return null;
+      }
+      var payload = typeof result.payload === 'string' ? result.payload : result.payload;
+      try {
+        return typeof payload === 'string' ? JSON.parse(payload) : payload;
+      } catch (err) {
+        console.warn('对比结果解析失败', err);
+        return null;
+      }
     }
 
     function formatMissingRequirement(item) {
@@ -322,13 +361,37 @@
       return normalized.module || normalized.points.length ? normalized : null;
     }
 
+    function pickCoveragePayload(data) {
+      if (!data || typeof data !== 'object') return null;
+      if (isCoveragePayload(data)) return data;
+      if (data && typeof data === 'object' && !Array.isArray(data) && isCoveragePayload(data.data)) {
+        return data.data;
+      }
+      var stack = [];
+      Object.keys(data).forEach(function(key) {
+        var value = data[key];
+        if (value && typeof value === 'object') stack.push(value);
+      });
+      while (stack.length) {
+        var current = stack.pop();
+        if (!current || typeof current !== 'object') continue;
+        if (isCoveragePayload(current)) return current;
+        Object.keys(current).forEach(function(key) {
+          var value = current[key];
+          if (value && typeof value === 'object') stack.push(value);
+        });
+      }
+      return null;
+    }
+
     function parseMissingModules(jsonText) {
       var result = unwrapRequirementPayload(jsonText || '');
       var payload = typeof result.payload === 'string' ? result.payload : result.payload;
       if (!payload) return [];
       try {
         var data = typeof payload === 'string' ? JSON.parse(payload) : payload;
-        var missing = data && Array.isArray(data.missing) ? data.missing : [];
+        var coverage = pickCoveragePayload(data);
+        var missing = coverage && Array.isArray(coverage.missing) ? coverage.missing : [];
         return missing.map(function(entry) { return normalizeMissingModule(entry); }).filter(Boolean);
       } catch (err) {
         console.warn('缺失模块 JSON 解析失败', err);
@@ -422,9 +485,41 @@
       if (!Array.isArray(state.caseGenModules)) state.caseGenModules = [];
     }
 
+    function ensureMissingDrawer() {
+      if (missingViewDrawer) return missingViewDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      missingViewDrawer = window.app.drawer.createDrawer({
+        drawerId: 'missingViewDrawer',
+        closeButtons: ['closeMissingViewDrawerBtn'],
+        onClose: function() {
+          if (missingViewContainer) {
+          missingViewContainer.classList.add('hidden');
+          missingViewContainer.classList.remove('visible');
+          missingViewContainer.innerHTML = '';
+        }
+        if (missingViewBtn) missingViewBtn.textContent = '前往勾选缺失模块生成缺失用例';
+      },
+    });
+    return missingViewDrawer;
+    }
+
+    function syncCasesGoUsecaseGenButton() {
+      if (!casesGoUsecaseGenBtn) return;
+      var hasSplit = Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim());
+      casesGoUsecaseGenBtn.disabled = !hasSplit;
+    }
+
+    if (splitResultEl && typeof splitResultEl.addEventListener === 'function') {
+      splitResultEl.addEventListener('input', syncCasesGoUsecaseGenButton);
+    }
+    syncCasesGoUsecaseGenButton();
+
     function refreshMissingSmartFillButton() {
       if (!missingSmartFillBtn) return;
       ensureMissingState();
+      if (!state.caseGenModules.length && typeof ensureCaseGenModulesFromSplit === 'function') {
+        ensureCaseGenModulesFromSplit();
+      }
       var hasMissing = state.missingLastList.length > 0;
       missingSmartFillBtn.disabled = !hasMissing || !state.caseGenModules.length;
     }
@@ -445,6 +540,23 @@
       }
     }
 
+    function bindMissingViewCheckboxEvents() {
+      if (!missingViewContainer) return;
+      var header = missingViewContainer.querySelector('input[data-missing-select-all]');
+      if (header) {
+        header.addEventListener('change', function(e) {
+          handleMissingSelectAll(e && e.target ? e.target.checked : false);
+        });
+      }
+      var rows = missingViewContainer.querySelectorAll('input[data-missing-index]');
+      rows.forEach(function(cb) {
+        cb.addEventListener('change', function(e) {
+          var target = e && e.target ? e.target : cb;
+          handleMissingSelectionChange(Number(target.dataset.missingIndex), target.checked);
+        });
+      });
+    }
+
     function updateMissingView() {
       if (!missingViewBtn || !copyMissingBtn || !missingViewContainer || !casesCompareResultEl) return;
       ensureMissingState();
@@ -454,16 +566,27 @@
       var rowLength = state.missingRowCache.length;
       state.missingSelections = new Set(Array.from(state.missingSelections).filter(function(idx) { return idx < rowLength; }));
       var hasData = list.length > 0;
-      missingViewBtn.disabled = !hasData;
+      var hasRawText = Boolean(casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim());
+      missingViewBtn.disabled = !hasData && !hasRawText;
       copyMissingBtn.disabled = !hasData;
+      syncCasesGoUsecaseGenButton();
       refreshMissingSmartFillButton();
       if (!hasData) {
-        missingViewContainer.classList.add('hidden');
-        missingViewContainer.classList.remove('visible');
-        missingViewContainer.innerHTML = '';
-        missingViewBtn.textContent = '缺失模块视图';
+        if (hasRawText && missingViewContainer.classList.contains('visible')) {
+          missingViewContainer.innerHTML = buildMissingViewHtml(state);
+          bindMissingViewCheckboxEvents();
+          refreshMissingSelectionUI();
+        } else {
+          missingViewContainer.classList.add('hidden');
+          missingViewContainer.classList.remove('visible');
+          missingViewContainer.innerHTML = '';
+          missingViewBtn.textContent = '前往勾选缺失模块生成缺失用例';
+          var drawer = missingViewDrawer || ensureMissingDrawer();
+          if (drawer && drawer.element && drawer.element.classList.contains('open')) drawer.close();
+        }
       } else if (missingViewContainer.classList.contains('visible')) {
         missingViewContainer.innerHTML = buildMissingViewHtml(state);
+        bindMissingViewCheckboxEvents();
         refreshMissingSelectionUI();
       }
       if (typeof updateAutoMissingCard === 'function') updateAutoMissingCard();
@@ -471,27 +594,29 @@
 
     function toggleMissingView() {
       if (!missingViewContainer || !missingViewBtn || missingViewBtn.disabled || !casesCompareResultEl) return;
+      var drawer = ensureMissingDrawer();
+      if (!drawer) return;
+      var isOpen = drawer.element && drawer.element.classList.contains('open');
+      if (isOpen) {
+        drawer.close();
+        return;
+      }
       ensureMissingState();
       var list = parseMissingModules(casesCompareResultEl.value || '');
       state.missingLastList = list;
       state.missingRowCache = buildMissingRows(list);
       var rowLength = state.missingRowCache.length;
       state.missingSelections = new Set(Array.from(state.missingSelections).filter(function(idx) { return idx < rowLength; }));
+      syncCasesGoUsecaseGenButton();
       refreshMissingSmartFillButton();
-      if (!list.length) return;
-      var visible = missingViewContainer.classList.contains('visible');
-      if (visible) {
-        missingViewContainer.classList.remove('visible');
-        missingViewContainer.classList.add('hidden');
-        missingViewContainer.innerHTML = '';
-        missingViewBtn.textContent = '缺失模块视图';
-      } else {
-        missingViewContainer.innerHTML = buildMissingViewHtml(state);
-        missingViewContainer.classList.add('visible');
-        missingViewContainer.classList.remove('hidden');
-        missingViewBtn.textContent = '收起缺失视图';
-        refreshMissingSelectionUI();
-      }
+      missingViewContainer.innerHTML = buildMissingViewHtml(state);
+      missingViewContainer.classList.add('visible');
+      missingViewContainer.classList.remove('hidden');
+      missingViewBtn.textContent = '收起缺失视图';
+      if (missingViewDrawerTitle) missingViewDrawerTitle.textContent = '缺失模块视图';
+      bindMissingViewCheckboxEvents();
+      refreshMissingSelectionUI();
+      drawer.open();
     }
 
     function handleMissingSelectionChange(index, checked) {
@@ -501,17 +626,28 @@
       refreshMissingSelectionUI();
       refreshMissingSmartFillButton();
       if (typeof updateAutoMissingCard === 'function') updateAutoMissingCard();
+      persistWorkflowState();
     }
 
     function handleMissingSelectAll(checked) {
       ensureMissingState();
-      state.missingSelections.clear();
-      if (checked) {
-        state.missingRowCache.forEach(function(_, idx) { state.missingSelections.add(idx); });
+      if (missingViewContainer) {
+        var nodes = missingViewContainer.querySelectorAll('input[data-missing-index]');
+        state.missingSelections.clear();
+        nodes.forEach(function(cb) {
+          var idx = Number(cb.dataset.missingIndex);
+          if (checked) state.missingSelections.add(idx);
+          cb.checked = checked;
+        });
+        if (missingViewContainer.classList.contains('visible')) {
+          missingViewContainer.innerHTML = buildMissingViewHtml(state);
+          bindMissingViewCheckboxEvents();
+        }
       }
       refreshMissingSelectionUI();
       refreshMissingSmartFillButton();
       if (typeof updateAutoMissingCard === 'function') updateAutoMissingCard();
+      persistWorkflowState();
     }
 
     function copyMissingJson() {
@@ -605,10 +741,13 @@
         casesCompareResultEl.value = JSON.stringify(wrapDataWithRequirement(parsed, 'cases_compare'), null, 2);
         setStatus(casesCoverageStatus, '已导入覆盖对比结果', 'ok');
         updateMissingView();
+        persistWorkflowSnapshot();
         updateFlowStatus();
       } catch (err) {
         console.error(err);
         setStatus(casesCoverageStatus, '导入失败：' + err.message, 'err');
+      } finally {
+        updateFlowStatus();
       }
     }
 
@@ -674,9 +813,12 @@
         setStatus(compareStatus, '已导入对比结果', 'ok');
         if (typeof resetAutoCompareUserInputs === 'function') resetAutoCompareUserInputs();
         if (typeof syncAutoCompareStatus === 'function') syncAutoCompareStatus();
+        persistWorkflowSnapshot();
       } catch (err) {
         console.error(err);
         setStatus(compareStatus, '导入失败：' + err.message, 'err');
+      } finally {
+        updateFlowStatus();
       }
     }
 
@@ -720,12 +862,15 @@
         return;
       }
       if (compareBtnEl) compareBtnEl.setAttribute('disabled', 'disabled');
+      setStepInProgress('compare');
       var model;
       try {
         model = getAssignedModel('compare');
       } catch (err) {
         setStatus(compareStatus, err && err.message ? err.message : '未配置模型', 'warn');
         updateModelTiming(compareTimingEl);
+        clearStepInProgress('compare');
+        updateFlowStatus();
         if (compareBtnEl) compareBtnEl.removeAttribute('disabled');
         return;
       }
@@ -735,12 +880,14 @@
         var comparePrompt = state.assignments && state.assignments.comparePrompt ? state.assignments.comparePrompt.trim() : '';
         var prompt = comparePrompt || defaultPrompts.compare;
         var reasoning = getReasoningForType('compare');
+        var temperature = getTemperatureForType('compare');
         var startTime = Date.now();
         var content = await callModelWithConfig(
           model,
           '原始需求：\n' + raw + '\n\n清洗后的需求：\n' + cleaned,
           prompt,
-          reasoning
+          reasoning,
+          temperature
         );
         updateModelTiming(compareTimingEl, Date.now() - startTime);
         var formatted = formatJsonOrText(stripCodeFence(content));
@@ -749,22 +896,25 @@
         syncAutoCompareStatus();
         setStatus(compareStatus, '对比完成', 'ok');
         updateFlowStatus();
+        persistWorkflowSnapshot();
       } catch (err) {
         console.error(err);
         updateModelTiming(compareTimingEl);
         setStatus(compareStatus, '对比失败：' + (err && err.message ? err.message : '请重试'), 'err');
       } finally {
+        clearStepInProgress('compare');
+        updateFlowStatus();
         if (compareBtnEl) compareBtnEl.removeAttribute('disabled');
       }
     }
 
-    async function compareSingleModuleWithCases(module, idx, casesPayload, isJson, model, prompt, reasoning) {
+    async function compareSingleModuleWithCases(module, idx, casesPayload, isJson, model, prompt, reasoning, temperature) {
       var payload = buildSingleModulePayload(module, idx);
       var label = isJson ? '测试用例列表（JSON）' : '测试用例内容';
       var userText = '仅针对以下单个模块进行覆盖对比，请返回 {coverage, missing, extra} JSON：\n' + payload.json + '\n\n' + label + '：\n' + casesPayload;
       var content;
       try {
-        content = await callModelWithConfig(model, userText, prompt, reasoning);
+        content = await callModelWithConfig(model, userText, prompt, reasoning, temperature);
       } catch (err) {
         throw new Error('模块「' + payload.title + '」对比失败：' + (err && err.message ? err.message : err));
       }
@@ -789,31 +939,34 @@
         setStatus(casesCoverageStatus, '拆分结果解析失败，请先重新运行“测试模块拆分”', 'warn');
         return;
       }
+      if (casesCompareResultEl) casesCompareResultEl.value = '';
       if (casesCompareBtnEl) casesCompareBtnEl.setAttribute('disabled', 'disabled');
+      renderCasesModuleProgress(parsedModules, parsedModules.map(function() { return 'pending'; }));
+      setStepInProgress('cases');
       var model;
       try {
         model = getAssignedModel('cases');
       } catch (err) {
         setStatus(casesCoverageStatus, err && err.message ? err.message : '未配置模型', 'warn');
         updateModelTiming(casesTimingEl);
+        clearStepInProgress('cases');
+        updateFlowStatus();
         if (casesCompareBtnEl) casesCompareBtnEl.removeAttribute('disabled');
         return;
       }
-      if (casesCompareResultEl) casesCompareResultEl.value = '';
-      renderCasesModuleProgress(parsedModules, parsedModules.map(function() { return 'pending'; }));
-      setStepInProgress('cases');
       var concurrency = resolveCasesCompareConcurrency(parsedModules.length);
       setStatus(casesCoverageStatus, '正在并发对比 ' + parsedModules.length + ' 个模块（并发上限 ' + concurrency + '）...', '');
       var casesPrompt = state.assignments && state.assignments.casesPrompt ? state.assignments.casesPrompt.trim() : '';
       var prompt = casesPrompt || defaultPrompts.cases;
       var reasoning = getReasoningForType('cases');
+      var temperature = getTemperatureForType('cases');
       var startTime = Date.now();
       try {
         var states = parsedModules.map(function() { return 'pending'; });
         var perModule = await runConcurrent(parsedModules, concurrency, function(module, idx) {
           states[idx] = 'running';
           renderCasesModuleProgress(parsedModules, states);
-          return compareSingleModuleWithCases(module, idx, casesPayload, isJson, model, prompt, reasoning)
+          return compareSingleModuleWithCases(module, idx, casesPayload, isJson, model, prompt, reasoning, temperature)
             .then(function(result) {
               states[idx] = 'done';
               renderCasesModuleProgress(parsedModules, states);
@@ -829,6 +982,7 @@
         if (casesCompareResultEl) casesCompareResultEl.value = JSON.stringify(summary, null, 2);
         setStatus(casesCoverageStatus, '覆盖对比完成', 'ok');
         updateMissingView();
+        persistWorkflowSnapshot();
       } catch (err) {
         console.error(err);
         setStatus(casesCoverageStatus, '覆盖对比失败：' + (err && err.message ? err.message : '请重试'), 'err');
@@ -839,6 +993,12 @@
         updateFlowStatus();
         if (casesCompareBtnEl) casesCompareBtnEl.removeAttribute('disabled');
       }
+    }
+
+    function extractCoverageFromCompareResult() {
+      var data = extractCompareResultData();
+      if (!data) return null;
+      return clampCoveragePercent(data.coverage);
     }
 
     return {
@@ -863,6 +1023,8 @@
       handleMissingSelectionChange: handleMissingSelectionChange,
       handleMissingSelectAll: handleMissingSelectAll,
       copyMissingJson: copyMissingJson,
+      extractCompareResultData: extractCompareResultData,
+      extractCoverageFromCompareResult: extractCoverageFromCompareResult,
       exportCasesCoverage: exportCasesCoverage,
       importCasesCoverage: importCasesCoverage,
       exportCompareResult: exportCompareResult,

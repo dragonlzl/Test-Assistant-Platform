@@ -12,6 +12,9 @@
     var toggleCleanRawViewBtn = dom.toggleCleanRawViewBtn;
     var cleanRawLocateBtn = dom.cleanRawLocateBtn;
     var cleanHighlightAllBtn = dom.cleanHighlightAllBtn;
+    var cleanViewDrawerBody = dom.cleanViewDrawerBody;
+    var cleanViewDrawerTitle = dom.cleanViewDrawerTitle;
+    var cleanViewDrawer = null;
     var state = ctx.state || {};
 
     var runCleaning = handlers.runCleaning;
@@ -19,25 +22,54 @@
     var renderCleanView = handlers.renderCleanView;
     var renderCleanRawView = handlers.renderCleanRawView;
 
+    function ensureCleanDrawer() {
+      if (cleanViewDrawer) return cleanViewDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      cleanViewDrawer = window.app.drawer.createDrawer({
+        drawerId: 'cleanViewDrawer',
+        closeButtons: ['closeCleanViewDrawerBtn'],
+        onClose: function() {
+          if (cleanViewContainer) {
+            cleanViewContainer.classList.add('hidden');
+            cleanViewContainer.classList.remove('visible');
+          }
+          if (cleanRawView) {
+            cleanRawView.classList.add('hidden');
+            cleanRawView.classList.remove('visible');
+          }
+          if (toggleCleanViewBtn) toggleCleanViewBtn.textContent = '展开视图';
+        },
+      });
+      return cleanViewDrawer;
+    }
+
     if (runCleanBtn && typeof runCleaning === 'function') {
       runCleanBtn.addEventListener('click', runCleaning);
     }
     if (copyBtn && typeof copyCleaned === 'function') {
       copyBtn.addEventListener('click', copyCleaned);
     }
-    if (toggleCleanViewBtn && cleanViewContainer && typeof renderCleanView === 'function') {
+    if (toggleCleanViewBtn && typeof renderCleanView === 'function') {
       toggleCleanViewBtn.addEventListener('click', function() {
-        var isHidden = cleanViewContainer.classList.contains('hidden');
-        if (isHidden) {
+        var drawer = ensureCleanDrawer();
+        if (!drawer) return;
+        var isOpen = drawer.element && drawer.element.classList.contains('open');
+        if (isOpen) {
+          drawer.close();
+          return;
+        }
+        if (cleanViewContainer) {
           cleanViewContainer.classList.remove('hidden');
           cleanViewContainer.classList.add('visible');
-          toggleCleanViewBtn.textContent = '收起视图';
-        } else {
-          cleanViewContainer.classList.add('hidden');
-          cleanViewContainer.classList.remove('visible');
-          toggleCleanViewBtn.textContent = '展开视图';
         }
+        if (cleanRawView) {
+          cleanRawView.classList.remove('hidden');
+          cleanRawView.classList.add('visible');
+        }
+        if (cleanViewDrawerTitle) cleanViewDrawerTitle.textContent = '清洗结果视图';
+        toggleCleanViewBtn.textContent = '收起视图';
         renderCleanView(false);
+        drawer.open();
       });
     }
     if (toggleCleanRawViewBtn && cleanRawView && typeof renderCleanRawView === 'function') {

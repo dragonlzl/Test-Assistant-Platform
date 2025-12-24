@@ -31,11 +31,31 @@
     ops: true,
   };
 
+  var defaultPageGuideSwitches = {
+    auto: true,
+    clean: true,
+    casesgen: true,
+    assign: true,
+    models: true,
+    tempexec: true,
+    'case-library': true,
+    'case-archive': true,
+    'exec-overview': true,
+  };
+
   var defaultSettings = {
     timeoutSec: 300,
     feishuWebhook: '',
     feishuMention: '',
+    theme: 'light',
+    caseGenProgressCollapsed: false,
+    memoPad: {
+      collapsed: false,
+      activeTabId: 'memo-tab-1',
+      tabs: [{ id: 'memo-tab-1', name: '', items: [] }],
+    },
     tempExecColumns: Object.assign({}, defaultTempExecColumns),
+    pageGuideSwitches: Object.assign({}, defaultPageGuideSwitches),
   };
 
   var config = {
@@ -47,9 +67,15 @@
     legacyCompareKey: 'cleaner-compare-config-v1',
     modelsKey: 'cleaner-models-v1',
     assignmentKey: 'cleaner-assignment-v1',
+    activeTabKey: 'usecase-active-tab',
+    workflowStorageKey: 'usecase-workflow-state-v1',
     tempExecStorageKey: 'usecase-temp-exec-v1',
     tempExecFocusStorageKey: 'tempexec-focus-v1',
     tempExecPageSizeStorageKey: 'tempexec-page-size',
+    opsLogViewStorageKey: 'tap-ops-log-view-v1',
+    opsActivityViewStorageKey: 'tap-ops-activity-view-v1',
+    opsContributionViewStorageKey: 'tap-ops-contribution-view-v1',
+    opsExecContributionViewStorageKey: 'tap-ops-exec-contribution-view-v1',
     defaultTempExecPageSize: 20,
     tempExecResultOptions: ['未执行', '通过', '失败', '阻塞', '不适用'],
     defaultPlacement: {
@@ -62,6 +88,7 @@
     legacyCleanPrompt: '你是资深需求分析师，请清洗并重写下面的原始需求，重新整理前，要充分理解需求，理解设计意图，然后整理成结构化、可读性强的条目，保持原意，保留关键信息与约束条件，输出JSON数组：[{"功能": 具体功能名称,"类别": 核心改动的类别,"功能描述": {"重新整理内容": 具体重新整理的功能原文内容,"功能目标": [如有则为功能的目标],"规则": [功能的具体规则],"约束": [如有则为功能的限制和约束],"流程": [功能触发的具体流程]},"原始需求描述": [原始需求的所有相关描述]}]。仅输出此 JSON 内容，禁止输出其它文字。',
     legacyCaseGenPrompt: '你是测试用例专家，针对单个测试模块生成 JSON 用例列表，每条用例字段：{module, title, priority, preconditions, steps, expected}，steps 为数组。priority 字段必须严格使用 P0/P1/P2（三选一），不要输出“高/中/低”等描述。结合模块的关键场景/测试要点/耦合模块，给出至少 3 条高质量用例。',
     defaultTempExecColumns: defaultTempExecColumns,
+    defaultPageGuideSwitches: defaultPageGuideSwitches,
     defaultSettings: defaultSettings,
     settingsKey: 'usecase-settings-v1',
     minModelTimeoutSec: 30,

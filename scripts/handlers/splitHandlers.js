@@ -9,6 +9,9 @@
     var splitViewContainer = dom.splitViewContainer;
     var toggleSplitViewBtn = dom.toggleSplitViewBtn;
     var splitStatus = dom.splitStatus;
+    var splitViewDrawerBody = dom.splitViewDrawerBody;
+    var splitViewDrawerTitle = dom.splitViewDrawerTitle;
+    var splitViewDrawer = null;
 
     var refreshMissingSmartFillButton = handlers.refreshMissingSmartFillButton;
     var updateFlowStatus = handlers.updateFlowStatus;
@@ -26,6 +29,24 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
     };
+
+    function ensureSplitDrawer() {
+      if (splitViewDrawer) return splitViewDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      splitViewDrawer = window.app.drawer.createDrawer({
+        drawerId: 'splitViewDrawer',
+        closeButtons: ['closeSplitViewDrawerBtn'],
+        onClose: function() {
+          if (splitViewContainer) {
+            splitViewContainer.classList.add('hidden');
+            splitViewContainer.classList.remove('visible');
+            splitViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“展开拆分视图”查看详情</p>';
+          }
+          if (toggleSplitViewBtn) toggleSplitViewBtn.textContent = '展开拆分视图';
+        },
+      });
+      return splitViewDrawer;
+    }
 
     function normalizeSplitList(value) {
       var normalize = function(val) {
@@ -98,6 +119,9 @@
         splitViewContainer.classList.add('hidden');
         splitViewContainer.classList.remove('visible');
         splitViewContainer.innerHTML = '<p class="hint" style="padding:12px;">暂无拆分数据，请先完成测试模块拆分</p>';
+        if (splitViewDrawer && splitViewDrawer.element && splitViewDrawer.element.classList.contains('open')) {
+          splitViewDrawer.close();
+        }
         return;
       }
       if (splitViewContainer.classList.contains('visible')) {
@@ -115,23 +139,24 @@
         setStatus(splitStatus, '暂无拆分数据，请先运行“测试模块拆分”', 'warn');
         return;
       }
+      var drawer = ensureSplitDrawer();
+      if (!drawer) return;
+      var isOpen = drawer.element && drawer.element.classList.contains('open');
+      if (isOpen) {
+        drawer.close();
+        return;
+      }
       var modules = typeof parseSplitModules === 'function' ? parseSplitModules() : [];
       if (!modules.length) {
         setStatus(splitStatus, '未解析到有效模块，请检查拆分 JSON 是否为数组且包含 module 字段', 'warn');
         return;
       }
-      var visible = splitViewContainer.classList.contains('visible');
-      if (visible) {
-        splitViewContainer.classList.remove('visible');
-        splitViewContainer.classList.add('hidden');
-        splitViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“展开拆分视图”查看详情</p>';
-        if (toggleSplitViewBtn) toggleSplitViewBtn.textContent = '展开拆分视图';
-      } else {
-        splitViewContainer.innerHTML = renderSplitViewTable(modules);
-        splitViewContainer.classList.add('visible');
-        splitViewContainer.classList.remove('hidden');
-        if (toggleSplitViewBtn) toggleSplitViewBtn.textContent = '收起拆分视图';
-      }
+      splitViewContainer.innerHTML = renderSplitViewTable(modules);
+      splitViewContainer.classList.add('visible');
+      splitViewContainer.classList.remove('hidden');
+      if (splitViewDrawerTitle) splitViewDrawerTitle.textContent = '拆分视图';
+      if (toggleSplitViewBtn) toggleSplitViewBtn.textContent = '收起拆分视图';
+      drawer.open();
     }
 
     if (splitResultEl) {

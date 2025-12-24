@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>登录 - 用例助手</title>
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml"/>
+  <link rel="stylesheet" href="./style.css"/>
+</head>
+<body class="login-body">
+  <div class="login-hero">
+    <div class="login-hero-content">
+      <p class="badge">Test Assistant Platform</p>
+      <h1>用例助手</h1>
+      <p class="subtitle">需求清洗、覆盖对比、用例生成与执行，一站式管理。请先登录后使用。</p>
+      <div class="login-highlights">
+        <span>AI 一键评审</span>
+        <span>覆盖率对比</span>
+        <span>用例生成</span>
+        <span>执行总览</span>
+      </div>
+    </div>
+  </div>
+  <div class="login-card">
+    <h2>登录</h2>
+    <form id="loginForm">
+      <label for="loginUsername">账号</label>
+      <input id="loginUsername" type="text" placeholder="请输入账号"/>
+      <label for="loginPassword">密码</label>
+      <input id="loginPassword" type="password" placeholder="请输入密码"/>
+      <p class="status" id="loginStatus"></p>
+      <button type="submit" id="loginSubmit">登录</button>
+      <button type="button" class="link-btn link-center" id="openChangePassword">修改密码</button>
+      <div class="change-password hidden" id="changePasswordPanel">
+        <label for="oldPassword">旧密码</label>
+        <input id="oldPassword" type="password" placeholder="请输入旧密码"/>
+        <label for="newPassword">新密码</label>
+        <input id="newPassword" type="password" placeholder="请输入新密码（至少8位）"/>
+        <label for="newPasswordConfirm">确认新密码</label>
+        <input id="newPasswordConfirm" type="password" placeholder="请再次输入新密码"/>
+        <p class="status" id="changePasswordStatus"></p>
+        <button type="button" class="primary" id="submitChangePassword">提交修改</button>
+      </div>
+    </form>
+  </div>
+  <script src="./services/apiClient.js"></script>
+  <script src="./scripts/modules/login.js"></script>
+</body>
+</html>

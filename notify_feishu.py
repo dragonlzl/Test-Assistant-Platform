@@ -10,6 +10,8 @@ import json
 import os
 import sys
 import ssl
+import socket
+import time
 import urllib.error
 import urllib.request
 
@@ -65,23 +67,41 @@ def load_webhook_from_config(config_path: str) -> str:
     return ""
 
 
+def build_error_hint(err: urllib.error.URLError) -> str:
+    """根据常见网络异常给出提示。"""
+    reason = getattr(err, "reason", None)
+    if isinstance(reason, socket.gaierror):
+        return "DNS 解析失败，可能未联网或需放行外网访问（沙箱环境需允许网络）。"
+    if isinstance(reason, socket.timeout):
+        return "请求超时，请检查网络连通性或代理配置。"
+    return ""
+
+
 def send_feishu_message(webhook_url: str, text: str):
-    """向飞书群机器人发送文本消息，返回 (status_code, response_body)。"""
+    """向飞书群机器人发送文本消息，返回 (status_code, response_body)，内置简单重试。"""
     payload = {
         "msg_type": "text",
         "content": {"text": text},
     }
     data = json.dumps(payload).encode("utf-8")
     ssl_context = build_ssl_context()
-    request = urllib.request.Request(
-        webhook_url,
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=10, context=ssl_context) as response:
-        body = response.read().decode("utf-8", errors="replace")
-        http_status = response.status
+    request = urllib.request.Request(webhook_url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    last_error = None
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=10, context=ssl_context) as response:
+                body = response.read().decode("utf-8", errors="replace")
+                http_status = response.status
+            break
+        except urllib.error.URLError as exc:  # 网络错误重试
+            last_error = exc
+            if attempt < 2:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            hint = build_error_hint(exc)
+            if hint:
+                raise urllib.error.URLError(f"{exc}; {hint}")
+            raise
 
     if http_status >= 300:
         raise RuntimeError(f"飞书返回状态码 {http_status}: {body}")

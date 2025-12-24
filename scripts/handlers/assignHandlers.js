@@ -7,13 +7,25 @@
     var setStatus = ctx.setStatus || function noopSetStatus() {};
     var downloadText = ctx.downloadText || function noopDownload() {};
     var dom = ctx.dom || {};
+    var cleanPromptEl = dom.cleanPromptEl || document.getElementById('cleanPrompt');
+    var reviewPromptEl = dom.reviewPromptEl || document.getElementById('reviewPrompt');
+    var comparePromptEl = dom.comparePromptEl || document.getElementById('comparePrompt');
+    var splitPromptEl = dom.splitPromptEl || document.getElementById('splitPrompt');
+    var casesPromptEl = dom.casesPromptEl || document.getElementById('casesPrompt');
+    var caseGenPromptEl = dom.caseGenPromptEl || document.getElementById('caseGenPrompt');
+    var caseFilterPromptEl = dom.caseFilterPromptEl || document.getElementById('caseFilterPrompt');
+    var defaultPromptStatus = dom.defaultPromptStatus || document.getElementById('defaultPromptStatus');
+    var saveDefaultPromptsBtn = dom.saveDefaultPromptsBtn || document.getElementById('saveDefaultPrompts');
+    var exportDefaultPromptsBtn = dom.exportDefaultPromptsBtn || document.getElementById('exportDefaultPrompts');
+    var importDefaultPromptsBtn = dom.importDefaultPromptsBtn || document.getElementById('importDefaultPrompts');
+    var importDefaultPromptsFile = dom.importDefaultPromptsFile || document.getElementById('importDefaultPromptsFile');
     if (!state.assignments || typeof state.assignments !== 'object') {
       state.assignments = {};
     }
     var assignments = state.assignments;
 
     function getStatusEl() {
-      return dom.defaultPromptStatus || null;
+      return defaultPromptStatus || null;
     }
 
     function setInputValue(el, value) {
@@ -32,13 +44,13 @@
 
     function buildCurrentPromptSnapshot() {
       return {
-        system: capturePromptValue(dom.cleanPromptEl, assignments.cleanPrompt, defaultPrompts.system),
-        review: capturePromptValue(dom.reviewPromptEl, assignments.reviewPrompt, defaultPrompts.review),
-        compare: capturePromptValue(dom.comparePromptEl, assignments.comparePrompt, defaultPrompts.compare),
-        split: capturePromptValue(dom.splitPromptEl, assignments.splitPrompt, defaultPrompts.split),
-        cases: capturePromptValue(dom.casesPromptEl, assignments.casesPrompt, defaultPrompts.cases),
-        casegen: capturePromptValue(dom.caseGenPromptEl, assignments.caseGenPrompt, defaultPrompts.casegen),
-        casefilter: capturePromptValue(dom.caseFilterPromptEl, assignments.caseFilterPrompt, defaultPrompts.casefilter),
+        system: capturePromptValue(cleanPromptEl, assignments.cleanPrompt, defaultPrompts.system),
+        review: capturePromptValue(reviewPromptEl, assignments.reviewPrompt, defaultPrompts.review),
+        compare: capturePromptValue(comparePromptEl, assignments.comparePrompt, defaultPrompts.compare),
+        split: capturePromptValue(splitPromptEl, assignments.splitPrompt, defaultPrompts.split),
+        cases: capturePromptValue(casesPromptEl, assignments.casesPrompt, defaultPrompts.cases),
+        casegen: capturePromptValue(caseGenPromptEl, assignments.caseGenPrompt, defaultPrompts.casegen),
+        casefilter: capturePromptValue(caseFilterPromptEl, assignments.caseFilterPrompt, defaultPrompts.casefilter),
       };
     }
 
@@ -78,13 +90,13 @@
         assignments.casesPrompt = defaultPrompts.cases;
         assignments.caseGenPrompt = defaultPrompts.casegen;
         assignments.caseFilterPrompt = defaultPrompts.casefilter;
-        setInputValue(dom.cleanPromptEl, assignments.cleanPrompt);
-        setInputValue(dom.reviewPromptEl, assignments.reviewPrompt);
-        setInputValue(dom.comparePromptEl, assignments.comparePrompt);
-        setInputValue(dom.splitPromptEl, assignments.splitPrompt);
-        setInputValue(dom.casesPromptEl, assignments.casesPrompt);
-        setInputValue(dom.caseGenPromptEl, assignments.caseGenPrompt);
-        if (dom.caseFilterPromptEl) setInputValue(dom.caseFilterPromptEl, assignments.caseFilterPrompt);
+        setInputValue(cleanPromptEl, assignments.cleanPrompt);
+        setInputValue(reviewPromptEl, assignments.reviewPrompt);
+        setInputValue(comparePromptEl, assignments.comparePrompt);
+        setInputValue(splitPromptEl, assignments.splitPrompt);
+        setInputValue(casesPromptEl, assignments.casesPrompt);
+        setInputValue(caseGenPromptEl, assignments.caseGenPrompt);
+        if (caseFilterPromptEl) setInputValue(caseFilterPromptEl, assignments.caseFilterPrompt);
       }
       return changed;
     }
@@ -139,6 +151,21 @@
         console.error(err);
         setStatus(getStatusEl(), '导入失败：' + (err && err.message ? err.message : '未知错误'), 'err');
       }
+    }
+
+    if (saveDefaultPromptsBtn && typeof saveDefaultPrompts === 'function') {
+      saveDefaultPromptsBtn.addEventListener('click', function() { saveDefaultPrompts(); });
+    }
+    if (exportDefaultPromptsBtn && typeof exportDefaultPrompts === 'function') {
+      exportDefaultPromptsBtn.addEventListener('click', function() { exportDefaultPrompts(); });
+    }
+    if (importDefaultPromptsBtn && importDefaultPromptsFile && typeof importDefaultPrompts === 'function') {
+      importDefaultPromptsBtn.addEventListener('click', function() { importDefaultPromptsFile.click(); });
+      importDefaultPromptsFile.addEventListener('change', async function(event) {
+        var file = event.target && event.target.files && event.target.files[0];
+        event.target.value = '';
+        if (file) await importDefaultPrompts(file);
+      });
     }
 
     return {

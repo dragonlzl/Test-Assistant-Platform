@@ -10,18 +10,32 @@ module.exports = defineConfig({
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090',
     headless: process.env.PLAYWRIGHT_HEADED ? false : true,
+    launchOptions: {
+      args: [
+        '--disable-crashpad',
+        '--disable-features=Crashpad',
+        '--no-sandbox',
+      ],
+      chromiumSandbox: false,
+    },
     actionTimeout: 10 * 1000,
     navigationTimeout: 15 * 1000,
+    acceptDownloads: true,
     trace: 'retain-on-failure',
+    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
   },
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        channel: undefined,
+        executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+      },
     },
   ],
   webServer: {
-    command: 'python3 -m http.server 8090',
+    command: 'python3 -m http.server 8090 --bind 127.0.0.1',
     cwd: path.join(__dirname, '..'),
     url: 'http://127.0.0.1:8090/index.html',
     reuseExistingServer: true,

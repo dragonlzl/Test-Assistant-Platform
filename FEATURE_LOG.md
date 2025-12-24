@@ -1,0 +1,2406 @@
+# 新增功能需求记录  
+
+> 用于登记已完成的新增功能及后续变更。同一需求有细节调整时，请同步更新对应条目。
+
+## 使用说明  
+- 完成新功能后立即添加记录，包含：功能描述、操作方式、使用效果、新增内容/接口、测试与验证摘要。  
+- 若同一需求后续有内容或细节修改，在原条目下追加“更新记录”或修改相关字段。  
+- 记录顺序：最新需求放最上方，便于查阅。  
+
+## 记录模板（复制后填写）  
+```
+- 功能名称：  
+- 功能描述：  
+- 操作方式：  
+- 使用效果：  
+- 新增内容/接口/组件：  
+- 复用说明：是否复用现有接口/组件？如未复用，说明原因  
+- 测试与验证：执行的 UI 自动化用例/结果，必要的人工验证  
+- 更新记录：如有后续变更，在此追加时间点与修改要点  
+```
+
+- 功能名称：用例生成进度面板收起/展开
+- 功能描述：左侧“用例生成进度”标题右侧新增收起按钮，支持折叠/展开进度列表。
+- 操作方式：在左侧“用例生成进度”标题右侧点击“收起/展开”按钮切换状态。
+- 使用效果：进度列表可折叠隐藏，标题行保持原位置与宽度，再次点击可恢复展开。
+- 新增内容/接口/组件：
+  - 前端：进度面板收起按钮与折叠逻辑（`index.html`、`style.css`、`scripts/handlers/casegenHandlers.js`、`config/domConfig.js`）。
+  - 测试：进度面板收起/展开 UI 用例（`tests/ui/casegen_db_store.spec.js`）。
+- 复用说明：复用用例生成进度面板结构与跳转逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/casegen_db_store.spec.js -g "进度面板支持收起与展开"`（通过，提权执行）
+- 更新记录：2025-12-24 新增用例生成进度面板收起/展开（`index.html`、`style.css`、`scripts/handlers/casegenHandlers.js`、`config/domConfig.js`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：一键执行/功能流程用例库导入
+- 功能描述：在一键执行与功能流程的用例导入区支持从用例库选择用例，并以抽屉形式筛选项目/版本/用例名后批量导入。
+- 操作方式：在“一键执行/功能流程”导入区点击“从用例库中选择”→ 选择项目与版本 → 输入用例名（可选）→ 点击“查询”→ 勾选用例或点击“选择”→ 点击“批量选择”或直接关闭抽屉。
+- 使用效果：选中的用例文件将导入到一键执行的用例导入列表，同时同步到功能流程的用例导入列表。
+- 新增内容/接口/组件：
+  - 前端：用例库选择抽屉与按钮样式（`index.html`、`style.css`）、导入逻辑与批量选择（`scripts/modules/caseLibrary.js`）、暴露用例导入 API（`scripts/modules/app.js`）。
+  - 测试：新增 UI 用例（`tests/ui/auto_case_library_import.spec.js`），补充 API 断言（`tests/api/case_library.spec.js`）。
+- 复用说明：复用用例库现有接口 `listCaseFiles`/`listCaseItems` 与抽屉样式，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/auto_case_library_import.spec.js`（未执行）
+  - `API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/case_library.spec.js -g "import/list/update/to-exec basic flow"`（未执行）
+- 更新记录：2025-12-24 新增一键执行/功能流程用例库导入（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`scripts/modules/app.js`、`tests/ui/auto_case_library_import.spec.js`、`tests/api/case_library.spec.js`）。
+- 更新记录：2025-12-24 一键执行导入用例库抽屉版本选择支持“全部版本”（`scripts/modules/caseLibrary.js`、`tests/ui/auto_case_library_import.spec.js`）。
+- 更新记录：2025-12-24 一键执行导入用例库抽屉按钮“选择”调整为“导入”，点击即导入并关闭，批量按钮改为“批量导入”（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/auto_case_library_import.spec.js`）。
+
+- 功能名称：用例复用切换确认抽屉
+- 功能描述：执行视图在存在执行记录时，开启/关闭“用例复用”由浏览器确认弹窗改为确认抽屉，保持二次确认行为。
+- 操作方式：在执行视图勾选/取消“用例复用”开关，若已有执行记录或复用子项，会弹出确认抽屉。
+- 使用效果：复用切换统一为抽屉确认，交互一致且可挂起当前页面操作。
+- 新增内容/接口/组件：
+  - 前端：复用切换确认抽屉（`scripts/core/tempexecCore.js`）。
+  - 测试：复用切换确认抽屉 UI 用例（`tests/ui/tempexec_search.spec.js`）。
+- 复用说明：复用既有确认抽屉组件，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_search.spec.js -g "复用切换存在执行记录时使用确认抽屉"`（通过）
+- 更新记录：2025-02-18 用例复用切换确认抽屉（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_search.spec.js`）。
+
+- 功能名称：执行分配版本盒子删除子项确认抽屉
+- 功能描述：执行分配页版本盒子内删除子项改为确认抽屉弹窗，并挂起当前打开的抽屉避免遮挡。
+- 操作方式：在执行分配页版本盒子中点击子项删除（×），在确认抽屉中确认或取消。
+- 使用效果：删除操作使用统一抽屉确认，且不会干扰当前打开的执行分配抽屉。
+- 新增内容/接口/组件：
+  - 前端：版本盒子子项删除改为确认抽屉（`scripts/modules/tempexec.js`）。
+  - 测试：执行分配版本盒子删除子项确认抽屉（`tests/ui/tempexec_project_layout.spec.js`）。
+- 复用说明：复用现有确认抽屉组件与执行分配流程，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_project_layout.spec.js -g "执行分配版本盒子删除子项使用确认抽屉"`（通过）
+- 更新记录：2025-02-18 执行分配版本盒子删除子项确认抽屉（`scripts/modules/tempexec.js`、`tests/ui/tempexec_project_layout.spec.js`）。
+
+- 功能名称：DeepSeek JSON 模式自动附加 response_format
+- 功能描述：模型指派选择 DeepSeek 时，模型调用会根据提示词包含 JSON 自动附加 response_format=json_object，并在 JSON 数组场景追加系统提示与严格校验，确保输出符合提示词格式。
+- 操作方式：在模型指派页选择 DeepSeek，并在提示词中要求输出 JSON（含 JSON 数组）后触发模型调用（清洗/对比/拆分等）。
+- 使用效果：DeepSeek 输出稳定为 JSON；当要求输出 JSON 数组时，结果需为数组格式。
+- 新增内容/接口/组件：
+  - 前端：DeepSeek JSON 模式 response_format + JSON 数组严格校验（`services/modelClient.js`）。
+  - 测试：DeepSeek JSON 模式请求体与数组校验（`tests/ui/model_response_strip.spec.js`）。
+- 复用说明：复用现有模型调用与提示词逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/model_response_strip.spec.js`（通过）
+- 更新记录：2025-02-18 DeepSeek JSON 模式自动附加 response_format（`services/modelClient.js`、`tests/ui/model_response_strip.spec.js`）。
+- 更新记录：2025-02-18 DeepSeek JSON 数组输出严格校验（`services/modelClient.js`、`tests/ui/model_response_strip.spec.js`）。
+
+- 功能名称：执行页多用户用例库变更同步修复  
+- 功能描述：多用户交替修改用例库后，执行页同步不再因历史混合时区导致 500，变更抽屉可展示完整 diff。  
+- 操作方式：A 修改 → B 刷新 → B 修改 → A 刷新 → B 刷新 → 点击“用例库变更”。  
+- 使用效果：变更抽屉可正常打开并展示完整 diff，不再提示 500。  
+- 新增内容/接口/组件：  
+  - 后端：用例库变更历史排序与时间戳兼容（`backend/routers/exec_routes.py`）。  
+  - 测试：API 用例新增（`tests/api/exec_case_library_sync.spec.js`）；UI 用例新增（`tests/ui/tempexec_case_library_multi_user.spec.js`）。  
+- 复用说明：复用既有同步接口与 diff 计算逻辑，无新增接口。  
+- 测试与验证：  
+  - `API_BASE_URL=http://127.0.0.1:8090 npm run test:api -- tests/api/exec_case_library_sync.spec.js -g "用例库同步支持混合时区时间戳|用例库历史排序兼容混合时区"`（通过）  
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 API_BASE_URL=http://127.0.0.1:8090 npm run test:ui -- tests/ui/tempexec_case_library_multi_user.spec.js`（通过）  
+- 更新记录：2025-02-18 执行页多用户用例库变更同步修复（`backend/routers/exec_routes.py`、`tests/api/exec_case_library_sync.spec.js`、`tests/ui/tempexec_case_library_multi_user.spec.js`）。  
+
+- 功能名称：用例库同步兼容混合时区时间戳  
+- 功能描述：执行页同步用例库时，统一使用安全时间戳比较，避免混合时区/空时间导致 500，保证 diff 正常返回。  
+- 操作方式：执行页点击“用例库变更”，或刷新执行页触发同步。  
+- 使用效果：同步接口稳定返回 diff，不再出现 500，变更抽屉可正常展示内容。  
+- 新增内容/接口/组件：  
+  - 后端：同步时间戳安全比较与 fallback（`backend/routers/exec_routes.py`）。  
+  - 测试：API 用例新增（`tests/api/exec_case_library_sync.spec.js`）。  
+- 复用说明：复用既有同步接口与 diff 计算逻辑，无新增接口。  
+- 测试与验证：  
+  - `API_BASE_URL=http://127.0.0.1:8090 npm run test:api -- tests/api/exec_case_library_sync.spec.js -g "用例库同步支持混合时区时间戳"`（通过）  
+- 更新记录：2025-02-18 用例库同步兼容混合时区时间戳（`backend/routers/exec_routes.py`、`tests/api/exec_case_library_sync.spec.js`）。  
+
+- 功能名称：执行页用例库变更按钮支持重试同步  
+- 功能描述：执行页首次同步失败或未拿到 diff 元数据时，仍可点击“用例库变更”按钮触发重试同步并打开 diff 抽屉，避免多用户刷新后按钮不可点。  
+- 操作方式：在执行页点击“用例库变更”按钮（同步失败/未完成时也可点击）。  
+- 使用效果：按钮保持可点击，触发同步后展示用例库变更明细。  
+- 新增内容/接口/组件：  
+  - 前端：执行页用例库变更按钮重试与同步兜底（`scripts/core/tempexecCore.js`）。  
+  - 测试：UI 用例新增（`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 复用说明：复用既有用例库同步与 diff 抽屉逻辑，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_case_library_changes.spec.js -g "用例库同步失败时：变更按钮仍可点击并触发重试"`（通过）  
+- 更新记录：2025-02-18 执行页用例库变更按钮支持重试同步（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 更新记录：2025-02-18 手动点击立即打开抽屉并同步最新变更（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+
+- 功能名称：归档用例自动移除专注区  
+- 功能描述：执行视图归档用例后，若该用例在专注区，会自动从专注区移除。  
+- 操作方式：在执行视图/归档总览归档用例。  
+- 使用效果：已归档用例不再出现在专注区，避免误操作。  
+- 新增内容/接口/组件：  
+  - 前端：归档后同步清理专注区（`scripts/modules/tempexec.js`）。  
+  - 测试：UI 用例（`tests/ui/tempexec_archive_stay_project.spec.js`）。  
+- 复用说明：复用现有归档流程与专注区渲染逻辑，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/modules/tempexec.js`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_archive_stay_project.spec.js -g "归档后自动移除专注区用例"`（通过）  
+- 更新记录：2025-12-22 归档用例自动移除专注区（`scripts/modules/tempexec.js`、`tests/ui/tempexec_archive_stay_project.spec.js`）。  
+
+- 功能名称：执行总览 NA 标识改为不适用  
+- 功能描述：执行总览页版本总览与执行集统计中，原 “NA” 标识改为 “不适用”，解释更清晰。  
+- 操作方式：进入执行总览页，查看版本总览/执行集统计。  
+- 使用效果：蓝色 “NA” 显示为 “不适用”，避免误解。  
+- 新增内容/接口/组件：  
+  - 前端：执行总览统计展示（`scripts/modules/execOverview.js`）。  
+  - 测试：UI 用例（`tests/ui/exec_overview.spec.js`）。  
+- 复用说明：复用既有统计与样式组件，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/modules/execOverview.js`（通过）  
+  - `npm run test:ui -- tests/ui/exec_overview.spec.js -g "版本总览 NA 标识展示为不适用"`（首次失败：index.html 空响应；重跑通过）  
+- 更新记录：2025-12-22 执行总览 NA 标识改为不适用（`scripts/modules/execOverview.js`、`tests/ui/exec_overview.spec.js`）。  
+
+- 功能名称：执行视图新增待确认期间阻止连续操作  
+- 功能描述：执行视图新增用例进入 8 秒待确认期后，继续新增或删除均会被阻止，删除/新增组合操作不再累计撤回数量。  
+- 操作方式：执行视图点击“＋”插入空用例后，再次点击“＋”或点击“−”删除。  
+- 使用效果：第二次操作提示阻塞，不会增加待撤回数量或触发删除确认。  
+- 新增内容/接口/组件：  
+  - 前端：新增待确认期阻塞逻辑（`scripts/core/tempexecCore.js`）。  
+  - 测试：UI 用例（`tests/ui/tempexec_search.spec.js`）。  
+- 复用说明：复用执行视图撤回计时与阻塞提示逻辑，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_search.spec.js -g "执行视图(删除待确认期间阻止连续删除|新增待确认期间阻止新增与删除)"`（首次失败：app 初始化超时；重跑见下）  
+  - `npm run test:ui -- tests/ui/tempexec_search.spec.js -g "执行视图新增待确认期间阻止新增与删除"`（通过）  
+- 更新记录：2025-12-22 执行视图新增待确认期间阻止连续操作（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_search.spec.js`）。  
+
+- 功能名称：执行视图删除待确认期间阻止连续删除  
+- 功能描述：执行视图点击“-”删除用例后，8 秒待确认期内再次删除会被阻止，删除计数不增加，与用例库一致。  
+- 操作方式：执行视图删除一条用例后，在 8 秒内再点另一条删除按钮。  
+- 使用效果：第二次点击提示阻塞但不进入删除流程，撤回计数保持不变。  
+- 新增内容/接口/组件：  
+  - 前端：删除待确认期拦截（`scripts/core/tempexecCore.js`）。  
+  - 测试：UI 用例（`tests/ui/tempexec_search.spec.js`）。  
+- 复用说明：复用执行视图撤回计时与阻塞提示逻辑，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_search.spec.js -g "执行视图删除待确认期间阻止连续删除"`（通过）  
+- 更新记录：2025-12-22 执行视图删除待确认期间阻止连续删除（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_search.spec.js`）。  
+
+- 功能名称：登录 token 过期延长至 7 天  
+- 功能描述：登录成功后颁发的 access token 有效期由 8 小时延长至 7 天。  
+- 操作方式：正常登录获取 token，后端返回的 expires_at 距登录时间约 7 天。  
+- 使用效果：减少频繁重新登录的打断。  
+- 新增内容/接口/组件：  
+  - 后端：登录 token TTL 调整（`backend/routers/auth.py`）。  
+  - 测试：UI 用例（`tests/ui/auth_login_expiry.spec.js`）；API 用例（`tests/api/auth_login_expiry.spec.js`）。  
+- 复用说明：复用 `generate_token` 与现有登录接口，无新增接口。  
+- 测试与验证：  
+  - `npm run test:ui -- tests/ui/auth_login_expiry.spec.js`（通过）  
+  - `APP_DB_FILE=apitest.db python3.12 -m uvicorn backend.main:app --host 127.0.0.1 --port 18082` 后执行 `API_BASE_URL=http://127.0.0.1:18082 npm run test:api -- tests/api/auth_login_expiry.spec.js`（通过）  
+- 更新记录：2025-12-22 登录 token 过期延长至 7 天（`backend/routers/auth.py`、`tests/ui/auth_login_expiry.spec.js`、`tests/api/auth_login_expiry.spec.js`）。  
+
+- 功能名称：执行视图复用/缺陷删除确认抽屉化  
+- 功能描述：执行视图中复用测试项与缺陷链接删除的二次确认由浏览器弹窗改为右侧确认抽屉。  
+- 操作方式：在执行视图点击复用测试项/缺陷链接的“删除” → 抽屉确认删除。  
+- 使用效果：确认交互统一为抽屉，避免浏览器弹窗打断。  
+- 新增内容/接口/组件：  
+  - 前端：复用/缺陷删除改为确认抽屉（`scripts/core/tempexecCore.js`）。  
+  - 测试：更新 UI 用例（`tests/ui/tempexec_search.spec.js`）。  
+- 复用说明：复用通用确认抽屉组件 `appConfirmDrawer`，无新增接口。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/tempexec_search.spec.js`（通过）。  
+- 更新记录：2025-12-22 执行视图复用/缺陷删除确认抽屉化（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_search.spec.js`）。  
+
+- 功能名称：页面说明登录后尊重设置开关  
+- 功能描述：当“页面说明”开关在设置中关闭时，重新登录不再自动弹出对应页面说明。  
+- 操作方式：在设置中取消页面说明勾选 → 重新登录系统。  
+- 使用效果：登录后仅对开启的页面说明自动弹出，避免被动弹窗干扰。  
+- 新增内容/接口/组件：  
+  - 前端：设置加载完成标记与事件派发（`scripts/modules/settings.js`）、页面说明自动弹出等待设置就绪（`scripts/modules/pageGuide.js`）。  
+  - 测试：UI 用例新增（`tests/ui/page_guide_drawer.spec.js`）。  
+- 复用说明：复用现有设置加载与页面说明抽屉组件，无新增接口。  
+- 测试与验证：`node --check scripts/modules/settings.js scripts/modules/pageGuide.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/page_guide_drawer.spec.js`（通过）。  
+- 更新记录：2025-12-22 页面说明登录后尊重设置开关（`scripts/modules/settings.js`、`scripts/modules/pageGuide.js`、`tests/ui/page_guide_drawer.spec.js`）。  
+
+- 功能名称：执行页用例删除确认抽屉化  
+- 功能描述：执行页“−”删除用例的确认由浏览器弹窗改为右侧确认抽屉。  
+- 操作方式：在执行页点击用例行“−”删除按钮 → 抽屉确认删除。  
+- 使用效果：确认交互与其他操作一致，避免浏览器弹窗打断。  
+- 新增内容/接口/组件：  
+  - 前端：执行页删除用例改用确认抽屉（`scripts/core/tempexecCore.js`、`scripts/modules/app.js`）。  
+  - 测试：更新 UI 用例（`tests/ui/tempexec_search.spec.js`）。  
+- 复用说明：复用通用确认抽屉组件 `appConfirmDrawer`，无新增接口。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/app.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/tempexec_search.spec.js`（通过）。  
+- 更新记录：2025-12-22 执行页用例删除确认抽屉化（`scripts/core/tempexecCore.js`、`scripts/modules/app.js`、`tests/ui/tempexec_search.spec.js`）。  
+
+- 功能名称：侧边栏页面路径可点击跳转  
+- 功能描述：左侧导航面板“页面路径”区域支持点击路径项进行跳转，并在执行页路径子项点击后打开对应抽屉/视图。  
+- 操作方式：在“页面路径”中点击路径项（如“执行分配”）即可跳转到对应页面或视图。  
+- 使用效果：路径区域可作为快捷导航，提升页面内跳转效率。  
+- 新增内容/接口/组件：  
+  - 前端：路径项渲染与点击跳转逻辑（`scripts/core/appRuntime.js`）、执行页路径子项跳转响应（`scripts/modules/tempexec.js`）、路径项可点击样式（`style.css`）。  
+  - 测试：UI 用例更新（`tests/ui/sidebar_path.spec.js`）。  
+- 复用说明：复用现有页签切换/抽屉组件，无新增接口。  
+- 测试与验证：`node --check scripts/core/appRuntime.js scripts/modules/tempexec.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/sidebar_path.spec.js`（通过）。  
+- 更新记录：2025-12-22 侧边栏路径点击跳转（`scripts/core/appRuntime.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/sidebar_path.spec.js`）。  
+
+- 功能名称：卡片收起三角标识移除  
+- 功能描述：各页面卡片标题右上角小三角收起标识与点击折叠能力移除，卡片内容保持展开。  
+- 操作方式：无需操作；点击卡片标题不再触发收起。  
+- 使用效果：避免误收起造成困惑，页面内容始终可见。  
+- 新增内容/接口/组件：  
+  - 前端：移除卡片标题折叠样式与交互（`style.css`、`scripts/handlers/layoutHandlers.js`）。  
+  - 测试：更新 UI 用例（`tests/ui/layout_persistence.spec.js`）。  
+- 复用说明：复用现有卡片结构与布局逻辑，无新增组件或接口。  
+- 测试与验证：`node --check scripts/handlers/layoutHandlers.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/layout_persistence.spec.js`（通过）。  
+- 更新记录：2025-12-22 卡片收起三角标识移除（`style.css`、`scripts/handlers/layoutHandlers.js`、`tests/ui/layout_persistence.spec.js`）。  
+
+- 功能名称：主要功能页面使用说明抽屉与开关  
+- 功能描述：AI 一键评审、功能工作流、用例生成、功能指派、模型管理、用例执行、用例库、用例归档、执行总览新增自动弹出的页面说明抽屉，内容包含功能简介/操作流程/必要说明；执行相关流程以“*”突出关键步骤，并提示可在设置中关闭。  
+- 操作方式：进入上述页面会自动弹出说明抽屉；在“设置 → 其他设置”中按页面勾选/关闭；切换到其他页面再返回会重新弹出，刷新当前页不触发。  
+- 使用效果：新用户进入页面即可获得功能指引，提示可按账号独立关闭，避免重复打扰。  
+- 新增内容/接口/组件：  
+  - 前端：新增说明抽屉与设置项（`index.html`、`style.css`、`scripts/modules/pageGuide.js`、`scripts/modules/settings.js`、`scripts/modules/app.js`、`config/constants.js`、`scripts/base/state.js`）。  
+  - 测试：UI 用例（`tests/ui/page_guide_drawer.spec.js`）；API 用例更新（`tests/api/settings_models.spec.js`）。  
+- 复用说明：复用现有 drawer 组件与 `/api/settings` 持久化，无新增后端接口。  
+- 测试与验证：`node --check scripts/modules/pageGuide.js scripts/modules/settings.js scripts/base/state.js scripts/modules/app.js`（通过）；`npm run test:ui -- tests/ui/page_guide_drawer.spec.js`（通过）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18083` 后执行 `API_BASE_URL=http://127.0.0.1:18083 npm run test:api -- tests/api/settings_models.spec.js`（通过）。  
+- 更新记录：2025-12-22 主要功能页面说明抽屉与设置开关（`index.html`、`style.css`、`scripts/modules/pageGuide.js`、`scripts/modules/settings.js`、`scripts/modules/app.js`、`config/constants.js`、`scripts/base/state.js`、`tests/`）。  
+- 更新记录：2025-12-22 页面说明设置新增全选/全取消并优化布局展示（`index.html`、`style.css`、`scripts/modules/settings.js`、`tests/ui/page_guide_drawer.spec.js`）。  
+
+- 功能名称：工作流/自动评审/用例生成数据持久化与导入确认  
+- 功能描述：用例生成、AI 一键需求&用例评审、功能工作流页面的核心输入与生成结果持久化；导入新需求时若页面已有数据，弹出确认抽屉提示清空并在确认后重置所有模块数据（含用例生成）。  
+- 操作方式：导入/输入需求并执行流程 → 刷新页面数据自动恢复；再次导入新需求时出现“清空提示”抽屉，确认后重新导入并清空旧数据。  
+- 使用效果：刷新不丢失工作流数据；避免误覆盖已有流程结果，确认后可安全导入新需求。  
+- 新增内容/接口/组件：  
+  - 前端：新增工作流持久化 key 与用户切换清理（`config/constants.js`、`scripts/modules/authGuard.js`）；工作流数据持久化/恢复与监听（`scripts/core/appRuntime.js`）；导入确认与数据清空逻辑（`scripts/modules/app.js`、`scripts/modules/upload.js`）；各模块触发持久化（`scripts/handlers/cleanHandlers.js`、`scripts/core/reviewCore.js`、`scripts/modules/auto.js`、`scripts/modules/casesgen.js`、`scripts/core/casegenCore.js`、`scripts/core/casesGenCore.js`）。  
+  - 测试：新增 UI 用例 `tests/ui/workflow_persistence_import_guard.spec.js`。  
+- 复用说明：复用通用确认抽屉与本地存储服务，无新增后端接口。  
+- 测试与验证：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js scripts/core/appRuntime.js scripts/core/casegenCore.js scripts/core/casesGenCore.js scripts/core/reviewCore.js scripts/handlers/cleanHandlers.js scripts/modules/auto.js scripts/modules/casesgen.js scripts/modules/upload.js`（通过）；UI 用例未执行。  
+- 更新记录：2025-12-20 工作流/自动评审/用例生成持久化与导入确认（`config/constants.js`、`scripts/modules/authGuard.js`、`scripts/modules/app.js`、`scripts/modules/upload.js`、`scripts/core/appRuntime.js`、`scripts/handlers/cleanHandlers.js`、`scripts/core/reviewCore.js`、`scripts/modules/auto.js`、`scripts/modules/casesgen.js`、`scripts/core/casegenCore.js`、`scripts/core/casesGenCore.js`、`tests/ui/workflow_persistence_import_guard.spec.js`）。  
+- 更新记录：2025-12-20 补齐用例覆盖对比缺失勾选持久化与用例生成进度恢复（`scripts/core/appRuntime.js`、`scripts/core/compareCore.js`、`scripts/core/autoCore.js`、`scripts/modules/app.js`、`tests/ui/workflow_persistence_import_guard.spec.js`）。  
+- 更新记录：2025-12-20 用例生成入库前全模块视图勾选后自动续接入库抽屉（`scripts/core/casesGenCore.js`、`tests/ui/casegen_db_store.spec.js`）。  
+- 更新记录：2025-12-20 用例覆盖对比结果写入时立即持久化避免刷新丢失（`scripts/core/compareCore.js`）。  
+
+- 功能名称：操作记录数量变化展示  
+- 功能描述：操作记录查看记录抽屉新增“数量变化”列，覆盖入库/追加/子项增删改/转执行/归档/解散等行为展示用例数量前后变化，未提供数量的行为显示“-”。  
+- 操作方式：操作记录 → 点击“查看记录” → 在列表中查看“数量变化”列。  
+- 使用效果：管理员可快速掌握用例数量变更前后差异，便于追溯入库/删除/解散等操作影响。  
+- 新增内容/接口/组件：  
+  - 前端：操作记录抽屉表格新增数量变化列与渲染逻辑（`index.html`、`scripts/modules/opsLog.js`）；批量新增/删除与解散归档日志补充数量字段（`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`）。  
+  - 后端：用例入库/追加/子项增删改与执行归档/解散日志补充 before/after 数量字段（`backend/routers/cases.py`、`backend/routers/exec_routes.py`）。  
+  - 测试：更新 UI 用例 `tests/ui/ops_log.spec.js`、API 用例 `tests/api/ops_log.spec.js`。  
+- 复用说明：复用既有操作记录接口与抽屉列表渲染逻辑，仅扩展日志 detail 字段与展示。  
+- 测试与验证：`node --check scripts/modules/opsLog.js scripts/modules/caseLibrary.js scripts/modules/tempexec.js`（通过）；UI/API 用例已补充，未执行。  
+- 更新记录：2025-12-20 操作记录数量变化列与日志字段补充（`index.html`、`scripts/modules/opsLog.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`、`backend/routers/cases.py`、`backend/routers/exec_routes.py`、`tests/ui/ops_log.spec.js`、`tests/api/ops_log.spec.js`）。  
+- 更新记录：2025-12-20 调整“修改/转执行”数量展示为具体数量（`scripts/modules/opsLog.js`、`tests/ui/ops_log.spec.js`）。  
+- 更新记录：2025-12-20 转执行日志补充 transfer_count 避免数量为 0（`backend/routers/exec_routes.py`、`tests/ui/ops_log.spec.js`）。  
+
+- 功能名称：操作记录用例贡献视图  
+- 功能描述：操作记录页新增用例贡献入口与贡献视图，支持选择人员、时间范围与用例操作行为（导入/新增/删除），按去重导入、完整新增/删除规则统计贡献并以柱状图展示。  
+- 操作方式：操作记录 → 点击“用例贡献视图” → 选择人员 → 确认 → 在贡献视图内按时间/行为筛选查看。  
+- 使用效果：管理员可快速对比成员用例导入、新增与删除贡献情况。  
+- 新增内容/接口/组件：  
+  - 前端：新增用例贡献入口/抽屉/视图卡片与统计逻辑（`index.html`、`scripts/modules/opsLog.js`）；配置新增持久化 Key（`config/constants.js`）。  
+  - 后端：用例增删改操作日志补充完整度标记与字段（`backend/routers/cases.py`）。  
+- 复用说明：复用活跃度视图样式与操作记录接口，不新增页面级框架组件。  
+- 测试与验证：未运行自动化测试（仅新增 UI 与统计逻辑）。  
+- 更新记录：2025-12-20 操作记录新增用例贡献视图与统计逻辑（`index.html`、`scripts/modules/opsLog.js`、`config/constants.js`、`backend/routers/cases.py`）。  
+- 更新记录：2025-12-20 追加入库计入新增贡献并补充完整度统计（`scripts/modules/opsLog.js`、`backend/routers/cases.py`）。  
+- 更新记录：2025-12-20 用例贡献与活跃度视图分离展示（`index.html`、`scripts/modules/opsLog.js`）。  
+- 更新记录：2025-12-20 删除用例贡献统计覆盖批量/整份删除且按完整字段计数（`scripts/modules/opsLog.js`、`backend/routers/cases.py`）。  
+
+- 功能名称：用例库查看&编辑更换版本  
+- 功能描述：用例库“查看&编辑”抽屉工具栏新增更换版本行，勾选用例后可选择目标版本并二次确认，一键更新所选用例所属版本。  
+- 操作方式：进入用例库 → 打开“查看&编辑”抽屉 → 勾选用例 → 选择“更换版本” → 确认更换版本 → 抽屉二次确认。  
+- 使用效果：支持在同一项目内批量调整用例版本，避免反复导入。  
+- 新增内容/接口/组件：  
+  - 前端：查看&编辑抽屉新增更换版本行与交互（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`）；操作记录动作补充（`scripts/modules/opsLog.js`）；API 封装（`services/apiClient.js`）。  
+  - 后端：新增 `POST /api/case-files/change-version`（`backend/routers/cases.py`、`backend/schemas.py`）。  
+  - 测试：新增 API 用例 `tests/api/case_library_change_version.spec.js`，更新 UI 用例 `tests/ui/case_library.spec.js`。  
+- 复用说明：复用通用确认抽屉与既有项目/版本列表，不新增前端框架型组件。  
+- 测试与验证：  
+  - `node --check scripts/modules/caseLibrary.js scripts/modules/opsLog.js services/apiClient.js`（通过）  
+  - `npm run test:ui -- tests/ui/case_library.spec.js --workers=1`（通过）  
+  - `APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080` 后执行 `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/case_library_change_version.spec.js`（通过）  
+- 更新记录：2025-12-20 用例库查看&编辑更换版本上线（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`services/apiClient.js`、`backend/routers/cases.py`、`backend/schemas.py`、`scripts/modules/opsLog.js`、`tests/api/case_library_change_version.spec.js`、`tests/ui/case_library.spec.js`）。  
+- 更新记录：2025-12-20 查看&编辑抽屉工具栏分区布局（`index.html`、`style.css`）。  
+- 更新记录：2025-12-20 更换版本选择框样式优化（`style.css`）。  
+- 更新记录：2025-12-20 查看&编辑列表操作按钮文案与主色统一（`scripts/modules/caseLibrary.js`）。  
+- 更新记录：2025-12-20 查看&编辑列表操作按钮文案保持横向展示（`style.css`）。  
+- 更新记录：2025-12-20 查看&编辑分区标题显示“搜索过滤/全局操作”（`index.html`、`style.css`）。  
+
+- 功能名称：用例库共享用例  
+- 功能描述：用例库“查看&编辑”抽屉的操作列新增共享入口，打开共享抽屉选择目标项目/版本并二次确认；共享后在目标项目入库一份新的用例；若目标项目存在清洗后的同名用例则阻止共享并提示。  
+- 操作方式：进入用例库 → 打开“查看&编辑”抽屉 → 点击用例行的“共享” → 选择目标项目与版本 → 确认共享 → 抽屉二次确认。  
+- 使用效果：支持跨项目/版本复制用例文件；非管理员在共享抽屉内可查看全部项目；重复同名时 5 秒悬浮提示“该项目已有此用例…”。  
+- 新增内容/接口/组件：  
+  - 前端：共享抽屉结构（`index.html`）、列表操作按钮与共享逻辑（`scripts/modules/caseLibrary.js`）、操作列样式（`style.css`）、API 封装 `shareCaseFile` 与项目/版本全量查询参数（`services/apiClient.js`）。  
+  - 后端：`POST /api/case-files/share` 共享入库；项目/版本列表支持 `scope=share`（`backend/routers/cases.py`、`backend/routers/projects.py`、`backend/schemas.py`）。  
+  - 测试：新增 API 用例 `tests/api/case_library_share.spec.js` 与 UI 用例 `tests/ui/case_library_share.spec.js`。  
+- 复用说明：复用用例库清洗/入库结构与通用确认抽屉，不新增前端框架型组件。  
+- 测试与验证：  
+  - `node --check scripts/modules/caseLibrary.js services/apiClient.js`（通过）  
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8080` 后执行 `API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/case_library_share.spec.js`（通过）  
+  - `npm run test:ui -- tests/ui/case_library_share.spec.js --workers=1`（通过，需放开本地端口权限）  
+  - `npm run test:ui -- tests/ui/case_library.spec.js --workers=1`（通过）  
+- 更新记录：2025-12-20 用例库共享用例与重复拦截提示上线（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`services/apiClient.js`、`backend/routers/cases.py`、`backend/routers/projects.py`、`backend/schemas.py`、`tests/api/case_library_share.spec.js`、`tests/ui/case_library_share.spec.js`）。  
+- 更新记录：2025-12-20 归属默认改为全部并新增“其他项目导入”筛选（`scripts/modules/caseLibrary.js`、`backend/routers/cases.py`、`backend/schemas.py`、`tests/ui/case_library.spec.js`）。  
+- 更新记录：2025-12-20 共享入口移至全局操作并支持多选共享结果汇总提示（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_share.spec.js`）。  
+
+- 功能名称：执行视图顶部切换与快捷归档  
+- 功能描述：用例执行页顶部工具栏新增上一份/下一份循环切换按钮与归档按钮；归档流程复用“归档操作&进度预览”逻辑（含未通过原因抽屉/通过确认），归档成功后自动切换到下一份用例。  
+- 操作方式：进入用例执行 → 在顶部工具栏点击“上一份/下一份”切换用例 → 点击“归档”按提示确认或填写原因后归档并自动跳到下一份。  
+- 使用效果：不离开执行视图即可连续切换与归档，减少抽屉切换与页面跳转，提高处理效率。  
+- 新增内容/接口/组件：  
+  - 前端：工具栏切换/归档按钮与顺序计算（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`），样式补充（`style.css`）。  
+  - 测试：UI 用例覆盖切换与归档后自动切换（`tests/ui/tempexec_archive_stay_project.spec.js`）。  
+- 复用说明：复用现有归档抽屉与归档接口逻辑，不新增后端接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_archive_stay_project.spec.js --workers=1`（通过）  
+- 更新记录：2025-12-19 执行视图顶部切换/归档按钮上线（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_archive_stay_project.spec.js`）。  
+- 更新记录：2025-12-19 工具栏搜索/归档移至下一行左侧，归档成功提示缩短为 3 秒（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`）。  
+- 更新记录：2025-12-19 用例执行顶部导航新增“用例库”入口（`index.html`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_entry.spec.js`）。  
+- 更新记录：2025-12-19 上一份/下一份按钮调整至归档同一行并置于左侧（`scripts/core/tempexecCore.js`）。  
+- 更新记录：2025-12-19 工具栏按钮分列：搜索左、切换中、归档右（`scripts/core/tempexecCore.js`、`style.css`）。  
+- 更新记录：2025-12-19 用例切换按钮前补充“用例切换：”说明（`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：用例库转执行确认抽屉与总览归档置底  
+- 功能描述：  
+  - 用例库转到执行时若已存在执行记录，二次确认由浏览器弹窗改为右侧确认抽屉，并支持挂起上层抽屉；批量转执行同样改为抽屉确认。  
+  - 用例执行个人总览（项目/版本盒子）中归档用例自动置底，避免归档项混在执行中的用例之间。  
+- 操作方式：  
+  - 用例库：选择单条/批量转到执行 → 若存在执行记录，抽屉提示“继续转到执行/取消”。  
+  - 用例执行：打开“归档操作&进度预览”→ 归档成功后在版本盒子内查看归档条目置底。  
+- 使用效果：确认交互与其他抽屉统一，减少浏览器弹窗打断；总览中归档条目始终靠后，执行中的用例更易查看。  
+- 新增内容/接口/组件：  
+  - 前端：转执行确认改为确认抽屉并完善同名冲突识别（`scripts/modules/caseLibrary.js`）；个人总览版本盒子内归档置底排序（`scripts/core/tempexecCore.js`）。  
+  - 测试：更新/新增 UI 用例覆盖转执行确认抽屉与归档置底（`tests/ui/case_library.spec.js`、`tests/ui/tempexec_overview_project_style.spec.js`）。  
+- 复用说明：复用通用确认抽屉组件与现有执行总览布局逻辑，无新增后端接口。  
+- 测试与验证：  
+  - `node --check scripts/modules/caseLibrary.js scripts/core/tempexecCore.js`（通过）  
+  - `npm run test:ui -- tests/ui/case_library.spec.js --workers=1`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_overview_project_style.spec.js`（通过）  
+- 更新记录：2025-12-19 用例库转执行确认抽屉与个人总览归档置底上线（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`tests/ui/case_library.spec.js`、`tests/ui/tempexec_overview_project_style.spec.js`）。  
+
+- 功能名称：执行总览版本总览盒子  
+- 功能描述：在执行总览项目区顶部新增“版本总览”盒子，汇总同项目各版本的总体进度（跨所有执行人、包含归档数据）；版本按最新到最旧排序，超出显示条数自动滚动；解散人员会动态更新汇总，全部解散/无数据时汇总消失。  
+- 操作方式：进入“执行总览”→选择项目→在个人分区上方查看版本总览；切换版本筛选时总览仍展示所有版本汇总。  
+- 使用效果：无需进入个人分区即可快速掌握项目各版本整体进度，汇总条目随执行/解散变化实时更新。  
+- 新增内容/接口/组件：  
+  - 前端：版本总览结构与样式（`index.html`、`style.css`）、版本汇总计算与渲染（`scripts/modules/execOverview.js`）。  
+  - 测试：UI 用例更新（`tests/ui/exec_overview.spec.js`）。  
+- 复用说明：复用执行总览接口 `/api/exec/overview/layout` 与现有进度条/统计组件逻辑，无新增后端接口。  
+- 测试与验证：  
+  - `node --check scripts/modules/execOverview.js`（通过）  
+  - `npx playwright test --config tests/playwright.config.js tests/ui/exec_overview.spec.js`（通过）  
+- 更新记录：2025-12-19 执行总览版本总览盒子上线（`index.html`、`style.css`、`scripts/modules/execOverview.js`、`tests/ui/exec_overview.spec.js`）。  
+- 更新记录：2025-12-19 执行总览版本筛选同步过滤版本总览汇总（`scripts/modules/execOverview.js`、`tests/ui/exec_overview.spec.js`）。  
+
+- 功能名称：操作记录活跃度视图  
+- 功能描述：在“操作记录”导航新增“活跃度视图”入口，抽屉选择人员并支持全选；选择后在主页面展示按操作行为分段的横向柱状图，按人员总操作次数排序；支持历史至今/年/月/周/日时间过滤与行为过滤；视图与筛选持久化。  
+- 操作方式：进入“操作记录”→点击“活跃度视图”→抽屉勾选人员并确认→在页面查看活跃度；可切换时间范围与行为筛选，点击“选择人员”重新调整。  
+- 使用效果：直观展示人员活跃度与行为分布，鼠标悬停图块查看具体行为与次数，视图不会溢出页面。  
+- 新增内容/接口/组件：  
+  - 前端：活跃度入口/抽屉与视图结构（`index.html`）、样式（`style.css`）、活跃度计算/过滤/持久化（`scripts/modules/opsLog.js`）、持久化配置与用户切换清理（`config/constants.js`、`scripts/modules/authGuard.js`）。  
+  - 测试：UI 用例 `tests/ui/ops_activity.spec.js`，API 用例更新 `tests/api/ops_log.spec.js`。  
+- 复用说明：复用既有操作记录列表接口 `/api/ops` 与人员列表 `/api/users`，复用通用抽屉机制，无新增后端接口。  
+- 测试与验证：  
+  - `node --check scripts/modules/opsLog.js scripts/modules/authGuard.js`（通过）  
+  - `npx playwright test --config tests/playwright.config.js tests/ui/ops_activity.spec.js`（通过）  
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8080` 后执行 `npx playwright test --config tests/api/playwright.api.config.js tests/api/ops_log.spec.js`（通过）  
+- 更新记录：2025-12-19 操作记录活跃度视图上线（`index.html`、`style.css`、`scripts/modules/opsLog.js`、`config/constants.js`、`scripts/modules/authGuard.js`、`tests/ui/ops_activity.spec.js`、`tests/api/ops_log.spec.js`）。  
+- 更新记录：2025-12-19 优化活跃度视图布局与柱状图比例展示（`index.html`、`style.css`、`scripts/modules/opsLog.js`）。  
+- 更新记录：2025-12-19 调整活跃度标题/已选人员布局与柱图长度显示（`index.html`、`style.css`、`scripts/modules/opsLog.js`）。  
+- 更新记录：2025-12-19 统一已选人员展示与按钮样式，移除柱内数字标签（`index.html`、`style.css`、`scripts/modules/opsLog.js`）。  
+
+- 功能名称：执行分配/项目管理删除确认抽屉化与居中提示  
+- 功能描述：执行分配页版本盒子“×”关闭版本（包含归档占位时提示解散归档）与项目管理删除版本的确认弹窗统一改为抽屉；解散归档占位与删除版本成功后均显示 3 秒居中提示。  
+- 操作方式：  
+  - 执行分配页：版本盒子点击“×”→抽屉确认关闭版本（含归档占位提示）→确认后解散归档占位并提示。  
+  - 项目管理：版本列表点击“删除”→抽屉确认删除→若版本占用需输入转移版本名并二次抽屉确认→删除成功提示。  
+- 使用效果：避免浏览器弹窗打断，删除/解散反馈更统一且不遮挡抽屉。  
+- 新增内容/接口/组件：  
+  - 前端：执行分配版本关闭改抽屉并增加解散居中提示（`scripts/modules/tempexec.js`）；项目管理删除版本改抽屉并增加居中提示（`scripts/modules/admin.js`）。  
+  - 测试：UI 用例更新（`tests/ui/tempexec_archived_placeholder.spec.js`、`tests/ui/project_admin_drawer.spec.js`）。  
+- 复用说明：复用通用确认抽屉（`appConfirmDrawer`）与居中提示样式，不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/tempexec.js scripts/modules/admin.js`（通过）；`npm run test:ui -- tests/ui/tempexec_archived_placeholder.spec.js tests/ui/project_admin_drawer.spec.js`（通过，需放开本地 http.server 端口权限）。  
+- 更新记录：2025-12-19 执行分配/项目管理删除确认抽屉化与居中提示上线（`scripts/modules/tempexec.js`、`scripts/modules/admin.js`、`tests/ui/tempexec_archived_placeholder.spec.js`、`tests/ui/project_admin_drawer.spec.js`）。  
+
+- 功能名称：用例生成全模块用例视图全选按钮  
+- 功能描述：在“用例生成”的全模块用例视图抽屉顶部新增“全选所有模块用例/取消全选”按钮，统一切换所有模块的勾选状态；按钮仅在全模块视图展示，且随勾选数量更新文案与禁用状态。  
+- 操作方式：进入“用例生成”→点击“全模块用例视图”→点击顶部“全选所有模块用例”，再次点击为取消全选。  
+- 使用效果：批量入库/导出/转执行前可一键全选或清空选择，减少逐模块勾选操作。  
+- 新增内容/接口/组件：  
+  - 前端：抽屉头部按钮与布局（`index.html`、`style.css`）、DOM 绑定（`config/domConfig.js`）、全选按钮状态联动（`scripts/core/casesGenCore.js`）、API 桥接（`scripts/core/appRuntime.js`）、事件绑定（`scripts/modules/casesgen.js`）。  
+  - 测试：补充 UI 用例覆盖（`tests/ui/casegen_db_store.spec.js`）。  
+- 复用说明：复用现有全模块勾选逻辑 `handleCaseSelectAllModules` 与选中状态管理，不新增后端接口。  
+- 测试与验证：`node --check scripts/core/casesGenCore.js scripts/modules/casesgen.js scripts/core/appRuntime.js`（通过）；`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（首轮出现 app 初始化超时，单测重跑通过）；`npm run test:ui -- tests/ui/casegen_db_store.spec.js -g 新用例入库：直接入库成功`（通过）。  
+- 更新记录：2025-12-19 用例生成全模块视图新增全选按钮与 UI 用例覆盖（`index.html`、`style.css`、`config/domConfig.js`、`scripts/core/casesGenCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/casesgen.js`、`tests/ui/casegen_db_store.spec.js`）。  
+
+- 功能名称：弹窗确认改为抽屉（同名导入/入库/归档/管理等）
+- 功能描述：
+  - 同名用例导入差异确认、用例生成入库未勾选提示/追加确认、归档删除/解散、人员重置密码、新增版本、用例库批量删除等原弹窗改为右侧抽屉确认。
+  - 多抽屉场景自动挂起上一层抽屉，确认结束后恢复，避免遮挡与误操作。
+- 操作方式：
+  - 用例库：同名差异对比抽屉内点击“确认覆盖导入/覆盖并追加入库”；批量删除用例时在抽屉确认。
+  - 用例生成：新用例入库/旧用例追加入库时，“未勾选模块提示/确认追加/确认入库”均在抽屉完成。
+  - 用例执行：同名导入差异对比“确认覆盖导入”及执行结果二次提示以抽屉确认；“解散归档/删除归档”均为抽屉确认。
+  - 管理端：人员重置密码、新增版本名称输入均改为抽屉确认/输入。
+- 使用效果：确认提示不再阻塞页面；多抽屉场景层级清晰，操作路径更一致。
+- 新增内容/接口/组件：
+  - 前端新增通用确认抽屉 `#appConfirmDrawer` 与脚本 `scripts/base/confirmDrawer.js`；`scripts/base/utils.js` 暴露 `openConfirmDrawer`。
+  - 业务接入：`scripts/modules/caseLibrary.js`、`scripts/core/casesGenCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseArchive.js`、`scripts/modules/admin.js`。
+  - 样式：`style.css` 增加 confirm drawer 与 `drawer-suspended` 处理。
+- 复用说明：复用现有抽屉框架（`scripts/base/drawer.js`），仅新增通用确认抽屉并接入各模块。
+- 测试与验证：待补充（见本次执行记录）。
+- 更新记录：2025-12-19 弹窗确认统一改为抽屉并补充 UI 测试覆盖。
+
+- 功能名称：执行版本选择（转到执行/入库确认/多版本独立执行）
+- 功能描述：
+  - 导入用例时选择的“版本”仅用于记录导入版本（`case_files.version_id`），不再强绑定执行版本。
+  - 转到执行/批量转到执行/执行页确认入库/入库并转到执行：统一新增“执行版本选择”抽屉，默认选中项目内“最近新增/更新”的版本，允许选择“未分配版本”。
+  - 执行页版本盒子分组改为基于执行版本（`exec_sets.version_id`）：同一项目下，同一份用例可在不同执行版本同时存在执行集，执行结果互不影响。
+  - 用例库同名校验保持项目级：同一项目下跨版本不允许同名用例文件；归档按执行集生效，版本 A 的归档不影响版本 B 的同名执行集。
+  - 当同一用例在多个执行版本同时执行且用例库发生变更时，“用例库 diff 自动弹窗”按 `case_file_id` 去重，每批变更只自动弹一次。
+- 操作方式：
+  - 用例库：用例详情“转到执行”、选择用例执行抽屉“转到执行”、批量“转到执行” → 弹出“执行版本选择”抽屉 → 确认后进入执行页对应版本盒子。
+  - 执行页：导入后点击“确认入库” → 弹出“执行版本选择”抽屉 → 确认后入库并进入对应版本盒子。
+  - 用例生成：入库并转到执行（DB 模式）→ 入库成功后弹出“执行版本选择”抽屉 → 确认后跳转到执行集。
+- 使用效果：
+  - 支持同项目下不同执行版本并行执行同名用例，结果与归档互不干扰；执行页版本盒子始终以“执行版本”为准展示。
+  - 版本选择交互统一收口到抽屉说明（导入版本 vs 执行版本），减少误解；跨版本同一批用例变更不会重复弹出 diff。
+- 新增内容/接口/组件：
+  - 前端：新增可复用抽屉组件 `scripts/base/execVersionDrawer.js`，并在 `index.html` 增加 `#execVersionSelectDrawer`；用例库转执行/批量转执行（`scripts/modules/caseLibrary.js`）、执行页确认入库（`scripts/modules/tempexec.js` + `scripts/core/tempexecCore.js`）、用例生成入库转执行（`scripts/core/casesGenCore.js`）接入执行版本选择并透传。
+  - 后端：`/api/exec/sets/from-case-file` 支持 `exec_version_id`，并将执行集按 `(case_file_id, created_by, status, version_id)` 维度分叉创建（`backend/routers/exec_routes.py`、`backend/schemas.py`）。
+  - 数据一致性：用例库同名约束保持项目级（`backend/models.py`，迁移 `backend/migrations.py` v17 兜底恢复项目级唯一索引）。
+  - 测试：新增 API 用例 `tests/api/exec_version_isolation.spec.js`；同步更新既有 API/UI 用例覆盖新交互与约束。
+- 复用说明：复用既有抽屉框架（`scripts/base/drawer.js`）与执行集 upsert 链路（`/api/exec/sets/from-case-file`），仅扩展“执行版本”参数与前端交互；未新增独立数据结构。
+- 测试与验证：
+  - 语法检查：`node --check scripts/base/execVersionDrawer.js scripts/modules/caseLibrary.js scripts/core/tempexecCore.js scripts/modules/tempexec.js scripts/core/casesGenCore.js`（通过）；`python3 -m compileall -q backend`（通过）
+  - UI：`npm run test:ui -- tests/ui/case_library_history.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js tests/ui/tempexec_import_confirm.spec.js tests/ui/tempexec_import_excel_diff.spec.js tests/ui/tempexec_import_multi_diff_queue.spec.js tests/ui/casegen_db_store.spec.js`（30 passed）
+  - API：`APP_DB_FILE=apitest_tmp_xxx.db python3.12 -m uvicorn backend.main:app --host 127.0.0.1 --port 18081` 后执行 `API_BASE_URL=http://127.0.0.1:18081 npm run test:api`（23 passed）
+- 更新记录：2025-12-18 执行版本选择与多版本独立执行上线（`scripts/base/execVersionDrawer.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`、`scripts/core/tempexecCore.js`、`backend/routers/exec_routes.py`、`backend/migrations.py`、`tests/api/exec_version_isolation.spec.js` 等）。
+  - 修复：执行页导入同名用例时，选择其他“执行版本”不再误覆盖当前版本执行集；导入版本在抽屉中优先展示版本名称（避免出现 `版本#id` 误导）。
+  - 修复：用例库同步（case-library-sync）不再把“执行备注”差异当作用例变更，避免导入同名无差异但触发其他版本用例被标记为“变更重跑”；并补充回归用例覆盖（`tests/api/exec_version_isolation.spec.js`）。
+
+- 功能名称：用例执行导入&分配：归档占位 + 解散归档（防止版本盒子消失）
+- 功能描述：当某项目版本下的个人执行用例全部归档后，执行页“用例导入&分配”的项目/版本盒子不再直接消失；已归档执行集以“占位”形式保留在版本盒子底部，并提供“解散归档”用于清除占位（不影响归档记录与未归档用例）。
+- 操作方式：
+  - 进入“用例执行 → 用例导入&分配”（DB 模式项目/版本分组布局）：若某版本下存在已归档占位，版本标题栏出现“解散归档”按钮。
+  - 已归档占位行显示灰色遮罩“已归档”，不可点击进入执行、不可拖拽、不可删除；点击占位行会提示“仅占位，不影响同名导入/转入执行；详情请到用例归档页”。
+  - 点击“解散归档”：仅清除该版本下已归档占位（会记入前端 UI 设置，后续不再出现）。
+  - 点击版本“关闭（×）”：若该版本包含已归档占位，会在二次确认中提示并同步执行“解散归档”逻辑；未归档用例仍走原关闭版本逻辑。
+- 使用效果：
+  - 即使该版本下全部用例已归档，版本盒子仍可见，用户仍可“关闭版本/关闭项目/解散归档”。
+  - 多个已归档占位固定在版本盒子底部，并按“最近归档在上”排序；其他用例无法移动到归档占位下方。
+  - 解散归档仅清除占位，不影响未归档用例与真实归档记录，也不影响同名用例继续导入/转入执行。
+- 新增内容/接口/组件：
+  - 前端：`scripts/core/tempexecCore.js`（归档占位数据加载、项目/版本分组渲染合并 active+archived、占位排序、`dissolveTempExecArchivedProjectVersion` API）、`scripts/modules/tempexec.js`（按钮点击/关闭提示/归档占位点击提示/拖拽限制与指示器插入点约束）、`style.css`（“解散归档”按钮与遮罩样式）。
+  - 测试：UI `tests/ui/tempexec_archived_placeholder.spec.js`（覆盖仅归档占位/排序/拖拽指示器/关闭版本提示与同步解散）。
+- 复用说明：复用现有 DB 模式 `/api/exec/sets?status_filter=archived` 拉取逻辑与项目/版本分组布局渲染，未新增后端接口；“解散归档”通过复用 tempexec UI settings（`tempexec_ui_v1.archivedHidden`）实现持久化隐藏。
+- 测试与验证：
+  - `node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_archived_placeholder.spec.js`（通过）
+  - 回归：`npx playwright test --config tests/playwright.config.js tests/ui/tempexec_project_layout.spec.js tests/ui/case_archive.spec.js`（通过）
+- 更新记录：2025-12-18 新增“归档占位/解散归档”与拖拽指示器约束，补齐 UI 自动化覆盖。
+- 更新记录：2025-12-18 归档遮罩“已归档”右对齐；移除顶部“执行视图”导航卡片并默认展示执行视图；“解散归档”改为按 exec_set_id 记忆，不影响未来新归档再次占位（`tempexec_ui_v1.archivedHidden` 兼容 pid::vid 与 exec_set_id 混用）。
+- 更新记录：2025-12-18 修复导入&分配页普通用例拖拽排序失效：项目/版本分组下点击不再强制关闭抽屉；拖拽开始时清理上一次 dragType，避免误判为项目/版本拖拽。
+- 更新记录：2025-12-18 用例执行导航卡片“个人执行总览”更名为“归档操作&进度预览”，描述同步更新（`index.html`、`tests/ui/tempexec_entry.spec.js`）。
+- 更新记录：2025-12-18 修复导入&分配页同版本盒子内用例拖拽排序：drop 场景读不到 `dataTransfer` 时兜底使用 `tempDragContext`，避免浏览器差异导致排序无效（`scripts/modules/tempexec.js`、`tests/ui/tempexec_project_layout.spec.js`）。
+- 更新记录：2025-12-18 归档与总览交互优化：同版本盒子内拖拽排序兼容 `drop` 阶段无 `dataTransfer`；当前项目用例全部归档后不自动切换到其他项目执行视图（执行视图顶部展示“当前用例归属：项目/版本”）；在“归档操作&进度预览”点已归档“归”标识会自动关闭总览抽屉并打开“用例导入&分配”（`scripts/modules/tempexec.js`、`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_archive_stay_project.spec.js`、`tests/ui/tempexec_project_layout.spec.js`）。
+- 更新记录：2025-12-18 继续修复导入&分配页拖拽排序：`dragover` 不再依赖 `event.dataTransfer` 存在（避免部分浏览器 dragover/drop 不触发导致“能拖动但放下不换位置”）（`scripts/modules/tempexec.js`）；回归 `tests/ui/tempexec_project_layout.spec.js`、`tests/ui/tempexec_archived_placeholder.spec.js`（通过）。
+- 更新记录：2025-12-18 修复项目/版本分组下版本盒子拖拽排序：`drop` 阶段不再提前清理“文件指示器/hoverId”，并优先按指示器位置计算插入点；归档占位 `dragstart` 强制 `preventDefault` 禁止拖拽，避免出现“都能拖拽但无法换位置”的错觉（`scripts/modules/tempexec.js`、`tests/ui/tempexec_project_layout.spec.js`）。
+
+- 功能名称：用例生成页：新用例入库 / 旧用例追加入库（DB 模式）
+- 功能描述：用例生成完成后，提供全局“新用例入库”“旧用例追加入库”入口，将勾选用例写入用例库；新用例入库用例名使用“需求标识”，并支持“直接入库 / 入库并转到执行”；旧用例追加入库支持在项目/版本内选择目标用例并追加，且保留原执行记录；追加会记录到用例库改动历史，执行页 diff 增加“追加”变更类型。
+- 操作方式：
+  - 新用例入库：在“用例生成”页先选择“新用例入库后”的动作（直接入库/入库并转到执行）→点击“新用例入库”→在抽屉内选择项目与版本→确认；若存在未生成或未勾选模块，会弹出二次确认提示后再入库。
+  - 旧用例追加入库：点击“旧用例追加入库”→在抽屉内选择项目与版本→选择该版本内目标用例→确认；同样会先进行“未生成/未勾选模块”二次确认，再进行“追加到目标用例”二次确认。
+- 使用效果：入库/追加入库的重名与差异对比逻辑与用例库导入/执行页导入一致；追加入库不会覆盖原执行结果；若当前正在执行的用例库发生追加，执行页同步 diff 会展示“追加”并可按类型筛选。
+- 新增内容/接口/组件：
+  - 前端：`index.html`（新增 `#caseGenStoreActionSelect/#caseGenStoreNewBtn/#caseGenStoreAppendBtn` 与 `#caseGenDbStoreDrawer`，移除旧“新增到/勾选到执行”入口）、`scripts/core/casesGenCore.js`（入库抽屉、校验/二次确认、导入/追加入库、入库并转到执行）、`scripts/core/appRuntime.js`（暴露 casesGenApi 入库方法）、`scripts/modules/caseLibrary.js`（外部复用同名差异对比抽屉、历史支持 append）、`scripts/core/tempexecCore.js`（diff 支持 appended）、`style.css`（必选框标红与 appended/append 标签样式）。
+  - 后端：`POST /api/case-files/{case_file_id}/items/append`（追加入库并写历史/操作日志）；执行页同步 diff 支持 `kind=appended` 与 `summary.appended`（`backend/routers/exec_routes.py`、`backend/schemas.py`、`backend/routers/cases.py`）。
+  - 测试：UI `tests/ui/casegen_db_store.spec.js`；API `tests/api/exec_case_library_sync.spec.js`（覆盖 appended diff 与“保留已执行结果”）。
+- 复用说明：复用用例库 `import` 的同名 diff 弹窗/确认链路（通过 `caseLibraryApi.openImportDiffForExternal` 复用抽屉），复用用例库历史落库机制与执行页 case-library-sync 同步机制，仅新增“追加”类型与最小必要 API。
+- 测试与验证：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js`；`npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js`（通过）；`APP_DB_FILE=apitest.db API_BASE_URL=http://127.0.0.1:18080 .venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 18080` + `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_case_library_sync.spec.js`（通过）。
+- 更新记录：2025-12-17 落地入库/追加入库入口并下线旧“新增到/勾选到执行”按钮；执行页与历史新增“追加”变更类型；追加入库遇到目标用例内重复（模块+标题+前提+步骤+预期一致）时打开 diff 并确认覆盖。
+- 更新记录：2025-12-17 用例生成页“入库后动作选择”左侧增加提示：先到各模块右上角的【用例视图】中勾选用例（`index.html`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：用例执行抽屉：暂时停用常用用例模版 + diff 抽屉宽度统一
+- 功能描述：暂时屏蔽“用例执行 → 用例导入&分配”中的常用用例模版入口；并将“用例库变更 diff / 同名用例差异对比”相关抽屉宽度统一为约 2/3 屏（与默认抽屉一致），避免 diff 表头被挤压到不可见。
+- 操作方式：
+  - 进入“用例执行 → 用例导入&分配”，观察“常用用例模版”按钮为禁用态并有提示。
+  - 在同名覆盖/用例库变更场景打开 diff 抽屉，抽屉宽度与其他默认抽屉一致；同名差异对比为单表展示且表头可见。
+- 使用效果：避免用户误触暂不可用的模版功能；diff 抽屉宽度更一致，且同名差异对比不再出现“实际结果”等表头不可见的问题。
+- 新增内容/接口/组件：
+  - 前端：`index.html`（禁用 `#caseTemplateToggle`；diff 抽屉改为默认 `drawer-panel`；同名差异对比改为单表 merged 展示）、`scripts/modules/tempexec.js`（同名差异对比单表渲染；禁用时不绑定模版入口事件）、`style.css`（为 `#tempExecImportDiffDrawer` 增加 diff 表格最小宽度与结果列宽，确保横向滚动而非挤压到 0）。
+  - 测试：`tests/ui/files_layout.spec.js` 同步断言按钮为禁用态；`tests/ui/tempexec_import_excel_diff.spec.js` 回归同名差异对比表头可见/隐藏逻辑。
+- 复用说明：复用现有抽屉宽度体系（默认 `drawer-panel`）与通用抽屉组件（`scripts/base/drawer.js`），仅做最小 UI/样式增量修正。
+- 测试与验证：`npx playwright test --config tests/playwright.config.js tests/ui/files_layout.spec.js tests/ui/tempexec_case_library_changes.spec.js tests/ui/tempexec_import_excel_diff.spec.js --workers=1`（通过）。
+- 更新记录：2025-12-17 同名用例差异对比新增“差异定位”：当视口内看不到差异但实际存在差异时，可通过“首处/上一处/下一处/末处”快速跳转并高亮定位（`index.html`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/tempexec_import_excel_diff.spec.js`、`tests/ui/case_library.spec.js`）。
+- 更新记录：2025-12-17 同名用例差异对比的“差异定位”操作栏改为 sticky 固定展示，定位后无需回到顶部即可继续定位（`style.css`、`tests/ui/case_library.spec.js`）。
+
+- 功能名称：用例库“用例改动历史”抽屉 + 历史永久落库
+- 功能描述：用例库页面顶部导航新增“用例改动历史”入口，打开右侧抽屉查看当前账号可访问项目内的用例变更历史；历史记录永久留存在数据库，整份用例删除后仍可查看，未重新导入时标记为“已删除”。
+- 操作方式：进入“用例相关 → 用例库”→点击“用例改动历史”卡片；在抽屉中选择用例（项目/版本/用例名），查看导入/覆盖导入/增删改/整份删除的历史记录；可通过药丸筛选不同类型。
+- 使用效果：用例库变更可追溯，支持定位“谁在什么时间改了哪条用例”，并在整份删除后仍可回溯历史，便于审计与排查。
+- 新增内容/接口/组件：
+  - 后端：新增表 `case_library_change_events`（迁移 v14）；新增接口 `GET /api/case-files/change-history/files`、`GET /api/case-files/change-history`；在 `POST /api/case-files/import`、`PATCH/POST/DELETE /api/case-files/items/*`、`DELETE /api/case-files/{id}` 以及执行页同步写库路径 `PATCH /api/exec/cases/{id}` 中写入历史记录（含操作人快照）。
+  - 前端：`index.html`（新增导航按钮与抽屉 DOM）、`scripts/modules/caseLibrary.js`（抽屉加载/渲染/筛选/切换）、`services/apiClient.js`（新增 API 方法）、`style.css`（补齐导入/重导/整份删除样式）。
+  - 测试：UI `tests/ui/case_library_history.spec.js`；API `tests/api/case_library_history.spec.js`。
+- 复用说明：复用执行页“用例库变更 diff”表格样式（`case-lib-diff-*`）与通用抽屉组件（`scripts/base/drawer.js`），仅新增最小增量接口与历史表。
+- 测试与验证：`node --check services/apiClient.js scripts/modules/caseLibrary.js`（通过）；UI：`npm run test:ui -- tests/ui/case_library_history.spec.js tests/ui/case_library.spec.js`（通过）；API：启动测试后端后 `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library_history.spec.js`（通过，使用测试库 apitest.db）。
+- 更新记录：2025-12-17 当历史用例列表为空（无任何改动记录）时，抽屉不再一直显示“加载历史用例中...”，改为提示“暂无发生过改动的用例”（`scripts/modules/caseLibrary.js`）。
+- 更新记录：2025-12-17 “用例改动历史”抽屉改为“按项目/版本查询 + 搜索过滤 + 文件级列表”，不再打开即加载全量；点击列表“历史详情”后关闭抽屉，并在用例库页面内展示该用例的历史明细（保留药丸筛选与原字段）（`index.html`、`scripts/modules/caseLibrary.js`、`backend/routers/cases.py`、`backend/schemas.py`、`services/apiClient.js`、`tests/ui/case_library_history.spec.js`、`tests/api/case_library_history.spec.js`）。
+- 更新记录：2025-12-17 “用例改动历史”查询支持“全部版本”选项，并在列表中增加“版本”列；点击“历史详情”后会隐藏用例编辑视图，确保主区域展示的是改动详情 diff 列表（`index.html`、`scripts/modules/caseLibrary.js`、`backend/routers/cases.py`、`tests/ui/case_library_history.spec.js`）。
+- 更新记录：2025-12-17 “用例改动历史”抽屉项目/版本/搜索持久化并在再次打开时自动恢复；历史详情 diff 列表按“执行视图分页设置”进行分页（默认 20），刷新/回到用例库页时按时间戳恢复最近一次选择（编辑视图 vs 历史详情）（`scripts/modules/caseLibrary.js`、`index.html`、`tests/ui/case_library_history.spec.js`）。
+- 更新记录：2025-12-17 历史详情持久化兼容“用户信息未加载但已进入页面”的场景：除 user_id 外增加 loginSeq 作为会话标识，避免刷新后无法恢复历史详情（`scripts/modules/caseLibrary.js`）。
+- 更新记录：2025-12-17 修复“同时存在编辑视图与历史详情选择时，刷新后总是回到编辑视图”的问题：新增“最近操作视图”持久化，刷新/回到用例库页时按该标识优先恢复（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_history.spec.js`）。
+- 更新记录：2025-12-17 修复“反向场景：最后停留在编辑视图但刷新回到历史详情”的问题：刷新后严格保持最后一次操作对应的主视图（`scripts/modules/caseLibrary.js`）。
+
+- 功能名称：用例执行个人总览对齐执行总览布局（项目盒子 + 版本盒子）
+- 功能描述：在“用例执行 → 用例执行总览（个人总览）”中保持顶部功能区不变，将下方展示区改为与“执行总览”一致的视觉风格：按项目盒子选择项目，下方按版本盒子分组展示执行集，并以同款用例子项卡片展示进度与统计。
+- 操作方式：进入“用例相关 → 用例执行”→打开“用例导入&分配”抽屉→点“用例执行情况总览”；在项目盒子中切换项目，在版本下拉中筛选版本，点击用例子项可跳转回执行视图。
+- 使用效果：个人执行情况在项目/版本维度更直观，且与执行总览统一风格与尺寸，减少学习成本与视觉割裂。
+- 新增内容/接口/组件：前端仅 UI 调整：`scripts/core/tempexecCore.js`（DB 模式个人总览渲染）、`scripts/modules/tempexec.js`（项目/版本筛选交互）、`style.css`（复用执行总览下拉样式到个人总览）；新增 UI 用例 `tests/ui/tempexec_overview_project_style.spec.js`。
+- 复用说明：复用执行总览的 CSS 体系（`.exec-overview-version-box`/`.exec-overview-file-chip`）与个人总览既有跳转逻辑（点击卡片回到执行视图、点击进度分段定位用例）。
+- 测试与验证：`npm run test:ui -- tests/ui/tempexec_overview_project_style.spec.js`（通过，本地 HTTP 服务 8090 + Mock API）。
+- 更新记录：无
+
+- 功能名称：执行页刷新同步用例库变更 + 自动 Diff 抽屉（新增/改动/删除）
+- 功能描述：当用例库中对“正在执行的用例文件”发生增删改后，执行人员在“用例执行”页面进入/刷新时会自动同步最新用例内容到执行列表，并自动弹出 Diff 抽屉展示新增/改动/删除差异；同一批变更仅自动弹一次，后续无新变更进入/刷新不再自动弹，但可通过“用例库变更”按钮重复查看最近一次差异。已执行过的用例若被用例库改动，会自动将该用例状态标记为“变更重跑”（系统态，用户不可主动选择/不可见；统计与进度按“未执行”处理）。
+- 操作方式：进入“用例相关 → 用例执行”或在该页面刷新；若存在用例库变更，会自动弹出“用例库变更”抽屉。之后可在执行视图顶部点击“用例库变更”按钮再次打开 Diff 抽屉；可点击“新增/改动/删除”药丸按钮过滤视图，再次点击同一药丸可取消过滤。
+- 使用效果：执行人员无需手动重导入即可在刷新时拿到用例库最新增删改；差异可视化提示降低漏同步/误执行风险；已执行用例被改动后自动进入“变更重跑”，避免误用旧结果并在总览统计中按未执行回收进度。
+- 新增内容/接口/组件：后端新增 `POST /api/exec/sets/{exec_set_id}/case-library-sync`、`POST /api/exec/sets/{exec_set_id}/case-library-diff/ack`；`exec_sets` 新增字段 `case_file_base_updated_at/case_file_last_diff_at/case_file_last_diff_json/case_file_last_diff_shown_at`（迁移 v9）；前端执行视图新增按钮与抽屉 `tempExecCaseLibraryChangesBtn`、`tempExecCaseLibraryDiffDrawer`，并在执行页刷新时触发同步与自动弹窗；执行状态新增系统态“变更重跑”（仅后端赋值，用户不可见不可选；执行页与执行总览按未执行统计）。
+- 复用说明：复用既有执行页 DB 加载链路（`listExecSets/listExecCases`）与抽屉组件（`scripts/base/drawer.js`），在加载阶段插入“用例库同步 + diff 展示”能力。
+- 测试与验证：`node --check scripts/core/appRuntime.js scripts/core/tempexecCore.js services/apiClient.js`（通过）；UI：`npm run test:ui -- tests/ui/tempexec_case_library_changes.spec.js`、`npm run test:ui -- tests/ui/tab_persistence.spec.js`（通过）；API：启动测试后端 `APP_DB_FILE=apitest.db .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080` 后执行 `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_case_library_sync.spec.js`（通过）。
+- 更新记录：2025-12-16 初版上线（刷新同步 + 自动 diff + 过滤药丸 + 系统态提示）；2025-12-16 修复并发刷新导致自动弹窗不触发（diff 元数据改为 exec_set 级别幂等落盘），并放宽 `PATCH /api/case-files/items/{id}` 支持仅更新部分字段；2025-12-16 优化触发与交互（切到“用例执行”也会自动弹；Diff 抽屉展示用例名/支持多用例切换与“选择用例”；“用例库变更”按钮移动到“导出用例XMind（无结果）”右侧并在有新变更时高亮提示）；2025-12-16 修复用例库“删除条目”无法出现在 diff/导致不自动弹窗的问题（exec_case 增加 `case_item_source_id` 保留原始条目 id，用于 deleted diff 与同步清理）；2025-12-16 Diff 抽屉支持“修改时间 + 历史变更累计”（新增 `exec_sets.case_file_diff_history_json`，同步时按批次记录并按最新优先展示；归档后重新启用执行集会清空历史视为重新开始）；2025-12-16 Diff 抽屉补齐“操作人”与时间展示（新增 `case_files.updated_by` 并在导入/增删改条目时维护；前端时间解析兼容 Safari 时区格式并默认按本地时区展示；过滤药丸选中态加深且切换用例时自动重置）；2025-12-16 将已执行用例被用例库改动后的系统态由“有改动”调整为“变更重跑”，并在执行页/执行总览中按未执行处理（用户不可见不可选）。
+
+- 功能名称：用例库删除增加“执行中拦截”+ 编辑抽屉展示执行页状态
+- 功能描述：用例库页面“编辑抽屉”列表新增“执行页状态”，展示该用例文件是否已转到执行页以及正在执行人员；管理员删除用例文件时若存在任意执行集仍关联该用例文件，则提示“先在执行页解散（删除执行集）再删除”，并阻止删除，避免执行中用例被误删导致执行数据断链。
+- 操作方式：进入“用例相关 → 用例库”→打开“编辑抽屉”→选择项目→在列表中查看“执行页状态”；管理员勾选用例文件点“删除所选”，若提示执行中则先通知执行人到执行页分配页解散该份用例（移除/删除执行集）后再删库。
+- 使用效果：执行中的用例文件无法被直接从用例库删除；执行页状态在编辑抽屉可直接识别，降低误删风险。
+- 新增内容/接口/组件：`index.html`（编辑抽屉列表新增“执行页状态”列）；`scripts/modules/caseLibrary.js`（编辑抽屉加载/渲染执行页状态、删除前前端拦截提示）；`backend/routers/cases.py`（`DELETE /api/case-files/{id}` 增加“存在 active 执行集则 400”强校验）；`backend/routers/exec_routes.py`（`/api/exec/sets/by-case-file` 兼容执行集创建人缺失时返回“未知人员”）；新增/更新自动化：`tests/ui/case_library.spec.js`、`tests/api/case_file_delete_blocked_by_exec_sets.spec.js`。
+- 复用说明：复用既有“执行人员聚合接口”`/api/exec/sets/by-case-file` 与用例库编辑抽屉的列表渲染，仅扩展展示与删除校验，无新增前端依赖。
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/case_library.spec.js -g \"编辑抽屉删除\"`（通过，需本地 8090 静态服）；`APP_DB_FILE=apitest.db uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080` + `npx playwright test --config tests/api/playwright.api.config.js tests/api/case_file_delete_blocked_by_exec_sets.spec.js`（通过）。
+- 更新记录：2025-12-16 初版上线（执行中拦截 + 状态列）。
+
+- 功能名称：用例执行支持 Excel（xlsx）导入（可带执行结果）+ 同名差异对比覆盖  
+- 功能描述：用例执行页“用例导入&分配”支持导入 `.xlsx`；Excel 表头与导出对齐时可解析入库，支持两种格式：  
+  - 不带结果：表头包含“模块/用例标题/优先级/前提条件/操作步骤/预期结果”。  
+  - 带结果：在不带结果基础上增加“实际结果/备注/缺陷链接”三列；若使用“复用子项行”，子项行要求“模块/用例标题/优先级/前提条件/操作步骤/缺陷链接”为空，预期结果=子项文本，实际结果=子项状态，备注=子项备注；且主行“实际结果”需与子项汇总一致，否则提示“结果格式不对无法导入”。  
+  当导入用例与当前项目/版本下已入库同名用例冲突时，会打开差异对比抽屉（左导入、右执行中同名用例），按红/绿标记差异并提供“确认覆盖导入”；若覆盖会替换或清空执行结果（实际结果/备注/缺陷链接），会二次确认。覆盖成功后会自动清空已选择文件，避免重复导入。  
+- 操作方式：进入“用例相关 → 用例执行”→打开“用例导入&分配”→选择 `.xlsx`→选择项目/版本→点击“确认入库”；同名时在差异抽屉中点击“确认覆盖导入”并按提示二次确认。  
+- 使用效果：支持 Excel 作为执行用例/执行结果交付格式；同名冲突可视化对比后再覆盖，减少误覆盖与重复导入带来的失败/冲突。  
+- 新增内容/接口/组件：`scripts/core/xlsxCore.js`（新增 Excel 解析）；`index.html`（执行导入 accept 增加 `.xlsx`、新增差异对比抽屉、core 脚本加载插入 xlsxCore）；`scripts/core/tempexecCore.js`（DB 入库新增 `.xlsx` 解析分支、结果/复用格式强校验、同名用例抛出 `duplicate_case_file` 供 UI 打开 diff）；`scripts/modules/tempexec.js`（新增执行页同名 diff 抽屉渲染与覆盖导入交互）；UI 用例新增 `tests/ui/tempexec_import_excel_diff.spec.js`，并更新 `tests/ui/tempexec_import_confirm.spec.js`（同名改为打开 diff 预期）、`tests/ui/tempexec_import_xmind.spec.js`（补充 e2e skip auth）。  
+- 复用说明：复用既有 JSZip 依赖与用例入库/执行集 upsert 接口（`/api/case-files/import?overwrite=1`、`/api/exec/sets/from-case-file`），仅新增前端解析与差异对比 UI。  
+- 测试与验证：`node --check scripts/core/xlsxCore.js scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/tempexec_import_excel_diff.spec.js tests/ui/tempexec_import_confirm.spec.js tests/ui/tempexec_import_xmind.spec.js`（通过，需 8090 http.server 权限）。  
+- 更新记录：2025-12-14 Excel 导入会自动忽略数据区重复表头行，避免“表头被当成用例条目”导致 diff 行数/差异不准确（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_import_excel_diff.spec.js`）；覆盖导入同名用例时执行集改为“先清空再重建”的完全替换（`preserve_results=false`），避免旧 exec_cases 残留导致执行页展示为追加/合并（`backend/routers/exec_routes.py`、`scripts/modules/tempexec.js`、`tests/api/exec_persistence.spec.js`）；用例库新增“复用类型”字段并在执行页启用复用时同步回用例库（`backend/models.py`、`backend/routers/exec_routes.py`、`backend/routers/cases.py`、`scripts/modules/caseLibrary.js`）。  
+
+- 功能名称：执行结果按个人隔离（每人一份执行集）
+- 功能描述：同一份用例文件（case_file）在执行页的执行结果不再共享；执行集（exec_set）按创建人隔离，避免多人同时执行时实际结果/状态互相覆盖或串写。非管理员默认只能看到/访问自己创建的执行集；管理员可通过参数查看全量用于排查。
+- 操作方式：
+  - 多人分别登录后，对同一份用例文件执行“从用例库转到执行”或“执行页导入并确认入库”，每个人会生成并维护自己的执行集与执行记录。
+  - 执行页切换到“用例执行”或登录完成后，会自动刷新并加载当前账号的历史执行集。
+- 使用效果：同名/同 case_file 的执行结果按个人隔离，多人并行执行不再互相影响；同时避免非管理员误访问他人的执行集数据。
+- 新增内容/接口/组件：
+  - 后端：`backend/routers/exec_routes.py`（exec_set 查询按 `created_by` 过滤；新增 exec_set 访问权限校验；`GET /api/exec/sets` 增加 `all_users` 参数供管理员按需查看全量）。
+  - 前端：`scripts/modules/tempexec.js`（在 `app-auth-ready` 与 `tempexec` 页签激活时触发 `api.loadTempExecState()` 刷新个人执行集）。
+  - 测试：`tests/api/exec_persistence.spec.js`（新增两用户同 case_file 创建不同 exec_set、互不可见/不可访问断言）；`tests/ui/tempexec_personal_exec_set.spec.js`（UI 层验证两用户只加载各自执行集）；`tests/ui/tempexec_import_confirm.spec.js`（增强 app 初始化等待，降低静态资源偶发空响应导致的测试不稳定）。
+- 复用说明：复用既有 exec_set/exec_cases 数据结构与 upsert 流程，仅在查询与鉴权层增加按用户隔离的最小增量逻辑。
+- 测试与验证：`python3 -m compileall backend`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/tempexec_import_confirm.spec.js tests/ui/tempexec_personal_exec_set.spec.js`（通过）；启动测试服务后 `API_BASE_URL=http://127.0.0.1:9000 npx playwright test --config tests/api/playwright.api.config.js --workers=1 tests/api/exec_persistence.spec.js`（通过）。
+- 更新记录：无
+
+- 功能名称：用例库“编辑用例”改名 + 选择执行支持批量转到执行  
+- 功能描述：用例库顶部导航“编辑用例&转到执行”入口改为“编辑用例”（更聚焦编辑/导出/删除）；“选择用例执行”抽屉新增复选框、全选与“批量转到执行”，可一次勾选多份用例文件转入执行页。为降低本地静态资源偶发空响应导致的关键能力缺失（如 drawer/switchTab/xmindCore）概率，增加轻量兜底：缺关键对象时自动刷新恢复，同时在用例库模块内对抽屉与导出依赖做补拉/降级处理。  
+- 操作方式：  
+  - 进入“用例相关 → 用例库”→点“编辑用例”打开编辑抽屉（项目/版本筛选、导出、删除等保持不变）。  
+  - 进入“用例相关 → 用例库”→点“选择用例执行”→选择项目（自动加载列表）→勾选多份→点“批量转到执行”。  
+- 使用效果：可批量将用例库多份用例文件转入执行页，减少逐条点击；并在静态资源加载抖动时可自动自愈，避免抽屉/导出/导航关键能力缺失导致流程中断。  
+- 新增内容/接口/组件：  
+  - 前端：`index.html`（编辑入口文案、选择执行批量控件、启动自检自动刷新兜底）、`scripts/modules/caseLibrary.js`（选择执行批量勾选与批量转到执行、抽屉兜底 open/close、导出依赖补拉、编辑卡 hidden 属性兜底）、`style.css`（复用既有样式，无新增）。  
+  - 测试：`tests/ui/case_library.spec.js`（新增“选择用例执行：支持勾选并批量转到执行”用例，更新相关描述文案）。  
+- 复用说明：复用既有用例库列表/过滤、`transferItemsToTempExec`（DB 执行集 upsert）与抽屉 DOM 结构；批量转到执行为最小增量扩展，不改变单条“转到执行”逻辑。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/case_library.spec.js`（通过）。  
+
+
+- 功能名称：用例执行数据入库（执行视图 DB 持久化 + 导入确认入库 + 同步用例库）
+- 功能描述：用例执行页的执行数据不再依赖浏览器缓存，改为落库到 SQLite；导入/分配改为“先选文件→再选项目/版本→确认入库”；执行中编辑除“实际结果/缺陷链接”外的字段会实时同步到用例库（case_items），并记录执行历史。
+- 操作方式：
+  - 用例执行页导入：打开“用例导入&分配”抽屉 → 拖拽/选择 XMind/JSON → 在下方选择“项目/版本”（仅自身所属项目）→ 点击“确认入库”。
+  - 执行数据自动保存：在“执行视图”中修改用例内容/结果后自动写入数据库；删除需求区用例会将对应执行集归档，后续同名导入/从用例库转入会恢复历史执行记录。
+  - 用例库转到执行：用例库选择用例文件“转到执行”会走 DB 执行集 upsert；同名覆盖时可按规则保留历史执行结果（标题+预期相同则保留执行结果/备注/缺陷等）。
+- 使用效果：执行数据可跨浏览器/缓存持久化；导入过程更可控（避免误入库）；执行编辑与用例库保持一致，历史执行记录可恢复与合并追加。
+- 新增内容/接口/组件：
+  - 前端：`scripts/core/tempexecCore.js`（DB 读写执行集/执行用例、导入入库/合并追加、删除归档恢复）、`scripts/modules/tempexec.js`（导入确认入库 UI/交互）、`scripts/modules/caseLibrary.js`（转到执行走 DB）、`services/apiClient.js`（补 exec 相关 API）、`index.html`（导入区新增项目/版本/确认控件）、`style.css`（项目/版本选择框美化与最小宽度）。
+  - 后端：`backend/routers/exec_routes.py`（`POST /api/exec/sets/from-case-file`、`PATCH /api/exec/cases/{id}` 同步 case_items 与 history、`POST /api/exec/sets/{id}/cases` 支持 case_item_id）、`backend/schemas.py`（ExecCaseCreate 增加 case_item_id）、`backend/models.py`/`backend/migrations.py`（字段/约束增量）。
+  - 数据：执行页 UI 状态以 settings 键 `tempexec_ui_v1` 持久化（当前激活、布局、折叠、分页等）。
+- 复用说明：复用既有执行视图渲染/解析逻辑与统一鉴权/项目可见性；仅在必要处新增“DB 模式”分支与接口扩展，静态模式保持原行为。
+- 测试与验证：
+  - 语法检查：`node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js scripts/modules/caseLibrary.js services/apiClient.js`（通过）；`python3 -m compileall backend`（通过）。
+  - UI：`npm run test:ui -- tests/ui/case_library.spec.js tests/ui/tempexec_import_confirm.spec.js tests/ui/drawer_nav_visibility.spec.js tests/ui/admin_visibility.spec.js`（通过）。
+  - API：`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --port 9000` 后执行 `API_BASE_URL=http://127.0.0.1:9000 npx playwright test --config tests/api/playwright.api.config.js --workers=1 tests/api/case_library.spec.js tests/api/exec_persistence.spec.js`（通过）。
+- 更新记录：2025-12-14 补充执行页“导入需确认入库”UI 用例（`tests/ui/tempexec_import_confirm.spec.js`）与执行入库 API 用例（`tests/api/exec_persistence.spec.js`）；修复抽屉遮罩 UI 用例登录注入（`tests/ui/drawer_nav_visibility.spec.js`）；修复后端文件名清洗未覆盖“勾选用例 ”带空格前缀导致执行页确认入库出现“成功 0，失败 1”，并在前端导入匹配中兼容历史 `file_name_clean`；新增 UI 用例覆盖该场景，API 用例补充带空格前缀清洗断言（`tests/ui/tempexec_import_confirm.spec.js`、`tests/api/case_library.spec.js`）；扩展“勾选用例”前缀清洗支持全角空格/多种短横线，避免特定文件名仍触发“成功 0，失败 1”，并补充对应 UI/API 用例覆盖（`tests/ui/tempexec_import_confirm.spec.js`、`tests/api/case_library.spec.js`）；修复用例库/执行页导入遇到“文件内重复条目（模块+标题+预期相同）”时整份导入失败：后端导入前自动去重并记录跳过数量，API 用例补充覆盖（`backend/routers/cases.py`、`tests/api/case_library.spec.js`）；用例库“编辑用例&转到执行”列表新增展示“用例条目数”（接口聚合返回，不新增 DB 字段）（`backend/routers/cases.py`、`backend/schemas.py`、`scripts/modules/caseLibrary.js`、`index.html`）；用例库“编辑用例&转到执行”支持全选/全取消并批量删除所选用例文件（需二次确认），后端新增 `DELETE /api/case-files/{id}` 并补齐 UI/API 用例覆盖（`backend/routers/cases.py`、`services/apiClient.js`、`scripts/modules/caseLibrary.js`、`index.html`、`tests/ui/case_library.spec.js`、`tests/api/case_library.spec.js`）（仅管理员可删除，确认弹窗文案改为“用例名，x条”列表格式）；用例库“编辑用例&转到执行/选择用例执行”抽屉选择项目后自动刷新列表，无需点击确认（`scripts/modules/caseLibrary.js`、`index.html`、`tests/ui/case_library.spec.js`）；修复项目管理增删版本/新增项目后，用例库与用例执行导入区“项目/版本”下拉不刷新：项目管理变更后广播 `app-projects-updated`，导入模块清理缓存并在页签激活时重拉；新增 UI 用例覆盖（`scripts/modules/admin.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`、`tests/ui/project_changes_refresh_import_selects.spec.js`）。
+
+- 功能名称：设置/模型/功能指派持久化 API 与操作日志查询  
+- 功能描述：新增设置、模型配置、功能指派的持久化接口，支持用户级/全局双作用域；操作日志提供管理员可查列表，前端“操作记录”页可刷新查看登录/增删改等记录。  
+- 操作方式：  
+  - 设置：`GET /api/settings?scope=all|user|global&owner_id=`，`PUT /api/settings`（items 列表）。  
+  - 模型：`GET /api/models?scope=all|user|global&owner_id=`，`POST /api/models` 创建（scope 支持 user/global），`PATCH /api/models/{id}` 更新。  
+  - 功能指派：`GET /api/features?...`，`POST /api/features`，`PATCH /api/features/{id}`；全局写入仅管理员。  
+  - 操作日志：管理员访问 `GET /api/ops?limit=&offset=&user_id=` 或前端“管理-操作记录”页的刷新按钮查看最新日志。  
+- 使用效果：设置/模型/指派数据落库并按权限隔离，非管理员仅能写入/修改自己的数据，全局配置需管理员；操作日志可按需审计最近动作，前端提供表格视图与分页条数选择。  
+- 新增内容/接口/组件：后端新增路由 `backend/routers/configs.py`、`backend/routers/ops.py`、`ModelConfig` 唯一性约束；`services/apiClient.js` 补充对应 API 封装；前端新增操作记录表格与刷新逻辑（`index.html`、`scripts/modules/opsLog.js`、`style.css`）；前端设置/模型/指派加载顺序调整并接入后端持久化（`scripts/modules/settings.js`、`scripts/modules/models.js`、`index.html`）；新增 API 用例 `tests/api/settings_models.spec.js`。  
+- 复用说明：复用统一鉴权与操作日志写入逻辑，权限依赖现有角色/级别校验；前端复用 admin 样式与全局状态。  
+- 测试与验证：`python -m compileall backend`（通过）；`node --check scripts/modules/settings.js scripts/modules/models.js scripts/modules/opsLog.js`（通过）；`API_BASE_URL=http://127.0.0.1:9000 ADMIN_USER=admin ADMIN_PASS=chillytest_admin npx playwright test --config tests/api/playwright.api.config.js --workers=1 tests/api/admin_entities.spec.js tests/api/auth_change_password.spec.js tests/api/non_admin_projects.spec.js tests/api/settings_models.spec.js`（通过）；已执行 `python3 notify_feishu.py`。  
+- 更新记录：设置模块改为按 `state.settings` 全量键值落库/同步（含“其他设置”页新增字段自动生效），补充 API/UI 用例覆盖自定义设置键。  
+
+- 功能名称：项目管理非管理员可见性修复与接口放行  
+- 功能描述：非管理员访问“管理-项目管理”不再空白，按所属项目展示列表；保留管理员全量可见，成员仅能查看/维护自己项目版本。  
+- 操作方式：以普通成员或组长登录后展开“管理”菜单，点击“项目管理”即可看到所属项目；管理员入口与操作保持不变。  
+- 使用效果：成员/组长能直接查看所属项目与版本，避免权限屏蔽导致页面空白；接口返回自身项目分配供前端过滤。  
+- 新增内容/接口/组件：调整 authGuard 角色可见性以放开项目管理入口；`/api/users/{user_id}/projects` 支持用户自查所属项目；新增 API 用例 `tests/api/non_admin_projects.spec.js`，更新 `tests/ui/project_admin_drawer.spec.js` 覆盖可见性。  
+- 复用说明：复用既有导航切换与项目列表过滤逻辑，仅补充权限判断与接口校验。  
+- 测试与验证：`npx playwright test --config tests/api/playwright.api.config.js tests/api/admin_entities.spec.js tests/api/non_admin_projects.spec.js`（通过，API_BASE_URL=http://127.0.0.1:9000）；`npm run test:ui -- tests/ui/project_admin_drawer.spec.js`（通过，使用本地 8090 静态服）。  
+- 更新记录：已执行 `python3 notify_feishu.py` 发送完成通知；2025-12-12 补充后端项目描述编辑权限（仅所属项目的组长/Admin），新增权限校验 API 用例。  
+
+- 功能名称：项目管理新增项目追加到底部  
+- 功能描述：在项目管理页面创建新项目后，列表保持原有顺序，新项目追加在底部而非置顶，便于按创建时间正序查看。  
+- 操作方式：进入“管理-项目管理”，点击“新建项目”保存后，列表末尾出现新项目条目。  
+- 使用效果：新增项目不会打乱现有排序，便于按创建顺序查阅。  
+- 新增内容/接口/组件：前端项目列表按 id 正序渲染；UI 用例补充校验新增项目出现在末尾。  
+- 复用说明：复用既有列表渲染与刷新逻辑，仅调整排序与测试断言。  
+- 测试与验证：`npm run test:ui -- tests/ui/project_admin_drawer.spec.js`（通过）。  
+- 更新记录：已执行 `python3 notify_feishu.py` 发送通知。  
+
+- 功能名称：项目管理权限细化（管理员/组员/组长）与导航可见性  
+- 功能描述：非管理员按级别差异化可见与可操作范围：组员/组长可见“管理-项目管理”，仅显示自身所属项目；组员仅能新增/删除版本，组长额外可编辑项目，删除/新建项目仅管理员可用；无可见子入口时一级菜单自动隐藏。  
+- 操作方式：登录后，组员/组长展开左侧“管理”，点击“项目管理”进入；仅能看到自己项目的版本操作按钮，管理员保持原有全量可见可改。  
+- 使用效果：降低非管理员越权风险，导航不再出现空的“管理”入口，成员只看到并操作自己的项目范围。  
+- 新增内容/接口/组件：authGuard 根据角色+级别重新计算可见 tabs；admin.js 按 currentUserProjects 过滤项目列表并限制动作权限；新增 currentUser/currentUserProjects 缓存。  
+- 复用说明：复用既有 API 客户端与 tab 切换逻辑，未新增接口。  
+- 测试与验证：`node --check scripts/modules/admin.js scripts/modules/authGuard.js`（通过）；尝试 `npx playwright test tests/ui/project_admin_drawer.spec.js`，因 Chrome headless 在当前沙箱下触发 macOS mach_port 权限拒绝未能跑通（chromium/crashpad 被拒绝写入），需在允许的环境复跑。  
+- 更新记录：2025-12-12 支持中文级别（组长/组员）也能正确识别权限并显示项目管理入口；当前端未拿到分配项目列表时，按接口返回的项目补全当前用户可见集，避免组长页面为空；所属项目 ID 兼容 `project_id/projectId/id/字符串`，防止过滤后空表。  
+
+- 功能名称：项目管理列表排版与按钮居中优化  
+- 功能描述：版本区域完整展示多行版本不滚动，“暂无版本”垂直居中；操作按钮固定高度/内边距，文本不换行且居中；项目名列宽缩半并给版本列让宽，版本列去掉底部线；项目名/描述/时间在版本换行时仍保持单行显示。  
+- 操作方式：进入项目管理列表查看版本较多的项目，观察按钮位置与各字段展示。  
+- 使用效果：多行版本时操作列不再被拉高，按钮与文字对齐美观；项目字段宽度稳定，不受版本换行干扰。  
+- 新增内容/接口/组件：调整项目管理表格布局（table-layout: fixed、列宽/最小宽度）、按钮样式、版本区样式。  
+- 复用说明：仅样式与现有渲染逻辑调整，无新增组件。  
+- 测试与验证：同上，UI 自动化因浏览器权限限制未跑通；需在具备 Chromium 运行权限的环境复验项目管理相关用例。  
+- 更新记录：无  
+
+- 功能名称：项目管理空版本提示居中
+- 功能描述：项目管理表格中，当项目还没有版本时，“暂无版本”提示垂直居中显示，行内容对齐不再显得偏高。
+- 操作方式：进入“管理-项目管理”，在无版本的项目行查看“版本”列提示。
+- 使用效果：空版本提示与表格其它字段保持同一垂直中心，对齐一致，行高度更整齐。
+- 新增内容/接口/组件：样式调整（style.css `.admin-table td` 垂直居中、`.version-empty` 尺寸与内边距优化）；UI 用例增加空态位置校验（tests/ui/project_admin_drawer.spec.js）。
+- 复用说明：复用既有表格结构与提示文案，仅优化样式与现有测试。
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/project_admin_drawer.spec.js`（通过）。
+- 更新记录：无
+
+- 功能名称：项目管理操作区不换行、版本列去线
+- 功能描述：项目管理表格中“操作”列按钮保持一行排列不再换行；“版本”列底部边线去除，视觉更干净。
+- 操作方式：进入“管理-项目管理”，查看项目列表的操作按钮与版本区域。
+- 使用效果：操作按钮集中一行更易点击，版本列空态或多标签下不再出现多余分割线。
+- 新增内容/接口/组件：项目表格定向样式（style.css `#projectAdmin .admin-table .actions`、`#projectAdmin .admin-table td.project-versions`），UI 用例增加布局校验（tests/ui/project_admin_drawer.spec.js）。
+- 复用说明：复用既有表格与按钮结构，仅调整样式与测试校验。
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/project_admin_drawer.spec.js`（通过）。
+- 更新记录：保持版本完整展示不滚动；操作区高度固定并居中，避免随版本行高拉伸；操作按钮文本保持单行居中不换行；项目名/描述/创建时间保持单行不换行、固定列宽，版本换行不再挤压这些字段；项目名宽度缩小一半并让出空间给版本列。
+
+- 功能名称：无可见二级入口时隐藏一级菜单
+- 功能描述：当某一级导航下所有二级入口因权限不可见时，自动隐藏对应的一级按钮，避免出现无法点击的空菜单。
+- 操作方式：权限不足用户登录后，侧边导航仅显示有权限的一级按钮；管理员保持不变。
+- 使用效果：非管理员看不到空的“管理”等一级入口，导航更简洁。
+- 新增内容/接口/组件：权限可见性计算与一级菜单隐藏逻辑（scripts/modules/authGuard.js），导航用例覆盖无权限场景（tests/ui/sidebar_menu.spec.js）。
+- 复用说明：复用现有角色标记与 tab 切换逻辑，仅增加可见性判定。
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/sidebar_menu.spec.js`（通过）。
+- 更新记录：无
+
+- 功能名称：人员管理项目分配改为勾选
+- 功能描述：人员管理抽屉的“所属项目”改为平铺勾选项，无项目时显示“暂无项目”，多个项目自动换行，勾选即为分配。
+- 操作方式：进入“管理-人员管理”打开新增/编辑抽屉，按需勾选项目；无可用项目时看到“暂无项目”提示。
+- 使用效果：项目分配入口直观可视，支持多行展示，空态清晰。
+- 新增内容/接口/组件：项目勾选容器与样式（index.html#userProjectsSelect，style.css `.user-projects-select/.project-checkbox/.project-checkbox-empty`），表单收集逻辑更新（scripts/modules/admin.js），UI 用例覆盖勾选状态与空态（tests/ui/user_admin_drawer.spec.js）。
+- 复用说明：复用原有项目数据与分配接口，仅调整前端展示与选择方式。
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/user_admin_drawer.spec.js`（通过）。
+- 更新记录：无
+
+- 功能名称：抽屉开启时禁用侧边导航点击  
+- 功能描述：抽屉打开后左侧导航（含二级菜单与用户菜单）保持可见但不再响应点击或切换，避免遮罩下误触。  
+- 操作方式：任意页面打开抽屉后，侧边一级/二级菜单、用户菜单与侧边工具按钮点击无效，需先收起抽屉再切换页签；抽屉关闭后恢复原有操作。  
+- 使用效果：遮罩出现时不会误切换页签或展开菜单，现有二级菜单设计与样式保持不变。  
+- 新增内容/接口/组件：抽屉状态检测与侧边事件阻断（scripts/core/appRuntime.js），用户菜单在抽屉开启时自动关闭/忽略点击（scripts/modules/authGuard.js）；新增 UI 场景 `tests/ui/sidebar_menu.spec.js` 覆盖抽屉下导航禁用。  
+- 复用说明：复用既有抽屉组件与页签切换逻辑，仅新增 isDrawerOpen 判定与事件阻断，不改动 DOM/样式结构。  
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/sidebar_menu.spec.js`（通过，需确保 8090 端口空闲）。  
+- 更新记录：2025-12-11 调整抽屉 z-index 与 content-shell 层级，确保遮罩覆盖导航；侧边栏键盘事件也被阻断。  
+
+- 功能名称：人员管理抽屉表单优化  
+- 功能描述：人员抽屉的“所属项目”改为紧凑下拉多选，整体更轻量；抽屉按钮排版收紧，取消按钮不再占满整行。  
+- 操作方式：在“管理-人员管理”点击“新增/编辑”打开抽屉，项目选择为小型多选列表，可滚动选择；保存/取消按钮紧凑排列。  
+- 使用效果：表单占用空间更少，视觉更整洁，避免巨型列表和宽幅取消按钮。  
+- 新增内容/接口/组件：项目多选样式 `user-projects-select`、抽屉按钮布局类 `user-form-actions`（style.css/index.html）。  
+- 复用说明：复用现有抽屉与表单逻辑，仅调整样式与标记。  
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/user_admin_drawer.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：项目管理抽屉化与表格视图  
+- 功能描述：“项目管理”改为表格列表展示，包含项目名/描述/版本/创建时间；新增与编辑项目在右侧抽屉完成，保持与人员管理一致的交互。  
+- 操作方式：进入“管理-项目管理”查看表格，点击“新建项目”或行内“编辑”在抽屉填写名称/描述保存；版本仍可在表格行内新增/删除。  
+- 使用效果：项目列表信息更集中易读，抽屉交互统一且不占主界面空间。  
+- 新增内容/接口/组件：项目表格 DOM `#projectTableBody`、项目抽屉 `#projectDrawer` 与标题 `#projectDrawerTitle`，版本展示按钮布局（index.html/style.css），项目交互逻辑抽屉化（scripts/modules/admin.js）。  
+- 复用说明：复用已有抽屉组件与状态提示，沿用项目/版本接口。  
+- 测试与验证：`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:ui -- tests/ui/project_admin_drawer.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：人员管理列表视图与抽屉编辑  
+- 功能描述：人员管理改为表格列表展示，适配多人场景；新增/编辑人员在右侧抽屉完成，字段集中且可滚动。  
+- 操作方式：在“管理-人员管理”进入后查看表格，点击“新增人员”或行内“编辑/分配项目”打开抽屉，填写账号、角色、级别、状态、项目并保存。  
+- 使用效果：大量用户时仍可快速浏览与筛查，编辑时不挤占主界面；抽屉关闭后列表自动刷新。  
+- 新增内容/接口/组件：表格 DOM（`index.html#userTableBody`）、抽屉容器 `#userDrawer`；样式 `.admin-table*`（style.css）；前端逻辑更新（scripts/modules/admin.js）支持表格渲染、抽屉开关、状态提示。  
+- 复用说明：复用现有抽屉组件与状态提示方法，沿用既有用户/项目接口。  
+- 测试与验证：新增 UI 用例 `tests/ui/user_admin_drawer.spec.js` 覆盖表格渲染与抽屉开关；未执行（本地缺少 Playwright 浏览器二进制），需先运行 `npx playwright install` 后执行 `npx playwright test tests/ui/user_admin_drawer.spec.js`。  
+- 更新记录：2025-12-11 列表级别改为中文展示（组长/组员），与抽屉选择一致。  
+
+- 功能名称：侧边导航分级与悬浮子菜单  
+- 功能描述：左侧页签按“AI 功能/用例相关/管理/设置”分级，二级入口通过悬浮菜单展示，避免按钮拥挤且保持布局稳定。  
+- 操作方式：点击一级按钮在右侧弹出悬浮菜单，选择对应二级按钮切换页面，点击空白处即可收起。  
+- 使用效果：导航更清晰，二级入口不再挤占侧边栏空间，切换时保留原有高亮与布局。  
+- 新增内容/接口/组件：侧边导航分组 DOM（index.html）、样式 `.tab-group/.tab-submenu` 与层级样式（style.css）、分组展开/收起逻辑与激活高亮（scripts/core/appRuntime.js）。  
+- 复用说明：复用原有 tab 切换与高亮机制，仅新增分组容器与悬浮层展示。  
+- 测试与验证：手工在主界面验证四个一级菜单的展开/收起、二级按钮点击切换、点击空白收起；建议在 Chrome/Safari 走一遍核心流程。新增 UI 自动化用例 `tests/ui/sidebar_menu.spec.js` 覆盖展开/关闭与切换（2025-XX-XX 最新运行通过）。  
+- 更新记录：无  
+
+- 功能名称：人员/项目管理前端与接口接入  
+- 功能描述：管理员可在“管理”分组下完成项目与版本增删改、人员增删改、项目分配及密码重置。  
+- 操作方式：项目管理卡片支持刷新/新建/编辑/删项目及新增/删除版本；人员管理卡片支持新增/编辑用户、分配项目、重置密码和删除；点击对应一级菜单后显示二级按钮，再进入卡片操作。  
+- 使用效果：基础权限与项目成员关系可在前端直接配置，后端自动写入/校验，后续用例库/执行等功能可依赖项目与人员数据。  
+- 新增内容/接口/组件：前端新增 `scripts/modules/admin.js`、项目/人员表单与列表（index.html）、样式块（style.css）；API 客户端扩展用户/项目 CRUD 与分配方法；后端新增用户项目列表接口 `/api/users/{id}/projects`；新增接口用例 `tests/api/admin_entities.spec.js`。  
+- 复用说明：复用现有卡片样式与状态提示；接口复用既有鉴权与操作日志逻辑。  
+- 测试与验证：`npm run test:ui -- tests/ui/sidebar_menu.spec.js`（通过，需 http.server 提权）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/admin_entities.spec.js`（需本地运行 FastAPI 服务）。  
+- 更新记录：无  
+
+- 功能名称：当前迭代计划（DB 接入与权限改造）
+- 功能描述：用 FastAPI + SQLite3 替换浏览器缓存持久化，新增登录/权限、人员管理、项目管理、用例库、执行数据入库、操作记录、设置/模型/功能指派持久化等；详情见 `db_integration_plan.md`。
+- 操作方式：实施前先阅读 `db_integration_plan.md` 与本条，确认已有进展与待办；实施后按 `FEATURE_DEV_GUIDE.md` 要求记录更新。
+- 使用效果：为多次迭代提供统一上下文，明确当前目标与落地路径。
+- 新增内容/接口/组件：规划文档 `db_integration_plan.md`，预计新增 FastAPI 服务、SQLite 表与前端页签/接口适配（实施中）。
+- 复用说明：规划阶段；实施时优先复用现有前端组件与逻辑，后端按规划复用通用接口模式。
+- 测试与验证：规划阶段，实施时需补充 UI 与 API 自动化测试。
+- 更新记录：已初始化 FastAPI+SQLite 后端骨架（静态托管、默认管理员、鉴权/用户/项目/版本与分配、操作日志写入），新增用例库导入/编辑与执行集创建/用例写库等 API；前端增加独立登录页、鉴权接入、侧边栏显示当前用户、管理员页签（项目管理/人员管理/操作记录）占位与用例库入口；补充执行总览规划（exec_overview_stats 表及接口）；支持登录页修改密码（前端表单+后端接口），新增 API 自动化用例 `tests/api/auth_change_password.spec.js`，待前端人员管理、执行页持久化与总览落地。  
+
+- 功能名称：工作流导入同步执行文件名去重  
+- 功能描述：用例生成页“用例视图中勾选用例，新增到”将工作流导入的用例同步到执行页时，执行名称/导出 XMind 根节点沿用所选用例文件名，先移除旧的 `_年月日时分秒` 标识再追加最新时间戳，避免标识叠加。  
+- 操作方式：在功能工作流导入用例后于用例生成页勾选用例、选择对应导入文件并确认新增，跳转到用例执行时根节点即为源文件名+当前时间戳，导出 XMind 根节点保持一致。  
+- 使用效果：执行页根节点名称与来源用例保持一致，导出 XMind 不再显示需求标识或叠加时间戳。  
+- 新增内容/接口/组件：追加到工作流的同步执行逻辑新增文件名前缀去标识与重新命名；XMind 导出根节点优先使用执行文件名；新增 UI 用例 `tests/ui/casegen_workflow_exec_name.spec.js` 校验命名。  
+- 复用说明：复用文件名清理与时间戳生成规则（getSafeFileBaseName、formatCompactTimestamp），未引入新接口。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_workflow_exec_name.spec.js`（通过，需本地 python3 http.server 提权）。  
+- 更新记录：补充“勾选用例转执行”生成的执行文件去除“勾选用例-”前缀并沿用需求标识；导出用例 XMind 根节点同步执行文件名。  
+
+- 功能名称：一键执行等待跳转定位
+- 功能描述：开启“需要人工确认需求澄清后再继续自动流程”时，澄清等待或覆盖率不足的导航点击将直接跳转到一键执行页对应澄清/对比区，而非功能工作流卡片。
+- 操作方式：勾选自动流程澄清选项后运行一键执行，出现澄清等待或覆盖率不足提示时，点击顶部流程导航对应步骤即自动切换到“一键执行”页并定位到澄清或对比卡片。
+- 使用效果：等待人工澄清或覆盖率不足时无需手动切页查找，导航按钮直接带用户到一键执行处理区域。
+- 新增内容/接口/组件：flowCore 导航跳转增加等待状态下的自动页锚点处理；UI 用例扩展 `tests/ui/auto_waiting_status.spec.js` 覆盖等待跳转。
+- 复用说明：复用既有导航与等待状态标记，只调整滚动目标与显隐控制。
+- 测试与验证：`npm run test:ui -- tests/ui/auto_waiting_status.spec.js --project=chromium --headed`（通过，需 http.server 提权）。
+- 更新记录：无  
+
+- 功能名称：拆分结果自动同步拆分视图
+- 功能描述：测试模块拆分模型生成结果后自动触发拆分视图刷新，无需导出/导入即可直接展开查看模块表格。
+- 操作方式：在“测试模块拆分”调用模型生成结果或程序写入拆分结果后，点击“展开拆分视图”即可查看，按钮会自动启用。
+- 使用效果：拆分完成后无需手动修改文本或重新导入，拆分视图抽屉立即可展开，模块列表与用例生成保持同步。
+- 新增内容/接口/组件：拆分结果写入统一通过 `applySplitResultText` 触发 `input` 事件与视图同步；新增 UI 用例 `tests/ui/split_view_autosync.spec.js` 验证按钮自动可用。
+- 复用说明：复用既有拆分结果解析、输入监听与视图渲染逻辑，仅补充程序写入时的事件派发与同步接口。
+- 测试与验证：`npm run test:ui -- tests/ui/split_view_autosync.spec.js`（首次因端口占用失败，清理 http.server 后重跑通过）。
+- 更新记录：无  
+
+- 功能名称：XMind 导出文件名去重与依赖修复  
+- 功能描述：导出执行/用例 XMind 时会先清除已有的 `_result_年月日时分秒` 或 `_年月日时分秒` 标识，避免时间戳叠加；同时修复执行页导出按钮因依赖未初始化导致无响应的问题。  
+- 操作方式：在执行页点击“导出执行XMind”或“导出用例Xmind（无结果）”，或在用例生成/模块导出 XMind 时，导出文件名自动去除旧标识后再追加最新时间戳。  
+- 使用效果：多次导入/导出、在结果与无结果之间切换时，文件名仅保留一次时间戳/结果标识，导出按钮恢复可用。  
+- 新增内容/接口/组件：文件名清理方法 `stripTimestampSuffix` 复用于 xmindCore 与 tempexecCore，暴露安全文件名前缀获取；新增 UI 用例 `tests/ui/xmind_filename_sanitize.spec.js`，扩展执行导入用例 `tests/ui/tempexec_import_xmind.spec.js`。  
+- 复用说明：复用既有 XMind 构建/导出与执行导入逻辑，仅补充文件名清理与依赖顺序修复。  
+- 测试与验证：`npm run test:ui -- tests/ui/xmind_filename_sanitize.spec.js tests/ui/tempexec_import_xmind.spec.js`（通过，需 http.server 提权）。  
+- 更新记录：修复 app.js 初始化顺序，避免 `getSafeFileBaseName`/`buildTempExecCasesFromXmindPaths` 未定义导致导出/导入失效。  
+
+- 功能名称：智能填充后关闭缺失抽屉恢复滚动  
+- 功能描述：智能填充缺失模块建议后自动关闭缺失模块抽屉与智能缺失抽屉，避免遮罩残留导致后续页面无法滚动。  
+- 操作方式：在清洗页导入拆分与覆盖对比结果，点击“缺失模块视图”后使用“智能填充”同步建议，抽屉会在填充完毕后自动收起。  
+- 使用效果：智能填充完成后跳转到用例生成页时不再被遮罩阻挡，可正常滚动和编辑。  
+- 新增内容/接口/组件：`closeMissingDrawersAfterFill` 关闭双抽屉逻辑，智能填充流程调用；UI 用例 `tests/ui/cases_missing_view.spec.js` 新增滚动可用性校验并统一等待初始化。  
+- 复用说明：复用既有抽屉封装与智能填充流程，仅补充收起逻辑与用例覆盖。  
+- 测试与验证：`npx playwright test --config tests/playwright.config.js tests/ui/cases_missing_view.spec.js --reporter list`（首次等待初始化超时，单例重跑通过）。  
+- 更新记录：补充切换 Tab 前统一收起抽屉，修复生成用例等跳转后的滚动锁定。  
+
+- 功能名称：执行页导入结果型 XMind 并识别复用  
+- 功能描述：用例执行页支持导入带执行结果的 XMind，自动根据根节点到叶子路径长度判定是否包含结果，并区分复用/非复用类型，复用子项与状态会同步到执行列表。  
+- 操作方式：在“用例导入&分配”直接导入执行 XMind，普通 6 层路径视为无结果，存在更深层节点则判为结果型；含子项路径自动开启复用模式。  
+- 使用效果：导入带结果的 XMind 时，执行状态/备注/复用子项自动落表；无结果的 XMind 仍按原有用例导入。  
+- 新增内容/接口/组件：XMind 叶子路径收集与结果解析、执行导入复用检测；UI 用例 `tests/ui/tempexec_import_xmind.spec.js` 覆盖无结果/带结果/复用导入。  
+- 复用说明：复用既有 XMind 解析与执行文件结构，仅新增路径分析与复用标记处理。  
+- 测试与验证：`npx playwright test --config tests/playwright.config.js tests/ui/tempexec_import_xmind.spec.js --reporter list`。  
+- 更新记录：无  
+
+- 功能名称：一键执行导航失败态标红完善  
+- 功能描述：AI 一键需求&用例评审顶部导航在评审/清洗/对比/拆分/覆盖对比结果校验失败时会描边变红并显示红色叉号，生成或导入的不合法数据会自动暴露。  
+- 操作方式：运行自动流程或手工导入结果，当评审/清洗/对比/拆分/覆盖对比结果非预期 JSON/缺少内容时，导航按钮自动切换为失败态；修复数据并更新后自动恢复正常。  
+- 使用效果：导航清晰提示数据异常步骤，失败态红色描边+叉号一目了然，便于优先修复；成功修复后状态即时回绿。  
+- 新增内容/接口/组件：导航校验新增评审/清洗/对比/拆分/覆盖对比自动校验、`updateFlowStatus` 外部调用出口、UI 用例 `tests/ui/auto_waiting_status.spec.js` 扩展失败态断言。  
+- 复用说明：复用既有导航状态渲染与验证流程，仅补充校验范围与状态暴露。  
+- 测试与验证：`npx playwright test --config tests/playwright.config.js tests/ui/auto_waiting_status.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：一键执行等待/失败导航提示  
+- 功能描述：自动流程因需求澄清或覆盖率不足暂停时，顶部步骤导航会标记对应步骤为橙色“等待确认”；生成/导入数据不合法时则标红“失败”，提示人工修复后重试。  
+- 操作方式：勾选“需要人工确认需求澄清”并运行一键执行后，澄清未确认时“评审”步骤显示橙色等待；对比完整性覆盖率 <100% 时，“对比完整性”步骤显示橙色等待，重新清洗或忽略后恢复正常；模型输出/导入无效导致校验失败时，相应步骤描边变红并显示红色叉号。  
+- 使用效果：等待人工确认时导航描边与状态图标变橙色，数据异常时变红叉，直观暴露阻塞步骤与处理优先级。  
+- 新增内容/接口/组件：新增等待/失败状态样式与状态图标、状态字典字段 `state.waitingSteps`/`state.failedSteps`、状态同步与重置逻辑；新增 UI 用例 `tests/ui/auto_waiting_status.spec.js`。  
+- 复用说明：复用既有步骤导航渲染与自动流程状态同步逻辑，仅扩展状态计算与样式。  
+- 测试与验证：`npx playwright test --config tests/playwright.config.js tests/ui/auto_waiting_status.spec.js tests/ui/auto_drawer.spec.js`（需本地 http.server，已提权通过）；`npm test` 全量执行时沿用同一服务器，有历史失败项：调试文件缺失与文件导出下载事件未触发。  
+- 更新记录：无  
+
+- 功能名称：用例生成跨模块勾选导出 XMind（恢复）  
+- 功能描述：用例生成页恢复全局“导出全部勾选用例XMind”按钮，可在用例视图勾选多模块用例后一次性导出合并 XMind；导入模块用例后按钮自动启用。  
+- 操作方式：导入或生成用例后在模块“用例视图”勾选，用例视图底部可导出/导入/清除当前模块，用例视图关闭后点击顶部“导出全部勾选用例XMind”导出。  
+- 使用效果：跨模块勾选导出重新可用，导入后全局导出按钮即时可用，操作集中在用例视图抽屉。  
+- 新增内容/接口/组件：全局按钮 DOM/别名绑定、casesGenCore 聚合导出/按钮刷新、用例视图底部操作区保留导出/导入/清除；UI 用例覆盖全局导出。  
+- 复用说明：复用既有 XMind 构建与勾选收集逻辑，补充状态刷新与导入后启用。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_export_xmind.spec.js`（需本地 8090 http.server，已通过）。  
+- 更新记录：无  
+
+- 功能名称：用例生成导出使用需求标识命名  
+- 功能描述：用例生成页一键导出生成用例时，直接生成需求标识前缀的 XMind 文件，便于归档与区分需求。  
+- 操作方式：在“用例生成”点击“导出全部用例”，文件名形如 `需求1_20251209095437.xmind`，前缀取当前需求标识，空标识时提示填写。  
+- 使用效果：导出的 XMind 与需求标识一一对应，免去手动改名，便于整理与对比。  
+- 新增内容/接口/组件：导出逻辑改为聚合所有生成用例并调用 XMind 导出，文件名基于需求标识与紧凑时间戳；新增 UI 自动化校验导出命名 `tests/ui/casegen_export_xmind.spec.js`。  
+- 复用说明：复用现有 XMind 构建与需求标识获取逻辑，仅调整导出聚合与命名。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_export_xmind.spec.js`（需本地 8090 http.server，已提权运行通过）。  
+- 更新记录：无  
+
+- 功能名称：执行页 XMind 导出沿用原文件名  
+- 功能描述：用例执行页导出的 XMind 文件名以原始导入文件名为前缀，区分是否包含执行结果追加 result 与时间戳。  
+- 操作方式：在“用例执行”点击“导出执行 XMind”或“导出用例 XMind”，示例：导出结果 `需求1_result_20251209093848.xmind`，导出无结果 `需求1_20251209093848.xmind`，前缀取原文件名去扩展名并替换非法字符。  
+- 使用效果：下载文件名与来源一致并标识是否含执行结果，便于归档和对比。  
+- 新增内容/接口/组件：xmindCore 新增 `getSafeFileBaseName` 工具，临时执行 XMind 导出使用原文件名前缀和紧凑时间戳命名，UI 用例补充文件名断言。  
+- 复用说明：复用原有时间戳/下载与导出管线，仅调整文件名生成逻辑。  
+- 测试与验证：`npm run test:ui -- tests/ui/tempexec_drag.spec.js`（需本地 8090 http.server，已提权运行通过）。  
+- 更新记录：无  
+
+- 功能名称：对比完整性导航步骤补充  
+- 功能描述：AI 一键需求&用例评审顶部步骤导航新增“对比完整性”按钮，明确清洗后需先做覆盖率对比再继续拆分/用例导入。  
+- 操作方式：在页面顶部步骤条，清洗与拆分之间新增“对比完整性”卡片，点击可定位到对应功能卡片，状态图标与执行进度同步。  
+- 使用效果：流程顺序更清晰，覆盖率对比作为独立步骤可一键跳转查看/补录结果，完成后状态自动标记。  
+- 新增内容/接口/组件：顶部 flowNav 新增 compare 步骤与编号调整，flowCore 状态映射增加 compareResult，同步更新 UI 用例断言。  
+- 复用说明：复用既有步骤导航结构与状态同步逻辑，仅新增步骤节点与状态字段。  
+- 测试与验证：`npm run test:ui -- tests/ui/workflow.spec.js`（需本地 8090 http.server，已提权运行通过）。  
+- 更新记录：无  
+
+- 功能名称：缺失模块视图操作迁移到抽屉底部  
+- 功能描述：缺失模块视图的入口文案改为“前往勾选缺失模块生成缺失用例”，生成缺失用例按钮移入抽屉，与复制缺失、智能生成填充统一放在抽屉底部操作区。  
+- 操作方式：点击入口按钮打开抽屉，在抽屉底部依次可复制缺失 JSON、智能生成填充（高亮主按钮）、生成缺失用例。自动流程的缺失抽屉同步改为底部操作区。  
+- 使用效果：缺失处理操作集中且不遮挡列表，智能填充按钮更醒目，美观易点。  
+- 新增内容/接口/组件：缺失视图抽屉底部操作栏（复制/智能填充/生成用例），入口文案更新；自动缺失抽屉同步布局。  
+- 复用说明：复用既有缺失抽屉与生成用例逻辑，仅调整按钮位置与样式。  
+- 测试与验证：`npm run test:ui -- tests/ui/cases_missing_view.spec.js`（需本地 8090 http.server，已提权运行通过）。  
+- 更新记录：无  
+
+- 功能名称：一键执行视图抽屉化  
+- 功能描述：一键执行页的澄清视图、覆盖缺失视图、用例缺失视图统一改为右侧抽屉，澄清确认、缺失处理与补充说明集中在抽屉内。  
+- 操作方式：在“需求澄清（人工确认）”点击“前往视图确认澄清”手动打开抽屉补充澄清；在“清洗后需求覆盖率”点击“覆盖缺失视图”查看缺失点、填写说明并继续流程；在“用例缺失测试点”点击入口打开抽屉查看缺失模块、复制/智能填充或跳转生成用例。勾选“需要人工确认”仅暂停流程，不会自动弹出抽屉。  
+- 使用效果：视图不再占用卡片主体，操作聚焦在抽屉内，遮罩下导航保持可见；人工澄清需显式打开抽屉确认，避免强制弹窗。  
+- 新增内容/接口/组件：新增一键执行澄清/覆盖/缺失抽屉 DOM 与开关、状态镜像辅助方法（按钮文案、状态同步），自动化用例 `tests/ui/auto_drawer.spec.js`。  
+- 复用说明：复用通用抽屉组件与现有渲染/状态管理逻辑，仅调整承载位置与开关行为。  
+- 测试与验证：`npm run test:ui -- tests/ui/auto_drawer.spec.js`。  
+- 更新记录：澄清人工确认选项不再自动展开抽屉，需要手动点击入口。  
+
+- 功能名称：执行页滚动后打开导入抽屉导航不偏移  
+- 功能描述：在用例执行页选中用例并上滚列表后，打开“用例导入&分配”抽屉时，左侧页签和执行导航保持在原位置，不会被移动到滚动处。  
+- 操作方式：进入“用例执行”页滚动至较靠上位置，点击“用例导入&分配”入口打开抽屉，导航区域应保持贴顶；关闭抽屉后滚动高度保持不变。  
+- 使用效果：抽屉开合不再改变导航定位，滚动后的视图稳定，避免需要重新定位导航区域。  
+- 新增内容/接口/组件：抽屉滚动锁定改为事件阻断（wheel/touch/键盘），移除 html/body overflow 隐藏以保持导航粘顶，新增 UI 用例覆盖长滚动后打开执行抽屉 `tests/ui/drawer_nav_visibility.spec.js`。  
+- 复用说明：复用通用抽屉组件与现有导航布局，仅优化滚动锁定方式。  
+- 测试与验证：`npm run test:ui -- tests/ui/drawer_nav_visibility.spec.js`、`npm run test:ui -- tests/ui/tempexec_sticky.spec.js`（通过，需本地 http.server 权限）。  
+- 更新记录：无  
+
+- 功能名称：抽屉打开后导航位置保持不变  
+- 功能描述：主页面已滚动时打开功能工作流或用例执行的抽屉，左侧页签与顶部导航不再被滚动移出视口，始终停留在原位置。  
+- 操作方式：在页面滚动一段距离后打开任意工作流/执行相关抽屉，导航区域仍可见，关闭抽屉后滚动位置保持不变。  
+- 使用效果：抽屉开合不会把导航滚走，遮罩覆盖背景但不影响导航辨识，关闭后回到原滚动高度。  
+- 新增内容/接口/组件：抽屉基础组件滚动锁定改为事件级阻止（wheel/touch/键盘），移除 html/body overflow 锁定，滚动场景 UI 用例扩展 `tests/ui/drawer_nav_visibility.spec.js`。  
+- 复用说明：复用通用抽屉组件与现有导航结构，仅补充滚动锁定与样式控制。  
+- 测试与验证：`npm run test:ui -- tests/ui/drawer_nav_visibility.spec.js`、`npm run test:ui -- tests/ui/tempexec_sticky.spec.js`（通过，需本地 http.server 权限，缺少浏览器时先执行 `npx playwright install`）。  
+- 更新记录：无  
+
+- 功能名称：用例生成追加到已有用例并同步执行  
+- 功能描述：在用例生成页新增“新增到已有用例”按钮，勾选生成的用例后可将其按模块追加到功能工作流已导入的用例中，自动跳过重复标题并同步到用例执行；如未在工作流导入，会引导选择执行页已有用例追加。  
+- 操作方式：生成用例并在用例视图勾选需要追加的用例，点击“新增到已有用例”，确认后自动将缺失模块/用例补充到已导入用例并刷新导入数据；若工作流空但执行页有历史用例，可在弹出的选择框选择目标执行用例追加；两处均有用例且需求一致时，同步到执行用例并保留执行记录/复用类型。重复标题自动跳过，内容全重复时提示“用例已经包含将要导入的用例，无需重复新增”。  
+- 使用效果：可一次性把多个模块的新用例补齐到既有用例并立即进入执行页，无需手动再导入；执行页历史用例可直接增量补充且保留已有执行结果，重复标题自动跳过。  
+- 新增内容/接口/组件：用例生成页追加按钮、工作流/执行页双通道追加与需求匹配逻辑、执行用例合并与执行数据保留、UI 用例 `tests/ui/casegen_append_existing.spec.js`。  
+- 复用说明：复用用例生成的选择状态与执行页存储结构，复用已导入用例解析与状态管理，仅新增追加、去重、执行同步与执行数据合并流程。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_append_existing.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：AI 评审步骤执行态描边与未开始图标优化  
+- 功能描述：AI 一键需求&用例评审的步骤按钮在执行中改为白底蓝色描边，运行中的状态图标描边加强；未开始状态改用三角形播放样式替代圆点。  
+- 操作方式：在自动流程或手工执行评审/清洗/对比/拆分时，顶部步骤条当前执行步骤显示蓝色描边与跑动图标，未执行步骤右侧展示灰色三角标。  
+- 使用效果：执行态不再被深色底遮挡，旋转图标更醒目；未执行态图标形状简洁清晰。  
+- 新增内容/接口/组件：运行/未开始状态的图标与描边样式调整，在状态同步时追加内联样式；新增 UI 断言覆盖执行态描边 `tests/ui/workflow.spec.js`。  
+- 复用说明：复用既有 flowNav 状态判定与渲染，仅增强样式与图标映射。  
+- 测试与验证：`npm run test:ui -- tests/ui/workflow.spec.js`（通过，需本地 8090 http.server）。  
+- 更新记录：无  
+
+- 功能名称：覆盖对比导出/缺失视图/拆分按钮交互修复  
+- 功能描述：修复用例覆盖对比导出会跳转页面、缺失模块视图全选无效、缺失视图生成用例按钮空态可点、拆分执行中按钮可重复点的问题。  
+- 操作方式：导出对比结果时保持在当前页；展开“缺失模块视图”可使用表头全选/取消；未有拆分结果时“生成用例”按钮保持禁用；点击“开始拆分”后按钮在执行中禁用，结束后恢复。  
+- 使用效果：导出仅触发下载、不再打开新页；缺失列表可一键全选/全取消；无拆分数据时避免误跳转生成用例；拆分执行中无法重复触发。  
+- 新增内容/接口/组件：绑定缺失视图选框事件、导出示例下载按需触发；DOM 映射补充 `splitBtnEl`；新增 UI 用例 `tests/ui/cases_export_and_split.spec.js`，扩展缺失视图用例校验全选/禁用状态。  
+- 复用说明：复用既有覆盖对比、缺失视图与拆分流程，仅补充事件绑定与状态控制。  
+- 测试与验证：`npm run test:ui -- tests/ui/cases_missing_view.spec.js tests/ui/cases_export_and_split.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：拆分结果生成用例跳转恢复  
+- 功能描述：修复功能工作流“测试模块拆分”卡片中，已有拆分结果时点击“生成用例”不跳转的情况，保证可直接进入用例生成页。  
+- 操作方式：在“测试模块拆分”生成或导入拆分 JSON 后点击“生成用例”，页面自动切换到“用例生成”页签并渲染拆分模块。  
+- 使用效果：拆分结果与用例生成联动恢复正常，无需二次刷新即可跳转。  
+- 新增内容/接口/组件：同步 casesGenApi 的生成用例跳转函数绑定，新增 UI 自动化用例 `tests/ui/split_go_usecase_nav.spec.js` 覆盖跳转路径。  
+- 复用说明：复用既有跳转与模块解析逻辑，仅补充 API 绑定时机，未新增接口。  
+- 测试与验证：`npx playwright test tests/ui/workflow.spec.js tests/ui/split_go_usecase_nav.spec.js --config tests/playwright.config.js`（通过，需本地 http.server 权限）。  
+- 更新记录：无  
+
+- 功能名称：缺失模块智能填充按钮即时可用  
+- 功能描述：修复先导入拆分数据再导入覆盖对比数据时，“智能生成填充”按钮仍灰置的问题，无需再切换页面即可使用。  
+- 操作方式：在“功能工作流”导入拆分调试 TXT（或直接填充拆分结果），再点击“导入对比结果”选择用例覆盖对比文件，导入完成后按钮自动可点击。  
+- 使用效果：满足有缺失模块且存在拆分数据时，智能填充按钮即时启用，减少额外跳转。  
+- 新增内容/接口/组件：缺失视图按钮刷新时自动回填拆分模块引用；新增 UI 用例覆盖导入拆分+覆盖后按钮可用场景 `tests/ui/cases_missing_view.spec.js`。  
+- 复用说明：复用原有拆分解析与缺失视图刷新逻辑，仅补充 CaseGen 模块自动同步。  
+- 测试与验证：`npx playwright test tests/ui/cases_missing_view.spec.js tests/ui/split_go_usecase_nav.spec.js --config tests/playwright.config.js`（通过，需本地 http.server 权限）。  
+- 更新记录：无  
+
+- 功能名称：用例生成结果展示格式美化  
+- 功能描述：生成或导入的用例结果在展示框中不再出现 `<br/>` 乱码，自动格式化为可读 JSON，避免内容拥挤。  
+- 操作方式：正常生成或通过“导入json”导入用例结果后，展示框内自动展示排版后的 JSON，包含换行缩进。  
+- 使用效果：用例结果可直接阅读/复制，无需手工替换 `<br/>` 或重新排版。  
+- 新增内容/接口/组件：用例结果解析时替换 `<br/>`、`&nbsp;` 并统一格式化；新增 UI 用例 `tests/ui/casegen_display_format.spec.js` 验证展示格式。  
+- 复用说明：复用原有用例生成解析逻辑，仅在渲染与导入时增加格式化与清洗。  
+- 测试与验证：`npx playwright test tests/ui/casegen_display_format.spec.js --config tests/playwright.config.js`（通过，需本地 http.server 权限）。  
+- 更新记录：无  
+
+- 功能名称：拆分调试文件需求标识去重  
+- 功能描述：导入已包含 requirement 的拆分调试 TXT 后再次保存不会重复包裹需求字段，避免 requirement/data 嵌套。  
+- 操作方式：导入带 requirement 的拆分调试文件后直接点击“保存调试TXT”，输出与原需求标识一致、不重复写入。  
+- 使用效果：调试文件往返导入/保存保持结构稳定，避免重复字段导致解析异常。  
+- 新增内容/接口/组件：调试保存时检测已包裹的 requirement/data 结构并跳过二次封装；新增 UI 用例 `tests/ui/debug_split_wrap.spec.js` 验证无重复包裹。  
+- 复用说明：复用原有调试保存逻辑，仅增加包裹检测。  
+- 测试与验证：`npx playwright test tests/ui/debug_split_wrap.spec.js --config tests/playwright.config.js`（通过，需本地 http.server 权限）。  
+- 更新记录：无  
+
+- 功能名称：缺失模块视图刷新修复  
+- 功能描述：修复测试用例覆盖对比结果导入或生成后，缺失模块视图因函数被占位覆盖而不再刷新，无法展示 missing 列表的问题。  
+- 操作方式：正常执行“测试用例覆盖对比”或点击“导入对比结果”选择覆盖对比文件，导入后点击“缺失模块视图”即可展开缺失点列表。  
+- 使用效果：无论是新生成的覆盖对比结果还是带需求标识/type 字段的导入文件，缺失模块视图都能即时解析并展示行列表，可继续复制或智能填充。  
+- 新增内容/接口/组件：修正 compareCore 缺失视图刷新逻辑；新增 UI 自动化用例 `tests/ui/cases_missing_view.spec.js`（新增需求标识覆盖场景）与示例数据 `tests/fixtures/cases_compare_missing_view_wrapped.txt`。  
+- 复用说明：复用原有覆盖对比解析与渲染流程，仅去除占位函数覆盖。  
+- 测试与验证：`npm run test:ui -- tests/ui/cases_missing_view.spec.js`（通过，需本地 8090 端口 http.server 权限）。  
+- 更新记录：无  
+
+- 功能名称：覆盖对比缺失视图解析修复  
+- 功能描述：导入用例覆盖对比结果时，兼容 data 内再包一层 data 的格式，缺失模块视图可正常解析并展示用户提供的对比结果。  
+- 操作方式：点击“导入对比结果”选择覆盖对比文件，导入后点击“缺失模块视图”可展开并看到缺失行列表。  
+- 使用效果：即便覆盖对比结果被额外 data 包裹，也能成功解析 missing 列表并展开视图。  
+- 新增内容/接口/组件：覆盖对比解析兜底逻辑、缺失视图 UI 自动化用例 `tests/ui/cases_missing_view.spec.js`、用例覆盖对比示例数据 `tests/fixtures/cases_compare_missing_view.txt`。  
+- 复用说明：复用原有覆盖对比解析与视图渲染流程，仅补充 data 包裹兜底。  
+- 测试与验证：新增 UI 用例 `npm run test:ui -- tests/ui/cases_missing_view.spec.js`（本地 Playwright 浏览器因系统权限限制无法启动，未能实跑，需在可运行浏览器的环境补测）。  
+- 更新记录：无  
+
+- 功能名称：AI 一键步骤状态图标完善  
+- 功能描述：在“AI一键需求&用例评审”步骤卡片，为待执行、执行中状态补充明显的图标展示，运行中采用旋转渐变描边与“↻”标识，未开始显示灰色圆点，与完成态的“✓”一致呈现。  
+- 操作方式：正常执行评审/清洗/对比/拆分等动作时，顶部步骤按钮会分别显示灰点（未开始）、旋转箭头（执行中）、绿色对勾（完成），无需额外交互。  
+- 使用效果：流程进度一眼可辨，待执行/执行中/完成三态视觉统一，符合现有渐变卡片风格。  
+- 新增内容/接口/组件：步骤状态图标映射与渐变底色、运行态文本色优化；UI 用例 `tests/ui/workflow.spec.js` 增加状态图标断言。  
+- 复用说明：复用既有步骤状态同步逻辑，仅在 flowCore 的状态渲染与样式上补充图标。  
+- 测试与验证：`npm run test:ui -- tests/ui/workflow.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：模型返回代码块兼容  
+- 功能描述：在模型客户端层统一剥离 ```/'''json 等代码块包裹，避免拆分、清洗、用例生成等依赖模型返回 JSON 的功能因外层标记导致解析失败。  
+- 操作方式：正常触发模型调用即可，即使模型返回内容被 ```json 或 '''json 包裹，系统也会自动去掉外层标记再回填到界面。  
+- 使用效果：拆分测试模块等功能在收到带代码块标记的模型结果时仍能正常解析、展示与后续处理。  
+- 新增内容/接口/组件：模型客户端 stripCodeFence 兼容逻辑；新增 UI 自动化用例 `tests/ui/model_response_strip.spec.js` 覆盖代码块剥离。  
+- 复用说明：复用现有 stripCodeFence 方法，在模型客户端统一处理，减少各功能重复兼容。  
+- 测试与验证：`npm run test:ui -- tests/ui/model_response_strip.spec.js`（本地提权启动 `python3 -m http.server 8090` 后通过）。  
+- 更新记录：无  
+
+- 功能名称：AI一键/功能工作流步骤状态指示  
+- 功能描述：在“AI一键需求&用例评审”步骤卡片上，为每个步骤按钮增加未开始/执行中/执行完成的状态图标，手动执行与自动流程都会实时同步。  
+- 操作方式：触发评审、清洗、对比、拆分、覆盖率等模型调用或自动流程时，顶部步骤按钮右侧圆点会显示灰色（未开始）、旋转描边（执行中）、绿色对勾（完成）。  
+- 使用效果：无需滚动即可快速获知各步骤的模型调用进度，便于判断当前执行到哪里、是否已产出结果。  
+- 新增内容/接口/组件：步骤状态图标样式与动画、flowNav 状态同步逻辑（基于现有 inProgressStep 状态）。  
+- 复用说明：复用既有步骤状态判定与 inProgressStep 标记，仅新增图标渲染。  
+- 测试与验证：`npm run test:ui -- --workers=1`（通过，需本地 8090 端口 http.server 权限）。  
+- 更新记录：无  
+
+- 功能名称：用例生成页前往拆分按钮可用性修复  
+- 功能描述：修复“前往测试模块拆分”按钮点击无效的问题，确保无论是否已有拆分结果都能跳转到功能工作流的拆分卡片。  
+- 操作方式：在“用例生成”页点击“前往测试模块拆分”按钮，页面会切换到“功能工作流”并滚动定位到“测试模块拆分”卡片。  
+- 使用效果：按钮始终可见且可点击，跳转后自动激活功能工作流页签并定位拆分卡片，便于继续维护拆分结果。  
+- 新增内容/接口/组件：修正 DOM 配置别名与跳转事件绑定；补充 UI 用例覆盖“已有拆分结果”场景到 `tests/ui/sticky_layout.spec.js`。  
+- 复用说明：复用现有 tab 切换与滚动逻辑，仅修正 DOM 映射与事件绑定。  
+- 测试与验证：`npm run test:ui -- --workers=1 --grep "拆分按钮"`（通过，需本地 8090 端口 http.server 权限）。  
+- 更新记录：无  
+
+- 功能名称：粘顶遮挡与用例生成跳转修复  
+- 功能描述：AI一键需求&用例评审步骤卡片粘顶时，上方不再露出后方内容；用例生成页的“前往测试模块拆分”按钮可正常跳转。  
+- 操作方式：在“功能工作流”页面向上滚动，步骤卡片应始终遮挡上方，不出现透视；在“用例生成”点击“前往测试模块拆分”自动跳回“功能工作流”并定位拆分卡片。  
+- 使用效果：粘顶区域遮挡完整，滚动不露出后方页面；跳转入口生效，便于空态快速返回拆分。  
+- 新增内容/接口/组件：粘顶偏移变量 `--flow-offset` 与顶层遮挡背景、`casegenHandlers` 跳转兜底；新增 UI 覆盖用例（粘顶无漏底、拆分跳转）至 `tests/ui/sticky_layout.spec.js`。  
+- 复用说明：复用既有粘顶布局与滚动跳转逻辑，仅补充遮挡背景与跳转兜底。  
+- 测试与验证：新增 UI 用例（粘顶无漏底、用例生成跳转），待安装浏览器后执行 `npm run test:ui -- tests/ui/sticky_layout.spec.js`。  
+- 更新记录：无  
+
+- 功能名称：指派提示与执行抽屉体验优化  
+- 功能描述：未配置模型时标记“未配置模型”，已有模型但未保存指派时标记“未保存指派模型”，已指派完毕则不再误报；“用例导入&分配”抽屉内切换用例不再把执行视图向上滚；侧边页签按钮视觉强化，突出可点击性。  
+- 操作方式：未配模型时“模型管理”“功能指派”页签显示“未配置模型”；配置模型但未保存指派时仅“功能指派”显示“未保存指派模型”；完成功能指派后刷新或切换页签提示徽标应消失；在“用例执行”→“用例导入&分配”抽屉中选择用例文件，执行列表保持当前滚动位置；左侧导航页签按钮更显眼。  
+- 使用效果：指派状态提示更准确，执行视图滚动稳定；导航入口更醒目，方便点击。  
+- 新增内容/接口/组件：指派缺失判断逻辑优化、抽屉滚动策略调整、页签样式增强。  
+- 复用说明：复用现有指派状态存储/抽屉组件与导航结构，仅调整提示判断、滚动开关与样式。  
+- 测试与验证：`npm run test:ui -- tests/ui/models_settings.spec.js tests/ui/workflow.spec.js tests/ui/tempexec_entry.spec.js`（通过，需本地 HTTP 服务 8090）。  
+- 更新记录：调整指派提示文案：“未配置模型”/“未保存指派模型” 分场景展示；缺失时点击页签自动高亮顶部“保存指派”提示条。  
+
+- 功能名称：页签持久化  
+- 功能描述：侧边页签在切换后会记住当前选中项，刷新页面仍停留在上次打开的功能页。  
+- 操作方式：点击任意页签切换功能，刷新页面，仍保留在刷新前的页签；首次进入默认停留在“AI一键需求&用例评审”。  
+- 使用效果：避免刷新或重新进入时反复寻找入口，提升多页签频繁切换的效率。  
+- 新增内容/接口/组件：本地存储键 `usecase-active-tab`，初始化时自动读取。  
+- 复用说明：复用既有页签切换逻辑，仅增加持久化读写。  
+- 测试与验证：`npm run test:ui -- tests/ui/tab_persistence.spec.js`（通过，本地 HTTP 服务 8090）。  
+- 更新记录：无  
+
+- 功能名称：卡片折叠状态持久化  
+- 功能描述：功能工作流/自动流程/用例执行等页面的卡片折叠状态会保存到本地，刷新或重新进入页面后保持上次的展开/收起偏好。  
+- 操作方式：点击卡片标题折叠或展开；刷新页面或切换回对应 Tab，状态保持不变，跳转到某卡片时自动展开。  
+- 使用效果：自定义的折叠视图不会因刷新丢失，导航跳转时避免卡片仍处于折叠导致内容遗漏。  
+- 新增内容/接口/组件：折叠状态存储键 `usecase-card-collapse-v1`、全局存储对象 `cardCollapseStore`、UI 自动化用例 `tests/ui/layout_persistence.spec.js`。  
+- 复用说明：复用现有卡片结构与折叠交互，仅增加状态持久化与跳转同步。  
+- 测试与验证：`npm run test:ui -- tests/ui/layout_persistence.spec.js tests/ui/help_structure_drawer.spec.js tests/ui/tempexec_drag.spec.js`（通过，需本地 HTTP 服务权限）。  
+- 更新记录：无  
+
+- 功能名称：XMind 用例结构抽屉化  
+- 功能描述：使用帮助页的“XMind 用例结构”从折叠卡改为右侧抽屉，支持遮罩点击收起，内容保持不变。  
+- 操作方式：点击侧边“使用帮助”中的“XMind 用例结构”按钮，抽屉从右侧展开查看；点击遮罩或“收起”关闭。  
+- 使用效果：结构说明不再占据主视图，阅读/关闭更便捷。  
+- 新增内容/接口/组件：复用通用抽屉组件新增 `xmindStructureDrawer` 实例。  
+- 复用说明：共用 `scripts/base/drawer.js`，仅调整承载容器与开关按钮。  
+- 测试与验证：`npm run test:ui -- tests/ui/help_structure_drawer.spec.js`（通过，需本地 HTTP 服务权限）。  
+- 更新记录：无  
+- 功能名称：执行配置导出包含模型配置  
+- 功能描述：导出“执行页面配置”时同步包含模型管理页的模型配置（含 API Key 等字段），导入时自动写回并持久化，兼容旧版快照。  
+- 操作方式：在“用例导入&分配”抽屉点击“导出执行页面配置”下载快照，或在同位置点击“导入执行页面配置”还原，模型配置一并恢复。  
+- 使用效果：备份/迁移执行配置时无需额外保存模型管理数据，导入后可直接继续使用。  
+- 新增内容/接口/组件：执行配置快照新增 `models`/`assignments` 字段，导入时写入模型与指派存储。  
+- 复用说明：复用现有快照结构，新增字段为可选，旧快照可直接导入。  
+- 测试与验证：`npm run test:ui -- tests/ui/tempexec_entry.spec.js tests/ui/tempexec_view_empty.spec.js tests/ui/tempexec_drag.spec.js tests/ui/tempexec_progress.spec.js`（通过，需本地 HTTP 服务权限）。  
+- 更新记录：无  
+- 功能名称：用例执行总览抽屉化  
+- 功能描述：用例执行总览改为右侧抽屉，保持原有统计与跳转功能，从导航卡或导入区按钮打开，与“用例导入&分配”一致。  
+- 操作方式：在“功能导航”点击“执行总览”卡片，或在导入抽屉点击“用例执行情况总览”按钮，右侧抽屉展开；点击遮罩、抽屉顶部“收起”或“返回执行视图”可关闭。  
+- 使用效果：总览界面以抽屉形式展示，不遮挡主视图，切换/回退更顺畅。  
+- 新增内容/接口/组件：新增总览抽屉结构与开合逻辑。  
+- 复用说明：复用原有总览渲染与状态管理，仅调整承载容器与开合交互。  
+- 测试与验证：`npm run test:ui -- tests/ui/tempexec_entry.spec.js tests/ui/tempexec_view_empty.spec.js tests/ui/tempexec_drag.spec.js tests/ui/tempexec_progress.spec.js`（通过，需本地 HTTP 服务权限）。  
+- 更新记录：无  
+- 功能名称：用例执行导航与空态样式修订  
+- 功能描述：修复“用例导入&分配”抽屉需求区子用例的删除按钮被圆角遮挡问题，执行视图空态提示改为引导前往“用例导入&分配”，功能导航卡片左侧替换为线性图标。  
+- 操作方式：在“用例执行”页点击“用例导入&分配”查看需求列表，删除按钮完整可点；切换到“执行视图”卡片时空态提示直接提示去导入；功能导航卡片左侧展示对应功能图标。  
+- 使用效果：删除操作不再被遮挡，空态文案更明确导向，导航卡视觉风格与页面一致且一眼区分功能。  
+- 新增内容/接口/组件：导航卡片内联 SVG 图标、执行视图空态文案更新、新增 UI 自动化用例 `tests/ui/tempexec_view_empty.spec.js`。  
+- 复用说明：复用现有抽屉/执行视图渲染与入口交互，仅做样式与文案微调。  
+- 测试与验证：`npm run test:ui -- tests/ui/tempexec_entry.spec.js tests/ui/tempexec_view_empty.spec.js`（通过，需本地 HTTP 服务权限）。  
+- 更新记录：调整需求区子用例删除按钮溢出裁剪问题，空态文案指向“用例导入&分配”抽屉。  
+- 功能名称：用例执行入口导航与抽屉优化  
+- 功能描述：执行视图入口区改名“功能导航”，入口按钮调整为小卡片式；抽屉宽度放大至约 2/3 页宽，遮罩区域可点击关闭，开合动效更平滑。  
+- 操作方式：在“用例执行”页点击“功能导航”下的“用例导入&分配”卡片打开抽屉；点击遮罩或右上角“收起”可关闭抽屉。  
+- 使用效果：入口更聚合、卡片化，抽屉空间更大，遮罩点击即可收起，过渡动画平滑不生硬。  
+- 新增内容/接口/组件：入口小卡片样式 `nav-entry-card`、抽屉遮罩交互与动效调整、新增 UI 自动化用例 `tests/ui/tempexec_entry.spec.js`。  
+- 复用说明：复用既有抽屉组件与入口按钮 ID，不改动导入/分配逻辑，仅增强外观与交互。  
+- 测试与验证：`npm run test:ui -- tests/ui/tempexec_entry.spec.js`（通过，需本地 HTTP 服务启动权限）。  
+- 更新记录：功能导航改为横向多子卡片（固定宽度约 5 个/行），进入“用例执行”时顶部一键执行步骤替换为导航栏。  
+- 功能名称：用例导入&分配抽屉化  
+- 功能描述：执行视图的“用例导入&分配”区域改为半屏右侧抽屉，支持随时收起/展开，保持核心功能不变。  
+- 操作方式：在执行视图顶部点击“用例导入&分配”卡片按钮打开抽屉，右上角“收起”或再次点击入口可关闭；抽屉内继续完成导入、配置备份、需求/版本拖拽等操作。  
+- 使用效果：抽屉默认收起，展开后悬浮在页面右侧，背景半透明遮罩不阻塞左侧操作，减少页面占用、便于复用。  
+- 新增内容/接口/组件：新增可复用抽屉组件 `scripts/base/drawer.js` 与样式、执行视图入口卡片、抽屉模板结构。  
+- 复用说明：复用原有执行视图状态、导入/导出与拖拽逻辑，仅调整布局并封装抽屉组件以便后续复用。  
+- 测试与验证：`npm run test:ui -- tests/ui/tempexec_drag.spec.js`（通过，覆盖导入、导出、拖拽、折叠与抽屉流程）。  
+- 更新记录：无  
+- 功能名称：执行视图需求/版本区收起展开  
+- 功能描述：执行视图中的需求区与版本分组区新增收起/展开按钮，减少视图占用，便于聚焦。  
+- 操作方式：在执行视图的“需求用例组”标题行点击“收起需求区”隐藏未分配需求列表，再次点击展开；在“版本分组”标题行点击“收起版本区”隐藏版本卡片，再次点击展开。  
+- 使用效果：可按需折叠列表，保持执行页面简洁，随时恢复查看并继续拖拽操作。  
+- 新增内容/接口/组件：新增需求区/版本区切换按钮与折叠提示文案，复用执行视图渲染逻辑。  
+- 复用说明：复用现有执行视图渲染与状态管理，仅追加折叠状态与按钮显示。  
+- 测试与验证：`npm run test:ui -- tests/ui/tempexec_drag.spec.js`（通过，新增用例覆盖折叠功能）。  
+- 更新记录：调整按钮为双层箭头图标（上/下重叠），折叠时自动隐藏新建版本按钮，展开按钮靠右展示。  
+- 功能名称：功能指派 Temperature 配置  
+- 功能描述：功能指派页面为清洗、评审、对比、拆分、覆盖对比、用例生成、相似对比等功能新增 temperature 设置，默认 0.2，可独立保存并参与模型调用。  
+- 操作方式：在“功能指派”各卡片的 Temperature 输入框中填写 0~1 之间的数值（默认 0.2），保存指派后即生效。  
+- 使用效果：可按功能调节模型温度，降低/提升生成随机性；旧指派数据自动兼容并回填默认值。  
+- 新增内容/接口/组件：新增 temperature 输入控件、指派存储字段、模型调用温度参数。  
+- 复用说明：复用原有指派保存/加载与模型调用流程，仅增加温度参数注入和存储。  
+- 测试与验证：`npm run test:ui -- tests/ui/models_settings.spec.js`（通过）。  
+- 更新记录：修复后端指派拉取时覆盖本地 Temperature 的问题，刷新后保持已保存值；跨设备持久化 UI 用例已补充 Temperature 覆盖（`tests/ui/models_persist_db.spec.js`）。  
+- 功能名称：执行视图状态汇总筛选与抽屉联动优化  
+- 功能描述：执行视图顶部状态汇总（已执行/未执行/通过/失败/阻塞/不适用）支持点击筛选列表，再次点击可取消；选中态绿色描边。点击导航区用例文件会自动收起“用例导入&分配”抽屉并滚动到执行视图，避免抽屉遮挡交互。  
+- 操作方式：在执行视图点击任一状态汇总圆角块即可按状态过滤当前文件用例；再点一次恢复。需要重新查看导入区或“执行总览”时可重新打开抽屉后点击对应按钮。执行列表上方的进度工具条固定在功能导航下方，实时展示当前文件与汇总状态，并提供搜索框。  
+- 使用效果：快速按执行结果查看用例，抽屉不再遮挡执行视图；当前文件筛选状态按文件维度记忆。进度工具条不随滚动消失，便于随时查看与搜索。  
+- 新增内容/接口/组件：新增状态筛选存储字段与过滤逻辑、执行视图主行标记 `case-row`。  
+- 复用说明：复用现有执行视图渲染与分页逻辑，仅追加筛选状态与导航点击联动。  
+- 测试与验证：`npm run test:ui -- tests/ui/help_structure_drawer.spec.js tests/ui/tempexec_drag.spec.js`（通过）。  
+- 更新记录：无  
+- 功能名称：模型配置与指派缺失提示 / DeepSeek Reasoner Token 推荐  
+- 功能描述：侧边“模型管理”“功能指派”页签在缺少模型或指派时显示红色提示；模型管理页推荐配置行动态提示 deepseek-reasoner 的 Max Tokens 推荐值，点击可跳转对应模型编辑。  
+- 操作方式：未配置模型时在对应页签显示“未配置模型”，有未保存指派的功能时在“功能指派”显示“未保存指派模型”，指派后消失；当存在 deepseek-reasoner 且 Max Tokens < 16384 时，推荐配置行显示红色提示，点击跳转到该模型。  
+- 使用效果：显式引导用户补全模型配置与指派，提升首次使用可达性；Token 提示避免输出截断。  
+- 新增内容/接口/组件：页签提示徽标、动态 Token 提示点击跳转逻辑。  
+- 复用说明：复用现有模型渲染/指派状态与表单跳转逻辑，仅新增提示判断。  
+- 测试与验证：`npm run test:ui -- tests/ui/models_settings.spec.js`（通过），`npm run test:ui -- tests/ui/tempexec_drag.spec.js`（通过）。  
+- 更新记录：无  
+- 功能名称：执行视图用例 XMind 导出分离  
+- 功能描述：用例执行视图新增“导出用例XMind（无结果）”，与现有“导出执行XMind”区分，前者不包含执行结果/备注/缺陷，后者保持原逻辑。  
+- 操作方式：在执行视图选择用例后点击“导出用例XMind（无结果）”即可导出纯用例结构；包含结果的导出仍使用“导出执行XMind”。  
+- 使用效果：便于下游仅需用例结构时快速导出简版 XMind，避免混入执行结果。  
+- 新增内容/接口/组件：新增导出按钮与纯用例 XMind 构建逻辑。  
+- 复用说明：复用现有执行用例与 XMind 构建能力，导出前剔除执行字段。  
+- 测试与验证：`npm run test:ui -- tests/ui/tempexec_drag.spec.js`（通过）。  
+- 更新记录：无  
+- 功能名称：执行总览当前执行区  
+- 功能描述：用例执行总览新增“当前执行区”，独立展示当前激活用例的进度卡片，便于快速查看当前执行状态。  
+- 操作方式：在“用例执行总览”卡片顶部查看当前执行区；切换当前用例后自动更新。  
+- 使用效果：一眼确认当前执行用例及进度，版本区/需求区保持原布局。  
+- 新增内容/接口/组件：总览渲染增加当前执行区分段。  
+- 复用说明：复用现有执行进度汇总方法，新增分区组合。  
+- 测试与验证：`npm run test:ui -- tests/ui/tempexec_drag.spec.js`（通过）。  
+- 更新记录：无  
+- 功能名称：顶栏粘顶区域修复  
+- 功能描述：侧边页签导航、AI一键需求&用例评审步骤、用例执行页的功能导航与当前文件工具条恢复粘顶，滚动页面不再被带走；侧边页签上移，保证视口内始终可见。  
+- 操作方式：正常滚动页面，侧边页签与评审步骤条、执行导航与工具条保持在顶部；侧边“使用帮助”按钮仍可直接打开说明。  
+- 使用效果：关键导航区随滚动固定在视口顶部，避免频繁回滚查找；执行导航与工具条在切换文件后保持可见。  
+- 新增内容/接口/组件：新增 UI 用例 `tests/ui/sticky_layout.spec.js`；调整 `style.css` 粘顶变量与侧边 tabs 样式；侧边 tabs 位置提前。  
+- 复用说明：复用既有粘顶样式变量与执行导航布局，仅调整位置与层级。  
+- 测试与验证：`npm run test:ui -- tests/ui/sticky_layout.spec.js tests/ui/tempexec_sticky.spec.js`（通过）。  
+- 更新记录：修复滚动粘顶失效问题。  
+- 功能名称：功能工作流导航多步骤独立运行态  
+- 功能描述：顶部步骤导航支持多个步骤同时处于“执行中”，后续步骤开始时不会把先前运行步骤重置为未开始，运行态以描边高亮独立显示。  
+- 操作方式：在功能工作流中并行或重复触发各步骤模型调用，导航按各自运行状态独立显示。  
+- 使用效果：并行执行时各步骤运行状态互不干扰，用户能同时看到多个步骤的进行中状态。  
+- 新增内容/接口/组件：状态存储新增 `state.inProgressSteps`，导航渲染按多步运行态计算。  
+- 复用说明：复用原状态映射，扩展运行态字典。  
+- 测试与验证：`npm run test:ui -- tests/ui/workflow.spec.js`（通过）。  
+- 功能名称：用例生成直达执行按钮优化  
+- 功能描述：“勾选用例到执行页”移动到“前往测试模块拆分”右侧，未拆分、未生成或未勾选时给出对应提示，取消合并确认时自动滚动到页顶。  
+- 操作方式：在用例生成页点击右上角按钮，按提示完成拆分/生成/勾选后再转到执行页。  
+- 使用效果：入口更易发现，提示更具体，交互引导清晰。  
+- 新增内容/接口/组件：按钮位置调整，提示文案细化。  
+- 复用说明：复用既有转执行逻辑，仅调整提示与入口。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_append_existing.spec.js`（通过）。  
+- 功能名称：用例追加目标多文件支持与直接转执行  
+- 功能描述：用例生成页追加下拉可按导入文件逐份选择（显示文件名而非“功能工作流导入用例”），并新增“勾选用例到执行页”按钮：无导入/历史执行时直接将勾选用例整体转到执行页；存在导入或执行历史时二次确认，支持跳过合并直接使用勾选用例。  
+- 操作方式：在用例生成右上角选择框中选择具体导入用例，或勾选用例后点击“勾选用例到执行页”，有导入/历史执行时按提示确认。  
+- 使用效果：多份工作流导入用例可独立追加，避免只能选第一份；可一次性将勾选用例转入执行页，跳过合并流程。  
+- 新增内容/接口/组件：追加目标选项构造支持多份导入；新增全局按钮 `#transferSelectedToExec` 及 `transferSelectedCasesToExec` 逻辑（创建执行文件/跳转执行页）；追加逻辑保存选中的工作流文件。  
+- 复用说明：复用原用例去重与执行同步逻辑，补充目标筛选与直接创建执行文件分支。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_append_existing.spec.js`（通过）。  
+- 功能名称：用例生成视图抽屉与新增入口优化  
+- 功能描述：用例生成卡片的“用例视图”移动到右侧并改为抽屉展示，勾选后可直接通过右上方下拉+“确认新增”按钮追加到导入用例/执行历史。  
+- 操作方式：在“用例生成”选择模块生成后，点击右侧“用例视图”打开抽屉勾选用例，再在顶部“用例视图中勾选用例，新增 到”处选择目标用例并点击“确认新增”。  
+- 使用效果：视图入口更显眼且不占页面高度，抽屉模式便于集中操作；勾选状态与新增按钮联动，减少误操作。  
+- 新增内容/接口/组件：新增 caseGenViewDrawer DOM 与事件委托，保留原表格渲染与追加逻辑；用例视图按钮样式调整。  
+- 复用说明：复用原有用例表格渲染/选择/追加逻辑，新增抽屉容器与按钮布局。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_append_existing.spec.js`（通过）。  
+- 功能名称：抽屉遮罩下保持导航可见  
+- 功能描述：在功能工作流与一键执行页面打开视图抽屉时，左侧页签/顶部导航不会被移除或遮挡，始终在遮罩下可见，遮罩仍覆盖 100% 背景。  
+- 操作方式：在功能工作流或一键执行页点击各视图入口打开抽屉，页签与导航保持可见。  
+- 使用效果：抽屉打开时导航区域不再消失，用户能持续看到当前页签与步骤提示，遮罩阻止背景交互。  
+- 新增内容/接口/组件：新增 UI 用例 `tests/ui/drawer_nav_visibility.spec.js`（覆盖功能工作流与用例执行抽屉）。  
+- 复用说明：复用既有抽屉组件与布局，调整遮罩可见性校验。  
+- 测试与验证：`npm run test:ui -- tests/ui/drawer_nav_visibility.spec.js`（通过）。  
+- 更新记录：无  
+- 功能名称：功能工作流视图抽屉化  
+- 功能描述：评审澄清视图、清洗结果视图、拆分视图、测试用例视图、缺失模块视图统一改为抽屉展示，视图入口移至右侧按钮，相关操作（澄清确认、缺失复制/智能填充、高亮、原文定位等）在抽屉内完成。  
+- 操作方式：在对应卡片点击“展开/打开”按钮唤起抽屉，内部可继续操作高亮、复制、确认澄清、复制缺失等；通过抽屉右上角收起。  
+- 使用效果：视图更聚焦且不占主工作区，重要操作与视图并列集中，减少滚动与遮挡。  
+- 新增内容/接口/组件：review/clean/split/case/missing 视图抽屉 DOM 与 drawer 管理逻辑，按钮文案调整。  
+- 复用说明：保留原渲染与交互逻辑，仅更换承载容器与开关方式。  
+- 测试与验证：`npm run test:ui -- tests/ui/workflow.spec.js`（通过）。  
+- 更新记录：无  
+- 功能名称：模型/指派/设置跨设备持久化修复  
+- 功能描述：模型保存后写入后端 ID 并同步功能指派，设置面板的列显示/分页配置落库，多端登录自动加载已保存的模型指派与执行视图配置。  
+- 操作方式：正常在模型管理/功能指派/设置页保存，换设备登录后模型列表、指派选择、执行视图列与分页会从后端恢复；分页保存按钮已可用。  
+- 使用效果：模型与功能指派稳定跨设备复用，执行视图列与分页不再依赖浏览器缓存。  
+- 新增内容/接口/组件：更新模型/指派持久化逻辑（`scripts/modules/models.js`）、补充分页保存事件绑定（`scripts/modules/settings.js`）、扩展后端设置用例（`tests/api/settings_models.spec.js`）、新增跨设备持久化 UI 用例（`tests/ui/models_persist_db.spec.js`）。  
+- 复用说明：复用现有 API 客户端与后端接口，补充 ID 正常化、指派映射与事件绑定，无新增外部依赖。  
+- 测试与验证：`npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_models.spec.js`（通过，本地 FastAPI 服务）；`PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/models_persist_db.spec.js`（通过，本地静态服+Mock API）。  
+- 更新记录：补充功能指派 Temperature 字段跨设备持久化与刷新不回退修复；修复模型保存重复创建远端记录的问题；修复执行页导入配置/执行视图分页调整未落库导致跨设备不同步；修复不同账号间本地缓存与远端合并导致的配置串用，现按账号隔离。  
+
+- 功能名称：其他设置跨设备同步修复（用户设置合并鲁棒性）  
+- 功能描述：修复“其他设置/设置页”保存后跨设备不生效/互相覆盖的问题：远端 user scoped 设置合并时不再依赖 currentUser.id 的严格类型/时序，支持 id 为字符串或未就绪的情况；登录态改为 DB-first（有 token 时忽略本地 settings 缓存，避免多端同号本地旧值抢占）；已登录会话在重新获得焦点/从后台返回时会自动拉取远端最新设置；每个保存按钮仅提交对应设置项，避免不同设备的旧值覆盖最新配置；未点击保存的草稿在 UI 保留但不生效，刷新页面会回退到最后保存数据。  
+- 操作方式：两台电脑同号登录后，在“设置/其他设置”中修改分页/列显示并点击对应保存按钮；另一端重新登录或刷新/回到页面后，会以最后一次点击保存的数据为准；未点击保存的修改不会入库，刷新后回到原配置。  
+- 使用效果：设置项稳定落库并跨设备一致，最后保存优先；草稿不影响生效配置且不会被远端刷新立即清空。  
+- 新增内容/接口/组件：调整 `scripts/modules/settings.js` 的 settings 加载策略（DB-first）与草稿脏态保护；设置保存改为按 key 粒度提交；`scripts/core/tempexecCore.js` 按 key 粒度持久化分页/列；更新跨设备持久化 UI 用例 `tests/ui/models_persist_db.spec.js` 增加“登录态忽略本地缓存”“未保存草稿刷新回退”“回到页面刷新远端设置”“单项保存不覆盖其他项”等场景。  
+- 复用说明：复用现有 `/api/settings`、`/api/features` 接口与前端持久化入口，仅增强合并与渲染时序。  
+- 测试与验证：`node --check scripts/modules/settings.js scripts/modules/models.js`（通过）；`npx playwright test tests/ui/models_persist_db.spec.js -c tests/playwright.config.js`（通过）。  
+- 更新记录：修复设置页保存后跨设备不同步问题；增强用户设置/指派合并容错；补充已登录会话回到页面自动刷新远端设置；修复跨设备交替保存导致的旧值覆盖。  
+
+- 功能名称：登录态刷新保持当前页签（会话级）  
+- 功能描述：在已登录状态下刷新 `index.html` 会恢复到刷新前最后一次打开的页签；登出/重新登录后不再沿用旧页签，回到系统默认页签。该页签状态仅在当前浏览器会话内生效，不入库。  
+- 操作方式：登录后切换到任意页签（如“用例执行”）→刷新页面，仍停留在该页签；点击“登出”后重新登录，页面回到默认页签。  
+- 使用效果：刷新不打断当前工作上下文；重新登录保持一致的默认入口，避免跨账号/跨会话的页签残留。  
+- 新增内容/接口/组件：`scripts/core/appRuntime.js` 切换页签时写入/初始化时读取 `sessionStorage(usecase-active-tab)`；`scripts/modules/authGuard.js` 登录态初始化优先读取 sessionStorage 以恢复页签；`scripts/modules/login.js` 登录与登录页初始化时清理该 key；新增 UI 用例 `tests/ui/tab_persistence.spec.js`、`tests/ui/login_tab_reset.spec.js` 覆盖刷新保持/重登回默认。  
+- 复用说明：复用现有页签切换与鉴权流程，仅调整持久化介质为 sessionStorage 并补充初始化读取。  
+- 测试与验证：`node --check scripts/core/appRuntime.js scripts/modules/authGuard.js scripts/modules/login.js`（通过）；`npx playwright test tests/ui/tab_persistence.spec.js tests/ui/login_tab_reset.spec.js -c tests/playwright.config.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：刷新恢复页签时自动加载“管理类”页面数据（项目/人员/操作记录）  
+- 功能描述：修复“登录态刷新后虽然停留在项目管理/人员管理/操作记录页签，但列表数据为空，需要再点一次页签才加载”的问题：页签恢复/切换时统一派发 `app-tab-activated` 事件，管理类模块在激活时自动拉取数据；同时登出后跳转登录页不再携带退出时 URL，保证重登必回主页(auto)。  
+- 操作方式：登录后进入“项目管理/人员管理/操作记录”任一页签→刷新页面，仍停留在该页签且列表会自动加载；点击“登出”→重新登录，默认回到主页(auto)。  
+- 使用效果：刷新不需要二次点击即可恢复页面数据；登出重登不再残留上次页签/页面 URL。  
+- 新增内容/接口/组件：`scripts/core/appRuntime.js` 与 `scripts/modules/authGuard.js` 在页签切换时派发 `CustomEvent(app-tab-activated)`；`scripts/modules/admin.js`、`scripts/modules/opsLog.js` 监听该事件并在激活时加载数据（并补充 `app-auth-ready` 兜底触发）；`scripts/modules/authGuard.js` 默认页签策略统一为 `auto` 且登出跳转不携带 redirect；新增 UI 用例 `tests/ui/project_admin_refresh_restore.spec.js`，并增强 `tests/ui/project_admin_drawer.spec.js`、`tests/ui/login_tab_reset.spec.js` 的等待条件以降低时序抖动。  
+- 复用说明：复用既有 `switchTab`/鉴权流程，不新增业务 API，仅补充统一事件钩子让已有页面逻辑在“恢复页签”场景下也能触发加载。  
+- 测试与验证：`node --check scripts/core/appRuntime.js scripts/modules/authGuard.js scripts/modules/admin.js scripts/modules/opsLog.js scripts/base/state.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/project_admin_refresh_restore.spec.js tests/ui/login_tab_reset.spec.js tests/ui/project_admin_drawer.spec.js --workers=1`（通过）。  
+- 更新记录：改为“登录会话隔离”策略：引入 `localStorage(tap-login-seq)` 与 `sessionStorage(tap-active-tab-login-seq)`，仅在同一次登录会话内恢复页签；显式登出同时写入 local/session `tap-force-default-tab` 强制下一次进入回主页；并修复刷新后在鉴权未就绪前进入“项目管理/人员管理/操作记录”导致首次空列表的问题（鉴权就绪后自动补加载）；后端静态资源增加 `Cache-Control: no-store`，避免浏览器/代理缓存旧 JS 导致“已更新但仍像旧版本”；修复 `tap-force-default-tab` 在 sessionStorage 已命中时未同步清理 localStorage，导致“重新登录后第一次切页刷新仍回主页，需要第二次才正常”的问题；更新 UI 用例 `tests/ui/login_tab_reset.spec.js` 覆盖该回归。  
+
+- 功能名称：执行总览页接入后端聚合接口（项目卡片/版本筛选/人员汇总/用例明细）  
+- 功能描述：补齐“执行总览”页签的 DB 接入能力：登录后展示所属项目卡片；选择项目后可按版本筛选，按人员展示执行统计，并支持展开查看用例明细列表（最多 200 条）。  
+- 操作方式：登录 → 进入“执行总览” → 选择项目 →（可选）选择版本 → 查看人员统计 → 点击“查看用例”展开明细。  
+- 使用效果：无需依赖浏览器缓存即可查看项目/版本维度的执行进度，且能快速定位到具体用例明细。  
+- 新增内容/接口/组件：新增前端模块 `scripts/modules/execOverview.js` 与执行总览 DOM/样式（`index.html`、`style.css`）；扩展 `services/apiClient.js`（`listProjectVersions/getExecutionOverview/listExecutionOverviewCases`）；后端扩展 `/api/exec/overview` 返回 `username`，并新增 `/api/exec/overview/cases` 明细接口（`backend/routers/exec_routes.py`、`backend/schemas.py`）。  
+- 复用说明：复用既有鉴权/项目权限校验、`app-tab-activated/app-auth-ready` 事件钩子与 API client 封装方式；后端复用现有 exec_set/exec_case 数据结构，仅补齐总览读取接口。  
+- 测试与验证：`node --check services/apiClient.js scripts/modules/execOverview.js`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_overview.spec.js`（通过，本地 FastAPI 服务）。  
+- 更新记录：补充 SQLite 轻量迁移：启动时自动为历史库给 `exec_cases` 增加缺失的 `executor_id` 列，避免出现 `no such column: exec_cases.executor_id` 导致的 500（`backend/migrations.py`、`backend/main.py`）。  
+
+- 功能名称：项目管理同名项目错误提示显示在抽屉内  
+- 功能描述：修复“新建项目时项目名已存在，但错误提示显示在列表页顶部，用户在抽屉内难以发现”的问题：同名/校验类错误统一展示在项目抽屉内。  
+- 操作方式：进入“项目管理”→“新建项目”→输入已存在的项目名→点击保存；错误提示出现在抽屉内。  
+- 使用效果：用户无需视线跳转即可在当前抽屉内看到失败原因，减少误以为无响应。  
+- 新增内容/接口/组件：项目抽屉新增状态位 `#projectFormStatus`（`index.html`），并调整 `scripts/modules/admin.js` 的项目保存提示位置；新增 UI 用例 `tests/ui/project_admin_duplicate_error_in_drawer.spec.js`。  
+- 复用说明：复用现有状态提示 `setStatus` 与抽屉交互逻辑，仅调整提示展示容器。  
+- 测试与验证：`node --check scripts/modules/admin.js`（通过）；`npm run test:ui -- tests/ui/project_admin_duplicate_error_in_drawer.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：模型管理新增模型同名校验与删除二次确认  
+- 功能描述：新增模型保存时做名称同名校验（避免重复模型名导致指派混乱/远端保存失败）；删除模型需二次确认后才会执行删除。  
+- 操作方式：在“模型管理”新增模型时输入与已有模型相同的模型名称并保存，会在表单内提示“模型名称已存在”；删除模型时会弹出两次确认。  
+- 使用效果：避免重复模型名引发误选/覆盖；删除操作更安全，降低误删概率。  
+- 新增内容/接口/组件：`scripts/modules/models.js` 增加 `normalizeModelName/hasDuplicateModelName` 校验逻辑；新增 UI 用例 `tests/ui/models_name_duplicate_and_delete_confirm.spec.js`。  
+- 复用说明：复用现有模型表单与状态提示 `setStatus`、列表删除入口，仅增加校验与确认。  
+- 测试与验证：`node --check scripts/modules/models.js`（通过）；`npm run test:ui -- tests/ui/models_name_duplicate_and_delete_confirm.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：项目管理/人员管理页面使用独立顶部导航栏  
+- 功能描述：进入“项目管理/人员管理”时不再展示默认的“AI 一键步骤”导航栏，改为各自页面的顶部导航栏；并将“新建/新增、刷新”等操作按钮移入顶部导航栏，样式与执行页导航卡片一致。  
+- 操作方式：进入“管理 → 项目管理/人员管理”，顶部显示本页导航卡片按钮；点击“新建项目/新增人员”在抽屉内新增，点击“刷新”重新拉取列表。  
+- 使用效果：管理页顶部区域更聚焦于当前页面操作，减少与 AI 工作流导航的混淆；按钮位置统一且更易发现。  
+- 新增内容/接口/组件：新增 `#projectAdminHead/#userAdminHead` 顶部导航 DOM（`index.html`），并调整页签切换时隐藏默认 `#flowNav`（`scripts/core/appRuntime.js`）；为稳定自动化用例补充管理模块就绪标记 `window.app.adminBound`（`scripts/modules/admin.js`）；更新 UI 用例（`tests/ui/project_admin_drawer.spec.js`、`tests/ui/user_admin_drawer.spec.js`）。  
+- 复用说明：复用现有 `projectRefreshBtn/projectCreateBtn/userRefreshBtn/userCreateBtn` 事件绑定与权限控制逻辑，仅调整 DOM 位置与展示方式。  
+- 测试与验证：`npm run test:ui -- tests/ui/project_admin_drawer.spec.js`（通过）；`npm run test:ui -- tests/ui/user_admin_drawer.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：抽屉收起时遮罩同步优化  
+- 功能描述：修复“收起抽屉瞬间侧边栏先解除遮罩/可交互，主区域稍后才结束过渡”导致的突兀体验：关闭抽屉时增加 closing 过渡状态，直到遮罩/面板过渡结束后再统一解除 `drawer-open` 与交互阻断。  
+- 操作方式：打开任意抽屉（执行抽屉/管理抽屉/视图抽屉等）→点击遮罩或“收起”关闭；侧边栏与主区域会在同一时刻结束遮罩与交互阻断。  
+- 使用效果：关闭动画期间整体遮罩保持一致，不出现“侧边栏先亮起来”的视觉跳变。  
+- 新增内容/接口/组件：抽屉组件新增 `.closing` 状态与关闭过渡结束后再解锁逻辑（`scripts/base/drawer.js`、`style.css`）；补齐 DOM 映射 `exportCaseGen`（`config/domConfig.js`）；更新并加固 UI 用例等待与菜单展开逻辑（`tests/ui/user_admin_drawer.spec.js`、`tests/ui/workflow.spec.js`）。  
+- 复用说明：复用现有抽屉 DOM/CSS 结构与 `drawer-open` 机制，仅增加 closing 状态以同步关闭时序。  
+- 测试与验证：`npm run test:ui -- tests/ui/project_admin_drawer.spec.js tests/ui/user_admin_drawer.spec.js tests/ui/workflow.spec.js`（3 workers 并发通过）。  
+- 更新记录：无  
+
+- 功能名称：执行总览页面独立顶部导航（项目按钮上移）  
+- 功能描述：进入“执行总览”时不再展示默认的“AI 一键步骤”导航栏，改为执行总览自己的顶部导航栏；顶部导航按“当前用户可访问/所属项目”动态渲染项目按钮（例如战魂铭人、元气骑士），点击即可进入对应项目总览；并保留“刷新”入口以重新拉取项目/总览数据。  
+- 操作方式：进入“用例相关 → 执行总览”→顶部展示所属项目按钮列表→点击项目按钮进入详情→可切换项目/返回列表/按版本筛选/查看用例明细；点击“刷新”会更新项目列表并刷新当前详情数据。  
+- 使用效果：执行总览的入口更聚焦且更快，减少在页面内寻找项目卡片的成本，符合执行页导航卡片的一致交互。  
+- 新增内容/接口/组件：新增执行总览顶部导航 DOM（`index.html`），项目按钮容器 `#execOverviewNavProjects`；执行总览改为在顶部渲染项目按钮并绑定切换逻辑（`scripts/modules/execOverview.js`）；页签切换时隐藏默认 `#flowNav`（`scripts/core/appRuntime.js`）；补充样式 `display: contents` 以便项目按钮与导航卡片同排展示（`style.css`）；更新 UI 用例覆盖“两项目按钮/切换项目/版本筛选/用例明细”（`tests/ui/exec_overview.spec.js`）。  
+- 复用说明：复用现有 `listProjects/listProjectVersions/getExecutionOverview` 接口与导航卡片样式 `nav-entry-card`，仅调整渲染位置与交互入口。  
+- 测试与验证：`npm run test:ui -- tests/ui/exec_overview.spec.js tests/ui/project_admin_drawer.spec.js tests/ui/user_admin_drawer.spec.js`（3 workers 并发通过）。  
+- 更新记录：美化执行总览版本选择框样式（`style.css`）。  
+
+- 功能名称：用例库导入/编辑/转执行全链路（DB 接入）  
+- 功能描述：用例库页新增独立顶部导航卡片（导入用例/编辑用例&转到执行/选择用例执行）取代默认“AI 一键步骤”；用例库接入后端 DB：导入需选项目+版本（同名校验按“项目级”，同一项目跨版本不允许同名；文件名清洗去导出标识与后缀并记录导入人）；编辑抽屉按项目拉取文件列表（展示导入人/导入时间/最近更新人/更新时间）；进入编辑后在页内“用例编辑视图卡片”复用执行视图样式与交互（无缺陷链接），支持搜索/分页/内容编辑与增删撤回（超时入库）；支持一键“转到执行”，同名覆盖提示并按“模块+标题+预期”保留执行结果字段。  
+- 操作方式：进入“用例相关 → 用例库”→顶部点“导入用例”选择文件→选择项目→选择版本→确认入库；点“编辑用例&转到执行”选择项目→确认→列表点“编辑”进入页内编辑卡片→直接点表格内容修改/点＋/−增删（可 8s 撤回）→点“转到执行”；点“选择用例执行”选择项目与版本→确认→列表点“转到执行”。  
+- 使用效果：用例库入口聚合到顶部导航，导入/维护更聚焦；用例条目可持续入库维护，并可快速转入执行页且尽量保留已有执行结果。  
+- 新增内容/接口/组件：用例库导航/抽屉/编辑卡片与样式（`index.html`、`style.css`）；用例库交互模块（`scripts/modules/caseLibrary.js`）；暴露执行页能力供用例库复用（`scripts/modules/app.js`）；切页时隐藏默认 `#flowNav`（`scripts/core/appRuntime.js`）；后端文件名清洗（`backend/utils.py`）；用例文件列表补充导入人与最近更新人字段（`backend/schemas.py`、`backend/routers/cases.py`）；新增用例条目增删接口并支持可选字段置空入库（`backend/routers/cases.py`、`services/apiClient.js`）；执行集追加接口批次内去重保护（`backend/routers/exec_routes.py`）；健康检查返回 DB 文件名（`backend/api.py`）；新增自动化（`tests/ui/case_library.spec.js`、`tests/api/case_library.spec.js`、`tests/fixtures/case_library_import.json`）。  
+- 复用说明：复用现有抽屉组件 `window.app.drawer`、执行视图样式/分页设置（`state.tempExecPageSize`）、以及执行页文件结构创建能力（`window.app.tempExecApi.createTempExecFile`），仅在用例库侧封装“同名覆盖/保留结果/增删撤回入库”的流程。  
+- 测试与验证：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js scripts/modules/caseLibrary.js services/apiClient.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）；API：`APP_DB_FILE=apitest.db python3.9 -m uvicorn backend.main:app --host 127.0.0.1 --port 18081` 启动测试服务后执行 `API_BASE_URL=http://127.0.0.1:18081 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过，健康检查断言使用测试库）。  
+- 更新记录：美化用例库项目/版本选择框样式，并为项目选择框设置最小宽度确保 6 个中文项目名完整展示（`style.css`）。  
+
+- 功能名称：用例库选择项目自动刷新（免确认）  
+- 功能描述：用例库的“编辑用例&转到执行”抽屉与“选择用例执行”抽屉，在选择项目后自动加载用例文件列表并同步版本下拉；选择版本后立即过滤列表；原“确认”按钮保留为可选“刷新”。  
+- 操作方式：进入“用例相关 → 用例库”→打开对应抽屉→选择项目后列表自动刷新；（可选）选择版本过滤；如需手动重拉，点“刷新”。  
+- 使用效果：减少一次无意义点击，项目/版本选择的反馈更及时。  
+- 新增内容/接口/组件：选择执行抽屉加载状态渲染修复与自动加载逻辑（`scripts/modules/caseLibrary.js`）；按钮文案调整（`index.html`）。  
+- 复用说明：复用现有 `listCaseFiles/listProjectVersions` 接口与抽屉组件，未新增新接口。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）；回归 `npm run test:ui -- tests/ui/project_changes_refresh_import_selects.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：编辑抽屉版本筛选（默认全部）  
+- 功能描述：在“编辑用例&转到执行”抽屉增加版本选择框，默认“全部版本”；选择版本可快速筛选该版本下的用例文件，便于定位。  
+- 操作方式：进入“用例相关 → 用例库”→点“编辑用例&转到执行”→选择项目后，版本下拉自动启用→选择版本即可过滤列表（默认全部）。  
+- 使用效果：项目下用例文件较多时，可通过版本快速缩小范围。  
+- 新增内容/接口/组件：编辑抽屉新增版本下拉与前端过滤逻辑（`index.html`、`scripts/modules/caseLibrary.js`）；UI 用例新增版本筛选覆盖（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用现有版本缓存与 `loadVersions/listCaseFiles` 拉取逻辑，仅在前端做过滤。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库编辑视图移除实际结果字段  
+- 功能描述：用例库的“用例编辑视图”不展示“实际结果/执行结果”列与控件，避免用例库携带执行态信息。  
+- 操作方式：进入“用例相关 → 用例库”→编辑任一用例文件→表格仅保留模块/标题/前提/步骤/预期/备注等字段。  
+- 使用效果：用例库视图更贴近“标准用例库”的定位，不与执行页面字段混淆。  
+- 新增内容/接口/组件：移除编辑视图表头与行内“实际结果”列（`scripts/modules/caseLibrary.js`）；UI 用例增加断言确保不出现该列（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用既有编辑表格结构，仅删除与执行态相关的展示列。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例导入同名限制升级为项目级（跨版本拦截）  
+- 功能描述：用例导入时同名校验从“项目+版本”调整为“项目级”：同一项目下，不同版本若存在同名用例文件也会提示“同名用例已存在”并拒绝导入。  
+- 操作方式：导入用例时选择项目/版本→若该项目任意版本已存在同名用例文件，则导入直接失败并提示“同名用例已存在”。  
+- 使用效果：避免同一项目内不同版本出现同名用例文件导致检索/复用歧义。  
+- 新增内容/接口/组件：后端导入接口按项目级校验（`backend/routers/cases.py`）；新库/迁移补充项目级唯一索引（`backend/models.py`、`backend/migrations.py`）；同步 UI 测试桩逻辑（`tests/ui/case_library.spec.js`、`tests/ui/tempexec_import_confirm.spec.js`）与 API 用例（`tests/api/case_library.spec.js`）。  
+- 复用说明：复用现有导入流程与错误提示，调整同名判定维度；DB 侧用唯一索引增强约束。  
+- 测试与验证：UI：`npm run test:ui -- tests/ui/case_library.spec.js tests/ui/tempexec_import_confirm.spec.js`（通过）；API：`APP_DB_FILE=apitest.db python3.9 -m uvicorn backend.main:app --host 127.0.0.1 --port 18082` 后执行 `API_BASE_URL=http://127.0.0.1:18082 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库编辑抽屉批量导出 XMind/Excel（不含执行结果、原名导出）  
+- 功能描述：“编辑用例&转到执行”抽屉内增加“导出XMind”“导出Excel”按钮，所有角色均可勾选用例文件并批量导出；导出内容与用例库字段一致且不包含执行结果；单份导出文件名使用用例原名（不追加时间戳/额外后缀），多份导出打包为 zip。  
+- 操作方式：进入“用例相关 → 用例库”→点“编辑用例&转到执行”→选择项目后在列表勾选 1 份或多份→点击“导出XMind”或“导出Excel”；单份下载“用例名.xmind / 用例名.xlsx”，多份下载“用例批量导出_xmind.zip / 用例批量导出_excel.zip”。  
+- 使用效果：非管理员也可按需勾选导出；批量导出避免重复下载与命名混乱；导出文件不混入执行态字段。  
+- 新增内容/接口/组件：导出按钮移动到编辑抽屉并常驻（`index.html`）；编辑抽屉列表对所有角色展示勾选框（删除仍仅管理员可见/可用）；批量导出逻辑（XMind 复用 `xmindCoreApi.buildXmindPackageFromCases`，Excel 生成 xlsx，批量打包 zip）（`scripts/modules/caseLibrary.js`）；UI 用例新增“非管理员批量导出”覆盖（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用现有 `listCaseItems`、XMind 生成逻辑与本地 `JSZip`，未新增外部依赖。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库编辑视图刷新恢复（保持选中用例）  
+- 功能描述：在已登录状态下，进入“用例库 → 编辑用例&转到执行”并打开某个用例文件的编辑视图后，刷新页面会自动恢复到上次选中的用例文件并保持编辑视图展示。  
+- 操作方式：在用例库编辑列表点击“编辑”进入用例编辑视图→直接刷新浏览器→仍展示上次用例编辑视图。  
+- 使用效果：避免刷新导致上下文丢失，提升连续编辑体验。  
+- 新增内容/接口/组件：用例库记录并恢复 `case_file_id`（localStorage：`tap-case-library-editor`）（`scripts/modules/caseLibrary.js`）；UI 用例新增刷新恢复覆盖并加固 `waitForFunction` 时序（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用现有 `listCaseFiles/listCaseItems/loadVersions` 接口与页签激活事件，仅增加轻量持久化与恢复流程。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库编辑抽屉刷新恢复（保持项目/版本/勾选/打开态）  
+- 功能描述：在已登录状态下，打开“编辑用例&转到执行”抽屉并选择项目/版本、勾选用例文件后，刷新页面仍会自动打开抽屉并恢复上次的项目/版本选择与勾选状态。  
+- 操作方式：进入“用例相关 → 用例库”→点“编辑用例&转到执行”→选择项目/版本并勾选若干用例→直接刷新浏览器→抽屉自动打开且选择/勾选保持不变。  
+- 使用效果：避免刷新导致抽屉筛选上下文与勾选丢失，提升连续导出/编辑/转执行的效率。  
+- 新增内容/接口/组件：编辑抽屉状态持久化（localStorage：`tap-case-library-edit-drawer`，含 `project_id/version_id/selected_ids/drawer_open`）（`scripts/modules/caseLibrary.js`）；持久化写入保护（避免初始化阶段覆盖成空）；`switchTab` 重复切到当前页签不再强制关闭抽屉，减少误关（`scripts/core/appRuntime.js`）；UI 用例新增“刷新恢复”覆盖（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用既有抽屉组件与项目/版本加载逻辑，仅增加轻量持久化与恢复流程。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js scripts/core/appRuntime.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库列表项目/版本展示修复（避免项目#null）  
+- 功能描述：用例库“编辑用例&转到执行/选择用例执行”列表的“所属项目/版本”列，改为优先使用用例文件行数据的 `project_id/version_id` 渲染，避免在刷新恢复或状态波动时出现“项目#null”“版本#10”这类异常展示。  
+- 操作方式：进入用例库相关抽屉，勾选/切换/刷新后列表的所属项目与版本展示保持正常。  
+- 使用效果：列表信息更稳定，避免误判用例归属。  
+- 新增内容/接口/组件：列表渲染逻辑调整（`scripts/modules/caseLibrary.js`）。  
+- 复用说明：复用既有项目/版本缓存与 `getVersionName`，仅调整取值优先级。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 编辑抽屉`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例导入同名差异对比抽屉（Git 风格 Diff）  
+- 功能描述：用例库导入时，若后端返回“同名用例已存在”，会自动关闭导入抽屉并打开新的“差异对比”抽屉：在同一份列表中展示导入与库中对比结果（字段内按“导入/库”分行展示），新增/删除/差异行分别以绿色/红色标记，字段差异单元格高亮；不展示/不对比“实际结果”“备注”。  
+- 操作方式：进入“用例相关 → 用例库”→点“导入用例”选择文件并选项目/版本→点击“确认入库”→若同名被拒绝则自动进入差异对比抽屉查看导入与库中内容差异。  
+- 使用效果：同名冲突时无需反复删除/重试导入，可直接快速定位差异（包括条目数不一致、字段变化、新增/删除）。  
+- 新增内容/接口/组件：Diff 抽屉 DOM（`index.html`）；Diff 样式（`style.css`）；差异计算与渲染（`scripts/modules/caseLibrary.js`）。  
+- 复用说明：复用现有文件名清洗与 `listCaseFiles/listCaseItems` 获取数据能力，在前端做轻量 Diff 渲染；不引入新依赖。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：2025-12-15 用例库同名 diff 抽屉改为单列表展示（`index.html`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/case_library.spec.js`）；2025-12-15 diff/校验抽屉字段列宽优化（模块6字、标题8字、优先级3字、前提12字、步骤12字、预期20字，`style.css`）；2025-12-15 diff/校验抽屉进一步优化：优先级加宽 2 字；字段在需要时展示“导入/库”标识且不计入字数，新增/将删除/有差异标识在单元格内独占一行居中展示（`style.css`、`scripts/modules/caseLibrary.js`）。  
+- 更新记录：2025-12-17 多文件导入遇到多份同名冲突时，差异对比按导入顺序逐份弹出（确认覆盖或关闭跳过后自动进入下一份）；非同名文件不会被同名 diff 阻塞；导入完成提示会展示成功/覆盖/跳过/失败的具体用例名（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_multi_import_diff_queue.spec.js`）。  
+- 更新记录：2025-12-17 多文件同名 diff 队列处理完成后，导入结果明细改为居中悬浮 toast（10s 自动消失）；覆盖处理时不再先关闭抽屉再打开下一份，改为保持打开并直接切换到下一份（`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/case_library_multi_import_diff_queue.spec.js`）。  
+
+- 功能名称：同名差异对比支持“确认覆盖导入”  
+- 功能描述：在“同名用例差异对比”抽屉中增加“确认覆盖导入”按钮，点击后二次确认；确认后将覆盖用例库中同名用例文件（删除原条目并写入导入内容）。  
+- 操作方式：触发同名差异对比抽屉后→点击“确认覆盖导入”→确认弹窗→覆盖成功后自动关闭差异对比抽屉并提示成功。  
+- 使用效果：同名冲突可直接在差异对比界面一键覆盖入库，无需手动删除旧用例再导入。  
+- 新增内容/接口/组件：差异抽屉按钮（`index.html`）；前端覆盖导入调用（`scripts/modules/caseLibrary.js`、`services/apiClient.js`）；后端导入接口新增 `overwrite=1` 支持覆盖（`backend/routers/cases.py`）。  
+- 复用说明：复用原 `/api/case-files/import` 导入接口，仅增加 query 参数控制覆盖；覆盖后复用 `listCaseFiles/listCaseItems` 刷新视图。  
+- 测试与验证：UI：`npm run test:ui -- tests/ui/case_library.spec.js`（通过）；API：启动后端（`APP_DB_FILE=apitest.db .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080`）后执行 `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库导入容错增强（允许“同标题不同预期”）  
+- 功能描述：用例库导入入库逻辑增强：同一份导入文件内重复条目会自动去重；同时兼容历史数据库唯一键不包含 `expected` 的情况（迁移修复），保证“同一分支/同标题但预期结果不同”可作为不同用例正常入库；导入失败时返回更明确的数据库约束错误信息，避免统一误报为“存在重复条目”。  
+- 操作方式：导入用例并确认入库；若用例标题相同但预期结果不同，将作为两条不同用例写入；历史库升级后无需手动清库。  
+- 使用效果：解决“库为空仍导入失败：存在重复条目”的阻断问题，导入流程更稳健且错误提示更可定位。  
+- 新增内容/接口/组件：导入接口插入逻辑增强（`backend/routers/cases.py`）；历史库迁移 v5（`backend/migrations.py`）；API 用例补充“同标题不同预期”导入断言（`tests/api/case_library.spec.js`）。  
+- 复用说明：复用既有导入接口与唯一键规则，仅补充 SQLite 容错插入与轻量迁移逻辑。  
+- 测试与验证：API：启动后端（`APP_DB_FILE=apitest.db .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080`）后执行 `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库导入同名判定增强（包含名 + 模块/标题交集）  
+- 功能描述：用例库导入同名校验规则更准确：第一层按“清洗名去首尾空格后完全相同”判定同名；若导入名包含库中名（如“用例1（1）”“xx用例1yy”），则第二层按模块交集 ≥2 判同名；若双方都只有 1 个模块且模块相同，则第三层按用例标题交集 ≥2 判同名；判定范围为项目级（同项目跨版本也会拦截）。  
+- 操作方式：在“用例库 → 导入用例”选择项目/版本并确认入库；若命中上述同名规则则提示同名并进入差异对比/覆盖导入流程。  
+- 使用效果：避免通过“文件名变体”绕过同名限制，同时保持“同项目跨版本”的重复限制一致性。  
+- 新增内容/接口/组件：后端同名匹配 `_find_duplicate_case_file` 与导入接口结构化返回（`backend/routers/cases.py`）；API error body 透出（`services/apiClient.js`）；前端导入冲突时按 `existing_case_file_id` 拉取库中条目打开 Diff，覆盖导入时用匹配 cleanName 构造 `file_name`（`scripts/modules/caseLibrary.js`）；API 用例新增“包含名 + 模块/标题交集”断言（`tests/api/case_library.spec.js`）。  
+- 复用说明：复用既有项目级同名限制与 Diff 抽屉，仅扩展判定规则与错误返回信息。  
+- 测试与验证：API：启动后端（`APP_DB_FILE=apitest.db .venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080`）后执行 `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库导入抽屉默认回填最近项目/版本  
+- 功能描述：在已登录状态下，用例库“导入用例”抽屉会记住最近一次选择的项目与版本；导入完成后再次打开导入抽屉，会自动回填并默认选中上次的项目/版本，减少重复选择。  
+- 操作方式：进入“用例相关 → 用例库”→打开“导入用例”并选择项目/版本导入完成→关闭抽屉→再次打开“导入用例”→项目/版本自动回填。  
+- 使用效果：连续导入多份用例时更省操作，避免反复选择项目/版本。  
+- 新增内容/接口/组件：导入抽屉状态持久化（localStorage：`tap-case-library-import-drawer`，含 `project_id/version_id`）（`scripts/modules/caseLibrary.js`）；UI 用例新增“关闭后再次打开默认回填”覆盖（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用既有项目/版本加载与鉴权就绪判断，仅新增轻量持久化与恢复逻辑。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库删除用例文件后同步清空编辑视图  
+- 功能描述：管理员在“编辑用例&转到执行”抽屉中删除用例文件后，若该用例文件当前正在右侧“用例编辑视图”中打开，则会自动清空并隐藏编辑视图，同时清理刷新恢复缓存，避免出现“已删除仍可编辑”的误导。  
+- 操作方式：打开某个用例文件的编辑视图→回到“编辑用例&转到执行”抽屉勾选并删除该用例文件→删除完成后编辑视图自动消失。  
+- 使用效果：删除操作与编辑视图状态一致，避免继续编辑已删除数据。  
+- 新增内容/接口/组件：删除完成后校验并清空编辑视图（`scripts/modules/caseLibrary.js`）；UI 用例补充“打开编辑视图后删除应清空”断言（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用现有删除流程与编辑视图渲染，仅在删除收尾阶段增加同步清理。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库导入成功后自动清空文件选择（防重复导入）  
+- 功能描述：用例库“导入用例”确认入库全部成功后，会自动清空已选择的导入文件（不清空项目/版本默认项），并禁用“确认入库”按钮，避免用户误点导致同一批文件被重复导入。  
+- 操作方式：导入用例并点击“确认入库”成功后，文件提示恢复为“未选择文件”，再次点击“确认入库”需重新选择文件。  
+- 使用效果：防止重复导入/重复冲突提示，导入流程更符合预期。  
+- 新增内容/接口/组件：导入完成收尾清理文件选择与 input 值（`scripts/modules/caseLibrary.js`）；UI 用例新增“导入完成后确认按钮禁用/文件提示重置”断言（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用既有导入流程与状态提示，仅在成功分支补充轻量清理。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库支持 Excel（xlsx）导入（格式与导出一致）  
+- 功能描述：用例库“导入用例”支持导入 `.xlsx` 文件；当 Excel 首行表头与导出一致（“模块/用例标题/优先级/前提条件/操作步骤/预期结果”）时可直接解析入库；解析完成后仍复用同一入库接口，因此同名判定/差异对比/覆盖导入规则与 XMind/JSON 导入一致。  
+- 操作方式：进入“用例相关 → 用例库”→打开“导入用例”→选择 `.xlsx` 文件（格式同导出 Excel）→选择项目/版本→确认入库。  
+- 使用效果：支持 Excel 作为用例编写与交换格式，导入链路统一且同名规则一致。  
+- 新增内容/接口/组件：导入文件选择允许 `.xlsx`（`index.html`）；前端新增 Excel 解析（支持 inlineStr/sharedStrings）并映射为用例条目（`scripts/modules/caseLibrary.js`）；UI 用例新增 Excel 导入覆盖（`tests/ui/case_library.spec.js`、fixture：`tests/fixtures/case_library_import.xlsx.base64`）。  
+- 复用说明：复用既有 JSZip 依赖与导入入库接口 `/api/case-files/import`，仅新增轻量解析逻辑与字段映射。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入\\ Excel`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库导入页提供 Excel/XMind 模板下载  
+- 功能描述：用例库“导入用例”抽屉新增两个模板按钮：点击“Excel导入模板”会下载仅包含表头字段的空 `.xlsx`；点击“XMind导入模板”会下载一份可直接参考的 `.xmind` 模板（含示例条目）。  
+- 操作方式：进入“用例相关 → 用例库”→打开“导入用例”抽屉→点击“Excel导入模板”或“XMind导入模板”下载。  
+- 使用效果：导入格式更明确，减少手工准备模板的成本。  
+- 新增内容/接口/组件：导入抽屉模板按钮（`index.html`）；模板文件生成与下载逻辑（`scripts/modules/caseLibrary.js`）；UI 用例新增模板下载覆盖（`tests/ui/case_library.spec.js`）。  
+- 复用说明：Excel 模板复用现有 `buildCaseLibraryExcelBlob`；XMind 模板复用现有 `buildXmindPackageFromCases`；不引入新依赖。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入模板下载`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库编辑视图搜索框样式优化  
+- 功能描述：用例库“用例编辑视图”的搜索框增加搜索图标、加宽输入框并优化焦点/占位符样式，便于展示更完整的默认提示文案。  
+- 操作方式：在用例库打开某份用例进入编辑视图，可在顶部搜索框输入关键字筛选模块/标题/步骤/预期等字段。  
+- 使用效果：搜索输入更醒目、提示更清晰，长文案不易被截断。  
+- 新增内容/接口/组件：搜索框结构与占位符优化（`index.html`）；搜索框样式（`style.css`）。  
+- 复用说明：复用既有搜索过滤逻辑，仅优化 UI 展示。  
+- 测试与验证：手工在 Chrome/Safari 验证搜索框样式与筛选交互；`node --check scripts/modules/caseLibrary.js`（通过）。  
+- 更新记录：无  
+
+- 功能名称：用例库编辑视图“清空搜索”按钮修复（禁用态更明确）  
+- 功能描述：用例库编辑视图的“清空”按钮用于清除当前搜索过滤；当搜索为空时按钮会自动置灰禁用，避免“点击无反应”的困惑；清空时会强制触发一次输入更新并短暂提示“已清空搜索”。  
+- 操作方式：在编辑视图搜索框输入关键字后，点击“清空”即可恢复显示全部用例条目；未输入搜索时按钮为禁用态。  
+- 使用效果：按钮行为更符合直觉，清空操作更明确且对输入法场景更稳。  
+- 新增内容/接口/组件：清空按钮状态同步与清空逻辑增强（`scripts/modules/caseLibrary.js`）；UI 用例新增“搜索过滤后清空恢复全量/按钮禁用态”断言（`tests/ui/case_library.spec.js`）。  
+- 复用说明：复用既有筛选渲染 `renderEditorTable`，仅补充控件状态同步。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入\\ \\-\\>`（通过）。  
+- 更新记录：按钮文案从“清空”调整为“清空搜索”（`index.html`）。  
+
+- 功能名称：用例库 Excel 导入模板支持复用/非复用选择  
+- 功能描述：用例库“导入用例”抽屉在下载 Excel 导入模板前增加“Excel模板”下拉选择，默认“非复用模板”；选择“复用模板”时导出的模板文件名与工作表名会标记为“用例导入模板（复用）”，便于区分与管理。  
+- 操作方式：进入“用例相关 → 用例库”→打开“导入用例”抽屉→在“Excel模板”中选择“非复用模板/复用模板”→点击“Excel导入模板”下载。  
+- 使用效果：模板用途更明确，下载时可直接区分复用/非复用模板，减少混用带来的导入误解。  
+- 新增内容/接口/组件：模板类型下拉控件（`index.html`）；模板下载按选择输出文件名/Sheet 名（`scripts/modules/caseLibrary.js`）；选择框最小宽度样式（`style.css`）；UI 用例新增“复用模板下载文件名”断言（`tests/ui/case_library.spec.js`）。  
+- 复用说明：Excel 模板仍复用既有 `buildCaseLibraryExcelBlob` 生成逻辑，仅在下载层增加模板类型分支，不改变导入格式结构。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 导入模板下载`（通过）。  
+- 更新记录：2025-12-15 复用模板在第二个工作表补充“执行页带结果（已执行）的复用示例”（不参与导入），便于直观看懂复用子项行与结果字段填写（`scripts/modules/caseLibrary.js`）。  
+
+- 功能名称：用例库导入必填字段校验与修正抽屉  
+- 功能描述：用例库“导入用例”在确认入库前增加格式校验：模块/用例标题/优先级/前提条件/操作步骤/预期结果均为必填；优先级允许小写 `p`（如 `p1`）并在入库前自动规范为大写 `P1`；当存在任意必填字段为空时，会自动打开“导入用例格式校验”抽屉，展示该文件内所有可解析用例条目，并对缺失字段高亮，支持页面内直接编辑；点击“确认修改并入库”后会再次校验并入库；若此时触发“同名用例已存在”，会自动关闭校验抽屉并打开差异对比抽屉引导覆盖导入。  
+- 操作方式：进入“用例相关 → 用例库”→打开“导入用例”抽屉→选择文件与项目/版本→点击“确认入库”→若提示校验失败则在“格式校验”抽屉补齐字段→点击“确认修改并入库”。  
+- 使用效果：导入前即可发现并修正缺失字段，避免“导入成功但内容不完整/被跳过”的困惑；同时统一优先级大小写格式。  
+- 新增内容/接口/组件：新增“导入用例格式校验”抽屉（`index.html`）；空字段高亮样式（`style.css`）；导入解析保留空字段并在入库前校验/修正入库（`scripts/modules/caseLibrary.js`）；XMind 模板提示文案调整为必填（`scripts/modules/caseLibrary.js`）；UI 用例新增覆盖（`tests/ui/case_library.spec.js`）与测试夹具补充（`tests/fixtures/case_library_import_invalid.json`）。  
+- 复用说明：复用既有导入解析与抽屉组件（`drawer.js`）与 diff 抽屉样式体系，仅新增“校验修正”抽屉与校验逻辑，不改变后端导入接口结构。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：2025-12-15 用例库导入必填校验上线（`scripts/modules/caseLibrary.js`、`index.html`、`style.css`）；2025-12-15 校验抽屉展示全量条目并在同名冲突时自动切换到 diff 抽屉（`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`）。  
+
+- 功能名称：修复 XMind 导入缺字段导致的根节点错位  
+- 功能描述：当导入的 XMind 用例字段层级不足（剔除根节点后不足 6 层）时，不再尝试“猜测补位”导致字段整体错位；会按行号提示“字段层级不足”，并在校验抽屉中同时展示“可正常解析的用例”，允许继续入库其余用例（字段层级不足的条目会被跳过）；当字段层级满足（>=6）时按最后 6 段映射为模块/标题/优先级/前提/步骤/预期，并继续走必填校验抽屉。  
+- 操作方式：导入 XMind → 点击“确认入库” → 若提示“字段层级缺失”则回到 XMind 补齐层级后重导入；若仅是字段内容为空（例如填了 `-` 占位）则在“格式校验”抽屉中补齐后入库。  
+- 使用效果：避免导入时字段整体错位（根节点变模块、模块变标题等）导致批量数据错误，并对“中间字段缺失”给出明确的行号定位提示。  
+- 新增内容/接口/组件：XMind 叶子路径标准化增强（剔除根节点并按字段长度识别缺失场景，`scripts/core/xmindCore.js`）；UI 用例覆盖（`tests/ui/case_library.spec.js`）与测试 fixture（`tests/fixtures/case_library_xmind_missing_expected.xmind.base64`）。  
+- 复用说明：复用既有 XMind JSON 遍历与导入校验抽屉机制，仅增强字段对齐策略。  
+- 测试与验证：`node --check scripts/core/xmindCore.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g XMind`（通过）。  
+- 更新记录：2025-12-15 修复 XMind 缺字段导入错位（`scripts/core/xmindCore.js`）；2025-12-15 用例库 XMind 导入增加字段层级(>=6)校验，层级不足时按行号提示并可继续入库其余用例（不足条目跳过，`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/case_library.spec.js`、`tests/fixtures/case_library_xmind_missing_precondition.xmind.base64`）；2025-12-15 XMind 节点存在但标题为空时视为字段内容为空（不计入层级缺失，`scripts/core/xmindCore.js`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`、`tests/fixtures/case_library_xmind_empty_precondition.xmind.base64`）。  
+
+- 功能名称：执行视图移除“导入执行JSON”按钮  
+- 功能描述：执行视图工具栏移除“导入执行JSON”入口，避免与 DB 导入/覆盖逻辑重复并降低误操作（保留导出本次执行 JSON 入口不变）。  
+- 操作方式：执行视图不再提供“导入执行JSON”按钮；如需导入请使用“用例导入&分配”流程。  
+- 使用效果：执行视图入口更聚焦，减少历史 JSON 导入导致的执行数据混乱。  
+- 新增内容/接口/组件：移除相关按钮与 file input（`index.html`）；清理绑定逻辑（`scripts/modules/tempexec.js`）；更新 UI 回归用例与布局断言（`tests/ui/files_layout.spec.js`）。  
+- 复用说明：复用既有执行页导出与 DB 导入机制，仅删除旧入口，不改变其他执行流程。  
+- 测试与验证：`node --check scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/files_layout.spec.js`（通过）。  
+- 更新记录：Playwright 本地静态服务绑定为 `127.0.0.1`（`tests/playwright.config.js`）；2025-12-14 执行视图进一步移除“导出本次执行JSON”按钮（`index.html`、`scripts/modules/tempexec.js`），避免误导用户使用旧导出能力。  
+
+- 功能名称：项目管理删除版本支持“转移用例后删除”  
+- 功能描述：在项目管理删除版本时，若用例库已存在该版本下的用例文件，则删除会被拦截并提示输入要转移到的目标版本（同项目内且必须已创建）；确认后会将该项目下对应版本的用例文件批量更新为目标版本，再删除旧版本；若目标版本不存在则提示需先创建。  
+- 操作方式：进入“管理 → 项目管理”→在目标项目版本标签处点击“删除”→若提示“版本下已存在用例”，输入要转移到的版本名称并二次确认→完成转移并删除版本。  
+- 使用效果：避免误删版本导致用例版本丢失（变为 NULL），支持平滑迁移用例到新版本后再清理旧版本。  
+- 新增内容/接口/组件：后端删除版本接口支持 `transfer_to` 参数并在版本占用时返回 `409 VERSION_IN_USE`（`backend/routers/projects.py`）；前端删除交互增加“输入转移版本 + 二次确认”流程（`scripts/modules/admin.js`）；API 客户端支持携带 `transfer_to`（`services/apiClient.js`）；UI/API 自动化用例覆盖（`tests/ui/project_admin_drawer.spec.js`、`tests/api/project_version_delete_transfer.spec.js`）。  
+- 复用说明：复用原 `DELETE /api/projects/{project_id}/versions/{version_id}` 路由与鉴权逻辑，仅增加可选转移分支，不影响无占用版本的直接删除。  
+- 测试与验证：`python3 -m compileall backend`（通过）；`node --check scripts/modules/admin.js services/apiClient.js`（通过）；`npm run test:ui -- tests/ui/project_admin_drawer.spec.js -g 删除版本`（通过）；`APP_DB_FILE=apitest.db python -m uvicorn backend.main:app --host 127.0.0.1 --port 9001` 后执行 `API_BASE_URL=http://127.0.0.1:9001 npx playwright test --config tests/api/playwright.api.config.js tests/api/project_version_delete_transfer.spec.js`（通过）。  
+- 更新记录：2025-12-15 修复后端返回 `409` 时 `code` 位于 `payload.detail.code` 导致前端未进入“输入转移版本”引导流程的问题，并补充 UI 用例覆盖真实返回结构（`scripts/modules/admin.js`、`tests/ui/project_admin_drawer.spec.js`）。  
+
+- 功能名称：用例库编辑视图列宽与换行优化  
+- 功能描述：用例库“用例编辑视图”的表格列宽与换行规则对齐导入校验/差异对比视图，避免字段过于拥挤导致阅读困难：模块≈6字/标题≈8字/优先级≈5字（含额外间距）/前提≈12字/步骤≈12字/预期≈20字，自动换行且不溢出。  
+- 操作方式：进入“用例相关 → 用例库”→打开“编辑用例”→选择文件进入“用例编辑视图”，查看表格字段展示与换行效果。  
+- 使用效果：编辑视图字段间距更均衡，长内容会自动换行，整体更易读。  
+- 新增内容/接口/组件：编辑视图表格 `table-layout: fixed` 与列宽/换行样式（`style.css`）。  
+- 复用说明：复用现有 `.temp-case-view` 表格体系，仅补充 `#caseLibraryEditView` 的列宽/换行规则，不改变编辑逻辑。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js scripts/core/tempexecCore.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 编辑用例`（通过）。  
+- 更新记录：2025-12-15 编辑视图列宽与换行规则上线（`style.css`）；2025-12-15 编辑视图“前提条件/操作步骤”各加宽≈3字（`style.css`）；2025-12-15 编辑视图“模块/用例标题”各加宽≈2字（`style.css`）。  
+
+- 功能名称：执行页 DB 模式加载明细异步化（提升“转到执行”稳定性）  
+- 功能描述：执行页 DB 模式加载执行集列表时，先渲染执行集元信息，再异步并发加载各执行集的用例明细，避免执行集数量较多时同步拉取导致 UI 阻塞与“转到执行”链路超时。  
+- 操作方式：在用例库点击“转到执行”或进入“用例执行”页签，观察执行集列表可更快出现，明细随后加载完成。  
+- 使用效果：执行页加载更快，“转到执行”更稳定，减少因执行集数量多导致的卡顿/超时。  
+- 新增内容/接口/组件：`loadTempExecStateFromDb` 先落地执行集骨架，再并发加载明细并按需刷新视图（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用既有 `listExecSets/listExecCases` 接口与渲染逻辑，仅调整加载顺序与并发策略，不改变数据结构与权限规则。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行页 DB 加载优化上线（`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：执行页导入重复条目改为抽屉确认（自动去重）  
+- 功能描述：执行页“导入并入库”检测到导入文件内存在重复条目（按 模块+用例标题+预期结果 判重）时，不再使用 `window.confirm` 弹窗；改为打开“导入用例重复校验”抽屉，展示重复条目列表与去重前后数量，用户点击确认后继续入库并自动去重。  
+- 操作方式：进入“用例执行 → 用例导入&分配”→选择包含重复条目的文件→选择项目/版本→点击“确认入库”→在“导入用例重复校验”抽屉中点击“确认继续入库（自动去重）”。  
+- 使用效果：重复条目更可视化，可明确知道哪些条目会被移除，避免弹窗信息过载且便于后续修正源文件。  
+- 新增内容/接口/组件：新增重复校验抽屉（`index.html`）、表格样式（`style.css`）、执行页入库重复处理改为抽屉确认（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用既有“抽屉组件”（`scripts/base/drawer.js`）与执行页导入去重逻辑，仅替换提示交互，不改变去重规则与入库流程。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js`（通过）；`npm run test:ui -- tests/ui/tempexec_import_confirm.spec.js`（通过，新增覆盖“重复条目抽屉确认后去重入库”）。  
+- 更新记录：2025-12-15 执行页导入重复条目抽屉确认上线（`index.html`、`style.css`、`scripts/core/tempexecCore.js`、`tests/ui/tempexec_import_confirm.spec.js`）；2025-12-15 重复抽屉升级为“完整展示重复组内全部字段+行号”（`index.html`、`style.css`、`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：用例库导入增加“重复条目抽屉确认”（自动去重）  
+- 功能描述：用例库“导入用例”在确认入库前增加重复条目提示：当同一导入文件内存在重复条目（按 模块+用例标题+预期结果 判重）时，打开“导入用例重复校验”抽屉，完整展示重复组内每条用例的全部字段与行号，并标记“保留/移除”；用户确认后自动去重再入库（避免后端唯一约束导致的静默丢条）。  
+- 操作方式：进入“用例相关 → 用例库”→打开“导入用例”抽屉→选择包含重复条目的文件并选择项目/版本→点击“确认入库”→在“导入用例重复校验”抽屉点击“确认继续入库（自动去重）”。  
+- 使用效果：重复条目可视化且可追溯到行号，用户可自行判断并决定是否继续入库；确认后入库结果与后端去重一致，避免“少一条但无提示”的困惑。  
+- 新增内容/接口/组件：新增用例库重复校验抽屉（`index.html`）、表格样式（`style.css`）、用例库导入链路重复检测与抽屉确认（`scripts/modules/caseLibrary.js`）。  
+- 复用说明：复用既有导入解析、`buildCaseItemKey` 判重与抽屉组件，仅新增“重复校验抽屉”交互，不改变入库接口。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 重复条目`（通过，新增覆盖“重复条目抽屉确认后去重入库”）。  
+- 更新记录：2025-12-15 用例库导入重复条目抽屉确认上线（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`）。  
+
+- 功能名称：执行页导入项目/版本选择持久化  
+- 功能描述：在“用例执行 → 用例导入&分配”中，项目与版本选择会写入本地存储并在刷新后自动恢复，方便连续多次导入无需重复选择。  
+- 操作方式：进入“用例执行 → 用例导入&分配”→选择项目与版本→刷新页面→再次进入该区域，项目/版本会自动恢复到上次选择。  
+- 使用效果：多次导入操作更顺畅，减少重复选择项目/版本的成本。  
+- 新增内容/接口/组件：导入选择持久化读写与恢复（`scripts/modules/tempexec.js`）；UI 用例新增覆盖“刷新后保持导入选择”（`tests/ui/tempexec_import_confirm.spec.js`）。  
+- 复用说明：复用用例库导入的持久化思路（localStorage 保存最近选择），并复用现有项目/版本加载逻辑，不改变入库接口。  
+- 测试与验证：`node --check scripts/modules/tempexec.js tests/ui/tempexec_import_confirm.spec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_import_confirm.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行页导入项目/版本选择持久化上线（`scripts/modules/tempexec.js`）。  
+
+- 功能名称：执行页导入&分配区改为“项目/版本分组”布局  
+- 功能描述：DB 模式下，“用例执行 → 用例导入&分配”下方不再展示需求区；原版本区升级为项目区：按“项目卡片 → 版本盒子”展示用例文件。项目/版本盒子支持拖拽换序；版本盒子内用例支持拖拽调整顺序；不同项目/不同版本间的用例不可互相拖拽移动；项目/版本/用例均可关闭移除（需二次确认），关闭后从执行页面消失，需重新导入/转入才会恢复。  
+- 操作方式：进入“用例执行 → 用例导入&分配”→导入用例并入库/或从用例库转到执行→执行页面会自动按项目与版本分组展示；可拖拽调整同项目内版本盒子顺序与盒子内用例顺序；点击项目/版本/用例右上角“×”可关闭移除。  
+- 使用效果：执行用例按项目与版本组织更清晰，避免“需求区/版本区”语义混淆；拖拽范围更可控，减少误操作。  
+- 新增内容/接口/组件：新增执行页项目分组渲染与排序缓存（`scripts/core/tempexecCore.js`）、执行页项目分组拖拽/关闭交互（`scripts/modules/tempexec.js`）、项目区样式（`style.css`）、文案调整（`index.html`）；新增 UI 用例覆盖项目/版本分组与拖拽限制（`tests/ui/tempexec_project_layout.spec.js`）。  
+- 复用说明：复用既有执行页文件行渲染、抽屉组件与持久化设置（`tempexec_ui_v1`），仅在 DB 模式下切换为“项目/版本分组”渲染，不删除旧需求/版本拖拽逻辑，便于未来回滚或复用。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_project_layout.spec.js tests/ui/tempexec_import_confirm.spec.js tests/ui/files_layout.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行页项目/版本分组布局上线（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`index.html`、`tests/ui/tempexec_project_layout.spec.js`）；2025-12-15 修复项目/版本盒子内点击切换用例时 `activeId` 被刷新回滚问题，并为执行集补充 `case_count` 返回与前端条目数展示（`backend/routers/exec_routes.py`、`backend/schemas.py`、`scripts/core/tempexecCore.js`、`tests/ui/tempexec_project_layout.spec.js`、`tests/api/exec_persistence.spec.js`）；2025-12-15 调整用例状态着色规则：只要存在“失败/阻塞”即标红（不要求全部执行完），并在明细异步加载完成后即时刷新用例行状态样式（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_project_layout.spec.js`）；2025-12-15 优化项目/版本盒子拖拽：支持“插入到目标之后”以解决左→右、上→下无法交换，并增加虚线放置占位框与更完整的拖拽剪影（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_project_layout.spec.js`）；2025-12-15 修复部分浏览器在 `dragover` 无法读取 `dataTransfer.getData` 导致“无占位/无法后插入”的问题，并增强在空白区域拖拽时的落点推断与占位展示（`scripts/modules/tempexec.js`、`style.css`）。  
+
+- 功能名称：删除版本并转移时同步迁移执行集版本  
+- 功能描述：项目管理删除版本并指定转移版本名时，除用例库 `case_files` 版本迁移外，同时将该项目下 `exec_sets` 的 `version_id` 迁移到目标版本，避免执行页面仍出现“已删除版本”或落入“全部版本”分组；前端在项目数据更新事件触发时会自动刷新执行数据。  
+- 操作方式：进入“项目管理”→删除版本→输入转移版本名→确认删除；用例库与执行页对应版本数据会同步迁移到目标版本。  
+- 使用效果：版本迁移对执行页面可见且一致，减少版本删除后的数据错位与手工处理成本。  
+- 新增内容/接口/组件：版本删除转移时同步更新 `exec_sets`（`backend/routers/projects.py`）；API 用例补充校验 `exec_sets.version_id` 迁移（`tests/api/project_version_delete_transfer.spec.js`）；执行页监听项目更新事件并刷新数据（`scripts/modules/tempexec.js`）。  
+- 复用说明：复用既有“版本删除转移”接口参数与用例库迁移逻辑，仅补充执行集迁移与前端刷新，不新增接口。  
+- 测试与验证：`API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/project_version_delete_transfer.spec.js`（通过）。  
+- 更新记录：2025-12-15 版本删除转移同步迁移执行集上线（`backend/routers/projects.py`、`scripts/modules/tempexec.js`、`tests/api/project_version_delete_transfer.spec.js`）。  
+
+- 功能名称：同一份用例内重复条目判定条件升级  
+- 功能描述：导入用例文件时，“重复条目（相同用例）”判定从“模块+用例描述+预期结果”升级为“模块+用例描述+前提条件+操作步骤+预期结果”全字段一致才算重复；避免同标题/同预期但前置或步骤不同的用例被误去重。  
+- 操作方式：在“用例库导入”或“用例执行导入入库”中导入同一文件：仅当条目模块/描述/前提/步骤/预期完全相同才会弹出“重复校验”抽屉并去重；若仅前提或步骤不同，会视为两条不同用例并同时入库。  
+- 使用效果：重复判断更准确，减少误去重导致的用例缺失；同时保证执行页导入覆盖/追加入库的匹配键与用例库一致。  
+- 新增内容/接口/组件：用例库 `case_items` 唯一键升级与迁移（`backend/models.py`、`backend/migrations.py`）；导入去重与执行结果映射键升级（`backend/routers/cases.py`、`backend/routers/exec_routes.py`、`scripts/core/tempexecCore.js`、`scripts/modules/caseLibrary.js`）；更新规划文档唯一键描述（`db_integration_plan.md`）。  
+- 复用说明：复用既有“重复校验抽屉”和导入流程，仅扩展判重 key（并同步后端唯一约束与结果映射逻辑），不新增接口。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 重复条目`（通过）；`npm run test:ui -- tests/ui/tempexec_import_confirm.spec.js -g 重复条目`（通过）；API：启动后端（`APP_DB_FILE=apitest.db python -m uvicorn backend.main:app --host 127.0.0.1 --port <port>`）后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
+- 更新记录：2025-12-15 同一份用例内重复条目判定条件升级上线（`backend/models.py`、`backend/migrations.py`、`backend/routers/cases.py`、`backend/routers/exec_routes.py`、`scripts/core/tempexecCore.js`、`scripts/modules/caseLibrary.js`、`db_integration_plan.md`、`tests/api/case_library.spec.js`、`tests/ui/case_library.spec.js`、`tests/ui/tempexec_import_confirm.spec.js`）。  
+
+- 功能名称：执行总览视图优化（按用例进度/抽屉明细/版本归属修复）  
+- 功能描述：执行总览不再展示“人员总进度条”，改为每份用例（执行集）展示独立进度条；去掉人员“组长”标识；修复执行集错误落入“全部版本”分组导致出现“全部版本”版本盒子的问题（后端按 `case_file_id/source` 回填版本）；用例明细改为抽屉展示，并支持从明细行/用例卡片打开“执行列表”抽屉查看该执行集下的用例列表。  
+- 操作方式：进入“执行总览”→选择项目/版本→查看人员卡片下各执行集进度条；点击人员“查看用例”打开明细抽屉；在明细表点击“查看”或直接点击执行集卡片，打开执行列表抽屉。  
+- 使用效果：进度展示更细粒度，明细查看更聚焦；避免版本盒子出现“全部版本”误分组，提升可用性与一致性。  
+- 新增内容/接口/组件：执行总览明细抽屉与执行集抽屉（`index.html`、`scripts/modules/execOverview.js`、`style.css`）；执行总览接口版本回填与筛选兼容（`backend/routers/exec_routes.py`、`tests/api/exec_overview.spec.js`）。  
+- 复用说明：复用既有 Drawer 组件（`scripts/base/drawer.js`）与执行集用例列表接口（`GET /api/exec/sets/{id}/cases`），不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/execOverview.js`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）；API：启动后端（`APP_DB_FILE=apitest.db python -m uvicorn backend.main:app --host 127.0.0.1 --port <port>`）后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_overview.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行总览视图优化上线（`index.html`、`scripts/modules/execOverview.js`、`style.css`、`backend/routers/exec_routes.py`、`tests/ui/exec_overview.spec.js`、`tests/api/exec_overview.spec.js`）。  
+
+## 已记录需求  
+- 功能名称：需求澄清确认提示  
+- 功能描述：在“需求澄清点视图”点击“确认澄清”后即时显示提示，明确澄清写入结果。  
+- 操作方式：在功能工作流的需求澄清点视图填写/编辑澄清结果后点击“确认澄清”，按钮下方会显示写入结果提示。  
+- 使用效果：用户能立即获知澄清写入成功或数据缺失等情况，避免无反馈导致误以为未生效。  
+- 新增内容/接口/组件：新增澄清视图状态位 `#clarifyStatus`，复用现有确认逻辑输出提示。  
+- 复用说明：复用原有确认澄清流程与状态提示方法，仅补充视图内状态承载。  
+- 测试与验证：`npm run test:ui -- tests/ui/workflow.spec.js`（通过，新增用例覆盖澄清提示）。  
+- 更新记录：无  
+
+- 功能名称：执行总览补充进度条与按人员展示项目执行布局  
+- 功能描述：执行总览页补回进度条展示，并支持在选定项目/版本下按人员分组展示“项目区（版本盒子→用例文件）”的执行布局；仅展示该项目/版本下有执行记录的人员；人员排序为“组长优先，其次按账号创建时间由早到晚”；归档执行集在总览中展示“归”标识，并且仅当归档前已执行完（pending=0）才长期展示，避免“未执行完就解散”的噪音。  
+- 操作方式：进入“用例相关 → 执行总览”→选择项目卡片→（可选）选择版本→查看各人员的进度条与版本盒子内的用例文件列表（含归档标识）。  
+- 使用效果：更直观地查看同项目下所有人员的执行进度与用例分布，归档用例可追溯且不干扰未完成执行。  
+- 新增内容/接口/组件：新增 `GET /api/exec/overview/layout` 返回项目成员的执行集布局与统计（`backend/routers/exec_routes.py`、`backend/schemas.py`）；前端执行总览页接入新接口并渲染进度条/归档标识/人员排序与布局（`scripts/modules/execOverview.js`、`services/apiClient.js`、`style.css`）；补充 UI/API 自动化覆盖（`tests/ui/exec_overview.spec.js`、`tests/api/exec_overview.spec.js`）。  
+- 复用说明：复用既有 `exec_sets/exec_cases` 作为权威数据源与现有“执行总览”页面框架，仅新增 layout 聚合接口与前端渲染增强，不改变执行页入库与实时保存逻辑。  
+- 测试与验证：`node --check services/apiClient.js scripts/modules/execOverview.js`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）；启动测试后端（`APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port <port>`）后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_overview.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行总览进度条与按人员布局展示上线（`backend/routers/exec_routes.py`、`backend/schemas.py`、`services/apiClient.js`、`scripts/modules/execOverview.js`、`style.css`、`tests/ui/exec_overview.spec.js`、`tests/api/exec_overview.spec.js`）。  
+
+- 功能名称：执行集从用例库添加的“相同用例”判定条件对齐  
+- 功能描述：从用例库添加用例到执行集（`POST /api/exec/sets/{id}/cases/from-library`）时，“相同用例”的判定从“模块+用例描述+预期结果”升级为“模块+用例描述+前提条件+操作步骤+预期结果”全字段一致才算重复，避免同名同预期但前置/步骤不同的用例被误判为重复而无法添加。  
+- 操作方式：在用例库准备两条“模块/描述/预期相同但步骤不同”的用例 → 添加到同一执行集；仅当五字段完全一致时才会提示重复。  
+- 使用效果：重复判断更准确，允许同名同预期但前置/步骤不同的用例同时进入执行集。  
+- 新增内容/接口/组件：后端执行接口判重 key 调整（`backend/routers/exec_routes.py`）；API 用例更新覆盖该场景（`tests/api/case_library.spec.js`）。  
+- 复用说明：复用既有接口与执行集用例列表，不新增后端接口。  
+- 测试与验证：`python3 -m compileall -q backend`（通过）；`API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行集从用例库添加去重条件对齐上线（`backend/routers/exec_routes.py`、`tests/api/case_library.spec.js`）。  
+
+- 功能名称：执行总览项目成员可见与入口简化  
+- 功能描述：执行总览页对“同一项目成员”开放：项目所属人员可在总览查看其他成员的执行进度与细节（只读）；同时执行总览页移除“返回项目列表”“查看用例”入口与对应抽屉逻辑，仅保留点击执行集卡片打开“执行列表”抽屉。  
+- 操作方式：项目成员进入“执行总览”→选择项目/版本→查看各成员执行集进度；点击任一执行集卡片可打开执行列表抽屉查看用例明细。  
+- 使用效果：项目内协作时可互相查看进度与明细；同时保留执行数据的写入隔离（编辑/更新仍按原规则限制），避免互相覆盖结果。  
+- 新增内容/接口/组件：执行集用例列表接口放开只读访问（`backend/routers/exec_routes.py`）；执行总览页移除返回/查看用例与明细抽屉（`index.html`、`scripts/modules/execOverview.js`）；抽屉“收起”按钮样式回归通用 `link-toggle`（`index.html`）；更新 API/UI 自动化覆盖该行为（`tests/api/exec_overview.spec.js`、`tests/ui/exec_overview.spec.js`）。  
+- 复用说明：复用既有项目权限校验，新增“只读执行集访问”与原有“个人执行集写隔离”并存，不新增接口。  
+- 测试与验证：`node --check scripts/modules/execOverview.js`（通过）；`python3 -m compileall -q backend`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）；API：启动测试后端后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_overview.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行总览项目成员可见与入口简化上线（`backend/routers/exec_routes.py`、`index.html`、`scripts/modules/execOverview.js`、`tests/api/exec_overview.spec.js`、`tests/ui/exec_overview.spec.js`）。  
+
+- 功能名称：执行总览项目选择持久化  
+- 功能描述：在登录状态下，执行总览页会记录用户最近在导航中选择的项目，并在刷新页面后自动恢复到该项目详情视图（保持“选中状态”）。  
+- 操作方式：进入“执行总览”→点击顶部项目导航按钮进入某项目→刷新页面→再次进入执行总览，会自动打开上次选中的项目。  
+- 使用效果：减少重复选择项目的成本，连续查看进度更顺畅。  
+- 新增内容/接口/组件：本地存储记录项目ID并恢复（`scripts/modules/execOverview.js`）；导航按钮选中态样式（`style.css`）；UI 用例覆盖刷新后保持选中（`tests/ui/exec_overview.spec.js`）。  
+- 复用说明：复用现有 tab 激活加载逻辑，不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/execOverview.js`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）。  
+- 更新记录：2025-12-15 执行总览项目选择持久化上线（`scripts/modules/execOverview.js`、`style.css`、`tests/ui/exec_overview.spec.js`）。  
+
+- 功能名称：用例库“选择用例执行”列表增加执行页状态  
+- 功能描述：用例库页“选择用例执行”抽屉的列表视图新增“执行页状态”列：若无人执行则显示“未（未转执行标识）”；若多人已转执行则按“人员：执（执行中标识）”逐行展示，便于识别重复执行风险。  
+- 操作方式：进入“用例库”→点击“选择用例执行”→选择项目后查看列表的“执行页状态”列（会按“人员：执行中”逐行展示）。  
+- 使用效果：选择更直观，减少重复转执行带来的确认弹窗/覆盖困扰。  
+- 新增内容/接口/组件：新增 `GET /api/exec/sets/by-case-file` 聚合接口返回“用例文件→执行人员”映射（`backend/routers/exec_routes.py`、`backend/schemas.py`）；前端列表展示状态标签与人员列表（`index.html`、`scripts/modules/caseLibrary.js`、`services/apiClient.js`）；更新 UI/API 用例覆盖（`tests/ui/case_library.spec.js`、`tests/api/exec_sets_by_case_file.spec.js`）。  
+- 复用说明：复用既有 `exec_sets` 数据作为权威来源，仅新增聚合查询接口供列表渲染，不改变转执行入库逻辑。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js -g 选择用例执行`（通过）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_sets_by_case_file.spec.js`（通过，需本地运行 FastAPI 服务并使用 `data/apitest.db`）。  
+- 更新记录：2025-12-16 修复“执行页状态”展示错误并支持展示多人选择执行（`backend/routers/exec_routes.py`、`backend/schemas.py`、`services/apiClient.js`、`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`、`tests/api/exec_sets_by_case_file.spec.js`）。  
+
+- 功能名称：执行页取消复用同步到用例库  
+- 功能描述：修复“复用类型用例在执行页取消勾选复用后，用例库仍保持复用类型”导致的状态反复与执行页混合展示问题：执行页关闭复用会同步更新用例库 `case_files.reuse_enabled=false`；同时调整“从用例库转执行”逻辑，仅在新建执行集时按用例库默认启用复用，避免已关闭的执行集被用例库状态反向开启。  
+- 操作方式：进入“用例执行”→打开已转执行的复用类型用例→取消勾选“用例复用”；再进入“用例库”查看对应文件的“复用类型”列应为“否”；后续在用例库编辑/覆盖导入后，执行页不会再把复用/非复用版本混合组合。  
+- 使用效果：执行页复用开关与用例库展示保持一致；关闭复用后执行集不会被自动反向开启，避免用例重复与状态混乱。  
+- 新增内容/接口/组件：执行集更新接口同步关闭复用到用例库（`backend/routers/exec_routes.py`）；转执行接口默认复用逻辑修正（`backend/routers/exec_routes.py`）；API/UI 自动化覆盖关闭复用同步与不反向开启（`tests/api/exec_persistence.spec.js`、`tests/ui/tempexec_reuse_toggle_sync.spec.js`）。  
+- 复用说明：复用既有执行集 PATCH 与用例库 `reuse_enabled` 字段，不新增新接口，仅补齐同步方向与默认行为。  
+- 测试与验证：`python3 -m compileall -q backend`（通过）；`npm run test:ui -- tests/ui/tempexec_reuse_toggle_sync.spec.js`（通过）；API：启动测试后端（`APP_DB_FILE=apitest.db python -m uvicorn backend.main:app --host 127.0.0.1 --port <port>`）后执行 `API_BASE_URL=http://127.0.0.1:<port> npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_persistence.spec.js`（通过）。  
+- 更新记录：2025-12-16 执行页取消复用同步到用例库上线（`backend/routers/exec_routes.py`、`tests/api/exec_persistence.spec.js`、`tests/ui/tempexec_reuse_toggle_sync.spec.js`）。  
+- 更新记录：2025-12-16 兼容旧执行集未落 `case_file_id`（仅 `source=case_file:<id>`）时，复用开关同步仍可更新用例库状态（`backend/routers/exec_routes.py`、`tests/api/exec_persistence.spec.js`）。  
+- 更新记录：2025-12-16 修复复用子项“变更重跑/有改动”状态颜色缺失（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_reuse_toggle_sync.spec.js`）。  
+- 更新记录：2025-12-16 修复时间显示少 8 小时（无时区时间按 UTC 解析后转本地显示），覆盖用例库导入/编辑时间、人员/项目创建时间、操作记录时间、执行总览更新时间、执行页用例库变更时间相关展示/比较（`scripts/modules/caseLibrary.js`、`scripts/modules/admin.js`、`scripts/modules/opsLog.js`、`scripts/modules/execOverview.js`、`scripts/core/tempexecCore.js`；UI 回归：`npm run test:ui -- tests/ui/case_library.spec.js -g 导入`、`npm run test:ui -- tests/ui/exec_overview.spec.js`）。  
+- 更新记录：2025-12-16 执行页“用例库变更”按钮提醒仅在用户主动点击后清除；未点击时跨刷新保持醒目，新变更再次进入提醒（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 更新记录：2025-12-16 用例库“编辑用例”抽屉新增“归属”下拉（全部/当前登录用户），默认选中当前用户以便聚焦自己负责/维护的用例文件（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`）。  
+- 更新记录：2025-12-16 用例库“查看&编辑”抽屉新增“用例名”搜索框（用于快速过滤定位用例文件），并将入口/列表按钮文案统一为“查看&编辑”（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`）。  
+- 更新记录：2025-12-16 执行页与用例库编辑点击“＋”新增用例行增加绿色描边高亮，并在页面生命周期内保持到下次刷新（`scripts/core/tempexecCore.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/new_added_highlight.spec.js`）。  
+- 更新记录：2025-12-16 执行页/用例库编辑在 8 秒待确认期内重复点增删时，会在点击位置浮出提示“当前有待确认的增删操作，请先撤回或等待入库”（3 秒后自动消失），避免滚动后看不到固定位置提示（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/undo_click_hint.spec.js`）。  
+- 更新记录：2025-12-16 执行页“用例导入&分配”温馨提示改为提醒导入后需点击“确认入库”才能进行下一步，并暂时屏蔽“导出/导入执行页面配置”按钮（`index.html`、`tests/ui/tempexec_import_confirm.spec.js`、`tests/ui/files_layout.spec.js`、`tests/ui/workflow.spec.js`、`tests/ui/tempexec_drag.spec.js`）。  
+- 更新记录：2025-12-16 人员管理删除用户增加“后果说明 + 输入当前管理员密码”确认（后端强校验，避免误删/越权脚本调用）（`backend/routers/users.py`、`backend/schemas.py`、`services/apiClient.js`、`index.html`、`scripts/modules/admin.js`、`tests/api/admin_entities.spec.js`、`tests/ui/user_admin_drawer.spec.js`）。  
+- 更新记录：2025-12-16 删除用户成功后页面中间悬浮提示“删除成功”，3 秒自动消失（`scripts/modules/admin.js`、`style.css`、`tests/ui/user_admin_drawer.spec.js`）。  
+- 更新记录：2025-12-16 执行总览/导入&分配视图按“三列版本”紧凑展示，并将版本内用例列表限制为“2.5 行可滚动”以提示可滚动；执行总览每个执行集卡片新增“状态 + 数量”小字信息（`scripts/modules/execOverview.js`、`style.css`、`tests/ui/exec_overview.spec.js`、`tests/ui/tempexec_project_layout.spec.js`）。  
+- 更新记录：2025-12-16 修复执行总览版本盒子滚动时进度条文本溢出，并将“待/过/失/阻”计数标识加上对应颜色；导入&分配页版本盒子内用例间距更紧凑，拖拽时显示虚线框并支持靠近边缘自动滚动（`scripts/modules/execOverview.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/exec_overview.spec.js`、`tests/ui/tempexec_project_layout.spec.js`）。  
+- 更新记录：2025-12-16 导入&分配页版本盒子保持高度不变，单屏展示调整为约 4.5 条子用例；执行总览滚动场景下仍可显示每条子用例进度条（`scripts/modules/execOverview.js`、`style.css`、`tests/ui/exec_overview.spec.js`、`tests/ui/tempexec_project_layout.spec.js`）。  
+- 更新记录：2025-12-16 导入&分配页版本盒子单屏展示调整为约 3.5 条子用例并回归更舒适的子项高度；执行总览子项高度与版本盒子最大高度同步调整，避免滚动场景遮挡“执行数据”（`style.css`）。  
+- 更新记录：2025-12-16 修复执行总览版本盒子内子项在多条时被 flex 压缩导致高度不一致/不触发滚动的问题，强制子项固定高度并通过滚动展示（`style.css`、`tests/ui/exec_overview.spec.js`）。  
+- 更新记录：2025-12-16 执行总览版本盒子子用例卡片高度再次降低以更紧凑展示，同时保持信息完整不遮挡，并继续保留“2.5 行露半行”滚动提示（`style.css`）。  
+- 更新记录：2025-12-16 执行页导航卡片“执行总览”更名为“个人执行总览”；在个人执行总览抽屉内点击进度条段可直接跳转到对应执行用例并关闭抽屉，同时修复点击底部进度时执行视图异常上滚的问题（`index.html`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_entry.spec.js`、`tests/ui/tempexec_progress.spec.js`；验证：`npm run test:ui -- tests/ui/tempexec_entry.spec.js tests/ui/tempexec_progress.spec.js`）。  
+- 更新记录：2025-12-16 个人执行总览抽屉内点击用例卡片（非进度条段）也会关闭抽屉并切换执行用例；进度条段跳转滚动延后到抽屉解锁后执行，避免“先跳到目标再被抽屉恢复滚动拉回”导致的外层执行视图上滚抖动（`scripts/modules/tempexec.js`、`tests/ui/tempexec_progress.spec.js`；验证：`npm run test:ui -- tests/ui/tempexec_progress.spec.js -g 个人执行总览`）。  
+- 更新记录：2025-12-17 修复个人执行总览抽屉内滚动后点击条目返回执行视图时，因抽屉滚动锁恢复（restore scrollTop）导致执行视图列表“自动上滚遮挡顶部”的问题：新增抽屉关闭时的“一次性跳过滚动恢复”开关，并在执行页抽屉内导航场景使用；同时移除抽屉打开时对 window 的滚动定位，改为仅滚动抽屉内容（`scripts/base/drawer.js`、`scripts/modules/tempexec.js`；验证：`npm run test:ui -- tests/ui/tempexec_entry.spec.js tests/ui/tempexec_progress.spec.js`）。  
+
+- 功能名称：用例库刷新恢复最后操作视图  
+- 功能描述：修复“先在查看&编辑打开用例编辑视图，再进入用例改动历史查看历史详情，刷新页面却回到编辑视图”的问题；刷新后以最后操作的视图为准，优先恢复到历史详情视图。  
+- 操作方式：进入“用例库”→在“查看&编辑”打开某用例→进入“用例改动历史”并打开“历史详情”→直接刷新页面，应仍停留在该历史详情视图。  
+- 使用效果：刷新不会把视图误切回编辑页，符合“最后操作视图优先”的直觉。  
+- 新增内容/接口/组件：前端在页面卸载前补一次“当前视图”落盘，并放宽历史详情恢复对项目列表就绪的硬依赖（`scripts/modules/caseLibrary.js`）；UI 用例强化为“刷新后无需二次切页也能恢复”（`tests/ui/case_library_history.spec.js`）。  
+- 复用说明：复用既有 localStorage 持久化键（`tap-case-library-last-view`、`tap-case-library-history-detail`），不新增接口。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library_history.spec.js`（通过）。  
+- 更新记录：2025-12-17 用例库刷新恢复最后操作视图上线（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_history.spec.js`）。  
+- 更新记录：2025-12-17 修复“先看历史详情再看编辑，刷新后仍回历史详情”的互斥显示问题，刷新前展示编辑则刷新后保持编辑（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_history.spec.js`）。  
+
+- 功能名称：执行总览抽屉用例搜索与分页  
+- 功能描述：执行总览页面点击执行集打开“执行列表”抽屉后，列表支持搜索与分页；分页大小复用“其他设置”里的 `tempExecPageSize` 配置。  
+- 操作方式：进入“执行总览”→点击任意执行集卡片打开抽屉→可在搜索框输入关键词筛选（模块/标题/状态/实际结果）→使用分页按钮翻页；分页大小在“其他设置-分页设置”调整后生效。  
+- 使用效果：执行集用例较多时可快速定位目标用例，抽屉列表可控且不再一次性铺满。  
+- 新增内容/接口/组件：抽屉增加搜索框与分页容器（`index.html`、`style.css`）；前端新增筛选/分页渲染逻辑（`scripts/modules/execOverview.js`）；UI 自动化覆盖分页大小读取 settings 与搜索筛选（`tests/ui/exec_overview.spec.js`）。  
+- 复用说明：复用既有 `tempExecPageSize` 设置项与 `.temp-pagination/.temp-search-input` 样式，不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/execOverview.js`（通过）；`npm run test:ui -- tests/ui/exec_overview.spec.js`（通过）。  
+- 更新记录：2025-12-17 执行总览抽屉用例搜索与分页上线（`index.html`、`style.css`、`scripts/modules/execOverview.js`、`tests/ui/exec_overview.spec.js`）。  
+
+- 功能名称：执行页导入&分配抽屉项目筛选按钮（DB 持久化）  
+- 功能描述：用例执行页“用例导入&分配”抽屉在项目分组上方增加项目按钮（风格对齐个人执行总览项目区），点击后仅展示该项目的分组；最近选择的项目会写入数据库设置（`tempexec_ui_v1`），刷新页面或重新登录后仍保持上次选择，直到变更。  
+- 操作方式：进入“用例执行”→打开“用例导入&分配”抽屉→点击顶部“项目”按钮（全部项目/某项目）→下方项目分组按选择过滤；刷新页面或重新登录后再次进入抽屉，应仍保持上次选择。  
+- 使用效果：项目多/用例多时能更快聚焦目标项目，且筛选状态跨刷新/重登保持一致。  
+- 新增内容/接口/组件：项目筛选按钮渲染与过滤逻辑（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）；筛选状态纳入 `tempexec_ui_v1` 写入/恢复（`scripts/core/tempexecCore.js`、`scripts/base/state.js`）；筛选按钮样式（`style.css`）；UI 用例覆盖跨刷新/重登恢复（`tests/ui/tempexec_import_project_filter_persist.spec.js`）。  
+- 复用说明：复用现有 `/api/settings` 的 `tempexec_ui_v1` 持久化能力与既有 `nav-entry-card` 风格，不新增后端接口。  
+- 测试与验证：`node --check scripts/base/state.js scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_project_layout.spec.js tests/ui/tempexec_import_project_filter_persist.spec.js`（通过）。  
+- 更新记录：2025-12-17 执行页导入&分配抽屉项目筛选按钮与 DB 持久化上线（`scripts/base/state.js`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_import_project_filter_persist.spec.js`）。  
+
+- 功能名称：用例库编辑视图批量删除（8 秒撤回）  
+- 功能描述：用例库“查看&编辑”的用例编辑视图增加“批量删除”按钮；勾选用例后可批量删除，沿用同一套 8 秒撤回机制：8 秒内点击“撤回”则全部恢复且不会写入；超时后才会逐条调用删除接口写入用例库。若批量删除中存在失败，会把失败项恢复回编辑视图并提示成功/失败数量。  
+- 操作方式：进入“用例库”→“查看&编辑”打开某用例→勾选多条用例→点击“批量删除（N）”→确认；可在弹出的撤回提示中 8 秒内撤回；不撤回则超时自动入库。  
+- 使用效果：批量删除操作更高效，且提供与单条删除一致的撤回窗口，降低误删风险。  
+- 新增内容/接口/组件：新增按钮（`index.html`）；批量删除/撤回/失败回滚逻辑（`scripts/modules/caseLibrary.js`）；UI 自动化覆盖（`tests/ui/case_library_batch_delete.spec.js`）。  
+- 复用说明：复用既有单条删除接口 `/api/case-files/items/{id}` 与既有 8 秒撤回 toast 机制，不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_delete.spec.js`（通过）。  
+- 更新记录：2025-12-17 用例库编辑视图支持批量删除并 8 秒撤回（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_batch_delete.spec.js`）。  
+- 更新记录：2025-12-17 修复批量删除超时入库后，“批量新增”按钮未自动恢复可用状态（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_batch_delete.spec.js`）。  
+
+- 功能名称：用例改动历史详情增加“用例名”列  
+- 功能描述：在用例库“用例改动历史详情”表格中新增“用例名”列，便于截图/导出/对照时直接看到当前历史记录归属的用例文件名。  
+- 操作方式：进入“用例库”→“用例改动历史”→打开某用例的“历史详情”，表格中可看到“用例名”列。  
+- 使用效果：历史详情信息更完整，减少仅靠顶部摘要定位用例名的成本。  
+- 新增内容/接口/组件：表头/占位列更新（`index.html`）；历史详情渲染补列与空态 colspan 同步（`scripts/modules/caseLibrary.js`）；UI 自动化断言补充（`tests/ui/case_library_history.spec.js`）。  
+- 复用说明：复用既有历史详情数据与渲染逻辑，仅补充展示字段，不新增接口。  
+- 测试与验证：`npm run test:ui -- tests/ui/case_library_history.spec.js`（通过）。  
+- 更新记录：2025-12-17 用例改动历史详情表新增“用例名”列（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_history.spec.js`）。  
+
+- 功能名称：用例库编辑视图批量新增（数量持久化 + 8 秒撤回）  
+- 功能描述：用例库“用例编辑视图”新增“批量新增”按钮与数量输入框（默认 5，可输入 1-10 的正整数并做校验）；数量配置写入本地存储，刷新后保持。点击“批量新增”会在列表末尾一次性追加 N 条空用例（全部绿描边高亮，分页自动跳到第一条空用例所在页），并复用同一套 8 秒撤回机制：8 秒内撤回则全部取消；超时后自动逐条入库。  
+- 操作方式：进入“用例库”→“查看&编辑”打开某用例→在编辑视图右上角输入数量（1-10）→点“批量新增”→可在 8 秒内撤回；不撤回则超时自动入库。  
+- 使用效果：批量补齐占位用例更高效，且与现有“新增/删除”一致提供 8 秒撤回窗口；输入数量刷新后保持，减少重复设置。  
+- 新增内容/接口/组件：编辑视图新增数量输入与按钮（`index.html`、`style.css`）；批量新增/撤回/入库逻辑（`scripts/modules/caseLibrary.js`）；UI 自动化覆盖（`tests/ui/case_library_batch_add.spec.js`）。  
+- 复用说明：复用既有新增接口 `/api/case-files/{id}/items` 与既有 8 秒撤回 toast 机制；为避免“全字段为空”触发唯一约束，批量新增的空用例在入库时会为 `expected` 写入不可见占位（界面展示仍为空）。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_add.spec.js`（通过）。  
+- 更新记录：2025-12-17 用例库编辑视图支持批量新增（含数量持久化与 8 秒撤回）（`index.html`、`style.css`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_batch_add.spec.js`）。  
+- 更新记录：2025-12-17 批量新增后即使不触发翻页，也会自动滚动定位到首条新增用例（`scripts/modules/caseLibrary.js`）。  
+
+- 功能名称：用例库刷新后按模块归位（满足完整字段才归位）  
+- 功能描述：用例库编辑视图在刷新/重新加载用例条目时，若某条用例的模块名已存在于当前用例且模块/标题/优先级/前提条件/操作步骤/预期结果均非空，则会将该用例归位到对应模块用例的末尾（按“同模块追加到末尾”规则），方便批量新增后填充内容的用例在下次刷新自动回到对应模块。  
+- 操作方式：批量新增后在空用例中填写模块/标题/优先级/前提条件/步骤/预期并保存→刷新页面或重新打开该用例编辑视图→该用例将移动到对应模块末尾。  
+- 新增内容/接口/组件：前端加载用例条目时的归位排序（`scripts/modules/caseLibrary.js`）；UI 自动化覆盖（`tests/ui/case_library_batch_add.spec.js`）。  
+- 复用说明：仅调整前端渲染顺序，不改后端查询顺序/不新增接口。  
+- 测试与验证：`npm run test:ui -- tests/ui/case_library_batch_add.spec.js -g 归位`（通过）。  
+- 更新记录：2025-12-17 用例库编辑视图刷新后按模块归位上线（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_batch_add.spec.js`）。  
+
+- 功能名称：用例执行导入多文件同名 diff 队列（顺序处理 + 10s 悬浮提示）  
+- 功能描述：用例执行页（DB 模式）一次选择多份用例文件入库时，若存在多份“同名用例”冲突，不再阻塞非同名文件：先入库非同名文件；同名冲突文件会按顺序逐份弹出差异对比抽屉，用户可逐份“确认覆盖导入”或关闭跳过；处理完全部差异后给出包含具体用例名的结果提示，并以页面正中间悬浮 toast 展示 10s 自动消失。  
+- 操作方式：进入“用例执行”→选择多份文件→选择项目/版本→点击“确认入库”；同名冲突会依次弹出 diff；确认覆盖或关闭跳过后自动进入下一份。  
+- 使用效果：多文件导入体验与用例库导入对齐，冲突处理不阻塞其它文件；最终成功/跳过/失败清单更清晰，且通过 10s 居中悬浮提示便于截图与回溯。  
+- 新增内容/接口/组件：执行页导入入库返回结果补充 `duplicates/imported_names` 并改为队列处理（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）；UI 自动化覆盖（`tests/ui/tempexec_import_multi_diff_queue.spec.js`）。  
+- 复用说明：复用既有同名差异对比抽屉与 `/api/case-files/import`、`/api/case-files/{id}/items`、`/api/exec/sets/from-case-file` 等接口，不新增后端接口。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_import_multi_diff_queue.spec.js`（通过）。  
+- 更新记录：2025-12-17 执行页多文件同名导入改为 diff 队列顺序处理并增加 10s 居中悬浮提示（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_import_multi_diff_queue.spec.js`）。  
+
+- 功能名称：用例归档页面 + 个人总览归档  
+- 功能描述：新增“用例归档”页面用于存放归档用例记录；在“用例执行→个人执行总览”每份用例新增“归档”入口。归档后执行集不再出现在执行页（导入&分配/执行视图），但归档结果仍保留：个人总览与执行总览会以“归”标识归档状态；归档页可按项目/版本筛选并查看归档明细（只读）。若仍存在未通过用例（未执行/失败/阻塞等），归档需二次确认并填写原因。管理员可删除归档记录。  
+- 操作方式：  
+  - 归档：进入“用例相关→用例执行→个人执行总览”→在用例卡片上点击“归档”→若存在未通过用例则确认并填写原因→归档成功后该用例从执行页消失，总览卡片标记“归”。  
+  - 查看：进入“用例相关→用例归档”→点击“查看归档”→选择项目/版本并搜索→列表点“查看”→在归档页主页展示只读用例详情（含实际结果/备注/缺陷链接/复用子项）。  
+  - 删除：管理员在归档列表点“删除”可移除归档记录（不可撤回）。  
+- 使用效果：执行结果可归档留存且可按项目/版本回溯；归档后执行页保持清爽，避免归档记录进入导入&分配；跨成员在所属项目内可查看归档结果。  
+- 新增内容/接口/组件：  
+  - 前端：新增归档页入口与页面（`index.html`、`scripts/modules/caseArchive.js`）；个人总览新增“归档”入口与“归”标识（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`）。  
+  - 后端：执行集归档字段与接口（`backend/models.py`、`backend/routers/exec_routes.py`、`backend/schemas.py`、`backend/migrations.py`）；归档查询/删除接口与权限控制；归档后转执行改为新建执行集（保留历史归档）。  
+  - 测试：API 用例（`tests/api/exec_archive.spec.js`）与 UI 用例（`tests/ui/case_archive.spec.js`）；同步调整旧用例（`tests/api/exec_persistence.spec.js`）。  
+- 复用说明：复用既有执行集/执行用例数据结构（`exec_sets/exec_cases`），以 `exec_sets.status=archived` + 归档元信息实现归档；归档页只读复用执行数据展示，不新增独立“归档结果表”。  
+- 测试与验证：`node --check scripts/modules/caseArchive.js scripts/modules/tempexec.js scripts/core/tempexecCore.js`（通过）；`API_BASE_URL=http://127.0.0.1:18080 APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app ...` 后执行 `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_archive.spec.js tests/api/exec_persistence.spec.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/case_archive.spec.js`（通过）。  
+- 更新记录：2025-12-17 用例归档页面与个人总览归档上线（`backend/`、`services/apiClient.js`、`index.html`、`style.css`、`scripts/`、`tests/`、`API_DOC.md`）。  
+- 更新记录：2025-12-18 归档详情视图的“实际结果/备注/缺陷链接”改为执行页同款折叠展开（复用用例实际结果可展开子项与子项结果，内容只读），字段列宽对齐执行页（`scripts/modules/caseArchive.js`、`style.css`、`tests/ui/case_archive.spec.js`）。  
+- 测试与验证：`node --check scripts/modules/caseArchive.js`（通过）；`npm run test:ui -- tests/ui/case_archive.spec.js`（通过）。  
+- 更新记录：2025-12-18 执行页/归档详情的复用子项布局优化：子项输入宽度减半，执行状态与删除按钮固定宽度（4/3 个汉字）并保持同一行，剩余宽度优先给子项备注（`style.css`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/case_archive.spec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_drag.spec.js`（通过）。  
+- 更新记录：2025-12-18 执行页/归档详情列宽微调：用例标题与前提条件各缩小 1 个汉字宽度，增加备注列宽；复用子项备注减少 5 个汉字宽度给子项；归档详情缺陷链接增加“打开”按钮（`scripts/core/tempexecCore.js`、`scripts/modules/caseArchive.js`、`style.css`、`tests/ui/case_archive.spec.js`）。  
+- 测试与验证：`node --check scripts/core/tempexecCore.js scripts/modules/caseArchive.js`（通过）；`npm run test:ui -- tests/ui/case_archive.spec.js`（通过）；`npm run test:ui -- tests/ui/tempexec_drag.spec.js`（通过）。  
+- 更新记录：2025-12-18 复用子项宽度再微调：子项描述再减少 5 个汉字宽度给子项；用例库编辑视图移除“备注”列；补充执行页功能导航的“执行视图”入口（`style.css`、`scripts/modules/caseLibrary.js`、`index.html`）。  
+- 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_add.spec.js`（通过）。  
+- 更新记录：2025-12-18 执行页归档交互优化：当仍存在未通过用例时，不再单独弹出“是否需要归档”的二次确认提示，改为直接进入“填写归档原因”抽屉并展示未通过统计（`scripts/modules/tempexec.js`、`tests/ui/case_archive.spec.js`）。  
+- 测试与验证：`node --check scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/case_archive.spec.js`（通过）。  
+
+- 功能名称：用例生成页面分区（通用操作区 / 入库操作区 / 模块区）  
+- 功能描述：用例生成页面按从上到下分为“通用操作区、入库操作区、模块区”，避免导出/跳转/入库按钮混杂在同一行；通用操作区放置“导出全部用例TXT、导出全部勾选用例XMind、前往测试模块拆分”；入库操作区放置“新用例入库、旧用例追加入库、入库后动作选择”。当选择“入库并转到执行”时，入库确认后会弹出“选择执行版本”抽屉并继续转到执行页（复用既有逻辑）。  
+- 操作方式：进入“AI 功能→用例生成”→在通用操作区导出/跳转；在各模块“用例视图”勾选后，在入库操作区选择“直接入库/入库并转到执行”并点击“新用例入库”，或点击“旧用例追加入库”按提示选择目标用例。  
+- 使用效果：页面结构更清晰；入库操作入口更集中，减少误触与学习成本。  
+- 新增内容/接口/组件：用例生成页分区布局（`index.html`、`style.css`）；UI 自动化覆盖（`tests/ui/casegen_layout_zones.spec.js`）。  
+- 复用说明：复用既有入库抽屉（`caseGenDbStoreDrawer`）与执行版本选择抽屉（`execVersionSelectDrawer`），不新增/不改后端接口。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_layout_zones.spec.js`（通过）。  
+- 更新记录：2025-12-18 用例生成页面分区与通用/入库/模块分组上线（`index.html`、`style.css`、`tests/ui/casegen_layout_zones.spec.js`）。  
+- 更新记录：2025-12-18 “填写需求标识”抽屉输入框支持最多 20 个字符并同步加宽显示（`index.html`、`style.css`、`scripts/core/casesGenCore.js`、`tests/ui/casegen_display_format.spec.js`）。  
+- 测试与验证：`node --check scripts/core/casesGenCore.js`（通过）；`npm run test:ui -- tests/ui/casegen_display_format.spec.js`（通过）。  
+
+- 功能名称：操作记录页面（管理员）增强：抽屉查看 + 筛选分页 + 前端操作留痕  
+- 功能描述：完善“操作记录”页面，仅管理员可见可用；顶部新增“操作记录导航”并提供【查看记录】入口，打开抽屉后以列表展示操作时间/操作人员/操作项/操作行为；支持按人员筛选、按操作对象平铺复选筛选（默认全部），分页每页条数复用“其他设置→全局分页设置”；并将“操作对象/操作行为”收敛为需求清单中列出的组合，未列出的行为暂不展示；对系统自动同步类日志做隐藏处理，避免刷屏。  
+- 操作方式：进入“管理→操作记录”→点击顶部导航【查看记录】→在抽屉中选择人员/操作对象→翻页查看；导出用例文件（XMind/Excel）、导出执行 XMind、导出用例导入模板（Excel/XMind）等会写入操作记录。  
+- 使用效果：管理员可按人员/对象快速回溯关键操作，并与全局分页设置保持一致；非需求范围的日志先隐藏，避免干扰排查。  
+- 新增内容/接口/组件：  
+  - 后端：新增 `POST /api/ops/event`（`backend/routers/ops.py`、`backend/schemas.py`、`backend/audit.py`）；同步更新 API 文档（`API_DOC.md`）。  
+  - 前端：操作记录顶部导航与抽屉列表（`index.html`、`scripts/modules/opsLog.js`、`style.css`）；前端导出操作自动写入日志（`services/apiClient.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`）。  
+  - 测试：API 用例（`tests/api/ops_log.spec.js`）与 UI 用例（`tests/ui/ops_log.spec.js`）。  
+- 复用说明：复用既有 `operation_logs` 表与 `/api/ops` 管理员查询接口；分页条数复用“其他设置→全局分页设置（tempExecPageSize）”；抽屉交互复用通用 drawer 组件。  
+- 更新记录：2025-12-18 操作记录页增强上线（`backend/`、`services/apiClient.js`、`index.html`、`style.css`、`scripts/`、`tests/`、`API_DOC.md`）。  
+- 更新记录：2025-12-19 操作记录页筛选改为按操作对象平铺，并收敛展示对象/行为；操作记录导航置顶显示并隐藏默认“AI 一键步骤”导航（`index.html`、`scripts/modules/opsLog.js`、`scripts/core/appRuntime.js`、`backend/routers/cases.py`、`backend/routers/exec_routes.py`、`tests/ui/ops_log.spec.js`、`tests/api/ops_log.spec.js`）。  
+- 测试与验证：`node --check scripts/modules/opsLog.js`（通过）；`npm run test:ui -- tests/ui/ops_log.spec.js`（通过）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080 ...` 后执行 `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/ops_log.spec.js`（通过）。  
+
+- 功能名称：操作记录补齐操作页面/对象名称/行为文案  
+- 功能描述：操作记录列表新增并统一展示“操作页面”，补齐人员首次分配权限、重置密码、删除项目/版本、用例库导出等场景的对象名称；同名用例覆盖导入行为显示为“覆盖入库”；执行页版本盒子“解散归档”记录为“解散归档”，删除版本操作对象展示“版本 {项目名}{版本名}”。  
+- 操作方式：管理员进入“操作记录”→查看抽屉列表；在人员管理/项目管理/用例库/执行页完成相关操作后查看记录。  
+- 使用效果：操作记录字段更完整、行为更清晰，便于审计与回溯。  
+- 新增内容/接口/组件：  
+  - 后端：日志明细补齐（`backend/routers/ops.py`、`backend/routers/projects.py`）。  
+  - 前端：操作记录行为文案与导出文件名补齐（`scripts/modules/opsLog.js`、`scripts/modules/caseLibrary.js`）。  
+  - 测试：API/UI 用例更新（`tests/api/ops_log.spec.js`、`tests/ui/ops_log.spec.js`）。  
+- 复用说明：复用既有 `operation_logs` 表与 `/api/ops` 查询接口，不新增表结构。  
+- 测试与验证：`node --check scripts/modules/opsLog.js scripts/modules/caseLibrary.js`（通过）；`APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 18080` 后执行 `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/ops_log.spec.js`（通过）；`npm run test:ui -- tests/ui/ops_log.spec.js`（通过）。  
+- 更新记录：2025-12-19 操作记录补齐操作页面/对象名称/行为文案（`backend/`、`scripts/`、`tests/`）。  
+- 更新记录：2025-12-19 操作记录批量行为显示数量，解散归档操作项展示用例名（`scripts/modules/opsLog.js`、`scripts/modules/tempexec.js`、`tests/ui/ops_log.spec.js`）。  
+- 更新记录：2025-12-19 侧边一级菜单与二级入口同步高亮，悬停一级入口显示独立颜色区分当前页面（`scripts/core/appRuntime.js`、`style.css`、`tests/ui/sidebar_menu.spec.js`）。  
+
+- 功能名称：多处二次确认弹窗改为抽屉提示  
+- 功能描述：用例生成追加确认与模块未勾选提醒、用例执行解散归档确认、用例库编辑批量删除确认等交互统一改为通用确认抽屉，并在打开抽屉时挂起当前抽屉避免遮挡与误操作。  
+- 操作方式：触发追加入库/解散归档/批量删除等操作时，页面顶部弹出确认抽屉，可在抽屉内确认或取消。  
+- 使用效果：二次确认入口统一为抽屉，保留上下文且避免浏览器弹窗打断。  
+- 新增内容/接口/组件：复用通用确认抽屉（`appConfirmDrawer`）；确认抽屉接入与挂起逻辑（`scripts/core/casesGenCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`）；UI 用例更新（`tests/ui/tempexec_progress.spec.js`、`tests/ui/casegen_db_store.spec.js`、`tests/ui/case_library_batch_delete.spec.js`）。  
+- 复用说明：复用既有通用确认抽屉与现有业务流程，不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/tempexec.js scripts/modules/caseLibrary.js scripts/core/casesGenCore.js`（通过）；`npm run test:ui -- tests/ui/tempexec_progress.spec.js tests/ui/tempexec_drag.spec.js tests/ui/casegen_db_store.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_delete.spec.js`（通过）。  
+- 更新记录：2025-12-19 多处确认弹窗改为抽屉并处理抽屉挂起（`scripts/core/casesGenCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`tests/ui/tempexec_progress.spec.js`、`tests/ui/casegen_db_store.spec.js`、`tests/ui/case_library_batch_delete.spec.js`）。  
+- 更新记录：2025-12-20 删除项目确认改为抽屉提示（`scripts/modules/admin.js`、`tests/ui/project_admin_drawer.spec.js`）。  
+- 更新记录：2025-12-20 删除项目成功后增加悬浮提示（`scripts/modules/admin.js`、`tests/ui/project_admin_drawer.spec.js`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/project_admin_drawer.spec.js --workers=1`（通过）。  
+
+- 功能名称：用例生成追加入库可重复触发与管理页成功提示  
+- 功能描述：修复用例生成页面追加入库成功/取消后无法再次追加入库的问题；执行页版本盒子“解散归档”提示语改为单行并展示待解散用例名；人员管理重置密码、项目管理新增版本成功后补充居中提示（3 秒后自动消失）。  
+- 操作方式：用例生成→勾选用例→旧用例追加入库→成功/取消后可再次追加入库；用例执行→版本卡片→解散归档查看提示；管理→人员管理→重置密码；管理→项目管理→新增版本。  
+- 使用效果：追加入库流程可重复触发；提示语更直观；管理页成功反馈明确。  
+- 新增内容/接口/组件：前端状态复位与取消回调（`scripts/core/casesGenCore.js`、`scripts/modules/caseLibrary.js`）；提示文案调整（`scripts/modules/tempexec.js`）；居中提示复用（`scripts/modules/admin.js`）；UI 用例更新（`tests/ui/casegen_db_store.spec.js`、`tests/ui/tempexec_archived_placeholder.spec.js`、`tests/ui/user_admin_drawer.spec.js`、`tests/ui/project_admin_drawer.spec.js`）；API 用例补充（`tests/api/admin_entities.spec.js`）。  
+- 复用说明：复用通用确认抽屉与居中提示样式，不改后端接口。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js tests/ui/tempexec_archived_placeholder.spec.js tests/ui/user_admin_drawer.spec.js tests/ui/project_admin_drawer.spec.js`（通过）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080`（通过）；`API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/admin_entities.spec.js`（通过）。  
+- 更新记录：2025-12-19 用例生成追加入库复位、归档提示文案与管理页成功提示更新（`scripts/`、`tests/`）。  
+- 更新记录：2025-12-19 确认抽屉清理遗留挂起状态，避免追加入库后页面锁死（`scripts/base/confirmDrawer.js`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  
+- 更新记录：2025-12-19 追加入库流程减少重复确认：缺失模块确认后直接进入追加/差异覆盖（`scripts/core/casesGenCore.js`、`scripts/modules/caseLibrary.js`、`tests/ui/casegen_db_store.spec.js`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  
+- 更新记录：2025-12-19 用例生成入库前未勾选时自动打开首个模块视图并红框提示勾选（`scripts/core/casesGenCore.js`、`style.css`、`tests/ui/casegen_db_store.spec.js`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  
+- 更新记录：2025-12-19 用例生成进度模块点击有结果时自动打开用例视图（`scripts/core/casegenCore.js`、`tests/ui/casegen_db_store.spec.js`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  
+- 更新记录：2025-12-19 进度跳转打开用例视图时不回滚滚动位置（`scripts/core/casegenCore.js`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/casegen_db_store.spec.js`（通过）。  
+- 更新记录：2025-12-19 执行分配关闭版本提示补充归档用例名、删除版本转移提示改为抽屉下拉选择（`scripts/modules/tempexec.js`、`scripts/modules/admin.js`、`scripts/base/confirmDrawer.js`、`index.html`、`tests/ui/tempexec_archived_placeholder.spec.js`、`tests/ui/project_admin_drawer.spec.js`）。  
+
+- 功能名称：用例贡献统计与单条删除确认优化  
+- 功能描述：修复删除用例未计入人员用例贡献统计的问题；用例库编辑视图通过“−”删除用例时改为通用确认抽屉。  
+- 操作方式：管理员进入“管理→操作记录→用例贡献视图”选择人员查看导入/新增/删除贡献；用例库编辑视图点击单条用例的“−”按钮，抽屉确认后 8 秒内可撤回。  
+- 使用效果：删除贡献可正确统计；删除确认不再被浏览器弹窗打断。  
+- 新增内容/接口/组件：  
+  - 前端：用例贡献统计过滤（`scripts/modules/opsLog.js`）；用例库单条删除确认抽屉与兜底调用（`scripts/modules/caseLibrary.js`）。  
+  - 后端：补齐用例删除日志完整度判断字段（`backend/routers/cases.py`）。  
+  - 测试：UI 用例（`tests/ui/ops_contribution.spec.js`、`tests/ui/case_library_single_delete_drawer.spec.js`）；API 用例更新（`tests/api/ops_log.spec.js`）。  
+- 复用说明：复用通用确认抽屉 `appConfirmDrawer` 与现有操作记录接口，不新增后端接口。  
+- 测试与验证：`node --check scripts/modules/opsLog.js scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/ops_contribution.spec.js tests/ui/case_library_single_delete_drawer.spec.js`（通过）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18080` 后执行 `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/ops_log.spec.js`（通过）。  
+- 更新记录：2025-12-20 修复删除用例贡献计数，单条删除确认改为抽屉（`scripts/modules/opsLog.js`、`scripts/modules/caseLibrary.js`、`backend/routers/cases.py`、`tests/`）。  
+- 更新记录：2025-12-20 活跃度/贡献视图进入时自动刷新数据（`scripts/modules/opsLog.js`、`tests/ui/ops_activity.spec.js`、`tests/ui/ops_contribution.spec.js`）。  
+- 测试与验证：`node --check scripts/modules/opsLog.js`（通过）；`npm run test:ui -- tests/ui/ops_activity.spec.js tests/ui/ops_contribution.spec.js`（通过）。  
+
+- 功能名称：操作记录新增用例执行贡献视图  
+- 功能描述：操作记录页新增“用例执行贡献视图”入口与抽屉选择；选择人员后展示执行贡献柱状图，支持按时间与用例执行行为筛选；用例执行按“模块/用例描述/前提/步骤/预期”去重计数，归档用例统计含实际结果的条数（同名重复归档也计数）。  
+- 操作方式：管理员进入“管理→操作记录”→点击“用例执行贡献视图”→勾选人员确认→在视图中按时间与行为筛选查看。  
+- 使用效果：用例执行贡献统计与活跃度视图保持一致风格，可区分执行与归档贡献情况。  
+- 新增内容/接口/组件：  
+  - 后端：执行用例更新日志补齐变更字段与用例快照，归档日志新增实际结果条数（`backend/routers/exec_routes.py`）。  
+  - 前端：操作记录导航入口、抽屉选择与贡献视图扩展（`index.html`、`scripts/modules/opsLog.js`、`config/constants.js`）。  
+  - 测试：UI 用例（`tests/ui/ops_exec_contribution.spec.js`）；API 用例更新（`tests/api/ops_log.spec.js`）。  
+- 复用说明：复用操作记录 `/api/ops` 与活跃度视图布局/抽屉组件，不新增表结构。  
+- 测试与验证：`node --check scripts/modules/opsLog.js`（通过）；`npm run test:ui -- tests/ui/ops_activity.spec.js tests/ui/ops_contribution.spec.js tests/ui/ops_exec_contribution.spec.js tests/ui/ops_log_drawer_restore.spec.js`（通过）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18081` 后执行 `API_BASE_URL=http://127.0.0.1:18081 npm run test:api -- tests/api/ops_log.spec.js`（通过）。  
+- 更新记录：2025-12-20 操作记录新增用例执行贡献视图与执行日志细节（`backend/routers/exec_routes.py`、`config/constants.js`、`index.html`、`scripts/modules/opsLog.js`、`tests/`）。  
+- 更新记录：2025-12-20 操作记录抽屉仅在刷新前打开时自动恢复，归档贡献按执行状态统计（`backend/routers/exec_routes.py`、`scripts/modules/opsLog.js`、`tests/ui/ops_log_drawer_restore.spec.js`、`tests/api/ops_log.spec.js`）。  
+- 更新记录：2025-12-20 用例执行贡献视图改为双柱展示执行/归档（`scripts/modules/opsLog.js`、`style.css`、`tests/ui/ops_exec_contribution.spec.js`）。  
+- 更新记录：2025-12-20 用例执行贡献筛选时隐藏未选柱状项（`scripts/modules/opsLog.js`、`tests/ui/ops_exec_contribution.spec.js`）。  
+- 更新记录：2025-12-20 用例执行贡献筛选单项时保留 0 计数人员展示（`scripts/modules/opsLog.js`、`tests/ui/ops_exec_contribution.spec.js`）。  
+- 更新记录：2025-12-20 活跃度/用例贡献/执行贡献视图补齐 0 计数人员展示（`scripts/modules/opsLog.js`、`tests/ui/ops_activity.spec.js`、`tests/ui/ops_contribution.spec.js`、`tests/ui/ops_exec_contribution.spec.js`）。  
+- 更新记录：2025-12-20 操作记录查看记录/活跃度/用例贡献/用例执行贡献视图支持日期范围筛选（`index.html`、`style.css`、`scripts/modules/opsLog.js`、`tests/ui/ops_log.spec.js`、`tests/ui/ops_activity.spec.js`、`tests/ui/ops_contribution.spec.js`、`tests/ui/ops_exec_contribution.spec.js`）。  
+- 测试与验证：`node --check scripts/modules/opsLog.js`（通过）；`npm run test:ui -- tests/ui/ops_log.spec.js tests/ui/ops_exec_contribution.spec.js`（通过）；`npm run test:ui -- tests/ui/ops_activity.spec.js`（通过，需允许本地服务监听权限）；`npm run test:ui -- tests/ui/ops_contribution.spec.js`（通过，需允许本地服务监听权限）。  
+
+- 功能名称：版本下拉新增版本入口  
+- 功能描述：执行页/用例库/用例生成的版本选择新增“＋新增版本”选项，支持在确认抽屉输入版本号创建并自动选中，重复版本提示不可添加。  
+- 操作方式：在版本下拉中选择“＋新增版本”→抽屉输入版本号确认→提示“添加版本成功”并自动选中新增版本；重复版本会提示并阻止创建。  
+- 使用效果：版本创建无需跳转项目管理；新增版本即时回填并可用于导入/执行分配/入库。  
+- 新增内容/接口/组件：  
+  - 前端：版本新增入口与逻辑复用（`scripts/base/utils.js`、`scripts/base/execVersionDrawer.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`scripts/core/casesGenCore.js`）。  
+  - 测试：UI 用例（`tests/ui/version_add_selects.spec.js`）；API 用例（`tests/api/project_version_duplicate.spec.js`）。  
+- 复用说明：复用通用确认抽屉与项目版本 API（`/api/projects/{id}/versions`），无新增后端接口。  
+- 测试与验证：`node --check scripts/base/utils.js scripts/base/execVersionDrawer.js scripts/modules/tempexec.js scripts/modules/caseLibrary.js scripts/core/casesGenCore.js`（通过）；`npm run test:ui -- tests/ui/version_add_selects.spec.js`（通过，需允许本地服务监听权限）；`APP_DB_FILE=apitest.db ./.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 18082` 后执行 `API_BASE_URL=http://127.0.0.1:18082 npm run test:api -- tests/api/project_version_duplicate.spec.js`（通过）。  
+- 更新记录：2025-12-20 版本下拉新增版本入口与自动选中（`scripts/base/utils.js`、`scripts/base/execVersionDrawer.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`scripts/core/casesGenCore.js`、`tests/ui/version_add_selects.spec.js`、`tests/api/project_version_duplicate.spec.js`）。  
+
+- 功能名称：执行视图专注区同步  
+- 功能描述：用例执行视图在搜索栏下方新增专注区，实时同步执行分配的专注用例；两处专注区移除用例改为确认抽屉。  
+- 操作方式：在执行分配页拖拽用例到专注区后，执行视图专注区同步展示；点击专注用例切换执行视图，点击“×”经抽屉确认后移出。  
+- 使用效果：执行视图可快速切换专注用例并保持与执行分配一致；移出操作统一抽屉确认。  
+- 新增内容/接口/组件：  
+  - 前端：执行视图专注区与移出确认抽屉接入（`index.html`、`scripts/modules/app.js`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）。  
+  - 测试：UI 用例（`tests/ui/tempexec_focus_sync.spec.js`、`tests/ui/tempexec_drag.spec.js`）。  
+- 复用说明：复用执行分配专注区渲染逻辑与通用确认抽屉，无新增后端接口。  
+- 测试与验证：`node --check scripts/modules/tempexec.js scripts/core/tempexecCore.js scripts/modules/app.js`（通过）；`npm run test:ui -- tests/ui/tempexec_focus_sync.spec.js tests/ui/tempexec_drag.spec.js`（通过，需允许本地服务监听权限）。  
+- 更新记录：2025-12-20 执行视图专注区同步与移出确认抽屉（`index.html`、`scripts/modules/app.js`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_focus_sync.spec.js`、`tests/ui/tempexec_drag.spec.js`）。2025-12-21 专注区紧凑布局、横向滚动与拖拽高亮（`index.html`、`style.css`、`scripts/modules/tempexec.js`）。2025-12-21 专注区拖拽插入指示器与切换滚动顶部（`style.css`、`scripts/modules/tempexec.js`、`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：页面说明与侧边栏路径优化、执行视图列显示即时保存  
+- 功能描述：AI 功能页签“AI一键需求&用例评审”改为“一键执行”，“功能工作流”改为“功能流程”；侧边栏说明区替换为当前页面路径；“页面说明”按钮可主动打开当前页抽屉说明（不受设置开关影响），无说明页时灰显不可点；用例执行/用例库页面说明新增模板下载入口与 XMind 用例结构说明；设置页执行视图列显示改为勾选即生效并入库，移除保存按钮。  
+- 操作方式：侧边栏点击“页面说明”即可打开当前页抽屉说明；用例执行/用例库抽屉说明可直接下载 Excel/XMind 导入模板并查看结构示例；在“其他配置→执行视图列显示”勾选列即可即时生效。  
+- 使用效果：路径提示更清晰，说明抽屉可主动打开；执行/用例库导入模板入口集中；列显示设置即时保存减少操作步骤。  
+- 新增内容/接口/组件：  
+  - 前端：侧边栏路径与文案调整、页面说明抽屉扩展、设置页即时保存（`index.html`、`style.css`、`scripts/core/appRuntime.js`、`scripts/modules/pageGuide.js`、`scripts/modules/tempexec.js`、`scripts/modules/settings.js`、`scripts/modules/caseLibrary.js`、`scripts/core/autoCore.js`、`scripts/core/casesGenCore.js`、`scripts/modules/opsLog.js`）。  
+  - 测试：UI 用例（`tests/ui/page_guide_drawer.spec.js`、`tests/ui/help_structure_drawer.spec.js`、`tests/ui/sidebar_path.spec.js`、`tests/ui/models_settings.spec.js`、`tests/ui/models_persist_db.spec.js`）；API 用例（`tests/api/settings_temp_exec_columns.spec.js`）。  
+- 复用说明：复用用例库导入模板下载逻辑与通用页面说明抽屉/设置持久化接口，不新增后端接口。  
+- 测试与验证：  
+  - `node --check scripts/core/appRuntime.js scripts/core/autoCore.js scripts/core/casesGenCore.js scripts/modules/pageGuide.js scripts/modules/settings.js scripts/modules/tempexec.js scripts/modules/caseLibrary.js scripts/modules/opsLog.js`（通过）  
+  - `npm run test:ui -- tests/ui/help_structure_drawer.spec.js`（通过）  
+  - `npm run test:ui -- tests/ui/page_guide_drawer.spec.js --workers=1`（通过）  
+  - `npm run test:ui -- tests/ui/sidebar_path.spec.js tests/ui/models_settings.spec.js --workers=1`（通过）  
+  - `npm run test:ui -- tests/ui/models_persist_db.spec.js -g 登录态忽略本地缓存 --workers=1`（通过）  
+  - `npm run test:ui -- tests/ui/models_persist_db.spec.js -g 已登录会话在重新获得焦点时刷新远端设置 --workers=1`（通过）  
+  - `API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/settings_temp_exec_columns.spec.js`（通过）  
+  - `node --check scripts/modules/tempexec.js`（通过）  
+  - `npm run test:ui -- tests/ui/tempexec_focus_sync.spec.js tests/ui/tempexec_drag.spec.js --workers=1`（通过）  
+- 更新记录：2025-12-21 页面说明/路径/列显示优化上线（`index.html`、`style.css`、`config/domConfig.js`、`scripts/`、`tests/`）。  
+- 更新记录：2025-12-21 页面路径样式优化、XMind 结构改为按钮打开抽屉、执行视图专注区补充左右滚动按钮（`index.html`、`style.css`、`scripts/core/appRuntime.js`、`scripts/modules/pageGuide.js`、`scripts/modules/tempexec.js`、`tests/ui/`）。2025-12-21 执行视图专注区改为横向滚动条+滚轮滚动并移除按钮（`style.css`、`scripts/modules/tempexec.js`）。2025-12-21 修复专注区用例过多导致页面横向撑宽（`style.css`）。2025-12-21 专注区点击同一用例也可回到执行视图顶部（`scripts/modules/tempexec.js`）。2025-12-21 专注区悬停展示自定义滚动条（`style.css`、`scripts/modules/tempexec.js`）。2025-12-21 修复专注区滚动条交互绑定在重绘后失效（`scripts/modules/tempexec.js`）。2025-12-21 修复专注区滚动条位置跟随滚动错位（`scripts/modules/tempexec.js`）。2025-12-21 全局分页设置变更后同步刷新分页视图（`scripts/modules/settings.js`、`scripts/modules/caseArchive.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/opsLog.js`、`scripts/modules/execOverview.js`）。2025-12-21 切换页签时补发分页设置变更通知确保即时生效（`scripts/core/appRuntime.js`）。  
+
+- 功能名称：全局分页设置 DB 同步修复  
+- 功能描述：执行页读取 DB 侧 UI 状态时，优先采用设置页保存的分页值，并在变更时回写 tempexec_ui_v1，避免被旧值覆盖。  
+- 操作方式：在“设置→其他设置”修改分页条数并保存，切换到执行/归档/总览等页面即时生效。  
+- 使用效果：分页条数在 5-200 范围内保存后立即生效，并随账号持久化。  
+- 新增内容/接口/组件：  
+  - 前端：分页设置优先级与 UI 状态同步（`scripts/core/tempexecCore.js`）。  
+  - 测试：UI 用例（`tests/ui/settings_page_size_db.spec.js`）；API 用例（`tests/api/settings_temp_exec_page_size.spec.js`）。  
+- 复用说明：复用 `/api/settings` 设置持久化接口，无新增后端接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+  - `npm run test:ui -- tests/ui/settings_page_size_db.spec.js`（通过）  
+  - `APP_DB_FILE=apitest.db python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 18082` 后执行 `API_BASE_URL=http://127.0.0.1:18082 npm run test:api -- tests/api/settings_temp_exec_page_size.spec.js`（未通过：当前环境 Python 3.7 无法安装 fastapi==0.104.1，需升级至 Python 3.8+ 后重试）  
+- 更新记录：2025-12-21 全局分页设置 DB 同步修复（`scripts/core/tempexecCore.js`、`tests/ui/settings_page_size_db.spec.js`、`tests/api/settings_temp_exec_page_size.spec.js`）。  
+
+- 功能名称：用例库抽屉分页  
+- 功能描述：用例库“查看&编辑”“选择用例执行”“用例改动历史”抽屉内列表增加分页，分页大小统一使用“其他设置”的全局分页值。  
+- 操作方式：进入用例库后分别打开三个抽屉，列表顶部/底部分页条可切页与跳页，显示每页条数来自全局分页设置。  
+- 使用效果：抽屉列表与其他页面保持一致的分页条数，长列表可快速翻页查看。  
+- 新增内容/接口/组件：  
+  - 前端：抽屉分页渲染与事件处理（`index.html`、`scripts/modules/caseLibrary.js`）。  
+  - 测试：UI 用例（`tests/ui/case_library_drawer_pagination.spec.js`）。  
+- 复用说明：复用现有全局分页设置与分页控件样式，无新增后端接口。  
+- 测试与验证：  
+  - `node --check scripts/modules/caseLibrary.js`（通过）  
+  - `npm run test:ui -- tests/ui/case_library_drawer_pagination.spec.js`（通过；提示 8080 端口已占用但测试复用了现有服务）  
+- 更新记录：2025-12-21 用例库抽屉分页接入全局分页设置（`index.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_drawer_pagination.spec.js`）。  
+
+- 功能名称：执行页用例库同步去重与删除同步  
+- 功能描述：执行页同步用例库时，若本地已有未绑定但内容一致的用例，则自动绑定并避免重复新增；执行页删除用例时同步删除用例库条目并记录变更历史。  
+- 操作方式：A 在执行页新增并编辑用例入库后，B 刷新执行页同步；删除执行页用例后查看用例库变更记录与其他执行集同步。  
+- 使用效果：同步时不再出现重复新增的用例，变更提示不再误指向自身手工新增；执行页删除会在用例库变更历史中记录“删除”并触发同步移除。  
+- 新增内容/接口/组件：  
+  - 后端：执行集同步匹配未绑定用例、执行页删除同步用例库（`backend/routers/exec_routes.py`）。  
+  - 测试：API 用例（`tests/api/exec_case_library_sync.spec.js`）；UI 用例（`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 复用说明：复用现有用例库变更记录与同步接口（`/api/exec/sets/*/case-library-sync`、`log_case_library_change`），未新增接口。  
+- 测试与验证：  
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npm run test:ui -- tests/ui/tempexec_case_library_changes.spec.js`（未通过：`存在多份变更时可切换用例diff；自动弹不影响当前选中用例；可点击“选择用例”切换执行视图` 在 `waitAppReady` 阶段未检测到 `tempExecApi`，其余 2 条通过）  
+  - `API_BASE_URL=http://127.0.0.1:18082 npm run test:api -- tests/api/exec_case_library_sync.spec.js`（通过）  
+- 更新记录：2025-12-21 执行页用例库同步去重与删除同步（`backend/routers/exec_routes.py`、`tests/api/exec_case_library_sync.spec.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+
+- 功能名称：执行页新增/编辑/删除与用例库同步补强  
+- 功能描述：执行页新增用例在模块/标题/优先级/前置条件/步骤/预期结果齐全时自动写入用例库并绑定；执行页修改/删除会记录为用例库变更并写入执行集 diff 历史；首次回到执行页刷新时可自动弹出 diff，自己执行页改动不再弹窗/高亮但仍可查看记录。  
+- 操作方式：在执行页点击“+”新增并补全字段，或直接编辑/删除用例；刷新执行页或切回执行页查看“用例库变更”。  
+- 使用效果：执行页与用例库保持一致；新增/删除记录完整；他人改动首次刷新自动弹 diff，自己改动不强弹但可查看历史。  
+- 新增内容/接口/组件：  
+  - 后端：执行用例创建自动落库/绑定、执行页变更写入 diff 历史并自动 ack（`backend/routers/exec_routes.py`）。  
+  - 前端：执行页同步触发序号消费，避免刷新漏弹（`scripts/core/tempexecCore.js`）。  
+  - 测试：API 用例（`tests/api/exec_case_library_sync.spec.js`、`tests/api/exec_persistence.spec.js`）；UI 用例（`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 复用说明：复用用例库变更记录与执行集同步接口（`/api/exec/sets/*/case-library-sync`、`log_case_library_change`），无新增接口。  
+- 测试与验证：未执行（需在测试库/前端服务环境下运行）。  
+- 更新记录：2025-12-23 执行页新增/编辑/删除与用例库同步补强（`backend/routers/exec_routes.py`、`scripts/core/tempexecCore.js`、`tests/api/exec_case_library_sync.spec.js`、`tests/api/exec_persistence.spec.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+
+- 功能名称：执行页用例库 diff 自动弹窗与同步判定补漏  
+- 功能描述：执行页同步用例库时，若用例库更新时间与上次同步一致但存在差异仍触发 diff 计算；刷新来源为执行页时优先消费同步触发并允许同步；用例库变更按钮在仅有历史记录时保持可点击。  
+- 操作方式：执行页或用例库修改用例后，回到执行页刷新；查看“用例库变更”按钮与自动弹出的 diff 抽屉。  
+- 使用效果：多人快速变更时不再漏同步；刷新回到执行页时能触发同步与自动弹 diff；变更按钮不会因历史存在而失效。  
+- 新增内容/接口/组件：  
+  - 后端：执行集与用例库同步判定补漏（`backend/routers/exec_routes.py`）。  
+  - 前端：执行页刷新来源判定与按钮可用性补强（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用执行集同步接口与用例库变更记录，无新增接口。  
+- 测试与验证：  
+  - `npm run test:ui -- tests/ui/tempexec_case_library_changes.spec.js`（通过）  
+- 更新记录：2025-12-24 执行页用例库 diff 自动弹窗与同步判定补漏（`backend/routers/exec_routes.py`、`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：执行页空用例编辑补漏与同步稳定性  
+- 功能描述：新增空用例时，未落库前的字段编辑会缓存并在创建完成后补写；执行页同步用例库不再依赖页签状态，保证变更按钮可用。  
+- 操作方式：执行页新增空用例后逐步补全字段并刷新；观察“用例库变更”按钮可点击与字段不再被刷新置空。  
+- 使用效果：空用例补全后字段可稳定保存，刷新不再丢失预期结果；执行页刷新后变更按钮保持可点击。  
+- 新增内容/接口/组件：  
+  - 前端：空用例创建期间的补丁缓冲与同步策略优化（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用现有执行用例更新接口与同步接口，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+- 更新记录：2025-12-24 执行页空用例编辑补漏与同步稳定性（`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：执行页变更按钮状态保底  
+- 功能描述：同步返回空 diff 时保留已有变更元信息，避免按钮被误禁用。  
+- 操作方式：多人在执行页/用例库交替修改后刷新执行页，观察“用例库变更”按钮仍可点击查看历史。  
+- 使用效果：变更按钮不会因短暂空返回而变灰不可点。  
+- 新增内容/接口/组件：  
+  - 前端：同步元数据合并（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用执行集同步接口，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+- 更新记录：2025-12-24 执行页变更按钮状态保底（`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：执行页变更按钮可用性判定补强  
+- 功能描述：变更按钮的可用性增加“用例库更新时间 vs 基线时间”判断，避免同步元信息不足时误禁用。  
+- 操作方式：多人交替修改用例库后刷新执行页，观察“用例库变更”按钮保持可点击。  
+- 使用效果：按钮不会因瞬时空 diff 而禁用。  
+- 新增内容/接口/组件：  
+  - 前端：变更按钮可用性判定补强（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用现有同步接口，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+- 更新记录：2025-12-24 执行页变更按钮可用性判定补强（`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：执行页变更按钮 lastDiffAt 保底  
+- 功能描述：同步返回 lastDiffAt 但 diff/history 空时，仍保持按钮可点击。  
+- 操作方式：多人交替修改同一用例标题后刷新执行页，检查变更按钮仍可点击。  
+- 使用效果：lastDiffAt 存在时按钮不再误禁用。  
+- 新增内容/接口/组件：  
+  - 前端：变更按钮判定补充 lastDiffAt（`scripts/core/tempexecCore.js`）。  
+- 复用说明：复用现有同步接口，无新增接口。  
+- 测试与验证：  
+  - `node --check scripts/core/tempexecCore.js`（通过）  
+- 更新记录：2025-12-24 执行页变更按钮 lastDiffAt 保底（`scripts/core/tempexecCore.js`）。  
+
+- 功能名称：执行页变更按钮摘要信号补强  
+- 功能描述：用例库同步仅返回摘要时，仍可识别变更并展示摘要，避免按钮灰掉。  
+- 操作方式：执行页刷新时仅返回摘要（无 diff/history），查看“用例库变更”按钮与摘要 pill。  
+- 使用效果：摘要存在时按钮可点击且展示改动统计。  
+- 新增内容/接口/组件：  
+  - 前端：摘要信号判定与摘要回填（`scripts/core/tempexecCore.js`）。  
+  - 测试：用例库变更摘要场景 UI 用例（`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 复用说明：复用执行集同步接口，无新增接口。  
+- 测试与验证：  
+  - `npm run test:ui -- tests/ui/tempexec_case_library_changes.spec.js`（通过）  
+- 更新记录：2025-12-24 执行页变更按钮摘要信号补强（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+
+- 功能名称：执行页变更按钮空元信息可打开  
+- 功能描述：同步返回空 diff/历史时仍允许手动打开变更抽屉，避免多人交替刷新后按钮变灰不可点。  
+- 操作方式：多人交替修改并刷新执行页，点击“用例库变更”按钮查看 diff/空态。  
+- 使用效果：按钮保持可点击，空元信息时展示“暂无变更”，不影响自动弹窗逻辑。  
+- 新增内容/接口/组件：  
+  - 前端：按钮可用性与抽屉打开逻辑兜底（`scripts/core/tempexecCore.js`）。  
+  - 测试：多人交替刷新空元信息 UI 用例（`tests/ui/tempexec_case_library_changes.spec.js`）。  
+- 复用说明：复用执行集同步接口，无新增接口。  
+- 测试与验证：  
+  - `npm run test:ui -- tests/ui/tempexec_case_library_changes.spec.js`（通过）  
+- 更新记录：2025-12-24 执行页变更按钮空元信息可打开（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。  
+
+- 功能名称：执行页多次改动历史回补
+- 功能描述：执行页同步时回补用例库变更事件，避免他人连续改动后只看到最新一条 diff。
+- 操作方式：A 在执行页连续修改同一用例两次，B 刷新执行页打开“用例库变更”抽屉查看历史。
+- 使用效果：B 可打开抽屉并看到两条变更记录，diff 内容包含两次改动。
+- 新增内容/接口/组件：
+  - 后端：执行集同步回补用例库事件历史（`backend/routers/exec_routes.py`）。
+  - 测试：多次改动跨执行集同步 API/UI 用例（`tests/api/exec_case_library_sync.spec.js`、`tests/ui/tempexec_case_library_multi_user.spec.js`）。
+- 复用说明：复用用例库变更事件与执行集同步接口，无新增接口。
+- 测试与验证：
+  - `API_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/api/exec_case_library_sync.spec.js -g "执行页连续改动两次"`（通过）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 API_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_case_library_multi_user.spec.js`（通过）
+- 更新记录：2025-12-23 执行页多次改动历史回补（`backend/routers/exec_routes.py`、`tests/api/exec_case_library_sync.spec.js`、`tests/ui/tempexec_case_library_multi_user.spec.js`）。
+
+- 功能名称：执行页用例变更按钮改名与重导入自动清空
+- 功能描述：执行页“用例库变更”按钮与抽屉标题改为“用例变更”；删除执行集后重新入库时清理缓存的变更记录，避免旧 diff 保留。
+- 操作方式：执行页点击“用例变更”；在版本盒子中删除用例后重新导入，打开“用例变更”抽屉查看内容。
+- 使用效果：按钮名称一致；删除后重导入不再保留旧变更记录，抽屉内容自动刷新。
+- 新增内容/接口/组件：
+  - 前端：用例变更文案调整与变更记录缓存清理（`index.html`、`scripts/core/tempexecCore.js`）。
+  - 测试：删除后重导入场景 UI 用例（`tests/ui/tempexec_case_library_multi_user.spec.js`）。
+- 复用说明：复用现有执行页同步与导入逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 API_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_case_library_multi_user.spec.js -g "版本盒子删除后重新导入"`（通过）
+- 更新记录：2025-12-23 执行页用例变更按钮改名与重导入自动清空（`index.html`、`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_multi_user.spec.js`）。
+
+- 功能名称：执行视图按钮布局与导出命名调整
+- 功能描述：执行视图搜索行拆分为四块布局；“用例库变更”按钮改名为“用例变更”；导出按钮去掉“执行/用例”字样。
+- 操作方式：进入执行视图，确认搜索区、用例变更+上一份/下一份、导出XMind/导出XMind（无结果）、归档按钮分区展示。
+- 使用效果：按钮分区更清晰，命名简化一致。
+- 新增内容/接口/组件：
+  - 前端：执行视图工具栏布局调整与按钮文案更新（`index.html`、`scripts/core/tempexecCore.js`、`style.css`）。
+  - 测试：按钮文案 UI 用例更新（`tests/ui/tempexec_case_library_changes.spec.js`）。
+- 复用说明：复用现有执行视图与用例变更逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_case_library_changes.spec.js -g "刷新回到执行页时自动弹出 diff"`（通过）
+- 更新记录：2025-12-23 执行视图按钮布局与导出命名调整（`index.html`、`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_case_library_changes.spec.js`）。
+
+- 功能名称：执行视图按钮布局细化
+- 功能描述：执行视图搜索行调整为“搜索输入在左、中部用例变更+用例切换+归档、右侧导出”的单行布局。
+- 操作方式：进入执行视图，观察搜索区在左，中间包含“用例变更/上一份/下一份/归档”，导出按钮最右。
+- 使用效果：布局分区明确，常用操作集中在中部。
+- 新增内容/接口/组件：
+  - 前端：工具栏结构与样式调整（`scripts/core/tempexecCore.js`、`style.css`）。
+  - 测试：工具栏布局断言（`tests/ui/tempexec_case_library_changes.spec.js`）。
+- 复用说明：复用现有执行视图与用例变更逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_case_library_changes.spec.js -g "刷新回到执行页时自动弹出 diff"`（通过）
+- 更新记录：2025-12-23 执行视图按钮布局细化（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_case_library_changes.spec.js`）。
+
+- 功能名称：执行视图中部区域居中对齐
+- 功能描述：调整工具栏网格列分配，保证“用例变更+用例切换+归档”区域居中展示。
+- 操作方式：进入执行视图，观察搜索区左侧，中部区块居中，导出按钮靠右。
+- 使用效果：中部操作区不再靠右，视觉对齐更稳定。
+- 新增内容/接口/组件：
+  - 前端：工具栏网格布局调整（`style.css`）。
+- 复用说明：复用现有工具栏结构，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_case_library_changes.spec.js -g "刷新回到执行页时自动弹出 diff"`（通过）
+- 更新记录：2025-12-23 执行视图中部区域居中对齐（`style.css`）。
+
+- 功能名称：执行视图用例变更自动弹窗稳定触发
+- 功能描述：用例库同步时增加自动弹窗队列与即时触发机制，避免多次加载覆盖导致自动弹窗漏触发；切换到执行页时补一次自动弹窗尝试。
+- 操作方式：A 在用例库修改用例后，B 刷新执行页，自动弹出“用例变更”抽屉并展示 diff。
+- 使用效果：执行页自动弹窗不再遗漏，且仍可手动打开查看。
+- 新增内容/接口/组件：
+  - 前端：自动弹窗队列/触发逻辑（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）。
+- 复用说明：复用现有执行页同步接口与抽屉逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8081 API_BASE_URL=http://127.0.0.1:8081 npx playwright test --config tests/playwright.config.js tests/ui/tempexec_case_library_multi_user.spec.js`（通过）
+  - `API_BASE_URL=http://127.0.0.1:8081 npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_case_library_sync.spec.js`（2 项失败，详见测试输出）
+- 更新记录：2025-12-23 执行视图用例变更自动弹窗稳定触发（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）。
+
+- 功能名称：用例库同步测试场景修正
+- 功能描述：将“其他执行集同步不重复新增”用例调整为同步非创建方执行集，确保测试语义与行为一致。
+- 操作方式：执行新增用例后，改为同步另一执行集并校验不产生重复新增。
+- 使用效果：API 自动化用例更符合场景含义。
+- 新增内容/接口/组件：
+  - 测试：用例库同步场景修正（`tests/api/exec_case_library_sync.spec.js`）。
+- 复用说明：复用现有同步接口与测试工具链，无新增接口。
+- 测试与验证：
+  - `API_BASE_URL=http://127.0.0.1:8081 npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_case_library_sync.spec.js`（通过）
+- 更新记录：2025-12-23 用例库同步测试场景修正（`tests/api/exec_case_library_sync.spec.js`）。
+
+- 功能名称：执行页复用类型变更记录与操作日志展示
+- 功能描述：执行页切换复用/非复用时同步用例库复用状态，记录到“用例变更”历史但不触发自动弹窗；操作记录新增“用例类型变更”并展示“转为复用/转为非复用”，操作记录表头“数量变化”改为“变化”。
+- 操作方式：在执行页勾选/取消复用；其他成员刷新执行页后，在“用例变更”历史中可查看“用例类型”变更；操作记录抽屉可查看对应条目。
+- 使用效果：用例库同步且记录可追溯，其他成员不被提醒；操作记录展示更清晰。
+- 新增内容/接口/组件：
+  - 后端：执行页复用变更写入用例库变更历史与操作记录（`backend/routers/exec_routes.py`）。
+  - 前端：操作记录行为/变化展示与表头文案更新（`scripts/modules/opsLog.js`、`index.html`）。
+  - 测试：复用变更 diff 与操作记录 UI 用例（`tests/ui/tempexec_case_library_changes.spec.js`、`tests/ui/ops_log.spec.js`），API 用例（`tests/api/exec_case_library_sync.spec.js`）。
+- 复用说明：复用现有用例库变更历史与操作记录机制，无新增接口。
+- 测试与验证：
+  - `API_BASE_URL=http://127.0.0.1:8081 npx playwright test tests/api/exec_case_library_sync.spec.js`（通过）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8091 npx playwright test tests/ui/tempexec_case_library_changes.spec.js tests/ui/ops_log.spec.js`（通过）
+- 更新记录：2025-12-23 执行页复用类型变更记录与操作日志展示（`backend/routers/exec_routes.py`、`scripts/modules/opsLog.js`、`index.html`、`tests/api/exec_case_library_sync.spec.js`、`tests/ui/tempexec_case_library_changes.spec.js`、`tests/ui/ops_log.spec.js`）。
+
+- 功能名称：登录校验失败时保留登录态
+- 功能描述：当登录态校验接口出现非 401/403 的异常（如后端短暂不可用）时，不再清除 token 并强制跳转登录页，改为保留 token 并提示重试。
+- 操作方式：登录后刷新页面，若后端短暂异常则提示“登录校验失败”且不跳转；恢复后刷新可继续使用。
+- 使用效果：避免因后端短暂不可用导致每天需要重新登录。
+- 新增内容/接口/组件：
+  - 前端：登录校验异常分支处理（`scripts/modules/authGuard.js`）。
+  - 测试：登录校验异常不清 token（`tests/ui/auth_login_expiry.spec.js`）。
+- 复用说明：复用现有登录校验逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8092 npx playwright test tests/ui/auth_login_expiry.spec.js`（通过）
+- 更新记录：2025-12-23 登录校验失败时保留登录态（`scripts/modules/authGuard.js`、`tests/ui/auth_login_expiry.spec.js`）。
+
+- 功能名称：执行分配页快速添加执行用例与用例库跳转执行页
+- 功能描述：执行分配页版本分组新增“添加执行用例”按钮，点击跳转用例库并自动打开“选择用例执行”抽屉；用例库导航新增“跳转用例执行页”，仅跳转不打开抽屉，并在跳转时关闭当前抽屉避免残留状态。
+- 操作方式：在执行分配页点击“添加执行用例”进入用例库并看到“选择用例执行”抽屉自动展开；在用例库点击“跳转用例执行页”仅进入执行页且不自动展开抽屉。
+- 使用效果：执行分配与用例库切换更顺滑，抽屉状态不会残留或误触发。
+- 新增内容/接口/组件：
+  - 前端：入口按钮与跨页打开抽屉逻辑（`index.html`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`）。
+  - 测试：用例库跳转与自动打开抽屉 UI 用例（`tests/ui/case_library_jump_exec.spec.js`）。
+- 复用说明：复用现有抽屉组件与 tab 切换逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/case_library_jump_exec.spec.js`（通过）
+- 更新记录：2025-12-23 执行分配页快速添加执行用例与用例库跳转执行页（`index.html`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_jump_exec.spec.js`）。
+
+- 功能名称：执行分配入口精简与用例库入口顺序调整
+- 功能描述：执行分配页移除“收起需求区”与“用例执行情况总览”按钮，“添加执行用例”移至执行分配标题行；用例库入口“跳转用例执行页/选择用例执行”按钮顺序互换。
+- 操作方式：进入执行分配抽屉，标题行显示“添加执行用例”，需求区不再显示收起按钮；用例库导航中“跳转用例执行页”位于“选择用例执行”之前。
+- 使用效果：执行分配入口更聚焦，导航顺序更符合预期。
+- 新增内容/接口/组件：
+  - 前端：执行分配按钮与用例库入口排序调整（`index.html`、`scripts/modules/tempexec.js`、`config/domConfig.js`）。
+  - 测试：执行分配入口与用例库顺序 UI 校验（`tests/ui/case_library_jump_exec.spec.js`），更新相关用例入口（`tests/ui/tempexec_progress.spec.js`、`tests/ui/tempexec_overview_project_style.spec.js`、`tests/ui/tempexec_archive_stay_project.spec.js`、`tests/ui/tempexec_drag.spec.js`、`tests/ui/files_layout.spec.js`）。
+- 复用说明：复用现有导航与抽屉组件，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/case_library_jump_exec.spec.js tests/ui/tempexec_progress.spec.js tests/ui/tempexec_overview_project_style.spec.js tests/ui/tempexec_archive_stay_project.spec.js tests/ui/tempexec_drag.spec.js tests/ui/files_layout.spec.js`（通过）
+- 更新记录：2025-12-23 执行分配入口精简与用例库入口顺序调整（`index.html`、`scripts/modules/tempexec.js`、`config/domConfig.js`、`tests/ui/case_library_jump_exec.spec.js`、`tests/ui/tempexec_progress.spec.js`、`tests/ui/tempexec_overview_project_style.spec.js`、`tests/ui/tempexec_archive_stay_project.spec.js`、`tests/ui/tempexec_drag.spec.js`、`tests/ui/files_layout.spec.js`）。
+
+- 功能名称：复用子项备注输入放大与执行按钮间距调整
+- 功能描述：复用子项区域保持原布局，子项输入框恢复原始长度，备注输入框放大为原始长度的 3.5 倍；子项执行下拉恢复原始尺寸，与备注框、删除按钮各保持 2 个汉字间距，删除按钮靠右对齐。
+- 操作方式：在执行视图开启复用并展开子项列表，子项输入框恢复原长度，备注框明显变长；执行下拉与备注框保持约 2 个汉字间距。
+- 使用效果：备注输入更充裕，执行下拉尺寸回归原样且删除按钮靠右更易定位。
+- 新增内容/接口/组件：
+  - 前端：复用子项备注长度与执行按钮尺寸/间距调整（`style.css`）。
+  - 测试：复用子项备注与间距/尺寸 UI 校验（`tests/ui/tempexec_drag.spec.js`）。
+- 复用说明：复用现有执行视图与复用渲染逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_drag.spec.js`（通过）
+- 更新记录：2025-12-23 复用子项备注输入放大与执行按钮间距调整（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
+- 更新记录：2025-12-23 复用子项执行下拉恢复原始尺寸（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
+- 更新记录：2025-12-23 复用子项执行下拉与删除按钮间距调整（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
+- 更新记录：2025-12-23 复用子项删除按钮靠右对齐（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
+
+- 功能名称：操作记录导出 Excel
+- 功能描述：操作记录“查看记录”抽屉新增“导出记录Excel”，按当前字段导出为 Excel，每行一条记录。
+- 操作方式：进入“操作记录 → 查看记录”抽屉，点击“导出记录Excel”下载文件。
+- 使用效果：可按当前筛选结果导出操作记录，便于线下查看与留档。
+- 新增内容/接口/组件：
+  - 前端：查看记录抽屉新增导出按钮与导出逻辑（`index.html`、`scripts/modules/opsLog.js`、`scripts/modules/caseLibrary.js`）。
+  - 测试：操作记录导出 Excel UI 用例（`tests/ui/ops_log.spec.js`）。
+- 复用说明：复用现有 Excel 导出构建逻辑与下载能力，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/ops_log.spec.js -g "导出记录Excel"`（通过）
+- 更新记录：2025-12-23 操作记录导出 Excel（`index.html`、`scripts/modules/opsLog.js`、`scripts/modules/caseLibrary.js`、`tests/ui/ops_log.spec.js`）。
+
+- 功能名称：用例生成进度面板自适应高度
+- 功能描述：左侧导航的“用例生成进度”面板高度随页面自适应；可展示全部模块时完整展示，超出视口时列表自动滚动。
+- 操作方式：进入任意页面，左侧“用例生成进度”随窗口高度调整；模块数多时列表出现滚动。
+- 使用效果：进度面板与页面高度一致，模块多时仍可查看全部进度。
+- 新增内容/接口/组件：
+  - 前端：进度面板高度与滚动策略调整（`style.css`）。
+  - 测试：进度面板自适应高度 UI 用例（`tests/ui/casegen_db_store.spec.js`）。
+- 复用说明：复用现有进度面板结构与渲染逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/casegen_db_store.spec.js -g "进度面板高度自适应并可滚动"`（通过）
+- 更新记录：2025-12-23 用例生成进度面板自适应高度（`style.css`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：操作记录查看记录抽屉宽度统一
+- 功能描述：查看记录抽屉宽度调整为默认抽屉宽度（约屏幕 2/3），与其他抽屉保持一致。
+- 操作方式：进入“操作记录 → 查看记录”打开抽屉，宽度与其他抽屉一致。
+- 使用效果：抽屉宽度统一，视觉一致性更好。
+- 新增内容/接口/组件：
+  - 前端：查看记录抽屉宽度回归默认（`index.html`）。
+  - 测试：查看记录抽屉宽度 UI 用例（`tests/ui/ops_log_drawer_restore.spec.js`）。
+- 复用说明：复用抽屉默认样式，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/ops_log_drawer_restore.spec.js -g "查看记录抽屉宽度与其他抽屉一致"`（通过）
+- 更新记录：2025-12-23 操作记录查看记录抽屉宽度统一（`index.html`、`tests/ui/ops_log_drawer_restore.spec.js`）。
+
+- 功能名称：全模块直接生成/补全生成
+- 功能描述：用例生成页通用操作区新增“全模块直接生成/全模块补全生成”，当存在未生成模块时可一键触发；若检测到已生成模块会提示覆盖确认，确认后执行全模块生成，取消则不执行；若模块生成中则跳过并对其余模块执行。
+- 操作方式：进入用例生成页，在通用操作区点击“全模块直接生成/全模块补全生成”，根据提示确认或取消。
+- 使用效果：一键完成多模块生成或补全，避免逐个点击；覆盖风险可控。
+- 新增内容/接口/组件：
+  - 前端：全模块生成按钮与批量生成逻辑（`index.html`、`scripts/modules/casesgen.js`、`scripts/core/casesGenCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`）。
+  - 测试：全模块生成按钮覆盖提示与禁用规则 UI 用例（`tests/ui/casegen_db_store.spec.js`）。
+- 复用说明：复用现有模块生成/补全逻辑与确认抽屉，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/casegen_db_store.spec.js -g "全模块生成按钮"`（通过，提权执行）
+- 更新记录：2025-12-23 全模块直接生成/补全生成（`index.html`、`scripts/modules/casesgen.js`、`scripts/core/casesGenCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`tests/ui/casegen_db_store.spec.js`）。
+- 更新记录：2025-12-23 修复 casesGenApi 的 renderCaseGeneration 绑定，确保全模块禁用状态可刷新（`scripts/core/appRuntime.js`、`tests/ui/casegen_db_store.spec.js`）。
+- 更新记录：2025-12-23 全模块按钮在已有生成结果时可点击，避免误禁用（`scripts/core/casesGenCore.js`、`tests/ui/casegen_db_store.spec.js`）。
+- 更新记录：2025-12-23 修复全模块生成仅触发首个模块的问题（`scripts/core/casesGenCore.js`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：用例生成页说明完善
+- 功能描述：在用例生成页“页面说明”抽屉补充生成用例、补全生成、全模块直接生成、全模块补全生成的功能说明、区别与使用规则。
+- 操作方式：进入用例生成页，点击左侧导航的“页面说明”打开抽屉查看。
+- 使用效果：用户可直观看到单模块与全模块操作的差异、覆盖规则与可用条件。
+- 新增内容/接口/组件：
+  - 前端：用例生成页说明内容调整（`scripts/modules/pageGuide.js`）。
+  - 测试：用例生成说明 UI 用例（`tests/ui/casegen_db_store.spec.js`）。
+- 复用说明：复用现有提示样式与用例生成逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/casegen_db_store.spec.js -g "用例生成说明"`（通过，提权执行）
+- 更新记录：2025-12-23 用例生成页说明完善（`scripts/modules/pageGuide.js`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：用例生成入库勾选提醒强化
+- 功能描述：生成用例但未勾选时，点击“新用例入库/旧用例追加入库”打开全模块视图，右上角“全选所有模块用例”按钮同步标红提示；一旦点击全选或任意勾选，红框消失。
+- 操作方式：用例生成完成但不勾选，点击入库按钮查看全模块视图提示；点击全选或勾选用例后提示消失。
+- 使用效果：入库前的勾选引导更明显，避免遗漏勾选导致无法入库。
+- 新增内容/接口/组件：
+  - 前端：全选按钮红框提示联动（`scripts/core/casesGenCore.js`、`style.css`）。
+  - 测试：入库未勾选时全选按钮标红 UI 用例（`tests/ui/casegen_db_store.spec.js`）。
+- 复用说明：复用已有勾选提示状态与入库入口逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/casegen_db_store.spec.js -g "全选按钮"`（通过，提权执行）
+- 更新记录：2025-12-23 用例生成入库勾选提醒强化（`scripts/core/casesGenCore.js`、`style.css`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：执行页复用子项备注自适应
+- 功能描述：执行视图复用子项备注输入框改为自适应，执行选择框宽度为 7 个汉字并与备注间隔 1 个汉字，删除按钮保持最右侧，保持子项输入框长度不变。
+- 操作方式：进入执行页启用用例复用，展开子项查看备注输入框宽度。
+- 使用效果：备注与执行选择框间距明确且更紧凑，删除按钮对齐右侧，执行项排列更清晰。
+- 新增内容/接口/组件：
+  - 前端：执行页复用子项备注布局自适应（`style.css`）。
+  - 测试：复用子项布局断言更新（`tests/ui/tempexec_drag.spec.js`）。
+- 复用说明：复用现有复用子项结构与样式规则，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_drag.spec.js -g "用例复用状态选择展示颜色"`（通过，提权执行）
+- 更新记录：2025-12-24 执行页复用子项备注自适应（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
+
+- 功能名称：页面主题设置
+- 功能描述：在“其他设置”中新增页面主题选择（白色/黑色），保存后生效并同步到账号设置；全站颜色基于主题自动切换。
+- 操作方式：进入“其他设置”选择主题并点击“保存主题”。
+- 使用效果：页面配色随主题切换（背景、卡片、抽屉、表格、输入框等），设置与账号绑定。
+- 新增内容/接口/组件：
+  - 前端：主题设置 UI 与保存逻辑（`index.html`、`scripts/modules/settings.js`）。
+  - 样式：暗色主题变量与覆盖（`style.css`）。
+  - 默认配置：新增主题默认值（`config/constants.js`、`scripts/modules/app.js`）。
+  - 测试：主题设置 UI 用例与 API 设置断言（`tests/ui/theme_setting.spec.js`、`tests/api/settings_models.spec.js`）。
+- 复用说明：复用现有设置保存接口与状态管理，无新增后端接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/theme_setting.spec.js`（失败：Playwright 启动 Chromium headless 权限不足，MachPortRendezvousServer permission denied）
+  - `API_BASE_URL=http://127.0.0.1:8080 npx playwright test tests/api/settings_models.spec.js`（失败：本地 8080 连接被拒绝/EPERM）
+- 更新记录：2025-12-24 页面主题设置（`index.html`、`style.css`、`scripts/modules/settings.js`、`config/constants.js`、`scripts/modules/app.js`、`tests/ui/theme_setting.spec.js`、`tests/api/settings_models.spec.js`）。
+- 更新记录：2025-12-24 优化暗色主题覆盖与亮度（`style.css`）。
+- 更新记录：2025-12-24 补齐暗色主题白块覆盖（登出按钮、导航流程、导入信息区、覆盖率/流程信息区、列表视图等）（`style.css`）。
+- 更新记录：2025-12-24 补齐执行视图/用例生成模块暗色背景与控件色（`style.css`）。
+- 更新记录：2025-12-24 补齐执行视图顶部固定区与归属/复用区域暗色样式（`style.css`）。
+- 更新记录：2025-12-24 补齐项目管理/操作记录/项目排序等暗色背景（`style.css`）。
+- 更新记录：2025-12-24 补齐操作记录选择项与顶部导航外框暗色样式（`style.css`）。
+- 更新记录：2025-12-24 修正操作记录筛选项与项目/版本选择箭头暗色样式（`style.css`）。
+- 更新记录：2025-12-24 修正操作记录日期选择与归属下拉箭头暗色样式（`style.css`）。
+- 更新记录：2025-12-24 修正操作记录时间选择框暗色箭头与背景（`style.css`）。
+- 更新记录：2025-12-24 修正用例变更 diff 用例名称暗色显示（`style.css`）。
+- 更新记录：2025-12-24 修正模型指派/模型管理卡片暗色背景（`style.css`）。
+- 更新记录：2025-12-24 修正功能指派注意事项文案暗色可读性（`style.css`）。
+- 更新记录：2025-12-24 修正执行总览进度条与用例名称暗色显示（`style.css`）。
+- 更新记录：2025-12-24 修正执行总览版本/人员进度与个人总览暗色背景（`style.css`）。
+- 更新记录：2025-12-24 修正执行总览版本进度条暗色背景（`style.css`）。
+- 更新记录：2025-12-24 新增页面 favicon（`assets/favicon.svg`、`index.html`、`login.html`）。
+- 更新记录：2025-12-24 favicon 调整为测试主题图标（`assets/favicon.svg`）。
+- 更新记录：2025-12-24 favicon 调整为“测试”文字图标（`assets/favicon.svg`）。
+- 更新记录：2025-12-24 favicon 精简为“测”字样（`assets/favicon.svg`）。
+- 更新记录：2025-12-24 favicon 放大并调整为艺术字风格“测”（`assets/favicon.svg`）。
+- 更新记录：2025-12-24 favicon “测”字进一步放大（`assets/favicon.svg`）。
+- 更新记录：2025-12-24 favicon 调整为黑底白字“测”（`assets/favicon.svg`）。
+- 更新记录：2025-12-24 favicon “测”字放大占比（`assets/favicon.svg`）。
+- 更新记录：2025-12-24 favicon “测”字进一步放大占比（`assets/favicon.svg`）。
+- 更新记录：2025-12-24 favicon “测”字再放大占比（`assets/favicon.svg`）。
+
+- 功能名称：用例库导入模板下拉与版本删除提示
+- 功能描述：暗色主题修正 Excel 模板下拉箭头；
+  删除版本无可转移时改为抽屉提示；
+  添加版本后重试即可选择新版本。
+- 操作方式：暗色主题查看用例库导入 Excel 模板下拉；
+  仅有一个版本且有用例时点击删除版本。
+- 使用效果：下拉箭头正常；无可转移版本提示可见。
+  提示包含“添加版本后重试”说明。
+- 新增内容/接口/组件：
+  - 前端：模板下拉样式补齐、删除版本提示抽屉化。
+    文件：`style.css`、`scripts/modules/admin.js`。
+  - 测试：主题/版本删除抽屉提示 UI 用例更新。
+    文件：`tests/ui/theme_setting.spec.js`、`tests/ui/project_admin_drawer.spec.js`。
+- 复用说明：复用确认抽屉与删除版本逻辑，无新增接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/theme_setting.spec.js`
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/project_admin_drawer.spec.js`
+- 更新记录：2025-12-24 用例库导入模板下拉与版本删除提示完善。
+  文件：`style.css`、`scripts/modules/admin.js`。
+- 更新记录：2025-12-24 对应 UI 用例更新。
+  文件：`tests/ui/theme_setting.spec.js`、
+  `tests/ui/project_admin_drawer.spec.js`。
+
+- 更新记录：2025-12-24 删除版本无可转移提示改为红字提醒。
+  文件：`scripts/base/confirmDrawer.js`、
+  `style.css`。
+  文件：`scripts/modules/admin.js`、
+  `tests/ui/project_admin_drawer.spec.js`。
+
+- 功能名称：侧边栏个人备忘区与进度区动态分配
+- 功能描述：左侧导航新增个人备忘区，支持最多 3 个页签、条目新增/已办/删除与抽屉二次确认；用例生成进度与备忘区支持收起/展开并记忆状态；当一方数据不足且另一方数据较多时自动扩展占用空余空间，双方数据均少/均多时保持 1:1 分配。
+- 操作方式：在左侧导航“个人备忘”中新增/命名页签、录入条目并点击已办或删除；点击区块右侧“收起/展开”按钮折叠/展开面板。
+- 使用效果：备忘区可随账号持久保存个人待办，进度区与备忘区根据数据量动态分配空间，收起时另一侧可获得更多可视区域。
+- 新增内容/接口/组件：
+  - 前端：侧边栏结构与交互（`index.html`、`scripts/modules/memoPad.js`、`scripts/modules/casegenProgress.js`、`scripts/handlers/casegenHandlers.js`）。
+  - 配置：默认设置与 DOM 映射（`config/constants.js`、`config/domConfig.js`）。
+  - 样式：备忘区样式与按钮对齐/动态布局（`style.css`）。
+  - 测试：备忘区 UI 用例与布局断言（`tests/ui/memo_pad.spec.js`）。
+- 复用说明：复用现有设置持久化、确认抽屉与居中提示能力，无新增后端接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/memo_pad.spec.js`（通过，提权执行）
+- 更新记录：2025-12-24 侧边栏个人备忘区与进度区动态分配（`index.html`、`style.css`、`config/constants.js`、`config/domConfig.js`、`scripts/modules/memoPad.js`、`scripts/modules/casegenProgress.js`、`scripts/handlers/casegenHandlers.js`、`tests/ui/memo_pad.spec.js`）。
+- 更新记录：2025-12-24 备忘区已办条目自动下沉、页签进度展示与页签上限扩展（`index.html`、`style.css`、`config/domConfig.js`、`scripts/modules/memoPad.js`、`tests/ui/memo_pad.spec.js`）。
+- 更新记录：2025-12-24 备忘条目完成排序与新条目自动下沉适配（`scripts/modules/memoPad.js`、`tests/ui/memo_pad.spec.js`）。
+- 更新记录：2025-12-24 备忘区页签上限恢复为 3（`scripts/modules/memoPad.js`、`tests/ui/memo_pad.spec.js`）。
+- 更新记录：2025-12-24 修正备忘页签重命名时点击输入框不再提前保存（`scripts/modules/memoPad.js`、`tests/ui/memo_pad.spec.js`）。

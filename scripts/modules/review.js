@@ -29,7 +29,7 @@
     var handleClarifyChangeEvent = handlers.handleClarifyChangeEvent;
     var handleClarifyInputEvent = handlers.handleClarifyInputEvent;
     var updateAutoClarifyVisibility = handlers.updateAutoClarifyVisibility;
-    var openAutoClarifyPanel = handlers.openAutoClarifyPanel;
+    var toggleAutoClarifyPanel = handlers.toggleAutoClarifyPanel;
     var handleAutoClarifyConfirm = handlers.handleAutoClarifyConfirm;
 
     if (runReviewBtn && typeof reviewRequirements === 'function') {
@@ -81,18 +81,10 @@
       }
     }
 
-    if (autoClarifyToggleBtn && typeof updateAutoClarifyVisibility === 'function') {
+    if (autoClarifyToggleBtn && typeof toggleAutoClarifyPanel === 'function') {
       autoClarifyToggleBtn.addEventListener('click', function() {
         if (!state.autoRequireClarifications) return;
-        if (!autoClarifyContainer) return;
-        var hidden = autoClarifyContainer.classList.contains('hidden');
-        if (hidden) {
-          if (typeof openAutoClarifyPanel === 'function') openAutoClarifyPanel();
-        } else {
-          autoClarifyContainer.classList.add('hidden');
-          autoClarifyContainer.classList.remove('visible');
-          autoClarifyToggleBtn.textContent = '展开澄清视图';
-        }
+        toggleAutoClarifyPanel();
       });
     }
 
@@ -100,9 +92,6 @@
       autoClarifyToggle.addEventListener('change', function(e) {
         var checked = Boolean(e && e.target && e.target.checked);
         updateAutoClarifyVisibility(checked);
-        if (checked && state.reviewRows && state.reviewRows.length && typeof openAutoClarifyPanel === 'function') {
-          openAutoClarifyPanel();
-        }
       });
     }
 

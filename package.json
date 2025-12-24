@@ -6,6 +6,7 @@
   "scripts": {
     "test": "npm run test:ui",
     "test:ui": "playwright test --config tests/playwright.config.js",
+    "test:api": "playwright test --config tests/api/playwright.api.config.js",
     "test:ui:headed": "PLAYWRIGHT_HEADED=1 playwright test --config tests/playwright.config.js --headed",
     "test:ui:install": "npx playwright install --with-deps"
   },

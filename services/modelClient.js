@@ -12,6 +12,39 @@
     return cur;
   }
 
+  function resolveStripCodeFence(options) {
+    var candidate = options && typeof options.stripCodeFence === 'function' ? options.stripCodeFence : null;
+    if (!candidate && window.app && window.app.utils && typeof window.app.utils.stripCodeFence === 'function') {
+      candidate = window.app.utils.stripCodeFence;
+    }
+    if (candidate) {
+      return function stripViaCandidate(text) {
+        return candidate(text);
+      };
+    }
+    return function fallbackStrip(text) {
+      if (!text) return '';
+      var trimmed = String(text).trim();
+      if (trimmed.indexOf('#NODE:') === 0) {
+        var newline = trimmed.indexOf('\n');
+        trimmed = newline !== -1 ? trimmed.slice(newline + 1).trim() : '';
+      }
+      var fenceMatch = trimmed.match(/^([`'"\u2019\u201c]{3})([\w-]*)?\s*\n?([\s\S]*?)\1\s*$/i);
+      if (fenceMatch && fenceMatch[3]) return (fenceMatch[3] || '').trim();
+      var inlineFence = trimmed.match(/^([`'"\u2019\u201c]{3})([\w-]*)?([\s\S]*?)([`'"\u2019\u201c]{3})\s*$/i);
+      if (inlineFence && inlineFence[3]) return (inlineFence[3] || '').trim();
+      if (/^([`'"\u2019\u201c]{3})/.test(trimmed)) {
+        var parts = trimmed.split('\n');
+        if (parts.length > 1) {
+          var last = parts[parts.length - 1].trim();
+          var body = parts.slice(1, last.match(/^([`'"\u2019\u201c]{3})$/) ? -1 : undefined).join('\n');
+          return body.trim();
+        }
+      }
+      return trimmed;
+    };
+  }
+
   function normalizeResponseContent(content) {
     if (content === null || content === undefined) return '';
     if (typeof content === 'string') return content.trim();
@@ -58,8 +91,67 @@
       : function getAuthHeader(apiKey) {
           return apiKey ? { Authorization: 'Bearer ' + apiKey } : {};
         };
+    var stripCodeFence = resolveStripCodeFence(options);
+    var modelIsDeepseek = typeof options.modelIsDeepseek === 'function'
+      ? options.modelIsDeepseek
+      : function modelIsDeepseek(model) {
+          if (!model) return false;
+          var provider = model.provider ? String(model.provider).toLowerCase() : '';
+          if (provider === 'deepseek') return true;
+          var baseUrl = model.baseUrl ? String(model.baseUrl).toLowerCase() : '';
+          if (baseUrl.indexOf('deepseek') !== -1) return true;
+          var name = model.model ? String(model.model).toLowerCase() : '';
+          return name.indexOf('deepseek') !== -1;
+        };
 
-    async function callModelWithConfig(model, userText, promptText, reasoningEffort) {
+    function shouldUseDeepseekJsonMode(model, promptText) {
+      if (!modelIsDeepseek(model)) return false;
+      if (!promptText) return false;
+      return /json/i.test(String(promptText));
+    }
+
+    function detectDeepseekJsonShape(promptText) {
+      if (!promptText) return '';
+      var raw = String(promptText);
+      if (!/json/i.test(raw)) return '';
+      if (/输出\s*json\s*(数组|列表|用例列表)/i.test(raw)) return 'array';
+      if (/json\s*(数组|列表|用例列表)/i.test(raw)) return 'array';
+      if (/输出\s*json\s*[:：]\s*\[/i.test(raw)) return 'array';
+      if (/输出[\s\S]{0,20}\[\s*\{/i.test(raw)) return 'array';
+      return 'object';
+    }
+
+    function appendDeepseekJsonHint(promptText, shape) {
+      if (!promptText || !shape) return promptText || '';
+      var hint = '';
+      if (shape === 'array') {
+        hint = '\n\n请严格输出 JSON 数组，顶层必须是数组（[]），不要输出对象或其它文字。';
+      } else if (shape === 'object') {
+        hint = '\n\n请严格输出 JSON 对象，顶层必须是对象（{}），不要输出数组或其它文字。';
+      }
+      if (!hint) return promptText;
+      if (promptText.indexOf(hint.trim()) !== -1) return promptText;
+      return promptText + hint;
+    }
+
+    function enforceJsonArrayOutput(text) {
+      var trimmed = String(text || '').trim();
+      if (!trimmed) {
+        throw new Error('模型输出为空');
+      }
+      var parsed;
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch (err) {
+        throw new Error('模型输出不是合法 JSON 数组');
+      }
+      if (!Array.isArray(parsed)) {
+        throw new Error('模型输出不是 JSON 数组');
+      }
+      return trimmed;
+    }
+
+    async function callModelWithConfig(model, userText, promptText, reasoningEffort, temperature) {
       if (!model || !model.baseUrl || !model.model) {
         throw new Error('模型配置不完整');
       }
@@ -67,18 +159,29 @@
         throw new Error('当前环境不支持 fetch');
       }
       var prompt = promptText && promptText.trim() ? promptText.trim() : (defaultPrompts.system || '');
+      var jsonShape = '';
+      var deepseekJsonMode = shouldUseDeepseekJsonMode(model, prompt);
+      if (deepseekJsonMode) {
+        jsonShape = detectDeepseekJsonShape(prompt);
+      }
+      var systemPrompt = deepseekJsonMode ? appendDeepseekJsonHint(prompt, jsonShape) : prompt;
       var maxTokens = model.maxTokens || defaultMaxTokens;
+      var tempValue = Number(temperature);
+      var safeTemperature = Number.isFinite(tempValue) ? Math.min(1, Math.max(0, tempValue)) : 0.2;
       var body = {
         model: model.model,
         messages: [
-          { role: 'system', content: prompt },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: userText }
         ],
-        temperature: 0.2,
+        temperature: safeTemperature,
         max_tokens: maxTokens,
       };
       if (reasoningEffort && modelIsR1(model)) {
         body.reasoning_effort = reasoningEffort;
+      }
+      if (deepseekJsonMode) {
+        body.response_format = { type: 'json_object' };
       }
       var headers = Object.assign({ 'Content-Type': 'application/json' }, getAuthHeader(model.apiKey));
       var timeoutSec = clampTimeoutSeconds(getTimeoutSec());
@@ -121,7 +224,10 @@
           data = JSON.parse(rawBody);
         } catch (err) {
           var trimmed = rawBody.trim();
-          if (trimmed) return trimmed;
+          if (trimmed) {
+            var sanitizedRaw = stripCodeFence(trimmed);
+            return sanitizedRaw || trimmed;
+          }
         }
       }
       if (!data) {
@@ -131,20 +237,28 @@
         var errMsg = data.error.message || data.error.code || (typeof data.error === 'string' ? data.error : JSON.stringify(data.error));
         throw new Error(errMsg);
       }
+      function normalizeAndStrip(value) {
+        var normalized = normalizeResponseContent(value);
+        if (!normalized) return '';
+        return stripCodeFence(normalized);
+      }
       var content =
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'message', 'content'])) ||
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'message', 'reasoning_content'])) ||
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'delta', 'content'])) ||
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'delta', 'reasoning_content'])) ||
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'content'])) ||
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'text'])) ||
-        normalizeResponseContent(getNestedValue(data, ['choices', 0, 'message', 'responses'])) ||
-        normalizeResponseContent(getNestedValue(data, ['data', 0, 'contents', 0, 'text'])) ||
-        normalizeResponseContent(getNestedValue(data, ['output_text']));
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'reasoning_content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'delta', 'content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'delta', 'reasoning_content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'text'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'responses'])) ||
+        normalizeAndStrip(getNestedValue(data, ['data', 0, 'contents', 0, 'text'])) ||
+        normalizeAndStrip(getNestedValue(data, ['output_text']));
       if (!content) {
         var preview = rawBody ? (rawBody.length > 400 ? rawBody.slice(0, 400) + '...' : rawBody) : '';
         var extra = preview ? '（响应片段：' + preview + '）' : '';
         throw new Error('未找到模型返回内容' + extra);
+      }
+      if (deepseekJsonMode && jsonShape === 'array') {
+        return enforceJsonArrayOutput(content);
       }
       return content;
     }

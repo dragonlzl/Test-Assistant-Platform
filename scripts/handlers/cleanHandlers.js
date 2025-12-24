@@ -15,7 +15,6 @@
     var renderCaseGenProgressBoard = handlers.renderCaseGenProgressBoard || function() {};
     var refreshMissingSmartFillButton = handlers.refreshMissingSmartFillButton || function() {};
     var wrapTextWithRequirement = handlers.wrapTextWithRequirement || function(text) { return text; };
-    var findSnippetRange = handlers.findSnippetRange || function() { return null; };
     var stripRequirementHeader = handlers.stripRequirementHeader || function(text) { return text; };
     var stripCodeFence = handlers.stripCodeFence || function(text) { return text; };
     var unwrapRequirementPayload = handlers.unwrapRequirementPayload || function(text) { return { payload: text }; };
@@ -23,11 +22,13 @@
     var buildReviewClarificationContext = handlers.buildReviewClarificationContext || function() { return ''; };
     var getAssignedModel = handlers.getAssignedModel || function() { throw new Error('缺少模型'); };
     var getReasoningForType = handlers.getReasoningForType || function() { return ''; };
+    var getTemperatureForType = handlers.getTemperatureForType || function() { return 0.2; };
     var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
     var updateModelTiming = handlers.updateModelTiming || function() {};
     var extractJsonPayload = handlers.extractJsonPayload || function(text) { return text; };
     var setStepInProgress = handlers.setStepInProgress || function() {};
     var clearStepInProgress = handlers.clearStepInProgress || function() {};
+    var persistWorkflowState = handlers.persistWorkflowState || function() {};
     var basicClean = handlers.basicClean || function(text) {
       var normalized = (text || '')
         .replace(/\r\n/g, '\n')
@@ -61,6 +62,88 @@
       if (!desc || typeof desc !== 'object') return '';
       return desc.summary || '';
     };
+
+    function findSnippetRange(fullText, snippet, startIdx) {
+      var target = (snippet || '').trim();
+      if (!target) return null;
+      var start = typeof startIdx === 'number' ? startIdx : 0;
+      var idx = fullText.indexOf(target, start);
+      var length = target.length;
+      if (idx === -1) {
+        var lines = target.split(/\n+/).map(function(line) { return line.trim(); }).filter(Boolean);
+        if (lines.length) {
+          var first = lines[0];
+          idx = fullText.indexOf(first, start);
+          length = first.length;
+        }
+      }
+      if (idx === -1) {
+        var pattern = escapeRegex(target).replace(/\s+/g, '\\s+');
+        try {
+          var regex = new RegExp(pattern, 'm');
+          var sliced = fullText.slice(start);
+          var match = regex.exec(sliced);
+          if (match) {
+            idx = start + match.index;
+            length = match[0].length;
+          }
+        } catch (err) {
+          idx = -1;
+        }
+      }
+      if (idx === -1) {
+        var normalized = buildNormalizedIndex(fullText);
+        var normalizedSnippet = normalizeForSearch(snippet);
+        if (normalizedSnippet) {
+          var normStart = findNormalizedStartIndex(normalized.indexMap, start);
+          var normIdx = normalized.text.indexOf(normalizedSnippet, normStart);
+          if (normIdx !== -1) {
+            var startOriginal = normalized.indexMap[normIdx];
+            var endOriginal = normalized.indexMap[normIdx + normalizedSnippet.length - 1] + 1;
+            return { start: startOriginal, end: endOriginal };
+          }
+        }
+      }
+      if (idx === -1) return null;
+      return { start: idx, end: idx + length };
+    }
+
+    function escapeRegex(str) {
+      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function buildNormalizedIndex(text) {
+      var chars = [];
+      var indexMap = [];
+      for (var i = 0; i < text.length; i += 1) {
+        var ch = text[i];
+        if (shouldSkipChar(ch)) continue;
+        chars.push(ch);
+        indexMap.push(i);
+      }
+      return { text: chars.join(''), indexMap: indexMap };
+    }
+
+    function findNormalizedStartIndex(indexMap, originalIndex) {
+      for (var i = 0; i < indexMap.length; i += 1) {
+        if (indexMap[i] >= originalIndex) return i;
+      }
+      return indexMap.length;
+    }
+
+    function normalizeForSearch(str) {
+      var chars = [];
+      for (var i = 0; i < str.length; i += 1) {
+        var ch = str[i];
+        if (shouldSkipChar(ch)) continue;
+        chars.push(ch);
+      }
+      return chars.join('');
+    }
+
+    function shouldSkipChar(ch) {
+      return /\s/.test(ch) || /[，,：:；;、。]/.test(ch);
+    }
     var switchTab = handlers.switchTab || function() {};
     var escapeHtml = handlers.escapeHtml || function(text) {
       var map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -111,6 +194,7 @@
       if (!state.lastRawImportName) renderAutoRawInfoImpl();
       renderCleanRawView(state.cleanViewSelection);
       updateFlowStatus();
+      persistWorkflowState();
     }
 
     function handleCleanInput() {
@@ -122,6 +206,7 @@
       renderCleanView();
       renderCleanRawView(null);
       updateFlowStatus();
+      persistWorkflowState();
     }
 
     function handleSplitInput() {
@@ -137,9 +222,7 @@
       setStatus(casesCoverageStatus, '', '');
       setStatus(caseGenStatus, '', '');
       refreshMissingSmartFillButton();
-      if (typeof splitResultEl.dispatchEvent === 'function') {
-        splitResultEl.dispatchEvent(new Event('input'));
-      }
+      persistWorkflowState();
     }
 
     function handleCaseTextInput() {
@@ -152,6 +235,7 @@
       }
       if (!hasImportedCases()) resetImportedCaseView();
       updateFlowStatus();
+      persistWorkflowState();
     }
 
     function wrapCleanedText(text) {
@@ -479,6 +563,14 @@
         setStatus(cleanStatus, '已取消需求清洗（需求标识为空）', 'warn');
         return;
       }
+      if (cleanedTextEl) cleanedTextEl.value = '';
+      state.cleanEntries = [];
+      state.cleanViewSelection = -1;
+      state.cleanHighlightAll = false;
+      state.cleanActiveHighlights = {};
+      renderCleanView(false);
+      renderCleanRawView(null);
+      updateFlowStatus();
       if (runCleanBtn) runCleanBtn.disabled = true;
       setStepInProgress('clean');
       setStatus(cleanStatus, '正在清洗（若接口未配置将使用本地规则粗洗）...', '');
@@ -489,6 +581,7 @@
           var cleanedPrompt = state.assignments && state.assignments.cleanPrompt ? state.assignments.cleanPrompt.trim() : '';
           var prompt = cleanedPrompt || (defaultPrompts.system || '');
           var reasoning = getReasoningForType('clean');
+          var temperature = getTemperatureForType('clean');
           var reviewContext = buildReviewClarificationContext();
           var modeInstruction = describeCleanMode(extraContext && extraContext.mode ? String(extraContext.mode) : '');
           var payloadSections = ['【原始需求】\n' + text];
@@ -498,7 +591,7 @@
           if (extraContext && extraContext.suggestion) payloadSections.push('【用户补充说明】\n' + extraContext.suggestion);
           var payload = payloadSections.join('\n\n');
           var startTime = Date.now();
-          cleaned = await callModelWithConfig(model, payload, prompt, reasoning);
+          cleaned = await callModelWithConfig(model, payload, prompt, reasoning, temperature);
           updateModelTiming(cleanTimingEl, Date.now() - startTime);
           var structured = extractJsonPayload(cleaned);
           if (structured) cleaned = structured;

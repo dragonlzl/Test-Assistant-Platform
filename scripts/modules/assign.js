@@ -13,42 +13,50 @@
     var updateFlowStatus = ctx.updateFlowStatus || function() {};
 
     var dom = ctx.dom || {};
-    var cleanModelSelect = dom.cleanModelSelect;
-    var reviewModelSelect = dom.reviewModelSelect;
-    var compareModelSelect = dom.compareModelSelect;
-    var splitModelSelect = dom.splitModelSelect;
-    var casesModelSelect = dom.casesModelSelect;
-    var caseGenModelSelect = dom.caseGenModelSelect;
-    var caseFilterModelSelect = dom.caseFilterModelSelect;
-    var cleanAssignStatus = dom.cleanAssignStatus;
-    var reviewAssignStatus = dom.reviewAssignStatus;
-    var compareAssignStatus = dom.compareAssignStatus;
-    var splitAssignStatus = dom.splitAssignStatus;
-    var casesAssignStatus = dom.casesAssignStatus;
-    var caseGenAssignStatus = dom.caseGenAssignStatus;
-    var caseFilterAssignStatus = dom.caseFilterAssignStatus;
-    var cleanPromptEl = dom.cleanPromptEl;
-    var reviewPromptEl = dom.reviewPromptEl;
-    var comparePromptEl = dom.comparePromptEl;
-    var splitPromptEl = dom.splitPromptEl;
-    var casesPromptEl = dom.casesPromptEl;
-    var caseGenPromptEl = dom.caseGenPromptEl;
-    var caseFilterPromptEl = dom.caseFilterPromptEl;
-    var cleanReasoningSelect = dom.cleanReasoningSelect;
-    var reviewReasoningSelect = dom.reviewReasoningSelect;
-    var compareReasoningSelect = dom.compareReasoningSelect;
-    var splitReasoningSelect = dom.splitReasoningSelect;
-    var casesReasoningSelect = dom.casesReasoningSelect;
-    var caseGenReasoningSelect = dom.caseGenReasoningSelect;
-    var caseFilterReasoningSelect = dom.caseFilterReasoningSelect;
-    var saveAssignmentsBtn = dom.saveAssignmentsBtn;
-    var testCleanModelBtn = dom.testCleanModelBtn;
-    var testReviewModelBtn = dom.testReviewModelBtn;
-    var testCompareModelBtn = dom.testCompareModelBtn;
-    var testSplitModelBtn = dom.testSplitModelBtn;
-    var testCasesModelBtn = dom.testCasesModelBtn;
-    var testCaseGenModelBtn = dom.testCaseGenModelBtn;
-    var testCaseFilterModelBtn = dom.testCaseFilterModelBtn;
+    var pick = function(node, id) { return node || document.getElementById(id); };
+    var cleanModelSelect = pick(dom.cleanModelSelect, 'cleanModelSelect');
+    var reviewModelSelect = pick(dom.reviewModelSelect, 'reviewModelSelect');
+    var compareModelSelect = pick(dom.compareModelSelect, 'compareModelSelect');
+    var splitModelSelect = pick(dom.splitModelSelect, 'splitModelSelect');
+    var casesModelSelect = pick(dom.casesModelSelect, 'casesModelSelect');
+    var caseGenModelSelect = pick(dom.caseGenModelSelect, 'caseGenModelSelect');
+    var caseFilterModelSelect = pick(dom.caseFilterModelSelect, 'caseFilterModelSelect');
+    var cleanAssignStatus = pick(dom.cleanAssignStatus, 'cleanAssignStatus');
+    var reviewAssignStatus = pick(dom.reviewAssignStatus, 'reviewAssignStatus');
+    var compareAssignStatus = pick(dom.compareAssignStatus, 'compareAssignStatus');
+    var splitAssignStatus = pick(dom.splitAssignStatus, 'splitAssignStatus');
+    var casesAssignStatus = pick(dom.casesAssignStatus, 'casesAssignStatus');
+    var caseGenAssignStatus = pick(dom.caseGenAssignStatus, 'caseGenAssignStatus');
+    var caseFilterAssignStatus = pick(dom.caseFilterAssignStatus, 'caseFilterAssignStatus');
+    var cleanPromptEl = pick(dom.cleanPromptEl, 'cleanPrompt');
+    var reviewPromptEl = pick(dom.reviewPromptEl, 'reviewPrompt');
+    var comparePromptEl = pick(dom.comparePromptEl, 'comparePrompt');
+    var splitPromptEl = pick(dom.splitPromptEl, 'splitPrompt');
+    var casesPromptEl = pick(dom.casesPromptEl, 'casesPrompt');
+    var caseGenPromptEl = pick(dom.caseGenPromptEl, 'caseGenPrompt');
+    var caseFilterPromptEl = pick(dom.caseFilterPromptEl, 'caseFilterPrompt');
+    var cleanReasoningSelect = pick(dom.cleanReasoningSelect, 'cleanReasoning');
+    var reviewReasoningSelect = pick(dom.reviewReasoningSelect, 'reviewReasoning');
+    var compareReasoningSelect = pick(dom.compareReasoningSelect, 'compareReasoning');
+    var splitReasoningSelect = pick(dom.splitReasoningSelect, 'splitReasoning');
+    var casesReasoningSelect = pick(dom.casesReasoningSelect, 'casesReasoning');
+    var caseGenReasoningSelect = pick(dom.caseGenReasoningSelect, 'caseGenReasoning');
+    var caseFilterReasoningSelect = pick(dom.caseFilterReasoningSelect, 'caseFilterReasoning');
+    var cleanTemperatureEl = pick(dom.cleanTemperatureEl, 'cleanTemperature');
+    var reviewTemperatureEl = pick(dom.reviewTemperatureEl, 'reviewTemperature');
+    var compareTemperatureEl = pick(dom.compareTemperatureEl, 'compareTemperature');
+    var splitTemperatureEl = pick(dom.splitTemperatureEl, 'splitTemperature');
+    var casesTemperatureEl = pick(dom.casesTemperatureEl, 'casesTemperature');
+    var caseGenTemperatureEl = pick(dom.caseGenTemperatureEl, 'caseGenTemperature');
+    var caseFilterTemperatureEl = pick(dom.caseFilterTemperatureEl, 'caseFilterTemperature');
+    var saveAssignmentsBtn = pick(dom.saveAssignmentsBtn, 'saveAssignments');
+    var testCleanModelBtn = pick(dom.testCleanModelBtn, 'testCleanModel');
+    var testReviewModelBtn = pick(dom.testReviewModelBtn, 'testReviewModel');
+    var testCompareModelBtn = pick(dom.testCompareModelBtn, 'testCompareModel');
+    var testSplitModelBtn = pick(dom.testSplitModelBtn, 'testSplitModel');
+    var testCasesModelBtn = pick(dom.testCasesModelBtn, 'testCasesModel');
+    var testCaseGenModelBtn = pick(dom.testCaseGenModelBtn, 'testCaseGenModel');
+    var testCaseFilterModelBtn = pick(dom.testCaseFilterModelBtn, 'testCaseFilterModel');
 
     function setAssignmentId(key, value) {
       if (!state.assignments) state.assignments = {};
@@ -80,6 +88,22 @@
       });
     }
 
+    function normalizeTemperature(value) {
+      if (value === undefined || value === null || value === '') return 0.2;
+      var num = Number(value);
+      if (!Number.isFinite(num)) return 0.2;
+      if (num < 0) return 0;
+      if (num > 1) return 1;
+      return Number(num.toFixed(2));
+    }
+
+    function bindTemperatureInput(el, key) {
+      if (!el) return;
+      el.addEventListener('input', function() {
+        state.assignments[key] = normalizeTemperature(el.value);
+      });
+    }
+
     bindModelSelect(cleanModelSelect, 'cleanId', 'clean', cleanAssignStatus);
     bindModelSelect(reviewModelSelect, 'reviewId', 'review', reviewAssignStatus);
     bindModelSelect(compareModelSelect, 'compareId', 'compare', compareAssignStatus);
@@ -103,6 +127,13 @@
     bindReasoningSelect(casesReasoningSelect, 'casesReasoning');
     bindReasoningSelect(caseGenReasoningSelect, 'caseGenReasoning');
     bindReasoningSelect(caseFilterReasoningSelect, 'caseFilterReasoning');
+    bindTemperatureInput(cleanTemperatureEl, 'cleanTemperature');
+    bindTemperatureInput(reviewTemperatureEl, 'reviewTemperature');
+    bindTemperatureInput(compareTemperatureEl, 'compareTemperature');
+    bindTemperatureInput(splitTemperatureEl, 'splitTemperature');
+    bindTemperatureInput(casesTemperatureEl, 'casesTemperature');
+    bindTemperatureInput(caseGenTemperatureEl, 'caseGenTemperature');
+    bindTemperatureInput(caseFilterTemperatureEl, 'caseFilterTemperature');
 
     if (saveAssignmentsBtn) {
       saveAssignmentsBtn.addEventListener('click', function() {

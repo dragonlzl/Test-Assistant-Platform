@@ -16,6 +16,7 @@
     var ensureRequirementLabel = handlers.ensureRequirementLabel || function() { return ''; };
     var getAssignedModel = handlers.getAssignedModel || function() { throw new Error('未配置模型'); };
     var getReasoningForType = handlers.getReasoningForType || function() { return ''; };
+    var getTemperatureForType = handlers.getTemperatureForType || function() { return 0.2; };
     var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
     var updateModelTiming = handlers.updateModelTiming || function() {};
     var wrapTextWithRequirement = handlers.wrapTextWithRequirement || function(text) { return text; };
@@ -27,19 +28,23 @@
     var promptRequirementLabel = handlers.promptRequirementLabel || function() { return ''; };
     var stripRequirementHeader = handlers.stripRequirementHeader || function(text) { return text; };
     var isCoveragePayload = handlers.isCoveragePayload || function() { return false; };
-    var looksLikeCoverageSummary = handlers.looksLikeCoverageSummary || function() { return false; };
     var downloadText = handlers.downloadText || function() {};
     var getSafeRequirementSlug = handlers.getSafeRequirementSlug || function() { return 'requirement'; };
     var updateFlowStatus = handlers.updateFlowStatus || function() {};
     var setStepInProgress = handlers.setStepInProgress || function() {};
     var clearStepInProgress = handlers.clearStepInProgress || function() {};
+    var persistWorkflowState = handlers.persistWorkflowState || function() {};
 
     var rawText = dom.rawText;
     var reviewStatus = dom.reviewStatus;
+    var clarifyStatus = dom.clarifyStatus;
     var reviewResultEl = dom.reviewResultEl;
     var reviewViewContainer = dom.reviewViewContainer;
     var toggleReviewViewBtn = dom.toggleReviewViewBtn;
     var confirmClarificationsBtn = dom.confirmClarificationsBtn;
+    var reviewViewDrawerBody = dom.reviewViewDrawerBody;
+    var reviewViewDrawerTitle = dom.reviewViewDrawerTitle;
+    var reviewViewDrawer = null;
     var runReviewBtn = dom.runReviewBtn;
     var reviewTimingEl = dom.reviewTimingEl;
     var autoClarifyContainer = dom.autoClarifyContainer;
@@ -48,11 +53,86 @@
     var autoClarifyConfirmBtn = dom.autoClarifyConfirmBtn;
     var autoClarifySection = dom.autoClarifySection;
     var autoClarifyStatus = dom.autoClarifyStatus;
+    var autoClarifyDrawerBody = dom.autoClarifyDrawerBody;
+    var autoClarifyDrawerTitle = dom.autoClarifyDrawerTitle;
+    var autoClarifyDrawer = null;
 
     if (!Array.isArray(state.reviewRows)) state.reviewRows = [];
     if (!(state.reviewClarifications instanceof Map)) state.reviewClarifications = new Map();
     if (!(state.reviewSelections instanceof Set)) state.reviewSelections = new Set();
     if (!(state.reviewExpanded instanceof Set)) state.reviewExpanded = new Set();
+
+    function ensureReviewDrawer() {
+      if (reviewViewDrawer) return reviewViewDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      reviewViewDrawer = window.app.drawer.createDrawer({
+        drawerId: 'reviewViewDrawer',
+        closeButtons: ['closeReviewViewDrawerBtn'],
+        onClose: function() {
+          if (reviewViewContainer) {
+            reviewViewContainer.classList.add('hidden');
+            reviewViewContainer.classList.remove('visible');
+            reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“前往视图确认澄清”查看详情</p>';
+          }
+          if (toggleReviewViewBtn) toggleReviewViewBtn.textContent = '前往视图确认澄清';
+        },
+      });
+      return reviewViewDrawer;
+    }
+
+    function ensureAutoClarifyDrawer() {
+      if (autoClarifyDrawer) return autoClarifyDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      autoClarifyDrawer = window.app.drawer.createDrawer({
+        drawerId: 'autoClarifyDrawer',
+        closeButtons: ['closeAutoClarifyDrawerBtn'],
+        onClose: function() {
+          if (autoClarifyContainer) {
+            autoClarifyContainer.classList.add('hidden');
+            autoClarifyContainer.classList.remove('visible');
+          }
+          setAutoClarifyToggleLabel(false);
+        },
+      });
+      return autoClarifyDrawer;
+    }
+
+    function closeClarifyDrawers() {
+      var reviewDrawer = reviewViewDrawer || ensureReviewDrawer();
+      if (reviewDrawer && reviewDrawer.element && reviewDrawer.element.classList.contains('open')) {
+        reviewDrawer.close();
+      }
+      var clarifyDrawer = autoClarifyDrawer || ensureAutoClarifyDrawer();
+      if (clarifyDrawer && clarifyDrawer.element && clarifyDrawer.element.classList.contains('open')) {
+        clarifyDrawer.close();
+      }
+    }
+
+    function setAutoClarifyToggleLabel(open) {
+      if (!autoClarifyToggleBtn) return;
+      autoClarifyToggleBtn.textContent = open ? '收起澄清视图' : '前往视图确认澄清';
+    }
+
+    function setClarifyStatus(text, type) {
+      setStatus(reviewStatus, text, type);
+      if (clarifyStatus) setStatus(clarifyStatus, text, type);
+    }
+
+    function looksLikeCoverageSummary(data) {
+      if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+      var hasCoverage = Object.prototype.hasOwnProperty.call(data, 'coverage');
+      var hasMissing = Object.prototype.hasOwnProperty.call(data, 'missing');
+      var hasExtra = Object.prototype.hasOwnProperty.call(data, 'extra');
+      if (hasCoverage && (hasMissing || hasExtra)) return true;
+      var nestedKeys = ['result', 'summary', 'data', 'payload'];
+      for (var i = 0; i < nestedKeys.length; i += 1) {
+        var nested = data[nestedKeys[i]];
+        if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+          if (looksLikeCoverageSummary(nested)) return true;
+        }
+      }
+      return false;
+    }
 
     function updateAutoClarifyVisibility(forceOpen) {
       if (forceOpen === void 0) forceOpen = false;
@@ -70,23 +150,23 @@
         if (autoClarifyConfirmBtn) autoClarifyConfirmBtn.disabled = true;
         if (autoClarifyToggleBtn) {
           autoClarifyToggleBtn.disabled = true;
-          autoClarifyToggleBtn.textContent = '展开澄清视图';
+          setAutoClarifyToggleLabel(false);
         }
         setStatus(autoClarifyStatus, '', '');
         if (state.autoClarifyResolver) {
           state.autoClarifyResolver(true);
           state.autoClarifyResolver = null;
         }
+        var drawer = autoClarifyDrawer || ensureAutoClarifyDrawer();
+        if (drawer && drawer.element && drawer.element.classList.contains('open')) drawer.close();
       } else {
         if (autoClarifyToggleBtn) {
           autoClarifyToggleBtn.disabled = false;
-          autoClarifyToggleBtn.textContent = autoClarifyContainer && !autoClarifyContainer.classList.contains('hidden')
-            ? '收起澄清视图'
-            : '展开澄清视图';
+          setAutoClarifyToggleLabel(autoClarifyDrawer && autoClarifyDrawer.element && autoClarifyDrawer.element.classList.contains('open'));
         }
         renderAutoClarifyView();
-        if (forceOpen) openAutoClarifyPanel();
       }
+      persistWorkflowState();
     }
 
     function renderAutoClarifyView() {
@@ -96,21 +176,21 @@
         autoClarifyContainer.classList.add('hidden');
         autoClarifyContainer.classList.remove('visible');
         if (autoClarifyConfirmBtn) autoClarifyConfirmBtn.disabled = true;
-        if (autoClarifyToggleBtn) autoClarifyToggleBtn.textContent = '展开澄清视图';
+        setAutoClarifyToggleLabel(false);
         return;
       }
       if (!state.reviewRows.length) {
         autoClarifyContainer.innerHTML = '<p class="hint" style="padding:12px;">暂无评审结果，请先运行需求评审</p>';
         autoClarifyContainer.classList.remove('hidden');
         autoClarifyContainer.classList.add('visible');
-        if (autoClarifyToggleBtn) autoClarifyToggleBtn.textContent = '收起澄清视图';
         if (autoClarifyConfirmBtn) autoClarifyConfirmBtn.disabled = true;
+        setAutoClarifyToggleLabel(autoClarifyDrawer && autoClarifyDrawer.element && autoClarifyDrawer.element.classList.contains('open'));
         return;
       }
       autoClarifyContainer.innerHTML = renderReviewView();
       autoClarifyContainer.classList.remove('hidden');
       autoClarifyContainer.classList.add('visible');
-      if (autoClarifyToggleBtn) autoClarifyToggleBtn.textContent = '收起澄清视图';
+      setAutoClarifyToggleLabel(autoClarifyDrawer && autoClarifyDrawer.element && autoClarifyDrawer.element.classList.contains('open'));
       if (autoClarifyConfirmBtn) autoClarifyConfirmBtn.disabled = false;
     }
 
@@ -120,14 +200,13 @@
         return Promise.reject(new Error('暂无可澄清的数据，请先完成需求评审'));
       }
       renderAutoClarifyView();
-      openAutoClarifyPanel();
       return new Promise(function(resolve) {
+        setStatus(autoClarifyStatus, '请补充澄清结果并点击“确认澄清”继续', 'warn');
         state.autoClarifyResolver = function(value) {
           if (value === void 0) value = true;
           state.autoClarifyResolver = null;
           resolve(value);
         };
-        setStatus(autoClarifyStatus, '请补充澄清结果并点击“确认澄清”继续', 'warn');
       });
     }
 
@@ -345,6 +424,7 @@
       var value = normalizeReviewText(textarea.value);
       state.reviewClarifications.set(idx, value);
       textarea.value = value;
+      persistWorkflowState();
     }
 
     function handleClarifyClickEvent(e) {
@@ -405,7 +485,7 @@
       if (toggleReviewViewBtn) {
         toggleReviewViewBtn.disabled = !hasData;
         var viewVisible = reviewViewContainer && reviewViewContainer.classList.contains('visible');
-        toggleReviewViewBtn.textContent = hasData && viewVisible ? '收起澄清视图' : '展开澄清视图';
+        toggleReviewViewBtn.textContent = hasData && viewVisible ? '收起澄清视图' : '前往视图确认澄清';
       }
       if (state.autoRequireClarifications) {
         renderAutoClarifyView();
@@ -415,10 +495,12 @@
         reviewViewContainer.classList.add('hidden');
         reviewViewContainer.classList.remove('visible');
         reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">暂无评审数据，请先完成需求评审</p>';
+        var drawer = ensureReviewDrawer();
+        if (drawer) drawer.close();
       } else if (reviewViewContainer.classList.contains('visible')) {
         reviewViewContainer.innerHTML = renderReviewView();
       } else {
-        reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“展开澄清视图”查看详情</p>';
+        reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“前往视图确认澄清”查看详情</p>';
       }
     }
 
@@ -427,24 +509,26 @@
         setStatus(reviewStatus, '当前没有可展示的澄清数据，请先完成评审', 'warn');
         return;
       }
-      var visible = reviewViewContainer.classList.contains('visible');
-      if (visible) {
-        reviewViewContainer.classList.remove('visible');
-        reviewViewContainer.classList.add('hidden');
-        reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“展开澄清视图”查看详情</p>';
-        if (toggleReviewViewBtn) toggleReviewViewBtn.textContent = '展开澄清视图';
-      } else {
-        reviewViewContainer.innerHTML = renderReviewView();
-        reviewViewContainer.classList.add('visible');
-        reviewViewContainer.classList.remove('hidden');
-        if (toggleReviewViewBtn) toggleReviewViewBtn.textContent = '收起澄清视图';
+      var drawer = ensureReviewDrawer();
+      if (!drawer) return;
+      var drawerEl = drawer.element;
+      var isOpen = drawerEl && drawerEl.classList.contains('open');
+      if (isOpen) {
+        drawer.close();
+        return;
       }
+      reviewViewContainer.innerHTML = renderReviewView();
+      reviewViewContainer.classList.add('visible');
+      reviewViewContainer.classList.remove('hidden');
+      if (reviewViewDrawerTitle) reviewViewDrawerTitle.textContent = '需求澄清点视图';
+      if (toggleReviewViewBtn) toggleReviewViewBtn.textContent = '收起澄清视图';
+      drawer.open();
     }
 
     function confirmClarifications() {
       var list = parseReviewList(reviewResultEl && reviewResultEl.value ? reviewResultEl.value : '');
       if (!list.length) {
-        setStatus(reviewStatus, '当前没有可写入的评审结果', 'warn');
+        setClarifyStatus('当前没有可写入的评审结果', 'warn');
         return;
       }
       var updated = list.map(function(item, idx) {
@@ -456,12 +540,13 @@
       });
       try {
         reviewResultEl.value = JSON.stringify(updated, null, 2);
-        setStatus(reviewStatus, '澄清结果已写入评审 JSON', 'ok');
+        setClarifyStatus('澄清结果已写入评审 JSON', 'ok');
         syncReviewViewFromResult();
         updateFlowStatus();
+        closeClarifyDrawers();
       } catch (err) {
         console.warn('澄清结果写入失败', err);
-        setStatus(reviewStatus, '澄清结果写入失败，请检查内容', 'warn');
+        setClarifyStatus('澄清结果写入失败，请检查内容', 'warn');
       }
     }
 
@@ -582,6 +667,13 @@
         setStatus(reviewStatus, '已取消需求评审（需求标识为空）', 'warn');
         return;
       }
+      if (reviewResultEl) reviewResultEl.value = '';
+      if (reviewViewContainer) {
+        reviewViewContainer.classList.add('hidden');
+        reviewViewContainer.classList.remove('visible');
+        reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“前往视图确认澄清”查看详情</p>';
+      }
+      updateFlowStatus();
       if (runReviewBtn) runReviewBtn.disabled = true;
       setStepInProgress('review');
       setStatus(reviewStatus, '正在分析需求模糊点...', '');
@@ -600,8 +692,9 @@
         var reviewPrompt = state.assignments && state.assignments.reviewPrompt ? state.assignments.reviewPrompt.trim() : '';
         var prompt = reviewPrompt || defaultPrompts.review;
         var reasoning = getReasoningForType('review');
+        var temperature = getTemperatureForType('review');
         var startTime = Date.now();
-        var content = await callModelWithConfig(model, raw, prompt, reasoning);
+        var content = await callModelWithConfig(model, raw, prompt, reasoning, temperature);
         updateModelTiming(reviewTimingEl, Date.now() - startTime);
         reviewResultEl.value = wrapTextWithRequirement(formatJsonOrText(stripCodeFence(content)));
         syncReviewViewFromResult();
@@ -619,9 +712,29 @@
 
     function openAutoClarifyPanel() {
       if (!autoClarifyContainer) return;
+      var drawer = ensureAutoClarifyDrawer();
+      if (!drawer) return;
       renderAutoClarifyView();
       autoClarifyContainer.classList.remove('hidden');
-      if (autoClarifyToggleBtn) autoClarifyToggleBtn.textContent = '收起澄清视图';
+      autoClarifyContainer.classList.add('visible');
+      if (autoClarifyDrawerBody) autoClarifyDrawerBody.scrollTop = 0;
+      if (autoClarifyDrawerTitle) autoClarifyDrawerTitle.textContent = '需求澄清视图';
+      setAutoClarifyToggleLabel(true);
+      drawer.open();
+    }
+
+    function closeAutoClarifyPanel() {
+      var drawer = autoClarifyDrawer || ensureAutoClarifyDrawer();
+      if (drawer) drawer.close();
+      else setAutoClarifyToggleLabel(false);
+    }
+
+    function toggleAutoClarifyPanel() {
+      var drawer = autoClarifyDrawer || ensureAutoClarifyDrawer();
+      if (!drawer) return;
+      var isOpen = drawer.element && drawer.element.classList.contains('open');
+      if (isOpen) closeAutoClarifyPanel();
+      else openAutoClarifyPanel();
     }
 
     return {
@@ -637,6 +750,8 @@
       updateAutoClarifyVisibility: updateAutoClarifyVisibility,
       renderAutoClarifyView: renderAutoClarifyView,
       openAutoClarifyPanel: openAutoClarifyPanel,
+      closeAutoClarifyPanel: closeAutoClarifyPanel,
+      toggleAutoClarifyPanel: toggleAutoClarifyPanel,
       handleAutoClarifyConfirm: handleAutoClarifyConfirm,
       waitForAutoClarification: waitForAutoClarification,
       syncReviewViewFromResult: syncReviewViewFromResult,

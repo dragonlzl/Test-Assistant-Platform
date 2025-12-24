@@ -16,6 +16,15 @@
 
     var caseGenProgressPanel = dom.caseGenProgressPanel;
     var caseGenProgressList = dom.caseGenProgressList;
+    function requestLayoutSync() {
+      try {
+        if (window.app && window.app.sidebarPanels && typeof window.app.sidebarPanels.requestLayoutSync === 'function') {
+          window.app.sidebarPanels.requestLayoutSync();
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
 
     function ensureCaseGenRunningSet() {
       if (!(state.caseGenRunning instanceof Set)) {
@@ -49,12 +58,19 @@
       return { state: 'pending', text: (statusInfo && statusInfo.text) || '未生成' };
     }
 
+    var defaultContainer = dom.casesGenerationContainer;
+
+    function pickContainer(root) {
+      return root || defaultContainer || null;
+    }
+
     function renderCaseGenProgressBoard() {
       if (!caseGenProgressPanel || !caseGenProgressList) return;
       var modules = Array.isArray(state.caseGenModules) ? state.caseGenModules : [];
       if (!modules.length) {
         caseGenProgressPanel.classList.remove('hidden');
         caseGenProgressList.innerHTML = '<p class="hint">暂无用例生成任务，请先完成“测试模块拆分”并生成用例</p>';
+        requestLayoutSync();
         return;
       }
       var html = modules.map(function(mod, idx) {
@@ -82,6 +98,7 @@
       }).join('');
       caseGenProgressList.innerHTML = html;
       caseGenProgressPanel.classList.remove('hidden');
+      requestLayoutSync();
     }
 
     function renderCaseProgressItem(item) {
@@ -122,8 +139,9 @@
     }
 
     function updateCaseProgressView(moduleId, containerRoot) {
-      if (!containerRoot || !moduleId) return;
-      var container = containerRoot.querySelector('[data-progress="' + moduleId + '"]');
+      var root = pickContainer(containerRoot);
+      if (!root || !moduleId) return;
+      var container = root.querySelector('[data-progress="' + moduleId + '"]');
       if (!container) return;
       container.innerHTML = renderCaseModuleProgress(moduleId);
     }
