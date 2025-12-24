@@ -2305,3 +2305,33 @@
 - 测试与验证：
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/tempexec_drag.spec.js -g "用例复用状态选择展示颜色"`（通过，提权执行）
 - 更新记录：2025-12-24 执行页复用子项备注自适应（`style.css`、`tests/ui/tempexec_drag.spec.js`）。
+
+- 功能名称：页面主题设置
+- 功能描述：在“其他设置”中新增页面主题选择（白色/黑色），保存后生效并同步到账号设置；全站颜色基于主题自动切换。
+- 操作方式：进入“其他设置”选择主题并点击“保存主题”。
+- 使用效果：页面配色随主题切换（背景、卡片、抽屉、表格、输入框等），设置与账号绑定。
+- 新增内容/接口/组件：
+  - 前端：主题设置 UI 与保存逻辑（`index.html`、`scripts/modules/settings.js`）。
+  - 样式：暗色主题变量与覆盖（`style.css`）。
+  - 默认配置：新增主题默认值（`config/constants.js`、`scripts/modules/app.js`）。
+  - 测试：主题设置 UI 用例与 API 设置断言（`tests/ui/theme_setting.spec.js`、`tests/api/settings_models.spec.js`）。
+- 复用说明：复用现有设置保存接口与状态管理，无新增后端接口。
+- 测试与验证：
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test tests/ui/theme_setting.spec.js`（失败：Playwright 启动 Chromium headless 权限不足，MachPortRendezvousServer permission denied）
+  - `API_BASE_URL=http://127.0.0.1:8080 npx playwright test tests/api/settings_models.spec.js`（失败：本地 8080 连接被拒绝/EPERM）
+- 更新记录：2025-12-24 页面主题设置（`index.html`、`style.css`、`scripts/modules/settings.js`、`config/constants.js`、`scripts/modules/app.js`、`tests/ui/theme_setting.spec.js`、`tests/api/settings_models.spec.js`）。
+- 更新记录：2025-12-24 优化暗色主题覆盖与亮度（`style.css`）。
+- 更新记录：2025-12-24 补齐暗色主题白块覆盖（登出按钮、导航流程、导入信息区、覆盖率/流程信息区、列表视图等）（`style.css`）。
+- 更新记录：2025-12-24 补齐执行视图/用例生成模块暗色背景与控件色（`style.css`）。
+- 更新记录：2025-12-24 补齐执行视图顶部固定区与归属/复用区域暗色样式（`style.css`）。
+- 更新记录：2025-12-24 补齐项目管理/操作记录/项目排序等暗色背景（`style.css`）。
+- 更新记录：2025-12-24 补齐操作记录选择项与顶部导航外框暗色样式（`style.css`）。
+- 更新记录：2025-12-24 修正操作记录筛选项与项目/版本选择箭头暗色样式（`style.css`）。
+- 更新记录：2025-12-24 修正操作记录日期选择与归属下拉箭头暗色样式（`style.css`）。
+- 更新记录：2025-12-24 修正操作记录时间选择框暗色箭头与背景（`style.css`）。
+- 更新记录：2025-12-24 修正用例变更 diff 用例名称暗色显示（`style.css`）。
+- 更新记录：2025-12-24 修正模型指派/模型管理卡片暗色背景（`style.css`）。
+- 更新记录：2025-12-24 修正功能指派注意事项文案暗色可读性（`style.css`）。
+- 更新记录：2025-12-24 修正执行总览进度条与用例名称暗色显示（`style.css`）。
+- 更新记录：2025-12-24 修正执行总览版本/人员进度与个人总览暗色背景（`style.css`）。
+- 更新记录：2025-12-24 修正执行总览版本进度条暗色背景（`style.css`）。

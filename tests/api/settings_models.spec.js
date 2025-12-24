@@ -69,6 +69,7 @@ test.describe('settings/models/features + ops api', () => {
           { key: 'tempExecColumns', value_json: { select: true, module: true, priority: false, steps: true } },
           { key: 'tempExecPageSize', value_json: 33 },
           { key: 'pageGuideSwitches', value_json: { auto: false, clean: true, tempexec: false } },
+          { key: 'theme', value_json: 'dark' },
           { key: 'otherSettingsDemo', value_json: { enabled: true } },
         ],
       },
@@ -86,6 +87,8 @@ test.describe('settings/models/features + ops api', () => {
     expect(otherSetting && otherSetting.value_json && otherSetting.value_json.enabled).toBe(true);
     const guideSetting = execSettingsBody.find((item) => item.key === 'pageGuideSwitches' && item.owner_id === userId);
     expect(guideSetting && guideSetting.value_json && guideSetting.value_json.auto).toBe(false);
+    const themeSetting = execSettingsBody.find((item) => item.key === 'theme' && item.owner_id === userId);
+    expect(themeSetting && themeSetting.value_json).toBe('dark');
 
     // model configs
     const createUserModel = await ctx.post(`${apiBase}/api/models`, {

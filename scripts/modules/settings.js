@@ -48,12 +48,16 @@
     var pageGuideSettingsGrid = dom.pageGuideSettingsGrid || document.getElementById('pageGuideSettingsGrid');
     var pageGuideSettingsStatus = dom.pageGuideSettingsStatus || document.getElementById('pageGuideSettingsStatus');
     var pageGuideSelectAllInput = dom.pageGuideSelectAllInput || document.getElementById('pageGuideSelectAll');
+    var themeSelect = dom.themeSelect || document.getElementById('themeSelect');
+    var saveThemeSettingBtn = dom.saveThemeSettingBtn || document.getElementById('saveThemeSetting');
+    var themeSettingStatus = dom.themeSettingStatus || document.getElementById('themeSettingStatus');
 
     var defaultSettings = config.defaultSettings || {};
     var defaultTempExecColumns = config.defaultTempExecColumns || {};
     var defaultPageGuideSwitches = config.defaultPageGuideSwitches
       || (defaultSettings && typeof defaultSettings.pageGuideSwitches === 'object' ? defaultSettings.pageGuideSwitches : {});
     var defaultTempExecPageSize = config.defaultTempExecPageSize || 20;
+    var defaultTheme = defaultSettings && defaultSettings.theme ? String(defaultSettings.theme) : 'light';
     var settingsKey = config.settingsKey || 'usecase-settings-v1';
     var minModelTimeoutSec = config.minModelTimeoutSec || 30;
     var maxModelTimeoutSec = config.maxModelTimeoutSec || 1800;
@@ -85,6 +89,7 @@
       tempExecPageSize: false,
       projectOrder: false,
       defaultProjectId: false,
+      theme: false,
     };
 
     function setSettingsReady(source) {
@@ -159,6 +164,28 @@
       return merged;
     }
 
+    function normalizeTheme(value) {
+      var key = value === null || value === undefined ? '' : String(value).toLowerCase();
+      if (key === 'dark') return 'dark';
+      return 'light';
+    }
+
+    function resolveTheme(value) {
+      var base = defaultTheme ? String(defaultTheme) : 'light';
+      var next = value === null || value === undefined ? base : value;
+      return normalizeTheme(next);
+    }
+
+    function applyTheme(theme) {
+      if (typeof document === 'undefined' || !document.documentElement) return;
+      var next = resolveTheme(theme);
+      if (document.documentElement.dataset) {
+        document.documentElement.dataset.theme = next;
+      } else {
+        document.documentElement.setAttribute('data-theme', next);
+      }
+    }
+
     function mergeServerSettings(list) {
       // owner_id 可能是 number 或 string；同时在 authReady 时序下 currentUser 可能暂未填充。
       var userId = null;
@@ -210,6 +237,8 @@
       }
       ensurePageGuideSwitches();
       ensureTempExecColumns();
+      state.settings.theme = resolveTheme(state.settings.theme);
+      applyTheme(state.settings.theme);
       setSettingsReady('server');
       // 如果执行页已打开，主动刷新以应用远端列/分页设置。
       try {
@@ -406,6 +435,8 @@
       }
       ensurePageGuideSwitches();
       ensureTempExecColumns();
+      state.settings.theme = resolveTheme(state.settings.theme);
+      applyTheme(state.settings.theme);
 
       if (!Array.isArray(state.settings.projectOrder)) state.settings.projectOrder = [];
       state.settings.projectOrder = state.settings.projectOrder
@@ -475,6 +506,11 @@
       if (tempExecPageSizeInput) {
         if (!dirtyDrafts.tempExecPageSize) {
           tempExecPageSizeInput.value = state.tempExecPageSize || defaultTempExecPageSize || '';
+        }
+      }
+      if (themeSelect) {
+        if (!dirtyDrafts.theme) {
+          themeSelect.value = resolveTheme(state.settings.theme);
         }
       }
       renderTempExecColumnSettings();
@@ -923,6 +959,26 @@
       }
     }
 
+    function getThemeLabel(theme) {
+      return theme === 'dark' ? '黑色主题' : '白色主题';
+    }
+
+    function saveThemeSetting() {
+      if (!themeSelect) return;
+      var next = resolveTheme(themeSelect.value);
+      var prev = resolveTheme(state.settings.theme);
+      state.settings.theme = next;
+      dirtyDrafts.theme = false;
+      persistSettings(['theme']);
+      applyTheme(next);
+      if (!themeSettingStatus) return;
+      if (prev === next) {
+        setStatus(themeSettingStatus, '主题已保存，保持为' + getThemeLabel(next), 'ok');
+      } else {
+        setStatus(themeSettingStatus, '主题已保存并切换为' + getThemeLabel(next), 'ok');
+      }
+    }
+
     function notifyPageSizeChange(size) {
       if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
       var detail = { size: size };
@@ -1020,6 +1076,12 @@
       if (tempExecPageSizeInput) tempExecPageSizeInput.addEventListener('input', function() {
         dirtyDrafts.tempExecPageSize = true;
         setStatus(tempExecPageSizeStatus, '', '');
+      });
+      if (saveThemeSettingBtn) saveThemeSettingBtn.addEventListener('click', saveThemeSetting);
+      if (themeSelect) themeSelect.addEventListener('change', function() {
+        var next = resolveTheme(themeSelect.value);
+        dirtyDrafts.theme = true;
+        setStatus(themeSettingStatus, '已选择' + getThemeLabel(next) + '，保存后生效', '');
       });
       if (pageGuideSettingsGrid) pageGuideSettingsGrid.addEventListener('change', handlePageGuideChange);
       bindProjectSortEvents();

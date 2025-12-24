@@ -35,6 +35,7 @@
       timeoutSec: 300,
       feishuWebhook: '',
       feishuMention: '',
+      theme: 'light',
       tempExecColumns: { ...defaultTempExecColumns },
       projectOrder: [],
       defaultProjectId: '',

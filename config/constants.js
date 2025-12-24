@@ -47,6 +47,7 @@
     timeoutSec: 300,
     feishuWebhook: '',
     feishuMention: '',
+    theme: 'light',
     tempExecColumns: Object.assign({}, defaultTempExecColumns),
     pageGuideSwitches: Object.assign({}, defaultPageGuideSwitches),
   };
