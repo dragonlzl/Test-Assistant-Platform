@@ -2945,14 +2945,18 @@
           '</div>' +
           '<div class="toolbar-block toolbar-export" id="tempExecExportSlot"></div>' +
         '</div>';
+      var pillsHtml =
+        '<div class="toolbar-pills">' +
+          '<span class="summary-pill executed ' + (activeFilter === 'executed' ? 'active' : '') + '" data-temp-status-filter="executed" data-temp-status-file="' + file.id + '">已执行 ' + summary.executed + '</span>' +
+          '<span class="summary-pill pending ' + (activeFilter === 'pending' ? 'active' : '') + '" data-temp-status-filter="pending" data-temp-status-file="' + file.id + '">未执行 ' + summary.pending + '</span>' +
+          '<span class="summary-pill passed ' + (activeFilter === 'passed' ? 'active' : '') + '" data-temp-status-filter="passed" data-temp-status-file="' + file.id + '">通过 ' + summary.passed + '</span>' +
+          '<span class="summary-pill failed ' + (activeFilter === 'failed' ? 'active' : '') + '" data-temp-status-filter="failed" data-temp-status-file="' + file.id + '">失败 ' + summary.failed + '</span>' +
+          '<span class="summary-pill blocked ' + (activeFilter === 'blocked' ? 'active' : '') + '" data-temp-status-filter="blocked" data-temp-status-file="' + file.id + '">阻塞 ' + summary.blocked + '</span>' +
+          '<span class="summary-pill unspecified ' + (activeFilter === 'unspecified' ? 'active' : '') + '" data-temp-status-filter="unspecified" data-temp-status-file="' + file.id + '">不适用 ' + summary.unspecified + '</span>' +
+        '</div>';
       var toolbarHtml = [
         '<div class="toolbar-file">当前文件：<strong>' + escapeHtml(file.name) + '</strong></div>',
-        '<span class="summary-pill executed ' + (activeFilter === 'executed' ? 'active' : '') + '" data-temp-status-filter="executed" data-temp-status-file="' + file.id + '">已执行 ' + summary.executed + '</span>',
-        '<span class="summary-pill pending ' + (activeFilter === 'pending' ? 'active' : '') + '" data-temp-status-filter="pending" data-temp-status-file="' + file.id + '">未执行 ' + summary.pending + '</span>',
-        '<span class="summary-pill passed ' + (activeFilter === 'passed' ? 'active' : '') + '" data-temp-status-filter="passed" data-temp-status-file="' + file.id + '">通过 ' + summary.passed + '</span>',
-        '<span class="summary-pill failed ' + (activeFilter === 'failed' ? 'active' : '') + '" data-temp-status-filter="failed" data-temp-status-file="' + file.id + '">失败 ' + summary.failed + '</span>',
-        '<span class="summary-pill blocked ' + (activeFilter === 'blocked' ? 'active' : '') + '" data-temp-status-filter="blocked" data-temp-status-file="' + file.id + '">阻塞 ' + summary.blocked + '</span>',
-        '<span class="summary-pill unspecified ' + (activeFilter === 'unspecified' ? 'active' : '') + '" data-temp-status-filter="unspecified" data-temp-status-file="' + file.id + '">不适用 ' + summary.unspecified + '</span>',
+        pillsHtml,
         actionsHtml,
       ].join('');
       tempExecToolbar.innerHTML = toolbarHtml;

@@ -19,6 +19,24 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例执行/用例编辑视图窄屏适配  
+- 功能描述：执行视图、用例库编辑视图等在窄屏下工具栏改为纵向排列，表格支持横向滚动，保持宽屏布局不变。  
+- 操作方式：在窄屏（<=980/640）打开“用例执行”或“用例库编辑视图”，工具栏自动换行，表格可横向滑动查看完整列。  
+- 使用效果：窄屏可完整操作搜索/切换/导出等，视图不再挤压；宽屏体验不变。  
+- 新增内容/接口/组件：  
+  - 前端：窄屏响应式样式（`style.css`）。  
+  - 测试：窄屏适配 UI 用例（`tests/ui/case_views_narrow_screen.spec.js`）。  
+- 复用说明：复用现有视图结构与样式体系，无新增接口。  
+- 测试与验证：  
+  - `npm run test:ui -- tests/ui/case_views_narrow_screen.spec.js`（通过，提权执行）  
+- 更新记录：2025-12-25 用例执行/用例编辑视图窄屏适配（`style.css`、`tests/ui/case_views_narrow_screen.spec.js`）。  
+- 更新记录：2025-12-25 执行视图缩放到中等窄屏仍可横向滚动（`style.css`、`tests/ui/case_views_narrow_screen.spec.js`）。  
+- 更新记录：2025-12-25 执行视图工具栏按钮支持横向滚动（`style.css`、`scripts/core/tempexecCore.js`、`tests/ui/case_views_narrow_screen.spec.js`）。  
+- 更新记录：2025-12-25 设置页项目排序卡片窄屏换行展示（`style.css`、`tests/ui/settings_project_sort_narrow.spec.js`）。  
+- 更新记录：2025-12-25 一键执行步骤导航窄屏支持横向滚动（`style.css`、`tests/ui/auto_flow_narrow.spec.js`）。  
+- 更新记录：2025-12-25 左侧导航窄屏改为全宽并下拉显示菜单（`style.css`、`tests/ui/sidebar_narrow.spec.js`）。  
+- 更新记录：2025-12-25 深色主题执行总览版本选择框箭头修复（`style.css`、`tests/ui/exec_overview_dark_select.spec.js`）。  
+
 - 功能名称：用例生成进度面板收起/展开
 - 功能描述：左侧“用例生成进度”标题右侧新增收起按钮，支持折叠/展开进度列表。
 - 操作方式：在左侧“用例生成进度”标题右侧点击“收起/展开”按钮切换状态。
