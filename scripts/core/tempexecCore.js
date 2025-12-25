@@ -7130,6 +7130,7 @@
       } catch (err) {
         console.warn('专注区数据保存失败', err);
       }
+      scheduleTempExecUiSave();
     }
 
     function syncTempExecFocus(skipSave) {
@@ -7148,6 +7149,7 @@
       if (state.tempExecFocus[0] === fileId) return;
       state.tempExecFocus = [fileId].concat(state.tempExecFocus.filter(function(id) { return id !== fileId; }));
       saveTempExecFocus();
+      scheduleTempExecUiSave();
       if (state.tempExecActiveId !== fileId) {
         setTempExecActive(fileId);
       } else {
@@ -7168,6 +7170,7 @@
       list.splice(idx, 0, fileId);
       state.tempExecFocus = list;
       saveTempExecFocus();
+      scheduleTempExecUiSave();
       if (state.tempExecActiveId !== fileId) {
         setTempExecActive(fileId);
       } else {

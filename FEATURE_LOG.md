@@ -2558,3 +2558,15 @@
   - `npx playwright test tests/ui/tempexec_case_library_changes.spec.js`（通过，提权执行）
   - `npx playwright test tests/ui/tempexec_import_excel_diff.spec.js`（通过，提权执行）
 - 更新记录：2025-12-25 暗色主题 diff 红绿文案加粗（`style.css`、`tests/ui/tempexec_case_library_changes.spec.js`、`tests/ui/tempexec_import_excel_diff.spec.js`）。
+
+- 功能名称：执行分配专注区刷新保持
+- 功能描述：执行分配页面拖拽用例到专注区后，刷新页面仍保持专注区内容。
+- 操作方式：在“执行分配”抽屉将用例拖入专注区，刷新页面后再次打开抽屉查看。
+- 使用效果：专注区用例不再因刷新消失。
+- 新增内容/接口/组件：
+  - 前端：专注区变更触发 DB UI 设置保存（`scripts/core/tempexecCore.js`）。
+  - 测试：执行分配专注区持久化 UI 用例（`tests/ui/tempexec_focus_persist_db.spec.js`）。
+- 复用说明：复用现有 `tempexec_ui_v1` 保存机制，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/tempexec_focus_persist_db.spec.js`（通过，提权执行）
+- 更新记录：2025-12-25 执行分配专注区刷新保持（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_focus_persist_db.spec.js`）。
