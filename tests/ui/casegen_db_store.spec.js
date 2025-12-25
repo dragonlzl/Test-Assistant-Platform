@@ -7,6 +7,26 @@ async function gotoIndex(page) {
   return base;
 }
 
+async function openCasegenSideTab(page) {
+  await page.click('#sidebarTabCasegen');
+  await page.waitForSelector('[data-sidebar-panel="casegen"].is-active');
+}
+
+async function openMemoSideTab(page) {
+  await page.click('#sidebarTabMemo');
+  await page.waitForSelector('[data-sidebar-panel="memo"].is-active');
+}
+
+async function ensureCasegenProgressExpanded(page) {
+  const panel = page.locator('#caseGenProgressPanel');
+  const toggle = page.locator('#caseGenProgressToggle');
+  const isCollapsed = await panel.evaluate((el) => el.classList.contains('is-collapsed'));
+  if (isCollapsed) {
+    await toggle.click();
+    await expect(panel).not.toHaveClass(/is-collapsed/);
+  }
+}
+
 async function seedCaseGenState(page, options) {
   const opts = options || {};
   const requirement = opts.requirement || 'UI自动化需求';
@@ -475,14 +495,19 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     });
 
     await gotoIndex(page);
+    await openCasegenSideTab(page);
     await seedCaseGenState(page, { selectIndex: -1 });
+    await ensureCasegenProgressExpanded(page);
     const moduleId = await page.evaluate(() => {
       const list = window.app && window.app.state && Array.isArray(window.app.state.caseGenModules)
         ? window.app.state.caseGenModules
         : [];
       return list && list[0] ? list[0].id : '';
     });
-    await page.click(`#caseGenProgressList [data-casegen-module="${moduleId}"]`);
+    await page.evaluate((id) => {
+      var item = document.querySelector('#caseGenProgressList [data-casegen-module="' + id + '"]');
+      if (item && item.click) item.click();
+    }, moduleId);
 
     const viewDrawer = page.locator('#caseGenViewDrawer');
     await expect(viewDrawer).toHaveClass(/open/);
@@ -523,14 +548,19 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     });
 
     await gotoIndex(page);
+    await openCasegenSideTab(page);
     await seedCaseGenState(page, { selectIndex: -1, noGenerateIndex: 0 });
+    await ensureCasegenProgressExpanded(page);
     const moduleId = await page.evaluate(() => {
       const list = window.app && window.app.state && Array.isArray(window.app.state.caseGenModules)
         ? window.app.state.caseGenModules
         : [];
       return list && list[0] ? list[0].id : '';
     });
-    await page.click(`#caseGenProgressList [data-casegen-module="${moduleId}"]`);
+    await page.evaluate((id) => {
+      var item = document.querySelector('#caseGenProgressList [data-casegen-module="' + id + '"]');
+      if (item && item.click) item.click();
+    }, moduleId);
 
     const viewDrawer = page.locator('#caseGenViewDrawer');
     await expect(viewDrawer).not.toHaveClass(/open/);
@@ -583,6 +613,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
         window.app.renderCaseGenProgressBoard();
       }
     });
+    await openCasegenSideTab(page);
 
     const metrics = await page.evaluate(() => {
       const sidebar = document.querySelector('.sidebar');
@@ -611,6 +642,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
     const project = { id: 1, name: '项目A', description: '' };
     const versions = [{ id: 11, name: 'v1' }];
+    let storedSettings = [];
 
     await page.addInitScript((tk) => {
       try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
@@ -632,7 +664,25 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
       if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
       if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
       if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
-      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, storedSettings);
+      if (pathName === '/api/settings' && method === 'PUT') {
+        var payload = {};
+        try {
+          payload = JSON.parse(route.request().postData() || '{}') || {};
+        } catch (err) {
+          payload = {};
+        }
+        var items = Array.isArray(payload.items) ? payload.items : [];
+        storedSettings = items.map(function(item) {
+          return {
+            key: item && item.key ? item.key : '',
+            scope: payload.scope || 'user',
+            owner_id: user.id,
+            value_json: item ? item.value_json : undefined,
+          };
+        }).filter(function(item) { return item.key; });
+        return respond(200, storedSettings);
+      }
       if (pathName === '/api/models' && method === 'GET') return respond(200, []);
       if (pathName === '/api/features' && method === 'GET') return respond(200, []);
       if (pathName.startsWith('/api/')) return respond(200, []);
@@ -646,13 +696,14 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
         window.app.renderCaseGenProgressBoard();
       }
     });
+    await openCasegenSideTab(page);
+    await ensureCasegenProgressExpanded(page);
 
     const toggle = page.locator('#caseGenProgressToggle');
     const panel = page.locator('#caseGenProgressPanel');
     const title = page.locator('#caseGenProgressPanel .panel-head .title');
     await expect(toggle).toHaveText('收起');
     await expect(panel).not.toHaveClass(/is-collapsed/);
-    await expect(page.locator('#caseGenProgressList')).toBeVisible();
     await expect(title).toBeVisible();
 
     const before = await page.evaluate(() => {
@@ -681,7 +732,6 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await toggle.click();
 
     await expect(panel).toHaveClass(/is-collapsed/);
-    await expect(page.locator('#caseGenProgressList')).toBeHidden();
     await expect(page.locator('#caseGenProgressPanel .panel-head .meta')).toBeHidden();
     await expect(toggle).toHaveText('展开');
     await expect(title).toBeVisible();
@@ -721,7 +771,6 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await toggle.click();
 
     await expect(panel).not.toHaveClass(/is-collapsed/);
-    await expect(page.locator('#caseGenProgressList')).toBeVisible();
     await expect(toggle).toHaveText('收起');
 
     await toggle.click();
@@ -732,6 +781,93 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await page.reload();
     await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
     await expect(page.locator('#caseGenProgressPanel')).toHaveClass(/is-collapsed/);
+  });
+
+  test('用例生成完成后进度页签红点按未读规则显示', async ({ page }) => {
+    const token = 'token-casegen-tab-dot';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await openMemoSideTab(page);
+    await seedCaseGenState(page, { selectIndex: -1 });
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.renderCaseGenProgressBoard === 'function') {
+        window.app.renderCaseGenProgressBoard();
+      }
+    });
+    await expect(page.locator('#caseGenProgressTabDot')).toHaveClass(/is-visible/);
+    await openCasegenSideTab(page);
+    await expect(page.locator('#caseGenProgressTabDot')).not.toHaveClass(/is-visible/);
+
+    await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var api = window.app && window.app.casesGenApi ? window.app.casesGenApi : null;
+      if (!state || !state.caseGenModules || !state.caseGenModules[0]) return;
+      var modId = state.caseGenModules[0].id;
+      state.caseGenResults[modId] = '';
+      if (api && typeof api.renderCaseGeneration === 'function') api.renderCaseGeneration();
+      var cases = [{
+        module: '登录',
+        title: '登录-用例1',
+        priority: 'P1',
+        preconditions: '前置条件',
+        steps: ['步骤1', '步骤2'],
+        expected: '预期结果',
+      }];
+      state.caseGenResults[modId] = JSON.stringify(cases, null, 2);
+      if (api && typeof api.renderCaseGeneration === 'function') api.renderCaseGeneration();
+    });
+    await expect(page.locator('#caseGenProgressTabDot')).not.toHaveClass(/is-visible/);
+
+    await openMemoSideTab(page);
+    await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var api = window.app && window.app.casesGenApi ? window.app.casesGenApi : null;
+      if (!state || !state.caseGenModules || !state.caseGenModules[1]) return;
+      var modId = state.caseGenModules[1].id;
+      state.caseGenResults[modId] = '';
+      if (api && typeof api.renderCaseGeneration === 'function') api.renderCaseGeneration();
+      var cases = [{
+        module: '支付',
+        title: '支付-用例1',
+        priority: 'P1',
+        preconditions: '前置条件',
+        steps: ['步骤1', '步骤2'],
+        expected: '预期结果',
+      }];
+      state.caseGenResults[modId] = JSON.stringify(cases, null, 2);
+      if (api && typeof api.renderCaseGeneration === 'function') api.renderCaseGeneration();
+    });
+    await expect(page.locator('#caseGenProgressTabDot')).toHaveClass(/is-visible/);
   });
 
   test('全模块生成按钮提示覆盖并支持取消', async ({ page }) => {

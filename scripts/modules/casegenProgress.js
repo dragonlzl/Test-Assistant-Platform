@@ -16,6 +16,8 @@
 
     var caseGenProgressPanel = dom.caseGenProgressPanel;
     var caseGenProgressList = dom.caseGenProgressList;
+    var caseGenProgressTabDot = dom.caseGenProgressTabDot;
+    var sidebarTabCasegen = dom.sidebarTabCasegen;
     function requestLayoutSync() {
       try {
         if (window.app && window.app.sidebarPanels && typeof window.app.sidebarPanels.requestLayoutSync === 'function') {
@@ -24,6 +26,55 @@
       } catch (err) {
         // ignore
       }
+    }
+
+    function ensureProgressNotice() {
+      if (!state.caseGenProgressNotice || typeof state.caseGenProgressNotice !== 'object') {
+        state.caseGenProgressNotice = { lastStates: {}, dotVisible: false };
+      }
+      if (!state.caseGenProgressNotice.lastStates || typeof state.caseGenProgressNotice.lastStates !== 'object') {
+        state.caseGenProgressNotice.lastStates = {};
+      }
+      return state.caseGenProgressNotice;
+    }
+
+    function isCasegenTabActive() {
+      if (sidebarTabCasegen && sidebarTabCasegen.classList) {
+        return sidebarTabCasegen.classList.contains('is-active');
+      }
+      return true;
+    }
+
+    function syncTabDotVisible(visible) {
+      if (!caseGenProgressTabDot) return;
+      caseGenProgressTabDot.classList.toggle('is-visible', visible === true);
+    }
+
+    function markCasegenTabViewed() {
+      var notice = ensureProgressNotice();
+      notice.dotVisible = false;
+      syncTabDotVisible(false);
+    }
+
+    function syncCasegenProgressDot(doneIds, hasNewDoneEvent) {
+      var notice = ensureProgressNotice();
+      var ids = doneIds || {};
+      var hasDone = false;
+      Object.keys(ids).forEach(function(key) {
+        if (key) hasDone = true;
+      });
+      if (!hasDone) {
+        notice.dotVisible = false;
+        syncTabDotVisible(false);
+        return;
+      }
+      if (isCasegenTabActive()) {
+        notice.dotVisible = false;
+        syncTabDotVisible(false);
+        return;
+      }
+      if (hasNewDoneEvent) notice.dotVisible = true;
+      syncTabDotVisible(notice.dotVisible === true);
     }
 
     function ensureCaseGenRunningSet() {
@@ -67,14 +118,25 @@
     function renderCaseGenProgressBoard() {
       if (!caseGenProgressPanel || !caseGenProgressList) return;
       var modules = Array.isArray(state.caseGenModules) ? state.caseGenModules : [];
+      var notice = ensureProgressNotice();
+      var doneIds = {};
+      var nextStates = {};
+      var hasNewDoneEvent = false;
       if (!modules.length) {
         caseGenProgressPanel.classList.remove('hidden');
         caseGenProgressList.innerHTML = '<p class="hint">暂无用例生成任务，请先完成“测试模块拆分”并生成用例</p>';
+        notice.lastStates = {};
+        syncCasegenProgressDot({});
         requestLayoutSync();
         return;
       }
       var html = modules.map(function(mod, idx) {
         var status = resolveCaseGenBoardState(mod.id);
+        nextStates[mod.id] = status.state;
+        if (status.state === 'done') doneIds[mod.id] = true;
+        if (status.state === 'done' && notice.lastStates[mod.id] !== 'done') {
+          hasNewDoneEvent = true;
+        }
         var label = status.state === 'running'
           ? '生成中'
           : status.state === 'done'
@@ -98,6 +160,8 @@
       }).join('');
       caseGenProgressList.innerHTML = html;
       caseGenProgressPanel.classList.remove('hidden');
+      notice.lastStates = nextStates;
+      syncCasegenProgressDot(doneIds, hasNewDoneEvent);
       requestLayoutSync();
     }
 
@@ -190,6 +254,16 @@
         progress.groups[idx].state = newState;
       });
       updateCaseProgressView(moduleId, containerRoot);
+    }
+
+    if (sidebarTabCasegen && sidebarTabCasegen.addEventListener) {
+      sidebarTabCasegen.addEventListener('click', function() {
+        markCasegenTabViewed();
+      });
+    }
+
+    if (isCasegenTabActive()) {
+      markCasegenTabViewed();
     }
 
     return {

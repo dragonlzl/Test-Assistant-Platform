@@ -25,6 +25,8 @@
     var tabProgress = dom.memoTabProgress;
     var caseGenProgressPanel = dom.caseGenProgressPanel;
     var caseGenProgressList = dom.caseGenProgressList;
+    var sidebarTabBar = dom.sidebarTabBar;
+    var sidebarTabPanels = dom.sidebarTabPanels;
 
     if (!panel || !tabList || !tabAddBtn || !body) return {};
 
@@ -145,6 +147,11 @@
 
     function syncSidebarPanels() {
       if (!caseGenProgressPanel || !panel) return;
+      if (sidebarTabBar && sidebarTabPanels) {
+        resetPanelInlineStyle(caseGenProgressPanel);
+        resetPanelInlineStyle(panel);
+        return;
+      }
       if (caseGenProgressPanel.classList.contains('is-collapsed') || panel.classList.contains('is-collapsed')) {
         resetPanelInlineStyle(caseGenProgressPanel);
         resetPanelInlineStyle(panel);
@@ -175,6 +182,34 @@
         layoutSyncToken = 0;
         syncSidebarPanels();
       });
+    }
+
+    var activeSidebarTab = '';
+
+    function getDefaultSidebarTab() {
+      if (!sidebarTabBar) return '';
+      var current = sidebarTabBar.querySelector('.sidebar-tab.is-active');
+      if (current && current.dataset && current.dataset.sidebarTab) {
+        return String(current.dataset.sidebarTab);
+      }
+      return 'casegen';
+    }
+
+    function setSidebarTab(tabId) {
+      if (!sidebarTabBar || !sidebarTabPanels) return;
+      var target = tabId ? String(tabId) : getDefaultSidebarTab();
+      var tabs = sidebarTabBar.querySelectorAll('[data-sidebar-tab]');
+      Array.prototype.forEach.call(tabs, function(btn) {
+        var isActive = btn.dataset && btn.dataset.sidebarTab === target;
+        btn.classList.toggle('is-active', isActive);
+        btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      });
+      var panels = sidebarTabPanels.querySelectorAll('[data-sidebar-panel]');
+      Array.prototype.forEach.call(panels, function(panelEl) {
+        var isActive = panelEl.dataset && panelEl.dataset.sidebarPanel === target;
+        panelEl.classList.toggle('is-active', isActive);
+      });
+      activeSidebarTab = target;
     }
 
     function ensureSettings() {
@@ -683,6 +718,15 @@
       var itemId = itemEl && itemEl.dataset ? itemEl.dataset.memoItem : '';
       saveItemText(itemId, target.value);
     }, true);
+
+    if (sidebarTabBar) {
+      sidebarTabBar.addEventListener('click', function(e) {
+        var btn = e.target && e.target.closest ? e.target.closest('[data-sidebar-tab]') : null;
+        if (!btn || !btn.dataset) return;
+        setSidebarTab(btn.dataset.sidebarTab || '');
+      });
+      setSidebarTab(getDefaultSidebarTab());
+    }
 
     try {
       window.addEventListener('app-settings-loaded', function() {

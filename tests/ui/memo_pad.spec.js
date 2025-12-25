@@ -11,6 +11,16 @@ async function waitForSettingsReady(page) {
   await page.waitForFunction(() => window.app && window.app.settingsReady === true, {}, { timeout: 20000 });
 }
 
+async function openMemoTab(page) {
+  await page.click('#sidebarTabMemo');
+  await expect(page.locator('[data-sidebar-panel="memo"]')).toHaveClass(/is-active/);
+}
+
+async function openCasegenTab(page) {
+  await page.click('#sidebarTabCasegen');
+  await expect(page.locator('[data-sidebar-panel="casegen"]')).toHaveClass(/is-active/);
+}
+
 async function setupRoutes(page, token, options) {
   const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
   const project = { id: 1, name: '项目A', description: '' };
@@ -71,6 +81,7 @@ test.describe('个人备忘区', () => {
     await gotoIndex(page);
     await waitForSettingsReady(page);
 
+    await openMemoTab(page);
     await expect(page.locator('#memoPadPanel')).toBeVisible();
     await expect(page.locator('.memo-tab')).toHaveCount(1);
 
@@ -99,6 +110,7 @@ test.describe('个人备忘区', () => {
     await gotoIndex(page);
     await waitForSettingsReady(page);
 
+    await openMemoTab(page);
     await page.click('.memo-item-add');
     await expect(page.locator('.memo-item')).toHaveCount(1);
 
@@ -162,6 +174,7 @@ test.describe('个人备忘区', () => {
     await gotoIndex(page);
     await waitForSettingsReady(page);
 
+    await openMemoTab(page);
     await page.evaluate(() => {
       if (!window.app || !window.app.state || !window.app.state.settings) return;
       var memo = window.app.state.settings.memoPad;
@@ -182,121 +195,21 @@ test.describe('个人备忘区', () => {
     await expect(page.locator('.memo-tab')).toHaveCount(1);
   });
 
-  test('备忘区收起持久化并让进度区扩展', async ({ page }) => {
-    const settingsStore = [];
-    await setupRoutes(page, 'token-memo-collapse', { settingsStore });
-    await page.setViewportSize({ width: 1280, height: 720 });
+  test('侧边栏页签切换展示', async ({ page }) => {
+    await setupRoutes(page, 'token-sidebar-tabs');
     await gotoIndex(page);
     await waitForSettingsReady(page);
 
-    const sizes = await page.evaluate(() => {
-      const progress = document.getElementById('caseGenProgressPanel');
-      const memo = document.getElementById('memoPadPanel');
-      if (!progress || !memo) return null;
-      const progressStyle = window.getComputedStyle(progress);
-      const memoStyle = window.getComputedStyle(memo);
-      return {
-        progressGrow: progressStyle.flexGrow,
-        memoGrow: memoStyle.flexGrow,
-      };
-    });
-    expect(sizes).not.toBeNull();
-    expect(sizes.progressGrow).toBe('1');
-    expect(sizes.memoGrow).toBe('1');
+    await expect(page.locator('[data-sidebar-panel="casegen"]')).toHaveClass(/is-active/);
+    await expect(page.locator('#caseGenProgressPanel')).toBeVisible();
+    await expect(page.locator('#memoPadPanel')).toBeHidden();
 
-    const putSettings = page.waitForResponse((resp) => {
-      return resp.url().includes('/api/settings') && resp.request().method() === 'PUT';
-    });
-    await page.click('#memoPadToggle');
-    await putSettings;
-    await expect(page.locator('#memoPadPanel')).toHaveClass(/is-collapsed/);
-    await page.waitForFunction(() => {
-      return window.app && window.app.state && window.app.state.settings
-        && window.app.state.settings.memoPad && window.app.state.settings.memoPad.collapsed === true;
-    });
+    await openMemoTab(page);
+    await expect(page.locator('#memoPadPanel')).toBeVisible();
+    await expect(page.locator('#caseGenProgressPanel')).toBeHidden();
 
-    const flexAfter = await page.evaluate(() => {
-      const progress = document.getElementById('caseGenProgressPanel');
-      const memo = document.getElementById('memoPadPanel');
-      if (!progress || !memo) return null;
-      const progressStyle = window.getComputedStyle(progress);
-      const memoStyle = window.getComputedStyle(memo);
-      return {
-        progressGrow: progressStyle.flexGrow,
-        memoGrow: memoStyle.flexGrow,
-      };
-    });
-    expect(flexAfter).not.toBeNull();
-    expect(flexAfter.progressGrow).toBe('1');
-    expect(flexAfter.memoGrow).toBe('0');
-
-    await page.reload();
-    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
-    await expect(page.locator('#memoPadPanel')).toHaveClass(/is-collapsed/);
-  });
-
-  test('进度区数据多时占据备忘区空余空间', async ({ page }) => {
-    await setupRoutes(page, 'token-memo-layout');
-    await page.setViewportSize({ width: 1280, height: 1000 });
-    await gotoIndex(page);
-    await waitForSettingsReady(page);
-
-    await page.evaluate(() => {
-      if (!window.app || !window.app.state) return;
-      var modules = [];
-      for (var i = 0; i < 30; i += 1) {
-        modules.push({ id: 'mod-' + i, title: '模块' + (i + 1) });
-      }
-      window.app.state.caseGenModules = modules;
-      if (window.app.state.settings && window.app.state.settings.memoPad && window.app.state.settings.memoPad.tabs) {
-        window.app.state.settings.memoPad.tabs[0].items = [];
-      }
-      if (window.app.memoPadApi && typeof window.app.memoPadApi.renderMemoPad === 'function') {
-        window.app.memoPadApi.renderMemoPad();
-      }
-      if (typeof window.app.renderCaseGenProgressBoard === 'function') {
-        window.app.renderCaseGenProgressBoard();
-      } else {
-        var list = document.getElementById('caseGenProgressList');
-        if (list) {
-          var html = '';
-          for (var j = 0; j < 30; j += 1) {
-            html += '<div class="casegen-progress-item state-pending">' +
-              '<div class="info"><span class="status-dot"></span>' +
-              '<div class="titles"><div class="name">模块' + (j + 1) + '</div></div></div>' +
-              '<span class="badge">未生成</span></div>';
-          }
-          list.innerHTML = html;
-        }
-        var panel = document.getElementById('caseGenProgressPanel');
-        if (panel) panel.classList.remove('hidden');
-      }
-      if (window.app.sidebarPanels && typeof window.app.sidebarPanels.syncLayoutNow === 'function') {
-        window.app.sidebarPanels.syncLayoutNow();
-      } else if (window.app.sidebarPanels && typeof window.app.sidebarPanels.requestLayoutSync === 'function') {
-        window.app.sidebarPanels.requestLayoutSync();
-      }
-    });
-
-    await page.waitForFunction(() => {
-      var memo = document.getElementById('memoPadPanel');
-      var progress = document.getElementById('caseGenProgressPanel');
-      if (!memo || !progress) return false;
-      var memoGrow = Number(window.getComputedStyle(memo).flexGrow || 0);
-      var progressGrow = Number(window.getComputedStyle(progress).flexGrow || 0);
-      return memoGrow === 0 && progressGrow >= 1;
-    });
-
-    const sizes = await page.evaluate(() => {
-      var memo = document.getElementById('memoPadPanel');
-      var progress = document.getElementById('caseGenProgressPanel');
-      if (!memo || !progress) return null;
-      return {
-        memoHeight: memo.getBoundingClientRect().height,
-        progressHeight: progress.getBoundingClientRect().height,
-      };
-    });
-    expect(sizes).not.toBeNull();
-    expect(sizes.progressHeight).toBeGreaterThan(sizes.memoHeight);
+    await openCasegenTab(page);
+    await expect(page.locator('#caseGenProgressPanel')).toBeVisible();
+    await expect(page.locator('#memoPadPanel')).toBeHidden();
   });
 });

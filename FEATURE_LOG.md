@@ -2404,3 +2404,22 @@
 - 更新记录：2025-12-24 备忘条目完成排序与新条目自动下沉适配（`scripts/modules/memoPad.js`、`tests/ui/memo_pad.spec.js`）。
 - 更新记录：2025-12-24 备忘区页签上限恢复为 3（`scripts/modules/memoPad.js`、`tests/ui/memo_pad.spec.js`）。
 - 更新记录：2025-12-24 修正备忘页签重命名时点击输入框不再提前保存（`scripts/modules/memoPad.js`、`tests/ui/memo_pad.spec.js`）。
+
+- 功能名称：侧边栏页签化切换与进度红点提醒
+- 功能描述：左侧导航将“用例生成进度/个人备忘”改为页签式切换，仅展示当前页签内容；当任一模块用例生成完成时，“用例生成进度”页签显示红点提示。
+- 操作方式：点击左侧页签切换模块；用例生成完成后查看“用例生成进度”页签红点提醒。
+- 使用效果：侧边栏不再分屏抢占空间；生成完成状态在页签上更直观提示。
+- 新增内容/接口/组件：
+  - 前端：侧边栏页签结构与切换逻辑、进度红点更新（`index.html`、`style.css`、`scripts/modules/memoPad.js`、`scripts/modules/casegenProgress.js`、`config/domConfig.js`）。
+  - 测试：页签切换与红点提示 UI 用例调整（`tests/ui/memo_pad.spec.js`、`tests/ui/casegen_db_store.spec.js`）。
+- 复用说明：复用现有进度渲染/设置持久化与备忘区组件逻辑，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/memo_pad.spec.js`（通过，提权执行）
+  - `npx playwright test tests/ui/casegen_db_store.spec.js`（通过，提权执行）
+- 更新记录：2025-12-24 侧边栏页签化切换与进度红点提醒（`index.html`、`style.css`、`scripts/modules/memoPad.js`、`scripts/modules/casegenProgress.js`、`config/domConfig.js`、`tests/ui/memo_pad.spec.js`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 更新记录：2025-12-24 用例生成进度红点按未读规则显示（点击页签清除；仅在未查看时出现，切换后新完成再提示）。
+  文件：`scripts/modules/casegenProgress.js`、`tests/ui/casegen_db_store.spec.js`。
+
+- 更新记录：2025-12-24 个人备忘条目字体清晰度调整（字号/行高优化）。
+  文件：`style.css`。

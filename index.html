@@ -70,6 +70,16 @@
 </nav>
 <button class="scroll-top-btn" type="button" id="scrollTopBtn">回到顶部</button>
 <button class="scroll-top-btn" type="button" id="scrollBottomBtn">跳到底部</button>
+<div class="sidebar-tabs" id="sidebarTabs">
+<div class="sidebar-tab-bar" id="sidebarTabBar">
+<button class="sidebar-tab is-active" type="button" id="sidebarTabCasegen" data-sidebar-tab="casegen">
+用例生成进度
+<span class="sidebar-tab-dot" id="caseGenProgressTabDot"></span>
+</button>
+<button class="sidebar-tab" type="button" id="sidebarTabMemo" data-sidebar-tab="memo">个人备忘</button>
+</div>
+<div class="sidebar-tab-panels" id="sidebarTabPanels">
+<div class="sidebar-tab-panel is-active" data-sidebar-panel="casegen">
 <div class="casegen-progress-panel" id="caseGenProgressPanel">
 <div class="panel-head">
 <div class="panel-title-row">
@@ -82,6 +92,8 @@
 <p class="hint">暂无用例生成任务，请先完成“测试模块拆分”并生成用例</p>
 </div>
 </div>
+</div>
+<div class="sidebar-tab-panel" data-sidebar-panel="memo">
 <div class="memo-pad-panel" id="memoPadPanel">
 <div class="panel-head">
 <div class="panel-title-row">
@@ -97,6 +109,9 @@
 <button class="memo-tab-add" type="button" id="memoTabAddBtn" aria-label="新增备忘页">+</button>
 </div>
 <div class="memo-pad-body" id="memoPadBody"></div>
+</div>
+</div>
+</div>
 </div>
 </aside>
 <div class="content-shell">
