@@ -114,4 +114,94 @@ test.describe('暗色主题复用执行按钮', () => {
     const optionBg = await page.$eval('.reuse-entry .status-select option', (el) => getComputedStyle(el).backgroundColor);
     expect(optionBg).toBe(panelColor);
   });
+
+  test('暗色主题用例编辑输入框不为白底', async ({ page }) => {
+    const serverState = {
+      settings: [{
+        id: 2,
+        scope: 'user',
+        owner_id: user.id,
+        key: 'theme',
+        value_json: 'dark',
+      }],
+    };
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tap-auth-token', 'reuse-dark-edit-token');
+        localStorage.setItem('usecase-temp-exec-v1', JSON.stringify({
+          files: [{
+            id: 'reuse-file-2',
+            name: '复用执行-编辑',
+            reuseEnabled: false,
+            reusePresets: [],
+            createdAt: Date.now(),
+            requirement: '',
+            projectId: '',
+            versionId: '',
+            cases: [{
+              module: '模块B',
+              title: '编辑用例',
+              priority: 'P1',
+              preconditions: '',
+              steps: '步骤1',
+              expected: '预期',
+              actual: '未执行',
+              remark: '',
+              reuseDetails: [],
+              defectLinks: [],
+            }],
+          }],
+          activeId: 'reuse-file-2',
+        }));
+      } catch (err) {}
+    });
+
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.continue();
+      }
+      return route.abort();
+    });
+    await page.route('**/api/**', createApiHandler(serverState));
+
+    await page.goto(base + '/index.html');
+    await waitForAppReady(page);
+
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('tempexec');
+      }
+    });
+
+    const editSelector = '.card[data-section-id="tempexec-view"] .temp-inline-edit';
+    await page.waitForSelector(editSelector, { state: 'visible', timeout: 8000 });
+    await page.click(editSelector);
+    await page.waitForFunction(() => {
+      var el = document.activeElement;
+      return el && el.classList && el.classList.contains('temp-inline-edit');
+    });
+    const panelColor = await page.evaluate(() => {
+      var root = document.documentElement;
+      var raw = getComputedStyle(root).getPropertyValue('--panel').trim();
+      var temp = document.createElement('div');
+      temp.style.backgroundColor = raw;
+      document.body.appendChild(temp);
+      var resolved = getComputedStyle(temp).backgroundColor;
+      temp.remove();
+      return resolved;
+    });
+    const editBg = await page.evaluate((selector) => {
+      var el = document.activeElement && document.activeElement.classList
+        && document.activeElement.classList.contains('temp-inline-edit')
+        ? document.activeElement
+        : document.querySelector(selector);
+      if (!el) return '';
+      return getComputedStyle(el).backgroundColor;
+    }, editSelector);
+    expect(editBg).not.toBe('rgb(248, 250, 252)');
+    expect(editBg).not.toBe('rgb(255, 255, 255)');
+    expect(panelColor).not.toBe('rgb(255, 255, 255)');
+  });
 });

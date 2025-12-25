@@ -2485,3 +2485,15 @@
 - 测试与验证：
   - `npx playwright test tests/ui/reuse_status_dark_theme.spec.js`（通过，提权执行）
 - 更新记录：2025-12-25 暗色主题复用子项执行下拉样式（`style.css`、`tests/ui/reuse_status_dark_theme.spec.js`）。
+
+- 功能名称：暗色主题用例编辑输入框样式
+- 功能描述：修复暗色主题下用例编辑输入框聚焦时背景发白的问题。
+- 操作方式：在“用例执行”页切换暗色主题，点击用例字段进入编辑。
+- 使用效果：编辑输入框聚焦背景保持暗色主题一致。
+- 新增内容/接口/组件：
+  - 前端：暗色主题下编辑输入框聚焦样式（`style.css`）。
+  - 测试：暗色主题编辑输入框 UI 用例更新（`tests/ui/reuse_status_dark_theme.spec.js`）。
+- 复用说明：复用现有主题变量与执行视图编辑样式，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/reuse_status_dark_theme.spec.js`（通过，提权执行）
+- 更新记录：2025-12-25 暗色主题用例编辑输入框样式（`style.css`、`tests/ui/reuse_status_dark_theme.spec.js`）。
