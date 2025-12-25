@@ -2461,3 +2461,15 @@
   - `npx playwright test tests/ui/reuse_status_dark_theme.spec.js`（通过，提权执行）
   - `npx playwright test tests/ui/sidebar_tab_persist.spec.js`（通过，提权执行）
 - 更新记录：2025-12-25 暗色主题复用执行按钮与侧边栏页签持久化（`style.css`、`config/constants.js`、`scripts/modules/memoPad.js`、`tests/ui/reuse_status_dark_theme.spec.js`、`tests/ui/sidebar_tab_persist.spec.js`）。
+
+- 功能名称：用例生成进度红点刷新持久化
+- 功能描述：用例生成进度页签红点在刷新前未清除时可继续保持。
+- 操作方式：当红点出现且未点击用例生成进度页签清除时刷新页面。
+- 使用效果：刷新后红点保持显示，避免遗漏未读提醒。
+- 新增内容/接口/组件：
+  - 前端：用例生成进度红点状态纳入流程快照持久化（`scripts/core/appRuntime.js`、`scripts/modules/casegenProgress.js`）。
+  - 测试：红点刷新持久化 UI 用例更新（`tests/ui/casegen_db_store.spec.js`）。
+- 复用说明：复用现有流程快照持久化机制，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/casegen_db_store.spec.js`（通过，提权执行）
+- 更新记录：2025-12-25 用例生成进度红点刷新持久化（`scripts/core/appRuntime.js`、`scripts/modules/casegenProgress.js`、`tests/ui/casegen_db_store.spec.js`）。

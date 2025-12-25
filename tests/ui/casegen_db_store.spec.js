@@ -224,7 +224,15 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
       if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
       if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
       if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
-      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') {
+        return respond(200, [{
+          id: 1,
+          scope: 'user',
+          owner_id: user.id,
+          key: 'sidebarTabActive',
+          value_json: 'memo',
+        }]);
+      }
       if (pathName === '/api/models' && method === 'GET') return respond(200, []);
       if (pathName === '/api/features' && method === 'GET') return respond(200, []);
       if (pathName.startsWith('/api/')) return respond(200, []);
@@ -867,6 +875,22 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
       state.caseGenResults[modId] = JSON.stringify(cases, null, 2);
       if (api && typeof api.renderCaseGeneration === 'function') api.renderCaseGeneration();
     });
+    await expect(page.locator('#caseGenProgressTabDot')).toHaveClass(/is-visible/);
+
+    await page.waitForFunction(() => {
+      try {
+        var raw = localStorage.getItem('usecase-workflow-state-v1');
+        if (!raw) return false;
+        var snapshot = JSON.parse(raw);
+        var notice = snapshot && snapshot.data ? snapshot.data.caseGenProgressNotice : null;
+        return notice && notice.dotVisible === true;
+      } catch (err) {
+        return false;
+      }
+    });
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+    await page.waitForFunction(() => window.app && window.app.settingsReady === true, {}, { timeout: 20000 });
     await expect(page.locator('#caseGenProgressTabDot')).toHaveClass(/is-visible/);
   });
 

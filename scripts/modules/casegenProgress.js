@@ -18,6 +18,7 @@
     var caseGenProgressList = dom.caseGenProgressList;
     var caseGenProgressTabDot = dom.caseGenProgressTabDot;
     var sidebarTabCasegen = dom.sidebarTabCasegen;
+    var persistWorkflowState = ctx.persistWorkflowState || function() {};
     function requestLayoutSync() {
       try {
         if (window.app && window.app.sidebarPanels && typeof window.app.sidebarPanels.requestLayoutSync === 'function') {
@@ -35,10 +36,28 @@
       if (!state.caseGenProgressNotice.lastStates || typeof state.caseGenProgressNotice.lastStates !== 'object') {
         state.caseGenProgressNotice.lastStates = {};
       }
+      state.caseGenProgressNotice.dotVisible = state.caseGenProgressNotice.dotVisible === true;
       return state.caseGenProgressNotice;
     }
 
+    function getSettingsSidebarTab() {
+      if (window.app && window.app.settingsReady !== true) {
+        return '';
+      }
+      if (!state.settings || state.settings.sidebarTabActive === undefined || state.settings.sidebarTabActive === null) {
+        return '';
+      }
+      var value = String(state.settings.sidebarTabActive || '');
+      if (value === 'casegen' || value === 'memo') return value;
+      return '';
+    }
+
     function isCasegenTabActive() {
+      var settingsTab = getSettingsSidebarTab();
+      if (settingsTab) return settingsTab === 'casegen';
+      if (window.app && window.app.settingsReady === false) {
+        return false;
+      }
       if (sidebarTabCasegen && sidebarTabCasegen.classList) {
         return sidebarTabCasegen.classList.contains('is-active');
       }
@@ -50,10 +69,18 @@
       caseGenProgressTabDot.classList.toggle('is-visible', visible === true);
     }
 
+    function persistProgressNotice() {
+      if (typeof persistWorkflowState === 'function') {
+        persistWorkflowState();
+      }
+    }
+
     function markCasegenTabViewed() {
       var notice = ensureProgressNotice();
+      var wasVisible = notice.dotVisible === true;
       notice.dotVisible = false;
       syncTabDotVisible(false);
+      if (wasVisible) persistProgressNotice();
     }
 
     function syncCasegenProgressDot(doneIds, hasNewDoneEvent) {
@@ -69,8 +96,11 @@
         return;
       }
       if (isCasegenTabActive()) {
-        notice.dotVisible = false;
-        syncTabDotVisible(false);
+        if (notice.dotVisible === true) {
+          syncTabDotVisible(true);
+        } else {
+          syncTabDotVisible(false);
+        }
         return;
       }
       if (hasNewDoneEvent) notice.dotVisible = true;
@@ -162,6 +192,7 @@
       caseGenProgressPanel.classList.remove('hidden');
       notice.lastStates = nextStates;
       syncCasegenProgressDot(doneIds, hasNewDoneEvent);
+      persistProgressNotice();
       requestLayoutSync();
     }
 
@@ -262,8 +293,28 @@
       });
     }
 
-    if (isCasegenTabActive()) {
+    function syncViewedIfActive() {
+      if (!isCasegenTabActive()) return;
+      var settingsTab = '';
+      if (state.settings && state.settings.sidebarTabActive !== undefined && state.settings.sidebarTabActive !== null) {
+        settingsTab = String(state.settings.sidebarTabActive || '');
+      }
+      if (settingsTab && settingsTab !== 'casegen') return;
+      var notice = ensureProgressNotice();
+      if (notice.dotVisible === true) return;
       markCasegenTabViewed();
+    }
+
+    if (window.app && window.app.settingsReady === true) {
+      syncViewedIfActive();
+    } else {
+      try {
+        window.addEventListener('app-settings-loaded', function() {
+          syncViewedIfActive();
+        });
+      } catch (err) {
+        // ignore
+      }
     }
 
     return {

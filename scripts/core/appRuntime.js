@@ -210,6 +210,7 @@
         caseGenSuggestions: cloneJson(state.caseGenSuggestions, {}),
         caseGenModuleStatus: cloneJson(state.caseGenModuleStatus, {}),
         caseGenProgress: cloneJson(state.caseGenProgress, {}),
+        caseGenProgressNotice: cloneJson(state.caseGenProgressNotice, {}),
         caseSelections: serializeCaseSelections(state.caseSelections),
         missingSelections: serializeNumberSet(state.missingSelections),
       };
@@ -339,6 +340,11 @@
       state.caseGenSuggestions = (data.caseGenSuggestions && typeof data.caseGenSuggestions === 'object') ? data.caseGenSuggestions : {};
       state.caseGenModuleStatus = (data.caseGenModuleStatus && typeof data.caseGenModuleStatus === 'object') ? data.caseGenModuleStatus : {};
       state.caseGenProgress = (data.caseGenProgress && typeof data.caseGenProgress === 'object') ? data.caseGenProgress : {};
+      state.caseGenProgressNotice = (data.caseGenProgressNotice && typeof data.caseGenProgressNotice === 'object') ? data.caseGenProgressNotice : {};
+      if (!state.caseGenProgressNotice.lastStates || typeof state.caseGenProgressNotice.lastStates !== 'object') {
+        state.caseGenProgressNotice.lastStates = {};
+      }
+      state.caseGenProgressNotice.dotVisible = state.caseGenProgressNotice.dotVisible === true;
       state.caseSelections = restoreCaseSelections(data.caseSelections);
       state.missingSelections = restoreNumberSet(data.missingSelections);
       state.missingRowCache = [];
@@ -1222,6 +1228,7 @@
         dom: dom,
         utils: appUtils,
         escapeHtml: escapeHtml,
+        persistWorkflowState: persistWorkflowState,
       })
       : null;
     assignIfPresent(api, casegenProgressModule, [
