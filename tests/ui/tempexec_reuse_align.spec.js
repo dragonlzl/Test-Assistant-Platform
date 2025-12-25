@@ -88,6 +88,9 @@ test.describe('执行视图复用子项对齐', () => {
     await page.waitForSelector('.reuse-status', { state: 'attached', timeout: 8000 });
     await page.click('.reuse-status');
     await page.waitForSelector('.reuse-entry .status-select', { state: 'attached', timeout: 8000 });
+    const transitionProp = await page.$eval('.reuse-entry .status-select', (el) => getComputedStyle(el).transitionProperty);
+    expect(transitionProp).not.toContain('all');
+    expect(transitionProp).not.toContain('transform');
 
     await page.waitForFunction(() => {
       var table = document.querySelector('#tempExecView table');
@@ -95,32 +98,42 @@ test.describe('执行视图复用子项对齐', () => {
       var listLeft = table.getBoundingClientRect().left;
       var actualEl = table.querySelector('tbody tr.case-row td.actual .reuse-status')
         || table.querySelector('tbody tr.case-row td.actual .status-select');
+      var noteEl = table.querySelector('.reuse-entry .reuse-note');
       var selectEl = table.querySelector('.reuse-entry .status-select');
-      if (!actualEl || !selectEl) return false;
+      if (!actualEl || !selectEl || !noteEl) return false;
       var actualRect = actualEl.getBoundingClientRect();
       var selectRect = selectEl.getBoundingClientRect();
+      var noteRect = noteEl.getBoundingClientRect();
       if (!actualRect.width || !selectRect.width) return false;
       var actualCenter = actualRect.left + actualRect.width / 2;
       var selectCenter = selectRect.left + selectRect.width / 2;
       var delta = Math.abs((actualCenter - listLeft) - (selectCenter - listLeft));
-      return delta <= 1;
+      var gap = selectRect.left - noteRect.right;
+      var fontSize = parseFloat(getComputedStyle(noteEl).fontSize) || 0;
+      return delta <= 1 && Math.abs(gap - fontSize) <= 1;
     }, null, { timeout: 8000 });
 
-    const delta = await page.evaluate(() => {
+    const result = await page.evaluate(() => {
       var table = document.querySelector('#tempExecView table');
       if (!table) return null;
       var listLeft = table.getBoundingClientRect().left;
       var actualEl = table.querySelector('tbody tr.case-row td.actual .reuse-status')
         || table.querySelector('tbody tr.case-row td.actual .status-select');
+      var noteEl = table.querySelector('.reuse-entry .reuse-note');
       var selectEl = table.querySelector('.reuse-entry .status-select');
-      if (!actualEl || !selectEl) return null;
+      if (!actualEl || !selectEl || !noteEl) return null;
       var actualRect = actualEl.getBoundingClientRect();
       var selectRect = selectEl.getBoundingClientRect();
+      var noteRect = noteEl.getBoundingClientRect();
       var actualCenter = actualRect.left + actualRect.width / 2;
       var selectCenter = selectRect.left + selectRect.width / 2;
-      return Math.abs((actualCenter - listLeft) - (selectCenter - listLeft));
+      var delta = Math.abs((actualCenter - listLeft) - (selectCenter - listLeft));
+      var gap = selectRect.left - noteRect.right;
+      var fontSize = parseFloat(getComputedStyle(noteEl).fontSize) || 0;
+      return { delta, gap, fontSize };
     });
-    expect(delta).not.toBeNull();
-    expect(delta).toBeLessThanOrEqual(1);
+    expect(result).not.toBeNull();
+    expect(result.delta).toBeLessThanOrEqual(1);
+    expect(Math.abs(result.gap - result.fontSize)).toBeLessThanOrEqual(1);
   });
 });

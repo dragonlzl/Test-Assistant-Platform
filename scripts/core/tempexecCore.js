@@ -3813,6 +3813,10 @@
           if (!select || !select.getBoundingClientRect) return;
           if (select.offsetParent === null) {
             if (select.style) select.style.transform = '';
+            if (select.closest) {
+              var hiddenEntry = select.closest('.reuse-entry');
+              if (hiddenEntry && hiddenEntry.style) hiddenEntry.style.removeProperty('--reuse-status-shift');
+            }
             return;
           }
           var rect = select.getBoundingClientRect();
@@ -3822,9 +3826,18 @@
           if (!Number.isFinite(delta)) return;
           if (Math.abs(delta) < 0.5) {
             if (select.style) select.style.transform = '';
+            if (select.closest) {
+              var nearEntry = select.closest('.reuse-entry');
+              if (nearEntry && nearEntry.style) nearEntry.style.removeProperty('--reuse-status-shift');
+            }
             return;
           }
-          if (select.style) select.style.transform = 'translateX(' + Math.round(delta) + 'px)';
+          var rounded = Math.round(delta);
+          if (select.style) select.style.transform = 'translateX(' + rounded + 'px)';
+          if (select.closest) {
+            var entry = select.closest('.reuse-entry');
+            if (entry && entry.style) entry.style.setProperty('--reuse-status-shift', rounded + 'px');
+          }
         });
       });
     }

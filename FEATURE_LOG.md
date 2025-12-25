@@ -2509,3 +2509,27 @@
 - 测试与验证：
   - `npx playwright test tests/ui/tempexec_reuse_align.spec.js`（通过，提权执行）
 - 更新记录：2025-12-25 复用子项执行选择框中心对齐（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_reuse_align.spec.js`）。
+
+- 功能名称：复用子项备注与执行选项间距
+- 功能描述：复用子项备注输入框自动铺满到执行选择框左侧，并保持 1 个汉字宽度间距。
+- 操作方式：在“用例执行”页开启复用并展开子项，查看备注输入框与执行选择框的间距。
+- 使用效果：备注输入框铺满至执行选择框前，间距稳定为 1 个汉字宽度。
+- 新增内容/接口/组件：
+  - 前端：复用子项备注与执行选择框间距逻辑（`scripts/core/tempexecCore.js`、`style.css`）。
+  - 测试：复用子项备注间距 UI 用例更新（`tests/ui/tempexec_reuse_align.spec.js`）。
+- 复用说明：复用现有对齐测量逻辑与执行视图样式，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/tempexec_reuse_align.spec.js`（通过，提权执行）
+- 更新记录：2025-12-25 复用子项备注与执行选项间距（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_reuse_align.spec.js`）。
+
+- 功能名称：复用子项执行选择框展示防抖动
+- 功能描述：复用子项执行选择框取消位移动画，避免展开时出现从左向右滑动的视觉抖动。
+- 操作方式：在“用例执行”页开启复用并展开子项列表。
+- 使用效果：执行选择框直接呈现到位，无明显移动动画。
+- 新增内容/接口/组件：
+  - 前端：复用子项执行选择框过渡样式优化（`style.css`）。
+  - 测试：复用子项执行选择框过渡样式 UI 用例更新（`tests/ui/tempexec_reuse_align.spec.js`）。
+- 复用说明：复用现有样式体系，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/tempexec_reuse_align.spec.js`（通过，提权执行）
+- 更新记录：2025-12-25 复用子项执行选择框展示防抖动（`style.css`、`tests/ui/tempexec_reuse_align.spec.js`）。
