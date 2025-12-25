@@ -51,6 +51,7 @@
     var themeSelect = dom.themeSelect || document.getElementById('themeSelect');
     var saveThemeSettingBtn = dom.saveThemeSettingBtn || document.getElementById('saveThemeSetting');
     var themeSettingStatus = dom.themeSettingStatus || document.getElementById('themeSettingStatus');
+    var settingsNavButtons = dom.settingsNavButtons || document.querySelectorAll('[data-settings-target]');
 
     var defaultSettings = config.defaultSettings || {};
     var defaultTempExecColumns = config.defaultTempExecColumns || {};
@@ -117,6 +118,18 @@
       state.settingsReady = false;
       if (!window.app) window.app = {};
       window.app.settingsReady = false;
+    }
+
+    function scrollToSettingsSection(target) {
+      if (!target) return;
+      var section = document.querySelector('[data-settings-section="' + target + '"]');
+      if (!section) return;
+      if (section.classList && section.classList.contains('collapsed')) {
+        section.classList.remove('collapsed');
+      }
+      if (section.scrollIntoView) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
 
     var projectSortState = {
@@ -1085,6 +1098,14 @@
       });
       if (pageGuideSettingsGrid) pageGuideSettingsGrid.addEventListener('change', handlePageGuideChange);
       bindProjectSortEvents();
+      if (settingsNavButtons && typeof settingsNavButtons.forEach === 'function') {
+        settingsNavButtons.forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            var target = btn.dataset ? btn.dataset.settingsTarget : '';
+            scrollToSettingsSection(target);
+          });
+        });
+      }
     }
 
     bindEvents();

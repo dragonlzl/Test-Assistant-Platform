@@ -384,6 +384,61 @@
       </div>
     </div>
   </div>
+  <div class="tempexec-head hidden" data-tab-section="settings" id="settingsHead">
+    <div class="flow" id="settingsFlowNav">
+      <div class="flow-title">设置导航</div>
+      <p class="hint" style="margin:0 0 6px;">设置项入口汇总于此，点击卡片快速定位。</p>
+      <div class="nav-entry-grid settings-nav-grid">
+        <button class="nav-entry-card nav-entry-import" id="settingsNavFeishuBtn" type="button" data-settings-target="feishu">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8l-4 3v-3H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path>
+              <path d="M8 9h8"></path>
+              <path d="M8 12h5"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">飞书通知配置</span>
+            <span class="nav-entry-desc">配置机器人与提醒对象</span>
+          </span>
+        </button>
+        <button class="nav-entry-card nav-entry-view" id="settingsNavColumnsBtn" type="button" data-settings-target="tempexec-columns">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <rect x="4" y="5" width="16" height="14" rx="2"></rect>
+              <path d="M9 5v14"></path>
+              <path d="M15 5v14"></path>
+              <path d="M4 10h16"></path>
+              <path d="M4 14h16"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">执行视图列显示</span>
+            <span class="nav-entry-desc">控制执行视图表头展示</span>
+          </span>
+        </button>
+        <button class="nav-entry-card nav-entry-overview" id="settingsNavMiscBtn" type="button" data-settings-target="misc">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M12 3v2"></path>
+              <path d="M12 19v2"></path>
+              <path d="M4.9 4.9l1.4 1.4"></path>
+              <path d="M17.7 17.7l1.4 1.4"></path>
+              <path d="M3 12h2"></path>
+              <path d="M19 12h2"></path>
+              <path d="M4.9 19.1l1.4-1.4"></path>
+              <path d="M17.7 6.3l1.4-1.4"></path>
+              <circle cx="12" cy="12" r="4"></circle>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">其他设置</span>
+            <span class="nav-entry-desc">主题/分页/页面说明等</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
 		<div class="tempexec-head hidden" data-tab-section="tempexec">
 		  <div class="flow" id="tempexecFlowNav">
 		    <div class="flow-title">功能导航</div>
@@ -1760,7 +1815,7 @@
 <div class="model-list" id="modelList"></div>
 </div>
 </section>
-<section class="card hidden" data-tab-section="settings">
+<section class="card hidden" data-tab-section="settings" data-settings-section="feishu" id="settingsFeishuSection">
 <h2>飞书通知配置</h2>
 <div class="card-body">
 <p class="hint">仅“一键执行”流程会触发通知：覆盖率不足 100% 会推送失败提醒，完整执行成功会推送成功提醒。</p>
@@ -1783,7 +1838,7 @@
 <p class="hint">请确保浏览器可访问该地址，建议使用群机器人以便团队及时获知执行状态。</p>
 </div>
 </section>
-<section class="card hidden" data-tab-section="settings">
+<section class="card hidden" data-tab-section="settings" data-settings-section="tempexec-columns" id="settingsTempExecSection">
 <h2>执行视图列显示</h2>
 <div class="card-body">
 <p class="hint">控制“用例执行”视图的表头展示，仅影响显示，不会修改用例数据。用例标题/实际结果/备注/缺陷链接为必选。</p>
@@ -1803,7 +1858,7 @@
 <p class="status" id="tempExecColumnStatus"></p>
 </div>
 </section>
-<section class="card hidden" data-tab-section="settings">
+<section class="card hidden" data-tab-section="settings" data-settings-section="misc" id="settingsOtherSection">
 <h2>其他设置</h2>
 <div class="card-body">
 <div class="settings-inline">

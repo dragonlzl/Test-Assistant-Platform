@@ -2423,3 +2423,15 @@
 
 - 更新记录：2025-12-24 个人备忘条目字体清晰度调整（字号/行高优化）。
   文件：`style.css`。
+
+- 功能名称：设置页顶部导航定位
+- 功能描述：设置页面提供独立顶部导航，替换默认“一键执行步骤”导航，并可快速定位到飞书通知配置、执行视图列显示、其他设置等模块。
+- 操作方式：进入“设置”页签，点击顶部导航卡片即可定位对应配置区域。
+- 使用效果：设置页导航入口集中，避免与一键执行导航混用，定位更快捷。
+- 新增内容/接口/组件：
+  - 前端：设置页顶部导航与定位交互（`index.html`、`scripts/modules/settings.js`、`scripts/core/appRuntime.js`）。
+  - 测试：设置页导航 UI 用例（`tests/ui/settings_nav.spec.js`）。
+- 复用说明：复用现有滚动定位与卡片样式，无新增后端接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/settings_nav.spec.js`（通过，提权执行）
+- 更新记录：2025-12-25 设置页顶部导航定位（`index.html`、`scripts/modules/settings.js`、`scripts/core/appRuntime.js`、`tests/ui/settings_nav.spec.js`）。
