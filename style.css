@@ -7705,6 +7705,42 @@ button.exec-overview-file-chip,
   border-color: rgba(148,163,184,0.45);
   color: #e2e8f0;
 }
+:root[data-theme="dark"] .reuse-status {
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+:root[data-theme="dark"] .reuse-status.pending {
+  background: rgba(148,163,184,0.2);
+  border-color: rgba(148,163,184,0.4);
+  color: #e2e8f0;
+}
+:root[data-theme="dark"] .reuse-status.passed {
+  background: rgba(34,197,94,0.2);
+  border-color: rgba(34,197,94,0.45);
+  color: #86efac;
+}
+:root[data-theme="dark"] .reuse-status.failed,
+:root[data-theme="dark"] .reuse-status.issue {
+  background: rgba(248,113,113,0.2);
+  border-color: rgba(248,113,113,0.45);
+  color: #fecaca;
+}
+:root[data-theme="dark"] .reuse-status.blocked {
+  background: rgba(245,158,11,0.2);
+  border-color: rgba(245,158,11,0.5);
+  color: #fde68a;
+}
+:root[data-theme="dark"] .reuse-status.changed {
+  background: rgba(125,180,255,0.2);
+  border-color: rgba(125,180,255,0.45);
+  color: #bfdbfe;
+}
+:root[data-theme="dark"] .reuse-status.unspecified {
+  background: rgba(148,163,184,0.2);
+  border-color: rgba(148,163,184,0.45);
+  color: #e2e8f0;
+}
 :root[data-theme="dark"] .reuse-presets,
 :root[data-theme="dark"] .reuse-presets .preset-input {
   background: var(--panel);

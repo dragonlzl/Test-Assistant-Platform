@@ -2435,3 +2435,29 @@
 - 测试与验证：
   - `npx playwright test tests/ui/settings_nav.spec.js`（通过，提权执行）
 - 更新记录：2025-12-25 设置页顶部导航定位（`index.html`、`scripts/modules/settings.js`、`scripts/core/appRuntime.js`、`tests/ui/settings_nav.spec.js`）。
+
+- 功能名称：用例生成清除确认抽屉
+- 功能描述：用例生成页“清除用例”改为抽屉式确认，避免阻塞弹窗并保持一致交互。
+- 操作方式：在“用例生成”页点击模块的“清除用例”，在抽屉中确认或取消。
+- 使用效果：清除操作以抽屉方式确认，支持取消，交互风格统一。
+- 新增内容/接口/组件：
+  - 前端：清除用例确认改为抽屉（`scripts/core/casesGenCore.js`）。
+  - 测试：用例生成清除抽屉 UI 用例（`tests/ui/casegen_clear_drawer.spec.js`）。
+- 复用说明：复用已有确认抽屉组件，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/casegen_clear_drawer.spec.js`（通过，提权执行）
+- 更新记录：2025-12-25 用例生成清除确认抽屉（`scripts/core/casesGenCore.js`、`tests/ui/casegen_clear_drawer.spec.js`）。
+
+- 功能名称：暗色主题复用执行按钮与侧边栏页签持久化
+- 功能描述：暗色主题下复用类型用例“实际结果”执行按钮修正背景色；用例生成进度/个人备忘侧边栏页签切换支持持久化。
+- 操作方式：切换至暗色主题查看复用用例实际结果按钮；点击侧边栏页签切换后刷新页面。
+- 使用效果：暗色主题按钮显示与主题一致；侧边栏页签选择可随账号保存并在刷新后保持。
+- 新增内容/接口/组件：
+  - 前端：暗色主题复用执行按钮样式（`style.css`）。
+  - 前端：侧边栏页签选择持久化（`config/constants.js`、`scripts/modules/memoPad.js`）。
+  - 测试：暗色主题复用按钮与页签持久化 UI 用例（`tests/ui/reuse_status_dark_theme.spec.js`、`tests/ui/sidebar_tab_persist.spec.js`）。
+- 复用说明：复用既有设置持久化与主题机制，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/reuse_status_dark_theme.spec.js`（通过，提权执行）
+  - `npx playwright test tests/ui/sidebar_tab_persist.spec.js`（通过，提权执行）
+- 更新记录：2025-12-25 暗色主题复用执行按钮与侧边栏页签持久化（`style.css`、`config/constants.js`、`scripts/modules/memoPad.js`、`tests/ui/reuse_status_dark_theme.spec.js`、`tests/ui/sidebar_tab_persist.spec.js`）。

@@ -3062,31 +3062,39 @@
         setCaseModuleStatus(moduleId, '【' + mod.title + '】暂无可清除的用例', 'warn');
         return;
       }
-      var confirmed = window.confirm('确定要清除【' + mod.title + '】的用例吗？');
-      if (!confirmed) return;
-      delete state.caseGenResults[moduleId];
-      delete state.caseSelections[moduleId];
-      var textarea = casesGenerationContainer && casesGenerationContainer.querySelector('textarea[data-result="' + moduleId + '"]');
-      if (textarea) textarea.value = '';
-      var viewBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-view="' + moduleId + '"]');
-      if (viewBtn) {
-        viewBtn.disabled = true;
-        viewBtn.textContent = '用例视图';
-      }
-      var exportBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-export="' + moduleId + '"]');
-      if (exportBtn) exportBtn.disabled = true;
-      var clearBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-clear="' + moduleId + '"]');
-      if (clearBtn) clearBtn.disabled = true;
-      closeCaseViewIfActive(moduleId);
-      updateSupplementButtons(moduleId, false);
-      clearCaseModuleStatus(moduleId);
-      clearCaseProgress(moduleId);
-      setCaseModuleStatus(moduleId, '已清除【' + mod.title + '】的用例', 'ok');
-      refreshExportCaseGenButton();
-      refreshAppendExistingButton();
-      refreshExportCaseGenXmindButton();
-      refreshCaseGenBatchButtons();
-      persistWorkflowState();
+      var moduleTitle = resolveModuleTitle(mod.title || mod.module || '');
+      openConfirmDrawer({
+        title: '确认清除用例',
+        message: '确定要清除【' + moduleTitle + '】的用例吗？',
+        confirmText: '清除',
+        cancelText: '取消',
+        previousDrawer: resolveCaseGenActiveDrawer(),
+      }).then(function(res) {
+        if (!res || res.ok !== true) return;
+        delete state.caseGenResults[moduleId];
+        delete state.caseSelections[moduleId];
+        var textarea = casesGenerationContainer && casesGenerationContainer.querySelector('textarea[data-result="' + moduleId + '"]');
+        if (textarea) textarea.value = '';
+        var viewBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-view="' + moduleId + '"]');
+        if (viewBtn) {
+          viewBtn.disabled = true;
+          viewBtn.textContent = '用例视图';
+        }
+        var exportBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-export="' + moduleId + '"]');
+        if (exportBtn) exportBtn.disabled = true;
+        var clearBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-clear="' + moduleId + '"]');
+        if (clearBtn) clearBtn.disabled = true;
+        closeCaseViewIfActive(moduleId);
+        updateSupplementButtons(moduleId, false);
+        clearCaseModuleStatus(moduleId);
+        clearCaseProgress(moduleId);
+        setCaseModuleStatus(moduleId, '已清除【' + moduleTitle + '】的用例', 'ok');
+        refreshExportCaseGenButton();
+        refreshAppendExistingButton();
+        refreshExportCaseGenXmindButton();
+        refreshCaseGenBatchButtons();
+        persistWorkflowState();
+      });
     }
 
     function toggleCaseView(moduleId) {

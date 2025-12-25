@@ -49,6 +49,7 @@
     feishuMention: '',
     theme: 'light',
     caseGenProgressCollapsed: false,
+    sidebarTabActive: 'casegen',
     memoPad: {
       collapsed: false,
       activeTabId: 'memo-tab-1',

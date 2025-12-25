@@ -186,8 +186,31 @@
 
     var activeSidebarTab = '';
 
+    function isValidSidebarTab(tabId) {
+      return tabId === 'casegen' || tabId === 'memo';
+    }
+
+    function getStoredSidebarTab() {
+      var settings = ensureSettings();
+      var stored = settings.sidebarTabActive;
+      if (stored === null || stored === undefined) return '';
+      var normalized = String(stored);
+      return isValidSidebarTab(normalized) ? normalized : '';
+    }
+
+    function persistSidebarTab(tabId) {
+      var settings = ensureSettings();
+      if (settings.sidebarTabActive === tabId) return;
+      settings.sidebarTabActive = tabId;
+      if (typeof persistSettings === 'function') {
+        persistSettings(['sidebarTabActive']);
+      }
+    }
+
     function getDefaultSidebarTab() {
       if (!sidebarTabBar) return '';
+      var stored = getStoredSidebarTab();
+      if (stored) return stored;
       var current = sidebarTabBar.querySelector('.sidebar-tab.is-active');
       if (current && current.dataset && current.dataset.sidebarTab) {
         return String(current.dataset.sidebarTab);
@@ -195,9 +218,10 @@
       return 'casegen';
     }
 
-    function setSidebarTab(tabId) {
+    function setSidebarTab(tabId, shouldPersist) {
       if (!sidebarTabBar || !sidebarTabPanels) return;
       var target = tabId ? String(tabId) : getDefaultSidebarTab();
+      if (!isValidSidebarTab(target)) target = 'casegen';
       var tabs = sidebarTabBar.querySelectorAll('[data-sidebar-tab]');
       Array.prototype.forEach.call(tabs, function(btn) {
         var isActive = btn.dataset && btn.dataset.sidebarTab === target;
@@ -210,6 +234,8 @@
         panelEl.classList.toggle('is-active', isActive);
       });
       activeSidebarTab = target;
+      if (shouldPersist === false) return;
+      persistSidebarTab(target);
     }
 
     function ensureSettings() {
@@ -723,13 +749,16 @@
       sidebarTabBar.addEventListener('click', function(e) {
         var btn = e.target && e.target.closest ? e.target.closest('[data-sidebar-tab]') : null;
         if (!btn || !btn.dataset) return;
-        setSidebarTab(btn.dataset.sidebarTab || '');
+        setSidebarTab(btn.dataset.sidebarTab || '', true);
       });
-      setSidebarTab(getDefaultSidebarTab());
+      setSidebarTab(getDefaultSidebarTab(), false);
     }
 
     try {
       window.addEventListener('app-settings-loaded', function() {
+        if (sidebarTabBar) {
+          setSidebarTab(getDefaultSidebarTab(), false);
+        }
         renderMemoPad();
       });
     } catch (err) {
