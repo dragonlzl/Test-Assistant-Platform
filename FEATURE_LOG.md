@@ -2570,3 +2570,15 @@
 - 测试与验证：
   - `npx playwright test tests/ui/tempexec_focus_persist_db.spec.js`（通过，提权执行）
 - 更新记录：2025-12-25 执行分配专注区刷新保持（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_focus_persist_db.spec.js`）。
+
+- 功能名称：暗色主题执行分配/用例库状态对比增强
+- 功能描述：暗色主题下执行分配版本盒子内子项删除按钮不再白底，查看&编辑页“执”状态标签颜色更清晰。
+- 操作方式：切换暗色主题，打开“执行分配”抽屉与“用例库-查看&编辑”列表查看样式变化。
+- 使用效果：暗色主题按钮与状态标签对比度提升，避免看不清。
+- 新增内容/接口/组件：
+  - 前端：暗色主题执行分配删除按钮与用例库执行状态标签样式优化（`style.css`）。
+  - 测试：暗色主题执行分配/用例库执行状态 UI 用例（`tests/ui/dark_theme_exec_assign_case_lib.spec.js`）。
+- 复用说明：复用现有暗色主题变量与执行分配/用例库渲染逻辑，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/dark_theme_exec_assign_case_lib.spec.js`（通过，提权执行）
+- 更新记录：2025-12-25 暗色主题执行分配/用例库状态对比增强（`style.css`、`tests/ui/dark_theme_exec_assign_case_lib.spec.js`）。
