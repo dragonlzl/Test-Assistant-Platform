@@ -2473,3 +2473,15 @@
 - 测试与验证：
   - `npx playwright test tests/ui/casegen_db_store.spec.js`（通过，提权执行）
 - 更新记录：2025-12-25 用例生成进度红点刷新持久化（`scripts/core/appRuntime.js`、`scripts/modules/casegenProgress.js`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：暗色主题复用子项执行下拉样式
+- 功能描述：修复暗色主题下复用子项执行选择框下拉列表底色偏白导致文字不清晰的问题。
+- 操作方式：在“用例执行”页切换暗色主题，展开复用子项并点击执行下拉框。
+- 使用效果：下拉列表保持暗色背景与文本可读性一致。
+- 新增内容/接口/组件：
+  - 前端：复用子项执行下拉选项暗色样式（`style.css`）。
+  - 测试：暗色主题复用执行样式 UI 用例更新（`tests/ui/reuse_status_dark_theme.spec.js`）。
+- 复用说明：复用现有主题变量与复用执行样式，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/reuse_status_dark_theme.spec.js`（通过，提权执行）
+- 更新记录：2025-12-25 暗色主题复用子项执行下拉样式（`style.css`、`tests/ui/reuse_status_dark_theme.spec.js`）。

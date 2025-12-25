@@ -7674,6 +7674,11 @@ button.exec-overview-file-chip,
   border-color: var(--border);
   color: var(--text);
 }
+:root[data-theme="dark"] .reuse-entry .status-select option,
+:root[data-theme="dark"] .reuse-entry .status-select optgroup {
+  background: var(--panel);
+  color: var(--text);
+}
 :root[data-theme="dark"] .reuse-entry .status-select.pending {
   background: rgba(148,163,184,0.2);
   border-color: rgba(148,163,184,0.4);

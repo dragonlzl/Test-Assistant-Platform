@@ -61,7 +61,12 @@ test.describe('暗色主题复用执行按钮', () => {
               expected: '预期',
               actual: '未执行',
               remark: '',
-              reuseDetails: [],
+              reuseDetails: [{
+                id: 'reuse-detail-1',
+                text: '子项1',
+                note: '',
+                status: '未执行',
+              }],
               defectLinks: [],
             }],
           }],
@@ -93,5 +98,20 @@ test.describe('暗色主题复用执行按钮', () => {
     const bgColor = await page.$eval('.reuse-status', (el) => getComputedStyle(el).backgroundColor);
     expect(bgColor).not.toBe('rgb(244, 244, 245)');
     expect(bgColor).not.toBe('rgb(255, 255, 255)');
+
+    await page.click('.reuse-status');
+    await page.waitForSelector('.reuse-entry .status-select option', { state: 'attached', timeout: 8000 });
+    const panelColor = await page.evaluate(() => {
+      var root = document.documentElement;
+      var raw = getComputedStyle(root).getPropertyValue('--panel').trim();
+      var temp = document.createElement('div');
+      temp.style.backgroundColor = raw;
+      document.body.appendChild(temp);
+      var resolved = getComputedStyle(temp).backgroundColor;
+      temp.remove();
+      return resolved;
+    });
+    const optionBg = await page.$eval('.reuse-entry .status-select option', (el) => getComputedStyle(el).backgroundColor);
+    expect(optionBg).toBe(panelColor);
   });
 });
