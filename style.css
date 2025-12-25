@@ -7800,6 +7800,22 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .case-lib-diff-case-name {
   color: var(--text);
 }
+:root[data-theme="dark"] .case-lib-diff-cell .case-lib-diff-old,
+:root[data-theme="dark"] .case-lib-diff-cell .case-lib-diff-new {
+  font-weight: 600;
+}
+:root[data-theme="dark"] .diff-badge-added,
+:root[data-theme="dark"] .diff-badge-removed,
+:root[data-theme="dark"] .diff-badge-changed {
+  font-weight: 800;
+}
+:root[data-theme="dark"] .tag.case-lib-diff-kind.append,
+:root[data-theme="dark"] .tag.case-lib-diff-kind.appended,
+:root[data-theme="dark"] .tag.case-lib-diff-kind.deleted,
+:root[data-theme="dark"] .summary-pill.case-lib-diff-pill.appended,
+:root[data-theme="dark"] .summary-pill.case-lib-diff-pill.deleted {
+  font-weight: 700;
+}
 :root[data-theme="dark"] .model-card {
   background: var(--panel);
   border-color: var(--border);

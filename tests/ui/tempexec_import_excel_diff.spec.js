@@ -93,7 +93,9 @@ async function confirmDrawer(page, options) {
     await expect(page.locator('#appConfirmDrawerMessage')).toContainText(opts.message);
   }
   await page.click('#appConfirmDrawerConfirmBtn');
-  await expect(drawer).not.toHaveClass(/open/);
+  if (!opts.skipClose) {
+    await expect(drawer).not.toHaveClass(/open/);
+  }
 }
 
 test.describe('用例执行-Excel 导入同名差异对比', () => {
@@ -112,6 +114,13 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
     const token = 'test-token';
 
     const user = { id: 9, username: 'demo_user', role: 'user', level: 'member' };
+    const settings = [{
+      id: 1,
+      scope: 'user',
+      owner_id: user.id,
+      key: 'theme',
+      value_json: 'dark',
+    }];
     const project = { id: 1, name: '项目A', description: 'for tempexec xlsx diff' };
     const version = { id: 11, name: 'v1' };
     const caseFileId = 123;
@@ -167,7 +176,7 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
       if (pathName === '/api/users/me' && method === 'GET') return respond(200, user);
       if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
       if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, [version]);
-      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, settings);
       if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
       if (pathName === '/api/models' && method === 'GET') return respond(200, []);
       if (pathName === '/api/features' && method === 'GET') return respond(200, []);
@@ -213,6 +222,7 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
 
     await page.goto(base + '/index.html');
     await waitAppReady(page, 30000);
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 
     await page.click('#openTempExecImportDrawerBtn');
@@ -242,6 +252,16 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
 
     await expect(page.locator('#tempExecImportDiffDrawer')).toHaveClass(/open/);
     await expect(page.locator('#tempExecImportDiffTitle')).toContainText('用例A');
+    await page.waitForSelector('#tempExecImportDiffBody .diff-badge', { timeout: 8000 });
+    const badgeWeights = await page.evaluate(() => {
+      var badges = Array.prototype.slice.call(document.querySelectorAll('#tempExecImportDiffBody .diff-badge'));
+      if (!badges.length) return null;
+      return badges.map((badge) => parseInt(getComputedStyle(badge).fontWeight, 10));
+    });
+    expect(badgeWeights).not.toBeNull();
+    badgeWeights.forEach((weight) => {
+      expect(weight).toBeGreaterThanOrEqual(700);
+    });
     const actualHeaders = page.locator('#tempExecImportDiffDrawer th[data-tempexec-diff-result]', { hasText: '实际结果' });
     await expect(actualHeaders).toHaveCount(1);
     await expect(actualHeaders.first()).toBeVisible();
@@ -254,7 +274,7 @@ test.describe('用例执行-Excel 导入同名差异对比', () => {
       return u.indexOf('/api/case-files/import') !== -1 && u.indexOf('overwrite=1') !== -1 && resp.status() === 200;
     });
     await page.click('#tempExecImportDiffOverwriteBtn');
-    await confirmDrawer(page, { messageIncludes: ['覆盖导入用例', '用例A'] });
+    await confirmDrawer(page, { messageIncludes: ['覆盖导入用例', '用例A'], skipClose: true });
     await confirmDrawer(page, { messageIncludes: ['替换现有执行结果'] });
     await overwriteResp;
     await page.waitForTimeout(400);

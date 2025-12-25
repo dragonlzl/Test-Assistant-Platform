@@ -2533,3 +2533,28 @@
 - 测试与验证：
   - `npx playwright test tests/ui/tempexec_reuse_align.spec.js`（通过，提权执行）
 - 更新记录：2025-12-25 复用子项执行选择框展示防抖动（`style.css`、`tests/ui/tempexec_reuse_align.spec.js`）。
+
+- 功能名称：暗色主题用例变更 diff 强调
+- 功能描述：暗色主题下用例变更 diff 的新旧内容加粗显示，提升可读性。
+- 操作方式：在“用例执行”页打开用例变更 diff 抽屉，切换暗色主题查看新旧内容。
+- 使用效果：红/绿新旧文案加粗，暗色下更清晰。
+- 新增内容/接口/组件：
+  - 前端：暗色主题 diff 新旧内容加粗样式（`style.css`）。
+  - 测试：暗色主题 diff 新旧内容 UI 用例（`tests/ui/tempexec_case_library_changes.spec.js`）。
+- 复用说明：复用现有 diff 结构与主题机制，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/tempexec_case_library_changes.spec.js`（通过，提权执行）
+- 更新记录：2025-12-25 暗色主题用例变更 diff 强调（`style.css`、`tests/ui/tempexec_case_library_changes.spec.js`）。
+
+- 功能名称：暗色主题 diff 红绿文案加粗
+- 功能描述：暗色主题下导入差异与用例库变更等 diff 视图的红/绿文案加粗，提升可读性。
+- 操作方式：切换暗色主题，打开“用例变更 diff”或“导入差异 diff”抽屉查看红绿标签。
+- 使用效果：新增/删除/追加等红绿文案更醒目。
+- 新增内容/接口/组件：
+  - 前端：暗色主题 diff 徽标/标签加粗样式（`style.css`）。
+  - 测试：暗色主题 diff 徽标/标签 UI 用例更新（`tests/ui/tempexec_case_library_changes.spec.js`、`tests/ui/tempexec_import_excel_diff.spec.js`）。
+- 复用说明：复用现有 diff 结构与主题样式，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/tempexec_case_library_changes.spec.js`（通过，提权执行）
+  - `npx playwright test tests/ui/tempexec_import_excel_diff.spec.js`（通过，提权执行）
+- 更新记录：2025-12-25 暗色主题 diff 红绿文案加粗（`style.css`、`tests/ui/tempexec_case_library_changes.spec.js`、`tests/ui/tempexec_import_excel_diff.spec.js`）。
