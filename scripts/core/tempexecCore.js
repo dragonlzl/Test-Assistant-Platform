@@ -3794,6 +3794,41 @@
       renderTempExecNav();
     }
 
+    function syncTempExecReuseStatusAlign() {
+      if (!tempExecView || !tempExecView.querySelectorAll) return;
+      if (tempExecView.classList && tempExecView.classList.contains('hidden')) return;
+      var tables = tempExecView.querySelectorAll('table');
+      if (!tables.length) return;
+      tables.forEach(function(table) {
+        if (!table || !table.querySelectorAll) return;
+        var targetEl = table.querySelector('tbody tr.case-row td.actual .reuse-status')
+          || table.querySelector('tbody tr.case-row td.actual .status-select')
+          || table.querySelector('thead th.actual');
+        if (!targetEl || !targetEl.getBoundingClientRect) return;
+        var targetRect = targetEl.getBoundingClientRect();
+        if (!targetRect || !targetRect.width) return;
+        var targetCenter = targetRect.left + targetRect.width / 2;
+        var selects = table.querySelectorAll('.reuse-panel .reuse-entry .status-select');
+        selects.forEach(function(select) {
+          if (!select || !select.getBoundingClientRect) return;
+          if (select.offsetParent === null) {
+            if (select.style) select.style.transform = '';
+            return;
+          }
+          var rect = select.getBoundingClientRect();
+          if (!rect || !rect.width) return;
+          var currentCenter = rect.left + rect.width / 2;
+          var delta = targetCenter - currentCenter;
+          if (!Number.isFinite(delta)) return;
+          if (Math.abs(delta) < 0.5) {
+            if (select.style) select.style.transform = '';
+            return;
+          }
+          if (select.style) select.style.transform = 'translateX(' + Math.round(delta) + 'px)';
+        });
+      });
+    }
+
     function renderTempExecView() {
       if (!tempExecView) return;
       var preserveScroll = Boolean(state.tempExecPreserveScrollOnce);
@@ -3879,6 +3914,7 @@
       if (tempExecMindBtn) tempExecMindBtn.disabled = false;
       syncTempExecCaseLibraryChangesButton(active);
       renderTempExecOverview();
+      syncTempExecReuseStatusAlign();
       restoreScroll();
     }
 
@@ -7798,6 +7834,7 @@
       renderTempVersionGrid: renderTempVersionGrid,
       renderTempExecTable: renderTempExecTable,
       renderTempExecOverview: renderTempExecOverview,
+      syncTempExecReuseStatusAlign: syncTempExecReuseStatusAlign,
       renderTempFocusZone: renderTempFocusZone,
       toggleTempExecRequirementZone: toggleTempExecRequirementZone,
       toggleTempExecVersionZone: toggleTempExecVersionZone,

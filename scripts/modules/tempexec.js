@@ -956,7 +956,15 @@
     }
     var updateToolbarOffsetDebounced = debounce(updateTempExecToolbarOffset, 200);
     window.addEventListener('resize', updateToolbarOffsetDebounced);
+    function syncTempExecReuseStatusAlign() {
+      if (api && typeof api.syncTempExecReuseStatusAlign === 'function') {
+        api.syncTempExecReuseStatusAlign();
+      }
+    }
+    var syncReuseStatusAlignDebounced = debounce(syncTempExecReuseStatusAlign, 200);
+    window.addEventListener('resize', syncReuseStatusAlignDebounced);
     setTimeout(updateTempExecToolbarOffset, 80);
+    setTimeout(syncTempExecReuseStatusAlign, 120);
     async function importLocalTemplate(name) {
       if (!name || !localTemplateHandles[name]) return;
       try {

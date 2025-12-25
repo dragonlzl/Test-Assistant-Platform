@@ -2497,3 +2497,15 @@
 - 测试与验证：
   - `npx playwright test tests/ui/reuse_status_dark_theme.spec.js`（通过，提权执行）
 - 更新记录：2025-12-25 暗色主题用例编辑输入框样式（`style.css`、`tests/ui/reuse_status_dark_theme.spec.js`）。
+
+- 功能名称：复用子项执行选择框中心对齐
+- 功能描述：复用子项执行结果下拉框与“实际结果”列中心自动对齐，保证视觉一致性。
+- 操作方式：在“用例执行”页开启复用并展开子项列表。
+- 使用效果：子项执行选择框的中心位置与实际结果列中心对齐。
+- 新增内容/接口/组件：
+  - 前端：复用子项执行选择框对齐逻辑（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）。
+  - 测试：执行视图复用子项对齐 UI 用例（`tests/ui/tempexec_reuse_align.spec.js`）。
+- 复用说明：复用现有执行视图渲染结构与 DOM 测量能力，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/tempexec_reuse_align.spec.js`（通过，提权执行）
+- 更新记录：2025-12-25 复用子项执行选择框中心对齐（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_reuse_align.spec.js`）。
