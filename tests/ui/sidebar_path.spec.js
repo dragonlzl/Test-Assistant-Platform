@@ -40,4 +40,28 @@ test.describe('侧边栏当前路径', () => {
     await page.locator('#currentPathText .path-item', { hasText: '执行分配' }).click();
     await expect(assignDrawer).toHaveClass(/open/);
   });
+
+  test('路径不展示一键执行进度提示', async ({ page }) => {
+    await page.click('[data-group="ai"]');
+    await page.click('[data-tab-btn="auto"]');
+    await page.evaluate(() => {
+      var state = window.app && window.app.state;
+      if (state) {
+        state.inProgressSteps = { compare: true };
+        state.waitingSteps = {};
+        state.failedSteps = {};
+        state.validationFailedSteps = {};
+      }
+      var core = window.app && window.app.core;
+      if (core && typeof core.updateFlowStatus === 'function') core.updateFlowStatus();
+    });
+    const pathItems = page.locator('#currentPathText .path-item');
+    await expect(pathItems.nth(0)).toHaveText('AI 功能');
+    await expect(pathItems.nth(1)).toHaveText('一键执行');
+
+    await page.hover('[data-group="ai"]');
+    await page.click('[data-tab-btn="clean"]');
+    await expect(pathItems.nth(0)).toHaveText('AI 功能');
+    await expect(pathItems.nth(1)).toHaveText('功能流程');
+  });
 });

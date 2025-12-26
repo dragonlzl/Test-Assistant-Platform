@@ -18,6 +18,10 @@
     var splitResultEl = pickEl(dom.splitResultEl, 'splitResult');
     var casesCompareResultEl = pickEl(dom.casesCompareResultEl, 'casesCompareResult');
     var flowNavSteps = dom.flowNavSteps || (typeof document !== 'undefined' ? document.querySelectorAll('#flowNav .step') : []);
+    var flowNavStepsCompact = dom.flowNavStepsCompact
+      || (typeof document !== 'undefined' ? document.querySelectorAll('#autoFlowCompact .step') : []);
+    var flowNavSubsteps = dom.flowNavSubsteps
+      || (typeof document !== 'undefined' ? document.querySelectorAll('.ai-flow-substep') : []);
     var runReviewBtn = pickEl(dom.runReviewBtn, 'runReview');
     var caseViewHint = pickEl(dom.caseViewHint, 'caseViewHint');
     var exportCaseGenBtn = pickEl(dom.exportCaseGenBtn, 'exportCaseGen');
@@ -34,6 +38,15 @@
       done: '✓',
       waiting: '!',
       failed: 'X',
+    };
+    var stepMeta = {
+      import: { badge: '1', label: '导入' },
+      review: { badge: '2', label: '评审' },
+      clean: { badge: '3', label: '清洗' },
+      compare: { badge: '4', label: '对比完整性' },
+      split: { badge: '5', label: '拆分' },
+      'cases-upload': { badge: '6', label: '用例导入' },
+      cases: { badge: '7', label: '覆盖对比' },
     };
 
     var switchTab = handlers.switchTab || function() {};
@@ -154,13 +167,16 @@
       var order = ['import', 'review', 'clean', 'compare', 'split', 'cases-upload', 'cases'];
       var failedStep = order.find(function(key) { return mergedFailedMap[key]; }) || '';
       var waitingStep = order.find(function(key) { return waitingMap[key]; }) || '';
+      var runningStep = order.find(function(key) { return runningMap[key]; }) || '';
       var nextPending = failedStep || waitingStep || order.find(function(key) { return !stateMap[key] && !runningMap[key]; }) || 'cases';
+      var compactTarget = runningStep || failedStep || waitingStep || nextPending;
       if (runReviewBtn) {
         var rawReady = stateMap.import;
         runReviewBtn.disabled = !rawReady || runningMap.review;
       }
-      if (flowNavSteps && typeof flowNavSteps.forEach === 'function') {
-        flowNavSteps.forEach(function(step) {
+      function syncSteps(stepList) {
+        if (!stepList || typeof stepList.forEach !== 'function') return;
+        stepList.forEach(function(step) {
           var target = step.dataset ? step.dataset.target : '';
           var status = 'pending';
           var isRunning = Boolean(runningMap[target]);
@@ -191,6 +207,26 @@
           if (!stateMap[target] && target === nextPending) step.classList.add('active');
           if (stateMap[target]) status = 'done';
           syncStepStatus(step, status);
+        });
+      }
+      syncSteps(flowNavSteps);
+      syncSteps(flowNavStepsCompact);
+      if (flowNavSubsteps && typeof flowNavSubsteps.forEach === 'function') {
+        var subMeta = stepMeta[compactTarget] || {};
+        flowNavSubsteps.forEach(function(step) {
+          if (!step) return;
+          if (step.dataset) step.dataset.target = compactTarget;
+          var badgeEl = step.querySelector ? step.querySelector('.badge') : null;
+          if (badgeEl && subMeta.badge) badgeEl.textContent = subMeta.badge;
+          var labelEl = step.querySelector ? step.querySelector('.step-label') : null;
+          if (labelEl && subMeta.label) labelEl.textContent = subMeta.label;
+        });
+        syncSteps(flowNavSubsteps);
+      }
+      if (flowNavStepsCompact && typeof flowNavStepsCompact.forEach === 'function') {
+        flowNavStepsCompact.forEach(function(step) {
+          var target = step.dataset ? step.dataset.target : '';
+          step.classList.toggle('hidden', compactTarget && target !== compactTarget);
         });
       }
     }

@@ -2662,3 +2662,19 @@
 - 测试与验证：
   - `npm run test:ui -- tests/ui/tempexec_reuse_pending_badge.spec.js`（通过，提权执行）
 - 更新记录：2025-12-26 复用未执行子项红点提示（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_reuse_pending_badge.spec.js`）。
+
+- 功能名称：AI 功能按钮一键执行进度提示
+- 功能描述：侧边栏“AI 功能”按钮右侧仅展示当前步骤的紧凑进度与步骤名称，并同步展示在二级菜单“一键执行/功能流程”按钮左侧，运行/等待/失败/完成状态同步，全部完成时保持最后步骤勾选。
+- 操作方式：进入一键执行页或更新步骤状态，观察 AI 功能按钮右侧紧凑进度与二级菜单左侧提示同步更新。
+- 使用效果：无需进入页面即可查看当前进度，窄屏下也保持单步紧凑展示。
+- 新增内容/接口/组件：
+  - 前端：新增 AI 按钮紧凑进度 DOM 与样式，并复用 flowCore 同步状态（`index.html`、`style.css`、`scripts/core/flowCore.js`）。
+  - 测试：AI 按钮紧凑进度 UI 用例（`tests/ui/auto_flow_compact_progress.spec.js`）。
+- 复用说明：复用现有一键执行流程状态计算与同步逻辑，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/auto_flow_compact_progress.spec.js`（通过，提权执行）
+- 更新记录：2025-12-26 AI 功能按钮一键执行进度提示（`index.html`、`style.css`、`scripts/core/flowCore.js`、`tests/ui/auto_flow_compact_progress.spec.js`）。
+- 更新记录：2025-12-26 紧凑进度勾选图标居中（`style.css`）。
+- 更新记录：2025-12-26 二级菜单展示一键执行进度提示（`index.html`、`style.css`、`scripts/core/flowCore.js`、`tests/ui/auto_flow_compact_progress.spec.js`）。
+- 更新记录：2025-12-26 紧凑进度执行中标识改为圆形（`style.css`）。
+- 更新记录：2025-12-26 页面路径隐藏进度提示（`scripts/core/appRuntime.js`、`tests/ui/sidebar_path.spec.js`）。

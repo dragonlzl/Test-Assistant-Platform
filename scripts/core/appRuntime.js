@@ -538,14 +538,20 @@
     function getTabLabel(tabName) {
       if (!tabName) return '';
       var btn = document.querySelector('[data-tab-btn="' + tabName + '"]');
-      return btn && btn.textContent ? String(btn.textContent).trim() : '';
+      if (!btn) return '';
+      var labelEl = btn.querySelector ? btn.querySelector('.tab-submenu-label') : null;
+      if (labelEl && labelEl.textContent) return String(labelEl.textContent).trim();
+      return btn.textContent ? String(btn.textContent).trim() : '';
     }
 
     function getGroupLabel(tabName) {
       var groupName = getGroupNameForTab(tabName);
       if (!groupName) return '';
       var btn = document.querySelector('.tab-group-btn[data-group="' + groupName + '"]');
-      return btn && btn.textContent ? String(btn.textContent).trim() : '';
+      if (!btn) return '';
+      var labelEl = btn.querySelector ? btn.querySelector('.tab-group-label') : null;
+      if (labelEl && labelEl.textContent) return String(labelEl.textContent).trim();
+      return btn.textContent ? String(btn.textContent).trim() : '';
     }
 
     function renderCurrentPath(parts) {
