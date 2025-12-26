@@ -6,6 +6,33 @@
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>用例助手</title>
 <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml"/>
+<script>
+(function() {
+  try {
+    var key = 'usecase-settings-v1';
+    var raw = localStorage.getItem(key);
+    if (!raw) return;
+    var saved = {};
+    try {
+      saved = JSON.parse(raw || '{}') || {};
+    } catch (err) {
+      saved = {};
+    }
+    var theme = saved && saved.theme ? String(saved.theme).toLowerCase() : '';
+    if (theme !== 'dark' && theme !== 'light') return;
+    var root = document && document.documentElement ? document.documentElement : null;
+    if (!root) return;
+    if (root.dataset) {
+      root.dataset.theme = theme;
+    } else {
+      root.setAttribute('data-theme', theme);
+    }
+    if (root.style) root.style.colorScheme = theme === 'dark' ? 'dark' : 'light';
+  } catch (err) {
+    // ignore
+  }
+})();
+</script>
 <link rel="stylesheet" href="./style.css"/>
 </head>
 <body>
@@ -37,7 +64,7 @@
 <div class="tab-group">
 <button class="tab-group-btn" data-group="ai">
   <span class="tab-group-label">AI 功能</span>
-  <span class="ai-flow-compact" id="autoFlowCompact" aria-hidden="true">
+  <span class="ai-flow-compact hidden" id="autoFlowCompact" aria-hidden="true">
     <span class="step active no-reason" data-target="import"><span class="badge">1</span><span class="step-label">导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
     <span class="step no-reason" data-target="review"><span class="badge">2</span><span class="step-label">评审</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
     <span class="step no-reason" data-target="clean"><span class="badge">3</span><span class="step-label">清洗</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>

@@ -2730,3 +2730,29 @@
 - 更新记录：2025-12-26 执行总览布局与项目列表请求去重（`services/apiClient.js`、`scripts/modules/admin.js`、`scripts/modules/execOverview.js`、`tests/ui/tab_request_dedup.spec.js`）。
 - 更新记录：2025-12-26 人员管理用户项目请求单飞去重（`services/apiClient.js`、`tests/ui/tab_request_dedup.spec.js`）。
 - 更新记录：2025-12-26 覆盖缺失视图恢复时不自动弹出（`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/auto.js`、`tests/ui/auto_drawer.spec.js`）。
+
+- 功能名称：AI 功能按钮紧凑进度初始化隐藏防闪
+- 功能描述：修复刷新时 AI 功能按钮紧凑进度短暂展示全部步骤导致按钮异常拉长的问题，初始化时默认隐藏进度，仅在有实际进度时显示最新步骤。
+- 操作方式：刷新页面观察 AI 功能按钮；未开始时紧凑进度不出现，有实际进度时仅展示当前步骤。
+- 使用效果：避免刷新瞬间闪现全量步骤，按钮长度稳定。
+- 新增内容/接口/组件：
+  - 前端：紧凑进度默认隐藏并由状态控制显示（`index.html`）。
+  - 测试：紧凑进度初始化隐藏用例（`tests/ui/auto_flow_compact_progress.spec.js`）。
+- 复用说明：复用现有一键执行进度状态渲染逻辑，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/auto_flow_compact_progress.spec.js`（通过，提权执行）
+  - `APP_DB_FILE=apitest.db npm run test:api -- tests/api/settings_models.spec.js`（通过，提权执行）
+- 更新记录：2025-12-26 AI 功能按钮紧凑进度初始化隐藏防闪（`index.html`、`tests/ui/auto_flow_compact_progress.spec.js`）。
+
+- 功能名称：暗色主题首屏预应用避免闪白
+- 功能描述：刷新页面时根据本地主题设置提前写入 `data-theme`，减少暗色主题首屏先白后黑的闪烁。
+- 操作方式：设置为黑色主题后刷新页面，页面直接以暗色主题渲染。
+- 使用效果：暗色主题首屏观感更稳定。
+- 新增内容/接口/组件：
+  - 前端：首屏读取本地主题并提前写入主题属性（`index.html`）。
+  - 测试：主题首屏应用 UI 用例（`tests/ui/theme_setting.spec.js`）。
+- 复用说明：复用现有主题设置存储键值，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/theme_setting.spec.js`（通过，提权执行）
+  - `APP_DB_FILE=apitest.db npm run test:api -- tests/api/settings_models.spec.js`（通过，提权执行）
+- 更新记录：2025-12-26 暗色主题首屏预应用避免闪白（`index.html`、`tests/ui/theme_setting.spec.js`）。

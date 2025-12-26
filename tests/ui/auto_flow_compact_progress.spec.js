@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { test, expect } = require('@playwright/test');
 
 test.describe('一键执行按钮进度提示', () => {
@@ -119,6 +121,14 @@ test.describe('一键执行按钮进度提示', () => {
     await expect(cleanSubstep.locator('.step-label')).toHaveText('用例导入');
     await expect(autoSubstep.locator('.step-status')).toHaveAttribute('data-status', 'failed');
     await expect(cleanSubstep.locator('.step-status')).toHaveAttribute('data-status', 'failed');
+  });
+
+  test('初始化时紧凑进度默认隐藏', async () => {
+    const htmlPath = path.join(__dirname, '..', '..', 'index.html');
+    const html = fs.readFileSync(htmlPath, 'utf8');
+    const compactMatch = html.match(/<span\s+class=\"([^\"]*)\"\s+id=\"autoFlowCompact\"/);
+    expect(compactMatch).not.toBeNull();
+    expect(compactMatch[1]).toContain('hidden');
   });
 
   test('未开始时不展示紧凑进度', async ({ page }) => {
