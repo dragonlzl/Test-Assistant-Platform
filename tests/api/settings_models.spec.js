@@ -89,6 +89,16 @@ test.describe('settings/models/features + ops api', () => {
     expect(guideSetting && guideSetting.value_json && guideSetting.value_json.auto).toBe(false);
     const themeSetting = execSettingsBody.find((item) => item.key === 'theme' && item.owner_id === userId);
     expect(themeSetting && themeSetting.value_json).toBe('dark');
+    const switchTheme = await ctx.put(`${apiBase}/api/settings`, {
+      headers: userHeaders,
+      data: { scope: 'user', items: [{ key: 'theme', value_json: 'light' }] },
+    });
+    expect(switchTheme.status()).toBe(200);
+    const listThemeSettings = await ctx.get(`${apiBase}/api/settings?scope=all`, { headers: userHeaders });
+    expect(listThemeSettings.status()).toBe(200);
+    const themeBody = await listThemeSettings.json();
+    const lightThemeSetting = themeBody.find((item) => item.key === 'theme' && item.owner_id === userId);
+    expect(lightThemeSetting && lightThemeSetting.value_json).toBe('light');
 
     // model configs
     const createUserModel = await ctx.post(`${apiBase}/api/models`, {

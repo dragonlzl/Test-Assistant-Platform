@@ -18,6 +18,7 @@
     var splitResultEl = pickEl(dom.splitResultEl, 'splitResult');
     var casesCompareResultEl = pickEl(dom.casesCompareResultEl, 'casesCompareResult');
     var flowNavSteps = dom.flowNavSteps || (typeof document !== 'undefined' ? document.querySelectorAll('#flowNav .step') : []);
+    var flowNavCompact = dom.flowNavCompact || pickEl(dom.flowNavCompact, 'autoFlowCompact');
     var flowNavStepsCompact = dom.flowNavStepsCompact
       || (typeof document !== 'undefined' ? document.querySelectorAll('#autoFlowCompact .step') : []);
     var flowNavSubsteps = dom.flowNavSubsteps
@@ -210,6 +211,8 @@
       var runningStep = order.find(function(key) { return runningMap[key]; }) || '';
       var nextPending = failedStep || waitingStep || order.find(function(key) { return !stateMap[key] && !runningMap[key]; }) || 'cases';
       var compactTarget = runningStep || failedStep || waitingStep || nextPending;
+      var hasProgress = Boolean(runningStep || failedStep || waitingStep
+        || order.some(function(key) { return Boolean(stateMap[key]); }));
       if (runReviewBtn) {
         var rawReady = stateMap.import;
         runReviewBtn.disabled = !rawReady || runningMap.review;
@@ -267,14 +270,18 @@
           if (badgeEl && subMeta.badge) badgeEl.textContent = subMeta.badge;
           var labelEl = step.querySelector ? step.querySelector('.step-label') : null;
           if (labelEl && subMeta.label) labelEl.textContent = subMeta.label;
+          if (step.classList) step.classList.toggle('hidden', !hasProgress);
         });
         syncSteps(flowNavSubsteps);
       }
       if (flowNavStepsCompact && typeof flowNavStepsCompact.forEach === 'function') {
         flowNavStepsCompact.forEach(function(step) {
           var target = step.dataset ? step.dataset.target : '';
-          step.classList.toggle('hidden', compactTarget && target !== compactTarget);
+          step.classList.toggle('hidden', !hasProgress || (compactTarget && target !== compactTarget));
         });
+      }
+      if (flowNavCompact && flowNavCompact.classList) {
+        flowNavCompact.classList.toggle('hidden', !hasProgress);
       }
     }
 

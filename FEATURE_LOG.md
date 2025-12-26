@@ -2678,6 +2678,7 @@
 - 更新记录：2025-12-26 二级菜单展示一键执行进度提示（`index.html`、`style.css`、`scripts/core/flowCore.js`、`tests/ui/auto_flow_compact_progress.spec.js`）。
 - 更新记录：2025-12-26 紧凑进度执行中标识改为圆形（`style.css`）。
 - 更新记录：2025-12-26 页面路径隐藏进度提示（`scripts/core/appRuntime.js`、`tests/ui/sidebar_path.spec.js`）。
+- 更新记录：2025-12-26 紧凑进度未启动时隐藏并优化白色主题选中对比度（`scripts/core/flowCore.js`、`style.css`、`tests/ui/auto_flow_compact_progress.spec.js`、`tests/api/settings_models.spec.js`）。
 
 - 功能名称：拆分视图展示特殊测试点
 - 功能描述：拆分模块包含“特殊测试点”字段时，拆分视图表格可正确展示该字段内容。
@@ -2725,3 +2726,4 @@
 - 更新记录：2025-12-26 修复执行页加载脚本缺失闭合导致的 async 语法错误（`scripts/core/tempexecCore.js`）。
 - 更新记录：2025-12-26 执行总览布局与项目列表请求去重（`services/apiClient.js`、`scripts/modules/admin.js`、`scripts/modules/execOverview.js`、`tests/ui/tab_request_dedup.spec.js`）。
 - 更新记录：2025-12-26 人员管理用户项目请求单飞去重（`services/apiClient.js`、`tests/ui/tab_request_dedup.spec.js`）。
+- 更新记录：2025-12-26 覆盖缺失视图恢复时不自动弹出（`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/auto.js`、`tests/ui/auto_drawer.spec.js`）。

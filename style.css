@@ -3325,6 +3325,13 @@ body {
   color: #1d4ed8;
   background: rgba(37,99,235,0.12);
 }
+:root:not([data-theme="dark"]) .tabs .tab-group-btn.active .ai-flow-compact .step.active:not(.waiting):not(.failed):not(.done),
+:root:not([data-theme="dark"]) .tab-submenu .ai-flow-submenu-btn.active .ai-flow-substep.active:not(.waiting):not(.failed):not(.done) {
+  background: rgba(255,255,255,0.95);
+  border-color: rgba(255,255,255,0.85);
+  color: #1e3a8a;
+  box-shadow: 0 6px 14px rgba(15,23,42,0.18);
+}
 .ai-flow-compact .step.done,
 .ai-flow-substep.done {
   border-color: rgba(34,197,94,0.55);

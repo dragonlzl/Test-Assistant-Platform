@@ -120,4 +120,25 @@ test.describe('一键执行抽屉视图', () => {
     await page.click('#closeAutoMissingDrawerBtn');
     await expect(missingDrawer).not.toHaveClass(/open/);
   });
+
+  test('覆盖缺失视图在刷新后不自动弹出', async ({ page }) => {
+    await page.evaluate(() => {
+      const snapshot = {
+        version: 1,
+        user_id: '',
+        updated_at: Date.now(),
+        data: {
+          compareResult: JSON.stringify({ coverage: 80, missing: ['缺少需求点A'] }),
+          rawText: '原始需求',
+          cleanedText: '清洗结果',
+        },
+      };
+      localStorage.setItem('usecase-workflow-state-v1', JSON.stringify(snapshot));
+    });
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForTimeout(200);
+    await expect(page.locator('#autoCompareDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#autoCompareToggleBtn')).toBeEnabled();
+  });
 });

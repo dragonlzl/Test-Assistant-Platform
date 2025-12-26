@@ -532,7 +532,8 @@
       }
     }
 
-    function syncAutoCompareStatus() {
+    function syncAutoCompareStatus(shouldOpenDrawer) {
+      if (shouldOpenDrawer === void 0) shouldOpenDrawer = true;
       var coverage = extractCoverageFromCompareResult();
       var data = extractCompareResultData();
       var missing = data && Array.isArray(data.missing) ? data.missing : [];
@@ -541,7 +542,7 @@
       if (autoRecleanStatus && !(coverage !== null && coverage < 100)) setStatus(autoRecleanStatus, '', '');
       if (!(coverage !== null && coverage < 100) && autoWorkflowStatus) setStatus(autoWorkflowStatus, '', '');
       if (!(coverage !== null && coverage < 100)) clearStepWaiting('compare');
-      renderAutoCompareMissingView(missing, coverage);
+      renderAutoCompareMissingView(missing, coverage, false, shouldOpenDrawer);
       return coverage;
     }
 

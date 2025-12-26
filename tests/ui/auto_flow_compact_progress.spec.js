@@ -121,6 +121,109 @@ test.describe('一键执行按钮进度提示', () => {
     await expect(cleanSubstep.locator('.step-status')).toHaveAttribute('data-status', 'failed');
   });
 
+  test('未开始时不展示紧凑进度', async ({ page }) => {
+    await page.evaluate(() => {
+      var raw = document.getElementById('rawText');
+      var review = document.getElementById('reviewResult');
+      var cleaned = document.getElementById('cleanedText');
+      var compare = document.getElementById('compareResult');
+      var split = document.getElementById('splitResult');
+      var caseText = document.getElementById('caseText');
+      var casesCompare = document.getElementById('casesCompareResult');
+      if (raw) raw.value = '';
+      if (review) review.value = '';
+      if (cleaned) cleaned.value = '';
+      if (compare) compare.value = '';
+      if (split) split.value = '';
+      if (caseText) caseText.value = '';
+      if (casesCompare) casesCompare.value = '';
+      var state = window.app && window.app.state;
+      function ensureRunner() {
+        if (window.app && window.app._flowCompactRunner) return window.app._flowCompactRunner;
+        var flowCore = window.app && window.app.flowCore;
+        if (!flowCore || typeof flowCore.init !== 'function' || !state) return null;
+        var runtime = window.app && window.app.core;
+        var runner = flowCore.init({
+          state: state,
+          handlers: {
+            hasCaseSource: function() {
+              return runtime && typeof runtime.hasCaseSource === 'function'
+                ? runtime.hasCaseSource()
+                : false;
+            },
+          },
+        });
+        window.app._flowCompactRunner = runner;
+        return runner;
+      }
+      var runner = ensureRunner();
+      if (state) {
+        state.inProgressSteps = {};
+        state.waitingSteps = {};
+        state.failedSteps = {};
+        state.validationFailedSteps = {};
+      }
+      if (runner && typeof runner.updateFlowStatus === 'function') runner.updateFlowStatus();
+    });
+
+    await expect(page.locator('#autoFlowCompact')).toHaveClass(/hidden/);
+    await expect(page.locator('#autoFlowCompact .step:not(.hidden)')).toHaveCount(0);
+    await expect(page.locator('[data-tab-btn="auto"] .ai-flow-substep')).toHaveClass(/hidden/);
+    await expect(page.locator('[data-tab-btn="clean"] .ai-flow-substep')).toHaveClass(/hidden/);
+  });
+
+  test('白色主题选中时进度样式可辨识', async ({ page }) => {
+    await page.evaluate(() => {
+      var raw = document.getElementById('rawText');
+      if (raw) raw.value = '需求';
+      var state = window.app && window.app.state;
+      function ensureRunner() {
+        if (window.app && window.app._flowCompactRunner) return window.app._flowCompactRunner;
+        var flowCore = window.app && window.app.flowCore;
+        if (!flowCore || typeof flowCore.init !== 'function' || !state) return null;
+        var runtime = window.app && window.app.core;
+        var runner = flowCore.init({
+          state: state,
+          handlers: {
+            hasCaseSource: function() {
+              return runtime && typeof runtime.hasCaseSource === 'function'
+                ? runtime.hasCaseSource()
+                : false;
+            },
+          },
+        });
+        window.app._flowCompactRunner = runner;
+        return runner;
+      }
+      var runner = ensureRunner();
+      if (state) {
+        state.inProgressSteps = { import: true };
+        state.waitingSteps = {};
+        state.failedSteps = {};
+        state.validationFailedSteps = {};
+      }
+      var groupBtn = document.querySelector('.tab-group-btn[data-group="ai"]');
+      if (groupBtn) groupBtn.classList.add('active');
+      var autoBtn = document.querySelector('.tab-submenu .ai-flow-submenu-btn[data-tab-btn="auto"]');
+      if (autoBtn) autoBtn.classList.add('active');
+      if (runner && typeof runner.updateFlowStatus === 'function') runner.updateFlowStatus();
+    });
+
+    const compactStyle = await page.locator('#autoFlowCompact .step.active:not(.hidden)').evaluate((node) => {
+      const style = window.getComputedStyle(node);
+      return { bg: style.backgroundColor, color: style.color };
+    });
+    expect(compactStyle.bg.indexOf('255, 255, 255')).toBeGreaterThan(-1);
+    expect(compactStyle.color).not.toBe('rgb(255, 255, 255)');
+
+    const subStyle = await page.locator('[data-tab-btn="auto"] .ai-flow-substep.active').evaluate((node) => {
+      const style = window.getComputedStyle(node);
+      return { bg: style.backgroundColor, color: style.color };
+    });
+    expect(subStyle.bg.indexOf('255, 255, 255')).toBeGreaterThan(-1);
+    expect(subStyle.color).not.toBe('rgb(255, 255, 255)');
+  });
+
   test('全部完成时最后步骤保持勾选', async ({ page }) => {
     await page.evaluate(() => {
       var raw = document.getElementById('rawText');

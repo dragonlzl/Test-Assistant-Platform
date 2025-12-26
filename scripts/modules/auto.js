@@ -169,7 +169,7 @@
       });
     }
 
-    syncAutoCompareStatus();
+    syncAutoCompareStatus(false);
 
     return {
       resetAutoCompareMissingView: resetAutoCompareMissingView,

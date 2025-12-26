@@ -899,7 +899,7 @@
       if (name === 'auto') {
         if (!skipHooks) {
           updateAutoClarifyVisibility();
-          syncAutoCompareStatus();
+          syncAutoCompareStatus(false);
           updateAutoMissingCard();
         }
       }
@@ -1355,7 +1355,7 @@
         'syncAutoCompareStatus',
       ]);
     }
-    syncAutoCompareStatus();
+    syncAutoCompareStatus(false);
     if (window.app.casesgen && typeof window.app.casesgen.init === 'function') {
       window.app.casesgen.init(moduleContext);
     }
