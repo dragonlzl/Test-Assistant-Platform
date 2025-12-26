@@ -68,6 +68,43 @@ test.describe('执行视图专注区同步', () => {
     });
   });
 
+  test('执行页专注区空白点击打开执行分配', async ({ page }) => {
+    await gotoIndex(page);
+    await switchToTab(page, 'tempexec');
+
+    await page.evaluate(() => {
+      const state = window.app && window.app.state ? window.app.state : null;
+      const api = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      if (!state || !api) return;
+      state.tempExecFiles = [
+        {
+          id: 'file-1',
+          name: '执行用例A',
+          cases: [{ module: '登录', title: '账号登录', expected: '成功' }],
+          scope: 'current',
+          requirement: '需求A',
+          createdAt: Date.now(),
+        },
+      ];
+      state.tempExecActiveId = 'file-1';
+      state.tempExecFocus = ['file-1'];
+      api.renderTempExecNav();
+      api.renderTempExecView();
+      api.renderTempVersionGrid();
+      api.renderTempFocusZone();
+    });
+
+    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
+    await page.click('#tempExecViewFocusBlock button[data-temp-file]');
+    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
+
+    await page.click('#tempExecViewFocusBlock .temp-focus-header');
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
+
+    await page.click('#tempFocusBlock [data-temp-focus-zone]');
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
+  });
+
   test('专注区同步显示与移出确认抽屉', async ({ page }) => {
     await gotoIndex(page);
     await switchToTab(page, 'tempexec');

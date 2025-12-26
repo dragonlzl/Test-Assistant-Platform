@@ -4107,6 +4107,7 @@
       var opts = options && typeof options === 'object' ? options : {};
       var shouldSwitchTab = opts.switchTab !== false;
       var shouldScrollTop = opts.scrollTop === true;
+      var onEmptyClick = typeof opts.onEmptyClick === 'function' ? opts.onEmptyClick : null;
       block.addEventListener('click', function(e) {
         var removeBtn = e.target.closest('[data-temp-focus-remove]');
         if (removeBtn) {
@@ -4125,7 +4126,17 @@
         }
         if (shouldSwitchTab) switchTab('tempexec');
         if (shouldScrollTop) scrollToTempExecViewTop({ waitForDrawerUnlock: true });
+        return;
       });
+      if (onEmptyClick) {
+        block.addEventListener('click', function(e) {
+          var removeBtn = e.target.closest('[data-temp-focus-remove]');
+          if (removeBtn) return;
+          var btn = e.target.closest('button[data-temp-file]');
+          if (btn) return;
+          onEmptyClick(e);
+        });
+      }
       block.addEventListener('dragstart', function(e) {
         var btn = e.target.closest('button[data-temp-file]');
         if (!btn || !e.dataTransfer) return;
@@ -4146,7 +4157,17 @@
     }
 
     bindFocusBlockEvents(tempFocusBlock, { switchTab: true, scrollTop: true });
-    bindFocusBlockEvents(tempExecViewFocusBlock, { switchTab: false, scrollTop: true });
+    bindFocusBlockEvents(tempExecViewFocusBlock, {
+      switchTab: false,
+      scrollTop: true,
+      onEmptyClick: function() {
+        if (tempExecAssignDrawer && typeof tempExecAssignDrawer.open === 'function') {
+          tempExecAssignDrawer.open();
+        } else if (openTempExecAssignDrawerBtn && typeof openTempExecAssignDrawerBtn.click === 'function') {
+          openTempExecAssignDrawerBtn.click();
+        }
+      },
+    });
 
     function cleanupFocusZoneIndicator(zone) {
       if (!zone) return;

@@ -2706,3 +2706,4 @@
 - 更新记录：2025-12-26 阻塞气泡宽度自适应短文案不换行（`scripts/core/flowCore.js`、`style.css`、`tests/ui/auto_flow_block_reason.spec.js`）。
 - 更新记录：2025-12-26 执行页入口直接打开用例库选择执行（`index.html`、`scripts/modules/tempexec.js`、`scripts/modules/pageGuide.js`、`tests/ui/tempexec_entry.spec.js`）。
 - 更新记录：2025-12-26 执行页选择用例执行抽屉不切换页签（`index.html`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/pageGuide.js`、`tests/ui/tempexec_entry.spec.js`）。
+- 更新记录：2025-12-26 执行页专注区点击打开执行分配（`scripts/modules/tempexec.js`、`tests/ui/tempexec_focus_sync.spec.js`）。
