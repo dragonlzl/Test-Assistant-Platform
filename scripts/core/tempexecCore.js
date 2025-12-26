@@ -4752,6 +4752,8 @@
     }
 
     var tempExecDbLoadSeq = 0;
+    var tempExecDbLoadPromise = null;
+    var tempExecDbLoadPending = false;
 
     // “＋”新增用例高亮：仅保留在本次页面生命周期（刷新后清空），避免写入 localStorage/DB。
     var tempExecNewAddedCaseUiKeysByFileId = {};
@@ -4825,58 +4827,63 @@
     }
 
     async function loadTempExecStateFromDb() {
-      tempExecDbLoadSeq += 1;
-      var loadSeq = tempExecDbLoadSeq;
+      if (tempExecDbLoadPromise) {
+        tempExecDbLoadPending = true;
+        return tempExecDbLoadPromise;
+      }
       var client = getApiClient();
       if (!client || typeof client.listExecSets !== 'function') return;
-      if (tempExecStatus) setStatus(tempExecStatus, '加载执行数据中...', '');
-      var uiState = null;
-      var hasSettingsPageSize = false;
-      var settingsPageSize = null;
-      if (typeof client.listSettings === 'function') {
-        try {
-          var settings = await client.listSettings('user');
-          if (Array.isArray(settings)) {
-            settings.forEach(function(item) {
-              if (!item || !item.key) return;
-              if (item.key === 'tempexec_ui_v1') {
-                uiState = item.value_json && typeof item.value_json === 'object' ? item.value_json : null;
-                return;
-              }
-              if (item.key === 'tempExecPageSize') {
-                settingsPageSize = item.value_json;
-                hasSettingsPageSize = true;
-              }
-            });
+      tempExecDbLoadSeq += 1;
+      var loadSeq = tempExecDbLoadSeq;
+      var promise = (async function() {
+        if (tempExecStatus) setStatus(tempExecStatus, '加载执行数据中...', '');
+        var uiState = null;
+        var hasSettingsPageSize = false;
+        var settingsPageSize = null;
+        if (typeof client.listSettings === 'function') {
+          try {
+            var settings = await client.listSettings('user');
+            if (Array.isArray(settings)) {
+              settings.forEach(function(item) {
+                if (!item || !item.key) return;
+                if (item.key === 'tempexec_ui_v1') {
+                  uiState = item.value_json && typeof item.value_json === 'object' ? item.value_json : null;
+                  return;
+                }
+                if (item.key === 'tempExecPageSize') {
+                  settingsPageSize = item.value_json;
+                  hasSettingsPageSize = true;
+                }
+              });
+            }
+          } catch (err) {
+            uiState = null;
           }
-        } catch (err) {
-          uiState = null;
         }
-      }
-      var sets = [];
-      try {
-        sets = await client.listExecSets();
-      } catch (err) {
-        if (tempExecStatus) setStatus(tempExecStatus, err && err.message ? err.message : '加载执行数据失败', 'err');
-        return;
-      }
-      var list = Array.isArray(sets) ? sets : [];
-      list = list.filter(function(s) { return s && String(s.status || '') === 'active'; });
-      // 按更新时间倒序，保持“最近执行的用例”更靠前
-      list = list.slice().sort(function(a, b) {
-        return parseDbTimeMs(b && b.updated_at) - parseDbTimeMs(a && a.updated_at);
-      });
-      var archivedSets = [];
-      try {
-        archivedSets = await client.listExecSets(null, { status_filter: 'archived' });
-      } catch (err) {
-        archivedSets = [];
-      }
-      var archivedList = Array.isArray(archivedSets) ? archivedSets : [];
-      archivedList = archivedList.filter(function(s) { return s && String(s.status || '') === 'archived'; });
-      var archivedHiddenKeys = uiState && Array.isArray(uiState.archivedHidden)
-        ? uiState.archivedHidden.map(function(k) { return String(k || '').trim(); }).filter(Boolean)
-        : [];
+        var sets = [];
+        try {
+          sets = await client.listExecSets();
+        } catch (err) {
+          if (tempExecStatus) setStatus(tempExecStatus, err && err.message ? err.message : '加载执行数据失败', 'err');
+          return;
+        }
+        var list = Array.isArray(sets) ? sets : [];
+        list = list.filter(function(s) { return s && String(s.status || '') === 'active'; });
+        // 按更新时间倒序，保持“最近执行的用例”更靠前
+        list = list.slice().sort(function(a, b) {
+          return parseDbTimeMs(b && b.updated_at) - parseDbTimeMs(a && a.updated_at);
+        });
+        var archivedSets = [];
+        try {
+          archivedSets = await client.listExecSets(null, { status_filter: 'archived' });
+        } catch (err) {
+          archivedSets = [];
+        }
+        var archivedList = Array.isArray(archivedSets) ? archivedSets : [];
+        archivedList = archivedList.filter(function(s) { return s && String(s.status || '') === 'archived'; });
+        var archivedHiddenKeys = uiState && Array.isArray(uiState.archivedHidden)
+          ? uiState.archivedHidden.map(function(k) { return String(k || '').trim(); }).filter(Boolean)
+          : [];
       // 若用户曾“关闭项目/关闭版本”，会写入 pid:: / pid::vid 隐藏键；
       // 当该项目/版本再次出现未归档执行集时，说明用户重新启用该范围，应自动清理旧隐藏键，避免后续归档占位无法出现。
       var prunedHiddenChanged = false;
@@ -5266,6 +5273,16 @@
         }
         if (tempExecStatus) setStatus(tempExecStatus, '', '');
       })();
+      })();
+      tempExecDbLoadPromise = promise;
+      promise.finally(function() {
+        if (tempExecDbLoadPromise === promise) tempExecDbLoadPromise = null;
+        if (tempExecDbLoadPending) {
+          tempExecDbLoadPending = false;
+          loadTempExecStateFromDb();
+        }
+      });
+      return promise;
     }
 
     async function loadTempExecState() {

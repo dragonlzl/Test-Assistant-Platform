@@ -1211,6 +1211,8 @@
   }
 
   function bindTabButtonFallbacks() {
+    // CustomEvent 可用时依赖 app-tab-activated，避免重复触发。
+    if (typeof CustomEvent === 'function') return;
     var tabBtn = document.querySelector('[data-tab-btn="case-archive"]');
     if (!tabBtn) return;
     tabBtn.addEventListener('click', function() {

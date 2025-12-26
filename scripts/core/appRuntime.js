@@ -832,6 +832,17 @@
     }
 
     function switchTab(name) {
+      var now = Date.now();
+      var skipHooks = false;
+      if (state.activeTab === name) {
+        var lastName = state._lastTabSwitchName || '';
+        var lastAt = Number(state._lastTabSwitchAt || 0);
+        if (lastName === name && now - lastAt < 200) {
+          skipHooks = true;
+        }
+      }
+      state._lastTabSwitchName = name;
+      state._lastTabSwitchAt = now;
       // 重复切到当前页签时不必关闭抽屉：避免误关，并避免影响“刷新后恢复抽屉打开态”的体验。
       if (state.activeTab !== name && window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
         window.app.drawer.closeAllDrawers();
@@ -866,54 +877,64 @@
       }
       if (name === 'models') clearStatusById('modelFormStatus');
       if (name === 'assign') {
-        renderAssignmentsSelect();
-        ['reviewAssignStatus', 'cleanAssignStatus', 'compareAssignStatus', 'splitAssignStatus', 'casesAssignStatus', 'caseGenAssignStatus', 'caseFilterAssignStatus']
-          .forEach(clearStatusById);
-        focusAssignSaveIfNeeded();
+        if (!skipHooks) {
+          renderAssignmentsSelect();
+          ['reviewAssignStatus', 'cleanAssignStatus', 'compareAssignStatus', 'splitAssignStatus', 'casesAssignStatus', 'caseGenAssignStatus', 'caseFilterAssignStatus']
+            .forEach(clearStatusById);
+          focusAssignSaveIfNeeded();
+        }
       }
       if (name === 'casesgen') {
-        const autoFilled = ensureCaseGenModulesFromSplit();
-        if (autoFilled) {
-          setStatus(dom.caseGenStatus, '', '');
-          renderCaseGeneration();
-        } else if (state.caseGenModules.length) {
-          renderCaseGeneration();
+        if (!skipHooks) {
+          const autoFilled = ensureCaseGenModulesFromSplit();
+          if (autoFilled) {
+            setStatus(dom.caseGenStatus, '', '');
+            renderCaseGeneration();
+          } else if (state.caseGenModules.length) {
+            renderCaseGeneration();
+          }
+          if (dom.toSplitFromCaseGenBtn) dom.toSplitFromCaseGenBtn.classList.remove('hidden');
         }
-        if (dom.toSplitFromCaseGenBtn) dom.toSplitFromCaseGenBtn.classList.remove('hidden');
       }
       if (name === 'auto') {
-        updateAutoClarifyVisibility();
-        syncAutoCompareStatus();
-        updateAutoMissingCard();
+        if (!skipHooks) {
+          updateAutoClarifyVisibility();
+          syncAutoCompareStatus();
+          updateAutoMissingCard();
+        }
       }
       if (name === 'settings') {
-        renderSettingsUI();
-        clearStatusById('feishuWebhookStatus');
+        if (!skipHooks) {
+          renderSettingsUI();
+          clearStatusById('feishuWebhookStatus');
+        }
       }
       // 进入“用例执行”页签时：递增一次“用例库同步触发序号”，并尽量触发一次执行页数据刷新。
       // 这样即便业务模块尚未绑定 app-tab-activated 监听，也能在切页时完成一次同步检查（仅 DB 模式会产生实际同步）。
       if (name === 'tempexec') {
-        try {
-          window.app = window.app || {};
-          var prev = Number(window.app.__tempexecCaseLibrarySyncSeq || 0);
-          if (!Number.isFinite(prev) || prev < 0) prev = 0;
-          window.app.__tempexecCaseLibrarySyncSeq = prev + 1;
-          window.app.__tempexecCaseLibrarySyncReason = 'tab-enter';
-        } catch (err) {
-          // ignore
-        }
-        try {
-          if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
-            setTimeout(function() {
-              try {
-                window.app.tempExecApi.loadTempExecState();
-              } catch (err2) {
-                // ignore
-              }
-            }, 0);
+        if (!skipHooks) {
+          try {
+            window.app = window.app || {};
+            var prev = Number(window.app.__tempexecCaseLibrarySyncSeq || 0);
+            if (!Number.isFinite(prev) || prev < 0) prev = 0;
+            window.app.__tempexecCaseLibrarySyncSeq = prev + 1;
+            window.app.__tempexecCaseLibrarySyncReason = 'tab-enter';
+          } catch (err) {
+            // ignore
           }
-        } catch (err3) {
-          // ignore
+          try {
+            if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
+              setTimeout(function() {
+                try {
+                  window.app.tempExecApi.loadTempExecState();
+                } catch (err2) {
+                  // ignore
+                }
+              }, 0);
+            }
+          } catch (err3) {
+            // ignore
+          }
         }
       }
       markActiveTabGroup(name);
@@ -921,12 +942,14 @@
       var grp = getGroupNameForTab(name);
       showTabGroup(grp, { keepTabActive: true, expand: false });
       // 给各业务模块一个统一的“页签激活”钩子：用于刷新后恢复页签时也能自动拉取数据。
-      try {
-        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
-          window.dispatchEvent(new CustomEvent('app-tab-activated', { detail: { tab: name } }));
+      if (!skipHooks) {
+        try {
+          if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('app-tab-activated', { detail: { tab: name } }));
+          }
+        } catch (err) {
+          // ignore
         }
-      } catch (err) {
-        // ignore
       }
       try {
         if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {

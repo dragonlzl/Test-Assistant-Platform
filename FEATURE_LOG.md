@@ -2707,3 +2707,21 @@
 - 更新记录：2025-12-26 执行页入口直接打开用例库选择执行（`index.html`、`scripts/modules/tempexec.js`、`scripts/modules/pageGuide.js`、`tests/ui/tempexec_entry.spec.js`）。
 - 更新记录：2025-12-26 执行页选择用例执行抽屉不切换页签（`index.html`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/pageGuide.js`、`tests/ui/tempexec_entry.spec.js`）。
 - 更新记录：2025-12-26 执行页专注区点击打开执行分配（`scripts/modules/tempexec.js`、`tests/ui/tempexec_focus_sync.spec.js`）。
+
+- 功能名称：页签切换请求去重与执行页加载单飞
+- 功能描述：修复点击二级菜单触发重复请求与执行页偶现未刷新问题，通过页签切换去重与执行数据加载单飞降低并发冲突。
+- 操作方式：点击管理/执行总览/用例归档等页签，接口仅发起一次；进入用例执行页时执行数据稳定加载。
+- 使用效果：避免重复请求导致的抖动或空数据，提高切页与执行页稳定性。
+- 新增内容/接口/组件：
+  - 前端：页签切换去重与执行数据单飞加载（`scripts/core/appRuntime.js`、`scripts/core/tempexecCore.js`、`services/apiClient.js`、`scripts/modules/admin.js`、`scripts/modules/execOverview.js`、`scripts/modules/caseArchive.js`）。
+  - 测试：页签切换去重 UI 用例（`tests/ui/tab_request_dedup.spec.js`）。
+- 复用说明：复用现有页签激活/执行加载逻辑，仅补充去重控制，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/tab_request_dedup.spec.js`（通过，提权执行）
+- 更新记录：2025-12-26 页签切换请求去重与执行页加载单飞（`scripts/core/appRuntime.js`、`scripts/core/tempexecCore.js`、`services/apiClient.js`、`scripts/modules/admin.js`、`scripts/modules/execOverview.js`、`scripts/modules/caseArchive.js`、`tests/ui/tab_request_dedup.spec.js`）。
+- 更新记录：2025-12-26 修复页签去重导致的执行页未激活/未加载问题（`scripts/core/appRuntime.js`）。
+- 更新记录：2025-12-26 用例执行加载单飞支持排队刷新，避免转入新执行集后视图为空（`scripts/core/tempexecCore.js`）。
+- 更新记录：2025-12-26 页签切换去重改为仅跳过重复钩子，保持菜单选中态（`scripts/core/appRuntime.js`）。
+- 更新记录：2025-12-26 修复执行页加载脚本缺失闭合导致的 async 语法错误（`scripts/core/tempexecCore.js`）。
+- 更新记录：2025-12-26 执行总览布局与项目列表请求去重（`services/apiClient.js`、`scripts/modules/admin.js`、`scripts/modules/execOverview.js`、`tests/ui/tab_request_dedup.spec.js`）。
+- 更新记录：2025-12-26 人员管理用户项目请求单飞去重（`services/apiClient.js`、`tests/ui/tab_request_dedup.spec.js`）。

@@ -926,6 +926,8 @@
   }
 
   var pendingTab = '';
+  var lastTabActivatedAt = 0;
+  var lastTabActivatedName = '';
 
   function handleTabActivated(tabName) {
     // 刷新后用户可能在鉴权未就绪前就点到管理页签：先挂起，等 app-auth-ready 再补加载，避免首次进入空列表。
@@ -935,6 +937,10 @@
       if (tabName === 'user-admin') setStatus(dom.userStatus, '登录信息加载中...', '');
       return;
     }
+    var now = Date.now();
+    if (tabName === lastTabActivatedName && (now - lastTabActivatedAt) < 300) return;
+    lastTabActivatedName = tabName || '';
+    lastTabActivatedAt = now;
     if (tabName === 'project-admin') {
       loadProjects();
     } else if (tabName === 'user-admin') {
@@ -951,6 +957,8 @@
   }
 
   function bindTabButtonFallbacks() {
+    // CustomEvent 可用时依赖 app-tab-activated，避免重复触发。
+    if (typeof CustomEvent === 'function') return;
     // 兜底：某些时序/浏览器下可能没收到 app-tab-activated（例如脚本尚未完全就绪）。
     var projectTab = document.querySelector('[data-tab-btn="project-admin"]');
     if (projectTab) {

@@ -1091,6 +1091,8 @@
   }
 
   var pendingTab = '';
+  var lastTabActivatedAt = 0;
+  var lastTabActivatedName = '';
 
   function handleTabActivated(tabName) {
     if (tabName !== 'exec-overview') return;
@@ -1099,6 +1101,10 @@
       setStatus('登录信息加载中...', '');
       return;
     }
+    var now = Date.now();
+    if (tabName === lastTabActivatedName && (now - lastTabActivatedAt) < 300) return;
+    lastTabActivatedName = tabName || '';
+    lastTabActivatedAt = now;
     // 默认先展示项目卡片列表。
     showProjectList();
     loadProjects().then(function() {
@@ -1126,6 +1132,8 @@
   }
 
   function bindTabButtonFallbacks() {
+    // CustomEvent 可用时依赖 app-tab-activated，避免重复触发。
+    if (typeof CustomEvent === 'function') return;
     var tabBtn = document.querySelector('[data-tab-btn="exec-overview"]');
     if (!tabBtn) return;
     tabBtn.addEventListener('click', function() {

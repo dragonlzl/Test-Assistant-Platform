@@ -2,6 +2,22 @@
   var tokenKey = 'tap-auth-token';
   var loginSeqKey = 'tap-login-seq';
   var authToken = '';
+  var pendingRequests = {};
+
+  function singleFlight(key, runner) {
+    if (pendingRequests[key]) return pendingRequests[key];
+    var promise = null;
+    try {
+      promise = Promise.resolve(runner());
+    } catch (err) {
+      return Promise.reject(err);
+    }
+    pendingRequests[key] = promise;
+    promise.finally(function() {
+      if (pendingRequests[key] === promise) delete pendingRequests[key];
+    });
+    return promise;
+  }
 
   function generateLoginSeq() {
     // ES2019 兼容：用时间戳 + 随机数即可区分每次登录会话。
@@ -147,10 +163,12 @@
   }
 
   function listUsers() {
-    return fetch('/api/users', {
-      method: 'GET',
-      headers: buildHeaders(),
-    }).then(handleResponse);
+    return singleFlight('listUsers', function() {
+      return fetch('/api/users', {
+        method: 'GET',
+        headers: buildHeaders(),
+      }).then(handleResponse);
+    });
   }
 
   function createUser(payload) {
@@ -193,10 +211,13 @@
   }
 
   function getUserProjects(userId) {
-    return fetch('/api/users/' + userId + '/projects', {
-      method: 'GET',
-      headers: buildHeaders(),
-    }).then(handleResponse);
+    var url = '/api/users/' + userId + '/projects';
+    return singleFlight('getUserProjects:' + url, function() {
+      return fetch(url, {
+        method: 'GET',
+        headers: buildHeaders(),
+      }).then(handleResponse);
+    });
   }
 
   function listProjects(params) {
@@ -206,10 +227,12 @@
     if (p && p.include_all) query.push('include_all=1');
     var url = '/api/projects';
     if (query.length) url += '?' + query.join('&');
-    return fetch(url, {
-      method: 'GET',
-      headers: buildHeaders(),
-    }).then(handleResponse);
+    return singleFlight('listProjects:' + url, function() {
+      return fetch(url, {
+        method: 'GET',
+        headers: buildHeaders(),
+      }).then(handleResponse);
+    });
   }
 
   function createProject(payload) {
@@ -250,10 +273,12 @@
     if (p && p.include_all) query.push('include_all=1');
     var url = '/api/projects/' + projectId + '/versions';
     if (query.length) url += '?' + query.join('&');
-    return fetch(url, {
-      method: 'GET',
-      headers: buildHeaders(),
-    }).then(handleResponse);
+    return singleFlight('listProjectVersions:' + url, function() {
+      return fetch(url, {
+        method: 'GET',
+        headers: buildHeaders(),
+      }).then(handleResponse);
+    });
   }
 
   function listCaseFiles(projectId) {
@@ -635,10 +660,12 @@
     if (versionId || versionId === 0) query.push('version_id=' + encodeURIComponent(versionId));
     var url = '/api/exec/overview';
     if (query.length) url += '?' + query.join('&');
-    return fetch(url, {
-      method: 'GET',
-      headers: buildHeaders(),
-    }).then(handleResponse);
+    return singleFlight('execOverview:' + url, function() {
+      return fetch(url, {
+        method: 'GET',
+        headers: buildHeaders(),
+      }).then(handleResponse);
+    });
   }
 
   function getExecutionOverviewLayout(projectId, versionId) {
@@ -647,10 +674,12 @@
     if (versionId || versionId === 0) query.push('version_id=' + encodeURIComponent(versionId));
     var url = '/api/exec/overview/layout';
     if (query.length) url += '?' + query.join('&');
-    return fetch(url, {
-      method: 'GET',
-      headers: buildHeaders(),
-    }).then(handleResponse);
+    return singleFlight('execOverviewLayout:' + url, function() {
+      return fetch(url, {
+        method: 'GET',
+        headers: buildHeaders(),
+      }).then(handleResponse);
+    });
   }
 
   function listExecutionOverviewCases(params) {
