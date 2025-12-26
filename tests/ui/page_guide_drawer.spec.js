@@ -110,6 +110,36 @@ test.describe('页面说明抽屉', () => {
     await page.click('#closePageGuideDrawerBtn');
     await expect(drawer).not.toHaveClass(/open/);
   });
+
+  test('页面说明内容同步最新功能', async ({ page }) => {
+    const drawer = page.locator('#pageGuideDrawer');
+    const trigger = page.locator('#pageGuideTrigger');
+    const openGuide = async (group, tabId) => {
+      await page.click(`[data-group="${group}"]`);
+      await page.click(`[data-tab-btn="${tabId}"]`);
+      if (!(await drawer.evaluate((el) => el.classList.contains('open')))) {
+        await trigger.click();
+      }
+      await expect(drawer).toHaveClass(/open/);
+    };
+    const closeGuide = async () => {
+      if (await drawer.evaluate((el) => el.classList.contains('open'))) {
+        await page.click('#closePageGuideDrawerBtn');
+        await expect(drawer).not.toHaveClass(/open/);
+      }
+    };
+
+    await closeGuide();
+    await openGuide('ai', 'auto');
+    await expect(drawer).toContainText('紧凑进度');
+    await expect(drawer).toContainText('原因气泡');
+    await closeGuide();
+
+    await openGuide('cases', 'tempexec');
+    await expect(drawer).toContainText('用例变更');
+    await expect(drawer).toContainText('跳转用例库');
+    await closeGuide();
+  });
 });
 
 test.describe('页面说明登录设置', () => {

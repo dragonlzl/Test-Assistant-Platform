@@ -227,7 +227,7 @@
     }
 
     function buildAutoGuide() {
-      var intro = '<p>用于一键执行，对导入的需求和用例进行评审，分析需求不明确点，并指出用例缺漏。</p>';
+      var intro = '<p>用于一键执行，对导入的需求和用例进行评审、清洗、对比与覆盖检查，并在侧边栏展示当前进度。</p>';
       var flow = ''
         + '<ol class="page-guide-steps">'
         + '<li>Step1 导入需求、导入用例。</li>'
@@ -235,6 +235,7 @@
         + '<ul>'
         + '<li>可选操作：勾选 <span class="page-guide-button">【需要人工确认需求澄清后再继续自动流程】</span>。</li>'
         + '<li>勾选后，在需求评审完成后会暂停，需人工确认澄清后才继续执行进入 Step3。</li>'
+        + '<li>执行过程中，侧边栏 <span class="page-guide-button">【AI 功能】</span> 与二级菜单会显示当前步骤的紧凑进度。</li>'
         + '</ul>'
         + '</li>'
         + '<li>Step3 等待覆盖率结果。'
@@ -244,6 +245,7 @@
         + '<li>覆盖率等于 100%，则继续执行直到最后一步覆盖对比完成。</li>'
         + '</ul>'
         + '</li>'
+        + '<li>Step3-1 若步骤处于等待/失败，会在对应步骤按钮上方持续展示原因气泡，直到状态恢复正常。</li>'
         + '<li>Step4 覆盖对比完成。'
         + '<ul>'
         + '<li>点击 <span class="page-guide-button">【用例缺失测试点】</span> 下的 <span class="page-guide-button">【前往勾选缺失模块生成缺失用例】</span> 展开视图。</li>'
@@ -256,6 +258,8 @@
         + '<li><span class="page-guide-button">【需要人工确认需求澄清后再继续自动流程】</span>：可选操作，勾选后流程在评审后暂停，需在澄清抽屉确认完成才会继续。</li>'
         + '<li><span class="page-guide-button">【一键执行】</span>：按顺序执行评审、清洗、对比、拆分与覆盖对比流程。</li>'
         + '<li><span class="page-guide-button">【覆盖缺失视图】</span>：展示清洗后需求缺失点，便于判断是否重新清洗。</li>'
+        + '<li>等待/失败时的原因气泡会持续显示在步骤按钮上方，直到状态恢复为未开始/执行中/完成。</li>'
+        + '<li>侧边栏仅展示最新步骤的紧凑进度，便于窄屏下快速查看。</li>'
         + '<li><span class="page-guide-button">【前往勾选缺失模块生成缺失用例】</span>：打开缺失模块视图并支持勾选生成用例。</li>'
         + '</ul>';
       return ''
@@ -273,7 +277,10 @@
         + '<li>需求评审（前置：导入需求文档）<ul><li>点击 <span class="page-guide-button">【需求分析】</span> 输出评审 JSON。</li></ul></li>'
         + '<li>需求清洗（前置：需求评审）<ul><li>点击 <span class="page-guide-button">【开始清洗】</span> 生成结构化清洗结果。</li></ul></li>'
         + '<li>对比完整性（前置：需求清洗）<ul><li>点击 <span class="page-guide-button">【开始对比】</span> 获取覆盖率，低于 100% 可回到清洗修正。</li></ul></li>'
-        + '<li>测试模块拆分（前置：对比完整性）<ul><li>点击 <span class="page-guide-button">【开始拆分】</span> 生成测试模块与测点。</li></ul></li>'
+        + '<li>测试模块拆分（前置：对比完整性）<ul>'
+        + '<li>点击 <span class="page-guide-button">【开始拆分】</span> 生成测试模块与测点。</li>'
+        + '<li>可打开拆分视图查看“特殊测试点”等字段。</li>'
+        + '</ul></li>'
         + '<li>用例导入（前置：无）<ul><li>导入 XMind/文本用例，为覆盖对比提供用例数据。</li></ul></li>'
         + '<li>测试用例覆盖对比（前置：测试模块拆分、用例导入）<ul><li>点击 <span class="page-guide-button">【执行覆盖对比】</span> 输出覆盖率与缺失模块。</li></ul></li>'
         + '</ol>';
@@ -284,6 +291,7 @@
         + '<li><span class="page-guide-button">【开始对比】</span>：检查清洗结果是否覆盖原需求。</li>'
         + '<li><span class="page-guide-button">【开始拆分】</span>：得到测试模块/测点，供用例生成。</li>'
         + '<li><span class="page-guide-button">【执行覆盖对比】</span>：对比拆分模块与导入用例，输出缺失点。</li>'
+        + '<li>覆盖缺失视图需手动打开，不会在登录或刷新后自动弹出。</li>'
         + '<li><span class="page-guide-button">【前往勾选缺失模块生成缺失用例】</span>：进入缺失模块视图并跳转到用例生成。</li>'
         + '</ul>';
       return ''
@@ -383,9 +391,8 @@
         + '</li>'
         + '<li>方式二：点击顶部导航 <span class="page-guide-button">【选择用例执行】</span>。'
         + '<ul>'
-        + '<li>Step1 直接打开选择用例执行抽屉，勾选用例。</li>'
-        + '<li>Step2 点击 <span class="page-guide-button">【转到执行】</span> 或右上角 <span class="page-guide-button">【批量转到执行】</span>。</li>'
-        + '<li>Step3 自动跳回用例执行页，开始执行。</li>'
+        + '<li>Step1 在当前页打开选择用例执行抽屉，勾选用例。</li>'
+        + '<li>Step2 点击 <span class="page-guide-button">【转到执行】</span> 或右上角 <span class="page-guide-button">【批量转到执行】</span>，直接加入当前执行列表。</li>'
         + '</ul>'
         + '</li>'
         + '</ul>'
@@ -400,6 +407,7 @@
         + '<ul>'
         + '<li>进入 <span class="page-guide-button">【执行分配】</span>，拖拽用例到专注区。</li>'
         + '<li>专注用例会同步到执行页工具栏的专注区，便于快速切换。</li>'
+        + '<li>点击执行页专注区空白区域可快速打开执行分配。</li>'
         + '</ul>'
         + '</li>'
         + '</ol>';
@@ -407,6 +415,9 @@
         + '<ul class="page-guide-notes">'
         + '<li><span class="page-guide-star">*</span><span class="page-guide-button">【归档】</span>：归档当前执行集并写入数据库，可在“用例归档”查看。</li>'
         + '<li><span class="page-guide-button">【解散归档】</span>：解除归档状态并回到版本盒子；不解散会一直保留在版本盒子中。</li>'
+        + '<li><span class="page-guide-button">【用例变更】</span>：检测到用例库变更时可打开差异视图并确认同步。</li>'
+        + '<li>复用用例未展开时，如存在未执行子项，“实际结果”按钮会显示数字红点提示。</li>'
+        + '<li>顶部导航 <span class="page-guide-button">【跳转用例库】</span> 可进入用例库进行编辑或导入。</li>'
         + '<li>其他按钮（上一份/下一份、确认入库、转到执行等）用于切换与入库操作。</li>'
         + '</ul>';
       return ''
@@ -424,7 +435,7 @@
         + '<ol class="page-guide-steps">'
         + '<li>点击顶部导航 <span class="page-guide-button">【导入用例】</span>，选择文件、项目与版本后点击 <span class="page-guide-button">【确认入库】</span>。</li>'
         + '<li>点击 <span class="page-guide-button">【查看&编辑】</span>，搜索并编辑用例条目。</li>'
-        + '<li>点击 <span class="page-guide-button">【选择用例执行】</span>，勾选用例并转到执行。</li>'
+        + '<li>点击 <span class="page-guide-button">【选择用例执行】</span>，在当前页抽屉勾选用例并转到执行。</li>'
         + '<li>点击 <span class="page-guide-button">【用例改动历史】</span> 查看导入、覆盖、编辑记录。</li>'
         + '</ol>';
       var notes = ''
@@ -463,13 +474,14 @@
     }
 
     function buildExecOverviewGuide() {
-      var intro = '<p>按项目/版本查看执行进度，快速定位人员执行详情。</p>';
+      var intro = '<p>按项目/版本查看执行进度，版本区分组展示，需求区补充未分配版本的用例。</p>';
       var flow = ''
         + '<ol class="page-guide-steps">'
         + '<li>点击项目卡片进入项目视图。</li>'
         + '<li>选择版本后查看版本汇总与人员进度。</li>'
         + '<li>点击人员卡片或进度条，打开执行列表抽屉。</li>'
         + '<li>在抽屉中可搜索用例条目并查看最新状态。</li>'
+        + '<li>点击版本区或需求区的用例卡片可跳转到执行视图。</li>'
         + '</ol>';
       var notes = ''
         + '<ul class="page-guide-notes">'

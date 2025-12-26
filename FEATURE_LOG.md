@@ -2710,6 +2710,7 @@
 - 更新记录：2025-12-26 执行页专注区点击打开执行分配（`scripts/modules/tempexec.js`、`tests/ui/tempexec_focus_sync.spec.js`）。
 - 更新记录：2025-12-26 执行页导航补充用例库跳转入口（`index.html`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_entry.spec.js`、`tests/api/case_library.spec.js`）。
 - 更新记录：2025-12-26 暗色主题执行视图空态背景、菜单选中态与专注区选中增强（`style.css`、`tests/ui/dark_theme_exec_assign_case_lib.spec.js`、`tests/api/settings_models.spec.js`）。
+- 更新记录：2025-12-26 页面说明更新覆盖一键执行进度/阻塞气泡、执行页入口与专注区、用例库与总览说明（`scripts/modules/pageGuide.js`、`tests/ui/page_guide_drawer.spec.js`）。
 
 - 功能名称：页签切换请求去重与执行页加载单飞
 - 功能描述：修复点击二级菜单触发重复请求与执行页偶现未刷新问题，通过页签切换去重与执行数据加载单飞降低并发冲突。
