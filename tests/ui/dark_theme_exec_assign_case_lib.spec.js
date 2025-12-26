@@ -219,6 +219,110 @@ test.describe('暗色主题 UI 对比增强', () => {
     expect(bgColor).not.toBe('rgb(244, 244, 245)');
   });
 
+  test('执行分配拖拽时版本盒子背景非白底', async ({ page }) => {
+    const now = Date.now();
+    const iso = (ms) => new Date(ms).toISOString();
+    const serverState = {
+      user: { id: 19, username: 'dark_drag_user', role: 'user', level: 'member' },
+      projects: [{ id: 2, name: '拖拽项目', description: '' }],
+      versionsByProject: { 2: [{ id: 21, project_id: 2, name: 'v1' }] },
+      execSets: [
+        { id: 2001, project_id: 2, version_id: 21, case_file_id: 201, case_count: 1, name: '用例B', status: 'active', created_at: iso(now - 2000), updated_at: iso(now - 200) },
+      ],
+      casesBySetId: {
+        2001: [{
+          id: 6001,
+          exec_set_id: 2001,
+          case_item_id: null,
+          module: '模块',
+          title: '标题',
+          expected: '预期',
+          priority: null,
+          precondition: null,
+          steps: null,
+          actual_result: null,
+          defect_link: null,
+          reuse_details: null,
+          defect_links: [],
+          remark: '',
+          status: '未执行',
+          order_no: 1,
+          executor_id: 19,
+          created_at: iso(now - 2000),
+          updated_at: iso(now - 200),
+        }],
+      },
+      settings: [{
+        id: 1,
+        scope: 'user',
+        owner_id: 19,
+        key: 'theme',
+        value_json: 'dark',
+      }],
+      lastSettingsPayload: null,
+    };
+    const apiHandler = createTempExecApiHandler(serverState);
+
+    await page.route('**/*', async (route) => {
+      const url = route.request().url();
+      if (url.indexOf('/api/') !== -1) return apiHandler(route);
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.continue();
+      }
+      return route.abort();
+    });
+    await page.addInitScript(() => {
+      try { localStorage.setItem('tap-auth-token', 'dark-drag-token'); } catch (_) {}
+    });
+
+    await gotoIndex(page);
+    await waitAppReady(page, 30000);
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    await switchToTab(page, 'tempexec');
+    await page.evaluate(() => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
+        return window.app.tempExecApi.loadTempExecState();
+      }
+      return null;
+    });
+    await page.click('#openTempExecAssignDrawerBtn');
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
+
+    await page.evaluate(() => {
+      var body = document.querySelector('#tempVersionGrid .temp-project-version-body');
+      if (!body) return;
+      body.classList.add('dragover-file');
+      if (!body.querySelector('.temp-file-drop-indicator')) {
+        var indicator = document.createElement('div');
+        indicator.className = 'temp-file-drop-indicator';
+        body.appendChild(indicator);
+      }
+      if (!body.querySelector('.temp-drag-placeholder')) {
+        var placeholder = document.createElement('div');
+        placeholder.className = 'temp-drag-placeholder';
+        placeholder.textContent = '放置到此';
+        body.appendChild(placeholder);
+      }
+    });
+
+    const colors = await page.evaluate(() => {
+      var body = document.querySelector('#tempVersionGrid .temp-project-version-body');
+      var indicator = body ? body.querySelector('.temp-file-drop-indicator') : null;
+      var placeholder = body ? body.querySelector('.temp-drag-placeholder') : null;
+      return {
+        body: body ? getComputedStyle(body).backgroundColor : '',
+        indicator: indicator ? getComputedStyle(indicator).backgroundColor : '',
+        placeholder: placeholder ? getComputedStyle(placeholder).backgroundColor : '',
+      };
+    });
+    expect(colors.body).not.toBe('rgb(255, 255, 255)');
+    expect(colors.body).not.toBe('rgb(240, 247, 255)');
+    expect(colors.indicator).not.toBe('rgb(255, 255, 255)');
+    expect(colors.indicator).not.toBe('rgb(240, 247, 255)');
+    expect(colors.placeholder).not.toBe('rgb(255, 255, 255)');
+    expect(colors.placeholder).not.toBe('rgb(248, 251, 255)');
+  });
+
   test('查看&编辑执行状态标签在暗色主题下更清晰', async ({ page }) => {
     const now = Date.now();
     const iso = (ms) => new Date(ms).toISOString();

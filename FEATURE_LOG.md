@@ -2624,3 +2624,15 @@
 - 测试与验证：
   - `npm run test:ui -- tests/ui/tempexec_edit_defer_save.spec.js`（通过，提权执行）
 - 更新记录：2025-12-26 执行页编辑仅在失焦时入库（`scripts/modules/tempexec.js`、`tests/ui/tempexec_edit_defer_save.spec.js`）。
+
+- 功能名称：暗色主题执行分配拖拽背景适配
+- 功能描述：暗色主题下拖拽执行用例到版本盒子时，拖拽高亮背景不再显示白色。
+- 操作方式：切换暗色主题，在“执行分配”抽屉拖拽用例调整位置，观察拖拽过程高亮背景。
+- 使用效果：拖拽过程背景与暗色主题一致，不出现白底突兀区域。
+- 新增内容/接口/组件：
+  - 前端：执行分配拖拽高亮/占位的暗色主题样式（`style.css`）。
+  - 测试：暗色主题拖拽背景 UI 用例（`tests/ui/dark_theme_exec_assign_case_lib.spec.js`）。
+- 复用说明：复用现有拖拽 class 与主题样式体系，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/dark_theme_exec_assign_case_lib.spec.js`（通过，提权执行）
+- 更新记录：2025-12-26 暗色主题执行分配拖拽背景适配（`style.css`、`tests/ui/dark_theme_exec_assign_case_lib.spec.js`）。

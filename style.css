@@ -7804,6 +7804,30 @@ button.exec-overview-file-chip,
   background: rgba(125,180,255,0.2);
   color: #dbeafe;
 }
+:root[data-theme="dark"] .temp-project-version-body.dragover-file {
+  background: rgba(125,180,255,0.12);
+}
+:root[data-theme="dark"] .temp-project-version-body .temp-file-drop-indicator,
+:root[data-theme="dark"] .temp-drop-indicator {
+  background: rgba(125,180,255,0.12);
+  border-color: rgba(125,180,255,0.55);
+}
+:root[data-theme="dark"] .temp-req-box.dragover {
+  background: rgba(125,180,255,0.16);
+  outline-color: rgba(125,180,255,0.7);
+}
+:root[data-theme="dark"] .temp-version-card .temp-req-box.dragover {
+  background: rgba(34,197,94,0.18);
+  outline-color: rgba(34,197,94,0.65);
+}
+:root[data-theme="dark"] .temp-req-row.dragover-target {
+  background: rgba(125,180,255,0.16);
+}
+:root[data-theme="dark"] .temp-drag-placeholder {
+  background: rgba(26,34,49,0.92);
+  border-color: rgba(125,180,255,0.55);
+  color: #bfdbfe;
+}
 :root[data-theme="dark"] .tempexec-head .flow {
   background: linear-gradient(180deg, #1b2433 0%, #202b3d 90%);
   border-color: var(--border);
