@@ -231,9 +231,22 @@ test.describe('执行视图导入导出与拖拽', () => {
     await firstReq.dragTo(firstVersionBody);
     await expect(firstVersion.locator('[data-temp-req-key]')).toHaveCount(1);
 
-    const versionReq = firstVersion.locator('[data-temp-req]').first();
     const secondVersion = page.locator('#tempVersionGrid [data-temp-version]').nth(1);
     const secondVersionBody = secondVersion.locator('.temp-version-body');
+    const crossVersionRow = firstVersionBody.locator('.temp-req-row[data-temp-file]').first();
+    const crossVersionId = await crossVersionRow.getAttribute('data-temp-file');
+    await crossVersionRow.dragTo(secondVersionBody);
+    await expect(page.locator('#tempExecStatus')).toContainText('不支持拖拽移动用例');
+    const blockHint = page.locator('.temp-center-toast.warn', { hasText: '不支持拖拽移动用例' });
+    await expect(blockHint).toBeVisible();
+    if (crossVersionId) {
+      await expect(firstVersionBody.locator(`.temp-req-row[data-temp-file="${crossVersionId}"]`).first()).toBeVisible();
+      await expect(secondVersionBody.locator(`.temp-req-row[data-temp-file="${crossVersionId}"]`)).toHaveCount(0);
+    }
+    await page.waitForTimeout(3800);
+    await expect(blockHint).toHaveCount(0);
+
+    const versionReq = firstVersion.locator('[data-temp-req]').first();
     await versionReq.dragTo(secondVersionBody);
     await expect(secondVersion.locator('[data-temp-req-key]')).toHaveCount(1);
 

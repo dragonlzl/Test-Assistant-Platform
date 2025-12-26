@@ -2636,3 +2636,16 @@
 - 测试与验证：
   - `npm run test:ui -- tests/ui/dark_theme_exec_assign_case_lib.spec.js`（通过，提权执行）
 - 更新记录：2025-12-26 暗色主题执行分配拖拽背景适配（`style.css`、`tests/ui/dark_theme_exec_assign_case_lib.spec.js`）。
+
+- 功能名称：执行分配跨版本拖拽失败悬浮提示
+- 功能描述：执行分配中将用例跨版本拖拽时显示居中悬浮失败提示，3 秒后自动消失（项目/版本分组与普通版本分组均适用）。
+- 操作方式：在“执行分配”抽屉中拖拽用例到不同版本盒子，观察提示显示与自动消失。
+- 使用效果：跨版本拖拽即时居中提示，暗色主题下也清晰可见，不会误以为成功移动。
+- 新增内容/接口/组件：
+  - 前端：跨版本拖拽失败触发居中悬浮提示（`scripts/modules/tempexec.js`、`scripts/core/tempexecCore.js`）。
+  - 测试：跨版本拖拽提示 UI 用例（`tests/ui/tempexec_project_layout.spec.js`、`tests/ui/tempexec_drag.spec.js`）。
+- 复用说明：复用现有居中悬浮提示组件与拖拽逻辑，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/tempexec_project_layout.spec.js`（通过，提权执行）
+  - `npm run test:ui -- tests/ui/tempexec_drag.spec.js`（失败：用例复用状态选择展示颜色用例的 removeGap 断言未达标，提权执行）
+- 更新记录：2025-12-26 执行分配跨版本拖拽失败悬浮提示（`scripts/modules/tempexec.js`、`scripts/core/tempexecCore.js`、`tests/ui/tempexec_project_layout.spec.js`、`tests/ui/tempexec_drag.spec.js`）。

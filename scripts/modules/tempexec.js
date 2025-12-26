@@ -3725,15 +3725,18 @@
 	        if (!ids && window.app && window.app.tempDragContext && window.app.tempDragContext.type === 'file') {
 	          ids = window.app.tempDragContext.fileId || '';
 	        }
-	        if (ids && api.reorderTempExecFileInProjectVersion) {
-	          var versionCard = e.target.closest('[data-temp-project-version-card]');
-	          if (!versionCard || !versionCard.dataset.tempProjectVersionCard) return;
-	          var parsed = parseProjectVersionKey(versionCard.dataset.tempProjectVersionCard);
+        if (ids && api.reorderTempExecFileInProjectVersion) {
+          var versionCard = e.target.closest('[data-temp-project-version-card]');
+          if (!versionCard || !versionCard.dataset.tempProjectVersionCard) return;
+          var parsed = parseProjectVersionKey(versionCard.dataset.tempProjectVersionCard);
           var idArr = ids.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
           if (!idArr.length) return;
           var file = api.getTempExecFile ? api.getTempExecFile(idArr[0]) : null;
           if (!file) return;
-          if (String(file.projectId || '') !== String(parsed.projectId || '') || String(file.versionId || '') !== String(parsed.versionId || '')) {
+          var hasProject = file.projectId !== undefined && file.projectId !== null && String(file.projectId) !== '';
+          var hasVersion = file.versionId !== undefined && file.versionId !== null && String(file.versionId) !== '';
+          if (hasProject && hasVersion && (String(file.projectId) !== String(parsed.projectId || '') || String(file.versionId) !== String(parsed.versionId || ''))) {
+            showTempExecDragBlockHint(versionCard, '不同项目/不同版本之间不支持拖拽移动用例');
             setStatus(tempExecStatus, '不同项目/不同版本之间不支持拖拽移动用例', 'warn');
             return;
           }
@@ -3765,6 +3768,22 @@
     function setTempDragContext(ctx) {
       window.app = window.app || {};
       window.app.tempDragContext = ctx;
+    }
+
+    function showTempExecDragBlockHint(anchorEl, message) {
+      var msg = message || '不同版本之间不支持拖拽移动用例';
+      if (typeof showTempExecCenterToast === 'function') {
+        showTempExecCenterToast(msg, 'warn');
+        return;
+      }
+      var hintApi = api.showTempExecBlockHint;
+      if (!hintApi && window.app && window.app.tempExecApi && typeof window.app.tempExecApi.showTempExecBlockHint === 'function') {
+        hintApi = window.app.tempExecApi.showTempExecBlockHint;
+      }
+      if (!hintApi || !anchorEl) return;
+      var rect = (typeof anchorEl.getBoundingClientRect === 'function') ? anchorEl.getBoundingClientRect() : anchorEl;
+      if (!rect) return;
+      hintApi(rect, msg);
     }
 
     function resolveVersionTargetReq(card, clientY) {
@@ -3859,6 +3878,12 @@
           tempMouseDragFileId = '';
           tempMouseDragFromNav = false;
           if (api.getTempExecFile && api.getTempExecFile(pendingFileId)) {
+            var pendingFile = api.getTempExecFile(pendingFileId);
+            if (pendingFile && pendingFile.versionId && String(pendingFile.versionId) !== String(card.dataset.tempVersion || '')) {
+              showTempExecDragBlockHint(card, '不同版本之间不支持拖拽移动用例');
+              setStatus(tempExecStatus, '不同版本之间不支持拖拽移动用例', 'warn');
+              return;
+            }
             if (typeof api.moveTempExecFileWithinVersion === 'function') {
               api.moveTempExecFileWithinVersion(pendingFileId, card.dataset.tempVersion, dropReq || '', '');
             } else if (typeof api.moveTempExecToVersion === 'function') {
@@ -3934,6 +3959,19 @@
           }
           var idArr = ids.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
           var firstFile = idArr.length && api.getTempExecFile ? api.getTempExecFile(idArr[0]) : null;
+          var targetVersionId = String(card.dataset.tempVersion || '');
+          if (idArr.length && api.getTempExecFile) {
+            var blocked = idArr.some(function(id) {
+              var file = api.getTempExecFile(id);
+              if (!file || !file.versionId) return false;
+              return String(file.versionId) !== targetVersionId;
+            });
+            if (blocked) {
+              showTempExecDragBlockHint(card, '不同版本之间不支持拖拽移动用例');
+              setStatus(tempExecStatus, '不同版本之间不支持拖拽移动用例', 'warn');
+              return;
+            }
+          }
           var srcReqName = normalizeRequirementName(firstFile && firstFile.requirement) || '';
           var tgtReqName = normalizeRequirementName(resolvedReq) || srcReqName;
           if (idArr.length && srcReqName && tgtReqName && srcReqName !== tgtReqName) {
@@ -4055,6 +4093,12 @@
         tempMouseDragFileId = '';
         tempMouseDragFromNav = false;
         if (api.getTempExecFile && !api.getTempExecFile(fileId)) return;
+        var targetFile = api.getTempExecFile ? api.getTempExecFile(fileId) : null;
+        if (targetFile && targetFile.versionId && String(targetFile.versionId) !== String(versionCard.dataset.tempVersion || '')) {
+          showTempExecDragBlockHint(versionCard, '不同版本之间不支持拖拽移动用例');
+          setStatus(tempExecStatus, '不同版本之间不支持拖拽移动用例', 'warn');
+          return;
+        }
         var resolvedReq = versionBody.dataset && versionBody.dataset.tempReq ? versionBody.dataset.tempReq : '';
         if (typeof api.moveTempExecFileWithinVersion === 'function') {
           api.moveTempExecFileWithinVersion(fileId, versionCard.dataset.tempVersion, resolvedReq, '');

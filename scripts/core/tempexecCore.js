@@ -7842,6 +7842,7 @@
       restoreTempExecUndo: restoreTempExecUndo,
       cleanupTempExecUndoUI: cleanupTempExecUndoUI,
       startTempExecUndoTimer: startTempExecUndoTimer,
+      showTempExecBlockHint: showTempExecBlockHint,
       insertTempExecCase: insertTempExecCase,
       removeTempExecCase: removeTempExecCase,
       updateTempExecCaseField: updateTempExecCaseField,

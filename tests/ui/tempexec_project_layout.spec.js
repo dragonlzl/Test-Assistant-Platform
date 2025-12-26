@@ -289,8 +289,12 @@ test.describe('用例执行-项目/版本分组布局', () => {
 
     await v1Rows.nth(0).dragTo(v2Body, { targetPosition: { x: 10, y: 10 } });
     await expect(page.locator('#tempExecStatus')).toContainText('不支持拖拽移动用例');
+    const blockHint = page.locator('.temp-center-toast.warn', { hasText: '不支持拖拽移动用例' });
+    await expect(blockHint).toBeVisible();
     await expect(v2Body).not.toContainText('用例A');
     await expect(v1Body).toContainText('用例A');
+    await page.waitForTimeout(3800);
+    await expect(blockHint).toHaveCount(0);
 
     const v1Header = v1Card.locator('.temp-project-version-header').first();
     const v2Header = v2Card.locator('.temp-project-version-header').first();
