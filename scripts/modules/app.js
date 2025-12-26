@@ -52,6 +52,7 @@
       scenarios: ['key_scenarios', '测试场景', '关键场景'],
       points: ['test_points', '测点要点', '测试要点'],
       coupled: ['coupled_modules', '耦合模块'],
+      special: ['special', 'special_points', '特殊测试点'],
     };
     const cleanedEntryFieldAliases = appConfig.cleanedEntryFieldAliases || {
       feature: ['feature', 'module', 'name', 'title', '功能', '功能点', '模块', '功能模块', '条目', '功能名称'],

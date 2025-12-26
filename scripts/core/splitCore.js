@@ -1,6 +1,7 @@
 (function() {
   function init(deps) {
     var moduleFieldAliases = deps && deps.moduleFieldAliases ? deps.moduleFieldAliases : {};
+    var specialAliases = moduleFieldAliases.special || ['special', 'special_points', '特殊测试点'];
     var normalizeRequirementName = deps && deps.normalizeRequirementName ? deps.normalizeRequirementName : function(text) { return text || ''; };
     var unwrapRequirementPayload = deps && deps.unwrapRequirementPayload ? deps.unwrapRequirementPayload : function(text) { return { payload: text }; };
     var stripCodeFence = deps && deps.stripCodeFence ? deps.stripCodeFence : function(text) { return text || ''; };
@@ -79,6 +80,7 @@
         scenarios: pickFirstArray(item, moduleFieldAliases.scenarios),
         points: pickFirstArray(item, moduleFieldAliases.points),
         coupled: pickFirstArray(item, moduleFieldAliases.coupled),
+        special: pickFirstArray(item, specialAliases),
       };
     }
 
@@ -94,6 +96,7 @@
         scenarios: pickFirstArray(blockArr, moduleFieldAliases.scenarios),
         points: pickFirstArray(blockArr, moduleFieldAliases.points),
         coupled: pickFirstArray(blockArr, moduleFieldAliases.coupled),
+        special: pickFirstArray(blockArr, specialAliases),
       };
     }
 

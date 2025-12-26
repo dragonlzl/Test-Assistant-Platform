@@ -2678,3 +2678,15 @@
 - 更新记录：2025-12-26 二级菜单展示一键执行进度提示（`index.html`、`style.css`、`scripts/core/flowCore.js`、`tests/ui/auto_flow_compact_progress.spec.js`）。
 - 更新记录：2025-12-26 紧凑进度执行中标识改为圆形（`style.css`）。
 - 更新记录：2025-12-26 页面路径隐藏进度提示（`scripts/core/appRuntime.js`、`tests/ui/sidebar_path.spec.js`）。
+
+- 功能名称：拆分视图展示特殊测试点
+- 功能描述：拆分模块包含“特殊测试点”字段时，拆分视图表格可正确展示该字段内容。
+- 操作方式：完成模块拆分并包含“特殊测试点”字段，点击“展开拆分视图”查看表格。
+- 使用效果：拆分视图不再遗漏特殊测试点信息，内容与拆分结果一致。
+- 新增内容/接口/组件：
+  - 前端：拆分解析补充特殊测试点字段映射（`scripts/modules/app.js`、`scripts/core/splitCore.js`）。
+  - 测试：拆分视图展示特殊测试点 UI 用例（`tests/ui/split_view_autosync.spec.js`）。
+- 复用说明：复用现有拆分解析与拆分视图渲染逻辑，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/split_view_autosync.spec.js`（通过，提权执行）
+- 更新记录：2025-12-26 拆分视图展示特殊测试点（`scripts/modules/app.js`、`scripts/core/splitCore.js`、`tests/ui/split_view_autosync.spec.js`）。
