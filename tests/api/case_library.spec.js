@@ -32,6 +32,11 @@ test.describe('case library api', () => {
     });
     expect(createProj.status()).toBe(201);
     const projectId = (await createProj.json()).id;
+    const listProjectsRes = await ctx.get(`${apiBase}/api/projects`, { headers });
+    expect(listProjectsRes.status()).toBe(200);
+    const projects = await listProjectsRes.json();
+    expect(Array.isArray(projects)).toBeTruthy();
+    expect(projects.some((item) => item && item.id === projectId)).toBeTruthy();
 
     const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
       headers,

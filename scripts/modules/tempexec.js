@@ -63,6 +63,7 @@
     var openTempExecImportDrawerBtn = document.getElementById('openTempExecImportDrawerBtn');
     var openTempExecAssignDrawerBtn = document.getElementById('openTempExecAssignDrawerBtn');
     var openTempExecCaseLibraryBtn = document.getElementById('openTempExecCaseLibraryBtn');
+    var openTempExecCaseLibraryJumpBtn = document.getElementById('openTempExecCaseLibraryJumpBtn');
     var openTempExecViewNavBtn = document.getElementById('openTempExecViewNavBtn');
     var openTempExecOverviewNavBtn = document.getElementById('openTempExecOverviewNavBtn');
     var openTempExecBackupNavBtn = document.getElementById('openTempExecBackupNavBtn');
@@ -913,6 +914,17 @@
         }
       }
     }
+    function openCaseLibraryFromTempExec() {
+      try {
+        if (window.app) window.app.__drawerSkipRestoreOnce = true;
+      } catch (err) {
+        // ignore
+      }
+      if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+        window.app.drawer.closeAllDrawers();
+      }
+      if (typeof switchTab === 'function') switchTab('case-library');
+    }
     if (openTempExecViewNavBtn) {
       openTempExecViewNavBtn.addEventListener('click', function() {
         showTempExecView();
@@ -931,6 +943,11 @@
     if (openTempExecCaseLibraryBtn) {
       openTempExecCaseLibraryBtn.addEventListener('click', function() {
         openCaseLibrarySelectExecFromTempExec();
+      });
+    }
+    if (openTempExecCaseLibraryJumpBtn) {
+      openTempExecCaseLibraryJumpBtn.addEventListener('click', function() {
+        openCaseLibraryFromTempExec();
       });
     }
 

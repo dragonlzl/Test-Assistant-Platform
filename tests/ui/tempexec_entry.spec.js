@@ -94,6 +94,17 @@ test.describe('临时执行入口导航', () => {
     await expect(page.locator('#caseLibrarySelectExecDrawer')).toHaveClass(/open/);
   });
 
+  test('顶部导航跳转用例库页签', async ({ page }) => {
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    const jumpBtn = page.locator('#openTempExecCaseLibraryJumpBtn');
+    await expect(jumpBtn).toBeVisible();
+    await expect(jumpBtn).toContainText('跳转用例库');
+    await jumpBtn.click();
+    await expect(page.locator('[data-tab-btn="case-library"]')).toHaveClass(/active/);
+    await expect(page.locator('#caseLibraryFlowNav')).toBeVisible();
+    await expect(page.locator('#caseLibrarySelectExecDrawer')).not.toHaveClass(/open/);
+  });
+
   test('执行总览抽屉展开', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
     await page.click('#openTempExecOverviewNavBtn');

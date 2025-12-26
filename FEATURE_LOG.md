@@ -2708,6 +2708,7 @@
 - 更新记录：2025-12-26 执行页入口直接打开用例库选择执行（`index.html`、`scripts/modules/tempexec.js`、`scripts/modules/pageGuide.js`、`tests/ui/tempexec_entry.spec.js`）。
 - 更新记录：2025-12-26 执行页选择用例执行抽屉不切换页签（`index.html`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`scripts/modules/pageGuide.js`、`tests/ui/tempexec_entry.spec.js`）。
 - 更新记录：2025-12-26 执行页专注区点击打开执行分配（`scripts/modules/tempexec.js`、`tests/ui/tempexec_focus_sync.spec.js`）。
+- 更新记录：2025-12-26 执行页导航补充用例库跳转入口（`index.html`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_entry.spec.js`、`tests/api/case_library.spec.js`）。
 
 - 功能名称：页签切换请求去重与执行页加载单飞
 - 功能描述：修复点击二级菜单触发重复请求与执行页偶现未刷新问题，通过页签切换去重与执行数据加载单飞降低并发冲突。
