@@ -99,6 +99,16 @@ test.describe('settings/models/features + ops api', () => {
     const themeBody = await listThemeSettings.json();
     const lightThemeSetting = themeBody.find((item) => item.key === 'theme' && item.owner_id === userId);
     expect(lightThemeSetting && lightThemeSetting.value_json).toBe('light');
+    const restoreTheme = await ctx.put(`${apiBase}/api/settings`, {
+      headers: userHeaders,
+      data: { scope: 'user', items: [{ key: 'theme', value_json: 'dark' }] },
+    });
+    expect(restoreTheme.status()).toBe(200);
+    const listFinalTheme = await ctx.get(`${apiBase}/api/settings?scope=all`, { headers: userHeaders });
+    expect(listFinalTheme.status()).toBe(200);
+    const finalThemeBody = await listFinalTheme.json();
+    const finalThemeSetting = finalThemeBody.find((item) => item.key === 'theme' && item.owner_id === userId);
+    expect(finalThemeSetting && finalThemeSetting.value_json).toBe('dark');
 
     // model configs
     const createUserModel = await ctx.post(`${apiBase}/api/models`, {

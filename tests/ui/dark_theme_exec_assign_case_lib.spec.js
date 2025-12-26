@@ -385,4 +385,156 @@ test.describe('暗色主题 UI 对比增强', () => {
     const tagColor = await page.$eval('#caseLibraryEditListBody .case-lib-exec-tag', (el) => getComputedStyle(el).color);
     expect(tagColor).toBe('rgb(134, 239, 172)');
   });
+
+  test('执行视图空态背景在暗色主题下非白色', async ({ page }) => {
+    const serverState = {
+      user: { id: 21, username: 'dark_exec_empty_user', role: 'user', level: 'member' },
+      projects: [{ id: 1, name: '执行项目', description: '' }],
+      versionsByProject: { 1: [{ id: 11, project_id: 1, name: 'v1' }] },
+      execSets: [],
+      casesBySetId: {},
+      settings: [{
+        id: 1,
+        scope: 'user',
+        owner_id: 21,
+        key: 'theme',
+        value_json: 'dark',
+      }],
+      lastSettingsPayload: null,
+    };
+    const apiHandler = createTempExecApiHandler(serverState);
+
+    await page.route('**/*', async (route) => {
+      const url = route.request().url();
+      if (url.indexOf('/api/') !== -1) return apiHandler(route);
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.continue();
+      }
+      return route.abort();
+    });
+    await page.addInitScript(() => {
+      try { localStorage.setItem('tap-auth-token', 'dark-empty-token'); } catch (_) {}
+    });
+
+    await gotoIndex(page);
+    await waitAppReady(page, 30000);
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    await switchToTab(page, 'tempexec');
+    await page.evaluate(() => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
+        return window.app.tempExecApi.loadTempExecState();
+      }
+      return null;
+    });
+    const emptyView = page.locator('#tempExecView .temp-case-empty');
+    await expect(emptyView).toBeVisible();
+    const bg = await emptyView.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(bg).not.toBe('rgb(248, 250, 252)');
+    expect(bg).not.toBe('rgb(255, 255, 255)');
+  });
+
+  test('暗色主题菜单选中状态可辨识', async ({ page }) => {
+    const serverState = {
+      user: { id: 22, username: 'dark_menu_user', role: 'user', level: 'member' },
+      projects: [{ id: 1, name: '执行项目', description: '' }],
+      versionsByProject: { 1: [{ id: 11, project_id: 1, name: 'v1' }] },
+      execSets: [],
+      casesBySetId: {},
+      settings: [{
+        id: 1,
+        scope: 'user',
+        owner_id: 22,
+        key: 'theme',
+        value_json: 'dark',
+      }],
+      lastSettingsPayload: null,
+    };
+    const apiHandler = createTempExecApiHandler(serverState);
+
+    await page.route('**/*', async (route) => {
+      const url = route.request().url();
+      if (url.indexOf('/api/') !== -1) return apiHandler(route);
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.continue();
+      }
+      return route.abort();
+    });
+    await page.addInitScript(() => {
+      try { localStorage.setItem('tap-auth-token', 'dark-menu-token'); } catch (_) {}
+    });
+
+    await gotoIndex(page);
+    await waitAppReady(page, 30000);
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    await switchToTab(page, 'tempexec');
+
+    const activeGroup = page.locator('.tab-group-btn[data-group="cases"]');
+    const idleGroup = page.locator('.tab-group-btn[data-group="ai"]');
+    await expect(activeGroup).toHaveClass(/active/);
+    const activeBorder = await activeGroup.evaluate((el) => getComputedStyle(el).borderColor);
+    const idleBorder = await idleGroup.evaluate((el) => getComputedStyle(el).borderColor);
+    expect(activeBorder).not.toBe(idleBorder);
+  });
+
+  test('暗色主题专注区选中状态更明显', async ({ page }) => {
+    const serverState = {
+      user: { id: 23, username: 'dark_focus_user', role: 'user', level: 'member' },
+      projects: [{ id: 1, name: '执行项目', description: '' }],
+      versionsByProject: { 1: [{ id: 11, project_id: 1, name: 'v1' }] },
+      execSets: [],
+      casesBySetId: {},
+      settings: [{
+        id: 1,
+        scope: 'user',
+        owner_id: 23,
+        key: 'theme',
+        value_json: 'dark',
+      }],
+      lastSettingsPayload: null,
+    };
+    const apiHandler = createTempExecApiHandler(serverState);
+
+    await page.route('**/*', async (route) => {
+      const url = route.request().url();
+      if (url.indexOf('/api/') !== -1) return apiHandler(route);
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.continue();
+      }
+      return route.abort();
+    });
+    await page.addInitScript(() => {
+      try { localStorage.setItem('tap-auth-token', 'dark-focus-token'); } catch (_) {}
+    });
+
+    await gotoIndex(page);
+    await waitAppReady(page, 30000);
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    await switchToTab(page, 'tempexec');
+    await page.evaluate(() => {
+      var focusZone = document.getElementById('testFocusZone');
+      if (!focusZone) {
+        focusZone = document.createElement('div');
+        focusZone.id = 'testFocusZone';
+        focusZone.className = 'temp-focus-zone';
+        document.body.appendChild(focusZone);
+      }
+      focusZone.innerHTML =
+        '<button type="button" class="active">' +
+          '<span class="tag tag-focus">专注</span>' +
+          '<span>用例A（1）</span>' +
+        '</button>' +
+        '<button type="button" class="idle">' +
+          '<span class="tag tag-focus">专注</span>' +
+          '<span>用例B（2）</span>' +
+        '</button>';
+    });
+    const focusZone = page.locator('#testFocusZone');
+    const activeBtn = focusZone.locator('button.active').first();
+    const idleBtn = focusZone.locator('button.idle').first();
+    await expect(activeBtn).toBeVisible();
+    await expect(idleBtn).toBeVisible();
+    const activeBgImage = await activeBtn.evaluate((el) => getComputedStyle(el).backgroundImage);
+    const idleBgImage = await idleBtn.evaluate((el) => getComputedStyle(el).backgroundImage);
+    expect(activeBgImage).not.toBe(idleBgImage);
+  });
 });

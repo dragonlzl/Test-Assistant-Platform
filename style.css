@@ -7338,6 +7338,14 @@ button.exec-overview-file-chip,
   color: #93c5fd;
   border-color: rgba(96,165,250,0.35);
 }
+:root[data-theme="dark"] .tabs button.active,
+:root[data-theme="dark"] .tabs .tab-group-btn.active,
+:root[data-theme="dark"] .tabs.vertical button.active {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 60%, #0ea5e9 100%);
+  color: #e0f2fe;
+  border-color: rgba(96,165,250,0.85);
+  box-shadow: 0 12px 24px rgba(37,99,235,0.38);
+}
 :root[data-theme="dark"] .ai-flow-compact .step,
 :root[data-theme="dark"] .ai-flow-substep {
   border-color: rgba(125,180,255,0.35);
@@ -8157,6 +8165,11 @@ button.exec-overview-file-chip,
   border-color: var(--border);
   box-shadow: var(--shadow);
 }
+:root[data-theme="dark"] .temp-case-empty {
+  background: rgba(26,34,49,0.9);
+  border-color: var(--border);
+  color: var(--muted);
+}
 :root[data-theme="dark"] .temp-focus-block {
   background: var(--panel);
   border-color: rgba(125,180,255,0.35);
@@ -8179,9 +8192,10 @@ button.exec-overview-file-chip,
   color: var(--text);
 }
 :root[data-theme="dark"] .temp-focus-zone button.active {
-  background: rgba(125,180,255,0.3);
-  border-color: rgba(125,180,255,0.75);
-  color: #dbeafe;
+  background: linear-gradient(135deg, rgba(59,130,246,0.5), rgba(37,99,235,0.7));
+  border-color: rgba(147,197,253,0.9);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(59,130,246,0.35);
 }
 :root[data-theme="dark"] .temp-focus-zone button .remove {
   background: rgba(248,113,113,0.2);
