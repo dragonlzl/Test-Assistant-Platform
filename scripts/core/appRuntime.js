@@ -355,6 +355,9 @@
       state.failedSteps = {};
       state.waitingSteps = {};
       state.validationFailedSteps = {};
+      state.failedReasons = {};
+      state.waitingReasons = {};
+      state.validationFailedReasons = {};
       state.autoRunning = false;
       return true;
     }

@@ -571,15 +571,16 @@
         try {
           await step.run(context);
           if (!step.validate()) {
-            setStepFailed(step.key);
+            var invalidReason = step.label + '未产生有效输出，请检查模型配置或稍后重试';
+            setStepFailed(step.key, invalidReason);
             updateFlowStatus();
-            throw new Error(step.label + '未产生有效输出，请检查模型配置或稍后重试');
+            throw new Error(invalidReason);
           }
           if (step.after) {
             await step.after();
           }
         } catch (err) {
-          if (step && step.key) setStepFailed(step.key);
+          if (step && step.key) setStepFailed(step.key, err && err.message ? err.message : '执行失败');
           updateFlowStatus();
           throw err;
         }
@@ -595,7 +596,7 @@
         if (autoRecleanBtn) autoRecleanBtn.disabled = false;
         if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = true;
         if (autoRecleanStatus) setStatus(autoRecleanStatus, '请修正并重新清洗', 'warn');
-        setStepFailed('compare');
+        setStepFailed('compare', '对比完整性结果解析失败');
         updateFlowStatus();
         throw new Error('未解析到对比覆盖率');
       }
@@ -604,7 +605,7 @@
         if (autoRecleanBtn) autoRecleanBtn.disabled = false;
         if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = false;
         if (autoRecleanStatus) setStatus(autoRecleanStatus, '覆盖率不足，点击“重新清洗并继续”以重跑流程', 'warn');
-        setStepWaiting('compare');
+        setStepWaiting('compare', '覆盖率不足，等待确认');
         updateFlowStatus();
         await notifyFeishuCoverageFailure();
         throw new Error('对比覆盖率不足100%');
@@ -620,7 +621,7 @@
       switchTab('auto');
       if (autoClarifySection) autoClarifySection.classList.remove('hidden');
       renderAutoClarifyView();
-      setStepWaiting('review');
+      setStepWaiting('review', '等待澄清确认');
       updateFlowStatus();
       try {
         await notifyFeishuClarificationNeeded();

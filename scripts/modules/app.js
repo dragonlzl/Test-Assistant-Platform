@@ -1184,6 +1184,13 @@
       return state.waitingSteps;
     }
 
+    function ensureWaitingReasonMap() {
+      if (!state.waitingReasons || typeof state.waitingReasons !== 'object') {
+        state.waitingReasons = {};
+      }
+      return state.waitingReasons;
+    }
+
     function ensureFailedMap() {
       if (!state.failedSteps || typeof state.failedSteps !== 'object') {
         state.failedSteps = {};
@@ -1191,11 +1198,25 @@
       return state.failedSteps;
     }
 
+    function ensureFailedReasonMap() {
+      if (!state.failedReasons || typeof state.failedReasons !== 'object') {
+        state.failedReasons = {};
+      }
+      return state.failedReasons;
+    }
+
     function ensureValidationFailedMap() {
       if (!state.validationFailedSteps || typeof state.validationFailedSteps !== 'object') {
         state.validationFailedSteps = {};
       }
       return state.validationFailedSteps;
+    }
+
+    function ensureValidationFailedReasonMap() {
+      if (!state.validationFailedReasons || typeof state.validationFailedReasons !== 'object') {
+        state.validationFailedReasons = {};
+      }
+      return state.validationFailedReasons;
     }
 
     function triggerUpdateFlowStatus() {
@@ -1206,9 +1227,14 @@
       }
     }
 
-    function setStepWaiting(step) {
+    function setStepWaiting(step, reason) {
       var map = ensureWaitingMap();
+      var reasonMap = ensureWaitingReasonMap();
       if (step) map[step] = true;
+      if (step) {
+        if (reason) reasonMap[step] = String(reason);
+        else if (Object.prototype.hasOwnProperty.call(reasonMap, step)) delete reasonMap[step];
+      }
       triggerUpdateFlowStatus();
     }
 
@@ -1216,6 +1242,8 @@
       var map = ensureWaitingMap();
       if (!step || !map[step]) return;
       delete map[step];
+      var reasonMap = ensureWaitingReasonMap();
+      if (Object.prototype.hasOwnProperty.call(reasonMap, step)) delete reasonMap[step];
       triggerUpdateFlowStatus();
     }
 
@@ -1224,25 +1252,42 @@
       var keys = Object.keys(map);
       if (!keys.length) return;
       keys.forEach(function(key) { delete map[key]; });
+      var reasonMap = ensureWaitingReasonMap();
+      Object.keys(reasonMap).forEach(function(key) { delete reasonMap[key]; });
       triggerUpdateFlowStatus();
     }
 
-    function setStepFailed(step) {
+    function setStepFailed(step, reason) {
       var map = ensureFailedMap();
+      var reasonMap = ensureFailedReasonMap();
       if (step) map[step] = true;
+      if (step) {
+        if (reason) reasonMap[step] = String(reason);
+        else if (Object.prototype.hasOwnProperty.call(reasonMap, step)) delete reasonMap[step];
+      }
       triggerUpdateFlowStatus();
     }
 
     function clearStepFailed(step) {
       var map = ensureFailedMap();
       var validationMap = ensureValidationFailedMap();
+      var reasonMap = ensureFailedReasonMap();
+      var validationReasonMap = ensureValidationFailedReasonMap();
       var touched = false;
       if (step && map[step]) {
         delete map[step];
         touched = true;
       }
+      if (step && Object.prototype.hasOwnProperty.call(reasonMap, step)) {
+        delete reasonMap[step];
+        touched = true;
+      }
       if (step && validationMap[step]) {
         delete validationMap[step];
+        touched = true;
+      }
+      if (step && Object.prototype.hasOwnProperty.call(validationReasonMap, step)) {
+        delete validationReasonMap[step];
         touched = true;
       }
       if (touched) triggerUpdateFlowStatus();
@@ -1255,6 +1300,10 @@
       if (!keys.length) return;
       Object.keys(map).forEach(function(key) { delete map[key]; });
       Object.keys(validationMap).forEach(function(key) { delete validationMap[key]; });
+      var reasonMap = ensureFailedReasonMap();
+      var validationReasonMap = ensureValidationFailedReasonMap();
+      Object.keys(reasonMap).forEach(function(key) { delete reasonMap[key]; });
+      Object.keys(validationReasonMap).forEach(function(key) { delete validationReasonMap[key]; });
       triggerUpdateFlowStatus();
     }
 
@@ -1325,16 +1374,38 @@
       }
     }
 
+    function getValidationFailureReason(step) {
+      switch (step) {
+        case 'review':
+          return '评审结果格式异常';
+        case 'clean':
+          return '清洗结果格式异常';
+        case 'compare':
+          return '对比结果格式异常';
+        case 'split':
+          return '拆分结果格式异常';
+        case 'cases-upload':
+          return '用例导入格式异常';
+        case 'cases':
+          return '覆盖对比结果格式异常';
+        default:
+          return '结果格式异常';
+      }
+    }
+
     function applyValidationFailure(step, failed) {
       var map = ensureValidationFailedMap();
+      var reasonMap = ensureValidationFailedReasonMap();
       var changed = false;
       if (failed) {
         if (!map[step]) {
           map[step] = true;
           changed = true;
         }
+        reasonMap[step] = getValidationFailureReason(step);
       } else if (map[step]) {
         delete map[step];
+        if (Object.prototype.hasOwnProperty.call(reasonMap, step)) delete reasonMap[step];
         changed = true;
       }
       return changed;
@@ -1552,6 +1623,9 @@
       state.failedSteps = {};
       state.waitingSteps = {};
       state.validationFailedSteps = {};
+      state.failedReasons = {};
+      state.waitingReasons = {};
+      state.validationFailedReasons = {};
       state.reviewRows = [];
       state.reviewClarifications = new Map();
       state.reviewSelections = new Set();

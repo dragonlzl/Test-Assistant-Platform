@@ -3221,6 +3221,7 @@ body {
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
+  position: relative;
 }
 .ai-flow-substep {
   flex: 0 0 auto;
@@ -3258,6 +3259,61 @@ body {
   line-height: 1;
   text-align: center;
   box-shadow: none;
+}
+.ai-flow-compact .step .step-reason,
+.ai-flow-substep .step-reason {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(10em + 16px);
+  max-height: calc(1.4em * 3 + 8px);
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #fff;
+  background: rgba(15,23,42,0.92);
+  box-shadow: 0 8px 18px rgba(15,23,42,0.2);
+  text-align: center;
+  white-space: normal;
+  word-break: break-word;
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: 20;
+}
+.ai-flow-compact .step .step-reason.reason-short,
+.ai-flow-substep .step-reason.reason-short {
+  white-space: nowrap;
+  word-break: normal;
+}
+.ai-flow-compact .step .step-reason::after,
+.ai-flow-substep .step-reason::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px;
+  border-style: solid;
+  border-color: rgba(15,23,42,0.92) transparent transparent transparent;
+}
+.ai-flow-compact .step.waiting .step-reason,
+.ai-flow-substep.waiting .step-reason {
+  background: #f97316;
+}
+.ai-flow-compact .step.waiting .step-reason::after,
+.ai-flow-substep.waiting .step-reason::after {
+  border-color: #f97316 transparent transparent transparent;
+}
+.ai-flow-compact .step.failed .step-reason,
+.ai-flow-substep.failed .step-reason {
+  background: #ef4444;
+}
+.ai-flow-compact .step.failed .step-reason::after,
+.ai-flow-substep.failed .step-reason::after {
+  border-color: #ef4444 transparent transparent transparent;
 }
 .ai-flow-compact .step .step-status[data-status="running"],
 .ai-flow-substep .step-status[data-status="running"] {
@@ -4643,6 +4699,7 @@ tr.diff-locate-active td {
       flex-wrap: nowrap;
       justify-content: center;
       padding: 4px;
+      overflow-y: visible;
     }
     @media (max-width: 980px) {
       .flow-steps {
@@ -4667,6 +4724,55 @@ tr.diff-locate-active td {
       box-shadow: 0 6px 14px rgba(37,99,235,0.12);
       font-weight: 700;
       color: var(--text);
+      position: relative;
+    }
+    .flow .step .step-reason {
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 8px);
+      transform: translateX(-50%);
+      width: max-content;
+      max-width: calc(10em + 20px);
+      max-height: calc(1.4em * 3 + 12px);
+      padding: 6px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: #fff;
+      background: rgba(15,23,42,0.9);
+      box-shadow: 0 10px 24px rgba(15,23,42,0.2);
+      text-align: center;
+      white-space: normal;
+      word-break: break-word;
+      overflow-y: auto;
+      overflow-x: hidden;
+      z-index: 20;
+    }
+    .flow .step .step-reason.reason-short {
+      white-space: nowrap;
+      word-break: normal;
+    }
+    .flow .step .step-reason::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 6px;
+      border-style: solid;
+      border-color: rgba(15,23,42,0.9) transparent transparent transparent;
+    }
+    .flow .step.waiting .step-reason {
+      background: #f97316;
+    }
+    .flow .step.waiting .step-reason::after {
+      border-color: #f97316 transparent transparent transparent;
+    }
+    .flow .step.failed .step-reason {
+      background: #ef4444;
+    }
+    .flow .step.failed .step-reason::after {
+      border-color: #ef4444 transparent transparent transparent;
     }
     .flow .step .step-label {
       display: inline-flex;
@@ -7260,6 +7366,34 @@ button.exec-overview-file-chip,
   color: #fecaca;
   background: rgba(248,113,113,0.2);
 }
+:root[data-theme="dark"] .ai-flow-compact .step .step-reason,
+:root[data-theme="dark"] .ai-flow-substep .step-reason {
+  background: rgba(30,41,59,0.95);
+  color: #e2e8f0;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.45);
+}
+:root[data-theme="dark"] .ai-flow-compact .step .step-reason::after,
+:root[data-theme="dark"] .ai-flow-substep .step-reason::after {
+  border-color: rgba(30,41,59,0.95) transparent transparent transparent;
+}
+:root[data-theme="dark"] .ai-flow-compact .step.waiting .step-reason,
+:root[data-theme="dark"] .ai-flow-substep.waiting .step-reason {
+  background: rgba(251,146,60,0.95);
+  color: #fff;
+}
+:root[data-theme="dark"] .ai-flow-compact .step.waiting .step-reason::after,
+:root[data-theme="dark"] .ai-flow-substep.waiting .step-reason::after {
+  border-color: rgba(251,146,60,0.95) transparent transparent transparent;
+}
+:root[data-theme="dark"] .ai-flow-compact .step.failed .step-reason,
+:root[data-theme="dark"] .ai-flow-substep.failed .step-reason {
+  background: rgba(248,113,113,0.95);
+  color: #fff;
+}
+:root[data-theme="dark"] .ai-flow-compact .step.failed .step-reason::after,
+:root[data-theme="dark"] .ai-flow-substep.failed .step-reason::after {
+  border-color: rgba(248,113,113,0.95) transparent transparent transparent;
+}
 :root[data-theme="dark"] .tab-submenu {
   background: var(--panel);
   border-color: var(--border);
@@ -7341,6 +7475,28 @@ button.exec-overview-file-chip,
   background: rgba(125,180,255,0.18);
   border-color: rgba(125,180,255,0.4);
   color: #bfdbfe;
+}
+:root[data-theme="dark"] .flow .step .step-reason {
+  background: rgba(30,41,59,0.95);
+  color: #e2e8f0;
+  box-shadow: 0 10px 22px rgba(0,0,0,0.45);
+}
+:root[data-theme="dark"] .flow .step .step-reason::after {
+  border-color: rgba(30,41,59,0.95) transparent transparent transparent;
+}
+:root[data-theme="dark"] .flow .step.waiting .step-reason {
+  background: rgba(251,146,60,0.95);
+  color: #fff;
+}
+:root[data-theme="dark"] .flow .step.waiting .step-reason::after {
+  border-color: rgba(251,146,60,0.95) transparent transparent transparent;
+}
+:root[data-theme="dark"] .flow .step.failed .step-reason {
+  background: rgba(248,113,113,0.95);
+  color: #fff;
+}
+:root[data-theme="dark"] .flow .step.failed .step-reason::after {
+  border-color: rgba(248,113,113,0.95) transparent transparent transparent;
 }
 :root[data-theme="dark"] .status {
   background: rgba(26,34,49,0.85);

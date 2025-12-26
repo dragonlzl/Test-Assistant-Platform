@@ -2690,3 +2690,17 @@
 - 测试与验证：
   - `npm run test:ui -- tests/ui/split_view_autosync.spec.js`（通过，提权执行）
 - 更新记录：2025-12-26 拆分视图展示特殊测试点（`scripts/modules/app.js`、`scripts/core/splitCore.js`、`tests/ui/split_view_autosync.spec.js`）。
+
+- 功能名称：一键执行阻塞原因气泡提示
+- 功能描述：一键执行步骤处于等待处理或失败状态时，在对应进度按钮上方展示气泡，持续显示等待操作项或失败原因，直到状态恢复为正常/执行中/完成。
+- 操作方式：触发一键执行等待或失败状态，观察步骤按钮上方气泡的原因提示；恢复状态后气泡消失。
+- 使用效果：快速定位阻塞原因，避免需要切换查看其它状态提示。
+- 新增内容/接口/组件：
+  - 前端：阻塞原因状态记录与进度按钮气泡渲染（`scripts/base/state.js`、`scripts/modules/app.js`、`scripts/core/autoCore.js`、`scripts/core/flowCore.js`、`style.css`）。
+  - 测试：阻塞原因气泡 UI 用例（`tests/ui/auto_flow_block_reason.spec.js`）。
+- 复用说明：复用现有一键执行步骤状态流转逻辑，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/auto_flow_block_reason.spec.js`（通过，提权执行）
+- 更新记录：2025-12-26 一键执行阻塞原因气泡提示（`scripts/base/state.js`、`scripts/modules/app.js`、`scripts/core/autoCore.js`、`scripts/core/flowCore.js`、`style.css`、`tests/ui/auto_flow_block_reason.spec.js`）。
+- 更新记录：2025-12-26 阻塞气泡仅显示在顶部步骤并调整气泡尺寸（`index.html`、`scripts/core/flowCore.js`、`style.css`、`tests/ui/auto_flow_block_reason.spec.js`）。
+- 更新记录：2025-12-26 阻塞气泡宽度自适应短文案不换行（`scripts/core/flowCore.js`、`style.css`、`tests/ui/auto_flow_block_reason.spec.js`）。

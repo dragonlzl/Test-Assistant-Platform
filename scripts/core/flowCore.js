@@ -128,6 +128,41 @@
       }
     }
 
+    function ensureStepReason(stepEl) {
+      if (!stepEl || typeof document === 'undefined') return null;
+      var reasonEl = stepEl.querySelector ? stepEl.querySelector('.step-reason') : null;
+      if (!reasonEl) {
+        reasonEl = document.createElement('div');
+        reasonEl.className = 'step-reason hidden';
+        stepEl.appendChild(reasonEl);
+      }
+      return reasonEl;
+    }
+
+    function syncStepReason(stepEl, reason, status) {
+      if (!stepEl) return;
+      if (stepEl.classList && stepEl.classList.contains('no-reason')) {
+        var existing = stepEl.querySelector ? stepEl.querySelector('.step-reason') : null;
+        if (existing) {
+          existing.textContent = '';
+          existing.classList.add('hidden');
+        }
+        if (stepEl.classList) stepEl.classList.remove('has-reason');
+        return;
+      }
+      var reasonEl = ensureStepReason(stepEl);
+      if (!reasonEl) return;
+      var shouldShow = Boolean(reason) && (status === 'waiting' || status === 'failed');
+      var reasonText = shouldShow ? String(reason) : '';
+      reasonEl.textContent = reasonText;
+      var isShort = shouldShow && reasonText.length <= 10;
+      if (reasonEl.classList) {
+        reasonEl.classList.toggle('reason-short', isShort);
+        reasonEl.classList.toggle('hidden', !shouldShow);
+      }
+      if (stepEl.classList) stepEl.classList.toggle('has-reason', shouldShow);
+    }
+
     function updateFlowStatus() {
       var stateMap = {
         import: rawText && rawText.value.trim().length > 0,
@@ -143,6 +178,11 @@
       var failedMap = (state && state.failedSteps && typeof state.failedSteps === 'object') ? state.failedSteps : {};
       var validationFailedMap = (state && state.validationFailedSteps && typeof state.validationFailedSteps === 'object')
         ? state.validationFailedSteps
+        : {};
+      var waitingReasonMap = (state && state.waitingReasons && typeof state.waitingReasons === 'object') ? state.waitingReasons : {};
+      var failedReasonMap = (state && state.failedReasons && typeof state.failedReasons === 'object') ? state.failedReasons : {};
+      var validationReasonMap = (state && state.validationFailedReasons && typeof state.validationFailedReasons === 'object')
+        ? state.validationFailedReasons
         : {};
       if (state.inProgressStep) runningMap[state.inProgressStep] = true;
       if (state) state.inProgressSteps = runningMap;
@@ -182,31 +222,38 @@
           var isRunning = Boolean(runningMap[target]);
           var isWaiting = Boolean(waitingMap[target]);
           var isFailed = Boolean(mergedFailedMap[target]);
+          var reason = '';
           step.classList.remove('done', 'active', 'waiting', 'failed');
           if (isRunning) {
             step.classList.add('active');
             status = 'running';
             syncStepStatus(step, status);
+            syncStepReason(step, '', status);
             return;
           }
           if (isWaiting) {
             step.classList.add('active');
             step.classList.add('waiting');
             status = 'waiting';
+            reason = waitingReasonMap[target] || '等待处理';
             syncStepStatus(step, status);
+            syncStepReason(step, reason, status);
             return;
           }
           if (isFailed) {
             step.classList.add('active');
             step.classList.add('failed');
             status = 'failed';
+            reason = failedReasonMap[target] || validationReasonMap[target] || '执行失败';
             syncStepStatus(step, status);
+            syncStepReason(step, reason, status);
             return;
           }
           if (stateMap[target]) step.classList.add('done');
           if (!stateMap[target] && target === nextPending) step.classList.add('active');
           if (stateMap[target]) status = 'done';
           syncStepStatus(step, status);
+          syncStepReason(step, '', status);
         });
       }
       syncSteps(flowNavSteps);
