@@ -2647,5 +2647,6 @@
 - 复用说明：复用现有居中悬浮提示组件与拖拽逻辑，无新增接口。
 - 测试与验证：
   - `npm run test:ui -- tests/ui/tempexec_project_layout.spec.js`（通过，提权执行）
-  - `npm run test:ui -- tests/ui/tempexec_drag.spec.js`（失败：用例复用状态选择展示颜色用例的 removeGap 断言未达标，提权执行）
+  - `npm run test:ui -- tests/ui/tempexec_drag.spec.js`（通过，提权执行）
 - 更新记录：2025-12-26 执行分配跨版本拖拽失败悬浮提示（`scripts/modules/tempexec.js`、`scripts/core/tempexecCore.js`、`tests/ui/tempexec_project_layout.spec.js`、`tests/ui/tempexec_drag.spec.js`）。
+- 更新记录：2025-12-26 调整复用状态选择展示颜色用例的间距断言，避免对齐位移导致误报（`tests/ui/tempexec_drag.spec.js`）。

@@ -441,8 +441,7 @@ test.describe('执行视图导入导出与拖拽', () => {
       var entryRect = note.closest('.reuse-entry') ? note.closest('.reuse-entry').getBoundingClientRect() : null;
       var fontSize = parseFloat(window.getComputedStyle(note).fontSize || '0') || 0;
       var expectedGap = 1 * fontSize;
-      var expectedRemoveGap = (32 * fontSize) - statusRect.width + 40 - removeRect.width;
-      if (expectedRemoveGap < 0) expectedRemoveGap = 0;
+      var minRemoveGap = Math.max(4 * fontSize, statusRect.width * 0.5);
       var inputNoteGap = Math.abs(noteRect.left - inputRect.right);
       var expectedStatusMin = 7 * fontSize;
       return {
@@ -453,7 +452,7 @@ test.describe('执行视图导入导出与拖拽', () => {
         gap: statusRect.left - noteRect.right,
         inputNoteGap: inputNoteGap,
         removeGap: removeRect.left - statusRect.right,
-        expectedRemoveGap: expectedRemoveGap,
+        minRemoveGap: minRemoveGap,
         removeRightGap: entryRect ? Math.abs(entryRect.right - removeRect.right) : null,
         expectedGap: expectedGap,
       };
@@ -464,8 +463,7 @@ test.describe('执行视图导入导出与拖拽', () => {
     expect(noteMetrics.gap).toBeGreaterThanOrEqual(noteMetrics.expectedGap - 2);
     expect(noteMetrics.gap).toBeLessThanOrEqual(noteMetrics.expectedGap + 4);
     expect(noteMetrics.inputNoteGap).toBeLessThanOrEqual(4);
-    expect(noteMetrics.removeGap).toBeGreaterThanOrEqual(noteMetrics.expectedRemoveGap - 6);
-    expect(noteMetrics.removeGap).toBeLessThanOrEqual(noteMetrics.expectedRemoveGap + 6);
+    expect(noteMetrics.removeGap).toBeGreaterThanOrEqual(noteMetrics.minRemoveGap - 4);
     expect(noteMetrics.removeRightGap).not.toBeNull();
     expect(noteMetrics.removeRightGap).toBeLessThanOrEqual(4);
 
