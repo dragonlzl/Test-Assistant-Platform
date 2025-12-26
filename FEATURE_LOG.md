@@ -2650,3 +2650,15 @@
   - `npm run test:ui -- tests/ui/tempexec_drag.spec.js`（通过，提权执行）
 - 更新记录：2025-12-26 执行分配跨版本拖拽失败悬浮提示（`scripts/modules/tempexec.js`、`scripts/core/tempexecCore.js`、`tests/ui/tempexec_project_layout.spec.js`、`tests/ui/tempexec_drag.spec.js`）。
 - 更新记录：2025-12-26 调整复用状态选择展示颜色用例的间距断言，避免对齐位移导致误报（`tests/ui/tempexec_drag.spec.js`）。
+
+- 功能名称：复用未执行子项红点提示
+- 功能描述：复用类型用例未展开时，如果存在未执行子项，在父项“实际结果”按钮右上角显示带数字红点，数字为未执行子项数；变更重跑/有改动状态同样提示，黑色主题下保持清晰可见。
+- 操作方式：执行视图中关闭复用子项展开，若存在未执行子项则在父项“实际结果”按钮看到红点数字提示；展开后隐藏提示，所有子项执行完后红点消失。
+- 使用效果：快速定位未执行子项，提示与执行状态同步更新，刷新/重新登录后保持一致。
+- 新增内容/接口/组件：
+  - 前端：复用未执行子项计数提示渲染（`scripts/core/tempexecCore.js`、`style.css`）。
+  - 测试：复用未执行子项红点 UI 用例（`tests/ui/tempexec_reuse_pending_badge.spec.js`）。
+- 复用说明：复用现有复用子项统计与实际结果按钮，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/tempexec_reuse_pending_badge.spec.js`（通过，提权执行）
+- 更新记录：2025-12-26 复用未执行子项红点提示（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_reuse_pending_badge.spec.js`）。

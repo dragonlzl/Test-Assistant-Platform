@@ -7435,10 +7435,19 @@
           return '<option value="' + opt + '" ' + (currentStatus === opt ? 'selected' : '') + '>' + opt + '</option>';
         }).join('');
         var reuseStatus = getCaseExecutionDisplay(file, item);
+        var pendingReuseCount = 0;
+        if (reuseEnabled && !reuseOpen) {
+          var details = Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
+          if (details.length) pendingReuseCount = aggregateReuseDetails(details).pending || 0;
+        }
+        var reusePendingBadge = pendingReuseCount > 0
+          ? '<span class="reuse-pending-badge" data-reuse-pending="' + pendingReuseCount + '">' + pendingReuseCount + '</span>'
+          : '';
         var actualCell = reuseEnabled
           ? '<td class="reuse-cell actual">' +
               '<button type="button" class="reuse-status ' + reuseStatus.className + '" data-temp-reuse-panel="' + file.id + '" data-index="' + idx + '">' +
                 escapeHtml(reuseStatus.label) +
+                reusePendingBadge +
               '</button>' +
             '</td>'
           : '<td class="actual">' +

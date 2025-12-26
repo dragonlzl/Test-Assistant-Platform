@@ -5366,6 +5366,32 @@ tr.diff-locate-active td {
       transition: all 0.15s ease;
       width: 100%;
       box-sizing: border-box;
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      overflow: visible;
+    }
+    .reuse-status .reuse-pending-badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 11px;
+      line-height: 18px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #fff;
+      box-shadow: 0 6px 12px rgba(239,68,68,0.35);
+      pointer-events: none;
+      box-sizing: border-box;
     }
     .reuse-status.pending {
       background: #f4f4f5;
@@ -8025,6 +8051,10 @@ button.exec-overview-file-chip,
   background: rgba(148,163,184,0.2);
   border-color: rgba(148,163,184,0.45);
   color: #e2e8f0;
+}
+:root[data-theme="dark"] .reuse-status .reuse-pending-badge {
+  border-color: rgba(15,23,42,0.92);
+  box-shadow: 0 6px 12px rgba(239,68,68,0.42);
 }
 :root[data-theme="dark"] .reuse-presets,
 :root[data-theme="dark"] .reuse-presets .preset-input {
