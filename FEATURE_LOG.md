@@ -2612,3 +2612,15 @@
 - 测试与验证：
   - `npm run test:ui -- tests/ui/tempexec_case_library_changes.spec.js`（通过，提权执行）
 - 更新记录：2025-12-26 执行页用例变更 diff 登录后延迟弹出（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。
+
+- 功能名称：执行页编辑仅在失焦时入库
+- 功能描述：执行页编辑用例标题/步骤/备注等字段时，避免输入过程多次入库与 diff 记录，改为失焦时统一保存。
+- 操作方式：在“用例执行”页编辑任意用例字段，输入文本后不离开输入框，确认无入库请求；点击输入框外区域后触发保存。
+- 使用效果：编辑过程不再产生多次变更记录，仅在编辑结束时保存并记录。
+- 新增内容/接口/组件：
+  - 前端：执行页编辑输入改为失焦提交（`scripts/modules/tempexec.js`）。
+  - 测试：执行页编辑失焦保存 UI 用例（`tests/ui/tempexec_edit_defer_save.spec.js`）。
+- 复用说明：复用现有执行用例保存接口与渲染逻辑，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/tempexec_edit_defer_save.spec.js`（通过，提权执行）
+- 更新记录：2025-12-26 执行页编辑仅在失焦时入库（`scripts/modules/tempexec.js`、`tests/ui/tempexec_edit_defer_save.spec.js`）。

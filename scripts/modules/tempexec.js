@@ -4808,80 +4808,140 @@
           return;
         }
       });
-      tempExecView.addEventListener('input', function(e) {
+      tempExecView.addEventListener('focusin', function(e) {
         var target = e.target;
-        if (!target) return;
+        if (!target || !target.dataset) return;
+        if (target.dataset.tempEditField !== undefined) {
+          var multiline0 = String(target.dataset.tempEditMultiline || '').toLowerCase() === 'true';
+          var raw0 = typeof target.innerText === 'string' ? target.innerText : (target.textContent || '');
+          var normalized0 = raw0.replace(/\r\n/g, '\n');
+          if (!multiline0) normalized0 = normalized0.replace(/\n/g, ' ').trim();
+          if (target.dataset.tempEditField === 'priority') normalized0 = normalized0.toUpperCase().trim();
+          target.dataset.tempEditOrigin = normalized0;
+          return;
+        }
+        if (
+          target.dataset.tempRemark !== undefined ||
+          target.dataset.tempReuseText !== undefined ||
+          target.dataset.tempReuseNote !== undefined ||
+          target.dataset.tempDefectLink !== undefined
+        ) {
+          target.dataset.tempInputOrigin = target.value || '';
+        }
+      });
+      tempExecView.addEventListener('focusout', function(e) {
+        var target = e.target;
+        if (!target || !target.dataset) return;
+        if (target.dataset.tempEditField !== undefined && api.updateTempExecCaseField) {
+          var efFileId2 = target.dataset.tempEditFile;
+          var efIdx2 = Number(target.dataset.tempEditIndex);
+          var efField2 = target.dataset.tempEditField;
+          var multiline2 = String(target.dataset.tempEditMultiline || '').toLowerCase() === 'true';
+          var raw2 = typeof target.innerText === 'string' ? target.innerText : (target.textContent || '');
+          var normalized2 = raw2.replace(/\r\n/g, '\n');
+          if (!multiline2) normalized2 = normalized2.replace(/\n/g, ' ').trim();
+          if (efField2 === 'priority') normalized2 = normalized2.toUpperCase();
+          var origin2 = target.dataset.tempEditOrigin;
+          if (origin2 !== undefined) delete target.dataset.tempEditOrigin;
+          if (!Number.isNaN(efIdx2) && efField2) {
+            if (origin2 !== undefined && origin2 === normalized2) return;
+            api.updateTempExecCaseField(efFileId2, efIdx2, efField2, normalized2);
+          }
+          return;
+        }
         if (target.dataset.tempRemark !== undefined && api.updateTempExecRemark) {
-          var rFileId = target.dataset.tempRemark;
-          var rIdx = Number(target.dataset.index);
-          if (!Number.isNaN(rIdx)) api.updateTempExecRemark(rFileId, rIdx, target.value);
+          var rFileId2 = target.dataset.tempRemark;
+          var rIdx2 = Number(target.dataset.index);
+          var rOrigin = target.dataset.tempInputOrigin;
+          if (rOrigin !== undefined) delete target.dataset.tempInputOrigin;
+          if (!Number.isNaN(rIdx2) && rFileId2) {
+            var rValue = target.value || '';
+            if (rOrigin !== undefined && rOrigin === rValue) return;
+            api.updateTempExecRemark(rFileId2, rIdx2, rValue);
+          }
           return;
         }
         if (target.dataset.tempReuseText !== undefined && api.updateTempExecReuseText) {
-          var rtFileId = target.dataset.tempReuseText;
-          var rtIdx = Number(target.dataset.index);
-          var rtDetailId = target.dataset.detail;
-          if (!Number.isNaN(rtIdx) && rtDetailId) api.updateTempExecReuseText(rtFileId, rtIdx, rtDetailId, target.value);
+          var rtFileId2 = target.dataset.tempReuseText;
+          var rtIdx2 = Number(target.dataset.index);
+          var rtDetailId2 = target.dataset.detail;
+          var rtOrigin = target.dataset.tempInputOrigin;
+          if (rtOrigin !== undefined) delete target.dataset.tempInputOrigin;
+          if (!Number.isNaN(rtIdx2) && rtDetailId2) {
+            var rtValue = target.value || '';
+            if (rtOrigin !== undefined && rtOrigin === rtValue) return;
+            api.updateTempExecReuseText(rtFileId2, rtIdx2, rtDetailId2, rtValue);
+          }
           return;
         }
         if (target.dataset.tempReuseNote !== undefined && api.updateTempExecReuseNote) {
-          var rnFileId = target.dataset.tempReuseNote;
-          var rnIdx = Number(target.dataset.index);
-          var rnDetailId = target.dataset.detail;
-          if (!Number.isNaN(rnIdx) && rnDetailId) api.updateTempExecReuseNote(rnFileId, rnIdx, rnDetailId, target.value);
+          var rnFileId2 = target.dataset.tempReuseNote;
+          var rnIdx2 = Number(target.dataset.index);
+          var rnDetailId2 = target.dataset.detail;
+          var rnOrigin = target.dataset.tempInputOrigin;
+          if (rnOrigin !== undefined) delete target.dataset.tempInputOrigin;
+          if (!Number.isNaN(rnIdx2) && rnDetailId2) {
+            var rnValue = target.value || '';
+            if (rnOrigin !== undefined && rnOrigin === rnValue) return;
+            api.updateTempExecReuseNote(rnFileId2, rnIdx2, rnDetailId2, rnValue);
+          }
           return;
         }
+        if (target.dataset.tempDefectLink !== undefined && api.updateTempExecDefectLink) {
+          var dlFileId2 = target.dataset.tempDefectLink;
+          var dlIdx2 = Number(target.dataset.index);
+          var dlLinkId2 = target.dataset.link;
+          var dlOrigin = target.dataset.tempInputOrigin;
+          if (dlOrigin !== undefined) delete target.dataset.tempInputOrigin;
+          if (!Number.isNaN(dlIdx2) && dlLinkId2) {
+            var dlValue = target.value || '';
+            if (dlOrigin !== undefined && dlOrigin === dlValue) return;
+            api.updateTempExecDefectLink(dlFileId2, dlIdx2, dlLinkId2, dlValue);
+          }
+        }
+      });
+      tempExecView.addEventListener('input', function(e) {
+        var target = e.target;
+        if (!target) return;
         if (target.dataset.tempSearchInput !== undefined) {
           return;
         }
         if (target.dataset.tempSearchInput !== undefined) {
           return;
         }
-        if (target.dataset.tempEditField !== undefined && api.updateTempExecCaseField) {
-          var efFileId = target.dataset.tempEditFile;
-          var efIdx = Number(target.dataset.tempEditIndex);
-          var efField = target.dataset.tempEditField;
+        if (target.dataset.tempEditField !== undefined) {
           var multiline = String(target.dataset.tempEditMultiline || '').toLowerCase() === 'true';
-          if (!Number.isNaN(efIdx) && efField) {
-            var caretPos = null;
-            var sel = window.getSelection && window.getSelection();
-            if (sel && sel.anchorNode && target.contains(sel.anchorNode)) {
-              caretPos = sel.anchorOffset;
-            }
-            var rawText = typeof target.innerText === 'string' ? target.innerText : (target.textContent || '');
-            var normalized = rawText.replace(/\r\n/g, '\n');
-            if (!multiline) {
-              normalized = normalized.replace(/\n/g, ' ').trim();
-            }
-            if (efField === 'priority') {
-              var upper = normalized.toUpperCase();
-              normalized = upper;
-              target.textContent = normalized;
-              if (caretPos !== null) {
-                var node = target.firstChild;
-                if (node) {
-                  var pos = Math.min(caretPos, node.textContent.length);
-                  var range = document.createRange();
-                  range.setStart(node, pos);
-                  range.collapse(true);
-                  sel.removeAllRanges();
-                  sel.addRange(range);
-                }
+          var caretPos = null;
+          var sel = window.getSelection && window.getSelection();
+          if (sel && sel.anchorNode && target.contains(sel.anchorNode)) {
+            caretPos = sel.anchorOffset;
+          }
+          var rawText = typeof target.innerText === 'string' ? target.innerText : (target.textContent || '');
+          var normalized = rawText.replace(/\r\n/g, '\n');
+          if (!multiline) {
+            normalized = normalized.replace(/\n/g, ' ').trim();
+          }
+          if (target.dataset.tempEditField === 'priority') {
+            var upper = normalized.toUpperCase();
+            normalized = upper;
+            target.textContent = normalized;
+            if (caretPos !== null) {
+              var node = target.firstChild;
+              if (node) {
+                var pos = Math.min(caretPos, node.textContent.length);
+                var range = document.createRange();
+                range.setStart(node, pos);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
               }
             }
-            api.updateTempExecCaseField(efFileId, efIdx, efField, normalized);
           }
           return;
         }
         if (target.dataset.tempReusePresetInput !== undefined && api.updateTempExecPresetDraft) {
           api.updateTempExecPresetDraft(target.value);
           return;
-        }
-        if (target.dataset.tempDefectLink !== undefined && api.updateTempExecDefectLink) {
-          var dlFileId = target.dataset.tempDefectLink;
-          var dlIdx = Number(target.dataset.index);
-          var dlLinkId = target.dataset.link;
-          if (!Number.isNaN(dlIdx) && dlLinkId) api.updateTempExecDefectLink(dlFileId, dlIdx, dlLinkId, target.value);
         }
       });
       tempExecView.addEventListener('keydown', function(e) {
