@@ -223,6 +223,141 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     expect(toolbarOrder.exportIds).toContain('exportTempExecCasesXmindBtn');
   });
 
+  test('登录后未进入执行页不自动弹出 diff，进入执行页后再弹', async ({ page }) => {
+    const token = 'token-case-lib-defer-open';
+    const user = { id: 17, username: 'defer_open_user', role: 'user', level: 'member' };
+    const project = { id: 6, name: '延迟弹窗项目', description: 'defer popup diff' };
+    const versions = [{ id: 61, name: 'v1' }];
+    const now = new Date().toISOString();
+
+    const execSet = { id: 6001, project_id: project.id, version_id: versions[0].id, case_file_id: 212, name: '延迟弹窗用例', status: 'active', created_at: now, updated_at: now };
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/exec/sets' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, [execSet]);
+      }
+
+      if (pathName === `/api/exec/sets/${execSet.id}/case-library-sync` && method === 'POST') {
+        const diffEntry = {
+          kind: 'updated',
+          case_item_id: 99,
+          changed_fields: ['steps'],
+          old: { module: '支付', title: '旧步骤', priority: 'P1', precondition: '无', steps: '旧步骤', expected: '成功', remark: '' },
+          new: { module: '支付', title: '新步骤', priority: 'P1', precondition: '无', steps: '新步骤', expected: '成功', remark: '' },
+        };
+        return respond(200, {
+          exec_set_id: execSet.id,
+          case_file_id: execSet.case_file_id,
+          case_file_updated_at: now,
+          base_updated_at: now,
+          last_diff_at: now,
+          last_shown_at: null,
+          ever_changed: true,
+          has_new_diff: true,
+          should_auto_popup: true,
+          summary: { added: 0, updated: 1, deleted: 0 },
+          diff: [diffEntry],
+        });
+      }
+
+      const execCasesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (execCasesMatch && method === 'GET') {
+        const id = Number(execCasesMatch[1]);
+        if (id !== execSet.id) return respond(200, []);
+        return respond(200, [
+          {
+            id: 9901,
+            exec_set_id: execSet.id,
+            case_item_id: 99,
+            module: '支付',
+            title: '新步骤',
+            expected: '成功',
+            priority: 'P1',
+            precondition: '无',
+            steps: '新步骤',
+            status: '未执行',
+            remark: '',
+            defect_links: [],
+            reuse_details: [],
+            order_no: 1,
+            created_at: now,
+            updated_at: now,
+          },
+        ]);
+      }
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { sessionStorage.setItem('usecase-active-tab', 'auto'); } catch (_) {}
+      window.app = window.app || {};
+      window.app.__tempexecCaseLibrarySyncSeq = 1;
+    }, { token: token });
+
+    await gotoIndex(page);
+    await page.waitForFunction(() => window.app && window.app.apiClient && window.app.state);
+    await ensureAuthed(page, token, user);
+    await waitAppReady(page, 30000);
+
+    const initialTab = await page.evaluate(() => (window.app && window.app.state ? window.app.state.activeTab : ''));
+    expect(initialTab).not.toBe('tempexec');
+
+    const syncResponse = page.waitForResponse((resp) => {
+      return resp.url().includes(`/api/exec/sets/${execSet.id}/case-library-sync`) && resp.request().method() === 'POST';
+    });
+    await page.evaluate(() => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
+        return window.app.tempExecApi.loadTempExecState();
+      }
+      return null;
+    });
+    await syncResponse;
+    await page.waitForFunction(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      return Boolean(state && Array.isArray(state.tempExecCaseLibraryAutoPopupOrder) && state.tempExecCaseLibraryAutoPopupOrder.length);
+    });
+
+    const openedBefore = await page.evaluate(() => {
+      var drawer = document.getElementById('tempExecCaseLibraryDiffDrawer');
+      return Boolean(drawer && drawer.classList.contains('open'));
+    });
+    expect(openedBefore).toBe(false);
+
+    await switchToTab(page, 'tempexec');
+    const diffDrawer = page.locator('#tempExecCaseLibraryDiffDrawer');
+    await expect(diffDrawer).toHaveClass(/open/);
+  });
+
   test('暗色主题下 diff 新旧内容加粗展示', async ({ page }) => {
     const token = 'token-case-lib-diff-dark';
     const user = { id: 11, username: 'diff_dark_user', role: 'user', level: 'member' };

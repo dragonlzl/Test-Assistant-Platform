@@ -2600,3 +2600,15 @@
 - 测试与验证：
   - `npx playwright test tests/ui/dark_theme_exec_assign_case_lib.spec.js`（通过，提权执行）
 - 更新记录：2025-12-25 暗色主题执行分配/用例库状态对比增强（`style.css`、`tests/ui/dark_theme_exec_assign_case_lib.spec.js`）。
+
+- 功能名称：执行页用例变更 diff 登录后延迟弹出
+- 功能描述：登录完成后不再直接弹出用例库变更 diff 抽屉，改为进入“用例执行”页时再自动弹出。
+- 操作方式：登录后停留在非执行页，确认未弹出 diff；切换到“用例执行”页确认自动弹出。
+- 使用效果：避免登录成功后突兀弹窗，进入执行页时提示更符合预期。
+- 新增内容/接口/组件：
+  - 前端：执行页用例变更自动弹窗仅在执行页可见时触发（`scripts/core/tempexecCore.js`）。
+  - 测试：登录后延迟弹出 diff 的 UI 用例（`tests/ui/tempexec_case_library_changes.spec.js`）。
+- 复用说明：复用现有用例库同步与自动弹窗队列逻辑，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/tempexec_case_library_changes.spec.js`（通过，提权执行）
+- 更新记录：2025-12-26 执行页用例变更 diff 登录后延迟弹出（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。

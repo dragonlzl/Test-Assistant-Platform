@@ -314,14 +314,15 @@
       return opened;
     }
 
-    function isTempExecTabActive() {
+    function isTempExecTabActive(strict) {
+      var isStrict = strict === true;
       var isTempExecTab = false;
       try {
         isTempExecTab = String(state && state.activeTab ? state.activeTab : '') === 'tempexec';
       } catch (err) {
         isTempExecTab = false;
       }
-      if (!isTempExecTab) {
+      if (!isTempExecTab && !isStrict) {
         try {
           if (typeof sessionStorage !== 'undefined') {
             var cfg = window.app && window.app.config ? window.app.config : {};
@@ -4562,7 +4563,7 @@
 
     function tryAutoOpenTempExecCaseLibraryDiff() {
       if (!isDbMode()) return false;
-      var allowAutoPopup = isTempExecTabActive();
+      var allowAutoPopup = isTempExecTabActive(true);
       var activeId = state.tempExecActiveId ? String(state.tempExecActiveId) : '';
       return maybeOpenTempExecCaseLibraryAutoPopup(allowAutoPopup, activeId);
     }
@@ -5161,11 +5162,11 @@
         }
         var allowCaseLibrarySync = true;
         var allowAutoPopup = false;
-        var isTempExecTab = isTempExecTabActive();
-        // 用例库同步触发序号：用于解决刷新后 activeTab 尚未恢复时的“漏同步”问题。
-        var syncTriggered = consumeTempExecCaseLibrarySyncTrigger();
-        // 用例库同步：始终执行以保持 meta/历史可用；自动弹窗仅在执行页或触发序号命中时生效。
-        allowAutoPopup = isTempExecTab || syncTriggered;
+        var isTempExecTab = isTempExecTabActive(true);
+        // 消费触发序号，避免旧触发在后续重复命中；自动弹窗仍以当前执行页可见为准。
+        consumeTempExecCaseLibrarySyncTrigger();
+        // 用例库同步：始终执行以保持 meta/历史可用；自动弹窗仅在执行页可见时生效。
+        allowAutoPopup = isTempExecTab;
         var activeId = state.tempExecActiveId ? String(state.tempExecActiveId) : '';
         var autoPopupOpened = false;
         var order = [];
