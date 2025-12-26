@@ -894,14 +894,6 @@
         exportTempExecConfigBtn.focus({ preventScroll: true });
       }
     }
-    function openCaseLibraryFromTempExec() {
-      try {
-        if (window.app) window.app.__drawerSkipRestoreOnce = true;
-      } catch (err) {
-        // ignore
-      }
-      switchTab('case-library');
-    }
     function openCaseLibrarySelectExecFromTempExec() {
       try {
         if (window.app) window.app.__drawerSkipRestoreOnce = true;
@@ -912,7 +904,7 @@
         window.app.drawer.closeAllDrawers();
       }
       if (window.app && window.app.caseLibraryApi && typeof window.app.caseLibraryApi.openSelectExecDrawer === 'function') {
-        window.app.caseLibraryApi.openSelectExecDrawer({ source: 'tempexec' });
+        window.app.caseLibraryApi.openSelectExecDrawer({ source: 'tempexec', allowInactive: true });
       } else {
         try {
           if (window.app) window.app.__caseLibrarySelectExecRequest = true;
@@ -920,7 +912,6 @@
           // ignore
         }
       }
-      switchTab('case-library');
     }
     if (openTempExecViewNavBtn) {
       openTempExecViewNavBtn.addEventListener('click', function() {
@@ -939,7 +930,7 @@
     }
     if (openTempExecCaseLibraryBtn) {
       openTempExecCaseLibraryBtn.addEventListener('click', function() {
-        openCaseLibraryFromTempExec();
+        openCaseLibrarySelectExecFromTempExec();
       });
     }
 

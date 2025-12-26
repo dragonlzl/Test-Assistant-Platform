@@ -82,12 +82,16 @@ test.describe('临时执行入口导航', () => {
 	    expect(Math.abs(finalScroll - afterFirstClose)).toBeLessThanOrEqual(2);
 	  });
 
-  test('顶部导航进入用例库', async ({ page }) => {
+  test('顶部导航打开选择用例执行抽屉', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
     const entryBtn = page.locator('#openTempExecCaseLibraryBtn');
     await expect(entryBtn).toBeVisible();
+    await expect(entryBtn).toContainText('选择用例执行');
     await entryBtn.click();
-    await expect(page.locator('#caseLibraryFlowNav')).toBeVisible();
+    await expect(page.locator('#tempexecFlowNav')).toBeVisible();
+    await expect(page.locator('[data-tab-btn="tempexec"]')).toHaveClass(/active/);
+    await expect(page.locator('[data-tab-btn="case-library"]')).not.toHaveClass(/active/);
+    await expect(page.locator('#caseLibrarySelectExecDrawer')).toHaveClass(/open/);
   });
 
   test('执行总览抽屉展开', async ({ page }) => {

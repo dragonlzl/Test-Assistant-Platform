@@ -85,8 +85,10 @@
     return false;
   }
 
-  function openSelectExecDrawer() {
-    if (!isCaseLibraryActive()) {
+  function openSelectExecDrawer(options) {
+    var opts = options || {};
+    var allowInactive = Boolean(opts.allowInactive || opts.force || opts.skipTabCheck);
+    if (!allowInactive && !isCaseLibraryActive()) {
       markSelectExecDrawerRequest();
       return false;
     }
