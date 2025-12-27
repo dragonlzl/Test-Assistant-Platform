@@ -6857,6 +6857,15 @@ tr.diff-locate-active td {
   gap: 10px;
   margin-bottom: 10px;
 }
+.exec-overview-toolbar .status {
+  flex: 1;
+  width: 100%;
+  margin: 0;
+  min-height: 18px;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+}
 .exec-overview-drawer-actions {
   display: flex;
   align-items: center;
@@ -6961,6 +6970,21 @@ tr.diff-locate-active td {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+.exec-overview-empty-state {
+  grid-column: 1 / -1;
+  width: 100%;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: #f8fafc;
+  color: var(--muted);
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 16px;
+  font-size: 13px;
 }
 .exec-overview-user-card {
   border: 1px solid #e5e7eb;
@@ -7318,6 +7342,15 @@ button.exec-overview-file-chip,
   background: var(--panel);
   color: var(--text);
   border-color: var(--border);
+}
+:root[data-theme="dark"] #caseArchiveDrawer .pill.danger {
+  background: rgba(127, 29, 29, 0.22);
+  border-color: rgba(248, 113, 113, 0.7);
+  color: #f87171;
+}
+:root[data-theme="dark"] #caseArchiveDrawer .pill.danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.18);
+  color: #fecaca;
 }
 :root[data-theme="dark"] .tabs.vertical {
   background: linear-gradient(180deg, rgba(31,42,60,0.95), rgba(26,34,49,0.8));
@@ -7700,6 +7733,11 @@ button.exec-overview-file-chip,
   background: var(--panel);
   border-color: var(--border);
   box-shadow: var(--shadow);
+}
+:root[data-theme="dark"] .exec-overview-empty-state {
+  background: rgba(26,34,49,0.9);
+  border-color: var(--border);
+  color: var(--muted);
 }
 :root[data-theme="dark"] .exec-overview-version-box .head {
   background: rgba(125,180,255,0.16);

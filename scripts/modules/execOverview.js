@@ -514,8 +514,10 @@
     var hasLayout = layoutUsers.length > 0;
     var list = hasLayout ? layoutUsers : rows;
     if (!list.length) {
-      dom.userCards.innerHTML = '';
-      if (dom.emptyUsers) dom.emptyUsers.classList.remove('hidden');
+      var emptyText = dom.emptyUsers && dom.emptyUsers.textContent ? dom.emptyUsers.textContent : '暂无执行数据';
+      dom.userCards.classList.remove('layout-mode');
+      dom.userCards.innerHTML = '<div class="exec-overview-empty-state">' + escapeHtml(emptyText) + '</div>';
+      if (dom.emptyUsers) dom.emptyUsers.classList.add('hidden');
       return;
     }
     if (dom.emptyUsers) dom.emptyUsers.classList.add('hidden');
