@@ -75,6 +75,20 @@ test.describe('多页面拆分入口', () => {
     await expect(page.locator('#caseLibrarySelectExecDrawer')).toHaveClass(/open/);
   });
 
+  test('转到执行后可自动打开执行分配并提示', async ({ page }) => {
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.addInitScript((payload) => {
+      try {
+        sessionStorage.setItem('tap-temp-exec-assign-request', JSON.stringify(payload));
+      } catch (_) {}
+    }, { name: '登录用例', versionName: '版本A' });
+    await page.goto(base + '/case-exec.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 20000 });
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
+    await expect(page.locator('.temp-center-toast').first())
+      .toContainText('用例：【登录用例】已成功转到用例执行页内，请在当前【执行分配】页内查看选择。');
+  });
+
   test('页签切换支持前进后退', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/ai-workflow.html');

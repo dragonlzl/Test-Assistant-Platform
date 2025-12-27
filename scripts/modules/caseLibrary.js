@@ -50,6 +50,7 @@
   }
 
   var selectExecRequestSessionKey = 'tap-case-library-select-exec-request';
+  var tempExecAssignRequestSessionKey = 'tap-temp-exec-assign-request';
 
   function markSelectExecDrawerRequest() {
     try {
@@ -64,6 +65,42 @@
         // ignore
       }
     }
+  }
+
+  function markTempExecAssignRequest(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    try {
+      if (window.app) window.app.__tempExecAssignRequest = payload;
+    } catch (err) {
+      // ignore
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      try {
+        sessionStorage.setItem(tempExecAssignRequestSessionKey, JSON.stringify(payload));
+      } catch (err) {
+        // ignore
+      }
+    }
+  }
+
+  function requestTempExecAssignDrawer(options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var caseName = opts.caseName || opts.name || '';
+    var versionName = opts.versionName || opts.version || '';
+    var name = caseName ? String(caseName) : '';
+    var version = versionName ? String(versionName) : '';
+    if (!name) name = '用例';
+    if (!version) version = '未分配版本';
+    var payload = { name: name, versionName: version, at: Date.now() };
+    markTempExecAssignRequest(payload);
+    try {
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('temp-exec-assign-request', { detail: payload }));
+      }
+    } catch (err) {
+      // ignore
+    }
+    return payload;
   }
 
   function consumeSelectExecDrawerRequest() {
@@ -7364,6 +7401,25 @@
     return normalizeName(module) + '::' + normalizeName(title) + '::' + normalizeName(expected);
   }
 
+  function resolveExecCaseName(caseFile, fileName) {
+    var raw = '';
+    if (caseFile && caseFile.file_name_clean) raw = caseFile.file_name_clean;
+    if (!raw && fileName) raw = fileName;
+    var name = String(raw || '').trim();
+    if (name) return name;
+    if (caseFile && caseFile.id) return '用例#' + caseFile.id;
+    return '用例';
+  }
+
+  function resolveExecVersionLabel(projectId, execVersionId) {
+    if (execVersionId === null || execVersionId === undefined || execVersionId === '') return '未分配版本';
+    if (projectId) {
+      var name = getVersionName(projectId, execVersionId);
+      if (name && name !== '--') return name;
+    }
+    return '版本#' + execVersionId;
+  }
+
   function transferItemsToTempExec(caseFile, fileName, items, options) {
     var opts = options && typeof options === 'object' ? options : {};
     var statusEl = opts.statusEl || dom.status;
@@ -7371,6 +7427,13 @@
     var skipActiveConfirm = opts.skipActiveConfirm === true;
     var execVersionId = Object.prototype.hasOwnProperty.call(opts, 'execVersionId') ? opts.execVersionId : undefined;
     var previousDrawer = opts.previousDrawer || null;
+    var openAssignDrawer = opts.openAssignDrawer === true;
+    var projectId = caseFile && caseFile.project_id ? caseFile.project_id : null;
+    var execCaseName = resolveExecCaseName(caseFile, fileName);
+    var normalizedExecVersionId = execVersionId !== undefined
+      ? (execVersionId === '' ? null : execVersionId)
+      : (caseFile && caseFile.version_id !== null && caseFile.version_id !== undefined ? caseFile.version_id : null);
+    var execVersionLabel = resolveExecVersionLabel(projectId, normalizedExecVersionId);
 
     var tempExecApi = getTempExecApi();
     if (!tempExecApi || !window.app || !window.app.state) {
@@ -7378,15 +7441,9 @@
       return Promise.resolve({ ok: false, reason: 'not_ready' });
     }
     if (isExecDbEnabled() && caseFile && caseFile.id) {
-      var projectId = caseFile.project_id || null;
-      var name = (caseFile.file_name_clean || fileName || '').trim() || ('用例#' + caseFile.id);
+      var name = execCaseName;
       setStatus(statusEl, '转到执行中...', '');
-      var targetExecVersionId = null;
-      if (execVersionId !== undefined) {
-        targetExecVersionId = execVersionId === '' ? null : execVersionId;
-      } else {
-        targetExecVersionId = (caseFile && caseFile.version_id !== null && caseFile.version_id !== undefined) ? caseFile.version_id : null;
-      }
+      var targetExecVersionId = normalizedExecVersionId;
       function matchExecVersionId(serverValue, targetValue) {
         if (targetValue === null || targetValue === undefined || targetValue === '') {
           return serverValue === null || serverValue === undefined || String(serverValue) === '';
@@ -7465,6 +7522,9 @@
         })
         .then(function() {
           setStatus(statusEl, '已转到执行：' + name, 'ok');
+          if (openAssignDrawer) {
+            requestTempExecAssignDrawer({ caseName: name, versionName: execVersionLabel });
+          }
           if (shouldSwitchTab) {
             var coreApi = getCore();
             var switchTab = window.app && typeof window.app.switchTab === 'function'
@@ -7497,7 +7557,7 @@
       return Promise.resolve({ ok: false, reason: 'empty' });
     }
 
-    var name = (fileName || '').trim() || '用例';
+    var name = execCaseName;
     var normalizeTempName = utils && typeof utils.normalizeTempExecName === 'function'
       ? utils.normalizeTempExecName
       : function(v) { return String(v || '').trim().toLowerCase(); };
@@ -7565,6 +7625,9 @@
       setStatus(statusEl, '已转到执行：' + name, 'ok');
     }
 
+    if (openAssignDrawer) {
+      requestTempExecAssignDrawer({ caseName: name, versionName: execVersionLabel });
+    }
     if (shouldSwitchTab) {
       var coreApi = getCore();
       var switchTab = window.app && typeof window.app.switchTab === 'function'
@@ -8307,7 +8370,12 @@
           caseFile,
           caseFile.file_name_clean || ('用例#' + caseFile.id),
           items || [],
-          { statusEl: dom.selectStatus, execVersionId: execVid, previousDrawer: selectDrawerInstance || null }
+          {
+            statusEl: dom.selectStatus,
+            execVersionId: execVid,
+            previousDrawer: selectDrawerInstance || null,
+            openAssignDrawer: true,
+          }
         );
         Promise.resolve(res).then(function() {
           if (selectDrawerInstance && typeof selectDrawerInstance.close === 'function') selectDrawerInstance.close();
@@ -8716,7 +8784,7 @@
                 file,
                 file.file_name_clean || ('用例#' + file.id),
                 state.editor.items || [],
-                { execVersionId: execVid, previousDrawer: editDrawerInstance || null }
+                { execVersionId: execVid, previousDrawer: editDrawerInstance || null, openAssignDrawer: true }
               );
             });
 		      });

@@ -2823,3 +2823,17 @@
   - `npm run test:ui -- tests/ui/html_split_pages.spec.js`（通过）
   - 未涉及后端 API，未运行 `test:api`
 - 更新记录：2025-12-27 用例库页签跳转修复（`case-exec.html`、`tests/ui/html_split_pages.spec.js`）。
+
+- 功能名称：用例库转执行自动打开执行分配并提示
+- 功能描述：从用例库转到执行成功后，自动切换到用例执行页并打开“执行分配”抽屉，同时在页面中央提示转入成功信息。
+- 操作方式：在用例库选择用例转到执行，成功后跳转到 `case-exec.html` 并自动打开执行分配抽屉，显示“用例：【用例名】已成功转到用例执行页内，请在当前【执行分配】页内查看选择。”提示，5 秒后消失。
+- 使用效果：转执行后的下一步入口更明确，减少手动打开抽屉的步骤。
+- 新增内容/接口/组件：
+  - 前端：转执行成功后写入执行分配打开请求并跨页消费提示（`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`）。
+  - 测试：转执行提示与执行分配自动打开用例（`tests/ui/html_split_pages.spec.js`）。
+- 复用说明：复用现有抽屉与居中提示样式，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/html_split_pages.spec.js`（通过）
+  - 未涉及后端 API，未运行 `test:api`
+- 更新记录：2025-12-27 用例库转执行自动打开执行分配并提示（`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`、`tests/ui/html_split_pages.spec.js`）。
+- 更新记录：2025-12-27 调整执行分配提示文案（`scripts/modules/tempexec.js`、`tests/ui/html_split_pages.spec.js`）。

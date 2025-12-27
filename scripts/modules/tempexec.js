@@ -363,6 +363,95 @@
         tempExecArchiveReasonContext = null;
       },
     });
+    var tempExecAssignRequestSessionKey = 'tap-temp-exec-assign-request';
+
+    function isTempExecActive() {
+      var globalState = window.app && window.app.state ? window.app.state : {};
+      if (globalState && globalState.activeTab === 'tempexec') return true;
+      var visible = document.querySelector('section[data-tab-section="tempexec"]:not(.hidden)');
+      return Boolean(visible);
+    }
+
+    function readTempExecAssignRequest() {
+      var payload = null;
+      try {
+        if (window.app && window.app.__tempExecAssignRequest) payload = window.app.__tempExecAssignRequest;
+      } catch (err) {
+        // ignore
+      }
+      if (!payload && typeof sessionStorage !== 'undefined') {
+        try {
+          var raw = sessionStorage.getItem(tempExecAssignRequestSessionKey);
+          if (raw) payload = JSON.parse(raw);
+        } catch (err2) {
+          payload = null;
+        }
+      }
+      if (!payload || typeof payload !== 'object') return null;
+      return payload;
+    }
+
+    function clearTempExecAssignRequest() {
+      try {
+        if (window.app) window.app.__tempExecAssignRequest = null;
+      } catch (err) {
+        // ignore
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        try {
+          sessionStorage.removeItem(tempExecAssignRequestSessionKey);
+        } catch (err2) {
+          // ignore
+        }
+      }
+    }
+
+    function buildTempExecAssignToast(payload) {
+      var name = payload && (payload.caseName || payload.name || payload.case_name) ? (payload.caseName || payload.name || payload.case_name) : '';
+      var version = payload && (payload.versionName || payload.version || payload.version_name)
+        ? (payload.versionName || payload.version || payload.version_name)
+        : '';
+      var caseLabel = name ? String(name) : '用例';
+      var versionLabel = version ? String(version) : '未分配版本';
+      return '用例：【' + caseLabel + '】已成功转到用例执行页内，请在当前【执行分配】页内查看选择。';
+    }
+
+    function openTempExecAssignDrawerFromRequest() {
+      if (!isTempExecActive()) return false;
+      if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+        window.app.drawer.closeAllDrawers();
+      }
+      if (tempExecAssignDrawer && typeof tempExecAssignDrawer.open === 'function') {
+        tempExecAssignDrawer.open();
+        return true;
+      }
+      if (openTempExecAssignDrawerBtn && typeof openTempExecAssignDrawerBtn.click === 'function') {
+        openTempExecAssignDrawerBtn.click();
+        return true;
+      }
+      return false;
+    }
+
+    function applyTempExecAssignRequest(payload) {
+      if (!payload) return false;
+      var opened = openTempExecAssignDrawerFromRequest();
+      if (!opened) return false;
+      var msg = buildTempExecAssignToast(payload);
+      if (utils && typeof utils.showCenterToast === 'function') {
+        utils.showCenterToast(msg, 'ok', 5000);
+      } else if (typeof showTempExecCenterToast === 'function') {
+        showTempExecCenterToast(msg, 'ok');
+      }
+      return true;
+    }
+
+    function consumeTempExecAssignRequest() {
+      var payload = readTempExecAssignRequest();
+      if (!payload) return false;
+      var applied = applyTempExecAssignRequest(payload);
+      if (applied) clearTempExecAssignRequest();
+      return applied;
+    }
 
     function openTempExecArchiveReasonDrawerForArchive(options) {
       options = options || {};
@@ -2791,6 +2880,14 @@
         if (typeof api.tryAutoOpenTempExecCaseLibraryDiff === 'function') {
           api.tryAutoOpenTempExecCaseLibraryDiff();
         }
+        consumeTempExecAssignRequest();
+      });
+      window.addEventListener('temp-exec-assign-request', function(e) {
+        var payload = e && e.detail ? e.detail : null;
+        if (!payload) return;
+        if (applyTempExecAssignRequest(payload)) {
+          clearTempExecAssignRequest();
+        }
       });
       window.addEventListener('app-auth-ready', function() {
         ensureImportProjects();
@@ -2813,6 +2910,7 @@
       });
     }
     ensureImportProjects();
+    consumeTempExecAssignRequest();
     renderImportFileHint();
     syncImportConfirmState();
 
