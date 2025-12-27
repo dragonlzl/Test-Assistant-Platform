@@ -2756,3 +2756,16 @@
   - `npm run test:ui -- tests/ui/theme_setting.spec.js`（通过，提权执行）
   - `APP_DB_FILE=apitest.db npm run test:api -- tests/api/settings_models.spec.js`（通过，提权执行）
 - 更新记录：2025-12-26 暗色主题首屏预应用避免闪白（`index.html`、`tests/ui/theme_setting.spec.js`）。
+
+- 功能名称：执行页顶部导航入口顺序调整
+- 功能描述：用例执行页顶部导航将“选择用例执行”与“执行分配”的位置互换，便于优先选择用例转执行。
+- 操作方式：进入用例执行页，顶部导航中“选择用例执行”位于“执行分配”之前。
+- 使用效果：导航入口排序更符合流程习惯，快速入口更靠前。
+- 新增内容/接口/组件：
+  - 前端：执行页导航入口顺序调整（`index.html`）。
+  - 测试：顶部导航顺序 UI 用例（`tests/ui/tempexec_entry.spec.js`）。
+- 复用说明：复用现有入口按钮与抽屉逻辑，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/tempexec_entry.spec.js`（通过，提权执行）
+  - `APP_DB_FILE=apitest.db npm run test:api -- tests/api/settings_models.spec.js`（通过，提权执行）
+- 更新记录：2025-12-27 执行页顶部导航入口顺序调整（`index.html`、`tests/ui/tempexec_entry.spec.js`）。

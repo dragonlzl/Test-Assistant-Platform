@@ -52,6 +52,20 @@ test.describe('临时执行入口导航', () => {
 	    await expect(drawer).not.toHaveClass(/open/);
 	  });
 
+  test('顶部导航入口顺序调整', async ({ page }) => {
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    const order = await page.evaluate(() => {
+      var nav = document.getElementById('tempexecFlowNav');
+      if (!nav) return [];
+      return Array.from(nav.querySelectorAll('.nav-entry-card')).map(function(btn) { return btn.id || ''; });
+    });
+    const selectIndex = order.indexOf('openTempExecCaseLibraryBtn');
+    const assignIndex = order.indexOf('openTempExecAssignDrawerBtn');
+    expect(selectIndex).toBeGreaterThanOrEqual(0);
+    expect(assignIndex).toBeGreaterThanOrEqual(0);
+    expect(selectIndex).toBeLessThan(assignIndex);
+  });
+
   test('抽屉遮罩覆盖且不会导致页面滚动', async ({ page }) => {
 	    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 	    const initialScroll = await page.evaluate(() => window.scrollY);
