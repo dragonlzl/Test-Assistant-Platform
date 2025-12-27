@@ -2862,3 +2862,17 @@
 - 更新记录：2025-12-27 执行总览空态卡片占满一行（`style.css`）。
 - 更新记录：2025-12-27 执行总览状态展示区占满整行（`style.css`）。
 - 更新记录：2025-12-27 执行总览状态展示区高度减半（`style.css`）。
+- 更新记录：2025-12-27 执行总览当前执行区点击优先回到顶部（`scripts/modules/tempexec.js`）。
+
+- 功能名称：移除用例库/执行页跳转入口
+- 功能描述：用例库页不再提供“跳转用例执行页”，用例执行页不再提供“跳转用例库”入口，避免无效跳转入口造成困扰。
+- 操作方式：进入 `case-library.html` 或 `case-exec.html` 顶部导航，确认不再展示上述跳转入口。
+- 使用效果：顶部导航保持聚焦当前页的核心入口，减少误操作。
+- 新增内容/接口/组件：
+  - 前端：移除导航入口按钮（`case-library.html`、`case-exec.html`、`index.html`）。
+  - 测试：更新导航入口校验用例（`tests/ui/case_library_jump_exec.spec.js`、`tests/ui/tempexec_entry.spec.js`）。
+- 复用说明：复用现有导航结构，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/case_library_jump_exec.spec.js tests/ui/tempexec_entry.spec.js`（通过）
+  - 未涉及后端 API，未运行 `test:api`
+- 更新记录：2025-12-28 移除用例库/执行页跳转入口（`case-library.html`、`case-exec.html`、`index.html`、`tests/ui/case_library_jump_exec.spec.js`、`tests/ui/tempexec_entry.spec.js`）。

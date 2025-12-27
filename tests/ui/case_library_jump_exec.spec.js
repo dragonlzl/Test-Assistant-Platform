@@ -11,7 +11,7 @@ async function waitForAppReady(page) {
   await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout: 30000 });
 }
 
-test.describe('用例库跳转执行入口', () => {
+test.describe('用例库/执行页跳转入口调整', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
@@ -66,49 +66,31 @@ test.describe('用例库跳转执行入口', () => {
       return respond(200, []);
     });
 
-    await page.goto(base + '/index.html');
     await page.waitForLoadState('domcontentloaded');
-    await waitForAppReady(page);
   });
 
   test('执行分配页添加执行用例后自动打开选择用例执行抽屉', async ({ page }) => {
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await page.goto(base + '/case-exec.html');
+    await waitForAppReady(page);
     await page.click('#openTempExecAssignDrawerBtn');
     await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
 
     await page.click('#tempExecAddCaseFromLibraryBtn');
-    await page.waitForFunction(() => window.app && window.app.state && window.app.state.activeTab === 'case-library');
+    await page.waitForFunction(() => window.app && window.app.state && window.app.state.activeTab === 'tempexec');
     await expect(page.locator('#caseLibrarySelectExecDrawer')).toHaveClass(/open/);
     await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
   });
 
-  test('执行分配与用例库入口布局调整', async ({ page }) => {
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
-    await page.click('#openTempExecAssignDrawerBtn');
-    const titleRow = page.locator('#tempExecAssignDrawer .card-title-row');
-    await expect(titleRow.locator('#tempExecAddCaseFromLibraryBtn')).toBeVisible();
-    await expect(page.locator('#tempExecOverviewBtn')).toHaveCount(0);
-    await expect(page.locator('#toggleTempReq')).toHaveCount(0);
-    await page.click('#closeTempExecAssignDrawerBtn');
-
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
+  test('用例库导航不再提供跳转执行页入口', async ({ page }) => {
+    await page.goto(base + '/case-library.html');
+    await waitForAppReady(page);
     const order = await page.evaluate(() => {
       var nav = document.getElementById('caseLibraryFlowNav');
       if (!nav) return [];
       return Array.from(nav.querySelectorAll('.nav-entry-card')).map(function(btn) { return btn.id || ''; });
     });
-    const jumpIndex = order.indexOf('caseLibraryJumpExecBtn');
     const selectIndex = order.indexOf('openCaseLibrarySelectExecDrawerBtn');
-    expect(jumpIndex).toBeGreaterThanOrEqual(0);
     expect(selectIndex).toBeGreaterThanOrEqual(0);
-    expect(jumpIndex).toBeLessThan(selectIndex);
-  });
-
-  test('用例库仅跳转执行页且不打开抽屉', async ({ page }) => {
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
-    await page.click('#caseLibraryJumpExecBtn');
-    await page.waitForFunction(() => window.app && window.app.state && window.app.state.activeTab === 'tempexec');
-    await expect(page.locator('#caseLibrarySelectExecDrawer')).not.toHaveClass(/open/);
-    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
+    expect(order.indexOf('caseLibraryJumpExecBtn')).toBe(-1);
   });
 });

@@ -16,12 +16,11 @@ test.describe('临时执行入口导航', () => {
       } catch (_) {}
     });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-    await page.goto(base + '/index.html');
+    await page.goto(base + '/case-exec.html');
     await page.waitForFunction(() => window.app && window.app._inited === true);
   });
 
 	  test('入口卡片与抽屉交互', async ({ page }) => {
-	    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 	    const topNav = page.locator('#tempexecFlowNav');
 	    await expect(topNav).toBeVisible();
 	    const navCards = topNav.locator('.nav-entry-card');
@@ -53,7 +52,6 @@ test.describe('临时执行入口导航', () => {
 	  });
 
   test('顶部导航入口顺序调整', async ({ page }) => {
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
     const order = await page.evaluate(() => {
       var nav = document.getElementById('tempexecFlowNav');
       if (!nav) return [];
@@ -67,7 +65,6 @@ test.describe('临时执行入口导航', () => {
   });
 
   test('抽屉遮罩覆盖且不会导致页面滚动', async ({ page }) => {
-	    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
 	    const initialScroll = await page.evaluate(() => window.scrollY);
 	    await page.click('#openTempExecImportDrawerBtn');
 	    await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
@@ -97,7 +94,6 @@ test.describe('临时执行入口导航', () => {
 	  });
 
   test('顶部导航打开选择用例执行抽屉', async ({ page }) => {
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
     const entryBtn = page.locator('#openTempExecCaseLibraryBtn');
     await expect(entryBtn).toBeVisible();
     await expect(entryBtn).toContainText('选择用例执行');
@@ -108,19 +104,11 @@ test.describe('临时执行入口导航', () => {
     await expect(page.locator('#caseLibrarySelectExecDrawer')).toHaveClass(/open/);
   });
 
-  test('顶部导航跳转用例库页签', async ({ page }) => {
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
-    const jumpBtn = page.locator('#openTempExecCaseLibraryJumpBtn');
-    await expect(jumpBtn).toBeVisible();
-    await expect(jumpBtn).toContainText('跳转用例库');
-    await jumpBtn.click();
-    await expect(page.locator('[data-tab-btn="case-library"]')).toHaveClass(/active/);
-    await expect(page.locator('#caseLibraryFlowNav')).toBeVisible();
-    await expect(page.locator('#caseLibrarySelectExecDrawer')).not.toHaveClass(/open/);
+  test('顶部导航不再展示跳转用例库入口', async ({ page }) => {
+    await expect(page.locator('#openTempExecCaseLibraryJumpBtn')).toHaveCount(0);
   });
 
   test('执行总览抽屉展开', async ({ page }) => {
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
     await page.click('#openTempExecOverviewNavBtn');
     const overviewDrawer = page.locator('#tempExecOverviewDrawer');
     await expect(overviewDrawer).toHaveClass(/open/);

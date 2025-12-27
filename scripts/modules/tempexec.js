@@ -4640,21 +4640,24 @@
           if (api.renderTempExecOverview) api.renderTempExecOverview();
           return;
         }
-	        var seg = e.target.closest('[data-temp-overview-file][data-temp-overview-status]');
-	        if (seg) {
-	          e.preventDefault();
-	          e.stopPropagation();
-	          var archivedSeg = seg.closest('[data-temp-archived="1"]');
-	          if (archivedSeg) {
-	            if (tempExecStatus) setStatus(tempExecStatus, '该用例已归档，请到【用例归档】页面查看', 'warn');
-	            showTempExecCenterToast('该用例已归档，请到【用例归档】页面查看', 'warn');
-	            return;
-	          }
-	          var segFileId = seg.dataset.tempOverviewFile;
-	          var segIndex = Number(seg.dataset.tempOverviewIndex);
-	          if (!Number.isFinite(segIndex) || segIndex < 0) segIndex = 0;
-          jumpToTempExecCase(segFileId, segIndex);
-          return;
+        var seg = e.target.closest('[data-temp-overview-file][data-temp-overview-status]');
+        if (seg) {
+          var inCurrent = seg.closest('.temp-overview-current');
+          if (!inCurrent) {
+            e.preventDefault();
+            e.stopPropagation();
+            var archivedSeg = seg.closest('[data-temp-archived="1"]');
+            if (archivedSeg) {
+              if (tempExecStatus) setStatus(tempExecStatus, '该用例已归档，请到【用例归档】页面查看', 'warn');
+              showTempExecCenterToast('该用例已归档，请到【用例归档】页面查看', 'warn');
+              return;
+            }
+            var segFileId = seg.dataset.tempOverviewFile;
+            var segIndex = Number(seg.dataset.tempOverviewIndex);
+            if (!Number.isFinite(segIndex) || segIndex < 0) segIndex = 0;
+            jumpToTempExecCase(segFileId, segIndex);
+            return;
+          }
         }
 	        var card = e.target.closest('[data-temp-file]');
 	        if (!card) return;
