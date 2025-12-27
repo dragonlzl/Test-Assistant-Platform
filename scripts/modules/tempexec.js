@@ -896,6 +896,7 @@
       }
     }
     function openCaseLibrarySelectExecFromTempExec() {
+      var selectExecRequestKey = 'tap-case-library-select-exec-request';
       try {
         if (window.app) window.app.__drawerSkipRestoreOnce = true;
       } catch (err) {
@@ -904,15 +905,42 @@
       if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
         window.app.drawer.closeAllDrawers();
       }
+      var hasSelectExecDrawer = Boolean(document.getElementById('caseLibrarySelectExecDrawer'));
       if (window.app && window.app.caseLibraryApi && typeof window.app.caseLibraryApi.openSelectExecDrawer === 'function') {
-        window.app.caseLibraryApi.openSelectExecDrawer({ source: 'tempexec', allowInactive: true });
-      } else {
+        var opened = false;
+        if (hasSelectExecDrawer) {
+          opened = window.app.caseLibraryApi.openSelectExecDrawer({ source: 'tempexec', allowInactive: true });
+        }
+        if (opened) return;
+        if (!hasSelectExecDrawer) {
+          if (typeof window.app.caseLibraryApi.requestSelectExecDrawer === 'function') {
+            window.app.caseLibraryApi.requestSelectExecDrawer();
+          } else {
+            window.app.caseLibraryApi.openSelectExecDrawer({ source: 'tempexec' });
+            if (typeof sessionStorage !== 'undefined') {
+              try {
+                sessionStorage.setItem(selectExecRequestKey, '1');
+              } catch (err) {
+                // ignore
+              }
+            }
+          }
+        }
+      } else if (!hasSelectExecDrawer) {
         try {
           if (window.app) window.app.__caseLibrarySelectExecRequest = true;
         } catch (err) {
           // ignore
         }
+        if (typeof sessionStorage !== 'undefined') {
+          try {
+            sessionStorage.setItem(selectExecRequestKey, '1');
+          } catch (err) {
+            // ignore
+          }
+        }
       }
+      if (!hasSelectExecDrawer && typeof switchTab === 'function') switchTab('case-library');
     }
     function openCaseLibraryFromTempExec() {
       try {
@@ -1195,6 +1223,7 @@
     }
     var tempExecView = document.getElementById('tempExecView');
     var tempExecMindBtn = document.getElementById('tempExecMindBtn');
+    var tempExecOverview = document.getElementById('tempExecOverview');
     var tempExecOverviewSection = document.querySelector('[data-section-id="tempexec-overview"]');
     var tempExecViewSection = document.querySelector('[data-section-id="tempexec-view"]');
     var tempExecBackBtn = document.getElementById('tempExecBackBtn');

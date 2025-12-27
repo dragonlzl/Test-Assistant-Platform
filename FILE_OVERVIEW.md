@@ -5,6 +5,12 @@
 ## 被入口引用的必需文件
 - `index.html`：主页面入口。
 - `login.html`：登录入口页面。
+- `ai-workflow.html`：AI 工作流页（导入/评审/清洗/对比/拆分/用例生成/自动流程）。
+- `ai-tools.html`：AI 工具页（功能指派/模型管理）。
+- `case-exec.html`：用例执行页（执行视图/执行总览）。
+- `case-library.html`：用例资产页（用例库/用例归档）。
+- `admin.html`：管理页（项目/人员/操作记录）。
+- `settings.html`：设置页（飞书/执行列/其他配置）。
 - `style.css`：页面样式。
 - `config/constants.js`：全局默认配置（提示词、键名、默认列/设置等），需在其他脚本前加载。
 - `scripts/vendor/jszip.min.js`：XMind/压缩依赖。

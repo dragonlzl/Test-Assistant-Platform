@@ -59,6 +59,33 @@
     pageGuideSwitches: Object.assign({}, defaultPageGuideSwitches),
   };
 
+  var tabPageMap = {
+    help: 'ai-workflow.html',
+    auto: 'ai-workflow.html',
+    clean: 'ai-workflow.html',
+    casesgen: 'ai-workflow.html',
+    assign: 'ai-tools.html',
+    models: 'ai-tools.html',
+    tempexec: 'case-exec.html',
+    'exec-overview': 'case-exec.html',
+    'case-library': 'case-library.html',
+    'case-archive': 'case-library.html',
+    'project-admin': 'admin.html',
+    'user-admin': 'admin.html',
+    'ops-log': 'admin.html',
+    settings: 'settings.html',
+  };
+
+  var pageDefaultTabMap = {
+    'ai-workflow': 'auto',
+    'ai-tools': 'assign',
+    'case-exec': 'tempexec',
+    'case-library': 'case-library',
+    admin: 'project-admin',
+    settings: 'settings',
+    index: 'auto',
+  };
+
   var config = {
     defaultPrompts: defaultPrompts,
     defaultPromptsKey: 'usecase-default-prompts',
@@ -115,6 +142,8 @@
       values: ['数值', '数值配置', '数值设置', 'values'],
       configs: ['配置', '配置项', 'configurations', 'configs'],
     },
+    tabPageMap: tabPageMap,
+    pageDefaultTabMap: pageDefaultTabMap,
   };
 
   window.app = window.app || {};

@@ -49,24 +49,43 @@
     return Boolean(visible);
   }
 
+  var selectExecRequestSessionKey = 'tap-case-library-select-exec-request';
+
   function markSelectExecDrawerRequest() {
     try {
       if (window.app) window.app.__caseLibrarySelectExecRequest = true;
     } catch (err) {
       // ignore
     }
+    if (typeof sessionStorage !== 'undefined') {
+      try {
+        sessionStorage.setItem(selectExecRequestSessionKey, '1');
+      } catch (err) {
+        // ignore
+      }
+    }
   }
 
   function consumeSelectExecDrawerRequest() {
+    var consumed = false;
     try {
       if (window.app && window.app.__caseLibrarySelectExecRequest) {
         window.app.__caseLibrarySelectExecRequest = false;
-        return true;
+        consumed = true;
       }
     } catch (err) {
       // ignore
     }
-    return false;
+    if (typeof sessionStorage !== 'undefined') {
+      try {
+        var stored = sessionStorage.getItem(selectExecRequestSessionKey) || '';
+        if (!consumed && stored === '1') consumed = true;
+        if (consumed) sessionStorage.removeItem(selectExecRequestSessionKey);
+      } catch (err) {
+        // ignore
+      }
+    }
+    return consumed;
   }
 
   function openSelectExecDrawerDirect() {
@@ -9069,11 +9088,47 @@
     });
   }
 
-  function init() {
-    if (!dom.root) return;
+  function initDrawerOnly() {
+    var hasSelectDrawer = Boolean(document.getElementById('caseLibrarySelectExecDrawer'));
+    var hasImportSelectDrawer = Boolean(document.getElementById('caseLibraryImportSelectDrawer'));
+    if (!hasSelectDrawer && !hasImportSelectDrawer) return false;
 
-    // 兜底：本地静态资源偶发空响应时，提前触发一次导出依赖补拉，避免导出按钮处报“缺少依赖”。
-    ensureExportDepsReady();
+    if (hasSelectDrawer) {
+      selectDrawerInstance = ensureDrawer('caseLibrarySelectExecDrawer', ['openCaseLibrarySelectExecDrawerBtn'], function() {
+        ensureProjectsReady().then(function() {
+          resetSelectDrawer();
+          return restoreSelectDrawerFromPersistedState();
+        });
+      });
+    }
+
+    if (hasImportSelectDrawer) {
+      importSelectDrawerInstance = ensureDrawer('caseLibraryImportSelectDrawer', [], function() {
+        ensureProjectsReady().then(function() {
+          resetImportSelectDrawer();
+        });
+      }, handleImportSelectDrawerClose);
+    }
+
+    bindEvents();
+    window.app = window.app || {};
+    window.app.caseLibraryApi = window.app.caseLibraryApi || {};
+    window.app.caseLibraryApi.openSelectExecDrawer = openSelectExecDrawer;
+    window.app.caseLibraryApi.requestSelectExecDrawer = markSelectExecDrawerRequest;
+    if (hasImportSelectDrawer) {
+      window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
+    }
+    return true;
+  }
+
+  function init() {
+    if (!dom.root) {
+      if (initDrawerOnly()) return;
+      return;
+    }
+
+  // 兜底：本地静态资源偶发空响应时，提前触发一次导出依赖补拉，避免导出按钮处报“缺少依赖”。
+  ensureExportDepsReady();
 
 	    importDrawerInstance = ensureDrawer('caseLibraryImportDrawer', ['openCaseLibraryImportDrawerBtn'], function() {
 	      ensureProjectsReady().then(resetImportDrawer);
@@ -9190,6 +9245,7 @@
     window.app = window.app || {};
     window.app.caseLibraryApi = window.app.caseLibraryApi || {};
     window.app.caseLibraryApi.openSelectExecDrawer = openSelectExecDrawer;
+    window.app.caseLibraryApi.requestSelectExecDrawer = markSelectExecDrawerRequest;
     window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
     window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
     window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;

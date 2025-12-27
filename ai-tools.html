@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>用例助手 - AI 工具</title>
+<link rel="icon" href="./assets/favicon.svg" type="image/svg+xml"/>
+<script>
+(function() {
+  try {
+    var key = 'usecase-settings-v1';
+    var raw = localStorage.getItem(key);
+    if (!raw) return;
+    var saved = {};
+    try {
+      saved = JSON.parse(raw || '{}') || {};
+    } catch (err) {
+      saved = {};
+    }
+    var theme = saved && saved.theme ? String(saved.theme).toLowerCase() : '';
+    if (theme !== 'dark' && theme !== 'light') return;
+    var root = document && document.documentElement ? document.documentElement : null;
+    if (!root) return;
+    if (root.dataset) {
+      root.dataset.theme = theme;
+    } else {
+      root.setAttribute('data-theme', theme);
+    }
+    if (root.style) root.style.colorScheme = theme === 'dark' ? 'dark' : 'light';
+  } catch (err) {
+    // ignore
+  }
+})();
+</script>
+<link rel="stylesheet" href="./style.css"/>
+</head>
+<body data-page="ai-tools">
+<div class="app-layout">
+<aside class="sidebar">
+<div class="user-banner" id="userBanner">
+<span class="user-prefix">当前用户</span>
+<strong id="currentUsername">未登录</strong>
+<span class="user-role" id="currentUserRole"></span>
+<button class="pill-btn" id="userMenuToggle" type="button" aria-label="用户菜单">设置</button>
+<div class="user-menu" id="userMenu">
+<button class="ghost-btn" id="logoutBtn" type="button">登出</button>
+</div>
+</div>
+<div class="sidebar-header">
+<h1>用例助手</h1>
+<button class="help-pill" id="pageGuideTrigger" type="button">
+<span class="icon">?</span>
+<span>页面说明</span>
+</button>
+</div>
+<div class="path-panel" id="currentPath">
+  <div class="path-title">
+    <span class="path-title-label">页面路径</span>
+  </div>
+  <div class="path-items" id="currentPathText"></div>
+</div>
+<nav class="tabs vertical">
+<div class="tab-group">
+<button class="tab-group-btn" data-group="ai">
+  <span class="tab-group-label">AI 功能</span>
+  <span class="ai-flow-compact hidden" id="autoFlowCompact" aria-hidden="true">
+    <span class="step active no-reason" data-target="import"><span class="badge">1</span><span class="step-label">导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
+    <span class="step no-reason" data-target="review"><span class="badge">2</span><span class="step-label">评审</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
+    <span class="step no-reason" data-target="clean"><span class="badge">3</span><span class="step-label">清洗</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
+    <span class="step no-reason" data-target="compare"><span class="badge">4</span><span class="step-label">对比完整性</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
+    <span class="step no-reason" data-target="split"><span class="badge">5</span><span class="step-label">拆分</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
+    <span class="step no-reason" data-target="cases-upload"><span class="badge">6</span><span class="step-label">用例导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
+    <span class="step no-reason" data-target="cases"><span class="badge">7</span><span class="step-label">覆盖对比</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
+  </span>
+</button>
+<div class="tab-submenu hidden" data-group-menu="ai">
+<button class="active ai-flow-submenu-btn" data-tab-btn="auto">
+  <span class="ai-flow-substep no-reason" data-flow-slot="auto">
+    <span class="badge">1</span>
+    <span class="step-label">导入</span>
+    <span class="step-status" data-status="pending" aria-hidden="true"></span>
+  </span>
+  <span class="tab-submenu-label">一键执行</span>
+</button>
+<button class="ai-flow-submenu-btn" data-tab-btn="clean">
+  <span class="ai-flow-substep no-reason" data-flow-slot="clean">
+    <span class="badge">1</span>
+    <span class="step-label">导入</span>
+    <span class="step-status" data-status="pending" aria-hidden="true"></span>
+  </span>
+  <span class="tab-submenu-label">功能流程</span>
+</button>
+<button data-tab-btn="casesgen">用例生成</button>
+<button data-tab-btn="assign">功能指派</button>
+<button data-tab-btn="models">模型管理</button>
+</div>
+</div>
+<div class="tab-group">
+<button class="tab-group-btn" data-group="cases">用例相关</button>
+<div class="tab-submenu hidden" data-group-menu="cases">
+<button data-tab-btn="tempexec">用例执行</button>
+<button data-tab-btn="case-library">用例库</button>
+<button data-tab-btn="case-archive">用例归档</button>
+<button data-tab-btn="exec-overview">执行总览</button>
+</div>
+</div>
+<div class="tab-group">
+<button class="tab-group-btn" data-group="manage">管理</button>
+<div class="tab-submenu hidden" data-group-menu="manage">
+<button class="hidden" data-tab-btn="project-admin" data-role="admin-only">项目管理</button>
+<button class="hidden" data-tab-btn="user-admin" data-role="admin-only">人员管理</button>
+<button class="hidden" data-tab-btn="ops-log" data-role="admin-only">操作记录</button>
+</div>
+</div>
+<div class="tab-group">
+<button class="tab-group-btn" data-group="settings">设置</button>
+<div class="tab-submenu hidden" data-group-menu="settings">
+<button data-tab-btn="settings">其他配置</button>
+</div>
+</div>
+</nav>
+<button class="scroll-top-btn" type="button" id="scrollTopBtn">回到顶部</button>
+<button class="scroll-top-btn" type="button" id="scrollBottomBtn">跳到底部</button>
+<div class="sidebar-tabs" id="sidebarTabs">
+<div class="sidebar-tab-bar" id="sidebarTabBar">
+<button class="sidebar-tab is-active" type="button" id="sidebarTabCasegen" data-sidebar-tab="casegen">
+用例生成进度
+<span class="sidebar-tab-dot" id="caseGenProgressTabDot"></span>
+</button>
+<button class="sidebar-tab" type="button" id="sidebarTabMemo" data-sidebar-tab="memo">个人备忘</button>
+</div>
+<div class="sidebar-tab-panels" id="sidebarTabPanels">
+<div class="sidebar-tab-panel is-active" data-sidebar-panel="casegen">
+<div class="casegen-progress-panel" id="caseGenProgressPanel">
+<div class="panel-head">
+<div class="panel-title-row">
+<span class="title">用例生成进度</span>
+<button class="panel-toggle" type="button" id="caseGenProgressToggle" aria-expanded="true" aria-controls="caseGenProgressList">收起</button>
+</div>
+<span class="meta">点击跳转对应模块</span>
+</div>
+<div class="casegen-progress-list" id="caseGenProgressList">
+<p class="hint">暂无用例生成任务，请先完成“测试模块拆分”并生成用例</p>
+</div>
+</div>
+</div>
+<div class="sidebar-tab-panel" data-sidebar-panel="memo">
+<div class="memo-pad-panel" id="memoPadPanel">
+<div class="panel-head">
+<div class="panel-title-row">
+<div class="panel-title-main">
+<span class="title">个人备忘</span>
+<span class="memo-tab-progress" id="memoTabProgress">0/0</span>
+</div>
+<button class="panel-toggle" type="button" id="memoPadToggle" aria-expanded="true" aria-controls="memoPadBody">收起</button>
+</div>
+</div>
+<div class="memo-tabs" id="memoTabLayer">
+<div class="memo-tab-list" id="memoTabList"></div>
+<button class="memo-tab-add" type="button" id="memoTabAddBtn" aria-label="新增备忘页">+</button>
+</div>
+<div class="memo-pad-body" id="memoPadBody"></div>
+</div>
+</div>
+</div>
+</div>
+</aside>
+<div class="content-shell">
+  <div class="flow" id="flowNav">
+    <div class="flow-title">一键执行步骤</div>
+    <div class="flow-steps">
+      <div class="step active" data-target="import"><span class="badge">1</span><span class="step-label">导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+      <div class="progress-line"></div>
+      <div class="step" data-target="review"><span class="badge">2</span><span class="step-label">评审</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+      <div class="progress-line"></div>
+      <div class="step" data-target="clean"><span class="badge">3</span><span class="step-label">清洗</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+      <div class="progress-line"></div>
+      <div class="step" data-target="compare"><span class="badge">4</span><span class="step-label">对比完整性</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+      <div class="progress-line"></div>
+      <div class="step" data-target="split"><span class="badge">5</span><span class="step-label">拆分</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+      <div class="progress-line"></div>
+      <div class="step" data-target="cases-upload"><span class="badge">6</span><span class="step-label">用例导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+      <div class="progress-line"></div>
+      <div class="step" data-target="cases"><span class="badge">7</span><span class="step-label">覆盖对比</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
+    </div>
+  </div>
+
+	
+	
+  
+  
+  
+  
+		
+<main>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<section class="card hidden" data-tab-section="assign">
+<h2>功能指派</h2>
+<div class="card-body">
+<p class="hint">先在“模型管理”中创建模型，再为每个功能指派具体模型。</p>
+<div class="assign-save-bar hidden" id="assignSaveBar">
+<div class="assign-save-text">未保存指派模型，请先保存指派</div>
+<button class="primary" id="saveAssignmentsTop">保存指派</button>
+</div>
+<div class="notice-card" style="background:linear-gradient(120deg,rgba(248,113,113,0.15),rgba(249,115,22,0.12));border-color:rgba(249,115,22,0.35);">
+<strong style="display:block;margin-bottom:6px;color:#b91c1c;">注意事项</strong>
+<p style="margin:0;color:#7c2d12;font-weight:600;">提示词内的 JSON 数据结构需要严格遵循，改动提示词时，请不要影响到 JSON 的数据结构要求！！！</p>
+</div>
+<div class="actions" style="margin-bottom:12px;">
+<button class="secondary" id="saveDefaultPrompts">设为默认提示词</button>
+<button class="secondary" id="exportDefaultPrompts">导出默认提示词</button>
+<button class="secondary" id="importDefaultPrompts">导入默认提示词</button>
+<input accept=".json,.txt" hidden="" id="importDefaultPromptsFile" type="file"/>
+</div>
+<p class="status" id="defaultPromptStatus"></p>
+<div class="model-card">
+<strong>清洗功能</strong>
+<div class="row">
+<label for="cleanModelSelect">使用模型</label>
+<select id="cleanModelSelect"></select>
+</div>
+<div class="row column">
+<label for="cleanPrompt">提示词</label>
+<textarea class="small-textarea" id="cleanPrompt" placeholder="为空则使用默认清洗提示词"></textarea>
+</div>
+<div class="row">
+<label for="cleanTemperature">Temperature</label>
+<input id="cleanTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
+<div class="row hidden" data-reasoning="clean">
+<label for="cleanReasoning">Reasoning Effort</label>
+<select id="cleanReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testCleanModel">测试连通性</button>
+</div>
+<p class="status" id="cleanAssignStatus"></p>
+</div>
+<div class="model-card">
+<strong>需求评审功能</strong>
+<div class="row">
+<label for="reviewModelSelect">使用模型</label>
+<select id="reviewModelSelect"></select>
+</div>
+<div class="row column">
+<label for="reviewPrompt">提示词</label>
+<textarea class="small-textarea" id="reviewPrompt" placeholder="为空则使用默认评审提示词"></textarea>
+</div>
+<div class="row">
+<label for="reviewTemperature">Temperature</label>
+<input id="reviewTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
+<div class="row hidden" data-reasoning="review">
+<label for="reviewReasoning">Reasoning Effort</label>
+<select id="reviewReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testReviewModel">测试连通性</button>
+</div>
+<p class="status" id="reviewAssignStatus"></p>
+</div>
+</div>
+<div class="model-card">
+<strong>对比完整性功能</strong>
+<div class="row">
+<label for="compareModelSelect">使用模型</label>
+<select id="compareModelSelect"></select>
+</div>
+<div class="row column">
+<label for="comparePrompt">提示词</label>
+<textarea class="small-textarea" id="comparePrompt" placeholder="为空则使用默认对比提示词"></textarea>
+</div>
+<div class="row">
+<label for="compareTemperature">Temperature</label>
+<input id="compareTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
+<div class="row hidden" data-reasoning="compare">
+<label for="compareReasoning">Reasoning Effort</label>
+<select id="compareReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testCompareModel">测试连通性</button>
+</div>
+<p class="status" id="compareAssignStatus"></p>
+</div>
+<div class="model-card">
+<strong>测试模块拆分功能</strong>
+<div class="row">
+<label for="splitModelSelect">使用模型</label>
+<select id="splitModelSelect"></select>
+</div>
+<div class="row column">
+<label for="splitPrompt">提示词</label>
+<textarea class="small-textarea" id="splitPrompt" placeholder="为空则使用默认拆分提示词"></textarea>
+</div>
+<div class="row">
+<label for="splitTemperature">Temperature</label>
+<input id="splitTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
+<div class="row hidden" data-reasoning="split">
+<label for="splitReasoning">Reasoning Effort</label>
+<select id="splitReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testSplitModel">测试连通性</button>
+</div>
+<p class="status" id="splitAssignStatus"></p>
+</div>
+<div class="model-card">
+<strong>XMind 覆盖对比功能</strong>
+<div class="row">
+<label for="casesModelSelect">使用模型</label>
+<select id="casesModelSelect"></select>
+</div>
+<div class="row column">
+<label for="casesPrompt">提示词</label>
+<textarea class="small-textarea" id="casesPrompt" placeholder="为空则使用默认覆盖对比提示词"></textarea>
+</div>
+<div class="row">
+<label for="casesTemperature">Temperature</label>
+<input id="casesTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
+<div class="row hidden" data-reasoning="cases">
+<label for="casesReasoning">Reasoning Effort</label>
+<select id="casesReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testCasesModel">测试连通性</button>
+</div>
+<p class="status" id="casesAssignStatus"></p>
+</div>
+<div class="model-card">
+<strong>用例生成功能</strong>
+<div class="row">
+<label for="caseGenModelSelect">使用模型</label>
+<select id="caseGenModelSelect"></select>
+</div>
+<div class="row column">
+<label for="caseGenPrompt">提示词</label>
+<textarea class="small-textarea" id="caseGenPrompt" placeholder="为空则使用默认用例生成提示词"></textarea>
+</div>
+<div class="row">
+<label for="caseGenTemperature">Temperature</label>
+<input id="caseGenTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
+<div class="row hidden" data-reasoning="casegen">
+<label for="caseGenReasoning">Reasoning Effort</label>
+<select id="caseGenReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testCaseGenModel">测试连通性</button>
+</div>
+<p class="status" id="caseGenAssignStatus"></p>
+</div>
+<div class="model-card">
+<strong>用例相似对比</strong>
+<div class="row">
+<label for="caseFilterModelSelect">使用模型</label>
+<select id="caseFilterModelSelect"></select>
+</div>
+<div class="row column">
+<label for="caseFilterPrompt">提示词</label>
+<textarea class="small-textarea" id="caseFilterPrompt" placeholder="为空则使用默认相似度对比提示词"></textarea>
+</div>
+<div class="row">
+<label for="caseFilterTemperature">Temperature</label>
+<input id="caseFilterTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
+<div class="row hidden" data-reasoning="casefilter">
+<label for="caseFilterReasoning">Reasoning Effort</label>
+<select id="caseFilterReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testCaseFilterModel">测试连通性</button>
+</div>
+<p class="status" id="caseFilterAssignStatus"></p>
+</div>
+<div class="actions">
+<button id="saveAssignments">保存指派</button>
+</div>
+</section>
+
+
+
+
+
+
+
+	
+	
+
+
+
+
+<section class="card hidden" data-tab-section="models">
+<h2>模型管理</h2>
+<div class="card-body">
+  <div class="notice-card highlight" style="margin: 0 0 12px;">
+    <h3>推荐配置</h3>
+    <ul>
+      <li>优先指派 <strong>DeepSeek-R1</strong>（模型 ID：<code>deepseek-reasoner</code>），输出质量更好。</li>
+      <li>请将 <code>Max Tokens</code> 设置为 <strong>16384</strong> 或更高，避免长回复被截断。<span class="token-hint hidden" id="deepseekTokenHint"></span></li>
+      <li>为每个功能统一指派此模型，保持行为一致。</li>
+    </ul>
+  </div>
+<p class="hint">为不同供应商配置多个模型，可随时分配给清洗或对比任务。API Key 等敏感信息仅保存在本地浏览器。</p>
+<div class="actions">
+<button id="createModelBtn">新增模型</button>
+</div>
+<div class="model-card">
+<strong>全局调用设置</strong>
+<div class="row">
+<label for="modelTimeoutInput">模型超时时间（秒）</label>
+<input id="modelTimeoutInput" max="1800" min="30" placeholder="默认 300" step="30" type="number"/>
+</div>
+<p class="hint">超时后会自动中断模型请求，建议 30-1800 秒之间，根据模型响应速度适当调整。</p>
+<div class="actions">
+<button class="secondary" id="saveModelTimeout">保存超时设置</button>
+</div>
+<p class="status" id="modelTimeoutStatus"></p>
+</div>
+<div class="model-card hidden" id="modelFormWrapper">
+<h3 id="modelFormTitle">新增模型</h3>
+<div class="row">
+<label for="modelDisplayName">模型名称</label>
+<input id="modelDisplayName" placeholder="如：DeepSeek 清洗模型 A"/>
+</div>
+<div class="row">
+<label for="modelProvider">模型类型</label>
+<select id="modelProvider">
+<option value="deepseek">DeepSeek</option>
+<option value="kimi">Kimi K2</option>
+<option value="custom">自定义</option>
+</select>
+</div>
+<div class="row">
+<label for="modelBaseUrl">接口地址</label>
+<input id="modelBaseUrl" placeholder="如：https://api.xxx.com/v1/chat/completions"/>
+</div>
+<div class="row">
+<label for="modelApiKey">API Key</label>
+<input id="modelApiKey" placeholder="填写用于鉴权的 Key" type="password"/>
+</div>
+<div class="row">
+<label for="modelIdentifier">模型 ID</label>
+<input id="modelIdentifier" placeholder="如：deepseek-chat / k2 / 你的模型名"/>
+</div>
+<div class="row">
+<label for="modelMaxTokens">最大输出 Tokens</label>
+<input id="modelMaxTokens" min="256" placeholder="默认 1024" step="128" type="number"/>
+</div>
+<div class="actions">
+<button id="saveModelBtn">保存模型</button>
+<button class="secondary" id="resetModelForm">取消</button>
+</div>
+<p class="status" id="modelFormStatus"></p>
+</div>
+<h3>已配置模型</h3>
+<div class="model-list" id="modelList"></div>
+</div>
+</section>
+
+
+
+
+
+
+	  
+
+	
+
+
+
+
+<div class="drawer" id="caseLibraryImportSelectDrawer">
+  <div class="drawer-mask" data-drawer-close="caseLibraryImportSelectDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>从用例库中选择</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryImportSelectDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">选择项目与版本后查询，用例将导入“一键执行/功能流程”的测试用例中。</p>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryImportSelectProjectSelect">项目</label>
+          <select id="caseLibraryImportSelectProjectSelect"></select>
+          <label class="case-library-label" for="caseLibraryImportSelectVersionSelect">版本</label>
+          <select id="caseLibraryImportSelectVersionSelect" disabled></select>
+          <label class="case-library-label" for="caseLibraryImportSelectSearchInput">用例名</label>
+          <input id="caseLibraryImportSelectSearchInput" type="text" placeholder="搜索用例名" />
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="primary" id="caseLibraryImportSelectQueryBtn" type="button">查询</button>
+          <button class="secondary" id="caseLibraryImportSelectBatchBtn" type="button" disabled>批量导入</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibraryImportSelectStatus"></p>
+      <div id="caseLibraryImportSelectPaginationTop"></div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="caseLibraryImportSelectSelectAll" aria-label="全选/全不选"/></th>
+              <th>所属项目</th>
+              <th>版本</th>
+              <th>用例名</th>
+              <th>复用类型</th>
+              <th>条目数</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryImportSelectListBody">
+            <tr><td colspan="7"><p class="hint">请选择项目后点击“查询”。</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="caseLibraryImportSelectPaginationBottom"></div>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibraryImportSelectDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="drawer hidden" id="execVersionSelectDrawer">
+  <div class="drawer-mask" data-drawer-close="execVersionSelectDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="execVersionSelectDrawerTitle">选择执行版本</h3>
+      <button class="link-toggle" data-drawer-close="execVersionSelectDrawer" type="button">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" style="margin:0 0 10px;" id="execVersionSelectDrawerHint">
+        导入版本仅用于记录用例库归属；执行版本用于“用例执行”页面的版本分组、归档筛选等展示与统计。
+      </p>
+      <div class="case-library-drawer-meta" style="margin-bottom:10px;">
+        <div class="meta-line">
+          <span class="label">项目</span>
+          <span class="value" id="execVersionSelectDrawerProject">--</span>
+        </div>
+        <div class="meta-line">
+          <span class="label">导入版本</span>
+          <span class="value" id="execVersionSelectDrawerImportVersion">--</span>
+        </div>
+      </div>
+      <div class="case-library-filters" style="margin-bottom:8px;">
+        <span class="case-library-label">执行版本</span>
+        <select id="execVersionSelectDrawerVersionSelect" disabled>
+          <option value="">加载中...</option>
+        </select>
+      </div>
+      <p class="status" id="execVersionSelectDrawerStatus"></p>
+      <div class="actions user-form-actions" style="justify-content:flex-end; gap:8px;">
+        <button class="primary" id="execVersionSelectDrawerConfirmBtn" type="button" disabled>确认并继续</button>
+        <button class="ghost-btn" id="execVersionSelectDrawerCancelBtn" data-drawer-close="execVersionSelectDrawer" type="button">取消</button>
+      </div>
+</div>
+</div>
+</div>
+<div class="drawer" id="appConfirmDrawer">
+  <div class="drawer-mask" data-drawer-close="appConfirmDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="appConfirmDrawerTitle">确认操作</h3>
+      <button class="link-toggle" data-drawer-close="appConfirmDrawer" type="button">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="confirm-drawer-message" id="appConfirmDrawerMessage"></p>
+      <div class="row column hidden" id="appConfirmDrawerInputRow">
+        <label class="inline" id="appConfirmDrawerInputLabel">输入内容
+          <input id="appConfirmDrawerInput" type="text" placeholder="请输入内容"/>
+          <select id="appConfirmDrawerSelect" class="hidden"></select>
+        </label>
+      </div>
+      <p class="hint hidden" id="appConfirmDrawerHint"></p>
+      <p class="status" id="appConfirmDrawerStatus"></p>
+      <div class="actions user-form-actions" style="justify-content:flex-end; gap:8px;">
+        <button class="primary" id="appConfirmDrawerConfirmBtn" type="button">确认</button>
+        <button class="ghost-btn" id="appConfirmDrawerCancelBtn" data-drawer-close="appConfirmDrawer" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+	
+
+  
+  <div class="drawer hidden" id="pageGuideDrawer">
+    <div class="drawer-mask" data-drawer-close="pageGuideDrawer"></div>
+    <div class="drawer-panel">
+      <div class="drawer-header">
+        <h3 id="pageGuideDrawerTitle">页面说明</h3>
+        <button class="link-toggle" id="closePageGuideDrawerBtn" data-drawer-close="pageGuideDrawer">收起</button>
+      </div>
+      <div class="drawer-body" id="pageGuideDrawerBody">
+        <p class="hint" style="margin:0;">暂无页面说明</p>
+      </div>
+    </div>
+  </div>
+  <div class="drawer hidden" id="xmindStructureDrawer">
+    <div class="drawer-mask" data-drawer-close="xmindStructureDrawer"></div>
+    <div class="drawer-panel drawer-panel-wide">
+      <div class="drawer-header">
+        <h3 id="xmindStructureDrawerTitle">XMind 用例结构</h3>
+        <button class="link-toggle" id="closeXmindStructureDrawerBtn" data-drawer-close="xmindStructureDrawer">收起</button>
+      </div>
+      <div class="drawer-body" id="xmindStructureDrawerBody"></div>
+    </div>
+  </div>
+</main>
+</div>
+</div>
+<script src="./scripts/vendor/jszip.min.js" defer></script>
+<script src="./config/constants.js" defer></script>
+<script src="./config/domConfig.js" defer></script>
+<script src="./scripts/core/appInitHelpers.js" defer></script>
+<script src="./scripts/core/appRuntime.js" defer></script>
+<script src="./scripts/core/splitCore.js" defer></script>
+<script src="./scripts/core/cleanCore.js" defer></script>
+<script src="./scripts/core/compareCore.js" defer></script>
+<script src="./scripts/core/reviewCore.js" defer></script>
+<script src="./scripts/core/casesCore.js" defer></script>
+<script src="./scripts/core/autoCore.js" defer></script>
+<script src="./scripts/core/xmindCore.js" defer></script>
+<script src="./scripts/core/xlsxCore.js" defer></script>
+<script src="./scripts/core/tempexecDefaults.js" defer></script>
+<script src="./scripts/core/tempexecCore.js" defer></script>
+<script src="./scripts/core/casesGenCore.js" defer></script>
+<script src="./scripts/core/debugCore.js" defer></script>
+<script src="./scripts/core/requirementCore.js" defer></script>
+<script src="./scripts/core/flowCore.js" defer></script>
+<script src="./scripts/handlers/cleanHandlers.js" defer></script>
+<script src="./scripts/base/state.js" defer></script>
+<script src="./scripts/base/utils.js" defer></script>
+<script src="./scripts/base/drawer.js" defer></script>
+<script src="./scripts/base/confirmDrawer.js" defer></script>
+<script src="./scripts/base/execVersionDrawer.js" defer></script>
+<script src="./services/storage.js" defer></script>
+<script src="./services/modelClient.js" defer></script>
+<script src="./services/apiClient.js" defer></script>
+<script src="./scripts/modules/settings.js" defer></script>
+<script src="./scripts/modules/models.js" defer></script>
+<script src="./scripts/handlers/assignHandlers.js" defer></script>
+<script src="./scripts/modules/assign.js" defer></script>
+<script src="./scripts/modules/review.js" defer></script>
+<script src="./scripts/modules/clean.js" defer></script>
+<script src="./scripts/modules/compare.js" defer></script>
+<script src="./scripts/modules/split.js" defer></script>
+<script src="./scripts/handlers/splitHandlers.js" defer></script>
+<script src="./scripts/modules/upload.js" defer></script>
+<script src="./scripts/handlers/casegenHandlers.js" defer></script>
+<script src="./scripts/core/casegenCore.js" defer></script>
+<script src="./scripts/modules/casegenProgress.js" defer></script>
+<script src="./scripts/modules/memoPad.js" defer></script>
+<script src="./scripts/handlers/layoutHandlers.js" defer></script>
+<script src="./scripts/modules/auto.js" defer></script>
+<script src="./scripts/modules/casesgen.js" defer></script>
+<script src="./scripts/modules/tempexec.js" defer></script>
+<script src="./scripts/modules/caseLibrary.js" defer></script>
+<script src="./scripts/modules/caseArchive.js" defer></script>
+<script src="./scripts/modules/execOverview.js" defer></script>
+<script src="./scripts/modules/opsLog.js" defer></script>
+<script src="./scripts/modules/admin.js" defer></script>
+<script src="./scripts/modules/authGuard.js" defer></script>
+<script src="./scripts/modules/pageGuide.js" defer></script>
+<script src="./scripts/modules/app.js" defer></script>
+<script src="./scripts/modules/bootstrap.js" defer></script>
+<script>
+  (function() {
+    // 兜底：本地静态资源偶发“空响应”会导致关键脚本缺失（如 switchTab/drawer），自动刷新一次可恢复。
+    var retryKey = 'tap_bootstrap_reload_retry';
+    function getRetryCount() {
+      try {
+        return Number(sessionStorage.getItem(retryKey) || '0') || 0;
+      } catch (e) {
+        return 0;
+      }
+    }
+    function setRetryCount(n) {
+      try {
+        sessionStorage.setItem(retryKey, String(n || 0));
+      } catch (e) {
+        // ignore
+      }
+    }
+    function clearRetryCount() {
+      try {
+        sessionStorage.removeItem(retryKey);
+      } catch (e) {
+        // ignore
+      }
+    }
+    function isAppReady() {
+      if (!window.app) return false;
+      if (typeof window.app.switchTab !== 'function') return false;
+      if (!window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return false;
+      return true;
+    }
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        if (isAppReady()) {
+          clearRetryCount();
+          return;
+        }
+        var count = getRetryCount();
+        if (count >= 2) return;
+        setRetryCount(count + 1);
+        try { window.location.reload(); } catch (e) {}
+      }, 1800);
+    });
+  })();
+</script>
+</body>
+</html>

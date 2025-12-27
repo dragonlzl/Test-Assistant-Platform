@@ -831,7 +831,134 @@
       return tab || (state && state.activeTab ? state.activeTab : '');
     }
 
-    function switchTab(name) {
+    function getTabPageMap() {
+      var cfg = window.app && window.app.config ? window.app.config : {};
+      return cfg && cfg.tabPageMap ? cfg.tabPageMap : {};
+    }
+
+    function parseQuery(search) {
+      var result = {};
+      if (!search) return result;
+      var raw = String(search || '').replace(/^\?/, '');
+      if (!raw) return result;
+      raw.split('&').forEach(function(pair) {
+        if (!pair) return;
+        var parts = pair.split('=');
+        var key = decodeURIComponent(parts.shift() || '');
+        if (!key) return;
+        var value = parts.length ? decodeURIComponent(parts.join('=')) : '';
+        result[key] = value;
+      });
+      return result;
+    }
+
+    function buildQuery(params) {
+      var list = [];
+      var keys = Object.keys(params || {});
+      keys.forEach(function(key) {
+        if (!key) return;
+        var val = params[key];
+        if (val === undefined || val === null || val === '') return;
+        list.push(encodeURIComponent(key) + '=' + encodeURIComponent(String(val)));
+      });
+      return list.length ? '?' + list.join('&') : '';
+    }
+
+    function getCurrentPageName() {
+      if (typeof window === 'undefined' || !window.location) return '';
+      var path = window.location.pathname || '';
+      if (!path) return '';
+      var parts = path.split('/').filter(Boolean);
+      return parts.length ? parts[parts.length - 1] : '';
+    }
+
+    function getTabFromUrl() {
+      if (typeof window === 'undefined' || !window.location) return '';
+      var params = parseQuery(window.location.search || '');
+      return params && params.tab ? String(params.tab || '') : '';
+    }
+
+    function buildTabUrl(path, tabName) {
+      if (!path) return '';
+      var hash = '';
+      var hashIndex = path.indexOf('#');
+      if (hashIndex >= 0) {
+        hash = path.slice(hashIndex);
+        path = path.slice(0, hashIndex);
+      }
+      var queryIndex = path.indexOf('?');
+      var params = {};
+      var base = path;
+      if (queryIndex >= 0) {
+        params = parseQuery(path.slice(queryIndex));
+        base = path.slice(0, queryIndex);
+      }
+      if (tabName) {
+        params.tab = tabName;
+      } else if (params.tab) {
+        delete params.tab;
+      }
+      return base + buildQuery(params) + hash;
+    }
+
+    function shouldForceRedirect() {
+      var pageKey = '';
+      if (document && document.body && document.body.dataset && document.body.dataset.page) {
+        pageKey = String(document.body.dataset.page || '');
+      }
+      if (pageKey === 'index') return true;
+      var current = getCurrentPageName();
+      return !current || current === 'index.html' || current === 'index';
+    }
+
+    function syncHistoryForTab(name, options) {
+      if (!name) return;
+      if (typeof window === 'undefined' || !window.history || typeof window.history.pushState !== 'function') return;
+      var current = (window.location ? (window.location.pathname || '') + (window.location.search || '') + (window.location.hash || '') : '');
+      if (!current) return;
+      var target = buildTabUrl(current, name);
+      if (!target || target === current) return;
+      try {
+        if (options && options.replaceHistory) {
+          window.history.replaceState({ tab: name }, '', target);
+        } else {
+          window.history.pushState({ tab: name }, '', target);
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function resolveTabPage(name) {
+      if (!name) return '';
+      var map = getTabPageMap();
+      return map && map[name] ? String(map[name]) : '';
+    }
+
+    function hasLocalTabSection(name) {
+      if (!name || typeof document === 'undefined') return false;
+      return Boolean(document.querySelector('[data-tab-section=\"' + name + '\"]'));
+    }
+
+    function redirectToTabPage(name) {
+      var target = resolveTabPage(name);
+      if (!target) return false;
+      var current = getCurrentPageName();
+      if (current && current === target) return false;
+      persistActiveTabForSession(name);
+      try {
+        window.location.href = buildTabUrl(target, name) || target;
+      } catch (err) {
+        // ignore
+      }
+      return true;
+    }
+
+    function switchTab(name, options) {
+      if (name && (shouldForceRedirect() || !hasLocalTabSection(name))) {
+        var redirected = redirectToTabPage(name);
+        if (redirected) return;
+      }
       var now = Date.now();
       var skipHooks = false;
       if (state.activeTab === name) {
@@ -969,6 +1096,9 @@
       } catch (err3) {
         // ignore
       }
+      if (!options || !options.skipHistory) {
+        syncHistoryForTab(name, options);
+      }
     }
     api.switchTab = switchTab;
     // 兜底：页面刷新/关闭前再写一次 activeTab，避免少数情况下首次切页后未落到 sessionStorage 的问题。
@@ -991,6 +1121,10 @@
           if (document && document.visibilityState === 'hidden') {
             persistActiveTabForSession(getActiveTabFromDom());
           }
+        });
+        window.addEventListener('popstate', function() {
+          var tab = getTabFromUrl();
+          if (tab) switchTab(tab, { skipHistory: true });
         });
       }
     } catch (err) {
@@ -1139,6 +1273,22 @@
       restoreWorkflowState();
       function resolveInitialTab() {
         var defaultTab = 'auto';
+        try {
+          var cfg = window.app && window.app.config ? window.app.config : {};
+          var pageDefaults = cfg && cfg.pageDefaultTabMap ? cfg.pageDefaultTabMap : {};
+          var pageKey = '';
+          if (document && document.body && document.body.dataset && document.body.dataset.page) {
+            pageKey = String(document.body.dataset.page || '');
+          }
+          if (!pageKey) pageKey = 'index';
+          if (pageDefaults && pageDefaults[pageKey]) {
+            defaultTab = String(pageDefaults[pageKey] || defaultTab);
+          }
+        } catch (err) {
+          defaultTab = 'auto';
+        }
+        var urlTab = getTabFromUrl();
+        if (urlTab) return urlTab;
         var saved = '';
         if (activeTabKey && typeof sessionStorage !== 'undefined') {
           try {
@@ -1166,7 +1316,13 @@
           // ignore
         }
         var tabs = [];
-        if (dom.tabButtons && dom.tabButtons.length) {
+        if (dom.tabSections && dom.tabSections.length) {
+          dom.tabSections.forEach(function(sec) {
+            if (sec && sec.dataset && sec.dataset.tabSection) {
+              tabs.push(sec.dataset.tabSection);
+            }
+          });
+        } else if (dom.tabButtons && dom.tabButtons.length) {
           dom.tabButtons.forEach(function(btn) {
             if (btn && btn.dataset && btn.dataset.tabBtn) {
               tabs.push(btn.dataset.tabBtn);
@@ -1196,7 +1352,7 @@
       syncSplitView();
       resetModelForm();
       var initialTab = resolveInitialTab();
-      switchTab(initialTab);
+      switchTab(initialTab, { replaceHistory: true });
       if (initialTab === 'auto') {
         scrollToSection('auto-import', { behavior: 'instant' });
       }

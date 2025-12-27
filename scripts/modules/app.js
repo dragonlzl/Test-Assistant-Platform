@@ -193,9 +193,19 @@
       });
       return target;
     };
-    const initModule = appInitHelpers.initModule || function(name, args) {
+    const baseInitModule = appInitHelpers.initModule || function(name, args) {
       const mod = window.app && window.app[name];
       return mod && typeof mod.init === 'function' ? mod.init(args || {}) : null;
+    };
+    const initModule = function(name, args) {
+      try {
+        return baseInitModule(name, args);
+      } catch (err) {
+        if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
+          console.warn('模块初始化失败: ' + name, err);
+        }
+        return null;
+      }
     };
     let debugNodes;
     let switchTab = function(name) {
@@ -1129,6 +1139,7 @@
       })
       : null;
     tempExecApi = tempexecCore ? { ...tempexecCore } : {};
+    const tempExecStatus = dom.tempExecStatus || null;
     const tempExecDefaults = window.app.tempexecDefaults && typeof window.app.tempexecDefaults.create === 'function'
       ? window.app.tempexecDefaults.create({
         state,

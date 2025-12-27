@@ -66,6 +66,28 @@
     return fallback;
   }
 
+  function parseQuery(search) {
+    var result = {};
+    if (!search) return result;
+    var raw = String(search || '').replace(/^\?/, '');
+    if (!raw) return result;
+    raw.split('&').forEach(function(pair) {
+      if (!pair) return;
+      var parts = pair.split('=');
+      var key = decodeURIComponent(parts.shift() || '');
+      if (!key) return;
+      var value = parts.length ? decodeURIComponent(parts.join('=')) : '';
+      result[key] = value;
+    });
+    return result;
+  }
+
+  function getTabFromUrl() {
+    if (typeof window === 'undefined' || !window.location) return '';
+    var params = parseQuery(window.location.search || '');
+    return params && params.tab ? String(params.tab || '') : '';
+  }
+
   function getLoginSeq() {
     try {
       if (typeof localStorage !== 'undefined') {
@@ -199,6 +221,42 @@
     var btn = document.querySelector('[data-tab-btn="' + saved + '"]');
     if (!btn) return '';
     return saved;
+  }
+
+  function getPageDefaultTab() {
+    var fallback = 'auto';
+    try {
+      var cfg = window.app && window.app.config ? window.app.config : {};
+      var pageDefaults = cfg && cfg.pageDefaultTabMap ? cfg.pageDefaultTabMap : {};
+      var pageKey = '';
+      if (document && document.body && document.body.dataset && document.body.dataset.page) {
+        pageKey = String(document.body.dataset.page || '');
+      }
+      if (!pageKey) pageKey = 'index';
+      if (pageDefaults && pageDefaults[pageKey]) {
+        fallback = String(pageDefaults[pageKey] || fallback);
+      }
+    } catch (err) {
+      // ignore
+    }
+    return fallback;
+  }
+
+  function resolveValidTab(name) {
+    if (typeof document === 'undefined') return name || 'auto';
+    var target = name || '';
+    if (target) {
+      var exists = document.querySelector('[data-tab-section=\"' + target + '\"]');
+      if (exists) return target;
+    }
+    var defaultTab = getPageDefaultTab();
+    if (defaultTab) {
+      var defaultExists = document.querySelector('[data-tab-section=\"' + defaultTab + '\"]');
+      if (defaultExists) return defaultTab;
+    }
+    var first = document.querySelector('[data-tab-section]');
+    if (first && first.dataset && first.dataset.tabSection) return first.dataset.tabSection;
+    return target || defaultTab || 'auto';
   }
 
   function redirectToLogin(options) {
@@ -338,6 +396,7 @@
   }
 
   function switchToTab(name) {
+    name = resolveValidTab(name);
     if (window.app && typeof window.app.switchTab === 'function') {
       window.app.switchTab(name);
       return;
@@ -398,7 +457,8 @@
     } catch (err) {
       // ignore
     }
-    if (forceDefaultTab) {
+    var urlTab = getTabFromUrl();
+    if (forceDefaultTab && !urlTab) {
       // 显式登出后的下一次登录：无条件回到主页(auto)，避免任何残留页签影响。
       try {
         var activeTabKey = getConfigValue('activeTabKey', 'usecase-active-tab');
@@ -410,7 +470,7 @@
       }
       liveState.activeTab = 'auto';
     } else {
-      var savedTab = getSavedActiveTab();
+      var savedTab = urlTab || getSavedActiveTab();
       // 无保存页签时统一回到主页(auto)，避免重登落到旧默认(clean)。
       liveState.activeTab = savedTab || 'auto';
     }
@@ -425,19 +485,19 @@
       liveState.authToken = liveState.authToken || 'e2e-token';
       liveState.authReady = true;
       window.app = window.app || {};
-      window.app.authReady = true;
-      try {
-        window.dispatchEvent(new CustomEvent('app-auth-ready', { detail: { user: liveState.currentUser } }));
-      } catch (err) {
-        // ignore
-      }
-      updateUserDisplay();
-      applyRoleVisibility(liveState.currentUser);
-      var tab = liveState.activeTab || 'auto';
-      liveState.activeTab = tab;
-      switchToTab(tab);
-      return;
+    window.app.authReady = true;
+    try {
+      window.dispatchEvent(new CustomEvent('app-auth-ready', { detail: { user: liveState.currentUser } }));
+    } catch (err) {
+      // ignore
     }
+    updateUserDisplay();
+    applyRoleVisibility(liveState.currentUser);
+    var tab = resolveValidTab(liveState.activeTab || 'auto');
+    liveState.activeTab = tab;
+    switchToTab(tab);
+    return;
+  }
     if (!apiClient || typeof apiClient.getStoredToken !== 'function') {
       redirectToLogin();
       return;

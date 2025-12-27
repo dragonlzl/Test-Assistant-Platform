@@ -19,6 +19,21 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：多页面 HTML 拆分与跨页导航
+- 功能描述：将原本集中在 `index.html` 的功能页拆分为 6 个独立 HTML 页面，并为跨页切换补充 tab → 页面映射与跳转逻辑。
+- 操作方式：访问 `ai-workflow.html`/`ai-tools.html`/`case-exec.html`/`case-library.html`/`admin.html`/`settings.html`，或在侧边栏点击非当前页签自动跳转对应页面。
+- 使用效果：功能页按用途拆分，保留原有交互与脚本加载顺序；跨页切换不再出现空白页。
+- 新增内容/接口/组件：
+  - 前端：新增 6 个页面入口（`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`settings.html`）。
+  - 前端：tab → 页面映射与默认页签（`config/constants.js`），跨页 switchTab 跳转（`scripts/core/appRuntime.js`）。
+  - 测试：多页面入口 UI 用例（`tests/ui/html_split_pages.spec.js`）。
+- 复用说明：复用现有模块初始化与页面结构，无新增后端接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/html_split_pages.spec.js`（通过）
+- 更新记录：2025-12-27 新增多页面入口与跨页导航（`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`settings.html`、`config/constants.js`、`scripts/core/appRuntime.js`、`tests/ui/html_split_pages.spec.js`）。
+- 更新记录：2025-12-27 修复执行页初始化缺失 DOM 引用导致脚本中断（`scripts/modules/app.js`、`scripts/modules/tempexec.js`）。
+- 更新记录：2025-12-27 页签切换写入 URL 并支持浏览器前进/后退（`scripts/core/appRuntime.js`、`scripts/modules/authGuard.js`、`config/constants.js`、`tests/ui/html_split_pages.spec.js`）。
+
 - 功能名称：用例执行/用例编辑视图窄屏适配  
 - 功能描述：执行视图、用例库编辑视图等在窄屏下工具栏改为纵向排列，表格支持横向滚动，保持宽屏布局不变。  
 - 操作方式：在窄屏（<=980/640）打开“用例执行”或“用例库编辑视图”，工具栏自动换行，表格可横向滑动查看完整列。  
@@ -2769,3 +2784,42 @@
   - `npm run test:ui -- tests/ui/tempexec_entry.spec.js`（通过，提权执行）
   - `APP_DB_FILE=apitest.db npm run test:api -- tests/api/settings_models.spec.js`（通过，提权执行）
 - 更新记录：2025-12-27 执行页顶部导航入口顺序调整（`index.html`、`tests/ui/tempexec_entry.spec.js`）。
+
+- 功能名称：执行页选择用例执行跨页面跳转修复
+- 功能描述：修复用例执行页“选择用例执行”与“执行分配 > 添加执行用例”跨页面无法打开选择抽屉的问题，点击后跳转至用例库页并自动展开选择执行抽屉。
+- 操作方式：进入 `case-exec.html`，点击顶部“选择用例执行”或执行分配抽屉内“添加执行用例”，跳转到 `case-library.html` 并自动打开“选择执行用例”抽屉。
+- 使用效果：跨页面入口可用，选择执行流程恢复。
+- 新增内容/接口/组件：
+  - 前端：选择执行抽屉请求跨页持久化与跳转兜底（`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`）。
+  - 测试：多页面入口跳转与抽屉打开用例（`tests/ui/html_split_pages.spec.js`）。
+- 复用说明：复用现有抽屉打开与页签跳转逻辑，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/html_split_pages.spec.js`（通过）
+  - 未涉及后端 API，未运行 `test:api`
+- 更新记录：2025-12-27 执行页选择用例执行跨页面跳转修复（`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`、`tests/ui/html_split_pages.spec.js`）。
+
+- 功能名称：执行页选择用例执行抽屉本页打开
+- 功能描述：用例执行页“选择用例执行/添加执行用例”改为直接打开“选择用例执行”抽屉，不再跳转到用例库页面。
+- 操作方式：进入 `case-exec.html`，点击顶部“选择用例执行”或执行分配抽屉内“添加执行用例”，应在当前页弹出选择执行抽屉。
+- 使用效果：保持执行页上下文，避免页面跳转。
+- 新增内容/接口/组件：
+  - 前端：执行页补齐选择执行抽屉结构并支持仅抽屉初始化（`case-exec.html`、`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`）。
+  - 测试：执行页抽屉直开用例（`tests/ui/html_split_pages.spec.js`）。
+- 复用说明：复用原用例库选择抽屉逻辑，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/html_split_pages.spec.js`（通过）
+  - 未涉及后端 API，未运行 `test:api`
+- 更新记录：2025-12-27 执行页选择用例执行抽屉本页打开（`case-exec.html`、`scripts/modules/caseLibrary.js`、`scripts/modules/tempexec.js`、`tests/ui/html_split_pages.spec.js`）。
+
+- 功能名称：用例库页签跳转修复
+- 功能描述：修复执行页选择执行抽屉被标记为用例库页签导致无法跳转到用例库页面的问题，调整抽屉所属页签为执行页。
+- 操作方式：从任意页面切换到用例库页签，应正确跳转到 `case-library.html`；执行页选择用例执行仍可正常弹出抽屉。
+- 使用效果：用例库页面可正常打开，执行页抽屉不受影响。
+- 新增内容/接口/组件：
+  - 前端：调整执行页选择执行抽屉的页签归属（`case-exec.html`）。
+  - 测试：复用 `tests/ui/html_split_pages.spec.js` 覆盖执行页抽屉打开。
+- 复用说明：复用现有页签跳转逻辑，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/html_split_pages.spec.js`（通过）
+  - 未涉及后端 API，未运行 `test:api`
+- 更新记录：2025-12-27 用例库页签跳转修复（`case-exec.html`、`tests/ui/html_split_pages.spec.js`）。
