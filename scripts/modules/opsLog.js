@@ -43,6 +43,8 @@
     pageIndex: 0,
     selectedUserId: '',
     selectedTargets: { all: true },
+    selectedActions: { all: true },
+    actionOptionKeys: [],
     overviewView: 'activity',
     hasViewed: false,
     drawerOpen: false,
@@ -113,6 +115,7 @@
     dateStart: document.getElementById('opsLogDateStart'),
     dateEnd: document.getElementById('opsLogDateEnd'),
     targetGrid: document.getElementById('opsLogTargetFilterGrid'),
+    actionGrid: document.getElementById('opsLogActionFilterGrid'),
     paginationTop: document.getElementById('opsLogPaginationTop'),
     paginationBottom: document.getElementById('opsLogPaginationBottom'),
     tableBody: document.getElementById('opsLogDrawerTableBody'),
@@ -394,9 +397,11 @@
   function persistViewState() {
     if (!storage || typeof storage.setJson !== 'function') return;
     var selected = getSelectedTargetKeys();
+    var selectedActions = getSelectedActionKeys();
     var payload = {
       userId: state.selectedUserId || '',
       targets: selected,
+      actions: selectedActions,
       pageIndex: Number(state.pageIndex) || 0,
       hasViewed: Boolean(state.hasViewed),
       drawerOpen: Boolean(state.drawerOpen),
@@ -419,6 +424,7 @@
     state.dateStart = saved.dateStart ? String(saved.dateStart || '') : '';
     state.dateEnd = saved.dateEnd ? String(saved.dateEnd || '') : '';
     state.selectedTargets = { all: true };
+    state.selectedActions = { all: true };
     // 兼容：旧版字段为 behaviors（操作行为筛选），新版为 targets（操作对象筛选）。
     var list = Array.isArray(saved.targets) ? saved.targets : [];
     if (list.length) {
@@ -428,6 +434,15 @@
         state.selectedTargets[String(key)] = true;
       });
       syncAllTargetSelection();
+    }
+    var actions = Array.isArray(saved.actions) ? saved.actions : [];
+    if (actions.length) {
+      state.selectedActions = { all: false };
+      actions.forEach(function(key) {
+        if (!key) return;
+        state.selectedActions[String(key)] = true;
+      });
+      syncAllActionSelection();
     }
   }
 
@@ -801,6 +816,131 @@
         '</label>'
       );
     }).join('');
+  }
+
+  function resolveActionFilterLabel(log) {
+    if (!log || typeof log !== 'object') return '';
+    var action = normalizeAction(log.action);
+    if (!action) return '';
+    if (action === 'batch_create_case_items') return '批量新增';
+    if (action === 'batch_delete_case_items') return '批量删除';
+    if (action === 'create_version') return '新增版本';
+    return resolveActionLabel(log) || '';
+  }
+
+  function buildActionFilterOptions(list) {
+    var map = {};
+    (Array.isArray(list) ? list : []).forEach(function(log) {
+      var label = resolveActionFilterLabel(log);
+      if (!label) return;
+      if (!map[label]) map[label] = { key: label, label: label, count: 0 };
+      map[label].count += 1;
+    });
+    var options = Object.keys(map).map(function(key) { return map[key]; });
+    options.sort(function(a, b) {
+      if (b.count !== a.count) return b.count - a.count;
+      return String(a.label || '').localeCompare(String(b.label || ''));
+    });
+    return options;
+  }
+
+  function getSelectedActionKeys() {
+    var selected = state.selectedActions || {};
+    if (selected.all) return [];
+    var keys = [];
+    Object.keys(selected).forEach(function(key) {
+      if (key === 'all') return;
+      if (selected[key]) keys.push(key);
+    });
+    if (!keys.length) return [];
+    return keys;
+  }
+
+  function trimActionSelection(optionKeys) {
+    var selected = state.selectedActions || {};
+    if (selected.all) return;
+    var keys = Array.isArray(optionKeys) ? optionKeys : [];
+    if (!keys.length) return;
+    var allow = {};
+    keys.forEach(function(key) {
+      if (!key) return;
+      allow[key] = true;
+    });
+    var changed = false;
+    Object.keys(selected).forEach(function(key) {
+      if (key === 'all') return;
+      if (!allow[key]) {
+        delete selected[key];
+        changed = true;
+      }
+    });
+    if (changed) {
+      var any = false;
+      Object.keys(selected).forEach(function(key) {
+        if (key === 'all') return;
+        if (selected[key]) any = true;
+      });
+      if (!any) state.selectedActions = { all: true };
+    }
+  }
+
+  function syncAllActionSelection(optionKeys) {
+    var selected = state.selectedActions || {};
+    var keys = Array.isArray(optionKeys) ? optionKeys : (Array.isArray(state.actionOptionKeys) ? state.actionOptionKeys : []);
+    if (keys.length) {
+      var any = false;
+      keys.forEach(function(key) {
+        if (selected[key]) any = true;
+      });
+      if (!any) {
+        state.selectedActions = { all: true };
+        return;
+      }
+      var allSelected = true;
+      keys.forEach(function(key) {
+        if (!selected[key]) allSelected = false;
+      });
+      if (allSelected) {
+        state.selectedActions = { all: true };
+      } else {
+        state.selectedActions.all = false;
+      }
+      return;
+    }
+    var hasSelection = false;
+    Object.keys(selected).forEach(function(key) {
+      if (key === 'all') return;
+      if (selected[key]) hasSelection = true;
+    });
+    if (!hasSelection) state.selectedActions = { all: true };
+  }
+
+  function syncActionGrid() {
+    if (!dom.actionGrid) return;
+    var list = Array.isArray(state.logs) ? state.logs : [];
+    var execLogs = buildExecCaseRunLogs(list);
+    var options = buildActionFilterOptions(list.concat(execLogs));
+    var optionKeys = options.map(function(item) { return item.key; });
+    state.actionOptionKeys = optionKeys;
+    trimActionSelection(optionKeys);
+    syncAllActionSelection(optionKeys);
+    var selected = state.selectedActions || { all: true };
+    var html = ['<label class="ops-log-filter-chip">' +
+      '<input type="checkbox" data-ops-log-action="all"' + (selected.all ? ' checked' : '') + ' />' +
+      '<span>全部</span>' +
+    '</label>'];
+    options.forEach(function(item) {
+      var key = item.key;
+      var checked = '';
+      if (!selected.all && selected[key]) checked = ' checked';
+      html.push(
+        '<label class="ops-log-filter-chip">' +
+          '<input type="checkbox" data-ops-log-action="' + escapeHtml(key) + '"' + checked + ' />' +
+          '<span>' + escapeHtml(item.label) + '</span>' +
+        '</label>'
+      );
+    });
+    dom.actionGrid.innerHTML = html.join('');
   }
 
   function syncOpsLogDateRange() {
@@ -2557,6 +2697,12 @@
     if (selected.all) {
       return list.filter(function(log) {
         return isTimeInRange(log && log.created_at, range);
+      }).filter(function(log) {
+        var selectedActions = state.selectedActions || { all: true };
+        if (selectedActions.all) return true;
+        var label = resolveActionFilterLabel(log);
+        if (!label) return false;
+        return Boolean(selectedActions[label]);
       }).sort(function(a, b) {
         return (parseTimeMs(b && b.created_at) || 0) - (parseTimeMs(a && a.created_at) || 0);
       });
@@ -2573,6 +2719,12 @@
         if (allow[keys[i]]) return true;
       }
       return false;
+    }).filter(function(log) {
+      var selected = state.selectedActions || { all: true };
+      if (selected.all) return true;
+      var label = resolveActionFilterLabel(log);
+      if (!label) return false;
+      return Boolean(selected[label]);
     }).sort(function(a, b) {
       return (parseTimeMs(b && b.created_at) || 0) - (parseTimeMs(a && a.created_at) || 0);
     });
@@ -2778,6 +2930,7 @@
       .then(function(payload) {
         state.logs = payload && payload.logs ? payload.logs : [];
         state.pageIndex = 0;
+        syncActionGrid();
         renderList();
         var allowedCount = payload && Number.isFinite(payload.allowedCount) ? payload.allowedCount : state.logs.filter(isAllowedLog).length;
         var hasRange = range && (range.startMs !== null || range.endMs !== null);
@@ -2981,6 +3134,7 @@
         persistViewState();
         setStatus(dom.drawerStatusEl, '加载中...', '');
         syncTargetGrid();
+        syncActionGrid();
         loadUsers().then(function() {
           syncUserSelect();
           return loadLogs();
@@ -3137,6 +3291,35 @@
         }
         syncAllTargetSelection();
         syncTargetGrid();
+        state.pageIndex = 0;
+        persistViewState();
+        renderList();
+      });
+    }
+    if (dom.actionGrid) {
+      dom.actionGrid.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        var key = t && t.dataset ? String(t.dataset.opsLogAction || '') : '';
+        if (!key) return;
+        if (key === 'all') {
+          state.selectedActions = { all: Boolean(t.checked) };
+          if (!t.checked) state.selectedActions = { all: true };
+          syncActionGrid();
+          state.pageIndex = 0;
+          persistViewState();
+          renderList();
+          return;
+        }
+        if (!state.selectedActions || typeof state.selectedActions !== 'object') state.selectedActions = { all: true };
+        if (state.selectedActions.all) {
+          var next = { all: false };
+          next[key] = Boolean(t.checked);
+          state.selectedActions = next;
+        } else {
+          state.selectedActions[key] = Boolean(t.checked);
+        }
+        syncAllActionSelection();
+        syncActionGrid();
         state.pageIndex = 0;
         persistViewState();
         renderList();

@@ -129,6 +129,12 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('解散归档');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('覆盖入库');
 
+    // 操作行为筛选：点击“批量新增”后仅保留批量新增记录。
+    await page.click('input[data-ops-log-action="批量新增"]');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('批量新增3条');
+    await expect(page.locator('#opsLogDrawerTableBody')).not.toContainText('批量删除2条');
+    await page.click('input[data-ops-log-action="all"]');
+
     // 人员筛选：仅看 user_b。
     await page.selectOption('#opsLogUserSelect', '2');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('user_b');
