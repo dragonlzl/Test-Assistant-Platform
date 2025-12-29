@@ -178,6 +178,8 @@ body {
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      justify-content: center;
+      width: 100%;
       box-shadow: 0 6px 16px rgba(37,99,235,0.35);
       cursor: pointer;
       transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -200,6 +202,48 @@ body {
       justify-content: center;
       font-weight: 700;
       font-size: 13px;
+    }
+.sidebar-header-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.guide-pill {
+  border: none;
+  background: linear-gradient(135deg, #f97316, #fb7185);
+  color: #fff;
+  font-size: 13px;
+  border-radius: 999px;
+  padding: 6px 14px 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  width: 100%;
+  box-shadow: 0 6px 16px rgba(249,115,22,0.3);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+    .guide-pill:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 22px rgba(249,115,22,0.3);
+    }
+    .guide-pill:focus-visible {
+      outline: 2px solid rgba(249,115,22,0.35);
+      outline-offset: 2px;
+    }
+    .guide-pill .icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.25);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
     }
     h1 {
       margin: 0 0 6px;
@@ -3518,6 +3562,279 @@ body {
   overflow-y: auto;
   height: calc(100vh - 60px);
   overscroll-behavior: contain;
+}
+.guide-entry-card {
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(15,23,42,0.08);
+  border-radius: 14px;
+  background: #fff;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 10px 24px rgba(15,23,42,0.08);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+#flowGuideDrawerBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.guide-entry-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(249,115,22,0.35);
+  box-shadow: 0 16px 32px rgba(249,115,22,0.18);
+}
+.guide-entry-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+}
+.guide-entry-desc {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+body.guide-active {
+  overflow: hidden;
+}
+body.guide-active * {
+  pointer-events: none;
+}
+body.guide-active .guide-focus,
+body.guide-active .guide-tooltip,
+body.guide-active .guide-tooltip * {
+  pointer-events: auto;
+}
+body.guide-active .guide-allow,
+body.guide-active .guide-allow * {
+  pointer-events: auto;
+}
+
+.guide-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9800;
+  pointer-events: none;
+}
+.guide-overlay.hidden {
+  display: none;
+}
+.guide-focus {
+  position: fixed;
+  z-index: 9810;
+  border-radius: 12px;
+  border: 2px solid rgba(255,255,255,0.9);
+  box-shadow: 0 0 0 9999px var(--guide-dim, rgba(15,23,42,0.72));
+  background: transparent;
+  transition: all 0.18s ease;
+}
+.guide-focus.hidden {
+  display: none;
+}
+.guide-focus::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  border: 2px solid rgba(249,115,22,0.9);
+  box-shadow: 0 0 0 6px rgba(249,115,22,0.18);
+  animation: guidePulse 1.6s ease-in-out infinite;
+}
+.guide-focus.guide-proxy {
+  cursor: pointer;
+  border-color: rgba(249,115,22,0.85);
+}
+.guide-focus.guide-proxy::after {
+  border-color: rgba(249,115,22,0.95);
+  box-shadow: 0 0 0 10px rgba(249,115,22,0.22);
+}
+.guide-tooltip {
+  position: fixed;
+  z-index: 9820;
+  min-width: 220px;
+  max-width: 360px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px 14px 14px;
+  border: 1px solid rgba(15,23,42,0.1);
+  box-shadow: 0 18px 32px rgba(15,23,42,0.2);
+}
+.guide-tooltip.hidden {
+  display: none;
+}
+.guide-tooltip-actions {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: flex;
+  gap: 8px;
+}
+.guide-skip-step,
+.guide-skip-all {
+  border: none;
+  background: rgba(15,23,42,0.06);
+  color: #1f2937;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.guide-skip-all {
+  background: rgba(239,68,68,0.12);
+  color: #b91c1c;
+}
+.guide-tooltip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 14px;
+}
+.guide-tooltip-text {
+  font-size: 13px;
+  color: #1f2937;
+  line-height: 1.55;
+}
+.guide-tooltip-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #f97316;
+}
+.guide-tooltip-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  fill: none;
+}
+
+.guide-fake-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 9700;
+  background: linear-gradient(180deg, rgba(248,250,252,0.95), rgba(241,245,249,0.98));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 32px;
+  overflow: auto;
+}
+.guide-fake-panel.hidden {
+  display: none;
+}
+.guide-fake-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.guide-fake-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+}
+.guide-fake-sub {
+  font-size: 12px;
+  color: #64748b;
+}
+.guide-fake-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.guide-version-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.guide-focus-block {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid rgba(15,23,42,0.08);
+  padding: 12px 14px;
+  box-shadow: 0 8px 16px rgba(15,23,42,0.08);
+}
+
+.guide-fake-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 9705;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15,23,42,0.25);
+}
+.guide-fake-drawer.hidden {
+  display: none;
+}
+.guide-fake-drawer-inner {
+  width: min(360px, 92vw);
+  height: 100%;
+  background: #fff;
+  box-shadow: -8px 0 24px rgba(15,23,42,0.18);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.guide-fake-drawer-header {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+.guide-fake-drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.guide-fake-label {
+  font-size: 12px;
+  color: #475569;
+}
+.guide-fake-select {
+  border: 1px solid rgba(15,23,42,0.16);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.guide-fake-actions {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.guide-missing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.guide-missing-item {
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid rgba(15,23,42,0.08);
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #1f2937;
+  box-shadow: 0 6px 14px rgba(15,23,42,0.08);
+}
+.guide-missing-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.guide-archive-btn {
+  position: fixed;
+  right: 24px;
+  top: 140px;
+  z-index: 9701;
+}
+.guide-archive-btn.hidden {
+  display: none;
+}
+
+@keyframes guidePulse {
+  0% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(0.92); opacity: 0.6; }
+  100% { transform: scale(1); opacity: 0.9; }
 }
 .confirm-drawer-message {
   margin: 0 0 12px;
@@ -7458,6 +7775,75 @@ button.exec-overview-file-chip,
   background: var(--panel);
   border-bottom-color: var(--border);
 }
+:root[data-theme="dark"] .guide-entry-card {
+  background: var(--card);
+  border-color: var(--border);
+  box-shadow: var(--shadow);
+}
+:root[data-theme="dark"] .guide-entry-card:hover {
+  border-color: rgba(125,180,255,0.45);
+  box-shadow: 0 18px 32px rgba(0,0,0,0.45);
+}
+:root[data-theme="dark"] .guide-entry-title {
+  color: var(--text);
+}
+:root[data-theme="dark"] .guide-entry-desc {
+  color: var(--muted);
+}
+:root[data-theme="dark"] .guide-tooltip {
+  background: var(--card);
+  border-color: var(--border);
+  box-shadow: var(--shadow);
+}
+:root[data-theme="dark"] .guide-tooltip-text {
+  color: var(--text);
+}
+:root[data-theme="dark"] .guide-skip-step {
+  background: rgba(148,163,184,0.2);
+  color: var(--text);
+}
+:root[data-theme="dark"] .guide-skip-all {
+  background: rgba(248,113,113,0.2);
+  color: #fecaca;
+}
+:root[data-theme="dark"] .guide-fake-panel {
+  background: linear-gradient(180deg, rgba(19,26,38,0.97), rgba(18,24,35,0.99));
+}
+:root[data-theme="dark"] .guide-fake-title {
+  color: var(--text);
+}
+:root[data-theme="dark"] .guide-fake-sub {
+  color: var(--muted);
+}
+:root[data-theme="dark"] .guide-focus-block {
+  background: var(--panel);
+  border-color: var(--border);
+  box-shadow: var(--shadow);
+}
+:root[data-theme="dark"] .guide-missing-item {
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+:root[data-theme="dark"] .guide-fake-drawer {
+  background: rgba(0,0,0,0.55);
+}
+:root[data-theme="dark"] .guide-fake-drawer-inner {
+  background: var(--card);
+  box-shadow: -12px 0 32px rgba(0,0,0,0.6);
+}
+:root[data-theme="dark"] .guide-fake-drawer-header {
+  color: var(--text);
+}
+:root[data-theme="dark"] .guide-fake-label {
+  color: var(--muted);
+}
+:root[data-theme="dark"] .guide-fake-select {
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text);
+}
 :root[data-theme="dark"] .zone {
   background: rgba(26,34,49,0.65);
   border-color: rgba(96,165,250,0.5);
@@ -8185,6 +8571,22 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .temp-req-box.dragover {
   background: rgba(125,180,255,0.16);
   outline-color: rgba(125,180,255,0.7);
+}
+:root[data-theme="dark"] .temp-version-card {
+  background: linear-gradient(135deg, #1b2433 0%, #1f2a3c 100%);
+  border-color: var(--border);
+  box-shadow: var(--shadow);
+}
+:root[data-theme="dark"] .temp-version-card.dragover {
+  border-color: rgba(125,180,255,0.8);
+  box-shadow: 0 10px 22px rgba(96,165,250,0.25);
+}
+:root[data-theme="dark"] .temp-version-card .title {
+  color: var(--text);
+}
+:root[data-theme="dark"] .temp-version-card .remove {
+  background: rgba(255,255,255,0.12);
+  color: var(--text);
 }
 :root[data-theme="dark"] .temp-version-card .temp-req-box.dragover {
   background: rgba(34,197,94,0.18);

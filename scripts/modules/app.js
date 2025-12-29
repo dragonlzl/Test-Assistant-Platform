@@ -1894,6 +1894,11 @@
     }
     if (runtime && runtime.switchTab) switchTab = runtime.switchTab;
     window.app.switchTab = switchTab;
+    initModule('flowGuide', {
+      utils: appUtils,
+      switchTab: switchTab,
+      setStatus: setStatus,
+    });
     initModule('pageGuide', {
       state: state,
       config: {

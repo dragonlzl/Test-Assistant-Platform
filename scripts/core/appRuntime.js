@@ -712,6 +712,7 @@
         }
       }
     }
+    if (window.app) window.app.showTabGroup = showTabGroup;
 
     function markActiveTabGroup(tabName) {
       var activeGroup = '';

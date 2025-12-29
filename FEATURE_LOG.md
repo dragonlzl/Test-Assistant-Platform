@@ -19,6 +19,29 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：功能引导流程（强制遮罩）
+- 功能描述：新增左侧“功能引导”按钮与抽屉，提供用例导入/执行/AI一键/用例生成等多流程强制引导，遮罩锁定非目标区域并支持跳过。
+- 操作方式：点击侧边栏“功能引导”→选择需要的引导流程→按提示点击高亮区域，支持“跳过这一步/跳过全部”。
+- 使用效果：引导自动跳转到首节点所在页面，流程步骤化提示、强制遮罩与聚拢描边聚焦，刷新可续引导。
+- 新增内容/接口/组件：
+  - 前端：引导按钮与抽屉（`index.html`、`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`settings.html`）。
+  - 前端：引导模块与流程配置（`scripts/modules/flowGuide.js`）、引导样式与假页面样式（`style.css`）。
+  - 前端：暴露菜单展开方法（`scripts/core/appRuntime.js`）、接入模块初始化（`scripts/modules/app.js`）。
+  - 测试：功能引导抽屉 UI 用例（`tests/ui/flow_guide_drawer.spec.js`）。
+- 复用说明：复用现有 drawer 机制与 tab 切换逻辑，无新增后端接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/flow_guide_drawer.spec.js`（通过，需提权启动本地 WebServer）
+- 更新记录：2025-02-18 新增功能引导按钮与强制引导流程（`scripts/modules/flowGuide.js`、`style.css`、各入口 HTML、`tests/ui/flow_guide_drawer.spec.js`）。
+- 更新记录：2025-12-29 引导支持悬停触发与跳过单步用例（`scripts/modules/flowGuide.js`、`tests/ui/flow_guide_drawer.spec.js`）。
+- 更新记录：2025-12-29 引导遮罩禁用滚动并锁定菜单关闭（`scripts/modules/flowGuide.js`）。
+- 更新记录：2025-12-29 抽屉引导遮罩可点击与遮罩可见性调整（`scripts/modules/flowGuide.js`）。
+- 更新记录：2025-12-29 引导聚拢描边与透明区域强化（`style.css`）。
+- 更新记录：2025-12-29 引导焦点等待抽屉过渡并二次定位（`scripts/modules/flowGuide.js`）。
+- 更新记录：2025-12-29 左侧引导按钮下移至页面说明下方（`index.html`、`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`settings.html`、`style.css`）。
+- 更新记录：2025-12-29 功能引导抽屉与假页面暗色主题适配（`style.css`）。
+- 更新记录：2025-12-29 假页面版本盒子暗色主题适配（`style.css`）。
+- 更新记录：2025-12-29 选择用例执行引导阻止下拉触发并确保聚拢定位（`scripts/modules/flowGuide.js`）。
+
 - 功能名称：多页面 HTML 拆分与跨页导航
 - 功能描述：将原本集中在 `index.html` 的功能页拆分为 6 个独立 HTML 页面，并为跨页切换补充 tab → 页面映射与跳转逻辑。
 - 操作方式：访问 `ai-workflow.html`/`ai-tools.html`/`case-exec.html`/`case-library.html`/`admin.html`/`settings.html`，或在侧边栏点击非当前页签自动跳转对应页面。

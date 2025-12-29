@@ -49,10 +49,16 @@
 </div>
 <div class="sidebar-header">
 <h1>用例助手</h1>
+<div class="sidebar-header-actions">
 <button class="help-pill" id="pageGuideTrigger" type="button">
 <span class="icon">?</span>
 <span>页面说明</span>
 </button>
+<button class="guide-pill" id="flowGuideTrigger" type="button">
+<span class="icon">G</span>
+<span>功能引导</span>
+</button>
+</div>
 </div>
 <div class="path-panel" id="currentPath">
   <div class="path-title">
@@ -3038,6 +3044,16 @@
       </div>
     </div>
   </div>
+  <div class="drawer hidden" id="flowGuideDrawer">
+    <div class="drawer-mask" data-drawer-close="flowGuideDrawer"></div>
+    <div class="drawer-panel">
+      <div class="drawer-header">
+        <h3 id="flowGuideDrawerTitle">功能引导</h3>
+        <button class="link-toggle" id="closeFlowGuideDrawerBtn" data-drawer-close="flowGuideDrawer">收起</button>
+      </div>
+      <div class="drawer-body" id="flowGuideDrawerBody"></div>
+    </div>
+  </div>
   <div class="drawer hidden" id="pageGuideDrawer">
     <div class="drawer-mask" data-drawer-close="pageGuideDrawer"></div>
     <div class="drawer-panel">
@@ -3115,6 +3131,7 @@
 <script src="./scripts/modules/opsLog.js" defer></script>
 <script src="./scripts/modules/admin.js" defer></script>
 <script src="./scripts/modules/authGuard.js" defer></script>
+<script src="./scripts/modules/flowGuide.js" defer></script>
 <script src="./scripts/modules/pageGuide.js" defer></script>
 <script src="./scripts/modules/app.js" defer></script>
 <script src="./scripts/modules/bootstrap.js" defer></script>
