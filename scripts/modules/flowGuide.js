@@ -55,6 +55,15 @@
       return String(Date.now()) + '_' + Math.random().toString(36).slice(2, 8);
     }
 
+    function scrollPageToTop() {
+      if (typeof window === 'undefined') return;
+      if (document.documentElement) document.documentElement.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+      if (typeof window.scrollTo === 'function') {
+        window.scrollTo(0, 0);
+      }
+    }
+
     function detectPassiveOptions() {
       var supportsPassive = false;
       try {
@@ -272,11 +281,11 @@
       tooltipEl.id = 'flowGuideTooltip';
       tooltipEl.className = 'guide-tooltip hidden';
       tooltipEl.innerHTML =
-        '<div class="guide-tooltip-actions" id="flowGuideTooltipActions"></div>' +
         '<div class="guide-tooltip-body">' +
           '<div class="guide-tooltip-text" id="flowGuideTooltipText"></div>' +
           '<div class="guide-tooltip-icon" id="flowGuideTooltipIcon"></div>' +
-        '</div>';
+        '</div>' +
+        '<div class="guide-tooltip-actions" id="flowGuideTooltipActions"></div>';
       document.body.appendChild(tooltipEl);
 
       tooltipTextEl = document.getElementById('flowGuideTooltipText');
@@ -727,20 +736,38 @@
       if (fakeExecVersionPanel) return fakeExecVersionPanel;
       fakeExecVersionPanel = document.createElement('div');
       fakeExecVersionPanel.id = 'guideFakeExecVersionPanel';
-      fakeExecVersionPanel.className = 'guide-fake-drawer hidden';
+      fakeExecVersionPanel.className = 'drawer guide-fake-drawer hidden';
       fakeExecVersionPanel.innerHTML =
-        '<div class="guide-fake-drawer-inner">' +
-          '<div class="guide-fake-drawer-header">选择执行版本（引导演示）</div>' +
-          '<div class="guide-fake-drawer-body">' +
-            '<label class="guide-fake-label" for="guideExecVersionSelect">执行版本</label>' +
-            '<select id="guideExecVersionSelect" class="guide-fake-select">' +
-              '<option value="">请选择版本</option>' +
-              '<option value="1.0.0">1.0.0</option>' +
-              '<option value="1.1.0">1.1.0</option>' +
-            '</select>' +
-            '<p class="hint" style="margin:8px 0 0;">此处为引导示例，不会实际提交</p>' +
-            '<div class="guide-fake-actions">' +
-              '<button class="pill primary" id="guideExecVersionConfirm" type="button">确认并继续</button>' +
+        '<div class="drawer-mask"></div>' +
+        '<div class="drawer-panel">' +
+          '<div class="drawer-header">' +
+            '<h3>选择执行版本</h3>' +
+            '<button class="link-toggle" type="button">收起</button>' +
+          '</div>' +
+          '<div class="drawer-body">' +
+            '<p class="hint" style="margin:0 0 10px;">导入版本仅用于记录用例库归属；执行版本用于“用例执行”页面的版本分组、归档筛选等展示与统计。</p>' +
+            '<div class="case-library-drawer-meta" style="margin-bottom:10px;">' +
+              '<div class="meta-line">' +
+                '<span class="label">项目</span>' +
+                '<span class="value">--</span>' +
+              '</div>' +
+              '<div class="meta-line">' +
+                '<span class="label">导入版本</span>' +
+                '<span class="value">--</span>' +
+              '</div>' +
+            '</div>' +
+            '<div class="case-library-filters" style="margin-bottom:8px;">' +
+              '<span class="case-library-label">执行版本</span>' +
+              '<select id="guideExecVersionSelect">' +
+                '<option value="">请选择版本</option>' +
+                '<option value="1.0.0">1.0.0</option>' +
+                '<option value="1.1.0">1.1.0</option>' +
+              '</select>' +
+            '</div>' +
+            '<p class="status"></p>' +
+            '<div class="actions user-form-actions" style="justify-content:flex-end; gap:8px;">' +
+              '<button class="primary" id="guideExecVersionConfirm" type="button">确认并继续</button>' +
+              '<button class="ghost-btn" type="button">取消</button>' +
             '</div>' +
           '</div>' +
         '</div>';
@@ -1259,6 +1286,7 @@
       }
       var flow = guideFlows[id];
       if (!flow) return;
+      scrollPageToTop();
       activeGuideId = id;
       activeFlow = flow;
       if (id === 'temp-exec' && !options.sessionId) {
@@ -1856,7 +1884,10 @@
         var btn = e && e.target && e.target.closest ? e.target.closest('[data-guide-start]') : null;
         if (!btn || !btn.dataset) return;
         var id = btn.dataset.guideStart;
-        if (guideDrawer && typeof guideDrawer.close === 'function') guideDrawer.close();
+        if (guideDrawer && typeof guideDrawer.close === 'function') {
+          try { if (window.app) window.app.__drawerSkipRestoreOnce = true; } catch (_) {}
+          guideDrawer.close();
+        }
         startGuide(id);
       });
     }

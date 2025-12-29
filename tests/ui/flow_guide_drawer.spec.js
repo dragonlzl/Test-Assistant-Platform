@@ -51,6 +51,33 @@ test.describe('功能引导抽屉', () => {
     await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
   });
 
+  test('启动引导会回到顶部', async ({ page }) => {
+    await page.evaluate(() => {
+      var spacer = document.getElementById('__guideScrollSpacer');
+      if (!spacer) {
+        spacer = document.createElement('div');
+        spacer.id = '__guideScrollSpacer';
+        spacer.style.height = '2000px';
+        document.body.appendChild(spacer);
+      }
+      window.scrollTo(0, document.body.scrollHeight);
+    });
+    await page.waitForFunction(() => window.scrollY > 0);
+    const beforeScroll = await page.evaluate(() => window.scrollY);
+    expect(beforeScroll).toBeGreaterThan(0);
+
+    await page.locator('#flowGuideTrigger').click();
+    await page.locator('[data-guide-start="case-library-import"]').click();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('用例相关');
+    await page.waitForFunction(() => !document.body.classList.contains('drawer-open'));
+    await page.waitForFunction(() => window.scrollY === 0);
+    const afterScroll = await page.evaluate(() => window.scrollY);
+    expect(afterScroll).toBe(0);
+
+    await page.locator('.guide-skip-all').click();
+    await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
+  });
+
   test('执行分配拖拽放手后进入下一步', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/case-exec.html');

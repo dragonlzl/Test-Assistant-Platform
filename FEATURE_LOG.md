@@ -2916,3 +2916,38 @@
 - 更新记录：2025-12-28 执行分配引导改为版本盒子布局并支持拖拽占位与滚动（`scripts/modules/flowGuide.js`、`style.css`、`tests/ui/flow_guide_drawer.spec.js`）。
 - 更新记录：2025-12-28 执行分配引导拖拽提示防抖与手势指引（`scripts/modules/flowGuide.js`、`style.css`）。
 - 更新记录：2025-12-28 执行分配引导手势指引跟随滚动并限制在版本盒子内（`scripts/modules/flowGuide.js`）。
+
+- 功能名称：引导启动自动回顶
+- 功能描述：启动任何引导前自动将页面滚动回顶部，避免顶部导航不在视口导致引导节点定位失败。
+- 操作方式：页面滚动到下方后打开引导抽屉并启动任一引导，页面会自动回到顶部。
+- 使用效果：顶部导航始终可见，引导步骤定位稳定。
+- 新增内容/接口/组件：
+  - 前端：引导启动回顶逻辑（`scripts/modules/flowGuide.js`）。
+  - 测试：引导回顶场景覆盖（`tests/ui/flow_guide_drawer.spec.js`）。
+- 复用说明：复用现有引导启动流程，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/flow_guide_drawer.spec.js`
+- 更新记录：2025-12-28 引导启动自动回顶（`scripts/modules/flowGuide.js`、`tests/ui/flow_guide_drawer.spec.js`）。
+- 更新记录：2025-12-28 引导启动关闭抽屉时跳过滚动恢复（`scripts/modules/flowGuide.js`、`tests/ui/flow_guide_drawer.spec.js`）。
+
+- 功能名称：引导假执行版本抽屉对齐真实布局
+- 功能描述：引导中的“选择执行版本”假页面改为真实抽屉布局，宽度保持三分之二，与正式页面结构一致。
+- 操作方式：启动“用例导入引导（用例执行）”，进入选择执行版本步骤，检查抽屉宽度与布局。
+- 使用效果：假页面与真实执行版本抽屉视觉一致，减少理解偏差。
+- 新增内容/接口/组件：
+  - 前端：假执行版本抽屉结构与样式对齐（`scripts/modules/flowGuide.js`、`style.css`）。
+- 复用说明：复用现有抽屉与执行版本选择布局样式，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/flow_guide_drawer.spec.js`
+- 更新记录：2025-12-28 引导假执行版本抽屉对齐真实布局（`scripts/modules/flowGuide.js`、`style.css`）。
+
+- 功能名称：引导跳过按钮布局调整
+- 功能描述：引导提示中的跳过按钮移至右下角，并与说明文字保持一行间隔。
+- 操作方式：触发任一引导步骤，检查提示框中“跳过这一步/跳过全部”位于右下角且与描述分隔。
+- 使用效果：提示按钮布局更清晰，阅读与操作区分明确。
+- 新增内容/接口/组件：
+  - 前端：提示框布局与按钮位置调整（`scripts/modules/flowGuide.js`、`style.css`）。
+- 复用说明：复用现有提示框结构与按钮样式，无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/flow_guide_drawer.spec.js`
+- 更新记录：2025-12-28 引导跳过按钮布局调整（`scripts/modules/flowGuide.js`、`style.css`）。
