@@ -6328,6 +6328,155 @@
     }
   }
 
+  function getActiveEditorInlineCell() {
+    if (typeof document === 'undefined') return null;
+    if (!dom.editView || !dom.editView.contains) return null;
+    var active = document.activeElement;
+    if (!active || !dom.editView.contains(active)) return null;
+    if (!active.getAttribute) return null;
+    var field = active.getAttribute('data-case-lib-edit-field');
+    if (!field) return null;
+    return active;
+  }
+
+  function isCaseLibraryEditorEditing() {
+    if (typeof document === 'undefined') return false;
+    if (!dom.editView || !dom.editView.contains) return false;
+    var active = document.activeElement;
+    if (!active || !dom.editView.contains(active)) return false;
+    if (!active.getAttribute) return false;
+    if (active.getAttribute('data-case-lib-edit-field')) return true;
+    if (active.getAttribute('data-case-lib-remark')) return true;
+    return false;
+  }
+
+  function normalizeInlineDisplayText(value, multiline) {
+    var text = stripInvisibleMarkers(value);
+    if (multiline) return text;
+    return text.replace(/\r\n/g, '\n').replace(/\n/g, ' ');
+  }
+
+  function ensureEditorAutoSaveState() {
+    if (!state.editor || typeof state.editor !== 'object') return null;
+    if (!state.editor.autoSaveTimers || typeof state.editor.autoSaveTimers !== 'object') {
+      state.editor.autoSaveTimers = {};
+    }
+    if (!state.editor.autoSaveInFlight || typeof state.editor.autoSaveInFlight !== 'object') {
+      state.editor.autoSaveInFlight = {};
+    }
+    return state.editor;
+  }
+
+  function tryAutoSaveCaseItemAtIndex(index) {
+    var ed = state.editor;
+    if (!ed || !ed.caseFile || !ed.caseFile.id) return;
+    var idx = Number(index);
+    if (!isFinite(idx) || idx < 0 || idx >= ed.items.length) return;
+    var item = ed.items[idx];
+    if (!item || !item.id) return;
+    var payload = buildCaseItemPayload(item);
+    var err = validatePayload(payload);
+    if (err) return;
+    var idKey = String(item.id);
+    var store = ensureEditorAutoSaveState();
+    if (!store) return;
+    if (store.autoSaveInFlight[idKey]) {
+      store.autoSaveInFlight[idKey] = 'pending';
+      return;
+    }
+    store.autoSaveInFlight[idKey] = true;
+    apiClient.updateCaseItem(item.id, payload).then(function(updated) {
+      if (updated && typeof updated === 'object' && (updated.id || updated.id === 0)) {
+        ed.items[idx] = updated;
+      }
+    }).catch(function() {
+      // auto-save failure is silent; manual save still works on blur.
+    }).finally(function() {
+      var stateVal = store.autoSaveInFlight[idKey];
+      delete store.autoSaveInFlight[idKey];
+      if (stateVal === 'pending') {
+        store.autoSaveInFlight[idKey] = false;
+        setTimeout(function() { tryAutoSaveCaseItemAtIndex(idx); }, 200);
+      }
+    });
+  }
+
+  function scheduleEditorAutoSave(index) {
+    var ed = ensureEditorAutoSaveState();
+    if (!ed) return;
+    var key = String(index);
+    if (ed.autoSaveTimers[key]) {
+      clearTimeout(ed.autoSaveTimers[key]);
+    }
+    ed.autoSaveTimers[key] = setTimeout(function() {
+      delete ed.autoSaveTimers[key];
+      tryAutoSaveCaseItemAtIndex(index);
+    }, 800);
+  }
+
+  function syncEditorRowInputToItem(index, item, options) {
+    if (!dom.editView || !dom.editView.querySelector) return false;
+    if (!item) return false;
+    var idx = Number(index);
+    if (!isFinite(idx)) return false;
+    var opts = options || {};
+    var skipEmptyRequired = opts.skipEmptyRequired === true;
+    var fields = [
+      { key: 'module', multiline: false, required: true },
+      { key: 'title', multiline: false, required: true },
+      { key: 'priority', multiline: false },
+      { key: 'precondition', multiline: true },
+      { key: 'steps', multiline: true },
+      { key: 'expected', multiline: true, required: true },
+    ];
+    var changed = false;
+    fields.forEach(function(meta) {
+      var cell = dom.editView.querySelector('[data-case-lib-edit-field="' + meta.key + '"][data-index="' + idx + '"]');
+      if (!cell) return;
+      var raw = meta.multiline ? cell.innerText : cell.textContent;
+      var next = normalizeEditorText(raw);
+      if (skipEmptyRequired && meta.required && !next) return;
+      if (item[meta.key] !== next) {
+        item[meta.key] = next;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  function flushEditorPendingRender() {
+    if (!state.editor || !state.editor.pendingRender) return;
+    if (isCaseLibraryEditorEditing()) return;
+    state.editor.pendingRender = false;
+    renderEditorTable();
+  }
+
+  function syncEditorRowInlineText(index, item, activeCell) {
+    if (!dom.editView || !dom.editView.querySelector) return false;
+    if (!item) return false;
+    var idx = Number(index);
+    if (!isFinite(idx)) return false;
+    var fields = [
+      { key: 'module', multiline: false },
+      { key: 'title', multiline: false },
+      { key: 'priority', multiline: false },
+      { key: 'precondition', multiline: true },
+      { key: 'steps', multiline: true },
+      { key: 'expected', multiline: true },
+    ];
+    var changed = false;
+    fields.forEach(function(meta) {
+      var cell = dom.editView.querySelector('[data-case-lib-edit-field="' + meta.key + '"][data-index="' + idx + '"]');
+      if (!cell || cell === activeCell) return;
+      var nextText = normalizeInlineDisplayText(item[meta.key], meta.multiline);
+      if (cell.textContent !== nextText) {
+        cell.textContent = nextText;
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
   function renderEditorTable() {
     if (!dom.editView) return;
     if (!state.editor.caseFile) {
@@ -6849,13 +6998,11 @@
       if (ed.pendingRemaining <= 0) {
         clearInterval(ed.pendingInterval);
         ed.pendingInterval = null;
+        commitPendingOp();
         return;
       }
       renderCountdown();
     }, 1000);
-    ed.pendingTimer = setTimeout(function() {
-      commitPendingOp();
-    }, ed.pendingRemaining * 1000);
   }
 
 	  function buildCaseItemPayload(item) {
@@ -6899,8 +7046,15 @@
     }
     setStatus(dom.editStatus, (reason || '保存中') + '...', '');
     apiClient.updateCaseItem(item.id, payload).then(function(updated) {
-      if (updated) ed.items[idx] = updated;
+      if (updated && typeof updated === 'object' && (updated.id || updated.id === 0)) {
+        ed.items[idx] = updated;
+      }
       setStatus(dom.editStatus, '已保存', 'ok');
+      var activeCell = getActiveEditorInlineCell();
+      if (activeCell) {
+        syncEditorRowInlineText(idx, ed.items[idx], activeCell);
+        return;
+      }
       renderEditorTable();
     }).catch(function(e) {
       setStatus(dom.editStatus, e && e.message ? e.message : '保存失败', 'err');
@@ -7019,6 +7173,7 @@
         if (idx === -1) return;
         var item = ed.items[idx];
         if (!item) return;
+        syncEditorRowInputToItem(idx, item, { skipEmptyRequired: true });
         entries.push({ index: idx, item: item, key: key });
       });
 
@@ -7095,11 +7250,19 @@
         );
         if (!failures.length) {
           setStatus(dom.editStatus, '批量新增已入库（' + entries.length + '条）', 'ok');
-          renderEditorTable();
+          if (isCaseLibraryEditorEditing()) {
+            state.editor.pendingRender = true;
+          } else {
+            renderEditorTable();
+          }
           return;
         }
         setStatus(dom.editStatus, '批量新增部分失败：成功 ' + (entries.length - failures.length) + ' 条，失败 ' + failures.length + ' 条', 'warn');
-        renderEditorTable();
+        if (isCaseLibraryEditorEditing()) {
+          state.editor.pendingRender = true;
+        } else {
+          renderEditorTable();
+        }
 	      }).catch(function(e) {
 	        setStatus(dom.editStatus, e && e.message ? e.message : '批量新增入库失败', 'err');
 	      }).finally(function() {
@@ -7116,6 +7279,7 @@
         return;
       }
       var newItem = ed.items[createIndex];
+      syncEditorRowInputToItem(createIndex, newItem, { skipEmptyRequired: true });
       var uiKey = getCaseLibraryEditorUiKey(newItem);
       var payload = buildCaseItemPayload(newItem);
       var err = validatePayload(payload);
@@ -7131,7 +7295,11 @@
           markCaseLibraryNewAdded(file.id, created);
         }
         setStatus(dom.editStatus, '新增已入库', 'ok');
-        renderEditorTable();
+        if (isCaseLibraryEditorEditing()) {
+          state.editor.pendingRender = true;
+        } else {
+          renderEditorTable();
+        }
 	      }).catch(function(e) {
 	        setStatus(dom.editStatus, e && e.message ? e.message : '新增入库失败', 'err');
 	      }).finally(function() {
@@ -8825,9 +8993,9 @@
           handlePaginationAction(pageBtn.getAttribute('data-case-lib-page'));
         }
       });
-      dom.editView.addEventListener('change', function(e) {
-        var t = e && e.target ? e.target : null;
-        if (!t) return;
+	      dom.editView.addEventListener('change', function(e) {
+	        var t = e && e.target ? e.target : null;
+	        if (!t) return;
         if (t.hasAttribute && t.hasAttribute('data-case-lib-page-input')) {
           handlePaginationJump(t.value);
           return;
@@ -8850,6 +9018,30 @@
 	          syncEditorBatchDeleteControls();
 	        }
 	      });
+        dom.editView.addEventListener('input', function(e) {
+          var t = e && e.target ? e.target : null;
+          if (!t || !t.getAttribute) return;
+          var field = t.getAttribute('data-case-lib-edit-field');
+          var idx = Number(t.getAttribute('data-index'));
+          if (field) {
+            if (!isFinite(idx)) return;
+            var item = state.editor.items[idx];
+            if (!item) return;
+            var multiline = String(t.getAttribute('data-case-lib-multiline') || '').toLowerCase() === 'true';
+            var raw = multiline ? t.innerText : t.textContent;
+            var next = normalizeEditorText(raw);
+            item[field] = next;
+            scheduleEditorAutoSave(idx);
+            return;
+          }
+          if (t.hasAttribute('data-case-lib-remark')) {
+            if (!isFinite(idx)) return;
+            var remarkItem = state.editor.items[idx];
+            if (!remarkItem) return;
+            remarkItem.remark = t.value || '';
+            scheduleEditorAutoSave(idx);
+          }
+        });
 	      dom.editView.addEventListener('focusout', function(e) {
 	        var t = e && e.target ? e.target : null;
 	        if (!t || !t.getAttribute) return;
@@ -8866,6 +9058,7 @@
 	        if (prevNorm === nextNorm) return;
 	        item[field] = nextNorm;
 	        saveCaseItemAtIndex(idx, '保存');
+          setTimeout(function() { flushEditorPendingRender(); }, 0);
 	      });
       dom.editView.addEventListener('blur', function(e) {
         var t = e && e.target ? e.target : null;
@@ -8877,6 +9070,7 @@
         if (!item) return;
         item.remark = t.value || '';
         saveCaseItemAtIndex(idx, '保存');
+        setTimeout(function() { flushEditorPendingRender(); }, 0);
       }, true);
     }
 
