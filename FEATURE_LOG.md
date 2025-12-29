@@ -3042,3 +3042,16 @@
 - 测试与验证：
   - 未运行自动化测试（需本地 UI 服务）。
 - 更新记录：2025-12-29 复用用例新增自动填充预设子项（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_reuse_preset_insert.spec.js`）。
+
+- 功能名称：操作记录执行用例聚合展示
+- 功能描述：操作记录列表新增“执行用例”行为，按天聚合为首条/末条记录，变化列展示执行前后数量并标记复用用例类型。
+- 操作方式：进入操作记录页的查看记录，可看到执行用例的首条与末条记录（当天末条在次日展示），变化列显示 `前 -> 后`。
+- 使用效果：执行记录更聚合，避免每次执行都刷屏。
+- 新增内容/接口/组件：
+  - 前端：执行用例聚合与展示（`scripts/modules/opsLog.js`）。
+  - 后端：执行记录补充复用子项统计字段（`backend/routers/exec_routes.py`）。
+  - 测试：覆盖执行用例聚合展示（`tests/ui/ops_log_exec_case_run.spec.js`）。
+- 复用说明：复用既有 update_exec_case 操作记录，无新增接口。
+- 测试与验证：
+  - 未运行自动化测试（需本地 UI 服务）。
+- 更新记录：2025-12-29 操作记录执行用例聚合展示（`scripts/modules/opsLog.js`、`tests/ui/ops_log_exec_case_run.spec.js`）。

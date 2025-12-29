@@ -222,6 +222,17 @@
     }
   }
 
+  function padDayPart(value) {
+    return value < 10 ? '0' + value : String(value);
+  }
+
+  function getDayKeyFromMs(value) {
+    if (!Number.isFinite(value)) return '';
+    var d = new Date(value);
+    if (!d || isNaN(d.getTime())) return '';
+    return d.getFullYear() + '-' + padDayPart(d.getMonth() + 1) + '-' + padDayPart(d.getDate());
+  }
+
   function resolveSingleUserId(list) {
     if (!Array.isArray(list) || list.length !== 1) return null;
     var raw = Number(list[0]);
@@ -595,6 +606,17 @@
 
     // 系统平台
     if (action === 'login' || action === 'logout' || action === 'change_password') return '系统平台';
+    if (action === 'exec_case_run') {
+      var execTitle = String(detail.case_title || detail.case_name || detail.title || '').trim();
+      var reuseFlag = String(detail.case_type || detail.reuse_type || '').trim().toLowerCase() === 'reuse';
+      if (!reuseFlag) {
+        var reuseTotal = Number(detail.reuse_total_count);
+        if (Number.isFinite(reuseTotal) && reuseTotal > 0) reuseFlag = true;
+      }
+      var suffix = reuseFlag ? '（复）' : '';
+      if (execTitle) return '用例：' + execTitle + suffix;
+      return '用例' + suffix;
+    }
 
     // 解散归档占位（执行页版本盒子）
     if (action === 'dissolve_exec_archived_placeholders') {
@@ -1533,12 +1555,15 @@
 
   function normalizeExecCaseKey(detail) {
     if (!detail || typeof detail !== 'object') return '';
+    var execSetId = (detail.exec_set_id || detail.exec_set_id === 0) ? String(detail.exec_set_id) : '';
     var moduleText = normalizeCaseText(detail.module);
     var titleText = normalizeCaseText(detail.title);
     var preText = normalizeCaseText(detail.precondition);
     var stepsText = normalizeCaseText(detail.steps);
     var expectedText = normalizeCaseText(detail.expected);
-    return [moduleText, titleText, preText, stepsText, expectedText].join('::');
+    var caseKey = [moduleText, titleText, preText, stepsText, expectedText].join('::');
+    if (execSetId) return execSetId + '::' + caseKey;
+    return caseKey;
   }
 
   function readChangedFields(detail) {
@@ -1550,6 +1575,14 @@
       if (parts.length) return parts;
     }
     return [];
+  }
+
+  function isExecCaseRunEvent(detail) {
+    if (!detail || typeof detail !== 'object') return false;
+    var changed = readChangedFields(detail);
+    var hasSignal = changed.indexOf('status') !== -1 || changed.indexOf('actual_result') !== -1 || changed.indexOf('reuse_details') !== -1;
+    if (!hasSignal) return false;
+    return resolveExecCaseExecutedState(detail) === true;
   }
 
   function isExecCaseExecuted(detail) {
@@ -1569,6 +1602,145 @@
     var actualText = normalizeCaseText(detail.actual_result);
     if (hasChanged || hasStatus || actualText) return true;
     return false;
+  }
+
+  function resolveReuseMeta(detail) {
+    if (!detail || typeof detail !== 'object') return { isReuse: false, executedCount: null, totalCount: null };
+    var total = Number(detail.reuse_total_count);
+    var executed = Number(detail.reuse_executed_count);
+    var totalOk = Number.isFinite(total) && total > 0;
+    var executedOk = Number.isFinite(executed) && executed >= 0;
+    var changed = readChangedFields(detail);
+    var hasReuseFlag = totalOk || changed.indexOf('reuse_details') !== -1;
+    return {
+      isReuse: hasReuseFlag,
+      executedCount: totalOk && executedOk ? executed : null,
+      totalCount: totalOk ? total : null,
+    };
+  }
+
+  function resolveExecCaseExecutedState(detail) {
+    var reuseMeta = resolveReuseMeta(detail);
+    if (reuseMeta.totalCount !== null && reuseMeta.executedCount !== null) {
+      return reuseMeta.executedCount > 0;
+    }
+    return isExecCaseExecuted(detail);
+  }
+
+  function buildExecCaseRunLogs(list) {
+    if (!Array.isArray(list) || !list.length) return [];
+    var groups = {};
+    var todayKey = getDayKeyFromMs(Date.now());
+    list.forEach(function(log) {
+      if (!log || normalizeAction(log.action) !== 'update_exec_case') return;
+      var detail = log.detail && typeof log.detail === 'object' ? log.detail : {};
+      var t = parseTimeMs(log.created_at);
+      if (t === null) return;
+      var dayKey = getDayKeyFromMs(t);
+      if (!dayKey) return;
+      var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
+      if (!userId) return;
+      var groupKey = userId + '::' + dayKey;
+      if (!groups[groupKey]) {
+        groups[groupKey] = { userId: userId, dayKey: dayKey, logs: [], username: log.username || '' };
+      }
+      if (!groups[groupKey].username && log.username) groups[groupKey].username = log.username;
+      groups[groupKey].logs.push({ log: log, time: t });
+    });
+
+    var results = [];
+    Object.keys(groups).forEach(function(key) {
+      var group = groups[key];
+      var items = group && Array.isArray(group.logs) ? group.logs : [];
+      if (!items.length) return;
+      items.sort(function(a, b) { return a.time - b.time; });
+      var executedMap = {};
+      var executedCount = 0;
+      var firstEvent = null;
+      var lastEvent = null;
+      var firstAfter = null;
+      var lastAfter = null;
+      var firstBefore = null;
+      items.forEach(function(entry) {
+        var log = entry.log;
+        var detail = log && log.detail && typeof log.detail === 'object' ? log.detail : {};
+        var caseKey = normalizeExecCaseKey(detail);
+        if (!caseKey) return;
+        var prevExecuted = executedMap[caseKey] === true;
+        var nextExecuted = resolveExecCaseExecutedState(detail) === true;
+        var beforeCount = executedCount;
+        if (nextExecuted !== prevExecuted) {
+          if (nextExecuted) executedCount += 1;
+          else executedCount = Math.max(0, executedCount - 1);
+          executedMap[caseKey] = nextExecuted;
+        } else if (executedMap[caseKey] === undefined) {
+          executedMap[caseKey] = nextExecuted;
+        }
+        var afterCount = executedCount;
+        if (!isExecCaseRunEvent(detail)) return;
+        var reuseMeta = resolveReuseMeta(detail);
+        var title = String(detail.title || detail.case_title || detail.case_name || '').trim();
+        var payload = {
+          log: log,
+          before: beforeCount,
+          after: afterCount,
+          title: title || null,
+          reuseType: reuseMeta.isReuse === true ? 'reuse' : '',
+        };
+        if (!firstEvent) {
+          firstEvent = payload;
+          firstBefore = beforeCount;
+          firstAfter = afterCount;
+        }
+        lastEvent = payload;
+        lastAfter = afterCount;
+      });
+
+      if (!firstEvent) return;
+      var baseDetail = {
+        page: 'tempexec',
+        exec_day: group.dayKey,
+      };
+      results.push({
+        id: 'exec-case-run-first-' + group.userId + '-' + group.dayKey,
+        user_id: firstEvent.log.user_id,
+        username: firstEvent.log.username || group.username,
+        action: 'exec_case_run',
+        target_type: 'exec_set',
+        target_id: null,
+        result: 'success',
+        detail: Object.assign({}, baseDetail, {
+          exec_stage: 'first',
+          exec_count: 1,
+          before_count: firstBefore,
+          after_count: firstAfter,
+          case_title: firstEvent.title || null,
+          case_type: firstEvent.reuseType || '',
+        }),
+        created_at: firstEvent.log.created_at,
+      });
+      if (lastEvent && lastEvent !== firstEvent && group.dayKey !== todayKey) {
+        results.push({
+          id: 'exec-case-run-last-' + group.userId + '-' + group.dayKey,
+          user_id: lastEvent.log.user_id,
+          username: lastEvent.log.username || group.username,
+          action: 'exec_case_run',
+          target_type: 'exec_set',
+          target_id: null,
+          result: 'success',
+          detail: Object.assign({}, baseDetail, {
+            exec_stage: 'last',
+            exec_count: (firstAfter !== null && lastAfter !== null) ? (lastAfter - firstAfter) : 0,
+            before_count: firstAfter,
+            after_count: lastAfter,
+            case_title: lastEvent.title || null,
+            case_type: lastEvent.reuseType || '',
+          }),
+          created_at: lastEvent.log.created_at,
+        });
+      }
+    });
+    return results;
   }
 
   function resolveExecContributionEntry(log) {
@@ -2098,7 +2270,8 @@
       action === 'export_case_files_excel' ||
       action === 'export_exec_xmind' ||
       action === 'export_exec_snapshot' ||
-      action === 'export_cases_xmind'
+      action === 'export_cases_xmind' ||
+      action === 'exec_case_run'
     ) {
       return ['case'];
     }
@@ -2168,6 +2341,7 @@
     if (action === 'export_cases_xmind') return '导出xmind';
     if (action === 'export_exec_xmind') return '导出xmind（含结果）';
     if (action === 'export_exec_snapshot') return '导出excel（含结果）';
+    if (action === 'exec_case_run') return '执行用例';
 
     // 用例（子项）
     if (action === 'batch_create_case_items') {
@@ -2228,6 +2402,15 @@
     var action = normalizeAction(l.action);
     if (!action) return '-';
     var detail = l.detail && typeof l.detail === 'object' ? l.detail : {};
+    if (action === 'exec_case_run') {
+      var beforeExec = normalizeCountValue(detail.before_count);
+      var afterExec = normalizeCountValue(detail.after_count);
+      if (beforeExec !== null && afterExec !== null) return String(beforeExec) + ' -> ' + String(afterExec);
+      var execCount = normalizeCountValue(detail.exec_count);
+      if (execCount === null) execCount = normalizeCountValue(detail.count);
+      if (execCount !== null) return String(execCount);
+      return '-';
+    }
     if (action === 'change_case_reuse_type') {
       var nextReuse = null;
       if (detail.reuse_enabled !== undefined && detail.reuse_enabled !== null) {
@@ -2366,12 +2549,16 @@
 
   function getFilteredLogs() {
     var list = Array.isArray(state.logs) ? state.logs : [];
+    var execLogs = buildExecCaseRunLogs(list);
+    if (execLogs.length) list = list.concat(execLogs);
     list = list.filter(isAllowedLog);
     var range = getDateRangeMs(state.dateStart, state.dateEnd);
     var selected = state.selectedTargets || { all: true };
     if (selected.all) {
       return list.filter(function(log) {
         return isTimeInRange(log && log.created_at, range);
+      }).sort(function(a, b) {
+        return (parseTimeMs(b && b.created_at) || 0) - (parseTimeMs(a && a.created_at) || 0);
       });
     }
     var allow = {};
@@ -2386,6 +2573,8 @@
         if (allow[keys[i]]) return true;
       }
       return false;
+    }).sort(function(a, b) {
+      return (parseTimeMs(b && b.created_at) || 0) - (parseTimeMs(a && a.created_at) || 0);
     });
   }
 

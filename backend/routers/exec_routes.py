@@ -2618,6 +2618,21 @@ def update_exec_case(
                 "expected": exec_case.expected,
                 "status": exec_case.status,
                 "actual_result": exec_case.actual_result,
+                "reuse_total_count": (
+                    len(exec_case.reuse_details)
+                    if isinstance(exec_case.reuse_details, list) and len(exec_case.reuse_details) > 0
+                    else None
+                ),
+                "reuse_executed_count": (
+                    sum(
+                        1
+                        for detail in exec_case.reuse_details
+                        if isinstance(detail, dict)
+                        and str(detail.get("status") or "").strip() not in ("", "未执行", "pending", "变更重跑", "有改动")
+                    )
+                    if isinstance(exec_case.reuse_details, list) and len(exec_case.reuse_details) > 0
+                    else None
+                ),
                 "changed_fields": changed_fields,
             },
         )
