@@ -8634,9 +8634,9 @@ button.exec-overview-file-chip,
   color: #fecaca;
 }
 :root[data-theme="dark"] .temp-case-view td .status-select[data-status="不适用"] {
-  background: rgba(148,163,184,0.2);
-  border-color: rgba(148,163,184,0.5);
-  color: #e2e8f0;
+  background: rgba(59,130,246,0.24);
+  border-color: rgba(59,130,246,0.55);
+  color: #bfdbfe;
 }
 :root[data-theme="dark"] .temp-case-view td .status-select[data-status="阻塞"] {
   background: rgba(245,158,11,0.2);
@@ -8658,6 +8658,12 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .remark-toggle.filled {
   border-color: rgba(245,158,11,0.6);
   color: #fcd34d;
+}
+:root[data-theme="dark"] .defect-toggle.filled {
+  border-color: rgba(52,211,153,0.6);
+  color: #6ee7b7;
+  background: rgba(52,211,153,0.18);
+  box-shadow: 0 6px 14px rgba(16,185,129,0.25);
 }
 :root[data-theme="dark"] .remark-row,
 :root[data-theme="dark"] .defect-row,
@@ -8732,9 +8738,9 @@ button.exec-overview-file-chip,
   color: #bfdbfe;
 }
 :root[data-theme="dark"] .reuse-entry .status-select.unspecified {
-  background: rgba(148,163,184,0.2);
-  border-color: rgba(148,163,184,0.45);
-  color: #e2e8f0;
+  background: rgba(59,130,246,0.24);
+  border-color: rgba(59,130,246,0.55);
+  color: #bfdbfe;
 }
 :root[data-theme="dark"] .reuse-status {
   background: var(--panel);

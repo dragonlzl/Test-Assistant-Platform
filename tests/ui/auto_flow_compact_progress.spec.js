@@ -182,6 +182,41 @@ test.describe('一键执行按钮进度提示', () => {
     await expect(page.locator('[data-tab-btn="clean"] .ai-flow-substep')).toHaveClass(/hidden/);
   });
 
+  test('跨页面切换时同步一键执行步骤状态', async ({ page }) => {
+    await page.evaluate(() => {
+      var snapshot = {
+        version: 1,
+        user_id: '',
+        updated_at: Date.now(),
+        data: {
+          rawText: '需求内容',
+          reviewResult: '[]',
+          cleanedText: '{"summary":"ok"}',
+          compareResult: '{"coverage":100,"missing":[]}',
+          splitResult: '[{"module":"模块","key_scenarios":[],"test_points":[],"coupled_modules":[]}]',
+          casesCompareResult: '{"coverage":100,"missing":[],"extra":[]}',
+          caseText: '用例列表',
+          importedCases: [],
+        },
+      };
+      localStorage.setItem('usecase-workflow-state-v1', JSON.stringify(snapshot));
+    });
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/case-exec.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+
+    const compact = page.locator('#autoFlowCompact');
+    await expect(compact).not.toHaveClass(/hidden/);
+    await expect(compact.locator('.step:not(.hidden)')).toHaveCount(1);
+    const casesStep = compact.locator('.step[data-target=cases]');
+    await expect(casesStep).toHaveClass(/done/);
+    await expect(casesStep.locator('.step-status')).toHaveAttribute('data-status', 'done');
+    const autoSubstep = page.locator('[data-tab-btn="auto"] .ai-flow-substep');
+    await expect(autoSubstep).not.toHaveClass(/hidden/);
+    await expect(autoSubstep.locator('.step-label')).toHaveText('覆盖对比');
+    await expect(autoSubstep.locator('.step-status')).toHaveAttribute('data-status', 'done');
+  });
+
   test('白色主题选中时进度样式可辨识', async ({ page }) => {
     await page.evaluate(() => {
       var raw = document.getElementById('rawText');

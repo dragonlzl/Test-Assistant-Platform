@@ -222,6 +222,20 @@
       };
     }
 
+    function buildWorkflowNavSnapshot(data) {
+      if (!data || typeof data !== 'object') return {};
+      return {
+        rawText: data.rawText || '',
+        reviewResult: data.reviewResult || '',
+        cleanedText: data.cleanedText || '',
+        compareResult: data.compareResult || '',
+        splitResult: data.splitResult || '',
+        casesCompareResult: data.casesCompareResult || '',
+        caseText: data.caseText || '',
+        importedCases: Array.isArray(data.importedCases) ? data.importedCases : [],
+      };
+    }
+
     function hasRequirementLabel(data) {
       if (!data) return false;
       var label = data.requirementLabel ? String(data.requirementLabel).trim() : '';
@@ -270,9 +284,11 @@
       if (!storage || typeof storage.setJson !== 'function') return;
       var snapshot = buildWorkflowSnapshot();
       if (!snapshotHasContent(snapshot)) {
+        if (state) state.workflowNavSnapshot = {};
         if (storage && typeof storage.remove === 'function') storage.remove(workflowStorageKey);
         return;
       }
+      if (state) state.workflowNavSnapshot = buildWorkflowNavSnapshot(snapshot.data);
       storage.setJson(workflowStorageKey, snapshot);
     }
 
@@ -315,6 +331,7 @@
     function applyWorkflowSnapshot(snapshot) {
       if (!snapshot || !snapshot.data || typeof snapshot.data !== 'object') return false;
       var data = snapshot.data;
+      if (state) state.workflowNavSnapshot = buildWorkflowNavSnapshot(data);
       state.requirementLabel = data.requirementLabel || '';
       state.requirementLabelSource = data.requirementLabelSource || '';
       state.lastRawImportName = data.lastRawImportName || '';

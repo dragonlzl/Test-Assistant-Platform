@@ -165,14 +165,33 @@
     }
 
     function updateFlowStatus() {
+      var navSnapshot = (state && state.workflowNavSnapshot && typeof state.workflowNavSnapshot === 'object')
+        ? state.workflowNavSnapshot
+        : null;
+      function pickText(el, key) {
+        if (el && typeof el.value === 'string') return el.value.trim();
+        if (navSnapshot && navSnapshot[key]) return String(navSnapshot[key]).trim();
+        return '';
+      }
+      var caseSource = false;
+      try {
+        caseSource = hasCaseSource();
+      } catch (err) {
+        caseSource = false;
+      }
+      if (!caseSource && navSnapshot) {
+        var caseText = navSnapshot.caseText ? String(navSnapshot.caseText).trim() : '';
+        var imported = navSnapshot.importedCases;
+        caseSource = Boolean(caseText) || (Array.isArray(imported) && imported.length > 0);
+      }
       var stateMap = {
-        import: rawText && rawText.value.trim().length > 0,
-        review: reviewResultEl ? reviewResultEl.value.trim().length > 0 : false,
-        clean: cleanedTextEl && cleanedTextEl.value.trim().length > 0,
-        compare: compareResultEl && compareResultEl.value.trim().length > 0,
-        split: splitResultEl && splitResultEl.value.trim().length > 0,
-        'cases-upload': hasCaseSource(),
-        cases: casesCompareResultEl && casesCompareResultEl.value.trim().length > 0,
+        import: pickText(rawText, 'rawText').length > 0,
+        review: pickText(reviewResultEl, 'reviewResult').length > 0,
+        clean: pickText(cleanedTextEl, 'cleanedText').length > 0,
+        compare: pickText(compareResultEl, 'compareResult').length > 0,
+        split: pickText(splitResultEl, 'splitResult').length > 0,
+        'cases-upload': caseSource,
+        cases: pickText(casesCompareResultEl, 'casesCompareResult').length > 0,
       };
       var runningMap = (state && state.inProgressSteps && typeof state.inProgressSteps === 'object') ? state.inProgressSteps : {};
       var waitingMap = (state && state.waitingSteps && typeof state.waitingSteps === 'object') ? state.waitingSteps : {};
