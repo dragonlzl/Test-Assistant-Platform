@@ -127,4 +127,108 @@ test.describe('操作记录-用例贡献视图', () => {
     await expect(page.locator('#opsContributionDrawer')).toHaveClass(/open/);
     await expect.poll(() => opsCalls).toBeGreaterThan(beforeRefreshCalls);
   });
+
+  test('日期范围向更早调整会补齐分页数据', async ({ page }) => {
+    const admin = { id: 1, username: 'admin', role: 'admin', level: 'leader' };
+    const userB = { id: 2, username: 'user_b', role: 'user', level: 'member' };
+    const base = new Date();
+    const today = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 12, 0, 0);
+    const yesterday = new Date(base.getFullYear(), base.getMonth(), base.getDate() - 1, 12, 0, 0);
+    const oldDate = new Date(base.getFullYear(), base.getMonth(), base.getDate() - 10, 12, 0, 0);
+    const logs = [];
+    for (let i = 0; i < 500; i += 1) {
+      logs.push({
+        id: i + 1,
+        user_id: 2,
+        username: 'user_b',
+        action: 'import_case_file',
+        target_type: 'case_file',
+        target_id: 10,
+        result: 'success',
+        detail: { item_imported: 1, source: 'xmind', file_name: `case-${i}` },
+        created_at: new Date(yesterday.getTime() - i * 1000).toISOString(),
+      });
+    }
+    logs.push({
+      id: 1001,
+      user_id: 2,
+      username: 'user_b',
+      action: 'import_case_file',
+      target_type: 'case_file',
+      target_id: 12,
+      result: 'success',
+      detail: { item_imported: 5, source: 'xmind', file_name: 'case-old' },
+      created_at: oldDate.toISOString(),
+    });
+    let opsCalls = 0;
+
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem(
+          'tap-ops-contribution-view-v1',
+          JSON.stringify({
+            userIds: [],
+            timeRange: 'day',
+            dateStart: '',
+            dateEnd: '',
+            behaviors: [],
+            behaviorAll: true,
+            hasSelection: false,
+            savedAt: Date.now(),
+          }),
+        );
+      } catch (_) {}
+    });
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, admin);
+      if (pathName === '/api/users' && method === 'GET') return respond(200, [admin, userB]);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') {
+        opsCalls += 1;
+        const limit = Number(url.searchParams.get('limit') || logs.length);
+        const offset = Number(url.searchParams.get('offset') || 0);
+        return respond(200, logs.slice(offset, offset + limit));
+      }
+
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitAppReady(page, 30000);
+
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
+    });
+
+    await page.click('#openOpsContributionDrawerBtn');
+    await expect(page.locator('#opsContributionDrawer')).toHaveClass(/open/);
+
+    await page.click('input[data-ops-contribution-user="2"]');
+    await page.click('#opsContributionApplyBtn');
+    await expect(page.locator('#opsContributionDrawer')).not.toHaveClass(/open/);
+
+    await expect(page.locator('#opsContributionCard')).toBeVisible();
+    await expect(page.locator('#opsContributionList .ops-activity-row', { hasText: 'user_b' }).locator('.ops-activity-count')).toHaveText('0');
+
+    const oldInput = formatDateInput(oldDate);
+    await page.fill('#opsContributionDateStart', oldInput);
+    await page.fill('#opsContributionDateEnd', oldInput);
+    await expect.poll(() => opsCalls).toBeGreaterThan(1);
+    await expect(page.locator('#opsContributionList .ops-activity-row', { hasText: 'user_b' }).locator('.ops-activity-count')).toHaveText('5');
+  });
 });

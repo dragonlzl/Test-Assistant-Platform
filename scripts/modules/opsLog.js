@@ -11,6 +11,8 @@
   var EXEC_CONTRIBUTION_STORAGE_KEY = appConfig.opsExecContributionViewStorageKey || 'tap-ops-exec-contribution-view-v1';
   var DEFAULT_ACTIVITY_RANGE = 'week';
   var ACTIVITY_BAR_MAX_RATIO = 82;
+  var DRAWER_MAX_ALLOWED_LOGS = Number(appConfig.opsLogDrawerMaxAllowed || 500);
+  if (!Number.isFinite(DRAWER_MAX_ALLOWED_LOGS) || DRAWER_MAX_ALLOWED_LOGS <= 0) DRAWER_MAX_ALLOWED_LOGS = 500;
 
   var TARGETS = [
     { key: 'all', label: '全部' },
@@ -47,6 +49,7 @@
     dateStart: '',
     dateEnd: '',
     pendingAuth: false,
+    pendingReload: false,
     loading: false,
     activity: {
       drawer: null,
@@ -217,6 +220,98 @@
     } catch (err) {
       return null;
     }
+  }
+
+  function resolveSingleUserId(list) {
+    if (!Array.isArray(list) || list.length !== 1) return null;
+    var raw = Number(list[0]);
+    if (!Number.isFinite(raw)) return null;
+    return raw;
+  }
+
+  function getOldestLogTime(list) {
+    if (!Array.isArray(list) || !list.length) return null;
+    for (var i = list.length - 1; i >= 0; i -= 1) {
+      var log = list[i];
+      var t = log ? parseTimeMs(log.created_at) : null;
+      if (t !== null) return t;
+    }
+    return null;
+  }
+
+  function fetchOperationLogsByRange(range, options) {
+    var limit = 500;
+    var offset = 0;
+    var userId = options && (options.userId || options.userId === 0) ? options.userId : null;
+    var results = [];
+
+    function loadNext() {
+      return apiClient
+        .listOperationLogs({
+          limit: limit,
+          offset: offset,
+          user_id: userId !== null ? userId : undefined,
+        })
+        .then(function(list) {
+          var rawList = Array.isArray(list) ? list : [];
+          if (!rawList.length) return results;
+          offset += rawList.length;
+          results = results.concat(rawList.filter(function(row) { return !isAutoOperation(row); }));
+          var shouldContinue = rawList.length >= limit;
+          if (shouldContinue && range && range.startMs !== null) {
+            var oldest = getOldestLogTime(rawList);
+            if (oldest !== null && oldest <= range.startMs) shouldContinue = false;
+          }
+          if (!shouldContinue) return results;
+          return loadNext();
+        });
+    }
+
+    return loadNext();
+  }
+
+  function fetchDrawerLogs(range, options) {
+    var limit = 500;
+    var offset = 0;
+    var userId = options && (options.userId || options.userId === 0) ? options.userId : null;
+    var maxAllowed = options && Number.isFinite(options.maxAllowed) ? options.maxAllowed : DRAWER_MAX_ALLOWED_LOGS;
+    var results = [];
+    var allowedCount = 0;
+    var hasRange = Boolean(range && (range.startMs !== null || range.endMs !== null));
+    var reachedCap = false;
+
+    function loadNext() {
+      return apiClient
+        .listOperationLogs({
+          limit: limit,
+          offset: offset,
+          user_id: userId !== null ? userId : undefined,
+        })
+        .then(function(list) {
+          var rawList = Array.isArray(list) ? list : [];
+          if (!rawList.length) return { logs: results, allowedCount: allowedCount, reachedCap: reachedCap };
+          offset += rawList.length;
+          rawList.forEach(function(row) {
+            if (isAutoOperation(row)) return;
+            if (hasRange && !isTimeInRange(row && row.created_at, range)) return;
+            results.push(row);
+            if (isAllowedLog(row)) allowedCount += 1;
+          });
+          var shouldContinue = rawList.length >= limit;
+          if (shouldContinue && range && range.startMs !== null) {
+            var oldest = getOldestLogTime(rawList);
+            if (oldest !== null && oldest <= range.startMs) shouldContinue = false;
+          }
+          if (shouldContinue && !hasRange && maxAllowed && allowedCount >= maxAllowed) {
+            shouldContinue = false;
+            reachedCap = true;
+          }
+          if (!shouldContinue) return { logs: results, allowedCount: allowedCount, reachedCap: reachedCap };
+          return loadNext();
+        });
+    }
+
+    return loadNext();
   }
 
   function parseDateInputValue(value, isEnd) {
@@ -2190,6 +2285,8 @@
   }
 
   function isAllowedLog(log) {
+    var l = log && typeof log === 'object' ? log : null;
+    if (!l) return false;
     return Boolean(resolveActionLabel(log));
   }
 
@@ -2476,23 +2573,29 @@
       setStatus(dom.drawerStatusEl, '仅管理员可查看操作记录', 'warn');
       return Promise.resolve([]);
     }
-    if (state.loading) return Promise.resolve(state.logs);
+    if (state.loading) {
+      state.pendingReload = true;
+      return Promise.resolve(state.logs);
+    }
     state.loading = true;
     if (dom.drawerRefreshBtn) dom.drawerRefreshBtn.disabled = true;
     setStatus(dom.drawerStatusEl, '加载中...', '');
     var userId = state.selectedUserId ? Number(state.selectedUserId) : null;
-    return apiClient
-      .listOperationLogs({
-        limit: 500,
-        offset: 0,
-        user_id: userId !== null && Number.isFinite(userId) ? userId : undefined,
-      })
-      .then(function(list) {
-        state.logs = (Array.isArray(list) ? list : []).filter(function(row) { return !isAutoOperation(row); });
+    var range = getDateRangeMs(state.dateStart, state.dateEnd);
+    return fetchDrawerLogs(range, {
+      userId: userId !== null && Number.isFinite(userId) ? userId : null,
+      maxAllowed: DRAWER_MAX_ALLOWED_LOGS,
+    })
+      .then(function(payload) {
+        state.logs = payload && payload.logs ? payload.logs : [];
         state.pageIndex = 0;
         renderList();
-        var allowedCount = state.logs.filter(isAllowedLog).length;
-        setStatus(dom.drawerStatusEl, '已加载 ' + allowedCount + ' 条记录（最多 500 条）', 'ok');
+        var allowedCount = payload && Number.isFinite(payload.allowedCount) ? payload.allowedCount : state.logs.filter(isAllowedLog).length;
+        var hasRange = range && (range.startMs !== null || range.endMs !== null);
+        var msg = '已加载 ' + allowedCount + ' 条记录';
+        if (!hasRange) msg += '（最多 ' + DRAWER_MAX_ALLOWED_LOGS + ' 条）';
+        if (payload && payload.reachedCap && !hasRange) msg += '，可通过日期筛选查看更多';
+        setStatus(dom.drawerStatusEl, msg, 'ok');
         return state.logs;
       })
       .catch(function(err) {
@@ -2505,6 +2608,10 @@
       .finally(function() {
         state.loading = false;
         if (dom.drawerRefreshBtn) dom.drawerRefreshBtn.disabled = false;
+        if (state.pendingReload) {
+          state.pendingReload = false;
+          loadLogs();
+        }
       });
   }
 
@@ -2522,12 +2629,13 @@
     state.activity.loading = true;
     if (dom.activityRefreshBtn) dom.activityRefreshBtn.disabled = true;
     setStatus(dom.activityStatus, '加载中...', '');
-    return apiClient
-      .listOperationLogs({ limit: 500, offset: 0 })
+    var range = getActivityDateRangeMs();
+    var userId = resolveSingleUserId(state.activity.selectedUserIds);
+    return fetchOperationLogsByRange(range, { userId: userId })
       .then(function(list) {
-        state.activity.logs = (Array.isArray(list) ? list : []).filter(function(row) { return !isAutoOperation(row); });
+        state.activity.logs = Array.isArray(list) ? list : [];
         state.activity.logsLoaded = true;
-        setStatus(dom.activityStatus, '已加载 ' + state.activity.logs.length + ' 条记录（最多 500 条）', 'ok');
+        setStatus(dom.activityStatus, '已加载 ' + state.activity.logs.length + ' 条记录', 'ok');
         return state.activity.logs;
       })
       .catch(function(err) {
@@ -2556,12 +2664,13 @@
     state.contribution.loading = true;
     if (dom.contributionRefreshBtn) dom.contributionRefreshBtn.disabled = true;
     setStatus(dom.contributionStatus, '加载中...', '');
-    return apiClient
-      .listOperationLogs({ limit: 500, offset: 0 })
+    var range = getContributionDateRangeMs();
+    var userId = resolveSingleUserId(state.contribution.selectedUserIds);
+    return fetchOperationLogsByRange(range, { userId: userId })
       .then(function(list) {
-        state.contribution.logs = (Array.isArray(list) ? list : []).filter(function(row) { return !isAutoOperation(row); });
+        state.contribution.logs = Array.isArray(list) ? list : [];
         state.contribution.logsLoaded = true;
-        setStatus(dom.contributionStatus, '已加载 ' + state.contribution.logs.length + ' 条记录（最多 500 条）', 'ok');
+        setStatus(dom.contributionStatus, '已加载 ' + state.contribution.logs.length + ' 条记录', 'ok');
         return state.contribution.logs;
       })
       .catch(function(err) {
@@ -2590,12 +2699,13 @@
     state.execContribution.loading = true;
     if (dom.execContributionRefreshBtn) dom.execContributionRefreshBtn.disabled = true;
     setStatus(dom.execContributionStatus, '加载中...', '');
-    return apiClient
-      .listOperationLogs({ limit: 500, offset: 0 })
+    var range = getExecContributionDateRangeMs();
+    var userId = resolveSingleUserId(state.execContribution.selectedUserIds);
+    return fetchOperationLogsByRange(range, { userId: userId })
       .then(function(list) {
-        state.execContribution.logs = (Array.isArray(list) ? list : []).filter(function(row) { return !isAutoOperation(row); });
+        state.execContribution.logs = Array.isArray(list) ? list : [];
         state.execContribution.logsLoaded = true;
-        setStatus(dom.execContributionStatus, '已加载 ' + state.execContribution.logs.length + ' 条记录（最多 500 条）', 'ok');
+        setStatus(dom.execContributionStatus, '已加载 ' + state.execContribution.logs.length + ' 条记录', 'ok');
         return state.execContribution.logs;
       })
       .catch(function(err) {
@@ -2803,7 +2913,7 @@
         state.dateStart = dom.dateStart.value || '';
         state.pageIndex = 0;
         persistViewState();
-        renderList();
+        loadLogs();
       });
     }
     if (dom.dateEnd) {
@@ -2811,7 +2921,7 @@
         state.dateEnd = dom.dateEnd.value || '';
         state.pageIndex = 0;
         persistViewState();
-        renderList();
+        loadLogs();
       });
     }
     if (dom.targetGrid) {
@@ -2890,21 +3000,21 @@
       dom.activityTimeRange.addEventListener('change', function() {
         state.activity.timeRange = dom.activityTimeRange.value || DEFAULT_ACTIVITY_RANGE;
         persistActivityState();
-        renderActivityView();
+        refreshActivityView(true);
       });
     }
     if (dom.activityDateStart) {
       dom.activityDateStart.addEventListener('change', function() {
         state.activity.dateStart = dom.activityDateStart.value || '';
         persistActivityState();
-        renderActivityView();
+        refreshActivityView(true);
       });
     }
     if (dom.activityDateEnd) {
       dom.activityDateEnd.addEventListener('change', function() {
         state.activity.dateEnd = dom.activityDateEnd.value || '';
         persistActivityState();
-        renderActivityView();
+        refreshActivityView(true);
       });
     }
     if (dom.activityBehaviorGrid) {
@@ -2988,21 +3098,21 @@
       dom.contributionTimeRange.addEventListener('change', function() {
         state.contribution.timeRange = dom.contributionTimeRange.value || DEFAULT_ACTIVITY_RANGE;
         persistContributionState();
-        renderContributionView();
+        refreshContributionView(true);
       });
     }
     if (dom.contributionDateStart) {
       dom.contributionDateStart.addEventListener('change', function() {
         state.contribution.dateStart = dom.contributionDateStart.value || '';
         persistContributionState();
-        renderContributionView();
+        refreshContributionView(true);
       });
     }
     if (dom.contributionDateEnd) {
       dom.contributionDateEnd.addEventListener('change', function() {
         state.contribution.dateEnd = dom.contributionDateEnd.value || '';
         persistContributionState();
-        renderContributionView();
+        refreshContributionView(true);
       });
     }
     if (dom.contributionBehaviorGrid) {
@@ -3086,21 +3196,21 @@
       dom.execContributionTimeRange.addEventListener('change', function() {
         state.execContribution.timeRange = dom.execContributionTimeRange.value || DEFAULT_ACTIVITY_RANGE;
         persistExecContributionState();
-        renderExecContributionView();
+        refreshExecContributionView(true);
       });
     }
     if (dom.execContributionDateStart) {
       dom.execContributionDateStart.addEventListener('change', function() {
         state.execContribution.dateStart = dom.execContributionDateStart.value || '';
         persistExecContributionState();
-        renderExecContributionView();
+        refreshExecContributionView(true);
       });
     }
     if (dom.execContributionDateEnd) {
       dom.execContributionDateEnd.addEventListener('change', function() {
         state.execContribution.dateEnd = dom.execContributionDateEnd.value || '';
         persistExecContributionState();
-        renderExecContributionView();
+        refreshExecContributionView(true);
       });
     }
     if (dom.execContributionBehaviorGrid) {

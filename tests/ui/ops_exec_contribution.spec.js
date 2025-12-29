@@ -229,4 +229,126 @@ test.describe('操作记录-用例执行贡献视图', () => {
       page.locator('#opsExecContributionList .ops-activity-row', { hasText: 'admin' }).locator('.ops-activity-count'),
     ).toHaveText(['0', '0']);
   });
+
+  test('日期范围向更早调整会补齐分页数据', async ({ page }) => {
+    const admin = { id: 1, username: 'admin', role: 'admin', level: 'leader' };
+    const userB = { id: 2, username: 'user_b', role: 'user', level: 'member' };
+    const base = new Date();
+    const today = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 12, 0, 0);
+    const yesterday = new Date(base.getFullYear(), base.getMonth(), base.getDate() - 1, 12, 0, 0);
+    const oldDate = new Date(base.getFullYear(), base.getMonth(), base.getDate() - 10, 12, 0, 0);
+    const logs = [];
+    for (let i = 0; i < 500; i += 1) {
+      logs.push({
+        id: i + 1,
+        user_id: 2,
+        username: 'user_b',
+        action: 'update_exec_case',
+        target_type: 'exec_case',
+        target_id: i + 1,
+        result: 'success',
+        detail: {
+          module: '模块A',
+          title: `用例-${i}`,
+          precondition: '前置',
+          steps: '步骤',
+          expected: '预期',
+          status: '未执行',
+          actual_result: '',
+          changed_fields: [],
+        },
+        created_at: new Date(yesterday.getTime() - i * 1000).toISOString(),
+      });
+    }
+    logs.push({
+      id: 2001,
+      user_id: 2,
+      username: 'user_b',
+      action: 'update_exec_case',
+      target_type: 'exec_case',
+      target_id: 999,
+      result: 'success',
+      detail: {
+        module: '模块B',
+        title: '用例-旧',
+        precondition: '前置',
+        steps: '步骤',
+        expected: '预期',
+        status: '通过',
+        actual_result: 'OK',
+        changed_fields: ['status'],
+      },
+      created_at: oldDate.toISOString(),
+    });
+    let opsCalls = 0;
+
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem(
+          'tap-ops-exec-contribution-view-v1',
+          JSON.stringify({
+            userIds: [],
+            timeRange: 'day',
+            dateStart: '',
+            dateEnd: '',
+            behaviors: [],
+            behaviorAll: true,
+            hasSelection: false,
+            savedAt: Date.now(),
+          }),
+        );
+      } catch (_) {}
+    });
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, admin);
+      if (pathName === '/api/users' && method === 'GET') return respond(200, [admin, userB]);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') {
+        opsCalls += 1;
+        const limit = Number(url.searchParams.get('limit') || logs.length);
+        const offset = Number(url.searchParams.get('offset') || 0);
+        return respond(200, logs.slice(offset, offset + limit));
+      }
+
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitAppReady(page, 30000);
+
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
+    });
+
+    await page.click('#openOpsExecContributionDrawerBtn');
+    await expect(page.locator('#opsExecContributionDrawer')).toHaveClass(/open/);
+
+    await page.click('input[data-ops-exec-contribution-user="2"]');
+    await page.click('#opsExecContributionApplyBtn');
+    await expect(page.locator('#opsExecContributionDrawer')).not.toHaveClass(/open/);
+
+    await expect(page.locator('#opsExecContributionCard')).toBeVisible();
+    await expect(page.locator('#opsExecContributionList .ops-activity-row', { hasText: 'user_b' }).locator('.ops-activity-count')).toHaveText(['0', '0']);
+
+    const oldInput = formatDateInput(oldDate);
+    await page.fill('#opsExecContributionDateStart', oldInput);
+    await page.fill('#opsExecContributionDateEnd', oldInput);
+    await expect.poll(() => opsCalls).toBeGreaterThan(1);
+    await expect(page.locator('#opsExecContributionList .ops-activity-row', { hasText: 'user_b' }).locator('.ops-activity-count')).toHaveText(['1', '0']);
+  });
 });

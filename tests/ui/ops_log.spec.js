@@ -270,4 +270,69 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     expect(download.suggestedFilename()).toMatch(/操作记录_/);
     expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
   });
+
+  test('设置更新不展示在查看记录列表', async ({ page }) => {
+    const admin = { id: 1, username: 'admin', role: 'admin', level: 'leader' };
+    const now = new Date();
+    const logs = [
+      {
+        id: 201,
+        user_id: 1,
+        username: 'admin',
+        action: 'update_settings',
+        target_type: 'settings',
+        target_id: 1,
+        result: 'success',
+        detail: { scope: 'user', keys: ['tempExecPageSize'], items: [{ key: 'tempExecPageSize', value_json: 20 }] },
+        created_at: new Date(now.getTime() - 1000).toISOString(),
+      },
+      {
+        id: 202,
+        user_id: 1,
+        username: 'admin',
+        action: 'login',
+        target_type: 'auth',
+        target_id: 1,
+        result: 'success',
+        detail: {},
+        created_at: new Date(now.getTime() - 2000).toISOString(),
+      },
+    ];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, admin);
+      if (pathName === '/api/users' && method === 'GET') return respond(200, [admin]);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, logs);
+
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitAppReady(page, 30000);
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
+    });
+
+    await page.click('#openOpsLogDrawerBtn');
+    await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(1);
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('登录');
+    await expect(page.locator('#opsLogDrawerTableBody')).not.toContainText('更新设置');
+    await expect(page.locator('#opsLogDrawerTableBody')).not.toContainText('settings#');
+  });
 });
