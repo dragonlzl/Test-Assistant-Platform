@@ -147,4 +147,27 @@ test.describe('需求导入确认与持久化', () => {
     });
     expect(moduleCount).toBe(1);
   });
+
+  test('切换到用例相关页面仍展示用例生成进度', async ({ page }) => {
+    await page.evaluate(() => {
+      try { localStorage.removeItem('usecase-workflow-state-v1'); } catch (_) {}
+    });
+    await page.evaluate(() => {
+      if (window.app && window.app.state) {
+        window.app.state.caseGenModules = [
+          { id: 'm1', title: 'Module 1', scenarios: ['s1'], points: [], coupled: [] },
+        ];
+        window.app.state.caseGenResults = { m1: '' };
+        window.app.state.caseGenSuggestions = { m1: '' };
+      }
+      if (window.app && typeof window.app.persistWorkflowStateNow === 'function') {
+        window.app.persistWorkflowStateNow();
+      }
+    });
+
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/case-library.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 20000 });
+    await expect(page.locator('#caseGenProgressList')).toContainText('Module 1');
+  });
 });

@@ -1449,6 +1449,9 @@
       'setCaseProgressStep',
       'markAllCaseProgressGroups',
     ]);
+    if (api && typeof api.renderCaseGenProgressBoard === 'function') {
+      api.renderCaseGenProgressBoard();
+    }
     if (state.caseGenModules && state.caseGenModules.length) {
       renderCaseGeneration();
     }
