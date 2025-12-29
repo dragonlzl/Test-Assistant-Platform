@@ -2602,6 +2602,21 @@
       return file.reusePresets;
     }
 
+    function buildReuseDetailsFromPresets(file) {
+      if (!file || !file.reuseEnabled) return [];
+      var presets = ensureReusePresets(file);
+      if (!presets.length) return [];
+      return presets.map(function(preset) {
+        return {
+          id: generateReuseDetailId(),
+          text: preset && preset.text ? preset.text : '',
+          note: '',
+          status: '未执行',
+          presetId: preset && preset.id ? preset.id : '',
+        };
+      });
+    }
+
     function startTempExecPresetDraft(fileId) {
       state.tempExecPresetDraft = { fileId: fileId, value: '' };
       renderTempExecView();
@@ -6732,6 +6747,7 @@
       }
       var base = file.cases[index] || {};
       var moduleName = base.module || '';
+      var reuseDetails = buildReuseDetailsFromPresets(file);
       var fresh = {
         module: moduleName,
         title: '',
@@ -6739,9 +6755,9 @@
         preconditions: '',
         steps: '',
         expected: '',
-        actual: '未执行',
+        actual: file.reuseEnabled ? resolveReuseAggregateStatus(reuseDetails) : '未执行',
         remark: '',
-        reuseDetails: [],
+        reuseDetails: reuseDetails,
         defectLinks: [],
       };
       ensureTempExecNewAddedUiKey(fresh);
