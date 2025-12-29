@@ -25,6 +25,7 @@
     var stepClickHandler = null;
     var stepDragHandler = null;
     var stepHoverHandler = null;
+    var stepScrollHandler = null;
     var historyBound = false;
     var guardBound = false;
     var scrollGuardHandler = null;
@@ -42,11 +43,13 @@
     var tooltipTextEl = null;
     var tooltipActionsEl = null;
     var tooltipIconEl = null;
+    var dragHandEl = null;
 
     var fakeAssignPanel = null;
     var fakeMissingPanel = null;
     var fakeExecVersionPanel = null;
-    var fakeArchiveBtn = null;
+    var fakeAssignDragBound = false;
+    var fakeAssignDragState = null;
 
     function buildSessionId() {
       return String(Date.now()) + '_' + Math.random().toString(36).slice(2, 8);
@@ -66,6 +69,27 @@
         supportsPassive = false;
       }
       guardOptions = supportsPassive ? { passive: false, capture: true } : true;
+    }
+
+    function isScrollableNode(node) {
+      if (!node || typeof window === 'undefined' || !window.getComputedStyle) return false;
+      var style = window.getComputedStyle(node);
+      if (!style) return false;
+      var overflowY = style.overflowY;
+      var overflowX = style.overflowX;
+      var canScrollY = (overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight + 1;
+      var canScrollX = (overflowX === 'auto' || overflowX === 'scroll') && node.scrollWidth > node.clientWidth + 1;
+      return canScrollY || canScrollX;
+    }
+
+    function findScrollableParent(node, root) {
+      var current = node;
+      while (current && current !== document.body) {
+        if (isScrollableNode(current)) return current;
+        if (root && current === root) break;
+        current = current.parentElement;
+      }
+      return null;
     }
 
     function runWithClickBypass(fn) {
@@ -100,6 +124,13 @@
       if (!guardOptions) detectPassiveOptions();
       scrollGuardHandler = function(e) {
         if (!document.body.classList.contains('guide-active')) return;
+        if (e && e.target && e.target.closest) {
+          var allowRoot = e.target.closest('.guide-allow');
+          if (allowRoot) {
+            var scrollable = findScrollableParent(e.target, allowRoot);
+            if (scrollable) return;
+          }
+        }
         if (e && typeof e.preventDefault === 'function') e.preventDefault();
         if (e && typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
         if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
@@ -251,6 +282,20 @@
       tooltipTextEl = document.getElementById('flowGuideTooltipText');
       tooltipActionsEl = document.getElementById('flowGuideTooltipActions');
       tooltipIconEl = document.getElementById('flowGuideTooltipIcon');
+      dragHandEl = document.getElementById('flowGuideDragHand');
+      if (!dragHandEl) {
+        dragHandEl = document.createElement('div');
+        dragHandEl.id = 'flowGuideDragHand';
+        dragHandEl.className = 'guide-drag-hand hidden';
+        dragHandEl.innerHTML =
+          '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+            '<path d="M7 11V6a2 2 0 1 1 4 0v5"></path>' +
+            '<path d="M11 11V4a2 2 0 1 1 4 0v7"></path>' +
+            '<path d="M15 11V7a2 2 0 1 1 4 0v8"></path>' +
+            '<path d="M7 11v6a4 4 0 0 0 4 4h4a4 4 0 0 0 4-4v-2"></path>' +
+          '</svg>';
+        document.body.appendChild(dragHandEl);
+      }
       if (focusEl) {
         focusEl.addEventListener('click', function(e) {
           if (!activeStep || !activeStep.proxy) return;
@@ -261,45 +306,393 @@
       }
     }
 
+    function buildFakeAssignRow(id, name, req) {
+      return (
+        '<div class="temp-req-row" data-temp-file="' + id + '" data-temp-req="' + req + '" draggable="true">' +
+          '<span class="temp-req-count-badge">1 条</span>' +
+          '<button type="button" class="temp-req-item" data-temp-file="' + id + '" draggable="true">' +
+            '<div class="temp-req-line"><span class="name"><span class="name-text">' + name + '</span></span></div>' +
+          '</button>' +
+        '</div>'
+      );
+    }
+
+    function buildFakeAssignRows(startIndex, names, req) {
+      var html = '';
+      for (var i = 0; i < names.length; i += 1) {
+        html += buildFakeAssignRow('guide-file-' + (startIndex + i), names[i], req);
+      }
+      return html;
+    }
+
+    function buildFakeAssignPanelHtml() {
+      var version1Cases = ['用例例子1', '用例例子2', '用例例子3', '用例例子4', '用例例子5', '用例例子6', '用例例子7', '用例例子8'];
+      var version2Cases = ['用例例子9', '用例例子10', '用例例子11', '用例例子12', '用例例子13', '用例例子14'];
+      var version1Rows = buildFakeAssignRows(1, version1Cases, '需求A');
+      var version2Rows = buildFakeAssignRows(1 + version1Cases.length, version2Cases, '需求B');
+      return (
+        '<div class="drawer-mask"></div>' +
+        '<div class="drawer-panel">' +
+          '<div class="drawer-header guide-fake-assign-header">' +
+            '<div class="guide-fake-header-block">' +
+              '<h3>执行分配（引导演示）</h3>' +
+              '<span class="guide-fake-sub">示例数据仅用于教学，不会写入实际数据</span>' +
+            '</div>' +
+            '<span class="guide-fake-header-tag">引导模式</span>' +
+          '</div>' +
+          '<div class="drawer-body">' +
+            '<section class="card" data-section-id="tempexec-assign" data-tab-section="tempexec">' +
+              '<div class="card-title-row">' +
+                '<h2>执行分配</h2>' +
+                '<button class="pill accent" type="button" disabled>＋ 添加执行用例</button>' +
+              '</div>' +
+              '<div class="card-body">' +
+                '<p class="hint">在此页面进行执行分配：可按需求查看用例列表、创建版本分组、拖拽需求盒子进版本、拖拽用例到专注区；也可在执行视图进行执行人分配与结果录入。</p>' +
+                '<div class="temp-exec-header"><p class="hint">需求用例组（可拖拽操作）</p></div>' +
+                '<div class="temp-case-nav"><span class="hint">引导演示不包含真实用例数据</span></div>' +
+                '<div class="temp-version-header">' +
+                  '<div class="temp-version-title">版本分组</div>' +
+                  '<div class="temp-version-actions">' +
+                    '<button class="pill primary temp-version-create" type="button" disabled>＋ 新建版本</button>' +
+                    '<button class="link-toggle" type="button" disabled>收起版本区</button>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="temp-version-grid temp-project-layout" id="guideAssignVersionGrid">' +
+                  '<div class="temp-project-card guide-project-card" data-guide-project="demo" data-temp-project-card="demo">' +
+                    '<div class="temp-project-header" data-temp-project-drag="demo" draggable="true">' +
+                      '<span class="title">演示项目</span>' +
+                      '<span class="remove" aria-hidden="true">×</span>' +
+                    '</div>' +
+                    '<div class="temp-project-body">' +
+                      '<div class="temp-project-versions guide-version-grid">' +
+                        '<div class="temp-project-version guide-version-card" id="guideAssignVersionBox1" data-guide-version="1.0.0" data-temp-project-version-card="demo||1.0.0">' +
+                          '<div class="temp-project-version-header" data-temp-project-version-drag="demo||1.0.0" draggable="true">' +
+                            '<span class="title">1.0.0</span>' +
+                            '<span class="temp-project-version-actions">' +
+                              '<span class="remove" aria-hidden="true">×</span>' +
+                            '</span>' +
+                          '</div>' +
+                          '<div class="temp-project-version-body">' + version1Rows + '</div>' +
+                        '</div>' +
+                        '<div class="temp-project-version guide-version-card" id="guideAssignVersionBox2" data-guide-version="2.0.0" data-temp-project-version-card="demo||2.0.0">' +
+                          '<div class="temp-project-version-header" data-temp-project-version-drag="demo||2.0.0" draggable="true">' +
+                            '<span class="title">2.0.0</span>' +
+                            '<span class="temp-project-version-actions">' +
+                              '<span class="remove" aria-hidden="true">×</span>' +
+                            '</span>' +
+                          '</div>' +
+                          '<div class="temp-project-version-body">' + version2Rows + '</div>' +
+                        '</div>' +
+                      '</div>' +
+                    '</div>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="temp-focus-block guide-focus-block" id="guideAssignFocusBlock">' +
+                  '<div class="temp-case-group-label">专注区</div>' +
+                  '<div class="temp-focus-zone" id="guideAssignFocusZone">' +
+                    '<span class="hint">拖拽用例到此区域</span>' +
+                  '</div>' +
+                  '<p class="hint">可从版本盒子中拖拽用例到专注区</p>' +
+                '</div>' +
+              '</div>' +
+            '</section>' +
+          '</div>' +
+        '</div>'
+      );
+    }
+
+    function resetFakeAssignPanel() {
+      if (!fakeAssignPanel) return;
+      fakeAssignPanel.innerHTML = buildFakeAssignPanelHtml();
+      fakeAssignDragState = {
+        row: null,
+        card: null,
+        rowTarget: null,
+        rowTargetBox: null,
+        cardTarget: null,
+        fileIndicator: null,
+        indicator: null,
+        lastIndicatorRef: null,
+        lastFileIndicatorRef: null,
+      };
+      if (!fakeAssignDragBound) bindFakeAssignDrag(fakeAssignPanel);
+    }
+
     function ensureFakeAssignPanel() {
       if (fakeAssignPanel) return fakeAssignPanel;
       fakeAssignPanel = document.getElementById('guideFakeAssignPanel');
-      if (fakeAssignPanel) return fakeAssignPanel;
-      fakeAssignPanel = document.createElement('div');
-      fakeAssignPanel.id = 'guideFakeAssignPanel';
-      fakeAssignPanel.className = 'guide-fake-panel hidden';
-      fakeAssignPanel.innerHTML =
-        '<div class="guide-fake-header">' +
-          '<div class="guide-fake-title">执行分配（引导演示）</div>' +
-          '<span class="guide-fake-sub">示例数据仅用于教学，不会写入实际数据</span>' +
-        '</div>' +
-        '<div class="guide-fake-body">' +
-          '<div class="temp-version-grid guide-version-grid">' +
-            '<div class="temp-version-card guide-version-card" id="guideAssignVersionBox1" draggable="true">' +
-              '<div class="header"><span class="title">1.0.0</span></div>' +
-              '<div class="temp-req-list">' +
-                '<div class="temp-req-row" draggable="true"><div class="temp-req-item"><div class="name">用例例子1</div></div></div>' +
-                '<div class="temp-req-row" draggable="true"><div class="temp-req-item"><div class="name">用例例子2</div></div></div>' +
-              '</div>' +
-            '</div>' +
-            '<div class="temp-version-card guide-version-card" id="guideAssignVersionBox2" draggable="true">' +
-              '<div class="header"><span class="title">2.0.0</span></div>' +
-              '<div class="temp-req-list">' +
-                '<div class="temp-req-row" draggable="true"><div class="temp-req-item"><div class="name">用例例子3</div></div></div>' +
-                '<div class="temp-req-row" draggable="true"><div class="temp-req-item"><div class="name">用例例子4</div></div></div>' +
-              '</div>' +
-            '</div>' +
-          '</div>' +
-          '<div class="temp-focus-block guide-focus-block" id="guideAssignFocusBlock">' +
-            '<div class="temp-case-group-label">专注区</div>' +
-            '<div class="temp-focus-zone" id="guideAssignFocusZone">' +
-              '<span class="hint">拖拽用例到此区域</span>' +
-            '</div>' +
-            '<p class="hint">可从版本盒子中拖拽用例到专注区</p>' +
-          '</div>' +
-        '</div>';
-      document.body.appendChild(fakeAssignPanel);
+      if (!fakeAssignPanel) {
+        fakeAssignPanel = document.createElement('div');
+        fakeAssignPanel.id = 'guideFakeAssignPanel';
+        fakeAssignPanel.className = 'drawer guide-fake-assign hidden';
+        document.body.appendChild(fakeAssignPanel);
+      }
+      if (!fakeAssignPanel.firstChild) {
+        fakeAssignPanel.innerHTML = buildFakeAssignPanelHtml();
+      }
+      if (!fakeAssignDragBound) bindFakeAssignDrag(fakeAssignPanel);
       return fakeAssignPanel;
+    }
+
+    function ensureFakeAssignFileIndicator() {
+      if (!fakeAssignDragState) return null;
+      if (!fakeAssignDragState.fileIndicator) {
+        var indicator = document.createElement('div');
+        indicator.className = 'temp-file-drop-indicator';
+        fakeAssignDragState.fileIndicator = indicator;
+      }
+      return fakeAssignDragState.fileIndicator;
+    }
+
+    function ensureFakeAssignIndicator() {
+      if (!fakeAssignDragState) return null;
+      if (!fakeAssignDragState.indicator) {
+        var indicator = document.createElement('div');
+        indicator.className = 'temp-drop-indicator version';
+        fakeAssignDragState.indicator = indicator;
+      }
+      return fakeAssignDragState.indicator;
+    }
+
+    function clearFakeAssignPlaceholders() {
+      if (!fakeAssignDragState) return;
+      if (fakeAssignDragState.fileIndicator && fakeAssignDragState.fileIndicator.parentNode) {
+        fakeAssignDragState.fileIndicator.parentNode.removeChild(fakeAssignDragState.fileIndicator);
+      }
+      if (fakeAssignDragState.indicator && fakeAssignDragState.indicator.parentNode) {
+        fakeAssignDragState.indicator.parentNode.removeChild(fakeAssignDragState.indicator);
+      }
+      fakeAssignDragState.lastIndicatorRef = null;
+      fakeAssignDragState.lastFileIndicatorRef = null;
+    }
+
+    function clearFakeAssignRowHints() {
+      if (!fakeAssignDragState) return;
+      if (fakeAssignDragState.rowTarget && fakeAssignDragState.rowTarget.classList) {
+        fakeAssignDragState.rowTarget.classList.remove('dragover-target');
+      }
+      if (fakeAssignDragState.rowTargetBox && fakeAssignDragState.rowTargetBox.classList) {
+        fakeAssignDragState.rowTargetBox.classList.remove('dragover-file');
+      }
+      fakeAssignDragState.rowTarget = null;
+      fakeAssignDragState.rowTargetBox = null;
+      clearFakeAssignPlaceholders();
+    }
+
+    function clearFakeAssignCardHints() {
+      if (!fakeAssignDragState) return;
+      if (fakeAssignDragState.cardTarget && fakeAssignDragState.cardTarget.classList) {
+        fakeAssignDragState.cardTarget.classList.remove('dragover');
+      }
+      fakeAssignDragState.cardTarget = null;
+      clearFakeAssignPlaceholders();
+    }
+
+    function clearFakeAssignHints(panel) {
+      if (!panel) return;
+      clearFakeAssignRowHints();
+      clearFakeAssignCardHints();
+    }
+
+    function resolveFakeAssignInsertRow(targetBody, clientY) {
+      if (!targetBody) return null;
+      var rows = Array.prototype.slice.call(targetBody.querySelectorAll('.temp-req-row'));
+      var candidate = null;
+      rows.some(function(row) {
+        if (!row || !row.getBoundingClientRect) return false;
+        var rect = row.getBoundingClientRect();
+        if (clientY < rect.top + rect.height / 2) {
+          candidate = row;
+          return true;
+        }
+        return false;
+      });
+      return candidate;
+    }
+
+    function updateFakeAssignRowDrag(targetBody, targetRow, clientY) {
+      if (!fakeAssignDragState) return;
+      if (targetBody) {
+        targetRow = resolveFakeAssignInsertRow(targetBody, clientY);
+      }
+      var prevBody = fakeAssignDragState.rowTargetBox;
+      var prevRow = fakeAssignDragState.rowTarget;
+      if (prevBody && prevBody !== targetBody && prevBody.classList) prevBody.classList.remove('dragover-file');
+      if (prevRow && prevRow !== targetRow && prevRow.classList) prevRow.classList.remove('dragover-target');
+      if (!targetBody) {
+        fakeAssignDragState.rowTargetBox = null;
+        fakeAssignDragState.rowTarget = null;
+        clearFakeAssignPlaceholders();
+        return;
+      }
+      targetBody.classList.add('dragover-file');
+      if (targetRow && targetRow !== fakeAssignDragState.row) {
+        targetRow.classList.add('dragover-target');
+      } else {
+        targetRow = null;
+      }
+      fakeAssignDragState.rowTargetBox = targetBody;
+      fakeAssignDragState.rowTarget = targetRow;
+      var indicator = ensureFakeAssignFileIndicator();
+      if (!indicator) return;
+      var refNode = null;
+      if (targetRow && targetRow.parentNode === targetBody && targetRow.getBoundingClientRect) {
+        var rect = targetRow.getBoundingClientRect();
+        var before = clientY < rect.top + rect.height / 2;
+        refNode = before ? targetRow : targetRow.nextSibling;
+      }
+      if (fakeAssignDragState.lastFileIndicatorRef !== refNode || indicator.parentNode !== targetBody) {
+        targetBody.insertBefore(indicator, refNode);
+        fakeAssignDragState.lastFileIndicatorRef = refNode;
+      }
+    }
+
+    function updateFakeAssignCardDrag(panel, targetCard, clientX, clientY) {
+      if (!fakeAssignDragState) return;
+      var grid = panel ? panel.querySelector('.guide-version-grid') : null;
+      if (!targetCard && panel && Number.isFinite(clientX)) {
+        var cards = Array.prototype.slice.call(panel.querySelectorAll('.temp-project-version'));
+        if (cards.length) {
+          var nearest = null;
+          var minDist = Infinity;
+          cards.forEach(function(card) {
+            if (!card || !card.getBoundingClientRect) return;
+            var rect = card.getBoundingClientRect();
+            var cx = rect.left + rect.width / 2;
+            var cy = rect.top + rect.height / 2;
+            var dx = clientX - cx;
+            var dy = (Number.isFinite(clientY) ? clientY : cy) - cy;
+            var dist = dx * dx + dy * dy;
+            if (dist < minDist) {
+              minDist = dist;
+              nearest = card;
+            }
+          });
+          targetCard = nearest;
+        }
+      }
+      var prevCard = fakeAssignDragState.cardTarget;
+      if (prevCard && prevCard !== targetCard && prevCard.classList) prevCard.classList.remove('dragover');
+      if (!targetCard) {
+        fakeAssignDragState.cardTarget = null;
+        clearFakeAssignPlaceholders();
+        return;
+      }
+      targetCard.classList.add('dragover');
+      fakeAssignDragState.cardTarget = targetCard;
+      var indicator = ensureFakeAssignIndicator();
+      if (!grid || !indicator || !targetCard.getBoundingClientRect) return;
+      var rect = targetCard.getBoundingClientRect();
+      var before = clientX < rect.left + rect.width / 2;
+      var refNode = before ? targetCard : targetCard.nextSibling;
+      if (fakeAssignDragState.lastIndicatorRef !== refNode || indicator.parentNode !== grid) {
+        grid.insertBefore(indicator, refNode);
+        fakeAssignDragState.lastIndicatorRef = refNode;
+      }
+    }
+
+    function bindFakeAssignDrag(panel) {
+      if (!panel || fakeAssignDragBound) return;
+      fakeAssignDragBound = true;
+      fakeAssignDragState = {
+        row: null,
+        card: null,
+        rowTarget: null,
+        rowTargetBox: null,
+        cardTarget: null,
+        fileIndicator: null,
+        indicator: null,
+      };
+
+      panel.addEventListener('dragstart', function(e) {
+        var row = e.target && e.target.closest ? e.target.closest('.temp-req-row') : null;
+        if (row && panel.contains(row)) {
+          clearFakeAssignCardHints();
+          fakeAssignDragState.row = row;
+          fakeAssignDragState.card = null;
+          fakeAssignDragState.rowTarget = null;
+          fakeAssignDragState.rowTargetBox = null;
+          fakeAssignDragState.cardTarget = null;
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', 'guide-case');
+          }
+          return;
+        }
+        var versionHeader = e.target && e.target.closest ? e.target.closest('.temp-project-version-header') : null;
+        var card = versionHeader && versionHeader.closest ? versionHeader.closest('.temp-project-version') : null;
+        if (card && panel.contains(card)) {
+          clearFakeAssignRowHints();
+          fakeAssignDragState.card = card;
+          fakeAssignDragState.row = null;
+          fakeAssignDragState.rowTarget = null;
+          fakeAssignDragState.rowTargetBox = null;
+          fakeAssignDragState.cardTarget = null;
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', 'guide-version');
+          }
+        }
+      });
+
+      panel.addEventListener('dragover', function(e) {
+        if (!fakeAssignDragState || (!fakeAssignDragState.row && !fakeAssignDragState.card)) return;
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if (fakeAssignDragState.row) {
+          var targetRow = e.target && e.target.closest ? e.target.closest('.temp-req-row') : null;
+          var targetBody = e.target && e.target.closest ? e.target.closest('.temp-project-version-body') : null;
+          updateFakeAssignRowDrag(targetBody, targetRow, e.clientY);
+          return;
+        }
+        var targetCard = e.target && e.target.closest ? e.target.closest('.temp-project-version') : null;
+        updateFakeAssignCardDrag(panel, targetCard, e.clientX, e.clientY);
+      });
+
+      panel.addEventListener('dragleave', function(e) {
+        if (!fakeAssignDragState || (!fakeAssignDragState.row && !fakeAssignDragState.card)) return;
+        var related = e && e.relatedTarget ? e.relatedTarget : null;
+        if (related && panel.contains(related)) return;
+        clearFakeAssignHints(panel);
+      });
+
+      panel.addEventListener('drop', function(e) {
+        if (!fakeAssignDragState || (!fakeAssignDragState.row && !fakeAssignDragState.card)) return;
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        if (fakeAssignDragState.row) {
+          var targetRow = fakeAssignDragState.rowTarget || (e.target && e.target.closest ? e.target.closest('.temp-req-row') : null);
+          var targetBody = fakeAssignDragState.rowTargetBox || (e.target && e.target.closest ? e.target.closest('.temp-project-version-body') : null);
+          var indicator = fakeAssignDragState.fileIndicator;
+          if (targetBody && indicator && indicator.parentNode === targetBody) {
+            targetBody.insertBefore(fakeAssignDragState.row, indicator);
+          } else if (targetBody && targetRow && targetRow !== fakeAssignDragState.row) {
+            targetBody.insertBefore(fakeAssignDragState.row, targetRow);
+          } else if (targetBody) {
+            targetBody.appendChild(fakeAssignDragState.row);
+          }
+        }
+        if (fakeAssignDragState.card) {
+          var indicator = fakeAssignDragState.indicator;
+          if (indicator && indicator.parentNode) {
+            indicator.parentNode.insertBefore(fakeAssignDragState.card, indicator);
+          } else {
+            var targetCard = fakeAssignDragState.cardTarget || (e.target && e.target.closest ? e.target.closest('.temp-project-version') : null);
+            if (targetCard && targetCard !== fakeAssignDragState.card) {
+              var parent = targetCard.parentNode;
+              if (parent) parent.insertBefore(fakeAssignDragState.card, targetCard);
+            }
+          }
+        }
+        clearFakeAssignHints(panel);
+        fakeAssignDragState.row = null;
+        fakeAssignDragState.card = null;
+      });
+
+      panel.addEventListener('dragend', function() {
+        clearFakeAssignHints(panel);
+        if (!fakeAssignDragState) return;
+        fakeAssignDragState.row = null;
+        fakeAssignDragState.card = null;
+      });
     }
 
     function ensureFakeMissingPanel() {
@@ -355,36 +748,24 @@
       return fakeExecVersionPanel;
     }
 
-    function ensureFakeArchiveButton() {
-      if (fakeArchiveBtn) return fakeArchiveBtn;
-      fakeArchiveBtn = document.getElementById('guideArchiveBtn');
-      if (fakeArchiveBtn) return fakeArchiveBtn;
-      fakeArchiveBtn = document.createElement('button');
-      fakeArchiveBtn.id = 'guideArchiveBtn';
-      fakeArchiveBtn.type = 'button';
-      fakeArchiveBtn.className = 'pill accent guide-archive-btn hidden';
-      fakeArchiveBtn.textContent = '归档';
-      document.body.appendChild(fakeArchiveBtn);
-      return fakeArchiveBtn;
-    }
-
     function showFakePanel(panel) {
       if (!panel || !panel.classList) return;
       panel.classList.remove('hidden');
       panel.classList.add('active');
+      if (panel.classList.contains('drawer')) panel.classList.add('open');
     }
 
     function hideFakePanel(panel) {
       if (!panel || !panel.classList) return;
       panel.classList.add('hidden');
       panel.classList.remove('active');
+      panel.classList.remove('open');
     }
 
     function hideAllFakePanels() {
       hideFakePanel(fakeAssignPanel);
       hideFakePanel(fakeMissingPanel);
       hideFakePanel(fakeExecVersionPanel);
-      if (fakeArchiveBtn && fakeArchiveBtn.classList) fakeArchiveBtn.classList.add('hidden');
     }
 
     function resolveTarget(step) {
@@ -414,11 +795,20 @@
       if (activeTarget && stepHoverHandler) {
         activeTarget.removeEventListener('mouseenter', stepHoverHandler);
       }
+      if (stepScrollHandler && stepScrollHandler.targets) {
+        stepScrollHandler.targets.forEach(function(el) {
+          if (el && el.removeEventListener) el.removeEventListener('scroll', stepScrollHandler.handler, true);
+        });
+      }
       if (stepDragHandler) {
         var dragTargets = stepDragHandler.targets || [];
         dragTargets.forEach(function(el) {
           if (el && el.removeEventListener) {
-            el.removeEventListener('dragstart', stepDragHandler.handler, true);
+            if (stepDragHandler.type === 'drop') {
+              el.removeEventListener('drop', stepDragHandler.handler, true);
+            } else {
+              el.removeEventListener('dragstart', stepDragHandler.handler, true);
+            }
           }
         });
       }
@@ -426,6 +816,7 @@
       stepClickCapture = false;
       stepHoverHandler = null;
       stepDragHandler = null;
+      stepScrollHandler = null;
     }
 
     function resetTargetAllow() {
@@ -436,6 +827,45 @@
     function bindStepEvents(step, target) {
       clearStepListeners();
       if (!step || !target) return;
+      if (step.dragHand && step.dragHand.type === 'case') {
+        var list = target.querySelectorAll('.temp-project-version-body');
+        if (list && list.length) {
+          var targets = Array.prototype.slice.call(list);
+          var handler = function() {
+            updateDragHand(step, target);
+          };
+          targets.forEach(function(el) {
+            if (el && el.addEventListener) el.addEventListener('scroll', handler, true);
+          });
+          stepScrollHandler = { handler: handler, targets: targets };
+        }
+      }
+      if (step.interaction === 'drop') {
+        var dropTargets = [];
+        var selectors = step.dropTargets && step.dropTargets.length ? step.dropTargets : (step.dragTargets || []);
+        if (!selectors.length && step.target) selectors = [step.target];
+        selectors.forEach(function(sel) {
+          if (!sel) return;
+          var list = document.querySelectorAll(sel);
+          if (list && list.length) {
+            Array.prototype.forEach.call(list, function(item) { dropTargets.push(item); });
+          } else {
+            var el = document.querySelector(sel);
+            if (el) dropTargets.push(el);
+          }
+        });
+        if (!dropTargets.length) dropTargets = [target];
+        var dropHandler = function() {
+          completeStep();
+        };
+        dropTargets.forEach(function(el) {
+          if (el && el.addEventListener) {
+            el.addEventListener('drop', dropHandler, true);
+          }
+        });
+        stepDragHandler = { handler: dropHandler, targets: dropTargets, type: 'drop' };
+        return;
+      }
       if (step.interaction === 'drag') {
         var dragTargets = [];
         if (step.dragTargets && step.dragTargets.length) {
@@ -499,6 +929,74 @@
       activeTarget = target;
     }
 
+    function updateDragHand(step, target) {
+      if (!dragHandEl) return;
+      if (!step || !step.dragHand) {
+        dragHandEl.classList.add('hidden');
+        return;
+      }
+      var type = step.dragHand.type || '';
+      var from = null;
+      var to = null;
+      var clamp = function(value, min, max) {
+        if (!Number.isFinite(value)) return min;
+        return Math.min(Math.max(value, min), max);
+      };
+      if (type === 'case') {
+        var container = target && target.querySelector ? target : document.querySelector('#guideAssignVersionBox1');
+        var body = container ? container.querySelector('.temp-project-version-body') : null;
+        var rows = body ? body.querySelectorAll('.temp-req-row') : null;
+        if (body && rows && rows.length > 1) {
+          var bodyRect = body.getBoundingClientRect();
+          var visible = [];
+          Array.prototype.forEach.call(rows, function(row) {
+            if (!row || !row.getBoundingClientRect) return;
+            var rect = row.getBoundingClientRect();
+            if (rect.bottom > bodyRect.top && rect.top < bodyRect.bottom) {
+              visible.push({ el: row, rect: rect });
+            }
+          });
+          if (visible.length > 1) {
+            var r1 = visible[0].rect;
+            var r2 = visible[1].rect;
+            var padding = 8;
+            var minX = bodyRect.left + padding;
+            var maxX = bodyRect.right - padding;
+            var minY = bodyRect.top + padding;
+            var maxY = bodyRect.bottom - padding;
+            var startX = clamp(r1.right - Math.min(24, r1.width * 0.2), minX, maxX);
+            var startY = clamp(r1.top + r1.height / 2, minY, maxY);
+            var endX = clamp(r2.right - Math.min(24, r2.width * 0.2), minX, maxX);
+            var endY = clamp(r2.bottom + 8, minY, maxY);
+            from = { x: startX, y: startY };
+            to = { x: endX, y: endY };
+          }
+        }
+      } else if (type === 'version') {
+        var box1 = document.getElementById('guideAssignVersionBox1');
+        var box2 = document.getElementById('guideAssignVersionBox2');
+        if (box1 && box2) {
+          var b1 = box1.getBoundingClientRect();
+          var b2 = box2.getBoundingClientRect();
+          var vx1 = b1.left + b1.width * 0.35;
+          var vy1 = b1.top + 24;
+          var vx2 = b2.left + b2.width * 0.35;
+          var vy2 = b2.top + 24;
+          from = { x: vx1, y: vy1 };
+          to = { x: vx2, y: vy2 };
+        }
+      }
+      if (!from || !to) {
+        dragHandEl.classList.add('hidden');
+        return;
+      }
+      dragHandEl.style.setProperty('--hand-from-x', Math.round(from.x) + 'px');
+      dragHandEl.style.setProperty('--hand-from-y', Math.round(from.y) + 'px');
+      dragHandEl.style.setProperty('--hand-to-x', Math.round(to.x) + 'px');
+      dragHandEl.style.setProperty('--hand-to-y', Math.round(to.y) + 'px');
+      dragHandEl.classList.remove('hidden');
+    }
+
     function updateFocusPosition(step, target) {
       if (!focusEl || !tooltipEl || !target) return;
       var rect = target.getBoundingClientRect();
@@ -528,6 +1026,7 @@
         tooltipEl.style.left = tipLeft + 'px';
         tooltipEl.style.top = tipTop + 'px';
       }
+      updateDragHand(step, target);
     }
 
     function bindOverlayPosition() {
@@ -741,6 +1240,7 @@
       }
       if (focusEl && focusEl.classList) focusEl.classList.add('hidden');
       if (tooltipEl && tooltipEl.classList) tooltipEl.classList.add('hidden');
+      if (dragHandEl && dragHandEl.classList) dragHandEl.classList.add('hidden');
       document.body.classList.remove('guide-active');
       unbindGuideGuards();
       activeGuideId = '';
@@ -761,6 +1261,10 @@
       if (!flow) return;
       activeGuideId = id;
       activeFlow = flow;
+      if (id === 'temp-exec' && !options.sessionId) {
+        ensureFakeAssignPanel();
+        resetFakeAssignPanel();
+      }
       activeStepIndex = options.stepIndex ? Number(options.stepIndex) : 0;
       if (!Number.isFinite(activeStepIndex) || activeStepIndex < 0) activeStepIndex = 0;
       activeSessionId = options.sessionId || buildSessionId();
@@ -1119,8 +1623,9 @@
               proxy: false,
               skipNext: true,
               swapIcon: true,
-              interaction: 'drag',
-              dragTargets: ['#guideAssignVersionBox1 .temp-req-row'],
+              dragHand: { type: 'case' },
+              interaction: 'drop',
+              dropTargets: ['#guideAssignVersionBox1'],
               prepare: function() {
                 showFakePanel(ensureFakeAssignPanel());
               },
@@ -1134,8 +1639,9 @@
               proxy: false,
               skipNext: true,
               swapIcon: true,
-              interaction: 'drag',
-              dragTargets: ['.guide-version-card'],
+              dragHand: { type: 'version' },
+              interaction: 'drop',
+              dropTargets: ['.guide-version-grid'],
               prepare: function() {
                 showFakePanel(ensureFakeAssignPanel());
               },
@@ -1166,17 +1672,14 @@
             {
               id: 'tempexec-archive',
               tab: 'tempexec',
-              target: '#guideArchiveBtn',
+              target: function() {
+                return document.querySelector('.temp-exec-toolbar .toolbar-archive') ||
+                  document.querySelector('[data-temp-overview-archive]');
+              },
               tip: '这是最后一步的操作，归档用于存储执行完成的用例，如果用例已经跑完，请务必点击归档，即可把执行记录入库。',
               proxy: true,
               dimOpacity: 0.55,
-              prepare: function() {
-                var btn = ensureFakeArchiveButton();
-                if (btn && btn.classList) btn.classList.remove('hidden');
-              },
-              onComplete: function() {
-                if (fakeArchiveBtn && fakeArchiveBtn.classList) fakeArchiveBtn.classList.add('hidden');
-              },
+              scrollIntoView: true,
             },
           ],
         },

@@ -41,6 +41,8 @@
 - 更新记录：2025-12-29 功能引导抽屉与假页面暗色主题适配（`style.css`）。
 - 更新记录：2025-12-29 假页面版本盒子暗色主题适配（`style.css`）。
 - 更新记录：2025-12-29 选择用例执行引导阻止下拉触发并确保聚拢定位（`scripts/modules/flowGuide.js`）。
+- 更新记录：2025-12-29 用例执行引导归档按钮改用页面内真实入口（`scripts/modules/flowGuide.js`、`style.css`）。
+- 更新记录：2025-12-29 执行分配假引导页改为抽屉布局并支持拖拽换位（`scripts/modules/flowGuide.js`、`style.css`）。
 
 - 功能名称：多页面 HTML 拆分与跨页导航
 - 功能描述：将原本集中在 `index.html` 的功能页拆分为 6 个独立 HTML 页面，并为跨页切换补充 tab → 页面映射与跳转逻辑。
@@ -2899,3 +2901,18 @@
   - `npm run test:ui -- tests/ui/case_library_jump_exec.spec.js tests/ui/tempexec_entry.spec.js`（通过）
   - 未涉及后端 API，未运行 `test:api`
 - 更新记录：2025-12-28 移除用例库/执行页跳转入口（`case-library.html`、`case-exec.html`、`index.html`、`tests/ui/case_library_jump_exec.spec.js`、`tests/ui/tempexec_entry.spec.js`）。
+
+- 功能名称：执行分配引导拖拽体验对齐
+- 功能描述：执行分配假引导页补齐拖拽虚线指示与放手后换位效果，拖拽放手后才进入下一步。
+- 操作方式：在“用例执行引导”进入执行分配演示页，拖拽用例行与版本盒子完成放手操作即可进入下一步。
+- 使用效果：拖拽体验与真实执行分配页一致，用户可直观看到拖拽提示与换位效果。
+- 新增内容/接口/组件：
+  - 前端：执行分配假页拖拽占位/指示器与换位处理（`scripts/modules/flowGuide.js`、`style.css`）。
+  - 测试：执行分配引导拖拽场景（`tests/ui/flow_guide_drawer.spec.js`）。
+- 复用说明：复用现有拖拽提示样式（`temp-drag-placeholder`、`temp-drop-indicator`），无新增接口。
+- 测试与验证：
+  - `npm run test:ui -- tests/ui/flow_guide_drawer.spec.js`
+- 更新记录：2025-12-28 执行分配引导拖拽体验对齐（`scripts/modules/flowGuide.js`、`style.css`、`tests/ui/flow_guide_drawer.spec.js`）。
+- 更新记录：2025-12-28 执行分配引导改为版本盒子布局并支持拖拽占位与滚动（`scripts/modules/flowGuide.js`、`style.css`、`tests/ui/flow_guide_drawer.spec.js`）。
+- 更新记录：2025-12-28 执行分配引导拖拽提示防抖与手势指引（`scripts/modules/flowGuide.js`、`style.css`）。
+- 更新记录：2025-12-28 执行分配引导手势指引跟随滚动并限制在版本盒子内（`scripts/modules/flowGuide.js`）。

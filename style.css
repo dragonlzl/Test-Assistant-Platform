@@ -3711,6 +3711,34 @@ body.guide-active .guide-allow * {
   stroke-width: 1.6;
   fill: none;
 }
+.guide-drag-hand {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9825;
+  width: 28px;
+  height: 28px;
+  color: #f97316;
+  pointer-events: none;
+  transform: translate(var(--hand-from-x, 0px), var(--hand-from-y, 0px));
+  animation: guideHandMove 1.4s ease-in-out infinite;
+}
+.guide-drag-hand.hidden {
+  display: none;
+}
+.guide-drag-hand svg {
+  width: 100%;
+  height: 100%;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  fill: none;
+  filter: drop-shadow(0 4px 8px rgba(15,23,42,0.2));
+}
+@keyframes guideHandMove {
+  0% { transform: translate(var(--hand-from-x, 0px), var(--hand-from-y, 0px)); opacity: 0.85; }
+  50% { transform: translate(var(--hand-to-x, 0px), var(--hand-to-y, 0px)); opacity: 1; }
+  100% { transform: translate(var(--hand-from-x, 0px), var(--hand-from-y, 0px)); opacity: 0.85; }
+}
 
 .guide-fake-panel {
   position: fixed;
@@ -3725,6 +3753,21 @@ body.guide-active .guide-allow * {
 }
 .guide-fake-panel.hidden {
   display: none;
+}
+.guide-fake-assign.drawer {
+  z-index: 9700;
+}
+.guide-fake-assign .guide-fake-header-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.guide-fake-assign .guide-fake-header-tag {
+  font-size: 12px;
+  color: #f97316;
+  background: rgba(249,115,22,0.14);
+  border-radius: 999px;
+  padding: 4px 10px;
 }
 .guide-fake-header {
   display: flex;
@@ -3746,7 +3789,12 @@ body.guide-active .guide-allow * {
   gap: 18px;
 }
 .guide-version-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.guide-version-grid .temp-drop-indicator {
+  min-height: 180px;
+  border-radius: 12px;
+  align-self: stretch;
 }
 .guide-focus-block {
   background: #fff;
@@ -3819,16 +3867,6 @@ body.guide-active .guide-allow * {
 .guide-missing-actions {
   display: flex;
   justify-content: flex-end;
-}
-
-.guide-archive-btn {
-  position: fixed;
-  right: 24px;
-  top: 140px;
-  z-index: 9701;
-}
-.guide-archive-btn.hidden {
-  display: none;
 }
 
 @keyframes guidePulse {
@@ -7832,6 +7870,10 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .guide-fake-drawer-inner {
   background: var(--card);
   box-shadow: -12px 0 32px rgba(0,0,0,0.6);
+}
+:root[data-theme="dark"] .guide-fake-assign .guide-fake-header-tag {
+  color: #fdba74;
+  background: rgba(249,115,22,0.18);
 }
 :root[data-theme="dark"] .guide-fake-drawer-header {
   color: var(--text);
