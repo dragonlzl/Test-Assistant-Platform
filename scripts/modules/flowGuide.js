@@ -710,20 +710,49 @@
       if (fakeMissingPanel) return fakeMissingPanel;
       fakeMissingPanel = document.createElement('div');
       fakeMissingPanel.id = 'guideFakeMissingPanel';
-      fakeMissingPanel.className = 'guide-fake-panel hidden';
+      fakeMissingPanel.className = 'drawer guide-fake-missing hidden';
       fakeMissingPanel.innerHTML =
-        '<div class="guide-fake-header">' +
-          '<div class="guide-fake-title">缺失测试点视图（引导演示）</div>' +
-          '<span class="guide-fake-sub">示例数据仅用于演示</span>' +
-        '</div>' +
-        '<div class="guide-fake-body">' +
-          '<div class="guide-missing-list">' +
-            '<div class="guide-missing-item">模块：登录安全 - 缺失测试点：多因子验证</div>' +
-            '<div class="guide-missing-item">模块：消息通知 - 缺失测试点：推送失败重试</div>' +
-            '<div class="guide-missing-item">模块：权限管理 - 缺失测试点：角色变更同步</div>' +
+        '<div class="drawer-mask"></div>' +
+        '<div class="drawer-panel">' +
+          '<div class="drawer-header">' +
+            '<h3>缺失模块视图</h3>' +
+            '<button class="link-toggle" type="button">收起</button>' +
           '</div>' +
-          '<div class="guide-missing-actions">' +
-            '<button class="pill primary" id="guideMissingSmartFillBtn" type="button">智能填充</button>' +
+          '<div class="drawer-body">' +
+            '<p class="status">示例数据仅用于演示</p>' +
+            '<div class="missing-view visible">' +
+              '<table class="table-view">' +
+                '<thead>' +
+                  '<tr>' +
+                    '<th class="check"><input type="checkbox" disabled></th>' +
+                    '<th class="module">缺失模块</th>' +
+                    '<th class="remark">缺失测试点</th>' +
+                  '</tr>' +
+                '</thead>' +
+                '<tbody>' +
+                  '<tr>' +
+                    '<td class="check"><input type="checkbox" checked disabled></td>' +
+                    '<td class="module">登录安全</td>' +
+                    '<td class="remark">多因子验证</td>' +
+                  '</tr>' +
+                  '<tr>' +
+                    '<td class="check"><input type="checkbox" disabled></td>' +
+                    '<td class="module">消息通知</td>' +
+                    '<td class="remark">推送失败重试</td>' +
+                  '</tr>' +
+                  '<tr>' +
+                    '<td class="check"><input type="checkbox" disabled></td>' +
+                    '<td class="module">权限管理</td>' +
+                    '<td class="remark">角色变更同步</td>' +
+                  '</tr>' +
+                '</tbody>' +
+              '</table>' +
+            '</div>' +
+            '<div class="actions user-form-actions" style="justify-content:flex-end; gap:8px;">' +
+              '<button class="secondary" type="button">复制缺失模块JSON</button>' +
+              '<button class="pill primary" id="guideMissingSmartFillBtn" type="button">智能生成填充</button>' +
+              '<button class="secondary" type="button">生成用例</button>' +
+            '</div>' +
           '</div>' +
         '</div>';
       document.body.appendChild(fakeMissingPanel);
@@ -1777,6 +1806,7 @@
               tip: '可在此处观察执行进度，并点击按钮跳转到对应的功能流程中查看。点击此处进入下一步引导。',
               proxy: true,
               dimOpacity: 0.55,
+              scrollIntoView: true,
             },
             {
               id: 'auto-missing-toggle',
@@ -1834,7 +1864,7 @@
               id: 'casesgen-all',
               tab: 'casesgen',
               target: '#caseGenAllGenerateBtn',
-              tip: '点击可对所有模块进行生成，注意，生成的是全部内容。点击此处进入下一步引导。',
+              tip: '点击可对所有模块进行生成，注意，生成的是全部内容。生成前提：需要先通过【AI功能】的【一键执行】进行用例模块拆分，拆分后才可以开始生成用例。点击此处进入下一步引导。',
               proxy: true,
               dimOpacity: 0.55,
               scrollIntoView: true,
@@ -1843,7 +1873,7 @@
               id: 'casesgen-topup',
               tab: 'casesgen',
               target: '#caseGenAllTopupBtn',
-              tip: '点击后可对全模块进行补充生成，注意，仅针对生成建议的内容进行补充的生成，不会去掉原来已经生成的用例数据。点击此处进入下一步引导。',
+              tip: '点击后可对全模块进行补充生成，注意，仅针对生成建议的内容进行补充的生成，不会去掉原来已经生成的用例数据。生成前提：需要先通过【AI功能】的【一键执行】的最后一个流程，才可以根据缺失测试点结果生成补充用例。点击此处进入下一步引导。',
               proxy: true,
               dimOpacity: 0.55,
             },
