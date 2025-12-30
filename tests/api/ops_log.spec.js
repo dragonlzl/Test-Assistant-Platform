@@ -269,6 +269,8 @@ test.describe('operation logs', () => {
     expect(execUpdateLog.detail.precondition).not.toBeUndefined();
     expect(execUpdateLog.detail.steps).not.toBeUndefined();
     expect(execUpdateLog.detail.expected).not.toBeUndefined();
+    const execFileName = execUpdateLog.detail.case_file_name || execUpdateLog.detail.exec_set_name;
+    expect(execFileName).toBeTruthy();
 
     const archiveLog = opsLogs.find((row) => row && row.action === 'archive_exec_set' && row.target_id === execSetId);
     expect(archiveLog).toBeTruthy();

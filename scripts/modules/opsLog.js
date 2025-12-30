@@ -1708,6 +1708,14 @@
     return caseKey;
   }
 
+  function resolveExecCaseFileName(detail) {
+    if (!detail || typeof detail !== 'object') return '';
+    var fileName = normalizeCaseText(detail.case_file_name);
+    if (!fileName) fileName = normalizeCaseText(detail.file_name);
+    if (!fileName) fileName = normalizeCaseText(detail.exec_set_name);
+    return fileName;
+  }
+
   function readChangedFields(detail) {
     if (!detail || typeof detail !== 'object') return [];
     var raw = detail.changed_fields;
@@ -1782,11 +1790,25 @@
       if (!dayKey) return;
       var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
       if (!userId) return;
-      var groupKey = userId + '::' + dayKey;
+      var fileName = resolveExecCaseFileName(detail);
+      var fileKey = fileName;
+      if (!fileKey) {
+        var execSetId = (detail.exec_set_id || detail.exec_set_id === 0) ? String(detail.exec_set_id) : '';
+        fileKey = execSetId ? ('exec-set-' + execSetId) : 'unknown';
+      }
+      var groupKey = userId + '::' + dayKey + '::' + fileKey;
       if (!groups[groupKey]) {
-        groups[groupKey] = { userId: userId, dayKey: dayKey, logs: [], username: log.username || '' };
+        groups[groupKey] = {
+          userId: userId,
+          dayKey: dayKey,
+          fileKey: fileKey,
+          fileName: fileName || '',
+          logs: [],
+          username: log.username || ''
+        };
       }
       if (!groups[groupKey].username && log.username) groups[groupKey].username = log.username;
+      if (!groups[groupKey].fileName && fileName) groups[groupKey].fileName = fileName;
       groups[groupKey].logs.push({ log: log, time: t });
     });
 
@@ -1822,7 +1844,7 @@
         if (!isExecCaseRunEvent(detail)) return;
         var reuseMeta = resolveReuseMeta(detail);
         var title = String(detail.title || detail.case_title || detail.case_name || '').trim();
-        var fileName = String(detail.case_file_name || detail.file_name || detail.exec_set_name || '').trim();
+        var fileName = resolveExecCaseFileName(detail);
         var payload = {
           log: log,
           before: beforeCount,
@@ -1846,7 +1868,7 @@
         exec_day: group.dayKey,
       };
       results.push({
-        id: 'exec-case-run-first-' + group.userId + '-' + group.dayKey,
+        id: 'exec-case-run-first-' + group.userId + '-' + group.dayKey + '-' + group.fileKey,
         user_id: firstEvent.log.user_id,
         username: firstEvent.log.username || group.username,
         action: 'exec_case_run',
@@ -1859,14 +1881,14 @@
           before_count: firstBefore,
           after_count: firstAfter,
           case_title: firstEvent.title || null,
-          case_file_name: firstEvent.fileName || null,
+          case_file_name: firstEvent.fileName || group.fileName || null,
           case_type: firstEvent.reuseType || '',
         }),
         created_at: firstEvent.log.created_at,
       });
       if (lastEvent && lastEvent !== firstEvent && group.dayKey !== todayKey) {
         results.push({
-          id: 'exec-case-run-last-' + group.userId + '-' + group.dayKey,
+          id: 'exec-case-run-last-' + group.userId + '-' + group.dayKey + '-' + group.fileKey,
           user_id: lastEvent.log.user_id,
           username: lastEvent.log.username || group.username,
           action: 'exec_case_run',
@@ -1879,7 +1901,7 @@
             before_count: firstAfter,
             after_count: lastAfter,
             case_title: lastEvent.title || null,
-            case_file_name: lastEvent.fileName || null,
+            case_file_name: lastEvent.fileName || group.fileName || null,
             case_type: lastEvent.reuseType || '',
           }),
           created_at: lastEvent.log.created_at,

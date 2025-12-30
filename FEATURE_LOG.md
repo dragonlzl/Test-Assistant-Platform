@@ -3105,3 +3105,16 @@
 - 测试与验证：
   - 未运行自动化测试（需本地 UI 服务）。
 - 更新记录：2025-12-29 用例库新增撤回计时编辑不中断（`scripts/modules/caseLibrary.js`）。
+
+- 功能名称：操作记录执行用例按文件拆分聚合
+- 功能描述：操作记录查看记录中执行用例按天聚合时，增加用例文件名维度，分别输出每份用例的首条/末条记录。
+- 操作方式：进入操作记录页点击“查看记录”，同一天内执行多份用例时，列表展示每份用例的首条与末条记录。
+- 使用效果：同日执行多份用例的记录不再混合，按用例文件分别聚合。
+- 新增内容/接口/组件：
+  - 前端：执行用例聚合按用例文件拆分（`scripts/modules/opsLog.js`）。
+  - 测试：更新执行用例聚合 UI 与 API 覆盖（`tests/ui/ops_log_exec_case_run.spec.js`、`tests/api/ops_log.spec.js`）。
+- 复用说明：复用既有 update_exec_case 操作记录与列表查询，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/ops_log.spec.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/ops_log_exec_case_run.spec.js`
+- 更新记录：2025-12-30 操作记录执行用例按文件拆分聚合（`scripts/modules/opsLog.js`、`tests/ui/ops_log_exec_case_run.spec.js`、`tests/api/ops_log.spec.js`）。

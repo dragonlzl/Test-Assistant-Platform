@@ -43,7 +43,7 @@ test.describe('操作记录-执行用例聚合展示', () => {
         target_id: 100,
         result: 'success',
         detail: {
-          case_file_name: '用例文件',
+          case_file_name: '用例A',
           module: '模块A',
           title: '用例1',
           precondition: '前置1',
@@ -64,14 +64,14 @@ test.describe('操作记录-执行用例聚合展示', () => {
         target_id: 101,
         result: 'success',
         detail: {
-          case_file_name: '用例文件',
-          module: '模块A',
+          case_file_name: '用例B',
+          module: '模块B',
           title: '用例2',
           precondition: '前置2',
           steps: '步骤2',
           expected: '预期2',
-          status: '失败',
-          actual_result: 'NG',
+          status: '通过',
+          actual_result: 'OK',
           changed_fields: ['status'],
         },
         created_at: new Date(yesterday.getTime() + 60 * 60 * 1000).toISOString(),
@@ -85,19 +85,38 @@ test.describe('操作记录-执行用例聚合展示', () => {
         target_id: 102,
         result: 'success',
         detail: {
-          case_file_name: '用例文件',
+          case_file_name: '用例A',
           module: '模块A',
-          title: '皮肤',
+          title: '用例3',
           precondition: '前置3',
           steps: '步骤3',
           expected: '预期3',
-          status: '未执行',
-          actual_result: '',
-          reuse_total_count: 3,
-          reuse_executed_count: 1,
-          changed_fields: ['reuse_details'],
+          status: '失败',
+          actual_result: 'NG',
+          changed_fields: ['status'],
         },
-        created_at: new Date(yesterday.getTime() + 5 * 60 * 60 * 1000).toISOString(),
+        created_at: new Date(yesterday.getTime() + 3 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: 4,
+        user_id: 1,
+        username: 'admin',
+        action: 'update_exec_case',
+        target_type: 'exec_case',
+        target_id: 103,
+        result: 'success',
+        detail: {
+          case_file_name: '用例B',
+          module: '模块B',
+          title: '用例4',
+          precondition: '前置4',
+          steps: '步骤4',
+          expected: '预期4',
+          status: '通过',
+          actual_result: 'OK',
+          changed_fields: ['status'],
+        },
+        created_at: new Date(yesterday.getTime() + 4 * 60 * 60 * 1000).toISOString(),
       },
     ];
 
@@ -145,9 +164,14 @@ test.describe('操作记录-执行用例聚合展示', () => {
         });
     });
     const execText = execRows.map((row) => row.text).join(' ');
+    expect(execRows.length).toBe(4);
     expect(execText).toContain('0 -> 1');
-    expect(execText).toContain('1 -> 3');
-    expect(execText).toContain('用例：用例文件');
-    expect(execText).toContain('用例：用例文件（复）');
+    expect(execText).toContain('1 -> 2');
+    expect(execText).toContain('用例：用例A');
+    expect(execText).toContain('用例：用例B');
+    const firstCount = execRows.filter((row) => row.text.includes('0 -> 1')).length;
+    const lastCount = execRows.filter((row) => row.text.includes('1 -> 2')).length;
+    expect(firstCount).toBe(2);
+    expect(lastCount).toBe(2);
   });
 });
