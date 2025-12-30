@@ -3055,6 +3055,7 @@
 - 测试与验证：
   - 未运行自动化测试（需本地 UI 服务）。
 - 更新记录：2025-12-29 操作记录执行用例聚合展示（`scripts/modules/opsLog.js`、`tests/ui/ops_log_exec_case_run.spec.js`）。
+- 更新记录：2025-12-29 执行用例操作项显示用例名（`backend/routers/exec_routes.py`、`scripts/modules/opsLog.js`、`tests/ui/ops_log_exec_case_run.spec.js`）。
 
 - 功能名称：操作记录操作行为筛选
 - 功能描述：查看记录新增“操作行为”平铺筛选，可按行为过滤列表。

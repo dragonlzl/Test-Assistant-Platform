@@ -622,6 +622,7 @@
     // 系统平台
     if (action === 'login' || action === 'logout' || action === 'change_password') return '系统平台';
     if (action === 'exec_case_run') {
+      var execFileName = String(detail.case_file_name || detail.file_name || detail.exec_set_name || '').trim();
       var execTitle = String(detail.case_title || detail.case_name || detail.title || '').trim();
       var reuseFlag = String(detail.case_type || detail.reuse_type || '').trim().toLowerCase() === 'reuse';
       if (!reuseFlag) {
@@ -629,6 +630,7 @@
         if (Number.isFinite(reuseTotal) && reuseTotal > 0) reuseFlag = true;
       }
       var suffix = reuseFlag ? '（复）' : '';
+      if (execFileName) return '用例：' + execFileName + suffix;
       if (execTitle) return '用例：' + execTitle + suffix;
       return '用例' + suffix;
     }
@@ -1820,11 +1822,13 @@
         if (!isExecCaseRunEvent(detail)) return;
         var reuseMeta = resolveReuseMeta(detail);
         var title = String(detail.title || detail.case_title || detail.case_name || '').trim();
+        var fileName = String(detail.case_file_name || detail.file_name || detail.exec_set_name || '').trim();
         var payload = {
           log: log,
           before: beforeCount,
           after: afterCount,
           title: title || null,
+          fileName: fileName || null,
           reuseType: reuseMeta.isReuse === true ? 'reuse' : '',
         };
         if (!firstEvent) {
@@ -1855,6 +1859,7 @@
           before_count: firstBefore,
           after_count: firstAfter,
           case_title: firstEvent.title || null,
+          case_file_name: firstEvent.fileName || null,
           case_type: firstEvent.reuseType || '',
         }),
         created_at: firstEvent.log.created_at,
@@ -1874,6 +1879,7 @@
             before_count: firstAfter,
             after_count: lastAfter,
             case_title: lastEvent.title || null,
+            case_file_name: lastEvent.fileName || null,
             case_type: lastEvent.reuseType || '',
           }),
           created_at: lastEvent.log.created_at,

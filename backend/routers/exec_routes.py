@@ -2413,6 +2413,23 @@ def update_exec_case(
         exec_case.updated_by = user.id
         exec_case.updated_at = datetime.now(timezone.utc)
         db.add(exec_case)
+        case_file_name = None
+        case_file_id = None
+        exec_set_name = exec_set.name if exec_set else None
+        if exec_set and exec_set.case_file_id:
+            case_file_id = exec_set.case_file_id
+            try:
+                case_file = (
+                    db.query(models.CaseFile)
+                    .filter(models.CaseFile.id == exec_set.case_file_id)
+                    .first()
+                )
+            except Exception:
+                case_file = None
+            if case_file and case_file.file_name_clean:
+                case_file_name = case_file.file_name_clean
+        if not case_file_name and exec_set_name:
+            case_file_name = exec_set_name
 
         # 非“实际结果/缺陷链接”字段变更需要同步到用例库（case_items）
         case_fields = ["module", "title", "expected", "priority", "precondition", "steps", "remark"]
@@ -2611,6 +2628,9 @@ def update_exec_case(
             target_id=exec_case.id,
             detail={
                 "exec_set_id": exec_case.exec_set_id,
+                "exec_set_name": exec_set_name,
+                "case_file_id": case_file_id,
+                "case_file_name": case_file_name,
                 "module": exec_case.module,
                 "title": exec_case.title,
                 "precondition": exec_case.precondition,

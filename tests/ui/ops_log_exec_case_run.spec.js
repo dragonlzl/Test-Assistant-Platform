@@ -43,6 +43,7 @@ test.describe('操作记录-执行用例聚合展示', () => {
         target_id: 100,
         result: 'success',
         detail: {
+          case_file_name: '用例文件',
           module: '模块A',
           title: '用例1',
           precondition: '前置1',
@@ -63,6 +64,7 @@ test.describe('操作记录-执行用例聚合展示', () => {
         target_id: 101,
         result: 'success',
         detail: {
+          case_file_name: '用例文件',
           module: '模块A',
           title: '用例2',
           precondition: '前置2',
@@ -83,6 +85,7 @@ test.describe('操作记录-执行用例聚合展示', () => {
         target_id: 102,
         result: 'success',
         detail: {
+          case_file_name: '用例文件',
           module: '模块A',
           title: '皮肤',
           precondition: '前置3',
@@ -144,7 +147,7 @@ test.describe('操作记录-执行用例聚合展示', () => {
     const execText = execRows.map((row) => row.text).join(' ');
     expect(execText).toContain('0 -> 1');
     expect(execText).toContain('1 -> 3');
-    expect(execText).toContain('用例：用例1');
-    expect(execText).toContain('用例：皮肤（复）');
+    expect(execText).toContain('用例：用例文件');
+    expect(execText).toContain('用例：用例文件（复）');
   });
 });
