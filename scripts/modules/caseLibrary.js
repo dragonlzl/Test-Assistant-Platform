@@ -184,7 +184,7 @@
     importConfirmBtn: document.getElementById('caseLibraryImportConfirmBtn'),
     importStatus: document.getElementById('caseLibraryImportStatus'),
 
-    importDiffTitle: document.getElementById('caseLibraryImportDiffTitle'),
+	    importDiffTitle: document.getElementById('caseLibraryImportDiffTitle'),
     importDiffStatus: document.getElementById('caseLibraryImportDiffStatus'),
     importDiffMeta: document.getElementById('caseLibraryImportDiffMeta'),
     importDiffLocateBar: document.getElementById('caseLibraryImportDiffLocateBar'),
@@ -192,6 +192,7 @@
 	    importDiffOverwriteBtn: document.getElementById('caseLibraryImportDiffOverwriteBtn'),
 	    importInvalidTitle: document.getElementById('caseLibraryImportInvalidTitle'),
 	    importInvalidStatus: document.getElementById('caseLibraryImportInvalidStatus'),
+	    importInvalidLocateBar: document.getElementById('caseLibraryImportInvalidLocateBar'),
 	    importInvalidBody: document.getElementById('caseLibraryImportInvalidBody'),
 	    importInvalidConfirmBtn: document.getElementById('caseLibraryImportInvalidConfirmBtn'),
       importDuplicateTitle: document.getElementById('caseLibraryImportDuplicateTitle'),
@@ -314,6 +315,7 @@
 	      items: [],
 	      invalid: [],
 	      loading: false,
+	      locateIndex: -1,
 	    },
 
     editDrawer: {
@@ -878,6 +880,152 @@
     }
   }
 
+  var importInvalidLocateHighlightTimer = null;
+  function clearImportInvalidLocateHighlight() {
+    if (importInvalidLocateHighlightTimer) clearTimeout(importInvalidLocateHighlightTimer);
+    importInvalidLocateHighlightTimer = null;
+    if (!dom.importInvalidBody || !dom.importInvalidBody.querySelectorAll) return;
+    var active = dom.importInvalidBody.querySelectorAll('tr.import-invalid-locate-active');
+    active.forEach(function(tr) {
+      if (!tr || !tr.classList) return;
+      tr.classList.remove('import-invalid-locate-active');
+    });
+  }
+
+  function getImportInvalidRowEls() {
+    if (!dom.importInvalidBody || !dom.importInvalidBody.querySelectorAll) return [];
+    var rows = Array.prototype.slice.call(dom.importInvalidBody.querySelectorAll('tr'));
+    return rows.filter(function(row) {
+      return row && row.querySelector && row.querySelector('td.invalid-cell');
+    });
+  }
+
+  function isAnyImportInvalidRowInView(rows, containerEl) {
+    var list = Array.isArray(rows) ? rows : [];
+    if (!list.length || !containerEl || !containerEl.getBoundingClientRect) return false;
+    var crect = containerEl.getBoundingClientRect();
+    var top = crect.top + 60;
+    var bottom = crect.bottom - 40;
+    for (var i = 0; i < list.length; i += 1) {
+      var row = list[i];
+      if (!row || !row.getBoundingClientRect) continue;
+      var r = row.getBoundingClientRect();
+      if (r.bottom > top && r.top < bottom) return true;
+    }
+    return false;
+  }
+
+  function buildImportInvalidLocateBarHtml() {
+    if (!dom.importInvalidLocateBar) return '';
+    var rows = getImportInvalidRowEls();
+    var total = rows.length;
+    if (!total) {
+      return (
+        '<div class="diff-locate-info">缺失字段定位</div>' +
+        '<div class="diff-locate-empty">暂无缺失字段</div>'
+      );
+    }
+    var current = Number.isInteger(state.importInvalid.locateIndex) ? state.importInvalid.locateIndex : -1;
+    if (current >= total) current = total - 1;
+    if (current < -1) current = -1;
+    state.importInvalid.locateIndex = current;
+    var posText = current >= 0 ? ('位置 ' + String(current + 1) + '/' + String(total)) : ('位置 --/' + String(total));
+    var hasCurrent = current >= 0;
+    var disablePrev = !hasCurrent || current <= 0;
+    var disableNext = hasCurrent && current >= total - 1;
+    var disableFirst = hasCurrent && current <= 0;
+    var disableLast = hasCurrent && current >= total - 1;
+    return (
+      '<div class="diff-locate-info">缺失字段定位：共 ' + String(total) + ' 行</div>' +
+      '<div class="diff-locate-controls">' +
+        '<button type="button" class="secondary" data-import-invalid-locate-scope="case-library-import-invalid" data-import-invalid-locate-action="first" ' + (disableFirst ? 'disabled' : '') + '>首处</button>' +
+        '<button type="button" class="secondary" data-import-invalid-locate-scope="case-library-import-invalid" data-import-invalid-locate-action="prev" ' + (disablePrev ? 'disabled' : '') + '>上一处</button>' +
+        '<button type="button" class="secondary" data-import-invalid-locate-scope="case-library-import-invalid" data-import-invalid-locate-action="next" ' + (disableNext ? 'disabled' : '') + '>下一处</button>' +
+        '<button type="button" class="secondary" data-import-invalid-locate-scope="case-library-import-invalid" data-import-invalid-locate-action="last" ' + (disableLast ? 'disabled' : '') + '>末处</button>' +
+        '<span class="diff-locate-pos" data-import-invalid-locate-pos>' + escapeHtml(posText) + '</span>' +
+        '<span class="diff-locate-hint hidden" data-import-invalid-locate-hint></span>' +
+      '</div>'
+    );
+  }
+
+  function renderImportInvalidLocateBar() {
+    if (!dom.importInvalidLocateBar) return;
+    dom.importInvalidLocateBar.innerHTML = buildImportInvalidLocateBarHtml();
+    updateImportInvalidLocateHint();
+  }
+
+  function updateImportInvalidLocateHint() {
+    if (!dom.importInvalidLocateBar || !dom.importInvalidLocateBar.querySelector) return;
+    var hintEl = dom.importInvalidLocateBar.querySelector('[data-import-invalid-locate-hint]');
+    if (!hintEl) return;
+    var rows = getImportInvalidRowEls();
+    var total = rows.length;
+    if (!total) {
+      hintEl.textContent = '';
+      if (hintEl.classList) hintEl.classList.add('hidden');
+      return;
+    }
+    var drawerEl = document.getElementById('caseLibraryImportInvalidDrawer');
+    var bodyEl = drawerEl ? drawerEl.querySelector('.drawer-body') : null;
+    var inView = isAnyImportInvalidRowInView(rows, bodyEl);
+    var hint = inView ? '' : '当前视口无缺失字段，可点击“下一处”定位';
+    hintEl.textContent = hint;
+    if (!hintEl.classList) return;
+    hintEl.classList.toggle('hidden', !hint);
+  }
+
+  function jumpToImportInvalidAt(index) {
+    var rows = getImportInvalidRowEls();
+    if (!rows.length) return;
+    var idx = Number(index);
+    if (!Number.isFinite(idx)) idx = 0;
+    if (idx < 0) idx = 0;
+    if (idx >= rows.length) idx = rows.length - 1;
+    state.importInvalid.locateIndex = idx;
+    clearImportInvalidLocateHighlight();
+    var row = rows[idx];
+    if (row && row.scrollIntoView) {
+      try { row.scrollIntoView({ block: 'center' }); } catch (e) { row.scrollIntoView(); }
+    }
+    if (row && row.classList) row.classList.add('import-invalid-locate-active');
+    var focusCell = row && row.querySelector ? row.querySelector('td.invalid-cell .temp-inline-edit') : null;
+    if (focusCell && focusCell.focus) {
+      try { focusCell.focus(); } catch (e) { /* ignore */ }
+    }
+    importInvalidLocateHighlightTimer = setTimeout(function() {
+      if (row && row.classList) row.classList.remove('import-invalid-locate-active');
+    }, 2000);
+    renderImportInvalidLocateBar();
+  }
+
+  var importInvalidLocateBound = false;
+  function bindImportInvalidLocateEvents() {
+    if (importInvalidLocateBound) return;
+    importInvalidLocateBound = true;
+    var drawerEl = document.getElementById('caseLibraryImportInvalidDrawer');
+    if (drawerEl && typeof drawerEl.addEventListener === 'function') {
+      drawerEl.addEventListener('click', function(e) {
+        var btn = e && e.target && e.target.closest ? e.target.closest('[data-import-invalid-locate-action]') : null;
+        if (!btn || !btn.getAttribute) return;
+        if (btn.getAttribute('data-import-invalid-locate-scope') !== 'case-library-import-invalid') return;
+        var action = btn.getAttribute('data-import-invalid-locate-action') || '';
+        if (!action) return;
+        var rows = getImportInvalidRowEls();
+        if (!rows.length) return;
+        if (action === 'first') jumpToImportInvalidAt(0);
+        else if (action === 'last') jumpToImportInvalidAt(rows.length - 1);
+        else if (action === 'next') jumpToImportInvalidAt((state.importInvalid.locateIndex >= 0 ? state.importInvalid.locateIndex + 1 : 0));
+        else if (action === 'prev') jumpToImportInvalidAt((state.importInvalid.locateIndex >= 0 ? state.importInvalid.locateIndex - 1 : rows.length - 1));
+      });
+      var bodyEl = drawerEl.querySelector('.drawer-body');
+      if (bodyEl && typeof bodyEl.addEventListener === 'function') {
+        var debounce = (utils && typeof utils.debounce === 'function') ? utils.debounce : null;
+        var onScroll = function() { updateImportInvalidLocateHint(); };
+        bodyEl.addEventListener('scroll', debounce ? debounce(onScroll, 120) : onScroll);
+      }
+    }
+  }
+
   function syncImportDiffControls() {
     if (!dom.importDiffOverwriteBtn) return;
     var mode = state.importDiff && state.importDiff.mode ? String(state.importDiff.mode) : 'import';
@@ -1193,10 +1341,12 @@
 
 	  function renderImportInvalidTable() {
 	    if (!dom.importInvalidBody) return;
+	    clearImportInvalidLocateHighlight();
 	    var structural = Array.isArray(state.importInvalid.structuralErrors) ? state.importInvalid.structuralErrors : [];
 	    var invalid = Array.isArray(state.importInvalid.invalid) ? state.importInvalid.invalid : [];
 	    if (!structural.length && !invalid.length) {
 	      dom.importInvalidBody.innerHTML = '<tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>';
+	      renderImportInvalidLocateBar();
 	      return;
 	    }
 
@@ -1239,6 +1389,29 @@
 	          cell('expected', true) +
 	        '</tr>'
 	      );
+	    }
+
+	    function isItemComplete(item) {
+	      if (!item) return false;
+	      var module = String(item.module || '').trim();
+	      var title = String(item.title || '').trim();
+	      var priority = normalizePriorityInput(item.priority);
+	      var precondition = String(item.precondition || '').trim();
+	      var steps = String(item.steps || '').trim();
+	      var expected = String(item.expected || '').trim();
+	      return Boolean(module && title && priority && precondition && steps && expected);
+	    }
+
+	    function shouldShowStructuralHint(entry, itemsByLine) {
+	      if (!entry || !itemsByLine) return true;
+	      var line = entry && typeof entry.line === 'number' ? entry.line : null;
+	      if (!line) return true;
+	      var list = itemsByLine[line] || [];
+	      if (!list.length) return true;
+	      for (var i = 0; i < list.length; i += 1) {
+	        if (isItemComplete(list[i].item)) return false;
+	      }
+	      return true;
 	    }
 
 	    function buildErrByIndex(invalidList) {
@@ -1286,14 +1459,18 @@
 	      var lines = buildSortedLines(structuralByLine, itemsByLine);
 	      var rows = lines.map(function(line) {
 	        var html = '';
-	        if (structuralByLine[line]) html += renderStructuralRows([structuralByLine[line]]);
 	        var itemList = itemsByLine[line] || [];
 	        itemList.forEach(function(rec) {
 	          html += renderItemRow(rec.idx, line, rec.item, errByIndex[rec.idx] || {});
 	        });
+	        var structuralEntry = structuralByLine[line];
+	        if (structuralEntry && shouldShowStructuralHint(structuralEntry, itemsByLine)) {
+	          html += renderStructuralRows([structuralEntry]);
+	        }
 	        return html;
 	      }).join('');
 	      dom.importInvalidBody.innerHTML = rows || '<tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>';
+	      renderImportInvalidLocateBar();
 	      return;
 	    }
 
@@ -1302,6 +1479,7 @@
 	    var items = Array.isArray(state.importInvalid.items) ? state.importInvalid.items : [];
 	    if (!items.length) {
 	      dom.importInvalidBody.innerHTML = '<tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>';
+	      renderImportInvalidLocateBar();
 	      return;
 	    }
 	    var itemsByLine = buildItemsByLine(items);
@@ -1315,6 +1493,7 @@
 	      return html;
 	    }).join('');
 	    dom.importInvalidBody.innerHTML = rows || '<tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>';
+	    renderImportInvalidLocateBar();
 	  }
 
 	  function openImportInvalidDrawer(payload) {
@@ -1328,6 +1507,7 @@
 	    state.importInvalid.structuralErrors = Array.isArray(payload.structuralErrors) ? payload.structuralErrors : [];
 	    state.importInvalid.items = Array.isArray(payload.items) ? payload.items : [];
 	    state.importInvalid.invalid = validateImportItems(state.importInvalid.items);
+	    state.importInvalid.locateIndex = -1;
 	    state.importInvalid.loading = false;
 
 	    if (dom.importInvalidTitle) {
@@ -1339,7 +1519,23 @@
 	      var invalidCount = state.importInvalid.invalid ? state.importInvalid.invalid.length : 0;
 	      if (structuralCount) {
 	        if (itemCount) {
-	          setStatus(dom.importInvalidStatus, '检测到字段层级不足 ' + structuralCount + ' 条（将跳过）；其余 ' + itemCount + ' 条可继续入库' + (invalidCount ? '（请先补齐必填字段）' : ''), 'warn');
+	          var restCount = itemCount - structuralCount;
+	          if (restCount < 0) restCount = 0;
+	          var invalidNonStructural = invalidCount;
+	          if (invalidCount) {
+	            var structuralLineMap = {};
+	            state.importInvalid.structuralErrors.forEach(function(entry) {
+	              if (entry && typeof entry.line === 'number') structuralLineMap[entry.line] = true;
+	            });
+	            invalidNonStructural = state.importInvalid.invalid.filter(function(entry) {
+	              var line = entry && typeof entry.line === 'number' ? entry.line : null;
+	              return !line || !structuralLineMap[line];
+	            }).length;
+	          }
+	          var msg = '检测到字段层级不足 ' + structuralCount + ' 条，可在列表内补齐字段后入库，未补齐将自动跳过';
+	          if (restCount) msg += '；其余 ' + restCount + ' 条可继续入库';
+	          if (invalidNonStructural) msg += '（请先补齐必填字段）';
+	          setStatus(dom.importInvalidStatus, msg, 'warn');
 	        } else {
 	          setStatus(dom.importInvalidStatus, '全部条目字段层级不足（共 ' + structuralCount + ' 条），无法入库，请在 XMind 中补齐后重新导入', 'warn');
 	        }
@@ -1347,6 +1543,7 @@
 	        setStatus(dom.importInvalidStatus, '请补齐必填字段后再确认入库', 'warn');
 	      }
 	    }
+	    bindImportInvalidLocateEvents();
 	    renderImportInvalidTable();
 	    syncImportInvalidControls();
 
@@ -1380,19 +1577,58 @@
 	      return;
 	    }
 
+	    var itemsToImport = items;
+	    var structuralLineMap = {};
+	    if (structural.length) {
+	      structural.forEach(function(entry) {
+	        if (entry && typeof entry.line === 'number') structuralLineMap[entry.line] = true;
+	      });
+	    }
+
 	    var invalid = validateImportItems(items);
 	    state.importInvalid.invalid = invalid;
-	    if (invalid.length) {
+	    var invalidNonStructural = invalid;
+	    if (invalid.length && structural.length) {
+	      invalidNonStructural = invalid.filter(function(entry) {
+	        var line = entry && typeof entry.line === 'number' ? entry.line : null;
+	        return !line || !structuralLineMap[line];
+	      });
+	    }
+	    if (invalidNonStructural.length) {
 	      renderImportInvalidTable();
-	      setStatus(dom.importInvalidStatus, '仍有 ' + invalid.length + ' 条用例必填字段为空，请修改后再确认', 'warn');
+	      setStatus(dom.importInvalidStatus, '仍有 ' + invalidNonStructural.length + ' 条用例必填字段为空，请修改后再确认', 'warn');
 	      return;
 	    }
 
-      var dup = buildDuplicateGroupsForImport(items);
+	    var pendingStructuralLines = {};
+	    if (invalid.length && structural.length) {
+	      invalid.forEach(function(entry) {
+	        var line = entry && typeof entry.line === 'number' ? entry.line : null;
+	        if (line && structuralLineMap[line]) pendingStructuralLines[line] = true;
+	      });
+	    }
+	    var pendingStructuralCount = Object.keys(pendingStructuralLines).length;
+	    if (pendingStructuralCount) {
+	      itemsToImport = items.filter(function(item, idx) {
+	        var lineNo = item && item._sourceLine ? Number(item._sourceLine) : (idx + 1);
+	        if (!isFinite(lineNo) || lineNo <= 0) lineNo = idx + 1;
+	        return !pendingStructuralLines[lineNo];
+	      });
+	    }
+	    if (!itemsToImport.length) {
+	      if (pendingStructuralCount || structural.length) {
+	        setStatus(dom.importInvalidStatus, '无可入库用例：字段层级不足 ' + (pendingStructuralCount || structural.length) + ' 条，请补齐后再入库', 'warn');
+	      } else {
+	        setStatus(dom.importInvalidStatus, '导入数据未就绪，请关闭后重新导入', 'warn');
+	      }
+	      return;
+	    }
+
+      var dup = buildDuplicateGroupsForImport(itemsToImport);
       if (dup.duplicateCount > 0) {
         confirmImportDuplicatesByDrawer({
           fileName: fileName,
-          total: items.length,
+          total: itemsToImport.length,
           uniqueCount: dup.uniqueItems.length,
           duplicateCount: dup.duplicateCount,
           rows: dup.rows,
@@ -1401,8 +1637,8 @@
             setStatus(dom.importInvalidStatus, '已取消入库（包含重复条目）', 'warn');
             return;
           }
-          items = dup.uniqueItems;
-          state.importInvalid.items = items;
+          itemsToImport = dup.uniqueItems;
+          state.importInvalid.items = itemsToImport;
 
           state.importInvalid.loading = true;
           syncImportInvalidControls();
@@ -1413,10 +1649,10 @@
             version_id: versionId,
             file_name: fileName,
             source: state.importInvalid.source || extFromFileName(fileName),
-            items: sanitizeImportItemsForApi(items),
+            items: sanitizeImportItemsForApi(itemsToImport),
           }).then(function() {
             var msg = '入库成功：' + cleanCaseFileName(fileName);
-            if (structural.length) msg += '（已跳过字段层级不足 ' + structural.length + ' 条）';
+            if (pendingStructuralCount) msg += '（已跳过字段层级不足 ' + pendingStructuralCount + ' 条）';
             setStatus(dom.importInvalidStatus, msg, 'ok');
             setStatus(dom.importStatus, msg, 'ok');
             setStatus(dom.status, msg, 'ok');
@@ -1474,7 +1710,7 @@
                     projectId: projectId,
                     importVersionId: versionId,
                     dbVersionId: matchedVersionId,
-                    importItems: items,
+                    importItems: itemsToImport,
                     dbItems: dbItems || [],
                     source: source,
                   });
@@ -1495,7 +1731,7 @@
                           projectId: projectId,
                           importVersionId: versionId,
                           dbVersionId: existing.version_id || null,
-                          importItems: items,
+                          importItems: itemsToImport,
                           dbItems: dbItems || [],
                           source: source,
                         });
@@ -1524,10 +1760,10 @@
 	      version_id: versionId,
 	      file_name: fileName,
 	      source: state.importInvalid.source || extFromFileName(fileName),
-	      items: sanitizeImportItemsForApi(items),
+	      items: sanitizeImportItemsForApi(itemsToImport),
 	    }).then(function() {
 	      var msg = '入库成功：' + cleanCaseFileName(fileName);
-	      if (structural.length) msg += '（已跳过字段层级不足 ' + structural.length + ' 条）';
+	      if (pendingStructuralCount) msg += '（已跳过字段层级不足 ' + pendingStructuralCount + ' 条）';
 	      setStatus(dom.importInvalidStatus, msg, 'ok');
 	      setStatus(dom.importStatus, msg, 'ok');
 	      setStatus(dom.status, msg, 'ok');
@@ -3879,6 +4115,7 @@
 	    return list
 	      .map(function(item, idx) {
 	        if (!item || typeof item !== 'object') return null;
+	        var forceKeep = item._forceKeep === true;
 	        var module = normalizeDashAsEmpty(item.module || item.module_name || item['模块'] || '');
 	        var title = normalizeDashAsEmpty(item.title || item.case_title || item['用例标题'] || '');
 	        var expected = normalizeDashAsEmpty(item.expected || item.result || item['预期结果'] || '');
@@ -3887,7 +4124,7 @@
 	        var steps = normalizeDashAsEmpty(toLineText(item.steps || item.actions || item['操作步骤'] || ''));
 	        var remark = normalizeDashAsEmpty(item.remark || '');
 	        var any = String(module || '') + String(title || '') + String(priority || '') + String(precondition || '') + String(steps || '') + String(expected || '') + String(remark || '');
-	        if (!any.trim()) return null;
+	        if (!any.trim() && !forceKeep) return null;
           var sourceLine = item._sourceLine;
           if (!isFinite(Number(sourceLine)) || Number(sourceLine) <= 0) sourceLine = idx + 1;
 	        return {
@@ -3977,22 +4214,30 @@
 	    var structuralErrors = [];
 	    var raw = [];
 
-	    list.forEach(function(pathArr, idx) {
-	      var segs = normalizeXmindPathSegments(pathArr, rootTitle);
-	      if (segs.length < 6) {
-	        structuralErrors.push({ line: idx + 1, depth: segs.length });
-	        return;
-	      }
+	    function mapSegmentsToItem(segs, lineNo, forceKeep) {
 	      var tail = segs.slice(-6);
-	      raw.push({
+	      var item = {
 	        module: tail[0] || '',
 	        title: tail[1] || '',
 	        priority: tail[2] || '',
 	        precondition: tail[3] || '',
 	        steps: tail[4] || '',
 	        expected: tail[5] || '',
-	        _sourceLine: idx + 1,
-	      });
+	        _sourceLine: lineNo,
+	      };
+	      if (forceKeep) item._forceKeep = true;
+	      return item;
+	    }
+
+	    list.forEach(function(pathArr, idx) {
+	      var segs = normalizeXmindPathSegments(pathArr, rootTitle);
+	      var lineNo = idx + 1;
+	      if (segs.length < 6) {
+	        raw.push(mapSegmentsToItem(segs, lineNo, true));
+	        structuralErrors.push({ line: lineNo, depth: segs.length });
+	        return;
+	      }
+	      raw.push(mapSegmentsToItem(segs, lineNo, false));
 	    });
 
 	    return { items: buildImportItems(raw), structuralErrors: structuralErrors };
@@ -9434,9 +9679,11 @@
 	        state.importInvalid.source = '';
 	        state.importInvalid.projectId = null;
 	        state.importInvalid.versionId = null;
+	        state.importInvalid.structuralErrors = [];
 	        state.importInvalid.items = [];
 	        state.importInvalid.invalid = [];
 	        state.importInvalid.loading = false;
+	        state.importInvalid.locateIndex = -1;
 	        syncImportInvalidControls();
 	        if (dom.importInvalidStatus) setStatus(dom.importInvalidStatus, '', '');
 	        if (dom.importInvalidBody) {

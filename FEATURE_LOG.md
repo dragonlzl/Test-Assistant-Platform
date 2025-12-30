@@ -3155,3 +3155,27 @@
 - 测试与验证：
   - `npx playwright test --config tests/playwright.config.js tests/ui/theme_setting.spec.js`
 - 更新记录：2025-12-30 设置页白色主题控件配色与项目排序字重优化（`style.css`、`tests/ui/theme_setting.spec.js`）。
+
+- 功能名称：导入校验层级不足行补全展示
+- 功能描述：导入 XMind 层级不足时，在格式校验列表中展示该用例字段并按模块/标题/优先级/前提/步骤/预期从左到右填充，提示信息置于该行下方。
+- 操作方式：导入含层级不足节点的 XMind，用例格式校验列表查看对应条目与提示。
+- 使用效果：问题用例可直接定位，缺失层级提示更直观。
+- 新增内容/接口/组件：
+  - 前端：层级不足条目展示与提示顺序优化（`scripts/modules/caseLibrary.js`）。
+  - 测试：更新导入层级不足展示用例（`tests/ui/case_library.spec.js`）。
+- 复用说明：复用既有导入校验逻辑，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/case_library.spec.js`
+- 更新记录：2025-12-30 导入校验层级不足行补全展示（`scripts/modules/caseLibrary.js`、`tests/ui/case_library.spec.js`）。
+
+- 功能名称：导入校验快速定位与层级不足可编辑
+- 功能描述：导入用例格式校验抽屉新增缺失字段定位条，支持快速跳转缺失行；层级不足条目可直接编辑空字段，未补齐项自动跳过入库。
+- 操作方式：导入触发格式校验失败的用例文件，在校验抽屉使用“缺失字段定位”并直接修改空字段。
+- 使用效果：缺失字段定位更快，层级不足用例可在页面内补齐后入库。
+- 新增内容/接口/组件：
+  - 前端：导入校验定位条与层级不足编辑/入库逻辑优化（`scripts/modules/caseLibrary.js`、`index.html`、`case-library.html`、`style.css`）。
+  - 测试：更新导入校验定位与层级不足编辑用例（`tests/ui/case_library.spec.js`）。
+- 复用说明：复用既有导入校验结构与抽屉交互，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/case_library.spec.js`
+- 更新记录：2025-12-30 导入校验快速定位与层级不足可编辑（`scripts/modules/caseLibrary.js`、`index.html`、`case-library.html`、`style.css`、`tests/ui/case_library.spec.js`）。

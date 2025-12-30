@@ -4,7 +4,7 @@ const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  const url = base + '/index.html';
+  const url = base + '/case-library.html';
   let lastErr = null;
   for (let i = 0; i < 3; i += 1) {
     try {
@@ -714,10 +714,14 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryEditClearSearchBtn')).toBeDisabled();
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
 
+    const editPatch = page.waitForResponse((res) => {
+      return res.url().includes('/api/case-files/items/') && res.request().method() === 'PATCH';
+    });
     await page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]').click();
     await page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]').fill('正常登录（已更新）');
     // 保存依赖 focusout，这里点击标题触发 blur（清空按钮在无搜索时会禁用）
     await page.click('#caseLibraryEditCardTitle');
+    await editPatch;
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录（已更新）');
 
     // 刷新页面后仍保持上次编辑的用例视图
@@ -741,6 +745,12 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
       if (!st || !Array.isArray(st.tempExecFiles)) return false;
       return st.tempExecFiles.some((f) => (f && f.name) === 'case_library_import');
     });
+    const assignDrawer = page.locator('#tempExecAssignDrawer');
+    const assignOpen = await assignDrawer.evaluate((el) => Boolean(el && el.classList && el.classList.contains('open')));
+    if (assignOpen) {
+      await page.click('#closeTempExecAssignDrawerBtn');
+      await expect(assignDrawer).not.toHaveClass(/open/);
+    }
 
     const firstCasePatch = page.waitForResponse((res) => {
       return res.url().includes('/api/exec/cases/') && res.request().method() === 'PATCH';
@@ -833,6 +843,10 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 	    await expect(page.locator('#caseLibraryImportStatus')).toContainText('导入校验失败');
 	    await expect(page.locator('#caseLibraryImportInvalidDrawer')).toHaveClass(/open/);
 	    await expect(page.locator('#caseLibraryImportInvalidStatus')).toContainText('请补齐');
+	    await expect(page.locator('#caseLibraryImportInvalidLocateBar')).toContainText('缺失字段定位');
+	    await expect(page.locator('#caseLibraryImportInvalidLocateBar button[data-import-invalid-locate-action="next"]')).toBeEnabled();
+	    await page.click('#caseLibraryImportInvalidLocateBar button[data-import-invalid-locate-action="next"]');
+	    await expect(page.locator('#caseLibraryImportInvalidBody tr.import-invalid-locate-active')).toHaveCount(1);
 
 	    await page.locator('#caseLibraryImportInvalidBody [data-case-lib-import-invalid-field="precondition"][data-index="0"]').click();
 	    await page.locator('#caseLibraryImportInvalidBody [data-case-lib-import-invalid-field="precondition"][data-index="0"]').fill('已注册账号');
@@ -904,7 +918,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     expect(String(parsed.list[0].expected || '')).toBe('');
   });
 
-  test('XMind 中间字段缺失：字段层级不足时按行号提示且不展示字段内容', async ({ page }) => {
+  test('XMind 中间字段缺失：字段层级不足时展示用例内容并提示', async ({ page }) => {
     const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
     const project = { id: 1, name: '战魂铭人', description: '用于 XMind 层级校验' };
     const versions = [{ id: 11, name: 'v1' }];
@@ -948,8 +962,25 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryImportInvalidDrawer')).toHaveClass(/open/);
     await expect(page.locator('#caseLibraryImportInvalidStatus')).toContainText('字段层级不足');
 
+    const structureItemRow = page.locator('#caseLibraryImportInvalidBody tr', { hasText: '验证码登录' });
+    await expect(structureItemRow).toHaveCount(1);
+    await expect(structureItemRow).toContainText('输入手机号');
     await expect(page.locator('#caseLibraryImportInvalidBody .import-structure-row')).toContainText('字段层级不足');
     await expect(page.locator('#caseLibraryImportInvalidBody .import-structure-row')).toContainText('1');
+    const hintBelow = await page.evaluate(() => {
+      const rows = Array.prototype.slice.call(document.querySelectorAll('#caseLibraryImportInvalidBody tr'));
+      const row = rows.find((item) => item && item.textContent && item.textContent.indexOf('验证码登录') !== -1);
+      if (!row) return false;
+      const next = row.nextElementSibling;
+      if (!next) return false;
+      return next.classList.contains('import-structure-row') && next.textContent.indexOf('字段层级不足') !== -1;
+    });
+    expect(hintBelow).toBe(true);
+    const expectedCell = structureItemRow.locator('[data-case-lib-import-invalid-field="expected"]');
+    await expectedCell.click();
+    await expectedCell.fill('登录成功');
+    await page.click('#caseLibraryImportInvalidTitle');
+    await expect(expectedCell).toContainText('登录成功');
     // 同一份文件中未缺失层级的用例仍应在列表中展示，保持完整性
     await expect(page.locator('#caseLibraryImportInvalidBody')).toContainText('密码登录');
     await expect(page.locator('#caseLibraryImportInvalidConfirmBtn')).toBeEnabled();
