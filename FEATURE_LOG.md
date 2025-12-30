@@ -3118,3 +3118,28 @@
   - `npx playwright test --config tests/api/playwright.api.config.js tests/api/ops_log.spec.js`
   - `npx playwright test --config tests/playwright.config.js tests/ui/ops_log_exec_case_run.spec.js`
 - 更新记录：2025-12-30 操作记录执行用例按文件拆分聚合（`scripts/modules/opsLog.js`、`tests/ui/ops_log_exec_case_run.spec.js`、`tests/api/ops_log.spec.js`）。
+
+- 功能名称：个人菜单命名与一级菜单显眼化
+- 功能描述：左上角个人信息区按钮文案从“设置”调整为“个人”，侧边栏一级菜单按钮使用更醒目字体与颜色并兼容黑白主题。
+- 操作方式：进入任意页面查看左上角个人菜单按钮与侧边栏一级菜单文案样式。
+- 使用效果：避免与左侧“设置”菜单混淆，一级菜单更易识别可点击。
+- 新增内容/接口/组件：
+  - 前端：个人菜单文案调整、一级菜单字体与颜色优化（`index.html`、`admin.html`、`settings.html`、`case-exec.html`、`ai-tools.html`、`ai-workflow.html`、`case-library.html`、`style.css`）。
+  - 测试：新增侧边栏一级菜单样式用例（`tests/ui/sidebar_menu_style.spec.js`）。
+- 复用说明：复用既有主题变量与侧边栏结构，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/sidebar_menu_style.spec.js`
+- 更新记录：2025-12-30 个人菜单命名与一级菜单显眼化（`index.html`、`admin.html`、`settings.html`、`case-exec.html`、`ai-tools.html`、`ai-workflow.html`、`case-library.html`、`style.css`、`tests/ui/sidebar_menu_style.spec.js`）。
+
+- 功能名称：侧边栏一级菜单描边与滚动按钮去描边
+- 功能描述：左侧“回到顶部/跳到底部”按钮去掉蓝色描边；一级菜单（AI 功能/用例相关/管理/设置）增加蓝色描边。
+- 操作方式：查看左侧导航与滚动按钮，一级菜单有蓝色描边，滚动按钮无蓝色描边。
+- 使用效果：一级菜单更具按钮感，滚动按钮更简洁。
+- 新增内容/接口/组件：
+  - 前端：侧边栏按钮描边样式调整（`style.css`）。
+  - 测试：更新侧边栏样式用例（`tests/ui/sidebar_menu_style.spec.js`）。
+- 复用说明：复用既有主题变量与侧边栏结构，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/sidebar_menu_style.spec.js`
+- 更新记录：2025-12-30 侧边栏一级菜单描边与滚动按钮去描边（`style.css`、`tests/ui/sidebar_menu_style.spec.js`）。
+- 更新记录：2025-12-30 一级菜单默认态补齐蓝色描边（`style.css`）。

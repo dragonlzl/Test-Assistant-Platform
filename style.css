@@ -7,6 +7,11 @@
       --primary-weak: #e9edff;
       --text: #0f172a;
       --muted: #6b7280;
+      --nav-main-font: "Noto Sans SC","Source Han Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Heiti SC",sans-serif;
+      --nav-main-color: #1e3a8a;
+      --nav-main-hover: #2563eb;
+      --nav-main-border: rgba(37,99,235,0.8);
+      --nav-main-border-hover: rgba(37,99,235,0.95);
       --success: #15803d;
       --warn: #c2410c;
       --error: #b91c1c;
@@ -99,8 +104,8 @@ body {
       justify-content: space-between;
       gap: 10px;
     }
-    .scroll-top-btn {
-      border: 1px solid var(--primary);
+.scroll-top-btn {
+      border: 1px solid var(--border);
       color: var(--primary);
       background: #fff;
       border-radius: 10px;
@@ -3207,17 +3212,28 @@ body {
   color: #fff;
   border-color: var(--primary);
 }
-.tabs .tab-group-btn.hovering {
-  background: #eff6ff;
-  color: #1d4ed8;
-  border-color: #bfdbfe;
+.tabs.vertical button.tab-group-btn {
+  font-family: var(--nav-main-font);
+  font-size: 15px;
+  letter-spacing: 0.3px;
+  color: var(--nav-main-color);
+  border: 1px solid var(--nav-main-border);
 }
-.tabs .tab-group-btn.active {
+.tabs.vertical button.tab-group-btn:hover {
+  color: var(--nav-main-hover);
+  border-color: var(--nav-main-border-hover);
+}
+.tabs.vertical button.tab-group-btn.hovering {
+  background: #eff6ff;
+  color: var(--nav-main-hover);
+  border-color: var(--nav-main-border-hover);
+}
+.tabs.vertical button.tab-group-btn.active {
   background: var(--primary);
   color: #fff;
   border-color: var(--primary);
 }
-.tabs .tab-group-btn.active.hovering {
+.tabs.vertical button.tab-group-btn.active.hovering {
   background: var(--primary);
   color: #fff;
   border-color: var(--primary);
@@ -7575,6 +7591,10 @@ button.exec-overview-file-chip,
   --primary-weak: rgba(125,180,255,0.18);
   --text: #e5e7eb;
   --muted: #b3bcc9;
+  --nav-main-color: #dbeafe;
+  --nav-main-hover: #93c5fd;
+  --nav-main-border: rgba(96,165,250,0.8);
+  --nav-main-border-hover: rgba(191,219,254,0.95);
   --success: #22c55e;
   --warn: #f59e0b;
   --error: #f87171;
@@ -7602,7 +7622,7 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .scroll-top-btn {
   background: var(--panel);
   color: var(--primary);
-  border-color: var(--primary);
+  border-color: var(--border);
 }
 :root[data-theme="dark"] .card {
   border-color: var(--border);
@@ -7668,13 +7688,21 @@ button.exec-overview-file-chip,
   color: var(--text);
   border-color: var(--border);
 }
-:root[data-theme="dark"] .tabs .tab-group-btn.hovering {
+:root[data-theme="dark"] .tabs.vertical button.tab-group-btn {
+  color: var(--nav-main-color);
+  border-color: var(--nav-main-border);
+}
+:root[data-theme="dark"] .tabs.vertical button.tab-group-btn:hover {
+  color: var(--nav-main-hover);
+  border-color: var(--nav-main-border-hover);
+}
+:root[data-theme="dark"] .tabs.vertical button.tab-group-btn.hovering {
   background: rgba(96,165,250,0.18);
   color: #93c5fd;
   border-color: rgba(96,165,250,0.35);
 }
 :root[data-theme="dark"] .tabs button.active,
-:root[data-theme="dark"] .tabs .tab-group-btn.active,
+:root[data-theme="dark"] .tabs.vertical button.tab-group-btn.active,
 :root[data-theme="dark"] .tabs.vertical button.active {
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 60%, #0ea5e9 100%);
   color: #e0f2fe;
