@@ -7615,12 +7615,20 @@
             );
           }
         });
+        var reuseActions = reuseEnabled
+          ? (
+            '<div class="reuse-actions">' +
+              '<button type="button" class="reuse-add" data-temp-reuse-add="' + file.id + '" data-index="' + idx + '">＋ 添加测试项</button>' +
+              '<button type="button" class="reuse-sync" data-temp-reuse-sync="' + file.id + '" data-index="' + idx + '">同步首条子项结果</button>' +
+            '</div>'
+          )
+          : '';
         var reuseRow = reuseEnabled
           ? '<tr class="reuse-row ' + (reuseOpen ? 'visible' : '') + '">' +
               '<td colspan="' + colCount + '">' +
                 '<div class="reuse-panel" data-temp-reuse-panel-container="' + file.id + '" data-index="' + idx + '">' +
                   renderReuseEntries(file, item, idx) +
-                  '<button type="button" class="reuse-add" data-temp-reuse-add="' + file.id + '" data-index="' + idx + '">＋ 添加测试项</button>' +
+                  reuseActions +
                 '</div>' +
               '</td>' +
             '</tr>'
@@ -7768,6 +7776,55 @@
       }
       persistTempExecState();
       renderTempExecView();
+    }
+
+    function normalizeReuseDetailStatus(value) {
+      var text = value === null || value === undefined ? '' : String(value);
+      text = text.trim();
+      if (!text || text === 'pending') return '未执行';
+      return text;
+    }
+
+    function syncTempExecReuseStatusFromFirst(fileId, index, anchorEl) {
+      var file = getTempExecFile(fileId);
+      if (!file || !file.cases[index]) return;
+      var targetCase = file.cases[index];
+      if (!Array.isArray(targetCase.reuseDetails) || !targetCase.reuseDetails.length) {
+        var anchorRect = captureTempExecAnchorRect(anchorEl);
+        if (anchorRect) {
+          showTempExecBlockHint(anchorRect, '暂无可同步的复用子项');
+        }
+        if (tempExecStatus) setStatus(tempExecStatus, '暂无可同步的复用子项', 'warn');
+        return;
+      }
+      var details = targetCase.reuseDetails;
+      var first = details[0];
+      if (!first) return;
+      var firstStatus = normalizeReuseDetailStatus(first.status);
+      var changed = false;
+      if (first.status !== firstStatus) {
+        first.status = firstStatus;
+        changed = true;
+      }
+      for (var i = 1; i < details.length; i += 1) {
+        var detail = details[i];
+        if (!detail) continue;
+        if (detail.status !== firstStatus) {
+          detail.status = firstStatus;
+          changed = true;
+        }
+      }
+      if (!changed) {
+        if (tempExecStatus) setStatus(tempExecStatus, '子项结果已一致', 'ok');
+        return;
+      }
+      targetCase.actual = resolveReuseAggregateStatus(details);
+      if (isDbMode()) {
+        queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
+      }
+      persistTempExecState();
+      renderTempExecView();
+      if (tempExecStatus) setStatus(tempExecStatus, '已同步首条子项结果', 'ok');
     }
 
     function updateTempExecReuseText(fileId, index, detailId, text) {
@@ -8003,6 +8060,7 @@
       toggleTempExecReusePanel: toggleTempExecReusePanel,
       addTempExecReuseEntry: addTempExecReuseEntry,
       removeTempExecReuseEntry: removeTempExecReuseEntry,
+      syncTempExecReuseStatusFromFirst: syncTempExecReuseStatusFromFirst,
       updateTempExecReuseStatus: updateTempExecReuseStatus,
       updateTempExecReuseText: updateTempExecReuseText,
       updateTempExecReuseNote: updateTempExecReuseNote,

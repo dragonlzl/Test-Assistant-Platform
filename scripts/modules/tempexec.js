@@ -4952,6 +4952,13 @@
           if (!Number.isNaN(raIdx)) api.addTempExecReuseEntry(raFileId, raIdx);
           return;
         }
+        var reuseSyncBtn = e.target.closest('[data-temp-reuse-sync]');
+        if (reuseSyncBtn && api.syncTempExecReuseStatusFromFirst) {
+          var rsFileId = reuseSyncBtn.dataset.tempReuseSync;
+          var rsIdx = Number(reuseSyncBtn.dataset.index);
+          if (!Number.isNaN(rsIdx)) api.syncTempExecReuseStatusFromFirst(rsFileId, rsIdx, reuseSyncBtn);
+          return;
+        }
         var reuseRemoveBtn = e.target.closest('[data-temp-reuse-remove]');
         if (reuseRemoveBtn && api.removeTempExecReuseEntry) {
           var rrFileId = reuseRemoveBtn.dataset.tempReuseRemove;

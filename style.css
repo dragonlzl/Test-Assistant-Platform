@@ -6099,6 +6099,13 @@ tr.import-invalid-locate-active td {
       box-sizing: border-box;
       text-align: center;
     }
+    .reuse-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
     .defect-toggle {
       border: 1px solid var(--border);
       border-radius: 999px;
@@ -6465,6 +6472,18 @@ tr.import-invalid-locate-active td {
       border: 1px dashed var(--primary);
       background: rgba(37,99,235,0.08);
       color: var(--primary);
+      padding: 6px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .reuse-sync {
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      color: var(--text);
       padding: 6px 12px;
       border-radius: 999px;
       cursor: pointer;
@@ -8875,6 +8894,11 @@ button.exec-overview-file-chip,
   background: rgba(125,180,255,0.16);
   border-color: rgba(125,180,255,0.45);
   color: #bfdbfe;
+}
+:root[data-theme="dark"] .reuse-sync {
+  background: rgba(15,23,42,0.7);
+  border-color: rgba(148,163,184,0.45);
+  color: #e2e8f0;
 }
 :root[data-theme="dark"] .defect-panel {
   background: var(--panel);
