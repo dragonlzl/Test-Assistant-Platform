@@ -3205,3 +3205,15 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_preset_status_change.spec.js`
   - `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_persistence.spec.js`
 - 更新记录：2025-12-30 复用新增用例子项执行结果可独立选择（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_reuse_preset_status_change.spec.js`、`tests/api/exec_persistence.spec.js`）。
+
+- 功能名称：执行视图新增用例同步复用预设子项
+- 功能描述：修复多人执行场景下新增用例只同步新增行但未补齐本地预设子项的问题，加载执行用例时会为新增行补齐当前预设子项并同步入库。
+- 操作方式：执行视图开启复用并设置预设子项，其他人新增用例后刷新执行视图并展开复用面板。
+- 使用效果：新增用例在本地自动补齐预设子项，复用列表完整一致。
+- 新增内容/接口/组件：
+  - 前端：执行用例加载时补齐预设子项并同步入库（`scripts/core/tempexecCore.js`）。
+  - 测试：新增执行视图新增用例预设子项同步用例（`tests/ui/tempexec_reuse_preset_sync_new_case.spec.js`）。
+- 复用说明：复用既有复用预设逻辑与执行用例 patch 接口，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_preset_sync_new_case.spec.js`
+- 更新记录：2025-12-30 执行视图新增用例同步复用预设子项（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_reuse_preset_sync_new_case.spec.js`）。

@@ -259,7 +259,7 @@ test.describe('exec persistence api', () => {
     ];
     const patchReuseRes = await ctx.patch(`${apiBase}/api/exec/cases/${first.id}`, {
       headers,
-      data: { reuse_details: reuseDetails, status: '失败' },
+      data: { reuse_details: reuseDetails },
     });
     expect(patchReuseRes.status()).toBe(200);
     const patchedReuse = await patchReuseRes.json();

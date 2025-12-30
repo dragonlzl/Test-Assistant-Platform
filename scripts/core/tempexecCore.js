@@ -2656,6 +2656,30 @@
       });
     }
 
+    function applyPresetsToCase(file, caseItem) {
+      if (!file || !caseItem) return false;
+      if (!file.reuseEnabled) return false;
+      var presets = ensureReusePresets(file);
+      if (!presets.length) return false;
+      if (!Array.isArray(caseItem.reuseDetails)) caseItem.reuseDetails = [];
+      var changed = false;
+      presets.forEach(function(preset) {
+        if (!preset || !preset.id) return;
+        var exists = caseItem.reuseDetails.some(function(detail) { return detail && detail.presetId === preset.id; });
+        if (!exists) {
+          caseItem.reuseDetails.push({
+            id: generateReuseDetailId(),
+            text: preset.text || '',
+            note: '',
+            status: '未执行',
+            presetId: preset.id,
+          });
+          changed = true;
+        }
+      });
+      return changed;
+    }
+
     function removePresetFromCases(file, presetId) {
       if (!file || !presetId) return;
       file.cases.forEach(function(caseItem) {
@@ -5272,6 +5296,17 @@
                 .listExecCases(file.execSetId)
                 .then(function(rawCases) {
                   var cases = Array.isArray(rawCases) ? rawCases.map(mapExecCaseToTempCase).filter(Boolean) : [];
+                  var presetSynced = [];
+                  if (file && file.reuseEnabled && Array.isArray(file.reusePresets) && file.reusePresets.length) {
+                    cases.forEach(function(item) {
+                      if (applyPresetsToCase(file, item)) presetSynced.push(item);
+                    });
+                    if (presetSynced.length) {
+                      presetSynced.forEach(function(item) {
+                        queueExecCasePatchForItem(item, { reuse_details: item.reuseDetails || [] });
+                      });
+                    }
+                  }
                   // 仅在最新一次加载仍有效时写入，避免并发刷新导致状态回写错乱。
                   if (tempExecDbLoadSeq !== loadSeq) return;
                   file.cases = cases;
