@@ -13,8 +13,14 @@
       : function() {
         return 'tempver-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6);
       };
+    var reuseDetailSeed = 0;
     var generateReusePresetId = deps && deps.generateReusePresetId ? deps.generateReusePresetId : function() { return 'reuse-' + Date.now(); };
-    var generateReuseDetailId = deps && deps.generateReuseDetailId ? deps.generateReuseDetailId : function() { return 'reuse-detail-' + Date.now(); };
+    var generateReuseDetailId = deps && deps.generateReuseDetailId
+      ? deps.generateReuseDetailId
+      : function() {
+        reuseDetailSeed += 1;
+        return 'reuse-detail-' + Date.now().toString(16) + '-' + reuseDetailSeed.toString(16) + '-' + Math.random().toString(16).slice(2, 6);
+      };
     var generateDefectLinkId = deps && deps.generateDefectLinkId ? deps.generateDefectLinkId : function() { return 'defect-' + Date.now(); };
     var normalizeTempExecName = deps && deps.normalizeTempExecName ? deps.normalizeTempExecName : function(name) {
       return (name || '').trim().toLowerCase();

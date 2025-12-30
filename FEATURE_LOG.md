@@ -3191,3 +3191,17 @@
 - 测试与验证：
   - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_preset_edit.spec.js`
 - 更新记录：2025-12-30 复用预设子项编辑与删除确认（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_reuse_preset_edit.spec.js`）。
+
+- 功能名称：复用新增用例子项执行结果可独立选择
+- 功能描述：修复复用类型用例在执行视图新增用例后，多个预设子项执行结果选择互相影响的问题，确保每个子项状态独立。
+- 操作方式：执行视图启用复用且有多个预设子项，点击“＋”新增用例，展开复用面板分别选择子项结果。
+- 使用效果：新增用例的各子项结果可独立调整，不再被其他子项覆盖。
+- 新增内容/接口/组件：
+  - 前端：复用子项 id 生成避免同毫秒重复（`scripts/core/tempexecCore.js`）。
+  - 测试：新增复用新增用例子项结果独立选择 UI 用例（`tests/ui/tempexec_reuse_preset_status_change.spec.js`）。
+  - 测试：补充执行用例复用详情更新 API 用例（`tests/api/exec_persistence.spec.js`）。
+- 复用说明：复用既有执行视图复用逻辑与 API patch 接口，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_preset_status_change.spec.js`
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_persistence.spec.js`
+- 更新记录：2025-12-30 复用新增用例子项执行结果可独立选择（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_reuse_preset_status_change.spec.js`、`tests/api/exec_persistence.spec.js`）。

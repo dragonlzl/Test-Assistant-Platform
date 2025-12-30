@@ -253,6 +253,28 @@ test.describe('exec persistence api', () => {
     });
     expect(patchStatusRes.status()).toBe(200);
 
+    const reuseDetails = [
+      { id: 'reuse-detail-a-' + Date.now(), text: '子项1', note: '', status: '通过', presetId: 'preset-a' },
+      { id: 'reuse-detail-b-' + Date.now(), text: '子项2', note: '', status: '失败', presetId: 'preset-b' },
+    ];
+    const patchReuseRes = await ctx.patch(`${apiBase}/api/exec/cases/${first.id}`, {
+      headers,
+      data: { reuse_details: reuseDetails, status: '失败' },
+    });
+    expect(patchReuseRes.status()).toBe(200);
+    const patchedReuse = await patchReuseRes.json();
+    expect(Array.isArray(patchedReuse.reuse_details)).toBeTruthy();
+    expect(patchedReuse.reuse_details.length).toBe(2);
+    expect(patchedReuse.reuse_details[0].status).toBe('通过');
+    expect(patchedReuse.reuse_details[1].status).toBe('失败');
+
+    const afterReuseRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers });
+    expect(afterReuseRes.status()).toBe(200);
+    const afterReuseCases = await afterReuseRes.json();
+    const afterReuseCase = afterReuseCases.find((item) => item.id === first.id);
+    expect(afterReuseCase && Array.isArray(afterReuseCase.reuse_details)).toBeTruthy();
+    expect(afterReuseCase.reuse_details.length).toBe(2);
+
     const itemsAfterStatusRes = await ctx.get(`${apiBase}/api/case-files/${caseFileId}/items`, { headers });
     expect(itemsAfterStatusRes.status()).toBe(200);
     const itemsAfterStatus = await itemsAfterStatusRes.json();
