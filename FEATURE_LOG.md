@@ -3179,3 +3179,15 @@
 - 测试与验证：
   - `npx playwright test --config tests/playwright.config.js tests/ui/case_library.spec.js`
 - 更新记录：2025-12-30 导入校验快速定位与层级不足可编辑（`scripts/modules/caseLibrary.js`、`index.html`、`case-library.html`、`style.css`、`tests/ui/case_library.spec.js`）。
+
+- 功能名称：复用预设子项编辑与删除确认
+- 功能描述：复用型用例预设子项支持点击名称编辑保存，并在删除时弹出确认抽屉，同时同步更新用例视图内同名复用子项展示。
+- 操作方式：执行视图开启复用后，在预设子项区点击名称进行编辑；点击“×”删除时按确认抽屉操作。
+- 使用效果：预设子项可安全编辑/删除，列表内同名复用子项同步刷新。
+- 新增内容/接口/组件：
+  - 前端：预设子项编辑入口与删除确认、同名复用子项同步更新（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`）。
+  - 测试：新增复用预设子项编辑/删除确认用例（`tests/ui/tempexec_reuse_preset_edit.spec.js`）。
+- 复用说明：复用既有确认抽屉与复用逻辑，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_preset_edit.spec.js`
+- 更新记录：2025-12-30 复用预设子项编辑与删除确认（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_reuse_preset_edit.spec.js`）。

@@ -210,6 +210,34 @@
       var trimmed = name ? String(name).trim() : '';
       return Promise.resolve({ ok: Boolean(trimmed), value: trimmed });
     }
+    function promptTempExecPresetName(options) {
+      var config = options || {};
+      var drawerApi = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
+      if (drawerApi && typeof drawerApi.open === 'function') {
+        return drawerApi.open({
+          title: config.title || '编辑预设子项',
+          message: config.message || '请输入新的预设子项名称',
+          confirmText: config.confirmText || '保存',
+          cancelText: config.cancelText || '取消',
+          previousDrawer: config.previousDrawer || null,
+          input: {
+            label: config.label || '预设子项',
+            placeholder: config.placeholder || '请输入预设子项名称',
+            required: true,
+            requiredMessage: config.requiredMessage || '请输入预设子项名称',
+            maxLength: Number.isFinite(config.maxLength) ? Number(config.maxLength) : 60,
+            value: config.value || '',
+            validate: config.validate,
+          },
+        });
+      }
+      var promptText = config.prompt || '请输入预设子项名称';
+      var raw = window.prompt(promptText, config.value || '');
+      if (raw === null) return Promise.resolve({ ok: false });
+      var trimmed = String(raw || '').trim();
+      if (!trimmed) return Promise.resolve({ ok: false, reason: 'empty' });
+      return Promise.resolve({ ok: true, value: trimmed });
+    }
     function normalizeTemplateName(raw) {
       if (!raw) return '';
       var clean = raw.split('?')[0] || '';
@@ -4774,11 +4802,50 @@
           api.confirmTempExecPresetDraft(presetConfirmBtn.dataset.tempReusePresetConfirm);
           return;
         }
+        var presetEditBtn = e.target.closest('[data-temp-reuse-preset-edit]');
+        if (presetEditBtn && api.renameTempExecPreset) {
+          var editFileId = presetEditBtn.dataset.tempReusePresetEdit;
+          var editPresetId = presetEditBtn.dataset.preset;
+          var editFile = api.getTempExecFile && api.getTempExecFile(editFileId);
+          var editPresets = editFile ? (api.ensureReusePresets ? api.ensureReusePresets(editFile) : (editFile.reusePresets || [])) : [];
+          var editPreset = editPresets.find(function(item) { return item && item.id === editPresetId; });
+          if (editFileId && editPresetId && editPreset) {
+            var currentText = editPreset.text || '';
+            promptTempExecPresetName({
+              value: currentText,
+              maxLength: 80,
+              validate: function(nextValue) {
+                var trimmed = String(nextValue || '').trim();
+                if (!trimmed) return '请输入预设子项名称';
+                var duplicated = editPresets.some(function(item) {
+                  return item && item.id !== editPresetId && item.text === trimmed;
+                });
+                if (duplicated) return '已存在相同的预设子项';
+                return '';
+              },
+            }).then(function(res) {
+              if (!res || res.ok !== true) return;
+              api.renameTempExecPreset(editFileId, editPresetId, res.value);
+            });
+          }
+          return;
+        }
         var presetRemoveBtn = e.target.closest('[data-temp-reuse-preset-remove]');
         if (presetRemoveBtn && api.removeTempExecPreset) {
           var presetFileId = presetRemoveBtn.dataset.tempReusePresetRemove;
           var presetId = presetRemoveBtn.dataset.preset;
-          if (presetFileId && presetId) api.removeTempExecPreset(presetFileId, presetId);
+          if (presetFileId && presetId) {
+            openConfirmDrawer({
+              title: '删除预设子项',
+              message: '确定删除该预设子项吗？删除后将同步移除关联的复用子项。',
+              confirmText: '确认删除',
+              cancelText: '取消',
+              danger: true,
+            }).then(function(res) {
+              if (!res || res.ok !== true) return;
+              api.removeTempExecPreset(presetFileId, presetId);
+            });
+          }
           return;
         }
         var pageBtn = e.target.closest('[data-temp-page-action]');

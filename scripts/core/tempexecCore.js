@@ -2690,6 +2690,46 @@
       renderTempExecView();
     }
 
+    function renameTempExecPreset(fileId, presetId, nextText) {
+      var file = getTempExecFile(fileId);
+      if (!file) return;
+      var presets = ensureReusePresets(file);
+      var target = presets.find(function(item) { return item && item.id === presetId; });
+      if (!target) return;
+      var trimmed = (nextText || '').trim();
+      if (!trimmed) {
+        if (tempExecStatus) setStatus(tempExecStatus, '预设子项内容不能为空', 'warn');
+        return;
+      }
+      if (target.text === trimmed) return;
+      var exists = presets.some(function(item) { return item && item.id !== presetId && item.text === trimmed; });
+      if (exists) {
+        if (tempExecStatus) setStatus(tempExecStatus, '已存在相同的预设子项', 'warn');
+        return;
+      }
+      var oldText = target.text || '';
+      target.text = trimmed;
+      (file.cases || []).forEach(function(caseItem) {
+        if (!caseItem || !Array.isArray(caseItem.reuseDetails)) return;
+        caseItem.reuseDetails.forEach(function(detail) {
+          if (!detail) return;
+          if (detail.text === oldText) detail.text = trimmed;
+        });
+      });
+      if (isDbMode()) {
+        var execSetId = file.execSetId || Number(file.id);
+        if (execSetId) {
+          queueExecSetPatch(execSetId, { reuse_presets: file.reusePresets || [], reuse_enabled: Boolean(file.reuseEnabled) });
+        }
+        (file.cases || []).forEach(function(item) {
+          if (!item) return;
+          queueExecCasePatchForItem(item, { reuse_details: item.reuseDetails || [] });
+        });
+      }
+      persistTempExecState();
+      renderTempExecView();
+    }
+
     function removeTempExecPreset(fileId, presetId) {
       var file = getTempExecFile(fileId);
       if (!file) return;
@@ -7266,10 +7306,11 @@
         ? state.tempExecPresetDraft.value || ''
         : null;
       var chips = presets.map(function(preset) {
+        var presetText = preset && preset.text ? preset.text : '';
         return (
           '<span class="preset-chip">' +
-            escapeHtml(preset.text) +
-            '<span class="remove" data-temp-reuse-preset-remove="' + file.id + '" data-preset="' + preset.id + '">×</span>' +
+            '<span class="preset-text" data-temp-reuse-preset-edit="' + file.id + '" data-preset="' + preset.id + '" title="点击编辑">' + escapeHtml(presetText) + '</span>' +
+            '<span class="remove" data-temp-reuse-preset-remove="' + file.id + '" data-preset="' + preset.id + '" title="删除预设子项">×</span>' +
           '</span>'
         );
       }).join('');
@@ -7916,6 +7957,7 @@
       cancelTempExecPresetDraft: cancelTempExecPresetDraft,
       updateTempExecPresetDraft: updateTempExecPresetDraft,
       confirmTempExecPresetDraft: confirmTempExecPresetDraft,
+      renameTempExecPreset: renameTempExecPreset,
       removeTempExecPreset: removeTempExecPreset,
       toggleTempExecReusePanel: toggleTempExecReusePanel,
       addTempExecReuseEntry: addTempExecReuseEntry,
