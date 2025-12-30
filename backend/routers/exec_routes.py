@@ -1023,15 +1023,12 @@ def upsert_exec_set_from_case_file(
             before_priority = existing.priority
             before_precondition = existing.precondition
             before_steps = existing.steps
-            before_remark = existing.remark
-
             existing.module = item.module
             existing.title = item.title
             existing.expected = item.expected
             existing.priority = item.priority
             existing.precondition = item.precondition
             existing.steps = item.steps
-            existing.remark = item.remark
             existing.case_item_id = item.id
             existing.case_item_source_id = int(item.id)
             existing.updated_by = user.id
@@ -1055,7 +1052,6 @@ def upsert_exec_set_from_case_file(
                     or before_priority != existing.priority
                     or before_precondition != existing.precondition
                     or before_steps != existing.steps
-                    or before_remark != existing.remark
                 )
                 # 用例库发生改动时：若该用例已有执行结果，则标记为“变更重跑”（系统态），提醒重新确认并按未执行处理。
                 if changed:
@@ -1071,7 +1067,6 @@ def upsert_exec_set_from_case_file(
                     has_reuse_execution = _has_reuse_execution(reuse_details_value)
                     has_result = bool(before_status and before_status != "未执行") or bool(
                         (existing.actual_result or "").strip()
-                        or (existing.remark or "").strip()
                         or (existing.defect_link or "").strip()
                         or has_defect_links
                         or has_reuse_execution
@@ -2067,9 +2062,6 @@ def create_exec_case(
                 if exec_case.priority != existing.priority:
                     existing.priority = exec_case.priority
                     updated_case = True
-                if exec_case.remark is not None and exec_case.remark != existing.remark:
-                    existing.remark = exec_case.remark
-                    updated_case = True
                 exec_case.case_item_id = existing.id
                 exec_case.case_item_source_id = int(existing.id)
                 if updated_case:
@@ -2107,7 +2099,7 @@ def create_exec_case(
                     priority=exec_case.priority,
                     precondition=exec_case.precondition or "",
                     steps=exec_case.steps or "",
-                    remark=exec_case.remark,
+                    remark=None,
                     created_by=user.id,
                     updated_by=user.id,
                     created_at=now,
@@ -2431,8 +2423,8 @@ def update_exec_case(
         if not case_file_name and exec_set_name:
             case_file_name = exec_set_name
 
-        # 非“实际结果/缺陷链接”字段变更需要同步到用例库（case_items）
-        case_fields = ["module", "title", "expected", "priority", "precondition", "steps", "remark"]
+        # 用例库仅同步结构字段，执行备注/缺陷链接等个人信息不入库。
+        case_fields = ["module", "title", "expected", "priority", "precondition", "steps"]
         if exec_case.case_item_id:
             case_item = (
                 db.query(models.CaseItem)
@@ -2523,9 +2515,6 @@ def update_exec_case(
                             if exec_case.priority != existing.priority:
                                 existing.priority = exec_case.priority
                                 updated_case = True
-                            if exec_case.remark is not None and exec_case.remark != existing.remark:
-                                existing.remark = exec_case.remark
-                                updated_case = True
                             exec_case.case_item_id = existing.id
                             exec_case.case_item_source_id = int(existing.id)
                             if updated_case:
@@ -2574,7 +2563,7 @@ def update_exec_case(
                                 priority=exec_case.priority,
                                 precondition=exec_case.precondition or "",
                                 steps=exec_case.steps or "",
-                                remark=exec_case.remark,
+                                remark=None,
                                 created_by=user.id,
                                 updated_by=user.id,
                                 created_at=now,

@@ -3217,3 +3217,17 @@
 - 测试与验证：
   - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_preset_sync_new_case.spec.js`
 - 更新记录：2025-12-30 执行视图新增用例同步复用预设子项（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_reuse_preset_sync_new_case.spec.js`）。
+
+- 功能名称：执行备注与缺陷链接保持个人
+- 功能描述：执行用例的备注与缺陷链接不再同步至用例库，避免通过用例库变更影响其他人的执行数据。
+- 操作方式：执行视图填写备注/缺陷链接，其他用户创建或刷新执行集后检查备注与缺陷链接。
+- 使用效果：备注与缺陷链接仅对当前执行人可见，不会污染用例库或其他人执行记录。
+- 新增内容/接口/组件：
+  - 后端：执行用例同步用例库时跳过备注字段（`backend/routers/exec_routes.py`）。
+  - 测试：新增执行备注/缺陷链接个人化 API 用例（`tests/api/exec_personal_fields.spec.js`）。
+  - 测试：新增执行视图备注/缺陷链接个人化 UI 用例（`tests/ui/tempexec_personal_remark_defect.spec.js`）。
+- 复用说明：复用既有执行用例与用例库同步逻辑，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_personal_fields.spec.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_personal_remark_defect.spec.js`
+- 更新记录：2025-12-30 执行备注与缺陷链接保持个人（`backend/routers/exec_routes.py`、`tests/api/exec_personal_fields.spec.js`、`tests/ui/tempexec_personal_remark_defect.spec.js`）。
