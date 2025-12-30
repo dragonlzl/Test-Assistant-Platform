@@ -6290,6 +6290,23 @@ tr.diff-locate-active td {
       padding: 8px 10px;
       font-size: 14px;
     }
+:root:not([data-theme="dark"]) .settings-inline .control input,
+:root:not([data-theme="dark"]) .settings-inline .control select,
+:root:not([data-theme="dark"]) body[data-page="settings"] .settings-inline .control input,
+:root:not([data-theme="dark"]) body[data-page="settings"] .settings-inline .control select,
+:root:not([data-theme="dark"]) [data-tab-section="settings"] .settings-inline .control input,
+:root:not([data-theme="dark"]) [data-tab-section="settings"] .settings-inline .control select {
+  background: #fff;
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: inset 0 1px 2px rgba(15,23,42,0.06);
+}
+:root:not([data-theme="dark"]) body[data-page="settings"] input[type="checkbox"],
+:root:not([data-theme="dark"]) [data-tab-section="settings"] input[type="checkbox"] {
+  color-scheme: light;
+  accent-color: var(--primary);
+  background: #fff;
+}
     .settings-divider {
       height: 1px;
       background: var(--border);
@@ -6334,6 +6351,9 @@ tr.diff-locate-active td {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+:root:not([data-theme="dark"]) .project-sort-card .name {
+  font-weight: 600;
+}
     .project-sort-card .meta {
       display: inline-flex;
       align-items: center;

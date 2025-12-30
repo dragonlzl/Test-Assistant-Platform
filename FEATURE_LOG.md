@@ -3143,3 +3143,15 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/sidebar_menu_style.spec.js`
 - 更新记录：2025-12-30 侧边栏一级菜单描边与滚动按钮去描边（`style.css`、`tests/ui/sidebar_menu_style.spec.js`）。
 - 更新记录：2025-12-30 一级菜单默认态补齐蓝色描边（`style.css`）。
+
+- 功能名称：设置页白色主题控件配色与项目排序字重优化
+- 功能描述：白色主题下修复设置页勾选框、行数输入框、主题选择框背景偏黑问题，并降低项目排序中文名称字重。
+- 操作方式：切换白色主题进入设置页，查看勾选框/行数输入/主题选择背景与项目排序列表字体。
+- 使用效果：设置页控件背景更符合白色主题，项目排序列表阅读更舒适。
+- 新增内容/接口/组件：
+  - 前端：设置页控件背景与项目排序字重适配（`style.css`）。
+  - 测试：覆盖白色主题设置控件与项目排序样式（`tests/ui/theme_setting.spec.js`）。
+- 复用说明：复用既有主题与设置页结构，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/theme_setting.spec.js`
+- 更新记录：2025-12-30 设置页白色主题控件配色与项目排序字重优化（`style.css`、`tests/ui/theme_setting.spec.js`）。
