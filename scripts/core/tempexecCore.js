@@ -751,19 +751,26 @@
       return isDbMode();
     }
 
+    function isReuseDetailRemoved(detail) {
+      return Boolean(detail && detail.removed);
+    }
+
     function normalizeReuseDetails(list) {
       if (!Array.isArray(list)) return [];
       return list
         .map(function(detail) {
           var text = detail && detail.text ? String(detail.text).trim() : '';
-          if (!text) return null;
+          var presetId = detail && detail.presetId ? detail.presetId : '';
+          var removed = isReuseDetailRemoved(detail);
+          if (!text && (!removed || !presetId)) return null;
           var id = detail && detail.id ? detail.id : generateReuseDetailId();
           return {
             id: id,
             text: text,
             note: detail && detail.note ? detail.note : '',
             status: detail && detail.status ? detail.status : '未执行',
-            presetId: detail && detail.presetId ? detail.presetId : '',
+            presetId: presetId,
+            removed: removed,
           };
         })
         .filter(Boolean);
@@ -918,6 +925,7 @@
                   note: detail && detail.note ? detail.note : '',
                   status: detail && detail.status ? detail.status : '未执行',
                   presetId: detail && detail.presetId ? detail.presetId : '',
+                  removed: Boolean(detail && detail.removed),
                 };
               })
               : [],
@@ -2619,6 +2627,7 @@
           note: '',
           status: '未执行',
           presetId: preset && preset.id ? preset.id : '',
+          removed: false,
         };
       });
     }
@@ -2651,6 +2660,7 @@
             note: '',
             status: '未执行',
             presetId: preset.id,
+            removed: false,
           });
         }
       });
@@ -2673,6 +2683,7 @@
             note: '',
             status: '未执行',
             presetId: preset.id,
+            removed: false,
           });
           changed = true;
         }
@@ -2831,6 +2842,7 @@
       if (!Array.isArray(details)) return stats;
       details.forEach(function(detail) {
         if (!detail) return;
+        if (isReuseDetailRemoved(detail)) return;
         var status = detail.status || '未执行';
         try { status = String(status).trim(); } catch (err) { status = status || '未执行'; }
         if (status === '通过') stats.passed += 1;
@@ -5758,6 +5770,7 @@
           return list2.some(function(item) {
             var details = item && Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
             return details.some(function(d) {
+              if (!d || isReuseDetailRemoved(d)) return false;
               var st = d && d.status ? String(d.status) : '未执行';
               var note = d && d.note ? String(d.note) : '';
               return (st && st !== '未执行') || (note && note.trim());
@@ -7378,12 +7391,13 @@
 
     function renderReuseEntries(file, caseItem, caseIndex) {
       var details = Array.isArray(caseItem.reuseDetails) ? caseItem.reuseDetails : [];
-      if (!details.length) {
+      var visibleDetails = details.filter(function(detail) { return detail && !isReuseDetailRemoved(detail); });
+      if (!visibleDetails.length) {
         return '<p class="reuse-empty">暂无复用测试项，点击下方“＋ 添加测试项”。</p>';
       }
       return (
         '<div class="reuse-list">' +
-          details.map(function(detail) {
+          visibleDetails.map(function(detail) {
             var currentStatus = detail && detail.status ? String(detail.status) : '未执行';
             currentStatus = currentStatus.trim();
             if (currentStatus === 'pending') currentStatus = '未执行';
@@ -7725,7 +7739,7 @@
       if (!file.cases[index]) return;
       var targetCase = file.cases[index];
       if (!Array.isArray(targetCase.reuseDetails)) targetCase.reuseDetails = [];
-      targetCase.reuseDetails.push({ id: generateReuseDetailId(), text: '', note: '', status: '未执行' });
+      targetCase.reuseDetails.push({ id: generateReuseDetailId(), text: '', note: '', status: '未执行', removed: false });
       // 复用模式下同时维护 exec_case.status，方便总览统计与清除“变更重跑”系统态。
       targetCase.actual = resolveReuseAggregateStatus(targetCase.reuseDetails);
       if (isDbMode()) {
@@ -7752,7 +7766,26 @@
         if (!nextFile || !nextFile.cases[index]) return;
         var nextCase = nextFile.cases[index];
         if (!Array.isArray(nextCase.reuseDetails)) return;
-        nextCase.reuseDetails = nextCase.reuseDetails.filter(function(item) { return item.id !== detailId; });
+        var details = nextCase.reuseDetails;
+        var updated = false;
+        for (var i = 0; i < details.length; i += 1) {
+          var detail = details[i];
+          if (!detail || detail.id !== detailId) continue;
+          if (detail.presetId) {
+            if (!detail.removed) {
+              detail.removed = true;
+              detail.status = '未执行';
+              detail.note = '';
+              updated = true;
+            }
+          } else {
+            details.splice(i, 1);
+            updated = true;
+          }
+          break;
+        }
+        if (!updated) return;
+        nextCase.reuseDetails = details;
         nextCase.actual = resolveReuseAggregateStatus(nextCase.reuseDetails);
         if (isDbMode()) {
           queueExecCasePatchForItem(nextCase, { reuse_details: nextCase.reuseDetails, status: nextCase.actual });
@@ -7769,6 +7802,7 @@
       if (!Array.isArray(targetCase.reuseDetails)) targetCase.reuseDetails = [];
       var entry = targetCase.reuseDetails.find(function(item) { return item.id === detailId; });
       if (!entry) return;
+      if (isReuseDetailRemoved(entry)) return;
       entry.status = tempExecResultOptions.indexOf(value) !== -1 ? value : '未执行';
       targetCase.actual = resolveReuseAggregateStatus(targetCase.reuseDetails);
       if (isDbMode()) {
@@ -7798,17 +7832,24 @@
         return;
       }
       var details = targetCase.reuseDetails;
-      var first = details[0];
-      if (!first) return;
+      var visibleDetails = details.filter(function(detail) { return detail && !isReuseDetailRemoved(detail); });
+      if (!visibleDetails.length) {
+        var anchorRect2 = captureTempExecAnchorRect(anchorEl);
+        if (anchorRect2) {
+          showTempExecBlockHint(anchorRect2, '暂无可同步的复用子项');
+        }
+        if (tempExecStatus) setStatus(tempExecStatus, '暂无可同步的复用子项', 'warn');
+        return;
+      }
+      var first = visibleDetails[0];
       var firstStatus = normalizeReuseDetailStatus(first.status);
       var changed = false;
       if (first.status !== firstStatus) {
         first.status = firstStatus;
         changed = true;
       }
-      for (var i = 1; i < details.length; i += 1) {
-        var detail = details[i];
-        if (!detail) continue;
+      for (var i = 1; i < visibleDetails.length; i += 1) {
+        var detail = visibleDetails[i];
         if (detail.status !== firstStatus) {
           detail.status = firstStatus;
           changed = true;
@@ -7834,6 +7875,7 @@
       if (!Array.isArray(targetCase.reuseDetails)) targetCase.reuseDetails = [];
       var entry = targetCase.reuseDetails.find(function(item) { return item.id === detailId; });
       if (!entry) return;
+      if (isReuseDetailRemoved(entry)) return;
       entry.text = text || '';
       if (isDbMode()) {
         queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails });
@@ -7848,6 +7890,7 @@
       if (!Array.isArray(targetCase.reuseDetails)) targetCase.reuseDetails = [];
       var entry = targetCase.reuseDetails.find(function(item) { return item.id === detailId; });
       if (!entry) return;
+      if (isReuseDetailRemoved(entry)) return;
       entry.note = text || '';
       if (isDbMode()) {
         queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails });
@@ -7923,7 +7966,10 @@
         return;
       }
 
-      var hasReuse = file.cases.some(function(item) { return Array.isArray(item.reuseDetails) && item.reuseDetails.length; });
+      var hasReuse = file.cases.some(function(item) {
+        var details = Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
+        return details.some(function(detail) { return detail && !isReuseDetailRemoved(detail); });
+      });
       if (hasReuse) {
         var confirmClose = '关闭“用例复用”会删除所有复用测试项与预设子项，是否继续？';
         openConfirmDrawer({

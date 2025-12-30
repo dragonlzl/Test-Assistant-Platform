@@ -3245,3 +3245,15 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_sync_no_detail_hint.spec.js`
 - 更新记录：2025-12-30 复用子项同步首条结果（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_reuse_sync_first_status.spec.js`）。
 - 更新记录：2025-12-30 无复用子项时提示同步无效（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_reuse_sync_no_detail_hint.spec.js`）。
+
+- 功能名称：复用预设子项删除保持
+- 功能描述：复用用例删除预设子项后记录为“已移除”，刷新或重新加载执行集时不再自动回填该子项。
+- 操作方式：执行视图展开复用子项面板，点击子项右侧“删除”，刷新页面或重新加载执行集。
+- 使用效果：单条用例可长期排除某个预设子项，不会因刷新恢复。
+- 新增内容/接口/组件：
+  - 前端：复用子项删除标记与渲染过滤（`scripts/core/tempexecCore.js`）。
+  - 测试：新增删除预设子项保持用例（`tests/ui/tempexec_reuse_preset_remove_detail.spec.js`）。
+- 复用说明：复用既有复用子项渲染与预设同步逻辑，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_preset_remove_detail.spec.js`
+- 更新记录：2025-12-30 复用预设子项删除保持（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_reuse_preset_remove_detail.spec.js`）。
