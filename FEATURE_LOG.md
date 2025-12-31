@@ -3232,10 +3232,10 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_personal_remark_defect.spec.js`
 - 更新记录：2025-12-30 执行备注与缺陷链接保持个人（`backend/routers/exec_routes.py`、`tests/api/exec_personal_fields.spec.js`、`tests/ui/tempexec_personal_remark_defect.spec.js`）。
 
-- 功能名称：复用子项同步首条结果
-- 功能描述：执行视图复用子项面板新增“同步首条子项结果”按钮，点击后将首条子项结果同步到同用例的其他子项，支持首条删除后自动以新首条为基准。
-- 操作方式：执行视图展开复用子项面板，点击“同步首条子项结果”。
-- 使用效果：同一用例的多个子项结果可快速对齐首条结果。
+- 功能名称：复用子项同步结果
+- 功能描述：执行视图复用子项面板提供“同步结果”按钮，点击后将首条子项结果同步到同用例的其他子项，支持首条删除后自动以新首条为基准，并将按钮中点对齐到实际结果字段中点。
+- 操作方式：执行视图展开复用子项面板，点击“同步结果”。
+- 使用效果：同一用例的多个子项结果可快速对齐首条结果，按钮与实际结果字段中点对齐。
 - 新增内容/接口/组件：
   - 前端：复用子项同步按钮与同步逻辑（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`）。
   - 测试：新增复用子项同步首条结果用例（`tests/ui/tempexec_reuse_sync_first_status.spec.js`）。
@@ -3245,6 +3245,9 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_sync_no_detail_hint.spec.js`
 - 更新记录：2025-12-30 复用子项同步首条结果（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_reuse_sync_first_status.spec.js`）。
 - 更新记录：2025-12-30 无复用子项时提示同步无效（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_reuse_sync_no_detail_hint.spec.js`）。
+- 更新记录：2025-12-31 同步按钮改名并对齐执行结果输入框（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_reuse_sync_first_status.spec.js`、`tests/ui/tempexec_reuse_sync_no_detail_hint.spec.js`）。
+- 更新记录：2025-12-31 同步按钮改名为“同步结果”并与实际结果字段中点对齐（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_reuse_sync_first_status.spec.js`、`tests/ui/tempexec_reuse_sync_no_detail_hint.spec.js`）。
+- 更新记录：2025-12-31 同步按钮对齐时取消 transform 动画，避免展开时位移（`style.css`）。
 
 - 功能名称：复用预设子项删除保持
 - 功能描述：复用用例删除预设子项后记录为“已移除”，刷新或重新加载执行集时不再自动回填该子项。

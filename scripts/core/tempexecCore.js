@@ -3941,6 +3941,25 @@
             if (entry && entry.style) entry.style.setProperty('--reuse-status-shift', rounded + 'px');
           }
         });
+        var syncButtons = table.querySelectorAll('.reuse-panel .reuse-actions .reuse-sync');
+        syncButtons.forEach(function(button) {
+          if (!button || !button.getBoundingClientRect) return;
+          if (button.offsetParent === null) {
+            if (button.style) button.style.transform = '';
+            return;
+          }
+          var btnRect = button.getBoundingClientRect();
+          if (!btnRect || !btnRect.width) return;
+          var btnCenter = btnRect.left + btnRect.width / 2;
+          var deltaBtn = targetCenter - btnCenter;
+          if (!Number.isFinite(deltaBtn)) return;
+          if (Math.abs(deltaBtn) < 0.5) {
+            if (button.style) button.style.transform = '';
+            return;
+          }
+          var roundedBtn = Math.round(deltaBtn);
+          if (button.style) button.style.transform = 'translateX(' + roundedBtn + 'px)';
+        });
       });
     }
 
@@ -7633,7 +7652,7 @@
           ? (
             '<div class="reuse-actions">' +
               '<button type="button" class="reuse-add" data-temp-reuse-add="' + file.id + '" data-index="' + idx + '">＋ 添加测试项</button>' +
-              '<button type="button" class="reuse-sync" data-temp-reuse-sync="' + file.id + '" data-index="' + idx + '">同步首条子项结果</button>' +
+              '<button type="button" class="reuse-sync" data-temp-reuse-sync="' + file.id + '" data-index="' + idx + '">同步结果</button>' +
             '</div>'
           )
           : '';
@@ -7865,7 +7884,7 @@
       }
       persistTempExecState();
       renderTempExecView();
-      if (tempExecStatus) setStatus(tempExecStatus, '已同步首条子项结果', 'ok');
+      if (tempExecStatus) setStatus(tempExecStatus, '已同步结果', 'ok');
     }
 
     function updateTempExecReuseText(fileId, index, detailId, text) {

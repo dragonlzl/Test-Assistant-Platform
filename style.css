@@ -6012,6 +6012,25 @@ tr.import-invalid-locate-active td {
   align-items: center;
   --reuse-status-shift: 0px;
 }
+.card[data-section-id="tempexec-view"] .reuse-actions {
+  display: grid;
+  grid-template-columns: calc(110px + 10em) minmax(0, 1fr) 14em 7em 6em 6em 40px;
+  align-items: center;
+  column-gap: 0;
+  row-gap: 8px;
+}
+.card[data-section-id="tempexec-view"] .reuse-actions .reuse-add {
+  grid-column: 1;
+  justify-self: start;
+}
+.card[data-section-id="tempexec-view"] .reuse-actions .reuse-sync {
+  grid-column: 3;
+  justify-self: start;
+  width: 7em;
+  min-width: 7em;
+  box-sizing: border-box;
+  justify-content: center;
+}
     .card[data-section-id="tempexec-view"] .reuse-entry .reuse-input {
       grid-column: 1;
       width: 100%;
@@ -6491,6 +6510,7 @@ tr.import-invalid-locate-active td {
       display: inline-flex;
       align-items: center;
       gap: 4px;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     }
     .file-list {
       margin-top: 10px;

@@ -7,7 +7,7 @@ async function waitForAppReady(page) {
   await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout: 20000 });
 }
 
-test.describe('复用子项同步首条结果', () => {
+test.describe('复用子项同步结果', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       try {
@@ -58,7 +58,7 @@ test.describe('复用子项同步首条结果', () => {
     );
   });
 
-  test('同步首条子项结果后其他子项跟随', async ({ page }) => {
+  test('同步结果后其他子项跟随', async ({ page }) => {
     await page.goto(base + '/index.html');
     await waitForAppReady(page);
 
@@ -72,7 +72,9 @@ test.describe('复用子项同步首条结果', () => {
     const panel = page.locator('[data-temp-reuse-panel-container="reuse-sync-file"][data-index="0"]');
     await expect(panel).toBeVisible();
 
-    await page.click('[data-temp-reuse-sync="reuse-sync-file"][data-index="0"]');
+    const syncButton = panel.locator('[data-temp-reuse-sync="reuse-sync-file"][data-index="0"]');
+    await expect(syncButton).toHaveText('同步结果');
+    await syncButton.click();
     const firstValues = await panel.locator('select.status-select').evaluateAll((list) => list.map((el) => el.value));
     expect(firstValues).toEqual(['通过', '通过', '通过']);
 
@@ -100,7 +102,7 @@ test.describe('复用子项同步首条结果', () => {
     });
     const panelAfterDelete = page.locator('[data-temp-reuse-panel-container="reuse-sync-file"][data-index="0"]');
     await expect(panelAfterDelete).toBeVisible();
-    await page.click('[data-temp-reuse-sync="reuse-sync-file"][data-index="0"]');
+    await panelAfterDelete.locator('[data-temp-reuse-sync="reuse-sync-file"][data-index="0"]').click();
     const secondValues = await panelAfterDelete.locator('select.status-select').evaluateAll((list) => list.map((el) => el.value));
     expect(secondValues).toEqual(['失败', '失败']);
   });

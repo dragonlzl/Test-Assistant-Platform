@@ -7,7 +7,7 @@ async function waitForAppReady(page) {
   await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout: 20000 });
 }
 
-test.describe('复用子项同步首条结果提示', () => {
+test.describe('复用子项同步结果提示', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       try {
