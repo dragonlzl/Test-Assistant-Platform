@@ -38,6 +38,10 @@ async function switchToTab(page, tabName) {
   await page.evaluate((name) => {
     if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab(name);
   }, tabName);
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction((name) => {
+    return window.app && window.app.state && window.app.state.activeTab === name;
+  }, tabName, { timeout: 8000 }).catch(() => {});
 }
 
 async function ensureAuthed(page, token, user) {
@@ -869,7 +873,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
 
       if (pathName === `/api/exec/sets/${execSet.id}/case-library-sync` && method === 'POST') {
         syncCalls += 1;
-        if (syncCalls === 1) {
+        if (syncCalls < 3) {
           const diffEntry = {
             kind: 'updated',
             case_item_id: 11,
@@ -1532,5 +1536,171 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await expect(body).toContainText('用例类型');
     await expect(body).toContainText('旧：非复用');
     await expect(body).toContainText('新：复用');
+  });
+
+  test('点击变更行可定位执行用例且抽屉保持打开', async ({ page }) => {
+    const token = 'token-case-lib-diff-locate';
+    const user = { id: 33, username: 'diff_locate_user', role: 'user', level: 'member' };
+    const project = { id: 21, name: '变更定位项目', description: 'diff locate' };
+    const versions = [{ id: 211, name: 'v1' }];
+    const now = new Date().toISOString();
+
+    const execSet = { id: 21001, project_id: project.id, version_id: versions[0].id, case_file_id: 880, name: '定位用例', status: 'active', created_at: now, updated_at: now };
+    const execCases = [];
+    for (let i = 0; i < 12; i += 1) {
+      execCases.push({
+        id: 7000 + i,
+        exec_set_id: execSet.id,
+        case_item_id: 5001 + i,
+        module: '模块' + (i + 1),
+        title: '用例' + (i + 1),
+        expected: '预期' + (i + 1),
+        priority: 'P1',
+        precondition: '无',
+        steps: '步骤' + (i + 1),
+        status: '未执行',
+        remark: '',
+        defect_links: [],
+        reuse_details: [],
+        order_no: i + 1,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/exec/sets' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, [execSet]);
+      }
+
+      if (pathName === `/api/exec/sets/${execSet.id}/case-library-sync` && method === 'POST') {
+        const diffAdded = {
+          kind: 'added',
+          case_item_id: 5003,
+          changed_fields: [],
+          old: null,
+          new: { module: '模块3', title: '用例3', priority: 'P1', precondition: '无', steps: '步骤3', expected: '预期3', remark: '' },
+        };
+        const diffUpdated = {
+          kind: 'updated',
+          case_item_id: 5011,
+          changed_fields: ['steps'],
+          old: { module: '模块11', title: '用例11', priority: 'P1', precondition: '无', steps: '旧步骤11', expected: '预期11', remark: '' },
+          new: { module: '模块11', title: '用例11', priority: 'P1', precondition: '无', steps: '步骤11', expected: '预期11', remark: '' },
+        };
+        const diffAppended = {
+          kind: 'appended',
+          case_item_id: 5009,
+          changed_fields: [],
+          old: { module: '模块9', title: '用例9', priority: 'P1', precondition: '无', steps: '旧步骤9', expected: '预期9', remark: '' },
+          new: { module: '模块9', title: '用例9', priority: 'P1', precondition: '无', steps: '步骤9', expected: '预期9', remark: '' },
+        };
+        return respond(200, {
+          exec_set_id: execSet.id,
+          case_file_id: execSet.case_file_id,
+          case_file_updated_at: now,
+          base_updated_at: now,
+          last_diff_at: now,
+          last_shown_at: null,
+          ever_changed: true,
+          has_new_diff: true,
+          should_auto_popup: true,
+          summary: { appended: 1, added: 1, updated: 1, deleted: 0 },
+          diff: [diffAdded, diffUpdated, diffAppended],
+        });
+      }
+
+      const execCasesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (execCasesMatch && method === 'GET') {
+        const id = Number(execCasesMatch[1]);
+        if (id !== execSet.id) return respond(200, []);
+        return respond(200, execCases);
+      }
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { sessionStorage.setItem('usecase-active-tab', 'tempexec'); } catch (_) {}
+    }, { token: token });
+
+    await gotoIndex(page);
+    await ensureAuthed(page, token, user);
+    await waitAppReady(page, 30000);
+    await switchToTab(page, 'tempexec');
+    await page.evaluate(() => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
+        return window.app.tempExecApi.loadTempExecState();
+      }
+      return null;
+    });
+    await page.evaluate(() => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.applyTempExecPageSize === 'function') {
+        window.app.tempExecApi.applyTempExecPageSize(5);
+      }
+    });
+
+    const diffDrawer = page.locator('#tempExecCaseLibraryDiffDrawer');
+    await expect(diffDrawer).toHaveClass(/open/);
+
+    const targetRowBottom = page.locator('tr.case-row[data-temp-case-row=\"' + execSet.id + '\"][data-index=\"8\"]');
+    const targetRowTop = page.locator('tr.case-row[data-temp-case-row=\"' + execSet.id + '\"][data-index=\"2\"]');
+
+    const diffRowTop = page.locator('#tempExecCaseLibraryDiffBody tr.case-lib-diff-clickable[data-case-lib-diff-case-id=\"5003\"]');
+    await expect(diffRowTop).toBeVisible();
+    await page.evaluate(() => {
+      window.scrollTo(0, document.body.scrollHeight);
+    });
+    await diffRowTop.click();
+
+    await expect(diffDrawer).toHaveClass(/open/);
+    await expect(targetRowTop).toHaveCount(1);
+    await expect(targetRowTop).toContainText('用例3');
+
+    const diffRowBottom = page.locator('#tempExecCaseLibraryDiffBody tr.case-lib-diff-clickable[data-case-lib-diff-case-id=\"5009\"]');
+    await expect(diffRowBottom).toBeVisible();
+    await diffRowBottom.click();
+
+    await expect(diffDrawer).toHaveClass(/open/);
+    await expect(targetRowBottom).toHaveCount(1);
+    await expect(targetRowBottom).toContainText('用例9');
+
+    await page.click('#closeTempExecCaseLibraryDiffDrawerBtn');
+    await expect(diffDrawer).not.toHaveClass(/open/);
+    await page.waitForFunction((selector) => {
+      var el = document.querySelector(selector);
+      if (!el || !el.getBoundingClientRect) return false;
+      var rect = el.getBoundingClientRect();
+      var height = window.innerHeight || 0;
+      return rect.bottom > 0 && rect.top < height;
+    }, 'tr.case-row[data-temp-case-row="' + execSet.id + '"][data-index="8"]', { timeout: 3000 });
   });
 });

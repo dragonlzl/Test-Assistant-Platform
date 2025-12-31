@@ -2797,6 +2797,12 @@ body {
     .case-lib-diff-table td {
       vertical-align: top;
     }
+    .case-lib-diff-clickable td {
+      cursor: pointer;
+    }
+    .case-lib-diff-clickable:hover td {
+      background: rgba(15,23,42,0.04);
+    }
     .case-lib-diff-time {
       font-size: 12px;
       color: #475569;
@@ -8995,6 +9001,9 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .case-lib-diff-cell .case-lib-diff-old,
 :root[data-theme="dark"] .case-lib-diff-cell .case-lib-diff-new {
   font-weight: 600;
+}
+:root[data-theme="dark"] .case-lib-diff-clickable:hover td {
+  background: rgba(148,163,184,0.12);
 }
 :root[data-theme="dark"] .diff-badge-added,
 :root[data-theme="dark"] .diff-badge-removed,

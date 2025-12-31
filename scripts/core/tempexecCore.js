@@ -4322,6 +4322,122 @@
       return '';
     }
 
+    function normalizeCaseLibDiffItemId(entry) {
+      if (!entry) return '';
+      var id = entry.case_item_id;
+      if (id === null || id === undefined) id = entry.caseItemId;
+      if (id === null || id === undefined) return '';
+      return String(id);
+    }
+
+    function findTempExecCaseIndexByItemId(file, caseItemId) {
+      if (!file || !Array.isArray(file.cases)) return -1;
+      var target = String(caseItemId || '');
+      if (!target) return -1;
+      for (var i = 0; i < file.cases.length; i += 1) {
+        var item = file.cases[i];
+        if (!item) continue;
+        var id = item.caseItemId || item.case_item_id || null;
+        if (id !== null && id !== undefined && String(id) === target) return i;
+      }
+      return -1;
+    }
+
+    function scrollToTempExecCaseRow(fileId, idx, options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var attempts = 0;
+      var maxAttempts = 30;
+      var offset = Number(opts.offset);
+      if (!Number.isFinite(offset)) offset = 140;
+      var storeRestore = opts.storeRestore !== false;
+      function tryScroll() {
+        attempts += 1;
+        var container = tempExecView;
+        if (!container) return;
+        var selector = 'tr.case-row[data-temp-case-row="' + String(fileId) + '"][data-index="' + String(idx) + '"]';
+        var target = container.querySelector(selector);
+        if (!target) {
+          if (attempts < maxAttempts) setTimeout(tryScroll, 40);
+          return;
+        }
+        var desired = 0;
+        if (storeRestore && typeof window !== 'undefined') {
+          var rect = target.getBoundingClientRect();
+          var scrollTop = 0;
+          if (typeof window.scrollY === 'number') {
+            scrollTop = window.scrollY;
+          } else if (document && document.documentElement) {
+            scrollTop = document.documentElement.scrollTop || document.body.scrollTop || 0;
+          }
+          desired = Math.max(0, Math.round(scrollTop + rect.top - offset));
+          try {
+            window.app = window.app || {};
+            window.app.__drawerRestoreScrollTopOnce = desired;
+          } catch (err) {
+            // ignore
+          }
+        }
+        var scrolled = false;
+        if (target && typeof target.scrollIntoView === 'function') {
+          try {
+            target.scrollIntoView({ block: 'center', behavior: 'auto' });
+            scrolled = true;
+          } catch (err2) {
+            try {
+              target.scrollIntoView();
+              scrolled = true;
+            } catch (err3) {
+              scrolled = false;
+            }
+          }
+        }
+        if (!scrolled) {
+          scrollElementIntoView(target, 'auto', 160);
+        }
+        if (storeRestore && typeof window !== 'undefined') {
+          setTimeout(function() {
+            try {
+              window.app = window.app || {};
+              window.app.__drawerRestoreScrollTopOnce = desired;
+              window.app.__drawerSkipRestoreOnce = true;
+              window.app.__drawerRestoreScrollTopOnce = null;
+            } catch (err4) {
+              // ignore
+            }
+          }, 60);
+        }
+      }
+      setTimeout(tryScroll, 60);
+    }
+
+    function locateTempExecCaseFromDiff(entry, execSetId) {
+      var fileId = execSetId ? String(execSetId) : '';
+      var caseItemId = normalizeCaseLibDiffItemId(entry);
+      if (!fileId || !caseItemId) {
+        if (tempExecCaseLibraryDiffStatus) setStatus(tempExecCaseLibraryDiffStatus, '未找到可定位的用例信息', 'warn');
+        return;
+      }
+      var file = getTempExecFile(fileId);
+      if (!file) {
+        if (tempExecCaseLibraryDiffStatus) setStatus(tempExecCaseLibraryDiffStatus, '未找到对应执行用例文件', 'warn');
+        return;
+      }
+      var idx = findTempExecCaseIndexByItemId(file, caseItemId);
+      if (idx < 0) {
+        if (tempExecCaseLibraryDiffStatus) setStatus(tempExecCaseLibraryDiffStatus, '未在执行视图找到对应变更用例', 'warn');
+        return;
+      }
+      if (tempExecViewSection && tempExecViewSection.classList) {
+        tempExecViewSection.classList.remove('hidden');
+      }
+      var result = jumpToTempExecCase(fileId, idx, { clearFilters: true });
+      if (!result || result.ok !== true) {
+        if (tempExecCaseLibraryDiffStatus) setStatus(tempExecCaseLibraryDiffStatus, '定位执行用例失败，请刷新后重试', 'warn');
+        return;
+      }
+      scrollToTempExecCaseRow(fileId, idx, { storeRestore: true });
+    }
+
     function renderTempExecCaseLibraryDiffCaseTabs(selectedExecSetId) {
       if (!tempExecCaseLibraryDiffCaseTabs) return;
       var ids = listTempExecCaseLibraryDiffExecSetIds();
@@ -4509,6 +4625,7 @@
       tempExecCaseLibraryDiffBody.innerHTML = visible.map(function(row) {
         var entry = row && row.entry ? row.entry : null;
         var kind = normalizeDiffKind(entry && entry.kind);
+        var caseItemId = normalizeCaseLibDiffItemId(entry);
         var oldSnap = entry && entry.old && typeof entry.old === 'object' ? entry.old : null;
         var newSnap = entry && entry.new && typeof entry.new === 'object' ? entry.new : null;
         var changedFields = Array.isArray(entry && entry.changed_fields) ? entry.changed_fields : [];
@@ -4517,8 +4634,13 @@
         var typeTag = '<span class="tag case-lib-diff-kind ' + kind + '">' + escapeHtml(getCaseLibDiffKindLabel(kind)) + '</span>';
         var timeText = formatCaseLibDiffTime(row && row.diffAt ? row.diffAt : '');
         var operatorText = row && row.operator ? String(row.operator) : '';
+        var canLocate = Boolean(caseItemId && (kind === 'appended' || kind === 'added' || kind === 'updated'));
+        var rowClass = 'case-lib-diff-row' + (canLocate ? ' case-lib-diff-clickable' : '');
+        var rowAttrs = canLocate
+          ? (' data-case-lib-diff-case-id="' + escapeHtml(caseItemId) + '" data-case-lib-diff-kind="' + escapeHtml(kind) + '"')
+          : '';
         return (
-          '<tr>' +
+          '<tr class="' + rowClass + '"' + rowAttrs + '>' +
             '<td>' + typeTag + '</td>' +
             '<td class="case-lib-diff-time">' + escapeHtml(timeText) + '</td>' +
             '<td class="case-lib-diff-operator">' + escapeHtml(operatorText) + '</td>' +
@@ -4554,6 +4676,16 @@
             if (nextExecSetId) {
               renderTempExecCaseLibraryDiff(nextExecSetId);
             }
+            return;
+          }
+          var diffRow = target.closest('tr.case-lib-diff-clickable');
+          if (diffRow && diffRow.dataset && diffRow.dataset.caseLibDiffCaseId) {
+            var execSetId = getTempExecCaseLibraryDiffSelectedExecSetId();
+            if (!execSetId) execSetId = state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
+            locateTempExecCaseFromDiff(
+              { case_item_id: diffRow.dataset.caseLibDiffCaseId, kind: diffRow.dataset.caseLibDiffKind },
+              execSetId
+            );
             return;
           }
           var pill = target.closest('[data-case-lib-diff-filter]');

@@ -19,6 +19,22 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例变更 diff 列表定位
+- 功能描述：执行页用例变更 diff 抽屉支持点击新增/改动/追加记录，定位到对应执行用例且保持抽屉打开。
+- 操作方式：执行页 → 用例变更 diff 抽屉 → 点击新增/改动/追加的变更行任意位置。
+- 使用效果：执行页自动跳转到对应变更用例行，diff 抽屉不关闭。
+- 新增内容/接口/组件：
+  - 前端：diff 列表行点击定位、滚动到目标用例（`scripts/core/tempexecCore.js`）。
+  - 前端：可定位行 hover/指针样式（`style.css`）。
+  - 测试：diff 行点击定位用例 UI 用例（`tests/ui/tempexec_case_library_changes.spec.js`）。
+- 复用说明：复用现有用例变更 diff、执行视图渲染与滚动能力，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_case_library_changes.spec.js`
+- 更新记录：2025-12-31 用例变更 diff 行点击定位执行用例并保持抽屉打开（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_case_library_changes.spec.js`）。
+- 更新记录：2025-12-31 修复 diff 行定位被抽屉滚动锁定覆盖问题，关闭抽屉后保持滚动定位（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。
+- 更新记录：2025-12-31 修复滚动到下方后点击顶部变更无法定位的问题（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。
+- 更新记录：2025-12-31 关闭抽屉不再触发额外回滚，保持定位位置（`scripts/core/tempexecCore.js`）。
+
 - 功能名称：功能引导执行/导入流程稳定性修复
 - 功能描述：修复用例执行引导在非用例页面点击“用例执行”导致页面空白问题，并确保用例导入引导（用例执行）结束后可正常点击页面按钮。
 - 操作方式：功能引导 → 用例执行引导 → 点击“用例执行”；功能引导 → 用例导入引导（用例执行） → 完成版本确认。
