@@ -3248,6 +3248,8 @@
 - 更新记录：2025-12-31 同步按钮改名并对齐执行结果输入框（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_reuse_sync_first_status.spec.js`、`tests/ui/tempexec_reuse_sync_no_detail_hint.spec.js`）。
 - 更新记录：2025-12-31 同步按钮改名为“同步结果”并与实际结果字段中点对齐（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_reuse_sync_first_status.spec.js`、`tests/ui/tempexec_reuse_sync_no_detail_hint.spec.js`）。
 - 更新记录：2025-12-31 同步按钮对齐时取消 transform 动画，避免展开时位移（`style.css`）。
+- 更新记录：2025-12-31 同步结果前拦截已有执行结果的子项（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_reuse_sync_block_existing.spec.js`）。
+- 更新记录：2025-12-31 同步结果仅在其他子项结果与首条不同且为明确结果时拦截（`scripts/core/tempexecCore.js`）。
 
 - 功能名称：复用预设子项删除保持
 - 功能描述：复用用例删除预设子项后记录为“已移除”，刷新或重新加载执行集时不再自动回填该子项。
