@@ -71,6 +71,31 @@ def ensure_version_in_project(
     return version
 
 
+def ensure_case_item_order(db: Session, case_file_id: int):
+    rows = (
+        db.query(models.CaseItem)
+        .filter(models.CaseItem.case_file_id == int(case_file_id))
+        .order_by(models.CaseItem.order_no.asc(), models.CaseItem.id.asc())
+        .all()
+    )
+    if not rows:
+        return {}
+    expected = 1
+    needs_fix = False
+    for row in rows:
+        order_no = int(row.order_no or 0)
+        if order_no != expected:
+            needs_fix = True
+            break
+        expected += 1
+    if needs_fix:
+        for idx, row in enumerate(rows):
+            row.order_no = idx + 1
+            db.add(row)
+        db.flush()
+    return {row.id: row.order_no for row in rows}
+
+
 def get_executor_for_case(user: models.User, case: models.ExecCase) -> int:
     if case.executor_id:
         return case.executor_id

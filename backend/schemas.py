@@ -232,6 +232,7 @@ class ExecSetOut(BaseModel):
 
 class ExecSetByCaseFileOut(BaseModel):
     case_file_id: int
+    exec_set_id: Optional[int] = None
     active_users: List[str] = []
 
 

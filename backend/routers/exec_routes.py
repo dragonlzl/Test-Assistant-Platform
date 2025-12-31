@@ -10,7 +10,7 @@ from .. import models, schemas
 from ..audit import log_case_library_change, log_operation
 from ..db import get_db
 from ..dependencies import get_current_user
-from ..utils import ensure_project_access, ensure_version_in_project
+from ..utils import ensure_project_access, ensure_version_in_project, ensure_case_item_order
 from sqlalchemy import func, case, and_, cast, Integer, or_
 from sqlalchemy.exc import IntegrityError
 
@@ -970,7 +970,7 @@ def upsert_exec_set_from_case_file(
     case_items = (
         db.query(models.CaseItem)
         .filter(models.CaseItem.case_file_id == case_file.id)
-        .order_by(models.CaseItem.id.asc())
+        .order_by(models.CaseItem.order_no.asc(), models.CaseItem.id.asc())
         .all()
     )
     existing_cases = (
@@ -1246,9 +1246,11 @@ def list_exec_sets_by_case_file(
     ensure_project_access(db, user, project_id)
     rows = (
         db.query(
+            models.ExecSet.id,
             models.ExecSet.case_file_id,
             models.ExecSet.source,
             models.ExecSet.status,
+            models.ExecSet.updated_at,
             models.User.username,
         )
         .outerjoin(models.User, models.User.id == models.ExecSet.created_by)
@@ -1256,19 +1258,24 @@ def list_exec_sets_by_case_file(
         .all()
     )
     by_file = {}
-    for case_file_id, source, status_text, username in rows:
+    for exec_set_id, case_file_id, source, status_text, updated_at, username in rows:
         fid = _parse_case_file_id(case_file_id, source)
         if not fid:
             continue
         entry = by_file.get(fid)
         if not entry:
-            entry = {"active": set()}
+            entry = {"active": set(), "latest_id": None, "latest_ts": None}
             by_file[fid] = entry
         name = (username or "").strip() or None
         if not name:
             name = "未知人员"
         if str(status_text or "") == "active":
             entry["active"].add(name)
+            ts = updated_at or datetime.now(timezone.utc)
+            last_ts = entry.get("latest_ts")
+            if last_ts is None or (ts and ts > last_ts):
+                entry["latest_ts"] = ts
+                entry["latest_id"] = exec_set_id
     result: List[schemas.ExecSetByCaseFileOut] = []
     for fid in sorted(by_file.keys()):
         entry = by_file.get(fid) or {}
@@ -1277,6 +1284,7 @@ def list_exec_sets_by_case_file(
         result.append(
             schemas.ExecSetByCaseFileOut(
                 case_file_id=int(fid),
+                exec_set_id=entry.get("latest_id"),
                 active_users=active_users,
             )
         )
@@ -1301,7 +1309,7 @@ def _diff_exec_set_against_case_file(
     case_items = (
         db.query(models.CaseItem)
         .filter(models.CaseItem.case_file_id == case_file.id)
-        .order_by(models.CaseItem.id.asc())
+        .order_by(models.CaseItem.order_no.asc(), models.CaseItem.id.asc())
         .all()
     )
     exec_cases = (
@@ -1453,7 +1461,7 @@ def _sync_exec_set_from_case_file(
     case_items = (
         db.query(models.CaseItem)
         .filter(models.CaseItem.case_file_id == case_file.id)
-        .order_by(models.CaseItem.id.asc())
+        .order_by(models.CaseItem.order_no.asc(), models.CaseItem.id.asc())
         .all()
     )
     existing_cases = (
@@ -1949,6 +1957,62 @@ def list_exec_cases(
     return cases
 
 
+def _ensure_exec_case_order(db: Session, exec_set_id: int):
+    rows = (
+        db.query(models.ExecCase)
+        .filter(models.ExecCase.exec_set_id == exec_set_id)
+        .order_by(models.ExecCase.order_no.asc(), models.ExecCase.id.asc())
+        .all()
+    )
+    if not rows:
+        return {}
+    expected = 1
+    needs_fix = False
+    for row in rows:
+        order_no = int(row.order_no or 0)
+        if order_no != expected:
+            needs_fix = True
+            break
+        expected += 1
+    if needs_fix:
+        for idx, row in enumerate(rows):
+            row.order_no = idx + 1
+            db.add(row)
+        db.flush()
+    return {row.id: row.order_no for row in rows}
+
+
+def _resolve_case_item_insert_order(
+    db: Session,
+    exec_set_id: int,
+    case_file_id: int,
+    exec_order_no: int,
+):
+    order_map = ensure_case_item_order(db, case_file_id)
+    if not order_map:
+        return 1
+    candidates = (
+        db.query(models.ExecCase)
+        .filter(models.ExecCase.exec_set_id == exec_set_id)
+        .filter(models.ExecCase.order_no < int(exec_order_no or 0))
+        .filter(
+            or_(
+                models.ExecCase.case_item_source_id.isnot(None),
+                models.ExecCase.case_item_id.isnot(None),
+            )
+        )
+        .order_by(models.ExecCase.order_no.desc(), models.ExecCase.id.desc())
+        .all()
+    )
+    for prev in candidates:
+        if not prev:
+            continue
+        prev_item_id = prev.case_item_source_id or prev.case_item_id
+        if prev_item_id and prev_item_id in order_map:
+            return int(order_map.get(prev_item_id, 0)) + 1
+    return 1
+
+
 @router.post(
     "/sets/{exec_set_id}/cases",
     response_model=schemas.ExecCaseOut,
@@ -1964,6 +2028,7 @@ def create_exec_case(
     now = datetime.now(timezone.utc)
 
     order_no = 1
+    order_map = _ensure_exec_case_order(db, exec_set.id)
     if payload.after_case_id:
         after_case = (
             db.query(models.ExecCase)
@@ -1975,7 +2040,7 @@ def create_exec_case(
         )
         if not after_case:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="插入位置用例不存在")
-        order_no = int(after_case.order_no or 0) + 1
+        order_no = int(order_map.get(after_case.id, after_case.order_no or 0)) + 1
 
     db.query(models.ExecCase).filter(
         models.ExecCase.exec_set_id == exec_set.id,
@@ -2091,6 +2156,16 @@ def create_exec_case(
                     ]
                     diff_summary = schemas.ExecCaseLibraryDiffSummary(updated=1)
             else:
+                case_item_order_no = _resolve_case_item_insert_order(
+                    db, exec_set.id, case_file.id, order_no
+                )
+                db.query(models.CaseItem).filter(
+                    models.CaseItem.case_file_id == case_file.id,
+                    models.CaseItem.order_no >= case_item_order_no,
+                ).update(
+                    {models.CaseItem.order_no: models.CaseItem.order_no + 1},
+                    synchronize_session=False,
+                )
                 case_item = models.CaseItem(
                     case_file_id=case_file.id,
                     module=exec_case.module,
@@ -2100,6 +2175,7 @@ def create_exec_case(
                     precondition=exec_case.precondition or "",
                     steps=exec_case.steps or "",
                     remark=None,
+                    order_no=case_item_order_no,
                     created_by=user.id,
                     updated_by=user.id,
                     created_at=now,
@@ -2555,6 +2631,20 @@ def update_exec_case(
                                     auto_ack=True,
                                 )
                         else:
+                            if not exec_case.order_no or int(exec_case.order_no or 0) <= 0:
+                                order_map = _ensure_exec_case_order(db, exec_set.id)
+                                if order_map and exec_case.id in order_map:
+                                    exec_case.order_no = order_map.get(exec_case.id)
+                            case_item_order_no = _resolve_case_item_insert_order(
+                                db, exec_set.id, case_file.id, exec_case.order_no
+                            )
+                            db.query(models.CaseItem).filter(
+                                models.CaseItem.case_file_id == case_file.id,
+                                models.CaseItem.order_no >= case_item_order_no,
+                            ).update(
+                                {models.CaseItem.order_no: models.CaseItem.order_no + 1},
+                                synchronize_session=False,
+                            )
                             case_item = models.CaseItem(
                                 case_file_id=case_file.id,
                                 module=exec_case.module,
@@ -2564,6 +2654,7 @@ def update_exec_case(
                                 precondition=exec_case.precondition or "",
                                 steps=exec_case.steps or "",
                                 remark=None,
+                                order_no=case_item_order_no,
                                 created_by=user.id,
                                 updated_by=user.id,
                                 created_at=now,

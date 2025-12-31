@@ -146,6 +146,7 @@ class CaseItem(Base):
             name="uq_case_item_key",
         ),
         Index("ix_case_items_case_file_id", "case_file_id"),
+        Index("ix_case_items_case_file_order", "case_file_id", "order_no"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -157,6 +158,7 @@ class CaseItem(Base):
     steps = Column(Text, nullable=False, default="")
     expected = Column(Text, nullable=False)
     remark = Column(Text, nullable=True)
+    order_no = Column(Integer, default=0, nullable=False)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)

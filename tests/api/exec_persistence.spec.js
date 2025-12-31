@@ -1,4 +1,6 @@
 const { test, expect, request } = require('@playwright/test');
+const { execSync } = require('child_process');
+const path = require('path');
 
 test.describe('exec persistence api', () => {
   const adminUser = process.env.ADMIN_USER || 'admin';
@@ -446,5 +448,209 @@ test.describe('exec persistence api', () => {
       data: { admin_password: adminPass },
     });
     expect([200, 404]).toContain(delUser.status());
+  });
+
+  test('create exec case honors legacy order when order_no missing', async () => {
+    const ctx = await request.newContext();
+    const token = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(health && health.status).toBe('ok');
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'exec-order-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'exec order normalize' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers,
+      data: { name: 'v1' },
+    });
+    expect(verRes.status()).toBe(201);
+    const versionId = (await verRes.json()).id;
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: 'exec-order-' + Date.now() + '.json',
+        source: 'apitest',
+        items: [
+          { module: '模块A', title: '用例A', expected: 'ok', priority: 'P0', precondition: '', steps: '', remark: '' },
+          { module: '模块A', title: '用例B', expected: 'ok', priority: 'P1', precondition: '', steps: '', remark: '' },
+          { module: '模块A', title: '用例C', expected: 'ok', priority: 'P2', precondition: '', steps: '', remark: '' },
+        ],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFileId = (await importRes.json()).id;
+
+    const upsertRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: { case_file_id: caseFileId, mode: 'replace', prefer_result_source: 'db' },
+    });
+    expect(upsertRes.status()).toBe(200);
+    const execSetId = (await upsertRes.json()).id;
+
+    const casesRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers });
+    expect(casesRes.status()).toBe(200);
+    const execCases = await casesRes.json();
+    expect(execCases.length).toBe(3);
+    const firstCaseId = execCases[0].id;
+    const secondCaseId = execCases[1].id;
+    const thirdCaseId = execCases[2].id;
+
+    const dbPath = path.resolve(__dirname, '..', '..', 'data', 'apitest.db');
+    const script = `
+import sqlite3
+db = r"""${dbPath}"""
+conn = sqlite3.connect(db)
+cur = conn.cursor()
+cur.execute("UPDATE exec_cases SET order_no=0 WHERE exec_set_id=?", (${execSetId},))
+conn.commit()
+conn.close()
+`;
+    execSync(`python3 - <<'PY'\n${script}\nPY`);
+
+    const createItemRes = await ctx.post(`${apiBase}/api/case-files/${caseFileId}/items`, {
+      headers,
+      data: {
+        module: '模块A',
+        title: '插入用例',
+        expected: 'ok-insert',
+        priority: 'P1',
+        precondition: '',
+        steps: '',
+        remark: '',
+      },
+    });
+    expect(createItemRes.status()).toBe(201);
+    const newItem = await createItemRes.json();
+
+    const insertRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/cases`, {
+      headers,
+      data: { case_item_id: newItem.id, status: '未执行', after_case_id: firstCaseId },
+    });
+    expect(insertRes.status()).toBe(201);
+    const inserted = await insertRes.json();
+    expect(inserted.case_item_id).toBe(newItem.id);
+
+    const casesAfterRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers });
+    expect(casesAfterRes.status()).toBe(200);
+    const casesAfter = await casesAfterRes.json();
+    const idsAfter = casesAfter.map((c) => c.id);
+    expect(idsAfter).toEqual([firstCaseId, inserted.id, secondCaseId, thirdCaseId]);
+
+    const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
+    expect(delProj.status()).toBe(200);
+  });
+
+  test('exec insert keeps order after case library sync', async () => {
+    const ctx = await request.newContext();
+    const token = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(health && health.status).toBe('ok');
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'exec-sync-order-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'exec sync order' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers,
+      data: { name: 'v1' },
+    });
+    expect(verRes.status()).toBe(201);
+    const versionId = (await verRes.json()).id;
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: 'exec-sync-order-' + Date.now() + '.json',
+        source: 'apitest',
+        items: [
+          { module: '模块A', title: '用例A', expected: 'ok', priority: 'P0', precondition: 'pre-a', steps: 'step-a', remark: '' },
+          { module: '模块A', title: '用例B', expected: 'ok', priority: 'P1', precondition: 'pre-b', steps: 'step-b', remark: '' },
+          { module: '模块A', title: '用例C', expected: 'ok', priority: 'P2', precondition: 'pre-c', steps: 'step-c', remark: '' },
+        ],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFileId = (await importRes.json()).id;
+
+    const upsertRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: { case_file_id: caseFileId, mode: 'replace', prefer_result_source: 'db' },
+    });
+    expect(upsertRes.status()).toBe(200);
+    const execSetId = (await upsertRes.json()).id;
+
+    const casesRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers });
+    expect(casesRes.status()).toBe(200);
+    const execCases = await casesRes.json();
+    expect(execCases.length).toBe(3);
+    const firstCaseId = execCases[0].id;
+    const secondCaseId = execCases[1].id;
+    const thirdCaseId = execCases[2].id;
+
+    const insertRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/cases`, {
+      headers,
+      data: {
+        after_case_id: firstCaseId,
+        module: '模块A',
+        title: '执行插入',
+        expected: 'ok-insert',
+        priority: 'P1',
+        precondition: 'pre-insert',
+        steps: 'step-insert',
+        remark: '',
+        status: '未执行',
+      },
+    });
+    expect(insertRes.status()).toBe(201);
+    const inserted = await insertRes.json();
+    expect(inserted && inserted.case_item_id).toBeTruthy();
+
+    const casesAfterRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers });
+    expect(casesAfterRes.status()).toBe(200);
+    const casesAfter = await casesAfterRes.json();
+    const idsAfter = casesAfter.map((c) => c.id);
+    expect(idsAfter).toEqual([firstCaseId, inserted.id, secondCaseId, thirdCaseId]);
+
+    const itemsRes = await ctx.get(`${apiBase}/api/case-files/${caseFileId}/items`, { headers });
+    expect(itemsRes.status()).toBe(200);
+    const items = await itemsRes.json();
+    const titles = items.map((it) => it.title);
+    expect(titles).toEqual(['用例A', '执行插入', '用例B', '用例C']);
+
+    const syncRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/case-library-sync`, { headers });
+    expect(syncRes.status()).toBe(200);
+
+    const casesSyncRes = await ctx.get(`${apiBase}/api/exec/sets/${execSetId}/cases`, { headers });
+    expect(casesSyncRes.status()).toBe(200);
+    const casesAfterSync = await casesSyncRes.json();
+    const idsAfterSync = casesAfterSync.map((c) => c.id);
+    expect(idsAfterSync).toEqual([firstCaseId, inserted.id, secondCaseId, thirdCaseId]);
+
+    const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
+    expect(delProj.status()).toBe(200);
   });
 });

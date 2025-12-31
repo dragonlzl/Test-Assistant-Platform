@@ -590,3 +590,42 @@ def apply_migrations(engine: Engine) -> None:
                         )
                     )
             _mark_applied(conn, 17)
+
+        # v18: case_items 增加 order_no，用于保持用例库插入顺序。
+        if not _is_applied(conn, 18):
+            if "case_items" in tables:
+                cols = set([c["name"] for c in insp.get_columns("case_items")])
+                if "order_no" not in cols:
+                    conn.execute(
+                        text("ALTER TABLE case_items ADD COLUMN order_no INTEGER NOT NULL DEFAULT 0")
+                    )
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_case_items_case_file_order "
+                            "ON case_items(case_file_id, order_no)"
+                        )
+                    )
+                count_row = conn.execute(
+                    text("SELECT COUNT(1) FROM case_items WHERE order_no > 0")
+                ).fetchone()
+                has_order = bool(count_row and count_row[0])
+                if not has_order:
+                    rows = conn.execute(
+                        text(
+                            "SELECT id, case_file_id FROM case_items "
+                            "ORDER BY case_file_id ASC, id ASC"
+                        )
+                    ).fetchall()
+                    current_file = None
+                    order_idx = 0
+                    for row in rows or []:
+                        case_file_id = row[1] if len(row) > 1 else None
+                        if case_file_id != current_file:
+                            current_file = case_file_id
+                            order_idx = 0
+                        order_idx += 1
+                        conn.execute(
+                            text("UPDATE case_items SET order_no = :order_no WHERE id = :id"),
+                            {"order_no": order_idx, "id": row[0]},
+                        )
+            _mark_applied(conn, 18)

@@ -91,6 +91,7 @@ test.describe('exec sets by case file api', () => {
       data: { project_id: projectId, version_id: versionId, name: 'exec-a', case_file_id: caseFileId },
     });
     expect(execSetARes.status()).toBe(201);
+    const execSetAId = (await execSetARes.json()).id;
 
     const execSetBRes = await ctx.post(`${apiBase}/api/exec/sets`, {
       headers: headersB,
@@ -110,6 +111,8 @@ test.describe('exec sets by case file api', () => {
     expect(Array.isArray(row.active_users)).toBeTruthy();
     expect(row.active_users).toContain(memberA);
     expect(row.active_users).toContain(memberB);
+    expect(row.exec_set_id).toBeTruthy();
+    expect([execSetAId, execSetBId]).toContain(row.exec_set_id);
 
     const delRes = await ctx.delete(`${apiBase}/api/exec/sets/${execSetBId}`, { headers: headersB });
     expect(delRes.status()).toBe(200);
@@ -123,6 +126,7 @@ test.describe('exec sets by case file api', () => {
     expect(rowAfterDel).toBeTruthy();
     expect(rowAfterDel.active_users).toContain(memberA);
     expect(rowAfterDel.active_users).not.toContain(memberB);
+    expect(rowAfterDel.exec_set_id).toBe(execSetAId);
 
     // cleanup
     const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers: adminHeaders });

@@ -13,7 +13,7 @@ from .. import models, schemas
 from ..audit import log_case_library_change, log_operation
 from ..db import get_db
 from ..dependencies import get_current_user, require_admin
-from ..utils import clean_case_file_name, ensure_project_access, ensure_version_in_project
+from ..utils import clean_case_file_name, ensure_project_access, ensure_version_in_project, ensure_case_item_order
 
 
 router = APIRouter(prefix="/case-files", tags=["case-library"])
@@ -335,7 +335,7 @@ def import_case_file(
         db.add(case_file)
         db.flush()
     values = []
-    for item in unique_items:
+    for idx, item in enumerate(unique_items):
         values.append(
             {
                 "case_file_id": case_file.id,
@@ -346,6 +346,7 @@ def import_case_file(
                 "steps": item.steps if item.steps is not None else "",
                 "expected": item.expected,
                 "remark": item.remark,
+                "order_no": idx + 1,
                 "created_by": user.id,
                 "updated_by": user.id,
                 "created_at": now,
@@ -474,6 +475,7 @@ def share_case_file(
     items = (
         db.query(models.CaseItem)
         .filter(models.CaseItem.case_file_id == source_case_file.id)
+        .order_by(models.CaseItem.order_no.asc(), models.CaseItem.id.asc())
         .all()
     )
     if not items:
@@ -495,7 +497,7 @@ def share_case_file(
     db.flush()
 
     values = []
-    for item in items:
+    for idx, item in enumerate(items):
         values.append(
             {
                 "case_file_id": case_file.id,
@@ -506,6 +508,7 @@ def share_case_file(
                 "steps": item.steps if item.steps is not None else "",
                 "expected": item.expected,
                 "remark": item.remark,
+                "order_no": idx + 1,
                 "created_by": user.id,
                 "updated_by": user.id,
                 "created_at": now,
@@ -755,7 +758,7 @@ def list_case_items(
     items = (
         db.query(models.CaseItem)
         .filter(models.CaseItem.case_file_id == case_file_id)
-        .order_by(models.CaseItem.id.asc())
+        .order_by(models.CaseItem.order_no.asc(), models.CaseItem.id.asc())
         .all()
     )
     return items
@@ -1034,6 +1037,8 @@ def create_case_item(
         .scalar()
         or 0
     )
+    order_map = ensure_case_item_order(db, case_file_id)
+    order_no = max(order_map.values() or [0]) + 1
     now = datetime.now(timezone.utc)
     case_item = models.CaseItem(
         case_file_id=case_file_id,
@@ -1044,6 +1049,7 @@ def create_case_item(
         steps=payload.steps if payload.steps is not None else "",
         expected=payload.expected,
         remark=payload.remark,
+        order_no=order_no,
         created_by=user.id,
         updated_by=user.id,
         created_at=now,
@@ -1172,9 +1178,11 @@ def append_case_items(
     existing_rows = (
         db.query(models.CaseItem)
         .filter(models.CaseItem.case_file_id == case_file.id)
-        .order_by(models.CaseItem.id.asc())
+        .order_by(models.CaseItem.order_no.asc(), models.CaseItem.id.asc())
         .all()
     )
+    order_map = ensure_case_item_order(db, case_file.id)
+    next_order = max(order_map.values() or [0]) + 1
     existing_by_content = {}
     for row in existing_rows:
         if not row:
@@ -1238,12 +1246,14 @@ def append_case_items(
                 "steps": item.steps if item.steps is not None else "",
                 "expected": item.expected,
                 "remark": item.remark,
+                "order_no": next_order,
                 "created_by": user.id,
                 "updated_by": user.id,
                 "created_at": now,
                 "updated_at": now,
             }
         )
+        next_order += 1
 
     if values:
         db.execute(sqlite_insert(models.CaseItem).values(values).prefix_with("OR IGNORE"))

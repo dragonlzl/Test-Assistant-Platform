@@ -19,6 +19,24 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行用例新增位置同步
+- 功能描述：修复执行用例新增后跨用户刷新位置错乱的问题，确保执行页与用例库编辑视图都按新增位置同步展示。
+- 操作方式：执行页点击“＋”在任意位置新增用例，其他用户刷新执行页或进入用例库编辑视图。
+- 使用效果：执行页新增用例按插入位置展示，其他用户刷新后保持一致；用例库编辑视图按执行顺序展示用例。
+- 新增内容/接口/组件：
+  - 后端：执行用例入库前归一化 order_no，`/exec/sets/by-case-file` 补充 `exec_set_id`（`backend/routers/exec_routes.py`、`backend/schemas.py`）。
+  - 后端：用例库条目增加 order_no 并按执行插入位置写入（`backend/models.py`、`backend/migrations.py`、`backend/utils.py`、`backend/routers/cases.py`、`backend/routers/exec_routes.py`）。
+  - 前端：用例库编辑视图按执行用例顺序重排（`scripts/modules/caseLibrary.js`）。
+  - 测试：执行用例排序 API 用例（`tests/api/exec_persistence.spec.js`）、按执行顺序展示 UI 用例（`tests/ui/case_library_exec_order_sync.spec.js`）、by-case-file 返回 exec_set_id（`tests/api/exec_sets_by_case_file.spec.js`）。
+- 复用说明：复用现有执行用例 order_no 与用例库编辑视图逻辑，无新增接口形态。
+- 测试与验证：
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_persistence.spec.js -g "honors legacy order"`
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_persistence.spec.js -g "exec insert keeps order after case library sync"`
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_sets_by_case_file.spec.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/case_library_exec_order_sync.spec.js`（未执行）
+- 更新记录：2025-12-31 执行用例新增位置同步（`backend/routers/exec_routes.py`、`backend/schemas.py`、`scripts/modules/caseLibrary.js`、`tests/api/exec_persistence.spec.js`、`tests/api/exec_sets_by_case_file.spec.js`、`tests/ui/case_library_exec_order_sync.spec.js`）。
+- 更新记录：2025-12-31 同步用例库 order_no 保持跨用户新增位置（`backend/models.py`、`backend/migrations.py`、`backend/utils.py`、`backend/routers/cases.py`、`backend/routers/exec_routes.py`、`tests/api/exec_persistence.spec.js`）。
+
 - 功能名称：用例视图字号设置
 - 功能描述：设置页新增用例视图字号配置，支持按账号保存并应用于用例执行视图与用例库编辑视图，范围 11-16，默认 13。
 - 操作方式：进入设置 → 其他设置 → 输入用例视图字号 → 点击“保存字号”。

@@ -5988,21 +5988,43 @@
 	    if (!caseFile || !caseFile.id) return;
 	    setStatus(dom.editDrawerStatus, '加载用例条目...', '');
 	    apiClient.listCaseItems(caseFile.id).then(function(items) {
-	      // 保证视图互斥：切到编辑视图时，应隐藏“历史详情”卡片（但不清理其持久化，方便用户回退查看）。
-	      setHistoryDetailVisible(false);
-	      state.editor.caseFile = caseFile;
-	      state.editor.items = reorderItemsByExistingModuleAppend(Array.isArray(items) ? items : []);
-	      state.editor.searchText = '';
-	      state.editor.pageIndex = 0;
-	      state.editor.selection = new Set();
-	      state.editor.remarkOpen = new Set();
-	      setStatus(dom.editStatus, '已加载 ' + state.editor.items.length + ' 条用例，可直接编辑', 'ok');
+	      var baseItems = Array.isArray(items) ? items : [];
+	      var execMeta = state.editDrawer.execByFileId && typeof state.editDrawer.execByFileId === 'object'
+	        ? state.editDrawer.execByFileId[String(caseFile.id)]
+	        : null;
+	      var execSetId = execMeta && (execMeta.exec_set_id || execMeta.exec_set_id === 0)
+	        ? Number(execMeta.exec_set_id)
+	        : null;
+	      if (!Number.isFinite(execSetId) || execSetId <= 0) execSetId = null;
+	      var fallbackItems = reorderItemsByExistingModuleAppend(baseItems);
+	      var applyItems = function(nextItems) {
+	        // 保证视图互斥：切到编辑视图时，应隐藏“历史详情”卡片（但不清理其持久化，方便用户回退查看）。
+	        setHistoryDetailVisible(false);
+	        state.editor.caseFile = caseFile;
+	        state.editor.items = Array.isArray(nextItems) ? nextItems : [];
+	        state.editor.searchText = '';
+	        state.editor.pageIndex = 0;
+	        state.editor.selection = new Set();
+	        state.editor.remarkOpen = new Set();
+	        setStatus(dom.editStatus, '已加载 ' + state.editor.items.length + ' 条用例，可直接编辑', 'ok');
       if (dom.editSearchInput) dom.editSearchInput.value = '';
       persistEditorSelection(caseFile);
       persistCaseLibraryLastView('editor');
       renderEditorCard();
       syncEditorSearchControls();
       if (editDrawerInstance && typeof editDrawerInstance.close === 'function') editDrawerInstance.close();
+      };
+      if (!execSetId || !apiClient || typeof apiClient.listExecCases !== 'function') {
+        applyItems(fallbackItems);
+        return;
+      }
+      apiClient.listExecCases(execSetId).then(function(execCases) {
+        var ordered = reorderItemsByExecCaseOrder(baseItems, execCases);
+        var nextItems = ordered.matched ? ordered.items : fallbackItems;
+        applyItems(nextItems);
+      }).catch(function() {
+        applyItems(fallbackItems);
+      });
     }).catch(function(err) {
       setStatus(dom.editDrawerStatus, err && err.message ? err.message : '加载用例失败', 'err');
     });
@@ -6487,6 +6509,37 @@
 	    });
 	    return result;
 	  }
+
+    function reorderItemsByExecCaseOrder(items, execCases) {
+      var list = Array.isArray(items) ? items.slice() : [];
+      var cases = Array.isArray(execCases) ? execCases : [];
+      if (!list.length || !cases.length) return { items: list, matched: false };
+      var itemById = {};
+      list.forEach(function(item) {
+        if (!item || item.id === null || item.id === undefined) return;
+        itemById[String(item.id)] = item;
+      });
+      var ordered = [];
+      var used = {};
+      cases.forEach(function(row) {
+        if (!row || row.case_item_id === null || row.case_item_id === undefined) return;
+        var key = String(row.case_item_id);
+        var hit = itemById[key];
+        if (!hit || used[key]) return;
+        ordered.push(hit);
+        used[key] = true;
+      });
+      if (!ordered.length) return { items: list, matched: false };
+      list.forEach(function(item) {
+        if (!item || item.id === null || item.id === undefined) {
+          ordered.push(item);
+          return;
+        }
+        var key = String(item.id);
+        if (!used[key]) ordered.push(item);
+      });
+      return { items: ordered, matched: true };
+    }
 
   function buildEditorPagination(totalCases, pageIndex, totalPages, start, end) {
     var pageSize = getPageSize();
