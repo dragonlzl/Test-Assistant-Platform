@@ -26,6 +26,7 @@
     var stepDragHandler = null;
     var stepHoverHandler = null;
     var stepScrollHandler = null;
+    var focusClickHandler = null;
     var historyBound = false;
     var guardBound = false;
     var scrollGuardHandler = null;
@@ -36,6 +37,7 @@
     var guideClickBypass = false;
     var drawerApiCache = {};
     var stepClickCapture = false;
+    var guideOpenedDrawers = {};
 
     var overlay = null;
     var focusEl = null;
@@ -117,6 +119,16 @@
         drawerApiCache[drawerId] = window.app.drawer.createDrawer({ drawerId: drawerId });
       }
       return drawerApiCache[drawerId] || null;
+    }
+
+    function markGuideDrawerOpen(drawerId) {
+      if (!drawerId) return;
+      guideOpenedDrawers[drawerId] = true;
+    }
+
+    function clearGuideDrawerMark(drawerId) {
+      if (!drawerId || !guideOpenedDrawers) return;
+      if (guideOpenedDrawers[drawerId]) delete guideOpenedDrawers[drawerId];
     }
 
     function isGuideInteractiveTarget(target) {
@@ -240,6 +252,26 @@
       return btn && btn.dataset ? String(btn.dataset.tabBtn || '') : '';
     }
 
+    function hasLocalTabSection(name) {
+      if (!name || typeof document === 'undefined') return false;
+      return Boolean(document.querySelector('[data-tab-section="' + name + '"]'));
+    }
+
+    function isIndexLikePage() {
+      if (typeof document === 'undefined') return false;
+      var pageKey = '';
+      if (document.body && document.body.dataset && document.body.dataset.page) {
+        pageKey = String(document.body.dataset.page || '');
+      }
+      if (pageKey === 'index') return true;
+      if (typeof window === 'undefined' || !window.location) return false;
+      var path = window.location.pathname || '';
+      if (!path) return true;
+      var parts = path.split('/').filter(Boolean);
+      var current = parts.length ? parts[parts.length - 1] : '';
+      return !current || current === 'index.html' || current === 'index';
+    }
+
     function showTabGroup(name, opts) {
       if (window.app && typeof window.app.showTabGroup === 'function') {
         window.app.showTabGroup(name, opts);
@@ -350,7 +382,7 @@
             '<span class="guide-fake-header-tag">引导模式</span>' +
           '</div>' +
           '<div class="drawer-body">' +
-            '<section class="card" data-section-id="tempexec-assign" data-tab-section="tempexec">' +
+            '<section class="card" data-section-id="tempexec-assign">' +
               '<div class="card-title-row">' +
                 '<h2>执行分配</h2>' +
                 '<button class="pill accent" type="button" disabled>＋ 添加执行用例</button>' +
@@ -843,6 +875,21 @@
       return true;
     }
 
+    function isElementDisabled(el) {
+      if (!el) return false;
+      if (el.disabled) return true;
+      if (el.getAttribute && el.getAttribute('disabled') !== null) return true;
+      if (el.getAttribute && el.getAttribute('aria-disabled') === 'true') return true;
+      if (el.classList && el.classList.contains('disabled')) return true;
+      return false;
+    }
+
+    function shouldProxyUseFocus(step, target) {
+      if (!step || !step.proxy) return false;
+      if (!target) return false;
+      return isElementDisabled(target);
+    }
+
     function clearStepListeners() {
       if (activeTarget && stepClickHandler) {
         activeTarget.removeEventListener('click', stepClickHandler, stepClickCapture);
@@ -868,11 +915,16 @@
           }
         });
       }
+      if (focusEl && focusClickHandler) {
+        focusEl.removeEventListener('click', focusClickHandler, true);
+        focusEl.removeEventListener('mousedown', focusClickHandler, true);
+      }
       stepClickHandler = null;
       stepClickCapture = false;
       stepHoverHandler = null;
       stepDragHandler = null;
       stepScrollHandler = null;
+      focusClickHandler = null;
     }
 
     function resetTargetAllow() {
@@ -950,17 +1002,27 @@
       }
       if (step.proxy) {
         var handled = false;
-        stepClickHandler = function(e) {
+        var handleProxy = function(e, source) {
           if (handled) return;
           handled = true;
           if (e && typeof e.preventDefault === 'function') e.preventDefault();
           if (e && typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
           if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
-          handleStepAction('proxy-target');
+          handleStepAction(source || 'proxy-target');
+        };
+        stepClickHandler = function(e) {
+          handleProxy(e, 'proxy-target');
         };
         stepClickCapture = true;
         target.addEventListener('mousedown', stepClickHandler, true);
         target.addEventListener('click', stepClickHandler, true);
+        if (shouldProxyUseFocus(step, target) && focusEl) {
+          focusClickHandler = function(e) {
+            handleProxy(e, 'proxy-focus');
+          };
+          focusEl.addEventListener('mousedown', focusClickHandler, true);
+          focusEl.addEventListener('click', focusClickHandler, true);
+        }
         return;
       }
       stepClickHandler = function() {
@@ -1184,9 +1246,20 @@
       overlay.classList.add('active');
       if (focusEl) focusEl.classList.remove('hidden');
       if (tooltipEl) tooltipEl.classList.remove('hidden');
-      focusEl.style.pointerEvents = step && step.proxy ? 'auto' : 'none';
+      focusEl.style.pointerEvents = shouldProxyUseFocus(step, target) ? 'auto' : 'none';
       renderTooltip(step);
       updateFocusPosition(step, target);
+    }
+
+    function pauseGuideOverlay() {
+      if (overlay && overlay.classList) {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('active');
+      }
+      if (focusEl && focusEl.classList) focusEl.classList.add('hidden');
+      if (tooltipEl && tooltipEl.classList) tooltipEl.classList.add('hidden');
+      if (dragHandEl && dragHandEl.classList) dragHandEl.classList.add('hidden');
+      document.body.classList.remove('guide-active');
     }
 
     function cleanupStep() {
@@ -1202,7 +1275,7 @@
       if (currentTab && currentTab === step.tab) return true;
       if (typeof switchTab === 'function') {
         switchTab(step.tab);
-        return false;
+        if (!hasLocalTabSection(step.tab) || isIndexLikePage()) return false;
       }
       return true;
     }
@@ -1211,6 +1284,7 @@
       var attempts = 0;
       function check() {
         if (token !== renderToken) return;
+        if (!activeFlow || !activeGuideId) return;
         var target = resolveTarget(step);
         if (target && isTargetVisible(target)) {
           activeTarget = target;
@@ -1232,6 +1306,7 @@
           setTimeout(check, 120);
         } else {
           setStatus(null, '引导目标加载失败，请刷新页面重试', 'warn');
+          endGuide();
         }
       }
       check();
@@ -1255,7 +1330,10 @@
       if (activeStep.group) showTabGroup(activeStep.group, { keepTabActive: true });
       if (activeStep.lockMenu) showTabGroup(activeStep.lockMenu, { keepTabActive: true });
 
-      if (!ensureTab(activeStep)) return;
+      if (!ensureTab(activeStep)) {
+        pauseGuideOverlay();
+        return;
+      }
       if (activeStep.prepare) activeStep.prepare();
 
       renderToken += 1;
@@ -1285,11 +1363,14 @@
     }
 
     function endGuide(fromSkipAll) {
+      renderToken += 1;
+      guideClickBypass = false;
       if (fromSkipAll && activeStep && typeof activeStep.onSkipAll === 'function') {
         activeStep.onSkipAll();
       }
       cleanupStep();
       hideAllFakePanels();
+      closeGuideDrawers();
       if (overlay && overlay.classList) {
         overlay.classList.add('hidden');
         overlay.classList.remove('active');
@@ -1338,17 +1419,32 @@
       var api = drawerId ? getDrawerApi(drawerId) : null;
       if (api && typeof api.open === 'function') {
         api.open();
+        markGuideDrawerOpen(drawerId);
         return;
       }
       var btn = document.getElementById(buttonId);
       if (btn && typeof btn.click === 'function') {
         runWithClickBypass(function() { btn.click(); });
+        markGuideDrawerOpen(drawerId);
         return;
       }
       if (drawer && drawer.classList) {
         drawer.classList.remove('hidden');
         drawer.classList.add('open');
+        markGuideDrawerOpen(drawerId);
       }
+    }
+
+    function openTempExecSelectDrawer() {
+      var caseLibraryApi = window.app && window.app.caseLibraryApi ? window.app.caseLibraryApi : null;
+      if (caseLibraryApi && typeof caseLibraryApi.openSelectExecDrawer === 'function') {
+        var opened = caseLibraryApi.openSelectExecDrawer({ source: 'tempexec', allowInactive: true });
+        if (opened) {
+          markGuideDrawerOpen('caseLibrarySelectExecDrawer');
+          return;
+        }
+      }
+      openDrawerByButton('openTempExecCaseLibraryBtn', 'caseLibrarySelectExecDrawer');
     }
 
     function closeDrawerById(drawerId) {
@@ -1357,14 +1453,26 @@
       var api = drawerId ? getDrawerApi(drawerId) : null;
       if (api && typeof api.close === 'function') {
         api.close();
+        clearGuideDrawerMark(drawerId);
         return;
       }
       var closer = drawer.querySelector('[data-drawer-close]') || drawer.querySelector('.drawer-mask');
       if (closer && typeof closer.click === 'function') {
         runWithClickBypass(function() { closer.click(); });
+        clearGuideDrawerMark(drawerId);
         return;
       }
       drawer.classList.remove('open');
+      clearGuideDrawerMark(drawerId);
+    }
+
+    function closeGuideDrawers() {
+      var ids = guideOpenedDrawers ? Object.keys(guideOpenedDrawers) : [];
+      if (!ids.length) return;
+      ids.forEach(function(id) {
+        closeDrawerById(id);
+      });
+      guideOpenedDrawers = {};
     }
 
     function buildGuideListHtml() {
@@ -1621,7 +1729,7 @@
               dimOpacity: 0.55,
               scrollIntoView: true,
               prepare: function() {
-                openDrawerByButton('openTempExecCaseLibraryBtn', 'caseLibrarySelectExecDrawer');
+                openTempExecSelectDrawer();
               },
             },
             {
@@ -1633,7 +1741,7 @@
               dimOpacity: 0.55,
               scrollIntoView: true,
               prepare: function() {
-                openDrawerByButton('openTempExecCaseLibraryBtn', 'caseLibrarySelectExecDrawer');
+                openTempExecSelectDrawer();
               },
             },
             {
@@ -1644,7 +1752,7 @@
               proxy: true,
               dimOpacity: 0.55,
               prepare: function() {
-                openDrawerByButton('openTempExecCaseLibraryBtn', 'caseLibrarySelectExecDrawer');
+                openTempExecSelectDrawer();
               },
               onComplete: function() {
                 closeDrawerById('caseLibrarySelectExecDrawer');

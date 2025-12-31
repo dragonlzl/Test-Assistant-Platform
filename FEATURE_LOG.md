@@ -19,6 +19,20 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：功能引导执行/导入流程稳定性修复
+- 功能描述：修复用例执行引导在非用例页面点击“用例执行”导致页面空白问题，并确保用例导入引导（用例执行）结束后可正常点击页面按钮。
+- 操作方式：功能引导 → 用例执行引导 → 点击“用例执行”；功能引导 → 用例导入引导（用例执行） → 完成版本确认。
+- 使用效果：切换到用例执行页不再空白，引导结束后页面恢复可操作。
+- 新增内容/接口/组件：
+  - 前端：引导假面板不干扰 tab 检测、引导结束时自动关闭引导打开的抽屉、聚焦层不拦截交互（`scripts/modules/flowGuide.js`）。
+  - 前端：引导期间不再全局禁用 pointer-events（`style.css`）。
+  - 测试：补充引导跨页与结束可操作断言（`tests/ui/flow_guide_drawer.spec.js`）。
+- 复用说明：复用既有功能引导与抽屉机制，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/flow_guide_drawer.spec.js`（通过）
+- 更新记录：2025-02-19 功能引导执行/导入流程稳定性修复（`scripts/modules/flowGuide.js`、`style.css`、`tests/ui/flow_guide_drawer.spec.js`）。
+- 更新记录：2025-02-19 用例执行引导版本选择禁用时可继续（`scripts/modules/flowGuide.js`、`tests/ui/flow_guide_drawer.spec.js`）。
+
 - 功能名称：执行用例新增位置同步
 - 功能描述：修复执行用例新增后跨用户刷新位置错乱的问题，确保执行页与用例库编辑视图都按新增位置同步展示。
 - 操作方式：执行页点击“＋”在任意位置新增用例，其他用户刷新执行页或进入用例库编辑视图。
@@ -3293,3 +3307,17 @@
 - 测试与验证：
   - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_preset_remove_detail.spec.js`
 - 更新记录：2025-12-30 复用预设子项删除保持（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_reuse_preset_remove_detail.spec.js`）。
+
+- 功能名称：功能引导流程稳定性修复
+- 功能描述：修复用例执行引导在非用例页面启动后进入选择用例执行出现空白页的问题，并确保用例导入引导结束后解除页面遮罩。
+- 操作方式：从设置/AI页面启动用例执行引导，点击“选择用例执行”；执行用例导入引导并完成版本确认。
+- 使用效果：引导可正常跳转并打开选择抽屉，引导结束后页面恢复可操作。
+- 新增内容/接口/组件：
+  - 前端：引导切页/切 tab 继续渲染、选择抽屉打开兜底、目标加载超时自动结束（`scripts/modules/flowGuide.js`）。
+  - 测试：新增引导跨页继续与结束解锁用例（`tests/ui/flow_guide_drawer.spec.js`）。
+- 复用说明：复用既有抽屉与用例库选择执行逻辑，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/flow_guide_drawer.spec.js`
+- 更新记录：2025-12-31 功能引导流程稳定性修复（`scripts/modules/flowGuide.js`、`tests/ui/flow_guide_drawer.spec.js`）。
+- 更新记录：2025-12-31 引导结束后锁定兜底清理（`scripts/modules/flowGuide.js`）。
+- 更新记录：2025-12-31 引导假抽屉不阻塞解锁（`scripts/base/drawer.js`、`scripts/modules/flowGuide.js`）。

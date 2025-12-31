@@ -145,4 +145,88 @@ test.describe('功能引导抽屉', () => {
 
     await expect(page.locator('#flowGuideTooltipText')).toContainText('拖拽用例到专注区');
   });
+
+  test('从设置页启动用例执行引导可继续打开选择抽屉', async ({ page }) => {
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/settings.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.flowGuide) {
+        window.app.flowGuide.start('temp-exec');
+      }
+    });
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('用例相关');
+
+    await page.locator('.tab-group-btn[data-group="cases"]').hover();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('用例执行');
+
+    await page.locator('[data-tab-btn="tempexec"]').click();
+    await page.waitForURL(/case-exec\.html/);
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+
+    await expect(page.locator('#tempexecFlowNav')).toBeVisible();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('选择用例执行');
+    await page.locator('#openTempExecCaseLibraryBtn').click();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('选择目标用例所属项目');
+    await expect(page.locator('#caseLibrarySelectExecDrawer')).toHaveClass(/open/);
+
+    await page.locator('.guide-skip-all').click();
+    await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
+  });
+
+  test('用例导入引导结束后解除遮罩', async ({ page }) => {
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/case-exec.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('tempexec');
+      }
+    });
+
+    await page.evaluate(() => {
+      if (window.app && window.app.flowGuide) {
+        window.app.flowGuide.start('temp-exec-import', { stepIndex: 7 });
+      }
+    });
+    await expect(page.locator('#guideFakeExecVersionPanel')).toBeVisible();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('选择执行用例的版本');
+
+    await page.locator('#guideExecVersionSelect').click();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('确认并继续');
+
+    await page.locator('#guideExecVersionConfirm').click();
+    await page.waitForFunction(() => !document.body.classList.contains('guide-active'));
+    await page.waitForFunction(() => !document.body.classList.contains('drawer-open'));
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/open/);
+    await page.locator('#flowGuideTrigger').click();
+    await expect(page.locator('#flowGuideDrawer')).toHaveClass(/open/);
+  });
+
+  test('版本选择禁用时可通过聚焦区继续', async ({ page }) => {
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/case-exec.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('tempexec');
+      }
+    });
+
+    await page.evaluate(() => {
+      if (window.app && window.app.flowGuide) {
+        window.app.flowGuide.start('temp-exec', { stepIndex: 4 });
+      }
+    });
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('选择目标用例所属项目版本');
+    const versionSelect = page.locator('#caseLibrarySelectVersionSelect');
+    await expect(versionSelect).toBeVisible();
+    await expect(versionSelect).toBeDisabled();
+
+    await page.locator('#flowGuideFocus').click();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('刷新后下方会展示用例列表');
+    await page.locator('.guide-skip-all').click();
+    await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
+  });
 });

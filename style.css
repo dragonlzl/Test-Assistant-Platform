@@ -3640,9 +3640,6 @@ body {
 body.guide-active {
   overflow: hidden;
 }
-body.guide-active * {
-  pointer-events: none;
-}
 body.guide-active .guide-focus,
 body.guide-active .guide-tooltip,
 body.guide-active .guide-tooltip * {
