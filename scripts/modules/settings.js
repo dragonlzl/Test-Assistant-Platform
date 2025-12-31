@@ -43,6 +43,9 @@
     var tempExecPageSizeInput = dom.tempExecPageSizeInput || document.getElementById('tempExecPageSizeInput');
     var saveTempExecPageSizeBtn = dom.saveTempExecPageSizeBtn || document.getElementById('saveTempExecPageSize');
     var tempExecPageSizeStatus = dom.tempExecPageSizeStatus || document.getElementById('tempExecPageSizeStatus');
+    var caseViewFontSizeInput = dom.caseViewFontSizeInput || document.getElementById('caseViewFontSizeInput');
+    var saveCaseViewFontSizeBtn = dom.saveCaseViewFontSizeBtn || document.getElementById('saveCaseViewFontSize');
+    var caseViewFontSizeStatus = dom.caseViewFontSizeStatus || document.getElementById('caseViewFontSizeStatus');
     var projectSortGrid = dom.projectSortGrid || document.getElementById('projectSortGrid');
     var projectSortStatus = dom.projectSortStatus || document.getElementById('projectSortStatus');
     var pageGuideSettingsGrid = dom.pageGuideSettingsGrid || document.getElementById('pageGuideSettingsGrid');
@@ -59,6 +62,10 @@
       || (defaultSettings && typeof defaultSettings.pageGuideSwitches === 'object' ? defaultSettings.pageGuideSwitches : {});
     var defaultTempExecPageSize = config.defaultTempExecPageSize || 20;
     var defaultTheme = defaultSettings && defaultSettings.theme ? String(defaultSettings.theme) : 'light';
+    var defaultCaseViewFontSize = Number(config.defaultCaseViewFontSize)
+      || (defaultSettings && defaultSettings.caseViewFontSize ? Number(defaultSettings.caseViewFontSize) : 13);
+    var minCaseViewFontSize = Number(config.minCaseViewFontSize) || 11;
+    var maxCaseViewFontSize = Number(config.maxCaseViewFontSize) || 16;
     var settingsKey = config.settingsKey || 'usecase-settings-v1';
     var minModelTimeoutSec = config.minModelTimeoutSec || 30;
     var maxModelTimeoutSec = config.maxModelTimeoutSec || 1800;
@@ -88,6 +95,7 @@
       feishuMention: false,
       tempExecColumns: false,
       tempExecPageSize: false,
+      caseViewFontSize: false,
       projectOrder: false,
       defaultProjectId: false,
       theme: false,
@@ -199,6 +207,25 @@
       }
     }
 
+    function clampCaseViewFontSize(value) {
+      var num = Math.round(Number(value));
+      if (!Number.isFinite(num) || num <= 0) return defaultCaseViewFontSize;
+      if (num < minCaseViewFontSize) return minCaseViewFontSize;
+      if (num > maxCaseViewFontSize) return maxCaseViewFontSize;
+      return num;
+    }
+
+    function applyCaseViewFontSize(value) {
+      if (typeof document === 'undefined' || !document.documentElement) return;
+      var base = clampCaseViewFontSize(value);
+      var small = base - 1;
+      if (small < minCaseViewFontSize) small = minCaseViewFontSize;
+      if (document.documentElement.style && document.documentElement.style.setProperty) {
+        document.documentElement.style.setProperty('--case-view-font-size', base + 'px');
+        document.documentElement.style.setProperty('--case-view-font-size-sm', small + 'px');
+      }
+    }
+
     function mergeServerSettings(list) {
       // owner_id 可能是 number 或 string；同时在 authReady 时序下 currentUser 可能暂未填充。
       var userId = null;
@@ -248,10 +275,16 @@
         state.tempExecPageSize = size;
         state.settings.tempExecPageSize = size;
       }
+      if (state.settings.caseViewFontSize !== undefined && state.settings.caseViewFontSize !== null) {
+        state.settings.caseViewFontSize = clampCaseViewFontSize(state.settings.caseViewFontSize);
+      } else {
+        state.settings.caseViewFontSize = defaultCaseViewFontSize;
+      }
       ensurePageGuideSwitches();
       ensureTempExecColumns();
       state.settings.theme = resolveTheme(state.settings.theme);
       applyTheme(state.settings.theme);
+      applyCaseViewFontSize(state.settings.caseViewFontSize);
       setSettingsReady('server');
       // 如果执行页已打开，主动刷新以应用远端列/分页设置。
       try {
@@ -446,10 +479,16 @@
         state.tempExecPageSize = defaultTempExecPageSize;
         state.settings.tempExecPageSize = defaultTempExecPageSize;
       }
+      if (state.settings.caseViewFontSize !== undefined && state.settings.caseViewFontSize !== null) {
+        state.settings.caseViewFontSize = clampCaseViewFontSize(state.settings.caseViewFontSize);
+      } else {
+        state.settings.caseViewFontSize = defaultCaseViewFontSize;
+      }
       ensurePageGuideSwitches();
       ensureTempExecColumns();
       state.settings.theme = resolveTheme(state.settings.theme);
       applyTheme(state.settings.theme);
+      applyCaseViewFontSize(state.settings.caseViewFontSize);
 
       if (!Array.isArray(state.settings.projectOrder)) state.settings.projectOrder = [];
       state.settings.projectOrder = state.settings.projectOrder
@@ -519,6 +558,11 @@
       if (tempExecPageSizeInput) {
         if (!dirtyDrafts.tempExecPageSize) {
           tempExecPageSizeInput.value = state.tempExecPageSize || defaultTempExecPageSize || '';
+        }
+      }
+      if (caseViewFontSizeInput) {
+        if (!dirtyDrafts.caseViewFontSize) {
+          caseViewFontSizeInput.value = state.settings.caseViewFontSize || defaultCaseViewFontSize || '';
         }
       }
       if (themeSelect) {
@@ -972,6 +1016,28 @@
       }
     }
 
+    function saveCaseViewFontSize() {
+      if (!caseViewFontSizeInput) return;
+      var raw = caseViewFontSizeInput.value;
+      var size = clampCaseViewFontSize(raw);
+      if (!Number.isFinite(size)) {
+        setStatus(caseViewFontSizeStatus, '请输入 ' + minCaseViewFontSize + '-' + maxCaseViewFontSize + ' 之间的数值', 'warn');
+        return;
+      }
+      var prev = state.settings.caseViewFontSize;
+      caseViewFontSizeInput.value = size;
+      state.settings.caseViewFontSize = size;
+      dirtyDrafts.caseViewFontSize = false;
+      persistSettings(['caseViewFontSize']);
+      applyCaseViewFontSize(size);
+      if (!caseViewFontSizeStatus) return;
+      if (prev === size) {
+        setStatus(caseViewFontSizeStatus, '用例视图字号保持为 ' + size + 'px', 'ok');
+      } else {
+        setStatus(caseViewFontSizeStatus, '用例视图字号已更新为 ' + size + 'px', 'ok');
+      }
+    }
+
     function getThemeLabel(theme) {
       return theme === 'dark' ? '黑色主题' : '白色主题';
     }
@@ -1089,6 +1155,11 @@
       if (tempExecPageSizeInput) tempExecPageSizeInput.addEventListener('input', function() {
         dirtyDrafts.tempExecPageSize = true;
         setStatus(tempExecPageSizeStatus, '', '');
+      });
+      if (saveCaseViewFontSizeBtn) saveCaseViewFontSizeBtn.addEventListener('click', saveCaseViewFontSize);
+      if (caseViewFontSizeInput) caseViewFontSizeInput.addEventListener('input', function() {
+        dirtyDrafts.caseViewFontSize = true;
+        setStatus(caseViewFontSizeStatus, '', '');
       });
       if (saveThemeSettingBtn) saveThemeSettingBtn.addEventListener('click', saveThemeSetting);
       if (themeSelect) themeSelect.addEventListener('change', function() {

@@ -31,6 +31,10 @@
     ops: true,
   };
 
+  var defaultCaseViewFontSize = 13;
+  var minCaseViewFontSize = 11;
+  var maxCaseViewFontSize = 16;
+
   var defaultPageGuideSwitches = {
     auto: true,
     clean: true,
@@ -48,6 +52,7 @@
     feishuWebhook: '',
     feishuMention: '',
     theme: 'light',
+    caseViewFontSize: defaultCaseViewFontSize,
     caseGenProgressCollapsed: false,
     sidebarTabActive: 'casegen',
     memoPad: {
@@ -121,6 +126,9 @@
     settingsKey: 'usecase-settings-v1',
     minModelTimeoutSec: 30,
     maxModelTimeoutSec: 1800,
+    defaultCaseViewFontSize: defaultCaseViewFontSize,
+    minCaseViewFontSize: minCaseViewFontSize,
+    maxCaseViewFontSize: maxCaseViewFontSize,
     moduleFieldAliases: {
       title: ['module', 'name', 'title', '模块', '模块名称'],
       scenarios: ['key_scenarios', '测试场景', '关键场景'],

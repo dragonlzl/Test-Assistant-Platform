@@ -45,6 +45,7 @@
     var assignmentStorageKey = deps && deps.assignmentKey ? deps.assignmentKey : 'cleaner-assignment-v1';
     var navPrefersUnassigned = false;
     var defaultTempExecPageSize = deps && deps.defaultTempExecPageSize ? deps.defaultTempExecPageSize : 20;
+    var caseViewBaseFontSize = deps && Number.isFinite(deps.caseViewBaseFontSize) ? deps.caseViewBaseFontSize : 13;
     var tempExecStatus = deps && deps.dom && deps.dom.tempExecStatus ? deps.dom.tempExecStatus : null;
     var tempVersionGrid = deps && deps.dom && deps.dom.tempVersionGrid ? deps.dom.tempVersionGrid : null;
     var tempExecNav = deps && deps.dom && deps.dom.tempExecNav ? deps.dom.tempExecNav : null;
@@ -121,6 +122,12 @@
           + pad(now.getMinutes())
           + pad(now.getSeconds());
       };
+    function emToPx(value) {
+      var num = Number(value);
+      if (!Number.isFinite(num)) return 0;
+      var px = num * caseViewBaseFontSize;
+      return Math.round(px * 100) / 100;
+    }
     var downloadText = deps && deps.downloadText ? deps.downloadText : function() {};
     var downloadBlob = deps && deps.downloadBlob ? deps.downloadBlob : function() {};
     var scrollElementIntoView = deps && deps.scrollElementIntoView ? deps.scrollElementIntoView : function() {};
@@ -7530,9 +7537,9 @@
       var widthByKey = {
         select: '36px',
         index: '50px',
-        actual: '7em',
-        remark: '6em',
-        defect: '6em',
+        actual: emToPx(7) + 'px',
+        remark: emToPx(6) + 'px',
+        defect: emToPx(6) + 'px',
         ops: '40px',
       };
       stretchVisible.forEach(function(key) {
@@ -7540,9 +7547,9 @@
         var w = base + extraEm;
         // 避免产生过长小数，减少 HTML 体积
         var fixed = Math.round(w * 100) / 100;
-        widthByKey[key] = String(fixed) + 'em';
+        widthByKey[key] = emToPx(fixed) + 'px';
       });
-      if (show('priority')) widthByKey.priority = String(Number(baseEm.priority) || 5) + 'em';
+      if (show('priority')) widthByKey.priority = emToPx(Number(baseEm.priority) || 5) + 'px';
       var colgroup = '<colgroup>' + visibleKeys.map(function(key) {
         var width = widthByKey[key] || '';
         return width ? ('<col style="width:' + width + '">') : '<col>';

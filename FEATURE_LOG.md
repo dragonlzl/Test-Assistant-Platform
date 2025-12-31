@@ -19,6 +19,19 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例视图字号设置
+- 功能描述：设置页新增用例视图字号配置，支持按账号保存并应用于用例执行视图与用例库编辑视图，范围 11-16，默认 13。
+- 操作方式：进入设置 → 其他设置 → 输入用例视图字号 → 点击“保存字号”。
+- 使用效果：用例执行与用例库编辑视图表格及操作按钮字体同步变化，黑白主题保持一致显示。
+- 新增内容/接口/组件：
+  - 前端：设置项与保存逻辑（`settings.html`、`index.html`、`scripts/modules/settings.js`）、默认配置（`config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`）、用例视图字体变量与适配样式（`style.css`）。
+  - 测试：用例视图字号设置 UI 用例（`tests/ui/case_view_font_size_setting.spec.js`）。
+- 复用说明：复用现有 settings 存取机制与用例视图渲染结构，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/case_view_font_size_setting.spec.js`（未执行）
+- 更新记录：2025-12-31 新增用例视图字号设置（`settings.html`、`index.html`、`scripts/modules/settings.js`、`config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`、`style.css`、`tests/ui/case_view_font_size_setting.spec.js`）。
+- 更新记录：2025-12-31 字号放大不再影响执行/编辑列表列宽（`scripts/core/tempexecCore.js`、`scripts/modules/app.js`、`style.css`）。
+
 - 功能名称：功能引导流程（强制遮罩）
 - 功能描述：新增左侧“功能引导”按钮与抽屉，提供用例导入/执行/AI一键/用例生成等多流程强制引导，遮罩锁定非目标区域并支持跳过。
 - 操作方式：点击侧边栏“功能引导”→选择需要的引导流程→按提示点击高亮区域，支持“跳过这一步/跳过全部”。

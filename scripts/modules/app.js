@@ -36,6 +36,7 @@
       feishuWebhook: '',
       feishuMention: '',
       theme: 'light',
+      caseViewFontSize: 13,
       tempExecColumns: { ...defaultTempExecColumns },
       projectOrder: [],
       defaultProjectId: '',
@@ -43,6 +44,10 @@
     const settingsKey = appConfig.settingsKey || 'usecase-settings-v1';
     const minModelTimeoutSec = Number(appConfig.minModelTimeoutSec) || 30;
     const maxModelTimeoutSec = Number(appConfig.maxModelTimeoutSec) || 1800;
+    const defaultCaseViewFontSize = Number(appConfig.defaultCaseViewFontSize)
+      || (defaultSettings && defaultSettings.caseViewFontSize ? Number(defaultSettings.caseViewFontSize) : 13);
+    const minCaseViewFontSize = Number(appConfig.minCaseViewFontSize) || 11;
+    const maxCaseViewFontSize = Number(appConfig.maxCaseViewFontSize) || 16;
     const legacyCasesPrompt = appConfig.legacyCasesPrompt || '你是测试审核专家，请对比“测试模块拆分结果”和“XMind 测试用例”，输出 JSON：{coverage: 百分比(0-100), missing: [模块缺失点], extra: [测试用例中多出的点]}，missing/extra 为空数组表示无缺失或冗余。';
     const legacyCleanPrompt = appConfig.legacyCleanPrompt || '你是资深需求分析师，请清洗并重写下面的原始需求，重新整理前，要充分理解需求，理解设计意图，然后整理成结构化、可读性强的条目，保持原意，保留关键信息与约束条件，输出JSON数组：[{"功能": 具体功能名称,"类别": 核心改动的类别,"功能描述": {"重新整理内容": 具体重新整理的功能原文内容,"功能目标": [如有则为功能的目标],"规则": [功能的具体规则],"约束": [如有则为功能的限制和约束],"流程": [功能触发的具体流程]},"原始需求描述": [原始需求的所有相关描述]}]。仅输出此 JSON 内容，禁止输出其它文字。';
     const legacyCaseGenPrompt = appConfig.legacyCaseGenPrompt || '你是测试用例专家，针对单个测试模块生成 JSON 用例列表，每条用例字段：{module, title, priority, preconditions, steps, expected}，steps 为数组。priority 字段必须严格使用 P0/P1/P2（三选一），不要输出“高/中/低”等描述。结合模块的关键场景/测试要点/耦合模块，给出至少 3 条高质量用例。';
@@ -386,6 +391,9 @@
         defaultSettings,
         defaultTempExecColumns,
         defaultTempExecPageSize,
+        defaultCaseViewFontSize,
+        minCaseViewFontSize,
+        maxCaseViewFontSize,
         settingsKey,
         minModelTimeoutSec,
         maxModelTimeoutSec,
@@ -1110,6 +1118,7 @@
         modelsKey,
         assignmentKey,
         defaultTempExecPageSize,
+        caseViewBaseFontSize: defaultCaseViewFontSize,
         escapeHtml,
         escapeHtmlPreserve,
         normalizeTempExecName,

@@ -7,6 +7,8 @@
       --primary-weak: #e9edff;
       --text: #0f172a;
       --muted: #6b7280;
+      --case-view-font-size: 13px;
+      --case-view-font-size-sm: 12px;
       --nav-main-font: "Noto Sans SC","Source Han Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Heiti SC",sans-serif;
       --nav-main-color: #1e3a8a;
       --nav-main-hover: #2563eb;
@@ -1668,6 +1670,12 @@ body {
       font-size: 13px;
       table-layout: fixed;
     }
+    .temp-case-view:not(.case-archive-cases-view) {
+      font-size: var(--case-view-font-size, 13px);
+    }
+    .temp-case-view:not(.case-archive-cases-view) table {
+      font-size: inherit;
+    }
     .temp-case-view th,
     .temp-case-view td,
     .clarify-table th,
@@ -1716,6 +1724,10 @@ body {
       -webkit-appearance: none;
       box-sizing: border-box;
     }
+    .temp-case-view:not(.case-archive-cases-view) td .status-select,
+    .temp-case-view:not(.case-archive-cases-view) .reuse-entry .status-select {
+      font-size: var(--case-view-font-size, 13px);
+    }
     .temp-case-view td .status-select[data-status="未执行"] {
       color: var(--text);
       background: #fff;
@@ -1762,6 +1774,10 @@ body {
       justify-content: center;
       box-sizing: border-box;
     }
+    .temp-case-view:not(.case-archive-cases-view) .remark-toggle,
+    .temp-case-view:not(.case-archive-cases-view) .defect-toggle {
+      font-size: var(--case-view-font-size-sm, 12px);
+    }
     .remark-toggle.filled {
       border-color: #c2410c;
       color: #c2410c;
@@ -1799,6 +1815,14 @@ body {
       resize: vertical;
       transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
+    .temp-case-view:not(.case-archive-cases-view) .remark-panel,
+    .temp-case-view:not(.case-archive-cases-view) .clarify-panel,
+    .temp-case-view:not(.case-archive-cases-view) .defect-panel,
+    .temp-case-view:not(.case-archive-cases-view) .defect-entry input,
+    .temp-case-view:not(.case-archive-cases-view) .defect-entry button,
+    .temp-case-view:not(.case-archive-cases-view) .defect-add {
+      font-size: var(--case-view-font-size, 13px);
+    }
     .remark-panel:focus,
     .clarify-panel:focus {
       border-color: var(--primary);
@@ -1828,17 +1852,17 @@ body {
     #caseLibraryEditView th:nth-child(2),
     #caseLibraryEditView td:nth-child(2) { width: 50px; }
     #caseLibraryEditView th:nth-child(3),
-    #caseLibraryEditView td:nth-child(3) { width: 8em; }
+    #caseLibraryEditView td:nth-child(3) { width: 104px; }
     #caseLibraryEditView th:nth-child(4),
-    #caseLibraryEditView td:nth-child(4) { width: 10em; }
+    #caseLibraryEditView td:nth-child(4) { width: 130px; }
     #caseLibraryEditView th:nth-child(5),
-    #caseLibraryEditView td:nth-child(5) { width: 5em; }
+    #caseLibraryEditView td:nth-child(5) { width: 65px; }
     #caseLibraryEditView th:nth-child(6),
-    #caseLibraryEditView td:nth-child(6) { width: 15em; }
+    #caseLibraryEditView td:nth-child(6) { width: 195px; }
     #caseLibraryEditView th:nth-child(7),
-    #caseLibraryEditView td:nth-child(7) { width: 15em; }
+    #caseLibraryEditView td:nth-child(7) { width: 195px; }
     #caseLibraryEditView th:nth-child(8),
-    #caseLibraryEditView td:nth-child(8) { width: 20em; }
+    #caseLibraryEditView td:nth-child(8) { width: 260px; }
     #caseLibraryEditView th:nth-child(9),
     #caseLibraryEditView td:nth-child(9) { width: 72px; }
 
@@ -5993,28 +6017,40 @@ tr.import-invalid-locate-active td {
       box-sizing: border-box;
       min-width: 0;
     }
+    .temp-case-view:not(.case-archive-cases-view) .reuse-entry .reuse-input,
+    .temp-case-view:not(.case-archive-cases-view) .reuse-entry .reuse-note,
+    .temp-case-view:not(.case-archive-cases-view) .reuse-entry .reuse-remove,
+    .temp-case-view:not(.case-archive-cases-view) .reuse-actions .reuse-add,
+    .temp-case-view:not(.case-archive-cases-view) .reuse-actions .reuse-sync,
+    .temp-case-view:not(.case-archive-cases-view) .reuse-presets .preset-add,
+    .temp-case-view:not(.case-archive-cases-view) .reuse-presets .preset-chip,
+    .temp-case-view:not(.case-archive-cases-view) .reuse-presets .preset-input,
+    .temp-case-view:not(.case-archive-cases-view) .reuse-presets .preset-input input,
+    .temp-case-view:not(.case-archive-cases-view) .reuse-presets .preset-input button {
+      font-size: var(--case-view-font-size, 13px);
+    }
     /* 子项输入：恢复原始长度，备注默认放大为原始长度的 3.5 倍（执行视图另行自适应） */
     .reuse-entry .reuse-input {
       /* 复用子项：子项描述回到基础长度 */
-      flex: 0 0 calc(110px + 10em);
+      flex: 0 0 240px;
     }
     .reuse-entry .reuse-note {
       /* 复用备注：16em 基准放大 3.5 倍（=56em），避免被挤压 */
-      flex: 0 0 calc(56em);
-      max-width: calc(70em);
-      margin-right: 2em;
+      flex: 0 0 728px;
+      max-width: 910px;
+      margin-right: 26px;
       background: #f8fafc;
     }
     /* 执行视图：复用备注自适应，执行选择框贴近备注右侧，删除按钮保持最右 */
 .card[data-section-id="tempexec-view"] .reuse-entry {
   display: grid;
-  grid-template-columns: calc(110px + 10em) minmax(0, 1fr) 14em 7em 6em 6em 40px;
+  grid-template-columns: 240px minmax(0, 1fr) 182px 91px 78px 78px 40px;
   align-items: center;
   --reuse-status-shift: 0px;
 }
 .card[data-section-id="tempexec-view"] .reuse-actions {
   display: grid;
-  grid-template-columns: calc(110px + 10em) minmax(0, 1fr) 14em 7em 6em 6em 40px;
+  grid-template-columns: 240px minmax(0, 1fr) 182px 91px 78px 78px 40px;
   align-items: center;
   column-gap: 0;
   row-gap: 8px;
@@ -6026,8 +6062,8 @@ tr.import-invalid-locate-active td {
 .card[data-section-id="tempexec-view"] .reuse-actions .reuse-sync {
   grid-column: 3;
   justify-self: start;
-  width: 7em;
-  min-width: 7em;
+  width: 91px;
+  min-width: 91px;
   box-sizing: border-box;
   justify-content: center;
 }
@@ -6046,8 +6082,8 @@ tr.import-invalid-locate-active td {
   grid-column: 3;
   margin-left: 0;
   margin-right: 0;
-  width: 7em;
-  min-width: 7em;
+  width: 91px;
+  min-width: 91px;
   justify-self: start;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -6057,9 +6093,9 @@ tr.import-invalid-locate-active td {
       justify-self: end;
     }
     .reuse-entry .status-select {
-      flex: 0 0 4.6em;
-      width: 4.6em;
-      min-width: 4.6em;
+      flex: 0 0 59.8px;
+      width: 59.8px;
+      min-width: 59.8px;
       border-radius: 999px;
       padding: 6px 8px;
       font-weight: 600;
@@ -6104,9 +6140,9 @@ tr.import-invalid-locate-active td {
     }
     .reuse-entry .reuse-remove {
       margin-left: auto;
-      flex: 0 0 3.4em;
-      width: 3.4em;
-      min-width: 3.4em;
+      flex: 0 0 44.2px;
+      width: 44.2px;
+      min-width: 44.2px;
       border: 1px solid #fecaca;
       color: #b91c1c;
       background: #fef2f2;

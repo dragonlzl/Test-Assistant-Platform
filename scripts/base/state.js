@@ -10,6 +10,7 @@
       timeoutSec: 300,
       feishuWebhook: '',
       feishuMention: '',
+      caseViewFontSize: 13,
       tempExecColumns: {
         select: true,
         index: true,
