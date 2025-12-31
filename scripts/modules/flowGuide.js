@@ -886,8 +886,9 @@
 
     function shouldProxyUseFocus(step, target) {
       if (!step || !step.proxy) return false;
-      if (!target) return false;
-      return isElementDisabled(target);
+      if (step.focusProxy === false) return false;
+      if (step.focusProxy) return true;
+      return true;
     }
 
     function clearStepListeners() {
@@ -1020,7 +1021,6 @@
           focusClickHandler = function(e) {
             handleProxy(e, 'proxy-focus');
           };
-          focusEl.addEventListener('mousedown', focusClickHandler, true);
           focusEl.addEventListener('click', focusClickHandler, true);
         }
         return;
@@ -1134,13 +1134,28 @@
 
       if (tooltipEl) {
         var tipMaxWidth = 360;
+        var viewportWidth = window.innerWidth || 0;
+        var viewportHeight = window.innerHeight || 0;
         tooltipEl.style.maxWidth = tipMaxWidth + 'px';
+        tooltipEl.style.maxHeight = '';
+        tooltipEl.style.overflowY = '';
         var tipRect = tooltipEl.getBoundingClientRect();
+        var maxTipHeight = viewportHeight - 32;
+        if (maxTipHeight > 0 && tipRect.height > maxTipHeight) {
+          tooltipEl.style.maxHeight = maxTipHeight + 'px';
+          tooltipEl.style.overflowY = 'auto';
+          tipRect = tooltipEl.getBoundingClientRect();
+        }
         var tipLeft = rect.left;
         var tipTop = rect.bottom + 12;
-        var maxLeft = window.innerWidth - tipRect.width - 16;
+        var maxLeft = viewportWidth - tipRect.width - 16;
         if (tipLeft > maxLeft) tipLeft = maxLeft;
         if (tipLeft < 16) tipLeft = 16;
+        var maxTop = viewportHeight - tipRect.height - 16;
+        if (tipTop > maxTop) {
+          tipTop = rect.top - tipRect.height - 12;
+        }
+        if (tipTop < 16) tipTop = 16;
         tooltipEl.style.left = tipLeft + 'px';
         tooltipEl.style.top = tipTop + 'px';
       }
@@ -1286,20 +1301,25 @@
         if (token !== renderToken) return;
         if (!activeFlow || !activeGuideId) return;
         var target = resolveTarget(step);
-        if (target && isTargetVisible(target)) {
-          activeTarget = target;
-          applyTargetAllow(step, target);
+        if (target) {
+          if (isTargetVisible(target)) {
+            activeTarget = target;
+            applyTargetAllow(step, target);
+            if (step && step.scrollIntoView) {
+              scrollElementIntoView(target, 'smooth', 140);
+            }
+            applyGuideOverlay(step, target);
+            bindStepEvents(step, target);
+            setTimeout(function() {
+              if (token !== renderToken) return;
+              if (activeStep !== step || activeTarget !== target) return;
+              updateFocusPosition(step, target);
+            }, 360);
+            return;
+          }
           if (step && step.scrollIntoView) {
             scrollElementIntoView(target, 'smooth', 140);
           }
-          applyGuideOverlay(step, target);
-          bindStepEvents(step, target);
-          setTimeout(function() {
-            if (token !== renderToken) return;
-            if (activeStep !== step || activeTarget !== target) return;
-            updateFocusPosition(step, target);
-          }, 360);
-          return;
         }
         attempts += 1;
         if (attempts < 80) {
@@ -1905,6 +1925,7 @@
               target: '#runAutoWorkflow',
               tip: '点击后可直接执行功能流程。点击此处进入下一步引导。',
               proxy: true,
+              focusProxy: true,
               dimOpacity: 0.55,
             },
             {

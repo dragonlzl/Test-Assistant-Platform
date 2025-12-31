@@ -33,6 +33,10 @@
 - 更新记录：2025-02-19 功能引导执行/导入流程稳定性修复（`scripts/modules/flowGuide.js`、`style.css`、`tests/ui/flow_guide_drawer.spec.js`）。
 - 更新记录：2025-02-19 用例执行引导版本选择禁用时可继续（`scripts/modules/flowGuide.js`、`tests/ui/flow_guide_drawer.spec.js`）。
 - 更新记录：2025-02-19 补充 AI 一键/用例生成引导 UI 覆盖（`tests/ui/flow_guide_drawer.spec.js`）。
+- 更新记录：2025-02-19 AI 一键执行引导点击兜底与测试覆盖完善（`scripts/modules/flowGuide.js`、`tests/ui/flow_guide_drawer.spec.js`）。
+- 更新记录：2025-02-19 功能引导代理步骤统一由聚焦层接管点击（`scripts/modules/flowGuide.js`、`tests/ui/flow_guide_drawer.spec.js`）。
+- 更新记录：2025-02-19 功能引导切换步骤时支持自动滚动聚焦目标（`scripts/modules/flowGuide.js`）。
+- 更新记录：2025-12-31 引导提示在小屏自动上移避免跳过按钮被遮挡（`scripts/modules/flowGuide.js`、`tests/ui/flow_guide_drawer.spec.js`）。
 
 - 功能名称：执行用例新增位置同步
 - 功能描述：修复执行用例新增后跨用户刷新位置错乱的问题，确保执行页与用例库编辑视图都按新增位置同步展示。

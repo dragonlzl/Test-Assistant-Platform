@@ -193,10 +193,10 @@ test.describe('功能引导抽屉', () => {
     await expect(page.locator('#guideFakeExecVersionPanel')).toBeVisible();
     await expect(page.locator('#flowGuideTooltipText')).toContainText('选择执行用例的版本');
 
-    await page.locator('#guideExecVersionSelect').click();
+    await page.locator('#flowGuideFocus').click();
     await expect(page.locator('#flowGuideTooltipText')).toContainText('确认并继续');
 
-    await page.locator('#guideExecVersionConfirm').click();
+    await page.locator('#flowGuideFocus').click();
     await page.waitForFunction(() => !document.body.classList.contains('guide-active'));
     await page.waitForFunction(() => !document.body.classList.contains('drawer-open'));
     await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/open/);
@@ -221,12 +221,43 @@ test.describe('功能引导抽屉', () => {
 
     await page.locator('[data-tab-btn="auto"]').click();
     await expect(page.locator('#flowGuideTooltipText')).toContainText('选择需求');
-    await page.locator('#autoRawDropZone').click();
+    await page.locator('#flowGuideFocus').click();
     await expect(page.locator('#flowGuideTooltipText')).toContainText('选择用例');
-    await page.locator('#autoCaseDropZone').click();
+    await page.locator('#flowGuideFocus').click();
     await expect(page.locator('#flowGuideTooltipText')).toContainText('人工审核流程');
+    await page.locator('#flowGuideFocus').click();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('执行功能流程');
+    await page.locator('#flowGuideFocus').click();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('观察执行进度');
 
     await page.locator('.guide-skip-all').evaluate((el) => el.click());
+    await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
+  });
+
+  test('缺失模块引导小屏可看到跳过按钮', async ({ page }) => {
+    await page.setViewportSize({ width: 1080, height: 520 });
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/ai-workflow.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.flowGuide) {
+        window.app.flowGuide.start('auto-flow', { stepIndex: 8 });
+      }
+    });
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('缺失的测试点');
+
+    const skipAllBtn = page.locator('.guide-skip-all');
+    await expect(skipAllBtn).toBeVisible();
+    const skipBox = await skipAllBtn.boundingBox();
+    const viewport = page.viewportSize();
+    expect(skipBox).not.toBeNull();
+    if (skipBox && viewport) {
+      expect(skipBox.y).toBeGreaterThanOrEqual(0);
+      expect(skipBox.y + skipBox.height).toBeLessThanOrEqual(viewport.height);
+    }
+
+    await skipAllBtn.click();
     await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
   });
 
