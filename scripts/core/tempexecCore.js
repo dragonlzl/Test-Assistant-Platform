@@ -4330,6 +4330,45 @@
       return String(id);
     }
 
+    function buildTempExecCaseItemIdSet(file) {
+      if (!file || !Array.isArray(file.cases)) return null;
+      if (file._casesLoading) return null;
+      var ids = new Set();
+      file.cases.forEach(function(item) {
+        if (!item) return;
+        var id = item.caseItemId || item.case_item_id || null;
+        if (id === null || id === undefined) return;
+        ids.add(String(id));
+      });
+      return ids;
+    }
+
+    function filterTempExecCaseLibraryDiffRows(execSetId, rows) {
+      if (!execSetId || !Array.isArray(rows) || !rows.length) return rows;
+      var file = getTempExecFile(String(execSetId));
+      var idSet = buildTempExecCaseItemIdSet(file);
+      if (!idSet) return rows;
+      return rows.filter(function(row) {
+        var entry = row && row.entry ? row.entry : null;
+        var caseItemId = normalizeCaseLibDiffItemId(entry);
+        if (!caseItemId) return true;
+        return idSet.has(caseItemId);
+      });
+    }
+
+    function summarizeTempExecCaseLibraryDiffRows(rows) {
+      var summary = { appended: 0, added: 0, updated: 0, deleted: 0 };
+      if (!Array.isArray(rows) || !rows.length) return summary;
+      rows.forEach(function(row) {
+        var kind = normalizeDiffKind(row && row.entry ? row.entry.kind : '');
+        if (kind === 'appended') summary.appended += 1;
+        if (kind === 'added') summary.added += 1;
+        if (kind === 'updated') summary.updated += 1;
+        if (kind === 'deleted') summary.deleted += 1;
+      });
+      return summary;
+    }
+
     function findTempExecCaseIndexByItemId(file, caseItemId) {
       if (!file || !Array.isArray(file.cases)) return -1;
       var target = String(caseItemId || '');
@@ -4592,7 +4631,12 @@
         return 0;
       });
 
-      var visible = rows.filter(function(row) {
+      var availableRows = filterTempExecCaseLibraryDiffRows(execSetId, rows);
+      if (availableRows.length !== rows.length) {
+        totalSummary = summarizeTempExecCaseLibraryDiffRows(availableRows);
+      }
+
+      var visible = availableRows.filter(function(row) {
         var entry = row && row.entry ? row.entry : null;
         var kind = normalizeDiffKind(entry && entry.kind);
         if (!kind) return false;

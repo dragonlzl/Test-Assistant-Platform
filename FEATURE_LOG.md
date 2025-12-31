@@ -36,6 +36,7 @@
 - 更新记录：2025-12-31 关闭抽屉不再触发额外回滚，保持定位位置（`scripts/core/tempexecCore.js`）。
 - 更新记录：2025-12-31 定位用例后增加临时高亮提示（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_case_library_changes.spec.js`）。
 - 更新记录：2025-12-31 临时高亮适配暗色主题（`style.css`）。
+- 更新记录：2025-12-31 归档/移除执行用例后，diff 视图过滤掉已移除用例（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。
 
 - 功能名称：功能引导执行/导入流程稳定性修复
 - 功能描述：修复用例执行引导在非用例页面点击“用例执行”导致页面空白问题，并确保用例导入引导（用例执行）结束后可正常点击页面按钮。
