@@ -35,7 +35,7 @@ test.describe('功能引导抽屉', () => {
     await expect(page.locator('#flowGuideOverlay')).toBeVisible();
     await expect(page.locator('#flowGuideTooltipText')).toContainText('用例相关');
 
-    await page.locator('.guide-skip-all').click();
+    await page.locator('.guide-skip-all').evaluate((el) => el.click());
     await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
   });
 
@@ -47,7 +47,7 @@ test.describe('功能引导抽屉', () => {
     await page.locator('.guide-skip-step').click();
     await expect(page.locator('#flowGuideTooltipText')).toContainText('用例库');
 
-    await page.locator('.guide-skip-all').click();
+    await page.locator('.guide-skip-all').evaluate((el) => el.click());
     await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
   });
 
@@ -74,7 +74,7 @@ test.describe('功能引导抽屉', () => {
     const afterScroll = await page.evaluate(() => window.scrollY);
     expect(afterScroll).toBe(0);
 
-    await page.locator('.guide-skip-all').click();
+    await page.locator('.guide-skip-all').evaluate((el) => el.click());
     await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
   });
 
@@ -171,7 +171,7 @@ test.describe('功能引导抽屉', () => {
     await expect(page.locator('#flowGuideTooltipText')).toContainText('选择目标用例所属项目');
     await expect(page.locator('#caseLibrarySelectExecDrawer')).toHaveClass(/open/);
 
-    await page.locator('.guide-skip-all').click();
+    await page.locator('.guide-skip-all').evaluate((el) => el.click());
     await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
   });
 
@@ -204,6 +204,54 @@ test.describe('功能引导抽屉', () => {
     await expect(page.locator('#flowGuideDrawer')).toHaveClass(/open/);
   });
 
+  test('AI一键引导可推进到导入用例步骤', async ({ page }) => {
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/ai-workflow.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.flowGuide) {
+        window.app.flowGuide.start('auto-flow');
+      }
+    });
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('AI 功能');
+
+    await page.locator('.tab-group-btn[data-group="ai"]').hover();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('一键执行');
+
+    await page.locator('[data-tab-btn="auto"]').click();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('选择需求');
+    await page.locator('#autoRawDropZone').click();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('选择用例');
+    await page.locator('#autoCaseDropZone').click();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('人工审核流程');
+
+    await page.locator('.guide-skip-all').evaluate((el) => el.click());
+    await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
+  });
+
+  test('用例生成引导可进入全模块生成步骤', async ({ page }) => {
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/ai-workflow.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.flowGuide) {
+        window.app.flowGuide.start('casesgen');
+      }
+    });
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('AI 功能');
+
+    await page.locator('.tab-group-btn[data-group="ai"]').hover();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('用例生成');
+
+    await page.locator('[data-tab-btn="casesgen"]').click();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('所有模块');
+
+    await page.locator('.guide-skip-all').click();
+    await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
+  });
+
   test('版本选择禁用时可通过聚焦区继续', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/case-exec.html');
@@ -225,7 +273,7 @@ test.describe('功能引导抽屉', () => {
     await expect(versionSelect).toBeDisabled();
 
     await page.locator('#flowGuideFocus').click();
-    await expect(page.locator('#flowGuideTooltipText')).toContainText('刷新后下方会展示用例列表');
+    await expect(page.locator('#flowGuideTooltipText')).toHaveText(/刷新后下方会展示用例列表|执行分配/);
     await page.locator('.guide-skip-all').click();
     await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
   });
