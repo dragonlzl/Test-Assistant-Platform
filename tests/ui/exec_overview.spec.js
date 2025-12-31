@@ -314,6 +314,115 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('正常登录');
   });
 
+  test('执行列表实际结果为空时使用状态兜底展示', async ({ page }) => {
+    const user = { id: 6, username: 'overview_user', role: 'user', level: 'member' };
+    const projects = [{ id: 1, name: '演示项目', description: 'exec overview' }];
+    const versionV1 = { id: 11, name: 'v1' };
+    const now = new Date().toISOString();
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const path = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (path === '/api/users/me') return respond(200, user);
+      if (path === '/api/projects') return respond(200, projects);
+      var versionsMatch = path.match(/^\/api\/projects\/(\d+)\/versions$/);
+      if (versionsMatch) return respond(200, [versionV1]);
+
+      if (path === '/api/exec/overview/layout' && method === 'GET') {
+        return respond(200, [
+          {
+            project_id: 1,
+            version_id: versionV1.id,
+            user_id: user.id,
+            username: user.username,
+            level: user.level,
+            user_created_at: now,
+            total: 1,
+            pending: 0,
+            passed: 1,
+            failed: 0,
+            blocked: 0,
+            not_applicable: 0,
+            ui_placement: { versionOrderByProject: { 1: ['11'] }, fileOrderByProjectVersion: { 1: { 11: ['200'] } } },
+            exec_sets: [
+              {
+                exec_set_id: 200,
+                exec_set_name: '需求-登录',
+                version_id: versionV1.id,
+                status: 'active',
+                requirement: '',
+                total: 1,
+                pending: 0,
+                passed: 1,
+                failed: 0,
+                blocked: 0,
+                not_applicable: 0,
+                created_at: now,
+                updated_at: now,
+              },
+            ],
+          },
+        ]);
+      }
+
+      var execCasesMatch = path.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (execCasesMatch && method === 'GET') {
+        var execSetId = Number(execCasesMatch[1]);
+        if (execSetId !== 200) return respond(200, []);
+        return respond(200, [
+          {
+            id: 100,
+            exec_set_id: 200,
+            case_item_id: 1,
+            module: '登录',
+            title: '正常登录',
+            expected: 'ok',
+            priority: 'P0',
+            precondition: '',
+            steps: '1',
+            actual_result: '',
+            defect_link: null,
+            reuse_details: null,
+            defect_links: null,
+            remark: '',
+            status: '通过',
+            order_no: 1,
+            executor_id: user.id,
+            created_at: now,
+            updated_at: now,
+          },
+        ]);
+      }
+
+      if (path === '/api/auth/logout') return respond(200, {});
+      if (path.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForSelector('.tab-group-btn[data-group="cases"]', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', { timeout: 20000 });
+
+    await page.click('.tab-group-btn[data-group="cases"]');
+    await page.click('[data-group-menu="cases"] [data-tab-btn="exec-overview"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('exec-overview'); });
+
+    await page.click('#execOverviewNavProjects [data-project-id="1"]');
+    await page.click('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]');
+
+    const row = page.locator('#execOverviewExecSetTableBody tr').first();
+    const headers = page.locator('#execOverviewExecSetDrawer thead th');
+    await expect(headers).toHaveCount(4);
+    await expect(page.locator('#execOverviewExecSetDrawer thead')).not.toContainText('状态');
+    const actualCell = row.locator('td').nth(2);
+    await expect(actualCell).toContainText('通过');
+  });
+
   test('版本总览 NA 标识展示为不适用', async ({ page }) => {
     const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
     const projects = [{ id: 1, name: '战魂铭人', description: '用于执行总览' }];

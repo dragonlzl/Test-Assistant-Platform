@@ -388,7 +388,6 @@
     return Boolean(
       has('module') ||
       has('title') ||
-      has('status') ||
       has('actual_result') ||
       has('expected') ||
       has('remark')
@@ -830,12 +829,14 @@
     if (dom.execSetEmpty) dom.execSetEmpty.classList.add('hidden');
     dom.execSetTableBody.innerHTML = list.map(function(item) {
       var updatedText = formatTime(item && item.updated_at ? item.updated_at : '');
+      var statusText = item && item.status !== null && item.status !== undefined ? String(item.status) : '';
+      var actualText = item && item.actual_result !== null && item.actual_result !== undefined ? String(item.actual_result) : '';
+      if (!actualText && statusText) actualText = statusText;
       return (
         '<tr>' +
           '<td>' + escapeHtml(item.module || '') + '</td>' +
           '<td>' + escapeHtml(item.title || '') + '</td>' +
-          '<td>' + escapeHtml(item.status || '') + '</td>' +
-          '<td>' + escapeHtml(item.actual_result || '') + '</td>' +
+          '<td>' + escapeHtml(actualText) + '</td>' +
           '<td>' + escapeHtml(updatedText) + '</td>' +
         '</tr>'
       );
