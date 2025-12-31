@@ -4343,6 +4343,35 @@
       return -1;
     }
 
+    var tempExecLocateTimer = 0;
+    var tempExecLocateTarget = null;
+    function clearTempExecLocateHighlight() {
+      if (tempExecLocateTimer) clearTimeout(tempExecLocateTimer);
+      tempExecLocateTimer = 0;
+      if (tempExecLocateTarget && tempExecLocateTarget.classList) {
+        tempExecLocateTarget.classList.remove('locate-highlight');
+      }
+      tempExecLocateTarget = null;
+    }
+    function flashTempExecLocate(target) {
+      if (!target || !target.classList) return;
+      if (tempExecLocateTarget && tempExecLocateTarget !== target) {
+        clearTempExecLocateHighlight();
+      } else if (tempExecLocateTimer) {
+        clearTimeout(tempExecLocateTimer);
+        tempExecLocateTimer = 0;
+      }
+      tempExecLocateTarget = target;
+      target.classList.add('locate-highlight');
+      tempExecLocateTimer = setTimeout(function() {
+        if (tempExecLocateTarget === target && target.classList) {
+          target.classList.remove('locate-highlight');
+        }
+        if (tempExecLocateTarget === target) tempExecLocateTarget = null;
+        tempExecLocateTimer = 0;
+      }, 1600);
+    }
+
     function scrollToTempExecCaseRow(fileId, idx, options) {
       var opts = options && typeof options === 'object' ? options : {};
       var attempts = 0;
@@ -4394,6 +4423,7 @@
         if (!scrolled) {
           scrollElementIntoView(target, 'auto', 160);
         }
+        flashTempExecLocate(target);
         if (storeRestore && typeof window !== 'undefined') {
           setTimeout(function() {
             try {

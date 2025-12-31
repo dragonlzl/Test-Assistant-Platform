@@ -1684,6 +1684,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await expect(diffDrawer).toHaveClass(/open/);
     await expect(targetRowTop).toHaveCount(1);
     await expect(targetRowTop).toContainText('用例3');
+    await expect(targetRowTop).toHaveClass(/locate-highlight/);
 
     const diffRowBottom = page.locator('#tempExecCaseLibraryDiffBody tr.case-lib-diff-clickable[data-case-lib-diff-case-id=\"5009\"]');
     await expect(diffRowBottom).toBeVisible();
@@ -1692,6 +1693,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await expect(diffDrawer).toHaveClass(/open/);
     await expect(targetRowBottom).toHaveCount(1);
     await expect(targetRowBottom).toContainText('用例9');
+    await expect(targetRowBottom).toHaveClass(/locate-highlight/);
 
     await page.click('#closeTempExecCaseLibraryDiffDrawerBtn');
     await expect(diffDrawer).not.toHaveClass(/open/);
