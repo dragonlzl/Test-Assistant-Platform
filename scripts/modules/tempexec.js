@@ -1353,6 +1353,67 @@
     var saveTempExecPageSizeBtn = document.getElementById('saveTempExecPageSize');
     var tempFocusBlock = document.getElementById('tempFocusBlock');
     var tempFocusZone = tempFocusBlock ? tempFocusBlock.querySelector('[data-temp-focus-zone]') : null;
+    var tempExecReuseAutoCollapseBound = false;
+
+    function getTempExecViewportHeight() {
+      if (typeof window !== 'undefined' && typeof window.innerHeight === 'number') return window.innerHeight;
+      if (document.documentElement && typeof document.documentElement.clientHeight === 'number') {
+        return document.documentElement.clientHeight;
+      }
+      return 0;
+    }
+
+    function resolveTempExecReuseRowEl(fileId, index) {
+      if (!tempExecView || !tempExecView.querySelector) return null;
+      var selector = '[data-temp-reuse-panel-container="' + String(fileId) + '"][data-index="' + String(index) + '"]';
+      var panel = tempExecView.querySelector(selector);
+      if (!panel) return null;
+      if (panel.closest) {
+        var row = panel.closest('tr.reuse-row');
+        if (row) return row;
+      }
+      return panel;
+    }
+
+    function isTempExecReuseRowOutOfView(rowEl, viewportHeight) {
+      if (!rowEl || !rowEl.getBoundingClientRect) return false;
+      var rect = rowEl.getBoundingClientRect();
+      return rect.bottom <= 0 || rect.top >= viewportHeight;
+    }
+
+    function autoCollapseTempExecReusePanels() {
+      if (!tempExecView || !api.ensureTempExecReuseOpen || !api.toggleTempExecReusePanel) return;
+      if (tempExecView.classList && tempExecView.classList.contains('hidden')) return;
+      if (tempExecViewSection && tempExecViewSection.classList && tempExecViewSection.classList.contains('hidden')) return;
+      var fileId = state && state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
+      if (!fileId) return;
+      var openSet = api.ensureTempExecReuseOpen(fileId);
+      if (!openSet || !openSet.size) return;
+      var viewportHeight = getTempExecViewportHeight();
+      if (!viewportHeight) return;
+      var indexes = Array.from(openSet);
+      var toClose = [];
+      for (var i = 0; i < indexes.length; i += 1) {
+        var idx = indexes[i];
+        var rowEl = resolveTempExecReuseRowEl(fileId, idx);
+        if (!rowEl) continue;
+        if (isTempExecReuseRowOutOfView(rowEl, viewportHeight)) {
+          toClose.push(idx);
+        }
+      }
+      if (!toClose.length) return;
+      api.toggleTempExecReusePanel(fileId, toClose);
+    }
+
+    function bindTempExecReuseAutoCollapse() {
+      if (tempExecReuseAutoCollapseBound) return;
+      if (!tempExecView) return;
+      tempExecReuseAutoCollapseBound = true;
+      var onScroll = debounce(function() {
+        autoCollapseTempExecReusePanels();
+      }, 160);
+      window.addEventListener('scroll', onScroll);
+    }
 
     var apiClient = window.app && window.app.apiClient ? window.app.apiClient : null;
     function safeLogOperation(action, targetType, targetId, detail, result) {
@@ -5260,6 +5321,8 @@
         }
       });
     }
+
+    bindTempExecReuseAutoCollapse();
 
     if (exportTempExecConfigBtn && api.exportTempExecSnapshot) {
       exportTempExecConfigBtn.addEventListener('click', function() {

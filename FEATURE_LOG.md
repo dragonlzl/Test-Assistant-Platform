@@ -19,6 +19,18 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行视图复用子项滚动自动收起
+- 功能描述：复用类型用例在执行视图展开复用子项后，滚动离开当前视口自动收起。
+- 操作方式：执行视图点击用例“实际结果”按钮展开复用子项，向下/向上滚动页面离开当前用例区域。
+- 使用效果：滚动离开当前界面时复用子项自动收起，执行视图更整洁。
+- 新增内容/接口/组件：
+  - 前端：执行视图滚动监听与复用面板自动收起（`scripts/modules/tempexec.js`）。
+  - 测试：复用子项滚动自动收起 UI 用例（`tests/ui/tempexec_reuse_auto_collapse_on_scroll.spec.js`）。
+- 复用说明：复用现有复用面板渲染与 toggle 逻辑，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_auto_collapse_on_scroll.spec.js`（通过）
+- 更新记录：2026-01-04 执行视图复用子项滚动自动收起（`scripts/modules/tempexec.js`、`tests/ui/tempexec_reuse_auto_collapse_on_scroll.spec.js`）。
+
 - 功能名称：用例库编辑页状态补充用例条数
 - 功能描述：在“查看&编辑”抽屉搜索用例文件后，状态文案补充当前筛选文件的用例条目总数。
 - 操作方式：用例库 → 查看&编辑 → 搜索用例文件。
