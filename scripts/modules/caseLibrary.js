@@ -4917,6 +4917,7 @@
     state.editDrawer.selection = new Set();
     state.editDrawer.pageIndex = 0;
     renderEditDrawerList();
+    updateEditDrawerLoadedStatus();
     syncEditDrawerControls();
     persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
   }
@@ -4942,6 +4943,7 @@
     });
     state.editDrawer.selection = nextSel;
     renderEditDrawerList();
+    updateEditDrawerLoadedStatus();
     syncEditDrawerControls();
     persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
   }
@@ -4962,8 +4964,24 @@
     });
     state.editDrawer.selection = nextSel;
     renderEditDrawerList();
+    updateEditDrawerLoadedStatus();
     syncEditDrawerControls();
     persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
+  }
+
+  function updateEditDrawerLoadedStatus(list, force) {
+    if (!dom.editDrawerStatus) return;
+    if (!force && state.editDrawer.loading) return;
+    var files = Array.isArray(list) ? list : getEditDrawerVisibleFiles();
+    var totalItems = 0;
+    files.forEach(function(f) {
+      var count = Number(f && f.item_count);
+      if (!Number.isFinite(count) || count < 0) count = 0;
+      totalItems += count;
+    });
+    var fileCount = files.length;
+    var msg = '已加载 ' + fileCount + ' 份用例文件，共' + totalItems + '条用例。';
+    setStatus(dom.editDrawerStatus, msg, fileCount ? 'ok' : 'warn');
   }
 
   function getSelectedEditDrawerCaseFiles() {
@@ -5954,7 +5972,7 @@
           }
         }
         syncEditDrawerChangeVersionOptions(projectId);
-        setStatus(dom.editDrawerStatus, '已加载 ' + files.length + ' 份用例文件', files.length ? 'ok' : 'warn');
+        updateEditDrawerLoadedStatus(getEditDrawerVisibleFiles(), true);
         // 若列表更新，清理掉不存在/不可见的勾选项，避免按钮状态与实际不一致。
         var visibleIds = {};
         getEditDrawerVisibleFiles().forEach(function(f) {

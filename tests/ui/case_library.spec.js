@@ -664,6 +664,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await page.fill('#caseLibraryEditFileSearchInput', 'other_user');
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('other_user_case_file');
     await expect(page.locator('#caseLibraryEditListBody')).not.toContainText('case_library_import');
+    await expect(page.locator('#caseLibraryEditDrawerStatus')).toContainText('已加载 1 份用例文件，共0条用例');
     await page.fill('#caseLibraryEditFileSearchInput', '');
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('case_library_import');
     // 回到“仅自己”，保证后续导出/编辑仍聚焦当前用例文件
