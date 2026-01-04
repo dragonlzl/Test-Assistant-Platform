@@ -122,7 +122,7 @@
 <div class="tab-group">
 <button class="tab-group-btn" data-group="settings">设置</button>
 <div class="tab-submenu hidden" data-group-menu="settings">
-<button data-tab-btn="settings">其他配置</button>
+<button data-tab-btn="settings">通用设置</button>
 </div>
 </div>
 </nav>
@@ -245,7 +245,7 @@
             </svg>
           </span>
           <span class="nav-entry-text">
-            <span class="nav-entry-title">其他设置</span>
+            <span class="nav-entry-title">通用设置</span>
             <span class="nav-entry-desc">主题/分页/页面说明等</span>
           </span>
         </button>
@@ -339,7 +339,7 @@
 </div>
 </section>
 <section class="card hidden" data-tab-section="settings" data-settings-section="misc" id="settingsOtherSection">
-<h2>其他设置</h2>
+<h2>通用设置</h2>
 <div class="card-body">
 <div class="settings-inline">
 <div class="meta">
@@ -404,6 +404,14 @@
   <label><input type="checkbox" data-page-guide="exec-overview"/> 执行总览</label>
 </form>
 <p class="status" id="pageGuideSettingsStatus"></p>
+
+<div class="settings-divider"></div>
+<h3>导航栏智能收起</h3>
+<p class="hint">勾选后向下滚动会自动收起顶部导航；滚动到顶部继续向上滚动可自动展开。</p>
+<form class="settings-grid" id="smartTopNavSettingsGrid">
+  <label><input type="checkbox" id="smartTopNavToggle" data-smart-top-nav="1"/> 启用导航栏智能收起</label>
+</form>
+<p class="status" id="smartTopNavStatus"></p>
 
 <div class="settings-divider"></div>
 <div class="settings-inline" style="align-items:flex-start;">

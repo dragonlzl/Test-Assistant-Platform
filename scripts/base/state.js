@@ -11,6 +11,7 @@
       feishuWebhook: '',
       feishuMention: '',
       caseViewFontSize: 13,
+      smartTopNavCollapse: false,
       tempExecColumns: {
         select: true,
         index: true,

@@ -122,7 +122,7 @@
 <div class="tab-group">
 <button class="tab-group-btn" data-group="settings">设置</button>
 <div class="tab-submenu hidden" data-group-menu="settings">
-<button data-tab-btn="settings">其他配置</button>
+<button data-tab-btn="settings">通用设置</button>
 </div>
 </div>
 </nav>
@@ -194,8 +194,12 @@
 
 	
 	<div class="tempexec-head hidden" data-tab-section="exec-overview" id="execOverviewHead">
-	  <div class="flow" id="execOverviewFlowNav">
-	    <div class="flow-title">执行总览导航</div>
+	  <div class="flow top-nav" id="execOverviewFlowNav" data-top-nav="exec-overview">
+	    <div class="flow-head">
+	      <div class="flow-title">执行总览导航</div>
+	      <button class="flow-toggle" type="button" data-flow-toggle="exec-overview" aria-expanded="true">收起</button>
+	    </div>
+	    <div class="flow-body">
 	    <p class="hint" style="margin:0 0 6px;">按项目/版本查看各人员执行进度，点击卡片快速操作。</p>
 	    <div class="nav-entry-grid" id="execOverviewNavGrid">
 	      <div class="exec-overview-nav-projects" id="execOverviewNavProjects"></div>
@@ -212,6 +216,7 @@
 	        </span>
 	      </button>
 	    </div>
+	    </div>
 	  </div>
 	</div>
   
@@ -219,8 +224,12 @@
   
   
 		<div class="tempexec-head hidden" data-tab-section="tempexec">
-		  <div class="flow" id="tempexecFlowNav">
-		    <div class="flow-title">功能导航</div>
+		  <div class="flow top-nav" id="tempexecFlowNav" data-top-nav="tempexec">
+		    <div class="flow-head">
+		      <div class="flow-title">功能导航</div>
+		      <button class="flow-toggle" type="button" data-flow-toggle="tempexec" aria-expanded="true">收起</button>
+		    </div>
+		    <div class="flow-body">
 		    <p class="hint" style="margin:0 0 6px;">用例执行相关入口汇总于此，点击卡片快速打开。</p>
 	    <div class="nav-entry-grid">
 	      <button class="nav-entry-card nav-entry-import" id="openTempExecImportDrawerBtn" type="button">
@@ -276,9 +285,10 @@
 	          <span class="nav-entry-title">归档操作&进度预览</span>
 	          <span class="nav-entry-desc">预览进度并归档用例（可跳转归档详情）</span>
 	        </span>
-	      </button>
-	    </div>
-	  </div>
+      </button>
+		  </div>
+		  </div>
+		</div>
   <section class="card hidden temp-exec-toolbar-card" id="tempExecToolbarCard" data-tab-section="tempexec">
     <div class="card-body">
       <div class="temp-exec-toolbar" id="tempExecToolbar"></div>

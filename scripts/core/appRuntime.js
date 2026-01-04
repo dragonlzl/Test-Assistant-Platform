@@ -1417,6 +1417,7 @@
         : null;
       const layoutHandlersModule = window.app.layoutHandlers && typeof window.app.layoutHandlers.init === 'function'
         ? window.app.layoutHandlers.init({
+          state: state,
           updateFlowStatus: updateFlowStatus,
           scrollToSection: scrollToSection,
           switchTab: switchTab,

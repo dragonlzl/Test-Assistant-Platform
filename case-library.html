@@ -122,7 +122,7 @@
 <div class="tab-group">
 <button class="tab-group-btn" data-group="settings">设置</button>
 <div class="tab-submenu hidden" data-group-menu="settings">
-<button data-tab-btn="settings">其他配置</button>
+<button data-tab-btn="settings">通用设置</button>
 </div>
 </div>
 </nav>
@@ -195,8 +195,12 @@
 	
 	
   <div class="tempexec-head hidden" data-tab-section="case-library" id="caseLibraryHead">
-    <div class="flow" id="caseLibraryFlowNav">
-      <div class="flow-title">用例库导航</div>
+    <div class="flow top-nav" id="caseLibraryFlowNav" data-top-nav="case-library">
+      <div class="flow-head">
+        <div class="flow-title">用例库导航</div>
+        <button class="flow-toggle" type="button" data-flow-toggle="case-library" aria-expanded="true">收起</button>
+      </div>
+      <div class="flow-body">
       <p class="hint" style="margin:0 0 6px;">用例库相关入口汇总于此，点击卡片快速打开。</p>
       <div class="nav-entry-grid">
         <button class="nav-entry-card nav-entry-import" id="openCaseLibraryImportDrawerBtn" type="button">
@@ -256,11 +260,16 @@
           </span>
         </button>
       </div>
+      </div>
     </div>
   </div>
   <div class="tempexec-head hidden" data-tab-section="case-archive" id="caseArchiveHead">
-    <div class="flow" id="caseArchiveFlowNav">
-      <div class="flow-title">用例归档导航</div>
+    <div class="flow top-nav" id="caseArchiveFlowNav" data-top-nav="case-archive">
+      <div class="flow-head">
+        <div class="flow-title">用例归档导航</div>
+        <button class="flow-toggle" type="button" data-flow-toggle="case-archive" aria-expanded="true">收起</button>
+      </div>
+      <div class="flow-body">
       <p class="hint" style="margin:0 0 6px;">用于查看各项目/版本的归档用例记录，点击卡片快速打开。</p>
       <div class="nav-entry-grid">
         <button class="nav-entry-card nav-entry-view" id="openCaseArchiveDrawerBtn" type="button">
@@ -278,6 +287,7 @@
             <span class="nav-entry-desc">按项目/版本筛选并查看归档用例</span>
           </span>
         </button>
+      </div>
       </div>
     </div>
   </div>

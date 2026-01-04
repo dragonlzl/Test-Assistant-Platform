@@ -122,7 +122,7 @@
 <div class="tab-group">
 <button class="tab-group-btn" data-group="settings">设置</button>
 <div class="tab-submenu hidden" data-group-menu="settings">
-<button data-tab-btn="settings">其他配置</button>
+<button data-tab-btn="settings">通用设置</button>
 </div>
 </div>
 </nav>
@@ -256,8 +256,12 @@
 	  </div>
 	</div>
 	<div class="tempexec-head hidden" data-tab-section="exec-overview" id="execOverviewHead">
-	  <div class="flow" id="execOverviewFlowNav">
-	    <div class="flow-title">执行总览导航</div>
+	  <div class="flow top-nav" id="execOverviewFlowNav" data-top-nav="exec-overview">
+	    <div class="flow-head">
+	      <div class="flow-title">执行总览导航</div>
+	      <button class="flow-toggle" type="button" data-flow-toggle="exec-overview" aria-expanded="true">收起</button>
+	    </div>
+	    <div class="flow-body">
 	    <p class="hint" style="margin:0 0 6px;">按项目/版本查看各人员执行进度，点击卡片快速操作。</p>
 	    <div class="nav-entry-grid" id="execOverviewNavGrid">
 	      <div class="exec-overview-nav-projects" id="execOverviewNavProjects"></div>
@@ -274,11 +278,16 @@
 	        </span>
 	      </button>
 	    </div>
+	    </div>
 	  </div>
 	</div>
   <div class="tempexec-head hidden" data-tab-section="case-library" id="caseLibraryHead">
-    <div class="flow" id="caseLibraryFlowNav">
-      <div class="flow-title">用例库导航</div>
+    <div class="flow top-nav" id="caseLibraryFlowNav" data-top-nav="case-library">
+      <div class="flow-head">
+        <div class="flow-title">用例库导航</div>
+        <button class="flow-toggle" type="button" data-flow-toggle="case-library" aria-expanded="true">收起</button>
+      </div>
+      <div class="flow-body">
       <p class="hint" style="margin:0 0 6px;">用例库相关入口汇总于此，点击卡片快速打开。</p>
       <div class="nav-entry-grid">
         <button class="nav-entry-card nav-entry-import" id="openCaseLibraryImportDrawerBtn" type="button">
@@ -338,11 +347,16 @@
           </span>
         </button>
       </div>
+      </div>
     </div>
   </div>
   <div class="tempexec-head hidden" data-tab-section="case-archive" id="caseArchiveHead">
-    <div class="flow" id="caseArchiveFlowNav">
-      <div class="flow-title">用例归档导航</div>
+    <div class="flow top-nav" id="caseArchiveFlowNav" data-top-nav="case-archive">
+      <div class="flow-head">
+        <div class="flow-title">用例归档导航</div>
+        <button class="flow-toggle" type="button" data-flow-toggle="case-archive" aria-expanded="true">收起</button>
+      </div>
+      <div class="flow-body">
       <p class="hint" style="margin:0 0 6px;">用于查看各项目/版本的归档用例记录，点击卡片快速打开。</p>
       <div class="nav-entry-grid">
         <button class="nav-entry-card nav-entry-view" id="openCaseArchiveDrawerBtn" type="button">
@@ -360,6 +374,7 @@
             <span class="nav-entry-desc">按项目/版本筛选并查看归档用例</span>
           </span>
         </button>
+      </div>
       </div>
     </div>
   </div>
@@ -476,7 +491,7 @@
             </svg>
           </span>
           <span class="nav-entry-text">
-            <span class="nav-entry-title">其他设置</span>
+            <span class="nav-entry-title">通用设置</span>
             <span class="nav-entry-desc">主题/分页/页面说明等</span>
           </span>
         </button>
@@ -484,8 +499,12 @@
     </div>
   </div>
 		<div class="tempexec-head hidden" data-tab-section="tempexec">
-		  <div class="flow" id="tempexecFlowNav">
-		    <div class="flow-title">功能导航</div>
+		  <div class="flow top-nav" id="tempexecFlowNav" data-top-nav="tempexec">
+		    <div class="flow-head">
+		      <div class="flow-title">功能导航</div>
+		      <button class="flow-toggle" type="button" data-flow-toggle="tempexec" aria-expanded="true">收起</button>
+		    </div>
+		    <div class="flow-body">
 		    <p class="hint" style="margin:0 0 6px;">用例执行相关入口汇总于此，点击卡片快速打开。</p>
 	    <div class="nav-entry-grid">
 	      <button class="nav-entry-card nav-entry-import" id="openTempExecImportDrawerBtn" type="button">
@@ -541,9 +560,10 @@
 	          <span class="nav-entry-title">归档操作&进度预览</span>
 	          <span class="nav-entry-desc">预览进度并归档用例（可跳转归档详情）</span>
 	        </span>
-	      </button>
-	    </div>
-	  </div>
+      </button>
+		  </div>
+		  </div>
+		</div>
   <section class="card hidden temp-exec-toolbar-card" id="tempExecToolbarCard" data-tab-section="tempexec">
     <div class="card-body">
       <div class="temp-exec-toolbar" id="tempExecToolbar"></div>
@@ -574,7 +594,7 @@
 <li><strong>XMind 用例结构要求已并入“用例执行/用例库”的页面说明，请先阅读格式要求，这是用例执行的基础！</strong></li>
 <li>请先在<a data-jump="models" href="#">“模型管理”</a>中添加 <strong>DeepSeek-R1</strong>，并将 <code>Max Tokens</code> 设为 <strong>16,000</strong>。</li>
 <li>在<a data-jump="assign" href="#">“功能指派”</a>页将所有功能统一指派为上述模型，保持行为一致。</li>
-<li>如需自动通知，请前往<a data-jump="settings" href="#">“其他配置”</a>填写飞书 Webhook，建议使用群机器人同步执行结果。</li>
+<li>如需自动通知，请前往<a data-jump="settings" href="#">“通用设置”</a>填写飞书 Webhook，建议使用群机器人同步执行结果。</li>
 </ul>
 </div>
 <div class="notice-card highlight">
@@ -634,8 +654,8 @@
 <p>在指派页配置每个功能使用的提示词与模型，并可设定默认提示词；模型管理页用于录入不同供应商的接口地址、密钥与超时。</p>
 </article>
 <article class="help-card">
-<h3>其他配置 / 通知</h3>
-<p>在“其他配置”里填写飞书 Webhook 或其它偏好。一键执行流程完成或失败都会自动推送通知，方便团队成员第一时间了解结果。</p>
+<h3>通用设置 / 通知</h3>
+<p>在“通用设置”里填写飞书 Webhook 或其它偏好。一键执行流程完成或失败都会自动推送通知，方便团队成员第一时间了解结果。</p>
 </article>
 </div>
 </div>
@@ -1903,7 +1923,7 @@
 </div>
 </section>
 <section class="card hidden" data-tab-section="settings" data-settings-section="misc" id="settingsOtherSection">
-<h2>其他设置</h2>
+<h2>通用设置</h2>
 <div class="card-body">
 <div class="settings-inline">
 <div class="meta">

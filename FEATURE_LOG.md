@@ -19,6 +19,21 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例相关顶部导航收起/展开与智能收起
+- 功能描述：用例执行/用例库/用例归档/执行总览页顶部导航支持收起与展开，并提供滚轮智能收起设置；功能引导期间自动展开导航避免卡流程。
+- 操作方式：点击导航右侧“收起/展开”按钮切换；设置 → 通用设置 → 勾选“导航栏智能收起”后，向下滚动自动收起、滚动到顶部继续向上滚动自动展开。
+- 使用效果：导航可折叠为单行标题，刷新保持每个页面的展开状态；智能收起滚动体验更自然，引导时强制展开并保持。
+- 新增内容/接口/组件：
+  - 前端：顶部导航折叠结构与按钮（`case-exec.html`、`case-library.html`、`index.html`）。
+  - 前端：导航折叠与智能滚动逻辑（`scripts/handlers/layoutHandlers.js`）。
+  - 前端：通用设置新增智能收起选项（`settings.html`、`scripts/modules/settings.js`、`config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`）。
+  - 样式：导航折叠/按钮与暗色主题适配（`style.css`）。
+  - 测试：新增顶部导航折叠与智能收起 UI 用例（`tests/ui/top_nav_collapse.spec.js`）。
+- 复用说明：复用现有顶部导航结构与 settings 存取机制，无新增后端接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/top_nav_collapse.spec.js`
+- 更新记录：2026-01-04 用例相关顶部导航收起/展开与智能收起（`case-exec.html`、`case-library.html`、`index.html`、`settings.html`、`scripts/handlers/layoutHandlers.js`、`scripts/modules/settings.js`、`config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`、`style.css`、`tests/ui/top_nav_collapse.spec.js`）。
+
 - 功能名称：用例变更 diff 列表定位
 - 功能描述：执行页用例变更 diff 抽屉支持点击新增/改动/追加记录，定位到对应执行用例且保持抽屉打开。
 - 操作方式：执行页 → 用例变更 diff 抽屉 → 点击新增/改动/追加的变更行任意位置。

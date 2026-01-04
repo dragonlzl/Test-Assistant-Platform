@@ -51,6 +51,8 @@
     var pageGuideSettingsGrid = dom.pageGuideSettingsGrid || document.getElementById('pageGuideSettingsGrid');
     var pageGuideSettingsStatus = dom.pageGuideSettingsStatus || document.getElementById('pageGuideSettingsStatus');
     var pageGuideSelectAllInput = dom.pageGuideSelectAllInput || document.getElementById('pageGuideSelectAll');
+    var smartTopNavToggle = dom.smartTopNavToggle || document.getElementById('smartTopNavToggle');
+    var smartTopNavStatus = dom.smartTopNavStatus || document.getElementById('smartTopNavStatus');
     var themeSelect = dom.themeSelect || document.getElementById('themeSelect');
     var saveThemeSettingBtn = dom.saveThemeSettingBtn || document.getElementById('saveThemeSetting');
     var themeSettingStatus = dom.themeSettingStatus || document.getElementById('themeSettingStatus');
@@ -280,6 +282,11 @@
       } else {
         state.settings.caseViewFontSize = defaultCaseViewFontSize;
       }
+      if (state.settings.smartTopNavCollapse === undefined || state.settings.smartTopNavCollapse === null) {
+        state.settings.smartTopNavCollapse = defaultSettings.smartTopNavCollapse === true;
+      } else {
+        state.settings.smartTopNavCollapse = state.settings.smartTopNavCollapse === true;
+      }
       ensurePageGuideSwitches();
       ensureTempExecColumns();
       state.settings.theme = resolveTheme(state.settings.theme);
@@ -484,6 +491,11 @@
       } else {
         state.settings.caseViewFontSize = defaultCaseViewFontSize;
       }
+      if (state.settings.smartTopNavCollapse === undefined || state.settings.smartTopNavCollapse === null) {
+        state.settings.smartTopNavCollapse = defaultSettings.smartTopNavCollapse === true;
+      } else {
+        state.settings.smartTopNavCollapse = state.settings.smartTopNavCollapse === true;
+      }
       ensurePageGuideSwitches();
       ensureTempExecColumns();
       state.settings.theme = resolveTheme(state.settings.theme);
@@ -569,6 +581,10 @@
         if (!dirtyDrafts.theme) {
           themeSelect.value = resolveTheme(state.settings.theme);
         }
+      }
+      if (smartTopNavToggle) {
+        smartTopNavToggle.checked = state.settings.smartTopNavCollapse === true;
+        setStatus(smartTopNavStatus, '', '');
       }
       renderTempExecColumnSettings();
       renderPageGuideSettings();
@@ -1132,6 +1148,14 @@
       pageGuideSelectAllInput.indeterminate = !allChecked && anyChecked;
     }
 
+    function handleSmartTopNavChange(e) {
+      var target = e && e.target;
+      if (!target) return;
+      state.settings.smartTopNavCollapse = Boolean(target.checked);
+      persistSettings(['smartTopNavCollapse']);
+      setStatus(smartTopNavStatus, target.checked ? '导航栏智能收起已开启' : '导航栏智能收起已关闭', 'ok');
+    }
+
     function bindEvents() {
       if (saveModelTimeoutBtn) saveModelTimeoutBtn.addEventListener('click', saveTimeoutSetting);
       if (modelTimeoutInput) modelTimeoutInput.addEventListener('input', function() {
@@ -1168,6 +1192,7 @@
         setStatus(themeSettingStatus, '已选择' + getThemeLabel(next) + '，保存后生效', '');
       });
       if (pageGuideSettingsGrid) pageGuideSettingsGrid.addEventListener('change', handlePageGuideChange);
+      if (smartTopNavToggle) smartTopNavToggle.addEventListener('change', handleSmartTopNavChange);
       bindProjectSortEvents();
       if (settingsNavButtons && typeof settingsNavButtons.forEach === 'function') {
         settingsNavButtons.forEach(function(btn) {

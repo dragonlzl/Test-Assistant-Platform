@@ -21,10 +21,171 @@
     var tempexecFlowNav = dom.tempexecFlowNav || document.getElementById('tempexecFlowNav');
     var rootEl = document.documentElement;
     var tempexecNavTimer;
+    var topNavStorageKey = 'usecase-top-nav-collapse-v1';
+    var topNavState = {};
+    var topNavList = [];
+    var smartScrollDown = 0;
+    var smartScrollUp = 0;
+    var smartScrollThreshold = 60;
+    var lastGuideActive = false;
+    var state = ctx.state || {};
 
     function setCssVar(name, value) {
       if (!name || !rootEl || !rootEl.style) return;
       rootEl.style.setProperty(name, value);
+    }
+
+    function loadTopNavState() {
+      var stored = {};
+      try {
+        stored = JSON.parse(localStorage.getItem(topNavStorageKey) || '{}') || {};
+      } catch (err) {
+        stored = {};
+      }
+      topNavState = stored && typeof stored === 'object' ? stored : {};
+    }
+
+    function saveTopNavState() {
+      try {
+        localStorage.setItem(topNavStorageKey, JSON.stringify(topNavState || {}));
+      } catch (err) {
+        // ignore save errors
+      }
+    }
+
+    function getTopNavKey(nav) {
+      if (!nav || !nav.dataset) return '';
+      return nav.dataset.topNav || '';
+    }
+
+    function isNavCollapsed(nav) {
+      if (!nav || !nav.classList) return false;
+      return nav.classList.contains('is-collapsed');
+    }
+
+    function updateTopNavToggle(nav, collapsed) {
+      if (!nav) return;
+      var btn = nav.querySelector('[data-flow-toggle]');
+      if (!btn) return;
+      btn.textContent = collapsed ? '展开' : '收起';
+      btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }
+
+    function applyTopNavState(nav, collapsed, options) {
+      if (!nav || !nav.classList) return;
+      nav.classList.toggle('is-collapsed', collapsed);
+      updateTopNavToggle(nav, collapsed);
+      var key = getTopNavKey(nav);
+      if (options && options.persist && key) {
+        topNavState[key] = collapsed === true;
+        saveTopNavState();
+      }
+      if (key === 'tempexec') {
+        scheduleSyncTempexecNavHeight();
+        try {
+          window.dispatchEvent(new Event('resize'));
+        } catch (err) {
+          // ignore resize dispatch failures
+        }
+      }
+    }
+
+    function isTopNavVisible(nav) {
+      if (!nav || !nav.classList) return false;
+      if (nav.classList.contains('hidden')) return false;
+      var head = nav.closest ? nav.closest('.tempexec-head') : null;
+      if (head && head.classList && head.classList.contains('hidden')) return false;
+      return true;
+    }
+
+    function getActiveTopNav() {
+      for (var i = 0; i < topNavList.length; i += 1) {
+        var nav = topNavList[i];
+        if (isTopNavVisible(nav)) return nav;
+      }
+      return null;
+    }
+
+    function resetSmartScroll() {
+      smartScrollDown = 0;
+      smartScrollUp = 0;
+    }
+
+    function getScrollTop() {
+      if (typeof window === 'undefined') return 0;
+      if (typeof window.pageYOffset === 'number') return window.pageYOffset;
+      if (document.documentElement && typeof document.documentElement.scrollTop === 'number') {
+        return document.documentElement.scrollTop;
+      }
+      if (document.body && typeof document.body.scrollTop === 'number') return document.body.scrollTop;
+      return 0;
+    }
+
+    function isSmartTopNavEnabled() {
+      return state && state.settings && state.settings.smartTopNavCollapse === true;
+    }
+
+    function handleSmartTopNavWheel(e) {
+      if (!e) return;
+      if (!isSmartTopNavEnabled()) return;
+      var body = document.body;
+      if (body && body.classList) {
+        if (body.classList.contains('guide-active')) return;
+        if (body.classList.contains('drawer-open')) return;
+      }
+      if (e.ctrlKey) return;
+      var delta = Number(e.deltaY);
+      if (!Number.isFinite(delta) || delta === 0) return;
+      var nav = getActiveTopNav();
+      if (!nav) return;
+      if (delta > 0) {
+        smartScrollUp = 0;
+        if (!isNavCollapsed(nav)) {
+          smartScrollDown += delta;
+          if (smartScrollDown >= smartScrollThreshold) {
+            applyTopNavState(nav, true, { persist: true });
+            resetSmartScroll();
+          }
+        }
+        return;
+      }
+      smartScrollDown = 0;
+      if (!isNavCollapsed(nav)) return;
+      var top = getScrollTop();
+      if (!Number.isFinite(top)) top = 0;
+      var upDelta = Math.abs(delta);
+      var nearTop = top <= 1;
+      var reachTop = top <= upDelta + 4;
+      if (!nearTop && !reachTop) {
+        smartScrollUp = 0;
+        return;
+      }
+      smartScrollUp += upDelta;
+      if (smartScrollUp >= smartScrollThreshold) {
+        applyTopNavState(nav, false, { persist: true });
+        resetSmartScroll();
+      }
+    }
+
+    function expandTopNavForGuide() {
+      topNavList.forEach(function(nav) {
+        if (!nav || !nav.classList) return;
+        if (nav.classList.contains('is-collapsed')) {
+          applyTopNavState(nav, false, { persist: true });
+        }
+      });
+    }
+
+    function checkGuideActive() {
+      var body = document.body;
+      var active = Boolean(body && body.classList && body.classList.contains('guide-active'));
+      if (active && !lastGuideActive) {
+        lastGuideActive = true;
+        expandTopNavForGuide();
+        setTimeout(expandTopNavForGuide, 120);
+      } else if (!active && lastGuideActive) {
+        lastGuideActive = false;
+      }
     }
 
     function syncTempexecNavHeight() {
@@ -52,6 +213,39 @@
         }
       });
       tempexecObserver.observe(tempexecFlowNav, { attributes: true });
+    }
+
+    loadTopNavState();
+    topNavList = Array.prototype.slice.call(document.querySelectorAll('.flow[data-top-nav]') || []);
+    topNavList.forEach(function(nav) {
+      var key = getTopNavKey(nav);
+      var collapsed = key && topNavState && topNavState[key] === true;
+      applyTopNavState(nav, collapsed, { persist: false });
+      var toggle = nav.querySelector('[data-flow-toggle]');
+      if (toggle) {
+        toggle.addEventListener('click', function() {
+          var next = !isNavCollapsed(nav);
+          applyTopNavState(nav, next, { persist: true });
+          resetSmartScroll();
+        });
+      }
+    });
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('wheel', handleSmartTopNavWheel);
+    }
+    if (document.body && typeof MutationObserver !== 'undefined') {
+      var guideObserver = new MutationObserver(function(mutations) {
+        var changed = false;
+        mutations.forEach(function(mutation) {
+          if (mutation && mutation.type === 'attributes' && mutation.attributeName === 'class') {
+            changed = true;
+          }
+        });
+        if (changed) checkGuideActive();
+      });
+      guideObserver.observe(document.body, { attributes: true });
+      checkGuideActive();
     }
 
     document.querySelectorAll('section.card').forEach(function(card) {
@@ -92,6 +286,7 @@
         btn.addEventListener('click', function() {
           if (btn.dataset && btn.dataset.tabBtn) switchTab(btn.dataset.tabBtn);
           if (btn.dataset && btn.dataset.tabBtn === 'tempexec') scheduleSyncTempexecNavHeight();
+          resetSmartScroll();
         });
       });
     }

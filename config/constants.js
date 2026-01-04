@@ -60,6 +60,7 @@
       activeTabId: 'memo-tab-1',
       tabs: [{ id: 'memo-tab-1', name: '', items: [] }],
     },
+    smartTopNavCollapse: false,
     tempExecColumns: Object.assign({}, defaultTempExecColumns),
     pageGuideSwitches: Object.assign({}, defaultPageGuideSwitches),
   };
