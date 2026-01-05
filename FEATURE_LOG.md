@@ -19,6 +19,20 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行页归档确认抽屉化
+- 功能描述：执行页归档时当全部用例已执行通过，二次确认从浏览器弹窗改为应用确认抽屉。
+- 操作方式：在用例执行页选择已全部执行通过的用例集，点击“归档”。
+- 使用效果：归档提示以抽屉展示，确认后提交归档，取消不提交。
+- 新增内容/接口/组件：
+  - 前端：归档确认改为复用确认抽屉（`scripts/modules/tempexec.js`）。
+  - 测试：新增归档确认抽屉 UI 用例（`tests/ui/tempexec_archive_confirm_drawer.spec.js`）。
+  - 测试：归档流程用例补充确认抽屉覆盖（`tests/ui/tempexec_archive_stay_project.spec.js`）。
+- 复用说明：复用现有确认抽屉组件 `confirmDrawer`，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_archive_confirm_drawer.spec.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_archive_stay_project.spec.js`
+- 更新记录：2026-01-05 执行页归档二次确认改为抽屉式（`scripts/modules/tempexec.js`、`tests/ui/tempexec_archive_confirm_drawer.spec.js`、`tests/ui/tempexec_archive_stay_project.spec.js`）。
+
 - 功能名称：执行视图复用子项滚动自动收起
 - 功能描述：复用类型用例在执行视图展开复用子项后，滚动离开当前视口自动收起并保留占位，滚回视口时自动恢复展开。
 - 操作方式：执行视图点击用例“实际结果”按钮展开复用子项，向下/向上滚动页面离开当前用例区域。

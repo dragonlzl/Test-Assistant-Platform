@@ -33,6 +33,13 @@ async function openTempExecOverview(page) {
   await expect(page.locator('#tempExecOverviewDrawer')).toHaveClass(/open/);
 }
 
+async function confirmArchiveDrawer(page) {
+  const confirmDrawer = page.locator('#appConfirmDrawer');
+  await expect(confirmDrawer).toHaveClass(/open/);
+  await page.click('#appConfirmDrawerConfirmBtn');
+  await expect(confirmDrawer).not.toHaveClass(/open/);
+}
+
 test.describe('用例执行-归档后不自动切换项目', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -188,6 +195,7 @@ test.describe('用例执行-归档后不自动切换项目', () => {
 
     await openTempExecOverview(page);
     await page.click('[data-temp-overview-archive="1001"]');
+    await confirmArchiveDrawer(page);
 
     await expect.poll(
       () => page.evaluate(() => (window.app && window.app.state ? String(window.app.state.tempExecActiveId || '') : '')),
@@ -310,6 +318,7 @@ test.describe('用例执行-归档后不自动切换项目', () => {
       res.url().includes('/api/exec/sets/1001/archive') && res.status() === 200
     );
     await page.click('[data-temp-overview-archive="1001"]');
+    await confirmArchiveDrawer(page);
     await waitArchive;
     await expect(page.locator('#tempFocusBlock button[data-temp-file]')).toHaveCount(0, { timeout: 10000 });
     await expect(page.locator('#tempExecViewFocusBlock button[data-temp-file]')).toHaveCount(0, { timeout: 10000 });
@@ -450,6 +459,7 @@ test.describe('用例执行-归档后不自动切换项目', () => {
       return file && file._casesLoading === false;
     });
     await page.click('#tempExecToolbar [data-temp-file-archive]');
+    await confirmArchiveDrawer(page);
     await expect.poll(
       () => page.evaluate(() => (window.app && window.app.state ? String(window.app.state.tempExecActiveId || '') : '')),
       { timeout: 8000 }

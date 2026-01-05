@@ -671,6 +671,20 @@
       var payload = {};
       var resumeOverview = opts.resumeOverview !== false;
       var afterArchive = typeof opts.afterArchive === 'function' ? opts.afterArchive : null;
+      function submitTempExecArchive() {
+        if (tempExecStatus) setStatus(tempExecStatus, '归档中...', '');
+        client
+          .archiveExecSet(sid, payload)
+          .then(function() {
+            if (tempExecStatus) setStatus(tempExecStatus, '归档成功', 'ok');
+            showTempExecArchiveSuccessToast();
+            removeTempExecFocusAfterArchive(focusFileId);
+            finalizeTempExecArchive({ resumeOverview: resumeOverview, afterArchive: afterArchive });
+          })
+          .catch(function(err) {
+            if (tempExecStatus) setStatus(tempExecStatus, err && err.message ? err.message : '归档失败', 'err');
+          });
+      }
       if (needReason) {
         var hintText =
           '仍存在未通过用例（未执行 ' +
@@ -690,22 +704,30 @@
           afterArchive: afterArchive,
         });
         return;
-      } else if (counts.total > 0) {
-        var okPassed = window.confirm('用例已全部执行通过（或通过+不适用），归档后无法更改测试结果，是否确认归档？');
+      }
+      if (counts.total > 0) {
+        var confirmDrawer = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
+        var confirmMessage = '用例已全部执行通过（或通过+不适用），归档后无法更改测试结果，是否确认归档？';
+        if (confirmDrawer && typeof confirmDrawer.open === 'function') {
+          confirmDrawer.open({
+            title: '确认归档',
+            message: confirmMessage,
+            confirmText: '确认归档',
+            cancelText: '取消',
+            danger: true,
+          }).then(function(result) {
+            if (!result || !result.ok) return;
+            submitTempExecArchive();
+          });
+          return;
+        }
+        var okPassed = true;
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+          okPassed = window.confirm(confirmMessage);
+        }
         if (!okPassed) return;
       }
-      if (tempExecStatus) setStatus(tempExecStatus, '归档中...', '');
-      client
-        .archiveExecSet(sid, payload)
-        .then(function() {
-          if (tempExecStatus) setStatus(tempExecStatus, '归档成功', 'ok');
-          showTempExecArchiveSuccessToast();
-          removeTempExecFocusAfterArchive(focusFileId);
-          finalizeTempExecArchive({ resumeOverview: resumeOverview, afterArchive: afterArchive });
-        })
-        .catch(function(err) {
-          if (tempExecStatus) setStatus(tempExecStatus, err && err.message ? err.message : '归档失败', 'err');
-        });
+      submitTempExecArchive();
     }
 
     function submitTempExecArchiveReason() {
