@@ -20,16 +20,33 @@
 ```
 
 - 功能名称：执行视图复用子项滚动自动收起
-- 功能描述：复用类型用例在执行视图展开复用子项后，滚动离开当前视口自动收起。
+- 功能描述：复用类型用例在执行视图展开复用子项后，滚动离开当前视口自动收起并保留占位，滚回视口时自动恢复展开。
 - 操作方式：执行视图点击用例“实际结果”按钮展开复用子项，向下/向上滚动页面离开当前用例区域。
-- 使用效果：滚动离开当前界面时复用子项自动收起，执行视图更整洁。
+- 使用效果：滚动离开当前界面时复用子项自动收起但保留高度，滚回时自动展开，避免跳动与位置丢失。
 - 新增内容/接口/组件：
-  - 前端：执行视图滚动监听与复用面板自动收起（`scripts/modules/tempexec.js`）。
+  - 前端：执行视图滚动监听与复用面板自动收起/占位恢复（`scripts/modules/tempexec.js`）。
+  - 前端：复用子项占位行渲染（`scripts/core/tempexecCore.js`）。
+  - 样式：复用子项占位行样式（`style.css`）。
   - 测试：复用子项滚动自动收起 UI 用例（`tests/ui/tempexec_reuse_auto_collapse_on_scroll.spec.js`）。
 - 复用说明：复用现有复用面板渲染与 toggle 逻辑，无新增接口。
 - 测试与验证：
   - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_auto_collapse_on_scroll.spec.js`（通过）
 - 更新记录：2026-01-04 执行视图复用子项滚动自动收起（`scripts/modules/tempexec.js`、`tests/ui/tempexec_reuse_auto_collapse_on_scroll.spec.js`）。
+- 更新记录：2026-01-04 滚动自动收起加入最近离开缓冲，降低视图跳动（`scripts/modules/tempexec.js`、`tests/ui/tempexec_reuse_auto_collapse_on_scroll.spec.js`）。
+- 更新记录：2026-01-04 自动收起时补偿滚动位置，避免视口跳动（`scripts/modules/tempexec.js`）。
+- 更新记录：2026-01-04 自动收起改为立即生效，去掉缓冲等待（`scripts/modules/tempexec.js`、`tests/ui/tempexec_reuse_auto_collapse_on_scroll.spec.js`）。
+- 更新记录：2026-01-04 自动收起改为占位收起，保持行高避免跳动（`scripts/modules/tempexec.js`、`scripts/core/tempexecCore.js`、`style.css`）。
+- 更新记录：2026-01-04 占位滚回视口时自动展开复用子项（`scripts/modules/tempexec.js`、`scripts/core/tempexecCore.js`、`tests/ui/tempexec_reuse_auto_collapse_on_scroll.spec.js`）。
+- 更新记录：2026-01-04 占位靠近视口时提前展开，提升滚动回看响应速度（`scripts/modules/tempexec.js`）。
+- 更新记录：2026-01-04 预展开触发范围调整为 500px（`scripts/modules/tempexec.js`）。
+- 更新记录：2026-01-04 预展开触发范围调整为 1500px（`scripts/modules/tempexec.js`）。
+- 更新记录：2026-01-04 预展开改为向上滚动时触发，避免向下滚动立即回弹（`scripts/modules/tempexec.js`）。
+- 更新记录：2026-01-04 滚动监听改为 rAF 节流，滚轮持续滚动时也能刷新展开状态（`scripts/modules/tempexec.js`）。
+- 更新记录：2026-01-04 增加滚动停止检测，停在底部时也能触发展开（`scripts/modules/tempexec.js`）。
+- 更新记录：2026-01-04 追加滚轮监听，底部持续滚动也能更新展开逻辑（`scripts/modules/tempexec.js`）。
+- 更新记录：2026-01-04 顶部/底部越界滚动不触发展开/收起，避免临界刷新（`scripts/modules/tempexec.js`）。
+- 更新记录：2026-01-04 自动收起前同步 DOM 展开状态，防止状态漂移影响收起（`scripts/modules/tempexec.js`）。
+- 更新记录：2026-01-04 复用收起逻辑补充可触发入口，便于统一触发展开收起检查（`scripts/modules/tempexec.js`）。
 
 - 功能名称：用例库编辑页状态补充用例条数
 - 功能描述：在“查看&编辑”抽屉搜索用例文件后，状态文案补充当前筛选文件的用例条目总数。

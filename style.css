@@ -6041,6 +6041,12 @@ tr.import-invalid-locate-active td {
     .reuse-row.visible {
       display: table-row;
     }
+    .reuse-row.placeholder {
+      display: table-row;
+    }
+    .reuse-row.placeholder .reuse-placeholder {
+      width: 100%;
+    }
     .reuse-panel {
       padding: 12px;
       background: #fff;

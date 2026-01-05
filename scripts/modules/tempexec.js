@@ -1354,6 +1354,10 @@
     var tempFocusBlock = document.getElementById('tempFocusBlock');
     var tempFocusZone = tempFocusBlock ? tempFocusBlock.querySelector('[data-temp-focus-zone]') : null;
     var tempExecReuseAutoCollapseBound = false;
+    var tempExecReuseLastScrollTop = 0;
+    var tempExecReuseScrollDirection = 'down';
+    var tempExecReusePreopenMargin = 1500;
+    var tempExecReuseIdleToken = 0;
 
     function getTempExecViewportHeight() {
       if (typeof window !== 'undefined' && typeof window.innerHeight === 'number') return window.innerHeight;
@@ -1361,6 +1365,172 @@
         return document.documentElement.clientHeight;
       }
       return 0;
+    }
+
+    function getTempExecScrollTop() {
+      if (typeof window === 'undefined') return 0;
+      if (typeof window.scrollY === 'number') return window.scrollY;
+      if (document.documentElement && typeof document.documentElement.scrollTop === 'number') {
+        return document.documentElement.scrollTop;
+      }
+      return 0;
+    }
+
+    function getTempExecScrollMax() {
+      if (typeof document === 'undefined') return 0;
+      var doc = document.documentElement;
+      var body = document.body;
+      var scrollHeight = 0;
+      var candidates = [
+        doc && doc.scrollHeight ? doc.scrollHeight : 0,
+        doc && doc.offsetHeight ? doc.offsetHeight : 0,
+        doc && doc.clientHeight ? doc.clientHeight : 0,
+        body && body.scrollHeight ? body.scrollHeight : 0,
+        body && body.offsetHeight ? body.offsetHeight : 0,
+      ];
+      candidates.forEach(function(val) {
+        if (Number.isFinite(val) && val > scrollHeight) scrollHeight = val;
+      });
+      var max = scrollHeight - getTempExecViewportHeight();
+      if (!Number.isFinite(max) || max < 0) max = 0;
+      return max;
+    }
+
+    function isTempExecScrollAtBoundary(direction) {
+      var top = getTempExecScrollTop();
+      var max = getTempExecScrollMax();
+      var epsilon = 1;
+      if (direction === 'down') return top >= max - epsilon;
+      if (direction === 'up') return top <= epsilon;
+      return false;
+    }
+
+    function scheduleTempExecReuseIdleCheck() {
+      if (typeof window === 'undefined') return;
+      var schedule = typeof window.requestAnimationFrame === 'function'
+        ? window.requestAnimationFrame
+        : function(fn) { return setTimeout(fn, 16); };
+      tempExecReuseIdleToken += 1;
+      var token = tempExecReuseIdleToken;
+      var last = getTempExecScrollTop();
+      var stableFrames = 0;
+      var check = function() {
+        if (token !== tempExecReuseIdleToken) return;
+        var current = getTempExecScrollTop();
+        if (current !== last) {
+          last = current;
+          stableFrames = 0;
+        } else {
+          stableFrames += 1;
+          if (stableFrames >= 2) {
+            tempExecReuseScrollDirection = 'idle';
+            autoCollapseTempExecReusePanels();
+            return;
+          }
+        }
+        schedule(check);
+      };
+      schedule(check);
+    }
+
+    function ensureTempExecReusePlaceholders(fileId) {
+      if (!state.tempExecReusePlaceholders || typeof state.tempExecReusePlaceholders !== 'object') {
+        state.tempExecReusePlaceholders = {};
+      }
+      if (!fileId) return {};
+      if (!state.tempExecReusePlaceholders[fileId] || typeof state.tempExecReusePlaceholders[fileId] !== 'object') {
+        state.tempExecReusePlaceholders[fileId] = {};
+      }
+      return state.tempExecReusePlaceholders[fileId];
+    }
+
+    function ensureTempExecReusePanelHeights(fileId) {
+      if (!state.tempExecReusePanelHeights || typeof state.tempExecReusePanelHeights !== 'object') {
+        state.tempExecReusePanelHeights = {};
+      }
+      if (!fileId) return {};
+      if (!state.tempExecReusePanelHeights[fileId] || typeof state.tempExecReusePanelHeights[fileId] !== 'object') {
+        state.tempExecReusePanelHeights[fileId] = {};
+      }
+      return state.tempExecReusePanelHeights[fileId];
+    }
+
+    function clearTempExecReusePlaceholders(fileId, indexes) {
+      if (!state.tempExecReusePlaceholders || typeof state.tempExecReusePlaceholders !== 'object') return;
+      if (!fileId) return;
+      var map = state.tempExecReusePlaceholders[fileId];
+      if (!map || typeof map !== 'object') return;
+      var list = Array.isArray(indexes) ? indexes : [indexes];
+      list.forEach(function(idx) {
+        var key = String(idx);
+        if (map[key] !== undefined) delete map[key];
+      });
+    }
+
+    function recordTempExecReusePanelHeight(fileId, indexes) {
+      if (!tempExecView) return;
+      var map = ensureTempExecReusePanelHeights(fileId);
+      var list = Array.isArray(indexes) ? indexes : [indexes];
+      list.forEach(function(idx) {
+        var selector = '[data-temp-reuse-panel-container="' + String(fileId) + '"][data-index="' + String(idx) + '"]';
+        var panel = tempExecView.querySelector ? tempExecView.querySelector(selector) : null;
+        if (!panel) return;
+        var rect = panel.getBoundingClientRect ? panel.getBoundingClientRect() : null;
+        var height = rect && rect.height ? Math.round(rect.height) : 0;
+        if (!height && panel.offsetHeight) height = Math.round(panel.offsetHeight);
+        if (!height && panel.scrollHeight) height = Math.round(panel.scrollHeight);
+        if (height > 0) map[String(idx)] = height;
+      });
+    }
+
+    function scheduleTempExecReusePanelHeightRecord(fileId, indexes) {
+      recordTempExecReusePanelHeight(fileId, indexes);
+      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(function() {
+          recordTempExecReusePanelHeight(fileId, indexes);
+        });
+      }
+    }
+
+    var tempExecReusePlaceholderObserver = null;
+    function ensureTempExecReusePlaceholderObserver() {
+      if (tempExecReusePlaceholderObserver) return tempExecReusePlaceholderObserver;
+      if (typeof IntersectionObserver === 'undefined') return null;
+      tempExecReusePlaceholderObserver = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (!entry || !entry.isIntersecting) return;
+          if (tempExecReuseScrollDirection === 'down') return;
+          var target = entry.target;
+          if (!target || !target.getAttribute) return;
+          var fileId = target.getAttribute('data-temp-reuse-row') || '';
+          var rawIndex = target.getAttribute('data-index');
+          var idx = rawIndex !== null ? Number(rawIndex) : NaN;
+          if (!fileId || !Number.isFinite(idx)) return;
+          var placeholders = ensureTempExecReusePlaceholders(fileId);
+          if (!placeholders || placeholders[String(idx)] === undefined) return;
+          clearTempExecReusePlaceholders(fileId, idx);
+          if (api && typeof api.toggleTempExecReusePanel === 'function') {
+            api.toggleTempExecReusePanel(fileId, [idx]);
+            scheduleTempExecReusePanelHeightRecord(fileId, [idx]);
+          }
+          if (tempExecReusePlaceholderObserver) {
+            try { tempExecReusePlaceholderObserver.unobserve(target); } catch (_) {}
+          }
+        });
+      }, { root: null, rootMargin: tempExecReusePreopenMargin + 'px 0px', threshold: 0.01 });
+      return tempExecReusePlaceholderObserver;
+    }
+
+    function observeTempExecReusePlaceholders() {
+      if (!tempExecView || !tempExecView.querySelectorAll) return;
+      var observer = ensureTempExecReusePlaceholderObserver();
+      if (!observer) return;
+      var nodes = tempExecView.querySelectorAll('.reuse-row.placeholder');
+      nodes.forEach(function(node) {
+        if (!node || node._reuseObserved) return;
+        node._reuseObserved = true;
+        observer.observe(node);
+      });
     }
 
     function resolveTempExecReuseRowEl(fileId, index) {
@@ -1375,10 +1545,57 @@
       return panel;
     }
 
+    function resolveTempExecReuseRowContainer(fileId, index) {
+      if (!tempExecView || !tempExecView.querySelector) return null;
+      var selector = '[data-temp-reuse-row="' + String(fileId) + '"][data-index="' + String(index) + '"]';
+      return tempExecView.querySelector(selector);
+    }
+
+    function syncTempExecReuseOpenFromDom(fileId, openSet) {
+      if (!tempExecView || !tempExecView.querySelectorAll || !openSet) return;
+      var selector = '.reuse-row.visible[data-temp-reuse-row="' + String(fileId) + '"]';
+      var nodes = tempExecView.querySelectorAll(selector);
+      nodes.forEach(function(node) {
+        if (!node || !node.getAttribute) return;
+        var rawIndex = node.getAttribute('data-index');
+        var idx = rawIndex !== null ? Number(rawIndex) : NaN;
+        if (!Number.isFinite(idx)) return;
+        openSet.add(idx);
+      });
+    }
+
     function isTempExecReuseRowOutOfView(rowEl, viewportHeight) {
       if (!rowEl || !rowEl.getBoundingClientRect) return false;
       var rect = rowEl.getBoundingClientRect();
       return rect.bottom <= 0 || rect.top >= viewportHeight;
+    }
+
+    function isTempExecReuseRowInView(rowEl, viewportHeight) {
+      if (!rowEl || !rowEl.getBoundingClientRect) return false;
+      var rect = rowEl.getBoundingClientRect();
+      return rect.bottom > 0 && rect.top < viewportHeight;
+    }
+
+    function isTempExecReuseRowNearView(rowEl, viewportHeight, margin) {
+      if (!rowEl || !rowEl.getBoundingClientRect) return false;
+      var rect = rowEl.getBoundingClientRect();
+      var distance = Number(margin) || 0;
+      return rect.bottom > -distance && rect.top < viewportHeight + distance;
+    }
+
+    function closeTempExecReusePanels(fileId, indexes, openSet) {
+      if (!fileId || !indexes || !indexes.length || !api) return;
+      var setRef = openSet || (api.ensureTempExecReuseOpen ? api.ensureTempExecReuseOpen(fileId) : null);
+      if (setRef && setRef.delete) {
+        indexes.forEach(function(idx) {
+          setRef.delete(idx);
+        });
+      }
+      if (typeof api.renderTempExecView === 'function') {
+        api.renderTempExecView();
+      } else if (typeof api.toggleTempExecReusePanel === 'function') {
+        api.toggleTempExecReusePanel(fileId, indexes);
+      }
     }
 
     function autoCollapseTempExecReusePanels() {
@@ -1388,31 +1605,129 @@
       var fileId = state && state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
       if (!fileId) return;
       var openSet = api.ensureTempExecReuseOpen(fileId);
-      if (!openSet || !openSet.size) return;
+      if (!openSet) return;
+      syncTempExecReuseOpenFromDom(fileId, openSet);
       var viewportHeight = getTempExecViewportHeight();
       if (!viewportHeight) return;
-      var indexes = Array.from(openSet);
+      var scrollDir = tempExecReuseScrollDirection;
+      var placeholders = ensureTempExecReusePlaceholders(fileId);
+      var reuseHeights = ensureTempExecReusePanelHeights(fileId);
       var toClose = [];
-      for (var i = 0; i < indexes.length; i += 1) {
-        var idx = indexes[i];
-        var rowEl = resolveTempExecReuseRowEl(fileId, idx);
-        if (!rowEl) continue;
-        if (isTempExecReuseRowOutOfView(rowEl, viewportHeight)) {
+      if (openSet.size) {
+        var indexes = Array.from(openSet);
+        for (var i = 0; i < indexes.length; i += 1) {
+          var idx = indexes[i];
+          var rowEl = resolveTempExecReuseRowEl(fileId, idx);
+          if (!rowEl) continue;
+          if (!isTempExecReuseRowOutOfView(rowEl, viewportHeight)) continue;
+          var rect = rowEl.getBoundingClientRect ? rowEl.getBoundingClientRect() : null;
+          if (rect) {
+            var panelEl = rowEl.querySelector ? rowEl.querySelector('.reuse-panel') : null;
+            var panelRect = panelEl && panelEl.getBoundingClientRect ? panelEl.getBoundingClientRect() : null;
+            var panelHeight = panelRect && panelRect.height ? Math.round(panelRect.height) : 0;
+            if (!panelHeight && panelEl && panelEl.offsetHeight) panelHeight = Math.round(panelEl.offsetHeight);
+            if (!panelHeight && panelEl && panelEl.scrollHeight) panelHeight = Math.round(panelEl.scrollHeight);
+            if (!panelHeight && rowEl.offsetHeight) panelHeight = Math.round(rowEl.offsetHeight);
+            if (!panelHeight && rowEl.scrollHeight) panelHeight = Math.round(rowEl.scrollHeight);
+            if (!panelHeight && rect.height) panelHeight = Math.round(rect.height);
+            if (!panelHeight && reuseHeights[String(idx)]) panelHeight = Number(reuseHeights[String(idx)]) || 0;
+            if (panelHeight > 0) placeholders[String(idx)] = panelHeight;
+          }
           toClose.push(idx);
         }
       }
-      if (!toClose.length) return;
-      api.toggleTempExecReusePanel(fileId, toClose);
+      var toOpen = [];
+      var allowPreopen = scrollDir === 'up' || scrollDir === 'idle';
+      Object.keys(placeholders).forEach(function(key) {
+        var idx = Number(key);
+        if (!Number.isFinite(idx)) return;
+        if (openSet.has(idx)) return;
+        var rowEl = resolveTempExecReuseRowContainer(fileId, idx);
+        if (!rowEl) return;
+        if (allowPreopen) {
+          if (isTempExecReuseRowNearView(rowEl, viewportHeight, tempExecReusePreopenMargin)) {
+            toOpen.push(idx);
+          }
+        } else if (scrollDir !== 'down') {
+          if (isTempExecReuseRowInView(rowEl, viewportHeight)) {
+            toOpen.push(idx);
+          }
+        }
+      });
+      if (!toOpen.length && allowPreopen) {
+        Object.keys(placeholders).forEach(function(key) {
+          var idx = Number(key);
+          if (!Number.isFinite(idx)) return;
+          if (openSet.has(idx)) return;
+          var rowEl = resolveTempExecReuseRowContainer(fileId, idx);
+          if (!rowEl) return;
+          if (isTempExecReuseRowInView(rowEl, viewportHeight)) {
+            toOpen.push(idx);
+          }
+        });
+      }
+      if (toClose.length) {
+        state.tempExecPreserveScrollOnce = true;
+        closeTempExecReusePanels(fileId, toClose, openSet);
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(function() { observeTempExecReusePlaceholders(); });
+        } else {
+          observeTempExecReusePlaceholders();
+        }
+      }
+      if (toOpen.length) {
+        clearTempExecReusePlaceholders(fileId, toOpen);
+        state.tempExecPreserveScrollOnce = true;
+        api.toggleTempExecReusePanel(fileId, toOpen);
+        scheduleTempExecReusePanelHeightRecord(fileId, toOpen);
+      }
     }
 
     function bindTempExecReuseAutoCollapse() {
       if (tempExecReuseAutoCollapseBound) return;
       if (!tempExecView) return;
       tempExecReuseAutoCollapseBound = true;
-      var onScroll = debounce(function() {
-        autoCollapseTempExecReusePanels();
-      }, 160);
+      tempExecReuseLastScrollTop = getTempExecScrollTop();
+      var scrollScheduled = false;
+      var scheduleScrollUpdate = function() {
+        if (scrollScheduled) return;
+        scrollScheduled = true;
+        var run = function() {
+          scrollScheduled = false;
+          var currentScrollTop = getTempExecScrollTop();
+          if (currentScrollTop > tempExecReuseLastScrollTop) {
+            tempExecReuseScrollDirection = 'down';
+          } else if (currentScrollTop < tempExecReuseLastScrollTop) {
+            tempExecReuseScrollDirection = 'up';
+          }
+          tempExecReuseLastScrollTop = currentScrollTop;
+          autoCollapseTempExecReusePanels();
+          scheduleTempExecReuseIdleCheck();
+        };
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(run);
+        } else {
+          setTimeout(run, 0);
+        }
+      };
+      var onScroll = function() {
+        scheduleScrollUpdate();
+      };
+      var onWheel = function(e) {
+        if (e && typeof e.deltaY === 'number') {
+          if (e.deltaY > 0) {
+            if (isTempExecScrollAtBoundary('down')) return;
+            tempExecReuseScrollDirection = 'down';
+          } else if (e.deltaY < 0) {
+            if (isTempExecScrollAtBoundary('up')) return;
+            tempExecReuseScrollDirection = 'up';
+          }
+        }
+        scheduleScrollUpdate();
+        scheduleTempExecReuseIdleCheck();
+      };
       window.addEventListener('scroll', onScroll);
+      window.addEventListener('wheel', onWheel);
     }
 
     var apiClient = window.app && window.app.apiClient ? window.app.apiClient : null;
@@ -5002,7 +5317,9 @@
           if (!Number.isNaN(rIdx)) {
             var reuseSelection = api.ensureTempExecSelection(rFileId);
             var reuseTargets = reuseSelection.size ? Array.from(reuseSelection) : [rIdx];
+            clearTempExecReusePlaceholders(rFileId, reuseTargets);
             api.toggleTempExecReusePanel(rFileId, reuseTargets);
+            scheduleTempExecReusePanelHeightRecord(rFileId, reuseTargets);
           }
           return;
         }
@@ -5323,6 +5640,9 @@
     }
 
     bindTempExecReuseAutoCollapse();
+    if (api && typeof api === 'object' && typeof api.autoCollapseTempExecReusePanels !== 'function') {
+      api.autoCollapseTempExecReusePanels = autoCollapseTempExecReusePanels;
+    }
 
     if (exportTempExecConfigBtn && api.exportTempExecSnapshot) {
       exportTempExecConfigBtn.addEventListener('click', function() {

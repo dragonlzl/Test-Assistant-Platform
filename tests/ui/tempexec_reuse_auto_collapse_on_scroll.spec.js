@@ -12,8 +12,9 @@ test.describe('执行视图复用子项滚动自动收起', () => {
     await page.addInitScript(() => {
       try {
         localStorage.setItem('tap-auth-token', 'reuse-auto-collapse-token');
+        localStorage.setItem('tempexec-page-size', '200');
         const cases = [];
-        for (let i = 0; i < 40; i += 1) {
+        for (let i = 0; i < 120; i += 1) {
           cases.push({
             module: `模块${i + 1}`,
             title: `用例${i + 1}`,
@@ -68,18 +69,78 @@ test.describe('执行视图复用子项滚动自动收起', () => {
       if (window.app && typeof window.app.switchTab === 'function') {
         window.app.switchTab('tempexec');
       }
+      if (window.app && window.app.api && typeof window.app.api.applyTempExecPageSize === 'function') {
+        window.app.api.applyTempExecPageSize(200);
+      }
       if (window.scrollTo) window.scrollTo(0, 0);
     });
-
-    const reuseBtn = page.locator('[data-temp-reuse-panel="reuse-auto-collapse-file"][data-index="0"]');
-    await expect(reuseBtn).toBeVisible();
-    await reuseBtn.click();
+    await page.waitForSelector('[data-section-id="tempexec-view"]:not(.hidden)');
+    await page.evaluate(() => {
+      window.__scrollCount = 0;
+      window.addEventListener('scroll', () => { window.__scrollCount += 1; });
+    });
+    await page.evaluate(() => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.toggleTempExecReusePanel === 'function') {
+        window.app.tempExecApi.toggleTempExecReusePanel('reuse-auto-collapse-file', [0]);
+      }
+    });
+    const openSetSize = await page.evaluate(() => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.ensureTempExecReuseOpen === 'function') {
+        return window.app.tempExecApi.ensureTempExecReuseOpen('reuse-auto-collapse-file').size || 0;
+      }
+      return 0;
+    });
+    console.log('openSetSize', openSetSize);
     await expect(page.locator('.reuse-row.visible')).toHaveCount(1);
 
-    for (let i = 0; i < 6; i += 1) {
-      await page.mouse.wheel(0, 600);
+    for (let i = 0; i < 16; i += 1) {
+      await page.mouse.wheel(0, 700);
+      const scrollTop = await page.evaluate(() => {
+        if (typeof window === 'undefined') return 0;
+        return window.scrollY || document.documentElement.scrollTop || 0;
+      });
+      if (scrollTop > 2400) break;
     }
 
-    await expect(page.locator('.reuse-row.visible')).toHaveCount(0);
+    await page.evaluate(() => {
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new Event('scroll'));
+      }
+    });
+    await page.waitForTimeout(200);
+    const scrollCount = await page.evaluate(() => window.__scrollCount || 0);
+    console.log('scrollCount', scrollCount);
+    const sectionHidden = await page.evaluate(() => {
+      const section = document.querySelector('[data-section-id="tempexec-view"]');
+      return section ? section.classList.contains('hidden') : null;
+    });
+    console.log('sectionHidden', sectionHidden);
+    const placeholderState = await page.evaluate(() => {
+      if (!window.app || !window.app.state || !window.app.state.tempExecReusePlaceholders) return null;
+      return window.app.state.tempExecReusePlaceholders['reuse-auto-collapse-file'] || null;
+    });
+    console.log('placeholderState', placeholderState);
+    const rowState = await page.evaluate(() => {
+      const row = document.querySelector('[data-temp-reuse-row="reuse-auto-collapse-file"][data-index="0"]');
+      const panel = document.querySelector('[data-temp-reuse-panel-container="reuse-auto-collapse-file"][data-index="0"]');
+      const rect = row && row.getBoundingClientRect ? row.getBoundingClientRect() : null;
+      return {
+        rowClass: row ? row.className : '',
+        panelExists: Boolean(panel),
+        rect: rect ? { top: rect.top, bottom: rect.bottom } : null,
+      };
+    });
+    console.log('rowState', rowState);
+    await page.waitForSelector('.reuse-row.placeholder');
+
+    await page.evaluate(() => {
+      const placeholder = document.querySelector('.reuse-row.placeholder');
+      if (placeholder && placeholder.scrollIntoView) {
+        placeholder.scrollIntoView({ block: 'center' });
+      }
+    });
+    await page.waitForTimeout(500);
+    await expect(page.locator('.reuse-row.visible')).toHaveCount(1);
+    await expect(page.locator('.reuse-row.placeholder')).toHaveCount(0);
   });
 });

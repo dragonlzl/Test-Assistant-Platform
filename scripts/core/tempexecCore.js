@@ -7869,15 +7869,34 @@
             '</div>'
           )
           : '';
+        var placeholderHeight = 0;
+        if (!reuseOpen && state.tempExecReusePlaceholders && state.tempExecReusePlaceholders[file.id]) {
+          var placeholderRaw = state.tempExecReusePlaceholders[file.id][String(idx)];
+          var parsedHeight = Number(placeholderRaw);
+          if (Number.isFinite(parsedHeight) && parsedHeight > 0) placeholderHeight = Math.round(parsedHeight);
+        }
         var reuseRow = reuseEnabled
-          ? '<tr class="reuse-row ' + (reuseOpen ? 'visible' : '') + '">' +
-              '<td colspan="' + colCount + '">' +
-                '<div class="reuse-panel" data-temp-reuse-panel-container="' + file.id + '" data-index="' + idx + '">' +
-                  renderReuseEntries(file, item, idx) +
-                  reuseActions +
-                '</div>' +
-              '</td>' +
-            '</tr>'
+          ? (
+            reuseOpen
+              ? '<tr class="reuse-row visible" data-temp-reuse-row="' + escapeHtml(file.id) + '" data-index="' + idx + '">' +
+                  '<td colspan="' + colCount + '">' +
+                    '<div class="reuse-panel" data-temp-reuse-panel-container="' + file.id + '" data-index="' + idx + '">' +
+                      renderReuseEntries(file, item, idx) +
+                      reuseActions +
+                    '</div>' +
+                  '</td>' +
+                '</tr>'
+              : (placeholderHeight
+                ? '<tr class="reuse-row placeholder" data-temp-reuse-row="' + escapeHtml(file.id) + '" data-index="' + idx + '">' +
+                    '<td colspan="' + colCount + '">' +
+                      '<div class="reuse-placeholder" style="height:' + placeholderHeight + 'px;"></div>' +
+                    '</td>' +
+                  '</tr>'
+                : '<tr class="reuse-row" data-temp-reuse-row="' + escapeHtml(file.id) + '" data-index="' + idx + '">' +
+                    '<td colspan="' + colCount + '"></td>' +
+                  '</tr>'
+              )
+          )
           : '';
         var rowClass = 'case-row' + (isTempExecNewAdded(file.id, item) ? ' new-added' : '');
         return (
