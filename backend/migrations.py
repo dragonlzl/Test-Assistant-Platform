@@ -629,3 +629,28 @@ def apply_migrations(engine: Engine) -> None:
                             {"order_no": order_idx, "id": row[0]},
                         )
             _mark_applied(conn, 18)
+
+        # v19: exec_sets 增加归档恢复关联与重归档次数统计。
+        if not _is_applied(conn, 19):
+            if "exec_sets" in tables:
+                cols = set([c["name"] for c in insp.get_columns("exec_sets")])
+                if "restored_from_id" not in cols:
+                    conn.execute(text("ALTER TABLE exec_sets ADD COLUMN restored_from_id INTEGER"))
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_exec_sets_restored_from_id "
+                            "ON exec_sets(restored_from_id)"
+                        )
+                    )
+                if "rearchive_count" not in cols:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE exec_sets ADD COLUMN rearchive_count INTEGER NOT NULL DEFAULT 0"
+                        )
+                    )
+                    conn.execute(
+                        text(
+                            "UPDATE exec_sets SET rearchive_count = 0 WHERE rearchive_count IS NULL"
+                        )
+                    )
+            _mark_applied(conn, 19)

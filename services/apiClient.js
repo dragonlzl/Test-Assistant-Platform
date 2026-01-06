@@ -488,6 +488,14 @@
     }).then(handleResponse);
   }
 
+  function restoreExecArchive(execSetId) {
+    return fetch('/api/exec/archives/' + execSetId + '/restore', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify({}),
+    }).then(handleResponse);
+  }
+
   function syncExecSetCaseLibrary(execSetId) {
     return fetch('/api/exec/sets/' + execSetId + '/case-library-sync', {
       method: 'POST',
@@ -742,6 +750,7 @@
     listExecArchives: listExecArchives,
     getExecArchive: getExecArchive,
     deleteExecArchive: deleteExecArchive,
+    restoreExecArchive: restoreExecArchive,
     syncExecSetCaseLibrary: syncExecSetCaseLibrary,
     ackExecSetCaseLibraryDiff: ackExecSetCaseLibraryDiff,
     upsertExecSetFromCaseFile: upsertExecSetFromCaseFile,

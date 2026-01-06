@@ -19,6 +19,23 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：归档用例恢复与重归档
+- 功能描述：归档页新增“恢复”操作，管理员/组长可将归档用例恢复到执行页；归档列表展示重归档次数与当前状态，并限制重执状态下恢复/删除。
+- 操作方式：用例归档 → 查看归档 → 列表点击“恢复”并确认；非组长提示联系组长/管理员；重执状态不可恢复或删除；恢复后在执行页重新归档。
+- 使用效果：恢复后自动进入对应版本盒子（不存在则新建并提示），用例库变更在首次进入/刷新时按现有规则弹出 diff 并标记变更重跑；重归档覆盖旧归档数据并累计次数。
+- 新增内容/接口/组件：
+  - 后端：exec_sets 新增 `restored_from_id`/`rearchive_count`；新增 `POST /api/exec/archives/{id}/restore`；归档列表/详情返回 `archive_state`/`rearchive_count`；重归档合并归档数据并限制重执删除（`backend/models.py`、`backend/migrations.py`、`backend/routers/exec_routes.py`、`backend/schemas.py`）。
+  - 前端：归档列表新增“状态/重归档次数”列与恢复按钮、权限/提示逻辑（`index.html`、`scripts/modules/caseArchive.js`、`style.css`、`services/apiClient.js`）。
+  - 测试：UI `tests/ui/case_archive_restore.spec.js`；API `tests/api/exec_archive.spec.js`。
+- 复用说明：复用现有归档/用例库同步逻辑与确认抽屉，无新增执行页组件。
+- 测试与验证：
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_archive.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/case_archive_restore.spec.js`（通过）
+- 更新记录：2026-01-06 归档恢复/重归档功能登记。
+- 更新记录：2026-01-06 重归档恢复为覆盖原归档记录并更新字段；暗色主题下执行状态选择框适配（`backend/routers/exec_routes.py`、`style.css`、`tests/api/exec_archive.spec.js`）。
+- 更新记录：2026-01-06 恢复前检测执行页同名同版本用例，重复时阻止恢复并提示（`backend/routers/exec_routes.py`、`scripts/modules/caseArchive.js`、`tests/api/exec_archive.spec.js`、`tests/ui/case_archive_restore.spec.js`）。
+- 更新记录：2026-01-06 归档详情缺陷链接暗色主题背景适配（`style.css`）。
+
 - 功能名称：执行页归档确认抽屉化
 - 功能描述：执行页归档时当全部用例已执行通过，二次确认从浏览器弹窗改为应用确认抽屉。
 - 操作方式：在用例执行页选择已全部执行通过的用例集，点击“归档”。

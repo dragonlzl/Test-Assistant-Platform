@@ -253,4 +253,246 @@ test.describe('exec archive api', () => {
     const delProj = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
     expect(delProj.status()).toBe(200);
   });
+
+  test('restore archive creates rerun state and rearchive increments count', async () => {
+    const ctx = await request.newContext();
+    const adminToken = await login(ctx, adminUser, adminPass);
+    const adminHeaders = { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'archive-restore-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers: adminHeaders,
+      data: { name: projectName, description: 'exec archive restore' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers: adminHeaders,
+      data: { name: 'v-restore' },
+    });
+    expect(verRes.status()).toBe(201);
+    const versionId = (await verRes.json()).id;
+
+    const ownerName = 'archive-owner-' + Date.now();
+    const leaderName = 'archive-leader-' + Date.now();
+    const ownerRes = await ctx.post(`${apiBase}/api/users`, {
+      headers: adminHeaders,
+      data: { username: ownerName, role: 'user', level: 'member' },
+    });
+    expect(ownerRes.status()).toBe(201);
+    const ownerId = (await ownerRes.json()).id;
+    const leaderRes = await ctx.post(`${apiBase}/api/users`, {
+      headers: adminHeaders,
+      data: { username: leaderName, role: 'user', level: 'leader' },
+    });
+    expect(leaderRes.status()).toBe(201);
+    const leaderId = (await leaderRes.json()).id;
+
+    const assignOwnerRes = await ctx.post(`${apiBase}/api/users/assign-projects`, {
+      headers: adminHeaders,
+      data: { user_id: ownerId, project_ids: [projectId] },
+    });
+    expect(assignOwnerRes.status()).toBe(200);
+    const assignLeaderRes = await ctx.post(`${apiBase}/api/users/assign-projects`, {
+      headers: adminHeaders,
+      data: { user_id: leaderId, project_ids: [projectId] },
+    });
+    expect(assignLeaderRes.status()).toBe(200);
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers: adminHeaders,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '归档恢复用例.json',
+        source: 'apitest',
+        items: [
+          { module: '模块R', title: '用例R1', expected: 'ok' },
+          { module: '模块R', title: '用例R2', expected: 'ok' },
+        ],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFile = await importRes.json();
+
+    const ownerToken = await login(ctx, ownerName, '12345678');
+    const ownerHeaders = { Authorization: `Bearer ${ownerToken}`, 'Content-Type': 'application/json' };
+    const leaderToken = await login(ctx, leaderName, '12345678');
+    const leaderHeaders = { Authorization: `Bearer ${leaderToken}`, 'Content-Type': 'application/json' };
+
+    const upsertRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers: ownerHeaders,
+      data: { case_file_id: caseFile.id, mode: 'replace', prefer_result_source: 'db' },
+    });
+    expect(upsertRes.status()).toBe(200);
+    const execSet = await upsertRes.json();
+    const execSetId = execSet.id;
+
+    const archiveRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/archive`, {
+      headers: ownerHeaders,
+      data: { reason: '恢复测试归档' },
+    });
+    expect(archiveRes.status()).toBe(200);
+    const archivedRow = await archiveRes.json();
+    const archiveId = archivedRow.exec_set_id;
+
+    const restoreForbiddenRes = await ctx.post(`${apiBase}/api/exec/archives/${archiveId}/restore`, {
+      headers: ownerHeaders,
+    });
+    expect(restoreForbiddenRes.status()).toBe(403);
+
+    const restoreRes = await ctx.post(`${apiBase}/api/exec/archives/${archiveId}/restore`, {
+      headers: leaderHeaders,
+    });
+    expect(restoreRes.status()).toBe(200);
+    const restoreBody = await restoreRes.json();
+    const restoredExecSetId = restoreBody.restored_exec_set_id;
+    expect(restoreBody.version_box_existed).toBe(false);
+
+    const listRes = await ctx.get(`${apiBase}/api/exec/archives?project_id=${projectId}`, { headers: leaderHeaders });
+    expect(listRes.status()).toBe(200);
+    const listRows = await listRes.json();
+    const rerunRow = listRows.find((row) => row && row.exec_set_id === archiveId);
+    expect(rerunRow && rerunRow.archive_state).toBe('rerun');
+    expect(rerunRow && rerunRow.rearchive_count).toBe(0);
+
+    const deleteBlockedRes = await ctx.delete(`${apiBase}/api/exec/archives/${archiveId}`, { headers: adminHeaders });
+    expect(deleteBlockedRes.status()).toBe(400);
+
+    const listActiveRes = await ctx.get(`${apiBase}/api/exec/sets?project_id=${projectId}`, { headers: ownerHeaders });
+    expect(listActiveRes.status()).toBe(200);
+    const activeRows = await listActiveRes.json();
+    expect(activeRows.some((row) => row && row.id === restoredExecSetId)).toBeTruthy();
+
+    const rearchiveRes = await ctx.post(`${apiBase}/api/exec/sets/${restoredExecSetId}/archive`, {
+      headers: ownerHeaders,
+      data: { reason: '重归档覆盖' },
+    });
+    expect(rearchiveRes.status()).toBe(200);
+    const rearchivedRow = await rearchiveRes.json();
+    const rearchiveId = rearchivedRow.exec_set_id;
+    expect(rearchiveId).toBe(archiveId);
+    expect(rearchivedRow.rearchive_count).toBe(1);
+    expect(rearchivedRow.archive_state).toBe('archived');
+
+    const listAfterRes = await ctx.get(`${apiBase}/api/exec/archives?project_id=${projectId}`, { headers: leaderHeaders });
+    expect(listAfterRes.status()).toBe(200);
+    const afterRows = await listAfterRes.json();
+    const afterRow = afterRows.find((row) => row && row.exec_set_id === archiveId);
+    expect(afterRow && afterRow.rearchive_count).toBe(1);
+    expect(afterRow && afterRow.archive_state).toBe('archived');
+
+    const listActiveAfterRes = await ctx.get(`${apiBase}/api/exec/sets?project_id=${projectId}`, { headers: ownerHeaders });
+    expect(listActiveAfterRes.status()).toBe(200);
+    const activeAfter = await listActiveAfterRes.json();
+    expect(activeAfter.some((row) => row && row.id === restoredExecSetId)).toBeFalsy();
+  });
+
+  test('restore blocked when same active exec set exists', async () => {
+    const ctx = await request.newContext();
+    const adminToken = await login(ctx, adminUser, adminPass);
+    const adminHeaders = { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'archive-restore-dup-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers: adminHeaders,
+      data: { name: projectName, description: 'exec archive duplicate restore' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers: adminHeaders,
+      data: { name: 'v-dup' },
+    });
+    expect(verRes.status()).toBe(201);
+    const versionId = (await verRes.json()).id;
+
+    const ownerName = 'archive-owner-dup-' + Date.now();
+    const leaderName = 'archive-leader-dup-' + Date.now();
+    const ownerRes = await ctx.post(`${apiBase}/api/users`, {
+      headers: adminHeaders,
+      data: { username: ownerName, role: 'user', level: 'member' },
+    });
+    expect(ownerRes.status()).toBe(201);
+    const ownerId = (await ownerRes.json()).id;
+    const leaderRes = await ctx.post(`${apiBase}/api/users`, {
+      headers: adminHeaders,
+      data: { username: leaderName, role: 'user', level: 'leader' },
+    });
+    expect(leaderRes.status()).toBe(201);
+    const leaderId = (await leaderRes.json()).id;
+
+    const assignOwnerRes = await ctx.post(`${apiBase}/api/users/assign-projects`, {
+      headers: adminHeaders,
+      data: { user_id: ownerId, project_ids: [projectId] },
+    });
+    expect(assignOwnerRes.status()).toBe(200);
+    const assignLeaderRes = await ctx.post(`${apiBase}/api/users/assign-projects`, {
+      headers: adminHeaders,
+      data: { user_id: leaderId, project_ids: [projectId] },
+    });
+    expect(assignLeaderRes.status()).toBe(200);
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers: adminHeaders,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '归档恢复重名用例.json',
+        source: 'apitest',
+        items: [
+          { module: '模块D', title: '用例D1', expected: 'ok' },
+          { module: '模块D', title: '用例D2', expected: 'ok' },
+        ],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFile = await importRes.json();
+
+    const ownerToken = await login(ctx, ownerName, '12345678');
+    const ownerHeaders = { Authorization: `Bearer ${ownerToken}`, 'Content-Type': 'application/json' };
+    const leaderToken = await login(ctx, leaderName, '12345678');
+    const leaderHeaders = { Authorization: `Bearer ${leaderToken}`, 'Content-Type': 'application/json' };
+
+    const upsertRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers: ownerHeaders,
+      data: { case_file_id: caseFile.id, mode: 'replace', prefer_result_source: 'db' },
+    });
+    expect(upsertRes.status()).toBe(200);
+    const execSet = await upsertRes.json();
+    const execSetId = execSet.id;
+
+    const archiveRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/archive`, {
+      headers: ownerHeaders,
+      data: { reason: '归档后重名恢复' },
+    });
+    expect(archiveRes.status()).toBe(200);
+    const archivedRow = await archiveRes.json();
+    const archiveId = archivedRow.exec_set_id;
+
+    const upsertDupRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers: ownerHeaders,
+      data: { case_file_id: caseFile.id, mode: 'replace', prefer_result_source: 'db' },
+    });
+    expect(upsertDupRes.status()).toBe(200);
+
+    const restoreRes = await ctx.post(`${apiBase}/api/exec/archives/${archiveId}/restore`, {
+      headers: leaderHeaders,
+    });
+    expect(restoreRes.status()).toBe(400);
+    const restoreBody = await restoreRes.json();
+    expect(restoreBody && restoreBody.detail && restoreBody.detail.code).toBe('exec_set_duplicate');
+  });
 });

@@ -220,6 +220,7 @@ class ExecSetOut(BaseModel):
     reuse_presets: Optional[Any] = None
     case_count: Optional[int] = None
     status: str
+    restored_from_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
     case_file_base_updated_at: Optional[datetime] = None
@@ -396,6 +397,8 @@ class ExecArchiveListItemOut(BaseModel):
     name: str
     case_count: int = 0
     reuse_enabled: bool = False
+    rearchive_count: int = 0
+    archive_state: Optional[str] = None
     imported_by: Optional[int] = None
     imported_by_name: Optional[str] = None
     imported_at: datetime
@@ -407,6 +410,15 @@ class ExecArchiveListItemOut(BaseModel):
 
 class ExecArchiveDetailOut(ExecArchiveListItemOut):
     cases: List[ExecCaseOut] = []
+
+
+class ExecArchiveRestoreOut(BaseModel):
+    archive_exec_set_id: int
+    restored_exec_set_id: int
+    project_id: int
+    version_id: Optional[int] = None
+    version_name: Optional[str] = None
+    version_box_existed: bool = False
 
 
 class ExecImportCasePayload(BaseModel):

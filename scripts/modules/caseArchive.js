@@ -230,6 +230,55 @@
     return globalState && globalState.currentUser ? globalState.currentUser : null;
   }
 
+  function normalizeLevel(level) {
+    if (!level && level !== 0) return '';
+    var lower = String(level).toLowerCase();
+    if (lower === '组长') return 'leader';
+    if (lower === '组员') return 'member';
+    return lower;
+  }
+
+  function isAdminUser(user) {
+    return Boolean(user && String(user.role || '') === 'admin');
+  }
+
+  function isLeaderUser(user) {
+    var level = user && user.level ? user.level : '';
+    return normalizeLevel(level) === 'leader';
+  }
+
+  function showCenterToast(message, type, duration) {
+    if (utils && typeof utils.showCenterToast === 'function') {
+      utils.showCenterToast(message, type, duration);
+      return;
+    }
+    setStatus(dom.drawerStatus, message, type || '');
+  }
+
+  function normalizeArchiveState(value) {
+    var raw = value === null || value === undefined ? '' : String(value || '').trim().toLowerCase();
+    if (!raw) return 'archived';
+    if (raw === 'rerun' || raw === 'reexec' || raw === 're-run' || raw === '重执') return 'rerun';
+    if (raw === 'archived' || raw === '已归') return 'archived';
+    return raw;
+  }
+
+  function getArchiveRowState(row) {
+    if (!row || typeof row !== 'object') return 'archived';
+    return normalizeArchiveState(row.archive_state || row.archiveState || row.archive_status || row.archiveStatus);
+  }
+
+  function findArchiveRow(execSetId) {
+    var rows = Array.isArray(state.rows) ? state.rows : [];
+    var id = String(execSetId || '');
+    for (var i = 0; i < rows.length; i += 1) {
+      var row = rows[i];
+      if (!row) continue;
+      if (String(row.exec_set_id || row.execSetId || '') === id) return row;
+    }
+    return null;
+  }
+
   function normalizeTimeInput(input) {
     if (!input) return '';
     if (typeof input === 'number') return input;
@@ -606,7 +655,7 @@
     }
     if (dom.listEmpty) dom.listEmpty.classList.add('hidden');
     var user = state.currentUser || getCurrentUser();
-    var isAdmin = Boolean(user && String(user.role || '') === 'admin');
+    var isAdmin = isAdminUser(user);
     var pageSize = getPageSize();
     var total = rows.length;
     var totalPages = total ? Math.ceil(total / pageSize) : 1;
@@ -618,8 +667,14 @@
     setListPagination(buildListPagination(total, state.listPageIndex, totalPages, start, end));
     dom.listBody.innerHTML = view.map(function(row, idx) {
       var reuseText = row && row.reuse_enabled ? '复用' : '非复用';
+      var archiveState = getArchiveRowState(row);
+      var stateLabel = archiveState === 'rerun' ? '重执' : '已归';
+      var stateClass = archiveState === 'rerun' ? 'tag case-archive-rerun' : 'tag tag-archived';
+      var rearchiveCount = row && (row.rearchive_count || row.rearchiveCount);
+      if (rearchiveCount === undefined || rearchiveCount === null || rearchiveCount === '') rearchiveCount = 0;
       var ops = [
         '<button type="button" class="pill secondary tiny" data-case-archive-action="view" data-case-archive-id="' + escapeHtml(String(row.exec_set_id)) + '">查看</button>',
+        '<button type="button" class="pill secondary tiny" data-case-archive-action="restore" data-case-archive-id="' + escapeHtml(String(row.exec_set_id)) + '">恢复</button>',
       ];
       if (isAdmin) {
         ops.push('<button type="button" class="pill secondary tiny danger" data-case-archive-action="delete" data-case-archive-id="' + escapeHtml(String(row.exec_set_id)) + '">删除</button>');
@@ -631,6 +686,8 @@
           '<td>' + escapeHtml(row.version_name || '--') + '</td>' +
           '<td title="' + escapeHtml(row.name || '') + '">' + escapeHtml(row.name || '') + '</td>' +
           '<td>' + escapeHtml(String(row.case_count || 0)) + '</td>' +
+          '<td>' + escapeHtml(String(rearchiveCount || 0)) + '</td>' +
+          '<td><span class="' + escapeHtml(stateClass) + '">' + escapeHtml(stateLabel) + '</span></td>' +
           '<td>' + escapeHtml(reuseText) + '</td>' +
           '<td>' + escapeHtml(row.imported_by_name || '--') + '</td>' +
           '<td>' + escapeHtml(formatTime(row.imported_at || '')) + '</td>' +
@@ -856,6 +913,11 @@
     if (!api.deleteExecArchive) return;
     var sid = Number(execSetId);
     if (!Number.isFinite(sid) || sid <= 0) return;
+    var row = findArchiveRow(sid);
+    if (getArchiveRowState(row) === 'rerun') {
+      showCenterToast('重执状态下无法删除归档记录', 'warn', 3000);
+      return;
+    }
     var drawerRef = ensureDrawer();
     openConfirmDrawer({
       title: '确认删除归档',
@@ -874,6 +936,120 @@
         })
         .catch(function(err) {
           setStatus(dom.drawerStatus, err && err.message ? err.message : '删除失败', 'err');
+        });
+    });
+  }
+
+  function formatArchiveVersionLabel(row, resp) {
+    var versionName = (resp && resp.version_name) || (row && row.version_name) || '';
+    var projectName = (row && row.project_name) ? String(row.project_name) : '';
+    var versionLabel = versionName ? ('版本' + versionName) : '';
+    if (!versionLabel && (row && row.version_id)) {
+      versionLabel = '版本#' + String(row.version_id);
+    }
+    if (!versionLabel) versionLabel = '未指定版本';
+    if (projectName) {
+      return projectName + ' / ' + versionLabel;
+    }
+    return versionLabel;
+  }
+
+  function normalizeArchiveIdValue(value) {
+    if (value === null || value === undefined || value === '') return '';
+    return String(value);
+  }
+
+  function isSameArchiveExecSet(set, row) {
+    if (!set || !row) return false;
+    if (normalizeArchiveIdValue(set.project_id) !== normalizeArchiveIdValue(row.project_id)) return false;
+    if (normalizeArchiveIdValue(set.version_id) !== normalizeArchiveIdValue(row.version_id)) return false;
+    var setName = String(set.name || '').trim();
+    var rowName = String(row.name || '').trim();
+    if (!setName || !rowName) return false;
+    return setName === rowName;
+  }
+
+  function checkDuplicateActiveExecSet(row, options) {
+    var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+    if (!client || typeof client.listExecSets !== 'function') {
+      return Promise.resolve(false);
+    }
+    if (!row) return Promise.resolve(false);
+    var projectId = row && row.project_id !== null && row.project_id !== undefined ? row.project_id : null;
+    var opts = { status_filter: 'active' };
+    if (options && options.allUsers) opts.all_users = true;
+    return client
+      .listExecSets(projectId, opts)
+      .then(function(sets) {
+        var list = Array.isArray(sets) ? sets : [];
+        return list.some(function(set) { return isSameArchiveExecSet(set, row); });
+      })
+      .catch(function() { return false; });
+  }
+
+  function refreshTempExecAfterRestore() {
+    var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+    if (tempApi && typeof tempApi.loadTempExecState === 'function') {
+      tempApi.loadTempExecState();
+    }
+  }
+
+  function restoreArchive(execSetId) {
+    if (!api.restoreExecArchive) return;
+    var sid = Number(execSetId);
+    if (!Number.isFinite(sid) || sid <= 0) return;
+    var row = findArchiveRow(sid);
+    var archiveState = getArchiveRowState(row);
+    if (archiveState === 'rerun') {
+      showCenterToast('该归档用例处于重执状态，需重新归档后再恢复', 'warn', 3000);
+      return;
+    }
+    var user = state.currentUser || getCurrentUser();
+    if (!isAdminUser(user) && !isLeaderUser(user)) {
+      checkDuplicateActiveExecSet(row).then(function(hasDuplicate) {
+        if (hasDuplicate) {
+          showCenterToast('执行页面已有相同执行用例，无法恢复。如需恢复，请先解散或者归档当前执行的同名用例', 'warn', 5000);
+        } else {
+          showCenterToast('恢复请联系 组长 或 管理员！！', 'warn', 5000);
+        }
+      });
+      return;
+    }
+    var drawerRef = ensureDrawer();
+    openConfirmDrawer({
+      title: '确认恢复归档',
+      message: '确认恢复该归档用例到执行页吗？恢复后将保留归档前执行结果，并同步用例库变更。',
+      confirmText: '确认恢复',
+      cancelText: '取消',
+      previousDrawer: drawerRef,
+    }).then(function(res) {
+      if (!res || res.ok !== true) return;
+      setStatus(dom.drawerStatus, '恢复中...', '');
+      api
+        .restoreExecArchive(sid)
+        .then(function(resp) {
+          setStatus(dom.drawerStatus, '已恢复', 'ok');
+          var label = formatArchiveVersionLabel(row, resp);
+          if (resp && resp.version_box_existed) {
+            showCenterToast('已恢复到版本盒子：' + label, 'ok', 3000);
+          } else {
+            showCenterToast('已恢复并新建版本盒子：' + label, 'ok', 3000);
+          }
+          return loadArchives().then(function() {
+            refreshTempExecAfterRestore();
+          });
+        })
+        .catch(function(err) {
+          var payload = err && err.payload && err.payload.detail ? err.payload.detail : null;
+          if (payload && payload.code === 'exec_set_duplicate') {
+            showCenterToast(
+              '该人员在执行页面已有相同执行用例。如需恢复，请先解散或者归档当前执行的同名用例。',
+              'warn',
+              5000
+            );
+          }
+          var msg = err && err.message ? err.message : '恢复失败';
+          setStatus(dom.drawerStatus, msg, 'err');
         });
     });
   }
@@ -931,6 +1107,10 @@
           if (e && typeof e.preventDefault === 'function') e.preventDefault();
           if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
           openDetail(id);
+        } else if (action === 'restore') {
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+          restoreArchive(id);
         } else if (action === 'delete') {
           if (e && typeof e.preventDefault === 'function') e.preventDefault();
           if (e && typeof e.stopPropagation === 'function') e.stopPropagation();

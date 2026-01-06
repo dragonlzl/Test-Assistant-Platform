@@ -5031,10 +5031,112 @@
       return text;
     }
 
+    // 兼容历史 exec_case 字段：恢复归档时补齐执行结果/备注/缺陷链接。
+    function normalizeExecCaseStatus(item) {
+      var rawStatus = item && item.status !== null && item.status !== undefined ? String(item.status) : '';
+      var status = normalizeExecStatus(rawStatus);
+      if (status && status !== '未执行') return status;
+      var actualText = item && item.actual_result !== null && item.actual_result !== undefined ? String(item.actual_result) : '';
+      actualText = actualText.trim();
+      if (!actualText) return status || '未执行';
+      if (actualText === 'pending') return '未执行';
+      if (actualText === '变更重跑' || actualText === '有改动') return actualText;
+      if (tempExecResultOptions.indexOf(actualText) !== -1) return actualText;
+      return status || '未执行';
+    }
+
+    function normalizeExecCaseRemark(item) {
+      var remark = item && item.remark !== null && item.remark !== undefined ? String(item.remark) : '';
+      if (remark && remark.trim()) return remark;
+      var actualText = item && item.actual_result !== null && item.actual_result !== undefined ? String(item.actual_result) : '';
+      actualText = actualText.trim();
+      if (!actualText) return remark;
+      if (actualText === 'pending') return remark;
+      if (actualText === '变更重跑' || actualText === '有改动') return remark;
+      if (tempExecResultOptions.indexOf(actualText) !== -1) return remark;
+      return actualText;
+    }
+
+    function normalizeExecReuseDetails(raw) {
+      if (!raw) return [];
+      if (Array.isArray(raw)) return raw;
+      if (typeof raw === 'string') {
+        try {
+          var parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (err) {
+          return [];
+        }
+      }
+      return [];
+    }
+
+    function isBlankDefectText(text) {
+      if (text === null || text === undefined) return true;
+      var raw = String(text);
+      if (!raw.trim()) return true;
+      var lower = raw.trim().toLowerCase();
+      return lower === 'null' || lower === 'undefined';
+    }
+
+    function extractDefectLinksFromRaw(raw) {
+      var list = [];
+      if (raw === null || raw === undefined) return list;
+      if (Array.isArray(raw)) {
+        raw.forEach(function(entry) {
+          list = list.concat(extractDefectLinksFromRaw(entry));
+        });
+        return list;
+      }
+      if (typeof raw === 'object') {
+        var url = raw.url || raw.value || '';
+        if (!isBlankDefectText(url)) {
+          list.push({ id: raw.id ? String(raw.id) : generateDefectLinkId(), url: String(url).trim() });
+        }
+        return list;
+      }
+      var text = String(raw);
+      if (isBlankDefectText(text)) return list;
+      var trimmed = text.trim();
+      if (trimmed[0] === '[' || trimmed[0] === '{') {
+        try {
+          var parsed = JSON.parse(trimmed);
+          return extractDefectLinksFromRaw(parsed);
+        } catch (err) {
+          // ignore and fallback to split
+        }
+      }
+      trimmed = trimmed.replace(/\r\n/g, '\n');
+      var parts = trimmed.split(/[\s\n,;，；]+/);
+      parts.forEach(function(part) {
+        if (isBlankDefectText(part)) return;
+        list.push({ id: generateDefectLinkId(), url: String(part).trim() });
+      });
+      return list;
+    }
+
+    function normalizeDefectLinksFromExecCase(item) {
+      var merged = [];
+      if (item) {
+        merged = merged.concat(extractDefectLinksFromRaw(item.defect_links));
+        merged = merged.concat(extractDefectLinksFromRaw(item.defect_link));
+      }
+      if (!merged.length) return [];
+      var seen = {};
+      var out = [];
+      merged.forEach(function(entry) {
+        if (!entry || !entry.url) return;
+        var url = String(entry.url).trim();
+        if (!url || seen[url]) return;
+        seen[url] = true;
+        out.push({ id: entry.id ? String(entry.id) : generateDefectLinkId(), url: url });
+      });
+      return out;
+    }
+
     function mapExecCaseToTempCase(item) {
       if (!item) return null;
       var reuse = item.reuse_details;
-      var defects = item.defect_links;
       return {
         id: item.id,
         execCaseId: item.id,
@@ -5045,10 +5147,10 @@
         preconditions: item.precondition || '',
         steps: item.steps || '',
         expected: item.expected || '',
-        actual: normalizeExecStatus(item.status),
-        remark: item.remark || '',
-        reuseDetails: Array.isArray(reuse) ? reuse : [],
-        defectLinks: Array.isArray(defects) ? defects : [],
+        actual: normalizeExecCaseStatus(item),
+        remark: normalizeExecCaseRemark(item),
+        reuseDetails: normalizeExecReuseDetails(reuse),
+        defectLinks: normalizeDefectLinksFromExecCase(item),
       };
     }
 
@@ -5202,6 +5304,15 @@
         list = list.slice().sort(function(a, b) {
           return parseDbTimeMs(b && b.updated_at) - parseDbTimeMs(a && a.updated_at);
         });
+        var restoredArchiveIdSet = new Set();
+        list.forEach(function(s) {
+          if (!s) return;
+          var rid = s.restored_from_id !== null && s.restored_from_id !== undefined
+            ? s.restored_from_id
+            : (s.restoredFromId !== null && s.restoredFromId !== undefined ? s.restoredFromId : null);
+          if (rid === null || rid === undefined) return;
+          restoredArchiveIdSet.add(String(rid));
+        });
         var archivedSets = [];
         try {
           archivedSets = await client.listExecSets(null, { status_filter: 'archived' });
@@ -5253,6 +5364,13 @@
           var exact = pid + '::' + vid;
           var all = pid + '::';
           return !hiddenSet.has(exact) && !hiddenSet.has(all);
+        });
+      }
+      if (restoredArchiveIdSet.size) {
+        archivedList = archivedList.filter(function(s) {
+          var sid = s && s.id !== null && s.id !== undefined ? String(s.id) : '';
+          if (!sid) return false;
+          return !restoredArchiveIdSet.has(sid);
         });
       }
       // 归档记录可能非常多：个人总览仅展示最近 N 份，完整列表请到“用例归档”理解。
@@ -5339,6 +5457,9 @@
           resolvedCaseCount = Number(meta.item_count);
         }
         if (!Number.isFinite(resolvedCaseCount) || resolvedCaseCount < 0) resolvedCaseCount = 0;
+        var restoredFromId = set && set.restored_from_id !== null && set.restored_from_id !== undefined
+          ? String(set.restored_from_id)
+          : (set && set.restoredFromId !== null && set.restoredFromId !== undefined ? String(set.restoredFromId) : '');
         return {
           id: String(set.id),
           execSetId: set.id,
@@ -5349,6 +5470,7 @@
           caseCount: resolvedCaseCount,
           scope: 'current',
           status: String(set.status || 'active'),
+          restoredFromId: restoredFromId,
           requirement: normalizeRequirementName(set.requirement) || '',
           reuseEnabled: Boolean(set.reuse_enabled),
           createdAt: createdAt,
@@ -7211,18 +7333,30 @@
 	      var idx = state.tempExecFiles.findIndex(function(item) { return item.id === fileId; });
 	      if (idx === -1) return;
 	      var targetFile = state.tempExecFiles[idx];
+	      var restoredFromId = targetFile && targetFile.restoredFromId ? String(targetFile.restoredFromId) : '';
 	      var execSetId = targetFile && (targetFile.execSetId || targetFile.id) ? String(targetFile.execSetId || targetFile.id) : '';
 	      if (execSetId) clearTempExecCaseLibraryDiffMeta(execSetId, { render: true });
 	      if (isDbMode()) {
 	        var client = getApiClient();
 	        var execSetIdNum = targetFile && (targetFile.execSetId || Number(targetFile.id));
 	        if (client && execSetIdNum && typeof client.deleteExecSet === 'function') {
-	          client.deleteExecSet(execSetIdNum).catch(function(err) {
-	            if (tempExecStatus) {
-	              var msg = err && err.message ? err.message : '执行集删除失败，刷新后可能会再次出现';
-	              setStatus(tempExecStatus, msg, 'warn');
-	            }
-	          });
+	          var deletePromise = client.deleteExecSet(execSetIdNum);
+	          if (deletePromise && typeof deletePromise.then === 'function') {
+	            deletePromise.then(function() {
+	              if (restoredFromId && typeof loadTempExecState === 'function') {
+	                loadTempExecState();
+	              }
+	            }).catch(function(err) {
+	              if (tempExecStatus) {
+	                var msg = err && err.message ? err.message : '执行集删除失败，刷新后可能会再次出现';
+	                setStatus(tempExecStatus, msg, 'warn');
+	              }
+	            });
+	          } else if (restoredFromId && typeof loadTempExecState === 'function') {
+	            loadTempExecState();
+	          }
+	        } else if (restoredFromId && typeof loadTempExecState === 'function') {
+	          loadTempExecState();
 	        }
 	      }
 	      removeTempExecFromVersion(fileId, { silent: true });
@@ -7346,15 +7480,21 @@
       var originalActiveId = String(state.tempExecActiveId || '');
       var removedActive = removeSet.has(originalActiveId);
       var placement = ensureTempExecPlacement();
+      var needsReload = false;
+      var deletePromises = [];
       list.forEach(function(id) {
         var idx = state.tempExecFiles.findIndex(function(item) { return item && String(item.id) === String(id); });
         if (idx === -1) return;
         var targetFile = state.tempExecFiles[idx];
+        if (targetFile && targetFile.restoredFromId) needsReload = true;
 	        if (isDbMode()) {
 	          var client = getApiClient();
 	          var execSetId = targetFile && (targetFile.execSetId || Number(targetFile.id));
 	          if (client && execSetId && typeof client.deleteExecSet === 'function') {
-	            client.deleteExecSet(execSetId).catch(function() {});
+	            var deletePromise = client.deleteExecSet(execSetId);
+	            if (deletePromise && typeof deletePromise.then === 'function') {
+	              deletePromises.push(deletePromise);
+	            }
 	          }
 	        }
 	        removeTempExecFromVersion(String(id), { silent: true });
@@ -7389,6 +7529,14 @@
       setTempExecActive(nextId);
       renderTempVersionGrid();
       renderTempExecView();
+      if (needsReload && deletePromises.length && typeof Promise !== 'undefined') {
+        Promise.all(deletePromises.map(function(p) { return p.catch(function() { return null; }); }))
+          .then(function() {
+            if (typeof loadTempExecState === 'function') loadTempExecState();
+          });
+      } else if (needsReload && typeof loadTempExecState === 'function') {
+        loadTempExecState();
+      }
       if (tempExecStatus && !(opts && opts.silentStatus)) {
         setStatus(tempExecStatus, '已移除 ' + list.length + ' 份用例', 'ok');
       }

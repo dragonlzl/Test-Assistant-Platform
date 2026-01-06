@@ -209,6 +209,10 @@ class ExecSet(Base):
     archived_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     archived_at = Column(DateTime(timezone=True), nullable=True)
     archived_reason = Column(Text, nullable=True)
+    # 归档恢复来源（仅对恢复后的执行集生效）。
+    restored_from_id = Column(Integer, nullable=True)
+    # 归档重执后重新归档次数。
+    rearchive_count = Column(Integer, nullable=False, default=0)
     case_file_base_updated_at = Column(DateTime(timezone=True), nullable=True)
     case_file_last_synced_at = Column(DateTime(timezone=True), nullable=True)
     case_file_last_diff_at = Column(DateTime(timezone=True), nullable=True)

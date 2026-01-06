@@ -86,6 +86,7 @@
 - `GET /api/exec/sets`（需登录）  
   - Query：`project_id?`、`status_filter?=active|archived|all`（默认 `active`）、`all_users?=1`（仅管理员）  
   - 说明：默认仅返回“当前用户”的执行集；普通用户仅可见自己创建的执行集；`status_filter=active` 用于执行页展示。
+  - 返回字段补充：`restored_from_id`（若为归档恢复后的执行集，则指向归档 exec_set_id）。
 
 ### 7.2 归档
 - `POST /api/exec/sets/{exec_set_id}/archive`（需登录；仅 owner 或管理员）  
@@ -97,10 +98,16 @@
 - `GET /api/exec/archives`（需登录）  
   - Query：`project_id?`、`version_id?`、`q?`（用例名关键字）、`limit?`、`offset?`  
   - 权限：管理员可看全部项目；普通用户仅可看自己所属项目下的归档记录（跨成员可读）。  
+  - 返回字段补充：`rearchive_count`（重归档次数）、`archive_state`（`archived`/`rerun`）。
 
 - `GET /api/exec/archives/{exec_set_id}`（需登录）  
-  - 出参：归档元信息 + `cases`（完整执行用例列表，含实际结果/备注/缺陷链接/复用子项等）。
+  - 出参：归档元信息 + `cases`（完整执行用例列表，含实际结果/备注/缺陷链接/复用子项等），并包含 `rearchive_count`、`archive_state`。
 
 ### 7.4 删除归档（管理员）
 - `DELETE /api/exec/archives/{exec_set_id}`（仅管理员）  
   - 说明：物理删除归档记录（级联删除该执行集及其执行用例/历史），不可撤回。
+
+### 7.5 归档恢复（管理员/组长）
+- `POST /api/exec/archives/{exec_set_id}/restore`（管理员/组长）  
+  - 出参：`{ archive_exec_set_id, restored_exec_set_id, project_id, version_id?, version_name?, version_box_existed }`  
+  - 说明：恢复归档用例为“执行中”状态，版本盒子存在则直接归入，不存在则新建；重执状态下不可再次恢复。
