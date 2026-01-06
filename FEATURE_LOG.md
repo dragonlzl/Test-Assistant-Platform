@@ -2003,6 +2003,12 @@
 - 测试与验证：`node --check scripts/modules/caseLibrary.js`（通过）；`npm run test:ui -- tests/ui/case_library.spec.js`（通过）；`npm run test:ui -- tests/ui/case_library_batch_add.spec.js`（通过）。  
 - 更新记录：2025-12-18 执行页归档交互优化：当仍存在未通过用例时，不再单独弹出“是否需要归档”的二次确认提示，改为直接进入“填写归档原因”抽屉并展示未通过统计（`scripts/modules/tempexec.js`、`tests/ui/case_archive.spec.js`）。  
 - 测试与验证：`node --check scripts/modules/tempexec.js`（通过）；`npm run test:ui -- tests/ui/case_archive.spec.js`（通过）。  
+- 测试与验证：`npm run test:ui -- tests/ui/case_archive.spec.js -g "暗色主题"`（通过）。  
+- 更新记录：2026-01-06 归档详情复用子项暗色主题背景适配（`style.css`、`tests/ui/case_archive.spec.js`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/case_archive.spec.js -g "暗色主题"`（通过）。  
+- 更新记录：2026-01-06 归档详情复用子项备注对齐执行布局并禁用光标（`style.css`、`tests/ui/case_archive.spec.js`）。  
+- 测试与验证：`npm run test:ui -- tests/ui/case_archive.spec.js -g "暗色主题"`（通过）。  
+- 更新记录：2026-01-06 归档详情复用子项尺寸对齐执行输入（`style.css`、`tests/ui/case_archive.spec.js`）。  
 
 - 功能名称：用例生成页面分区（通用操作区 / 入库操作区 / 模块区）  
 - 功能描述：用例生成页面按从上到下分为“通用操作区、入库操作区、模块区”，避免导出/跳转/入库按钮混杂在同一行；通用操作区放置“导出全部用例TXT、导出全部勾选用例XMind、前往测试模块拆分”；入库操作区放置“新用例入库、旧用例追加入库、入库后动作选择”。当选择“入库并转到执行”时，入库确认后会弹出“选择执行版本”抽屉并继续转到执行页（复用既有逻辑）。  

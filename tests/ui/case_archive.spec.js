@@ -286,7 +286,7 @@ test.describe('用例归档（个人总览归档 + 归档页查看）', () => {
     await expect(page.locator('#caseArchiveDetailTitle')).toContainText('用例1');
   });
 
-  test('归档详情：复用用例的“实际结果”可展开子项（只读）', async ({ page }) => {
+  test('归档详情：暗色主题复用用例的“实际结果”可展开子项（只读）', async ({ page }) => {
     const token = 'token-case-archive-ui-reuse';
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
     const project = { id: 1, name: '项目A', description: '' };
@@ -320,6 +320,13 @@ test.describe('用例归档（个人总览归档 + 归档页查看）', () => {
         updated_at: iso(now - 4000),
       },
     ];
+    const settings = [{
+      id: 1,
+      scope: 'user',
+      owner_id: user.id,
+      key: 'theme',
+      value_json: 'dark',
+    }];
 
     await page.addInitScript((tk) => {
       try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
@@ -340,7 +347,7 @@ test.describe('用例归档（个人总览归档 + 归档页查看）', () => {
       }
       if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
       if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
-      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, settings);
       if (pathName === '/api/models' && method === 'GET') return respond(200, []);
       if (pathName === '/api/features' && method === 'GET') return respond(200, []);
 
@@ -388,6 +395,7 @@ test.describe('用例归档（个人总览归档 + 归档页查看）', () => {
     });
 
     await gotoIndex(page);
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
 
     await page.click('[data-group="cases"]');
     await page.click('[data-tab-btn="case-archive"]');
@@ -410,6 +418,52 @@ test.describe('用例归档（个人总览归档 + 归档页查看）', () => {
     await expect(page.locator('[data-case-archive-reuse-row="9101"]')).toContainText('通过');
     await expect(page.locator('[data-case-archive-reuse-row="9101"]')).toContainText('子项2');
     await expect(page.locator('[data-case-archive-reuse-row="9101"]')).toContainText('失败');
+    const reuseEntryDisplay = await page.$eval('[data-case-archive-reuse-row="9101"] .reuse-entry', (el) => {
+      return getComputedStyle(el).display;
+    });
+    expect(reuseEntryDisplay).toBe('grid');
+    const reuseEntryColumns = await page.$eval('[data-case-archive-reuse-row="9101"] .reuse-entry', (el) => {
+      var raw = getComputedStyle(el).gridTemplateColumns || '';
+      return raw.trim().split(/\s+/).filter(Boolean);
+    });
+    expect(reuseEntryColumns.length).toBeGreaterThanOrEqual(7);
+    const reuseSizes = await page.evaluate(() => {
+      var entry = document.querySelector('[data-case-archive-reuse-row="9101"] .reuse-entry');
+      if (!entry) return null;
+      var input = entry.querySelector('.reuse-input');
+      var note = entry.querySelector('.reuse-note');
+      if (!input || !note) return null;
+      var inputRect = input.getBoundingClientRect();
+      var noteRect = note.getBoundingClientRect();
+      return {
+        inputHeight: inputRect.height,
+        noteHeight: noteRect.height,
+        noteWidth: noteRect.width,
+      };
+    });
+    expect(reuseSizes).not.toBeNull();
+    expect(Math.abs(reuseSizes.noteHeight - reuseSizes.inputHeight)).toBeLessThan(1.5);
+    const columnTwo = parseFloat(reuseEntryColumns[1]) || 0;
+    if (columnTwo) expect(reuseSizes.noteWidth).toBeLessThanOrEqual(columnTwo);
+    const panelColor = await page.evaluate(() => {
+      var root = document.documentElement;
+      var raw = getComputedStyle(root).getPropertyValue('--panel').trim();
+      var temp = document.createElement('div');
+      temp.style.backgroundColor = raw;
+      document.body.appendChild(temp);
+      var resolved = getComputedStyle(temp).backgroundColor;
+      temp.remove();
+      return resolved;
+    });
+    const reuseInputBg = await page.$eval('[data-case-archive-reuse-row="9101"] .reuse-input', (el) => {
+      return getComputedStyle(el).backgroundColor;
+    });
+    expect(reuseInputBg).toBe(panelColor);
+    await page.click('[data-case-archive-reuse-row="9101"] .reuse-note');
+    const reuseNoteCursor = await page.$eval('[data-case-archive-reuse-row="9101"] .reuse-note', (el) => {
+      return getComputedStyle(el).cursor;
+    });
+    expect(reuseNoteCursor).not.toBe('text');
 
     // 备注/缺陷链接也可展开（只读）
     await page.click('[data-case-archive-remark-toggle="9101"]');

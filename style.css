@@ -1918,16 +1918,39 @@ body {
     .case-archive-cases-view .reuse-entry.readonly .reuse-note {
       user-select: text;
       cursor: default;
+      caret-color: transparent;
+    }
+    .case-archive-cases-view .reuse-entry.readonly {
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr) 182px 91px 78px 78px 40px;
+      align-items: center;
+      --reuse-status-shift: 0px;
     }
     .case-archive-cases-view .reuse-entry.readonly .reuse-input {
-      background: #fff;
+      grid-column: 1;
+      width: 100%;
+      min-height: 34px;
+      background: var(--panel, #fff);
+    }
+    .case-archive-cases-view .reuse-entry.readonly .reuse-note {
+      grid-column: 2;
+      width: calc(100% - 1em + var(--reuse-status-shift, 0px));
+      flex: 0 0 auto;
+      max-width: none;
+      margin-right: 0;
+      min-height: 34px;
     }
     .case-archive-cases-view .reuse-entry.readonly .status-select {
+      grid-column: 3;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       cursor: default;
       user-select: text;
+      width: 91px;
+      min-width: 91px;
+      margin-right: 0;
+      justify-self: start;
     }
     .case-archive-cases-view .defect-entry.readonly .defect-url {
       flex: 2 1 360px;
