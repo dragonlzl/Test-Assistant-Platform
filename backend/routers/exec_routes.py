@@ -3515,6 +3515,21 @@ def restore_exec_archive(
     if not owner_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="归档记录无归属人员")
     archived_name = str(exec_set.name or "").strip()
+    if archived_name:
+        exists_in_library = (
+            db.query(models.CaseFile.id)
+            .filter(models.CaseFile.project_id == exec_set.project_id)
+            .filter(func.trim(models.CaseFile.file_name_clean) == archived_name)
+            .first()
+        )
+        if not exists_in_library:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "detail": "该用例已从用例库中删除，无法进行恢复！！！",
+                    "code": "case_deleted",
+                },
+            )
     duplicate_query = (
         db.query(models.ExecSet)
         .filter(models.ExecSet.status == "active")
@@ -3551,9 +3566,8 @@ def restore_exec_archive(
     base_updated_at = (
         exec_set.case_file_last_synced_at
         or exec_set.case_file_base_updated_at
-        or exec_set.archived_at
-        or exec_set.updated_at
         or exec_set.created_at
+        or exec_set.updated_at
         or now
     )
     new_exec_set = models.ExecSet(

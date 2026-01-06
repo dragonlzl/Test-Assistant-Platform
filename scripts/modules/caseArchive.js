@@ -987,6 +987,31 @@
       .catch(function() { return false; });
   }
 
+  function checkCaseFileDeleted(row) {
+    var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+    if (!client || typeof client.listCaseFiles !== 'function') {
+      return Promise.resolve(false);
+    }
+    if (!row) return Promise.resolve(false);
+    var projectId = row && row.project_id !== null && row.project_id !== undefined ? row.project_id : null;
+    if (projectId === null || projectId === undefined || projectId === '') return Promise.resolve(false);
+    var targetName = String(row.name || '').trim();
+    if (!targetName) return Promise.resolve(false);
+    return client
+      .listCaseFiles(projectId)
+      .then(function(files) {
+        var list = Array.isArray(files) ? files : [];
+        var exists = list.some(function(file) {
+          var name = file && file.file_name_clean ? String(file.file_name_clean || '').trim() : '';
+          return name && name === targetName;
+        });
+        return !exists;
+      })
+      .catch(function() {
+        return false;
+      });
+  }
+
   function refreshTempExecAfterRestore() {
     var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
     if (tempApi && typeof tempApi.loadTempExecState === 'function') {
@@ -1005,52 +1030,60 @@
       return;
     }
     var user = state.currentUser || getCurrentUser();
-    if (!isAdminUser(user) && !isLeaderUser(user)) {
-      checkDuplicateActiveExecSet(row).then(function(hasDuplicate) {
-        if (hasDuplicate) {
-          showCenterToast('执行页面已有相同执行用例，无法恢复。如需恢复，请先解散或者归档当前执行的同名用例', 'warn', 5000);
-        } else {
-          showCenterToast('恢复请联系 组长 或 管理员！！', 'warn', 5000);
-        }
-      });
-      return;
-    }
-    var drawerRef = ensureDrawer();
-    openConfirmDrawer({
-      title: '确认恢复归档',
-      message: '确认恢复该归档用例到执行页吗？恢复后将保留归档前执行结果，并同步用例库变更。',
-      confirmText: '确认恢复',
-      cancelText: '取消',
-      previousDrawer: drawerRef,
-    }).then(function(res) {
-      if (!res || res.ok !== true) return;
-      setStatus(dom.drawerStatus, '恢复中...', '');
-      api
-        .restoreExecArchive(sid)
-        .then(function(resp) {
-          setStatus(dom.drawerStatus, '已恢复', 'ok');
-          var label = formatArchiveVersionLabel(row, resp);
-          if (resp && resp.version_box_existed) {
-            showCenterToast('已恢复到版本盒子：' + label, 'ok', 3000);
+    checkCaseFileDeleted(row).then(function(deleted) {
+      if (deleted) {
+        showCenterToast('该用例已从用例库中删除，无法进行恢复！！！', 'warn', 5000);
+        return;
+      }
+      if (!isAdminUser(user) && !isLeaderUser(user)) {
+        checkDuplicateActiveExecSet(row).then(function(hasDuplicate) {
+          if (hasDuplicate) {
+            showCenterToast('执行页面已有相同执行用例，无法恢复。如需恢复，请先解散或者归档当前执行的同名用例', 'warn', 5000);
           } else {
-            showCenterToast('已恢复并新建版本盒子：' + label, 'ok', 3000);
+            showCenterToast('恢复请联系 组长 或 管理员！！', 'warn', 5000);
           }
-          return loadArchives().then(function() {
-            refreshTempExecAfterRestore();
-          });
-        })
-        .catch(function(err) {
-          var payload = err && err.payload && err.payload.detail ? err.payload.detail : null;
-          if (payload && payload.code === 'exec_set_duplicate') {
-            showCenterToast(
-              '该人员在执行页面已有相同执行用例。如需恢复，请先解散或者归档当前执行的同名用例。',
-              'warn',
-              5000
-            );
-          }
-          var msg = err && err.message ? err.message : '恢复失败';
-          setStatus(dom.drawerStatus, msg, 'err');
         });
+        return;
+      }
+      var drawerRef = ensureDrawer();
+      openConfirmDrawer({
+        title: '确认恢复归档',
+        message: '确认恢复该归档用例到执行页吗？恢复后将保留归档前执行结果，并同步用例库变更。',
+        confirmText: '确认恢复',
+        cancelText: '取消',
+        previousDrawer: drawerRef,
+      }).then(function(res) {
+        if (!res || res.ok !== true) return;
+        setStatus(dom.drawerStatus, '恢复中...', '');
+        api
+          .restoreExecArchive(sid)
+          .then(function(resp) {
+            setStatus(dom.drawerStatus, '已恢复', 'ok');
+            var label = formatArchiveVersionLabel(row, resp);
+            if (resp && resp.version_box_existed) {
+              showCenterToast('已恢复到版本盒子：' + label, 'ok', 3000);
+            } else {
+              showCenterToast('已恢复并新建版本盒子：' + label, 'ok', 3000);
+            }
+            return loadArchives().then(function() {
+              refreshTempExecAfterRestore();
+            });
+          })
+          .catch(function(err) {
+            var payload = err && err.payload && err.payload.detail ? err.payload.detail : null;
+            if (payload && payload.code === 'exec_set_duplicate') {
+              showCenterToast(
+                '该人员在执行页面已有相同执行用例。如需恢复，请先解散或者归档当前执行的同名用例。',
+                'warn',
+                5000
+              );
+            } else if (payload && payload.code === 'case_deleted') {
+              showCenterToast('该用例已从用例库中删除，无法进行恢复！！！', 'warn', 5000);
+            }
+            var msg = err && err.message ? err.message : '恢复失败';
+            setStatus(dom.drawerStatus, msg, 'err');
+          });
+      });
     });
   }
 

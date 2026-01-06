@@ -35,6 +35,8 @@
 - 更新记录：2026-01-06 重归档恢复为覆盖原归档记录并更新字段；暗色主题下执行状态选择框适配（`backend/routers/exec_routes.py`、`style.css`、`tests/api/exec_archive.spec.js`）。
 - 更新记录：2026-01-06 恢复前检测执行页同名同版本用例，重复时阻止恢复并提示（`backend/routers/exec_routes.py`、`scripts/modules/caseArchive.js`、`tests/api/exec_archive.spec.js`、`tests/ui/case_archive_restore.spec.js`）。
 - 更新记录：2026-01-06 归档详情缺陷链接暗色主题背景适配（`style.css`）。
+- 更新记录：2026-01-06 归档恢复时检测用例库已删除并提示不可恢复（`backend/routers/exec_routes.py`、`scripts/modules/caseArchive.js`、`tests/api/exec_archive.spec.js`、`tests/ui/case_archive_restore.spec.js`）。
+- 更新记录：2026-01-06 归档恢复后用例库变更强制触发 diff 弹窗与删除记录保留展示（`backend/routers/exec_routes.py`、`scripts/core/tempexecCore.js`）。
 
 - 功能名称：执行页归档确认抽屉化
 - 功能描述：执行页归档时当全部用例已执行通过，二次确认从浏览器弹窗改为应用确认抽屉。

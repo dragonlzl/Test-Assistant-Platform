@@ -47,6 +47,9 @@ test.describe('归档恢复按钮', () => {
       if (pathName === '/api/users/me' && method === 'GET') return respond(200, user);
       if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
       if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') {
+        return respond(200, [{ id: 501, project_id: project.id, version_id: versions[0].id, file_name_clean: '用例归档A' }]);
+      }
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
       if (pathName === '/api/models' && method === 'GET') return respond(200, []);
       if (pathName === '/api/features' && method === 'GET') return respond(200, []);
@@ -113,6 +116,9 @@ test.describe('归档恢复按钮', () => {
       if (pathName === '/api/users/me' && method === 'GET') return respond(200, user);
       if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
       if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') {
+        return respond(200, [{ id: 502, project_id: project.id, version_id: versions[0].id, file_name_clean: '用例归档B' }]);
+      }
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
       if (pathName === '/api/models' && method === 'GET') return respond(200, []);
       if (pathName === '/api/features' && method === 'GET') return respond(200, []);
@@ -189,6 +195,9 @@ test.describe('归档恢复按钮', () => {
       if (pathName === '/api/users/me' && method === 'GET') return respond(200, user);
       if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
       if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') {
+        return respond(200, [{ id: 503, project_id: project.id, version_id: versions[0].id, file_name_clean: '用例归档C' }]);
+      }
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
       if (pathName === '/api/models' && method === 'GET') return respond(200, []);
       if (pathName === '/api/features' && method === 'GET') return respond(200, []);
@@ -271,6 +280,9 @@ test.describe('归档恢复按钮', () => {
       if (pathName === '/api/users/me' && method === 'GET') return respond(200, user);
       if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
       if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') {
+        return respond(200, [{ id: 504, project_id: project.id, version_id: versions[0].id, file_name_clean: '用例归档D' }]);
+      }
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
       if (pathName === '/api/models' && method === 'GET') return respond(200, []);
       if (pathName === '/api/features' && method === 'GET') return respond(200, []);
@@ -313,5 +325,67 @@ test.describe('归档恢复按钮', () => {
     await expect(drawer).toHaveClass(/open/);
     await page.click('#appConfirmDrawerConfirmBtn');
     await expect(page.locator('.temp-center-toast')).toContainText('该人员在执行页面已有相同执行用例。如需恢复，请先解散或者归档当前执行的同名用例。', { timeout: 3000 });
+  });
+
+  test('组长恢复遇到用例库删除提示', async ({ page }) => {
+    const token = 'token-archive-restore-leader-deleted';
+    const user = { id: 5, username: 'leader_deleted', role: 'user', level: 'leader' };
+    const project = { id: 5, name: '项目E', description: '' };
+    const versions = [{ id: 51, name: 'v5' }];
+    const execSetId = 505;
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') return respond(200, user);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/exec/archives' && method === 'GET') {
+        return respond(200, [{
+          exec_set_id: execSetId,
+          project_id: project.id,
+          project_name: project.name,
+          version_id: versions[0].id,
+          version_name: versions[0].name,
+          name: '用例归档E',
+          case_count: 1,
+          reuse_enabled: false,
+          rearchive_count: 0,
+          archive_state: 'archived',
+          imported_by: 88,
+          imported_by_name: 'member_owner',
+          imported_at: new Date().toISOString(),
+          archived_by: 88,
+          archived_by_name: 'member_owner',
+          archived_at: new Date().toISOString(),
+          archived_reason: '',
+        }]);
+      }
+      if (pathName === `/api/exec/archives/${execSetId}/restore` && method === 'POST') {
+        return respond(400, { detail: { code: 'case_deleted', detail: '已删除' } });
+      }
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await openArchiveDrawer(page);
+
+    await page.waitForSelector('[data-case-archive-action="restore"]');
+    await page.click('[data-case-archive-action="restore"]');
+    await expect(page.locator('.temp-center-toast')).toContainText('该用例已从用例库中删除，无法进行恢复！！！', { timeout: 3000 });
   });
 });

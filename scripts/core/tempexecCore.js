@@ -4350,6 +4350,8 @@
       if (!idSet) return rows;
       return rows.filter(function(row) {
         var entry = row && row.entry ? row.entry : null;
+        var kind = normalizeDiffKind(entry && entry.kind ? entry.kind : '');
+        if (kind === 'deleted') return true;
         var caseItemId = normalizeCaseLibDiffItemId(entry);
         if (!caseItemId) return true;
         return idSet.has(caseItemId);

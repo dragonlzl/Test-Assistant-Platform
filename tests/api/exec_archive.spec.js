@@ -495,4 +495,100 @@ test.describe('exec archive api', () => {
     const restoreBody = await restoreRes.json();
     expect(restoreBody && restoreBody.detail && restoreBody.detail.code).toBe('exec_set_duplicate');
   });
+
+  test('restore blocked when case file deleted from library', async () => {
+    const ctx = await request.newContext();
+    const adminToken = await login(ctx, adminUser, adminPass);
+    const adminHeaders = { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'archive-restore-deleted-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers: adminHeaders,
+      data: { name: projectName, description: 'exec archive deleted restore' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers: adminHeaders,
+      data: { name: 'v-del' },
+    });
+    expect(verRes.status()).toBe(201);
+    const versionId = (await verRes.json()).id;
+
+    const ownerName = 'archive-owner-del-' + Date.now();
+    const leaderName = 'archive-leader-del-' + Date.now();
+    const ownerRes = await ctx.post(`${apiBase}/api/users`, {
+      headers: adminHeaders,
+      data: { username: ownerName, role: 'user', level: 'member' },
+    });
+    expect(ownerRes.status()).toBe(201);
+    const ownerId = (await ownerRes.json()).id;
+    const leaderRes = await ctx.post(`${apiBase}/api/users`, {
+      headers: adminHeaders,
+      data: { username: leaderName, role: 'user', level: 'leader' },
+    });
+    expect(leaderRes.status()).toBe(201);
+    const leaderId = (await leaderRes.json()).id;
+
+    const assignOwnerRes = await ctx.post(`${apiBase}/api/users/assign-projects`, {
+      headers: adminHeaders,
+      data: { user_id: ownerId, project_ids: [projectId] },
+    });
+    expect(assignOwnerRes.status()).toBe(200);
+    const assignLeaderRes = await ctx.post(`${apiBase}/api/users/assign-projects`, {
+      headers: adminHeaders,
+      data: { user_id: leaderId, project_ids: [projectId] },
+    });
+    expect(assignLeaderRes.status()).toBe(200);
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers: adminHeaders,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '归档恢复删除用例.json',
+        source: 'apitest',
+        items: [{ module: '模块E', title: '用例E1', expected: 'ok' }],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFile = await importRes.json();
+
+    const ownerToken = await login(ctx, ownerName, '12345678');
+    const ownerHeaders = { Authorization: `Bearer ${ownerToken}`, 'Content-Type': 'application/json' };
+    const leaderToken = await login(ctx, leaderName, '12345678');
+    const leaderHeaders = { Authorization: `Bearer ${leaderToken}`, 'Content-Type': 'application/json' };
+
+    const upsertRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers: ownerHeaders,
+      data: { case_file_id: caseFile.id, mode: 'replace', prefer_result_source: 'db' },
+    });
+    expect(upsertRes.status()).toBe(200);
+    const execSet = await upsertRes.json();
+    const execSetId = execSet.id;
+
+    const archiveRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/archive`, {
+      headers: ownerHeaders,
+      data: { reason: '归档后删除用例库文件' },
+    });
+    expect(archiveRes.status()).toBe(200);
+    const archivedRow = await archiveRes.json();
+    const archiveId = archivedRow.exec_set_id;
+
+    const deleteRes = await ctx.delete(`${apiBase}/api/case-files/${caseFile.id}`, { headers: adminHeaders });
+    expect(deleteRes.status()).toBe(200);
+
+    const restoreRes = await ctx.post(`${apiBase}/api/exec/archives/${archiveId}/restore`, {
+      headers: leaderHeaders,
+    });
+    expect(restoreRes.status()).toBe(400);
+    const restoreBody = await restoreRes.json();
+    expect(restoreBody && restoreBody.detail && restoreBody.detail.code).toBe('case_deleted');
+  });
 });
