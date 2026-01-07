@@ -1283,6 +1283,22 @@
     }
     window.app.casesGenApi = casesGenApi;
 
+    function clearPreloadNavFlags() {
+      try {
+        var root = document && document.documentElement ? document.documentElement : null;
+        if (!root) return;
+        if (root.dataset) {
+          if (root.dataset.preloadNav !== undefined) delete root.dataset.preloadNav;
+          if (root.dataset.initTab !== undefined) delete root.dataset.initTab;
+        } else {
+          root.removeAttribute('data-preload-nav');
+          root.removeAttribute('data-init-tab');
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
     function initApp() {
       if (window.app && window.app._inited) return;
       if (!window.app) window.app = {};
@@ -1371,6 +1387,7 @@
       resetModelForm();
       var initialTab = resolveInitialTab();
       switchTab(initialTab, { replaceHistory: true });
+      clearPreloadNavFlags();
       if (initialTab === 'auto') {
         scrollToSection('auto-import', { behavior: 'instant' });
       }

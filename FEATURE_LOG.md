@@ -3471,3 +3471,31 @@
 - 更新记录：2025-12-31 未确认 diff 的自动弹窗兜底（`backend/routers/exec_routes.py`、`tests/api/exec_case_library_sync.spec.js`）。
 - 更新记录：2025-12-31 执行页红点未确认时补充自动弹窗兜底（`scripts/core/tempexecCore.js`）。
 - 更新记录：2026-01-07 归档恢复后跨页面进入执行页自动弹出 diff（`scripts/modules/caseArchive.js`、`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`、`tests/api/exec_archive.spec.js`）。
+
+- 功能名称：跨页面切换顶部导航预加载
+- 功能描述：页面切换时预先判定目标页签，隐藏默认“一键执行步骤”导航并提前显示对应顶部导航，避免切换时出现错误导航闪现。
+- 操作方式：在侧边栏切换至用例执行/用例库/管理/设置等页面，观察顶部导航展示。
+- 使用效果：切页时不再短暂显示“一键执行步骤”，目标页面顶部导航直接出现。
+- 新增内容/接口/组件：
+  - 前端：预加载页签判断与导航标记、预加载样式兜底、初始化后清理标记（`index.html`、`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`settings.html`、`style.css`、`scripts/core/appRuntime.js`）。
+  - 测试：新增顶部导航预加载用例（`tests/ui/top_nav_preload.spec.js`）。
+- 复用说明：复用既有页签持久化与 URL tab 参数约定，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/top_nav_preload.spec.js`
+- 更新记录：2026-01-07 跨页面切换顶部导航预加载（`index.html`、`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`settings.html`、`style.css`、`scripts/core/appRuntime.js`、`tests/ui/top_nav_preload.spec.js`）。
+
+- 功能名称：暗色主题预加载防闪白
+- 功能描述：暗色主题刷新/切页时提前注入主题背景兜底样式，避免加载过程中短暂显示浅色背景。
+- 操作方式：在通用设置切换为暗色主题，刷新页面或从侧边栏切换到其它页面。
+- 使用效果：页面加载过程中保持暗色背景，不出现白色闪动。
+- 新增内容/接口/组件：
+  - 前端：主题初始化注入预加载样式（`index.html`、`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`settings.html`）。
+  - 测试：暗色主题预加载用例补充（`tests/ui/theme_setting.spec.js`）。
+- 复用说明：复用既有主题本地配置读取逻辑，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/theme_setting.spec.js`
+- 更新记录：2026-01-07 暗色主题预加载防闪白（`index.html`、`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`settings.html`、`tests/ui/theme_setting.spec.js`）。
+- 更新记录：2026-01-07 暗色主题预加载补充 html 背景兜底，降低 Windows 刷新闪白（`index.html`、`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`settings.html`）。
+- 更新记录：2026-01-07 暗色主题预加载改用本地主题提示兜底，降低无本地设置时的白屏（`index.html`、`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`settings.html`、`scripts/modules/settings.js`、`scripts/modules/authGuard.js`、`tests/ui/theme_setting.spec.js`）。
+- 更新记录：2026-01-07 主题加载缺省时读取本地提示，避免未登录/未缓存场景回落为白屏（`scripts/modules/settings.js`）。
+- 更新记录：2026-01-07 暗色主题预加载先读 theme hint，再回退解析本地设置，缩短 Windows 首次涂白时间（`index.html`、`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`settings.html`）。

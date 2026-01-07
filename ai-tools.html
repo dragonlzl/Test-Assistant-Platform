@@ -9,16 +9,31 @@
 <script>
 (function() {
   try {
-    var key = 'usecase-settings-v1';
-    var raw = localStorage.getItem(key);
-    if (!raw) return;
-    var saved = {};
+    var theme = '';
     try {
-      saved = JSON.parse(raw || '{}') || {};
+      theme = localStorage.getItem('tap-theme-hint') || '';
     } catch (err) {
-      saved = {};
+      theme = '';
     }
-    var theme = saved && saved.theme ? String(saved.theme).toLowerCase() : '';
+    if (theme) theme = String(theme).toLowerCase();
+    if (theme !== 'dark' && theme !== 'light') {
+      var key = 'usecase-settings-v1';
+      var raw = '';
+      try {
+        raw = localStorage.getItem(key) || '';
+      } catch (err) {
+        raw = '';
+      }
+      var saved = {};
+      if (raw) {
+        try {
+          saved = JSON.parse(raw || '{}') || {};
+        } catch (err) {
+          saved = {};
+        }
+      }
+      theme = saved && saved.theme ? String(saved.theme).toLowerCase() : '';
+    }
     if (theme !== 'dark' && theme !== 'light') return;
     var root = document && document.documentElement ? document.documentElement : null;
     if (!root) return;
@@ -28,6 +43,117 @@
       root.setAttribute('data-theme', theme);
     }
     if (root.style) root.style.colorScheme = theme === 'dark' ? 'dark' : 'light';
+
+    var preloadStyleId = 'tap-theme-preload';
+    if (!document.getElementById(preloadStyleId)) {
+      var style = document.createElement('style');
+      style.id = preloadStyleId;
+      style.textContent =
+        'html,body{background:#f9fafb;color:#0f172a;}'
+        + 'html[data-theme="dark"]{background:#151d2a;color:#e5e7eb;}'
+        + 'html[data-theme="dark"] body{background:#151d2a;color:#e5e7eb;}';
+      var head = document.head || document.getElementsByTagName('head')[0];
+      if (head) head.appendChild(style);
+    }
+  } catch (err) {
+    // ignore
+  }
+})();
+</script>
+<script>
+(function() {
+  try {
+    var root = document && document.documentElement ? document.documentElement : null;
+    if (!root) return;
+    var search = window && window.location ? window.location.search || '' : '';
+    var query = {};
+    if (search && search.charAt(0) == '?') search = search.slice(1);
+    if (search) {
+      search.split('&').forEach(function(pair) {
+        if (!pair) return;
+        var parts = pair.split('=');
+        var key = decodeURIComponent(parts.shift() || '');
+        if (!key) return;
+        var value = parts.length ? decodeURIComponent(parts.join('=')) : '';
+        query[key] = value;
+      });
+    }
+    var urlTab = query.tab ? String(query.tab || '') : '';
+    var path = window && window.location ? window.location.pathname || '' : '';
+    var file = '';
+    if (path) {
+      var parts = path.split('/').filter(Boolean);
+      file = parts.length ? parts[parts.length - 1] : '';
+    }
+    var page = '';
+    if (file == 'ai-workflow.html') page = 'ai-workflow';
+    else if (file == 'ai-tools.html') page = 'ai-tools';
+    else if (file == 'case-exec.html') page = 'case-exec';
+    else if (file == 'case-library.html') page = 'case-library';
+    else if (file == 'admin.html') page = 'admin';
+    else if (file == 'settings.html') page = 'settings';
+    else if (file == 'index.html' || !file) page = 'index';
+    if (!page) page = 'index';
+    var allowMap = {
+      'ai-workflow': ['auto', 'clean', 'casesgen'],
+      'ai-tools': ['assign', 'models'],
+      'case-exec': ['tempexec', 'exec-overview'],
+      'case-library': ['case-library', 'case-archive'],
+      admin: ['project-admin', 'user-admin', 'ops-log'],
+      settings: ['settings']
+    };
+    var defaultMap = {
+      'ai-workflow': 'auto',
+      'ai-tools': 'assign',
+      'case-exec': 'tempexec',
+      'case-library': 'case-library',
+      admin: 'project-admin',
+      settings: 'settings',
+      index: 'auto'
+    };
+    function isAllowed(tab) {
+      if (!tab) return false;
+      var list = allowMap[page];
+      if (!list) return true;
+      return list.indexOf(tab) != -1;
+    }
+    var candidate = '';
+    if (urlTab && isAllowed(urlTab)) candidate = urlTab;
+    if (!candidate) {
+      var saved = '';
+      try {
+        if (typeof sessionStorage != 'undefined') {
+          saved = sessionStorage.getItem('usecase-active-tab') || '';
+        }
+      } catch (err) {
+        saved = '';
+      }
+      if (saved) {
+        var valid = true;
+        try {
+          if (typeof sessionStorage != 'undefined') {
+            var tabSeq = sessionStorage.getItem('tap-active-tab-login-seq') || '';
+            var loginSeq = '';
+            if (typeof localStorage != 'undefined') {
+              loginSeq = localStorage.getItem('tap-login-seq') || '';
+            }
+            if (loginSeq && !tabSeq) {
+              sessionStorage.setItem('tap-active-tab-login-seq', loginSeq);
+              tabSeq = loginSeq;
+            }
+            if (loginSeq && tabSeq && tabSeq != loginSeq) {
+              valid = false;
+            }
+          }
+        } catch (err2) {
+          valid = false;
+        }
+        if (valid && isAllowed(saved)) candidate = saved;
+      }
+    }
+    if (!candidate) candidate = defaultMap[page] || 'auto';
+    root.setAttribute('data-preload-nav', '1');
+    root.setAttribute('data-init-tab', candidate);
   } catch (err) {
     // ignore
   }

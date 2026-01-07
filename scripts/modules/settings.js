@@ -207,6 +207,13 @@
       } else {
         document.documentElement.setAttribute('data-theme', next);
       }
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('tap-theme-hint', next);
+        }
+      } catch (err) {
+        // ignore
+      }
     }
 
     function clampCaseViewFontSize(value) {
@@ -289,6 +296,16 @@
       }
       ensurePageGuideSwitches();
       ensureTempExecColumns();
+      if (state.settings.theme === undefined || state.settings.theme === null || state.settings.theme === '') {
+        try {
+          if (typeof localStorage !== 'undefined') {
+            var themeHint = localStorage.getItem('tap-theme-hint') || '';
+            if (themeHint) state.settings.theme = themeHint;
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
       state.settings.theme = resolveTheme(state.settings.theme);
       applyTheme(state.settings.theme);
       applyCaseViewFontSize(state.settings.caseViewFontSize);
@@ -432,6 +449,7 @@
       if (!state.settings || typeof state.settings !== 'object') {
         state.settings = Object.assign({}, defaultSettings);
       }
+      var hasLocalSettings = false;
       // DB-first：当检测到已登录（本地有 token 且后端设置接口可用）时，不使用本地缓存覆盖，
       // 以避免多端同号时出现本地旧值抢占；无登录/无后端时继续使用 localStorage 作为回退。
       var shouldUseLocal = true;
@@ -446,7 +464,9 @@
       if (shouldUseLocal) {
         var saved = {};
         try {
-          saved = JSON.parse(localStorage.getItem(settingsKey) || '{}') || {};
+          var raw = localStorage.getItem(settingsKey) || '';
+          if (raw) hasLocalSettings = true;
+          saved = raw ? (JSON.parse(raw || '{}') || {}) : {};
         } catch (err) {
           console.warn('调用设置加载失败', err);
           saved = {};
@@ -498,6 +518,19 @@
       }
       ensurePageGuideSwitches();
       ensureTempExecColumns();
+      try {
+        if (typeof localStorage !== 'undefined') {
+          var themeHint = localStorage.getItem('tap-theme-hint') || '';
+          var needHint = state.settings.theme === undefined || state.settings.theme === null || state.settings.theme === '';
+          if (!needHint && !hasLocalSettings) {
+            var defaultTheme = defaultSettings && defaultSettings.theme ? String(defaultSettings.theme) : 'light';
+            needHint = String(state.settings.theme || '') === defaultTheme;
+          }
+          if (themeHint && needHint) state.settings.theme = themeHint;
+        }
+      } catch (err) {
+        // ignore
+      }
       state.settings.theme = resolveTheme(state.settings.theme);
       applyTheme(state.settings.theme);
       applyCaseViewFontSize(state.settings.caseViewFontSize);

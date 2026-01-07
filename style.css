@@ -2027,6 +2027,27 @@ body {
   border-radius: 14px;
   overflow: hidden;
 }
+/* Preload nav visibility to avoid flashing the default flow on page switch. */
+html[data-preload-nav="1"][data-init-tab="tempexec"] #flowNav,
+html[data-preload-nav="1"][data-init-tab="exec-overview"] #flowNav,
+html[data-preload-nav="1"][data-init-tab="project-admin"] #flowNav,
+html[data-preload-nav="1"][data-init-tab="user-admin"] #flowNav,
+html[data-preload-nav="1"][data-init-tab="ops-log"] #flowNav,
+html[data-preload-nav="1"][data-init-tab="case-library"] #flowNav,
+html[data-preload-nav="1"][data-init-tab="case-archive"] #flowNav,
+html[data-preload-nav="1"][data-init-tab="settings"] #flowNav {
+  display: none !important;
+}
+html[data-preload-nav="1"][data-init-tab="tempexec"] .tempexec-head[data-tab-section="tempexec"],
+html[data-preload-nav="1"][data-init-tab="exec-overview"] .tempexec-head[data-tab-section="exec-overview"],
+html[data-preload-nav="1"][data-init-tab="project-admin"] .tempexec-head[data-tab-section="project-admin"],
+html[data-preload-nav="1"][data-init-tab="user-admin"] .tempexec-head[data-tab-section="user-admin"],
+html[data-preload-nav="1"][data-init-tab="ops-log"] .tempexec-head[data-tab-section="ops-log"],
+html[data-preload-nav="1"][data-init-tab="case-library"] .tempexec-head[data-tab-section="case-library"],
+html[data-preload-nav="1"][data-init-tab="case-archive"] .tempexec-head[data-tab-section="case-archive"],
+html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-section="settings"] {
+  display: block !important;
+}
 .tempexec-head .flow {
   position: sticky;
   top: var(--tempexec-offset, var(--sticky-offset, 12px));

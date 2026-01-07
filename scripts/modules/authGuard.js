@@ -113,12 +113,13 @@
       var assignmentKey = getConfigValue('assignmentKey', 'cleaner-assignment-v1');
       var settingsKey = getConfigValue('settingsKey', 'usecase-settings-v1');
       var tempExecPageSizeKey = getConfigValue('tempExecPageSizeStorageKey', 'tempexec-page-size');
+      var themeHintKey = 'tap-theme-hint';
       var opsLogViewKey = getConfigValue('opsLogViewStorageKey', 'tap-ops-log-view-v1');
       var opsActivityViewKey = getConfigValue('opsActivityViewStorageKey', 'tap-ops-activity-view-v1');
       var legacyCleanKey = getConfigValue('legacyCleanKey', 'cleaner-config-v1');
       var legacyCompareKey = getConfigValue('legacyCompareKey', 'cleaner-compare-config-v1');
       var workflowKey = getConfigValue('workflowStorageKey', 'usecase-workflow-state-v1');
-      var keysToClear = [modelsKey, assignmentKey, settingsKey, tempExecPageSizeKey, opsLogViewKey, opsActivityViewKey, legacyCleanKey, legacyCompareKey, workflowKey];
+      var keysToClear = [modelsKey, assignmentKey, settingsKey, tempExecPageSizeKey, themeHintKey, opsLogViewKey, opsActivityViewKey, legacyCleanKey, legacyCompareKey, workflowKey];
       try {
         if (typeof localStorage !== 'undefined') {
           keysToClear.forEach(function(key) {

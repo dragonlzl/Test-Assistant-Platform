@@ -72,6 +72,38 @@ test.describe('主题设置', () => {
     await page.addInitScript(() => {
       try {
         window.localStorage.setItem('usecase-settings-v1', JSON.stringify({ theme: 'dark' }));
+        window.localStorage.setItem('tap-theme-hint', 'dark');
+        window.localStorage.setItem('tap-e2e-skip-auth', '1');
+        window.localStorage.removeItem('tap-auth-token');
+      } catch (err) {
+        // ignore
+      }
+    });
+    await page.route('**/*', (route) => {
+      const target = route.request().url();
+      if (target.startsWith('http://localhost') || target.startsWith('http://127.0.0.1') || target.startsWith('file:')) {
+        return route.continue();
+      }
+      return route.abort();
+    });
+
+    await page.goto(base + '/index.html');
+    await page.waitForLoadState('domcontentloaded');
+
+    const theme = await page.evaluate(() => document.documentElement.getAttribute('data-theme') || '');
+    expect(theme).toBe('dark');
+    const preloadStyle = await page.evaluate(() => {
+      var style = document.getElementById('tap-theme-preload');
+      return style ? (style.textContent || '') : '';
+    });
+    expect(preloadStyle).toContain('html[data-theme=\"dark\"] body');
+  });
+
+  test('无本地设置时使用主题提示兜底', async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        window.localStorage.removeItem('usecase-settings-v1');
+        window.localStorage.setItem('tap-theme-hint', 'dark');
         window.localStorage.setItem('tap-e2e-skip-auth', '1');
         window.localStorage.removeItem('tap-auth-token');
       } catch (err) {
