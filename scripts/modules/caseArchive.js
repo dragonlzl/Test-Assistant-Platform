@@ -1065,6 +1065,16 @@
             } else {
               showCenterToast('已恢复并新建版本盒子：' + label, 'ok', 3000);
             }
+            try {
+              var restoredId = resp && (resp.restored_exec_set_id || resp.restoredExecSetId);
+              if (restoredId !== null && restoredId !== undefined) {
+                if (typeof sessionStorage !== 'undefined') {
+                  sessionStorage.setItem('tap-tempexec-pending-restore-diff', String(restoredId));
+                }
+              }
+            } catch (err) {
+              // ignore
+            }
             return loadArchives().then(function() {
               refreshTempExecAfterRestore();
             });

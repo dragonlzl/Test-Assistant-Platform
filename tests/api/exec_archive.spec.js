@@ -591,4 +591,92 @@ test.describe('exec archive api', () => {
     const restoreBody = await restoreRes.json();
     expect(restoreBody && restoreBody.detail && restoreBody.detail.code).toBe('case_deleted');
   });
+
+  test('恢复归档后同步用例库改动应提示自动弹窗', async () => {
+    const ctx = await request.newContext();
+    const adminToken = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(health && health.status).toBe('ok');
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'archive-restore-diff-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'exec archive restore diff' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
+      headers,
+      data: { name: 'v1' },
+    });
+    expect(verRes.status()).toBe(201);
+    const versionId = (await verRes.json()).id;
+
+    const importRes = await ctx.post(`${apiBase}/api/case-files/import`, {
+      headers,
+      data: {
+        project_id: projectId,
+        version_id: versionId,
+        file_name: '恢复用例_diff_' + Date.now() + '.json',
+        source: 'api-test',
+        items: [
+          { module: '支付', title: '归档恢复用例', priority: 'P1', precondition: '无', steps: '旧步骤', expected: '成功', remark: '' },
+        ],
+      },
+    });
+    expect(importRes.status()).toBe(201);
+    const caseFile = await importRes.json();
+    const caseFileId = caseFile.id;
+
+    const listItemsRes = await ctx.get(`${apiBase}/api/case-files/${caseFileId}/items`, { headers });
+    expect(listItemsRes.status()).toBe(200);
+    const items = await listItemsRes.json();
+    expect(items.length).toBe(1);
+    const caseItemId = items[0].id;
+
+    const createExecSetRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: { case_file_id: caseFileId, mode: 'replace', preserve_results: true, prefer_result_source: 'db' },
+    });
+    expect(createExecSetRes.status()).toBe(200);
+    const execSetId = (await createExecSetRes.json()).id;
+
+    const archiveRes = await ctx.post(`${apiBase}/api/exec/sets/${execSetId}/archive`, {
+      headers,
+      data: { reason: '准备恢复并同步差异' },
+    });
+    expect(archiveRes.status()).toBe(200);
+    const archiveId = (await archiveRes.json()).exec_set_id;
+
+    const updateItemRes = await ctx.patch(`${apiBase}/api/case-files/items/${caseItemId}`, {
+      headers,
+      data: { steps: '新步骤' },
+    });
+    expect(updateItemRes.status()).toBe(200);
+
+    const restoreRes = await ctx.post(`${apiBase}/api/exec/archives/${archiveId}/restore`, { headers });
+    expect(restoreRes.status()).toBe(200);
+    const restoreBody = await restoreRes.json();
+    const restoredExecSetId = restoreBody.restored_exec_set_id;
+    expect(restoredExecSetId).toBeTruthy();
+
+    const syncRes = await ctx.post(`${apiBase}/api/exec/sets/${restoredExecSetId}/case-library-sync`, {
+      headers,
+      data: {},
+    });
+    expect(syncRes.status()).toBe(200);
+    const sync = await syncRes.json();
+    expect(sync && sync.exec_set_id).toBe(restoredExecSetId);
+    expect(sync && sync.has_new_diff).toBeTruthy();
+    expect(sync && sync.should_auto_popup).toBeTruthy();
+
+    const cleanupRes = await ctx.delete(`${apiBase}/api/projects/${projectId}`, { headers });
+    expect(cleanupRes.status()).toBe(200);
+  });
 });

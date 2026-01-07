@@ -19,6 +19,18 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行页暗色主题勾选框适配
+- 功能描述：修复执行页暗色主题下用例勾选框与复用开关勾选框显示为白底的问题。
+- 操作方式：切换暗色主题 → 进入用例执行页，查看用例勾选框与“用例复用”勾选框。
+- 使用效果：勾选框使用主题色与暗色背景，清晰可见。
+- 新增内容/接口/组件：
+  - 前端：执行页勾选框暗色主题样式（`style.css`）。
+  - 测试：暗色主题执行页勾选框样式用例（`tests/ui/reuse_status_dark_theme.spec.js`）。
+- 复用说明：复用现有主题变量 `--primary` 与暗色主题配置，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/reuse_status_dark_theme.spec.js -g "暗色主题执行页勾选框使用主题色"`
+- 更新记录：2026-01-07 执行页暗色主题勾选框适配（`style.css`、`tests/ui/reuse_status_dark_theme.spec.js`）。
+
 - 功能名称：归档用例恢复与重归档
 - 功能描述：归档页新增“恢复”操作，管理员/组长可将归档用例恢复到执行页；归档列表展示重归档次数与当前状态，并限制重执状态下恢复/删除。
 - 操作方式：用例归档 → 查看归档 → 列表点击“恢复”并确认；非组长提示联系组长/管理员；重执状态不可恢复或删除；恢复后在执行页重新归档。
@@ -3442,3 +3454,20 @@
 - 更新记录：2025-12-31 功能引导流程稳定性修复（`scripts/modules/flowGuide.js`、`tests/ui/flow_guide_drawer.spec.js`）。
 - 更新记录：2025-12-31 引导结束后锁定兜底清理（`scripts/modules/flowGuide.js`）。
 - 更新记录：2025-12-31 引导假抽屉不阻塞解锁（`scripts/base/drawer.js`、`scripts/modules/flowGuide.js`）。
+
+- 功能名称：执行视图重入自动弹出用例变更
+- 功能描述：修复归档恢复后，用户重新进入执行视图未自动弹出用例库变更 diff 的问题。
+- 操作方式：归档恢复后，从其他页面或视图重新进入执行视图。
+- 使用效果：执行视图加载后若存在待提醒的用例库变更，会自动弹出 diff 抽屉。
+- 新增内容/接口/组件：
+  - 前端：执行视图进入后触发一次自动弹窗检查（`scripts/modules/tempexec.js`）。
+  - 后端：无新增接口，补充未确认 diff 的自动弹窗判断（`backend/routers/exec_routes.py`）。
+- 复用说明：复用既有 diff 自动弹窗与队列逻辑，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_case_library_changes.spec.js`
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_case_library_sync.spec.js`
+- 更新记录：2025-12-31 执行视图重入自动弹出用例变更（`scripts/modules/tempexec.js`）。
+- 更新记录：2025-12-31 菜单进入执行页自动弹出 diff（`scripts/modules/tempexec.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。
+- 更新记录：2025-12-31 未确认 diff 的自动弹窗兜底（`backend/routers/exec_routes.py`、`tests/api/exec_case_library_sync.spec.js`）。
+- 更新记录：2025-12-31 执行页红点未确认时补充自动弹窗兜底（`scripts/core/tempexecCore.js`）。
+- 更新记录：2026-01-07 归档恢复后跨页面进入执行页自动弹出 diff（`scripts/modules/caseArchive.js`、`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`、`tests/api/exec_archive.spec.js`）。

@@ -1941,6 +1941,11 @@ def sync_exec_set_case_library(
             db.refresh(exec_set)
         has_history = bool(history_batches)
         ever_changed = bool(base_ts and file_ts and file_ts > base_ts) or has_history
+        last_diff_at = exec_set.case_file_last_diff_at
+        last_shown_at = exec_set.case_file_last_diff_shown_at
+        last_diff_ts = _safe_dt_to_ts(last_diff_at)
+        last_shown_ts = _safe_dt_to_ts(last_shown_at)
+        should_auto_popup = bool(last_diff_ts and (not last_shown_ts or last_diff_ts > last_shown_ts))
         return schemas.ExecCaseLibrarySyncOut(
             exec_set_id=int(exec_set.id),
             case_file_id=int(case_file.id),
@@ -1950,7 +1955,7 @@ def sync_exec_set_case_library(
             last_shown_at=last_shown_at,
             ever_changed=ever_changed,
             has_new_diff=False,
-            should_auto_popup=False,
+            should_auto_popup=should_auto_popup,
             summary=stored_summary,
             diff=stored_diff_entries,
             history=history_batches,

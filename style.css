@@ -8207,6 +8207,13 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .temp-case-view td {
   background: var(--panel);
 }
+:root[data-theme="dark"] .temp-case-view input[type="checkbox"],
+:root[data-theme="dark"] .temp-reuse-toggle input[type="checkbox"] {
+  color-scheme: dark;
+  accent-color: var(--primary);
+  background-color: var(--panel);
+  border-color: var(--border);
+}
 :root[data-theme="dark"] .temp-case-view tr.case-row.locate-highlight td {
   background: rgba(245,158,11,0.18);
 }

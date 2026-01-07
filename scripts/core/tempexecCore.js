@@ -316,6 +316,39 @@
       return ids.length ? String(ids[0]) : '';
     }
 
+    var tempExecPendingRestoreDiffExecSetId = '';
+    var tempExecPendingRestoreDiffStorageKey = 'tap-tempexec-pending-restore-diff';
+    function readTempExecPendingRestoreDiffExecSetId() {
+      if (tempExecPendingRestoreDiffExecSetId) return tempExecPendingRestoreDiffExecSetId;
+      if (typeof sessionStorage === 'undefined') return '';
+      try {
+        var raw = sessionStorage.getItem(tempExecPendingRestoreDiffStorageKey) || '';
+        if (raw) tempExecPendingRestoreDiffExecSetId = String(raw || '').trim();
+      } catch (err) {
+        // ignore
+      }
+      return tempExecPendingRestoreDiffExecSetId;
+    }
+    function clearTempExecPendingRestoreDiffExecSetId() {
+      tempExecPendingRestoreDiffExecSetId = '';
+      if (typeof sessionStorage === 'undefined') return;
+      try {
+        sessionStorage.removeItem(tempExecPendingRestoreDiffStorageKey);
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    var tempExecCaseLibraryAutoPopupSeen = {};
+    function markTempExecCaseLibraryAutoPopupSeen(execSetId) {
+      if (!execSetId) return;
+      tempExecCaseLibraryAutoPopupSeen[String(execSetId)] = true;
+    }
+    function hasTempExecCaseLibraryAutoPopupSeen(execSetId) {
+      if (!execSetId) return false;
+      return tempExecCaseLibraryAutoPopupSeen[String(execSetId)] === true;
+    }
+
     function maybeOpenTempExecCaseLibraryAutoPopup(allowAutoPopup, activeId) {
       if (!allowAutoPopup) return false;
       var execSetId = pickTempExecCaseLibraryAutoPopupExecSetId(activeId);
@@ -323,6 +356,30 @@
       var opened = openTempExecCaseLibraryDiffDrawer({ auto: true, execSetId: execSetId });
       if (opened) {
         clearTempExecCaseLibraryAutoPopup(execSetId);
+        markTempExecCaseLibraryAutoPopupSeen(execSetId);
+      }
+      return opened;
+    }
+
+    // 归档恢复后跨页面进入执行视图：若存在待提醒 diff，优先自动弹出。
+    function tryAutoOpenTempExecRestoreDiff(execSetId, meta) {
+      var pendingId = readTempExecPendingRestoreDiffExecSetId();
+      if (!pendingId) return false;
+      var targetId = execSetId ? String(execSetId) : '';
+      if (targetId && targetId !== String(pendingId)) return false;
+      if (!isTempExecTabActive(true)) return false;
+      var store = ensureTempExecCaseLibraryDiffState();
+      var targetMeta = meta || (store.byExecSetId ? store.byExecSetId[String(pendingId)] : null);
+      if (!targetMeta) return false;
+      if (!hasUnackedCaseLibraryDiff(targetMeta) || !hasCaseLibraryChangeSignal(targetMeta)) {
+        clearTempExecPendingRestoreDiffExecSetId();
+        return false;
+      }
+      var opened = openTempExecCaseLibraryDiffDrawer({ auto: true, execSetId: String(pendingId) });
+      if (opened) {
+        clearTempExecPendingRestoreDiffExecSetId();
+        clearTempExecCaseLibraryAutoPopup(pendingId, targetMeta);
+        markTempExecCaseLibraryAutoPopupSeen(pendingId);
       }
       return opened;
     }
@@ -4217,6 +4274,7 @@
       if (String(state.tempExecActiveId || '') === String(execSetId)) {
         syncTempExecCaseLibraryChangesButton(getTempExecFile(state.tempExecActiveId));
       }
+      tryAutoOpenTempExecRestoreDiff(execSetId, meta);
       return meta;
     }
 
@@ -4894,9 +4952,22 @@
 
     function tryAutoOpenTempExecCaseLibraryDiff() {
       if (!isDbMode()) return false;
+      if (tryAutoOpenTempExecRestoreDiff()) return true;
       var allowAutoPopup = isTempExecTabActive(true);
       var activeId = state.tempExecActiveId ? String(state.tempExecActiveId) : '';
-      return maybeOpenTempExecCaseLibraryAutoPopup(allowAutoPopup, activeId);
+      var opened = maybeOpenTempExecCaseLibraryAutoPopup(allowAutoPopup, activeId);
+      if (opened) return true;
+      if (!allowAutoPopup || !activeId || hasTempExecCaseLibraryAutoPopupSeen(activeId)) return false;
+      var store = ensureTempExecCaseLibraryDiffState();
+      var meta = store.byExecSetId[String(activeId)] || null;
+      if (!meta || !hasUnackedCaseLibraryDiff(meta)) return false;
+      if (!hasCaseLibraryChangeSignal(meta)) return false;
+      var fallbackOpened = openTempExecCaseLibraryDiffDrawer({ auto: true, execSetId: activeId });
+      if (fallbackOpened) {
+        clearTempExecCaseLibraryAutoPopup(activeId, meta);
+        markTempExecCaseLibraryAutoPopupSeen(activeId);
+      }
+      return fallbackOpened;
     }
 
     function getTempExecFile(fileId) {

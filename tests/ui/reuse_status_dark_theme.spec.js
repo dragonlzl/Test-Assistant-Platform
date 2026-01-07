@@ -204,4 +204,84 @@ test.describe('暗色主题复用执行按钮', () => {
     expect(editBg).not.toBe('rgb(255, 255, 255)');
     expect(panelColor).not.toBe('rgb(255, 255, 255)');
   });
+
+  test('暗色主题执行页勾选框使用主题色', async ({ page }) => {
+    const serverState = {
+      settings: [{
+        id: 3,
+        scope: 'user',
+        owner_id: user.id,
+        key: 'theme',
+        value_json: 'dark',
+      }],
+    };
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tap-auth-token', 'reuse-dark-checkbox-token');
+        localStorage.setItem('usecase-temp-exec-v1', JSON.stringify({
+          files: [{
+            id: 'reuse-file-3',
+            name: '复用执行-勾选',
+            reuseEnabled: true,
+            reusePresets: [],
+            createdAt: Date.now(),
+            requirement: '',
+            projectId: '',
+            versionId: '',
+            cases: [{
+              module: '模块C',
+              title: '勾选用例',
+              priority: 'P1',
+              preconditions: '',
+              steps: '步骤1',
+              expected: '预期',
+              actual: '未执行',
+              remark: '',
+              reuseDetails: [],
+              defectLinks: [],
+            }],
+          }],
+          activeId: 'reuse-file-3',
+        }));
+      } catch (err) {}
+    });
+
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.continue();
+      }
+      return route.abort();
+    });
+    await page.route('**/api/**', createApiHandler(serverState));
+
+    await page.goto(base + '/index.html');
+    await waitForAppReady(page);
+
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('tempexec');
+      }
+    });
+    await page.waitForLoadState('domcontentloaded');
+    await waitForAppReady(page);
+    await page.waitForFunction(() => window.app && window.app.state && window.app.state.activeTab === 'tempexec');
+    await page.waitForSelector('.temp-case-view td.check input[type="checkbox"]', { state: 'attached', timeout: 8000 });
+    await page.waitForSelector('.temp-reuse-toggle input[type="checkbox"]', { state: 'attached', timeout: 8000 });
+
+    const expectedAccent = await page.evaluate(() => {
+      var raw = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
+      var temp = document.createElement('div');
+      temp.style.color = raw;
+      document.body.appendChild(temp);
+      var resolved = getComputedStyle(temp).color;
+      temp.remove();
+      return resolved;
+    });
+    const rowAccent = await page.$eval('.temp-case-view td.check input[type="checkbox"]', (el) => getComputedStyle(el).accentColor);
+    const reuseAccent = await page.$eval('.temp-reuse-toggle input[type="checkbox"]', (el) => getComputedStyle(el).accentColor);
+    expect(rowAccent).toBe(expectedAccent);
+    expect(reuseAccent).toBe(expectedAccent);
+  });
 });

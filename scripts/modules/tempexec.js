@@ -870,8 +870,23 @@
         // ignore
       }
       try {
+        var loadPromise = null;
         if (shouldReload && window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
-          window.app.tempExecApi.loadTempExecState();
+          loadPromise = window.app.tempExecApi.loadTempExecState();
+        }
+        var tryAutoOpen = function() {
+          try {
+            if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.tryAutoOpenTempExecCaseLibraryDiff === 'function') {
+              window.app.tempExecApi.tryAutoOpenTempExecCaseLibraryDiff();
+            }
+          } catch (err3) {
+            // ignore
+          }
+        };
+        if (loadPromise && typeof loadPromise.then === 'function') {
+          Promise.resolve(loadPromise).then(tryAutoOpen);
+        } else {
+          setTimeout(tryAutoOpen, 0);
         }
       } catch (err2) {
         // ignore
@@ -3303,8 +3318,27 @@
         if (tabName !== 'tempexec') return;
         ensureImportProjects();
         // 切到“用例执行”时的刷新/同步由 core/appRuntime 统一触发（避免时序差导致漏触发或重复触发）。
-        if (typeof api.tryAutoOpenTempExecCaseLibraryDiff === 'function') {
-          api.tryAutoOpenTempExecCaseLibraryDiff();
+        try {
+          var loadPromise = null;
+          if (typeof api.loadTempExecState === 'function') {
+            loadPromise = api.loadTempExecState();
+          }
+          var tryAutoOpen = function() {
+            try {
+              if (typeof api.tryAutoOpenTempExecCaseLibraryDiff === 'function') {
+                api.tryAutoOpenTempExecCaseLibraryDiff();
+              }
+            } catch (_) {
+              // ignore
+            }
+          };
+          if (loadPromise && typeof loadPromise.then === 'function') {
+            Promise.resolve(loadPromise).then(tryAutoOpen);
+          } else {
+            setTimeout(tryAutoOpen, 0);
+          }
+        } catch (err) {
+          // ignore
         }
         consumeTempExecAssignRequest();
       });
@@ -3318,8 +3352,27 @@
       window.addEventListener('app-auth-ready', function() {
         ensureImportProjects();
         // authReady 后 DB 能力才完整可用：补一次加载，确保“历史执行记录/个人执行集”能立即展示。
-        if (typeof api.loadTempExecState === 'function') {
-          api.loadTempExecState();
+        try {
+          var loadPromise = null;
+          if (typeof api.loadTempExecState === 'function') {
+            loadPromise = api.loadTempExecState();
+          }
+          var tryAutoOpen = function() {
+            try {
+              if (typeof api.tryAutoOpenTempExecCaseLibraryDiff === 'function') {
+                api.tryAutoOpenTempExecCaseLibraryDiff();
+              }
+            } catch (_) {
+              // ignore
+            }
+          };
+          if (loadPromise && typeof loadPromise.then === 'function') {
+            Promise.resolve(loadPromise).then(tryAutoOpen);
+          } else {
+            setTimeout(tryAutoOpen, 0);
+          }
+        } catch (err2) {
+          // ignore
         }
       });
       window.addEventListener('app-projects-updated', function() {
