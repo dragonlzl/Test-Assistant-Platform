@@ -314,6 +314,128 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('正常登录');
   });
 
+  test('执行总览版本筛选选择可持久化（按项目）', async ({ page }) => {
+    const user = { id: 7, username: 'persist_user', role: 'admin', level: 'leader' };
+    const projects = [
+      { id: 1, name: '项目A', description: 'overview persist' },
+      { id: 2, name: '项目B', description: 'overview persist' },
+    ];
+    const versionV1 = { id: 11, name: 'v1' };
+    const versionV2 = { id: 12, name: 'v2' };
+    const versionV3 = { id: 21, name: 'v1' };
+    const versionsByProject = {
+      1: [versionV1, versionV2],
+      2: [versionV3],
+    };
+    const now = new Date('2024-01-01T00:00:00Z').toISOString();
+
+    function buildUser(projectId, versionId, execSets) {
+      var total = execSets.reduce(function(sum, item) { return sum + (item.total || 0); }, 0);
+      var pending = execSets.reduce(function(sum, item) { return sum + (item.pending || 0); }, 0);
+      var passed = execSets.reduce(function(sum, item) { return sum + (item.passed || 0); }, 0);
+      var failed = execSets.reduce(function(sum, item) { return sum + (item.failed || 0); }, 0);
+      var blocked = execSets.reduce(function(sum, item) { return sum + (item.blocked || 0); }, 0);
+      var na = execSets.reduce(function(sum, item) { return sum + (item.not_applicable || 0); }, 0);
+      return {
+        project_id: Number(projectId),
+        version_id: versionId ? Number(versionId) : null,
+        user_id: user.id,
+        username: user.username,
+        level: user.level,
+        user_created_at: now,
+        total: total,
+        pending: pending,
+        passed: passed,
+        failed: failed,
+        blocked: blocked,
+        not_applicable: na,
+        ui_placement: { versionOrderByProject: { 1: ['12', '11'], 2: ['21'] }, fileOrderByProjectVersion: { 1: { 11: ['101'], 12: ['102'] }, 2: { 21: ['201'] } } },
+        exec_sets: execSets,
+      };
+    }
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const path = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (path === '/api/users/me') return respond(200, user);
+      if (path === '/api/projects') return respond(200, projects);
+      var versionsMatch = path.match(/^\/api\/projects\/(\d+)\/versions$/);
+      if (versionsMatch) {
+        var pid = Number(versionsMatch[1]);
+        return respond(200, versionsByProject[pid] || []);
+      }
+
+      if (path === '/api/exec/overview/layout' && method === 'GET') {
+        const projectId = url.searchParams.get('project_id');
+        const versionId = url.searchParams.get('version_id');
+        if (projectId === '2') {
+          return respond(200, [
+            buildUser(2, versionId, [
+              { exec_set_id: 201, exec_set_name: '需求-搜索', version_id: 21, status: 'active', requirement: '', total: 2, pending: 2, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: now, updated_at: now },
+            ]),
+          ]);
+        }
+        if (versionId === String(versionV1.id)) {
+          return respond(200, [
+            buildUser(1, versionId, [
+              { exec_set_id: 101, exec_set_name: '需求-登录', version_id: 11, status: 'active', requirement: '', total: 1, pending: 1, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: now, updated_at: now },
+            ]),
+          ]);
+        }
+        if (versionId === String(versionV2.id)) {
+          return respond(200, [
+            buildUser(1, versionId, [
+              { exec_set_id: 102, exec_set_name: '需求-注册', version_id: 12, status: 'active', requirement: '', total: 3, pending: 2, passed: 1, failed: 0, blocked: 0, not_applicable: 0, created_at: now, updated_at: now },
+            ]),
+          ]);
+        }
+        return respond(200, [
+          buildUser(1, null, [
+            { exec_set_id: 101, exec_set_name: '需求-登录', version_id: 11, status: 'active', requirement: '', total: 1, pending: 1, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: now, updated_at: now },
+            { exec_set_id: 102, exec_set_name: '需求-注册', version_id: 12, status: 'active', requirement: '', total: 3, pending: 2, passed: 1, failed: 0, blocked: 0, not_applicable: 0, created_at: now, updated_at: now },
+          ]),
+        ]);
+      }
+
+      if (path === '/api/auth/logout') return respond(200, {});
+      if (path.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForSelector('.tab-group-btn[data-group="cases"]', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', { timeout: 20000 });
+
+    await page.click('.tab-group-btn[data-group="cases"]');
+    await page.click('[data-group-menu="cases"] [data-tab-btn="exec-overview"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('exec-overview'); });
+
+    await page.click('#execOverviewNavProjects [data-project-id="1"]');
+    await page.selectOption('#execOverviewVersionSelect', String(versionV1.id));
+    await expect(page.locator('#execOverviewVersionSelect')).toHaveValue(String(versionV1.id));
+
+    await page.click('#execOverviewNavProjects [data-project-id="2"]');
+    await expect(page.locator('#execOverviewVersionSelect')).toHaveValue('');
+
+    await page.reload();
+    await page.waitForSelector('.tab-group-btn[data-group="cases"]', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', { timeout: 20000 });
+    await page.click('.tab-group-btn[data-group="cases"]');
+    await page.click('[data-group-menu="cases"] [data-tab-btn="exec-overview"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('exec-overview'); });
+
+    await expect(page.locator('#execOverviewProjectTitle')).toContainText('项目B');
+    await expect(page.locator('#execOverviewVersionSelect')).toHaveValue('');
+
+    await page.click('#execOverviewNavProjects [data-project-id="1"]');
+    await expect(page.locator('#execOverviewVersionSelect')).toHaveValue(String(versionV1.id));
+  });
+
   test('执行列表实际结果为空时使用状态兜底展示', async ({ page }) => {
     const user = { id: 6, username: 'overview_user', role: 'user', level: 'member' };
     const projects = [{ id: 1, name: '演示项目', description: 'exec overview' }];

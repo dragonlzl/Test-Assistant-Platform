@@ -3,6 +3,7 @@
   if (!api) return;
 
     var execOverviewProjectStorageKey = 'exec_overview_last_project_id_v1';
+    var execOverviewVersionStorageKey = 'exec_overview_last_version_id_v1';
 
 		  var dom = {
 		    root: document.getElementById('execOverview'),
@@ -296,6 +297,49 @@
     try {
       localStorage.setItem(execOverviewProjectStorageKey, pid);
     } catch (e) {}
+  }
+
+  function loadLastVersionSelection(projectId) {
+    if (typeof localStorage === 'undefined') return { exists: false, value: '' };
+    if (projectId === null || projectId === undefined || projectId === '') return { exists: false, value: '' };
+    try {
+      var raw = localStorage.getItem(execOverviewVersionStorageKey) || '';
+      var saved = raw ? (JSON.parse(raw || '{}') || {}) : {};
+      if (!saved || typeof saved !== 'object') return { exists: false, value: '' };
+      var key = String(projectId);
+      if (!Object.prototype.hasOwnProperty.call(saved, key)) return { exists: false, value: '' };
+      return { exists: true, value: saved[key] };
+    } catch (e) {
+      return { exists: false, value: '' };
+    }
+  }
+
+  function saveLastVersionSelection(projectId, versionId) {
+    if (typeof localStorage === 'undefined') return;
+    if (projectId === null || projectId === undefined || projectId === '') return;
+    try {
+      var raw = localStorage.getItem(execOverviewVersionStorageKey) || '';
+      var saved = raw ? (JSON.parse(raw || '{}') || {}) : {};
+      if (!saved || typeof saved !== 'object') saved = {};
+      var key = String(projectId);
+      saved[key] = versionId === null || versionId === undefined ? '' : String(versionId);
+      localStorage.setItem(execOverviewVersionStorageKey, JSON.stringify(saved));
+    } catch (e) {}
+  }
+
+  function applyPersistedVersion(projectId) {
+    var persisted = loadLastVersionSelection(projectId);
+    if (!persisted.exists) return;
+    var normalized = normalizeVersionId(persisted.value);
+    if (normalized !== null) {
+      var ok = (Array.isArray(state.versions) ? state.versions : []).some(function(v) {
+        return v && String(v.id) === String(normalized);
+      });
+      if (!ok) normalized = null;
+    }
+    state.currentVersionId = normalized;
+    renderVersionSelect();
+    saveLastVersionSelection(projectId, normalized);
   }
 
   function showProjectList() {
@@ -967,6 +1011,7 @@
     state.currentVersionId = null;
     renderVersionSelect();
     loadVersions(project.id).then(function() {
+      applyPersistedVersion(project.id);
       return Promise.all([loadOverview(), loadVersionSummary(project.id)]);
     });
   }
@@ -1056,6 +1101,7 @@
           state.currentVersionId = null;
           renderVersionSelect();
           loadVersions(found.id).then(function() {
+            applyPersistedVersion(found.id);
             return Promise.all([loadOverview(), loadVersionSummary(found.id)]);
           }).finally(function() {
             setStatus('', '');
@@ -1077,6 +1123,7 @@
         renderVersionSummary();
         loadOverview();
         var pid = state.currentProject && state.currentProject.id ? state.currentProject.id : null;
+        if (pid || pid === 0) saveLastVersionSelection(pid, state.currentVersionId);
         if (pid || pid === 0) loadVersionSummary(pid);
       });
     }
