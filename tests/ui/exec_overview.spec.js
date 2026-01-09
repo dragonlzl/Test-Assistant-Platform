@@ -263,15 +263,20 @@ test.describe('执行总览页（DB 接口接入）', () => {
 	    await expect(summaryRows.nth(1)).toContainText('v1');
 	    await expect(summaryRows.nth(1)).toContainText('已4/9');
 
-	    const layoutColumns = await page.$eval('#execOverviewUserCards .exec-overview-layout', (el) => {
-	      const cols = getComputedStyle(el).gridTemplateColumns || '';
-	      return cols.trim().split(/\s+/).filter(Boolean).length;
+	    const layoutStyles = await page.$eval('#execOverviewUserCards .exec-overview-layout', (el) => {
+	      const style = getComputedStyle(el);
+	      return { display: style.display, overflowX: style.overflowX };
 	    });
-	    expect(layoutColumns).toBe(3);
+	    expect(layoutStyles.display).toBe('flex');
+	    expect(layoutStyles.overflowX).toMatch(/auto|scroll/);
 
 	    const v1Body = page.locator('#execOverviewUserCards .exec-overview-version-box', { hasText: 'v1' }).locator('.body').first();
 	    const v1BodyScrollable = await v1Body.evaluate((el) => el.scrollHeight > el.clientHeight);
 	    expect(v1BodyScrollable).toBe(true);
+	    const v1BodyHeight = await v1Body.evaluate((el) => Math.round(el.getBoundingClientRect().height));
+	    const v2Body = page.locator('#execOverviewUserCards .exec-overview-version-box', { hasText: 'v2' }).locator('.body').first();
+	    const v2BodyHeight = await v2Body.evaluate((el) => Math.round(el.getBoundingClientRect().height));
+	    expect(Math.abs(v1BodyHeight - v2BodyHeight)).toBeLessThanOrEqual(2);
 	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"] .exec-overview-file-meta')).toContainText('已3/3');
 	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"] .exec-overview-kv.kv-pending')).toContainText('待0');
 	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"] .exec-overview-kv.kv-passed')).toContainText('过2');
@@ -434,6 +439,232 @@ test.describe('执行总览页（DB 接口接入）', () => {
 
     await page.click('#execOverviewNavProjects [data-project-id="1"]');
     await expect(page.locator('#execOverviewVersionSelect')).toHaveValue(String(versionV1.id));
+  });
+
+  test('版本总览与个人区版本盒子仅近邻加载', async ({ page }) => {
+    const user = { id: 8, username: 'lazy_user', role: 'admin', level: 'leader' };
+    const projects = [{ id: 1, name: '总览虚拟化', description: 'overview lazy' }];
+    const versions = [
+      { id: 11, name: 'v1' },
+      { id: 12, name: 'v2' },
+      { id: 13, name: 'v3' },
+      { id: 14, name: 'v4' },
+      { id: 15, name: 'v5' },
+      { id: 16, name: 'v6' },
+    ];
+    const now = new Date('2024-01-01T00:00:00Z').toISOString();
+    const versionOrder = versions.map((v) => String(v.id));
+    const fileOrderByVer = {};
+    const execSets = versions.map((v, idx) => {
+      const execSetId = 100 + idx;
+      fileOrderByVer[v.id] = [String(execSetId)];
+      return {
+        exec_set_id: execSetId,
+        exec_set_name: '需求-' + v.name,
+        version_id: v.id,
+        status: 'active',
+        requirement: '',
+        total: 1,
+        pending: 1,
+        passed: 0,
+        failed: 0,
+        blocked: 0,
+        not_applicable: 0,
+        created_at: now,
+        updated_at: now,
+      };
+    });
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const path = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (path === '/api/users/me') return respond(200, user);
+      if (path === '/api/projects') return respond(200, projects);
+      var versionsMatch = path.match(/^\/api\/projects\/(\d+)\/versions$/);
+      if (versionsMatch) return respond(200, versions);
+
+      if (path === '/api/exec/overview/layout' && method === 'GET') {
+        return respond(200, [
+          {
+            project_id: 1,
+            version_id: null,
+            user_id: user.id,
+            username: user.username,
+            level: user.level,
+            user_created_at: now,
+            total: execSets.length,
+            pending: execSets.length,
+            passed: 0,
+            failed: 0,
+            blocked: 0,
+            not_applicable: 0,
+            ui_placement: { versionOrderByProject: { 1: versionOrder }, fileOrderByProjectVersion: { 1: fileOrderByVer } },
+            exec_sets: execSets,
+          },
+        ]);
+      }
+
+      if (path === '/api/auth/logout') return respond(200, {});
+      if (path.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForSelector('.tab-group-btn[data-group="cases"]', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', { timeout: 20000 });
+
+    await page.click('.tab-group-btn[data-group="cases"]');
+    await page.click('[data-group-menu="cases"] [data-tab-btn="exec-overview"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('exec-overview'); });
+
+    await page.click('#execOverviewNavProjects [data-project-id="1"]');
+    await expect(page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row')).toHaveCount(6);
+    await expect(page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row:not(.placeholder)')).toHaveCount(4);
+    await expect(page.locator('#execOverviewUserCards .exec-overview-version-box:not(.placeholder)')).toHaveCount(4);
+
+    const layout = page.locator('#execOverviewUserCards .exec-overview-layout').first();
+    const overflow = await layout.evaluate((el) => el.scrollWidth > el.clientWidth);
+    expect(overflow).toBe(true);
+    const bar = layout.locator('.exec-overview-scrollbar');
+    await expect(bar).toHaveCount(1);
+    const beforeOpacity = await bar.evaluate((el) => parseFloat(getComputedStyle(el).opacity));
+    expect(beforeOpacity).toBeLessThan(0.1);
+    await layout.hover();
+    await page.waitForTimeout(200);
+    const afterOpacity = await bar.evaluate((el) => parseFloat(getComputedStyle(el).opacity));
+    expect(afterOpacity).toBeGreaterThan(0.1);
+
+    const summaryBody = page.locator('#execOverviewVersionSummaryBody');
+    await summaryBody.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+    await page.waitForTimeout(100);
+    const v6Summary = page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row', { hasText: 'v6' });
+    await expect(v6Summary).not.toHaveClass(/placeholder/);
+
+    await layout.evaluate((el) => { el.scrollLeft = el.scrollWidth; });
+    await page.waitForTimeout(100);
+    const v6Box = page.locator('#execOverviewUserCards .exec-overview-version-box', { hasText: 'v6' }).first();
+    await expect(v6Box).not.toHaveClass(/placeholder/);
+  });
+
+  test('个人区版本盒子滚轮优先上下滚动用例', async ({ page }) => {
+    const user = { id: 10, username: 'wheel_user', role: 'admin', level: 'leader' };
+    const projects = [{ id: 1, name: '滚轮冲突项目', description: 'overview wheel' }];
+    const versions = [
+      { id: 11, name: 'v1' },
+      { id: 12, name: 'v2' },
+      { id: 13, name: 'v3' },
+      { id: 14, name: 'v4' },
+      { id: 15, name: 'v5' },
+    ];
+    const now = new Date('2024-01-01T00:00:00Z').toISOString();
+    const versionOrder = versions.map((v) => String(v.id));
+    const fileOrderByVer = {};
+    const execSets = [];
+    for (let i = 0; i < 6; i += 1) {
+      const execSetId = 300 + i;
+      fileOrderByVer[11] = fileOrderByVer[11] || [];
+      fileOrderByVer[11].push(String(execSetId));
+      execSets.push({
+        exec_set_id: execSetId,
+        exec_set_name: '需求-登录-' + i,
+        version_id: 11,
+        status: 'active',
+        requirement: '',
+        total: 1,
+        pending: 1,
+        passed: 0,
+        failed: 0,
+        blocked: 0,
+        not_applicable: 0,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+    versions.slice(1).forEach((ver, idx) => {
+      const execSetId = 400 + idx;
+      fileOrderByVer[ver.id] = [String(execSetId)];
+      execSets.push({
+        exec_set_id: execSetId,
+        exec_set_name: '需求-' + ver.name,
+        version_id: ver.id,
+        status: 'active',
+        requirement: '',
+        total: 1,
+        pending: 1,
+        passed: 0,
+        failed: 0,
+        blocked: 0,
+        not_applicable: 0,
+        created_at: now,
+        updated_at: now,
+      });
+    });
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const path = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (path === '/api/users/me') return respond(200, user);
+      if (path === '/api/projects') return respond(200, projects);
+      var versionsMatch = path.match(/^\/api\/projects\/(\d+)\/versions$/);
+      if (versionsMatch) return respond(200, versions);
+
+      if (path === '/api/exec/overview/layout' && method === 'GET') {
+        return respond(200, [
+          {
+            project_id: 1,
+            version_id: null,
+            user_id: user.id,
+            username: user.username,
+            level: user.level,
+            user_created_at: now,
+            total: execSets.length,
+            pending: execSets.length,
+            passed: 0,
+            failed: 0,
+            blocked: 0,
+            not_applicable: 0,
+            ui_placement: { versionOrderByProject: { 1: versionOrder }, fileOrderByProjectVersion: { 1: fileOrderByVer } },
+            exec_sets: execSets,
+          },
+        ]);
+      }
+
+      if (path === '/api/auth/logout') return respond(200, {});
+      if (path.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await page.waitForSelector('.tab-group-btn[data-group="cases"]', { timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', { timeout: 20000 });
+
+    await page.click('.tab-group-btn[data-group="cases"]');
+    await page.click('[data-group-menu="cases"] [data-tab-btn="exec-overview"]');
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('exec-overview'); });
+
+    await page.click('#execOverviewNavProjects [data-project-id="1"]');
+    const layout = page.locator('#execOverviewUserCards .exec-overview-layout').first();
+    const v1Body = page.locator('#execOverviewUserCards .exec-overview-version-box', { hasText: 'v1' }).locator('.body').first();
+    const scrollable = await v1Body.evaluate((el) => el.scrollHeight > el.clientHeight);
+    expect(scrollable).toBe(true);
+
+    await v1Body.hover();
+    await page.mouse.wheel(0, 260);
+    await page.waitForTimeout(120);
+    const bodyScrollTop = await v1Body.evaluate((el) => el.scrollTop);
+    const layoutScrollLeft = await layout.evaluate((el) => el.scrollLeft);
+    expect(bodyScrollTop).toBeGreaterThan(0);
+    expect(layoutScrollLeft).toBeLessThanOrEqual(1);
   });
 
   test('执行列表实际结果为空时使用状态兜底展示', async ({ page }) => {

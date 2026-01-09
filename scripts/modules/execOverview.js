@@ -49,6 +49,14 @@
     },
   };
 
+  var versionSummaryWindowSize = 4;
+  var overviewLayoutWindowSize = 4;
+  var versionSummaryRenderList = [];
+  var overviewLayoutMeta = {};
+  var versionSummaryScrollBound = false;
+  var versionSummaryScrollRaf = 0;
+  var versionSummaryRowHeight = 0;
+
   function setStatus(text, type) {
     if (!dom.status) return;
     dom.status.textContent = text || '';
@@ -75,6 +83,38 @@
       .replace(/>/g, '&gt;')
       .replace(/\"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  function parseGapValue(value) {
+    if (!value) return 0;
+    var n = parseFloat(value);
+    return isFinite(n) ? n : 0;
+  }
+
+  function getContainerGap(el, axis) {
+    if (!el || typeof window === 'undefined' || typeof window.getComputedStyle !== 'function') return 0;
+    var style = window.getComputedStyle(el);
+    if (!style) return 0;
+    if (axis === 'x') {
+      return parseGapValue(style.columnGap || style.gap || style.rowGap);
+    }
+    return parseGapValue(style.rowGap || style.gap || style.columnGap);
+  }
+
+  function resolveDebounce() {
+    var utils = window.app && window.app.utils ? window.app.utils : null;
+    if (utils && typeof utils.debounce === 'function') return utils.debounce;
+    return function(fn, wait) {
+      var t;
+      var delay = Number(wait);
+      if (!isFinite(delay) || delay < 0) delay = 200;
+      return function() {
+        if (t) clearTimeout(t);
+        var args = arguments;
+        var ctx = this;
+        t = setTimeout(function run() { fn.apply(ctx, args); }, delay);
+      };
+    };
   }
 
   function normalizeTimeInput(input) {
@@ -277,6 +317,121 @@
         '<span class="exec-overview-file-counts" title="' + escapeHtml(parts.join(' ')) + '">' + counts + '</span>' +
       '</div>'
     );
+  }
+
+  function computeExecSetState(item) {
+    var total = Number(item && item.total) || 0;
+    var pending = Number(item && item.pending) || 0;
+    var failed = Number(item && item.failed) || 0;
+    var blocked = Number(item && item.blocked) || 0;
+    var executed = Math.max(0, total - pending);
+    if (total > 0 && (failed > 0 || blocked > 0)) return 'err';
+    if (total > 0 && pending === 0) return 'ok';
+    if (executed > 0) return 'running';
+    return 'pending';
+  }
+
+  function buildVersionSummaryRowInner(title, mainHtml) {
+    return (
+      '<div class="exec-overview-version-summary-title" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</div>' +
+      '<div class="exec-overview-version-summary-main">' + (mainHtml || '') + '</div>'
+    );
+  }
+
+  function buildVersionSummaryRowContent(row) {
+    var total = Number(row && row.total) || 0;
+    var pending = Number(row && row.pending) || 0;
+    var passed = Number(row && row.passed) || 0;
+    var failed = Number(row && row.failed) || 0;
+    var blocked = Number(row && row.blocked) || 0;
+    var na = Number(row && row.not_applicable) || 0;
+    var title = resolveVersionNameById(row && row.version_id);
+    var mainHtml = (
+      buildFileProgressBar(total, pending, passed, failed, blocked, na) +
+      buildExecSetMeta({
+        total: total,
+        pending: pending,
+        passed: passed,
+        failed: failed,
+        blocked: blocked,
+        not_applicable: na,
+      })
+    );
+    return buildVersionSummaryRowInner(title, mainHtml);
+  }
+
+  function buildVersionSummaryRowPlaceholder(row) {
+    var title = resolveVersionNameById(row && row.version_id);
+    return buildVersionSummaryRowInner(title, '<span class="exec-overview-placeholder">滚动加载</span>');
+  }
+
+  function updateVersionSummaryMetrics(container) {
+    if (!container) return;
+    var row = container.querySelector('.exec-overview-version-summary-row:not(.placeholder)');
+    if (row) {
+      var height = row.getBoundingClientRect().height || 0;
+      if (height > 0) versionSummaryRowHeight = height;
+    }
+    var gap = getContainerGap(container, 'y');
+    var baseHeight = versionSummaryRowHeight || 0;
+    if (baseHeight > 0) {
+      var maxHeight = baseHeight * 2.5 + gap * 2;
+      container.style.setProperty('--exec-overview-summary-row-height', Math.round(baseHeight) + 'px');
+      container.style.setProperty('--exec-overview-summary-max-height', Math.round(maxHeight) + 'px');
+    }
+  }
+
+  function updateVersionSummaryWindow() {
+    var container = dom.versionSummaryBody;
+    if (!container) return;
+    var list = Array.isArray(versionSummaryRenderList) ? versionSummaryRenderList : [];
+    var rows = container.querySelectorAll('.exec-overview-version-summary-row');
+    var total = list.length;
+    if (!rows.length || !total) return;
+    var rowHeight = versionSummaryRowHeight || rows[0].getBoundingClientRect().height || 72;
+    var gap = getContainerGap(container, 'y');
+    var unit = rowHeight + gap;
+    var startIndex = unit > 0 ? Math.floor(container.scrollTop / unit) : 0;
+    startIndex = Math.max(0, startIndex - 1);
+    var endIndex = Math.min(total - 1, startIndex + versionSummaryWindowSize - 1);
+    if (endIndex - startIndex + 1 < versionSummaryWindowSize) {
+      startIndex = Math.max(0, endIndex - versionSummaryWindowSize + 1);
+    }
+    for (var i = 0; i < rows.length; i += 1) {
+      var el = rows[i];
+      var row = list[i];
+      if (!row) continue;
+      if (i >= startIndex && i <= endIndex) {
+        if (el.getAttribute('data-loaded') !== '1') {
+          el.innerHTML = buildVersionSummaryRowContent(row);
+          el.setAttribute('data-loaded', '1');
+        }
+        el.classList.remove('placeholder');
+      } else {
+        if (el.getAttribute('data-loaded') !== '0') {
+          el.innerHTML = buildVersionSummaryRowPlaceholder(row);
+          el.setAttribute('data-loaded', '0');
+        }
+        el.classList.add('placeholder');
+      }
+    }
+    updateVersionSummaryMetrics(container);
+  }
+
+  function scheduleVersionSummaryUpdate() {
+    if (versionSummaryScrollRaf) return;
+    versionSummaryScrollRaf = window.requestAnimationFrame(function() {
+      versionSummaryScrollRaf = 0;
+      updateVersionSummaryWindow();
+    });
+  }
+
+  function bindVersionSummaryScroll() {
+    if (!dom.versionSummaryBody || versionSummaryScrollBound) return;
+    versionSummaryScrollBound = true;
+    dom.versionSummaryBody.addEventListener('scroll', function() {
+      scheduleVersionSummaryUpdate();
+    });
   }
 
   function loadLastProjectId() {
@@ -550,6 +705,258 @@
     dom.versionSelect.value = state.currentVersionId === null ? '' : String(state.currentVersionId);
   }
 
+  function buildVersionBoxPlaceholder() {
+    return '<span class="exec-overview-placeholder">滚动加载</span>';
+  }
+
+  function buildExecSetChip(es) {
+    var stateCls = computeExecSetState(es);
+    var isArchived = es && String(es.status || '') === 'archived';
+    var archiveTag = isArchived ? '<span class="tag tag-archived">归</span>' : '';
+    var label = es && es.exec_set_name ? String(es.exec_set_name) : ('执行集#' + String(es.exec_set_id));
+    var execSetId = es && (es.exec_set_id || es.exec_set_id === 0) ? String(es.exec_set_id) : '';
+    return (
+      '<button type="button" class="exec-overview-file-chip state-' + stateCls + '" data-exec-set-id="' + escapeHtml(execSetId) + '" data-exec-set-name="' + escapeHtml(label) + '">' +
+        '<div class="row">' +
+          archiveTag +
+          '<span class="text" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
+          '<span class="badge">' + (es.total || 0) + '</span>' +
+        '</div>' +
+        buildFileProgressBar(es.total || 0, es.pending || 0, es.passed || 0, es.failed || 0, es.blocked || 0, es.not_applicable || 0) +
+        buildExecSetMeta(es) +
+      '</button>'
+    );
+  }
+
+  function buildVersionBoxBody(item) {
+    var list = Array.isArray(item && item.execSets) ? item.execSets : [];
+    if (!list.length) {
+      return '<span class="exec-overview-placeholder">暂无用例</span>';
+    }
+    return list.map(buildExecSetChip).join('');
+  }
+
+  function getVersionBoxBodyHtml(item) {
+    if (!item) return buildVersionBoxPlaceholder();
+    if (item.bodyHtml === undefined) {
+      item.bodyHtml = buildVersionBoxBody(item);
+    }
+    return item.bodyHtml || '';
+  }
+
+  function ensureOverviewScrollbar(layoutEl) {
+    if (!layoutEl || !layoutEl.querySelector) return null;
+    var bar = layoutEl.querySelector('.exec-overview-scrollbar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'exec-overview-scrollbar';
+      var thumb = document.createElement('div');
+      thumb.className = 'exec-overview-scrollbar-thumb';
+      bar.appendChild(thumb);
+      layoutEl.appendChild(bar);
+    }
+    return bar;
+  }
+
+  function bindOverviewScrollbarDrag(layoutEl) {
+    if (!layoutEl) return;
+    var bar = ensureOverviewScrollbar(layoutEl);
+    if (!bar || bar._bound) return;
+    bar._bound = true;
+    var thumb = bar.querySelector('.exec-overview-scrollbar-thumb');
+    if (!thumb) return;
+    var dragging = false;
+    var startX = 0;
+    var startScroll = 0;
+    function onMove(e) {
+      if (!dragging) return;
+      if (!e) return;
+      var rect = bar.getBoundingClientRect();
+      var track = rect ? rect.width : 0;
+      var total = layoutEl.scrollWidth || 0;
+      var visible = layoutEl.clientWidth || 0;
+      var maxScroll = total - visible;
+      if (!track || maxScroll <= 0) return;
+      var thumbWidth = thumb.offsetWidth || 0;
+      var maxThumb = track - thumbWidth;
+      if (maxThumb <= 0) return;
+      var delta = e.clientX - startX;
+      var scrollDelta = delta * (maxScroll / maxThumb);
+      var next = startScroll + scrollDelta;
+      if (next < 0) next = 0;
+      if (next > maxScroll) next = maxScroll;
+      layoutEl.scrollLeft = next;
+    }
+    function onUp() {
+      if (!dragging) return;
+      dragging = false;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    thumb.addEventListener('mousedown', function(e) {
+      if (!e || e.button !== 0) return;
+      dragging = true;
+      startX = e.clientX;
+      startScroll = layoutEl.scrollLeft;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      e.preventDefault();
+    });
+    bar.addEventListener('click', function(e) {
+      if (!e || e.target === thumb) return;
+      var rect = bar.getBoundingClientRect();
+      var track = rect ? rect.width : 0;
+      if (!track) return;
+      var offset = e.clientX - rect.left;
+      var ratio = offset / track;
+      if (ratio < 0) ratio = 0;
+      if (ratio > 1) ratio = 1;
+      var maxScroll = (layoutEl.scrollWidth || 0) - (layoutEl.clientWidth || 0);
+      if (maxScroll <= 0) return;
+      layoutEl.scrollLeft = Math.round(maxScroll * ratio);
+    });
+  }
+
+  function syncOverviewScrollbar(layoutEl) {
+    if (!layoutEl) return;
+    var bar = ensureOverviewScrollbar(layoutEl);
+    if (!bar) return;
+    bindOverviewScrollbarDrag(layoutEl);
+    bar.style.transform = 'translateX(' + (layoutEl.scrollLeft || 0) + 'px)';
+    var thumb = bar.querySelector('.exec-overview-scrollbar-thumb');
+    if (!thumb) return;
+    var total = layoutEl.scrollWidth || 0;
+    var visible = layoutEl.clientWidth || 0;
+    if (!visible || total <= visible + 1) {
+      bar.style.display = 'none';
+      return;
+    }
+    bar.style.display = '';
+    var track = bar.clientWidth || 0;
+    if (!track) {
+      var rect = bar.getBoundingClientRect();
+      track = rect ? rect.width : 0;
+    }
+    if (!track) return;
+    var thumbWidth = Math.floor(track * visible / total);
+    if (thumbWidth < 24) thumbWidth = 24;
+    if (thumbWidth > track) thumbWidth = track;
+    var maxScroll = total - visible;
+    var maxThumb = track - thumbWidth;
+    var left = maxScroll > 0 ? (layoutEl.scrollLeft / maxScroll) * maxThumb : 0;
+    thumb.style.width = thumbWidth + 'px';
+    thumb.style.transform = 'translateX(' + left + 'px)';
+  }
+
+  function updateOverviewLayoutWindow(layoutEl) {
+    if (!layoutEl) return;
+    var userId = layoutEl.getAttribute('data-user-id') || '';
+    var meta = overviewLayoutMeta[userId];
+    var items = meta && Array.isArray(meta.items) ? meta.items : [];
+    var boxes = layoutEl.querySelectorAll('.exec-overview-version-box');
+    var total = items.length;
+    if (!total || !boxes.length) return;
+    var boxWidth = boxes[0].offsetWidth || 0;
+    var gap = getContainerGap(layoutEl, 'x');
+    var unit = boxWidth + gap;
+    var startIndex = unit > 0 ? Math.floor(layoutEl.scrollLeft / unit) : 0;
+    startIndex = Math.max(0, startIndex - 1);
+    var endIndex = Math.min(total - 1, startIndex + overviewLayoutWindowSize - 1);
+    if (endIndex - startIndex + 1 < overviewLayoutWindowSize) {
+      startIndex = Math.max(0, endIndex - overviewLayoutWindowSize + 1);
+    }
+    for (var i = 0; i < boxes.length; i += 1) {
+      var box = boxes[i];
+      var body = box ? box.querySelector('.body') : null;
+      if (!body) continue;
+      if (i >= startIndex && i <= endIndex) {
+        if (box.getAttribute('data-loaded') !== '1') {
+          body.innerHTML = getVersionBoxBodyHtml(items[i]);
+          box.setAttribute('data-loaded', '1');
+        }
+        box.classList.remove('placeholder');
+      } else {
+        if (box.getAttribute('data-loaded') !== '0') {
+          body.innerHTML = buildVersionBoxPlaceholder();
+          box.setAttribute('data-loaded', '0');
+        }
+        box.classList.add('placeholder');
+      }
+    }
+    syncOverviewScrollbar(layoutEl);
+  }
+
+  function scheduleOverviewLayoutUpdate(layoutEl) {
+    if (!layoutEl || layoutEl.__execOverviewRaf) return;
+    layoutEl.__execOverviewRaf = window.requestAnimationFrame(function() {
+      layoutEl.__execOverviewRaf = 0;
+      updateOverviewLayoutWindow(layoutEl);
+    });
+  }
+
+  function bindOverviewLayoutScroll() {
+    if (!dom.userCards) return;
+    var layouts = dom.userCards.querySelectorAll('.exec-overview-layout');
+    layouts.forEach(function(layoutEl) {
+      if (layoutEl.getAttribute('data-scroll-bound') === '1') return;
+      layoutEl.setAttribute('data-scroll-bound', '1');
+      ensureOverviewScrollbar(layoutEl);
+      syncOverviewScrollbar(layoutEl);
+      bindOverviewScrollbarDrag(layoutEl);
+      var timer = 0;
+      layoutEl.addEventListener('scroll', function() {
+        layoutEl.classList.add('scrolling');
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(function() {
+          layoutEl.classList.remove('scrolling');
+        }, 800);
+        scheduleOverviewLayoutUpdate(layoutEl);
+        syncOverviewScrollbar(layoutEl);
+      });
+      layoutEl.addEventListener('mouseenter', function() {
+        syncOverviewScrollbar(layoutEl);
+      });
+      layoutEl.addEventListener('wheel', function(e) {
+        if (!e) return;
+        if (layoutEl.scrollWidth <= layoutEl.clientWidth) return;
+        var target = e.target;
+        if (target && target.closest) {
+          var body = target.closest('.exec-overview-version-box .body');
+          if (body && body.scrollHeight > body.clientHeight) {
+            return;
+          }
+        }
+        var deltaX = Number(e.deltaX) || 0;
+        var deltaY = Number(e.deltaY) || 0;
+        if (!deltaX && !deltaY) return;
+        if (Math.abs(deltaY) >= Math.abs(deltaX)) {
+          layoutEl.scrollLeft += deltaY;
+          e.preventDefault();
+        }
+      }, { passive: false });
+      var debounceFn = resolveDebounce();
+      var syncDebounced = debounceFn(function() {
+        syncOverviewScrollbar(layoutEl);
+      }, 120);
+      window.addEventListener('resize', syncDebounced);
+      if (typeof MutationObserver !== 'undefined' && !layoutEl._overviewScrollbarObserver) {
+        var observer = new MutationObserver(function() {
+          syncOverviewScrollbar(layoutEl);
+        });
+        observer.observe(layoutEl, { childList: true, subtree: true });
+        layoutEl._overviewScrollbarObserver = observer;
+      }
+    });
+  }
+
+  function updateOverviewLayoutWindowAll() {
+    if (!dom.userCards) return;
+    var layouts = dom.userCards.querySelectorAll('.exec-overview-layout');
+    layouts.forEach(function(layoutEl) {
+      updateOverviewLayoutWindow(layoutEl);
+    });
+  }
+
   function renderOverviewRows() {
     if (!dom.userCards) return;
     var layoutUsers = Array.isArray(state.overviewLayoutUsers) ? state.overviewLayoutUsers : [];
@@ -565,19 +972,7 @@
     }
     if (dom.emptyUsers) dom.emptyUsers.classList.add('hidden');
     dom.userCards.classList.toggle('layout-mode', hasLayout);
-
-    function computeExecSetState(item) {
-      var total = Number(item && item.total) || 0;
-      var pending = Number(item && item.pending) || 0;
-      var failed = Number(item && item.failed) || 0;
-      var blocked = Number(item && item.blocked) || 0;
-      var executed = Math.max(0, total - pending);
-      if (total > 0 && (failed > 0 || blocked > 0)) return 'err';
-      if (total > 0 && pending === 0) return 'ok';
-      if (executed > 0) return 'running';
-      return 'pending';
-    }
-
+    overviewLayoutMeta = {};
 
     function renderUserLayoutCard(userRow) {
       var total = userRow.total || 0;
@@ -621,59 +1016,47 @@
         return ia - ib;
       });
 
-      var versionsHtml = verIds
-        .map(function(vid) {
-          var list = byVer[vid] || [];
-          var order = fileOrderByVer && fileOrderByVer[vid] && Array.isArray(fileOrderByVer[vid])
-            ? fileOrderByVer[vid].map(function(x) { return x === null || x === undefined ? '' : String(x); })
-            : [];
-	          list.sort(function(a, b) {
-	            var ia = order.indexOf(String(a.exec_set_id));
-	            var ib = order.indexOf(String(b.exec_set_id));
-	            if (ia !== -1 || ib !== -1) {
-	              if (ia === -1) return 1;
-	              if (ib === -1) return -1;
-	              if (ia !== ib) return ia - ib;
-	            }
-	            var ta = a && a.updated_at ? parseTimeMs(a.updated_at) : 0;
-	            var tb = b && b.updated_at ? parseTimeMs(b.updated_at) : 0;
-	            return tb - ta;
-	          });
+      var versionItems = verIds.map(function(vid) {
+        var list = byVer[vid] || [];
+        var order = fileOrderByVer && fileOrderByVer[vid] && Array.isArray(fileOrderByVer[vid])
+          ? fileOrderByVer[vid].map(function(x) { return x === null || x === undefined ? '' : String(x); })
+          : [];
+        list.sort(function(a, b) {
+          var ia = order.indexOf(String(a.exec_set_id));
+          var ib = order.indexOf(String(b.exec_set_id));
+          if (ia !== -1 || ib !== -1) {
+            if (ia === -1) return 1;
+            if (ib === -1) return -1;
+            if (ia !== ib) return ia - ib;
+          }
+          var ta = a && a.updated_at ? parseTimeMs(a.updated_at) : 0;
+          var tb = b && b.updated_at ? parseTimeMs(b.updated_at) : 0;
+          return tb - ta;
+        });
+        return {
+          versionId: vid,
+          title: resolveVersionNameById(vid),
+          execSets: list,
+        };
+      });
 
-          var chips = list
-            .map(function(es) {
-              var stateCls = computeExecSetState(es);
-              var isArchived = es && String(es.status || '') === 'archived';
-              var archiveTag = isArchived ? '<span class="tag tag-archived">归</span>' : '';
-              var label = es && es.exec_set_name ? String(es.exec_set_name) : ('执行集#' + String(es.exec_set_id));
-              var execSetId = es && (es.exec_set_id || es.exec_set_id === 0) ? String(es.exec_set_id) : '';
-              return (
-                '<button type="button" class="exec-overview-file-chip state-' + stateCls + '" data-exec-set-id="' + escapeHtml(execSetId) + '" data-exec-set-name="' + escapeHtml(label) + '">' +
-                  '<div class="row">' +
-                    archiveTag +
-                    '<span class="text" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
-                    '<span class="badge">' + (es.total || 0) + '</span>' +
-                  '</div>' +
-                  buildFileProgressBar(es.total || 0, es.pending || 0, es.passed || 0, es.failed || 0, es.blocked || 0, es.not_applicable || 0) +
-                  buildExecSetMeta(es) +
-                '</button>'
-              );
-            })
-            .join('');
+      overviewLayoutMeta[userId] = { items: versionItems };
 
+      var versionsHtml = versionItems
+        .map(function(item, idx) {
           return (
-            '<div class="exec-overview-version-box">' +
+            '<div class="exec-overview-version-box placeholder" data-version-index="' + String(idx) + '" data-user-id="' + escapeHtml(userId) + '">' +
               '<div class="head">' +
-                '<span class="title" title="' + escapeHtml(resolveVersionNameById(vid)) + '">' + escapeHtml(resolveVersionNameById(vid)) + '</span>' +
+                '<span class="title" title="' + escapeHtml(item.title) + '">' + escapeHtml(item.title) + '</span>' +
               '</div>' +
-              '<div class="body">' + (chips || '<span class="hint">暂无用例</span>') + '</div>' +
+              '<div class="body">' + buildVersionBoxPlaceholder() + '</div>' +
             '</div>'
           );
         })
         .join('');
 
       return (
-        '<div class="exec-overview-user-card">' +
+        '<div class="exec-overview-user-card" data-user-id="' + escapeHtml(userId) + '">' +
           '<div class="head">' +
             '<div class="name">' + escapeHtml(name) + '</div>' +
           '</div>' +
@@ -685,7 +1068,7 @@
             '<span>阻塞 ' + blocked + '</span>' +
             '<span>不适用 ' + na + '</span>' +
           '</div>' +
-          '<div class="exec-overview-layout">' + versionsHtml + '</div>' +
+          '<div class="exec-overview-layout" data-user-id="' + escapeHtml(userId) + '">' + versionsHtml + '</div>' +
         '</div>'
       );
     }
@@ -698,6 +1081,8 @@
 	        return String(a && a.username ? a.username : '').localeCompare(String(b && b.username ? b.username : ''), 'zh-Hans-CN');
 	      });
 	      dom.userCards.innerHTML = list.map(renderUserLayoutCard).join('');
+        bindOverviewLayoutScroll();
+        updateOverviewLayoutWindowAll();
 	      return;
     }
 
@@ -797,36 +1182,21 @@
     list = filterVersionSummaryRows(list);
     if (!list.length) {
       dom.versionSummaryBody.innerHTML = '';
+      versionSummaryRenderList = [];
       if (dom.versionSummaryEmpty) dom.versionSummaryEmpty.classList.remove('hidden');
       return;
     }
     if (dom.versionSummaryEmpty) dom.versionSummaryEmpty.classList.add('hidden');
     list = sortVersionSummaryRows(list);
-    dom.versionSummaryBody.innerHTML = list.map(function(row) {
-      var total = Number(row.total) || 0;
-      var pending = Number(row.pending) || 0;
-      var passed = Number(row.passed) || 0;
-      var failed = Number(row.failed) || 0;
-      var blocked = Number(row.blocked) || 0;
-      var na = Number(row.not_applicable) || 0;
-      var title = resolveVersionNameById(row.version_id);
+    versionSummaryRenderList = list;
+    dom.versionSummaryBody.innerHTML = list.map(function(row, idx) {
       return (
-        '<div class="exec-overview-version-summary-row">' +
-          '<div class="exec-overview-version-summary-title" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</div>' +
-          '<div class="exec-overview-version-summary-main">' +
-            buildFileProgressBar(total, pending, passed, failed, blocked, na) +
-            buildExecSetMeta({
-              total: total,
-              pending: pending,
-              passed: passed,
-              failed: failed,
-              blocked: blocked,
-              not_applicable: na,
-            }) +
-          '</div>' +
+        '<div class="exec-overview-version-summary-row placeholder" data-summary-index="' + String(idx) + '">' +
         '</div>'
       );
     }).join('');
+    bindVersionSummaryScroll();
+    updateVersionSummaryWindow();
   }
 
   function filterVersionSummaryRows(rows) {

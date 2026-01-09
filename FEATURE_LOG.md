@@ -19,6 +19,22 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行总览版本总览/个人区虚拟加载与横向滚动
+- 功能描述：执行总览版本总览固定显示 2.5 行，超出可滚动；个人区版本盒子改为横向滚动展示，并对版本内容进行近邻虚拟加载。
+- 操作方式：执行总览 → 查看版本总览与个人区 → 上下滚动版本总览 / 左右滑动个人区版本盒子。
+- 使用效果：版本总览与个人区仅加载距离展示区最近的 4 条内容，滚动到目标版本时再加载，降低长列表渲染压力。
+- 新增内容/接口/组件：
+  - 前端：版本总览高度与虚拟加载逻辑、个人区版本盒子横向滚动与虚拟加载（`scripts/modules/execOverview.js`）。
+  - 样式：版本总览高度控制、个人区横向布局与占位样式（`style.css`）。
+  - 测试：执行总览虚拟加载 UI 用例（`tests/ui/exec_overview.spec.js`）。
+- 复用说明：复用现有执行总览接口与渲染逻辑，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/exec_overview.spec.js`（通过）
+- 更新记录：2026-01-08 执行总览版本总览/个人区虚拟加载与横向滚动（`scripts/modules/execOverview.js`、`style.css`、`tests/ui/exec_overview.spec.js`）。
+- 更新记录：2026-01-08 个人区版本盒子悬停显示横向滚动条（`scripts/modules/execOverview.js`、`style.css`、`tests/ui/exec_overview.spec.js`）。
+- 更新记录：2026-01-08 个人区版本盒子固定高度一致展示（`style.css`、`tests/ui/exec_overview.spec.js`）。
+- 更新记录：2026-01-08 个人区版本盒子滚轮优先上下滚动用例（`scripts/modules/execOverview.js`、`tests/ui/exec_overview.spec.js`）。
+
 - 功能名称：执行总览版本筛选持久化
 - 功能描述：执行总览页记住每个项目的版本筛选选择，刷新或再次进入时自动恢复。
 - 操作方式：执行总览 → 选择项目 → 选择版本；刷新页面或切换项目再返回查看。
