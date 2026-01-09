@@ -476,6 +476,16 @@ class ExecOverviewExecSetOut(BaseModel):
     updated_at: datetime
 
 
+class ExecOverviewVersionStatOut(BaseModel):
+    version_id: Optional[int]
+    total: int
+    pending: int
+    passed: int
+    failed: int
+    blocked: int
+    not_applicable: int
+
+
 class ExecOverviewUserLayoutOut(BaseModel):
     project_id: int
     version_id: Optional[int]
@@ -490,7 +500,8 @@ class ExecOverviewUserLayoutOut(BaseModel):
     blocked: int
     not_applicable: int
     ui_placement: Optional[Any] = None
-    exec_sets: List[ExecOverviewExecSetOut]
+    exec_sets: List[ExecOverviewExecSetOut] = Field(default_factory=list)
+    version_stats: Optional[List[ExecOverviewVersionStatOut]] = None
 
 
 class ExecOverviewCaseOut(BaseModel):

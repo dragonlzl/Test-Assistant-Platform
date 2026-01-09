@@ -53,6 +53,8 @@
   var overviewLayoutWindowSize = 4;
   var versionSummaryRenderList = [];
   var overviewLayoutMeta = {};
+  var overviewLayoutExecSetCache = {};
+  var overviewLayoutRequestId = 0;
   var versionSummaryScrollBound = false;
   var versionSummaryScrollRaf = 0;
   var versionSummaryRowHeight = 0;
@@ -196,6 +198,11 @@
     });
     if (found && found.name) return found.name;
     return '版本#' + String(versionId);
+  }
+
+  function isLayoutLazyEnabled() {
+    return typeof api.getExecutionOverviewLayout === 'function'
+      && typeof api.listExecutionOverviewLayoutExecSets === 'function';
   }
 
   function buildVersionOrderList() {
@@ -709,6 +716,24 @@
     return '<span class="exec-overview-placeholder">滚动加载</span>';
   }
 
+  function buildVersionBoxLoading() {
+    return '<span class="exec-overview-placeholder">加载中...</span>';
+  }
+
+  function buildOverviewExecSetCacheKey(projectId, userId, versionId) {
+    var safeProjectId = projectId || projectId === 0 ? projectId : '';
+    var safeUserId = userId || userId === 0 ? userId : '';
+    return [
+      String(safeProjectId),
+      String(safeUserId),
+      normalizeVersionKey(versionId),
+    ].join('::');
+  }
+
+  function resetOverviewLayoutCache() {
+    overviewLayoutExecSetCache = {};
+  }
+
   function buildExecSetChip(es) {
     var stateCls = computeExecSetState(es);
     var isArchived = es && String(es.status || '') === 'archived';
@@ -729,7 +754,10 @@
   }
 
   function buildVersionBoxBody(item) {
-    var list = Array.isArray(item && item.execSets) ? item.execSets : [];
+    if (!item) return buildVersionBoxPlaceholder();
+    if (item.execSetsLoading) return buildVersionBoxLoading();
+    if (item.execSetsLoaded !== true) return buildVersionBoxPlaceholder();
+    var list = Array.isArray(item.execSets) ? item.execSets : [];
     if (!list.length) {
       return '<span class="exec-overview-placeholder">暂无用例</span>';
     }
@@ -737,11 +765,7 @@
   }
 
   function getVersionBoxBodyHtml(item) {
-    if (!item) return buildVersionBoxPlaceholder();
-    if (item.bodyHtml === undefined) {
-      item.bodyHtml = buildVersionBoxBody(item);
-    }
-    return item.bodyHtml || '';
+    return buildVersionBoxBody(item);
   }
 
   function ensureOverviewScrollbar(layoutEl) {
@@ -756,6 +780,73 @@
       layoutEl.appendChild(bar);
     }
     return bar;
+  }
+
+  function findOverviewLayoutElement(userId) {
+    if (!dom.userCards) return null;
+    return dom.userCards.querySelector('.exec-overview-layout[data-user-id="' + String(userId) + '"]');
+  }
+
+  function applyOverviewExecSetsToItem(userId, versionKey, execSets) {
+    var meta = overviewLayoutMeta[userId];
+    if (!meta || !Array.isArray(meta.items)) return;
+    var normalized = normalizeVersionKey(versionKey);
+    for (var i = 0; i < meta.items.length; i += 1) {
+      var item = meta.items[i];
+      if (!item) continue;
+      if (normalizeVersionKey(item.versionId) !== normalized) continue;
+      item.execSets = Array.isArray(execSets) ? execSets : [];
+      item.execSetsLoaded = true;
+      item.execSetsLoading = false;
+      return;
+    }
+  }
+
+  function ensureOverviewLayoutExecSets(userId, item, layoutEl) {
+    if (!item) return;
+    if (item.execSetsLoaded === true || item.execSetsLoading) return;
+    if (!isLayoutLazyEnabled()) {
+      item.execSetsLoaded = true;
+      item.execSetsLoading = false;
+      return;
+    }
+    var projectId = state.currentProject && (state.currentProject.id || state.currentProject.id === 0)
+      ? state.currentProject.id
+      : null;
+    if (projectId === null || projectId === undefined) return;
+    var versionId = normalizeVersionId(item.versionId);
+    var key = buildOverviewExecSetCacheKey(projectId, userId, versionId);
+    var cache = overviewLayoutExecSetCache[key];
+    if (cache && cache.state === 'loaded') {
+      item.execSets = Array.isArray(cache.execSets) ? cache.execSets : [];
+      item.execSetsLoaded = true;
+      item.execSetsLoading = false;
+      return;
+    }
+    if (cache && cache.state === 'loading') {
+      item.execSetsLoading = true;
+      return;
+    }
+    overviewLayoutExecSetCache[key] = { state: 'loading', execSets: [] };
+    item.execSetsLoading = true;
+    var requestId = overviewLayoutRequestId;
+    api
+      .listExecutionOverviewLayoutExecSets(projectId, userId, versionId)
+      .then(function(list) {
+        if (overviewLayoutRequestId !== requestId) return;
+        var data = Array.isArray(list) ? list : [];
+        overviewLayoutExecSetCache[key] = { state: 'loaded', execSets: data };
+        applyOverviewExecSetsToItem(userId, item.versionId, data);
+        var layout = layoutEl || findOverviewLayoutElement(userId);
+        if (layout) scheduleOverviewLayoutUpdate(layout);
+      })
+      .catch(function() {
+        if (overviewLayoutRequestId !== requestId) return;
+        overviewLayoutExecSetCache[key] = { state: 'loaded', execSets: [] };
+        applyOverviewExecSetsToItem(userId, item.versionId, []);
+        var layout = layoutEl || findOverviewLayoutElement(userId);
+        if (layout) scheduleOverviewLayoutUpdate(layout);
+      });
   }
 
   function bindOverviewScrollbarDrag(layoutEl) {
@@ -870,10 +961,9 @@
       var body = box ? box.querySelector('.body') : null;
       if (!body) continue;
       if (i >= startIndex && i <= endIndex) {
-        if (box.getAttribute('data-loaded') !== '1') {
-          body.innerHTML = getVersionBoxBodyHtml(items[i]);
-          box.setAttribute('data-loaded', '1');
-        }
+        ensureOverviewLayoutExecSets(userId, items[i], layoutEl);
+        body.innerHTML = getVersionBoxBodyHtml(items[i]);
+        box.setAttribute('data-loaded', '1');
         box.classList.remove('placeholder');
       } else {
         if (box.getAttribute('data-loaded') !== '0') {
@@ -984,6 +1074,8 @@
       var name = userRow.username ? userRow.username : formatName(userRow);
       var userId = userRow.user_id === null || userRow.user_id === undefined ? '' : String(userRow.user_id);
       var execSets = Array.isArray(userRow.exec_sets) ? userRow.exec_sets.slice() : [];
+      var versionStats = Array.isArray(userRow.version_stats) ? userRow.version_stats : [];
+      var hasVersionStats = versionStats.length > 0;
 
       var pid = state.currentProject && state.currentProject.id ? String(state.currentProject.id) : '';
       var placement = userRow.ui_placement && typeof userRow.ui_placement === 'object' ? userRow.ui_placement : null;
@@ -1000,6 +1092,11 @@
         var vid = es.version_id === null || es.version_id === undefined ? '' : String(es.version_id);
         if (!byVer[vid]) byVer[vid] = [];
         byVer[vid].push(es);
+      });
+      versionStats.forEach(function(stat) {
+        if (!stat) return;
+        var vid = stat.version_id === null || stat.version_id === undefined ? '' : String(stat.version_id);
+        if (!byVer[vid]) byVer[vid] = [];
       });
 
       var verIds = Object.keys(byVer);
@@ -1033,10 +1130,13 @@
           var tb = b && b.updated_at ? parseTimeMs(b.updated_at) : 0;
           return tb - ta;
         });
+        var preloaded = !hasVersionStats || list.length > 0;
         return {
           versionId: vid,
           title: resolveVersionNameById(vid),
           execSets: list,
+          execSetsLoaded: preloaded,
+          execSetsLoading: false,
         };
       });
 
@@ -1123,6 +1223,31 @@
     var map = {};
     var list = Array.isArray(layoutUsers) ? layoutUsers : [];
     list.forEach(function(userRow) {
+      var stats = Array.isArray(userRow && userRow.version_stats) ? userRow.version_stats : [];
+      if (stats.length) {
+        stats.forEach(function(stat) {
+          if (!stat) return;
+          var key = normalizeVersionKey(stat.version_id);
+          if (!map[key]) {
+            map[key] = {
+              version_id: key,
+              total: 0,
+              pending: 0,
+              passed: 0,
+              failed: 0,
+              blocked: 0,
+              not_applicable: 0,
+            };
+          }
+          map[key].total += Number(stat.total) || 0;
+          map[key].pending += Number(stat.pending) || 0;
+          map[key].passed += Number(stat.passed) || 0;
+          map[key].failed += Number(stat.failed) || 0;
+          map[key].blocked += Number(stat.blocked) || 0;
+          map[key].not_applicable += Number(stat.not_applicable) || 0;
+        });
+        return;
+      }
       var sets = Array.isArray(userRow && userRow.exec_sets) ? userRow.exec_sets : [];
       sets.forEach(function(es) {
         if (!es) return;
@@ -1217,9 +1342,10 @@
     }
     if (!api.getExecutionOverview && !api.getExecutionOverviewLayout) return Promise.resolve([]);
     var hasLayout = typeof api.getExecutionOverviewLayout === 'function';
+    var lazyLayout = isLayoutLazyEnabled();
     var fetcher = hasLayout ? api.getExecutionOverviewLayout : api.getExecutionOverview;
     return fetcher
-      .call(api, projectId, null)
+      .call(api, projectId, null, lazyLayout ? false : true)
       .then(function(rows) {
         state.versionSummaryRows = hasLayout ? aggregateSummaryFromLayout(rows) : aggregateSummaryFromRows(rows);
         renderVersionSummary();
@@ -1304,10 +1430,13 @@
     setStatus('加载执行总览中...', '');
     state.overviewRows = [];
     state.overviewLayoutUsers = [];
+    resetOverviewLayoutCache();
+    overviewLayoutRequestId += 1;
     var hasLayout = typeof api.getExecutionOverviewLayout === 'function';
+    var lazyLayout = isLayoutLazyEnabled();
     var fetcher = hasLayout ? api.getExecutionOverviewLayout : api.getExecutionOverview;
     return fetcher
-      .call(api, project.id, state.currentVersionId)
+      .call(api, project.id, state.currentVersionId, lazyLayout ? false : true)
       .then(function(rows) {
         if (hasLayout) {
           state.overviewLayoutUsers = Array.isArray(rows) ? rows : [];

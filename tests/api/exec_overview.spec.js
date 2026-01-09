@@ -132,6 +132,29 @@ test.describe('exec overview api', () => {
     expect(Array.isArray(layoutUser.exec_sets)).toBeTruthy();
     expect(layoutUser.exec_sets.length).toBeGreaterThanOrEqual(1);
 
+    const layoutLiteRes = await ctx.get(
+      `${apiBase}/api/exec/overview/layout?project_id=${projectId}&version_id=${versionId}&include_sets=0`,
+      { headers }
+    );
+    expect(layoutLiteRes.status()).toBe(200);
+    const layoutLite = await layoutLiteRes.json();
+    expect(Array.isArray(layoutLite)).toBeTruthy();
+    const layoutLiteUser = layoutLite.find((u) => u && u.user_id === auth.user.id);
+    expect(layoutLiteUser).toBeTruthy();
+    expect(Array.isArray(layoutLiteUser.exec_sets)).toBeTruthy();
+    expect(layoutLiteUser.exec_sets.length).toBe(0);
+    expect(Array.isArray(layoutLiteUser.version_stats)).toBeTruthy();
+    expect(layoutLiteUser.version_stats.length).toBeGreaterThanOrEqual(1);
+
+    const layoutSetsRes = await ctx.get(
+      `${apiBase}/api/exec/overview/layout/exec-sets?project_id=${projectId}&user_id=${auth.user.id}&version_id=${versionId}`,
+      { headers }
+    );
+    expect(layoutSetsRes.status()).toBe(200);
+    const layoutSets = await layoutSetsRes.json();
+    expect(Array.isArray(layoutSets)).toBeTruthy();
+    expect(layoutSets.some((s) => s && s.exec_set_id === execSet.id)).toBeTruthy();
+
     const casesRes = await ctx.get(
       `${apiBase}/api/exec/overview/cases?project_id=${projectId}&version_id=${versionId}&user_id=${auth.user.id}&limit=50`,
       { headers }

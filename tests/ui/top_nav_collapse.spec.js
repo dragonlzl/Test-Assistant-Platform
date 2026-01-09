@@ -96,5 +96,18 @@ test.describe('顶部导航收起展开', () => {
       window.dispatchEvent(new WheelEvent('wheel', { deltaY: -160 }));
     });
     await expect(nav).not.toHaveClass(/is-collapsed/);
+
+    await page.goto(base + '/case-exec.html');
+    await waitForAppReady(page);
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('exec-overview');
+      }
+    });
+    const execOverviewNav = page.locator('#execOverviewFlowNav');
+    await execOverviewNav.waitFor({ state: 'visible', timeout: 10000 });
+    await expect(execOverviewNav).not.toHaveClass(/is-collapsed/);
+    await page.mouse.wheel(0, 160);
+    await expect(execOverviewNav).not.toHaveClass(/is-collapsed/);
   });
 });

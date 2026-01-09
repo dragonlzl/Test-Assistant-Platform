@@ -26,6 +26,8 @@ test.describe('执行总览页（DB 接口接入）', () => {
       1: [versionV2, versionV1],
       2: [{ id: 21, name: 'v1' }],
     };
+    const now = Date.now();
+    const iso = (ms) => new Date(ms).toISOString();
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -96,8 +98,8 @@ test.describe('执行总览页（DB 接口接入）', () => {
       if (path === '/api/exec/overview/layout' && method === 'GET') {
         const projectId = url.searchParams.get('project_id');
         const versionId = url.searchParams.get('version_id');
-        const now = Date.now();
-        const iso = (ms) => new Date(ms).toISOString();
+        const v1Stats = { version_id: 11, total: 9, pending: 5, passed: 3, failed: 1, blocked: 0, not_applicable: 0 };
+        const v2Stats = { version_id: 12, total: 2, pending: 1, passed: 1, failed: 0, blocked: 0, not_applicable: 0 };
         const baseUser = {
           project_id: Number(projectId),
           version_id: versionId ? Number(versionId) : null,
@@ -112,12 +114,8 @@ test.describe('执行总览页（DB 接口接入）', () => {
           blocked: 0,
           not_applicable: 0,
           ui_placement: { versionOrderByProject: { 1: ['12', '11'] }, fileOrderByProjectVersion: { 1: { 11: ['200'], 12: [] } } },
-          exec_sets: [
-            { exec_set_id: 200, exec_set_name: '需求-登录', version_id: 11, status: 'archived', requirement: '', total: 3, pending: 0, passed: 2, failed: 1, blocked: 0, not_applicable: 0, created_at: iso(now - 20000), updated_at: iso(now - 2000) },
-            { exec_set_id: 201, exec_set_name: '需求-注册', version_id: 11, status: 'active', requirement: '', total: 2, pending: 2, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: iso(now - 18000), updated_at: iso(now - 1000) },
-            { exec_set_id: 202, exec_set_name: '需求-支付', version_id: 11, status: 'active', requirement: '', total: 4, pending: 3, passed: 1, failed: 0, blocked: 0, not_applicable: 0, created_at: iso(now - 16000), updated_at: iso(now - 1500) },
-            { exec_set_id: 203, exec_set_name: '需求-支付-v2', version_id: 12, status: 'active', requirement: '', total: 2, pending: 1, passed: 1, failed: 0, blocked: 0, not_applicable: 0, created_at: iso(now - 14000), updated_at: iso(now - 800) },
-          ],
+          exec_sets: [],
+          version_stats: [v1Stats, v2Stats],
         };
         if (projectId === '2') {
           return respond(200, [
@@ -129,8 +127,8 @@ test.describe('执行总览页（DB 接口接入）', () => {
               failed: 0,
               blocked: 0,
               not_applicable: 0,
-              exec_sets: [
-                { exec_set_id: 300, exec_set_name: '需求-战斗', version_id: 21, status: 'active', requirement: '', total: 1, pending: 1, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+              version_stats: [
+                { version_id: 21, total: 1, pending: 1, passed: 0, failed: 0, blocked: 0, not_applicable: 0 },
               ],
             }),
           ]);
@@ -139,18 +137,41 @@ test.describe('执行总览页（DB 接口接入）', () => {
           return respond(200, [
             Object.assign({}, baseUser, {
               total: 3,
-              pending: 1,
-              passed: 1,
+              pending: 0,
+              passed: 2,
               failed: 1,
               blocked: 0,
               not_applicable: 0,
-              exec_sets: [
-                { exec_set_id: 200, exec_set_name: '需求-登录', version_id: 11, status: 'archived', requirement: '', total: 3, pending: 0, passed: 2, failed: 1, blocked: 0, not_applicable: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+              version_stats: [
+                { version_id: 11, total: 3, pending: 0, passed: 2, failed: 1, blocked: 0, not_applicable: 0 },
               ],
             }),
           ]);
         }
         return respond(200, [baseUser]);
+      }
+
+      if (path === '/api/exec/overview/layout/exec-sets' && method === 'GET') {
+        const versionId = url.searchParams.get('version_id');
+        const baseTime = (offset) => iso(now - offset);
+        if (versionId === '21') {
+          return respond(200, [
+            { exec_set_id: 300, exec_set_name: '需求-战斗', version_id: 21, status: 'active', requirement: '', total: 1, pending: 1, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+          ]);
+        }
+        if (versionId === String(versionV1.id)) {
+          return respond(200, [
+            { exec_set_id: 200, exec_set_name: '需求-登录', version_id: 11, status: 'archived', requirement: '', total: 3, pending: 0, passed: 2, failed: 1, blocked: 0, not_applicable: 0, created_at: baseTime(20000), updated_at: baseTime(2000) },
+            { exec_set_id: 201, exec_set_name: '需求-注册', version_id: 11, status: 'active', requirement: '', total: 2, pending: 2, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: baseTime(18000), updated_at: baseTime(1000) },
+            { exec_set_id: 202, exec_set_name: '需求-支付', version_id: 11, status: 'active', requirement: '', total: 4, pending: 3, passed: 1, failed: 0, blocked: 0, not_applicable: 0, created_at: baseTime(16000), updated_at: baseTime(1500) },
+          ]);
+        }
+        if (versionId === String(versionV2.id)) {
+          return respond(200, [
+            { exec_set_id: 203, exec_set_name: '需求-支付-v2', version_id: 12, status: 'active', requirement: '', total: 2, pending: 1, passed: 1, failed: 0, blocked: 0, not_applicable: 0, created_at: baseTime(14000), updated_at: baseTime(800) },
+          ]);
+        }
+        return respond(200, []);
       }
 
       if (path === '/api/exec/overview/cases' && method === 'GET') {
@@ -251,7 +272,8 @@ test.describe('执行总览页（DB 接口接入）', () => {
 
 	    await expect(page.locator('#execOverviewUserCards')).toContainText(user.username);
 	    await expect(page.locator('#execOverviewUserCards')).toContainText('总数 11');
-	    await expect(page.locator('#execOverviewUserCards')).toContainText('归');
+	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id=\"200\"]')).toBeVisible();
+	    await expect(page.locator('#execOverviewUserCards .tag-archived')).toBeVisible();
 	    await expect(page.locator('#execOverviewUserCards .exec-overview-progress')).toHaveCount(0);
 	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-progress')).toHaveCount(4);
 	    await expect(page.locator('#execOverviewUserCards .exec-overview-file-meta')).toHaveCount(4);
@@ -341,6 +363,29 @@ test.describe('执行总览页（DB 接口接入）', () => {
       var failed = execSets.reduce(function(sum, item) { return sum + (item.failed || 0); }, 0);
       var blocked = execSets.reduce(function(sum, item) { return sum + (item.blocked || 0); }, 0);
       var na = execSets.reduce(function(sum, item) { return sum + (item.not_applicable || 0); }, 0);
+      var statsMap = {};
+      execSets.forEach(function(item) {
+        if (!item) return;
+        var key = item.version_id === null || item.version_id === undefined ? '' : String(item.version_id);
+        if (!statsMap[key]) {
+          statsMap[key] = {
+            version_id: key === '' ? null : Number(key),
+            total: 0,
+            pending: 0,
+            passed: 0,
+            failed: 0,
+            blocked: 0,
+            not_applicable: 0,
+          };
+        }
+        statsMap[key].total += item.total || 0;
+        statsMap[key].pending += item.pending || 0;
+        statsMap[key].passed += item.passed || 0;
+        statsMap[key].failed += item.failed || 0;
+        statsMap[key].blocked += item.blocked || 0;
+        statsMap[key].not_applicable += item.not_applicable || 0;
+      });
+      var versionStats = Object.keys(statsMap).map(function(key) { return statsMap[key]; });
       return {
         project_id: Number(projectId),
         version_id: versionId ? Number(versionId) : null,
@@ -355,7 +400,8 @@ test.describe('执行总览页（DB 接口接入）', () => {
         blocked: blocked,
         not_applicable: na,
         ui_placement: { versionOrderByProject: { 1: ['12', '11'], 2: ['21'] }, fileOrderByProjectVersion: { 1: { 11: ['101'], 12: ['102'] }, 2: { 21: ['201'] } } },
-        exec_sets: execSets,
+        exec_sets: [],
+        version_stats: versionStats,
       };
     }
 
@@ -404,6 +450,26 @@ test.describe('执行总览页（DB 接口接入）', () => {
             { exec_set_id: 102, exec_set_name: '需求-注册', version_id: 12, status: 'active', requirement: '', total: 3, pending: 2, passed: 1, failed: 0, blocked: 0, not_applicable: 0, created_at: now, updated_at: now },
           ]),
         ]);
+      }
+
+      if (path === '/api/exec/overview/layout/exec-sets' && method === 'GET') {
+        const versionId = url.searchParams.get('version_id');
+        if (versionId === '21') {
+          return respond(200, [
+            { exec_set_id: 201, exec_set_name: '需求-搜索', version_id: 21, status: 'active', requirement: '', total: 2, pending: 2, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: now, updated_at: now },
+          ]);
+        }
+        if (versionId === String(versionV1.id)) {
+          return respond(200, [
+            { exec_set_id: 101, exec_set_name: '需求-登录', version_id: 11, status: 'active', requirement: '', total: 1, pending: 1, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: now, updated_at: now },
+          ]);
+        }
+        if (versionId === String(versionV2.id)) {
+          return respond(200, [
+            { exec_set_id: 102, exec_set_name: '需求-注册', version_id: 12, status: 'active', requirement: '', total: 3, pending: 2, passed: 1, failed: 0, blocked: 0, not_applicable: 0, created_at: now, updated_at: now },
+          ]);
+        }
+        return respond(200, []);
       }
 
       if (path === '/api/auth/logout') return respond(200, {});
@@ -474,6 +540,15 @@ test.describe('执行总览页（DB 接口接入）', () => {
         updated_at: now,
       };
     });
+    const versionStats = versions.map((v) => ({
+      version_id: v.id,
+      total: 1,
+      pending: 1,
+      passed: 0,
+      failed: 0,
+      blocked: 0,
+      not_applicable: 0,
+    }));
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -503,9 +578,16 @@ test.describe('执行总览页（DB 接口接入）', () => {
             blocked: 0,
             not_applicable: 0,
             ui_placement: { versionOrderByProject: { 1: versionOrder }, fileOrderByProjectVersion: { 1: fileOrderByVer } },
-            exec_sets: execSets,
+            exec_sets: [],
+            version_stats: versionStats,
           },
         ]);
+      }
+
+      if (path === '/api/exec/overview/layout/exec-sets' && method === 'GET') {
+        const versionId = url.searchParams.get('version_id');
+        const list = execSets.filter((item) => String(item.version_id) === String(versionId));
+        return respond(200, list);
       }
 
       if (path === '/api/auth/logout') return respond(200, {});
@@ -604,6 +686,28 @@ test.describe('执行总览页（DB 接口接入）', () => {
         updated_at: now,
       });
     });
+    const statsMap = {};
+    execSets.forEach((item) => {
+      const key = String(item.version_id);
+      if (!statsMap[key]) {
+        statsMap[key] = {
+          version_id: item.version_id,
+          total: 0,
+          pending: 0,
+          passed: 0,
+          failed: 0,
+          blocked: 0,
+          not_applicable: 0,
+        };
+      }
+      statsMap[key].total += item.total || 0;
+      statsMap[key].pending += item.pending || 0;
+      statsMap[key].passed += item.passed || 0;
+      statsMap[key].failed += item.failed || 0;
+      statsMap[key].blocked += item.blocked || 0;
+      statsMap[key].not_applicable += item.not_applicable || 0;
+    });
+    const versionStats = Object.keys(statsMap).map((key) => statsMap[key]);
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -633,9 +737,16 @@ test.describe('执行总览页（DB 接口接入）', () => {
             blocked: 0,
             not_applicable: 0,
             ui_placement: { versionOrderByProject: { 1: versionOrder }, fileOrderByProjectVersion: { 1: fileOrderByVer } },
-            exec_sets: execSets,
+            exec_sets: [],
+            version_stats: versionStats,
           },
         ]);
+      }
+
+      if (path === '/api/exec/overview/layout/exec-sets' && method === 'GET') {
+        const versionId = url.searchParams.get('version_id');
+        const list = execSets.filter((item) => String(item.version_id) === String(versionId));
+        return respond(200, list);
       }
 
       if (path === '/api/auth/logout') return respond(200, {});
@@ -701,23 +812,32 @@ test.describe('执行总览页（DB 接口接入）', () => {
             blocked: 0,
             not_applicable: 0,
             ui_placement: { versionOrderByProject: { 1: ['11'] }, fileOrderByProjectVersion: { 1: { 11: ['200'] } } },
-            exec_sets: [
-              {
-                exec_set_id: 200,
-                exec_set_name: '需求-登录',
-                version_id: versionV1.id,
-                status: 'active',
-                requirement: '',
-                total: 1,
-                pending: 0,
-                passed: 1,
-                failed: 0,
-                blocked: 0,
-                not_applicable: 0,
-                created_at: now,
-                updated_at: now,
-              },
+            exec_sets: [],
+            version_stats: [
+              { version_id: versionV1.id, total: 1, pending: 0, passed: 1, failed: 0, blocked: 0, not_applicable: 0 },
             ],
+          },
+        ]);
+      }
+
+      if (path === '/api/exec/overview/layout/exec-sets' && method === 'GET') {
+        const versionId = url.searchParams.get('version_id');
+        if (versionId !== String(versionV1.id)) return respond(200, []);
+        return respond(200, [
+          {
+            exec_set_id: 200,
+            exec_set_name: '需求-登录',
+            version_id: versionV1.id,
+            status: 'active',
+            requirement: '',
+            total: 1,
+            pending: 0,
+            passed: 1,
+            failed: 0,
+            blocked: 0,
+            not_applicable: 0,
+            created_at: now,
+            updated_at: now,
           },
         ]);
       }
@@ -830,23 +950,31 @@ test.describe('执行总览页（DB 接口接入）', () => {
             blocked: 0,
             not_applicable: 2,
             ui_placement: { versionOrderByProject: { 1: ['11'] }, fileOrderByProjectVersion: { 1: { 11: ['200'] } } },
-            exec_sets: [
-              {
-                exec_set_id: 200,
-                exec_set_name: '需求-登录',
-                version_id: 11,
-                status: 'active',
-                requirement: '',
-                total: 5,
-                pending: 1,
-                passed: 2,
-                failed: 0,
-                blocked: 0,
-                not_applicable: 2,
-                created_at: iso(now - 20000),
-                updated_at: iso(now - 2000),
-              },
+            exec_sets: [],
+            version_stats: [
+              { version_id: 11, total: 5, pending: 1, passed: 2, failed: 0, blocked: 0, not_applicable: 2 },
             ],
+          },
+        ]);
+      }
+      if (path === '/api/exec/overview/layout/exec-sets' && method === 'GET') {
+        const versionId = url.searchParams.get('version_id');
+        if (versionId !== String(versionV1.id)) return respond(200, []);
+        return respond(200, [
+          {
+            exec_set_id: 200,
+            exec_set_name: '需求-登录',
+            version_id: 11,
+            status: 'active',
+            requirement: '',
+            total: 5,
+            pending: 1,
+            passed: 2,
+            failed: 0,
+            blocked: 0,
+            not_applicable: 2,
+            created_at: iso(now - 20000),
+            updated_at: iso(now - 2000),
           },
         ]);
       }
@@ -936,10 +1064,19 @@ test.describe('执行总览页（DB 接口接入）', () => {
             blocked: 0,
             not_applicable: 0,
             ui_placement: { versionOrderByProject: { 1: ['11'] }, fileOrderByProjectVersion: { 1: { 11: ['200'] } } },
-            exec_sets: [
-              { exec_set_id: 200, exec_set_name: '需求-登录', version_id: 11, status: 'active', requirement: '', total: cases.length, pending: cases.length, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+            exec_sets: [],
+            version_stats: [
+              { version_id: 11, total: cases.length, pending: cases.length, passed: 0, failed: 0, blocked: 0, not_applicable: 0 },
             ],
           },
+        ]);
+      }
+
+      if (path === '/api/exec/overview/layout/exec-sets' && method === 'GET') {
+        const versionId = url.searchParams.get('version_id');
+        if (versionId !== '11') return respond(200, []);
+        return respond(200, [
+          { exec_set_id: 200, exec_set_name: '需求-登录', version_id: 11, status: 'active', requirement: '', total: cases.length, pending: cases.length, passed: 0, failed: 0, blocked: 0, not_applicable: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         ]);
       }
 

@@ -3078,6 +3078,7 @@ def list_execution_overview_cases(
 def get_execution_overview_layout(
     project_id: int,
     version_id: int = None,
+    include_sets: bool = True,
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -3150,6 +3151,7 @@ def get_execution_overview_layout(
             models.ExecSet.created_by.label("user_id"),
             models.ExecSet.created_at.label("created_at"),
             models.ExecSet.updated_at.label("updated_at"),
+            effective_version_id,
             func.count(models.ExecCase.id).label("total"),
             func.sum(
                 case(
@@ -3225,6 +3227,112 @@ def get_execution_overview_layout(
             placement = value_json.get("placement")
         placement_by_user[int(owner_id)] = placement
 
+    source_is_int = and_(
+        models.ExecSet.source.isnot(None),
+        models.ExecSet.source != "",
+        models.ExecSet.source.op("GLOB")("[0-9]*"),
+    )
+    source_case_file_id = case(
+        (source_is_int, cast(models.ExecSet.source, Integer)),
+        else_=None,
+    )
+    effective_case_file_id = func.coalesce(models.ExecSet.case_file_id, source_case_file_id)
+    query_case_file_join = and_(
+        models.CaseFile.id == effective_case_file_id,
+        models.CaseFile.project_id == models.ExecSet.project_id,
+    )
+    effective_version_id = func.coalesce(models.ExecSet.version_id, models.CaseFile.version_id).label("version_id")
+
+    if not include_sets:
+        summary_query = (
+            db.query(
+                models.ExecSet.created_by.label("user_id"),
+                effective_version_id,
+                func.count(models.ExecCase.id).label("total"),
+                func.sum(
+                    case(
+                        (
+                            (models.ExecCase.status == "pending")
+                            | (models.ExecCase.status == "未执行")
+                            | (models.ExecCase.status == "变更重跑")
+                            | (models.ExecCase.status == "有改动"),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("pending"),
+                func.sum(case((models.ExecCase.status == "通过", 1), else_=0)).label("passed_cn"),
+                func.sum(case((models.ExecCase.status == "passed", 1), else_=0)).label("passed_en"),
+                func.sum(case((models.ExecCase.status == "failed", 1), else_=0)).label("failed_en"),
+                func.sum(case((models.ExecCase.status == "失败", 1), else_=0)).label("failed_cn"),
+                func.sum(case((models.ExecCase.status == "blocked", 1), else_=0)).label("blocked_en"),
+                func.sum(case((models.ExecCase.status == "阻塞", 1), else_=0)).label("blocked_cn"),
+                func.sum(case((models.ExecCase.status == "不适用", 1), else_=0)).label("na_cn"),
+                func.sum(case((models.ExecCase.status == "not_applicable", 1), else_=0)).label("na_en"),
+            )
+            .join(models.ExecCase, models.ExecCase.exec_set_id == models.ExecSet.id)
+            .outerjoin(models.CaseFile, query_case_file_join)
+            .filter(models.ExecSet.project_id == project_id, models.ExecSet.created_by.in_(member_ids))
+        )
+        if version_id is not None:
+            summary_query = summary_query.filter(effective_version_id == version_id)
+        summary_query = summary_query.group_by(models.ExecSet.created_by, effective_version_id)
+        summary_rows = summary_query.all()
+
+        stats_by_user = {}
+        for row in summary_rows:
+            if row.user_id is None:
+                continue
+            uid = int(row.user_id)
+            total_failed = (row.failed_en or 0) + (row.failed_cn or 0)
+            total_blocked = (row.blocked_en or 0) + (row.blocked_cn or 0)
+            total_na = (row.na_en or 0) + (row.na_cn or 0)
+            passed = (row.passed_cn or 0) + (row.passed_en or 0)
+            stats_by_user.setdefault(uid, []).append(
+                schemas.ExecOverviewVersionStatOut(
+                    version_id=row.version_id,
+                    total=row.total or 0,
+                    pending=row.pending or 0,
+                    passed=passed,
+                    failed=total_failed,
+                    blocked=total_blocked,
+                    not_applicable=total_na,
+                )
+            )
+
+        result: List[schemas.ExecOverviewUserLayoutOut] = []
+        for uid, stats in stats_by_user.items():
+            meta = member_meta.get(uid) or {}
+            username = meta.get("username") or ("用户#" + str(uid))
+            level = meta.get("level")
+            created_at = meta.get("created_at") or datetime.now(timezone.utc)
+            total = sum([s.total for s in stats])
+            pending = sum([s.pending for s in stats])
+            passed = sum([s.passed for s in stats])
+            failed = sum([s.failed for s in stats])
+            blocked = sum([s.blocked for s in stats])
+            na = sum([s.not_applicable for s in stats])
+            result.append(
+                schemas.ExecOverviewUserLayoutOut(
+                    project_id=project_id,
+                    version_id=version_id,
+                    user_id=uid,
+                    username=username,
+                    level=level,
+                    user_created_at=created_at,
+                    total=total,
+                    pending=pending,
+                    passed=passed,
+                    failed=failed,
+                    blocked=blocked,
+                    not_applicable=na,
+                    ui_placement=placement_by_user.get(uid),
+                    exec_sets=[],
+                    version_stats=stats,
+                )
+            )
+        return result
+
     grouped = {}
     for row in rows:
         if row.user_id is None:
@@ -3287,6 +3395,133 @@ def get_execution_overview_layout(
             )
         )
 
+    return result
+
+
+@router.get("/overview/layout/exec-sets", response_model=List[schemas.ExecOverviewExecSetOut])
+def list_execution_overview_layout_exec_sets(
+    project_id: int,
+    user_id: int,
+    version_id: int = None,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ensure_project_access(db, user, project_id)
+
+    membership_ids = [
+        int(uid)
+        for uid, in db.query(models.UserProject.user_id)
+        .filter(models.UserProject.project_id == project_id)
+        .all()
+        if uid is not None
+    ]
+    admin_ids_query = (
+        db.query(models.ExecSet.created_by)
+        .join(models.User, models.User.id == models.ExecSet.created_by)
+        .filter(
+            models.ExecSet.project_id == project_id,
+            models.ExecSet.created_by.isnot(None),
+            models.User.role == "admin",
+        )
+        .distinct()
+    )
+    admin_ids = [int(uid) for uid, in admin_ids_query.all() if uid is not None]
+    member_ids = list(set(membership_ids + admin_ids))
+    if not member_ids or int(user_id) not in member_ids:
+        return []
+
+    source_is_int = and_(
+        models.ExecSet.source.isnot(None),
+        models.ExecSet.source != "",
+        models.ExecSet.source.op("GLOB")("[0-9]*"),
+    )
+    source_case_file_id = case(
+        (source_is_int, cast(models.ExecSet.source, Integer)),
+        else_=None,
+    )
+    effective_case_file_id = func.coalesce(models.ExecSet.case_file_id, source_case_file_id)
+    query_case_file_join = and_(
+        models.CaseFile.id == effective_case_file_id,
+        models.CaseFile.project_id == models.ExecSet.project_id,
+    )
+    effective_version_id = func.coalesce(models.ExecSet.version_id, models.CaseFile.version_id).label("version_id")
+
+    query = (
+        db.query(
+            models.ExecSet.id.label("exec_set_id"),
+            models.ExecSet.name.label("exec_set_name"),
+            models.ExecSet.status.label("status"),
+            models.ExecSet.requirement.label("requirement"),
+            models.ExecSet.created_by.label("user_id"),
+            models.ExecSet.created_at.label("created_at"),
+            models.ExecSet.updated_at.label("updated_at"),
+            effective_version_id,
+            func.count(models.ExecCase.id).label("total"),
+            func.sum(
+                case(
+                    (
+                        (models.ExecCase.status == "pending")
+                        | (models.ExecCase.status == "未执行")
+                        | (models.ExecCase.status == "变更重跑")
+                        | (models.ExecCase.status == "有改动"),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("pending"),
+            func.sum(case((models.ExecCase.status == "通过", 1), else_=0)).label("passed_cn"),
+            func.sum(case((models.ExecCase.status == "passed", 1), else_=0)).label("passed_en"),
+            func.sum(case((models.ExecCase.status == "failed", 1), else_=0)).label("failed_en"),
+            func.sum(case((models.ExecCase.status == "失败", 1), else_=0)).label("failed_cn"),
+            func.sum(case((models.ExecCase.status == "blocked", 1), else_=0)).label("blocked_en"),
+            func.sum(case((models.ExecCase.status == "阻塞", 1), else_=0)).label("blocked_cn"),
+            func.sum(case((models.ExecCase.status == "不适用", 1), else_=0)).label("na_cn"),
+            func.sum(case((models.ExecCase.status == "not_applicable", 1), else_=0)).label("na_en"),
+        )
+        .join(models.ExecCase, models.ExecCase.exec_set_id == models.ExecSet.id)
+        .outerjoin(models.CaseFile, query_case_file_join)
+        .filter(
+            models.ExecSet.project_id == project_id,
+            models.ExecSet.created_by == int(user_id),
+        )
+    )
+    if version_id is not None:
+        query = query.filter(effective_version_id == version_id)
+    query = query.group_by(
+        models.ExecSet.id,
+        models.ExecSet.name,
+        models.ExecSet.status,
+        models.ExecSet.requirement,
+        models.ExecSet.created_by,
+        models.ExecSet.created_at,
+        models.ExecSet.updated_at,
+        effective_version_id,
+    )
+    rows = query.all()
+
+    result: List[schemas.ExecOverviewExecSetOut] = []
+    for row in rows:
+        total_failed = (row.failed_en or 0) + (row.failed_cn or 0)
+        total_blocked = (row.blocked_en or 0) + (row.blocked_cn or 0)
+        total_na = (row.na_en or 0) + (row.na_cn or 0)
+        passed = (row.passed_cn or 0) + (row.passed_en or 0)
+        result.append(
+            schemas.ExecOverviewExecSetOut(
+                exec_set_id=row.exec_set_id,
+                exec_set_name=row.exec_set_name,
+                version_id=row.version_id,
+                status=row.status,
+                requirement=row.requirement,
+                total=row.total or 0,
+                pending=row.pending or 0,
+                passed=passed,
+                failed=total_failed,
+                blocked=total_blocked,
+                not_applicable=total_na,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+        )
     return result
 
 

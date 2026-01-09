@@ -3527,3 +3527,29 @@
 - 更新记录：2026-01-07 暗色主题预加载改用本地主题提示兜底，降低无本地设置时的白屏（`index.html`、`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`settings.html`、`scripts/modules/settings.js`、`scripts/modules/authGuard.js`、`tests/ui/theme_setting.spec.js`）。
 - 更新记录：2026-01-07 主题加载缺省时读取本地提示，避免未登录/未缓存场景回落为白屏（`scripts/modules/settings.js`）。
 - 更新记录：2026-01-07 暗色主题预加载先读 theme hint，再回退解析本地设置，缩短 Windows 首次涂白时间（`index.html`、`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`settings.html`）。
+
+- 功能名称：执行总览版本盒子懒加载
+- 功能描述：执行总览布局支持 `include_sets=0` 返回版本汇总，个人区版本盒子在滚动到可见时再按用户+版本拉取执行集，降低首屏数据量与渲染压力。
+- 操作方式：进入执行总览页面查看版本总览与个人区版本盒子；向下/左右滚动时才触发对应版本执行集加载。
+- 使用效果：首屏加载更快，版本盒子按需加载，滚动时才请求执行集，版本统计展示保持一致。
+- 新增内容/接口/组件：
+  - 后端：新增 `ExecOverviewVersionStatOut`，`/api/exec/overview/layout` 增加 `include_sets` 参数，新增 `/api/exec/overview/layout/exec-sets`（`backend/routers/exec_routes.py`、`backend/schemas.py`）。
+  - 前端：执行总览支持按需拉取执行集与 version_stats 汇总适配，API Client 增加 `listExecutionOverviewLayoutExecSets`（`scripts/modules/execOverview.js`、`services/apiClient.js`）。
+  - 测试：更新执行总览 UI/接口用例（`tests/ui/exec_overview.spec.js`、`tests/api/exec_overview.spec.js`）。
+- 复用说明：复用既有执行总览布局接口，新增可选参数与按需获取执行集接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/exec_overview.spec.js`
+  - `API_BASE_URL=http://127.0.0.1:8091 npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_overview.spec.js`
+- 更新记录：2026-01-09 执行总览懒加载与布局接口拆分（`backend/routers/exec_routes.py`、`backend/schemas.py`、`services/apiClient.js`、`scripts/modules/execOverview.js`、`tests/ui/exec_overview.spec.js`、`tests/api/exec_overview.spec.js`）。
+
+- 功能名称：导航栏智能收起排除执行总览
+- 功能描述：启用“导航栏智能收起”时，不再对执行总览页顶部导航自动收起，避免滚动时影响执行总览操作。
+- 操作方式：在设置开启“导航栏智能收起”，进入执行总览页后滚动页面。
+- 使用效果：执行总览页顶部导航保持展开，其他页面仍可智能收起/展开。
+- 新增内容/接口/组件：
+  - 前端：智能收起逻辑增加执行总览排除判断（`scripts/handlers/layoutHandlers.js`）。
+  - 测试：更新顶部导航智能收起用例（`tests/ui/top_nav_collapse.spec.js`）。
+- 复用说明：复用既有智能收起逻辑，无新增接口。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/top_nav_collapse.spec.js`
+- 更新记录：2026-01-09 执行总览页排除智能收起（`scripts/handlers/layoutHandlers.js`、`tests/ui/top_nav_collapse.spec.js`）。

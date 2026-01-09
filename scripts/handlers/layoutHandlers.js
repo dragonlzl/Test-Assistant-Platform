@@ -125,6 +125,11 @@
       return state && state.settings && state.settings.smartTopNavCollapse === true;
     }
 
+    function isSmartTopNavExcluded(nav) {
+      if (!nav || !nav.dataset) return false;
+      return nav.dataset.topNav === 'exec-overview';
+    }
+
     function handleSmartTopNavWheel(e) {
       if (!e) return;
       if (!isSmartTopNavEnabled()) return;
@@ -138,6 +143,7 @@
       if (!Number.isFinite(delta) || delta === 0) return;
       var nav = getActiveTopNav();
       if (!nav) return;
+      if (isSmartTopNavExcluded(nav)) return;
       if (delta > 0) {
         smartScrollUp = 0;
         if (!isNavCollapsed(nav)) {

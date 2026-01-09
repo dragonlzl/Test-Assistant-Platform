@@ -676,10 +676,12 @@
     });
   }
 
-  function getExecutionOverviewLayout(projectId, versionId) {
+  function getExecutionOverviewLayout(projectId, versionId, includeSets) {
     var query = [];
     if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
     if (versionId || versionId === 0) query.push('version_id=' + encodeURIComponent(versionId));
+    if (includeSets === true) query.push('include_sets=1');
+    if (includeSets === false) query.push('include_sets=0');
     var url = '/api/exec/overview/layout';
     if (query.length) url += '?' + query.join('&');
     return singleFlight('execOverviewLayout:' + url, function() {
@@ -688,6 +690,19 @@
         headers: buildHeaders(),
       }).then(handleResponse);
     });
+  }
+
+  function listExecutionOverviewLayoutExecSets(projectId, userId, versionId) {
+    var query = [];
+    if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
+    if (userId || userId === 0) query.push('user_id=' + encodeURIComponent(userId));
+    if (versionId || versionId === 0) query.push('version_id=' + encodeURIComponent(versionId));
+    var url = '/api/exec/overview/layout/exec-sets';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
   }
 
   function listExecutionOverviewCases(params) {
@@ -770,6 +785,7 @@
     createOperationLogEvent: createOperationLogEvent,
     getExecutionOverview: getExecutionOverview,
     getExecutionOverviewLayout: getExecutionOverviewLayout,
+    listExecutionOverviewLayoutExecSets: listExecutionOverviewLayoutExecSets,
     listExecutionOverviewCases: listExecutionOverviewCases,
   };
 })();
