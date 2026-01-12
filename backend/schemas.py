@@ -197,6 +197,77 @@ class CaseFileAppendOut(BaseModel):
     updated_at: datetime
 
 
+class MissingModuleCreate(BaseModel):
+    project_id: int
+    name: str
+
+
+class MissingModulePatch(BaseModel):
+    name: str
+
+
+class MissingModuleOut(BaseModel):
+    id: int
+    project_id: int
+    name: str
+    item_count: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MissingCaseTypeCreate(BaseModel):
+    project_id: int
+    name: str
+
+
+class MissingCaseTypeOut(BaseModel):
+    id: int
+    project_id: int
+    name: str
+    item_count: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MissingCaseItemPayload(BaseModel):
+    title: Optional[str] = None
+    priority: Optional[str] = None
+    precondition: Optional[str] = None
+    steps: Optional[str] = None
+    expected: Optional[str] = None
+    remark: Optional[str] = None
+    type_id: Optional[int] = None
+
+
+class MissingCaseItemPatch(BaseModel):
+    title: Optional[str] = None
+    priority: Optional[str] = None
+    precondition: Optional[str] = None
+    steps: Optional[str] = None
+    expected: Optional[str] = None
+    remark: Optional[str] = None
+    type_id: Optional[int] = None
+
+
+class MissingCaseItemOut(BaseModel):
+    id: int
+    module_id: int
+    module_name: Optional[str] = None
+    type_id: Optional[int] = None
+    type_name: Optional[str] = None
+    title: str
+    priority: Optional[str] = None
+    precondition: str
+    steps: str
+    expected: str
+    remark: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ExecSetCreate(BaseModel):
     project_id: int
     version_id: Optional[int] = None

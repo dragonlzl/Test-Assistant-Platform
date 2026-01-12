@@ -1,0 +1,19 @@
+INFO:     Started server process [48792]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8080 (Press CTRL+C to quit)
+INFO:     127.0.0.1:49593 - "POST /api/auth/login HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49593 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49593 - "POST /api/projects HTTP/1.1" 201 Created
+INFO:     127.0.0.1:49593 - "POST /api/missing-modules HTTP/1.1" 201 Created
+INFO:     127.0.0.1:49593 - "POST /api/missing-modules HTTP/1.1" 409 Conflict
+INFO:     127.0.0.1:49593 - "GET /api/missing-modules?project_id=73 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49593 - "POST /api/missing-modules/1/items HTTP/1.1" 201 Created
+INFO:     127.0.0.1:49593 - "GET /api/missing-modules/1/items HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49593 - "PATCH /api/missing-modules/items/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49593 - "DELETE /api/missing-modules/items/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49593 - "DELETE /api/projects/73 HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [48792]

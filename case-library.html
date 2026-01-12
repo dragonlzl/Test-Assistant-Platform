@@ -356,6 +356,19 @@
             <span class="nav-entry-desc">查看并编辑用例库条目，支持搜索/导出/删除</span>
           </span>
         </button>
+        <button class="nav-entry-card nav-entry-missing" id="openCaseLibraryMissingDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M12 3l9 16H3l9-16z"></path>
+              <path d="M12 9v4"></path>
+              <path d="M12 17h.01"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">易漏用例</span>
+            <span class="nav-entry-desc">管理易漏模块并查看漏测条目</span>
+          </span>
+        </button>
         <button class="nav-entry-card nav-entry-overview" id="openCaseLibrarySelectExecDrawerBtn" type="button">
           <span class="nav-entry-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
@@ -626,6 +639,30 @@
     </div>
   </div>
 
+  <div class="card hidden" id="caseLibraryMissingCard">
+    <h3 id="caseLibraryMissingCardTitle">易漏用例视图</h3>
+    <div class="card-body">
+      <div class="case-library-drawer-meta">
+        <div class="meta-line">
+          <span class="label">项目</span>
+          <span class="value" id="caseLibraryMissingProject">--</span>
+        </div>
+        <div class="meta-line">
+          <span class="label">模块</span>
+          <span class="value" id="caseLibraryMissingModules">--</span>
+        </div>
+      </div>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-drawer-actions">
+          <button class="secondary" id="caseLibraryMissingBatchDeleteBtn" type="button" disabled>批量删除</button>
+        </div>
+      </div>
+      <div class="case-library-missing-type-pills" id="caseLibraryMissingTypePills"></div>
+      <p class="status" id="caseLibraryMissingStatus"></p>
+      <div class="temp-case-view case-library-missing-view" id="caseLibraryMissingView"></div>
+    </div>
+  </div>
+
   <div class="card hidden" id="caseLibraryHistoryDetailCard">
     <h3>用例改动历史详情</h3>
     <div class="card-body">
@@ -856,6 +893,194 @@
       <div class="actions user-form-actions">
         <button class="ghost-btn" data-drawer-close="caseLibraryEditDrawer" type="button">关闭</button>
       </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseLibraryMissingDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryMissingDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>易漏用例</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryMissingDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <div class="case-library-drawer-toolbar case-library-drawer-toolbar-primary">
+        <div class="case-library-filters">
+          <span class="case-library-section-title">筛选</span>
+          <label class="case-library-label" for="caseLibraryMissingProjectSelect">项目</label>
+          <select id="caseLibraryMissingProjectSelect"></select>
+          <label class="case-library-label" for="caseLibraryMissingModuleSelect">模块</label>
+          <select id="caseLibraryMissingModuleSelect" disabled></select>
+          <button class="primary" id="caseLibraryMissingQueryBtn" type="button">刷新</button>
+        </div>
+      </div>
+      <div class="case-library-drawer-toolbar case-library-drawer-toolbar-secondary">
+        <div class="case-library-drawer-actions case-library-drawer-actions-left">
+          <span class="case-library-section-title">类型操作</span>
+          <button class="secondary" id="caseLibraryMissingTypeAddBtn" type="button">新增类型</button>
+          <button class="secondary" id="caseLibraryMissingTypeManageBtn" type="button">管理类型</button>
+        </div>
+      </div>
+      <div class="case-library-drawer-toolbar case-library-drawer-toolbar-primary">
+        <div class="ops-log-filters case-library-missing-type-filters">
+          <div class="ops-log-filter-title">类型</div>
+          <div class="ops-log-filter-grid" id="caseLibraryMissingTypeGrid"></div>
+        </div>
+      </div>
+      <div class="case-library-drawer-toolbar case-library-drawer-toolbar-secondary">
+        <div class="case-library-drawer-actions case-library-drawer-actions-left">
+          <span class="case-library-section-title">模块操作</span>
+          <button class="secondary" id="caseLibraryMissingAddModuleBtn" type="button">新增模块</button>
+        </div>
+        <div class="case-library-drawer-actions case-library-drawer-actions-right">
+          <button class="secondary" id="caseLibraryMissingBatchViewBtn" type="button" disabled>批量查看</button>
+          <button class="secondary" id="caseLibraryMissingDeleteBtn" type="button" disabled>删除模块</button>
+          <button class="secondary" id="caseLibraryMissingExportXmindBtn" type="button" disabled>导出XMind</button>
+          <button class="secondary" id="caseLibraryMissingExportExcelBtn" type="button" disabled>导出Excel</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibraryMissingDrawerStatus"></p>
+      <div id="caseLibraryMissingDrawerPaginationTop"></div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table case-library-items-table">
+          <thead>
+            <tr>
+              <th class="check"><input type="checkbox" id="caseLibraryMissingSelectAll" aria-label="全选/全不选"/></th>
+              <th style="width:90px;">编号</th>
+              <th class="module">模块名</th>
+              <th class="ops" style="width:160px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryMissingListBody">
+            <tr><td colspan="4"><p class="hint">暂无模块</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="caseLibraryMissingDrawerPaginationBottom"></div>
+    </div>
+    <div class="drawer-foot">
+      <button class="ghost-btn" data-drawer-close="caseLibraryMissingDrawer" type="button">关闭</button>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseLibraryMissingAddDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryMissingAddDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>新增模块</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryMissingAddDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <div class="case-library-drawer-meta">
+        <div class="meta-line">
+          <span class="label">项目</span>
+          <span class="value" id="caseLibraryMissingAddProjectName">--</span>
+        </div>
+      </div>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryMissingModuleNameInput">模块名</label>
+          <input id="caseLibraryMissingModuleNameInput" type="text" placeholder="请输入模块名" />
+        </div>
+      </div>
+      <div class="case-library-missing-hints">
+        <p class="hint">模块名用于后续匹配使用，应尽量精简通用，比如“工程师1技能”</p>
+        <p class="hint">- 如果其他角色没有这个问题，具体到“工程师”的“第1个技能”，才有的问题，则模块为“工程师1技能”</p>
+        <p class="hint">- 如果是仅工程师才有的特殊问题，且工程师的其余技能都该有问题，模块应为“工程师”</p>
+        <p class="hint">- 如果是全部角色都有的“1技能”问题，只是通过工程师发现，则模块应为“1技能”</p>
+        <p class="hint">- 如果是全部角色都有，且不区分第几个技能，则模块应为“技能”</p>
+      </div>
+      <div class="case-library-drawer-actions">
+        <button class="primary" id="caseLibraryMissingAddConfirmBtn" type="button">确认添加</button>
+      </div>
+      <p class="status" id="caseLibraryMissingAddStatus"></p>
+    </div>
+    <div class="drawer-foot">
+      <button class="ghost-btn" data-drawer-close="caseLibraryMissingAddDrawer" type="button">关闭</button>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseLibraryMissingEditDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryMissingEditDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>编辑模块</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryMissingEditDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <div class="case-library-drawer-meta">
+        <div class="meta-line">
+          <span class="label">项目</span>
+          <span class="value" id="caseLibraryMissingEditProjectName">--</span>
+        </div>
+      </div>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryMissingEditModuleNameInput">模块名</label>
+          <input id="caseLibraryMissingEditModuleNameInput" type="text" placeholder="请输入模块名" />
+        </div>
+      </div>
+      <div class="case-library-missing-hints">
+        <p class="hint">模块名用于后续匹配使用，应尽量精简通用，比如“工程师1技能”</p>
+        <p class="hint">- 如果其他角色没有这个问题，具体到“工程师”的“第1个技能”，才有的问题，则模块为“工程师1技能”</p>
+        <p class="hint">- 如果是仅工程师才有的特殊问题，且工程师的其余技能都该有问题，模块应为“工程师”</p>
+        <p class="hint">- 如果是全部角色都有的“1技能”问题，只是通过工程师发现，则模块应为“1技能”</p>
+        <p class="hint">- 如果是全部角色都有，且不区分第几个技能，则模块应为“技能”</p>
+      </div>
+      <div class="case-library-drawer-actions">
+        <button class="primary" id="caseLibraryMissingEditConfirmBtn" type="button">保存修改</button>
+      </div>
+      <p class="status" id="caseLibraryMissingEditStatus"></p>
+    </div>
+    <div class="drawer-foot">
+      <button class="ghost-btn" data-drawer-close="caseLibraryMissingEditDrawer" type="button">关闭</button>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseLibraryMissingTypeAddDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryMissingTypeAddDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>新增类型</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryMissingTypeAddDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <div class="case-library-drawer-meta">
+        <div class="meta-line">
+          <span class="label">项目</span>
+          <span class="value" id="caseLibraryMissingTypeAddProjectName">--</span>
+        </div>
+      </div>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryMissingTypeNameInput">类型名</label>
+          <input id="caseLibraryMissingTypeNameInput" type="text" placeholder="请输入类型名" />
+        </div>
+      </div>
+      <div class="case-library-drawer-actions">
+        <button class="primary" id="caseLibraryMissingTypeAddConfirmBtn" type="button">确认添加</button>
+      </div>
+      <p class="status" id="caseLibraryMissingTypeAddStatus"></p>
+    </div>
+    <div class="drawer-foot">
+      <button class="ghost-btn" data-drawer-close="caseLibraryMissingTypeAddDrawer" type="button">关闭</button>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseLibraryMissingTypeManageDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryMissingTypeManageDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>管理类型</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryMissingTypeManageDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">仅管理员可删除类型，删除时会提示是否需要转移关联用例。</p>
+      <p class="status" id="caseLibraryMissingTypeManageStatus"></p>
+      <div class="case-library-missing-type-manage-grid" id="caseLibraryMissingTypeManageBody"></div>
+    </div>
+    <div class="drawer-foot">
+      <button class="ghost-btn" data-drawer-close="caseLibraryMissingTypeManageDrawer" type="button">关闭</button>
     </div>
   </div>
 </div>

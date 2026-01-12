@@ -365,6 +365,103 @@
     }).then(handleResponse);
   }
 
+  function listMissingModules(projectId, options) {
+    var query = [];
+    if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
+    var opts = options && typeof options === 'object' ? options : {};
+    var typeIds = Array.isArray(opts.type_ids) ? opts.type_ids : (Array.isArray(opts.typeIds) ? opts.typeIds : []);
+    if (typeIds.length) query.push('type_ids=' + encodeURIComponent(typeIds.join(',')));
+    var url = '/api/missing-modules';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function createMissingModule(payload) {
+    return fetch('/api/missing-modules', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function updateMissingModule(moduleId, payload) {
+    return fetch('/api/missing-modules/' + moduleId, {
+      method: 'PATCH',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function deleteMissingModule(moduleId) {
+    return fetch('/api/missing-modules/' + moduleId, {
+      method: 'DELETE',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function listMissingModuleItems(moduleId) {
+    return fetch('/api/missing-modules/' + moduleId + '/items', {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function createMissingModuleItem(moduleId, payload, options) {
+    return fetch('/api/missing-modules/' + moduleId + '/items', {
+      method: 'POST',
+      headers: buildHeadersWithOptions(options),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function updateMissingModuleItem(itemId, payload) {
+    return fetch('/api/missing-modules/items/' + itemId, {
+      method: 'PATCH',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function deleteMissingModuleItem(itemId, options) {
+    return fetch('/api/missing-modules/items/' + itemId, {
+      method: 'DELETE',
+      headers: buildHeadersWithOptions(options),
+    }).then(handleResponse);
+  }
+
+  function listMissingTypes(projectId) {
+    var query = [];
+    if (projectId || projectId === 0) query.push('project_id=' + encodeURIComponent(projectId));
+    var url = '/api/missing-types';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function createMissingType(payload) {
+    return fetch('/api/missing-types', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function deleteMissingType(typeId, transferTo) {
+    var query = [];
+    if (transferTo || transferTo === 0) query.push('transfer_to=' + encodeURIComponent(transferTo));
+    var url = '/api/missing-types/' + typeId;
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'DELETE',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
   function listCaseLibraryChangeFiles(params) {
     var p = params && typeof params === 'object' ? params : {};
     var query = [];
@@ -753,6 +850,17 @@
     appendCaseItems: appendCaseItems,
     shareCaseFile: shareCaseFile,
     deleteCaseItem: deleteCaseItem,
+    listMissingModules: listMissingModules,
+    createMissingModule: createMissingModule,
+    updateMissingModule: updateMissingModule,
+    deleteMissingModule: deleteMissingModule,
+    listMissingModuleItems: listMissingModuleItems,
+    createMissingModuleItem: createMissingModuleItem,
+    updateMissingModuleItem: updateMissingModuleItem,
+    deleteMissingModuleItem: deleteMissingModuleItem,
+    listMissingTypes: listMissingTypes,
+    createMissingType: createMissingType,
+    deleteMissingType: deleteMissingType,
     listCaseLibraryChangeFiles: listCaseLibraryChangeFiles,
     getCaseLibraryChangeHistory: getCaseLibraryChangeHistory,
     listExecSets: listExecSets,

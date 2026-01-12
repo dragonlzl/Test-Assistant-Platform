@@ -654,3 +654,141 @@ def apply_migrations(engine: Engine) -> None:
                         )
                     )
             _mark_applied(conn, 19)
+
+        # v20: 易漏用例模块与条目表。
+        if not _is_applied(conn, 20):
+            if "missing_modules" not in tables:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS missing_modules (
+                          id INTEGER PRIMARY KEY,
+                          project_id INTEGER NOT NULL,
+                          name VARCHAR(255) NOT NULL,
+                          created_by INTEGER,
+                          updated_by INTEGER,
+                          created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                          updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                          FOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE,
+                          FOREIGN KEY(created_by) REFERENCES users (id) ON DELETE SET NULL,
+                          FOREIGN KEY(updated_by) REFERENCES users (id) ON DELETE SET NULL
+                        )
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS uq_missing_module_name_project "
+                        "ON missing_modules(project_id, name)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_missing_modules_project "
+                        "ON missing_modules(project_id)"
+                    )
+                )
+            if "missing_case_items" not in tables:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS missing_case_items (
+                          id INTEGER PRIMARY KEY,
+                          module_id INTEGER NOT NULL,
+                          precondition TEXT NOT NULL DEFAULT '',
+                          steps TEXT NOT NULL DEFAULT '',
+                          expected TEXT NOT NULL DEFAULT '',
+                          remark TEXT,
+                          order_no INTEGER NOT NULL DEFAULT 0,
+                          created_by INTEGER,
+                          updated_by INTEGER,
+                          created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                          updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                          FOREIGN KEY(module_id) REFERENCES missing_modules (id) ON DELETE CASCADE,
+                          FOREIGN KEY(created_by) REFERENCES users (id) ON DELETE SET NULL,
+                          FOREIGN KEY(updated_by) REFERENCES users (id) ON DELETE SET NULL
+                        )
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_missing_case_items_module_id "
+                        "ON missing_case_items(module_id)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_missing_case_items_module_order "
+                        "ON missing_case_items(module_id, order_no)"
+                    )
+                )
+            _mark_applied(conn, 20)
+
+        # v21: 易漏用例条目补充标题与优先级字段。
+        if not _is_applied(conn, 21):
+            if "missing_case_items" in tables:
+                cols = set([c["name"] for c in insp.get_columns("missing_case_items")])
+                if "title" not in cols:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE missing_case_items "
+                            "ADD COLUMN title VARCHAR(255) NOT NULL DEFAULT ''"
+                        )
+                    )
+                if "priority" not in cols:
+                    conn.execute(text("ALTER TABLE missing_case_items ADD COLUMN priority VARCHAR(32)"))
+                    conn.execute(
+                        text(
+                            "UPDATE missing_case_items SET priority = NULL "
+                            "WHERE priority IS NULL"
+                        )
+                    )
+            _mark_applied(conn, 21)
+
+        # v22: 易漏用例类型与条目类型字段。
+        if not _is_applied(conn, 22):
+            if "missing_case_types" not in tables:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS missing_case_types (
+                          id INTEGER PRIMARY KEY,
+                          project_id INTEGER NOT NULL,
+                          name VARCHAR(255) NOT NULL,
+                          created_by INTEGER,
+                          updated_by INTEGER,
+                          created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                          updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                          FOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE,
+                          FOREIGN KEY(created_by) REFERENCES users (id) ON DELETE SET NULL,
+                          FOREIGN KEY(updated_by) REFERENCES users (id) ON DELETE SET NULL
+                        )
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS uq_missing_case_type_name_project "
+                        "ON missing_case_types(project_id, name)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_missing_case_types_project "
+                        "ON missing_case_types(project_id)"
+                    )
+                )
+            if "missing_case_items" in tables:
+                cols = set([c["name"] for c in insp.get_columns("missing_case_items")])
+                if "type_id" not in cols:
+                    conn.execute(
+                        text("ALTER TABLE missing_case_items ADD COLUMN type_id INTEGER")
+                    )
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_missing_case_items_type_id "
+                            "ON missing_case_items(type_id)"
+                        )
+                    )
+            _mark_applied(conn, 22)

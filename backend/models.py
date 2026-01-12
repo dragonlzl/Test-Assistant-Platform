@@ -169,6 +169,75 @@ class CaseItem(Base):
     case_file = relationship("CaseFile", back_populates="items")
 
 
+class MissingModule(Base):
+    __tablename__ = "missing_modules"
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_missing_module_name_project"),
+        Index("ix_missing_modules_project", "project_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    items = relationship("MissingCaseItem", back_populates="module", cascade="all, delete-orphan")
+
+
+class MissingCaseType(Base):
+    __tablename__ = "missing_case_types"
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_missing_case_type_name_project"),
+        Index("ix_missing_case_types_project", "project_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    items = relationship("MissingCaseItem", back_populates="type")
+
+
+class MissingCaseItem(Base):
+    __tablename__ = "missing_case_items"
+    __table_args__ = (
+        Index("ix_missing_case_items_module_id", "module_id"),
+        Index("ix_missing_case_items_module_order", "module_id", "order_no"),
+        Index("ix_missing_case_items_type_id", "type_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    module_id = Column(Integer, ForeignKey("missing_modules.id", ondelete="CASCADE"), nullable=False)
+    type_id = Column(Integer, ForeignKey("missing_case_types.id", ondelete="SET NULL"), nullable=True)
+    title = Column(String(255), nullable=False, default="")
+    priority = Column(String(32), nullable=True)
+    precondition = Column(Text, nullable=False, default="")
+    steps = Column(Text, nullable=False, default="")
+    expected = Column(Text, nullable=False, default="")
+    remark = Column(Text, nullable=True)
+    order_no = Column(Integer, default=0, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    module = relationship("MissingModule", back_populates="items")
+    type = relationship("MissingCaseType", back_populates="items")
+
+
 class CaseLibraryChangeEvent(Base):
     __tablename__ = "case_library_change_events"
     __table_args__ = (

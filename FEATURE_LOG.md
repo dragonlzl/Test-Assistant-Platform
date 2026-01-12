@@ -3553,3 +3553,64 @@
 - 测试与验证：
   - `npx playwright test --config tests/playwright.config.js tests/ui/top_nav_collapse.spec.js`
 - 更新记录：2026-01-09 执行总览页排除智能收起（`scripts/handlers/layoutHandlers.js`、`tests/ui/top_nav_collapse.spec.js`）。
+
+- 功能名称：用例库易漏用例入口与模块管理
+- 功能描述：在用例库顶部导航新增“易漏用例”入口，支持按项目/模块筛选、模块新增、模块批量查看、导出 XMind/Excel，以及易漏条目列表的增删改与批量删除。
+- 操作方式：进入用例库页面点击“易漏用例”入口；选择项目/模块后查看模块列表，支持新增模块；勾选模块批量查看或单个查看后在页面下方维护易漏条目。
+- 使用效果：易漏模块可集中管理与导出，模块条目支持快捷新增/撤回/批量删除，编辑体验与用例库一致且数据独立存储。
+- 新增内容/接口/组件：
+  - 后端：新增易漏模块/条目表与接口（`backend/models.py`、`backend/migrations.py`、`backend/routers/missing_cases.py`、`backend/schemas.py`、`backend/api.py`）。
+  - 前端：用例库导航/抽屉/易漏视图与导出（`case-library.html`、`scripts/modules/caseLibrary.js`、`style.css`、`services/apiClient.js`）。
+  - 测试：新增易漏模块 UI/API 用例（`tests/ui/case_library_missing_modules.spec.js`、`tests/api/missing_cases.spec.js`）。
+- 复用说明：复用既有抽屉、表格视图、导出与确认弹窗机制，仅新增易漏模块与条目接口。
+- 测试与验证：
+  - `npx playwright test tests/api/missing_cases.spec.js`
+  - `npx playwright test tests/ui/case_library_missing_modules.spec.js`
+- 更新记录：2026-01-11 用例库易漏用例入口与模块管理（`case-library.html`、`scripts/modules/caseLibrary.js`、`style.css`、`services/apiClient.js`、`backend/models.py`、`backend/migrations.py`、`backend/routers/missing_cases.py`、`backend/schemas.py`、`backend/api.py`、`tests/ui/case_library_missing_modules.spec.js`、`tests/api/missing_cases.spec.js`）。
+
+- 功能名称：易漏用例模块编辑/删除与字段对齐
+- 功能描述：易漏模块列表支持编辑/删除，模块删除前二次确认；易漏用例视图字段与常规用例对齐，新增标题与优先级字段；优化模块列表列宽布局。
+- 操作方式：在易漏模块抽屉中勾选模块后点击“删除模块”并确认；点击模块“编辑”进入抽屉修改模块名；查看模块后可编辑标题/优先级/前提/步骤/预期字段。
+- 使用效果：易漏模块可重命名与批量删除，条目字段更完整，模块列表空间分配更合理。
+- 新增内容/接口/组件：
+  - 后端：易漏模块支持编辑/删除接口，易漏条目补充标题与优先级字段（`backend/routers/missing_cases.py`、`backend/models.py`、`backend/schemas.py`、`backend/migrations.py`）。
+  - 前端：模块删除/编辑抽屉与字段扩展、导出字段更新（`case-library.html`、`scripts/modules/caseLibrary.js`、`style.css`、`services/apiClient.js`）。
+  - 测试：更新易漏模块 UI/API 用例（`tests/ui/case_library_missing_modules.spec.js`、`tests/api/missing_cases.spec.js`）。
+- 复用说明：复用既有抽屉、确认弹窗与导出组件，新增模块编辑/删除调用。
+- 测试与验证：
+  - `npx playwright test tests/api/missing_cases.spec.js`
+  - `npx playwright test tests/ui/case_library_missing_modules.spec.js`
+- 更新记录：2026-01-12 易漏模块编辑/删除与字段对齐（`case-library.html`、`scripts/modules/caseLibrary.js`、`style.css`、`services/apiClient.js`、`backend/models.py`、`backend/migrations.py`、`backend/routers/missing_cases.py`、`backend/schemas.py`、`tests/ui/case_library_missing_modules.spec.js`、`tests/api/missing_cases.spec.js`）。
+
+- 功能名称：易漏用例查看选择持久化
+- 功能描述：易漏用例视图记录上次查看的模块选择，刷新后自动恢复。
+- 操作方式：在易漏模块抽屉选择模块并查看，刷新页面。
+- 使用效果：易漏用例视图自动回到上次查看的模块列表，无需重复勾选。
+- 新增内容/接口/组件：
+  - 前端：易漏用例查看选择持久化与恢复逻辑（`scripts/modules/caseLibrary.js`）。
+  - 测试：易漏用例视图持久化 UI 用例更新（`tests/ui/case_library_missing_modules.spec.js`）。
+- 复用说明：复用现有 localStorage 持久化与视图恢复逻辑，无新增接口。
+- 测试与验证：
+  - `npx playwright test tests/ui/case_library_missing_modules.spec.js`
+- 更新记录：2026-01-12 易漏用例查看选择持久化（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_modules.spec.js`）。
+
+- 功能名称：易漏用例类型管理与筛选
+- 功能描述：易漏用例支持类型管理与筛选，抽屉新增类型选择与管理入口，易漏用例视图新增类型字段与类型筛选药丸按钮。
+- 操作方式：在易漏用例抽屉选择项目后，可通过“新增类型”添加类型；在类型筛选区勾选类型过滤模块；点击“管理类型”可删除类型并按提示转移用例；查看易漏用例后可在列表中选择类型并通过药丸按钮筛选。
+- 使用效果：易漏用例可按类型分类、筛选与管理，类型删除支持转移已有条目，视图筛选与编辑更直观。
+- 新增内容/接口/组件：
+  - 后端：新增易漏类型表与删除转移逻辑，易漏条目支持 type_id（`backend/models.py`、`backend/migrations.py`、`backend/routers/missing_cases.py`、`backend/schemas.py`、`backend/api.py`）。
+  - 前端：类型筛选区、类型管理抽屉、易漏视图类型列与药丸筛选（`case-library.html`、`scripts/modules/caseLibrary.js`、`style.css`、`services/apiClient.js`）。
+  - 测试：补充易漏类型 API/UI 用例（`tests/api/missing_cases.spec.js`、`tests/ui/case_library_missing_types.spec.js`）。
+- 复用说明：复用现有确认抽屉、筛选样式与易漏视图渲染逻辑，仅新增类型数据与筛选逻辑。
+- 测试与验证：
+  - `npx playwright test tests/api/missing_cases.spec.js`
+  - `npx playwright test tests/ui/case_library_missing_modules.spec.js`
+  - `npx playwright test tests/ui/case_library_missing_types.spec.js`
+  - `node --check scripts/modules/caseLibrary.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/case_library_missing_types.spec.js`
+- 更新记录：2026-01-13 易漏用例类型管理与筛选（`backend/models.py`、`backend/migrations.py`、`backend/routers/missing_cases.py`、`backend/schemas.py`、`backend/api.py`、`services/apiClient.js`、`scripts/modules/caseLibrary.js`、`case-library.html`、`style.css`、`tests/api/missing_cases.spec.js`、`tests/ui/case_library_missing_types.spec.js`）。
+- 更新记录：2026-01-14 调整易漏用例类型入口与视图样式（`case-library.html`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/case_library_missing_types.spec.js`）。
+- 更新记录：2026-01-15 修复易漏类型多选误触全部（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_types.spec.js`）。
+- 更新记录：2026-01-16 易漏用例视图类型下拉支持新增类型（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_types.spec.js`）。
+- 更新记录：2026-01-17 易漏视图新增类型后不自动展开抽屉（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_types.spec.js`）。
