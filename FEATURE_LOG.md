@@ -3630,3 +3630,7 @@
 - 更新记录：2026-01-13 易漏用例提醒区域（执行/用例库）（`settings.html`、`scripts/modules/settings.js`、`case-library.html`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`style.css`、`scripts/base/utils.js`、`scripts/base/state.js`、`config/constants.js`、`scripts/modules/app.js`、`scripts/modules/opsLog.js`、`tests/ui/missing_case_reminder.spec.js`、`tests/api/settings_missing_reminder_placement.spec.js`）。
 - 更新记录：2026-01-13 易漏用例提醒区域背景强化（`style.css`）。
 - 更新记录：2026-01-13 易漏用例提醒区域懒加载与表头冻结（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`style.css`）。
+- 更新记录：2026-01-13 易漏用例提醒匹配需同用例命中模块与类型（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`）。
+- 更新记录：2026-01-13 易漏用例提醒无匹配时隐藏区域（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`）。
+- 更新记录：2026-01-13 易漏用例提醒匹配字段限定为用例字段集（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`）。
+- 更新记录：2026-01-13 易漏用例提醒跨用例命中模块与类型（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`tests/ui/missing_case_reminder.spec.js`）。

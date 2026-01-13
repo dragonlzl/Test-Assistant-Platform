@@ -148,6 +148,14 @@ test.describe('易漏用例提醒区域', () => {
         precondition: '已注册账号',
         steps: '输入账号密码',
         expected: '登录成功',
+      }, {
+        id: 1003,
+        module: '账号',
+        title: '安全校验',
+        priority: 'P2',
+        precondition: '已登录',
+        steps: '触发安全验证',
+        expected: '验证通过',
       }],
       12: [{
         id: 1002,
@@ -263,6 +271,7 @@ test.describe('易漏用例提醒区域', () => {
     const user = { id: 0, username: 'missing_exec', role: 'user', level: 'member' };
     const project = { id: 1, name: '执行项目', description: 'missing reminder exec' };
     const missingModules = [{ id: 202, project_id: 1, name: '支付', item_count: 1 }];
+    const missingTypes = [{ id: 302, project_id: 1, name: '安全' }];
     const missingItemsByModule = {
       202: [{
         id: 8801,
@@ -272,7 +281,7 @@ test.describe('易漏用例提醒区域', () => {
         precondition: '账户余额不足',
         steps: '点击支付',
         expected: '提示余额不足',
-        type_id: null,
+        type_id: 302,
       }],
     };
 
@@ -299,6 +308,16 @@ test.describe('易漏用例提醒区域', () => {
                 precondition: '已绑定卡',
                 steps: '确认支付',
                 expected: '支付成功',
+                actual: '未执行',
+                remark: '',
+                defectLinks: [],
+              }, {
+                module: '设置',
+                title: '安全验证提示',
+                priority: 'P2',
+                precondition: '已登录',
+                steps: '触发安全验证',
+                expected: '展示验证提示',
                 actual: '未执行',
                 remark: '',
                 defectLinks: [],
@@ -355,7 +374,7 @@ test.describe('易漏用例提醒区域', () => {
       if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
 
       if (pathName === '/api/missing-modules' && method === 'GET') return respond(200, missingModules);
-      if (pathName === '/api/missing-types' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/missing-types' && method === 'GET') return respond(200, missingTypes);
       if (pathName.startsWith('/api/missing-modules/') && pathName.endsWith('/items') && method === 'GET') {
         const parts = pathName.split('/');
         const moduleId = Number(parts[parts.length - 2]);

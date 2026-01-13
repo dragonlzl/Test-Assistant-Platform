@@ -6601,29 +6601,36 @@
       clearMissingReminder();
       return;
     }
-    var buildSearchText = utils && typeof utils.buildCaseSearchText === 'function'
-      ? utils.buildCaseSearchText
-      : function(list, fields) {
-          var fallback = [];
-          (Array.isArray(list) ? list : []).forEach(function(item) {
-            if (!item || typeof item !== 'object') return;
-            var keys = Array.isArray(fields) && fields.length ? fields : Object.keys(item);
-            keys.forEach(function(key) {
-              if (!key) return;
-              var val = (utils && typeof utils.stringifyCaseField === 'function')
-                ? utils.stringifyCaseField(item[key])
-                : String(item[key] || '');
-              if (val) fallback.push(val);
-            });
-          });
-          return fallback.join(' ').toLowerCase();
-        };
-    var caseText = buildSearchText(items);
-    if (!caseText) {
+    var caseSearchFields = [
+      'module', 'title', 'priority', 'precondition', 'preconditions', 'steps', 'expected', 'remark'
+    ];
+    var buildCaseText = function(item) {
+      if (!item || typeof item !== 'object') return '';
+      if (utils && typeof utils.buildCaseSearchText === 'function') {
+        return utils.buildCaseSearchText([item], caseSearchFields);
+      }
+      var fallback = [];
+      caseSearchFields.forEach(function(key) {
+        if (!key) return;
+        var val = (utils && typeof utils.stringifyCaseField === 'function')
+          ? utils.stringifyCaseField(item[key])
+          : String(item[key] || '');
+        if (val) fallback.push(val);
+      });
+      return fallback.join(' ').toLowerCase();
+    };
+    var caseTexts = [];
+    items.forEach(function(item) {
+      var text = buildCaseText(item);
+      if (text) caseTexts.push(text);
+    });
+    if (!caseTexts.length) {
       clearMissingReminder();
       return;
     }
-    var signature = String(projectId) + ':' + hashReminderText(caseText);
+    var signatureText = caseTexts.join('\n\n');
+    var caseSearchText = caseTexts.join(' ');
+    var signature = String(projectId) + ':' + hashReminderText(signatureText);
     if (reminder.signature === signature && reminder.projectId === projectId && (reminder.loaded || reminder.pending)) {
       renderMissingReminder();
       return;
@@ -6659,7 +6666,7 @@
           var name = m.name ? String(m.name).trim() : '';
           var idStr = String(m.id);
           moduleMap[idStr] = m;
-          if (name && caseText.indexOf(name.toLowerCase()) !== -1) {
+          if (name && caseSearchText.indexOf(name.toLowerCase()) !== -1) {
             moduleMatches.push(name);
             moduleIds.push(idStr);
             matchedModuleMap[idStr] = true;
@@ -6668,17 +6675,19 @@
         var typeMatches = [];
         var typeIds = [];
         var typeNameMap = {};
+        var matchedTypeMap = {};
         types.forEach(function(t) {
           if (!t || t.id === null || t.id === undefined) return;
           var name = t.name ? String(t.name).trim() : '';
           var idStr = String(t.id);
           typeNameMap[idStr] = name || ('类型#' + idStr);
-          if (name && caseText.indexOf(name.toLowerCase()) !== -1) {
+          if (name && caseSearchText.indexOf(name.toLowerCase()) !== -1) {
             typeMatches.push(name);
             typeIds.push(idStr);
+            matchedTypeMap[idStr] = true;
           }
         });
-        if (!moduleIds.length && !typeIds.length) {
+        if (!moduleIds.length || !typeIds.length) {
           reminder.items = [];
           reminder.matchedModules = [];
           reminder.matchedTypes = [];
@@ -6701,6 +6710,7 @@
           moduleMap: moduleMap,
           typeNameMap: typeNameMap,
           matchedModuleMap: matchedModuleMap,
+          matchedTypeMap: matchedTypeMap,
         };
         reminder.loading = false;
         reminder.loaded = false;
@@ -6730,12 +6740,16 @@
       return;
     }
     var payload = reminder.pendingPayload || {};
-    var projectId = payload.projectId;
     var moduleIds = Array.isArray(payload.moduleIds) ? payload.moduleIds.slice() : [];
     var typeIds = Array.isArray(payload.typeIds) ? payload.typeIds.slice() : [];
     var moduleMap = payload.moduleMap && typeof payload.moduleMap === 'object' ? payload.moduleMap : {};
     var typeNameMap = payload.typeNameMap && typeof payload.typeNameMap === 'object' ? payload.typeNameMap : {};
     var matchedModuleMap = payload.matchedModuleMap && typeof payload.matchedModuleMap === 'object' ? payload.matchedModuleMap : {};
+    var matchedTypeMap = payload.matchedTypeMap && typeof payload.matchedTypeMap === 'object' ? payload.matchedTypeMap : {};
+    if (!moduleIds.length || !typeIds.length || !Object.keys(matchedModuleMap).length || !Object.keys(matchedTypeMap).length) {
+      clearMissingReminder();
+      return;
+    }
     reminder.pending = false;
     reminder.pendingPayload = null;
     reminder.loading = true;
@@ -6744,20 +6758,9 @@
     renderMissingReminder();
     var seq = (reminder.seq || 0) + 1;
     reminder.seq = seq;
-    var typeModulePromise = typeIds.length
-      ? apiClient.listMissingModules(projectId, { type_ids: typeIds })
-      : Promise.resolve([]);
-    typeModulePromise.then(function(typeModules) {
+    Promise.resolve([]).then(function() {
       if (reminder.seq !== seq) return null;
-      var moduleIdsToLoad = {};
-      moduleIds.forEach(function(id) { moduleIdsToLoad[String(id)] = true; });
-      var extraModules = Array.isArray(typeModules) ? typeModules : [];
-      extraModules.forEach(function(m) {
-        if (!m || m.id === null || m.id === undefined) return;
-        moduleIdsToLoad[String(m.id)] = true;
-        if (!moduleMap[String(m.id)]) moduleMap[String(m.id)] = m;
-      });
-      var ids = Object.keys(moduleIdsToLoad);
+      var ids = moduleIds.slice();
       if (!ids.length) {
         reminder.items = [];
         reminder.loading = false;
@@ -6790,11 +6793,21 @@
             if (!row) return;
             var moduleHit = row.module_id && matchedModuleMap[String(row.module_id)];
             var typeHit = row.type_id !== null && row.type_id !== undefined
-              ? typeIds.indexOf(String(row.type_id)) !== -1
+              ? matchedTypeMap[String(row.type_id)]
               : false;
-            if (moduleHit || typeHit) combined.push(row);
+            if (moduleHit && typeHit) combined.push(row);
           });
         });
+        if (!combined.length) {
+          reminder.items = [];
+          reminder.matchedModules = [];
+          reminder.matchedTypes = [];
+          reminder.hasMatch = false;
+          reminder.loading = false;
+          reminder.loaded = true;
+          renderMissingReminder();
+          return null;
+        }
         var limit = resolveMissingReminderLimit(reminder);
         reminder.items = combined.slice(0, limit);
         reminder.loading = false;
