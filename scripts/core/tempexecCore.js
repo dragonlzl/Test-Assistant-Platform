@@ -4027,6 +4027,304 @@
       });
     }
 
+    function ensureTempExecMissingReminderState() {
+      if (!state.tempExecMissingReminder || typeof state.tempExecMissingReminder !== 'object') {
+        state.tempExecMissingReminder = {
+          projectId: '',
+          signature: '',
+          items: [],
+          matchedModules: [],
+          matchedTypes: [],
+          loading: false,
+          loaded: false,
+          seq: 0,
+          refreshTimer: null,
+        };
+      }
+      return state.tempExecMissingReminder;
+    }
+
+    function resolveMissingReminderPlacement() {
+      var settings = state.settings && typeof state.settings === 'object' ? state.settings : {};
+      var raw = settings.missingCaseReminderPlacement;
+      var key = raw === null || raw === undefined ? '' : String(raw).toLowerCase();
+      return key === 'bottom' ? 'bottom' : 'top';
+    }
+
+    function hashReminderText(text) {
+      var str = String(text || '');
+      var hash = 0;
+      for (var i = 0; i < str.length; i += 1) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+      }
+      return hash + ':' + str.length;
+    }
+
+    function buildTempExecCaseSearchText(cases) {
+      var list = Array.isArray(cases) ? cases : [];
+      if (!list.length) return '';
+      var parts = [];
+      list.forEach(function(item) {
+        if (!item || typeof item !== 'object') return;
+        Object.keys(item).forEach(function(key) {
+          var val = stringifyCaseField(item[key]);
+          if (val) parts.push(val);
+        });
+      });
+      return parts.join(' ').toLowerCase();
+    }
+
+    function buildTempExecMissingReminderSummary(reminder) {
+      var modules = reminder && Array.isArray(reminder.matchedModules) ? reminder.matchedModules : [];
+      var types = reminder && Array.isArray(reminder.matchedTypes) ? reminder.matchedTypes : [];
+      var parts = [];
+      if (modules.length) {
+        var shownModules = modules.slice(0, 4);
+        var text = shownModules.join('、');
+        if (modules.length > shownModules.length) text += ' 等' + modules.length + '个';
+        parts.push('模块：' + text);
+      }
+      if (types.length) {
+        var shownTypes = types.slice(0, 4);
+        var text2 = shownTypes.join('、');
+        if (types.length > shownTypes.length) text2 += ' 等' + types.length + '个';
+        parts.push('类型：' + text2);
+      }
+      return parts.join('；');
+    }
+
+    function buildTempExecMissingReminderTable(reminder) {
+      var list = reminder && Array.isArray(reminder.items) ? reminder.items : [];
+      if (!list.length) return '';
+      var rows = list.map(function(item) {
+        var moduleName = item && item.module_name ? String(item.module_name) : '--';
+        var typeName = item && item.type_name ? String(item.type_name) : '未分类';
+        var title = item && item.title ? String(item.title) : '';
+        var priority = item && item.priority ? String(item.priority) : '';
+        var precondition = item && item.precondition ? String(item.precondition) : '';
+        var steps = item && item.steps ? String(item.steps) : '';
+        var expected = item && item.expected ? String(item.expected) : '';
+        return (
+          '<tr>' +
+            '<td class="type">' + escapeHtml(typeName) + '</td>' +
+            '<td class="module">' + escapeHtml(moduleName) + '</td>' +
+            '<td class="title">' + escapeHtml(title) + '</td>' +
+            '<td class="priority">' + escapeHtml(priority) + '</td>' +
+            '<td>' + escapeHtml(precondition).replace(/\\n/g, '<br>') + '</td>' +
+            '<td>' + escapeHtml(steps).replace(/\\n/g, '<br>') + '</td>' +
+            '<td>' + escapeHtml(expected).replace(/\\n/g, '<br>') + '</td>' +
+          '</tr>'
+        );
+      }).join('');
+      return (
+        '<div class="missing-reminder-card">' +
+          '<div class="missing-reminder-header">' +
+            '<span class="missing-reminder-title">易漏用例提醒</span>' +
+            '<span class="missing-reminder-meta">' +
+              escapeHtml(buildTempExecMissingReminderSummary(reminder)) +
+            '</span>' +
+          '</div>' +
+          '<div class="missing-reminder-scroll">' +
+            '<div class="temp-case-view">' +
+              '<table>' +
+                '<thead>' +
+                  '<tr>' +
+                    '<th class="type">类型</th>' +
+                    '<th class="module">模块</th>' +
+                    '<th class="title">用例标题</th>' +
+                    '<th class="priority">优先级</th>' +
+                    '<th>前提条件</th>' +
+                    '<th>操作步骤</th>' +
+                    '<th>预期结果</th>' +
+                  '</tr>' +
+                '</thead>' +
+                '<tbody>' + rows + '</tbody>' +
+              '</table>' +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    }
+
+    function renderTempExecMissingReminderBlock() {
+      var reminder = ensureTempExecMissingReminderState();
+      if (!reminder.items || !reminder.items.length) return '';
+      return buildTempExecMissingReminderTable(reminder);
+    }
+
+    function clearTempExecMissingReminder() {
+      var reminder = ensureTempExecMissingReminderState();
+      reminder.items = [];
+      reminder.matchedModules = [];
+      reminder.matchedTypes = [];
+      reminder.loading = false;
+      reminder.loaded = false;
+      reminder.signature = '';
+      reminder.projectId = '';
+    }
+
+    function requestTempExecMissingReminderRefresh() {
+      var reminder = ensureTempExecMissingReminderState();
+      if (reminder.refreshTimer) clearTimeout(reminder.refreshTimer);
+      reminder.refreshTimer = setTimeout(function() {
+        reminder.refreshTimer = null;
+        refreshTempExecMissingReminder();
+      }, 160);
+    }
+
+    function refreshTempExecMissingReminder() {
+      var reminder = ensureTempExecMissingReminderState();
+      var active = getTempExecFile(state.tempExecActiveId);
+      if (!active || !active.projectId) {
+        clearTempExecMissingReminder();
+        return;
+      }
+      var cases = Array.isArray(active.cases) ? active.cases : [];
+      if (!cases.length) {
+        clearTempExecMissingReminder();
+        return;
+      }
+      var caseText = buildTempExecCaseSearchText(cases);
+      if (!caseText) {
+        clearTempExecMissingReminder();
+        return;
+      }
+      var projectId = String(active.projectId);
+      var signature = projectId + ':' + hashReminderText(caseText);
+      if (reminder.signature === signature && reminder.projectId === projectId && reminder.loaded) {
+        return;
+      }
+      reminder.signature = signature;
+      reminder.projectId = projectId;
+      reminder.items = [];
+      reminder.matchedModules = [];
+      reminder.matchedTypes = [];
+      reminder.loading = true;
+      reminder.loaded = false;
+      var client = getApiClient();
+      if (!client || typeof client.listMissingModules !== 'function' || typeof client.listMissingTypes !== 'function') {
+        clearTempExecMissingReminder();
+        return;
+      }
+      var seq = (reminder.seq || 0) + 1;
+      reminder.seq = seq;
+      Promise.all([client.listMissingModules(projectId), client.listMissingTypes(projectId)])
+        .then(function(res) {
+          if (reminder.seq !== seq) return null;
+          var modules = Array.isArray(res && res[0]) ? res[0] : [];
+          var types = Array.isArray(res && res[1]) ? res[1] : [];
+          var moduleMatches = [];
+          var moduleIds = [];
+          var matchedModuleMap = {};
+          var moduleMap = {};
+          modules.forEach(function(m) {
+            if (!m || m.id === null || m.id === undefined) return;
+            var name = m.name ? String(m.name).trim() : '';
+            var idStr = String(m.id);
+            moduleMap[idStr] = m;
+            if (name && caseText.indexOf(name.toLowerCase()) !== -1) {
+              moduleMatches.push(name);
+              moduleIds.push(idStr);
+              matchedModuleMap[idStr] = true;
+            }
+          });
+          var typeMatches = [];
+          var typeIds = [];
+          var typeNameMap = {};
+          types.forEach(function(t) {
+            if (!t || t.id === null || t.id === undefined) return;
+            var name = t.name ? String(t.name).trim() : '';
+            var idStr = String(t.id);
+            typeNameMap[idStr] = name || ('类型#' + idStr);
+            if (name && caseText.indexOf(name.toLowerCase()) !== -1) {
+              typeMatches.push(name);
+              typeIds.push(idStr);
+            }
+          });
+          if (!moduleIds.length && !typeIds.length) {
+            reminder.items = [];
+            reminder.matchedModules = [];
+            reminder.matchedTypes = [];
+            reminder.loading = false;
+            reminder.loaded = true;
+            renderTempExecView();
+            return null;
+          }
+          var typeModulePromise = typeIds.length
+            ? client.listMissingModules(projectId, { type_ids: typeIds })
+            : Promise.resolve([]);
+          return typeModulePromise.then(function(typeModules) {
+            if (reminder.seq !== seq) return null;
+            var moduleIdsToLoad = {};
+            moduleIds.forEach(function(id) { moduleIdsToLoad[String(id)] = true; });
+            var extraModules = Array.isArray(typeModules) ? typeModules : [];
+            extraModules.forEach(function(m) {
+              if (!m || m.id === null || m.id === undefined) return;
+              moduleIdsToLoad[String(m.id)] = true;
+              if (!moduleMap[String(m.id)]) moduleMap[String(m.id)] = m;
+            });
+            var ids = Object.keys(moduleIdsToLoad);
+            if (!ids.length) {
+              reminder.items = [];
+              reminder.matchedModules = moduleMatches;
+              reminder.matchedTypes = typeMatches;
+              reminder.loading = false;
+              reminder.loaded = true;
+              renderTempExecView();
+              return null;
+            }
+            var tasks = ids.map(function(id) {
+              return client
+                .listMissingModuleItems(id)
+                .then(function(list) {
+                  var rows = Array.isArray(list) ? list : [];
+                  return rows.map(function(it) {
+                    var clone = it && typeof it === 'object' ? Object.assign({}, it) : {};
+                    clone.module_id = id;
+                    clone.module_name = moduleMap[id] && moduleMap[id].name ? moduleMap[id].name : ('模块#' + id);
+                    var typeKey = clone.type_id !== null && clone.type_id !== undefined ? String(clone.type_id) : '';
+                    if (typeKey && typeNameMap[typeKey]) clone.type_name = typeNameMap[typeKey];
+                    else if (!typeKey) clone.type_name = '未分类';
+                    return clone;
+                  });
+                })
+                .catch(function() { return []; });
+            });
+            return Promise.all(tasks).then(function(all) {
+              if (reminder.seq !== seq) return null;
+              var combined = [];
+              (all || []).forEach(function(rows) {
+                (rows || []).forEach(function(row) {
+                  if (!row) return;
+                  var moduleHit = row.module_id && matchedModuleMap[String(row.module_id)];
+                  var typeHit = row.type_id !== null && row.type_id !== undefined
+                    ? typeIds.indexOf(String(row.type_id)) !== -1
+                    : false;
+                  if (moduleHit || typeHit) combined.push(row);
+                });
+              });
+              reminder.items = combined;
+              reminder.matchedModules = moduleMatches;
+              reminder.matchedTypes = typeMatches;
+              reminder.loading = false;
+              reminder.loaded = true;
+              renderTempExecView();
+              return null;
+            });
+          });
+        })
+        .catch(function() {
+          if (reminder.seq !== seq) return;
+          reminder.items = [];
+          reminder.matchedModules = [];
+          reminder.matchedTypes = [];
+          reminder.loading = false;
+          reminder.loaded = false;
+          renderTempExecView();
+        });
+    }
+
     function renderTempExecView() {
       if (!tempExecView) return;
       var preserveScroll = Boolean(state.tempExecPreserveScrollOnce);
@@ -4080,6 +4378,7 @@
       }
       if (!active) {
         renderTempExecToolbar(null);
+        clearTempExecMissingReminder();
         tempExecView.innerHTML = ctxHtml + '<div class="temp-case-empty">暂无执行用例，请通过“用例导入”抽屉导入，或在“执行分配”中选择历史记录</div>';
         if (tempExecMindContainer) tempExecMindContainer.classList.add('hidden');
         state.tempExecMindMode = false;
@@ -4095,7 +4394,13 @@
         return;
       }
       renderTempExecToolbar(active);
-      tempExecView.innerHTML = ctxHtml + renderTempExecTable(active);
+      var reminderHtml = renderTempExecMissingReminderBlock();
+      var placement = resolveMissingReminderPlacement();
+      if (placement === 'bottom') {
+        tempExecView.innerHTML = ctxHtml + renderTempExecTable(active) + reminderHtml;
+      } else {
+        tempExecView.innerHTML = ctxHtml + reminderHtml + renderTempExecTable(active);
+      }
       if (state.tempExecMindMode && tempExecMindContainer) {
         tempExecMindContainer.innerHTML = '';
         tempExecMindContainer.classList.remove('hidden');
@@ -4113,6 +4418,7 @@
       syncTempExecCaseLibraryChangesButton(active);
       renderTempExecOverview();
       syncTempExecReuseStatusAlign();
+      requestTempExecMissingReminderRefresh();
       restoreScroll();
     }
 
@@ -8476,6 +8782,19 @@
         return;
       }
       applyReuseToggle(false);
+    }
+
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('app-settings-loaded', function() {
+        renderTempExecView();
+      });
+      window.addEventListener('app-settings-updated', function(e) {
+        var detail = e && e.detail ? e.detail : null;
+        var keys = detail && Array.isArray(detail.keys) ? detail.keys : [];
+        if (!keys.length || keys.indexOf('missingCaseReminderPlacement') !== -1) {
+          renderTempExecView();
+        }
+      });
     }
 
     return {

@@ -200,6 +200,29 @@
     return value.toString().trim();
   }
 
+  function buildCaseSearchText(items, fields) {
+    var list = Array.isArray(items) ? items : [];
+    if (!list.length) return '';
+    var keys = Array.isArray(fields) ? fields.filter(Boolean) : [];
+    var parts = [];
+    list.forEach(function(item) {
+      if (!item || typeof item !== 'object') return;
+      if (keys.length) {
+        keys.forEach(function(key) {
+          if (!key) return;
+          var val = stringifyCaseField(item[key]);
+          if (val) parts.push(val);
+        });
+        return;
+      }
+      Object.keys(item).forEach(function(key) {
+        var val = stringifyCaseField(item[key]);
+        if (val) parts.push(val);
+      });
+    });
+    return parts.join(' ').toLowerCase();
+  }
+
   function removePendingTempExecByName(pendingList, name, normalizeName) {
     if (!Array.isArray(pendingList) || !pendingList.length) return;
     var normalize = typeof normalizeName === 'function' ? normalizeName : normalizeTempExecName;
@@ -525,6 +548,7 @@
     generateTempVersionId: generateTempVersionId,
     normalizeTempExecName: normalizeTempExecName,
     stringifyCaseField: stringifyCaseField,
+    buildCaseSearchText: buildCaseSearchText,
     removePendingTempExecByName: removePendingTempExecByName,
     ensureTempExecReplacement: ensureTempExecReplacement,
     formatJsonOrText: formatJsonOrText,

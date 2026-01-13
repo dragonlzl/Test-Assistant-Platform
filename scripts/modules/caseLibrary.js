@@ -172,6 +172,8 @@
 	    editToExecBtn: document.getElementById('caseLibraryEditToExecBtn'),
 	    editStatus: document.getElementById('caseLibraryEditStatus'),
 	    editView: document.getElementById('caseLibraryEditView'),
+    missingReminderTop: document.getElementById('caseLibraryMissingReminderTop'),
+    missingReminderBottom: document.getElementById('caseLibraryMissingReminderBottom'),
     missingCard: document.getElementById('caseLibraryMissingCard'),
     missingCardTitle: document.getElementById('caseLibraryMissingCardTitle'),
     missingProject: document.getElementById('caseLibraryMissingProject'),
@@ -444,6 +446,18 @@
       pendingToast: null,
       pendingRemaining: 0,
       restoring: false,
+    },
+
+    missingReminder: {
+      projectId: null,
+      signature: '',
+      items: [],
+      matchedModules: [],
+      matchedTypes: [],
+      loading: false,
+      loaded: false,
+      seq: 0,
+      refreshTimer: null,
     },
 
     missingDrawer: {
@@ -6314,6 +6328,323 @@
     else dom.missingCard.classList.add('hidden');
   }
 
+  function ensureMissingReminderState() {
+    if (!state.missingReminder || typeof state.missingReminder !== 'object') {
+      state.missingReminder = {
+        projectId: null,
+        signature: '',
+        items: [],
+        matchedModules: [],
+        matchedTypes: [],
+        loading: false,
+        loaded: false,
+        seq: 0,
+        refreshTimer: null,
+      };
+    }
+    return state.missingReminder;
+  }
+
+  function resolveMissingReminderPlacement() {
+    var globalState = window.app && window.app.state ? window.app.state : null;
+    var settings = globalState && globalState.settings && typeof globalState.settings === 'object'
+      ? globalState.settings
+      : {};
+    var raw = settings.missingCaseReminderPlacement;
+    var key = raw === null || raw === undefined ? '' : String(raw).toLowerCase();
+    return key === 'bottom' ? 'bottom' : 'top';
+  }
+
+  function hashReminderText(text) {
+    var str = String(text || '');
+    var hash = 0;
+    for (var i = 0; i < str.length; i += 1) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return hash + ':' + str.length;
+  }
+
+  function buildMissingReminderSummary(reminder) {
+    var modules = Array.isArray(reminder.matchedModules) ? reminder.matchedModules : [];
+    var types = Array.isArray(reminder.matchedTypes) ? reminder.matchedTypes : [];
+    var parts = [];
+    if (modules.length) {
+      var shownModules = modules.slice(0, 4);
+      var text = shownModules.join('、');
+      if (modules.length > shownModules.length) text += ' 等' + modules.length + '个';
+      parts.push('模块：' + text);
+    }
+    if (types.length) {
+      var shownTypes = types.slice(0, 4);
+      var text2 = shownTypes.join('、');
+      if (types.length > shownTypes.length) text2 += ' 等' + types.length + '个';
+      parts.push('类型：' + text2);
+    }
+    return parts.join('；');
+  }
+
+  function buildMissingReminderTable(items) {
+    var list = Array.isArray(items) ? items : [];
+    if (!list.length) return '';
+    var rows = list.map(function(item) {
+      var moduleName = item && item.module_name ? String(item.module_name) : '--';
+      var typeName = item && item.type_name ? String(item.type_name) : '未分类';
+      var title = item && item.title ? String(item.title) : '';
+      var priority = item && item.priority ? String(item.priority) : '';
+      var precondition = item && item.precondition ? String(item.precondition) : '';
+      var steps = item && item.steps ? String(item.steps) : '';
+      var expected = item && item.expected ? String(item.expected) : '';
+      return (
+        '<tr>' +
+          '<td class="type">' + escapeHtml(typeName) + '</td>' +
+          '<td class="module">' + escapeHtml(moduleName) + '</td>' +
+          '<td class="title">' + escapeHtml(title) + '</td>' +
+          '<td class="priority">' + escapeHtml(priority) + '</td>' +
+          '<td>' + escapeHtml(precondition).replace(/\\n/g, '<br>') + '</td>' +
+          '<td>' + escapeHtml(steps).replace(/\\n/g, '<br>') + '</td>' +
+          '<td>' + escapeHtml(expected).replace(/\\n/g, '<br>') + '</td>' +
+        '</tr>'
+      );
+    }).join('');
+    return (
+      '<div class="missing-reminder-header">' +
+        '<span class="missing-reminder-title">易漏用例提醒</span>' +
+        '<span class="missing-reminder-meta">' + escapeHtml(buildMissingReminderSummary(state.missingReminder)) + '</span>' +
+      '</div>' +
+      '<div class="missing-reminder-scroll">' +
+        '<div class="temp-case-view">' +
+          '<table>' +
+            '<thead>' +
+              '<tr>' +
+                '<th class="type">类型</th>' +
+                '<th class="module">模块</th>' +
+                '<th class="title">用例标题</th>' +
+                '<th class="priority">优先级</th>' +
+                '<th>前提条件</th>' +
+                '<th>操作步骤</th>' +
+                '<th>预期结果</th>' +
+              '</tr>' +
+            '</thead>' +
+            '<tbody>' + rows + '</tbody>' +
+          '</table>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderMissingReminder() {
+    var reminder = ensureMissingReminderState();
+    var placement = resolveMissingReminderPlacement();
+    var top = dom.missingReminderTop;
+    var bottom = dom.missingReminderBottom;
+    var target = placement === 'bottom' ? bottom : top;
+    var other = placement === 'bottom' ? top : bottom;
+    if (other) {
+      other.innerHTML = '';
+      other.classList.add('hidden');
+    }
+    if (!target) return;
+    if (!reminder.items || !reminder.items.length) {
+      target.innerHTML = '';
+      target.classList.add('hidden');
+      return;
+    }
+    target.innerHTML = buildMissingReminderTable(reminder.items);
+    target.classList.remove('hidden');
+  }
+
+  function clearMissingReminder() {
+    var reminder = ensureMissingReminderState();
+    reminder.items = [];
+    reminder.matchedModules = [];
+    reminder.matchedTypes = [];
+    reminder.loading = false;
+    reminder.loaded = false;
+    reminder.signature = '';
+    reminder.projectId = null;
+    renderMissingReminder();
+  }
+
+  function requestMissingReminderRefresh() {
+    var reminder = ensureMissingReminderState();
+    if (reminder.refreshTimer) clearTimeout(reminder.refreshTimer);
+    reminder.refreshTimer = setTimeout(function() {
+      reminder.refreshTimer = null;
+      refreshMissingReminder();
+    }, 160);
+  }
+
+  function refreshMissingReminder() {
+    var reminder = ensureMissingReminderState();
+    if (!dom.editCard || dom.editCard.classList.contains('hidden')) {
+      clearMissingReminder();
+      return;
+    }
+    var file = state.editor.caseFile;
+    var projectId = file && (file.project_id || file.project_id === 0) ? String(file.project_id) : '';
+    var items = Array.isArray(state.editor.items) ? state.editor.items : [];
+    if (!projectId || !items.length) {
+      clearMissingReminder();
+      return;
+    }
+    var buildSearchText = utils && typeof utils.buildCaseSearchText === 'function'
+      ? utils.buildCaseSearchText
+      : function(list, fields) {
+          var fallback = [];
+          (Array.isArray(list) ? list : []).forEach(function(item) {
+            if (!item || typeof item !== 'object') return;
+            var keys = Array.isArray(fields) && fields.length ? fields : Object.keys(item);
+            keys.forEach(function(key) {
+              if (!key) return;
+              var val = (utils && typeof utils.stringifyCaseField === 'function')
+                ? utils.stringifyCaseField(item[key])
+                : String(item[key] || '');
+              if (val) fallback.push(val);
+            });
+          });
+          return fallback.join(' ').toLowerCase();
+        };
+    var caseText = buildSearchText(items);
+    if (!caseText) {
+      clearMissingReminder();
+      return;
+    }
+    var signature = String(projectId) + ':' + hashReminderText(caseText);
+    if (reminder.signature === signature && reminder.projectId === projectId && reminder.loaded) {
+      renderMissingReminder();
+      return;
+    }
+    reminder.signature = signature;
+    reminder.projectId = projectId;
+    reminder.items = [];
+    reminder.matchedModules = [];
+    reminder.matchedTypes = [];
+    reminder.loading = true;
+    reminder.loaded = false;
+    renderMissingReminder();
+    if (!apiClient || typeof apiClient.listMissingModules !== 'function' || typeof apiClient.listMissingTypes !== 'function') {
+      clearMissingReminder();
+      return;
+    }
+    var seq = (reminder.seq || 0) + 1;
+    reminder.seq = seq;
+    Promise.all([apiClient.listMissingModules(projectId), apiClient.listMissingTypes(projectId)])
+      .then(function(res) {
+        if (reminder.seq !== seq) return null;
+        var modules = Array.isArray(res && res[0]) ? res[0] : [];
+        var types = Array.isArray(res && res[1]) ? res[1] : [];
+        var moduleMatches = [];
+        var moduleIds = [];
+        var matchedModuleMap = {};
+        var moduleMap = {};
+        modules.forEach(function(m) {
+          if (!m || m.id === null || m.id === undefined) return;
+          var name = m.name ? String(m.name).trim() : '';
+          var idStr = String(m.id);
+          moduleMap[idStr] = m;
+          if (name && caseText.indexOf(name.toLowerCase()) !== -1) {
+            moduleMatches.push(name);
+            moduleIds.push(idStr);
+            matchedModuleMap[idStr] = true;
+          }
+        });
+        var typeMatches = [];
+        var typeIds = [];
+        var typeNameMap = {};
+        types.forEach(function(t) {
+          if (!t || t.id === null || t.id === undefined) return;
+          var name = t.name ? String(t.name).trim() : '';
+          var idStr = String(t.id);
+          typeNameMap[idStr] = name || ('类型#' + idStr);
+          if (name && caseText.indexOf(name.toLowerCase()) !== -1) {
+            typeMatches.push(name);
+            typeIds.push(idStr);
+          }
+        });
+        if (!moduleIds.length && !typeIds.length) {
+          reminder.items = [];
+          reminder.matchedModules = [];
+          reminder.matchedTypes = [];
+          reminder.loading = false;
+          reminder.loaded = true;
+          renderMissingReminder();
+          return null;
+        }
+        var typeModulePromise = typeIds.length
+          ? apiClient.listMissingModules(projectId, { type_ids: typeIds })
+          : Promise.resolve([]);
+        return typeModulePromise.then(function(typeModules) {
+          if (reminder.seq !== seq) return null;
+          var moduleIdsToLoad = {};
+          moduleIds.forEach(function(id) { moduleIdsToLoad[String(id)] = true; });
+          var extraModules = Array.isArray(typeModules) ? typeModules : [];
+          extraModules.forEach(function(m) {
+            if (!m || m.id === null || m.id === undefined) return;
+            moduleIdsToLoad[String(m.id)] = true;
+            if (!moduleMap[String(m.id)]) moduleMap[String(m.id)] = m;
+          });
+          var ids = Object.keys(moduleIdsToLoad);
+          if (!ids.length) {
+            reminder.items = [];
+            reminder.matchedModules = moduleMatches;
+            reminder.matchedTypes = typeMatches;
+            reminder.loading = false;
+            reminder.loaded = true;
+            renderMissingReminder();
+            return null;
+          }
+          var tasks = ids.map(function(id) {
+            return apiClient
+              .listMissingModuleItems(id)
+              .then(function(list) {
+                var rows = Array.isArray(list) ? list : [];
+                return rows.map(function(it) {
+                  var clone = it && typeof it === 'object' ? Object.assign({}, it) : {};
+                  clone.module_id = id;
+                  clone.module_name = moduleMap[id] && moduleMap[id].name ? moduleMap[id].name : ('模块#' + id);
+                  var typeKey = clone.type_id !== null && clone.type_id !== undefined ? String(clone.type_id) : '';
+                  if (typeKey && typeNameMap[typeKey]) clone.type_name = typeNameMap[typeKey];
+                  else if (!typeKey) clone.type_name = '未分类';
+                  return clone;
+                });
+              })
+              .catch(function() { return []; });
+          });
+          return Promise.all(tasks).then(function(all) {
+            if (reminder.seq !== seq) return null;
+            var combined = [];
+            (all || []).forEach(function(rows) {
+              (rows || []).forEach(function(row) {
+                if (!row) return;
+                var moduleHit = row.module_id && matchedModuleMap[String(row.module_id)];
+                var typeHit = row.type_id !== null && row.type_id !== undefined
+                  ? typeIds.indexOf(String(row.type_id)) !== -1
+                  : false;
+                if (moduleHit || typeHit) combined.push(row);
+              });
+            });
+            reminder.items = combined;
+            reminder.matchedModules = moduleMatches;
+            reminder.matchedTypes = typeMatches;
+            reminder.loading = false;
+            reminder.loaded = true;
+            renderMissingReminder();
+            return null;
+          });
+        });
+      })
+      .catch(function() {
+        if (reminder.seq !== seq) return;
+        reminder.items = [];
+        reminder.matchedModules = [];
+        reminder.matchedTypes = [];
+        reminder.loading = false;
+        reminder.loaded = false;
+        renderMissingReminder();
+      });
+  }
+
   function getMissingModuleNameById(moduleId) {
     var list = Array.isArray(state.missingView.modules) ? state.missingView.modules : [];
     for (var i = 0; i < list.length; i += 1) {
@@ -8232,12 +8563,14 @@
     );
     syncEditorBatchDeleteControls();
     syncEditorBatchAddControls();
+    requestMissingReminderRefresh();
   }
 
   function renderEditorCard() {
     var file = state.editor.caseFile;
     if (!file) {
       showEditorCard(false);
+      clearMissingReminder();
       return;
     }
     showEditorCard(true);
@@ -11781,6 +12114,7 @@
             var next = normalizeEditorText(raw);
             item[field] = next;
             scheduleEditorAutoSave(idx);
+            requestMissingReminderRefresh();
             return;
           }
           if (t.hasAttribute('data-case-lib-remark')) {
@@ -11789,6 +12123,7 @@
             if (!remarkItem) return;
             remarkItem.remark = t.value || '';
             scheduleEditorAutoSave(idx);
+            requestMissingReminderRefresh();
           }
         });
 	      dom.editView.addEventListener('focusout', function(e) {
@@ -11804,9 +12139,10 @@
 	        if (!item) return;
 	        var prevNorm = normalizeEditorText(item[field]);
 	        var nextNorm = normalizeEditorText(raw);
-	        if (prevNorm === nextNorm) return;
-	        item[field] = nextNorm;
-	        saveCaseItemAtIndex(idx, '保存');
+        if (prevNorm === nextNorm) return;
+        item[field] = nextNorm;
+        saveCaseItemAtIndex(idx, '保存');
+        requestMissingReminderRefresh();
           setTimeout(function() { flushEditorPendingRender(); }, 0);
 	      });
       dom.editView.addEventListener('blur', function(e) {
@@ -11819,6 +12155,7 @@
         if (!item) return;
         item.remark = t.value || '';
         saveCaseItemAtIndex(idx, '保存');
+        requestMissingReminderRefresh();
         setTimeout(function() { flushEditorPendingRender(); }, 0);
       }, true);
     }
@@ -12033,6 +12370,19 @@
         if (!id) return;
         var target = (state.missingType.types || []).find(function(t) { return t && String(t.id) === String(id); }) || null;
         requestDeleteMissingType(target, btn);
+      });
+    }
+
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('app-settings-loaded', function() {
+        renderMissingReminder();
+      });
+      window.addEventListener('app-settings-updated', function(e) {
+        var detail = e && e.detail ? e.detail : null;
+        var keys = detail && Array.isArray(detail.keys) ? detail.keys : [];
+        if (!keys.length || keys.indexOf('missingCaseReminderPlacement') !== -1) {
+          renderMissingReminder();
+        }
       });
     }
 

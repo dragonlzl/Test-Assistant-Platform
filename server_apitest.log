@@ -1,165 +1,44 @@
-INFO:     Started server process [43527]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8081 (Press CTRL+C to quit)
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/users/me HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/projects HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/projects/71/versions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/case-files/import HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "GET /api/case-files/77/items HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/exec/sets/52/cases HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "PATCH /api/exec/cases/99 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "PATCH /api/case-files/items/140 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/exec/sets/52/cases HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/exec/overview?project_id=71&version_id=73 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-diff/ack HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/projects/71 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/projects HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/projects/71/versions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/case-files/import HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "GET /api/case-files/77/items HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "PATCH /api/case-files/items/140 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/projects/71 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/projects HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/projects/71/versions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/case-files/import HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "GET /api/case-files/77/items HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "PATCH /api/case-files/items/140 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/projects/71 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/projects HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/projects/71/versions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/case-files/import HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "PATCH /api/exec/sets/52 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/case-files?project_id=71 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/projects/71 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/projects HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/projects/71/versions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/case-files/import HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "GET /api/case-files/77/items HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/exec/sets/52/cases HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/case-files/items/141 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/exec/sets/52/cases HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/projects/71 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/projects HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/projects/71/versions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/users HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/users HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/users/assign-projects HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/users/assign-projects HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/case-files/import HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/53/cases HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/cases HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/exec/sets/52/cases HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/projects/71 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/users/53/delete HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/users/54/delete HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/projects HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/projects/71/versions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/case-files/import HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/exec/sets/52/cases HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/exec/cases/99 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/case-files/77/items HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/case-files/change-history?project_id=71&file_name_clean=%E6%89%A7%E8%A1%8C%E5%88%A0%E9%99%A4%E5%90%8C%E6%AD%A5_1767750489604&limit=50 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/projects/71 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/projects HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/projects/71/versions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/case-files/import HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/cases HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "GET /api/case-files/77/items HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/projects/71 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/projects HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/projects/71/versions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/case-files/import HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "GET /api/case-files/77/items HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "PATCH /api/case-files/items/140 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "PATCH /api/case-files/items/140 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/projects/71 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/projects HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/projects/71/versions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/case-files/import HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/users HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/users/assign-projects HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/exec/sets/52/cases HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "PATCH /api/exec/cases/99 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "PATCH /api/exec/cases/99 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/53/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/projects/71 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/users/53/delete HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/projects HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/projects/71/versions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/case-files/import HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/exec/sets/52/cases HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "PATCH /api/exec/cases/99 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/case-files/77/items/append HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/case-files/change-history?project_id=71&file_name_clean=%E8%BF%BD%E5%8A%A0%E6%B5%8B%E8%AF%95_1767750491025 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/exec/sets/52/cases HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/projects/71 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/projects HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/projects/71/versions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/case-files/import HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/projects/71 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/auth/login HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/projects HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/projects/71/versions HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/case-files/import HTTP/1.1" 201 Created
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/from-case-file HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "POST /api/exec/sets/52/case-library-sync HTTP/1.1" 200 OK
-INFO:     127.0.0.1:54364 - "DELETE /api/projects/71 HTTP/1.1" 200 OK
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [43527]
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/runpy.py", line 193, in _run_module_as_main
+    "__main__", mod_spec)
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/runpy.py", line 85, in _run_code
+    exec(code, run_globals)
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/uvicorn/__main__.py", line 4, in <module>
+    uvicorn.main()
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/click/core.py", line 1130, in __call__
+    return self.main(*args, **kwargs)
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/click/core.py", line 1055, in main
+    rv = self.invoke(ctx)
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/click/core.py", line 1404, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/click/core.py", line 760, in invoke
+    return __callback(*args, **kwargs)
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/uvicorn/main.py", line 449, in main
+    h11_max_incomplete_event_size=h11_max_incomplete_event_size,
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/uvicorn/main.py", line 569, in run
+    server.run()
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/uvicorn/server.py", line 60, in run
+    return asyncio.run(self.serve(sockets=sockets))
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/asyncio/runners.py", line 43, in run
+    return loop.run_until_complete(main)
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/asyncio/base_events.py", line 587, in run_until_complete
+    return future.result()
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/uvicorn/server.py", line 67, in serve
+    config.load()
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/uvicorn/config.py", line 477, in load
+    self.loaded_app = import_from_string(self.app)
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/uvicorn/importer.py", line 24, in import_from_string
+    raise exc from None
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/uvicorn/importer.py", line 21, in import_from_string
+    module = importlib.import_module(module_str)
+  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/importlib/__init__.py", line 127, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+  File "<frozen importlib._bootstrap>", line 1006, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 983, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 967, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 677, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 728, in exec_module
+  File "<frozen importlib._bootstrap>", line 219, in _call_with_frames_removed
+  File "./backend/main.py", line 7, in <module>
+    from sqlalchemy.orm import Session
+ModuleNotFoundError: No module named 'sqlalchemy'

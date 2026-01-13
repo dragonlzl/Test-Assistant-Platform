@@ -53,6 +53,7 @@
     feishuMention: '',
     theme: 'light',
     caseViewFontSize: defaultCaseViewFontSize,
+    missingCaseReminderPlacement: 'top',
     caseGenProgressCollapsed: false,
     sidebarTabActive: 'casegen',
     memoPad: {

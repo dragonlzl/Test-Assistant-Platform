@@ -56,6 +56,12 @@
     var themeSelect = dom.themeSelect || document.getElementById('themeSelect');
     var saveThemeSettingBtn = dom.saveThemeSettingBtn || document.getElementById('saveThemeSetting');
     var themeSettingStatus = dom.themeSettingStatus || document.getElementById('themeSettingStatus');
+    var missingReminderPlacementSelect = dom.missingReminderPlacementSelect
+      || document.getElementById('missingReminderPlacementSelect');
+    var saveMissingReminderPlacementBtn = dom.saveMissingReminderPlacementBtn
+      || document.getElementById('saveMissingReminderPlacement');
+    var missingReminderPlacementStatus = dom.missingReminderPlacementStatus
+      || document.getElementById('missingReminderPlacementStatus');
     var settingsNavButtons = dom.settingsNavButtons || document.querySelectorAll('[data-settings-target]');
 
     var defaultSettings = config.defaultSettings || {};
@@ -66,6 +72,9 @@
     var defaultTheme = defaultSettings && defaultSettings.theme ? String(defaultSettings.theme) : 'light';
     var defaultCaseViewFontSize = Number(config.defaultCaseViewFontSize)
       || (defaultSettings && defaultSettings.caseViewFontSize ? Number(defaultSettings.caseViewFontSize) : 13);
+    var defaultMissingReminderPlacement = defaultSettings && defaultSettings.missingCaseReminderPlacement
+      ? String(defaultSettings.missingCaseReminderPlacement)
+      : 'top';
     var minCaseViewFontSize = Number(config.minCaseViewFontSize) || 11;
     var maxCaseViewFontSize = Number(config.maxCaseViewFontSize) || 16;
     var settingsKey = config.settingsKey || 'usecase-settings-v1';
@@ -101,6 +110,7 @@
       projectOrder: false,
       defaultProjectId: false,
       theme: false,
+      missingCaseReminderPlacement: false,
     };
 
     function setSettingsReady(source) {
@@ -199,6 +209,12 @@
       return normalizeTheme(next);
     }
 
+    function resolveMissingReminderPlacement(value) {
+      var key = value === null || value === undefined ? '' : String(value).toLowerCase();
+      if (key === 'bottom') return 'bottom';
+      return 'top';
+    }
+
     function applyTheme(theme) {
       if (typeof document === 'undefined' || !document.documentElement) return;
       var next = resolveTheme(theme);
@@ -289,6 +305,10 @@
       } else {
         state.settings.caseViewFontSize = defaultCaseViewFontSize;
       }
+      if (state.settings.missingCaseReminderPlacement === undefined || state.settings.missingCaseReminderPlacement === null) {
+        state.settings.missingCaseReminderPlacement = defaultMissingReminderPlacement;
+      }
+      state.settings.missingCaseReminderPlacement = resolveMissingReminderPlacement(state.settings.missingCaseReminderPlacement);
       if (state.settings.smartTopNavCollapse === undefined || state.settings.smartTopNavCollapse === null) {
         state.settings.smartTopNavCollapse = defaultSettings.smartTopNavCollapse === true;
       } else {
@@ -511,6 +531,10 @@
       } else {
         state.settings.caseViewFontSize = defaultCaseViewFontSize;
       }
+      if (state.settings.missingCaseReminderPlacement === undefined || state.settings.missingCaseReminderPlacement === null) {
+        state.settings.missingCaseReminderPlacement = defaultMissingReminderPlacement;
+      }
+      state.settings.missingCaseReminderPlacement = resolveMissingReminderPlacement(state.settings.missingCaseReminderPlacement);
       if (state.settings.smartTopNavCollapse === undefined || state.settings.smartTopNavCollapse === null) {
         state.settings.smartTopNavCollapse = defaultSettings.smartTopNavCollapse === true;
       } else {
@@ -614,6 +638,16 @@
         if (!dirtyDrafts.theme) {
           themeSelect.value = resolveTheme(state.settings.theme);
         }
+      }
+      if (missingReminderPlacementSelect) {
+        if (!dirtyDrafts.missingCaseReminderPlacement) {
+          missingReminderPlacementSelect.value = resolveMissingReminderPlacement(
+            state.settings.missingCaseReminderPlacement || defaultMissingReminderPlacement
+          );
+        }
+      }
+      if (missingReminderPlacementStatus) {
+        setStatus(missingReminderPlacementStatus, '', '');
       }
       if (smartTopNavToggle) {
         smartTopNavToggle.checked = state.settings.smartTopNavCollapse === true;
@@ -1107,6 +1141,53 @@
       }
     }
 
+    function getMissingReminderPlacementLabel(value) {
+      return value === 'bottom' ? '下方' : '上方';
+    }
+
+    function notifySettingsUpdated(keys) {
+      if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+      var detail = { keys: Array.isArray(keys) ? keys.slice() : [] };
+      try {
+        window.dispatchEvent(new CustomEvent('app-settings-updated', { detail: detail }));
+      } catch (err) {
+        try {
+          var evt = document.createEvent('CustomEvent');
+          evt.initCustomEvent('app-settings-updated', false, false, detail);
+          window.dispatchEvent(evt);
+        } catch (err2) {
+          // ignore
+        }
+      }
+    }
+
+    function saveMissingReminderPlacement() {
+      if (!missingReminderPlacementSelect) return;
+      var next = resolveMissingReminderPlacement(missingReminderPlacementSelect.value);
+      var prev = resolveMissingReminderPlacement(
+        state.settings.missingCaseReminderPlacement || defaultMissingReminderPlacement
+      );
+      state.settings.missingCaseReminderPlacement = next;
+      dirtyDrafts.missingCaseReminderPlacement = false;
+      persistSettings(['missingCaseReminderPlacement']);
+      if (missingReminderPlacementStatus) {
+        if (prev === next) {
+          setStatus(
+            missingReminderPlacementStatus,
+            '易漏用例提醒区域保持在' + getMissingReminderPlacementLabel(next),
+            'ok'
+          );
+        } else {
+          setStatus(
+            missingReminderPlacementStatus,
+            '易漏用例提醒区域已切换到' + getMissingReminderPlacementLabel(next),
+            'ok'
+          );
+        }
+      }
+      notifySettingsUpdated(['missingCaseReminderPlacement']);
+    }
+
     function notifyPageSizeChange(size) {
       if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
       var detail = { size: size };
@@ -1224,6 +1305,15 @@
         dirtyDrafts.theme = true;
         setStatus(themeSettingStatus, '已选择' + getThemeLabel(next) + '，保存后生效', '');
       });
+      if (saveMissingReminderPlacementBtn) {
+        saveMissingReminderPlacementBtn.addEventListener('click', saveMissingReminderPlacement);
+      }
+      if (missingReminderPlacementSelect) {
+        missingReminderPlacementSelect.addEventListener('change', function() {
+          dirtyDrafts.missingCaseReminderPlacement = true;
+          setStatus(missingReminderPlacementStatus, '', '');
+        });
+      }
       if (pageGuideSettingsGrid) pageGuideSettingsGrid.addEventListener('change', handlePageGuideChange);
       if (smartTopNavToggle) smartTopNavToggle.addEventListener('change', handleSmartTopNavChange);
       bindProjectSortEvents();

@@ -37,6 +37,7 @@
       feishuMention: '',
       theme: 'light',
       caseViewFontSize: 13,
+      missingCaseReminderPlacement: 'top',
       smartTopNavCollapse: false,
       tempExecColumns: { ...defaultTempExecColumns },
       projectOrder: [],

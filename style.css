@@ -1713,6 +1713,42 @@ body {
       background: #f8fbff;
       text-align: left;
     }
+    .missing-reminder-card {
+      --missing-reminder-row-height: calc(var(--case-view-font-size, 13px) * 1.5 + 24px);
+      margin: 10px 0 14px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--card);
+      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
+    }
+    .missing-reminder-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .missing-reminder-title {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .missing-reminder-meta {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .missing-reminder-scroll {
+      max-height: calc(var(--missing-reminder-row-height) * 4);
+      overflow-y: auto;
+      border-radius: 10px;
+    }
+    .missing-reminder-scroll table {
+      margin: 0;
+    }
+    .missing-reminder-scroll .temp-case-view td,
+    .missing-reminder-scroll .temp-case-view th {
+      padding: 10px 12px;
+    }
     .clarify-table th {
       font-weight: 600;
     }

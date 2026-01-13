@@ -3614,3 +3614,17 @@
 - 更新记录：2026-01-15 修复易漏类型多选误触全部（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_types.spec.js`）。
 - 更新记录：2026-01-16 易漏用例视图类型下拉支持新增类型（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_types.spec.js`）。
 - 更新记录：2026-01-17 易漏视图新增类型后不自动展开抽屉（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_types.spec.js`）。
+
+- 功能名称：易漏用例提醒区域（执行/用例库）
+- 功能描述：根据当前项目执行中用例或用例库编辑用例的内容匹配易漏模块/类型，匹配时在执行视图或用例库编辑视图展示易漏用例提醒区域。
+- 操作方式：在“设置-通用设置”选择提醒区域位置（上方/下方）；进入“用例库-查看&编辑”或“用例执行-执行视图”查看用例列表。
+- 使用效果：匹配到模块/类型关键字时展示相关易漏用例列表（无增删操作，超出3条可滚动），未匹配时不展示。
+- 新增内容/接口/组件：
+  - 前端：新增易漏提醒区域设置项、匹配逻辑与提醒区域渲染（`settings.html`、`scripts/modules/settings.js`、`case-library.html`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`style.css`、`scripts/base/utils.js`、`scripts/base/state.js`、`config/constants.js`、`scripts/modules/app.js`、`scripts/modules/opsLog.js`）。
+  - 测试：新增易漏提醒区域 UI/API 用例（`tests/ui/missing_case_reminder.spec.js`、`tests/api/settings_missing_reminder_placement.spec.js`）。
+- 复用说明：复用易漏模块/类型接口与用例表格样式，仅新增提醒区域匹配与展示逻辑。
+- 测试与验证：
+  - `node --check scripts/base/utils.js scripts/modules/settings.js scripts/modules/caseLibrary.js scripts/core/tempexecCore.js`
+  - `npx playwright test tests/api/settings_missing_reminder_placement.spec.js`
+  - `npx playwright test tests/ui/missing_case_reminder.spec.js`
+- 更新记录：2026-01-13 易漏用例提醒区域（执行/用例库）（`settings.html`、`scripts/modules/settings.js`、`case-library.html`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`style.css`、`scripts/base/utils.js`、`scripts/base/state.js`、`config/constants.js`、`scripts/modules/app.js`、`scripts/modules/opsLog.js`、`tests/ui/missing_case_reminder.spec.js`、`tests/api/settings_missing_reminder_placement.spec.js`）。

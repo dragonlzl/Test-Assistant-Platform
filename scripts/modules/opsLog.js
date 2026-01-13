@@ -592,6 +592,7 @@
     if (k === 'tempExecPageSize') return '全局分页设置';
     if (k === 'feishuWebhook') return '飞书 Webhook';
     if (k === 'feishuMention') return '@角色ID';
+    if (k === 'missingCaseReminderPlacement') return '易漏用例提醒区域';
     if (k === 'projectOrder') return '项目排序';
     if (k === 'defaultProjectId') return '默认项目';
     return k;
