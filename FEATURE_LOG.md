@@ -19,6 +19,20 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：易漏用例导入与合并
+- 功能描述：易漏用例抽屉新增漏测模板导入区域，支持 XMind/Excel 格式导入，同名模块条目对比后合并入库。
+- 操作方式：用例库 → 易漏用例 → 拖拽/选择漏测用例文件 → 选择项目 → 确认加入漏测库 → 在差异弹窗确认合并。
+- 使用效果：导入文件自动校验漏测模板格式；同名模块条目自动去重，新增条目合并入库并展示差异，模块不同直接新增。
+- 新增内容/接口/组件：
+  - 前端：易漏导入区域与合并差异抽屉、导入与合并逻辑（`case-library.html`、`scripts/modules/caseLibrary.js`）。
+  - 测试：易漏导入合并与格式校验 UI 用例（`tests/ui/case_library_missing_modules.spec.js`）。
+- 复用说明：复用既有导入解析能力与漏测模块/条目接口，无新增后端接口。
+- 测试与验证：
+  - `node --check scripts/modules/caseLibrary.js`
+  - `npx playwright test tests/ui/case_library_missing_modules.spec.js`
+- 更新记录：2026-01-13 易漏用例导入与合并（`case-library.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_modules.spec.js`）。
+- 更新记录：2026-01-13 修复易漏导入拖拽 FileList 解析（`scripts/modules/caseLibrary.js`）。
+
 - 功能名称：执行总览版本总览/个人区虚拟加载与横向滚动
 - 功能描述：执行总览版本总览固定显示 2.5 行，超出可滚动；个人区版本盒子改为横向滚动展示，并对版本内容进行近邻虚拟加载。
 - 操作方式：执行总览 → 查看版本总览与个人区 → 上下滚动版本总览 / 左右滑动个人区版本盒子。

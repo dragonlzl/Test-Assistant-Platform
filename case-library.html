@@ -906,6 +906,23 @@
       <button class="link-toggle" data-drawer-close="caseLibraryMissingDrawer">收起</button>
     </div>
     <div class="drawer-body">
+      <p class="hint">拖拽或选择漏测用例文件后，选择项目并确认加入漏测库。</p>
+      <label class="zone" id="caseLibraryMissingImportDropZone">
+        <input accept=".xmind,.xlsx" hidden="" id="caseLibraryMissingImportInput" multiple="" type="file"/>
+        <div class="zone-line"><strong>拖拽</strong><span>漏测用例文件到此处，或点击选择</span></div>
+        <p class="hint" id="caseLibraryMissingImportFileHint">未选择文件</p>
+      </label>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <span class="case-library-section-title">导入</span>
+          <label class="case-library-label" for="caseLibraryMissingImportProjectSelect">项目</label>
+          <select id="caseLibraryMissingImportProjectSelect"></select>
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="primary" id="caseLibraryMissingImportConfirmBtn" type="button" disabled>确认加入漏测库</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibraryMissingImportStatus"></p>
       <div class="case-library-drawer-toolbar case-library-drawer-toolbar-primary">
         <div class="case-library-filters">
           <span class="case-library-section-title">筛选</span>
@@ -962,6 +979,41 @@
     </div>
     <div class="drawer-foot">
       <button class="ghost-btn" data-drawer-close="caseLibraryMissingDrawer" type="button">关闭</button>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseLibraryMissingImportDiffDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryMissingImportDiffDrawer"></div>
+  <div class="drawer-panel drawer-panel-wide">
+    <div class="drawer-header">
+      <h3 id="caseLibraryMissingImportDiffTitle">漏测用例合并差异</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryMissingImportDiffDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">同名模块会进行合并：新增条目将加入漏测库，已存在条目将保留。</p>
+      <p class="status" id="caseLibraryMissingImportDiffStatus"></p>
+      <p class="hint" id="caseLibraryMissingImportDiffMeta"></p>
+      <div class="admin-table-wrapper">
+        <table class="admin-table diff-table">
+          <thead>
+            <tr>
+              <th style="width:70px;">状态</th>
+              <th>模块</th>
+              <th>用例标题</th>
+              <th>前提条件</th>
+              <th>操作步骤</th>
+              <th>预期结果</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryMissingImportDiffBody">
+            <tr><td colspan="6"><p class="hint">暂无数据</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="primary" id="caseLibraryMissingImportDiffConfirmBtn" type="button">确认合并</button>
+        <button class="ghost-btn" data-drawer-close="caseLibraryMissingImportDiffDrawer" type="button">关闭</button>
+      </div>
     </div>
   </div>
 </div>

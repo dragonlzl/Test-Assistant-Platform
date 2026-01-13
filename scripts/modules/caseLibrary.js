@@ -183,6 +183,18 @@
     missingView: document.getElementById('caseLibraryMissingView'),
     missingTypePills: document.getElementById('caseLibraryMissingTypePills'),
 
+    missingImportDropZone: document.getElementById('caseLibraryMissingImportDropZone'),
+    missingImportInput: document.getElementById('caseLibraryMissingImportInput'),
+    missingImportFileHint: document.getElementById('caseLibraryMissingImportFileHint'),
+    missingImportProjectSelect: document.getElementById('caseLibraryMissingImportProjectSelect'),
+    missingImportConfirmBtn: document.getElementById('caseLibraryMissingImportConfirmBtn'),
+    missingImportStatus: document.getElementById('caseLibraryMissingImportStatus'),
+    missingImportDiffTitle: document.getElementById('caseLibraryMissingImportDiffTitle'),
+    missingImportDiffStatus: document.getElementById('caseLibraryMissingImportDiffStatus'),
+    missingImportDiffMeta: document.getElementById('caseLibraryMissingImportDiffMeta'),
+    missingImportDiffBody: document.getElementById('caseLibraryMissingImportDiffBody'),
+    missingImportDiffConfirmBtn: document.getElementById('caseLibraryMissingImportDiffConfirmBtn'),
+
     importDropZone: document.getElementById('caseLibraryImportDropZone'),
     importInput: document.getElementById('caseLibraryImportInput'),
     importFileHint: document.getElementById('caseLibraryImportFileHint'),
@@ -516,6 +528,22 @@
       autoSaveInFlight: {},
       typeFilters: new Set(),
     },
+    missingImport: {
+      projectId: null,
+      files: [],
+      items: [],
+      structuralErrors: [],
+      loading: false,
+      pending: false,
+      invalid: [],
+    },
+    missingImportDiff: {
+      projectId: null,
+      rows: [],
+      newItems: [],
+      duplicateCount: 0,
+      pendingItemsByModule: [],
+    },
   };
 
 	  var importDrawerInstance = null;
@@ -575,7 +603,7 @@
 
   function buildCaseItemKey(item) {
     if (!item) return '';
-    var module = normalizeDiffText(item.module || '').toLowerCase();
+    var module = normalizeDiffText(item.module || item.module_name || '').toLowerCase();
     var title = normalizeDiffText(item.title || '').toLowerCase();
     var precondition = normalizeDiffText(item.precondition || item.preconditions || '').toLowerCase();
     var steps = normalizeDiffText(item.steps || '').toLowerCase();
@@ -4066,6 +4094,8 @@
       var selectSelected = dom.selectProjectSelect ? String(dom.selectProjectSelect.value || '') : '';
       var importSelectSelected = dom.importSelectProjectSelect ? String(dom.importSelectProjectSelect.value || '') : '';
       var historySelected = dom.historyDrawerProjectSelect ? String(dom.historyDrawerProjectSelect.value || '') : '';
+      var missingSelected = dom.missingDrawerProjectSelect ? String(dom.missingDrawerProjectSelect.value || '') : '';
+      var missingImportSelected = dom.missingImportProjectSelect ? String(dom.missingImportProjectSelect.value || '') : '';
       var projects = Array.isArray(list) ? list : [];
       if (utils && typeof utils.sortProjectsByUserSettings === 'function') {
         projects = utils.sortProjectsByUserSettings(projects);
@@ -4076,12 +4106,16 @@
       syncProjectOptions(dom.selectProjectSelect, '请选择项目');
       syncProjectOptions(dom.importSelectProjectSelect, '请选择项目');
       syncProjectOptions(dom.historyDrawerProjectSelect, '请选择项目');
+      syncProjectOptions(dom.missingDrawerProjectSelect, '请选择项目');
+      syncProjectOptions(dom.missingImportProjectSelect, '请选择项目');
       // 仅刷新 option 列表，不强制清空用户已选项目；若新列表不含该值，浏览器会自动回到空值。
       if (dom.importProjectSelect && importSelected) dom.importProjectSelect.value = importSelected;
       if (dom.editDrawerProjectSelect && editSelected) dom.editDrawerProjectSelect.value = editSelected;
       if (dom.selectProjectSelect && selectSelected) dom.selectProjectSelect.value = selectSelected;
       if (dom.importSelectProjectSelect && importSelectSelected) dom.importSelectProjectSelect.value = importSelectSelected;
       if (dom.historyDrawerProjectSelect && historySelected) dom.historyDrawerProjectSelect.value = historySelected;
+      if (dom.missingDrawerProjectSelect && missingSelected) dom.missingDrawerProjectSelect.value = missingSelected;
+      if (dom.missingImportProjectSelect && missingImportSelected) dom.missingImportProjectSelect.value = missingImportSelected;
       return state.projects;
     });
   }
@@ -4594,6 +4628,561 @@
     }
     syncImportConfirmEnabled();
     return restoreImportDrawerFromPersistedState();
+  }
+
+  function syncMissingImportConfirmEnabled() {
+    if (!dom.missingImportConfirmBtn) return;
+    var s = state.missingImport;
+    var hasFiles = s.files && s.files.length;
+    var hasItems = s.items && s.items.length;
+    var invalid = s.invalid && s.invalid.length;
+    dom.missingImportConfirmBtn.disabled = !hasFiles || !hasItems || !s.projectId || s.loading || s.pending || invalid;
+  }
+
+  function renderMissingImportFileHint() {
+    if (!dom.missingImportFileHint) return;
+    var files = state.missingImport.files || [];
+    if (!files.length) {
+      dom.missingImportFileHint.textContent = '未选择文件';
+      return;
+    }
+    var names = files.map(function(f) { return f && f.name ? f.name : '文件'; });
+    var head = names.slice(0, 2).join('、');
+    dom.missingImportFileHint.textContent = names.length > 2 ? ('已选择 ' + names.length + ' 个：' + head + '...') : ('已选择：' + head);
+  }
+
+  function resetMissingImportState() {
+    state.missingImport.projectId = null;
+    state.missingImport.files = [];
+    state.missingImport.items = [];
+    state.missingImport.structuralErrors = [];
+    state.missingImport.loading = false;
+    state.missingImport.pending = false;
+    state.missingImport.invalid = [];
+    setStatus(dom.missingImportStatus, '', '');
+    renderMissingImportFileHint();
+    syncProjectOptions(dom.missingImportProjectSelect, '请选择项目');
+    if (dom.missingImportProjectSelect) dom.missingImportProjectSelect.value = '';
+    syncMissingImportConfirmEnabled();
+  }
+
+  function normalizeMissingImportText(value) {
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
+  }
+
+  function normalizeMissingImportItem(item) {
+    if (!item) return null;
+    var module = normalizeMissingImportText(item.module || '');
+    var title = normalizeMissingImportText(item.title || '');
+    var expected = normalizeMissingImportText(item.expected || '');
+    var priority = normalizePriorityInput(item.priority || '');
+    var precondition = normalizeMissingImportText(item.precondition || item.preconditions || '');
+    var steps = normalizeMissingImportText(item.steps || '');
+    var remark = item.remark === null || item.remark === undefined ? null : normalizeMissingImportText(item.remark || '');
+    return {
+      module: module,
+      title: title,
+      expected: expected,
+      priority: priority,
+      precondition: precondition,
+      steps: steps,
+      remark: remark,
+    };
+  }
+
+  function validateMissingImportHeaderRow(row) {
+    var header = Array.isArray(row) ? row : [];
+    var required = ['模块', '用例标题', '优先级', '前提条件', '操作步骤', '预期结果'];
+    var found = {};
+    header.forEach(function(cell) {
+      var text = normalizeMissingImportText(cell);
+      if (!text) return;
+      found[text] = true;
+    });
+    var missing = required.filter(function(key) { return !found[key]; });
+    return { ok: missing.length === 0, missing: missing };
+  }
+
+  function parseMissingImportFile(file) {
+    if (!file) return Promise.resolve({ items: [], structuralErrors: [], error: '文件不可用' });
+    var name = file.name ? String(file.name) : '';
+    var ext = (name.split('.').pop() || '').toLowerCase();
+    if (ext !== 'xmind' && ext !== 'xlsx') {
+      return Promise.resolve({ items: [], structuralErrors: [], error: '仅支持导入 .xmind 或 .xlsx 文件' });
+    }
+    var coreApi = getCore();
+    if (ext === 'xmind') {
+      if (!coreApi || typeof coreApi.parseXmindFile !== 'function') {
+        return Promise.resolve({ items: [], structuralErrors: [], error: '缺少 XMind 解析能力' });
+      }
+      return coreApi.parseXmindFile(file).then(function(res) {
+        var paths = res && Array.isArray(res.paths) ? res.paths : [];
+        var rootTitle = res && res.rootTitle ? String(res.rootTitle) : '';
+        var mapped = buildImportItemsFromXmindPaths(paths, rootTitle);
+        return { items: mapped.items, structuralErrors: mapped.structuralErrors };
+      });
+    }
+    return parseXlsxFileToCaseRows(file).then(function(rows) {
+      if (!rows || !rows.length) {
+        return { items: [], structuralErrors: [], error: 'Excel 解析失败：未找到数据' };
+      }
+      var headerCheck = validateMissingImportHeaderRow(rows[0]);
+      if (!headerCheck.ok) {
+        return { items: [], structuralErrors: [], error: 'Excel 表头与漏测用例导出格式不一致' };
+      }
+      return { items: buildImportItemsFromXlsxRows(rows || []) };
+    });
+  }
+
+  function validateMissingImportItems(items) {
+    var list = Array.isArray(items) ? items : [];
+    var invalid = [];
+    list.forEach(function(it, idx) {
+      if (!it) return;
+      var module = normalizeMissingImportText(it.module || '');
+      var title = normalizeMissingImportText(it.title || '');
+      var expected = normalizeMissingImportText(it.expected || '');
+      if (!module || !title || !expected) {
+        invalid.push({
+          index: idx,
+          module: !module,
+          title: !title,
+          expected: !expected,
+        });
+      }
+    });
+    return invalid;
+  }
+
+  function handleMissingImportFiles(files) {
+    var list = Array.from(files || []).filter(Boolean);
+    if (!list.length) {
+      state.missingImport.files = [];
+      state.missingImport.items = [];
+      state.missingImport.structuralErrors = [];
+      state.missingImport.invalid = [];
+      renderMissingImportFileHint();
+      syncMissingImportConfirmEnabled();
+      setStatus(dom.missingImportStatus, '', '');
+      return;
+    }
+    state.missingImport.files = list;
+    state.missingImport.items = [];
+    state.missingImport.structuralErrors = [];
+    state.missingImport.invalid = [];
+    state.missingImport.loading = true;
+    renderMissingImportFileHint();
+    syncMissingImportConfirmEnabled();
+    setStatus(dom.missingImportStatus, '解析导入文件中...', '');
+
+    var tasks = list.map(function(f) {
+      return parseMissingImportFile(f).then(
+        function(res) {
+          return { file: f, result: res || {} };
+        },
+        function(err) {
+          return { file: f, result: { items: [], structuralErrors: [], error: err && err.message ? err.message : '解析失败' } };
+        }
+      );
+    });
+
+    Promise.all(tasks).then(function(results) {
+      var items = [];
+      var structuralErrors = [];
+      var errorMsg = '';
+      results.forEach(function(entry) {
+        var result = entry && entry.result ? entry.result : {};
+        if (result.error) {
+          if (!errorMsg) {
+            var fname = entry && entry.file && entry.file.name ? String(entry.file.name) : '';
+            errorMsg = fname ? ('导入失败：' + fname + ' - ' + result.error) : ('导入失败：' + result.error);
+          }
+          return;
+        }
+        if (Array.isArray(result.structuralErrors) && result.structuralErrors.length) {
+          structuralErrors = structuralErrors.concat(result.structuralErrors);
+        }
+        if (Array.isArray(result.items) && result.items.length) {
+          items = items.concat(result.items);
+        }
+      });
+
+      if (errorMsg) {
+        state.missingImport.items = [];
+        state.missingImport.structuralErrors = [];
+        state.missingImport.invalid = [];
+        setStatus(dom.missingImportStatus, errorMsg, 'err');
+        return;
+      }
+      if (structuralErrors.length) {
+        state.missingImport.items = [];
+        state.missingImport.structuralErrors = structuralErrors;
+        state.missingImport.invalid = [];
+        setStatus(dom.missingImportStatus, '导入失败：检测到 XMind 字段层级不足，请使用漏测用例导出模板', 'err');
+        return;
+      }
+      var normalized = dedupeCaseItemsByKey(items.map(normalizeMissingImportItem).filter(Boolean));
+      if (!normalized.length) {
+        setStatus(dom.missingImportStatus, '导入失败：未识别到漏测用例条目', 'warn');
+        state.missingImport.items = [];
+        return;
+      }
+      var invalid = validateMissingImportItems(normalized);
+      state.missingImport.items = normalized;
+      state.missingImport.invalid = invalid;
+      if (invalid.length) {
+        setStatus(dom.missingImportStatus, '导入校验失败：请补齐模块/用例标题/预期结果（缺失 ' + invalid.length + ' 条）', 'warn');
+        return;
+      }
+      setStatus(dom.missingImportStatus, '已识别 ' + normalized.length + ' 条漏测用例', 'ok');
+    }).catch(function(err) {
+      state.missingImport.items = [];
+      state.missingImport.structuralErrors = [];
+      state.missingImport.invalid = [];
+      setStatus(dom.missingImportStatus, err && err.message ? err.message : '导入解析失败', 'err');
+    }).finally(function() {
+      state.missingImport.loading = false;
+      syncMissingImportConfirmEnabled();
+    });
+  }
+
+  function handleMissingImportProjectChange() {
+    var projectId = normalizeId(dom.missingImportProjectSelect ? dom.missingImportProjectSelect.value : '');
+    state.missingImport.projectId = projectId;
+    syncMissingImportConfirmEnabled();
+    if (dom.missingDrawerProjectSelect) {
+      var current = String(dom.missingDrawerProjectSelect.value || '');
+      if (projectId && current !== String(projectId)) {
+        dom.missingDrawerProjectSelect.value = String(projectId || '');
+        handleMissingProjectChange();
+      }
+    }
+  }
+
+  function normalizeMissingModuleKey(name) {
+    return normalizeDiffText(name || '').toLowerCase();
+  }
+
+  function buildMissingImportGroups(items) {
+    var list = Array.isArray(items) ? items : [];
+    var map = {};
+    list.forEach(function(it) {
+      if (!it) return;
+      var moduleName = normalizeMissingImportText(it.module || '');
+      if (!moduleName) return;
+      var key = normalizeMissingModuleKey(moduleName);
+      if (!map[key]) map[key] = { key: key, moduleName: moduleName, items: [] };
+      map[key].items.push(it);
+    });
+    return Object.keys(map).map(function(k) { return map[k]; });
+  }
+
+  function buildExistingMissingItemKeySet(items) {
+    var seen = {};
+    (items || []).forEach(function(it) {
+      var key = buildCaseItemKey(it);
+      if (!key) return;
+      seen[key] = true;
+    });
+    return seen;
+  }
+
+  function renderMissingImportDiffTable(rows) {
+    if (!dom.missingImportDiffBody) return;
+    var list = Array.isArray(rows) ? rows : [];
+    if (!list.length) {
+      dom.missingImportDiffBody.innerHTML = '<tr><td colspan=\"6\"><p class=\"hint\">暂无数据</p></td></tr>';
+      return;
+    }
+    dom.missingImportDiffBody.innerHTML = list.map(function(row) {
+      var item = row && row.left ? row.left : (row && row.right ? row.right : null);
+      var status = '已存在';
+      var badge = 'diff-badge';
+      if (row && row.type === 'added') {
+        status = '新增';
+        badge = 'diff-badge diff-badge-added';
+      } else if (row && row.type === 'changed') {
+        status = '已存在（优先级差异）';
+        badge = 'diff-badge diff-badge-changed';
+      }
+      return (
+        '<tr>' +
+          '<td><span class=\"' + escapeHtml(badge) + '\">' + escapeHtml(status) + '</span></td>' +
+          '<td>' + escapeHtml(item && (item.module || item.module_name) ? (item.module || item.module_name) : '') + '</td>' +
+          '<td>' + escapeHtml(item && item.title ? item.title : '') + '</td>' +
+          '<td>' + escapeHtml(item && item.precondition ? item.precondition : '') + '</td>' +
+          '<td>' + escapeHtml(item && item.steps ? item.steps : '') + '</td>' +
+          '<td>' + escapeHtml(item && item.expected ? item.expected : '') + '</td>' +
+        '</tr>'
+      );
+    }).join('');
+  }
+
+  var missingImportDiffDrawerInstance = null;
+
+  function ensureMissingImportDiffDrawer() {
+    if (missingImportDiffDrawerInstance) return missingImportDiffDrawerInstance;
+    missingImportDiffDrawerInstance = ensureDrawer(
+      'caseLibraryMissingImportDiffDrawer',
+      [],
+      null,
+      function() {
+        state.missingImport.pending = false;
+        state.missingImportDiff.projectId = null;
+        state.missingImportDiff.rows = [];
+        state.missingImportDiff.newItems = [];
+        state.missingImportDiff.duplicateCount = 0;
+        state.missingImportDiff.pendingItemsByModule = [];
+        setStatus(dom.missingImportDiffStatus, '', '');
+        if (dom.missingImportDiffMeta) dom.missingImportDiffMeta.textContent = '';
+        renderMissingImportDiffTable([]);
+        syncMissingImportConfirmEnabled();
+      }
+    );
+    return missingImportDiffDrawerInstance;
+  }
+
+  function openMissingImportDiffDrawer(payload) {
+    var drawer = ensureMissingImportDiffDrawer();
+    if (!drawer) return;
+    state.missingImportDiff.projectId = payload.projectId || null;
+    state.missingImportDiff.rows = payload.rows || [];
+    state.missingImportDiff.newItems = payload.newItems || [];
+    state.missingImportDiff.duplicateCount = payload.duplicateCount || 0;
+    state.missingImportDiff.pendingItemsByModule = payload.pendingItemsByModule || [];
+    if (dom.missingImportDiffStatus) {
+      var statusText = '新增条目 ' + (payload.newCount || 0) + ' 条，重复跳过 ' + (payload.duplicateCount || 0) + ' 条。';
+      setStatus(dom.missingImportDiffStatus, statusText, payload.newCount ? 'ok' : 'warn');
+    }
+    if (dom.missingImportDiffMeta) {
+      dom.missingImportDiffMeta.textContent = '同名模块 ' + (payload.overlapModules || 0) + ' 个，导入条目 ' + (payload.importCount || 0) + ' 条。';
+    }
+    renderMissingImportDiffTable(state.missingImportDiff.rows);
+    if (typeof drawer.open === 'function') drawer.open();
+  }
+
+  function createMissingModuleItems(moduleId, items) {
+    var list = Array.isArray(items) ? items.slice() : [];
+    if (!list.length) return Promise.resolve([]);
+    if (!apiClient || typeof apiClient.createMissingModuleItem !== 'function') {
+      return Promise.reject(new Error('易漏条目接口未就绪'));
+    }
+    return list.reduce(function(chain, item) {
+      return chain.then(function() {
+        var payload = {
+          title: item.title || '',
+          priority: item.priority || null,
+          precondition: item.precondition || '',
+          steps: item.steps || '',
+          expected: item.expected || '',
+          remark: item.remark || null,
+        };
+        return apiClient.createMissingModuleItem(moduleId, payload);
+      });
+    }, Promise.resolve([]));
+  }
+
+  function executeMissingImportMerge(payload) {
+    if (!payload || !payload.pendingItemsByModule) return Promise.resolve(false);
+    var projectId = payload.projectId;
+    var entries = payload.pendingItemsByModule;
+    var totalNewModules = 0;
+    var totalNewItems = 0;
+    var skippedItems = payload.duplicateCount || 0;
+    if (dom.missingImportStatus) setStatus(dom.missingImportStatus, '合并处理中...', '');
+
+    function settle(p) {
+      return Promise.resolve(p).then(
+        function(v) { return { status: 'fulfilled', value: v }; },
+        function(err) { return { status: 'rejected', reason: err }; }
+      );
+    }
+
+    var chain = Promise.resolve();
+    entries.forEach(function(entry) {
+      var items = Array.isArray(entry.items) ? entry.items : [];
+      if (!items.length) return;
+      chain = chain.then(function() {
+        if (entry.isNewModule) {
+          if (!apiClient || typeof apiClient.createMissingModule !== 'function') {
+            throw new Error('易漏模块接口未就绪');
+          }
+          return apiClient.createMissingModule({ project_id: projectId, name: entry.moduleName }).then(function(module) {
+            var mid = module && module.id ? module.id : null;
+            if (!mid) throw new Error('新模块创建失败');
+            entry.moduleId = mid;
+            totalNewModules += 1;
+            return createMissingModuleItems(mid, items).then(function() {
+              totalNewItems += items.length;
+              return module;
+            });
+          });
+        }
+        var moduleId = entry.moduleId;
+        if (!moduleId) return null;
+        return createMissingModuleItems(moduleId, items).then(function() {
+          totalNewItems += items.length;
+          return null;
+        });
+      });
+    });
+
+    return settle(chain).then(function(result) {
+      if (!result || result.status !== 'fulfilled') {
+        var err = result && result.reason ? result.reason : null;
+        throw err || new Error('合并失败');
+      }
+      if (dom.missingImportStatus) {
+        var msg = '合并完成：新增模块 ' + totalNewModules + ' 个，新增条目 ' + totalNewItems + ' 条';
+        if (skippedItems) msg += '，重复跳过 ' + skippedItems + ' 条';
+        setStatus(dom.missingImportStatus, msg, totalNewItems ? 'ok' : 'warn');
+      }
+      state.missingImport.files = [];
+      state.missingImport.items = [];
+      state.missingImport.invalid = [];
+      renderMissingImportFileHint();
+      syncMissingImportConfirmEnabled();
+      if (state.missingDrawer.projectId && String(state.missingDrawer.projectId || '') === String(projectId || '')) {
+        loadMissingDrawerModules(projectId);
+      }
+      return true;
+    }).catch(function(err) {
+      setStatus(dom.missingImportStatus, err && err.message ? err.message : '合并失败', 'err');
+      return false;
+    }).finally(function() {
+      state.missingImport.pending = false;
+      syncMissingImportConfirmEnabled();
+    });
+  }
+
+  function confirmMissingImportToDb() {
+    if (state.missingImport.loading || state.missingImport.pending) return;
+    if (!apiClient || typeof apiClient.listMissingModules !== 'function') {
+      setStatus(dom.missingImportStatus, '易漏模块接口未就绪', 'err');
+      return;
+    }
+    var projectId = state.missingImport.projectId || normalizeId(dom.missingImportProjectSelect ? dom.missingImportProjectSelect.value : '');
+    state.missingImport.projectId = projectId;
+    if (!projectId) {
+      setStatus(dom.missingImportStatus, '请先选择项目', 'warn');
+      return;
+    }
+    var items = Array.isArray(state.missingImport.items) ? state.missingImport.items : [];
+    if (!items.length) {
+      setStatus(dom.missingImportStatus, '请先选择漏测用例文件', 'warn');
+      return;
+    }
+    if (state.missingImport.invalid && state.missingImport.invalid.length) {
+      setStatus(dom.missingImportStatus, '导入校验失败：请补齐必填字段', 'warn');
+      return;
+    }
+
+    state.missingImport.pending = true;
+    syncMissingImportConfirmEnabled();
+    setStatus(dom.missingImportStatus, '校验同名模块中...', '');
+
+    var groups = buildMissingImportGroups(items);
+    apiClient
+      .listMissingModules(projectId)
+      .then(function(list) {
+        var modules = Array.isArray(list) ? list : [];
+        var moduleIndex = {};
+        modules.forEach(function(m) {
+          if (!m || !m.name) return;
+          var key = normalizeMissingModuleKey(m.name);
+          if (!moduleIndex[key]) moduleIndex[key] = m;
+        });
+
+        var overlapGroups = [];
+        var newGroups = [];
+        groups.forEach(function(g) {
+          var existing = moduleIndex[g.key] || null;
+          if (existing) overlapGroups.push({ group: g, module: existing });
+          else newGroups.push(g);
+        });
+
+        if (!overlapGroups.length) {
+          var pendingNew = newGroups.map(function(g) {
+            return { moduleId: null, moduleName: g.moduleName, items: g.items, isNewModule: true };
+          });
+          return executeMissingImportMerge({
+            projectId: projectId,
+            pendingItemsByModule: pendingNew,
+            duplicateCount: 0,
+          });
+        }
+
+        var loadTasks = overlapGroups.map(function(entry) {
+          return apiClient.listMissingModuleItems(entry.module.id).then(function(itemsRes) {
+            return { entry: entry, items: Array.isArray(itemsRes) ? itemsRes : [] };
+          });
+        });
+
+        return Promise.all(loadTasks).then(function(existingLists) {
+          var pending = [];
+          var overlapImportItems = [];
+          var overlapExistingItems = [];
+          var duplicateCount = 0;
+          var newCount = 0;
+          var importCount = 0;
+
+          existingLists.forEach(function(row) {
+            var group = row.entry.group;
+            var module = row.entry.module;
+            var existingItems = Array.isArray(row.items) ? row.items : [];
+            var existingKeySet = buildExistingMissingItemKeySet(existingItems);
+            var addItems = [];
+            (group.items || []).forEach(function(it) {
+              var key = buildCaseItemKey(it);
+              if (key && existingKeySet[key]) {
+                duplicateCount += 1;
+                return;
+              }
+              addItems.push(it);
+            });
+            importCount += (group.items || []).length;
+            newCount += addItems.length;
+            pending.push({
+              moduleId: module.id,
+              moduleName: module.name || group.moduleName,
+              items: addItems,
+              isNewModule: false,
+            });
+            overlapImportItems = overlapImportItems.concat(group.items || []);
+            overlapExistingItems = overlapExistingItems.concat(existingItems || []);
+          });
+
+          newGroups.forEach(function(g) {
+            importCount += (g.items || []).length;
+            newCount += (g.items || []).length;
+            pending.push({
+              moduleId: null,
+              moduleName: g.moduleName,
+              items: g.items,
+              isNewModule: true,
+            });
+          });
+
+          var rows = buildImportDiffRows(overlapImportItems, overlapExistingItems);
+          openMissingImportDiffDrawer({
+            projectId: projectId,
+            rows: rows,
+            newItems: overlapImportItems,
+            duplicateCount: duplicateCount,
+            pendingItemsByModule: pending,
+            newCount: newCount,
+            importCount: importCount,
+            overlapModules: overlapGroups.length,
+          });
+          return null;
+        });
+      })
+      .catch(function(err) {
+        state.missingImport.pending = false;
+        syncMissingImportConfirmEnabled();
+        setStatus(dom.missingImportStatus, err && err.message ? err.message : '导入失败', 'err');
+      });
   }
 
   var importDuplicateDrawerInstance = null;
@@ -10548,17 +11137,24 @@
     if (dom.missingDrawerDeleteBtn) dom.missingDrawerDeleteBtn.disabled = true;
     if (dom.missingDrawerExportXmindBtn) dom.missingDrawerExportXmindBtn.disabled = true;
     if (dom.missingDrawerExportExcelBtn) dom.missingDrawerExportExcelBtn.disabled = true;
+    resetMissingImportState();
   }
 
   function prepareMissingDrawer() {
     syncProjectOptions(dom.missingDrawerProjectSelect, '请选择项目');
-    if (state.missingDrawer.projectId && dom.missingDrawerProjectSelect) {
-      dom.missingDrawerProjectSelect.value = String(state.missingDrawer.projectId || '');
-      loadMissingTypes(state.missingDrawer.projectId);
-      loadMissingDrawerModules(state.missingDrawer.projectId);
-      return;
+    syncProjectOptions(dom.missingImportProjectSelect, '请选择项目');
+    var projectId = state.missingDrawer.projectId || state.missingImport.projectId || null;
+    state.missingDrawer.projectId = projectId;
+    state.missingImport.projectId = projectId;
+    if (projectId && dom.missingDrawerProjectSelect) {
+      dom.missingDrawerProjectSelect.value = String(projectId || '');
+      loadMissingTypes(projectId);
+      loadMissingDrawerModules(projectId);
+    } else {
+      resetMissingDrawer();
     }
-    resetMissingDrawer();
+    if (dom.missingImportProjectSelect) dom.missingImportProjectSelect.value = projectId ? String(projectId || '') : '';
+    syncMissingImportConfirmEnabled();
   }
 
   function loadMissingTypes(projectId) {
@@ -10640,6 +11236,7 @@
   function handleMissingProjectChange() {
     var projectId = normalizeId(dom.missingDrawerProjectSelect ? dom.missingDrawerProjectSelect.value : '');
     state.missingDrawer.projectId = projectId;
+    state.missingImport.projectId = projectId;
     state.missingDrawer.moduleId = null;
     state.missingDrawer.modules = [];
     state.missingDrawer.selection = new Set();
@@ -10654,6 +11251,8 @@
       dom.missingDrawerSelectAll.indeterminate = false;
     }
     if (!projectId) {
+      if (dom.missingImportProjectSelect) dom.missingImportProjectSelect.value = '';
+      syncMissingImportConfirmEnabled();
       if (dom.missingDrawerModuleSelect) {
         dom.missingDrawerModuleSelect.disabled = true;
         dom.missingDrawerModuleSelect.innerHTML = '<option value=\"\">全部模块</option>';
@@ -10670,6 +11269,8 @@
       renderMissingDrawerList();
       return;
     }
+    if (dom.missingImportProjectSelect) dom.missingImportProjectSelect.value = String(projectId || '');
+    syncMissingImportConfirmEnabled();
     if (dom.missingDrawerTypeSelect) {
       dom.missingDrawerTypeSelect.disabled = false;
       syncMissingTypeOptions(dom.missingDrawerTypeSelect, [], '请选择类型', true);
@@ -12051,6 +12652,45 @@
         if (!item) return;
         if (field === 'priority') value = normalizePriorityInput(value);
         item[field] = value;
+      });
+    }
+    if (dom.missingImportInput) {
+      dom.missingImportInput.addEventListener('change', function(e) {
+        var files = e && e.target && e.target.files ? Array.from(e.target.files) : [];
+        handleMissingImportFiles(files);
+        try { e.target.value = ''; } catch (_) {}
+      });
+    }
+    if (dom.missingImportDropZone) {
+      dom.missingImportDropZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        dom.missingImportDropZone.classList.add('dragover');
+      });
+      dom.missingImportDropZone.addEventListener('dragleave', function() {
+        dom.missingImportDropZone.classList.remove('dragover');
+      });
+      dom.missingImportDropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dom.missingImportDropZone.classList.remove('dragover');
+        var files = e && e.dataTransfer ? e.dataTransfer.files : null;
+        if (files && files.length) handleMissingImportFiles(files);
+      });
+    }
+    if (dom.missingImportProjectSelect) {
+      dom.missingImportProjectSelect.addEventListener('change', handleMissingImportProjectChange);
+    }
+    if (dom.missingImportConfirmBtn) {
+      dom.missingImportConfirmBtn.addEventListener('click', confirmMissingImportToDb);
+    }
+    if (dom.missingImportDiffConfirmBtn) {
+      dom.missingImportDiffConfirmBtn.addEventListener('click', function() {
+        if (!state.missingImportDiff || !state.missingImportDiff.pendingItemsByModule) return;
+        executeMissingImportMerge(state.missingImportDiff).then(function(ok) {
+          if (!ok) return;
+          if (missingImportDiffDrawerInstance && typeof missingImportDiffDrawerInstance.close === 'function') {
+            missingImportDiffDrawerInstance.close();
+          }
+        });
       });
     }
     if (dom.jumpToExecBtn) {

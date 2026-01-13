@@ -117,6 +117,20 @@ async function openDrawer(page, buttonSelector, drawerSelector) {
   throw lastErr || new Error('openDrawer failed: ' + drawerSelector);
 }
 
+async function buildXlsxBuffer(page, rows, sheetName) {
+  const payload = { rows, sheetName: sheetName || '易漏用例' };
+  const bytes = await page.evaluate(async (opts) => {
+    const api = window.app && window.app.caseLibraryApi ? window.app.caseLibraryApi : null;
+    if (!api || typeof api.buildSimpleXlsxBlob !== 'function') return [];
+    const blob = await api.buildSimpleXlsxBlob({
+      sheets: [{ name: opts.sheetName || '易漏用例', rows: opts.rows || [] }],
+    });
+    const buf = await blob.arrayBuffer();
+    return Array.from(new Uint8Array(buf));
+  }, payload);
+  return Buffer.from(bytes);
+}
+
 test.describe('用例库易漏模块抽屉', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -374,5 +388,220 @@ test.describe('用例库易漏模块抽屉', () => {
 
     await expect.poll(() => updateCalls).toBeGreaterThan(0);
     expect(lastUpdatePayload && lastUpdatePayload.priority).toBe('P2');
+  });
+
+  test('易漏用例导入同名模块合并', async ({ page }) => {
+    const token = 'token-case-library-missing-import';
+    const user = { id: 11, username: 'missing_import_admin', role: 'admin', level: 'leader' };
+    const project = { id: 1, name: '漏测项目', description: 'missing import' };
+    const modules = [
+      {
+        id: 1,
+        project_id: project.id,
+        name: '模块A',
+        item_count: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+    const itemsByModule = {
+      1: [
+        {
+          id: 11,
+          module_id: 1,
+          module_name: '模块A',
+          title: '用例1',
+          priority: 'P1',
+          precondition: '前提1',
+          steps: '步骤1',
+          expected: '预期1',
+          remark: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ],
+    };
+    let moduleAutoId = 2;
+    let itemAutoId = 100;
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/missing-modules' && method === 'GET') {
+        const list = modules.map((m) => Object.assign({}, m, { item_count: (itemsByModule[m.id] || []).length }));
+        return respond(200, list);
+      }
+      if (pathName === '/api/missing-modules' && method === 'POST') {
+        const payload = route.request().postDataJSON();
+        const created = {
+          id: moduleAutoId++,
+          project_id: payload.project_id,
+          name: payload.name || '',
+          item_count: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        modules.push(created);
+        itemsByModule[created.id] = [];
+        return respond(201, created);
+      }
+      if (pathName.startsWith('/api/missing-modules/') && pathName.endsWith('/items') && method === 'GET') {
+        const parts = pathName.split('/');
+        const moduleId = Number(parts[parts.length - 2]);
+        return respond(200, itemsByModule[moduleId] || []);
+      }
+      if (pathName.startsWith('/api/missing-modules/') && pathName.endsWith('/items') && method === 'POST') {
+        const parts = pathName.split('/');
+        const moduleId = Number(parts[parts.length - 2]);
+        const payload = route.request().postDataJSON();
+        let moduleName = '';
+        const found = modules.find((m) => m.id === moduleId);
+        if (found && found.name) moduleName = found.name;
+        const created = Object.assign({}, payload, {
+          id: itemAutoId++,
+          module_id: moduleId,
+          module_name: moduleName,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+        if (!itemsByModule[moduleId]) itemsByModule[moduleId] = [];
+        itemsByModule[moduleId].push(created);
+        return respond(201, created);
+      }
+      if (pathName === '/api/missing-types' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page);
+
+    await openDrawer(page, '#openCaseLibraryMissingDrawerBtn', '#caseLibraryMissingDrawer');
+    await page.locator('#caseLibraryMissingImportProjectSelect').selectOption(String(project.id));
+
+    const rows = [
+      ['模块', '用例标题', '优先级', '前提条件', '操作步骤', '预期结果'],
+      ['模块A', '用例1', 'P1', '前提1', '步骤1', '预期1'],
+      ['模块A', '用例2', 'P2', '前提2', '步骤2', '预期2'],
+      ['模块B', '用例3', 'P1', '前提3', '步骤3', '预期3'],
+    ];
+    const buffer = await buildXlsxBuffer(page, rows, '易漏用例');
+    await page.setInputFiles('#caseLibraryMissingImportInput', {
+      name: 'missing_import.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer,
+    });
+
+    await expect(page.locator('#caseLibraryMissingImportStatus')).toContainText('已识别 3 条漏测用例');
+    await expect(page.locator('#caseLibraryMissingImportConfirmBtn')).toBeEnabled();
+    await page.locator('#caseLibraryMissingImportConfirmBtn').click();
+
+    const diffDrawer = page.locator('#caseLibraryMissingImportDiffDrawer');
+    await expect(diffDrawer).toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryMissingImportDiffStatus')).toContainText('新增条目 2 条');
+    await expect(page.locator('#caseLibraryMissingImportDiffStatus')).toContainText('重复跳过 1 条');
+
+    await page.locator('#caseLibraryMissingImportDiffConfirmBtn').click();
+    await expect(diffDrawer).not.toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryMissingImportStatus')).toContainText('合并完成');
+
+    const moduleB = modules.find((m) => m.name === '模块B');
+    expect(moduleB).toBeTruthy();
+    expect(itemsByModule[1].length).toBe(2);
+    expect(itemsByModule[moduleB.id].length).toBe(1);
+  });
+
+  test('易漏用例导入格式不匹配提示', async ({ page }) => {
+    const token = 'token-case-library-missing-import-invalid';
+    const user = { id: 12, username: 'missing_import_invalid', role: 'admin', level: 'leader' };
+    const project = { id: 2, name: '漏测项目-格式', description: 'missing import invalid' };
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/missing-modules' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/missing-types' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page);
+
+    await openDrawer(page, '#openCaseLibraryMissingDrawerBtn', '#caseLibraryMissingDrawer');
+    await page.locator('#caseLibraryMissingImportProjectSelect').selectOption(String(project.id));
+
+    const rows = [
+      ['模块名', '标题', '预期'],
+      ['模块X', '用例X', '预期X'],
+    ];
+    const buffer = await buildXlsxBuffer(page, rows, '错误模板');
+    await page.setInputFiles('#caseLibraryMissingImportInput', {
+      name: 'missing_import_invalid.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer,
+    });
+
+    await expect(page.locator('#caseLibraryMissingImportStatus')).toContainText('Excel 表头');
+    await expect(page.locator('#caseLibraryMissingImportConfirmBtn')).toBeDisabled();
   });
 });
