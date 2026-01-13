@@ -32,6 +32,7 @@
   - `npx playwright test tests/ui/case_library_missing_modules.spec.js`
 - 更新记录：2026-01-13 易漏用例导入与合并（`case-library.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_modules.spec.js`）。
 - 更新记录：2026-01-13 修复易漏导入拖拽 FileList 解析（`scripts/modules/caseLibrary.js`）。
+- 更新记录：2026-01-13 易漏导入层级不足信息在差异页展示（`case-library.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_modules.spec.js`）。
 
 - 功能名称：执行总览版本总览/个人区虚拟加载与横向滚动
 - 功能描述：执行总览版本总览固定显示 2.5 行，超出可滚动；个人区版本盒子改为横向滚动展示，并对版本内容进行近邻虚拟加载。
@@ -3628,6 +3629,8 @@
 - 更新记录：2026-01-15 修复易漏类型多选误触全部（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_types.spec.js`）。
 - 更新记录：2026-01-16 易漏用例视图类型下拉支持新增类型（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_types.spec.js`）。
 - 更新记录：2026-01-17 易漏视图新增类型后不自动展开抽屉（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_types.spec.js`）。
+- 更新记录：2026-01-13 修复易漏类型字段迁移缺失（补齐 missing_case_items.type_id 等列）（`backend/migrations.py`）。
+- 更新记录：2026-01-13 修复迁移表缓存导致易漏类型列未补齐（`backend/migrations.py`）。
 
 - 功能名称：易漏用例提醒区域（执行/用例库）
 - 功能描述：根据当前项目执行中用例或用例库编辑用例的内容匹配易漏模块/类型，匹配时在执行视图或用例库编辑视图展示易漏用例提醒区域。

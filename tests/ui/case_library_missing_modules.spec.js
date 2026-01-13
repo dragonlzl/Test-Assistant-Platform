@@ -1,4 +1,6 @@
 const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const path = require('path');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
@@ -129,6 +131,12 @@ async function buildXlsxBuffer(page, rows, sheetName) {
     return Array.from(new Uint8Array(buf));
   }, payload);
   return Buffer.from(bytes);
+}
+
+function buildXmindBufferFromFixture(fixtureName) {
+  const b64Path = path.join(__dirname, '..', 'fixtures', fixtureName);
+  const b64 = fs.readFileSync(b64Path, 'utf-8').trim().replace(/\s+/g, '');
+  return Buffer.from(b64, 'base64');
 }
 
 test.describe('用例库易漏模块抽屉', () => {
@@ -603,5 +611,74 @@ test.describe('用例库易漏模块抽屉', () => {
 
     await expect(page.locator('#caseLibraryMissingImportStatus')).toContainText('Excel 表头');
     await expect(page.locator('#caseLibraryMissingImportConfirmBtn')).toBeDisabled();
+  });
+
+  test('易漏用例导入层级不足在差异页展示', async ({ page }) => {
+    const token = 'token-case-library-missing-import-structure';
+    const user = { id: 13, username: 'missing_import_structure', role: 'admin', level: 'leader' };
+    const project = { id: 3, name: '漏测项目-层级', description: 'missing import structure' };
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/missing-modules' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/missing-types' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page);
+
+    await openDrawer(page, '#openCaseLibraryMissingDrawerBtn', '#caseLibraryMissingDrawer');
+    await page.locator('#caseLibraryMissingImportProjectSelect').selectOption(String(project.id));
+    await page.waitForFunction(() => {
+      return Boolean(window.app && window.app.core && typeof window.app.core.parseXmindFile === 'function');
+    });
+
+    const buffer = buildXmindBufferFromFixture('case_library_xmind_missing_precondition.xmind.base64');
+    await page.setInputFiles('#caseLibraryMissingImportInput', {
+      name: 'missing_precondition.xmind',
+      mimeType: 'application/octet-stream',
+      buffer,
+    });
+
+    await expect(page.locator('#caseLibraryMissingImportStatus')).toContainText('字段层级不足');
+    await page.locator('#caseLibraryMissingImportConfirmBtn').click();
+
+    const diffDrawer = page.locator('#caseLibraryMissingImportDiffDrawer');
+    await expect(diffDrawer).toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryMissingImportStructureWrap')).not.toHaveClass(/hidden/);
+    await expect(page.locator('#caseLibraryMissingImportStructureBody')).toContainText('字段层级不足');
+    await expect(page.locator('#caseLibraryMissingImportStructureBody')).toContainText('缺少');
   });
 });

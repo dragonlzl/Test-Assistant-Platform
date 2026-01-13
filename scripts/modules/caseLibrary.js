@@ -192,6 +192,8 @@
     missingImportDiffTitle: document.getElementById('caseLibraryMissingImportDiffTitle'),
     missingImportDiffStatus: document.getElementById('caseLibraryMissingImportDiffStatus'),
     missingImportDiffMeta: document.getElementById('caseLibraryMissingImportDiffMeta'),
+    missingImportStructureWrap: document.getElementById('caseLibraryMissingImportStructureWrap'),
+    missingImportStructureBody: document.getElementById('caseLibraryMissingImportStructureBody'),
     missingImportDiffBody: document.getElementById('caseLibraryMissingImportDiffBody'),
     missingImportDiffConfirmBtn: document.getElementById('caseLibraryMissingImportDiffConfirmBtn'),
 
@@ -543,6 +545,7 @@
       newItems: [],
       duplicateCount: 0,
       pendingItemsByModule: [],
+      structuralErrors: [],
     },
   };
 
@@ -4547,11 +4550,11 @@
 	    list.forEach(function(pathArr, idx) {
 	      var segs = normalizeXmindPathSegments(pathArr, rootTitle);
 	      var lineNo = idx + 1;
-	      if (segs.length < 6) {
-	        raw.push(mapSegmentsToItem(segs, lineNo, true));
-	        structuralErrors.push({ line: lineNo, depth: segs.length });
-	        return;
-	      }
+      if (segs.length < 6) {
+        raw.push(mapSegmentsToItem(segs, lineNo, true));
+        structuralErrors.push({ line: lineNo, depth: segs.length, segments: segs.slice() });
+        return;
+      }
 	      raw.push(mapSegmentsToItem(segs, lineNo, false));
 	    });
 
@@ -4636,7 +4639,8 @@
     var hasFiles = s.files && s.files.length;
     var hasItems = s.items && s.items.length;
     var invalid = s.invalid && s.invalid.length;
-    dom.missingImportConfirmBtn.disabled = !hasFiles || !hasItems || !s.projectId || s.loading || s.pending || invalid;
+    var hasStructural = s.structuralErrors && s.structuralErrors.length;
+    dom.missingImportConfirmBtn.disabled = !hasFiles || (!hasItems && !hasStructural) || !s.projectId || s.loading || s.pending || invalid;
   }
 
   function renderMissingImportFileHint() {
@@ -4815,24 +4819,46 @@
         setStatus(dom.missingImportStatus, errorMsg, 'err');
         return;
       }
+
+      state.missingImport.structuralErrors = structuralErrors;
+
+      var structuralLineMap = {};
       if (structuralErrors.length) {
-        state.missingImport.items = [];
-        state.missingImport.structuralErrors = structuralErrors;
-        state.missingImport.invalid = [];
-        setStatus(dom.missingImportStatus, '导入失败：检测到 XMind 字段层级不足，请使用漏测用例导出模板', 'err');
-        return;
+        structuralErrors.forEach(function(entry) {
+          var line = entry && typeof entry.line === 'number' ? entry.line : null;
+          if (line && isFinite(line)) structuralLineMap[line] = true;
+        });
       }
-      var normalized = dedupeCaseItemsByKey(items.map(normalizeMissingImportItem).filter(Boolean));
+      var filteredItems = structuralErrors.length
+        ? items.filter(function(it) {
+          var line = it && it._sourceLine ? Number(it._sourceLine) : null;
+          if (!line || !isFinite(line)) return true;
+          return !structuralLineMap[line];
+        })
+        : items;
+
+      var normalized = dedupeCaseItemsByKey(filteredItems.map(normalizeMissingImportItem).filter(Boolean));
       if (!normalized.length) {
-        setStatus(dom.missingImportStatus, '导入失败：未识别到漏测用例条目', 'warn');
+        if (structuralErrors.length) {
+          setStatus(dom.missingImportStatus, '导入失败：字段层级不足 ' + structuralErrors.length + ' 条，未识别到可导入条目', 'err');
+        } else {
+          setStatus(dom.missingImportStatus, '导入失败：未识别到漏测用例条目', 'warn');
+        }
         state.missingImport.items = [];
+        state.missingImport.invalid = [];
         return;
       }
       var invalid = validateMissingImportItems(normalized);
       state.missingImport.items = normalized;
       state.missingImport.invalid = invalid;
       if (invalid.length) {
-        setStatus(dom.missingImportStatus, '导入校验失败：请补齐模块/用例标题/预期结果（缺失 ' + invalid.length + ' 条）', 'warn');
+        var invalidMsg = '导入校验失败：请补齐模块/用例标题/预期结果（缺失 ' + invalid.length + ' 条）';
+        if (structuralErrors.length) invalidMsg += '，字段层级不足 ' + structuralErrors.length + ' 条';
+        setStatus(dom.missingImportStatus, invalidMsg, 'warn');
+        return;
+      }
+      if (structuralErrors.length) {
+        setStatus(dom.missingImportStatus, '已识别 ' + normalized.length + ' 条漏测用例，字段层级不足 ' + structuralErrors.length + ' 条', 'warn');
         return;
       }
       setStatus(dom.missingImportStatus, '已识别 ' + normalized.length + ' 条漏测用例', 'ok');
@@ -4888,6 +4914,69 @@
     return seen;
   }
 
+  function formatMissingImportStructuralDetail(entry) {
+    var fields = ['模块', '用例标题', '优先级', '前提条件', '操作步骤', '预期结果'];
+    var depth = entry && typeof entry.depth === 'number' ? entry.depth : null;
+    var segs = entry && Array.isArray(entry.segments) ? entry.segments : [];
+    var parts = [];
+    for (var i = 0; i < segs.length && i < fields.length; i += 1) {
+      var raw = segs[i];
+      var text = raw === null || raw === undefined || String(raw).trim() === '' ? '（空）' : String(raw).trim();
+      parts.push(fields[i] + '=' + text);
+    }
+    var missing = fields.slice(segs.length).join('、');
+    var info = parts.length ? ('已识别：' + parts.join(' / ')) : '未识别到有效层级';
+    var depthText = depth === null ? '' : ('当前 ' + depth + ' 层');
+    var missingText = missing ? ('缺少：' + missing) : '';
+    var prefix = '字段层级不足';
+    return [prefix, depthText, info, missingText].filter(Boolean).join('；') || prefix;
+  }
+
+  function renderMissingImportStructureTable(errors) {
+    if (!dom.missingImportStructureBody || !dom.missingImportStructureWrap) return;
+    var list = Array.isArray(errors) ? errors.slice() : [];
+    if (!list.length) {
+      dom.missingImportStructureWrap.classList.add('hidden');
+      dom.missingImportStructureBody.innerHTML = '<tr><td colspan="3"><p class="hint">暂无数据</p></td></tr>';
+      return;
+    }
+    list.sort(function(a, b) {
+      var la = a && typeof a.line === 'number' ? a.line : 0;
+      var lb = b && typeof b.line === 'number' ? b.line : 0;
+      return la - lb;
+    });
+    dom.missingImportStructureWrap.classList.remove('hidden');
+    dom.missingImportStructureBody.innerHTML = list.map(function(entry) {
+      var lineNo = entry && typeof entry.line === 'number' ? entry.line : null;
+      var depth = entry && typeof entry.depth === 'number' ? entry.depth : null;
+      var detail = formatMissingImportStructuralDetail(entry);
+      return (
+        '<tr>' +
+          '<td>' + escapeHtml(lineNo === null ? '-' : String(lineNo)) + '</td>' +
+          '<td>' + escapeHtml(depth === null ? '-' : String(depth)) + '</td>' +
+          '<td>' + escapeHtml(detail) + '</td>' +
+        '</tr>'
+      );
+    }).join('');
+  }
+
+  function countMissingImportPendingItems(entries) {
+    var total = 0;
+    (entries || []).forEach(function(entry) {
+      if (!entry || !entry.items) return;
+      total += entry.items.length || 0;
+    });
+    return total;
+  }
+
+  function syncMissingImportDiffConfirmEnabled() {
+    if (!dom.missingImportDiffConfirmBtn) return;
+    var entries = state.missingImportDiff && state.missingImportDiff.pendingItemsByModule
+      ? state.missingImportDiff.pendingItemsByModule
+      : [];
+    dom.missingImportDiffConfirmBtn.disabled = countMissingImportPendingItems(entries) <= 0;
+  }
+
   function renderMissingImportDiffTable(rows) {
     if (!dom.missingImportDiffBody) return;
     var list = Array.isArray(rows) ? rows : [];
@@ -4934,9 +5023,12 @@
         state.missingImportDiff.newItems = [];
         state.missingImportDiff.duplicateCount = 0;
         state.missingImportDiff.pendingItemsByModule = [];
+        state.missingImportDiff.structuralErrors = [];
         setStatus(dom.missingImportDiffStatus, '', '');
         if (dom.missingImportDiffMeta) dom.missingImportDiffMeta.textContent = '';
+        renderMissingImportStructureTable([]);
         renderMissingImportDiffTable([]);
+        syncMissingImportDiffConfirmEnabled();
         syncMissingImportConfirmEnabled();
       }
     );
@@ -4951,14 +5043,25 @@
     state.missingImportDiff.newItems = payload.newItems || [];
     state.missingImportDiff.duplicateCount = payload.duplicateCount || 0;
     state.missingImportDiff.pendingItemsByModule = payload.pendingItemsByModule || [];
+    state.missingImportDiff.structuralErrors = Array.isArray(payload.structuralErrors) ? payload.structuralErrors : [];
     if (dom.missingImportDiffStatus) {
+      var structuralCount = state.missingImportDiff.structuralErrors.length;
       var statusText = '新增条目 ' + (payload.newCount || 0) + ' 条，重复跳过 ' + (payload.duplicateCount || 0) + ' 条。';
-      setStatus(dom.missingImportDiffStatus, statusText, payload.newCount ? 'ok' : 'warn');
+      if (structuralCount) statusText += ' 字段层级不足 ' + structuralCount + ' 条。';
+      var statusType = payload.newCount ? 'ok' : 'warn';
+      if (structuralCount) statusType = 'warn';
+      setStatus(dom.missingImportDiffStatus, statusText, statusType);
     }
     if (dom.missingImportDiffMeta) {
-      dom.missingImportDiffMeta.textContent = '同名模块 ' + (payload.overlapModules || 0) + ' 个，导入条目 ' + (payload.importCount || 0) + ' 条。';
+      var metaText = '同名模块 ' + (payload.overlapModules || 0) + ' 个，导入条目 ' + (payload.importCount || 0) + ' 条。';
+      if (state.missingImportDiff.structuralErrors.length) {
+        metaText += ' 字段层级不足 ' + state.missingImportDiff.structuralErrors.length + ' 条。';
+      }
+      dom.missingImportDiffMeta.textContent = metaText;
     }
+    renderMissingImportStructureTable(state.missingImportDiff.structuralErrors);
     renderMissingImportDiffTable(state.missingImportDiff.rows);
+    syncMissingImportDiffConfirmEnabled();
     if (typeof drawer.open === 'function') drawer.open();
   }
 
@@ -5069,7 +5172,24 @@
       return;
     }
     var items = Array.isArray(state.missingImport.items) ? state.missingImport.items : [];
+    var structuralErrors = Array.isArray(state.missingImport.structuralErrors) ? state.missingImport.structuralErrors : [];
     if (!items.length) {
+      if (structuralErrors.length) {
+        state.missingImport.pending = true;
+        syncMissingImportConfirmEnabled();
+        openMissingImportDiffDrawer({
+          projectId: projectId,
+          rows: [],
+          newItems: [],
+          duplicateCount: 0,
+          pendingItemsByModule: [],
+          newCount: 0,
+          importCount: 0,
+          overlapModules: 0,
+          structuralErrors: structuralErrors,
+        });
+        return;
+      }
       setStatus(dom.missingImportStatus, '请先选择漏测用例文件', 'warn');
       return;
     }
@@ -5106,6 +5226,20 @@
           var pendingNew = newGroups.map(function(g) {
             return { moduleId: null, moduleName: g.moduleName, items: g.items, isNewModule: true };
           });
+          if (structuralErrors.length) {
+            openMissingImportDiffDrawer({
+              projectId: projectId,
+              rows: [],
+              newItems: [],
+              duplicateCount: 0,
+              pendingItemsByModule: pendingNew,
+              newCount: countMissingImportPendingItems(pendingNew),
+              importCount: countMissingImportPendingItems(pendingNew),
+              overlapModules: 0,
+              structuralErrors: structuralErrors,
+            });
+            return null;
+          }
           return executeMissingImportMerge({
             projectId: projectId,
             pendingItemsByModule: pendingNew,
@@ -5174,6 +5308,7 @@
             newCount: newCount,
             importCount: importCount,
             overlapModules: overlapGroups.length,
+            structuralErrors: structuralErrors,
           });
           return null;
         });

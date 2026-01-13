@@ -44,8 +44,19 @@ def apply_migrations(engine: Engine) -> None:
     with engine.begin() as conn:
         _ensure_migrations_table(conn)
 
-        insp = inspect(conn)
-        tables = set(insp.get_table_names())
+        insp = None
+        tables = set()
+
+        def refresh_schema() -> None:
+            nonlocal insp, tables
+            insp = inspect(conn)
+            tables = set(insp.get_table_names())
+
+        def mark_applied(version: int) -> None:
+            _mark_applied(conn, version)
+            refresh_schema()
+
+        refresh_schema()
 
         # v1: 兼容旧库 exec_cases 缺少 executor_id 的情况（会导致执行/总览相关接口 500）。
         if not _is_applied(conn, 1):
@@ -58,7 +69,7 @@ def apply_migrations(engine: Engine) -> None:
                             "CREATE INDEX IF NOT EXISTS ix_exec_cases_executor_id ON exec_cases(executor_id)"
                         )
                     )
-            _mark_applied(conn, 1)
+            mark_applied(1)
 
         # v2: 执行集补充 case_file 关联与复用/需求元信息。
         if not _is_applied(conn, 2):
@@ -81,7 +92,7 @@ def apply_migrations(engine: Engine) -> None:
                     )
                 if "reuse_presets" not in cols:
                     conn.execute(text("ALTER TABLE exec_sets ADD COLUMN reuse_presets TEXT"))
-            _mark_applied(conn, 2)
+            mark_applied(2)
 
         # v3: 执行用例补充字段（优先级/前置/步骤）与复用/缺陷结构化存储。
         if not _is_applied(conn, 3):
@@ -97,7 +108,7 @@ def apply_migrations(engine: Engine) -> None:
                     conn.execute(text("ALTER TABLE exec_cases ADD COLUMN reuse_details TEXT"))
                 if "defect_links" not in cols:
                     conn.execute(text("ALTER TABLE exec_cases ADD COLUMN defect_links TEXT"))
-            _mark_applied(conn, 3)
+            mark_applied(3)
 
         # v4: 用例文件同名约束升级为“项目级”（同一项目下跨版本不允许同名）。
         # SQLite 无法直接 ALTER UNIQUE CONSTRAINT，这里用唯一索引实现；若历史数据已存在重复，则跳过创建以避免启动失败。
@@ -120,7 +131,7 @@ def apply_migrations(engine: Engine) -> None:
                             "CREATE UNIQUE INDEX IF NOT EXISTS uq_case_file_name_project ON case_files(project_id, file_name_clean)"
                         )
                     )
-            _mark_applied(conn, 4)
+            mark_applied(4)
 
         # v5: 用例条目唯一键升级为 “case_file_id + module + title + expected”。
         # 兼容历史库：早期可能只按 (case_file_id,module,title) 判重，导致“同标题不同预期”无法导入。
@@ -234,7 +245,7 @@ def apply_migrations(engine: Engine) -> None:
                     )
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_case_items_id ON case_items(id)"))
                     conn.execute(text("PRAGMA foreign_keys=ON"))
-            _mark_applied(conn, 5)
+            mark_applied(5)
 
         # v6: 用例文件新增复用类型标记（case_files.reuse_enabled），用于执行页复用开关与用例库展示/同步。
         if not _is_applied(conn, 6):
@@ -251,7 +262,7 @@ def apply_migrations(engine: Engine) -> None:
                             "CREATE INDEX IF NOT EXISTS ix_case_files_reuse_enabled ON case_files(reuse_enabled)"
                         )
                     )
-            _mark_applied(conn, 6)
+            mark_applied(6)
 
         # v7: 用例条目唯一键升级为 “case_file_id + module + title + precondition + steps + expected”。
         # 同时将 precondition/steps 升级为 NOT NULL（默认空串），避免 UNIQUE 遇到 NULL 失效。
@@ -386,7 +397,7 @@ def apply_migrations(engine: Engine) -> None:
                     )
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_case_items_id ON case_items(id)"))
                     conn.execute(text("PRAGMA foreign_keys=ON"))
-            _mark_applied(conn, 7)
+            mark_applied(7)
 
         # v8: 早期版本将“执行页删除/关闭”实现为 exec_set.status=archived（软删除）。
         # 当前口径为“删除就是删除”，因此将历史 archived 执行集物理删除（级联删除 exec_cases/历史）。
@@ -395,7 +406,7 @@ def apply_migrations(engine: Engine) -> None:
                 cols = set([c["name"] for c in insp.get_columns("exec_sets")])
                 if "status" in cols:
                     conn.execute(text("DELETE FROM exec_sets WHERE status = 'archived'"))
-            _mark_applied(conn, 8)
+            mark_applied(8)
 
         # v9: 执行集记录用例库变更基线与最近一次 diff（用于执行页刷新同步与变更提示）。
         if not _is_applied(conn, 9):
@@ -415,7 +426,7 @@ def apply_migrations(engine: Engine) -> None:
                     conn.execute(
                         text("ALTER TABLE exec_sets ADD COLUMN case_file_last_diff_shown_at DATETIME")
                     )
-            _mark_applied(conn, 9)
+            mark_applied(9)
 
         # v10: 记录执行集最近一次同步到用例库的版本（避免仅执行页编辑触发误 diff）。
         if not _is_applied(conn, 10):
@@ -425,7 +436,7 @@ def apply_migrations(engine: Engine) -> None:
                     conn.execute(
                         text("ALTER TABLE exec_sets ADD COLUMN case_file_last_synced_at DATETIME")
                     )
-            _mark_applied(conn, 10)
+            mark_applied(10)
 
         # v11: exec_cases 记录 case_item_source_id，避免 case_item 删除导致 FK 置空后无法判断 deleted diff。
         if not _is_applied(conn, 11):
@@ -440,7 +451,7 @@ def apply_migrations(engine: Engine) -> None:
                         "WHERE case_item_source_id IS NULL AND case_item_id IS NOT NULL"
                     )
                 )
-            _mark_applied(conn, 11)
+            mark_applied(11)
 
         # v12: exec_sets 增加 diff 历史（记录执行期间用例库累计变更，最新在前）。
         if not _is_applied(conn, 12):
@@ -448,7 +459,7 @@ def apply_migrations(engine: Engine) -> None:
                 cols = set([c["name"] for c in insp.get_columns("exec_sets")])
                 if "case_file_diff_history_json" not in cols:
                     conn.execute(text("ALTER TABLE exec_sets ADD COLUMN case_file_diff_history_json TEXT"))
-            _mark_applied(conn, 12)
+            mark_applied(12)
 
         # v13: case_files 增加 updated_by（用于执行页 diff 展示“操作人”）。
         if not _is_applied(conn, 13):
@@ -463,7 +474,7 @@ def apply_migrations(engine: Engine) -> None:
                         "WHERE updated_by IS NULL AND importer_id IS NOT NULL"
                     )
                 )
-            _mark_applied(conn, 13)
+            mark_applied(13)
 
         # v14: 用例库改动历史（导入/覆盖导入/增删改/整份删除）永久留存。
         if not _is_applied(conn, 14):
@@ -501,7 +512,7 @@ def apply_migrations(engine: Engine) -> None:
                         "ON case_library_change_events(project_id, created_at)"
                     )
                 )
-            _mark_applied(conn, 14)
+            mark_applied(14)
 
         # v15: exec_sets 增加归档信息（归档人/归档时间/归档原因）。
         if not _is_applied(conn, 15):
@@ -521,7 +532,7 @@ def apply_migrations(engine: Engine) -> None:
                             "WHERE status = 'archived' AND archived_at IS NULL"
                         )
                     )
-            _mark_applied(conn, 15)
+            mark_applied(15)
 
         # v16: 用例文件同名约束调整为“项目+版本级”（允许跨版本同名）。
         # 仍使用唯一索引实现；若历史数据异常导致重复，则跳过创建以避免启动失败。
@@ -554,7 +565,7 @@ def apply_migrations(engine: Engine) -> None:
                             "ON case_files(project_id, version_id, file_name_clean)"
                     )
                 )
-            _mark_applied(conn, 16)
+            mark_applied(16)
 
         # v17: 用例文件同名约束恢复为“项目级”（同一项目下跨版本不允许同名）。
         # 仍使用唯一索引实现；若历史数据异常导致重复，则跳过创建以避免启动失败。
@@ -589,7 +600,7 @@ def apply_migrations(engine: Engine) -> None:
                             "ON case_files(project_id, file_name_clean)"
                         )
                     )
-            _mark_applied(conn, 17)
+            mark_applied(17)
 
         # v18: case_items 增加 order_no，用于保持用例库插入顺序。
         if not _is_applied(conn, 18):
@@ -628,7 +639,7 @@ def apply_migrations(engine: Engine) -> None:
                             text("UPDATE case_items SET order_no = :order_no WHERE id = :id"),
                             {"order_no": order_idx, "id": row[0]},
                         )
-            _mark_applied(conn, 18)
+            mark_applied(18)
 
         # v19: exec_sets 增加归档恢复关联与重归档次数统计。
         if not _is_applied(conn, 19):
@@ -653,7 +664,7 @@ def apply_migrations(engine: Engine) -> None:
                             "UPDATE exec_sets SET rearchive_count = 0 WHERE rearchive_count IS NULL"
                         )
                     )
-            _mark_applied(conn, 19)
+            mark_applied(19)
 
         # v20: 易漏用例模块与条目表。
         if not _is_applied(conn, 20):
@@ -723,7 +734,7 @@ def apply_migrations(engine: Engine) -> None:
                         "ON missing_case_items(module_id, order_no)"
                     )
                 )
-            _mark_applied(conn, 20)
+            mark_applied(20)
 
         # v21: 易漏用例条目补充标题与优先级字段。
         if not _is_applied(conn, 21):
@@ -744,7 +755,7 @@ def apply_migrations(engine: Engine) -> None:
                             "WHERE priority IS NULL"
                         )
                     )
-            _mark_applied(conn, 21)
+            mark_applied(21)
 
         # v22: 易漏用例类型与条目类型字段。
         if not _is_applied(conn, 22):
@@ -791,4 +802,113 @@ def apply_migrations(engine: Engine) -> None:
                             "ON missing_case_items(type_id)"
                         )
                     )
-            _mark_applied(conn, 22)
+            mark_applied(22)
+
+        # v23: 修复历史库缺少易漏用例类型字段（type_id/标题/优先级）。
+        if not _is_applied(conn, 23):
+            insp_v23 = inspect(conn)
+            tables_v23 = set(insp_v23.get_table_names())
+
+            if "missing_case_types" not in tables_v23:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS missing_case_types (
+                          id INTEGER PRIMARY KEY,
+                          project_id INTEGER NOT NULL,
+                          name VARCHAR(255) NOT NULL,
+                          created_by INTEGER,
+                          updated_by INTEGER,
+                          created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                          updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                          FOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE,
+                          FOREIGN KEY(created_by) REFERENCES users (id) ON DELETE SET NULL,
+                          FOREIGN KEY(updated_by) REFERENCES users (id) ON DELETE SET NULL
+                        )
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS uq_missing_case_type_name_project "
+                        "ON missing_case_types(project_id, name)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_missing_case_types_project "
+                        "ON missing_case_types(project_id)"
+                    )
+                )
+
+            if "missing_case_items" not in tables_v23:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS missing_case_items (
+                          id INTEGER PRIMARY KEY,
+                          module_id INTEGER NOT NULL,
+                          title VARCHAR(255) NOT NULL DEFAULT '',
+                          priority VARCHAR(32),
+                          precondition TEXT NOT NULL DEFAULT '',
+                          steps TEXT NOT NULL DEFAULT '',
+                          expected TEXT NOT NULL DEFAULT '',
+                          remark TEXT,
+                          order_no INTEGER NOT NULL DEFAULT 0,
+                          type_id INTEGER,
+                          created_by INTEGER,
+                          updated_by INTEGER,
+                          created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                          updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                          FOREIGN KEY(module_id) REFERENCES missing_modules (id) ON DELETE CASCADE,
+                          FOREIGN KEY(type_id) REFERENCES missing_case_types (id) ON DELETE SET NULL,
+                          FOREIGN KEY(created_by) REFERENCES users (id) ON DELETE SET NULL,
+                          FOREIGN KEY(updated_by) REFERENCES users (id) ON DELETE SET NULL
+                        )
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_missing_case_items_module_id "
+                        "ON missing_case_items(module_id)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_missing_case_items_module_order "
+                        "ON missing_case_items(module_id, order_no)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_missing_case_items_type_id "
+                        "ON missing_case_items(type_id)"
+                    )
+                )
+            else:
+                cols = set([c["name"] for c in insp_v23.get_columns("missing_case_items")])
+                if "title" not in cols:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE missing_case_items "
+                            "ADD COLUMN title VARCHAR(255) NOT NULL DEFAULT ''"
+                        )
+                    )
+                if "priority" not in cols:
+                    conn.execute(text("ALTER TABLE missing_case_items ADD COLUMN priority VARCHAR(32)"))
+                    conn.execute(
+                        text(
+                            "UPDATE missing_case_items SET priority = NULL "
+                            "WHERE priority IS NULL"
+                        )
+                    )
+                if "type_id" not in cols:
+                    conn.execute(text("ALTER TABLE missing_case_items ADD COLUMN type_id INTEGER"))
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_missing_case_items_type_id "
+                        "ON missing_case_items(type_id)"
+                    )
+                )
+            mark_applied(23)
