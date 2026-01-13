@@ -18,6 +18,11 @@
       --warn: #c2410c;
       --error: #b91c1c;
       --shadow: 0 10px 30px rgba(37,99,235,0.08), 0 4px 10px rgba(15,23,42,0.05);
+      --missing-reminder-bg: linear-gradient(135deg, rgba(37,99,235,0.12), rgba(34,197,94,0.08)), var(--card);
+      --missing-reminder-border: rgba(37,99,235,0.28);
+      --missing-reminder-accent: #2563eb;
+      --missing-reminder-shadow: 0 12px 28px rgba(37,99,235,0.12);
+      --missing-reminder-head-bg: #f8fbff;
       --tempexec-nav-height: 140px;
       --sticky-offset: 12px;
       --tempexec-offset: 0px;
@@ -1717,10 +1722,12 @@ body {
       --missing-reminder-row-height: calc(var(--case-view-font-size, 13px) * 1.5 + 24px);
       margin: 10px 0 14px;
       padding: 12px 14px;
-      border: 1px solid var(--border);
+      border: 1px solid var(--missing-reminder-border, var(--border));
+      border-left: 4px solid var(--missing-reminder-accent, var(--primary));
       border-radius: 12px;
-      background: var(--card);
-      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
+      background: var(--missing-reminder-bg, var(--card));
+      box-shadow: var(--missing-reminder-shadow, 0 6px 16px rgba(15, 23, 42, 0.05));
+      position: relative;
     }
     .missing-reminder-header {
       display: flex;
@@ -1741,6 +1748,27 @@ body {
       max-height: calc(var(--missing-reminder-row-height) * 4);
       overflow-y: auto;
       border-radius: 10px;
+    }
+    .missing-reminder-table-head {
+      border-radius: 10px 10px 0 0;
+      overflow: hidden;
+    }
+    .missing-reminder-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin: 0;
+      font-size: inherit;
+    }
+    .missing-reminder-table col.col-type { width: 90px; }
+    .missing-reminder-table col.col-module { width: 140px; }
+    .missing-reminder-table col.col-title { width: 220px; }
+    .missing-reminder-table col.col-priority { width: 90px; }
+    .missing-reminder-table-head .temp-case-view th {
+      background: var(--missing-reminder-head-bg, #f8fbff);
+    }
+    .missing-reminder-scroll {
+      border-radius: 0 0 10px 10px;
     }
     .missing-reminder-scroll table {
       margin: 0;
@@ -8005,6 +8033,11 @@ button.exec-overview-file-chip,
   --shadow: 0 14px 34px rgba(0,0,0,0.42), 0 6px 16px rgba(0,0,0,0.3);
   --panel: #1a2231;
   --panel-strong: #202b3d;
+  --missing-reminder-bg: linear-gradient(135deg, rgba(125,180,255,0.18), rgba(34,197,94,0.12)), var(--card);
+  --missing-reminder-border: rgba(125,180,255,0.45);
+  --missing-reminder-accent: #7db4ff;
+  --missing-reminder-shadow: 0 14px 30px rgba(0,0,0,0.45);
+  --missing-reminder-head-bg: var(--panel-strong);
 }
 :root[data-theme="dark"] body {
   background: var(--bg);

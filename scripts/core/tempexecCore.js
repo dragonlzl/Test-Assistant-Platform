@@ -4035,10 +4035,18 @@
           items: [],
           matchedModules: [],
           matchedTypes: [],
+          hasMatch: false,
+          pending: false,
+          pendingPayload: null,
           loading: false,
           loaded: false,
+          limit: 10,
           seq: 0,
           refreshTimer: null,
+          observer: null,
+          observerTarget: null,
+          scrollHandler: null,
+          scrollTimer: null,
         };
       }
       return state.tempExecMissingReminder;
@@ -4094,10 +4102,17 @@
       return parts.join('；');
     }
 
+    function resolveTempExecMissingReminderLimit(reminder) {
+      var limit = reminder && reminder.limit !== undefined ? Number(reminder.limit) : 10;
+      if (!isFinite(limit) || limit <= 0) return 10;
+      return limit;
+    }
+
     function buildTempExecMissingReminderTable(reminder) {
       var list = reminder && Array.isArray(reminder.items) ? reminder.items : [];
-      if (!list.length) return '';
-      var rows = list.map(function(item) {
+      var limit = resolveTempExecMissingReminderLimit(reminder);
+      var display = list.slice(0, limit);
+      var rows = display.map(function(item) {
         var moduleName = item && item.module_name ? String(item.module_name) : '--';
         var typeName = item && item.type_name ? String(item.type_name) : '未分类';
         var title = item && item.title ? String(item.title) : '';
@@ -4117,6 +4132,12 @@
           '</tr>'
         );
       }).join('');
+      if (!rows) {
+        var hint = '暂无匹配易漏用例';
+        if (reminder && reminder.loading) hint = '正在加载易漏用例...';
+        else if (reminder && reminder.pending) hint = '滑动到此处加载易漏用例';
+        rows = '<tr><td colspan="7"><p class="hint">' + escapeHtml(hint) + '</p></td></tr>';
+      }
       return (
         '<div class="missing-reminder-card">' +
           '<div class="missing-reminder-header">' +
@@ -4125,9 +4146,18 @@
               escapeHtml(buildTempExecMissingReminderSummary(reminder)) +
             '</span>' +
           '</div>' +
-          '<div class="missing-reminder-scroll">' +
+          '<div class="missing-reminder-table-head">' +
             '<div class="temp-case-view">' +
-              '<table>' +
+              '<table class="missing-reminder-table">' +
+                '<colgroup>' +
+                  '<col class="col-type">' +
+                  '<col class="col-module">' +
+                  '<col class="col-title">' +
+                  '<col class="col-priority">' +
+                  '<col class="col-precondition">' +
+                  '<col class="col-steps">' +
+                  '<col class="col-expected">' +
+                '</colgroup>' +
                 '<thead>' +
                   '<tr>' +
                     '<th class="type">类型</th>' +
@@ -4139,6 +4169,21 @@
                     '<th>预期结果</th>' +
                   '</tr>' +
                 '</thead>' +
+              '</table>' +
+            '</div>' +
+          '</div>' +
+          '<div class="missing-reminder-scroll">' +
+            '<div class="temp-case-view">' +
+              '<table class="missing-reminder-table">' +
+                '<colgroup>' +
+                  '<col class="col-type">' +
+                  '<col class="col-module">' +
+                  '<col class="col-title">' +
+                  '<col class="col-priority">' +
+                  '<col class="col-precondition">' +
+                  '<col class="col-steps">' +
+                  '<col class="col-expected">' +
+                '</colgroup>' +
                 '<tbody>' + rows + '</tbody>' +
               '</table>' +
             '</div>' +
@@ -4149,8 +4194,78 @@
 
     function renderTempExecMissingReminderBlock() {
       var reminder = ensureTempExecMissingReminderState();
-      if (!reminder.items || !reminder.items.length) return '';
+      if (!reminder.hasMatch && !reminder.loading && !reminder.pending) return '';
       return buildTempExecMissingReminderTable(reminder);
+    }
+
+    function cleanupTempExecMissingReminderObserver(reminder) {
+      if (reminder.observer) {
+        reminder.observer.disconnect();
+        reminder.observer = null;
+      }
+      reminder.observerTarget = null;
+      if (reminder.scrollHandler) {
+        window.removeEventListener('scroll', reminder.scrollHandler);
+        window.removeEventListener('resize', reminder.scrollHandler);
+        reminder.scrollHandler = null;
+      }
+      if (reminder.scrollTimer) {
+        clearTimeout(reminder.scrollTimer);
+        reminder.scrollTimer = null;
+      }
+    }
+
+    function resolveTempExecMissingReminderTarget() {
+      if (!tempExecView || !tempExecView.querySelector) return null;
+      return tempExecView.querySelector('.missing-reminder-card');
+    }
+
+    function isTempExecMissingReminderInView(target) {
+      if (!target || !target.getBoundingClientRect) return false;
+      if (target.offsetParent === null) return false;
+      var rect = target.getBoundingClientRect();
+      var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      if (!vh) return false;
+      return rect.bottom > 0 && rect.top < vh;
+    }
+
+    function scheduleTempExecMissingReminderLazyLoad() {
+      var reminder = ensureTempExecMissingReminderState();
+      if (!reminder.hasMatch || reminder.loading || reminder.loaded || !reminder.pendingPayload) return;
+      var target = resolveTempExecMissingReminderTarget();
+      if (!target) return;
+      if (isTempExecMissingReminderInView(target)) {
+        loadTempExecMissingReminderItems();
+        return;
+      }
+      if (reminder.observerTarget !== target) cleanupTempExecMissingReminderObserver(reminder);
+      if (reminder.observer) return;
+      if (typeof IntersectionObserver === 'function') {
+        reminder.observerTarget = target;
+        reminder.observer = new IntersectionObserver(function(entries) {
+          entries.forEach(function(entry) {
+            if (entry && (entry.isIntersecting || entry.intersectionRatio > 0)) {
+              loadTempExecMissingReminderItems();
+            }
+          });
+        }, { root: null, rootMargin: '120px 0px', threshold: 0.01 });
+        reminder.observer.observe(target);
+        return;
+      }
+      reminder.observerTarget = target;
+      if (!reminder.scrollHandler) {
+        reminder.scrollHandler = function() {
+          if (reminder.scrollTimer) clearTimeout(reminder.scrollTimer);
+          reminder.scrollTimer = setTimeout(function() {
+            reminder.scrollTimer = null;
+            if (!reminder.loaded && !reminder.loading && reminder.pendingPayload) {
+              if (isTempExecMissingReminderInView(reminder.observerTarget)) loadTempExecMissingReminderItems();
+            }
+          }, 120);
+        };
+        window.addEventListener('scroll', reminder.scrollHandler, { passive: true });
+        window.addEventListener('resize', reminder.scrollHandler);
+      }
     }
 
     function clearTempExecMissingReminder() {
@@ -4158,10 +4273,14 @@
       reminder.items = [];
       reminder.matchedModules = [];
       reminder.matchedTypes = [];
+      reminder.hasMatch = false;
+      reminder.pending = false;
+      reminder.pendingPayload = null;
       reminder.loading = false;
       reminder.loaded = false;
       reminder.signature = '';
       reminder.projectId = '';
+      cleanupTempExecMissingReminderObserver(reminder);
     }
 
     function requestTempExecMissingReminderRefresh() {
@@ -4192,7 +4311,8 @@
       }
       var projectId = String(active.projectId);
       var signature = projectId + ':' + hashReminderText(caseText);
-      if (reminder.signature === signature && reminder.projectId === projectId && reminder.loaded) {
+      if (reminder.signature === signature && reminder.projectId === projectId && (reminder.loaded || reminder.pending)) {
+        scheduleTempExecMissingReminderLazyLoad();
         return;
       }
       reminder.signature = signature;
@@ -4200,8 +4320,12 @@
       reminder.items = [];
       reminder.matchedModules = [];
       reminder.matchedTypes = [];
-      reminder.loading = true;
+      reminder.hasMatch = false;
+      reminder.pending = false;
+      reminder.pendingPayload = null;
+      reminder.loading = false;
       reminder.loaded = false;
+      cleanupTempExecMissingReminderObserver(reminder);
       var client = getApiClient();
       if (!client || typeof client.listMissingModules !== 'function' || typeof client.listMissingTypes !== 'function') {
         clearTempExecMissingReminder();
@@ -4246,83 +4370,134 @@
             reminder.items = [];
             reminder.matchedModules = [];
             reminder.matchedTypes = [];
+            reminder.hasMatch = false;
+            reminder.pending = false;
+            reminder.pendingPayload = null;
             reminder.loading = false;
             reminder.loaded = true;
             renderTempExecView();
             return null;
           }
-          var typeModulePromise = typeIds.length
-            ? client.listMissingModules(projectId, { type_ids: typeIds })
-            : Promise.resolve([]);
-          return typeModulePromise.then(function(typeModules) {
-            if (reminder.seq !== seq) return null;
-            var moduleIdsToLoad = {};
-            moduleIds.forEach(function(id) { moduleIdsToLoad[String(id)] = true; });
-            var extraModules = Array.isArray(typeModules) ? typeModules : [];
-            extraModules.forEach(function(m) {
-              if (!m || m.id === null || m.id === undefined) return;
-              moduleIdsToLoad[String(m.id)] = true;
-              if (!moduleMap[String(m.id)]) moduleMap[String(m.id)] = m;
-            });
-            var ids = Object.keys(moduleIdsToLoad);
-            if (!ids.length) {
-              reminder.items = [];
-              reminder.matchedModules = moduleMatches;
-              reminder.matchedTypes = typeMatches;
-              reminder.loading = false;
-              reminder.loaded = true;
-              renderTempExecView();
-              return null;
-            }
-            var tasks = ids.map(function(id) {
-              return client
-                .listMissingModuleItems(id)
-                .then(function(list) {
-                  var rows = Array.isArray(list) ? list : [];
-                  return rows.map(function(it) {
-                    var clone = it && typeof it === 'object' ? Object.assign({}, it) : {};
-                    clone.module_id = id;
-                    clone.module_name = moduleMap[id] && moduleMap[id].name ? moduleMap[id].name : ('模块#' + id);
-                    var typeKey = clone.type_id !== null && clone.type_id !== undefined ? String(clone.type_id) : '';
-                    if (typeKey && typeNameMap[typeKey]) clone.type_name = typeNameMap[typeKey];
-                    else if (!typeKey) clone.type_name = '未分类';
-                    return clone;
-                  });
-                })
-                .catch(function() { return []; });
-            });
-            return Promise.all(tasks).then(function(all) {
-              if (reminder.seq !== seq) return null;
-              var combined = [];
-              (all || []).forEach(function(rows) {
-                (rows || []).forEach(function(row) {
-                  if (!row) return;
-                  var moduleHit = row.module_id && matchedModuleMap[String(row.module_id)];
-                  var typeHit = row.type_id !== null && row.type_id !== undefined
-                    ? typeIds.indexOf(String(row.type_id)) !== -1
-                    : false;
-                  if (moduleHit || typeHit) combined.push(row);
-                });
-              });
-              reminder.items = combined;
-              reminder.matchedModules = moduleMatches;
-              reminder.matchedTypes = typeMatches;
-              reminder.loading = false;
-              reminder.loaded = true;
-              renderTempExecView();
-              return null;
-            });
-          });
+          reminder.matchedModules = moduleMatches;
+          reminder.matchedTypes = typeMatches;
+          reminder.hasMatch = true;
+          reminder.pending = true;
+          reminder.pendingPayload = {
+            projectId: projectId,
+            moduleIds: moduleIds,
+            typeIds: typeIds,
+            moduleMap: moduleMap,
+            typeNameMap: typeNameMap,
+            matchedModuleMap: matchedModuleMap,
+          };
+          reminder.loading = false;
+          reminder.loaded = false;
+          renderTempExecView();
+          return null;
         })
         .catch(function() {
           if (reminder.seq !== seq) return;
           reminder.items = [];
           reminder.matchedModules = [];
           reminder.matchedTypes = [];
+          reminder.hasMatch = false;
+          reminder.pending = false;
+          reminder.pendingPayload = null;
           reminder.loading = false;
           reminder.loaded = false;
+          cleanupTempExecMissingReminderObserver(reminder);
           renderTempExecView();
         });
+    }
+
+    function loadTempExecMissingReminderItems() {
+      var reminder = ensureTempExecMissingReminderState();
+      if (!reminder.pendingPayload || reminder.loading || reminder.loaded) return;
+      var client = getApiClient();
+      if (!client || typeof client.listMissingModules !== 'function' || typeof client.listMissingModuleItems !== 'function') {
+        clearTempExecMissingReminder();
+        return;
+      }
+      var payload = reminder.pendingPayload || {};
+      var projectId = payload.projectId;
+      var moduleIds = Array.isArray(payload.moduleIds) ? payload.moduleIds.slice() : [];
+      var typeIds = Array.isArray(payload.typeIds) ? payload.typeIds.slice() : [];
+      var moduleMap = payload.moduleMap && typeof payload.moduleMap === 'object' ? payload.moduleMap : {};
+      var typeNameMap = payload.typeNameMap && typeof payload.typeNameMap === 'object' ? payload.typeNameMap : {};
+      var matchedModuleMap = payload.matchedModuleMap && typeof payload.matchedModuleMap === 'object' ? payload.matchedModuleMap : {};
+      reminder.pending = false;
+      reminder.pendingPayload = null;
+      reminder.loading = true;
+      reminder.loaded = false;
+      cleanupTempExecMissingReminderObserver(reminder);
+      renderTempExecView();
+      var seq = (reminder.seq || 0) + 1;
+      reminder.seq = seq;
+      var typeModulePromise = typeIds.length
+        ? client.listMissingModules(projectId, { type_ids: typeIds })
+        : Promise.resolve([]);
+      typeModulePromise.then(function(typeModules) {
+        if (reminder.seq !== seq) return null;
+        var moduleIdsToLoad = {};
+        moduleIds.forEach(function(id) { moduleIdsToLoad[String(id)] = true; });
+        var extraModules = Array.isArray(typeModules) ? typeModules : [];
+        extraModules.forEach(function(m) {
+          if (!m || m.id === null || m.id === undefined) return;
+          moduleIdsToLoad[String(m.id)] = true;
+          if (!moduleMap[String(m.id)]) moduleMap[String(m.id)] = m;
+        });
+        var ids = Object.keys(moduleIdsToLoad);
+        if (!ids.length) {
+          reminder.items = [];
+          reminder.loading = false;
+          reminder.loaded = true;
+          renderTempExecView();
+          return null;
+        }
+        var tasks = ids.map(function(id) {
+          return client
+            .listMissingModuleItems(id)
+            .then(function(list) {
+              var rows = Array.isArray(list) ? list : [];
+              return rows.map(function(it) {
+                var clone = it && typeof it === 'object' ? Object.assign({}, it) : {};
+                clone.module_id = id;
+                clone.module_name = moduleMap[id] && moduleMap[id].name ? moduleMap[id].name : ('模块#' + id);
+                var typeKey = clone.type_id !== null && clone.type_id !== undefined ? String(clone.type_id) : '';
+                if (typeKey && typeNameMap[typeKey]) clone.type_name = typeNameMap[typeKey];
+                else if (!typeKey) clone.type_name = '未分类';
+                return clone;
+              });
+            })
+            .catch(function() { return []; });
+        });
+        return Promise.all(tasks).then(function(all) {
+          if (reminder.seq !== seq) return null;
+          var combined = [];
+          (all || []).forEach(function(rows) {
+            (rows || []).forEach(function(row) {
+              if (!row) return;
+              var moduleHit = row.module_id && matchedModuleMap[String(row.module_id)];
+              var typeHit = row.type_id !== null && row.type_id !== undefined
+                ? typeIds.indexOf(String(row.type_id)) !== -1
+                : false;
+              if (moduleHit || typeHit) combined.push(row);
+            });
+          });
+          var limit = resolveTempExecMissingReminderLimit(reminder);
+          reminder.items = combined.slice(0, limit);
+          reminder.loading = false;
+          reminder.loaded = true;
+          renderTempExecView();
+          return null;
+        });
+      }).catch(function() {
+        if (reminder.seq !== seq) return;
+        reminder.items = [];
+        reminder.loading = false;
+        reminder.loaded = false;
+        renderTempExecView();
+      });
     }
 
     function renderTempExecView() {
@@ -4419,6 +4594,7 @@
       renderTempExecOverview();
       syncTempExecReuseStatusAlign();
       requestTempExecMissingReminderRefresh();
+      scheduleTempExecMissingReminderLazyLoad();
       restoreScroll();
     }
 
