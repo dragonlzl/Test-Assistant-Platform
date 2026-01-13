@@ -28,6 +28,7 @@
   var CONTRIBUTION_BEHAVIORS = [
     { key: 'import', label: '用例导入' },
     { key: 'add', label: '新增用例' },
+    { key: 'edit', label: '修改用例' },
     { key: 'delete', label: '删除用例' },
   ];
 
@@ -698,6 +699,20 @@
     }
 
     // 用例（子项）：优先用 action 判断，避免 create_case_item 的 target_type=case_file 导致误判。
+    if (
+      action === 'create_missing_case_item' ||
+      action === 'update_missing_case_item' ||
+      action === 'delete_missing_case_item' ||
+      action === 'create_missing_module' ||
+      action === 'update_missing_module' ||
+      action === 'delete_missing_module'
+    ) {
+      var missingModuleName = String(detail.module_name || '').trim();
+      if (missingModuleName) return '用例：' + missingModuleName + '（模块）';
+      var missingModuleId = (detail.module_id || detail.module_id === 0) ? String(detail.module_id) : id;
+      if (missingModuleId) return '用例#' + missingModuleId + '（模块）';
+      return '用例（模块）';
+    }
     if (
       action === 'update_case_item' ||
       action === 'create_case_item' ||
@@ -1693,6 +1708,15 @@
       if (!deletedComplete) return null;
       return { key: 'delete', label: getContributionBehaviorLabel('delete'), count: deletedComplete };
     }
+    if (action === 'create_missing_case_item') {
+      return { key: 'add', label: getContributionBehaviorLabel('add'), count: 1 };
+    }
+    if (action === 'update_missing_case_item') {
+      return { key: 'edit', label: getContributionBehaviorLabel('edit'), count: 1 };
+    }
+    if (action === 'delete_missing_case_item') {
+      return { key: 'delete', label: getContributionBehaviorLabel('delete'), count: 1 };
+    }
     return null;
   }
 
@@ -2450,10 +2474,21 @@
       action === 'update_case_item' ||
       action === 'create_case_item' ||
       action === 'delete_case_item' ||
+      action === 'create_missing_case_item' ||
+      action === 'update_missing_case_item' ||
+      action === 'delete_missing_case_item' ||
       action === 'batch_create_case_items' ||
       action === 'batch_delete_case_items'
     ) {
       return ['case_item'];
+    }
+
+    if (
+      action === 'create_missing_module' ||
+      action === 'update_missing_module' ||
+      action === 'delete_missing_module'
+    ) {
+      return ['case'];
     }
 
     // 项目/版本
@@ -2526,6 +2561,13 @@
     if (action === 'create_case_item') return detail && detail.batch === true ? '' : '新增';
     if (action === 'update_case_item') return '修改';
     if (action === 'delete_case_item') return detail && detail.batch === true ? '' : '删除';
+    if (action === 'create_missing_case_item') return '新增';
+    if (action === 'update_missing_case_item') return '修改';
+    if (action === 'delete_missing_case_item') return '删除';
+
+    if (action === 'create_missing_module') return '新增漏测模块';
+    if (action === 'update_missing_module') return '修改漏测模块';
+    if (action === 'delete_missing_module') return '删除漏测模块';
 
     // 用例模版
     if (action === 'export_case_template_xmind') return '导出xmind';
@@ -2597,6 +2639,11 @@
       var modifiedCount = normalizeCountValue(detail.modified_count);
       if (modifiedCount === null) modifiedCount = 1;
       return String(modifiedCount);
+    }
+    if (action === 'update_missing_case_item' || action === 'update_missing_module') {
+      var modifiedCount2 = normalizeCountValue(detail.modified_count);
+      if (modifiedCount2 === null) modifiedCount2 = 1;
+      return String(modifiedCount2);
     }
     if (action === 'upsert_exec_set_from_case_file') {
       var transferCount = normalizeCountValue(detail.transfer_count);
@@ -2712,6 +2759,7 @@
     if (action === 'export_case_files_xmind' || action === 'export_case_files_excel') return '用例库';
     if (action.indexOf('batch_') === 0) return '用例库';
     if (action.indexOf('_case_item') !== -1) return '用例库';
+    if (action.indexOf('missing_case_item') !== -1 || action.indexOf('missing_module') !== -1) return '用例库';
 
     return '--';
   }
@@ -3764,14 +3812,37 @@
     refreshActivityView(false);
     refreshContributionView(false);
     refreshExecContributionView(false);
+    window.app = window.app || {};
+    window.app.opsLogBound = true;
   }
 
   var started = false;
+  var initAttempts = 0;
+  var MAX_INIT_ATTEMPTS = 50;
   function attemptInit() {
     if (started) return;
     // app.init() 由 bootstrap 在 DOMContentLoaded 后触发；这里等 app 把 state / authReady 准备好。
-    if (!window.app || window.app._inited !== true) return;
-    if (window.app.authReady !== true) return;
+    if (!window.app || window.app.authReady !== true) {
+      if (initAttempts < MAX_INIT_ATTEMPTS) {
+        initAttempts += 1;
+        setTimeout(attemptInit, 200);
+      }
+      return;
+    }
+    if (!window.app.apiClient || !window.app.state) {
+      if (initAttempts < MAX_INIT_ATTEMPTS) {
+        initAttempts += 1;
+        setTimeout(attemptInit, 200);
+      }
+      return;
+    }
+    if (!window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') {
+      if (initAttempts < MAX_INIT_ATTEMPTS) {
+        initAttempts += 1;
+        setTimeout(attemptInit, 200);
+      }
+      return;
+    }
     started = true;
     init();
   }

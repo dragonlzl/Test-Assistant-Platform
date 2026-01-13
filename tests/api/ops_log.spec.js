@@ -277,4 +277,71 @@ test.describe('operation logs', () => {
     expect(archiveLog.detail).toBeTruthy();
     expect(archiveLog.detail.actual_result_count).toBe(2);
   });
+
+  test('易漏用例/漏测模块操作记录包含数量变化', async () => {
+    const ctx = await request.newContext();
+    const adminToken = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${adminToken}`, 'Content-Type': 'application/json', 'X-TAP-Page': 'case-library' };
+
+    const projectName = 'opslog-missing-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'ops log missing cases' },
+    });
+    expect(createProj.status()).toBe(201);
+    const projectId = (await createProj.json()).id;
+
+    const createModuleRes = await ctx.post(`${apiBase}/api/missing-modules`, {
+      headers,
+      data: { project_id: projectId, name: '云存档' },
+    });
+    expect(createModuleRes.status()).toBe(201);
+    const createdModule = await createModuleRes.json();
+    const moduleId = createdModule.id;
+
+    const createItemRes = await ctx.post(`${apiBase}/api/missing-modules/${moduleId}/items`, {
+      headers,
+      data: { title: '易漏条目', expected: '提示异常', steps: '点击保存' },
+    });
+    expect(createItemRes.status()).toBe(201);
+    const createdItem = await createItemRes.json();
+    const itemId = createdItem.id;
+
+    const updateItemRes = await ctx.patch(`${apiBase}/api/missing-modules/items/${itemId}`, {
+      headers,
+      data: { title: '易漏条目更新' },
+    });
+    expect(updateItemRes.status()).toBe(200);
+
+    const deleteItemRes = await ctx.delete(`${apiBase}/api/missing-modules/items/${itemId}`, { headers });
+    expect(deleteItemRes.status()).toBe(200);
+
+    const deleteModuleRes = await ctx.delete(`${apiBase}/api/missing-modules/${moduleId}`, { headers });
+    expect(deleteModuleRes.status()).toBe(200);
+
+    const opsRes = await ctx.get(`${apiBase}/api/ops?limit=200`, { headers });
+    expect(opsRes.status()).toBe(200);
+    const logs = await opsRes.json();
+    expect(Array.isArray(logs)).toBeTruthy();
+
+    const createModuleLog = logs.find((row) => row && row.action === 'create_missing_module' && row.target_id === moduleId);
+    expect(createModuleLog).toBeTruthy();
+    expect(createModuleLog.detail).toEqual(expect.objectContaining({ module_name: '云存档', before_count: 0, after_count: 1 }));
+
+    const createItemLog = logs.find((row) => row && row.action === 'create_missing_case_item' && row.detail && row.detail.item_id === itemId);
+    expect(createItemLog).toBeTruthy();
+    expect(createItemLog.detail).toEqual(expect.objectContaining({ module_name: '云存档', before_count: 0, after_count: 1 }));
+
+    const updateItemLog = logs.find((row) => row && row.action === 'update_missing_case_item' && row.detail && row.detail.item_id === itemId);
+    expect(updateItemLog).toBeTruthy();
+    expect(updateItemLog.detail.modified_count).toBe(1);
+
+    const deleteItemLog = logs.find((row) => row && row.action === 'delete_missing_case_item' && row.detail && row.detail.item_id === itemId);
+    expect(deleteItemLog).toBeTruthy();
+    expect(deleteItemLog.detail).toEqual(expect.objectContaining({ module_name: '云存档', before_count: 1, after_count: 0 }));
+
+    const deleteModuleLog = logs.find((row) => row && row.action === 'delete_missing_module' && row.target_id === moduleId);
+    expect(deleteModuleLog).toBeTruthy();
+    expect(deleteModuleLog.detail).toEqual(expect.objectContaining({ module_name: '云存档', before_count: 1, after_count: 0 }));
+  });
 });

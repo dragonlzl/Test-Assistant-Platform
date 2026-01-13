@@ -2806,9 +2806,26 @@
 	    }
 	  }
 
-	  function normalizeEditorText(value) {
-	    return stripInvisibleMarkers(value).trim();
-	  }
+  function normalizeEditorText(value) {
+    return stripInvisibleMarkers(value).trim();
+  }
+
+  function moveInlineEditorCaretToEnd(el) {
+    if (!el || typeof window === 'undefined') return;
+    if (document.activeElement !== el) return;
+    if (!document.createRange || !window.getSelection) return;
+    try {
+      var range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      var selection = window.getSelection();
+      if (!selection) return;
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } catch (err) {
+      // ignore
+    }
+  }
 
 	  function buildInvisibleMarker(seed) {
 	    var raw = '';
@@ -6851,6 +6868,7 @@
 
   function buildMissingItemPayload(item) {
     var priority = normalizeEditorText(item && item.priority ? item.priority : '');
+    priority = normalizePriorityInput(priority);
     var title = normalizeEditorText(item && item.title ? item.title : '');
     var typeId = normalizeMissingTypeId(item && item.type_id !== undefined ? item.type_id : null);
     return {
@@ -6949,6 +6967,10 @@
       if (!cell) return;
       var raw = meta.multiline ? cell.innerText : cell.textContent;
       var next = normalizeEditorText(raw);
+      if (meta.key === 'priority') {
+        var normalized = normalizePriorityInput(next);
+        if (normalized !== next) next = normalized;
+      }
       if (skipEmptyRequired && meta.required && !next) return;
       if (item[meta.key] !== next) {
         item[meta.key] = next;
@@ -7116,6 +7138,7 @@
       var moduleName = item && (item.module_name || getMissingModuleNameById(item.module_id));
       var titleText = stripInvisibleMarkers(item && item.title ? item.title : '');
       var priorityText = stripInvisibleMarkers(item && item.priority ? item.priority : '');
+      priorityText = normalizePriorityInput(priorityText);
       var preText = stripInvisibleMarkers(item && item.precondition ? item.precondition : '');
       var stepsText = stripInvisibleMarkers(item && item.steps ? item.steps : '');
       var expectedText = stripInvisibleMarkers(item && item.expected ? item.expected : '');
@@ -12512,6 +12535,16 @@
         var multiline = String(t.getAttribute('data-case-lib-missing-multiline') || '').toLowerCase() === 'true';
         var raw = multiline ? t.innerText : t.textContent;
         var next = normalizeEditorText(raw);
+        if (field === 'priority') {
+          var normalized = normalizePriorityInput(next);
+          if (normalized !== next) {
+            next = normalized;
+            if (!multiline && t.textContent !== normalized) {
+              t.textContent = normalized;
+              moveInlineEditorCaretToEnd(t);
+            }
+          }
+        }
         item[field] = next;
         scheduleMissingAutoSave(idx);
       });
@@ -12528,6 +12561,13 @@
         if (!item) return;
         var prevNorm = normalizeEditorText(item[field]);
         var nextNorm = normalizeEditorText(raw);
+        if (field === 'priority') {
+          prevNorm = normalizePriorityInput(prevNorm);
+          nextNorm = normalizePriorityInput(nextNorm);
+          if (!multiline && t.textContent !== nextNorm) {
+            t.textContent = nextNorm;
+          }
+        }
         if (prevNorm === nextNorm) return;
         item[field] = nextNorm;
         saveMissingItemAtIndex(idx, '保存');

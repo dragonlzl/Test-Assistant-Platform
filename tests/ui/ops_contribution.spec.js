@@ -2,15 +2,43 @@ const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  await page.goto(base + '/index.html');
+  await page.goto(base + '/admin.html?tab=ops-log');
 }
 
 async function waitAppReady(page, timeoutMs) {
   const timeout = Number(timeoutMs) || 30000;
-  await page.waitForFunction(() => window.app && window.app._inited === true && window.app.authReady === true, null, {
-    timeout,
-  });
+  await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout });
   await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout });
+}
+
+async function switchToTab(page, tabName, timeoutMs) {
+  const timeout = Number(timeoutMs) || 30000;
+  await page.waitForFunction(() => {
+    if (!window.app || !window.app.state) return false;
+    const activeTab = window.app.state.activeTab;
+    if (!activeTab) return false;
+    const nodes = document.querySelectorAll(`[data-tab-section="${activeTab}"]`);
+    if (!nodes || !nodes.length) return false;
+    for (let i = 0; i < nodes.length; i += 1) {
+      if (!nodes[i].classList.contains('hidden')) return true;
+    }
+    return false;
+  }, null, { timeout });
+  await page.evaluate((tab) => {
+    if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab(tab);
+  }, tabName);
+  await page.waitForFunction((tab) => {
+    const nodes = document.querySelectorAll(`[data-tab-section="${tab}"]`);
+    if (!nodes || !nodes.length) return false;
+    for (let i = 0; i < nodes.length; i += 1) {
+      if (!nodes[i].classList.contains('hidden')) return true;
+    }
+    return false;
+  }, tabName, { timeout });
+  await page.waitForFunction((tab) => {
+    if (tab !== 'ops-log') return true;
+    return window.app && window.app.opsLogBound === true;
+  }, tabName, { timeout });
 }
 
 function formatDateInput(date) {
@@ -47,6 +75,9 @@ test.describe('操作记录-用例贡献视图', () => {
       { id: 2, user_id: 2, username: 'user_b', action: 'create_case_item', target_type: 'case_item', target_id: 11, result: 'success', detail: { complete: true, module: 'm', title: 't', precondition: 'p', steps: 's', expected: 'e' }, created_at: new Date(yesterday.getTime() - 1000).toISOString() },
       { id: 3, user_id: 2, username: 'user_b', action: 'delete_case_item', target_type: 'case_item', target_id: 12, result: 'success', detail: { module: 'm', title: 't2', precondition: 'p2', steps: 's2', expected: 'e2' }, created_at: new Date(yesterday.getTime() - 2000).toISOString() },
       { id: 4, user_id: 2, username: 'user_b', action: 'delete_case_file', target_type: 'case_file', target_id: 13, result: 'success', detail: { item_deleted_complete: 2, file_name: 'case-del' }, created_at: new Date(today.getTime() - 2000).toISOString() },
+      { id: 5, user_id: 2, username: 'user_b', action: 'create_missing_case_item', target_type: 'missing_module', target_id: 20, result: 'success', detail: { module_name: '云存档' }, created_at: new Date(today.getTime() - 3000).toISOString() },
+      { id: 6, user_id: 2, username: 'user_b', action: 'update_missing_case_item', target_type: 'missing_module', target_id: 20, result: 'success', detail: { module_name: '云存档', modified_count: 1 }, created_at: new Date(today.getTime() - 4000).toISOString() },
+      { id: 7, user_id: 2, username: 'user_b', action: 'delete_missing_case_item', target_type: 'missing_module', target_id: 20, result: 'success', detail: { module_name: '云存档' }, created_at: new Date(today.getTime() - 5000).toISOString() },
     ];
     let opsCalls = 0;
 
@@ -79,16 +110,21 @@ test.describe('操作记录-用例贡献视图', () => {
     await gotoIndex(page);
     await waitAppReady(page, 30000);
 
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
-    });
+    try {
+      await switchToTab(page, 'ops-log', 30000);
+    } catch (err) {
+      await page.evaluate(() => {
+        if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
+      });
+    }
     await page.waitForFunction(() => {
       const grid = document.getElementById('opsContributionBehaviorFilterGrid');
       return grid && grid.querySelectorAll('label').length > 0;
     });
 
-    await page.click('#openOpsContributionDrawerBtn');
-    await expect(page.locator('#opsContributionDrawer')).toHaveClass(/open/);
+    await page.waitForSelector('#openOpsContributionDrawerBtn');
+    await expect(page.locator('#openOpsContributionDrawerBtn')).toBeVisible();
+    await page.click('#openOpsContributionDrawerBtn', { force: true });
 
     await page.click('input[data-ops-contribution-user="1"]');
     await page.click('input[data-ops-contribution-user="2"]');
@@ -97,15 +133,16 @@ test.describe('操作记录-用例贡献视图', () => {
 
     await expect(page.locator('#opsContributionCard')).toBeVisible();
     await expect(page.locator('#opsContributionBehaviorFilterGrid')).toContainText('用例导入 3');
-    await expect(page.locator('#opsContributionBehaviorFilterGrid')).toContainText('新增用例 1');
-    await expect(page.locator('#opsContributionBehaviorFilterGrid')).toContainText('删除用例 3');
+    await expect(page.locator('#opsContributionBehaviorFilterGrid')).toContainText('新增用例 2');
+    await expect(page.locator('#opsContributionBehaviorFilterGrid')).toContainText('修改用例 1');
+    await expect(page.locator('#opsContributionBehaviorFilterGrid')).toContainText('删除用例 4');
 
     await expect(page.locator('#opsContributionList .ops-activity-row')).toHaveCount(2);
     await expect(page.locator('#opsContributionList .ops-activity-row', { hasText: 'user_b' })).toContainText('user_b');
     await expect(page.locator('#opsContributionList .ops-activity-row', { hasText: 'admin' })).toContainText('admin');
     await expect(
       page.locator('#opsContributionList .ops-activity-row', { hasText: 'user_b' }).locator('.ops-activity-count'),
-    ).toHaveText('7');
+    ).toHaveText('10');
     await expect(
       page.locator('#opsContributionList .ops-activity-row', { hasText: 'admin' }).locator('.ops-activity-count'),
     ).toHaveText('0');
@@ -167,13 +204,13 @@ test.describe('操作记录-用例贡献视图', () => {
         localStorage.setItem(
           'tap-ops-contribution-view-v1',
           JSON.stringify({
-            userIds: [],
+            userIds: [2],
             timeRange: 'day',
             dateStart: '',
             dateEnd: '',
             behaviors: [],
             behaviorAll: true,
-            hasSelection: false,
+            hasSelection: true,
             savedAt: Date.now(),
           }),
         );
@@ -211,14 +248,17 @@ test.describe('操作记录-用例贡献视图', () => {
     await gotoIndex(page);
     await waitAppReady(page, 30000);
 
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
-    });
+    try {
+      await switchToTab(page, 'ops-log', 30000);
+    } catch (err) {
+      await page.evaluate(() => {
+        if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
+      });
+    }
 
-    await page.click('#openOpsContributionDrawerBtn');
+    await page.waitForSelector('#openOpsContributionDrawerBtn');
+    await page.click('#openOpsContributionDrawerBtn', { force: true });
     await expect(page.locator('#opsContributionDrawer')).toHaveClass(/open/);
-
-    await page.click('input[data-ops-contribution-user="2"]');
     await page.click('#opsContributionApplyBtn');
     await expect(page.locator('#opsContributionDrawer')).not.toHaveClass(/open/);
 

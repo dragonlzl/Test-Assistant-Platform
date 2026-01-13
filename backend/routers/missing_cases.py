@@ -137,6 +137,12 @@ def create_missing_module(
     name = _normalize_text(payload.name)
     if not name:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="模块名不能为空")
+    before_count = (
+        db.query(func.count(models.MissingModule.id))
+        .filter(models.MissingModule.project_id == project.id)
+        .scalar()
+        or 0
+    )
     now = datetime.now(timezone.utc)
     module = models.MissingModule(
         project_id=project.id,
@@ -153,7 +159,7 @@ def create_missing_module(
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="missing_module_duplicate"
-        )
+    )
     db.refresh(module)
     log_operation(
         db=db,
@@ -161,8 +167,14 @@ def create_missing_module(
         action="create_missing_module",
         target_type="missing_module",
         target_id=module.id,
-        detail={"project_id": project.id, "module_name": module.name},
+        detail={
+            "project_id": project.id,
+            "module_name": module.name,
+            "before_count": int(before_count),
+            "after_count": int(before_count) + 1,
+        },
     )
+    db.commit()
     return module
 
 
@@ -217,6 +229,12 @@ def create_missing_item(
     db: Session = Depends(get_db),
 ):
     module = _ensure_missing_module_access(db, user, module_id)
+    before_count = (
+        db.query(func.count(models.MissingCaseItem.id))
+        .filter(models.MissingCaseItem.module_id == module.id)
+        .scalar()
+        or 0
+    )
     title = _normalize_text(payload.title)
     if not title:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用例标题不能为空")
@@ -267,8 +285,15 @@ def create_missing_item(
         action="create_missing_case_item",
         target_type="missing_module",
         target_id=module.id,
-        detail={"module_id": module.id, "module_name": module.name, "item_id": item.id},
+        detail={
+            "module_id": module.id,
+            "module_name": module.name,
+            "item_id": item.id,
+            "before_count": int(before_count),
+            "after_count": int(before_count) + 1,
+        },
     )
+    db.commit()
     return {
         "id": item.id,
         "module_id": item.module_id,
@@ -301,6 +326,12 @@ def update_missing_item(
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="条目不存在")
     module = _ensure_missing_module_access(db, user, item.module_id)
+    current_count = (
+        db.query(func.count(models.MissingCaseItem.id))
+        .filter(models.MissingCaseItem.module_id == module.id)
+        .scalar()
+        or 0
+    )
 
     if payload.precondition is not None:
         item.precondition = _normalize_text(payload.precondition)
@@ -347,8 +378,16 @@ def update_missing_item(
         action="update_missing_case_item",
         target_type="missing_module",
         target_id=module.id,
-        detail={"module_id": module.id, "module_name": module.name, "item_id": item.id},
+        detail={
+            "module_id": module.id,
+            "module_name": module.name,
+            "item_id": item.id,
+            "before_count": int(current_count),
+            "after_count": int(current_count),
+            "modified_count": 1,
+        },
     )
+    db.commit()
     type_name = next_type_name if payload.type_id is not None else None
     if payload.type_id is None and item.type_id:
         type_row = (
@@ -389,16 +428,32 @@ def delete_missing_item(
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="条目不存在")
     module = _ensure_missing_module_access(db, user, item.module_id)
+    before_count = (
+        db.query(func.count(models.MissingCaseItem.id))
+        .filter(models.MissingCaseItem.module_id == module.id)
+        .scalar()
+        or 0
+    )
     db.delete(item)
     db.commit()
+    after_count = int(before_count) - 1
+    if after_count < 0:
+        after_count = 0
     log_operation(
         db=db,
         user_id=user.id,
         action="delete_missing_case_item",
         target_type="missing_module",
         target_id=module.id,
-        detail={"module_id": module.id, "module_name": module.name, "item_id": item_id},
+        detail={
+            "module_id": module.id,
+            "module_name": module.name,
+            "item_id": item_id,
+            "before_count": int(before_count),
+            "after_count": int(after_count),
+        },
     )
+    db.commit()
     return {"detail": "deleted"}
 
 
@@ -431,8 +486,13 @@ def update_missing_module(
         action="update_missing_module",
         target_type="missing_module",
         target_id=module.id,
-        detail={"project_id": module.project_id, "module_name": module.name},
+        detail={
+            "project_id": module.project_id,
+            "module_name": module.name,
+            "modified_count": 1,
+        },
     )
+    db.commit()
     return module
 
 
@@ -443,16 +503,31 @@ def delete_missing_module(
     db: Session = Depends(get_db),
 ):
     module = _ensure_missing_module_access(db, user, module_id)
+    before_count = (
+        db.query(func.count(models.MissingModule.id))
+        .filter(models.MissingModule.project_id == module.project_id)
+        .scalar()
+        or 0
+    )
     db.delete(module)
     db.commit()
+    after_count = int(before_count) - 1
+    if after_count < 0:
+        after_count = 0
     log_operation(
         db=db,
         user_id=user.id,
         action="delete_missing_module",
         target_type="missing_module",
         target_id=module.id,
-        detail={"project_id": module.project_id, "module_name": module.name},
+        detail={
+            "project_id": module.project_id,
+            "module_name": module.name,
+            "before_count": int(before_count),
+            "after_count": int(after_count),
+        },
     )
+    db.commit()
     return {"detail": "deleted"}
 
 
@@ -541,6 +616,7 @@ def create_missing_type(
         target_id=missing_type.id,
         detail={"project_id": project.id, "type_name": missing_type.name},
     )
+    db.commit()
     return missing_type
 
 
@@ -613,4 +689,5 @@ def delete_missing_type(
             "moved_count": int(moved),
         },
     )
+    db.commit()
     return {"detail": "deleted", "moved_count": int(moved)}

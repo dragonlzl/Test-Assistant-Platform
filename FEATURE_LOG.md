@@ -3634,3 +3634,20 @@
 - 更新记录：2026-01-13 易漏用例提醒无匹配时隐藏区域（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`）。
 - 更新记录：2026-01-13 易漏用例提醒匹配字段限定为用例字段集（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`）。
 - 更新记录：2026-01-13 易漏用例提醒跨用例命中模块与类型（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`tests/ui/missing_case_reminder.spec.js`）。
+
+- 功能名称：易漏用例操作记录与用例贡献统计
+- 功能描述：易漏用例与漏测模块的新增/修改/删除操作写入操作记录，显示模块名（如“云存档（模块）”）并展示数量变化，同时纳入用例贡献视图统计。
+- 操作方式：在用例库的“易漏用例”抽屉新增/编辑/删除易漏条目或漏测模块；管理员在“操作记录”查看日志或在“用例贡献视图”查看统计。
+- 使用效果：操作记录可看到易漏用例与漏测模块的新增/修改/删除行为、模块名与数量变化；用例贡献视图会统计易漏用例新增/修改/删除。
+- 新增内容/接口/组件：
+  - 后端：易漏模块/条目日志补充数量变化与修改次数（`backend/routers/missing_cases.py`）。
+  - 前端：操作记录与贡献视图新增易漏用例/漏测模块映射与展示（`scripts/modules/opsLog.js`）。
+  - 测试：补充易漏用例操作记录与贡献统计用例（`tests/api/ops_log.spec.js`、`tests/ui/ops_log.spec.js`、`tests/ui/ops_contribution.spec.js`）。
+- 测试与验证：
+  - `node --check scripts/modules/opsLog.js`
+  - `npx playwright test tests/ui/ops_log.spec.js`
+  - `npx playwright test tests/ui/ops_contribution.spec.js`
+  - `npx playwright test tests/api/ops_log.spec.js`
+- 更新记录：2026-01-13 易漏用例操作记录与贡献统计（`backend/routers/missing_cases.py`、`scripts/modules/opsLog.js`、`tests/api/ops_log.spec.js`、`tests/ui/ops_log.spec.js`、`tests/ui/ops_contribution.spec.js`）。
+- 更新记录：2026-01-13 易漏用例优先级输入自动大写（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_modules.spec.js`）。
+- 更新记录：2026-01-18 执行分配项目关闭改用确认抽屉（`scripts/modules/tempexec.js`、`tests/ui/tempexec_project_layout.spec.js`）。

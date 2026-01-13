@@ -245,6 +245,7 @@ test.describe('用例库易漏模块抽屉', () => {
     const secondRowCheck = page.locator('#caseLibraryMissingListBody tr').nth(1).locator('input[type=\"checkbox\"]');
     await secondRowCheck.check();
     await page.locator('#caseLibraryMissingDeleteBtn').click();
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
     await page.locator('#appConfirmDrawerConfirmBtn').click();
     await expect(page.locator('#caseLibraryMissingListBody td.module', { hasText: /^工程师$/ })).toHaveCount(0);
 
@@ -262,5 +263,116 @@ test.describe('用例库易漏模块抽屉', () => {
     await waitCaseLibraryReady(page);
     await expect(page.locator('#caseLibraryMissingCard')).toBeVisible();
     await expect(page.locator('#caseLibraryMissingModules')).toContainText('工程师1技能-更新');
+  });
+
+  test('易漏用例优先级输入自动大写', async ({ page }) => {
+    const token = 'token-case-library-missing-priority';
+    const user = { id: 11, username: 'priority_admin', role: 'admin', level: 'leader' };
+    const project = { id: 2, name: '优先级项目', description: 'priority missing case' };
+    const modules = [
+      {
+        id: 21,
+        project_id: project.id,
+        name: '云存档',
+        item_count: 1,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+    const items = [
+      {
+        id: 301,
+        module_id: 21,
+        module_name: '云存档',
+        type_id: null,
+        type_name: null,
+        title: '易漏条目',
+        priority: 'p1',
+        precondition: '',
+        steps: '点击保存',
+        expected: '提示异常',
+        remark: '',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ];
+    let updateCalls = 0;
+    let lastUpdatePayload = null;
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/missing-modules' && method === 'GET') {
+        return respond(200, modules.slice());
+      }
+      if (pathName === `/api/missing-modules/${modules[0].id}/items` && method === 'GET') {
+        return respond(200, items.slice());
+      }
+      if (pathName.startsWith('/api/missing-modules/items/') && method === 'PATCH') {
+        updateCalls += 1;
+        const payload = route.request().postDataJSON();
+        lastUpdatePayload = payload;
+        items[0] = Object.assign({}, items[0], payload, {
+          priority: payload.priority || null,
+          updated_at: new Date().toISOString(),
+        });
+        return respond(200, items[0]);
+      }
+      if (pathName === '/api/missing-types' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page);
+
+    await openDrawer(page, '#openCaseLibraryMissingDrawerBtn', '#caseLibraryMissingDrawer');
+    await page.locator('#caseLibraryMissingProjectSelect').selectOption(String(project.id));
+
+    await page.locator('#caseLibraryMissingListBody button[data-case-lib-missing-view]').first().click();
+    await expect(page.locator('#caseLibraryMissingCard')).toBeVisible();
+
+    const priorityCell = page.locator('#caseLibraryMissingView [data-case-lib-missing-field="priority"][data-index="0"]');
+    await expect(priorityCell).toHaveText('P1');
+
+    await priorityCell.evaluate((el) => {
+      el.focus();
+      el.textContent = 'p2';
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await expect(priorityCell).toHaveText('P2');
+    await page.click('#caseLibraryMissingStatus', { force: true });
+
+    await expect.poll(() => updateCalls).toBeGreaterThan(0);
+    expect(lastUpdatePayload && lastUpdatePayload.priority).toBe('P2');
   });
 });

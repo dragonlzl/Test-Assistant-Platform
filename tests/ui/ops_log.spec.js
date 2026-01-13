@@ -2,15 +2,43 @@ const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  await page.goto(base + '/index.html');
+  await page.goto(base + '/admin.html?tab=ops-log');
 }
 
 async function waitAppReady(page, timeoutMs) {
   const timeout = Number(timeoutMs) || 30000;
-  await page.waitForFunction(() => window.app && window.app._inited === true && window.app.authReady === true, null, {
-    timeout,
-  });
+  await page.waitForFunction(() => window.app && window.app.authReady === true, null, { timeout });
   await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout });
+}
+
+async function switchToTab(page, tabName, timeoutMs) {
+  const timeout = Number(timeoutMs) || 30000;
+  await page.waitForFunction(() => {
+    if (!window.app || !window.app.state) return false;
+    const activeTab = window.app.state.activeTab;
+    if (!activeTab) return false;
+    const nodes = document.querySelectorAll(`[data-tab-section="${activeTab}"]`);
+    if (!nodes || !nodes.length) return false;
+    for (let i = 0; i < nodes.length; i += 1) {
+      if (!nodes[i].classList.contains('hidden')) return true;
+    }
+    return false;
+  }, null, { timeout });
+  await page.evaluate((tab) => {
+    if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab(tab);
+  }, tabName);
+  await page.waitForFunction((tab) => {
+    const nodes = document.querySelectorAll(`[data-tab-section="${tab}"]`);
+    if (!nodes || !nodes.length) return false;
+    for (let i = 0; i < nodes.length; i += 1) {
+      if (!nodes[i].classList.contains('hidden')) return true;
+    }
+    return false;
+  }, tabName, { timeout });
+  await page.waitForFunction((tab) => {
+    if (tab !== 'ops-log') return true;
+    return window.app && window.app.opsLogBound === true;
+  }, tabName, { timeout });
 }
 
 function formatDateInput(date) {
@@ -94,36 +122,34 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     await gotoIndex(page);
     await waitAppReady(page, 30000);
 
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
-    });
+    await switchToTab(page, 'ops-log', 30000);
     await expect(page.locator('#openOpsLogDrawerBtn')).toBeVisible();
-    await page.click('#openOpsLogDrawerBtn');
+    await page.click('#openOpsLogDrawerBtn', { force: true });
+    await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
     await page.waitForFunction(() => {
       const grid = document.getElementById('opsLogTargetFilterGrid');
       return grid && grid.querySelectorAll('label').length > 0;
     });
     await expect(page.locator('#flowNav')).toHaveClass(/hidden/);
-    await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
     await expect(page.locator('.ops-log-table thead')).toContainText('操作页面');
     await expect(page.locator('.ops-log-table thead')).toContainText('变化');
 
     // 使用“全局分页设置”每页 5 条。
     await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(5);
-    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例：case-0');
-    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('0 -> 1');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例：case-2');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('12 -> 12');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('9 -> 0');
     const transferRow = page.locator('#opsLogDrawerTableBody tr').filter({ hasText: '转执行' }).first();
     await expect(transferRow).toContainText('88');
     await expect(transferRow).not.toContainText('->');
 
     // 翻页：下一页应出现更旧的记录。
     await page.click('#opsLogPaginationTop [data-ops-log-page="next"]');
-    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例：case-5');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('项目：proj-1');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('批量新增3条');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('批量删除2条');
-    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('9 -> 0');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('20 -> 23');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('23 -> 21');
     await page.click('#opsLogPaginationTop [data-ops-log-page="last"]');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('版本 proj-2v2');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('解散归档');
@@ -209,17 +235,118 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
 
     await gotoIndex(page);
     await waitAppReady(page, 30000);
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
-    });
+    await switchToTab(page, 'ops-log', 30000);
 
-    await page.click('#openOpsLogDrawerBtn');
+    await expect(page.locator('#openOpsLogDrawerBtn')).toBeVisible();
+    await page.click('#openOpsLogDrawerBtn', { force: true });
     await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
     await expect(page.locator('.ops-log-table thead')).toContainText('变化');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例类型变更');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例：用例A');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('转为复用');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('转为非复用');
+  });
+
+  test('易漏用例与漏测模块操作记录展示为模块名', async ({ page }) => {
+    const admin = { id: 1, username: 'admin', role: 'admin', level: 'leader' };
+    const now = new Date().toISOString();
+    const logs = [
+      {
+        id: 201,
+        user_id: 1,
+        username: 'admin',
+        action: 'create_missing_case_item',
+        target_type: 'missing_module',
+        target_id: 10,
+        result: 'success',
+        detail: { module_name: '云存档', before_count: 0, after_count: 1, page: 'case-library' },
+        created_at: now,
+      },
+      {
+        id: 202,
+        user_id: 1,
+        username: 'admin',
+        action: 'update_missing_case_item',
+        target_type: 'missing_module',
+        target_id: 10,
+        result: 'success',
+        detail: { module_name: '云存档', modified_count: 1, page: 'case-library' },
+        created_at: new Date(Date.now() - 1000).toISOString(),
+      },
+      {
+        id: 203,
+        user_id: 1,
+        username: 'admin',
+        action: 'delete_missing_case_item',
+        target_type: 'missing_module',
+        target_id: 10,
+        result: 'success',
+        detail: { module_name: '云存档', before_count: 1, after_count: 0, page: 'case-library' },
+        created_at: new Date(Date.now() - 2000).toISOString(),
+      },
+      {
+        id: 204,
+        user_id: 1,
+        username: 'admin',
+        action: 'create_missing_module',
+        target_type: 'missing_module',
+        target_id: 10,
+        result: 'success',
+        detail: { module_name: '云存档', before_count: 0, after_count: 1, page: 'case-library' },
+        created_at: new Date(Date.now() - 3000).toISOString(),
+      },
+      {
+        id: 205,
+        user_id: 1,
+        username: 'admin',
+        action: 'delete_missing_module',
+        target_type: 'missing_module',
+        target_id: 10,
+        result: 'success',
+        detail: { module_name: '云存档', before_count: 1, after_count: 0, page: 'case-library' },
+        created_at: new Date(Date.now() - 4000).toISOString(),
+      },
+    ];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, admin);
+      if (pathName === '/api/users' && method === 'GET') return respond(200, [admin]);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, logs);
+
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitAppReady(page, 30000);
+    await switchToTab(page, 'ops-log', 30000);
+    await expect(page.locator('#openOpsLogDrawerBtn')).toBeVisible();
+    await page.click('#openOpsLogDrawerBtn', { force: true });
+    await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
+
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例：云存档（模块）');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('新增');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('修改');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('删除');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('新增漏测模块');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('删除漏测模块');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('0 -> 1');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('1 -> 0');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例库');
   });
 
   test('查看记录：导出记录Excel', async ({ page }) => {
@@ -259,13 +386,27 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     await gotoIndex(page);
     await waitAppReady(page, 30000);
 
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
-    });
-    await page.click('#openOpsLogDrawerBtn');
+    await switchToTab(page, 'ops-log', 30000);
+    await expect(page.locator('#openOpsLogDrawerBtn')).toBeVisible();
+    await page.click('#openOpsLogDrawerBtn', { force: true });
     await page.waitForFunction(() => {
       const grid = document.getElementById('opsLogTargetFilterGrid');
       return grid && grid.querySelectorAll('label').length > 0;
+    });
+    await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(2);
+    await page.evaluate(() => {
+      window.app = window.app || {};
+      window.app.caseLibraryApi = window.app.caseLibraryApi || {};
+      window.app.xlsxCoreApi = window.app.xlsxCoreApi || {};
+      const builder = function() {
+        return Promise.resolve(new Blob(['xlsx'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      };
+      if (typeof window.app.caseLibraryApi.buildSimpleXlsxBlob !== 'function') {
+        window.app.caseLibraryApi.buildSimpleXlsxBlob = builder;
+      }
+      if (typeof window.app.xlsxCoreApi.buildSimpleXlsxBlob !== 'function') {
+        window.app.xlsxCoreApi.buildSimpleXlsxBlob = builder;
+      }
     });
 
     const [download] = await Promise.all([
@@ -330,11 +471,10 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
 
     await gotoIndex(page);
     await waitAppReady(page, 30000);
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('ops-log');
-    });
+    await switchToTab(page, 'ops-log', 30000);
 
-    await page.click('#openOpsLogDrawerBtn');
+    await expect(page.locator('#openOpsLogDrawerBtn')).toBeVisible();
+    await page.click('#openOpsLogDrawerBtn', { force: true });
     await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
     await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(1);
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('登录');

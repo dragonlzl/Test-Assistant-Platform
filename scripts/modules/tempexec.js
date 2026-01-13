@@ -3930,9 +3930,17 @@
           var pid = projectRemoveBtn.dataset.tempProjectRemove || '';
           var projectFiles = getProjectFiles(pid);
           var projectLabel = resolveProjectLabel(pid);
-          var confirmed = window.confirm('是否确认关闭项目【' + projectLabel + '】（' + projectFiles.length + ' 份用例）？');
-          if (!confirmed) return;
-          api.removeTempExecProject(pid);
+          var prevDrawerProject = resolveTempExecActiveDrawer();
+          openConfirmDrawer({
+            title: '确认关闭项目',
+            message: '是否确认关闭项目【' + projectLabel + '】（' + projectFiles.length + ' 份用例）？',
+            confirmText: '确认关闭',
+            cancelText: '取消',
+            previousDrawer: prevDrawerProject || null,
+          }).then(function(res) {
+            if (!res || res.ok !== true) return;
+            api.removeTempExecProject(pid);
+          });
           return;
         }
         var versionRemoveBtn = e.target.closest('[data-temp-project-version-remove]');
