@@ -2047,6 +2047,11 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await openDrawer(page, '#openCaseLibrarySelectExecDrawerBtn', '#caseLibrarySelectExecDrawer');
 
     await page.selectOption('#caseLibrarySelectProjectSelect', String(project.id));
+    await page.waitForFunction(() => {
+      const el = document.getElementById('caseLibrarySelectVersionSelect');
+      return el && el.options && el.options.length > 0;
+    });
+    await expect(page.locator('#caseLibrarySelectVersionSelect option').first()).toHaveText('全部版本');
     await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');
     await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v2');
     await expect(page.locator('#caseLibrarySelectListBody')).toContainText('人员A：执');
@@ -2056,6 +2061,10 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await page.selectOption('#caseLibrarySelectVersionSelect', String(versions[0].id));
     await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');
     await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('用例v2');
+
+    await page.fill('#caseLibrarySelectSearchInput', '用例v2');
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v2');
+    await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('用例v1');
   });
 
   test('选择用例执行：项目/版本选择持久化', async ({ page }) => {

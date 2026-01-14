@@ -481,6 +481,7 @@
 
     selectProjectSelect: document.getElementById('caseLibrarySelectProjectSelect'),
     selectVersionSelect: document.getElementById('caseLibrarySelectVersionSelect'),
+    selectSearchInput: document.getElementById('caseLibrarySelectSearchInput'),
     selectConfirmBtn: document.getElementById('caseLibrarySelectConfirmBtn'),
     selectSelectAll: document.getElementById('caseLibrarySelectSelectAll'),
     selectBatchExecBtn: document.getElementById('caseLibrarySelectBatchExecBtn'),
@@ -606,6 +607,8 @@
     selectDrawer: {
       projectId: null,
       versionId: null,
+      searchText: '',
+      searchPrevVersionId: null,
       files: [],
       execByFileId: {},
       loading: false,
@@ -3773,6 +3776,7 @@
 
     state.selectDrawer.projectId = projectId;
     state.selectDrawer.versionId = null;
+    state.selectDrawer.searchText = '';
     state.selectDrawer.files = [];
     state.selectDrawer.execByFileId = {};
     state.selectDrawer.processing = false;
@@ -3782,9 +3786,10 @@
     if (dom.selectProjectSelect) dom.selectProjectSelect.value = String(projectId);
     if (dom.selectVersionSelect) {
       dom.selectVersionSelect.disabled = true;
-      dom.selectVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
+      dom.selectVersionSelect.innerHTML = '<option value=\"\">全部版本</option>';
       dom.selectVersionSelect.value = '';
     }
+    if (dom.selectSearchInput) dom.selectSearchInput.value = '';
 
     state.selectDrawer.loading = true;
     state.selectDrawer.loadSeq = Number(state.selectDrawer.loadSeq || 0) + 1;
@@ -3800,7 +3805,7 @@
         state.selectDrawer.files = files;
         state.selectDrawer.execByFileId = buildExecMapByFileId(execSets);
         if (dom.selectVersionSelect) {
-          syncVersionOptions(dom.selectVersionSelect, projectId, '请选择版本');
+          syncVersionOptions(dom.selectVersionSelect, projectId, '全部版本');
           dom.selectVersionSelect.disabled = false;
           if (versionId) {
             var ok = (state.versionsByProject[projectId] || []).some(function(v) { return v && String(v.id) === String(versionId); });
@@ -11443,6 +11448,14 @@
 
   function getSelectDrawerVisibleFiles() {
     var list = Array.isArray(state.selectDrawer.files) ? state.selectDrawer.files : [];
+    var term = String(state.selectDrawer.searchText || '').trim().toLowerCase();
+    if (term) {
+      list = list.filter(function(f) {
+        var name = f && f.file_name_clean ? String(f.file_name_clean) : (f && f.file_name ? String(f.file_name) : '');
+        return name.toLowerCase().indexOf(term) !== -1;
+      });
+      return list;
+    }
     if (state.selectDrawer.versionId) {
       list = list.filter(function(f) { return String(f && f.version_id || '') === String(state.selectDrawer.versionId || ''); });
     }
@@ -11520,6 +11533,8 @@
   function resetSelectDrawer() {
     state.selectDrawer.projectId = null;
     state.selectDrawer.versionId = null;
+    state.selectDrawer.searchText = '';
+    state.selectDrawer.searchPrevVersionId = null;
     state.selectDrawer.files = [];
     state.selectDrawer.execByFileId = {};
     state.selectDrawer.loading = false;
@@ -11532,9 +11547,10 @@
     if (dom.selectProjectSelect) dom.selectProjectSelect.value = '';
     if (dom.selectVersionSelect) {
       dom.selectVersionSelect.disabled = true;
-      dom.selectVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
+      dom.selectVersionSelect.innerHTML = '<option value=\"\">全部版本</option>';
       dom.selectVersionSelect.value = '';
     }
+    if (dom.selectSearchInput) dom.selectSearchInput.value = '';
     if (dom.selectListBody) {
       dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
     }
@@ -11550,6 +11566,8 @@
     var projectId = normalizeId(dom.selectProjectSelect ? dom.selectProjectSelect.value : '');
     state.selectDrawer.projectId = projectId;
     state.selectDrawer.versionId = null;
+    state.selectDrawer.searchText = '';
+    state.selectDrawer.searchPrevVersionId = null;
     persistSelectDrawerState({ projectId: projectId, versionId: '' });
     state.selectDrawer.files = [];
     state.selectDrawer.execByFileId = {};
@@ -11562,7 +11580,8 @@
     }
     if (!dom.selectVersionSelect) return;
     dom.selectVersionSelect.disabled = true;
-    dom.selectVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
+    dom.selectVersionSelect.innerHTML = '<option value=\"\">全部版本</option>';
+    if (dom.selectSearchInput) dom.selectSearchInput.value = '';
     if (!projectId) return;
     state.selectDrawer.loading = true;
     state.selectDrawer.loadSeq = Number(state.selectDrawer.loadSeq || 0) + 1;
@@ -11572,11 +11591,11 @@
 	    Promise.all([apiClient.listCaseFiles(projectId), loadVersions(projectId), apiClient.listExecSetsByCaseFile(projectId)])
 	      .then(function(res) {
 	        if (seq !== state.selectDrawer.loadSeq) return;
-	        var files = Array.isArray(res && res[0]) ? res[0] : [];
-	        var execSets = Array.isArray(res && res[2]) ? res[2] : [];
-	        state.selectDrawer.files = files;
-	        state.selectDrawer.execByFileId = buildExecMapByFileId(execSets);
-        syncVersionOptions(dom.selectVersionSelect, projectId, '请选择版本');
+        var files = Array.isArray(res && res[0]) ? res[0] : [];
+        var execSets = Array.isArray(res && res[2]) ? res[2] : [];
+        state.selectDrawer.files = files;
+        state.selectDrawer.execByFileId = buildExecMapByFileId(execSets);
+        syncVersionOptions(dom.selectVersionSelect, projectId, '全部版本');
         dom.selectVersionSelect.disabled = false;
         setStatus(dom.selectStatus, '已加载 ' + files.length + ' 份用例文件', files.length ? 'ok' : 'warn');
       })
@@ -11600,6 +11619,39 @@
     renderSelectDrawerList();
   }
 
+  function handleSelectSearchInput() {
+    state.selectDrawer.searchText = dom.selectSearchInput ? dom.selectSearchInput.value : '';
+    var term = String(state.selectDrawer.searchText || '').trim();
+    if (term) {
+      if (state.selectDrawer.searchPrevVersionId === null) {
+        state.selectDrawer.searchPrevVersionId = state.selectDrawer.versionId;
+      }
+      if (state.selectDrawer.versionId !== null && state.selectDrawer.versionId !== undefined) {
+        state.selectDrawer.versionId = null;
+      }
+      if (dom.selectVersionSelect) dom.selectVersionSelect.value = '';
+    } else {
+      if (state.selectDrawer.searchPrevVersionId !== null && state.selectDrawer.searchPrevVersionId !== undefined) {
+        var pid = state.selectDrawer.projectId;
+        var prev = state.selectDrawer.searchPrevVersionId;
+        var ok = pid && (state.versionsByProject[pid] || []).some(function(v) {
+          return v && String(v.id) === String(prev);
+        });
+        if (ok) {
+          state.selectDrawer.versionId = prev;
+          if (dom.selectVersionSelect) dom.selectVersionSelect.value = String(prev);
+        } else {
+          state.selectDrawer.versionId = null;
+          if (dom.selectVersionSelect) dom.selectVersionSelect.value = '';
+        }
+      }
+      state.selectDrawer.searchPrevVersionId = null;
+    }
+    state.selectDrawer.pageIndex = 0;
+    renderSelectDrawerList();
+    syncSelectDrawerControls();
+  }
+
   function renderSelectDrawerList() {
     if (!dom.selectListBody) return;
     if (!state.selectDrawer.projectId) {
@@ -11619,7 +11671,9 @@
     var total = result.total;
     var page = result.page;
     if (!total) {
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">暂无用例文件</p></td></tr>';
+      var term = String(state.selectDrawer.searchText || '').trim();
+      var hint = term ? '未找到匹配的用例文件' : '暂无用例文件';
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">' + escapeHtml(hint) + '</p></td></tr>';
       setDrawerPagination(dom.selectPaginationTop, dom.selectPaginationBottom, '');
       syncSelectDrawerControls();
       return;
@@ -13210,6 +13264,7 @@
     var versionId = normalizeId(dom.selectVersionSelect ? dom.selectVersionSelect.value : '');
     state.selectDrawer.projectId = projectId;
     state.selectDrawer.versionId = versionId;
+    state.selectDrawer.searchText = dom.selectSearchInput ? dom.selectSearchInput.value : '';
     persistSelectDrawerState({ projectId: projectId, versionId: versionId || '' });
     state.selectDrawer.files = [];
     state.selectDrawer.execByFileId = {};
@@ -14151,6 +14206,9 @@
     }
     if (dom.selectVersionSelect) {
       dom.selectVersionSelect.addEventListener('change', handleSelectVersionChange);
+    }
+    if (dom.selectSearchInput) {
+      dom.selectSearchInput.addEventListener('input', handleSelectSearchInput);
     }
     if (dom.selectConfirmBtn) {
       dom.selectConfirmBtn.addEventListener('click', loadSelectDrawerFiles);
