@@ -19,6 +19,19 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：易漏模块填写完成状态提示
+- 功能描述：易漏用例模块列表根据模块内全部用例填写情况（类型已选且各字段不为空）标记完成状态，新增模块无用例时不标记。
+- 操作方式：用例库 → 易漏用例 → 模块列表；当模块内所有用例类型/字段均填写完毕时模块名称高亮显示。
+- 使用效果：模块列表可直观识别哪些模块已完成填写；空模块不会误标。
+- 新增内容/接口/组件：
+  - 前端：完成状态判断与模块列表高亮（`scripts/modules/caseLibrary.js`、`style.css`）。
+  - 测试：新增模块完成状态 UI 用例（`tests/ui/case_library_missing_modules.spec.js`）。
+- 复用说明：复用现有易漏模块/条目接口与列表渲染，无新增后端接口或组件。
+- 测试与验证：
+  - `node --check scripts/modules/caseLibrary.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/case_library_missing_modules.spec.js -g "模块列表显示填写完成标记"`（通过）
+- 更新记录：2026-01-14 易漏模块填写完成状态提示（`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/case_library_missing_modules.spec.js`）。
+
 - 功能名称：易漏用例类型多选与提醒匹配兼容
 - 功能描述：易漏用例查看视图的类型字段支持最多 3 个类型选择，新增/删除/重复选择提示；执行页与用例库提醒区按任一类型命中即可。
 - 操作方式：用例库 → 易漏用例 → 查看模块 → 类型列点击“新增”增加选择框，点击“×”删除；重复选择与仅剩 1 个类型会提示；执行页/用例库提醒区自动按任一类型命中。

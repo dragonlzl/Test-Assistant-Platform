@@ -482,6 +482,9 @@
       processing: false,
       selection: new Set(),
       pageIndex: 0,
+      moduleCompletion: {},
+      moduleCompletionLoading: {},
+      moduleCompletionSeq: 0,
     },
 
     missingType: {
@@ -11537,6 +11540,9 @@
     state.missingDrawer.processing = false;
     state.missingDrawer.selection = new Set();
     state.missingDrawer.pageIndex = 0;
+    state.missingDrawer.moduleCompletion = {};
+    state.missingDrawer.moduleCompletionLoading = {};
+    state.missingDrawer.moduleCompletionSeq = (state.missingDrawer.moduleCompletionSeq || 0) + 1;
     state.missingType.projectId = null;
     state.missingType.types = [];
     state.missingType.loading = false;
@@ -11627,6 +11633,9 @@
     }
     state.missingDrawer.processing = false;
     state.missingDrawer.loading = true;
+    state.missingDrawer.moduleCompletion = {};
+    state.missingDrawer.moduleCompletionLoading = {};
+    state.missingDrawer.moduleCompletionSeq = (state.missingDrawer.moduleCompletionSeq || 0) + 1;
     setStatus(dom.missingDrawerStatus, '加载易漏模块...', '');
     renderMissingDrawerList();
     return apiClient
@@ -11674,6 +11683,9 @@
     state.missingDrawer.selection = new Set();
     state.missingDrawer.pageIndex = 0;
     state.missingDrawer.processing = false;
+    state.missingDrawer.moduleCompletion = {};
+    state.missingDrawer.moduleCompletionLoading = {};
+    state.missingDrawer.moduleCompletionSeq = (state.missingDrawer.moduleCompletionSeq || 0) + 1;
     state.missingType.projectId = projectId;
     state.missingType.types = [];
     state.missingType.loading = false;
@@ -11799,6 +11811,12 @@
       if (!m || !m.id) return true;
       return !idMap[String(m.id)];
     });
+    if (state.missingDrawer.moduleCompletion && typeof state.missingDrawer.moduleCompletion === 'object') {
+      idList.forEach(function(id) { delete state.missingDrawer.moduleCompletion[id]; });
+    }
+    if (state.missingDrawer.moduleCompletionLoading && typeof state.missingDrawer.moduleCompletionLoading === 'object') {
+      idList.forEach(function(id) { delete state.missingDrawer.moduleCompletionLoading[id]; });
+    }
     state.missingDrawer.selection = state.missingDrawer.selection instanceof Set ? state.missingDrawer.selection : new Set();
     idList.forEach(function(id) { state.missingDrawer.selection.delete(String(id)); });
     if (state.missingDrawer.moduleId && idMap[String(state.missingDrawer.moduleId)]) {
@@ -12305,6 +12323,87 @@
     });
   }
 
+  function isMissingItemTypeComplete(item) {
+    if (!item || typeof item !== 'object') return false;
+    var slots = Array.isArray(item.type_ids) ? item.type_ids.slice() : [];
+    if (!slots.length && item.type_id !== null && item.type_id !== undefined && item.type_id !== '') {
+      slots = [item.type_id];
+    }
+    if (!slots.length) return false;
+    for (var i = 0; i < slots.length; i += 1) {
+      if (!normalizeMissingTypeId(slots[i])) return false;
+    }
+    return true;
+  }
+
+  function isMissingItemFieldsComplete(item) {
+    if (!item || typeof item !== 'object') return false;
+    var fields = ['title', 'priority', 'precondition', 'steps', 'expected'];
+    for (var i = 0; i < fields.length; i += 1) {
+      var key = fields[i];
+      var value = normalizeEditorText(item[key] || '');
+      if (!value) return false;
+    }
+    return true;
+  }
+
+  function isMissingModuleComplete(items) {
+    if (!Array.isArray(items) || !items.length) return false;
+    for (var i = 0; i < items.length; i += 1) {
+      var item = items[i];
+      if (!isMissingItemTypeComplete(item) || !isMissingItemFieldsComplete(item)) return false;
+    }
+    return true;
+  }
+
+  function syncMissingDrawerModuleCompletion(modules) {
+    if (!apiClient || typeof apiClient.listMissingModuleItems !== 'function') return;
+    var drawer = state.missingDrawer;
+    if (!drawer || typeof drawer !== 'object') return;
+    drawer.moduleCompletion = drawer.moduleCompletion && typeof drawer.moduleCompletion === 'object'
+      ? drawer.moduleCompletion
+      : {};
+    drawer.moduleCompletionLoading = drawer.moduleCompletionLoading && typeof drawer.moduleCompletionLoading === 'object'
+      ? drawer.moduleCompletionLoading
+      : {};
+    var completionMap = drawer.moduleCompletion;
+    var loadingMap = drawer.moduleCompletionLoading;
+    var seq = drawer.moduleCompletionSeq || 0;
+    var toLoad = [];
+    (modules || []).forEach(function(m) {
+      var idStr = m && m.id ? String(m.id) : '';
+      if (!idStr) return;
+      var count = Number(m && m.item_count);
+      var hasCount = Number.isFinite(count);
+      if (hasCount && count <= 0) {
+        completionMap[idStr] = false;
+        return;
+      }
+      if (Object.prototype.hasOwnProperty.call(completionMap, idStr)) return;
+      if (loadingMap[idStr]) return;
+      toLoad.push(idStr);
+    });
+    if (!toLoad.length) return;
+    toLoad.forEach(function(id) { loadingMap[id] = true; });
+    Promise.all(toLoad.map(function(id) {
+      return apiClient.listMissingModuleItems(id).then(function(items) {
+        if (drawer.moduleCompletionSeq !== seq) return null;
+        completionMap[id] = isMissingModuleComplete(items);
+        return null;
+      }).catch(function() {
+        if (drawer.moduleCompletionSeq !== seq) return null;
+        completionMap[id] = false;
+        return null;
+      }).finally(function() {
+        if (drawer.moduleCompletionSeq !== seq) return;
+        delete loadingMap[id];
+      });
+    })).then(function() {
+      if (drawer.moduleCompletionSeq !== seq) return;
+      renderMissingDrawerList();
+    });
+  }
+
   function renderMissingDrawerList() {
     if (!dom.missingDrawerListBody) return;
     if (!state.missingDrawer.projectId) {
@@ -12331,15 +12430,20 @@
       return;
     }
     state.missingDrawer.selection = state.missingDrawer.selection instanceof Set ? state.missingDrawer.selection : new Set();
+    var completionMap = state.missingDrawer.moduleCompletion && typeof state.missingDrawer.moduleCompletion === 'object'
+      ? state.missingDrawer.moduleCompletion
+      : {};
     dom.missingDrawerListBody.innerHTML = list.map(function(m) {
       var idStr = m && m.id ? String(m.id) : '';
       var name = m && m.name ? String(m.name) : ('模块#' + (m && m.id ? m.id : ''));
+      var isComplete = idStr && completionMap[idStr] === true;
+      var moduleClass = 'module' + (isComplete ? ' case-library-missing-module-complete' : '');
       var checked = idStr && state.missingDrawer.selection.has(idStr) ? ' checked' : '';
       return (
         '<tr>' +
           '<td class=\"check\"><input type=\"checkbox\" data-case-lib-missing-select=\"' + escapeHtml(idStr) + '\"' + checked + '/></td>' +
           '<td>' + escapeHtml(idStr || '--') + '</td>' +
-          '<td class=\"module\">' + escapeHtml(name) + '</td>' +
+          '<td class=\"' + moduleClass + '\">' + escapeHtml(name) + '</td>' +
           '<td class=\"ops\"><div class=\"actions\">' +
             '<button class=\"primary\" type=\"button\" data-case-lib-missing-view=\"' + escapeHtml(idStr) + '\">查看</button>' +
             '<button class=\"secondary\" type=\"button\" data-case-lib-missing-edit=\"' + escapeHtml(idStr) + '\">编辑</button>' +
@@ -12360,6 +12464,7 @@
     });
     setStatus(dom.missingDrawerStatus, '已加载 ' + total + ' 个模块，' + totalItems + ' 条易漏用例。', total ? 'ok' : 'warn');
     syncMissingDrawerControls();
+    syncMissingDrawerModuleCompletion(list);
   }
 
   function handleMissingDrawerPaginationAction(action) {

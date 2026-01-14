@@ -287,6 +287,132 @@ test.describe('用例库易漏模块抽屉', () => {
     await expect(page.locator('#caseLibraryMissingModules')).toContainText('工程师1技能-更新');
   });
 
+  test('模块列表显示填写完成标记', async ({ page }) => {
+    const token = 'token-case-library-missing-complete';
+    const user = { id: 10, username: 'demo_admin', role: 'admin', level: 'leader' };
+    const project = { id: 2, name: '易漏项目-完成', description: 'for missing module completion' };
+    const types = [{ id: 1, project_id: project.id, name: '功能', item_count: 2 }];
+    const modules = [
+      { id: 201, project_id: project.id, name: '模块A', item_count: 2 },
+      { id: 202, project_id: project.id, name: '模块B', item_count: 0 },
+      { id: 203, project_id: project.id, name: '模块C', item_count: 1 },
+    ];
+    const itemsByModule = {
+      201: [
+        {
+          id: 9001,
+          module_id: 201,
+          module_name: '模块A',
+          title: '易漏条目A1',
+          priority: 'P1',
+          precondition: '前置A1',
+          steps: '步骤A1',
+          expected: '期望A1',
+          remark: '',
+          type_id: 1,
+          type_name: '功能',
+          type_ids: [1],
+          type_names: ['功能'],
+        },
+        {
+          id: 9002,
+          module_id: 201,
+          module_name: '模块A',
+          title: '易漏条目A2',
+          priority: 'P2',
+          precondition: '前置A2',
+          steps: '步骤A2',
+          expected: '期望A2',
+          remark: '',
+          type_id: 1,
+          type_name: '功能',
+          type_ids: [1],
+          type_names: ['功能'],
+        },
+      ],
+      203: [
+        {
+          id: 9003,
+          module_id: 203,
+          module_name: '模块C',
+          title: '易漏条目C1',
+          priority: '',
+          precondition: '前置C1',
+          steps: '步骤C1',
+          expected: '期望C1',
+          remark: '',
+          type_id: null,
+          type_name: null,
+          type_ids: [],
+          type_names: [],
+        },
+      ],
+    };
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/missing-types' && method === 'GET') {
+        return respond(200, types.slice());
+      }
+      if (pathName === '/api/missing-modules' && method === 'GET') {
+        return respond(200, modules.slice());
+      }
+      if (pathName.startsWith('/api/missing-modules/') && pathName.endsWith('/items') && method === 'GET') {
+        const parts = pathName.split('/');
+        const moduleId = Number(parts[parts.length - 2]);
+        return respond(200, itemsByModule[moduleId] || []);
+      }
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page);
+
+    await openDrawer(page, '#openCaseLibraryMissingDrawerBtn', '#caseLibraryMissingDrawer');
+    await page.locator('#caseLibraryMissingProjectSelect').selectOption(String(project.id));
+
+    await expect(page.locator('#caseLibraryMissingListBody tr')).toHaveCount(3);
+    const moduleA = page.locator('#caseLibraryMissingListBody td.module', { hasText: '模块A' });
+    const moduleB = page.locator('#caseLibraryMissingListBody td.module', { hasText: '模块B' });
+    const moduleC = page.locator('#caseLibraryMissingListBody td.module', { hasText: '模块C' });
+
+    await expect(moduleA).toHaveClass(/case-library-missing-module-complete/);
+    await expect(moduleB).not.toHaveClass(/case-library-missing-module-complete/);
+    await expect(moduleC).not.toHaveClass(/case-library-missing-module-complete/);
+  });
+
   test('易漏用例优先级输入自动大写', async ({ page }) => {
     const token = 'token-case-library-missing-priority';
     const user = { id: 11, username: 'priority_admin', role: 'admin', level: 'leader' };
