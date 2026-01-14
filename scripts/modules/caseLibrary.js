@@ -3746,6 +3746,30 @@
     return Boolean(user && user.role === 'admin');
   }
 
+  function getCurrentUser() {
+    var globalState = window.app && window.app.state ? window.app.state : null;
+    return globalState && globalState.currentUser ? globalState.currentUser : null;
+  }
+
+  function normalizeUserLevel(level) {
+    if (!level && level !== 0) return '';
+    var lower = String(level).toLowerCase();
+    if (lower === '组长') return 'leader';
+    if (lower === '组员') return 'member';
+    return lower;
+  }
+
+  function isLeaderUser(user) {
+    var level = user && user.level ? user.level : '';
+    return normalizeUserLevel(level) === 'leader';
+  }
+
+  function canDeleteMissingModules() {
+    var user = getCurrentUser();
+    if (user && String(user.role || '') === 'admin') return true;
+    return isLeaderUser(user);
+  }
+
   function getTempExecApi() {
     return window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
   }
@@ -12257,6 +12281,10 @@
 
   function deleteSelectedMissingModules(anchorEl) {
     if (state.missingDrawer.processing) return;
+    if (!canDeleteMissingModules()) {
+      showCenterToast('权限不足，请联系管理员或者组长进行操作。', 'warn', 3000);
+      return;
+    }
     if (!apiClient || typeof apiClient.deleteMissingModule !== 'function') {
       setStatus(dom.missingDrawerStatus, '易漏模块接口未就绪', 'err');
       return;
