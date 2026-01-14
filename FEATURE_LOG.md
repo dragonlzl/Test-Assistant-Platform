@@ -19,6 +19,19 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：易漏项目选择持久化
+- 功能描述：易漏模块抽屉的项目选择支持持久化，刷新后仍保留上次选择。
+- 操作方式：用例库 → 易漏用例 → 选择项目；刷新页面后再次打开易漏抽屉自动恢复项目选择。
+- 使用效果：减少重复选择项目操作，快速进入上次项目。
+- 新增内容/接口/组件：
+  - 前端：易漏项目选择持久化读取与恢复（`scripts/modules/caseLibrary.js`）。
+  - 测试：新增易漏项目持久化 UI 用例（`tests/ui/case_library_missing_modules.spec.js`）。
+- 复用说明：复用现有 localStorage 持久化模式，无新增接口。
+- 测试与验证：
+  - `node --check scripts/modules/caseLibrary.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/case_library_missing_modules.spec.js -g "易漏项目选择可持久化"`（通过）
+- 更新记录：2026-01-14 易漏项目选择持久化（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_modules.spec.js`）。
+
 - 功能名称：易漏用例视图列表紧凑化与删除权限限制
 - 功能描述：易漏用例视图列表行高缩短为列表式样式；易漏模块删除仅管理员或组长可执行，非组长提示权限不足。
 - 操作方式：用例库 → 易漏用例 → 查看模块列表与视图；非管理员点击“删除模块”时会提示权限不足。

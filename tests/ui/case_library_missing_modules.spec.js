@@ -478,6 +478,76 @@ test.describe('用例库易漏模块抽屉', () => {
     await expect(page.locator('#appConfirmDrawer')).not.toHaveClass(/open/);
   });
 
+  test('易漏项目选择可持久化', async ({ page }) => {
+    const token = 'token-case-library-missing-project';
+    const user = { id: 12, username: 'demo_persist', role: 'admin', level: 'leader' };
+    const projects = [
+      { id: 10, name: '易漏项目A', description: 'for missing persist a' },
+      { id: 11, name: '易漏项目B', description: 'for missing persist b' },
+    ];
+    const modulesByProject = {
+      10: [{ id: 401, project_id: 10, name: '模块A1', item_count: 0 }],
+      11: [{ id: 402, project_id: 11, name: '模块B1', item_count: 0 }],
+    };
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, projects);
+      if (pathName.startsWith('/api/projects/') && pathName.endsWith('/versions') && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/missing-types' && method === 'GET') {
+        return respond(200, []);
+      }
+      if (pathName === '/api/missing-modules' && method === 'GET') {
+        const projectId = Number(url.searchParams.get('project_id'));
+        return respond(200, modulesByProject[projectId] || []);
+      }
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page);
+
+    await openDrawer(page, '#openCaseLibraryMissingDrawerBtn', '#caseLibraryMissingDrawer');
+    await page.locator('#caseLibraryMissingProjectSelect').selectOption(String(projects[1].id));
+    await expect(page.locator('#caseLibraryMissingListBody')).toContainText('模块B1');
+
+    await page.reload();
+    await waitCaseLibraryReady(page);
+    await openDrawer(page, '#openCaseLibraryMissingDrawerBtn', '#caseLibraryMissingDrawer');
+    await expect(page.locator('#caseLibraryMissingProjectSelect')).toHaveValue(String(projects[1].id));
+    await expect(page.locator('#caseLibraryMissingListBody')).toContainText('模块B1');
+  });
+
   test('易漏用例优先级输入自动大写', async ({ page }) => {
     const token = 'token-case-library-missing-priority';
     const user = { id: 11, username: 'priority_admin', role: 'admin', level: 'leader' };

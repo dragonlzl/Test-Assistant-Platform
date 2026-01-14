@@ -3325,6 +3325,7 @@
   var historyDetailPersistKey = 'tap-case-library-history-detail';
   var caseLibraryLastViewPersistKey = 'tap-case-library-last-view';
   var missingViewPersistKey = 'tap-case-library-missing-view';
+  var missingDrawerPersistKey = 'tap-case-library-missing-drawer';
 
   function readHistoryDetailPersistedState() {
     if (typeof localStorage === 'undefined') return null;
@@ -3412,6 +3413,36 @@
     writeMissingViewPersistedState(null);
   }
 
+  function readMissingDrawerPersistedState() {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      var raw = localStorage.getItem(missingDrawerPersistKey);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function writeMissingDrawerPersistedState(payload) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      if (!payload) {
+        localStorage.removeItem(missingDrawerPersistKey);
+        return;
+      }
+      localStorage.setItem(missingDrawerPersistKey, JSON.stringify(payload));
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function clearMissingDrawerPersistedState() {
+    writeMissingDrawerPersistedState(null);
+  }
+
   function persistCaseLibraryLastView(viewName) {
     var view = String(viewName || '').trim();
     if (view !== 'editor' && view !== 'history' && view !== 'missing') return;
@@ -3463,6 +3494,23 @@
       login_seq: loginSeq || '',
       project_id: projectId || '',
       module_ids: moduleIds,
+      saved_at: Date.now(),
+    });
+  }
+
+  function persistMissingDrawerProject(projectId) {
+    var userId = getCurrentUserId();
+    var loginSeq = getCurrentLoginSeq();
+    if (!userId && !loginSeq) return;
+    var pid = normalizeId(projectId);
+    if (!pid) {
+      clearMissingDrawerPersistedState();
+      return;
+    }
+    writeMissingDrawerPersistedState({
+      user_id: userId || '',
+      login_seq: loginSeq || '',
+      project_id: pid || '',
       saved_at: Date.now(),
     });
   }
@@ -11567,6 +11615,8 @@
     state.missingDrawer.moduleCompletion = {};
     state.missingDrawer.moduleCompletionLoading = {};
     state.missingDrawer.moduleCompletionSeq = (state.missingDrawer.moduleCompletionSeq || 0) + 1;
+    state.missingDrawer.projectId = null;
+    state.missingImport.projectId = null;
     state.missingType.projectId = null;
     state.missingType.types = [];
     state.missingType.loading = false;
@@ -11606,6 +11656,26 @@
     syncProjectOptions(dom.missingDrawerProjectSelect, '请选择项目');
     syncProjectOptions(dom.missingImportProjectSelect, '请选择项目');
     var projectId = state.missingDrawer.projectId || state.missingImport.projectId || null;
+    if (!projectId) {
+      var persisted = readMissingDrawerPersistedState();
+      if (persisted) {
+        var userId = getCurrentUserId();
+        var loginSeq = getCurrentLoginSeq();
+        var okByUser = userId && String(persisted.user_id || '') === String(userId);
+        var okByLogin = loginSeq && String(persisted.login_seq || '') === String(loginSeq);
+        if (okByUser || okByLogin) {
+          var persistedProjectId = normalizeId(persisted.project_id);
+          if (persistedProjectId) {
+            var projectsLoaded = Boolean(state.projects && state.projects.length);
+            if (!projectsLoaded || (state.projects || []).some(function(p) { return p && String(p.id) === String(persistedProjectId); })) {
+              projectId = persistedProjectId;
+            } else {
+              clearMissingDrawerPersistedState();
+            }
+          }
+        }
+      }
+    }
     state.missingDrawer.projectId = projectId;
     state.missingImport.projectId = projectId;
     if (projectId && dom.missingDrawerProjectSelect) {
@@ -11700,6 +11770,7 @@
 
   function handleMissingProjectChange() {
     var projectId = normalizeId(dom.missingDrawerProjectSelect ? dom.missingDrawerProjectSelect.value : '');
+    persistMissingDrawerProject(projectId);
     state.missingDrawer.projectId = projectId;
     state.missingImport.projectId = projectId;
     state.missingDrawer.moduleId = null;
