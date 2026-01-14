@@ -3642,6 +3642,7 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/exec_overview.spec.js`
   - `API_BASE_URL=http://127.0.0.1:8091 npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_overview.spec.js`
 - 更新记录：2026-01-09 执行总览懒加载与布局接口拆分（`backend/routers/exec_routes.py`、`backend/schemas.py`、`services/apiClient.js`、`scripts/modules/execOverview.js`、`tests/ui/exec_overview.spec.js`、`tests/api/exec_overview.spec.js`）。
+- 更新记录：2026-01-14 修复执行总览 layout 未传版本时 include_sets=0 报错（`backend/routers/exec_routes.py`、`tests/api/exec_overview.spec.js`、`tests/ui/exec_overview.spec.js`）。
 
 - 功能名称：导航栏智能收起排除执行总览
 - 功能描述：启用“导航栏智能收起”时，不再对执行总览页顶部导航自动收起，避免滚动时影响执行总览操作。

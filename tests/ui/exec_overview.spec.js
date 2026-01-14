@@ -28,6 +28,7 @@ test.describe('执行总览页（DB 接口接入）', () => {
     };
     const now = Date.now();
     const iso = (ms) => new Date(ms).toISOString();
+    const layoutCalls = [];
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -98,6 +99,8 @@ test.describe('执行总览页（DB 接口接入）', () => {
       if (path === '/api/exec/overview/layout' && method === 'GET') {
         const projectId = url.searchParams.get('project_id');
         const versionId = url.searchParams.get('version_id');
+        const includeSets = url.searchParams.get('include_sets');
+        layoutCalls.push({ projectId: projectId, versionId: versionId, includeSets: includeSets });
         const v1Stats = { version_id: 11, total: 9, pending: 5, passed: 3, failed: 1, blocked: 0, not_applicable: 0 };
         const v2Stats = { version_id: 12, total: 2, pending: 1, passed: 1, failed: 0, blocked: 0, not_applicable: 0 };
         const baseUser = {
@@ -339,6 +342,14 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await page.click('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]');
     await expect(page.locator('#execOverviewExecSetDrawer')).toHaveClass(/open/);
     await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('正常登录');
+
+    const hasLayoutLiteNoVersion = layoutCalls.some(function(call) {
+      if (!call) return false;
+      if (call.includeSets !== '0') return false;
+      if (call.versionId !== null && call.versionId !== '' && call.versionId !== undefined) return false;
+      return true;
+    });
+    expect(hasLayoutLiteNoVersion).toBe(true);
   });
 
   test('执行总览版本筛选选择可持久化（按项目）', async ({ page }) => {

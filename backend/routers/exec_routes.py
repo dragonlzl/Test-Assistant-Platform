@@ -3102,24 +3102,25 @@ def get_execution_overview_layout(
         )
         .distinct()
     )
+    source_is_int = and_(
+        models.ExecSet.source.isnot(None),
+        models.ExecSet.source != "",
+        models.ExecSet.source.op("GLOB")("[0-9]*"),
+    )
+    source_case_file_id = case(
+        (source_is_int, cast(models.ExecSet.source, Integer)),
+        else_=None,
+    )
+    effective_case_file_id = func.coalesce(models.ExecSet.case_file_id, source_case_file_id)
+    query_case_file_join = and_(
+        models.CaseFile.id == effective_case_file_id,
+        models.CaseFile.project_id == models.ExecSet.project_id,
+    )
+    effective_version_expr = func.coalesce(models.ExecSet.version_id, models.CaseFile.version_id)
+    effective_version_id = effective_version_expr.label("version_id")
     if version_id is not None:
-        source_is_int = and_(
-            models.ExecSet.source.isnot(None),
-            models.ExecSet.source != "",
-            models.ExecSet.source.op("GLOB")("[0-9]*"),
-        )
-        source_case_file_id = case(
-            (source_is_int, cast(models.ExecSet.source, Integer)),
-            else_=None,
-        )
-        effective_case_file_id = func.coalesce(models.ExecSet.case_file_id, source_case_file_id)
-        query_case_file_join = and_(
-            models.CaseFile.id == effective_case_file_id,
-            models.CaseFile.project_id == models.ExecSet.project_id,
-        )
-        effective_version_id = func.coalesce(models.ExecSet.version_id, models.CaseFile.version_id)
         admin_ids_query = admin_ids_query.outerjoin(models.CaseFile, query_case_file_join).filter(
-            effective_version_id == version_id
+            effective_version_expr == version_id
         )
     admin_ids = [int(uid) for uid, in admin_ids_query.all() if uid is not None]
 
@@ -3151,7 +3152,6 @@ def get_execution_overview_layout(
             models.ExecSet.created_by.label("user_id"),
             models.ExecSet.created_at.label("created_at"),
             models.ExecSet.updated_at.label("updated_at"),
-            effective_version_id,
             func.count(models.ExecCase.id).label("total"),
             func.sum(
                 case(
@@ -3178,21 +3178,6 @@ def get_execution_overview_layout(
         .filter(models.ExecSet.project_id == project_id, models.ExecSet.created_by.in_(member_ids))
     )
 
-    source_is_int = and_(
-        models.ExecSet.source.isnot(None),
-        models.ExecSet.source != "",
-        models.ExecSet.source.op("GLOB")("[0-9]*"),
-    )
-    source_case_file_id = case(
-        (source_is_int, cast(models.ExecSet.source, Integer)),
-        else_=None,
-    )
-    effective_case_file_id = func.coalesce(models.ExecSet.case_file_id, source_case_file_id)
-    query_case_file_join = and_(
-        models.CaseFile.id == effective_case_file_id,
-        models.CaseFile.project_id == models.ExecSet.project_id,
-    )
-    effective_version_id = func.coalesce(models.ExecSet.version_id, models.CaseFile.version_id).label("version_id")
     query = query.outerjoin(models.CaseFile, query_case_file_join).add_columns(effective_version_id)
 
     if version_id is not None:
@@ -3226,22 +3211,6 @@ def get_execution_overview_layout(
         if isinstance(value_json, dict) and isinstance(value_json.get("placement"), dict):
             placement = value_json.get("placement")
         placement_by_user[int(owner_id)] = placement
-
-    source_is_int = and_(
-        models.ExecSet.source.isnot(None),
-        models.ExecSet.source != "",
-        models.ExecSet.source.op("GLOB")("[0-9]*"),
-    )
-    source_case_file_id = case(
-        (source_is_int, cast(models.ExecSet.source, Integer)),
-        else_=None,
-    )
-    effective_case_file_id = func.coalesce(models.ExecSet.case_file_id, source_case_file_id)
-    query_case_file_join = and_(
-        models.CaseFile.id == effective_case_file_id,
-        models.CaseFile.project_id == models.ExecSet.project_id,
-    )
-    effective_version_id = func.coalesce(models.ExecSet.version_id, models.CaseFile.version_id).label("version_id")
 
     if not include_sets:
         summary_query = (

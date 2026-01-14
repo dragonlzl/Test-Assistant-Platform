@@ -146,6 +146,21 @@ test.describe('exec overview api', () => {
     expect(Array.isArray(layoutLiteUser.version_stats)).toBeTruthy();
     expect(layoutLiteUser.version_stats.length).toBeGreaterThanOrEqual(1);
 
+    const layoutAllLiteRes = await ctx.get(
+      `${apiBase}/api/exec/overview/layout?project_id=${projectId}&include_sets=0`,
+      { headers }
+    );
+    expect(layoutAllLiteRes.status()).toBe(200);
+    const layoutAllLite = await layoutAllLiteRes.json();
+    expect(Array.isArray(layoutAllLite)).toBeTruthy();
+    const layoutAllLiteUser = layoutAllLite.find((u) => u && u.user_id === auth.user.id);
+    expect(layoutAllLiteUser).toBeTruthy();
+    expect(Array.isArray(layoutAllLiteUser.exec_sets)).toBeTruthy();
+    expect(layoutAllLiteUser.exec_sets.length).toBe(0);
+    expect(Array.isArray(layoutAllLiteUser.version_stats)).toBeTruthy();
+    expect(layoutAllLiteUser.version_stats.length).toBeGreaterThanOrEqual(1);
+    expect(layoutAllLiteUser.version_stats.some((s) => s && s.version_id === versionId)).toBeTruthy();
+
     const layoutSetsRes = await ctx.get(
       `${apiBase}/api/exec/overview/layout/exec-sets?project_id=${projectId}&user_id=${auth.user.id}&version_id=${versionId}`,
       { headers }
