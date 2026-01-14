@@ -239,6 +239,7 @@ class MissingCaseItemPayload(BaseModel):
     expected: Optional[str] = None
     remark: Optional[str] = None
     type_id: Optional[int] = None
+    type_ids: Optional[List[int]] = None
 
 
 class MissingCaseItemPatch(BaseModel):
@@ -249,6 +250,7 @@ class MissingCaseItemPatch(BaseModel):
     expected: Optional[str] = None
     remark: Optional[str] = None
     type_id: Optional[int] = None
+    type_ids: Optional[List[int]] = None
 
 
 class MissingCaseItemOut(BaseModel):
@@ -257,6 +259,8 @@ class MissingCaseItemOut(BaseModel):
     module_name: Optional[str] = None
     type_id: Optional[int] = None
     type_name: Optional[str] = None
+    type_ids: Optional[List[int]] = None
+    type_names: Optional[List[str]] = None
     title: str
     priority: Optional[str] = None
     precondition: str

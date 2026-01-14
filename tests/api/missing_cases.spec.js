@@ -92,7 +92,14 @@ test.describe('missing cases api', () => {
 
     const createItem = await ctx.post(`${apiBase}/api/missing-modules/${module.id}/items`, {
       headers,
-      data: { title: '易漏用例1', priority: 'P1', precondition: '无', steps: '步骤1', expected: '应提示', type_id: typeA.id },
+      data: {
+        title: '易漏用例1',
+        priority: 'P1',
+        precondition: '无',
+        steps: '步骤1',
+        expected: '应提示',
+        type_ids: [typeA.id, typeB.id],
+      },
     });
     expect(createItem.status()).toBe(201);
     const item = await createItem.json();
@@ -101,7 +108,9 @@ test.describe('missing cases api', () => {
     expect(item.title).toBe('易漏用例1');
     expect(item.priority).toBe('P1');
     expect(String(item.type_id)).toBe(String(typeA.id));
-    expect(item.type_name).toBe('类型A');
+    expect(Array.isArray(item.type_ids)).toBe(true);
+    expect(item.type_ids).toEqual([typeA.id, typeB.id]);
+    expect(item.type_names).toEqual(['类型A', '类型B']);
 
     const renameDup = await ctx.patch(`${apiBase}/api/missing-modules/${module.id}`, {
       headers,
@@ -123,6 +132,7 @@ test.describe('missing cases api', () => {
     expect(Array.isArray(items)).toBe(true);
     expect(items.length).toBe(1);
     expect(String(items[0].type_id)).toBe(String(typeA.id));
+    expect(items[0].type_ids).toEqual([typeA.id, typeB.id]);
 
     const inUseDelete = await ctx.delete(`${apiBase}/api/missing-types/${typeA.id}`, { headers });
     expect(inUseDelete.status()).toBe(409);
@@ -138,6 +148,7 @@ test.describe('missing cases api', () => {
     const itemsAfter = await listAfterTransfer.json();
     expect(itemsAfter.length).toBe(1);
     expect(String(itemsAfter[0].type_id)).toBe(String(typeB.id));
+    expect(itemsAfter[0].type_ids).toEqual([typeB.id]);
 
     const typeFilterModules = await ctx.get(`${apiBase}/api/missing-modules?project_id=${projectId}&type_ids=${typeB.id}`, { headers });
     expect(typeFilterModules.status()).toBe(200);
@@ -146,12 +157,13 @@ test.describe('missing cases api', () => {
 
     const updateItem = await ctx.patch(`${apiBase}/api/missing-modules/items/${item.id}`, {
       headers,
-      data: { title: '易漏用例1-更新', expected: '应弹窗' },
+      data: { title: '易漏用例1-更新', expected: '应弹窗', type_ids: [typeB.id] },
     });
     expect(updateItem.status()).toBe(200);
     const updated = await updateItem.json();
     expect(updated.expected).toBe('应弹窗');
     expect(updated.title).toBe('易漏用例1-更新');
+    expect(updated.type_ids).toEqual([typeB.id]);
 
     const deleteItem = await ctx.delete(`${apiBase}/api/missing-modules/items/${item.id}`, { headers });
     expect(deleteItem.status()).toBe(200);

@@ -4198,6 +4198,86 @@
     return n;
   }
 
+  function normalizeMissingTypeIds(values) {
+    if (!Array.isArray(values)) {
+      values = values === null || values === undefined ? [] : [values];
+    }
+    var result = [];
+    var seen = {};
+    values.forEach(function(raw) {
+      var val = normalizeMissingTypeId(raw);
+      if (!val) return;
+      var key = String(val);
+      if (seen[key]) return;
+      seen[key] = true;
+      result.push(val);
+    });
+    return result;
+  }
+
+  function ensureMissingItemTypeSlots(item) {
+    if (!item || typeof item !== 'object') return [''];
+    var raw = Array.isArray(item.type_ids) ? item.type_ids : [];
+    if (!raw.length && item.type_id !== null && item.type_id !== undefined && item.type_id !== '') {
+      raw = [item.type_id];
+    }
+    var slots = [];
+    raw.forEach(function(val) {
+      if (val === null || val === undefined) return;
+      slots.push(String(val));
+    });
+    if (!slots.length) slots.push('');
+    if (slots.length > 3) slots = slots.slice(0, 3);
+    item.type_ids = slots;
+    return slots;
+  }
+
+  function collectMissingItemTypeIds(item) {
+    var slots = ensureMissingItemTypeSlots(item);
+    var ids = normalizeMissingTypeIds(slots);
+    if (ids.length > 3) ids = ids.slice(0, 3);
+    return ids;
+  }
+
+  function resolveMissingItemTypeNames(typeIds, fallbackNames) {
+    var list = Array.isArray(typeIds) ? typeIds : [];
+    var fallback = Array.isArray(fallbackNames) ? fallbackNames : [];
+    var names = [];
+    for (var i = 0; i < list.length; i += 1) {
+      var id = list[i];
+      var name = getMissingTypeNameById(id);
+      if (!name && fallback[i]) name = fallback[i];
+      if (!name && id !== null && id !== undefined && id !== '') name = '类型#' + id;
+      names.push(name || '');
+    }
+    return names;
+  }
+
+  function formatMissingItemTypeLabel(item) {
+    if (!item || typeof item !== 'object') return '未分类';
+    var typeIds = normalizeMissingTypeIds(item.type_ids);
+    if (!typeIds.length && item.type_id) {
+      typeIds = normalizeMissingTypeIds([item.type_id]);
+    }
+    if (!typeIds.length) return '未分类';
+    var names = resolveMissingItemTypeNames(
+      typeIds,
+      item.type_names || (item.type_name ? [item.type_name] : [])
+    );
+    var filtered = names.filter(function(name) { return name; });
+    if (!filtered.length) return '未分类';
+    return filtered.join('、');
+  }
+
+  function normalizeMissingItemTypeData(item) {
+    if (!item || typeof item !== 'object') return item;
+    ensureMissingItemTypeSlots(item);
+    if (!Array.isArray(item.type_names)) {
+      item.type_names = item.type_name ? [item.type_name] : [];
+    }
+    return item;
+  }
+
   function toLineText(val) {
     if (val === null || val === undefined) return '';
     if (Array.isArray(val)) return val.filter(Boolean).map(function(s) { return String(s); }).join('\n');
@@ -7145,7 +7225,7 @@
     var display = list.slice(0, limit);
     var rows = display.map(function(item) {
       var moduleName = item && item.module_name ? String(item.module_name) : '--';
-      var typeName = item && item.type_name ? String(item.type_name) : '未分类';
+      var typeName = formatMissingItemTypeLabel(item);
       var title = item && item.title ? String(item.title) : '';
       var priority = item && item.priority ? String(item.priority) : '';
       var precondition = item && item.precondition ? String(item.precondition) : '';
@@ -7518,9 +7598,23 @@
               var clone = it && typeof it === 'object' ? Object.assign({}, it) : {};
               clone.module_id = id;
               clone.module_name = moduleMap[id] && moduleMap[id].name ? moduleMap[id].name : ('模块#' + id);
-              var typeKey = clone.type_id !== null && clone.type_id !== undefined ? String(clone.type_id) : '';
-              if (typeKey && typeNameMap[typeKey]) clone.type_name = typeNameMap[typeKey];
-              else if (!typeKey) clone.type_name = '未分类';
+              var typeIds = normalizeMissingTypeIds(clone.type_ids);
+              if (!typeIds.length && clone.type_id) {
+                typeIds = normalizeMissingTypeIds([clone.type_id]);
+              }
+              var baseNames = resolveMissingItemTypeNames(
+                typeIds,
+                clone.type_names || (clone.type_name ? [clone.type_name] : [])
+              );
+              var resolvedNames = [];
+              typeIds.forEach(function(typeId, idx) {
+                var key = String(typeId);
+                var name = typeNameMap[key] || baseNames[idx] || resolveMissingTypeLabel(typeId, null);
+                resolvedNames.push(name);
+              });
+              clone.type_ids = typeIds;
+              clone.type_names = resolvedNames;
+              clone.type_name = resolvedNames.length ? resolvedNames.join('、') : '未分类';
               return clone;
             });
           })
@@ -7533,9 +7627,17 @@
           (rows || []).forEach(function(row) {
             if (!row) return;
             var moduleHit = row.module_id && matchedModuleMap[String(row.module_id)];
-            var typeHit = row.type_id !== null && row.type_id !== undefined
-              ? matchedTypeMap[String(row.type_id)]
-              : false;
+            var rowTypeIds = normalizeMissingTypeIds(row.type_ids);
+            if (!rowTypeIds.length && row.type_id) {
+              rowTypeIds = normalizeMissingTypeIds([row.type_id]);
+            }
+            var typeHit = false;
+            for (var i = 0; i < rowTypeIds.length; i += 1) {
+              if (matchedTypeMap[String(rowTypeIds[i])]) {
+                typeHit = true;
+                break;
+              }
+            }
             if (moduleHit && typeHit) combined.push(row);
           });
         });
@@ -7594,7 +7696,7 @@
     var priority = normalizeEditorText(item && item.priority ? item.priority : '');
     priority = normalizePriorityInput(priority);
     var title = normalizeEditorText(item && item.title ? item.title : '');
-    var typeId = normalizeMissingTypeId(item && item.type_id !== undefined ? item.type_id : null);
+    var typeIds = collectMissingItemTypeIds(item);
     return {
       title: title,
       priority: priority || null,
@@ -7602,7 +7704,7 @@
       steps: normalizeEditorText(item && item.steps ? item.steps : ''),
       expected: normalizeEditorText(item && item.expected ? item.expected : ''),
       remark: normalizeEditorText(item && item.remark ? item.remark : '') || null,
-      type_id: typeId,
+      type_ids: typeIds,
     };
   }
 
@@ -7644,6 +7746,7 @@
     store.autoSaveInFlight[idKey] = true;
     apiClient.updateMissingModuleItem(item.id, payload).then(function(updated) {
       if (updated && typeof updated === 'object' && (updated.id || updated.id === 0)) {
+        normalizeMissingItemTypeData(updated);
         mv.items[idx] = updated;
       }
     }).catch(function() {
@@ -7737,32 +7840,61 @@
     return '类型#' + typeId;
   }
 
-  function buildMissingTypeSelectCell(item, index) {
-    var list = Array.isArray(state.missingType.types) ? state.missingType.types : [];
-    var activeId = item && item.type_id !== null && item.type_id !== undefined ? String(item.type_id) : '';
+  function buildMissingTypeSelectOptions(list, activeId) {
+    var active = activeId ? String(activeId) : '';
     var options = [];
-    var hasActive = false;
+    var emptySelected = active ? '' : ' selected';
     if (!list.length) {
-      options.push('<option value=\"\">暂无类型</option>');
+      options.push('<option value=\"\"' + emptySelected + '>暂无类型</option>');
     } else {
-      options.push('<option value=\"\">未设置</option>');
+      options.push('<option value=\"\"' + emptySelected + '>未设置</option>');
     }
+    var hasActive = false;
     list.forEach(function(t) {
       if (!t || t.id === null || t.id === undefined) return;
       var idStr = String(t.id);
-      var selected = activeId && idStr === activeId ? ' selected' : '';
+      var selected = active && idStr === active ? ' selected' : '';
       if (selected) hasActive = true;
       options.push('<option value=\"' + escapeHtml(idStr) + '\"' + selected + '>' + escapeHtml(t.name || ('类型#' + t.id)) + '</option>');
     });
-    if (activeId && !hasActive) {
-      options.push('<option value=\"' + escapeHtml(activeId) + '\" selected>类型#' + escapeHtml(activeId) + '</option>');
+    if (active && !hasActive) {
+      options.push('<option value=\"' + escapeHtml(active) + '\" selected>类型#' + escapeHtml(active) + '</option>');
     }
     options.push('<option value=\"__add_type__\">＋ 新增类型</option>');
+    return options.join('');
+  }
+
+  function buildMissingTypeSelectContent(item, index) {
+    var list = Array.isArray(state.missingType.types) ? state.missingType.types : [];
+    var slots = ensureMissingItemTypeSlots(item);
+    var rows = slots.map(function(activeId, slotIndex) {
+      var options = buildMissingTypeSelectOptions(list, activeId);
+      return (
+        '<div class=\"case-library-missing-type-row\">' +
+          '<select class=\"case-library-missing-type-select\" data-case-lib-missing-type data-index=\"' + index + '\" data-type-index=\"' + slotIndex + '\">' +
+            options +
+          '</select>' +
+          '<button type=\"button\" class=\"case-library-missing-type-remove\" data-case-lib-missing-type-remove data-index=\"' + index + '\" data-type-index=\"' + slotIndex + '\">×</button>' +
+        '</div>'
+      );
+    }).join('');
+    var canAdd = slots.length < 3;
+    var addBtn = canAdd
+      ? '<button type=\"button\" class=\"case-library-missing-type-add\" data-case-lib-missing-type-add data-index=\"' + index + '\">＋ 新增</button>'
+      : '';
     return (
-      '<td class=\"type\"><select class=\"case-library-missing-type-select\" data-case-lib-missing-type data-index=\"' +
-        index + '\">' +
-        options.join('') +
-      '</select></td>'
+      '<div class=\"case-library-missing-type-group\">' +
+        rows +
+        addBtn +
+      '</div>'
+    );
+  }
+
+  function buildMissingTypeSelectCell(item, index) {
+    return (
+      '<td class=\"type\" data-case-lib-missing-type-cell=\"' + index + '\">' +
+        buildMissingTypeSelectContent(item, index) +
+      '</td>'
     );
   }
 
@@ -7776,15 +7908,37 @@
     var counts = {};
     list.forEach(function(item) {
       if (!item) return;
-      var key = item.type_id ? String(item.type_id) : 'none';
-      if (!counts[key]) {
-        counts[key] = {
-          key: key,
-          label: resolveMissingTypeLabel(item.type_id, item.type_name),
-          count: 0,
-        };
+      var typeIds = normalizeMissingTypeIds(item.type_ids);
+      if (!typeIds.length && item.type_id) {
+        typeIds = normalizeMissingTypeIds([item.type_id]);
       }
-      counts[key].count += 1;
+      var typeNames = resolveMissingItemTypeNames(
+        typeIds,
+        item.type_names || (item.type_name ? [item.type_name] : [])
+      );
+      if (!typeIds.length) {
+        var keyNone = 'none';
+        if (!counts[keyNone]) {
+          counts[keyNone] = {
+            key: keyNone,
+            label: resolveMissingTypeLabel(null, null),
+            count: 0,
+          };
+        }
+        counts[keyNone].count += 1;
+        return;
+      }
+      typeIds.forEach(function(typeId, idx) {
+        var key = String(typeId);
+        if (!counts[key]) {
+          counts[key] = {
+            key: key,
+            label: resolveMissingTypeLabel(typeId, typeNames[idx]),
+            count: 0,
+          };
+        }
+        counts[key].count += 1;
+      });
     });
     var typeList = Array.isArray(state.missingType.types) ? state.missingType.types : [];
     var pills = [];
@@ -7827,8 +7981,20 @@
     var result = [];
     list.forEach(function(item, idx) {
       if (!item) return;
-      var key = item.type_id ? String(item.type_id) : 'none';
-      if (filters.has(key)) result.push(idx);
+      var typeIds = normalizeMissingTypeIds(item.type_ids);
+      if (!typeIds.length && item.type_id) {
+        typeIds = normalizeMissingTypeIds([item.type_id]);
+      }
+      if (!typeIds.length) {
+        if (filters.has('none')) result.push(idx);
+        return;
+      }
+      for (var i = 0; i < typeIds.length; i += 1) {
+        if (filters.has(String(typeIds[i]))) {
+          result.push(idx);
+          return;
+        }
+      }
     });
     return result;
   }
@@ -7945,38 +8111,164 @@
     renderMissingViewTable();
   }
 
-  function updateMissingItemType(index, nextValue) {
+  function refreshMissingTypeCell(index) {
+    if (!dom.missingView || !dom.missingView.querySelector) return;
+    var cell = dom.missingView.querySelector('td[data-case-lib-missing-type-cell=\"' + index + '\"]');
+    if (!cell) return;
+    var item = state.missingView.items[index];
+    if (!item) return;
+    cell.innerHTML = buildMissingTypeSelectContent(item, index);
+  }
+
+  function refreshMissingTypeCells() {
+    if (!dom.missingView || !dom.missingView.querySelectorAll) return;
+    var cells = dom.missingView.querySelectorAll('td[data-case-lib-missing-type-cell]');
+    for (var i = 0; i < cells.length; i += 1) {
+      var cell = cells[i];
+      var idx = Number(cell.getAttribute('data-case-lib-missing-type-cell'));
+      if (!isFinite(idx)) continue;
+      var item = state.missingView.items[idx];
+      if (!item) continue;
+      cell.innerHTML = buildMissingTypeSelectContent(item, idx);
+    }
+  }
+
+  function hasDuplicateMissingType(slots, slotIndex, typeId) {
+    if (!typeId || !Array.isArray(slots)) return false;
+    var key = String(typeId);
+    for (var i = 0; i < slots.length; i += 1) {
+      if (i === slotIndex) continue;
+      var existing = normalizeMissingTypeId(slots[i]);
+      if (existing && String(existing) === key) return true;
+    }
+    return false;
+  }
+
+  function syncMissingItemTypeUpdate(index, prevSlots) {
     var mv = state.missingView;
     if (!mv || !Array.isArray(mv.items)) return;
     var idx = Number(index);
     if (!isFinite(idx) || idx < 0 || idx >= mv.items.length) return;
     var item = mv.items[idx];
     if (!item) return;
-    if (String(nextValue) === '__add_type__') {
-      openMissingTypeAddDrawer('view');
-      renderMissingViewTable();
-      return;
+    var emptyCount = 0;
+    if (Array.isArray(item.type_ids)) {
+      for (var i = 0; i < item.type_ids.length; i += 1) {
+        if (!normalizeMissingTypeId(item.type_ids[i])) emptyCount += 1;
+      }
     }
-    var prevTypeId = item.type_id;
-    var prevTypeName = item.type_name;
-    var nextTypeId = normalizeMissingTypeId(nextValue);
-    item.type_id = nextTypeId;
-    item.type_name = nextTypeId ? getMissingTypeNameById(nextTypeId) : '';
     var hasFilter = mv.typeFilters && mv.typeFilters.size;
     if (hasFilter) renderMissingViewTable();
-    else renderMissingTypePills(mv.items);
+    else {
+      refreshMissingTypeCell(idx);
+      renderMissingTypePills(mv.items);
+    }
     if (!item.id || !apiClient || typeof apiClient.updateMissingModuleItem !== 'function') return;
-    apiClient.updateMissingModuleItem(item.id, { type_id: nextTypeId || 0 }).then(function(updated) {
+    var payload = { type_ids: collectMissingItemTypeIds(item) };
+    apiClient.updateMissingModuleItem(item.id, payload).then(function(updated) {
       if (updated && typeof updated === 'object' && (updated.id || updated.id === 0)) {
+        normalizeMissingItemTypeData(updated);
+        if (emptyCount > 0) {
+          var slots = ensureMissingItemTypeSlots(updated).slice();
+          var selectedCount = collectMissingItemTypeIds(updated).length;
+          var maxSlots = selectedCount ? 3 : Math.max(1, Math.min(3, emptyCount));
+          while (emptyCount > 0 && slots.length < maxSlots) {
+            slots.push('');
+            emptyCount -= 1;
+          }
+          updated.type_ids = slots;
+        }
+        if (!updated.module_name) updated.module_name = item.module_name;
         mv.items[idx] = updated;
         if (hasFilter) renderMissingViewTable();
-        else renderMissingTypePills(mv.items);
+        else {
+          refreshMissingTypeCell(idx);
+          renderMissingTypePills(mv.items);
+        }
       }
     }).catch(function(err) {
-      item.type_id = prevTypeId;
-      item.type_name = prevTypeName;
-      renderMissingViewTable();
+      if (Array.isArray(prevSlots)) item.type_ids = prevSlots.slice();
+      if (hasFilter) renderMissingViewTable();
+      else {
+        refreshMissingTypeCell(idx);
+        renderMissingTypePills(mv.items);
+      }
       setStatus(dom.missingStatus, err && err.message ? err.message : '更新类型失败', 'err');
+    });
+  }
+
+  function handleMissingItemTypeChange(index, slotIndex, nextValue) {
+    var mv = state.missingView;
+    if (!mv || !Array.isArray(mv.items)) return;
+    var idx = Number(index);
+    var slotIdx = Number(slotIndex);
+    if (!isFinite(idx) || idx < 0 || idx >= mv.items.length) return;
+    if (!isFinite(slotIdx) || slotIdx < 0) return;
+    var item = mv.items[idx];
+    if (!item) return;
+    var slots = ensureMissingItemTypeSlots(item);
+    var prevSlots = slots.slice();
+    if (slotIdx >= slots.length) return;
+    if (String(nextValue) === '__add_type__') {
+      openMissingTypeAddDrawer('view');
+      refreshMissingTypeCell(idx);
+      return;
+    }
+    var nextTypeId = normalizeMissingTypeId(nextValue);
+    if (nextTypeId && hasDuplicateMissingType(slots, slotIdx, nextTypeId)) {
+      showCenterToast('已选相同类型', 'warn', 3000);
+      refreshMissingTypeCell(idx);
+      return;
+    }
+    slots[slotIdx] = nextTypeId ? String(nextTypeId) : '';
+    item.type_ids = slots;
+    syncMissingItemTypeUpdate(idx, prevSlots);
+  }
+
+  function addMissingTypeSlot(index) {
+    var mv = state.missingView;
+    if (!mv || !Array.isArray(mv.items)) return;
+    var idx = Number(index);
+    if (!isFinite(idx) || idx < 0 || idx >= mv.items.length) return;
+    var item = mv.items[idx];
+    if (!item) return;
+    var slots = ensureMissingItemTypeSlots(item);
+    if (slots.length >= 3) return;
+    slots.push('');
+    item.type_ids = slots;
+    refreshMissingTypeCell(idx);
+  }
+
+  function removeMissingTypeSlot(index, slotIndex, anchorEl) {
+    var mv = state.missingView;
+    if (!mv || !Array.isArray(mv.items)) return;
+    var idx = Number(index);
+    var slotIdx = Number(slotIndex);
+    if (!isFinite(idx) || idx < 0 || idx >= mv.items.length) return;
+    if (!isFinite(slotIdx) || slotIdx < 0) return;
+    var item = mv.items[idx];
+    if (!item) return;
+    var slots = ensureMissingItemTypeSlots(item);
+    if (slotIdx >= slots.length) return;
+    if (slots.length <= 1) {
+      showCenterToast('至少要保留1个类型', 'warn', 3000);
+      return;
+    }
+    var typeLabel = resolveMissingTypeLabel(slots[slotIdx], null);
+    openConfirmDrawer({
+      title: '确认删除类型',
+      message: '确认删除类型【' + typeLabel + '】吗？',
+      confirmText: '确认删除',
+      cancelText: '取消',
+      danger: true,
+      anchorEl: anchorEl || null,
+    }).then(function(res) {
+      if (!res || res.ok !== true) return;
+      var prevSlots = slots.slice();
+      slots.splice(slotIdx, 1);
+      if (!slots.length) slots = [''];
+      item.type_ids = slots;
+      syncMissingItemTypeUpdate(idx, prevSlots);
     });
   }
 
@@ -8103,6 +8395,7 @@
     setStatus(dom.missingStatus, (reason || '保存中') + '...', '');
     apiClient.updateMissingModuleItem(item.id, payload).then(function(updated) {
       if (updated && typeof updated === 'object' && (updated.id || updated.id === 0)) {
+        normalizeMissingItemTypeData(updated);
         mv.items[idx] = updated;
       }
       setStatus(dom.missingStatus, '已保存', 'ok');
@@ -8223,6 +8516,7 @@
       }
       apiClient.createMissingModuleItem(moduleId, payload).then(function(created) {
         if (created) {
+          normalizeMissingItemTypeData(created);
           ensureNonEnumerableKey(created, '__uiKey', uiKey || '');
           mv.items[createIndex] = created;
           markMissingNewAdded(moduleId, created);
@@ -8261,6 +8555,8 @@
       __localId: localId,
       module_id: moduleId,
       module_name: moduleName,
+      type_ids: [''],
+      type_names: [],
       title: '',
       priority: '',
       precondition: '',
@@ -8435,6 +8731,7 @@
             var clone = it && typeof it === 'object' ? Object.assign({}, it) : {};
             clone.module_id = m.id;
             clone.module_name = m.name || ('模块#' + m.id);
+            normalizeMissingItemTypeData(clone);
             return clone;
           });
         })
@@ -11603,6 +11900,9 @@
           state.missingType.types.sort(function(a, b) { return Number(a.id) - Number(b.id); });
           normalizeMissingTypeSelection();
           syncMissingTypeUi();
+          if (state.missingView && Array.isArray(state.missingView.items)) {
+            refreshMissingTypeCells();
+          }
         }
         if (missingTypeAddDrawerInstance && typeof missingTypeAddDrawerInstance.close === 'function') {
           missingTypeAddDrawerInstance.close();
@@ -11674,18 +11974,43 @@
       state.missingView.typeFilters.delete(idStr);
     }
     if (transferId) {
-      var targetName = getMissingTypeNameById(transferId);
       if (state.missingView && Array.isArray(state.missingView.items)) {
         state.missingView.items.forEach(function(item) {
           if (!item) return;
-          if (String(item.type_id || '') === idStr) {
-            item.type_id = transferId;
-            item.type_name = targetName || (item.type_name || '');
-          }
+          var slots = ensureMissingItemTypeSlots(item).slice();
+          var next = [];
+          var removed = false;
+          slots.forEach(function(val) {
+            var tid = normalizeMissingTypeId(val);
+            if (tid && String(tid) === idStr) {
+              removed = true;
+              return;
+            }
+            next.push(val);
+          });
+          if (!removed) return;
+          var transferStr = String(transferId);
+          var hasTransfer = next.some(function(val) { return String(val) === transferStr; });
+          if (!hasTransfer) next.push(transferStr);
+          if (!next.length) next = [''];
+          item.type_ids = next;
+          item.type_names = resolveMissingItemTypeNames(
+            normalizeMissingTypeIds(next),
+            item.type_names || (item.type_name ? [item.type_name] : [])
+          );
+          item.type_name = formatMissingItemTypeLabel(item);
         });
+      }
+      if (state.missingView && Array.isArray(state.missingView.items)) {
+        renderMissingTypePills(state.missingView.items);
+        refreshMissingTypeCells();
       }
     }
     syncMissingTypeUi();
+    if (state.missingView && Array.isArray(state.missingView.items)) {
+      renderMissingTypePills(state.missingView.items);
+      refreshMissingTypeCells();
+    }
     if (state.missingDrawer.projectId) {
       loadMissingDrawerModules(state.missingDrawer.projectId);
     }
@@ -13240,6 +13565,20 @@
       dom.missingView.addEventListener('click', function(e) {
         var t = e && e.target ? e.target : null;
         if (!t) return;
+        var typeRemoveBtn = t.closest ? t.closest('[data-case-lib-missing-type-remove]') : null;
+        if (typeRemoveBtn) {
+          removeMissingTypeSlot(
+            typeRemoveBtn.getAttribute('data-index'),
+            typeRemoveBtn.getAttribute('data-type-index'),
+            typeRemoveBtn
+          );
+          return;
+        }
+        var typeAddBtn = t.closest ? t.closest('[data-case-lib-missing-type-add]') : null;
+        if (typeAddBtn) {
+          addMissingTypeSlot(typeAddBtn.getAttribute('data-index'));
+          return;
+        }
         var insertBtn = t.closest ? t.closest('[data-case-lib-missing-insert]') : null;
         if (insertBtn) {
           var ir = null;
@@ -13273,7 +13612,11 @@
         var t = e && e.target ? e.target : null;
         if (!t) return;
         if (t.hasAttribute && t.hasAttribute('data-case-lib-missing-type')) {
-          updateMissingItemType(t.getAttribute('data-index'), t.value);
+          handleMissingItemTypeChange(
+            t.getAttribute('data-index'),
+            t.getAttribute('data-type-index'),
+            t.value
+          );
           return;
         }
         if (t.hasAttribute && t.hasAttribute('data-case-lib-missing-page-input')) {

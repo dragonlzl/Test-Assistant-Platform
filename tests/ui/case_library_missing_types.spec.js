@@ -84,6 +84,8 @@ test.describe('用例库易漏类型筛选', () => {
         remark: null,
         type_id: 1,
         type_name: '功能',
+        type_ids: [1],
+        type_names: ['功能'],
       }],
       102: [{
         id: 502,
@@ -97,6 +99,8 @@ test.describe('用例库易漏类型筛选', () => {
         remark: null,
         type_id: 2,
         type_name: '性能',
+        type_ids: [2],
+        type_names: ['性能'],
       }],
     };
 
@@ -158,7 +162,10 @@ test.describe('用例库易漏类型筛选', () => {
         if (!typeIds.length) return respond(200, modules.slice());
         const filtered = modules.filter((mod) => {
           const rows = itemsByModule[mod.id] || [];
-          return rows.some((row) => typeIds.indexOf(Number(row.type_id)) !== -1);
+          return rows.some((row) => {
+            const rowTypeIds = Array.isArray(row.type_ids) ? row.type_ids : (row.type_id ? [row.type_id] : []);
+            return rowTypeIds.some((tid) => typeIds.indexOf(Number(tid)) !== -1);
+          });
         });
         return respond(200, filtered);
       }
@@ -179,11 +186,24 @@ test.describe('用例库易漏类型筛选', () => {
           });
         });
         if (!found) return respond(404, { detail: 'not found' });
-        if (Object.prototype.hasOwnProperty.call(payload, 'type_id')) {
+        if (Object.prototype.hasOwnProperty.call(payload, 'type_ids')) {
+          const nextIds = Array.isArray(payload.type_ids)
+            ? payload.type_ids.map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0)
+            : [];
+          found.type_ids = nextIds;
+          found.type_id = nextIds.length ? nextIds[0] : null;
+          found.type_names = nextIds.map((id) => {
+            const target = types.find((t) => Number(t.id) === Number(id));
+            return target ? target.name : `类型#${id}`;
+          });
+          found.type_name = found.type_names.length ? found.type_names.join('、') : null;
+        } else if (Object.prototype.hasOwnProperty.call(payload, 'type_id')) {
           const nextId = Number(payload.type_id) > 0 ? Number(payload.type_id) : null;
           found.type_id = nextId;
+          found.type_ids = nextId ? [nextId] : [];
           const target = types.find((t) => Number(t.id) === Number(nextId));
           found.type_name = target ? target.name : null;
+          found.type_names = found.type_name ? [found.type_name] : [];
         }
         return respond(200, found);
       }
@@ -226,10 +246,47 @@ test.describe('用例库易漏类型筛选', () => {
     await expect(page.locator('#caseLibraryMissingCard')).toBeVisible();
     await expect(page.locator('#caseLibraryMissingTypePills')).toContainText('功能');
 
-    const typeSelect = page.locator('#caseLibraryMissingView select[data-case-lib-missing-type]').first();
-    await typeSelect.selectOption('2');
+    const typeRows = page.locator('#caseLibraryMissingView .case-library-missing-type-row');
+    await expect(typeRows).toHaveCount(1);
+    const addTypeBtn = page.locator('#caseLibraryMissingView [data-case-lib-missing-type-add]').first();
+    await addTypeBtn.click();
+    await expect(page.locator('#caseLibraryMissingView .case-library-missing-type-select')).toHaveCount(2);
+
+    const secondSelect = page.locator('#caseLibraryMissingView .case-library-missing-type-select').nth(1);
+    await secondSelect.selectOption('1');
+    await expect(page.locator('.temp-center-toast')).toContainText('已选相同类型');
+
+    await secondSelect.selectOption('2');
     await expect(page.locator('#caseLibraryMissingTypePills')).toContainText('性能');
 
+    await addTypeBtn.click();
+    await expect(page.locator('#caseLibraryMissingView .case-library-missing-type-select')).toHaveCount(3);
+    await expect(page.locator('#caseLibraryMissingView [data-case-lib-missing-type-add]')).toHaveCount(0);
+
+    const secondRemove = page.locator('#caseLibraryMissingView .case-library-missing-type-remove').nth(1);
+    await secondRemove.click();
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await page.locator('#appConfirmDrawerConfirmBtn').click();
+    await expect(page.locator('#caseLibraryMissingView .case-library-missing-type-select')).toHaveCount(2);
+
+    const removeBtns = page.locator('#caseLibraryMissingView .case-library-missing-type-remove');
+    await removeBtns.first().click();
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await page.locator('#appConfirmDrawerConfirmBtn').click();
+    await expect(page.locator('#caseLibraryMissingView .case-library-missing-type-select')).toHaveCount(1);
+    await page.locator('#caseLibraryMissingView .case-library-missing-type-remove').first().click();
+    await expect(page.locator('.temp-center-toast')).toContainText('至少要保留1个类型');
+
+    const emptyAddBtn = page.locator('#caseLibraryMissingView [data-case-lib-missing-type-add]').first();
+    await emptyAddBtn.click();
+    await emptyAddBtn.click();
+    await expect(page.locator('#caseLibraryMissingView .case-library-missing-type-select')).toHaveCount(3);
+    await page.locator('#caseLibraryMissingView .case-library-missing-type-remove').first().click();
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await page.locator('#appConfirmDrawerConfirmBtn').click();
+    await expect(page.locator('#caseLibraryMissingView .case-library-missing-type-select')).toHaveCount(2);
+
+    const typeSelect = page.locator('#caseLibraryMissingView .case-library-missing-type-select').first();
     await typeSelect.selectOption('__add_type__');
     await expect(page.locator('#caseLibraryMissingTypeAddDrawer')).toHaveClass(/open/);
     await page.locator('#caseLibraryMissingTypeNameInput').fill('稳定');

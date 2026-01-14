@@ -19,6 +19,23 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：易漏用例类型多选与提醒匹配兼容
+- 功能描述：易漏用例查看视图的类型字段支持最多 3 个类型选择，新增/删除/重复选择提示；执行页与用例库提醒区按任一类型命中即可。
+- 操作方式：用例库 → 易漏用例 → 查看模块 → 类型列点击“新增”增加选择框，点击“×”删除；重复选择与仅剩 1 个类型会提示；执行页/用例库提醒区自动按任一类型命中。
+- 使用效果：类型可多选且操作可控，重复/最少提示清晰；提醒区对多类型用例匹配更准确。
+- 新增内容/接口/组件：
+  - 后端：新增 `missing_case_item_types` 关联表与迁移回填；易漏条目接口支持 `type_ids/type_names`；模块筛选/类型统计/删除转移兼容多类型（`backend/models.py`、`backend/migrations.py`、`backend/routers/missing_cases.py`、`backend/schemas.py`）。
+  - 前端：易漏视图类型多选 UI、删除确认/重复提示、提醒区多类型匹配与展示（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`）。
+  - 样式：易漏类型选择框/删除/新增按钮样式（`style.css`）。
+  - 测试：更新 `tests/ui/case_library_missing_types.spec.js`、`tests/api/missing_cases.spec.js`。
+- 复用说明：复用现有确认抽屉与中心提示、易漏类型接口与筛选逻辑，无新增独立组件。
+- 测试与验证：
+  - `node --check scripts/modules/caseLibrary.js scripts/core/tempexecCore.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/case_library_missing_types.spec.js`（通过，含未设置类型删除场景）
+  - `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/missing_cases.spec.js`（失败：本地缺少 `sqlalchemy`，`uvicorn` 启动报错，详见 `test-results/uvicorn-test.log`）
+- 更新记录：2026-01-19 易漏用例类型多选与提醒匹配兼容（`backend/models.py`、`backend/migrations.py`、`backend/routers/missing_cases.py`、`backend/schemas.py`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/case_library_missing_types.spec.js`、`tests/api/missing_cases.spec.js`）。
+- 更新记录：2026-01-14 修复未设置类型删除时一次性删多的问题，补充 UI 用例覆盖（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_types.spec.js`）。
+
 - 功能名称：易漏用例导入与合并
 - 功能描述：易漏用例抽屉新增漏测模板导入区域，支持 XMind/Excel 格式导入，同名模块条目对比后合并入库。
 - 操作方式：用例库 → 易漏用例 → 拖拽/选择漏测用例文件 → 选择项目 → 确认加入漏测库 → 在差异弹窗确认合并。

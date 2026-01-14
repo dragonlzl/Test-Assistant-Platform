@@ -207,6 +207,26 @@ class MissingCaseType(Base):
     )
 
     items = relationship("MissingCaseItem", back_populates="type")
+    items_multi = relationship(
+        "MissingCaseItem",
+        secondary="missing_case_item_types",
+        back_populates="types",
+    )
+
+
+class MissingCaseItemType(Base):
+    __tablename__ = "missing_case_item_types"
+    __table_args__ = (
+        Index("ix_missing_case_item_types_item_id", "item_id"),
+        Index("ix_missing_case_item_types_type_id", "type_id"),
+    )
+
+    item_id = Column(
+        Integer, ForeignKey("missing_case_items.id", ondelete="CASCADE"), primary_key=True
+    )
+    type_id = Column(
+        Integer, ForeignKey("missing_case_types.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class MissingCaseItem(Base):
@@ -236,6 +256,11 @@ class MissingCaseItem(Base):
 
     module = relationship("MissingModule", back_populates="items")
     type = relationship("MissingCaseType", back_populates="items")
+    types = relationship(
+        "MissingCaseType",
+        secondary="missing_case_item_types",
+        back_populates="items_multi",
+    )
 
 
 class CaseLibraryChangeEvent(Base):

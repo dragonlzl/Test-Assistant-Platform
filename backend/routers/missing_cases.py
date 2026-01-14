@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func
+from sqlalchemy import func, or_, distinct
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -33,6 +33,20 @@ def _normalize_type_id(value: Optional[int]) -> Optional[int]:
     if val <= 0:
         return None
     return val
+
+
+def _normalize_type_ids(values: Optional[List[int]]) -> List[int]:
+    if not values:
+        return []
+    result = []
+    seen = set()
+    for raw in values:
+        val = _normalize_type_id(raw)
+        if val is None or val in seen:
+            continue
+        seen.add(val)
+        result.append(val)
+    return result
 
 
 def _parse_type_ids(value: Optional[str]) -> List[int]:
@@ -69,6 +83,66 @@ def _ensure_missing_module_access(
     return module
 
 
+def _resolve_missing_item_type_ids(
+    db: Session,
+    module: models.MissingModule,
+    payload: Optional[object],
+) -> Optional[tuple]:
+    if payload is None:
+        return None
+    if payload.type_ids is not None:
+        type_ids = _normalize_type_ids(payload.type_ids)
+    elif payload.type_id is not None:
+        single = _normalize_type_id(payload.type_id)
+        type_ids = [single] if single is not None else []
+    else:
+        return None
+    if len(type_ids) > 3:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="类型最多选择3个")
+    if not type_ids:
+        return [], {}
+    types = (
+        db.query(models.MissingCaseType)
+        .filter(models.MissingCaseType.id.in_(type_ids))
+        .all()
+    )
+    if len(types) != len(type_ids):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="类型不存在")
+    for missing_type in types:
+        if missing_type.project_id != module.project_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="类型不属于当前项目")
+    name_map = {t.id: t.name for t in types}
+    return type_ids, name_map
+
+
+def _load_missing_item_type_map(
+    db: Session, item_ids: List[int]
+) -> dict:
+    if not item_ids:
+        return {}
+    rows = (
+        db.query(
+            models.MissingCaseItemType.item_id,
+            models.MissingCaseType.id,
+            models.MissingCaseType.name,
+        )
+        .join(
+            models.MissingCaseType,
+            models.MissingCaseType.id == models.MissingCaseItemType.type_id,
+        )
+        .filter(models.MissingCaseItemType.item_id.in_(item_ids))
+        .order_by(models.MissingCaseItemType.item_id.asc(), models.MissingCaseType.id.asc())
+        .all()
+    )
+    result = {}
+    for row in rows:
+        item_id, type_id, type_name = row
+        data = result.setdefault(item_id, {"type_ids": [], "type_names": []})
+        data["type_ids"].append(type_id)
+        data["type_names"].append(type_name)
+    return result
+
+
 @router.get("", response_model=List[schemas.MissingModuleOut])
 def list_missing_modules(
     project_id: Optional[int] = None,
@@ -87,17 +161,39 @@ def list_missing_modules(
 
     selected_type_ids = _parse_type_ids(type_ids)
     if selected_type_ids:
-        base_query = base_query.join(
-            models.MissingCaseItem, models.MissingCaseItem.module_id == models.MissingModule.id
-        ).filter(models.MissingCaseItem.type_id.in_(selected_type_ids))
+        base_query = (
+            base_query.join(
+                models.MissingCaseItem,
+                models.MissingCaseItem.module_id == models.MissingModule.id,
+            )
+            .outerjoin(
+                models.MissingCaseItemType,
+                models.MissingCaseItemType.item_id == models.MissingCaseItem.id,
+            )
+            .filter(
+                or_(
+                    models.MissingCaseItemType.type_id.in_(selected_type_ids),
+                    models.MissingCaseItem.type_id.in_(selected_type_ids),
+                )
+            )
+        )
 
     item_count_query = db.query(
         models.MissingCaseItem.module_id.label("module_id"),
-        func.count(models.MissingCaseItem.id).label("item_count"),
+        func.count(distinct(models.MissingCaseItem.id)).label("item_count"),
     )
     if selected_type_ids:
-        item_count_query = item_count_query.filter(
-            models.MissingCaseItem.type_id.in_(selected_type_ids)
+        item_count_query = (
+            item_count_query.outerjoin(
+                models.MissingCaseItemType,
+                models.MissingCaseItemType.item_id == models.MissingCaseItem.id,
+            )
+            .filter(
+                or_(
+                    models.MissingCaseItemType.type_id.in_(selected_type_ids),
+                    models.MissingCaseItem.type_id.in_(selected_type_ids),
+                )
+            )
         )
     item_count_sq = item_count_query.group_by(models.MissingCaseItem.module_id).subquery()
 
@@ -186,24 +282,46 @@ def list_missing_items(
 ):
     module = _ensure_missing_module_access(db, user, module_id)
     items = (
-        db.query(models.MissingCaseItem, models.MissingCaseType.name)
-        .outerjoin(
-            models.MissingCaseType, models.MissingCaseType.id == models.MissingCaseItem.type_id
-        )
+        db.query(models.MissingCaseItem)
         .filter(models.MissingCaseItem.module_id == module.id)
         .order_by(models.MissingCaseItem.order_no.asc(), models.MissingCaseItem.id.asc())
         .all()
     )
+    item_ids = [item.id for item in items]
+    type_map = _load_missing_item_type_map(db, item_ids)
+    legacy_type_ids = [
+        item.type_id
+        for item in items
+        if item.type_id and item.id not in type_map
+    ]
+    legacy_name_map = {}
+    if legacy_type_ids:
+        legacy_rows = (
+            db.query(models.MissingCaseType.id, models.MissingCaseType.name)
+            .filter(models.MissingCaseType.id.in_(legacy_type_ids))
+            .all()
+        )
+        legacy_name_map = {row[0]: row[1] for row in legacy_rows}
+
     result = []
-    for row in items:
-        item, type_name = row
+    for item in items:
+        type_info = type_map.get(item.id, {})
+        type_ids = type_info.get("type_ids", [])
+        type_names = type_info.get("type_names", [])
+        if not type_ids and item.type_id:
+            type_ids = [item.type_id]
+            type_names = [legacy_name_map.get(item.type_id)]
+        primary_id = type_ids[0] if type_ids else None
+        primary_name = type_names[0] if type_names else None
         result.append(
             {
                 "id": item.id,
                 "module_id": item.module_id,
                 "module_name": module.name,
-                "type_id": item.type_id,
-                "type_name": type_name,
+                "type_id": primary_id,
+                "type_name": primary_name,
+                "type_ids": type_ids,
+                "type_names": type_names,
                 "title": item.title or "",
                 "priority": item.priority,
                 "precondition": item.precondition or "",
@@ -247,23 +365,17 @@ def create_missing_item(
         .scalar()
         or 0
     )
-    type_id = _normalize_type_id(payload.type_id)
-    type_name = None
-    if type_id is not None:
-        missing_type = (
-            db.query(models.MissingCaseType)
-            .filter(models.MissingCaseType.id == int(type_id))
-            .first()
-        )
-        if not missing_type:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="类型不存在")
-        if missing_type.project_id != module.project_id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="类型不属于当前项目")
-        type_name = missing_type.name
+    type_ids = []
+    type_name_map = {}
+    type_info = _resolve_missing_item_type_ids(db, module, payload)
+    if type_info is not None:
+        type_ids, type_name_map = type_info
+    primary_type_id = type_ids[0] if type_ids else None
+    primary_type_name = type_name_map.get(primary_type_id) if primary_type_id else None
     now = datetime.now(timezone.utc)
     item = models.MissingCaseItem(
         module_id=module.id,
-        type_id=type_id,
+        type_id=primary_type_id,
         title=title,
         priority=_normalize_text(payload.priority) or None,
         precondition=_normalize_text(payload.precondition),
@@ -277,6 +389,10 @@ def create_missing_item(
         updated_at=now,
     )
     db.add(item)
+    db.flush()
+    if type_ids:
+        for type_id in type_ids:
+            db.add(models.MissingCaseItemType(item_id=item.id, type_id=type_id))
     db.commit()
     db.refresh(item)
     log_operation(
@@ -298,8 +414,10 @@ def create_missing_item(
         "id": item.id,
         "module_id": item.module_id,
         "module_name": module.name,
-        "type_id": item.type_id,
-        "type_name": type_name,
+        "type_id": primary_type_id,
+        "type_name": primary_type_name,
+        "type_ids": type_ids,
+        "type_names": [type_name_map.get(type_id) for type_id in type_ids],
         "title": item.title or "",
         "priority": item.priority,
         "precondition": item.precondition or "",
@@ -351,27 +469,25 @@ def update_missing_item(
         item.expected = next_expected
     if payload.remark is not None:
         item.remark = _normalize_text(payload.remark) or None
-    if payload.type_id is not None:
-        next_type_id = _normalize_type_id(payload.type_id)
-        next_type_name = None
-        if next_type_id is not None:
-            missing_type = (
-                db.query(models.MissingCaseType)
-                .filter(models.MissingCaseType.id == int(next_type_id))
-                .first()
-            )
-            if not missing_type:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="类型不存在")
-            if missing_type.project_id != module.project_id:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="类型不属于当前项目")
-            next_type_name = missing_type.name
-        item.type_id = next_type_id
+    type_info = _resolve_missing_item_type_ids(db, module, payload)
+    next_type_ids = None
+    if type_info is not None:
+        next_type_ids, _ = type_info
+        item.type_id = next_type_ids[0] if next_type_ids else None
 
     item.updated_by = user.id
     item.updated_at = datetime.now(timezone.utc)
     db.add(item)
     db.commit()
     db.refresh(item)
+    if next_type_ids is not None:
+        db.query(models.MissingCaseItemType).filter(
+            models.MissingCaseItemType.item_id == item.id
+        ).delete(synchronize_session=False)
+        if next_type_ids:
+            for type_id in next_type_ids:
+                db.add(models.MissingCaseItemType(item_id=item.id, type_id=type_id))
+        db.commit()
     log_operation(
         db=db,
         user_id=user.id,
@@ -388,21 +504,31 @@ def update_missing_item(
         },
     )
     db.commit()
-    type_name = next_type_name if payload.type_id is not None else None
-    if payload.type_id is None and item.type_id:
+    type_ids = []
+    type_names = []
+    type_map = _load_missing_item_type_map(db, [item.id])
+    type_info = type_map.get(item.id, {})
+    type_ids = type_info.get("type_ids", [])
+    type_names = type_info.get("type_names", [])
+    if not type_ids and item.type_id:
         type_row = (
             db.query(models.MissingCaseType.name)
             .filter(models.MissingCaseType.id == int(item.type_id))
             .first()
         )
         if type_row:
-            type_name = type_row[0]
+            type_ids = [item.type_id]
+            type_names = [type_row[0]]
+    primary_type_id = type_ids[0] if type_ids else None
+    primary_type_name = type_names[0] if type_names else None
     return {
         "id": item.id,
         "module_id": item.module_id,
         "module_name": module.name,
-        "type_id": item.type_id,
-        "type_name": type_name,
+        "type_id": primary_type_id,
+        "type_name": primary_type_name,
+        "type_ids": type_ids,
+        "type_names": type_names,
         "title": item.title or "",
         "priority": item.priority,
         "precondition": item.precondition or "",
@@ -548,10 +674,10 @@ def list_missing_types(
 
     item_count_sq = (
         db.query(
-            models.MissingCaseItem.type_id.label("type_id"),
-            func.count(models.MissingCaseItem.id).label("item_count"),
+            models.MissingCaseItemType.type_id.label("type_id"),
+            func.count(distinct(models.MissingCaseItemType.item_id)).label("item_count"),
         )
-        .group_by(models.MissingCaseItem.type_id)
+        .group_by(models.MissingCaseItemType.type_id)
         .subquery()
     )
 
@@ -638,12 +764,21 @@ def delete_missing_type(
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权限删除类型")
 
-    item_count = (
-        db.query(func.count(models.MissingCaseItem.id))
-        .filter(models.MissingCaseItem.type_id == missing_type.id)
-        .scalar()
-        or 0
-    )
+    item_ids = [
+        row[0]
+        for row in db.query(models.MissingCaseItemType.item_id)
+        .filter(models.MissingCaseItemType.type_id == missing_type.id)
+        .distinct()
+        .all()
+    ]
+    item_count = len(item_ids)
+    if not item_count:
+        item_count = (
+            db.query(func.count(models.MissingCaseItem.id))
+            .filter(models.MissingCaseItem.type_id == missing_type.id)
+            .scalar()
+            or 0
+        )
     transfer_id = _normalize_type_id(transfer_to)
     moved = 0
     if item_count > 0:
@@ -667,7 +802,32 @@ def delete_missing_type(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="转移类型不属于当前项目")
         if target.id == missing_type.id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="转移类型不能与当前类型相同")
-        moved = (
+        legacy_ids = [
+            row[0]
+            for row in db.query(models.MissingCaseItem.id)
+            .filter(models.MissingCaseItem.type_id == missing_type.id)
+            .all()
+        ]
+        moved_ids = set(item_ids).union(set(legacy_ids))
+        if moved_ids:
+            existing_target = {
+                row[0]
+                for row in db.query(models.MissingCaseItemType.item_id)
+                .filter(
+                    models.MissingCaseItemType.item_id.in_(list(moved_ids)),
+                    models.MissingCaseItemType.type_id == target.id,
+                )
+                .all()
+            }
+            for item_id in moved_ids:
+                if item_id in existing_target:
+                    continue
+                db.add(models.MissingCaseItemType(item_id=item_id, type_id=target.id))
+            db.query(models.MissingCaseItemType).filter(
+                models.MissingCaseItemType.type_id == missing_type.id
+            ).delete(synchronize_session=False)
+        moved = len(moved_ids)
+        (
             db.query(models.MissingCaseItem)
             .filter(models.MissingCaseItem.type_id == missing_type.id)
             .update({models.MissingCaseItem.type_id: target.id}, synchronize_session=False)

@@ -4119,13 +4119,56 @@
       return limit;
     }
 
+    function normalizeMissingReminderTypeId(value) {
+      if (value === null || value === undefined || value === '') return null;
+      var num = Number(value);
+      if (!isFinite(num) || num <= 0) return null;
+      return num;
+    }
+
+    function normalizeMissingReminderTypeIds(values) {
+      if (!Array.isArray(values)) {
+        values = values === null || values === undefined ? [] : [values];
+      }
+      var result = [];
+      var seen = {};
+      values.forEach(function(raw) {
+        var val = normalizeMissingReminderTypeId(raw);
+        if (!val) return;
+        var key = String(val);
+        if (seen[key]) return;
+        seen[key] = true;
+        result.push(val);
+      });
+      return result;
+    }
+
+    function formatTempExecMissingTypeLabel(item) {
+      if (!item || typeof item !== 'object') return '未分类';
+      var typeIds = normalizeMissingReminderTypeIds(item.type_ids);
+      if (!typeIds.length && item.type_id) {
+        typeIds = normalizeMissingReminderTypeIds([item.type_id]);
+      }
+      if (!typeIds.length) return '未分类';
+      var names = Array.isArray(item.type_names)
+        ? item.type_names
+        : (item.type_name ? [item.type_name] : []);
+      var textList = [];
+      for (var i = 0; i < typeIds.length; i += 1) {
+        var name = names[i];
+        if (!name) name = '类型#' + typeIds[i];
+        textList.push(name);
+      }
+      return textList.length ? textList.join('、') : '未分类';
+    }
+
     function buildTempExecMissingReminderTable(reminder) {
       var list = reminder && Array.isArray(reminder.items) ? reminder.items : [];
       var limit = resolveTempExecMissingReminderLimit(reminder);
       var display = list.slice(0, limit);
       var rows = display.map(function(item) {
         var moduleName = item && item.module_name ? String(item.module_name) : '--';
-        var typeName = item && item.type_name ? String(item.type_name) : '未分类';
+        var typeName = formatTempExecMissingTypeLabel(item);
         var title = item && item.title ? String(item.title) : '';
         var priority = item && item.priority ? String(item.priority) : '';
         var precondition = item && item.precondition ? String(item.precondition) : '';
@@ -4476,9 +4519,21 @@
                 var clone = it && typeof it === 'object' ? Object.assign({}, it) : {};
                 clone.module_id = id;
                 clone.module_name = moduleMap[id] && moduleMap[id].name ? moduleMap[id].name : ('模块#' + id);
-                var typeKey = clone.type_id !== null && clone.type_id !== undefined ? String(clone.type_id) : '';
-                if (typeKey && typeNameMap[typeKey]) clone.type_name = typeNameMap[typeKey];
-                else if (!typeKey) clone.type_name = '未分类';
+                var typeIds = normalizeMissingReminderTypeIds(clone.type_ids);
+                if (!typeIds.length && clone.type_id) {
+                  typeIds = normalizeMissingReminderTypeIds([clone.type_id]);
+                }
+                var resolvedNames = [];
+                typeIds.forEach(function(typeId, idx) {
+                  var key = String(typeId);
+                  var base = Array.isArray(clone.type_names) ? clone.type_names[idx] : null;
+                  if (!base && clone.type_name && idx === 0) base = clone.type_name;
+                  var name = typeNameMap[key] || base || ('类型#' + typeId);
+                  resolvedNames.push(name);
+                });
+                clone.type_ids = typeIds;
+                clone.type_names = resolvedNames;
+                clone.type_name = resolvedNames.length ? resolvedNames.join('、') : '未分类';
                 return clone;
               });
             })
@@ -4491,9 +4546,17 @@
             (rows || []).forEach(function(row) {
               if (!row) return;
               var moduleHit = row.module_id && matchedModuleMap[String(row.module_id)];
-              var typeHit = row.type_id !== null && row.type_id !== undefined
-                ? matchedTypeMap[String(row.type_id)]
-                : false;
+              var rowTypeIds = normalizeMissingReminderTypeIds(row.type_ids);
+              if (!rowTypeIds.length && row.type_id) {
+                rowTypeIds = normalizeMissingReminderTypeIds([row.type_id]);
+              }
+              var typeHit = false;
+              for (var i = 0; i < rowTypeIds.length; i += 1) {
+                if (matchedTypeMap[String(rowTypeIds[i])]) {
+                  typeHit = true;
+                  break;
+                }
+              }
               if (moduleHit && typeHit) combined.push(row);
             });
           });

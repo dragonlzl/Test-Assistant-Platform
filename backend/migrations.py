@@ -912,3 +912,51 @@ def apply_migrations(engine: Engine) -> None:
                     )
                 )
             mark_applied(23)
+
+        # v24: 易漏用例多类型关联表。
+        if not _is_applied(conn, 24):
+            insp_v24 = inspect(conn)
+            tables_v24 = set(insp_v24.get_table_names())
+            if "missing_case_item_types" not in tables_v24:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS missing_case_item_types (
+                          item_id INTEGER NOT NULL,
+                          type_id INTEGER NOT NULL,
+                          PRIMARY KEY (item_id, type_id),
+                          FOREIGN KEY(item_id) REFERENCES missing_case_items (id) ON DELETE CASCADE,
+                          FOREIGN KEY(type_id) REFERENCES missing_case_types (id) ON DELETE CASCADE
+                        )
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_missing_case_item_types_item_id "
+                        "ON missing_case_item_types(item_id)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_missing_case_item_types_type_id "
+                        "ON missing_case_item_types(type_id)"
+                    )
+                )
+            if "missing_case_items" in tables_v24 and "missing_case_item_types" in tables_v24:
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO missing_case_item_types (item_id, type_id)
+                        SELECT id, type_id
+                        FROM missing_case_items
+                        WHERE type_id IS NOT NULL AND type_id > 0
+                          AND NOT EXISTS (
+                            SELECT 1 FROM missing_case_item_types t
+                            WHERE t.item_id = missing_case_items.id
+                              AND t.type_id = missing_case_items.type_id
+                          )
+                        """
+                    )
+                )
+            mark_applied(24)
