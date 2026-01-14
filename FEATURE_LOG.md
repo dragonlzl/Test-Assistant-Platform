@@ -3655,6 +3655,7 @@
 - 测试与验证：
   - `npx playwright test --config tests/playwright.config.js tests/ui/top_nav_collapse.spec.js`
 - 更新记录：2026-01-09 执行总览页排除智能收起（`scripts/handlers/layoutHandlers.js`、`tests/ui/top_nav_collapse.spec.js`）。
+- 更新记录：2026-01-14 用例生成进度/备忘/易漏提醒滚动不触发智能收起（`scripts/handlers/layoutHandlers.js`、`tests/ui/top_nav_collapse.spec.js`）。
 
 - 功能名称：用例库易漏用例入口与模块管理
 - 功能描述：在用例库顶部导航新增“易漏用例”入口，支持按项目/模块筛选、模块新增、模块批量查看、导出 XMind/Excel，以及易漏条目列表的增删改与批量删除。

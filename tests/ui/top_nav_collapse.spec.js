@@ -110,4 +110,124 @@ test.describe('顶部导航收起展开', () => {
     await page.mouse.wheel(0, 160);
     await expect(execOverviewNav).not.toHaveClass(/is-collapsed/);
   });
+
+  test('智能收起不受侧边栏与提醒区滚动影响', async ({ page }) => {
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/settings.html');
+    await waitForAppReady(page);
+    const smartToggle = page.locator('#smartTopNavToggle');
+    await smartToggle.scrollIntoViewIfNeeded();
+    await smartToggle.check();
+    await expect(smartToggle).toBeChecked();
+
+    await page.goto(base + '/case-library.html');
+    await waitForAppReady(page);
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('case-library');
+      }
+    });
+    const nav = page.locator('#caseLibraryFlowNav');
+    await nav.waitFor({ state: 'visible', timeout: 10000 });
+    await expect(nav).not.toHaveClass(/is-collapsed/);
+
+    await page.click('#sidebarTabCasegen');
+    await expect(page.locator('[data-sidebar-panel="casegen"]')).toHaveClass(/is-active/);
+
+    const scrollReady = await page.evaluate(() => {
+      function fillCasegen() {
+        var panelWrap = document.querySelector('[data-sidebar-panel="casegen"]');
+        if (panelWrap) {
+          panelWrap.classList.add('is-active');
+          panelWrap.style.display = 'flex';
+        }
+        var panel = document.getElementById('caseGenProgressPanel');
+        if (panel && panel.classList) panel.classList.remove('is-collapsed');
+        var list = document.getElementById('caseGenProgressList');
+        if (!list) return false;
+        var items = '';
+        for (var i = 0; i < 24; i += 1) {
+          items += '<div class="casegen-progress-item"><span>模块' + (i + 1) + '</span></div>';
+        }
+        list.innerHTML = items;
+        list.style.maxHeight = '120px';
+        list.style.overflowY = 'auto';
+        return list.scrollHeight > list.clientHeight;
+      }
+
+      function fillReminder() {
+        var editCard = document.getElementById('caseLibraryEditCard');
+        if (editCard && editCard.classList) editCard.classList.remove('hidden');
+        var host = document.getElementById('caseLibraryMissingReminderTop') || document.getElementById('caseLibraryMissingReminderBottom');
+        if (!host) return false;
+        if (host.classList) host.classList.remove('hidden');
+        var rows = '';
+        for (var i = 0; i < 30; i += 1) {
+          rows += '<tr><td>类型</td><td>模块</td><td>标题' + (i + 1) + '</td><td>P1</td><td>前提</td><td>步骤</td><td>预期</td></tr>';
+        }
+        host.innerHTML =
+          '<div class="missing-reminder-card">' +
+            '<div class="missing-reminder-scroll" style="max-height: 120px; overflow-y: auto;">' +
+              '<div class="temp-case-view">' +
+                '<table class="missing-reminder-table"><tbody>' + rows + '</tbody></table>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        var scrollBox = host.querySelector('.missing-reminder-scroll');
+        if (!scrollBox) return false;
+        return scrollBox.scrollHeight > scrollBox.clientHeight;
+      }
+
+      return {
+        casegen: fillCasegen(),
+        reminder: fillReminder(),
+      };
+    });
+    expect(scrollReady.casegen).toBe(true);
+    expect(scrollReady.reminder).toBe(true);
+
+    await page.evaluate(() => {
+      var target = document.getElementById('caseGenProgressList');
+      if (!target) return;
+      target.dispatchEvent(new WheelEvent('wheel', { deltaY: 160, bubbles: true, cancelable: true }));
+    });
+    await expect(nav).not.toHaveClass(/is-collapsed/);
+
+    await page.click('#sidebarTabMemo');
+    await expect(page.locator('[data-sidebar-panel="memo"]')).toHaveClass(/is-active/);
+    const memoReady = await page.evaluate(() => {
+      var panelWrap = document.querySelector('[data-sidebar-panel="memo"]');
+      if (panelWrap) {
+        panelWrap.classList.add('is-active');
+        panelWrap.style.display = 'flex';
+      }
+      var body = document.getElementById('memoPadBody');
+      if (!body) return false;
+      body.innerHTML = '<div class="memo-items"></div>';
+      var itemsBox = body.querySelector('.memo-items');
+      if (!itemsBox) return false;
+      var html = '';
+      for (var i = 0; i < 30; i += 1) {
+        html += '<div class="memo-item"><span class="memo-item-index">' + (i + 1) + '</span><span>备忘' + (i + 1) + '</span></div>';
+      }
+      itemsBox.innerHTML = html;
+      itemsBox.style.maxHeight = '120px';
+      itemsBox.style.overflowY = 'auto';
+      return itemsBox.scrollHeight > itemsBox.clientHeight;
+    });
+    expect(memoReady).toBe(true);
+    await page.evaluate(() => {
+      var target = document.querySelector('#memoPadBody .memo-items');
+      if (!target) return;
+      target.dispatchEvent(new WheelEvent('wheel', { deltaY: 160, bubbles: true, cancelable: true }));
+    });
+    await expect(nav).not.toHaveClass(/is-collapsed/);
+
+    await page.evaluate(() => {
+      var target = document.querySelector('#caseLibraryMissingReminderTop .missing-reminder-scroll');
+      if (!target) return;
+      target.dispatchEvent(new WheelEvent('wheel', { deltaY: 160, bubbles: true, cancelable: true }));
+    });
+    await expect(nav).not.toHaveClass(/is-collapsed/);
+  });
 });

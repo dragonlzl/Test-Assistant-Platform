@@ -130,9 +130,47 @@
       return nav.dataset.topNav === 'exec-overview';
     }
 
+    function resolveWheelTarget(e) {
+      if (!e) return null;
+      var target = e.target || null;
+      if (target && target.nodeType === 3) target = target.parentNode;
+      if (target && target.nodeType === 1) return target;
+      return null;
+    }
+
+    function isScrollableY(el) {
+      if (!el) return false;
+      var scrollHeight = el.scrollHeight;
+      var clientHeight = el.clientHeight;
+      if (!Number.isFinite(scrollHeight) || !Number.isFinite(clientHeight)) return false;
+      return scrollHeight - clientHeight > 1;
+    }
+
+    function shouldIgnoreSmartTopNavWheel(e) {
+      var target = resolveWheelTarget(e);
+      if (!target || typeof target.closest !== 'function') return false;
+      var casegenPanel = target.closest('#caseGenProgressPanel');
+      if (casegenPanel) {
+        var progressList = casegenPanel.querySelector('#caseGenProgressList');
+        if (isScrollableY(progressList)) return true;
+      }
+      var memoPanel = target.closest('#memoPadPanel');
+      if (memoPanel) {
+        var memoItems = memoPanel.querySelector('.memo-items');
+        if (isScrollableY(memoItems)) return true;
+      }
+      var reminderCard = target.closest('.missing-reminder-card');
+      if (reminderCard) {
+        var reminderScroll = reminderCard.querySelector('.missing-reminder-scroll');
+        if (isScrollableY(reminderScroll)) return true;
+      }
+      return false;
+    }
+
     function handleSmartTopNavWheel(e) {
       if (!e) return;
       if (!isSmartTopNavEnabled()) return;
+      if (shouldIgnoreSmartTopNavWheel(e)) return;
       var body = document.body;
       if (body && body.classList) {
         if (body.classList.contains('guide-active')) return;
