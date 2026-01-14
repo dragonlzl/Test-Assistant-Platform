@@ -38,6 +38,7 @@
     var drawerApiCache = {};
     var stepClickCapture = false;
     var guideOpenedDrawers = {};
+    var lockedTabGroup = '';
 
     var overlay = null;
     var focusEl = null;
@@ -110,6 +111,12 @@
       } finally {
         guideClickBypass = false;
       }
+    }
+
+    function setLockedTabGroup(name) {
+      lockedTabGroup = name || '';
+      if (!window.app) window.app = {};
+      window.app.lockedTabGroup = lockedTabGroup;
     }
 
     function getDrawerApi(drawerId) {
@@ -1347,6 +1354,7 @@
       if (!options.fromHistory) pushHistoryState(index);
 
       if (!activeStep) return;
+      setLockedTabGroup(activeStep.lockMenu || '');
       if (activeStep.group) showTabGroup(activeStep.group, { keepTabActive: true });
       if (activeStep.lockMenu) showTabGroup(activeStep.lockMenu, { keepTabActive: true });
 
@@ -1385,6 +1393,7 @@
     function endGuide(fromSkipAll) {
       renderToken += 1;
       guideClickBypass = false;
+      setLockedTabGroup('');
       if (fromSkipAll && activeStep && typeof activeStep.onSkipAll === 'function') {
         activeStep.onSkipAll();
       }

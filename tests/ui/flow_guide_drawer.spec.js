@@ -51,6 +51,22 @@ test.describe('功能引导抽屉', () => {
     await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
   });
 
+  test('菜单锁定时悬停其他分组不会切换', async ({ page }) => {
+    await page.locator('#flowGuideTrigger').click();
+    await page.locator('[data-guide-start="case-library-import"]').click();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('用例相关');
+
+    await page.locator('.tab-group-btn[data-group="cases"]').hover();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('用例库');
+
+    await page.locator('.tab-group-btn[data-group="manage"]').hover();
+    await expect(page.locator('[data-group-menu="cases"] [data-tab-btn="case-library"]')).toBeVisible();
+    await expect(page.locator('[data-group-menu="manage"]')).toHaveClass(/hidden/);
+
+    await page.locator('.guide-skip-all').evaluate((el) => el.click());
+    await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
+  });
+
   test('启动引导会回到顶部', async ({ page }) => {
     await page.evaluate(() => {
       var spacer = document.getElementById('__guideScrollSpacer');

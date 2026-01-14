@@ -19,6 +19,18 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：功能引导菜单锁定修复
+- 功能描述：引导步骤需要锁定某个侧边栏分组时，避免鼠标悬停切换到其他分组导致二级菜单错位。
+- 操作方式：打开功能引导 → 选择“用例导入引导（用例库）” → 按提示悬停“用例相关”并继续；锁定步骤悬停其他菜单也不会切换分组。
+- 使用效果：引导下一步稳定展示正确的用例相关二级菜单，避免跳到“项目管理”等其他分组。
+- 新增内容/接口/组件：
+  - 前端：引导锁定分组时阻止侧边栏分组切换（`scripts/modules/flowGuide.js`、`scripts/core/appRuntime.js`）。
+  - 测试：新增引导菜单锁定 UI 用例（`tests/ui/flow_guide_drawer.spec.js`）。
+- 复用说明：复用现有 flowGuide 的 lockMenu 机制与侧边栏展示逻辑，仅补充分组锁定判断。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/flow_guide_drawer.spec.js`（通过）
+- 更新记录：2026-01-14 功能引导菜单锁定修复（`scripts/modules/flowGuide.js`、`scripts/core/appRuntime.js`、`tests/ui/flow_guide_drawer.spec.js`）。
+
 - 功能名称：易漏项目选择持久化
 - 功能描述：易漏模块抽屉的项目选择支持持久化，刷新后仍保留上次选择。
 - 操作方式：用例库 → 易漏用例 → 选择项目；刷新页面后再次打开易漏抽屉自动恢复项目选择。

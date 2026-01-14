@@ -694,6 +694,9 @@
       opts = opts || {};
       var keepTabActive = Boolean(opts.keepTabActive);
       var expand = opts.expand !== false; // 默认展开
+      var lockedGroup = window.app && window.app.lockedTabGroup ? String(window.app.lockedTabGroup) : '';
+      var guideActive = Boolean(document.body && document.body.classList && document.body.classList.contains('guide-active'));
+      if (guideActive && lockedGroup && name !== lockedGroup) return;
       if (!window.app) window.app = {};
       window.app.lastTabGroup = name || '';
       window.app.lastShowRan = true;
