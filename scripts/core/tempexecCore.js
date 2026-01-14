@@ -8846,13 +8846,92 @@
       var entry = targetCase.reuseDetails.find(function(item) { return item.id === detailId; });
       if (!entry) return;
       if (isReuseDetailRemoved(entry)) return;
-      entry.status = tempExecResultOptions.indexOf(value) !== -1 ? value : '未执行';
+      var nextStatus = tempExecResultOptions.indexOf(value) !== -1 ? value : '未执行';
+      entry.status = nextStatus;
       targetCase.actual = resolveReuseAggregateStatus(targetCase.reuseDetails);
       if (isDbMode()) {
         queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
       }
       persistTempExecState();
-      renderTempExecView();
+      updateTempExecReuseStatusUi(fileId, index, detailId, nextStatus);
+    }
+
+    // 仅刷新复用子项结果的局部 UI，避免整页重绘导致抖动。
+    function updateTempExecReuseStatusUi(fileId, index, detailId, status) {
+      if (!tempExecView || !tempExecView.querySelectorAll) return;
+      var file = getTempExecFile(fileId);
+      if (!file || !file.cases[index]) return;
+      var targetCase = file.cases[index];
+      var normalized = normalizeReuseDetailStatus(status);
+      var statusClass = mapStatusToClass(normalized);
+      var selectEl = null;
+      var selects = tempExecView.querySelectorAll('select[data-temp-reuse-status]');
+      for (var i = 0; i < selects.length; i += 1) {
+        var node = selects[i];
+        if (!node || !node.dataset) continue;
+        if (String(node.dataset.tempReuseStatus || '') !== String(fileId)) continue;
+        if (String(node.dataset.index || '') !== String(index)) continue;
+        if (String(node.dataset.detail || '') !== String(detailId)) continue;
+        selectEl = node;
+        break;
+      }
+      if (selectEl) {
+        if (selectEl.value !== normalized) selectEl.value = normalized;
+        if (selectEl.classList) {
+          selectEl.classList.remove('passed', 'failed', 'blocked', 'unspecified', 'pending', 'changed');
+          if (statusClass) selectEl.classList.add(statusClass);
+        } else if (selectEl.className !== undefined) {
+          var cls = String(selectEl.className || '').split(/\s+/).filter(Boolean);
+          cls = cls.filter(function(name) {
+            return ['passed', 'failed', 'blocked', 'unspecified', 'pending', 'changed'].indexOf(name) === -1;
+          });
+          if (statusClass) cls.push(statusClass);
+          selectEl.className = cls.join(' ');
+        }
+      }
+      var buttonEl = null;
+      var buttons = tempExecView.querySelectorAll('button[data-temp-reuse-panel]');
+      for (var j = 0; j < buttons.length; j += 1) {
+        var btn = buttons[j];
+        if (!btn || !btn.dataset) continue;
+        if (String(btn.dataset.tempReusePanel || '') !== String(fileId)) continue;
+        if (String(btn.dataset.index || '') !== String(index)) continue;
+        buttonEl = btn;
+        break;
+      }
+      if (buttonEl) {
+        var display = getCaseExecutionDisplay(file, targetCase);
+        if (buttonEl.classList) {
+          buttonEl.classList.remove('passed', 'failed', 'blocked', 'unspecified', 'pending', 'changed');
+          if (display && display.className) buttonEl.classList.add(display.className);
+        } else if (buttonEl.className !== undefined) {
+          var btnCls = String(buttonEl.className || '').split(/\s+/).filter(Boolean);
+          btnCls = btnCls.filter(function(name) {
+            return ['passed', 'failed', 'blocked', 'unspecified', 'pending', 'changed'].indexOf(name) === -1;
+          });
+          if (display && display.className) btnCls.push(display.className);
+          buttonEl.className = btnCls.join(' ');
+        }
+        while (buttonEl.firstChild) buttonEl.removeChild(buttonEl.firstChild);
+        var label = display && display.label ? display.label : '未执行';
+        buttonEl.appendChild(document.createTextNode(label));
+        var openSet = ensureTempExecReuseOpen(fileId);
+        var showPending = Boolean(file.reuseEnabled) && !openSet.has(index);
+        if (showPending) {
+          var summary = aggregateReuseDetails(targetCase.reuseDetails);
+          var pendingCount = summary && summary.pending ? summary.pending : 0;
+          if (pendingCount > 0) {
+            var badge = document.createElement('span');
+            badge.className = 'reuse-pending-badge';
+            badge.setAttribute('data-reuse-pending', String(pendingCount));
+            badge.textContent = String(pendingCount);
+            buttonEl.appendChild(badge);
+          }
+        }
+      }
+      renderTempExecToolbar(file);
+      renderTempExecOverview();
+      updateTempExecFileStateClass(fileId);
     }
 
     function normalizeReuseDetailStatus(value) {

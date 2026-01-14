@@ -19,6 +19,19 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行页复用子项状态切换去抖动
+- 功能描述：用例执行页复用子项选择执行结果时，改为局部刷新状态 UI，避免整页重绘导致抖动。
+- 操作方式：执行页开启复用 → 展开复用子项 → 选择子项执行结果。
+- 使用效果：切换结果时页面不再抖动，主行状态与统计同步更新。
+- 新增内容/接口/组件：
+  - 前端：复用子项结果局部 UI 刷新逻辑（`scripts/core/tempexecCore.js`）。
+  - 测试：新增复用子项切换不触发整页重绘用例（`tests/ui/tempexec_reuse_status_no_jitter.spec.js`）。
+- 复用说明：复用现有状态汇总与展示逻辑，仅补充局部更新。
+- 测试与验证：
+  - `node --check scripts/core/tempexecCore.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_status_no_jitter.spec.js`（通过）
+- 更新记录：2026-01-14 复用子项状态切换不再触发对齐重算，避免细微位移（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_reuse_status_no_jitter.spec.js`）。
+
 - 功能名称：易漏用例参考跳转
 - 功能描述：用例执行/用例库提醒区标题改为“易漏用例参考”，并提供跳转到易漏用例库的快捷入口。
 - 操作方式：在提醒区点击“跳转到易漏用例库”，执行页会跳转到用例库并自动打开易漏用例抽屉；用例库页直接打开抽屉。
