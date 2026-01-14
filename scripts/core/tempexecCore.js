@@ -4195,7 +4195,10 @@
       return (
         '<div class="missing-reminder-card">' +
           '<div class="missing-reminder-header">' +
-            '<span class="missing-reminder-title">易漏用例提醒</span>' +
+            '<div class="missing-reminder-title-group">' +
+              '<span class="missing-reminder-title">易漏用例参考</span>' +
+              '<button type="button" class="missing-reminder-link" data-missing-reminder-link="missing-library">跳转到易漏用例库</button>' +
+            '</div>' +
             '<span class="missing-reminder-meta">' +
               escapeHtml(buildTempExecMissingReminderSummary(reminder)) +
             '</span>' +

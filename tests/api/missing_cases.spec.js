@@ -112,6 +112,13 @@ test.describe('missing cases api', () => {
     expect(item.type_ids).toEqual([typeA.id, typeB.id]);
     expect(item.type_names).toEqual(['类型A', '类型B']);
 
+    const listModulesAfterItem = await ctx.get(`${apiBase}/api/missing-modules?project_id=${projectId}`, { headers });
+    expect(listModulesAfterItem.status()).toBe(200);
+    const modulesAfterItem = await listModulesAfterItem.json();
+    const moduleAfterItem = modulesAfterItem.find((m) => String(m.id) === String(module.id));
+    expect(moduleAfterItem).toBeTruthy();
+    expect(Number(moduleAfterItem.item_count || 0)).toBe(1);
+
     const renameDup = await ctx.patch(`${apiBase}/api/missing-modules/${module.id}`, {
       headers,
       data: { name: '模块B' },

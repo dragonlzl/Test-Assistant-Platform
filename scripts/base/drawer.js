@@ -94,9 +94,24 @@
     if (typeof document === 'undefined') return;
     var body = document.body;
     var root = document.documentElement;
+    var skipId = '';
+    var skipDrawer = null;
+    try {
+      if (window.app && typeof window.app.__drawerSkipCloseId === 'string') {
+        skipId = String(window.app.__drawerSkipCloseId || '');
+        window.app.__drawerSkipCloseId = '';
+      }
+    } catch (err) {
+      // ignore
+    }
+    if (skipId) {
+      skipDrawer = document.getElementById(skipId);
+    }
     var openDrawers = document.querySelectorAll ? document.querySelectorAll('.drawer.open, .drawer.closing') : [];
     if (openDrawers && typeof openDrawers.forEach === 'function') {
       openDrawers.forEach(function(drawer) {
+        if (skipDrawer && drawer === skipDrawer) return;
+        if (shouldSkipClose(drawer)) return;
         var closer = drawer.querySelector('[data-drawer-close]') || drawer.querySelector('.drawer-mask');
         if (closer && typeof closer.click === 'function') {
           closer.click();
@@ -106,6 +121,29 @@
       });
     }
     unlockBodyScroll(body, root);
+  }
+
+  function shouldSkipClose(drawer) {
+    if (!drawer || !drawer.id) return false;
+    var id = String(drawer.id || '');
+    if (!id) return false;
+    try {
+      if (window.app && window.app.__drawerSkipCloseId && String(window.app.__drawerSkipCloseId) === id) {
+        return true;
+      }
+      var guard = window.app && window.app.__drawerCloseGuard ? window.app.__drawerCloseGuard : null;
+      if (!guard || guard.id === undefined || guard.id === null) return false;
+      if (String(guard.id) !== id) return false;
+      var until = Number(guard.until || 0);
+      if (!isFinite(until) || until <= 0) return false;
+      if (Date.now() < until) return true;
+      if (window.app && window.app.__drawerCloseGuard && String(window.app.__drawerCloseGuard.id) === id) {
+        window.app.__drawerCloseGuard = null;
+      }
+    } catch (err) {
+      // ignore
+    }
+    return false;
   }
 
   function createDrawer(options) {
@@ -153,6 +191,7 @@
     }
     function close() {
       if (!drawer.classList.contains('open') && !drawer.classList.contains('closing')) return;
+      if (shouldSkipClose(drawer)) return;
       closeToken += 1;
       var token = closeToken;
       if (closeFinalizeTimer) clearTimeout(closeFinalizeTimer);

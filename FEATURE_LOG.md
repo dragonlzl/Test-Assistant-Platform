@@ -19,6 +19,20 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：易漏用例参考跳转
+- 功能描述：用例执行/用例库提醒区标题改为“易漏用例参考”，并提供跳转到易漏用例库的快捷入口。
+- 操作方式：在提醒区点击“跳转到易漏用例库”，执行页会跳转到用例库并自动打开易漏用例抽屉；用例库页直接打开抽屉。
+- 使用效果：提醒区名称更贴合“参考”定位，且可一键进入易漏用例库抽屉。
+- 新增内容/接口/组件：
+  - 前端：提醒区标题与跳转按钮、跨页打开易漏抽屉逻辑（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`style.css`）。
+  - 测试：补充易漏用例参考跳转 UI 用例（`tests/ui/missing_case_reminder.spec.js`）。
+- 复用说明：复用现有抽屉控制与跨页请求标记方式，仅新增跳转触发与样式。
+- 测试与验证：
+  - `npx playwright test --config tests/playwright.config.js tests/ui/missing_case_reminder.spec.js`（通过）
+- 更新记录：2026-01-14 易漏用例参考跳转（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/missing_case_reminder.spec.js`）。
+- 更新记录：2026-01-14 修复跳转后易漏抽屉自动关闭（`scripts/modules/caseLibrary.js`、`tests/ui/missing_case_reminder.spec.js`）。
+- 更新记录：2026-01-14 缓解跳转后抽屉收缩再展开抖动（`scripts/modules/caseLibrary.js`、`tests/ui/missing_case_reminder.spec.js`）。
+
 - 功能名称：功能引导菜单锁定修复
 - 功能描述：引导步骤需要锁定某个侧边栏分组时，避免鼠标悬停切换到其他分组导致二级菜单错位。
 - 操作方式：打开功能引导 → 选择“用例导入引导（用例库）” → 按提示悬停“用例相关”并继续；锁定步骤悬停其他菜单也不会切换分组。
@@ -3723,6 +3737,11 @@
 - 更新记录：2026-01-13 易漏用例提醒无匹配时隐藏区域（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`）。
 - 更新记录：2026-01-13 易漏用例提醒匹配字段限定为用例字段集（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`）。
 - 更新记录：2026-01-13 易漏用例提醒跨用例命中模块与类型（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`tests/ui/missing_case_reminder.spec.js`）。
+- 更新记录：2026-01-14 修复易漏用例提醒跳转抽屉开合抖动（`scripts/base/drawer.js`、`scripts/modules/tempexec.js`）。
+- 更新记录：2026-01-14 修复易漏用例提醒跳转后抽屉被恢复流程收起（`scripts/modules/caseLibrary.js`）。
+- 更新记录：2026-01-14 优化易漏用例提醒跳转抽屉开合过渡（`scripts/modules/caseLibrary.js`、`tests/ui/missing_case_reminder.spec.js`、`tests/api/missing_cases.spec.js`）。
+- 更新记录：2026-01-14 避免易漏用例抽屉打开过程重复开合（`scripts/modules/caseLibrary.js`、`tests/ui/missing_case_reminder.spec.js`）。
+- 更新记录：2026-01-14 跳转易漏抽屉增加关闭保护窗口（`scripts/base/drawer.js`、`scripts/modules/caseLibrary.js`）。
 
 - 功能名称：易漏用例操作记录与用例贡献统计
 - 功能描述：易漏用例与漏测模块的新增/修改/删除操作写入操作记录，显示模块名（如“云存档（模块）”）并展示数量变化，同时纳入用例贡献视图统计。

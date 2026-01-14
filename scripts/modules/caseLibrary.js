@@ -50,7 +50,10 @@
   }
 
   var selectExecRequestSessionKey = 'tap-case-library-select-exec-request';
+  var missingDrawerRequestSessionKey = 'tap-case-library-missing-drawer-request';
   var tempExecAssignRequestSessionKey = 'tap-temp-exec-assign-request';
+  var missingDrawerOpenTimer = 0;
+  var missingDrawerSkipTimer = 0;
 
   function markSelectExecDrawerRequest() {
     try {
@@ -61,6 +64,21 @@
     if (typeof sessionStorage !== 'undefined') {
       try {
         sessionStorage.setItem(selectExecRequestSessionKey, '1');
+      } catch (err) {
+        // ignore
+      }
+    }
+  }
+
+  function markMissingDrawerRequest() {
+    try {
+      if (window.app) window.app.__caseLibraryMissingDrawerRequest = true;
+    } catch (err) {
+      // ignore
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      try {
+        sessionStorage.setItem(missingDrawerRequestSessionKey, '1');
       } catch (err) {
         // ignore
       }
@@ -125,6 +143,48 @@
     return consumed;
   }
 
+  function consumeMissingDrawerRequest() {
+    var consumed = false;
+    try {
+      if (window.app && window.app.__caseLibraryMissingDrawerRequest) {
+        window.app.__caseLibraryMissingDrawerRequest = false;
+        consumed = true;
+      }
+    } catch (err) {
+      // ignore
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      try {
+        var stored = sessionStorage.getItem(missingDrawerRequestSessionKey) || '';
+        if (!consumed && stored === '1') consumed = true;
+        if (consumed) sessionStorage.removeItem(missingDrawerRequestSessionKey);
+      } catch (err) {
+        // ignore
+      }
+    }
+    return consumed;
+  }
+
+  function peekMissingDrawerRequest() {
+    var found = false;
+    try {
+      if (window.app && window.app.__caseLibraryMissingDrawerRequest) {
+        found = true;
+      }
+    } catch (err) {
+      // ignore
+    }
+    if (!found && typeof sessionStorage !== 'undefined') {
+      try {
+        var stored = sessionStorage.getItem(missingDrawerRequestSessionKey) || '';
+        if (stored === '1') found = true;
+      } catch (err) {
+        // ignore
+      }
+    }
+    return found;
+  }
+
   function openSelectExecDrawerDirect() {
     if (window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
       window.app.drawer.closeAllDrawers();
@@ -141,6 +201,107 @@
     return false;
   }
 
+  function hasOtherOpenDrawers(drawerEl) {
+    if (!drawerEl || typeof document === 'undefined' || !document.querySelectorAll) return false;
+    var openDrawers = document.querySelectorAll('.drawer.open, .drawer.closing');
+    if (!openDrawers || !openDrawers.length) return false;
+    for (var i = 0; i < openDrawers.length; i += 1) {
+      var node = openDrawers[i];
+      if (node && node !== drawerEl) return true;
+    }
+    return false;
+  }
+
+  function markDrawerSkipClose(drawerId, ttlMs) {
+    if (!drawerId) return;
+    try {
+      if (window.app) {
+        window.app.__drawerSkipCloseId = String(drawerId);
+        window.app.__drawerCloseGuard = { id: String(drawerId), until: Date.now() + Number(ttlMs || 0) };
+      }
+    } catch (err) {
+      // ignore
+    }
+    var ttl = Number(ttlMs);
+    if (!isFinite(ttl) || ttl <= 0) return;
+    if (missingDrawerSkipTimer) {
+      clearTimeout(missingDrawerSkipTimer);
+      missingDrawerSkipTimer = 0;
+    }
+    missingDrawerSkipTimer = setTimeout(function() {
+      missingDrawerSkipTimer = 0;
+      try {
+        if (window.app) {
+          if (window.app.__drawerSkipCloseId === String(drawerId)) {
+            window.app.__drawerSkipCloseId = '';
+          }
+          if (window.app.__drawerCloseGuard && String(window.app.__drawerCloseGuard.id || '') === String(drawerId)) {
+            window.app.__drawerCloseGuard = null;
+          }
+        }
+      } catch (err2) {
+        // ignore
+      }
+    }, ttl);
+  }
+
+  function openMissingDrawerDirect(options) {
+    var opts = options || {};
+    var skipClose = Boolean(opts.skipClose);
+    var waitClose = opts.waitClose === undefined ? !skipClose : Boolean(opts.waitClose);
+    var delayMs = Number(opts.delayMs);
+    if (!isFinite(delayMs) || delayMs < 0) delayMs = 360;
+    var maxWaitMs = Number(opts.maxWaitMs);
+    if (!isFinite(maxWaitMs) || maxWaitMs < 0) maxWaitMs = 900;
+    var pollInterval = Number(opts.pollIntervalMs);
+    if (!isFinite(pollInterval) || pollInterval <= 0) pollInterval = 60;
+    var drawerEl = missingDrawerInstance && missingDrawerInstance.element
+      ? missingDrawerInstance.element
+      : document.getElementById('caseLibraryMissingDrawer');
+    if (drawerEl && drawerEl.classList && drawerEl.classList.contains('open')) {
+      return true;
+    }
+    if (missingDrawerOpenTimer) {
+      clearTimeout(missingDrawerOpenTimer);
+      missingDrawerOpenTimer = 0;
+    }
+    var shouldDelay = false;
+    if (!skipClose && window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
+      shouldDelay = hasOtherOpenDrawers(drawerEl);
+      window.app.drawer.closeAllDrawers();
+    }
+    if (shouldDelay && waitClose) {
+      // 避免与其他抽屉关闭动画叠加导致开合抖动，等待关闭完成再打开
+      var startAt = Date.now();
+      var attemptOpen = function() {
+        if (missingDrawerOpenTimer) {
+          clearTimeout(missingDrawerOpenTimer);
+          missingDrawerOpenTimer = 0;
+        }
+        var hasOther = hasOtherOpenDrawers(drawerEl);
+        if (hasOther && Date.now() - startAt < maxWaitMs) {
+          missingDrawerOpenTimer = setTimeout(attemptOpen, pollInterval);
+          return;
+        }
+        missingDrawerOpenTimer = 0;
+        openMissingDrawerDirect({ skipClose: true, waitClose: false });
+      };
+      missingDrawerOpenTimer = setTimeout(attemptOpen, delayMs);
+      return true;
+    }
+    markDrawerSkipClose('caseLibraryMissingDrawer', 800);
+    if (missingDrawerInstance && typeof missingDrawerInstance.open === 'function') {
+      missingDrawerInstance.open();
+      return true;
+    }
+    var fallbackBtn = document.getElementById('openCaseLibraryMissingDrawerBtn');
+    if (fallbackBtn && typeof fallbackBtn.click === 'function') {
+      fallbackBtn.click();
+      return true;
+    }
+    return false;
+  }
+
   function openSelectExecDrawer(options) {
     var opts = options || {};
     var allowInactive = Boolean(opts.allowInactive || opts.force || opts.skipTabCheck);
@@ -150,6 +311,45 @@
     }
     consumeSelectExecDrawerRequest();
     return openSelectExecDrawerDirect();
+  }
+
+  function scheduleMissingDrawerOpen(options) {
+    var opts = options || {};
+    var attempts = Number(opts.attempts);
+    if (!isFinite(attempts) || attempts <= 0) attempts = 3;
+    var interval = Number(opts.intervalMs);
+    if (!isFinite(interval) || interval <= 0) interval = 160;
+    var delay = Number(opts.delayMs);
+    if (!isFinite(delay) || delay < 0) delay = 0;
+    function isOpen() {
+      if (missingDrawerOpenTimer) return true;
+      var el = missingDrawerInstance && missingDrawerInstance.element
+        ? missingDrawerInstance.element
+        : document.getElementById('caseLibraryMissingDrawer');
+      return Boolean(el && el.classList && el.classList.contains('open'));
+    }
+    function tryOpen() {
+      if (isOpen()) return;
+      openMissingDrawerDirect({ waitClose: true });
+      setTimeout(function() {
+        if (isOpen()) return;
+        attempts -= 1;
+        if (attempts <= 0) return;
+        setTimeout(tryOpen, interval);
+      }, interval);
+    }
+    setTimeout(tryOpen, delay);
+  }
+
+  function openMissingDrawer(options) {
+    var opts = options || {};
+    var allowInactive = Boolean(opts.allowInactive || opts.force || opts.skipTabCheck);
+    if (!allowInactive && !isCaseLibraryActive()) {
+      markMissingDrawerRequest();
+      return false;
+    }
+    consumeMissingDrawerRequest();
+    return openMissingDrawerDirect();
   }
 
   var dom = {
@@ -7336,7 +7536,10 @@
       '</colgroup>';
     return (
       '<div class="missing-reminder-header">' +
-        '<span class="missing-reminder-title">易漏用例提醒</span>' +
+        '<div class="missing-reminder-title-group">' +
+          '<span class="missing-reminder-title">易漏用例参考</span>' +
+          '<button type="button" class="missing-reminder-link" data-missing-reminder-link="missing-library">跳转到易漏用例库</button>' +
+        '</div>' +
         '<span class="missing-reminder-meta">' + escapeHtml(buildMissingReminderSummary(reminder || {})) + '</span>' +
       '</div>' +
       '<div class="missing-reminder-table-head">' +
@@ -7435,6 +7638,14 @@
       window.addEventListener('scroll', reminder.scrollHandler, { passive: true });
       window.addEventListener('resize', reminder.scrollHandler);
     }
+  }
+
+  function handleMissingReminderJump(e) {
+    var target = e && e.target && e.target.closest ? e.target.closest('[data-missing-reminder-link]') : null;
+    if (!target) return;
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    openMissingDrawer({ allowInactive: true, force: true });
   }
 
   function renderMissingReminder() {
@@ -8780,7 +8991,9 @@
       setHistoryDetailVisible(false);
       showEditorCard(false);
     });
-    if (missingDrawerInstance && typeof missingDrawerInstance.close === 'function') {
+    var keepOpenOnce = Boolean(state.missingDrawer && state.missingDrawer.keepOpenOnce);
+    if (keepOpenOnce && state.missingDrawer) state.missingDrawer.keepOpenOnce = false;
+    if (!keepOpenOnce && missingDrawerInstance && typeof missingDrawerInstance.close === 'function') {
       missingDrawerInstance.close();
     }
   }
@@ -13380,6 +13593,12 @@
         openImportSelectDrawer();
       });
     }
+    if (dom.missingReminderTop) {
+      dom.missingReminderTop.addEventListener('click', handleMissingReminderJump);
+    }
+    if (dom.missingReminderBottom) {
+      dom.missingReminderBottom.addEventListener('click', handleMissingReminderJump);
+    }
 
     if (dom.editDrawerConfirmBtn) {
       dom.editDrawerConfirmBtn.addEventListener('click', loadEditDrawerFiles);
@@ -14126,6 +14345,10 @@
 		  function restoreCaseLibraryAfterActivated() {
 		    if (restoreAfterActivatedPromise) return restoreAfterActivatedPromise;
 		    restoreAfterActivatedPromise = (function() {
+          var pendingMissingDrawer = peekMissingDrawerRequest();
+          if (pendingMissingDrawer && state.missingDrawer) {
+            state.missingDrawer.keepOpenOnce = true;
+          }
 		      if (!isAuthReady()) {
 		        pendingCaseLibraryTab = true;
 		        setStatus(dom.status, '登录信息加载中...', '');
@@ -14136,10 +14359,15 @@
 		      return ensureProjectsReady()
 		        .then(function() { return restoreCaseLibraryLastSelection(); })
 		        .then(function(view) {
-		          if (consumeSelectExecDrawerRequest()) {
-		            openSelectExecDrawerDirect();
-		            return view;
-		          }
+          if (consumeSelectExecDrawerRequest()) {
+            openSelectExecDrawerDirect();
+            return view;
+          }
+          if (consumeMissingDrawerRequest()) {
+            scheduleMissingDrawerOpen({ attempts: 4, intervalMs: 180 });
+            if (state.missingDrawer) state.missingDrawer.keepOpenOnce = false;
+            return view;
+          }
 		          var persisted = readEditDrawerPersistedState();
 		          var userId = getCurrentUserId();
 		          var shouldOpen = Boolean(persisted && userId && String(persisted.user_id || '') === String(userId) && persisted.drawer_open === true);
@@ -14233,6 +14461,8 @@
     window.app.caseLibraryApi = window.app.caseLibraryApi || {};
     window.app.caseLibraryApi.openSelectExecDrawer = openSelectExecDrawer;
     window.app.caseLibraryApi.requestSelectExecDrawer = markSelectExecDrawerRequest;
+    window.app.caseLibraryApi.openMissingDrawer = openMissingDrawer;
+    window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
     if (hasImportSelectDrawer) {
       window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
     }
@@ -14418,6 +14648,8 @@
     window.app.caseLibraryApi = window.app.caseLibraryApi || {};
     window.app.caseLibraryApi.openSelectExecDrawer = openSelectExecDrawer;
     window.app.caseLibraryApi.requestSelectExecDrawer = markSelectExecDrawerRequest;
+    window.app.caseLibraryApi.openMissingDrawer = openMissingDrawer;
+    window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
     window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
     window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
     window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;

@@ -1736,9 +1736,27 @@ body {
       gap: 12px;
       margin-bottom: 8px;
     }
+    .missing-reminder-title-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     .missing-reminder-title {
       font-weight: 600;
       font-size: 14px;
+    }
+    .missing-reminder-link {
+      border: 1px solid var(--missing-reminder-border, var(--border));
+      background: transparent;
+      color: var(--missing-reminder-accent, var(--primary));
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .missing-reminder-link:hover {
+      background: rgba(37,99,235,0.08);
     }
     .missing-reminder-meta {
       font-size: 12px;
@@ -8088,6 +8106,9 @@ button.exec-overview-file-chip,
   --missing-reminder-accent: #7db4ff;
   --missing-reminder-shadow: 0 14px 30px rgba(0,0,0,0.45);
   --missing-reminder-head-bg: var(--panel-strong);
+}
+:root[data-theme="dark"] .missing-reminder-link:hover {
+  background: rgba(125,180,255,0.12);
 }
 :root[data-theme="dark"] body {
   background: var(--bg);

@@ -1096,6 +1096,27 @@
       }
       if (!hasSelectExecDrawer && typeof switchTab === 'function') switchTab('case-library');
     }
+    function openCaseLibraryMissingDrawerFromTempExec() {
+      var missingDrawerRequestKey = 'tap-case-library-missing-drawer-request';
+      try {
+        if (window.app) {
+          window.app.__drawerSkipRestoreOnce = true;
+          window.app.__drawerSkipCloseId = 'caseLibraryMissingDrawer';
+        }
+      } catch (err) {
+        // ignore
+      }
+      if (window.app && window.app.caseLibraryApi && typeof window.app.caseLibraryApi.requestMissingDrawer === 'function') {
+        window.app.caseLibraryApi.requestMissingDrawer();
+      } else if (typeof sessionStorage !== 'undefined') {
+        try {
+          sessionStorage.setItem(missingDrawerRequestKey, '1');
+        } catch (err) {
+          // ignore
+        }
+      }
+      if (typeof switchTab === 'function') switchTab('case-library');
+    }
     function openCaseLibraryFromTempExec() {
       try {
         if (window.app) window.app.__drawerSkipRestoreOnce = true;
@@ -5240,6 +5261,11 @@
 
     if (tempExecView && api.renderTempExecView) {
       tempExecView.addEventListener('click', function(e) {
+        var reminderLink = e && e.target && e.target.closest ? e.target.closest('[data-missing-reminder-link]') : null;
+        if (reminderLink) {
+          openCaseLibraryMissingDrawerFromTempExec();
+          return;
+        }
         var presetAddBtn = e.target.closest('[data-temp-reuse-preset-add]');
         if (presetAddBtn && api.startTempExecPresetDraft) {
           var fileId = presetAddBtn.dataset.tempReusePresetAdd;

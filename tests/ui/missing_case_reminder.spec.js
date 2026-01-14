@@ -119,7 +119,111 @@ async function waitForAppReady(page) {
   await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout: 20000 });
 }
 
-test.describe('易漏用例提醒区域', () => {
+async function setupTempExecReminderPage(page, options) {
+  const opts = options || {};
+  const token = opts.token || '';
+  const user = opts.user || {};
+  const project = opts.project || {};
+  const missingModules = Array.isArray(opts.missingModules) ? opts.missingModules : [];
+  const missingTypes = Array.isArray(opts.missingTypes) ? opts.missingTypes : [];
+  const missingItemsByModule = opts.missingItemsByModule || {};
+  const files = Array.isArray(opts.files) ? opts.files : [];
+  const activeId = opts.activeId || (files[0] ? files[0].id : '');
+
+  await page.addInitScript((payload) => {
+    const tk = payload && payload.token ? payload.token : '';
+    const projectId = payload ? payload.projectId : '';
+    const files = Array.isArray(payload && payload.files) ? payload.files : [];
+    const activeId = payload && payload.activeId ? payload.activeId : (files[0] ? files[0].id : '');
+    try {
+      if (tk) localStorage.setItem('tap-auth-token', tk);
+      localStorage.setItem('usecase-temp-exec-v1', JSON.stringify({
+        files: files,
+        versions: [],
+        placement: { requirementOrder: [], fileOrder: {}, versionOrder: {} },
+        collapsed: { req: false, version: false },
+        activeId: activeId,
+      }));
+    } catch (_) {}
+  }, { token, projectId: project.id, files, activeId });
+
+  await page.route('**/api/**', async (route) => {
+    const url = new URL(route.request().url());
+    const pathName = url.pathname;
+    const method = route.request().method();
+    const respond = (status, body) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+    if (pathName === '/api/users/me' && method === 'GET') return respond(200, user);
+    if (pathName === '/api/projects' && method === 'GET') return respond(200, project ? [project] : []);
+    if (project && project.id && pathName === `/api/projects/${project.id}/versions` && method === 'GET') {
+      return respond(200, []);
+    }
+    if (pathName === '/api/settings' && method === 'GET') {
+      return respond(200, [{
+        key: 'missingCaseReminderPlacement',
+        scope: 'user',
+        owner_id: user.id || 0,
+        value_json: 'top',
+      }]);
+    }
+    if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+
+    if (pathName === '/api/missing-modules' && method === 'GET') return respond(200, missingModules);
+    if (pathName === '/api/missing-types' && method === 'GET') return respond(200, missingTypes);
+    if (pathName.startsWith('/api/missing-modules/') && pathName.endsWith('/items') && method === 'GET') {
+      const parts = pathName.split('/');
+      const moduleId = Number(parts[parts.length - 2]);
+      return respond(200, missingItemsByModule[moduleId] || []);
+    }
+
+    if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+    if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+    if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+    if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+    if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+    if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+    if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, []);
+    if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+
+    if (pathName.startsWith('/api/')) return respond(200, []);
+    return respond(404, { detail: 'not found' });
+  });
+
+  await page.goto(base + '/case-exec.html?tab=tempexec');
+  await waitForAppReady(page);
+  await page.evaluate(() => {
+    if (window.app && typeof window.app.switchTab === 'function') {
+      window.app.switchTab('tempexec');
+    }
+  });
+  await page.waitForFunction(() => {
+    return window.app
+      && window.app.tempExecApi
+      && typeof window.app.tempExecApi.loadTempExecState === 'function';
+  }, null, { timeout: 10000 });
+  await page.evaluate(() => window.app.tempExecApi.loadTempExecState());
+  await page.waitForFunction((expected) => {
+    return window.app
+      && window.app.state
+      && Array.isArray(window.app.state.tempExecFiles)
+      && window.app.state.tempExecFiles.length === expected;
+  }, files.length, { timeout: 10000 });
+  if (activeId) {
+    await page.evaluate((targetId) => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.setTempExecActive === 'function') {
+        window.app.tempExecApi.setTempExecActive(targetId);
+      }
+    }, activeId);
+    await page.waitForFunction((targetId) => {
+      return window.app
+        && window.app.state
+        && window.app.state.tempExecActiveId === targetId;
+    }, activeId, { timeout: 10000 });
+  }
+}
+
+test.describe('易漏用例参考区域', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
@@ -254,7 +358,8 @@ test.describe('易漏用例提醒区域', () => {
     const reminderTop = page.locator('#caseLibraryMissingReminderTop');
     const reminderBottom = page.locator('#caseLibraryMissingReminderBottom');
     await expect(reminderTop).toBeVisible();
-    await expect(reminderTop).toContainText('易漏用例提醒');
+    await expect(reminderTop).toContainText('易漏用例参考');
+    await expect(reminderTop.locator('[data-missing-reminder-link]')).toContainText('跳转到易漏用例库');
     await expect(reminderTop).toContainText('登录异常提示');
     await expect(reminderBottom).toBeHidden();
 
@@ -285,147 +390,72 @@ test.describe('易漏用例提醒区域', () => {
       }],
     };
 
-    await page.addInitScript((payload) => {
-      const tk = payload && payload.token ? payload.token : '';
-      const projectId = payload ? payload.projectId : '';
-      try {
-        if (tk) localStorage.setItem('tap-auth-token', tk);
-        localStorage.setItem('usecase-temp-exec-v1', JSON.stringify({
-          files: [
-            {
-              id: 'exec-file-a',
-              name: '执行用例A',
-              createdAt: Date.now(),
-              requirement: '',
-              projectId: projectId,
-              versionId: '',
-              reuseEnabled: false,
-              reusePresets: [],
-              cases: [{
-                module: '支付',
-                title: '支付成功',
-                priority: 'P1',
-                precondition: '已绑定卡',
-                steps: '确认支付',
-                expected: '支付成功',
-                actual: '未执行',
-                remark: '',
-                defectLinks: [],
-              }, {
-                module: '设置',
-                title: '安全验证提示',
-                priority: 'P2',
-                precondition: '已登录',
-                steps: '触发安全验证',
-                expected: '展示验证提示',
-                actual: '未执行',
-                remark: '',
-                defectLinks: [],
-              }],
-            },
-            {
-              id: 'exec-file-b',
-              name: '执行用例B',
-              createdAt: Date.now(),
-              requirement: '',
-              projectId: projectId,
-              versionId: '',
-              reuseEnabled: false,
-              reusePresets: [],
-              cases: [{
-                module: '设置',
-                title: '修改昵称',
-                priority: 'P2',
-                precondition: '已登录',
-                steps: '进入设置修改',
-                expected: '保存成功',
-                actual: '未执行',
-                remark: '',
-                defectLinks: [],
-              }],
-            },
-          ],
-          versions: [],
-          placement: { requirementOrder: [], fileOrder: {}, versionOrder: [] },
-          collapsed: { req: false, version: false },
-          activeId: 'exec-file-a',
-        }));
-      } catch (_) {}
-    }, { token, projectId: project.id });
-
-    await page.route('**/api/**', async (route) => {
-      const url = new URL(route.request().url());
-      const pathName = url.pathname;
-      const method = route.request().method();
-      const respond = (status, body) =>
-        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
-
-      if (pathName === '/api/users/me' && method === 'GET') return respond(200, user);
-      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
-      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, []);
-      if (pathName === '/api/settings' && method === 'GET') {
-        return respond(200, [{
-          key: 'missingCaseReminderPlacement',
-          scope: 'user',
-          owner_id: user.id,
-          value_json: 'top',
-        }]);
-      }
-      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
-
-      if (pathName === '/api/missing-modules' && method === 'GET') return respond(200, missingModules);
-      if (pathName === '/api/missing-types' && method === 'GET') return respond(200, missingTypes);
-      if (pathName.startsWith('/api/missing-modules/') && pathName.endsWith('/items') && method === 'GET') {
-        const parts = pathName.split('/');
-        const moduleId = Number(parts[parts.length - 2]);
-        return respond(200, missingItemsByModule[moduleId] || []);
-      }
-
-      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
-      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
-      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
-      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
-      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
-      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
-      if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, []);
-      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
-
-      if (pathName.startsWith('/api/')) return respond(200, []);
-      return respond(404, { detail: 'not found' });
-    });
-
-    await page.goto(base + '/case-exec.html?tab=tempexec');
-    await waitForAppReady(page);
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') {
-        window.app.switchTab('tempexec');
-      }
+    const files = [
+      {
+        id: 'exec-file-a',
+        name: '执行用例A',
+        createdAt: Date.now(),
+        requirement: '',
+        projectId: project.id,
+        versionId: '',
+        reuseEnabled: false,
+        reusePresets: [],
+        cases: [{
+          module: '支付',
+          title: '支付成功',
+          priority: 'P1',
+          precondition: '已绑定卡',
+          steps: '确认支付',
+          expected: '支付成功',
+          actual: '未执行',
+          remark: '',
+          defectLinks: [],
+        }, {
+          module: '设置',
+          title: '安全验证提示',
+          priority: 'P2',
+          precondition: '已登录',
+          steps: '触发安全验证',
+          expected: '展示验证提示',
+          actual: '未执行',
+          remark: '',
+          defectLinks: [],
+        }],
+      },
+      {
+        id: 'exec-file-b',
+        name: '执行用例B',
+        createdAt: Date.now(),
+        requirement: '',
+        projectId: project.id,
+        versionId: '',
+        reuseEnabled: false,
+        reusePresets: [],
+        cases: [{
+          module: '设置',
+          title: '修改昵称',
+          priority: 'P2',
+          precondition: '已登录',
+          steps: '进入设置修改',
+          expected: '保存成功',
+          actual: '未执行',
+          remark: '',
+          defectLinks: [],
+        }],
+      },
+    ];
+    await setupTempExecReminderPage(page, {
+      token: token,
+      user: user,
+      project: project,
+      missingModules: missingModules,
+      missingTypes: missingTypes,
+      missingItemsByModule: missingItemsByModule,
+      files: files,
+      activeId: 'exec-file-a',
     });
     await page.waitForFunction(() => {
-      return window.app
-        && window.app.tempExecApi
-        && typeof window.app.tempExecApi.loadTempExecState === 'function';
-    }, null, { timeout: 10000 });
-    const storedTempExec = await page.evaluate(() => {
-      try { return localStorage.getItem('usecase-temp-exec-v1') || ''; } catch (_) { return ''; }
-    });
-    expect(storedTempExec).toBeTruthy();
-    await page.evaluate(() => window.app.tempExecApi.loadTempExecState());
-    await page.waitForFunction(() => {
-      return window.app
-        && window.app.state
-        && Array.isArray(window.app.state.tempExecFiles)
-        && window.app.state.tempExecFiles.length === 2;
-    }, null, { timeout: 10000 });
-    await page.evaluate(() => {
-      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.setTempExecActive === 'function') {
-        window.app.tempExecApi.setTempExecActive('exec-file-a');
-      }
-    });
-    await page.waitForFunction(() => {
-      return window.app
-        && window.app.state
-        && window.app.state.tempExecActiveId === 'exec-file-a';
+      return window.app && window.app.state && window.app.state.tempExecMissingReminder;
     }, null, { timeout: 10000 });
     const reminderState = await page.evaluate(() => {
       if (!window.app || !window.app.state) return null;
@@ -455,6 +485,7 @@ test.describe('易漏用例提醒区域', () => {
 
     const reminder = page.locator('#tempExecView .missing-reminder-card');
     await expect(reminder).toHaveCount(1);
+    await expect(reminder).toContainText('易漏用例参考');
     await expect(reminder).toContainText('支付失败提示');
 
     await page.evaluate(() => {
@@ -463,5 +494,132 @@ test.describe('易漏用例提醒区域', () => {
       }
     });
     await expect(page.locator('#tempExecView .missing-reminder-card')).toHaveCount(0);
+  });
+
+  test('执行视图按钮可跳转到易漏用例库抽屉', async ({ page }) => {
+    const token = 'token-missing-reminder-jump';
+    const user = { id: 0, username: 'missing_jump', role: 'user', level: 'member' };
+    const project = { id: 1, name: '跳转项目', description: 'missing reminder jump' };
+    const missingModules = [{ id: 302, project_id: 1, name: '支付', item_count: 1 }];
+    const missingTypes = [{ id: 402, project_id: 1, name: '安全' }];
+    const missingItemsByModule = {
+      302: [{
+        id: 7801,
+        module_id: 302,
+        title: '支付失败提示',
+        priority: 'P1',
+        precondition: '账户余额不足',
+        steps: '点击支付',
+        expected: '提示余额不足',
+        type_id: 402,
+      }],
+    };
+    const files = [
+      {
+        id: 'exec-file-jump',
+        name: '执行用例跳转',
+        createdAt: Date.now(),
+        requirement: '',
+        projectId: project.id,
+        versionId: '',
+        reuseEnabled: false,
+        reusePresets: [],
+        cases: [{
+          module: '支付',
+          title: '支付成功',
+          priority: 'P1',
+          precondition: '已绑定卡',
+          steps: '确认支付',
+          expected: '支付成功',
+          actual: '未执行',
+          remark: '',
+          defectLinks: [],
+        }, {
+          module: '设置',
+          title: '安全验证提示',
+          priority: 'P2',
+          precondition: '已登录',
+          steps: '触发安全验证',
+          expected: '展示验证提示',
+          actual: '未执行',
+          remark: '',
+          defectLinks: [],
+        }],
+      },
+    ];
+
+    await setupTempExecReminderPage(page, {
+      token: token,
+      user: user,
+      project: project,
+      missingModules: missingModules,
+      missingTypes: missingTypes,
+      missingItemsByModule: missingItemsByModule,
+      files: files,
+      activeId: 'exec-file-jump',
+    });
+
+    const reminder = page.locator('#tempExecView .missing-reminder-card');
+    await expect(reminder).toHaveCount(1, { timeout: 10000 });
+    const jumpBtn = reminder.locator('[data-missing-reminder-link]');
+    await expect(jumpBtn).toContainText('跳转到易漏用例库');
+    await page.addInitScript(() => {
+      window.__missingDrawerClosingSeen = false;
+      window.__missingDrawerOpenSeen = false;
+      window.__missingDrawerOpenFlap = false;
+      window.__missingDrawerHiddenAfterOpen = false;
+      window.__missingDrawerObserverBound = false;
+      let tries = 0;
+      function bindObserver() {
+        if (window.__missingDrawerObserverBound) return;
+        const drawer = document.getElementById('caseLibraryMissingDrawer');
+        if (!drawer) return;
+        window.__missingDrawerObserverBound = true;
+        let lastOpen = drawer.classList && drawer.classList.contains('open');
+        if (lastOpen) window.__missingDrawerOpenSeen = true;
+        const observer = new MutationObserver(() => {
+          if (drawer.classList && drawer.classList.contains('closing')) {
+            window.__missingDrawerClosingSeen = true;
+          }
+          const isOpen = drawer.classList && drawer.classList.contains('open');
+          if (isOpen) window.__missingDrawerOpenSeen = true;
+          if (lastOpen && !isOpen) window.__missingDrawerOpenFlap = true;
+          if (window.__missingDrawerOpenSeen && drawer.classList && drawer.classList.contains('hidden')) {
+            window.__missingDrawerHiddenAfterOpen = true;
+          }
+          lastOpen = Boolean(isOpen);
+        });
+        observer.observe(drawer, { attributes: true, attributeFilter: ['class'] });
+        if (drawer.classList && drawer.classList.contains('closing')) {
+          window.__missingDrawerClosingSeen = true;
+        }
+        if (drawer.classList && drawer.classList.contains('hidden')) {
+          window.__missingDrawerHiddenAfterOpen = true;
+        }
+      }
+      function scheduleBind() {
+        tries += 1;
+        if (tries > 120) return;
+        bindObserver();
+        if (!window.__missingDrawerObserverBound) {
+          setTimeout(scheduleBind, 50);
+        }
+      }
+      scheduleBind();
+    });
+    await jumpBtn.click();
+
+    await page.waitForURL(/case-library\.html/);
+    await waitCaseLibraryReady(page);
+    await expect(page.locator('#caseLibraryMissingDrawer')).toHaveClass(/open/);
+    await page.waitForTimeout(800);
+    const status = await page.evaluate(() => ({
+      closingSeen: Boolean(window.__missingDrawerClosingSeen),
+      openFlap: Boolean(window.__missingDrawerOpenFlap),
+      hiddenAfterOpen: Boolean(window.__missingDrawerHiddenAfterOpen),
+    }));
+    expect(status.closingSeen).toBe(false);
+    expect(status.openFlap).toBe(false);
+    expect(status.hiddenAfterOpen).toBe(false);
   });
 });
