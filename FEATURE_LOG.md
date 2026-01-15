@@ -3803,3 +3803,4 @@
 - 更新记录：2026-01-20 修复执行视图提醒区滚动提示引发的渲染异常（`scripts/core/tempexecCore.js`）。
 - 更新记录：2026-01-20 提醒区可视高度提升至 4.5 行提示可滚动（`style.css`）。
 - 更新记录：2026-01-20 微调提醒区可视高度为约 4.5 行（`style.css`）。
+- 更新记录：2026-01-20 修复一键执行从用例库勾选导入重复导入（`scripts/modules/caseLibrary.js`、`tests/ui/auto_case_library_import.spec.js`）。

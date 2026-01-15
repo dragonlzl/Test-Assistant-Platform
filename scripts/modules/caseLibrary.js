@@ -625,6 +625,7 @@
       loading: false,
       processing: false,
       selection: new Set(),
+      skipCloseImport: false,
       pageIndex: 0,
       loadSeq: 0,
     },
@@ -13071,6 +13072,7 @@
     state.importSelectDrawer.loading = false;
     state.importSelectDrawer.processing = false;
     state.importSelectDrawer.selection = new Set();
+    state.importSelectDrawer.skipCloseImport = false;
     state.importSelectDrawer.pageIndex = 0;
     state.importSelectDrawer.loadSeq = 0;
     setStatus(dom.importSelectStatus, '', '');
@@ -13355,6 +13357,7 @@
     syncImportSelectDrawerControls();
     return importCaseFilesToWorkflow(files).then(function(ok) {
       if (ok && options.closeAfter && importSelectDrawerInstance && typeof importSelectDrawerInstance.close === 'function') {
+        state.importSelectDrawer.skipCloseImport = true;
         importSelectDrawerInstance.close();
       }
       return ok;
@@ -13373,6 +13376,10 @@
   }
 
   function handleImportSelectDrawerClose() {
+    if (state.importSelectDrawer.skipCloseImport) {
+      state.importSelectDrawer.skipCloseImport = false;
+      return;
+    }
     if (!state.importSelectDrawer.selection || !state.importSelectDrawer.selection.size) return;
     importSelectedCaseFilesFromImportDrawer({ closeAfter: false });
   }
@@ -14416,6 +14423,7 @@
         if (!file) return;
         importCaseFilesToWorkflow([file]).then(function(ok) {
           if (ok && importSelectDrawerInstance && typeof importSelectDrawerInstance.close === 'function') {
+            state.importSelectDrawer.skipCloseImport = true;
             importSelectDrawerInstance.close();
           }
         });
