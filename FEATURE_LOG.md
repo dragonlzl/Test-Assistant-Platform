@@ -3804,3 +3804,5 @@
 - 更新记录：2026-01-20 提醒区可视高度提升至 4.5 行提示可滚动（`style.css`）。
 - 更新记录：2026-01-20 微调提醒区可视高度为约 4.5 行（`style.css`）。
 - 更新记录：2026-01-20 修复一键执行从用例库勾选导入重复导入（`scripts/modules/caseLibrary.js`、`tests/ui/auto_case_library_import.spec.js`）。
+- 更新记录：2026-01-20 用例生成入库操作区改为三行排序（`index.html`、`ai-workflow.html`、`style.css`、`scripts/modules/flowGuide.js`、`tests/ui/casegen_db_store.spec.js`）。
+- 更新记录：2026-01-20 补充用例生成“新用例入库”引导步骤（`scripts/modules/flowGuide.js`）。

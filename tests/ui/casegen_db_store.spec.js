@@ -147,6 +147,42 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     });
   });
 
+  test('入库操作区分三行展示', async ({ page }) => {
+    const token = 'token-casegen-store-layout';
+    const user = { id: 11, username: 'casegen_layout', role: 'admin', level: 'leader' };
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') return respond(200, user);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, {});
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, {});
+      return respond(200, []);
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page);
+
+    const rows = page.locator('.casegen-store-actions .casegen-store-row');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0).locator('#caseGenAllViewBtn')).toBeVisible();
+    await expect(rows.nth(1).locator('#caseGenStoreActionSelect')).toBeVisible();
+    await expect(rows.nth(1).locator('#caseGenStoreNewBtn')).toBeVisible();
+    await expect(rows.nth(2).locator('#caseGenStoreAppendBtn')).toBeVisible();
+  });
+
   test('用例生成说明包含生成与补全规则', async ({ page }) => {
     const token = 'token-casegen-guide';
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
