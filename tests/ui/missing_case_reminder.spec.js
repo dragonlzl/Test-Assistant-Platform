@@ -246,20 +246,20 @@ test.describe('易漏用例参考区域', () => {
     const casesByFileId = {
       11: [{
         id: 1001,
-        module: '登录',
-        title: '登录成功',
+        module: '技能',
+        title: '工程师角色的一技能效果',
         priority: 'P1',
-        precondition: '已注册账号',
-        steps: '输入账号密码',
-        expected: '登录成功',
+        precondition: '已解锁工程师角色',
+        steps: '点击一技能按钮',
+        expected: '展示技能效果',
       }, {
         id: 1003,
-        module: '账号',
-        title: '安全校验',
+        module: '技能',
+        title: '工程师角色二技能效果',
         priority: 'P2',
-        precondition: '已登录',
-        steps: '触发安全验证',
-        expected: '验证通过',
+        precondition: '已解锁工程师角色',
+        steps: '点击二技能按钮',
+        expected: '展示技能效果',
       }],
       12: [{
         id: 1002,
@@ -271,17 +271,26 @@ test.describe('易漏用例参考区域', () => {
         expected: '保存成功',
       }],
     };
-    const missingModules = [{ id: 101, project_id: 1, name: '登录', item_count: 1 }];
-    const missingTypes = [{ id: 201, project_id: 1, name: '安全' }];
+    const missingModules = [{ id: 101, project_id: 1, name: '技能', item_count: 2 }];
+    const missingTypes = [{ id: 201, project_id: 1, name: '效果' }];
     const missingItemsByModule = {
       101: [{
         id: 9001,
         module_id: 101,
-        title: '登录异常提示',
+        title: '工程师角色的一技能效果',
         priority: 'P1',
+        precondition: '已解锁工程师角色',
+        steps: '点击一技能按钮',
+        expected: '展示技能效果',
+        type_id: 201,
+      }, {
+        id: 9002,
+        module_id: 101,
+        title: '工程师角色二技能效果',
+        priority: 'P2',
         precondition: '',
-        steps: '输入错误密码',
-        expected: '提示错误',
+        steps: '点击二技能按钮',
+        expected: '',
         type_id: 201,
       }],
     };
@@ -360,7 +369,13 @@ test.describe('易漏用例参考区域', () => {
     await expect(reminderTop).toBeVisible();
     await expect(reminderTop).toContainText('易漏用例参考');
     await expect(reminderTop.locator('[data-missing-reminder-link]')).toContainText('跳转到易漏用例库');
-    await expect(reminderTop).toContainText('登录异常提示');
+    await expect(reminderTop).toContainText('匹配得分');
+    const reminderRows = reminderTop.locator('tbody tr');
+    await expect(reminderRows).toHaveCount(2);
+    await expect(reminderRows.nth(0)).toContainText('工程师角色的一技能效果');
+    await expect(reminderRows.nth(0).locator('td.score')).toContainText('4');
+    await expect(reminderRows.nth(1)).toContainText('工程师角色二技能效果');
+    await expect(reminderRows.nth(1).locator('td.score')).toContainText('2');
     await expect(reminderBottom).toBeHidden();
 
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
@@ -369,6 +384,111 @@ test.describe('易漏用例参考区域', () => {
     await editSecond.click();
     await expect(reminderTop).toBeHidden();
     await expect(reminderBottom).toBeHidden();
+  });
+
+  test('用例库编辑视图仅类型命中也可提醒', async ({ page }) => {
+    const token = 'token-missing-reminder-type-only';
+    const user = { id: 9, username: 'missing_type', role: 'user', level: 'member' };
+    const project = { id: 2, name: '类型命中项目', description: 'missing reminder type only' };
+    const versions = [{ id: 1, name: 'v1' }];
+    const files = [{ id: 21, file_name_clean: '类型命中用例', project_id: 2, version_id: 1, item_count: 1 }];
+    const casesByFileId = {
+      21: [{
+        id: 2001,
+        module: '设置',
+        title: '安全提示展示',
+        priority: 'P1',
+        precondition: '已登录',
+        steps: '触发安全验证',
+        expected: '展示安全提示',
+      }],
+    };
+    const missingModules = [{ id: 301, project_id: 2, name: '支付', item_count: 1 }];
+    const missingTypes = [{ id: 401, project_id: 2, name: '安全' }];
+    const missingItemsByModule = {
+      301: [{
+        id: 9101,
+        module_id: 301,
+        title: '支付安全提示',
+        priority: 'P1',
+        precondition: '',
+        steps: '',
+        expected: '展示安全提示',
+        type_id: 401,
+      }],
+    };
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/settings' && method === 'GET') {
+        return respond(200, [{
+          key: 'missingCaseReminderPlacement',
+          scope: 'user',
+          owner_id: user.id,
+          value_json: 'top',
+        }, {
+          key: 'missingCaseReminderMatchConfig',
+          scope: 'user',
+          owner_id: user.id,
+          value_json: { type: true, module: false },
+        }]);
+      }
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, files);
+      if (pathName.startsWith('/api/case-files/') && pathName.endsWith('/items') && method === 'GET') {
+        const parts = pathName.split('/');
+        const fileId = Number(parts[parts.length - 2]);
+        return respond(200, casesByFileId[fileId] || []);
+      }
+      if (pathName === '/api/missing-modules' && method === 'GET') return respond(200, missingModules);
+      if (pathName === '/api/missing-types' && method === 'GET') return respond(200, missingTypes);
+      if (pathName.startsWith('/api/missing-modules/') && pathName.endsWith('/items') && method === 'GET') {
+        const parts = pathName.split('/');
+        const moduleId = Number(parts[parts.length - 2]);
+        return respond(200, missingItemsByModule[moduleId] || []);
+      }
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await page.goto(base + '/case-library.html');
+    await waitCaseLibraryReady(page);
+    await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
+    await page.locator('#caseLibraryEditProjectSelect').selectOption(String(project.id));
+    const editFirst = page.locator('[data-case-lib-edit="21"]');
+    await expect(editFirst).toBeVisible();
+    await editFirst.click();
+
+    const reminderTop = page.locator('#caseLibraryMissingReminderTop');
+    await expect(reminderTop).toBeVisible();
+    await expect(reminderTop).toContainText('支付安全提示');
+    await expect(reminderTop.locator('td.score')).toContainText('2');
   });
 
   test('执行视图匹配易漏模块时展示提醒', async ({ page }) => {

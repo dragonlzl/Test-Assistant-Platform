@@ -83,11 +83,10 @@ test.describe('临时执行搜索功能', () => {
     const searchInput = page.locator('#tempExecToolbar input[placeholder="搜索用例关键字"]');
     await expect(searchInput).toBeVisible({ timeout: 20000 });
     await searchInput.fill('登录');
-    await page.click('#tempExecToolbar button:has-text("搜索")');
     await expect(caseRows).toHaveCount(1, { timeout: 15000 });
     await expect(caseRows.first()).toContainText('登录');
 
-    await page.click('#tempExecToolbar button:has-text("清除")');
+    await searchInput.fill('');
     await expect(caseRows).toHaveCount(3);
   });
 

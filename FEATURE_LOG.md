@@ -3759,6 +3759,15 @@
 - 更新记录：2026-01-14 避免易漏用例抽屉打开过程重复开合（`scripts/modules/caseLibrary.js`、`tests/ui/missing_case_reminder.spec.js`）。
 - 更新记录：2026-01-14 跳转易漏抽屉增加关闭保护窗口（`scripts/base/drawer.js`、`scripts/modules/caseLibrary.js`）。
 
+- 功能名称：易漏用例提醒命中设定与匹配评分
+- 功能描述：提醒区支持配置第一优先命中条件（类型/模块），并基于易漏用例标题/前提/步骤/预期与当前用例的字段匹配得分排序，提醒区新增匹配得分列。
+- 操作方式：进入“设置-通用设置”勾选命中条件并保存；在“用例库-查看&编辑”或“用例执行-执行视图”查看提醒区得分与排序。
+- 使用效果：命中范围更可控，提醒区按匹配度排序，优先展示高匹配易漏用例。
+- 新增内容/接口/组件：
+  - 前端：新增命中设定设置项、关键词拆分与评分排序、提醒区得分列（`settings.html`、`scripts/modules/settings.js`、`scripts/base/utils.js`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`style.css`、`config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`、`scripts/modules/opsLog.js`）。
+  - 测试：补充易漏提醒匹配得分与命中设定 UI/API 用例（`tests/ui/missing_case_reminder.spec.js`、`tests/api/settings_missing_reminder_placement.spec.js`）。
+- 更新记录：2026-01-20 易漏用例提醒命中设定与匹配评分（`settings.html`、`scripts/modules/settings.js`、`scripts/base/utils.js`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`style.css`、`config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`、`scripts/modules/opsLog.js`、`tests/ui/missing_case_reminder.spec.js`、`tests/api/settings_missing_reminder_placement.spec.js`）。
+
 - 功能名称：易漏用例操作记录与用例贡献统计
 - 功能描述：易漏用例与漏测模块的新增/修改/删除操作写入操作记录，显示模块名（如“云存档（模块）”）并展示数量变化，同时纳入用例贡献视图统计。
 - 操作方式：在用例库的“易漏用例”抽屉新增/编辑/删除易漏条目或漏测模块；管理员在“操作记录”查看日志或在“用例贡献视图”查看统计。
@@ -3775,3 +3784,22 @@
 - 更新记录：2026-01-13 易漏用例操作记录与贡献统计（`backend/routers/missing_cases.py`、`scripts/modules/opsLog.js`、`tests/api/ops_log.spec.js`、`tests/ui/ops_log.spec.js`、`tests/ui/ops_contribution.spec.js`）。
 - 更新记录：2026-01-13 易漏用例优先级输入自动大写（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_missing_modules.spec.js`）。
 - 更新记录：2026-01-18 执行分配项目关闭改用确认抽屉（`scripts/modules/tempexec.js`、`tests/ui/tempexec_project_layout.spec.js`）。
+
+- 功能名称：执行视图搜索即时过滤
+- 功能描述：用例执行视图搜索框改为输入即生效，移除搜索/清除按钮。
+- 操作方式：用例执行 → 执行视图，在搜索框输入关键字立即过滤；清空输入自动恢复。
+- 使用效果：搜索无需按钮操作，筛选更及时。
+- 新增内容/接口/组件：
+  - 前端：搜索输入即时触发过滤与按钮移除（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）。
+  - 测试：调整执行视图搜索 UI 用例（`tests/ui/tempexec_search.spec.js`）。
+- 测试与验证：
+  - `node --check scripts/modules/tempexec.js scripts/core/tempexecCore.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_search.spec.js`
+- 更新记录：2026-01-20 执行视图搜索即时过滤（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_search.spec.js`）。
+- 更新记录：2026-01-20 修复执行视图搜索输入时丢失焦点（`scripts/core/tempexecCore.js`）。
+- 更新记录：2026-01-20 修复执行视图搜索输入法组合被打断（`scripts/base/utils.js`、`scripts/modules/tempexec.js`）。
+- 更新记录：2026-01-20 提醒区悬停时展示滚动条提示可滚动（`style.css`）。
+- 更新记录：2026-01-20 提醒区悬停即展示可滚动提示（`scripts/base/utils.js`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`style.css`）。
+- 更新记录：2026-01-20 修复执行视图提醒区滚动提示引发的渲染异常（`scripts/core/tempexecCore.js`）。
+- 更新记录：2026-01-20 提醒区可视高度提升至 4.5 行提示可滚动（`style.css`）。
+- 更新记录：2026-01-20 微调提醒区可视高度为约 4.5 行（`style.css`）。

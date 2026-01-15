@@ -62,6 +62,14 @@
       || document.getElementById('saveMissingReminderPlacement');
     var missingReminderPlacementStatus = dom.missingReminderPlacementStatus
       || document.getElementById('missingReminderPlacementStatus');
+    var missingReminderMatchTypeInput = dom.missingReminderMatchTypeInput
+      || document.getElementById('missingReminderMatchType');
+    var missingReminderMatchModuleInput = dom.missingReminderMatchModuleInput
+      || document.getElementById('missingReminderMatchModule');
+    var saveMissingReminderMatchBtn = dom.saveMissingReminderMatchBtn
+      || document.getElementById('saveMissingReminderMatch');
+    var missingReminderMatchStatus = dom.missingReminderMatchStatus
+      || document.getElementById('missingReminderMatchStatus');
     var settingsNavButtons = dom.settingsNavButtons || document.querySelectorAll('[data-settings-target]');
 
     var defaultSettings = config.defaultSettings || {};
@@ -75,6 +83,9 @@
     var defaultMissingReminderPlacement = defaultSettings && defaultSettings.missingCaseReminderPlacement
       ? String(defaultSettings.missingCaseReminderPlacement)
       : 'top';
+    var defaultMissingReminderMatchConfig = defaultSettings && typeof defaultSettings.missingCaseReminderMatchConfig === 'object'
+      ? defaultSettings.missingCaseReminderMatchConfig
+      : { type: true, module: true };
     var minCaseViewFontSize = Number(config.minCaseViewFontSize) || 11;
     var maxCaseViewFontSize = Number(config.maxCaseViewFontSize) || 16;
     var settingsKey = config.settingsKey || 'usecase-settings-v1';
@@ -111,6 +122,7 @@
       defaultProjectId: false,
       theme: false,
       missingCaseReminderPlacement: false,
+      missingCaseReminderMatchConfig: false,
     };
 
     function setSettingsReady(source) {
@@ -215,6 +227,22 @@
       return 'top';
     }
 
+    function resolveMissingReminderMatchConfig(value) {
+      if (utils && typeof utils.normalizeMissingReminderMatchConfig === 'function') {
+        return utils.normalizeMissingReminderMatchConfig(value, defaultMissingReminderMatchConfig);
+      }
+      var base = defaultMissingReminderMatchConfig || { type: true, module: true };
+      var raw = value && typeof value === 'object' ? value : {};
+      var typeFlag = raw.type === true ? true : raw.type === false ? false : base.type !== false;
+      var moduleFlag = raw.module === true ? true : raw.module === false ? false : base.module !== false;
+      if (!typeFlag && !moduleFlag) {
+        typeFlag = base.type !== false;
+        moduleFlag = base.module !== false;
+        if (!typeFlag && !moduleFlag) typeFlag = true;
+      }
+      return { type: typeFlag, module: moduleFlag };
+    }
+
     function applyTheme(theme) {
       if (typeof document === 'undefined' || !document.documentElement) return;
       var next = resolveTheme(theme);
@@ -309,6 +337,18 @@
         state.settings.missingCaseReminderPlacement = defaultMissingReminderPlacement;
       }
       state.settings.missingCaseReminderPlacement = resolveMissingReminderPlacement(state.settings.missingCaseReminderPlacement);
+      if (state.settings.missingCaseReminderMatchConfig === undefined || state.settings.missingCaseReminderMatchConfig === null) {
+        state.settings.missingCaseReminderMatchConfig = defaultMissingReminderMatchConfig;
+      }
+      state.settings.missingCaseReminderMatchConfig = resolveMissingReminderMatchConfig(
+        state.settings.missingCaseReminderMatchConfig
+      );
+      if (state.settings.missingCaseReminderMatchConfig === undefined || state.settings.missingCaseReminderMatchConfig === null) {
+        state.settings.missingCaseReminderMatchConfig = defaultMissingReminderMatchConfig;
+      }
+      state.settings.missingCaseReminderMatchConfig = resolveMissingReminderMatchConfig(
+        state.settings.missingCaseReminderMatchConfig
+      );
       if (state.settings.smartTopNavCollapse === undefined || state.settings.smartTopNavCollapse === null) {
         state.settings.smartTopNavCollapse = defaultSettings.smartTopNavCollapse === true;
       } else {
@@ -648,6 +688,16 @@
       }
       if (missingReminderPlacementStatus) {
         setStatus(missingReminderPlacementStatus, '', '');
+      }
+      if (missingReminderMatchTypeInput && missingReminderMatchModuleInput) {
+        if (!dirtyDrafts.missingCaseReminderMatchConfig) {
+          var matchConfig = resolveMissingReminderMatchConfig(state.settings.missingCaseReminderMatchConfig);
+          missingReminderMatchTypeInput.checked = matchConfig.type === true;
+          missingReminderMatchModuleInput.checked = matchConfig.module === true;
+        }
+        if (missingReminderMatchStatus) {
+          setStatus(missingReminderMatchStatus, '', '');
+        }
       }
       if (smartTopNavToggle) {
         smartTopNavToggle.checked = state.settings.smartTopNavCollapse === true;
@@ -1188,6 +1238,64 @@
       notifySettingsUpdated(['missingCaseReminderPlacement']);
     }
 
+    function getMissingReminderMatchLabel(config) {
+      var cfg = resolveMissingReminderMatchConfig(config);
+      var parts = [];
+      if (cfg.type) parts.push('类型');
+      if (cfg.module) parts.push('模块');
+      if (!parts.length) return '未设置';
+      return parts.join(' + ');
+    }
+
+    function saveMissingReminderMatchConfig() {
+      if (!missingReminderMatchTypeInput || !missingReminderMatchModuleInput) return;
+      var next = resolveMissingReminderMatchConfig({
+        type: Boolean(missingReminderMatchTypeInput.checked),
+        module: Boolean(missingReminderMatchModuleInput.checked),
+      });
+      var prev = resolveMissingReminderMatchConfig(state.settings.missingCaseReminderMatchConfig);
+      if (!next.type && !next.module) {
+        if (missingReminderMatchStatus) {
+          setStatus(missingReminderMatchStatus, '至少勾选一个命中条件', 'warn');
+        }
+        return;
+      }
+      state.settings.missingCaseReminderMatchConfig = next;
+      dirtyDrafts.missingCaseReminderMatchConfig = false;
+      persistSettings(['missingCaseReminderMatchConfig']);
+      if (missingReminderMatchStatus) {
+        if (prev.type === next.type && prev.module === next.module) {
+          setStatus(missingReminderMatchStatus, '易漏用例命中设定保持为' + getMissingReminderMatchLabel(next), 'ok');
+        } else {
+          setStatus(missingReminderMatchStatus, '易漏用例命中设定已更新为' + getMissingReminderMatchLabel(next), 'ok');
+        }
+      }
+      notifySettingsUpdated(['missingCaseReminderMatchConfig']);
+    }
+
+    function handleMissingReminderMatchChange(e) {
+      if (!missingReminderMatchTypeInput || !missingReminderMatchModuleInput) return;
+      var typeChecked = Boolean(missingReminderMatchTypeInput.checked);
+      var moduleChecked = Boolean(missingReminderMatchModuleInput.checked);
+      if (!typeChecked && !moduleChecked) {
+        if (e && e.target === missingReminderMatchTypeInput) {
+          missingReminderMatchTypeInput.checked = true;
+        } else if (e && e.target === missingReminderMatchModuleInput) {
+          missingReminderMatchModuleInput.checked = true;
+        } else {
+          missingReminderMatchTypeInput.checked = true;
+        }
+        if (missingReminderMatchStatus) {
+          setStatus(missingReminderMatchStatus, '至少勾选一个命中条件', 'warn');
+        }
+        return;
+      }
+      dirtyDrafts.missingCaseReminderMatchConfig = true;
+      if (missingReminderMatchStatus) {
+        setStatus(missingReminderMatchStatus, '', '');
+      }
+    }
+
     function notifyPageSizeChange(size) {
       if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
       var detail = { size: size };
@@ -1313,6 +1421,15 @@
           dirtyDrafts.missingCaseReminderPlacement = true;
           setStatus(missingReminderPlacementStatus, '', '');
         });
+      }
+      if (saveMissingReminderMatchBtn) {
+        saveMissingReminderMatchBtn.addEventListener('click', saveMissingReminderMatchConfig);
+      }
+      if (missingReminderMatchTypeInput) {
+        missingReminderMatchTypeInput.addEventListener('change', handleMissingReminderMatchChange);
+      }
+      if (missingReminderMatchModuleInput) {
+        missingReminderMatchModuleInput.addEventListener('change', handleMissingReminderMatchChange);
       }
       if (pageGuideSettingsGrid) pageGuideSettingsGrid.addEventListener('change', handlePageGuideChange);
       if (smartTopNavToggle) smartTopNavToggle.addEventListener('change', handleSmartTopNavChange);

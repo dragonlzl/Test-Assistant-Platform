@@ -45,4 +45,24 @@ test.describe('settings missingCaseReminderPlacement', () => {
     expect(bottomRecord).toBeTruthy();
     expect(bottomRecord.value_json).toBe('bottom');
   });
+
+  test('可写入并读取易漏用例命中设定', async () => {
+    const ctx = await request.newContext();
+    const token = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const matchConfig = { type: true, module: false };
+
+    const saveMatch = await ctx.put(`${apiBase}/api/settings`, {
+      headers,
+      data: { scope: 'user', items: [{ key: 'missingCaseReminderMatchConfig', value_json: matchConfig }] },
+    });
+    expect(saveMatch.status()).toBe(200);
+
+    const listMatch = await ctx.get(`${apiBase}/api/settings?scope=all`, { headers });
+    expect(listMatch.status()).toBe(200);
+    const listMatchBody = await listMatch.json();
+    const matchRecord = listMatchBody.find((item) => item.key === 'missingCaseReminderMatchConfig');
+    expect(matchRecord).toBeTruthy();
+    expect(matchRecord.value_json).toEqual(matchConfig);
+  });
 });

@@ -54,6 +54,7 @@
     theme: 'light',
     caseViewFontSize: defaultCaseViewFontSize,
     missingCaseReminderPlacement: 'top',
+    missingCaseReminderMatchConfig: { type: true, module: true },
     caseGenProgressCollapsed: false,
     sidebarTabActive: 'casegen',
     memoPad: {

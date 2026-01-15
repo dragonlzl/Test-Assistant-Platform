@@ -533,6 +533,22 @@
 <p class="status" id="missingReminderPlacementStatus"></p>
 
 <div class="settings-divider"></div>
+<div class="settings-inline">
+<div class="meta">
+<strong>易漏用例命中设定</strong>
+<p>选择提醒区的第一优先级命中条件，至少勾选一个。</p>
+</div>
+<div class="control">
+<label><input type="checkbox" id="missingReminderMatchType" data-missing-reminder-match="type"/> 类型</label>
+<label><input type="checkbox" id="missingReminderMatchModule" data-missing-reminder-match="module"/> 模块</label>
+</div>
+</div>
+<div class="actions">
+<button class="secondary" id="saveMissingReminderMatch">保存命中设定</button>
+</div>
+<p class="status" id="missingReminderMatchStatus"></p>
+
+<div class="settings-divider"></div>
 <h3>页面说明自动弹出</h3>
 <p class="hint">进入主要功能页面时自动弹出页面说明，可按页面独立关闭。</p>
 <form class="settings-grid" id="pageGuideSettingsGrid">

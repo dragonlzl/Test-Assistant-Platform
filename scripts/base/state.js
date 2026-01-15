@@ -12,6 +12,7 @@
       feishuMention: '',
       caseViewFontSize: 13,
       missingCaseReminderPlacement: 'top',
+      missingCaseReminderMatchConfig: { type: true, module: true },
       smartTopNavCollapse: false,
       tempExecColumns: {
         select: true,
@@ -57,6 +58,9 @@
     }
     if (defaultSettings && typeof defaultSettings.pageGuideSwitches === 'object') {
       settingsCopy.pageGuideSwitches = Object.assign({}, defaultSettings.pageGuideSwitches);
+    }
+    if (defaultSettings && typeof defaultSettings.missingCaseReminderMatchConfig === 'object') {
+      settingsCopy.missingCaseReminderMatchConfig = Object.assign({}, defaultSettings.missingCaseReminderMatchConfig);
     }
     return {
       authToken: '',

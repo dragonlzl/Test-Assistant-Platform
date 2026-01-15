@@ -7464,6 +7464,87 @@
     return key === 'bottom' ? 'bottom' : 'top';
   }
 
+  function resolveMissingReminderMatchConfig(value) {
+    var globalState = window.app && window.app.state ? window.app.state : null;
+    var settings = globalState && globalState.settings && typeof globalState.settings === 'object'
+      ? globalState.settings
+      : {};
+    var raw = value;
+    if (raw === undefined) raw = settings.missingCaseReminderMatchConfig;
+    if (utils && typeof utils.normalizeMissingReminderMatchConfig === 'function') {
+      return utils.normalizeMissingReminderMatchConfig(raw, { type: true, module: true });
+    }
+    var base = { type: true, module: true };
+    var cfg = raw && typeof raw === 'object' ? raw : {};
+    var typeFlag = cfg.type === true ? true : cfg.type === false ? false : base.type !== false;
+    var moduleFlag = cfg.module === true ? true : cfg.module === false ? false : base.module !== false;
+    if (!typeFlag && !moduleFlag) {
+      typeFlag = base.type !== false;
+      moduleFlag = base.module !== false;
+      if (!typeFlag && !moduleFlag) typeFlag = true;
+    }
+    return { type: typeFlag, module: moduleFlag };
+  }
+
+  function buildMissingReminderFieldText(item, keys) {
+    if (!item || typeof item !== 'object') return '';
+    var parts = [];
+    (keys || []).forEach(function(key) {
+      if (!key) return;
+      var val = (utils && typeof utils.stringifyCaseField === 'function')
+        ? utils.stringifyCaseField(item[key])
+        : String(item[key] || '');
+      if (val) parts.push(val);
+    });
+    return parts.join(' ').toLowerCase();
+  }
+
+  function buildMissingReminderFieldTextMap(items) {
+    var list = Array.isArray(items) ? items : [];
+    var titles = [];
+    var preconditions = [];
+    var steps = [];
+    var expected = [];
+    list.forEach(function(item) {
+      var title = buildMissingReminderFieldText(item, ['title']);
+      if (title) titles.push(title);
+      var pre = buildMissingReminderFieldText(item, ['precondition', 'preconditions']);
+      if (pre) preconditions.push(pre);
+      var step = buildMissingReminderFieldText(item, ['steps']);
+      if (step) steps.push(step);
+      var exp = buildMissingReminderFieldText(item, ['expected']);
+      if (exp) expected.push(exp);
+    });
+    return {
+      title: titles.join(' '),
+      precondition: preconditions.join(' '),
+      steps: steps.join(' '),
+      expected: expected.join(' '),
+    };
+  }
+
+  function hasMissingReminderKeywordHit(text, keywords) {
+    if (!text || !keywords || !keywords.length) return false;
+    for (var i = 0; i < keywords.length; i += 1) {
+      if (text.indexOf(keywords[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  function buildMissingReminderScore(item, fieldTextMap) {
+    if (!item || typeof item !== 'object') return 0;
+    var map = fieldTextMap && typeof fieldTextMap === 'object' ? fieldTextMap : {};
+    var score = 0;
+    var keywordFn = utils && typeof utils.buildMissingReminderKeywords === 'function'
+      ? utils.buildMissingReminderKeywords
+      : function(text) { return String(text || '').toLowerCase().split(/\s+/).filter(Boolean); };
+    if (hasMissingReminderKeywordHit(map.title, keywordFn(item.title))) score += 1;
+    if (hasMissingReminderKeywordHit(map.precondition, keywordFn(item.precondition))) score += 1;
+    if (hasMissingReminderKeywordHit(map.steps, keywordFn(item.steps))) score += 1;
+    if (hasMissingReminderKeywordHit(map.expected, keywordFn(item.expected))) score += 1;
+    return score;
+  }
+
   function hashReminderText(text) {
     var str = String(text || '');
     var hash = 0;
@@ -7511,8 +7592,11 @@
       var precondition = item && item.precondition ? String(item.precondition) : '';
       var steps = item && item.steps ? String(item.steps) : '';
       var expected = item && item.expected ? String(item.expected) : '';
+      var score = item && item.match_score !== undefined ? Number(item.match_score) : 0;
+      if (!isFinite(score) || score < 0) score = 0;
       return (
         '<tr>' +
+          '<td class="score">' + escapeHtml(String(score)) + '</td>' +
           '<td class="type">' + escapeHtml(typeName) + '</td>' +
           '<td class="module">' + escapeHtml(moduleName) + '</td>' +
           '<td class="title">' + escapeHtml(title) + '</td>' +
@@ -7527,10 +7611,11 @@
       var hint = '暂无匹配易漏用例';
       if (reminder && reminder.loading) hint = '正在加载易漏用例...';
       else if (reminder && reminder.pending) hint = '滑动到此处加载易漏用例';
-      rows = '<tr><td colspan="7"><p class="hint">' + escapeHtml(hint) + '</p></td></tr>';
+      rows = '<tr><td colspan="8"><p class="hint">' + escapeHtml(hint) + '</p></td></tr>';
     }
     var colGroup =
       '<colgroup>' +
+        '<col class="col-score">' +
         '<col class="col-type">' +
         '<col class="col-module">' +
         '<col class="col-title">' +
@@ -7553,6 +7638,7 @@
             colGroup +
             '<thead>' +
               '<tr>' +
+                '<th class="score">匹配得分</th>' +
                 '<th class="type">类型</th>' +
                 '<th class="module">模块</th>' +
                 '<th class="title">用例标题</th>' +
@@ -7672,6 +7758,9 @@
     }
     target.innerHTML = buildMissingReminderTable(reminder);
     target.classList.remove('hidden');
+    if (utils && typeof utils.bindMissingReminderScrollHint === 'function') {
+      utils.bindMissingReminderScrollHint(target);
+    }
     scheduleMissingReminderLazyLoad();
   }
 
@@ -7740,9 +7829,12 @@
       clearMissingReminder();
       return;
     }
+    var matchConfig = resolveMissingReminderMatchConfig();
+    var matchKey = (matchConfig.type ? 't' : '') + (matchConfig.module ? 'm' : '');
+    var fieldTextMap = buildMissingReminderFieldTextMap(items);
     var signatureText = caseTexts.join('\n\n');
     var caseSearchText = caseTexts.join(' ');
-    var signature = String(projectId) + ':' + hashReminderText(signatureText);
+    var signature = String(projectId) + ':' + hashReminderText(signatureText) + ':' + matchKey;
     if (reminder.signature === signature && reminder.projectId === projectId && (reminder.loaded || reminder.pending)) {
       renderMissingReminder();
       return;
@@ -7769,8 +7861,11 @@
         if (reminder.seq !== seq) return null;
         var modules = Array.isArray(res && res[0]) ? res[0] : [];
         var types = Array.isArray(res && res[1]) ? res[1] : [];
+        var requireModule = matchConfig.module === true;
+        var requireType = matchConfig.type === true;
         var moduleMatches = [];
         var moduleIds = [];
+        var allModuleIds = [];
         var matchedModuleMap = {};
         var moduleMap = {};
         modules.forEach(function(m) {
@@ -7778,6 +7873,7 @@
           var name = m.name ? String(m.name).trim() : '';
           var idStr = String(m.id);
           moduleMap[idStr] = m;
+          allModuleIds.push(idStr);
           if (name && caseSearchText.indexOf(name.toLowerCase()) !== -1) {
             moduleMatches.push(name);
             moduleIds.push(idStr);
@@ -7786,6 +7882,7 @@
         });
         var typeMatches = [];
         var typeIds = [];
+        var allTypeIds = [];
         var typeNameMap = {};
         var matchedTypeMap = {};
         types.forEach(function(t) {
@@ -7793,13 +7890,14 @@
           var name = t.name ? String(t.name).trim() : '';
           var idStr = String(t.id);
           typeNameMap[idStr] = name || ('类型#' + idStr);
+          allTypeIds.push(idStr);
           if (name && caseSearchText.indexOf(name.toLowerCase()) !== -1) {
             typeMatches.push(name);
             typeIds.push(idStr);
             matchedTypeMap[idStr] = true;
           }
         });
-        if (!moduleIds.length || !typeIds.length) {
+        if ((requireModule && !moduleIds.length) || (requireType && !typeIds.length) || (!allModuleIds.length)) {
           reminder.items = [];
           reminder.matchedModules = [];
           reminder.matchedTypes = [];
@@ -7811,6 +7909,8 @@
           renderMissingReminder();
           return null;
         }
+        if (!requireModule) moduleIds = allModuleIds.slice();
+        if (!requireType) typeIds = allTypeIds.slice();
         reminder.matchedModules = moduleMatches;
         reminder.matchedTypes = typeMatches;
         reminder.hasMatch = true;
@@ -7823,6 +7923,8 @@
           typeNameMap: typeNameMap,
           matchedModuleMap: matchedModuleMap,
           matchedTypeMap: matchedTypeMap,
+          matchConfig: matchConfig,
+          fieldTextMap: fieldTextMap,
         };
         reminder.loading = false;
         reminder.loaded = false;
@@ -7858,7 +7960,18 @@
     var typeNameMap = payload.typeNameMap && typeof payload.typeNameMap === 'object' ? payload.typeNameMap : {};
     var matchedModuleMap = payload.matchedModuleMap && typeof payload.matchedModuleMap === 'object' ? payload.matchedModuleMap : {};
     var matchedTypeMap = payload.matchedTypeMap && typeof payload.matchedTypeMap === 'object' ? payload.matchedTypeMap : {};
-    if (!moduleIds.length || !typeIds.length || !Object.keys(matchedModuleMap).length || !Object.keys(matchedTypeMap).length) {
+    var matchConfig = resolveMissingReminderMatchConfig(payload.matchConfig);
+    var requireModule = matchConfig.module === true;
+    var requireType = matchConfig.type === true;
+    if (!moduleIds.length) {
+      clearMissingReminder();
+      return;
+    }
+    if (requireModule && !Object.keys(matchedModuleMap).length) {
+      clearMissingReminder();
+      return;
+    }
+    if (requireType && (!typeIds.length || !Object.keys(matchedTypeMap).length)) {
       clearMissingReminder();
       return;
     }
@@ -7917,16 +8030,19 @@
         (all || []).forEach(function(rows) {
           (rows || []).forEach(function(row) {
             if (!row) return;
-            var moduleHit = row.module_id && matchedModuleMap[String(row.module_id)];
+            var moduleHit = requireModule ? (row.module_id && matchedModuleMap[String(row.module_id)]) : true;
             var rowTypeIds = normalizeMissingTypeIds(row.type_ids);
             if (!rowTypeIds.length && row.type_id) {
               rowTypeIds = normalizeMissingTypeIds([row.type_id]);
             }
-            var typeHit = false;
-            for (var i = 0; i < rowTypeIds.length; i += 1) {
-              if (matchedTypeMap[String(rowTypeIds[i])]) {
-                typeHit = true;
-                break;
+            var typeHit = true;
+            if (requireType) {
+              typeHit = false;
+              for (var i = 0; i < rowTypeIds.length; i += 1) {
+                if (matchedTypeMap[String(rowTypeIds[i])]) {
+                  typeHit = true;
+                  break;
+                }
               }
             }
             if (moduleHit && typeHit) combined.push(row);
@@ -7942,8 +8058,22 @@
           renderMissingReminder();
           return null;
         }
+        var fieldTextMap = payload.fieldTextMap && typeof payload.fieldTextMap === 'object' ? payload.fieldTextMap : {};
+        combined.forEach(function(item, idx) {
+          item.match_score = buildMissingReminderScore(item, fieldTextMap);
+          item.__score_index = idx;
+        });
+        combined.sort(function(a, b) {
+          var sa = Number(a && a.match_score) || 0;
+          var sb = Number(b && b.match_score) || 0;
+          if (sa !== sb) return sb - sa;
+          var ia = Number(a && a.__score_index) || 0;
+          var ib = Number(b && b.__score_index) || 0;
+          return ia - ib;
+        });
         var limit = resolveMissingReminderLimit(reminder);
         reminder.items = combined.slice(0, limit);
+        reminder.items.forEach(function(item) { try { delete item.__score_index; } catch (_) {} });
         reminder.loading = false;
         reminder.loaded = true;
         renderMissingReminder();
@@ -14195,7 +14325,10 @@
       window.addEventListener('app-settings-updated', function(e) {
         var detail = e && e.detail ? e.detail : null;
         var keys = detail && Array.isArray(detail.keys) ? detail.keys : [];
-        if (!keys.length || keys.indexOf('missingCaseReminderPlacement') !== -1) {
+        if (!keys.length
+          || keys.indexOf('missingCaseReminderPlacement') !== -1
+          || keys.indexOf('missingCaseReminderMatchConfig') !== -1) {
+          requestMissingReminderRefresh();
           renderMissingReminder();
         }
       });

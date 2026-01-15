@@ -38,6 +38,7 @@
       theme: 'light',
       caseViewFontSize: 13,
       missingCaseReminderPlacement: 'top',
+      missingCaseReminderMatchConfig: { type: true, module: true },
       smartTopNavCollapse: false,
       tempExecColumns: { ...defaultTempExecColumns },
       projectOrder: [],
@@ -823,6 +824,8 @@
     const generateTempVersionId = appUtils.generateTempVersionId;
     const normalizeTempExecName = appUtils.normalizeTempExecName;
     const stringifyCaseField = appUtils.stringifyCaseField;
+    const buildMissingReminderKeywords = appUtils.buildMissingReminderKeywords;
+    const normalizeMissingReminderMatchConfig = appUtils.normalizeMissingReminderMatchConfig;
     const removePendingTempExecByName = appUtils.removePendingTempExecByName;
 
     const ensureTempExecReplacement = function ensureTempExecReplacementProxy(entry, pendingList) {
@@ -1125,6 +1128,8 @@
         escapeHtmlPreserve,
         normalizeTempExecName,
         stringifyCaseField,
+        buildMissingReminderKeywords,
+        normalizeMissingReminderMatchConfig,
         deriveCaseListFromText,
         parseXmindFile: lazyParseXmindFile,
         parseXlsxFileToRows: (window.app && window.app.xlsxCoreApi && typeof window.app.xlsxCoreApi.parseXlsxFileToRows === 'function')

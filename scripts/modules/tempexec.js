@@ -3456,6 +3456,39 @@
     }
 
     if (tempExecToolbar) {
+      var applyTempExecSearchDebounced = debounce(function(fileId, raw) {
+        if (!api.applyTempExecSearch) return;
+        api.applyTempExecSearch(fileId, raw, raw);
+      }, 200);
+      tempExecToolbar.addEventListener('compositionstart', function(e) {
+        var target = e && e.target ? e.target : null;
+        if (!target || !target.dataset || target.dataset.tempSearchInput === undefined) return;
+        target.dataset.tempSearchComposed = '0';
+        target.dataset.tempSearchComposing = '1';
+        if (applyTempExecSearchDebounced.cancel) applyTempExecSearchDebounced.cancel();
+      });
+      tempExecToolbar.addEventListener('compositionend', function(e) {
+        var target = e && e.target ? e.target : null;
+        if (!target || !target.dataset || target.dataset.tempSearchInput === undefined) return;
+        target.dataset.tempSearchComposed = '1';
+        delete target.dataset.tempSearchComposing;
+        var fileId = target.dataset.tempSearchInput;
+        var val = target.value || '';
+        applyTempExecSearchDebounced(fileId, val);
+      });
+      tempExecToolbar.addEventListener('input', function(e) {
+        var target = e && e.target ? e.target : null;
+        if (!target || !target.dataset || target.dataset.tempSearchInput === undefined) return;
+        if (target.dataset.tempSearchComposing === '1') return;
+        if (target.dataset.tempSearchComposed === '1') {
+          delete target.dataset.tempSearchComposed;
+          return;
+        }
+        if (e && (e.isComposing === true || e.inputType === 'insertCompositionText')) return;
+        var fileId = target.dataset.tempSearchInput;
+        var val = target.value || '';
+        applyTempExecSearchDebounced(fileId, val);
+      });
       tempExecToolbar.addEventListener('click', function(e) {
         var navBtn = e.target.closest('[data-temp-file-nav]');
         if (navBtn) {
@@ -3489,21 +3522,6 @@
           var sfStatus = statusPill.dataset.tempStatusFilter;
           api.setTempExecStatusFilter(sfFileId, sfStatus);
           return;
-        }
-        var searchBtn = e.target.closest('[data-temp-search-btn]');
-        if (searchBtn && api.applyTempExecSearch) {
-          var sbFileId = searchBtn.dataset.tempSearchBtn;
-          var input = document.querySelector('[data-temp-search-input=\"' + sbFileId + '\"]');
-          var val = input ? input.value : '';
-          api.applyTempExecSearch(sbFileId, val, val);
-          return;
-        }
-        var searchClear = e.target.closest('[data-temp-search-clear]');
-        if (searchClear && api.applyTempExecSearch) {
-          var scFileId = searchClear.dataset.tempSearchClear;
-          var inputClear = document.querySelector('[data-temp-search-input=\"' + scFileId + '\"]');
-          if (inputClear) inputClear.value = '';
-          api.applyTempExecSearch(scFileId, '', '');
         }
       });
     }
@@ -5480,22 +5498,6 @@
               : null;
             api.insertTempExecCase(icFileId, icIdx, anchorRect4);
           }
-          return;
-        }
-        var searchBtn = e.target.closest('[data-temp-search-btn]');
-        if (searchBtn && api.applyTempExecSearch) {
-          var sbFileId = searchBtn.dataset.tempSearchBtn;
-          var input = document.querySelector('[data-temp-search-input=\"' + sbFileId + '\"]');
-          var val = input ? input.value : '';
-          api.applyTempExecSearch(sbFileId, val, val);
-          return;
-        }
-        var searchClear = e.target.closest('[data-temp-search-clear]');
-        if (searchClear && api.applyTempExecSearch) {
-          var scFileId = searchClear.dataset.tempSearchClear;
-          var inputClear = document.querySelector('[data-temp-search-input=\"' + scFileId + '\"]');
-          if (inputClear) inputClear.value = '';
-          api.applyTempExecSearch(scFileId, '', '');
           return;
         }
         var toggleBtn = e.target.closest('[data-temp-remark-toggle]');

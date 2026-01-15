@@ -8,12 +8,17 @@
     var t;
     var delay = Number(wait);
     if (!Number.isFinite(delay) || delay < 0) delay = 200;
-    return function debounced() {
+    function debounced() {
       if (t) clearTimeout(t);
       var args = arguments;
       var ctx = this;
       t = setTimeout(function run() { fn.apply(ctx, args); }, delay);
+    }
+    debounced.cancel = function() {
+      if (t) clearTimeout(t);
+      t = null;
     };
+    return debounced;
   }
   function downloadBlob(filename, blob) {
     var url = URL.createObjectURL(blob);
@@ -223,6 +228,107 @@
     return parts.join(' ').toLowerCase();
   }
 
+  var missingReminderStopWords = [
+    '的', '了', '和', '与', '及', '以及', '或', '并', '等', '在', '对', '为', '通过', '进行', '可以', '需要',
+    '是否', '允许', '禁止', '不能', '不可', '会', '不会', '作为', '当', '若', '如果', '则', '其', '该', '本',
+    '此', '这个', '这些', '那些', '当前', '相关', '具体', '可能', '一般', '其中', '此外', '同时', '包括', '包含',
+    '等于'
+  ];
+  var missingReminderSuffixes = [
+    '角色', '用户', '账号', '权限', '身份', '登录', '注册', '认证', '鉴权', '会话', 'token', '验证码', '短信',
+    '邮箱', '密码', '配置', '开关', '参数', '字段', '接口', '协议', '回调', '请求', '响应', '数据', '状态',
+    '状态码', '流程', '步骤', '结果', '规则', '逻辑', '校验', '限制', '异常', '错误', '失败', '成功', '告警',
+    '提示', '弹窗', '文案', '消息', '通知', '日志', '报表', '统计', '看板', '列表', '详情', '页面', '入口',
+    '按钮', '表单', '输入', '选择', '下拉', '搜索', '筛选', '排序', '分页', '上传', '下载', '导入', '导出',
+    '编辑', '保存', '提交', '发布', '撤回', '删除', '新增', '修改', '更新', '复制', '粘贴', '合并', '拆分',
+    '绑定', '解绑', '关联', '同步', '权限组', '版本', '项目', '模块', '功能', '效果', '样式', '布局', '展示',
+    '渲染', '兼容', '性能', '安全', '稳定', '体验', '交互'
+  ];
+  var missingReminderShortTokens = [
+    'ui', 'api', 'db', 'id', 'ip', 'url', 'http', 'https', 'sql', 'ios', 'android', 'pc', 'h5', 'sdk'
+  ];
+  var missingReminderShortTokenMap = {};
+  missingReminderShortTokens.forEach(function(token) {
+    if (!token) return;
+    missingReminderShortTokenMap[String(token).toLowerCase()] = true;
+  });
+  var missingReminderSuffixesSorted = missingReminderSuffixes.slice().sort(function(a, b) {
+    return b.length - a.length;
+  });
+
+  function normalizeMissingReminderMatchConfig(value, fallback) {
+    var base = fallback && typeof fallback === 'object' ? fallback : { type: true, module: true };
+    var raw = value && typeof value === 'object' ? value : {};
+    var typeFlag = raw.type === true ? true : raw.type === false ? false : base.type !== false;
+    var moduleFlag = raw.module === true ? true : raw.module === false ? false : base.module !== false;
+    if (!typeFlag && !moduleFlag) {
+      typeFlag = base.type !== false;
+      moduleFlag = base.module !== false;
+      if (!typeFlag && !moduleFlag) typeFlag = true;
+    }
+    return { type: typeFlag, module: moduleFlag };
+  }
+
+  function normalizeMissingReminderKeywordText(text) {
+    var raw = String(text || '').toLowerCase();
+    if (!raw) return '';
+    missingReminderStopWords.forEach(function(word) {
+      if (!word) return;
+      raw = raw.split(word).join(' ');
+    });
+    raw = raw
+      .replace(/[\t\r\n\f\v\u3000]+/g, ' ')
+      .replace(/[，。,;；:：!?！？、/\\()\[\]{}<>"'`~|+=\-_*#@%^&]+/g, ' ')
+      .replace(/\s+/g, ' ');
+    return raw.trim();
+  }
+
+  function shouldKeepMissingReminderToken(token) {
+    if (!token) return false;
+    if (missingReminderShortTokenMap[token]) return true;
+    return token.length >= 2;
+  }
+
+  function splitMissingReminderToken(token) {
+    if (!token) return null;
+    for (var i = 0; i < missingReminderSuffixesSorted.length; i += 1) {
+      var suffix = missingReminderSuffixesSorted[i];
+      if (!suffix) continue;
+      if (token.length <= suffix.length) continue;
+      if (token.slice(token.length - suffix.length) === suffix) {
+        var prefix = token.slice(0, token.length - suffix.length);
+        return [prefix, suffix];
+      }
+    }
+    return null;
+  }
+
+  function buildMissingReminderKeywords(text) {
+    var cleaned = normalizeMissingReminderKeywordText(text);
+    if (!cleaned) return [];
+    var tokens = cleaned.split(' ');
+    var results = [];
+    var seen = {};
+    var pushToken = function(token) {
+      if (!token) return;
+      if (!shouldKeepMissingReminderToken(token)) return;
+      if (seen[token]) return;
+      seen[token] = true;
+      results.push(token);
+    };
+    tokens.forEach(function(token) {
+      var next = String(token || '').trim();
+      if (!next) return;
+      pushToken(next);
+      var parts = splitMissingReminderToken(next);
+      if (!parts || !parts.length) return;
+      parts.forEach(function(part) {
+        pushToken(String(part || '').trim());
+      });
+    });
+    return results;
+  }
+
   function removePendingTempExecByName(pendingList, name, normalizeName) {
     if (!Array.isArray(pendingList) || !pendingList.length) return;
     var normalize = typeof normalizeName === 'function' ? normalizeName : normalizeTempExecName;
@@ -287,6 +393,63 @@
     var top = el.getBoundingClientRect().top + window.scrollY;
     var targetTop = top - (Number(offset) || 0);
     window.scrollTo({ top: targetTop, behavior: behavior || 'smooth' });
+  }
+
+  function updateMissingReminderScrollHint(scrollEl) {
+    if (!scrollEl) return;
+    var clientHeight = Number(scrollEl.clientHeight) || 0;
+    var scrollHeight = Number(scrollEl.scrollHeight) || 0;
+    var maxScroll = scrollHeight - clientHeight;
+    var canScroll = maxScroll > 1;
+    if (scrollEl.dataset) {
+      if (canScroll) scrollEl.dataset.missingScrollable = '1';
+      else delete scrollEl.dataset.missingScrollable;
+    } else if (canScroll) {
+      scrollEl.setAttribute('data-missing-scrollable', '1');
+    } else {
+      scrollEl.removeAttribute('data-missing-scrollable');
+    }
+    if (!canScroll || !clientHeight) {
+      if (scrollEl.style) {
+        scrollEl.style.removeProperty('--missing-reminder-scroll-thumb-height');
+        scrollEl.style.removeProperty('--missing-reminder-scroll-thumb-top');
+      }
+      return;
+    }
+    var padding = 6;
+    var minThumb = 24;
+    var track = Math.max(clientHeight - padding * 2, 0);
+    var thumb = track ? Math.max(Math.round(track * clientHeight / scrollHeight), minThumb) : 0;
+    if (thumb > track) thumb = track;
+    var ratio = maxScroll > 0 ? (scrollEl.scrollTop / maxScroll) : 0;
+    var top = padding + Math.round((track - thumb) * ratio);
+    if (scrollEl.style) {
+      scrollEl.style.setProperty('--missing-reminder-scroll-thumb-height', thumb + 'px');
+      scrollEl.style.setProperty('--missing-reminder-scroll-thumb-top', top + 'px');
+    }
+  }
+
+  function bindMissingReminderScrollHint(root) {
+    if (!root) return;
+    var scrollEl = null;
+    if (root.classList && root.classList.contains('missing-reminder-scroll')) {
+      scrollEl = root;
+    } else if (root.querySelector) {
+      scrollEl = root.querySelector('.missing-reminder-scroll');
+    }
+    if (!scrollEl) return;
+    if (scrollEl.dataset && scrollEl.dataset.missingReminderScrollBound === '1') {
+      updateMissingReminderScrollHint(scrollEl);
+      return;
+    }
+    if (scrollEl.dataset) scrollEl.dataset.missingReminderScrollBound = '1';
+    scrollEl.addEventListener('scroll', function() {
+      updateMissingReminderScrollHint(scrollEl);
+    });
+    scrollEl.addEventListener('mouseenter', function() {
+      updateMissingReminderScrollHint(scrollEl);
+    });
+    updateMissingReminderScrollHint(scrollEl);
   }
 
   var centerToastEl = null;
@@ -549,6 +712,8 @@
     normalizeTempExecName: normalizeTempExecName,
     stringifyCaseField: stringifyCaseField,
     buildCaseSearchText: buildCaseSearchText,
+    normalizeMissingReminderMatchConfig: normalizeMissingReminderMatchConfig,
+    buildMissingReminderKeywords: buildMissingReminderKeywords,
     removePendingTempExecByName: removePendingTempExecByName,
     ensureTempExecReplacement: ensureTempExecReplacement,
     formatJsonOrText: formatJsonOrText,
@@ -556,6 +721,7 @@
     escapeHtmlPreserve: escapeHtmlPreserve,
     formatCompactTimestamp: formatCompactTimestamp,
     scrollElementIntoView: scrollElementIntoView,
+    bindMissingReminderScrollHint: bindMissingReminderScrollHint,
     showCenterToast: showCenterToast,
     isAddVersionOption: isAddVersionOption,
     buildAddVersionOption: buildAddVersionOption,
