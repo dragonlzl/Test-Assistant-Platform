@@ -3785,13 +3785,6 @@
 - 更新记录：2026-01-22 易漏用例 AI 推荐空库点击提示（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`tests/ui/missing_case_reminder.spec.js`）。
 - 更新记录：2026-01-22 易漏用例 AI 推荐生成提示文案调整（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`）。
 - 更新记录：2026-01-22 用例生成进度模块生成建议标记（`scripts/modules/casegenProgress.js`、`scripts/modules/casesgen.js`、`style.css`、`tests/ui/casegen_db_store.spec.js`）。
-- 更新记录：2026-01-22 易漏用例 AI 推荐跨页面生成不中断（`scripts/modules/app.js`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`tests/ui/missing_case_reminder.spec.js`）。
-- 更新记录：2026-01-22 修复易漏用例 AI 推荐跨页面切换导致失败（`scripts/modules/app.js`）。
-- 更新记录：2026-01-22 一键执行跨页面生成不中断（`scripts/modules/app.js`、`scripts/core/autoCore.js`、`tests/ui/auto_workflow_persistence.spec.js`）。
-- 更新记录：2026-01-22 修复一键执行跨页面恢复前模型加载时序导致中断（`scripts/modules/app.js`、`tests/ui/auto_workflow_persistence.spec.js`）。
-- 更新记录：2026-01-22 修复一键执行跨页面切换触发模型超时误判导致中断（`scripts/modules/app.js`）。
-- 更新记录：2026-01-22 一键执行跨页面生成补齐隐形字段保持全局执行（`scripts/modules/app.js`）。
-- 更新记录：2026-01-22 修复缺失模块视图字典结构解析（`scripts/core/compareCore.js`）。
 
 - 功能名称：易漏用例操作记录与用例贡献统计
 - 功能描述：易漏用例与漏测模块的新增/修改/删除操作写入操作记录，显示模块名（如“云存档（模块）”）并展示数量变化，同时纳入用例贡献视图统计。

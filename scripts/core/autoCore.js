@@ -121,11 +121,6 @@
       autoMissingToggle.textContent = open ? '收起缺失视图' : '前往勾选缺失模块生成缺失用例';
     }
 
-    function getAutoWorkflowManager() {
-      if (typeof window === 'undefined') return null;
-      return window.app && window.app.autoWorkflowManager ? window.app.autoWorkflowManager : null;
-    }
-
     async function notifyFeishuCoverageFailure() {
       if (!state.autoRunning || !getFeishuWebhookUrl()) return;
       await postFeishuMessage('需求：' + getRequirementDisplayName() + '，清洗覆盖率不足100%，需手动重新清洗。');
@@ -552,117 +547,6 @@
       return coverage;
     }
 
-    function buildAutoWorkflowTaskMessages(kind, options) {
-      var opts = options || {};
-      var result = {};
-      function assignMessage(key, text, tone) {
-        result[key] = { text: text || '', tone: tone || '' };
-      }
-      if (kind === 'continue') {
-        assignMessage('recleanStart', '已忽略覆盖率不足，正在执行剩余步骤…', 'warn');
-        assignMessage('workflowStart', '已忽略覆盖率，正在继续执行后续流程', 'warn');
-        assignMessage('recleanSuccess', '已忽略覆盖率完成剩余步骤，请检查结果', 'ok');
-        assignMessage('workflowSuccess', '剩余步骤执行完成，覆盖率仍不足 100%，请注意风险', 'warn');
-        assignMessage('recleanFailure', '忽略覆盖率继续失败', 'err');
-        assignMessage('workflowFailure', '忽略覆盖率继续失败', 'err');
-        return result;
-      }
-      if (kind === 'reclean' || kind === 'supplement') {
-        assignMessage('recleanStart', opts.startMessage || '重新执行中（从需求清洗开始）...', opts.startTone || '');
-        assignMessage('workflowStart', opts.workflowStartMessage || '正在重新执行剩余步骤，请勿关闭页面', opts.workflowStartTone || '');
-        assignMessage('recleanSuccess', opts.successMessage || '重新执行完成', opts.successTone || 'ok');
-        assignMessage('workflowSuccess', opts.workflowSuccessMessage || '重新执行完成，可切换至“功能流程”查看详情', opts.workflowSuccessTone || 'ok');
-        assignMessage('recleanFailure', opts.failureMessage || '重新执行中断', opts.failureTone || 'err');
-        assignMessage('workflowFailure', opts.workflowFailureMessage || '一键执行中断', opts.workflowFailureTone || 'err');
-        return result;
-      }
-      assignMessage('workflowStart', '正在执行完整工作流，请勿关闭页面', '');
-      assignMessage('workflowSuccess', '一键执行完成，可切换至“功能流程”查看详情', 'ok');
-      assignMessage('workflowFailure', '一键执行中断', 'err');
-      return result;
-    }
-
-    function applyAutoWorkflowTaskState(task) {
-      var hasTask = Boolean(task && typeof task === 'object');
-      var running = Boolean(hasTask && task.status === 'running');
-      state.autoRunning = running;
-      if (autoWorkflowBtn) autoWorkflowBtn.disabled = running;
-      if (autoClarifyToggle) autoClarifyToggle.disabled = running;
-      if (autoRecleanBtn) autoRecleanBtn.disabled = running;
-      if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = running;
-      if (autoFillCleanBtn) autoFillCleanBtn.disabled = running;
-      if (autoJumpCleanViewBtn) autoJumpCleanViewBtn.disabled = running;
-
-      if (!hasTask) {
-        updateAutoCompareActions();
-        updateAutoMissingCard();
-        updateFlowStatus();
-        return;
-      }
-
-      var kind = task.kind || 'full';
-      var messages = task.messages && typeof task.messages === 'object'
-        ? task.messages
-        : buildAutoWorkflowTaskMessages(kind, task.messageOptions || {});
-
-      function resolveMessage(key, fallbackText, fallbackTone) {
-        var msg = messages && messages[key];
-        if (msg && typeof msg === 'object') {
-          return {
-            text: msg.text || fallbackText || '',
-            tone: msg.tone || fallbackTone || ''
-          };
-        }
-        if (typeof msg === 'string') return { text: msg, tone: fallbackTone || '' };
-        return { text: fallbackText || '', tone: fallbackTone || '' };
-      }
-
-      if (running) {
-        var startWorkflow = resolveMessage('workflowStart', '正在执行完整工作流，请勿关闭页面', '');
-        if (autoWorkflowStatus) setStatus(autoWorkflowStatus, startWorkflow.text, startWorkflow.tone);
-        if (kind !== 'full') {
-          var startReclean = resolveMessage('recleanStart', '', '');
-          if (autoRecleanStatus) setStatus(autoRecleanStatus, startReclean.text, startReclean.tone);
-        }
-      } else if (task.status === 'done') {
-        var doneWorkflow = resolveMessage('workflowSuccess', '一键执行完成，可切换至“功能流程”查看详情', 'ok');
-        if (autoWorkflowStatus) setStatus(autoWorkflowStatus, doneWorkflow.text, doneWorkflow.tone);
-        if (kind !== 'full') {
-          var doneReclean = resolveMessage('recleanSuccess', '', 'ok');
-          if (autoRecleanStatus) setStatus(autoRecleanStatus, doneReclean.text, doneReclean.tone);
-        }
-      } else if (task.status === 'error') {
-        var errText = task.error ? String(task.error) : '';
-        var failWorkflow = resolveMessage('workflowFailure', '一键执行中断', 'err');
-        var workflowMsg = errText ? (failWorkflow.text + '：' + errText) : failWorkflow.text;
-        if (autoWorkflowStatus) setStatus(autoWorkflowStatus, workflowMsg, failWorkflow.tone || 'err');
-        if (kind !== 'full') {
-          var failReclean = resolveMessage('recleanFailure', '', 'err');
-          var recleanMsg = errText ? (failReclean.text + '：' + errText) : failReclean.text;
-          if (autoRecleanStatus) setStatus(autoRecleanStatus, recleanMsg, failReclean.tone || 'err');
-        }
-      }
-
-      updateAutoClarifyVisibility();
-      updateAutoCompareActions();
-      updateAutoMissingCard();
-      updateFlowStatus();
-      if (task.status === 'done' && task.expandMissing) {
-        ensureAutoMissingViewVisible(true);
-      }
-    }
-
-    function isAutoWorkflowReady() {
-      return Boolean(
-        rawText &&
-        reviewResultEl &&
-        cleanedTextEl &&
-        compareResultEl &&
-        splitResultEl &&
-        casesCompareResultEl
-      );
-    }
-
     function buildAutoWorkflowSteps() {
       return [
         {
@@ -839,14 +723,7 @@
         setStatus(autoWorkflowStatus, '请先导入至少一份测试用例', 'warn');
         return;
       }
-      var autoWorkflowManager = getAutoWorkflowManager();
-      if (autoWorkflowManager && typeof autoWorkflowManager.getTask === 'function') {
-        var activeTask = autoWorkflowManager.getTask();
-        if (activeTask && activeTask.status === 'running') {
-          setStatus(autoWorkflowStatus, '正在执行，请稍候……', 'warn');
-          return;
-        }
-      } else if (state.autoRunning) {
+      if (state.autoRunning) {
         setStatus(autoWorkflowStatus, '正在执行，请稍候……', 'warn');
         return;
       }
@@ -869,16 +746,6 @@
       if (autoJumpCleanViewBtn) autoJumpCleanViewBtn.disabled = true;
       resetAutoMissingView();
       setStatus(autoWorkflowStatus, '正在执行完整工作流，请勿关闭页面', '');
-      if (autoWorkflowManager && typeof autoWorkflowManager.startTask === 'function') {
-        autoWorkflowManager.startTask({
-          kind: 'full',
-          startIndex: 0,
-          stepIndex: 0,
-          expandMissing: true,
-          messages: buildAutoWorkflowTaskMessages('full'),
-        }, { force: true });
-        return;
-      }
       try {
         await executeAutoWorkflowSteps(0);
         setStatus(autoWorkflowStatus, '一键执行完成，可切换至“功能流程”查看详情', 'ok');
@@ -923,14 +790,7 @@
         setStatus(autoRecleanStatus, '尚无对比结果可用，请先完成一次对比', 'warn');
         return;
       }
-      var autoWorkflowManager = getAutoWorkflowManager();
-      if (autoWorkflowManager && typeof autoWorkflowManager.getTask === 'function') {
-        var runningTask = autoWorkflowManager.getTask();
-        if (runningTask && runningTask.status === 'running') {
-          setStatus(autoRecleanStatus, '当前已有执行任务，请稍候', 'warn');
-          return;
-        }
-      } else if (state.autoRunning) {
+      if (state.autoRunning) {
         setStatus(autoRecleanStatus, '当前已有执行任务，请稍候', 'warn');
         return;
       }
@@ -963,47 +823,6 @@
       if (autoFillCleanBtn) autoFillCleanBtn.disabled = true;
       setStatus(autoRecleanStatus, startMessage, startTone);
       setStatus(autoWorkflowStatus, workflowStartMessage, workflowStartTone);
-      if (autoWorkflowManager && typeof autoWorkflowManager.startTask === 'function') {
-        var comparePayload = Object.prototype.hasOwnProperty.call(options, 'compareOverride')
-          ? options.compareOverride
-          : buildFilteredComparePayload();
-        var suggestionPayload = options.suggestion ? options.suggestion.trim() : '';
-        var context = {};
-        if (comparePayload) context.compare = comparePayload;
-        if (suggestionPayload) context.suggestion = suggestionPayload;
-        if (mode) context.mode = mode;
-        autoWorkflowManager.startTask({
-          kind: mode === 'supplement' ? 'supplement' : 'reclean',
-          startIndex: 1,
-          stepIndex: 1,
-          context: context,
-          messageOptions: {
-            startMessage: startMessage,
-            workflowStartMessage: workflowStartMessage,
-            successMessage: successMessage,
-            workflowSuccessMessage: workflowSuccessMessage,
-            failureMessage: failureMessage,
-            workflowFailureMessage: workflowFailureMessage,
-            startTone: startTone,
-            workflowStartTone: workflowStartTone,
-            successTone: successTone,
-            workflowSuccessTone: workflowSuccessTone,
-          },
-          messages: buildAutoWorkflowTaskMessages(mode === 'supplement' ? 'supplement' : 'reclean', {
-            startMessage: startMessage,
-            workflowStartMessage: workflowStartMessage,
-            successMessage: successMessage,
-            workflowSuccessMessage: workflowSuccessMessage,
-            failureMessage: failureMessage,
-            workflowFailureMessage: workflowFailureMessage,
-            startTone: startTone,
-            workflowStartTone: workflowStartTone,
-            successTone: successTone,
-            workflowSuccessTone: workflowSuccessTone,
-          }),
-        }, { force: true });
-        return;
-      }
       try {
         var comparePayload = Object.prototype.hasOwnProperty.call(options, 'compareOverride')
           ? options.compareOverride
@@ -1044,14 +863,7 @@
         setStatus(autoRecleanStatus, '覆盖率已满足要求，无需忽略继续', 'warn');
         return;
       }
-      var autoWorkflowManager = getAutoWorkflowManager();
-      if (autoWorkflowManager && typeof autoWorkflowManager.getTask === 'function') {
-        var runningTask = autoWorkflowManager.getTask();
-        if (runningTask && runningTask.status === 'running') {
-          setStatus(autoRecleanStatus, '当前已有执行任务，请稍候', 'warn');
-          return;
-        }
-      } else if (state.autoRunning) {
+      if (state.autoRunning) {
         setStatus(autoRecleanStatus, '当前已有执行任务，请稍候', 'warn');
         return;
       }
@@ -1071,15 +883,6 @@
       setMissingStatus('', '');
       setStatus(autoRecleanStatus, '已忽略覆盖率不足，正在执行剩余步骤…', 'warn');
       setStatus(autoWorkflowStatus, '已忽略覆盖率，正在继续执行后续流程', 'warn');
-      if (autoWorkflowManager && typeof autoWorkflowManager.startTask === 'function') {
-        autoWorkflowManager.startTask({
-          kind: 'continue',
-          startIndex: 3,
-          stepIndex: 3,
-          messages: buildAutoWorkflowTaskMessages('continue'),
-        }, { force: true });
-        return;
-      }
       try {
         await executeAutoWorkflowSteps(3);
         setStatus(autoRecleanStatus, '已忽略覆盖率完成剩余步骤，请检查结果', 'ok');
@@ -1138,8 +941,6 @@
       runAutoWorkflow: runAutoWorkflow,
       runAutoWorkflowFromClean: runAutoWorkflowFromClean,
       continueAutoWorkflowAfterCoverage: continueAutoWorkflowAfterCoverage,
-      applyAutoWorkflowTaskState: applyAutoWorkflowTaskState,
-      isAutoWorkflowReady: isAutoWorkflowReady,
     };
   }
 

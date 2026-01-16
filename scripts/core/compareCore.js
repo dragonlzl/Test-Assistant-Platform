@@ -384,36 +384,6 @@
       return null;
     }
 
-    function normalizeMissingPayload(rawMissing) {
-      if (!rawMissing) return [];
-      if (Array.isArray(rawMissing)) {
-        return rawMissing.map(function(item) {
-          if (item && typeof item === 'object') return item;
-          var text = normalizeMissingTextValue(item);
-          if (text) return { module: text, points: [] };
-          return null;
-        }).filter(Boolean);
-      }
-      if (typeof rawMissing !== 'object') return [];
-      var keys = Object.keys(rawMissing);
-      if (!keys.length) return [];
-      if (keys.length === 1 && /模块|module|缺失/.test(keys[0])) {
-        var wrapped = rawMissing[keys[0]];
-        if (Array.isArray(wrapped)) return normalizeMissingPayload(wrapped);
-        if (wrapped && typeof wrapped === 'object') {
-          return Object.keys(wrapped).map(function(moduleName) {
-            return { module: moduleName, points: wrapped[moduleName] };
-          });
-        }
-      }
-      var hasModuleKey = keys.some(function(key) { return /module|模块/.test(key); });
-      var hasPointKey = keys.some(function(key) { return /要点|测点|测试点|缺失/.test(key); });
-      if (hasModuleKey || hasPointKey) return [rawMissing];
-      return keys.map(function(moduleName) {
-        return { module: moduleName, points: rawMissing[moduleName] };
-      });
-    }
-
     function parseMissingModules(jsonText) {
       var result = unwrapRequirementPayload(jsonText || '');
       var payload = typeof result.payload === 'string' ? result.payload : result.payload;
@@ -421,8 +391,8 @@
       try {
         var data = typeof payload === 'string' ? JSON.parse(payload) : payload;
         var coverage = pickCoveragePayload(data);
-        var missing = coverage ? normalizeMissingPayload(coverage.missing) : [];
-        return (missing || []).map(function(entry) { return normalizeMissingModule(entry); }).filter(Boolean);
+        var missing = coverage && Array.isArray(coverage.missing) ? coverage.missing : [];
+        return missing.map(function(entry) { return normalizeMissingModule(entry); }).filter(Boolean);
       } catch (err) {
         console.warn('缺失模块 JSON 解析失败', err);
         return [];

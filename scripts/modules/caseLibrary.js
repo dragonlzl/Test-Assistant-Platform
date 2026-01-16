@@ -7653,56 +7653,6 @@
     return true;
   }
 
-  function getMissingReminderAiManager() {
-    return window.app && window.app.missingReminderAi ? window.app.missingReminderAi : null;
-  }
-
-  function buildMissingReminderAiItemsFromTask(task) {
-    var ids = task && Array.isArray(task.resultIds) ? task.resultIds : [];
-    var itemMap = task && task.itemMap && typeof task.itemMap === 'object' ? task.itemMap : {};
-    var selected = [];
-    var seen = {};
-    ids.forEach(function(id) {
-      var key = String(id || '').trim();
-      if (!key || seen[key]) return;
-      seen[key] = true;
-      var item = itemMap[key];
-      if (item) selected.push(Object.assign({}, item));
-    });
-    return selected;
-  }
-
-  function applyMissingReminderAiTaskState(reminder, task) {
-    if (!reminder || !task || task.scene !== 'case-library') return false;
-    var signature = task.contextSignature ? String(task.contextSignature) : '';
-    if (!signature) return false;
-    syncMissingReminderAiContext(reminder);
-    if (!reminder.aiContextSignature || reminder.aiContextSignature !== signature) return false;
-    reminder.aiSignature = signature;
-    reminder.aiProjectId = task.projectId || '';
-    reminder.aiLoading = task.status === 'running';
-    reminder.aiGenerated = task.status === 'done' || task.status === 'error';
-    reminder.aiError = task.status === 'error' ? (task.error || '') : '';
-    reminder.aiIds = Array.isArray(task.resultIds) ? task.resultIds.slice() : [];
-    reminder.aiItems = buildMissingReminderAiItemsFromTask(task);
-    if (Array.isArray(task.matchedModules)) reminder.matchedModules = task.matchedModules.slice();
-    if (Array.isArray(task.matchedTypes)) reminder.matchedTypes = task.matchedTypes.slice();
-    if (task.libraryEmpty !== undefined) {
-      reminder.libraryEmpty = task.libraryEmpty === true;
-      reminder.libraryChecked = true;
-      reminder.libraryLoading = false;
-      reminder.libraryProjectId = task.projectId || '';
-    }
-    return true;
-  }
-
-  function syncMissingReminderAiTaskState(reminder) {
-    var manager = getMissingReminderAiManager();
-    if (!manager || typeof manager.getTask !== 'function') return false;
-    var task = manager.getTask('case-library');
-    return applyMissingReminderAiTaskState(reminder, task);
-  }
-
   function resetMissingReminderLibraryStatus(reminder) {
     var target = reminder || ensureMissingReminderState();
     target.libraryEmpty = false;
@@ -8033,9 +7983,6 @@
   function renderMissingReminder() {
     var reminder = ensureMissingReminderState();
     var aiEnabled = resolveMissingReminderAiEnabled() === 'on';
-    if (aiEnabled) {
-      syncMissingReminderAiTaskState(reminder);
-    }
     var placement = resolveMissingReminderPlacement();
     var top = dom.missingReminderTop;
     var bottom = dom.missingReminderBottom;
@@ -8095,10 +8042,6 @@
     target.aiProjectId = '';
     target.aiSeq = (target.aiSeq || 0) + 1;
     resetMissingReminderLibraryStatus(target);
-    var manager = getMissingReminderAiManager();
-    if (manager && typeof manager.clearTask === 'function') {
-      manager.clearTask('case-library');
-    }
     if (!options || options.keepContext !== true) {
       target.aiContextSignature = '';
       target.aiContextProjectId = '';
@@ -8719,24 +8662,6 @@
           candidate_map: snapshot.map,
         };
         var userText = JSON.stringify(userPayload, null, 2);
-        var manager = getMissingReminderAiManager();
-        if (manager && typeof manager.createTask === 'function' && typeof manager.startTask === 'function') {
-          var task = manager.createTask('case-library', {
-            contextSignature: signature,
-            projectId: projectId,
-            model: model,
-            prompt: prompt,
-            reasoning: reasoning,
-            temperature: temperature,
-            userText: userText,
-            itemMap: snapshot.itemMap,
-            matchedModules: reminder.matchedModules,
-            matchedTypes: reminder.matchedTypes,
-            libraryEmpty: reminder.libraryEmpty === true,
-          });
-          manager.startTask('case-library', task);
-          return null;
-        }
         return coreApi.callModelWithConfig(model, userText, prompt, reasoning, temperature)
           .then(function(content) {
             if (reminder.aiSeq !== seq) return null;
@@ -15027,15 +14952,6 @@
           || keys.indexOf('missingCaseReminderMatchConfig') !== -1
           || touchedAi) {
           requestMissingReminderRefresh();
-          renderMissingReminder();
-        }
-      });
-      window.addEventListener('missing-reminder-ai-task', function(e) {
-        var detail = e && e.detail ? e.detail : null;
-        if (!detail || detail.scene !== 'case-library') return;
-        if (resolveMissingReminderAiEnabled() !== 'on') return;
-        var reminder = ensureMissingReminderState();
-        if (applyMissingReminderAiTaskState(reminder, detail.task)) {
           renderMissingReminder();
         }
       });
