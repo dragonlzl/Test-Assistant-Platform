@@ -4311,6 +4311,56 @@
       return true;
     }
 
+    function getTempExecMissingReminderAiManager() {
+      return window.app && window.app.missingReminderAi ? window.app.missingReminderAi : null;
+    }
+
+    function buildTempExecMissingReminderAiItemsFromTask(task) {
+      var ids = task && Array.isArray(task.resultIds) ? task.resultIds : [];
+      var itemMap = task && task.itemMap && typeof task.itemMap === 'object' ? task.itemMap : {};
+      var selected = [];
+      var seen = {};
+      ids.forEach(function(id) {
+        var key = String(id || '').trim();
+        if (!key || seen[key]) return;
+        seen[key] = true;
+        var item = itemMap[key];
+        if (item) selected.push(Object.assign({}, item));
+      });
+      return selected;
+    }
+
+    function applyTempExecMissingReminderAiTaskState(reminder, task) {
+      if (!reminder || !task || task.scene !== 'temp-exec') return false;
+      var signature = task.contextSignature ? String(task.contextSignature) : '';
+      if (!signature) return false;
+      syncTempExecMissingReminderAiContext(reminder);
+      if (!reminder.aiContextSignature || reminder.aiContextSignature !== signature) return false;
+      reminder.aiSignature = signature;
+      reminder.aiProjectId = task.projectId || '';
+      reminder.aiLoading = task.status === 'running';
+      reminder.aiGenerated = task.status === 'done' || task.status === 'error';
+      reminder.aiError = task.status === 'error' ? (task.error || '') : '';
+      reminder.aiIds = Array.isArray(task.resultIds) ? task.resultIds.slice() : [];
+      reminder.aiItems = buildTempExecMissingReminderAiItemsFromTask(task);
+      if (Array.isArray(task.matchedModules)) reminder.matchedModules = task.matchedModules.slice();
+      if (Array.isArray(task.matchedTypes)) reminder.matchedTypes = task.matchedTypes.slice();
+      if (task.libraryEmpty !== undefined) {
+        reminder.libraryEmpty = task.libraryEmpty === true;
+        reminder.libraryChecked = true;
+        reminder.libraryLoading = false;
+        reminder.libraryProjectId = task.projectId || '';
+      }
+      return true;
+    }
+
+    function syncTempExecMissingReminderAiTaskState(reminder) {
+      var manager = getTempExecMissingReminderAiManager();
+      if (!manager || typeof manager.getTask !== 'function') return false;
+      var task = manager.getTask('temp-exec');
+      return applyTempExecMissingReminderAiTaskState(reminder, task);
+    }
+
     function resetTempExecMissingReminderLibrary(reminder) {
       var target = reminder || ensureTempExecMissingReminderState();
       target.libraryEmpty = false;
@@ -4548,6 +4598,9 @@
     function renderTempExecMissingReminderBlock() {
       var reminder = ensureTempExecMissingReminderState();
       var aiEnabled = resolveMissingReminderAiEnabled() === 'on';
+      if (aiEnabled) {
+        syncTempExecMissingReminderAiTaskState(reminder);
+      }
       if (aiEnabled) {
         var showAi = reminder.aiContextReady === true
           || (reminder.aiLoading === true && reminder.aiSignature)
@@ -4964,6 +5017,10 @@
       target.aiProjectId = '';
       target.aiSeq = (target.aiSeq || 0) + 1;
       resetTempExecMissingReminderLibrary(target);
+      var manager = getTempExecMissingReminderAiManager();
+      if (manager && typeof manager.clearTask === 'function') {
+        manager.clearTask('temp-exec');
+      }
       if (!options || options.keepContext !== true) {
         target.aiContextSignature = '';
         target.aiContextProjectId = '';
@@ -5265,6 +5322,24 @@
             candidate_map: snapshot.map,
           };
           var userText = JSON.stringify(userPayload, null, 2);
+          var manager = getTempExecMissingReminderAiManager();
+          if (manager && typeof manager.createTask === 'function' && typeof manager.startTask === 'function') {
+            var task = manager.createTask('temp-exec', {
+              contextSignature: signature,
+              projectId: projectId,
+              model: model,
+              prompt: prompt,
+              reasoning: reasoning,
+              temperature: temperature,
+              userText: userText,
+              itemMap: snapshot.itemMap,
+              matchedModules: reminder.matchedModules,
+              matchedTypes: reminder.matchedTypes,
+              libraryEmpty: reminder.libraryEmpty === true,
+            });
+            manager.startTask('temp-exec', task);
+            return null;
+          }
           return callModelWithConfig(model, userText, prompt, reasoning, temperature)
             .then(function(content) {
               if (reminder.aiSeq !== seq) return null;
@@ -9898,6 +9973,15 @@
           || keys.indexOf('missingCaseReminderPlacement') !== -1
           || keys.indexOf('missingCaseReminderMatchConfig') !== -1
           || touchedAi) {
+          renderTempExecView();
+        }
+      });
+      window.addEventListener('missing-reminder-ai-task', function(e) {
+        var detail = e && e.detail ? e.detail : null;
+        if (!detail || detail.scene !== 'temp-exec') return;
+        if (resolveMissingReminderAiEnabled() !== 'on') return;
+        var reminder = ensureTempExecMissingReminderState();
+        if (applyTempExecMissingReminderAiTaskState(reminder, detail.task)) {
           renderTempExecView();
         }
       });

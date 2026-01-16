@@ -351,11 +351,816 @@
       })
       : null;
 
-    const callModelWithConfig = modelClient && typeof modelClient.callModelWithConfig === 'function'
-      ? modelClient.callModelWithConfig
-      : async function missingModelClient() {
-        throw new Error('模型客户端不可用，请刷新页面后重试');
+    function setLastModelError(err) {
+      if (typeof window === 'undefined') return;
+      if (!window.app) window.app = {};
+      if (!err) {
+        window.app.__lastModelError = null;
+        return;
+      }
+      var msg = err && err.message ? err.message : String(err || '');
+      window.app.__lastModelError = { message: msg, name: err && err.name ? err.name : '', at: Date.now() };
+    }
+
+    function getLastModelError() {
+      if (typeof window === 'undefined' || !window.app) return null;
+      var err = window.app.__lastModelError;
+      return err && typeof err === 'object' ? err : null;
+    }
+
+    function clearLastModelError() {
+      setLastModelError(null);
+    }
+
+    function wrapCallModelWithTracking(fn) {
+      return async function wrappedCallModel() {
+        try {
+          var result = await fn.apply(null, arguments);
+          clearLastModelError();
+          return result;
+        } catch (err) {
+          setLastModelError(err);
+          throw err;
+        }
       };
+    }
+
+    const callModelWithConfig = wrapCallModelWithTracking(
+      modelClient && typeof modelClient.callModelWithConfig === 'function'
+        ? modelClient.callModelWithConfig
+        : async function missingModelClient() {
+          throw new Error('模型客户端不可用，请刷新页面后重试');
+        }
+    );
+
+    function initMissingReminderAiManager(options) {
+      const utils = options && options.utils ? options.utils : {};
+      const callModel = options && typeof options.callModelWithConfig === 'function'
+        ? options.callModelWithConfig
+        : async function missingCall() {
+          throw new Error('模型客户端不可用，请刷新页面后重试');
+        };
+      const storagePrefix = 'tap-missing-reminder-ai-task:';
+      const runnerId = 'missing-reminder-ai-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      const runningMap = {};
+      const heartbeatIntervalMs = 2000;
+      const staleMs = 6000;
+      const takeoverTimers = {};
+      var pageUnloading = false;
+
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('pagehide', function() { pageUnloading = true; });
+        window.addEventListener('beforeunload', function() { pageUnloading = true; });
+      }
+
+      function buildKey(scene) {
+        return storagePrefix + scene;
+      }
+
+      function safeJsonParse(raw) {
+        if (!raw) return null;
+        try {
+          return JSON.parse(raw);
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function readTask(scene) {
+        if (!scene || typeof localStorage === 'undefined') return null;
+        try {
+          return safeJsonParse(localStorage.getItem(buildKey(scene)));
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function emitTaskUpdate(scene, task, action) {
+        if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+        try {
+          if (typeof CustomEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('missing-reminder-ai-task', { detail: { scene: scene, task: task, action: action || '' } }));
+          } else if (typeof document !== 'undefined' && typeof document.createEvent === 'function') {
+            var evt = document.createEvent('CustomEvent');
+            evt.initCustomEvent('missing-reminder-ai-task', false, false, { scene: scene, task: task, action: action || '' });
+            window.dispatchEvent(evt);
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
+
+      function writeTask(scene, task, action) {
+        if (!scene || typeof localStorage === 'undefined') return task || null;
+        if (!task) {
+          try {
+            localStorage.removeItem(buildKey(scene));
+          } catch (err) {
+            // ignore
+          }
+          emitTaskUpdate(scene, null, action || 'clear');
+          return null;
+        }
+        var next = task;
+        next.updatedAt = Date.now();
+        try {
+          localStorage.setItem(buildKey(scene), JSON.stringify(next));
+        } catch (err) {
+          // ignore
+        }
+        emitTaskUpdate(scene, next, action || 'update');
+        return next;
+      }
+
+      function clearTask(scene) {
+        writeTask(scene, null, 'clear');
+      }
+
+      function buildTaskId() {
+        return 'missing-reminder-ai-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      }
+
+      function normalizeModelSnapshot(model) {
+        if (!model || typeof model !== 'object') return null;
+        return {
+          id: model.id || '',
+          name: model.name || '',
+          provider: model.provider || '',
+          baseUrl: model.baseUrl || '',
+          apiKey: model.apiKey || '',
+          model: model.model || '',
+          maxTokens: model.maxTokens,
+        };
+      }
+
+      function createTask(scene, payload) {
+        var base = payload && typeof payload === 'object' ? Object.assign({}, payload) : {};
+        base.id = base.id || buildTaskId();
+        base.scene = scene || base.scene || '';
+        base.status = 'running';
+        base.createdAt = base.createdAt || Date.now();
+        base.updatedAt = base.updatedAt || base.createdAt;
+        base.retryCount = Number(base.retryCount || 0);
+        if (base.model) base.model = normalizeModelSnapshot(base.model);
+        return base;
+      }
+
+      function parseTaskIds(content) {
+        var raw = content || '';
+        var stripped = utils && typeof utils.stripCodeFence === 'function'
+          ? utils.stripCodeFence(raw)
+          : String(raw || '').trim();
+        var payloadText = utils && typeof utils.extractJsonPayload === 'function'
+          ? utils.extractJsonPayload(stripped)
+          : '';
+        var text = payloadText || stripped;
+        var data = JSON.parse(text);
+        var ids = data && Array.isArray(data.ids) ? data.ids : [];
+        return ids.map(function(id) { return String(id).trim(); }).filter(Boolean);
+      }
+
+      function resolveUserText(task) {
+        if (!task) return '';
+        if (typeof task.userText === 'string' && task.userText.trim()) return task.userText;
+        if (task.userPayload && typeof task.userPayload === 'object') {
+          try {
+            return JSON.stringify(task.userPayload, null, 2);
+          } catch (err) {
+            return '';
+          }
+        }
+        return '';
+      }
+
+      function isTransientFetchError(err) {
+        if (!err) return false;
+        var msg = err && err.message ? String(err.message) : String(err || '');
+        if (!msg) return false;
+        if (msg.indexOf('Failed to fetch') !== -1) return true;
+        if (msg.indexOf('NetworkError') !== -1) return true;
+        return false;
+      }
+
+      function isModelTimeoutError(err) {
+        if (!err) return false;
+        var msg = err && err.message ? String(err.message) : String(err || '');
+        if (!msg) return false;
+        return msg.indexOf('模型调用超时') !== -1;
+      }
+
+      function shouldSuspendForNavigation(err) {
+        if (pageUnloading) return true;
+        if (!err) return false;
+        if (err.name === 'AbortError') return true;
+        var msg = err && err.message ? String(err.message) : String(err || '');
+        if (msg.indexOf('AbortError') !== -1) return true;
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+          if (isTransientFetchError(err)) return true;
+          if (isModelTimeoutError(err)) return true;
+          return false;
+        }
+        return false;
+      }
+
+      function isTaskStale(task) {
+        if (!task) return true;
+        var heartbeat = Number(task.heartbeatAt || 0);
+        if (!heartbeat) return true;
+        return Date.now() - heartbeat > staleMs;
+      }
+
+      function shouldTakeover(task) {
+        if (!task || task.status !== 'running') return false;
+        if (!task.runnerId || task.runnerId === runnerId) return true;
+        return isTaskStale(task);
+      }
+
+      function startHeartbeat(scene, task) {
+        if (!scene || !task) return function() {};
+        var timer = setInterval(function() {
+          var current = readTask(scene);
+          if (!current || current.id !== task.id || current.status !== 'running') {
+            clearInterval(timer);
+            return;
+          }
+          if (current.runnerId && current.runnerId !== runnerId) {
+            clearInterval(timer);
+            return;
+          }
+          current.runnerId = runnerId;
+          current.heartbeatAt = Date.now();
+          current.updatedAt = current.heartbeatAt;
+          writeTask(scene, current, 'heartbeat');
+        }, heartbeatIntervalMs);
+        return function stopHeartbeat() {
+          clearInterval(timer);
+        };
+      }
+
+      function runTask(scene, task) {
+        if (!scene || !task) return Promise.resolve(null);
+        if (runningMap[scene] && runningMap[scene].taskId === task.id) {
+          return runningMap[scene].promise;
+        }
+        var stopHeartbeat = startHeartbeat(scene, task);
+        var promise = Promise.resolve()
+          .then(function() {
+            var current = readTask(scene);
+            if (!current || current.id !== task.id) return null;
+            var model = current.model;
+            if (!model || !model.baseUrl || !model.model) {
+              throw new Error('未找到易漏用例推荐模型');
+            }
+            var userText = resolveUserText(current);
+            if (!userText) {
+              throw new Error('推荐上下文缺失');
+            }
+            return callModel(model, userText, current.prompt || '', current.reasoning || '', current.temperature);
+          })
+          .then(function(content) {
+            var current = readTask(scene);
+            if (!current || current.id !== task.id) return null;
+            if (current.runnerId && current.runnerId !== runnerId) return null;
+            var ids = parseTaskIds(content);
+            current.status = 'done';
+            current.resultIds = ids;
+            current.error = '';
+            current.updatedAt = Date.now();
+            current.endedAt = current.updatedAt;
+            current.heartbeatAt = 0;
+            writeTask(scene, current, 'done');
+            return current;
+          })
+          .catch(function(err) {
+            var current = readTask(scene);
+            if (!current || current.id !== task.id) return null;
+            if (current.runnerId && current.runnerId !== runnerId) return null;
+            var msg = err && err.message ? err.message : String(err || '');
+            if (shouldSuspendForNavigation(err)) {
+              current.status = 'running';
+              current.error = '';
+              current.runnerId = '';
+              current.heartbeatAt = 0;
+              current.updatedAt = Date.now();
+              writeTask(scene, current, 'suspend');
+              return current;
+            }
+            if (isTransientFetchError(err)) {
+              current.retryCount = Number(current.retryCount || 0) + 1;
+              if (current.retryCount <= 2) {
+                current.status = 'running';
+                current.error = '';
+                current.runnerId = '';
+                current.heartbeatAt = 0;
+                current.updatedAt = Date.now();
+                writeTask(scene, current, 'retry');
+                return current;
+              }
+            }
+            current.status = 'error';
+            current.error = msg ? ('AI 推荐失败：' + msg) : 'AI 推荐失败';
+            current.updatedAt = Date.now();
+            current.endedAt = current.updatedAt;
+            current.heartbeatAt = 0;
+            writeTask(scene, current, 'error');
+            return current;
+          })
+          .finally(function() {
+            stopHeartbeat();
+            if (runningMap[scene] && runningMap[scene].taskId === task.id) {
+              delete runningMap[scene];
+            }
+          });
+        runningMap[scene] = { taskId: task.id, promise: promise };
+        return promise;
+      }
+
+      function startTask(scene, task, options) {
+        if (!scene) return Promise.resolve(null);
+        var active = task ? createTask(scene, task) : readTask(scene);
+        if (!active) return Promise.resolve(null);
+        if (active.status !== 'running') return Promise.resolve(active);
+        if (!options || options.force !== true) {
+          if (!shouldTakeover(active)) {
+            if (!takeoverTimers[scene]) {
+              takeoverTimers[scene] = setTimeout(function() {
+                takeoverTimers[scene] = null;
+                var latest = readTask(scene);
+                if (latest && latest.status === 'running') {
+                  startTask(scene, latest);
+                }
+              }, staleMs);
+            }
+            return Promise.resolve(active);
+          }
+        }
+        active.runnerId = runnerId;
+        active.heartbeatAt = Date.now();
+        writeTask(scene, active, 'start');
+        return runTask(scene, active);
+      }
+
+      function resumeTasks(options) {
+        ['case-library', 'temp-exec'].forEach(function(scene) {
+          var task = readTask(scene);
+          if (task && task.status === 'running') {
+            startTask(scene, task, options);
+          }
+        });
+      }
+
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('storage', function(e) {
+          var key = e && e.key ? String(e.key) : '';
+          if (!key || key.indexOf(storagePrefix) !== 0) return;
+          var scene = key.slice(storagePrefix.length);
+          emitTaskUpdate(scene, readTask(scene), 'storage');
+        });
+      }
+
+      return {
+        createTask: createTask,
+        startTask: startTask,
+        getTask: readTask,
+        clearTask: clearTask,
+        resumeTasks: resumeTasks,
+        buildTaskId: buildTaskId,
+        normalizeModelSnapshot: normalizeModelSnapshot,
+      };
+    }
+
+    function initAutoWorkflowManager(options) {
+      const getSteps = options && typeof options.getSteps === 'function'
+        ? options.getSteps
+        : function() { return []; };
+      const canRun = options && typeof options.canRun === 'function'
+        ? options.canRun
+        : function() { return true; };
+      const persistWorkflowStateNow = options && typeof options.persistWorkflowStateNow === 'function'
+        ? options.persistWorkflowStateNow
+        : function() {};
+      const getLastError = options && typeof options.getLastModelError === 'function'
+        ? options.getLastModelError
+        : function() { return null; };
+      const clearLastError = options && typeof options.clearLastModelError === 'function'
+        ? options.clearLastModelError
+        : function() {};
+      const storageKey = 'tap-auto-workflow-task';
+      const runnerId = 'auto-workflow-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      const runningMap = {};
+      const heartbeatIntervalMs = 2000;
+      const staleMs = 6000;
+      var takeoverTimer = null;
+      var retryTimer = null;
+      var pageUnloading = false;
+
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('pagehide', function() { pageUnloading = true; });
+        window.addEventListener('beforeunload', function() { pageUnloading = true; });
+      }
+
+      function safeJsonParse(raw) {
+        if (!raw) return null;
+        try {
+          return JSON.parse(raw);
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function readTask() {
+        if (typeof localStorage === 'undefined') return null;
+        try {
+          return safeJsonParse(localStorage.getItem(storageKey));
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function emitTaskUpdate(task, action) {
+        if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+        try {
+          if (typeof CustomEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('auto-workflow-task', { detail: { task: task, action: action || '' } }));
+          } else if (typeof document !== 'undefined' && typeof document.createEvent === 'function') {
+            var evt = document.createEvent('CustomEvent');
+            evt.initCustomEvent('auto-workflow-task', false, false, { task: task, action: action || '' });
+            window.dispatchEvent(evt);
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
+
+      function writeTask(task, action) {
+        if (typeof localStorage === 'undefined') return task || null;
+        if (!task) {
+          try {
+            localStorage.removeItem(storageKey);
+          } catch (err) {
+            // ignore
+          }
+          emitTaskUpdate(null, action || 'clear');
+          return null;
+        }
+        var next = task;
+        next.updatedAt = Date.now();
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(next));
+        } catch (err) {
+          // ignore
+        }
+        emitTaskUpdate(next, action || 'update');
+        return next;
+      }
+
+      function clearTask() {
+        writeTask(null, 'clear');
+      }
+
+      function buildTaskId() {
+        return 'auto-workflow-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      }
+
+      function createTask(payload) {
+        var base = payload && typeof payload === 'object' ? Object.assign({}, payload) : {};
+        base.id = base.id || buildTaskId();
+        base.status = 'running';
+        base.createdAt = base.createdAt || Date.now();
+        base.updatedAt = base.updatedAt || base.createdAt;
+        base.retryCount = Number(base.retryCount || 0);
+        base.startIndex = Number(base.startIndex || 0);
+        if (!Number.isFinite(base.startIndex) || base.startIndex < 0) base.startIndex = 0;
+        if (!Number.isFinite(Number(base.stepIndex))) base.stepIndex = base.startIndex;
+        if (!base.context || typeof base.context !== 'object') base.context = {};
+        if (!base.messages || typeof base.messages !== 'object') base.messages = {};
+        return base;
+      }
+
+      function isTransientFetchError(err) {
+        if (!err) return false;
+        var msg = err && err.message ? String(err.message) : String(err || '');
+        if (!msg) return false;
+        if (msg.indexOf('Failed to fetch') !== -1) return true;
+        if (msg.indexOf('NetworkError') !== -1) return true;
+        return false;
+      }
+
+      function isModelTimeoutError(err) {
+        if (!err) return false;
+        var msg = err && err.message ? String(err.message) : String(err || '');
+        if (!msg) return false;
+        return msg.indexOf('模型调用超时') !== -1;
+      }
+
+      function shouldSuspendForNavigation(err) {
+        if (pageUnloading) return true;
+        if (!err) return false;
+        if (err.name === 'AbortError') return true;
+        var msg = err && err.message ? String(err.message) : String(err || '');
+        if (msg.indexOf('AbortError') !== -1) return true;
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+          if (isTransientFetchError(err)) return true;
+          if (isModelTimeoutError(err)) return true;
+          return false;
+        }
+        return false;
+      }
+
+      function isTaskStale(task) {
+        if (!task) return true;
+        var heartbeat = Number(task.heartbeatAt || 0);
+        if (!heartbeat) return true;
+        return Date.now() - heartbeat > staleMs;
+      }
+
+      function shouldTakeover(task) {
+        if (!task || task.status !== 'running') return false;
+        if (!task.runnerId || task.runnerId === runnerId) return true;
+        return isTaskStale(task);
+      }
+
+      function startHeartbeat(task) {
+        if (!task) return function() {};
+        var timer = setInterval(function() {
+          var current = readTask();
+          if (!current || current.id !== task.id || current.status !== 'running') {
+            clearInterval(timer);
+            return;
+          }
+          if (current.runnerId && current.runnerId !== runnerId) {
+            clearInterval(timer);
+            return;
+          }
+          current.runnerId = runnerId;
+          current.heartbeatAt = Date.now();
+          current.updatedAt = current.heartbeatAt;
+          writeTask(current, 'heartbeat');
+        }, heartbeatIntervalMs);
+        return function stopHeartbeat() {
+          clearInterval(timer);
+        };
+      }
+
+      function resetRunner(task) {
+        if (!task) return;
+        task.runnerId = '';
+        task.heartbeatAt = 0;
+      }
+
+      function scheduleRetry() {
+        if (retryTimer) return;
+        retryTimer = setTimeout(function() {
+          retryTimer = null;
+          var current = readTask();
+          if (!current || current.status !== 'running') return;
+          if (pageUnloading) return;
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+          startTask(current, { force: true });
+        }, 800);
+      }
+
+      function handleRetry(current, action) {
+        if (!current) return false;
+        current.retryCount = Number(current.retryCount || 0) + 1;
+        if (current.retryCount > 2) return false;
+        current.status = 'running';
+        current.error = '';
+        resetRunner(current);
+        current.updatedAt = Date.now();
+        writeTask(current, action || 'retry');
+        if (!pageUnloading && typeof document !== 'undefined' && document.visibilityState !== 'hidden') {
+          scheduleRetry();
+        }
+        return true;
+      }
+
+      function runTask(task) {
+        if (!task) return Promise.resolve(null);
+        if (runningMap.main && runningMap.main.taskId === task.id) {
+          return runningMap.main.promise;
+        }
+        var stopHeartbeat = startHeartbeat(task);
+        var promise = Promise.resolve()
+          .then(async function() {
+            var steps = getSteps();
+            var current = readTask();
+            if (!current || current.id !== task.id) return null;
+            if (typeof canRun === 'function' && !canRun()) {
+              current.status = 'running';
+              current.error = '';
+              resetRunner(current);
+              current.updatedAt = Date.now();
+              writeTask(current, 'suspend');
+              return current;
+            }
+            if (!steps || !steps.length) {
+              current.status = 'error';
+              current.error = '未配置自动流程步骤';
+              current.updatedAt = Date.now();
+              current.endedAt = current.updatedAt;
+              resetRunner(current);
+              writeTask(current, 'error');
+              return current;
+            }
+            var startIndex = Number(current.stepIndex);
+            if (!Number.isFinite(startIndex) || startIndex < 0) startIndex = Number(current.startIndex || 0);
+            if (!Number.isFinite(startIndex) || startIndex < 0) startIndex = 0;
+            var context = current.context && typeof current.context === 'object' ? current.context : {};
+
+            for (var i = startIndex; i < steps.length; i += 1) {
+              var step = steps[i] || {};
+              current = readTask();
+              if (!current || current.id !== task.id) return null;
+              if (current.runnerId && current.runnerId !== runnerId) return null;
+              current.stepIndex = i;
+              current.stepKey = step.key || '';
+              current.stepLabel = step.label || '';
+              current.updatedAt = Date.now();
+              writeTask(current, 'step');
+              if (typeof clearLastError === 'function') clearLastError();
+              try {
+                if (step && typeof step.run === 'function') {
+                  await step.run(context);
+                }
+                var valid = step && typeof step.validate === 'function' ? step.validate() : false;
+                if (!valid) {
+                  var lastErr = typeof getLastError === 'function' ? getLastError() : null;
+                  if (shouldSuspendForNavigation(lastErr)) {
+                    current.status = 'running';
+                    current.error = '';
+                    resetRunner(current);
+                    current.updatedAt = Date.now();
+                    writeTask(current, 'suspend');
+                    return current;
+                  }
+                  if (isTransientFetchError(lastErr) && handleRetry(current, 'retry')) {
+                    return current;
+                  }
+                  var invalidReason = (step && step.label ? step.label : '流程步骤') + '未产生有效输出，请检查模型配置或稍后重试';
+                  throw new Error(invalidReason);
+                }
+                if (step && typeof step.after === 'function') {
+                  await step.after();
+                }
+                current.stepIndex = i + 1;
+                current.stepKey = '';
+                current.stepLabel = '';
+                current.updatedAt = Date.now();
+                writeTask(current, 'progress');
+                if (typeof persistWorkflowStateNow === 'function') persistWorkflowStateNow();
+              } catch (err) {
+                var lastErrInner = typeof getLastError === 'function' ? getLastError() : null;
+                if (shouldSuspendForNavigation(err) || shouldSuspendForNavigation(lastErrInner)) {
+                  current.status = 'running';
+                  current.error = '';
+                  resetRunner(current);
+                  current.updatedAt = Date.now();
+                  writeTask(current, 'suspend');
+                  return current;
+                }
+                if ((isTransientFetchError(err) || isTransientFetchError(lastErrInner)) && handleRetry(current, 'retry')) {
+                  return current;
+                }
+                var msg = err && err.message ? err.message : String(err || '');
+                current.status = 'error';
+                current.error = msg || '自动流程失败';
+                current.updatedAt = Date.now();
+                current.endedAt = current.updatedAt;
+                resetRunner(current);
+                writeTask(current, 'error');
+                return current;
+              }
+            }
+            current = readTask();
+            if (!current || current.id !== task.id) return null;
+            if (current.runnerId && current.runnerId !== runnerId) return null;
+            current.status = 'done';
+            current.error = '';
+            current.updatedAt = Date.now();
+            current.endedAt = current.updatedAt;
+            current.heartbeatAt = 0;
+            writeTask(current, 'done');
+            return current;
+          })
+          .finally(function() {
+            stopHeartbeat();
+            if (runningMap.main && runningMap.main.taskId === task.id) {
+              delete runningMap.main;
+            }
+          });
+        runningMap.main = { taskId: task.id, promise: promise };
+        return promise;
+      }
+
+      function startTask(task, options) {
+        var active = task ? createTask(task) : readTask();
+        if (!active) return Promise.resolve(null);
+        if (active.status !== 'running') return Promise.resolve(active);
+        if (!options || options.force !== true) {
+          if (!shouldTakeover(active)) {
+            if (!takeoverTimer) {
+              takeoverTimer = setTimeout(function() {
+                takeoverTimer = null;
+                var latest = readTask();
+                if (latest && latest.status === 'running') {
+                  startTask(latest);
+                }
+              }, staleMs);
+            }
+            return Promise.resolve(active);
+          }
+        }
+        active.runnerId = runnerId;
+        active.heartbeatAt = Date.now();
+        writeTask(active, 'start');
+        return runTask(active);
+      }
+
+      function resumeTask(options) {
+        var task = readTask();
+        if (task && task.status === 'running') {
+          startTask(task, options);
+        }
+      }
+
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('storage', function(e) {
+          var key = e && e.key ? String(e.key) : '';
+          if (key !== storageKey) return;
+          emitTaskUpdate(readTask(), 'storage');
+        });
+      }
+
+      return {
+        createTask: createTask,
+        startTask: startTask,
+        getTask: readTask,
+        clearTask: clearTask,
+        resumeTask: resumeTask,
+      };
+    }
+
+    const missingReminderAiManager = initMissingReminderAiManager({
+      utils: appUtils,
+      callModelWithConfig: callModelWithConfig,
+    });
+    window.app.missingReminderAi = missingReminderAiManager;
+
+    function shouldResumeMissingReminderAi() {
+      return Boolean(state && state.settings && state.settings.missingCaseReminderAiEnabled === 'on');
+    }
+
+    function syncMissingReminderAiTasks() {
+      if (!missingReminderAiManager || typeof missingReminderAiManager.resumeTasks !== 'function') return;
+      if (!shouldResumeMissingReminderAi()) {
+        if (typeof missingReminderAiManager.clearTask === 'function') {
+          missingReminderAiManager.clearTask('case-library');
+          missingReminderAiManager.clearTask('temp-exec');
+        }
+        return;
+      }
+      missingReminderAiManager.resumeTasks({ force: true });
+    }
+
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('app-settings-loaded', function() {
+        syncMissingReminderAiTasks();
+      });
+      window.addEventListener('app-settings-updated', function(e) {
+        var detail = e && e.detail ? e.detail : null;
+        var keys = detail && Array.isArray(detail.keys) ? detail.keys : [];
+        if (!keys.length || keys.indexOf('missingCaseReminderAiEnabled') !== -1) {
+          syncMissingReminderAiTasks();
+        }
+      });
+    }
+    if (window.app && window.app.settingsReady === true) {
+      syncMissingReminderAiTasks();
+    }
+
+    function ensureAutoWorkflowGhostFields() {
+      if (typeof document === 'undefined' || !document.body) return;
+      var ids = ['rawText', 'reviewResult', 'cleanedText', 'compareResult', 'splitResult', 'casesCompareResult', 'caseText'];
+      var hasMissing = ids.some(function(id) { return !document.getElementById(id); });
+      if (!hasMissing) return;
+      var container = document.getElementById('autoWorkflowGhostFields');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'autoWorkflowGhostFields';
+        container.style.display = 'none';
+        document.body.appendChild(container);
+      }
+      ids.forEach(function(id) {
+        if (document.getElementById(id)) return;
+        var area = document.createElement('textarea');
+        area.id = id;
+        area.setAttribute('data-ghost', 'true');
+        container.appendChild(area);
+      });
+    }
+
+    ensureAutoWorkflowGhostFields();
 
     const domConfig = window.app.domConfig || {};
     const dom = buildDom(domConfig.ids, domConfig.alias);
@@ -915,12 +1720,64 @@
       'buildFilteredComparePayload',
       'updateAutoCompareActions',
       'syncAutoCompareStatus',
+      'buildAutoWorkflowSteps',
       'executeAutoWorkflowSteps',
       'enforceAutoCoverageRequirement',
       'runAutoWorkflow',
       'runAutoWorkflowFromClean',
       'continueAutoWorkflowAfterCoverage',
+      'applyAutoWorkflowTaskState',
     ]);
+
+    const autoWorkflowManager = initAutoWorkflowManager({
+      getSteps: function() {
+        return autoCoreModule && typeof autoCoreModule.buildAutoWorkflowSteps === 'function'
+          ? autoCoreModule.buildAutoWorkflowSteps()
+          : [];
+      },
+      canRun: function() {
+        return autoCoreModule && typeof autoCoreModule.isAutoWorkflowReady === 'function'
+          ? autoCoreModule.isAutoWorkflowReady()
+          : true;
+      },
+      persistWorkflowStateNow: requestPersistWorkflowStateNow,
+      getLastModelError: getLastModelError,
+      clearLastModelError: clearLastModelError,
+    });
+    window.app.autoWorkflowManager = autoWorkflowManager;
+
+    function syncAutoWorkflowTaskState(task) {
+      if (!autoCoreModule || typeof autoCoreModule.applyAutoWorkflowTaskState !== 'function') return;
+      autoCoreModule.applyAutoWorkflowTaskState(task || null);
+    }
+
+    function resumeAutoWorkflowTaskWhenReady() {
+      if (!autoWorkflowManager || typeof autoWorkflowManager.resumeTask !== 'function') return;
+      var attempts = 0;
+      var maxAttempts = 40;
+      function attemptResume() {
+        attempts += 1;
+        if (window.app && window.app._inited === true) {
+          if (typeof loadModels === 'function') loadModels();
+          if (typeof loadAssignments === 'function') loadAssignments();
+          autoWorkflowManager.resumeTask({ force: true });
+          syncAutoWorkflowTaskState(autoWorkflowManager.getTask ? autoWorkflowManager.getTask() : null);
+          return;
+        }
+        if (attempts < maxAttempts) {
+          setTimeout(attemptResume, 200);
+        }
+      }
+      attemptResume();
+    }
+
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('auto-workflow-task', function(e) {
+        var detail = e && e.detail ? e.detail : null;
+        syncAutoWorkflowTaskState(detail ? detail.task : null);
+      });
+    }
+    resumeAutoWorkflowTaskWhenReady();
     const casesGenCoreModule = window.app && window.app.casesGenCore && typeof window.app.casesGenCore.init === 'function'
       ? window.app.casesGenCore.init({
         state,
