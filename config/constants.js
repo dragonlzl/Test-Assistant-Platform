@@ -6,7 +6,8 @@
     review: '你是资深游戏项目的需求分析师，精通理解分析需求，从游戏设计角度和玩家体验角度多维度分析需求存在的问题，请先对原始需求中存在的问题进行归类（类别仅可为：需求矛盾、需求模糊、需求不全、边界不明确、分支预期不足、多余需求、无效需求），然后输出 JSON 数组：[{"类别": 分类, "不明确的需求点": 描述, "不明确原因": 原因说明, "可能存在的分支/边界情况": 分支说明}]。若无不明确点返回空数组，不要输出其它文本。',
     cases: '你是测试审核专家，请仔细地对“测试模块拆分结果”和“XMind 测试用例”进行充分理解后，再进行对比，输出“XMind 测试用例”中缺少的模块测试点，以及“XMind 测试用例”中多出的测试点，输出 JSON：{coverage: 百分比(0-100), missing: [{模块名: [缺失的模块测试点，包括但不限于常规测试点、通用测试点、异常测试点、特殊测试点]}], extra: [测试用例中多出的点]}，missing/extra 为空数组表示无缺失或额外多出，严格按照上述结构进行输出。',
     casegen: '你是游戏测试用例专家，针对单个测试模块生成 JSON 用例列表，每条用例字段：{module, title, priority（仅从P0、P1、P2中选择）, preconditions, steps, expected}，steps 为数组。通过模块的测试场景/测试要点/耦合模块，也要充分思考基于手机操作的特殊场景，以及重复操作，比如重复获取，重复处理等情况，给出足矣覆盖测试点的高质量用例。',
-    casefilter: '你是测试用例去重专家，请比较“生成用例候选”与“已导入用例”。保留在导入用例中不存在或不高度相似的候选，用例结构保持与输入一致，输出 JSON 用例列表，每条用例字段：{module, title, priority（仅从P0、P1、P2中选择）, preconditions, steps, expected}，steps 为数组。'
+    casefilter: '你是测试用例去重专家，请比较“生成用例候选”与“已导入用例”。保留在导入用例中不存在或不高度相似的候选，用例结构保持与输入一致，输出 JSON 用例列表，每条用例字段：{module, title, priority（仅从P0、P1、P2中选择）, preconditions, steps, expected}，steps 为数组。',
+    missingreminder: '你是测试用例关联推荐专家。请根据“当前用例信息”从“候选易漏用例字典”（id -> 用例字段，包含 match_level=高/中/低）中筛选适合当前用例执行/查看的关联用例，并按关联度从高到低排序。严格输出 JSON：{ids: [\"1\",\"2\"]}，若无适合用例输出 {ids: []}，不要输出任何其他文本。'
   };
 
   var providerDefaults = {
@@ -55,6 +56,7 @@
     caseViewFontSize: defaultCaseViewFontSize,
     missingCaseReminderPlacement: 'top',
     missingCaseReminderMatchConfig: { type: true, module: true },
+    missingCaseReminderAiEnabled: 'off',
     caseGenProgressCollapsed: false,
     sidebarTabActive: 'casegen',
     memoPad: {

@@ -70,6 +70,7 @@ test.describe('settings/models/features + ops api', () => {
           { key: 'tempExecPageSize', value_json: 33 },
           { key: 'pageGuideSwitches', value_json: { auto: false, clean: true, tempexec: false } },
           { key: 'theme', value_json: 'dark' },
+          { key: 'missingCaseReminderAiEnabled', value_json: 'on' },
           { key: 'otherSettingsDemo', value_json: { enabled: true } },
         ],
       },
@@ -89,6 +90,8 @@ test.describe('settings/models/features + ops api', () => {
     expect(guideSetting && guideSetting.value_json && guideSetting.value_json.auto).toBe(false);
     const themeSetting = execSettingsBody.find((item) => item.key === 'theme' && item.owner_id === userId);
     expect(themeSetting && themeSetting.value_json).toBe('dark');
+    const aiSetting = execSettingsBody.find((item) => item.key === 'missingCaseReminderAiEnabled' && item.owner_id === userId);
+    expect(aiSetting && aiSetting.value_json).toBe('on');
     const switchTheme = await ctx.put(`${apiBase}/api/settings`, {
       headers: userHeaders,
       data: { scope: 'user', items: [{ key: 'theme', value_json: 'light' }] },

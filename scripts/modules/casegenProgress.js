@@ -139,6 +139,16 @@
       return { state: 'pending', text: (statusInfo && statusInfo.text) || '未生成' };
     }
 
+    function hasCaseGenSuggestion(moduleId) {
+      if (moduleId === null || moduleId === undefined) return false;
+      if (!state.caseGenSuggestions || typeof state.caseGenSuggestions !== 'object') return false;
+      var raw = state.caseGenSuggestions[moduleId];
+      if (raw === undefined || raw === null) {
+        raw = state.caseGenSuggestions[String(moduleId)];
+      }
+      return Boolean(String(raw || '').trim());
+    }
+
     var defaultContainer = dom.casesGenerationContainer;
 
     function pickContainer(root) {
@@ -177,8 +187,9 @@
           ? '失败'
           : '未生成';
         var name = escapeHtml(mod.title || ('模块' + (idx + 1)));
+        var suggestionClass = hasCaseGenSuggestion(mod.id) ? ' has-suggestion' : '';
         return '' +
-          '<div class="casegen-progress-item state-' + (status.state || 'pending') + '" data-casegen-module="' + mod.id + '">' +
+          '<div class="casegen-progress-item state-' + (status.state || 'pending') + suggestionClass + '" data-casegen-module="' + mod.id + '">' +
             '<div class="info">' +
               '<span class="status-dot"></span>' +
               '<div class="titles">' +

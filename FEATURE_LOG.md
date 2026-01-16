@@ -3768,6 +3768,24 @@
   - 测试：补充易漏提醒匹配得分与命中设定 UI/API 用例（`tests/ui/missing_case_reminder.spec.js`、`tests/api/settings_missing_reminder_placement.spec.js`）。
 - 更新记录：2026-01-20 易漏用例提醒命中设定与匹配评分（`settings.html`、`scripts/modules/settings.js`、`scripts/base/utils.js`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`style.css`、`config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`、`scripts/modules/opsLog.js`、`tests/ui/missing_case_reminder.spec.js`、`tests/api/settings_missing_reminder_placement.spec.js`）。
 
+- 功能名称：易漏用例提醒 AI 推荐
+- 功能描述：易漏用例提醒新增大模型推荐能力，基于“模块/类型”候选与当前执行/编辑用例上下文筛选关联易漏用例。
+- 操作方式：在 AI 功能指派中选择“易漏用例推荐”模型；在通用设置开启“易漏用例推荐（大模型）”；在用例库编辑/执行提醒区点击“AI 推荐”触发生成。
+- 使用效果：提醒区展示 AI 推荐按钮与生成提示，输出按关联度排序的易漏用例；关闭开关或取消确认后回退到关键词匹配逻辑并清空 AI 结果。
+- 新增内容/接口/组件：
+  - 前端：新增易漏用例推荐模型指派卡片与默认提示词、设置开关与开启校验、提醒区 AI 推荐按钮/加载动画/持久化逻辑（`config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`、`index.html`、`ai-tools.html`、`settings.html`、`scripts/modules/models.js`、`scripts/modules/assign.js`、`scripts/handlers/assignHandlers.js`、`scripts/modules/settings.js`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`scripts/modules/opsLog.js`）。
+  - 测试：补充易漏用例 AI 推荐 UI 与设置开关、接口配置验证用例（`tests/ui/missing_case_reminder.spec.js`、`tests/api/settings_models.spec.js`）。
+- 测试与验证：
+  - `node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js scripts/modules/caseLibrary.js scripts/core/tempexecCore.js`
+  - `npx playwright test tests/ui/missing_case_reminder.spec.js`
+  - `npx playwright test tests/api/settings_models.spec.js`
+- 更新记录：2026-01-21 易漏用例提醒 AI 推荐（`config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`、`index.html`、`ai-tools.html`、`settings.html`、`scripts/modules/models.js`、`scripts/modules/assign.js`、`scripts/handlers/assignHandlers.js`、`scripts/modules/settings.js`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`style.css`、`tests/ui/missing_case_reminder.spec.js`、`tests/api/settings_models.spec.js`）。
+- 更新记录：2026-01-22 易漏用例 AI 推荐匹配得分等级展示与候选上下文补充（`config/constants.js`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`tests/ui/missing_case_reminder.spec.js`）。
+- 更新记录：2026-01-22 易漏用例 AI 推荐空库提示引导添加（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`tests/ui/missing_case_reminder.spec.js`）。
+- 更新记录：2026-01-22 易漏用例 AI 推荐空库点击提示（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`tests/ui/missing_case_reminder.spec.js`）。
+- 更新记录：2026-01-22 易漏用例 AI 推荐生成提示文案调整（`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`）。
+- 更新记录：2026-01-22 用例生成进度模块生成建议标记（`scripts/modules/casegenProgress.js`、`scripts/modules/casesgen.js`、`style.css`、`tests/ui/casegen_db_store.spec.js`）。
+
 - 功能名称：易漏用例操作记录与用例贡献统计
 - 功能描述：易漏用例与漏测模块的新增/修改/删除操作写入操作记录，显示模块名（如“云存档（模块）”）并展示数量变化，同时纳入用例贡献视图统计。
 - 操作方式：在用例库的“易漏用例”抽屉新增/编辑/删除易漏条目或漏测模块；管理员在“操作记录”查看日志或在“用例贡献视图”查看统计。

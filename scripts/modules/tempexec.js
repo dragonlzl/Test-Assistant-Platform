@@ -5284,6 +5284,14 @@
           openCaseLibraryMissingDrawerFromTempExec();
           return;
         }
+        var reminderAi = e && e.target && e.target.closest ? e.target.closest('[data-missing-reminder-ai]') : null;
+        if (reminderAi) {
+          if (reminderAi.disabled) return;
+          if (api.triggerTempExecMissingReminderAiRecommend) {
+            api.triggerTempExecMissingReminderAiRecommend();
+          }
+          return;
+        }
         var presetAddBtn = e.target.closest('[data-temp-reuse-preset-add]');
         if (presetAddBtn && api.startTempExecPresetDraft) {
           var fileId = presetAddBtn.dataset.tempReusePresetAdd;

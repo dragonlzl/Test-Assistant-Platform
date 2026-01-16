@@ -21,6 +21,7 @@
     var casesModelSelect = pick(dom.casesModelSelect, 'casesModelSelect');
     var caseGenModelSelect = pick(dom.caseGenModelSelect, 'caseGenModelSelect');
     var caseFilterModelSelect = pick(dom.caseFilterModelSelect, 'caseFilterModelSelect');
+    var missingReminderModelSelect = pick(dom.missingReminderModelSelect, 'missingReminderModelSelect');
     var cleanAssignStatus = pick(dom.cleanAssignStatus, 'cleanAssignStatus');
     var reviewAssignStatus = pick(dom.reviewAssignStatus, 'reviewAssignStatus');
     var compareAssignStatus = pick(dom.compareAssignStatus, 'compareAssignStatus');
@@ -28,6 +29,7 @@
     var casesAssignStatus = pick(dom.casesAssignStatus, 'casesAssignStatus');
     var caseGenAssignStatus = pick(dom.caseGenAssignStatus, 'caseGenAssignStatus');
     var caseFilterAssignStatus = pick(dom.caseFilterAssignStatus, 'caseFilterAssignStatus');
+    var missingReminderAssignStatus = pick(dom.missingReminderAssignStatus, 'missingReminderAssignStatus');
     var cleanPromptEl = pick(dom.cleanPromptEl, 'cleanPrompt');
     var reviewPromptEl = pick(dom.reviewPromptEl, 'reviewPrompt');
     var comparePromptEl = pick(dom.comparePromptEl, 'comparePrompt');
@@ -35,6 +37,7 @@
     var casesPromptEl = pick(dom.casesPromptEl, 'casesPrompt');
     var caseGenPromptEl = pick(dom.caseGenPromptEl, 'caseGenPrompt');
     var caseFilterPromptEl = pick(dom.caseFilterPromptEl, 'caseFilterPrompt');
+    var missingReminderPromptEl = pick(dom.missingReminderPromptEl, 'missingReminderPrompt');
     var cleanReasoningSelect = pick(dom.cleanReasoningSelect, 'cleanReasoning');
     var reviewReasoningSelect = pick(dom.reviewReasoningSelect, 'reviewReasoning');
     var compareReasoningSelect = pick(dom.compareReasoningSelect, 'compareReasoning');
@@ -42,6 +45,7 @@
     var casesReasoningSelect = pick(dom.casesReasoningSelect, 'casesReasoning');
     var caseGenReasoningSelect = pick(dom.caseGenReasoningSelect, 'caseGenReasoning');
     var caseFilterReasoningSelect = pick(dom.caseFilterReasoningSelect, 'caseFilterReasoning');
+    var missingReminderReasoningSelect = pick(dom.missingReminderReasoningSelect, 'missingReminderReasoning');
     var cleanTemperatureEl = pick(dom.cleanTemperatureEl, 'cleanTemperature');
     var reviewTemperatureEl = pick(dom.reviewTemperatureEl, 'reviewTemperature');
     var compareTemperatureEl = pick(dom.compareTemperatureEl, 'compareTemperature');
@@ -49,6 +53,7 @@
     var casesTemperatureEl = pick(dom.casesTemperatureEl, 'casesTemperature');
     var caseGenTemperatureEl = pick(dom.caseGenTemperatureEl, 'caseGenTemperature');
     var caseFilterTemperatureEl = pick(dom.caseFilterTemperatureEl, 'caseFilterTemperature');
+    var missingReminderTemperatureEl = pick(dom.missingReminderTemperatureEl, 'missingReminderTemperature');
     var saveAssignmentsBtn = pick(dom.saveAssignmentsBtn, 'saveAssignments');
     var testCleanModelBtn = pick(dom.testCleanModelBtn, 'testCleanModel');
     var testReviewModelBtn = pick(dom.testReviewModelBtn, 'testReviewModel');
@@ -57,6 +62,7 @@
     var testCasesModelBtn = pick(dom.testCasesModelBtn, 'testCasesModel');
     var testCaseGenModelBtn = pick(dom.testCaseGenModelBtn, 'testCaseGenModel');
     var testCaseFilterModelBtn = pick(dom.testCaseFilterModelBtn, 'testCaseFilterModel');
+    var testMissingReminderModelBtn = pick(dom.testMissingReminderModelBtn, 'testMissingReminderModel');
 
     function setAssignmentId(key, value) {
       if (!state.assignments) state.assignments = {};
@@ -111,6 +117,7 @@
     bindModelSelect(casesModelSelect, 'casesId', 'cases', casesAssignStatus);
     bindModelSelect(caseFilterModelSelect, 'caseFilterId', 'casefilter', caseFilterAssignStatus);
     bindModelSelect(caseGenModelSelect, 'caseGenId', 'casegen', caseGenAssignStatus);
+    bindModelSelect(missingReminderModelSelect, 'missingReminderId', 'missingreminder', missingReminderAssignStatus);
 
     bindPromptInput(cleanPromptEl, 'cleanPrompt');
     bindPromptInput(reviewPromptEl, 'reviewPrompt');
@@ -119,6 +126,7 @@
     bindPromptInput(casesPromptEl, 'casesPrompt');
     bindPromptInput(caseGenPromptEl, 'caseGenPrompt');
     bindPromptInput(caseFilterPromptEl, 'caseFilterPrompt');
+    bindPromptInput(missingReminderPromptEl, 'missingReminderPrompt');
 
     bindReasoningSelect(cleanReasoningSelect, 'cleanReasoning');
     bindReasoningSelect(reviewReasoningSelect, 'reviewReasoning');
@@ -127,6 +135,7 @@
     bindReasoningSelect(casesReasoningSelect, 'casesReasoning');
     bindReasoningSelect(caseGenReasoningSelect, 'caseGenReasoning');
     bindReasoningSelect(caseFilterReasoningSelect, 'caseFilterReasoning');
+    bindReasoningSelect(missingReminderReasoningSelect, 'missingReminderReasoning');
     bindTemperatureInput(cleanTemperatureEl, 'cleanTemperature');
     bindTemperatureInput(reviewTemperatureEl, 'reviewTemperature');
     bindTemperatureInput(compareTemperatureEl, 'compareTemperature');
@@ -134,6 +143,7 @@
     bindTemperatureInput(casesTemperatureEl, 'casesTemperature');
     bindTemperatureInput(caseGenTemperatureEl, 'caseGenTemperature');
     bindTemperatureInput(caseFilterTemperatureEl, 'caseFilterTemperature');
+    bindTemperatureInput(missingReminderTemperatureEl, 'missingReminderTemperature');
 
     if (saveAssignmentsBtn) {
       saveAssignmentsBtn.addEventListener('click', function() {
@@ -163,6 +173,9 @@
     });
     if (testCaseFilterModelBtn && testModel) testCaseFilterModelBtn.addEventListener('click', function() {
       testModel(caseFilterModelSelect ? caseFilterModelSelect.value : '', caseFilterAssignStatus);
+    });
+    if (testMissingReminderModelBtn && testModel) testMissingReminderModelBtn.addEventListener('click', function() {
+      testModel(missingReminderModelSelect ? missingReminderModelSelect.value : '', missingReminderAssignStatus);
     });
 
     return {

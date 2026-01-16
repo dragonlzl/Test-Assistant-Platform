@@ -1470,6 +1470,9 @@
       'setCaseProgressStep',
       'markAllCaseProgressGroups',
     ]);
+    if (casesGenApi && api && typeof api.renderCaseGenProgressBoard === 'function') {
+      casesGenApi.renderCaseGenProgressBoard = api.renderCaseGenProgressBoard;
+    }
     if (api && typeof api.renderCaseGenProgressBoard === 'function') {
       api.renderCaseGenProgressBoard();
     }

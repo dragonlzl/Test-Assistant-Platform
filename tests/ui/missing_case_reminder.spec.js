@@ -129,6 +129,7 @@ async function setupTempExecReminderPage(page, options) {
   const missingItemsByModule = opts.missingItemsByModule || {};
   const files = Array.isArray(opts.files) ? opts.files : [];
   const activeId = opts.activeId || (files[0] ? files[0].id : '');
+  const aiEnabled = opts.missingReminderAiEnabled === true;
 
   await page.addInitScript((payload) => {
     const tk = payload && payload.token ? payload.token : '';
@@ -160,12 +161,21 @@ async function setupTempExecReminderPage(page, options) {
       return respond(200, []);
     }
     if (pathName === '/api/settings' && method === 'GET') {
-      return respond(200, [{
+      const settings = [{
         key: 'missingCaseReminderPlacement',
         scope: 'user',
         owner_id: user.id || 0,
         value_json: 'top',
-      }]);
+      }];
+      if (aiEnabled) {
+        settings.push({
+          key: 'missingCaseReminderAiEnabled',
+          scope: 'user',
+          owner_id: user.id || 0,
+          value_json: 'on',
+        });
+      }
+      return respond(200, settings);
     }
     if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
 
@@ -741,5 +751,408 @@ test.describe('易漏用例参考区域', () => {
     expect(status.closingSeen).toBe(false);
     expect(status.openFlap).toBe(false);
     expect(status.hiddenAfterOpen).toBe(false);
+  });
+
+  test('设置页易漏用例推荐开关需配置模型', async ({ page }) => {
+    const token = 'token-missing-reminder-ai-setting';
+    const user = { id: 301, username: 'missing_setting', role: 'user', level: 'member' };
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') return respond(200, user);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
+      if (pathName.indexOf('/api/projects/') === 0 && pathName.indexOf('/versions') > -1 && method === 'GET') {
+        return respond(200, []);
+      }
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      return respond(200, method === 'GET' ? [] : {});
+    });
+
+    await page.goto(base + '/settings.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 20000 });
+    const select = page.locator('#missingReminderAiSelect');
+    const saveBtn = page.locator('#saveMissingReminderAi');
+    await expect(select).toHaveValue('off');
+    await select.selectOption('on');
+    await saveBtn.click();
+    await expect(select).toHaveValue('off');
+    await expect(page.locator('#missingReminderAiStatus')).toContainText('请先在功能指派配置易漏用例推荐模型');
+  });
+
+  test('用例库编辑视图AI开启且易漏库为空提示添加', async ({ page }) => {
+    const token = 'token-missing-reminder-ai-empty';
+    const user = { id: 302, username: 'missing_ai_empty', role: 'user', level: 'member' };
+    const project = { id: 5, name: 'AI空库项目', description: 'missing reminder ai empty' };
+    const versions = [{ id: 1, name: 'v1' }];
+    const files = [{ id: 51, file_name_clean: '空库用例', project_id: 5, version_id: 1, item_count: 1 }];
+    const casesByFileId = {
+      51: [{
+        id: 5101,
+        module: '登录',
+        title: '账号登录',
+        priority: 'P1',
+        precondition: '已注册账号',
+        steps: '输入账号密码并登录',
+        expected: '登录成功',
+      }],
+    };
+    const missingModules = [];
+    const missingTypes = [];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/settings' && method === 'GET') {
+        return respond(200, [{
+          key: 'missingCaseReminderPlacement',
+          scope: 'user',
+          owner_id: user.id,
+          value_json: 'top',
+        }, {
+          key: 'missingCaseReminderAiEnabled',
+          scope: 'user',
+          owner_id: user.id,
+          value_json: 'on',
+        }]);
+      }
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, files);
+      if (pathName.startsWith('/api/case-files/') && pathName.endsWith('/items') && method === 'GET') {
+        const parts = pathName.split('/');
+        const fileId = Number(parts[parts.length - 2]);
+        return respond(200, casesByFileId[fileId] || []);
+      }
+
+      if (pathName === '/api/missing-modules' && method === 'GET') return respond(200, missingModules);
+      if (pathName === '/api/missing-types' && method === 'GET') return respond(200, missingTypes);
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await page.goto(base + '/case-library.html');
+    await waitCaseLibraryReady(page);
+    await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
+    await page.locator('#caseLibraryEditProjectSelect').selectOption(String(project.id));
+    const editFirst = page.locator('[data-case-lib-edit="51"]');
+    await expect(editFirst).toBeVisible();
+    await editFirst.click();
+
+    const reminderTop = page.locator('#caseLibraryMissingReminderTop');
+    await expect(reminderTop).toBeVisible();
+    await expect(reminderTop).toContainText('易漏库没有任何用例，请点击上方“跳转到易漏用例库”进行添加。');
+    const aiBtn = reminderTop.locator('.missing-reminder-ai-btn');
+    await expect(aiBtn).toBeVisible();
+    await aiBtn.click();
+    const toast = page.locator('.temp-center-toast');
+    await expect(toast).toContainText('易漏库没有任何用例，请点击上方“跳转到易漏用例库”进行添加。');
+  });
+
+  test('用例库编辑视图AI推荐可生成并需二次确认', async ({ page }) => {
+    const token = 'token-missing-reminder-ai';
+    const user = { id: 16, username: 'missing_ai', role: 'admin', level: 'leader' };
+    const project = { id: 3, name: 'AI提醒项目', description: 'missing reminder ai' };
+    const versions = [{ id: 1, name: 'v1' }];
+    const files = [
+      { id: 31, file_name_clean: 'AI匹配用例', project_id: 3, version_id: 1, item_count: 1 },
+    ];
+    const casesByFileId = {
+      31: [{
+        id: 3001,
+        module: '技能',
+        title: '工程师角色的一技能效果',
+        priority: 'P1',
+        precondition: '已解锁工程师角色',
+        steps: '点击一技能按钮',
+        expected: '展示技能效果',
+      }, {
+        id: 3002,
+        module: '技能',
+        title: '工程师角色二技能效果',
+        priority: 'P2',
+        precondition: '已解锁工程师角色',
+        steps: '点击二技能按钮',
+        expected: '展示技能效果',
+      }],
+    };
+    const missingModules = [{ id: 501, project_id: 3, name: '技能', item_count: 2 }];
+    const missingTypes = [{ id: 601, project_id: 3, name: '效果' }];
+    const missingItemsByModule = {
+      501: [{
+        id: 8801,
+        module_id: 501,
+        title: '工程师角色的一技能效果',
+        priority: 'P1',
+        precondition: '已解锁工程师角色',
+        steps: '点击一技能按钮',
+        expected: '展示技能效果',
+        type_id: 601,
+      }, {
+        id: 8802,
+        module_id: 501,
+        title: '工程师角色二技能效果',
+        priority: 'P2',
+        precondition: '',
+        steps: '点击二技能按钮',
+        expected: '',
+        type_id: 601,
+      }],
+    };
+    const modelId = 'missing-reminder-model';
+    const modelBaseUrl = base + '/mock-model';
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { localStorage.setItem('cleaner-models-v1', JSON.stringify(payload.models)); } catch (_) {}
+      try { localStorage.setItem('cleaner-assignment-v1', JSON.stringify(payload.assignments)); } catch (_) {}
+    }, {
+      token,
+      models: [{
+        id: modelId,
+        name: 'AI推荐模型',
+        provider: 'custom',
+        baseUrl: modelBaseUrl,
+        apiKey: 'mock-key',
+        model: 'mock-model',
+        maxTokens: 512,
+      }],
+      assignments: { missingReminderId: modelId },
+    });
+    await page.route('**/mock-model', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ ids: ['2', '1'] }) } }] }),
+      });
+    });
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/settings' && method === 'GET') {
+        return respond(200, [{
+          key: 'missingCaseReminderPlacement',
+          scope: 'user',
+          owner_id: user.id,
+          value_json: 'top',
+        }, {
+          key: 'missingCaseReminderAiEnabled',
+          scope: 'user',
+          owner_id: user.id,
+          value_json: 'on',
+        }]);
+      }
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, files);
+      if (pathName.startsWith('/api/case-files/') && pathName.endsWith('/items') && method === 'GET') {
+        const parts = pathName.split('/');
+        const fileId = Number(parts[parts.length - 2]);
+        return respond(200, casesByFileId[fileId] || []);
+      }
+      if (pathName === '/api/missing-modules' && method === 'GET') return respond(200, missingModules);
+      if (pathName === '/api/missing-types' && method === 'GET') return respond(200, missingTypes);
+      if (pathName.startsWith('/api/missing-modules/') && pathName.endsWith('/items') && method === 'GET') {
+        const parts = pathName.split('/');
+        const moduleId = Number(parts[parts.length - 2]);
+        return respond(200, missingItemsByModule[moduleId] || []);
+      }
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await page.goto(base + '/case-library.html');
+    await waitCaseLibraryReady(page);
+    await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
+    await page.locator('#caseLibraryEditProjectSelect').selectOption(String(project.id));
+    const editFirst = page.locator('[data-case-lib-edit="31"]');
+    await expect(editFirst).toBeVisible();
+    await editFirst.click();
+
+    const reminderTop = page.locator('#caseLibraryMissingReminderTop');
+    await expect(reminderTop).toBeVisible();
+    const aiBtn = reminderTop.locator('.missing-reminder-ai-btn');
+    await expect(aiBtn).toBeVisible();
+    await expect(reminderTop).toContainText('匹配得分');
+    await aiBtn.click();
+    await expect(aiBtn).toBeDisabled();
+    await expect(reminderTop).toContainText('正在生成 AI 推荐');
+    const rows = reminderTop.locator('tbody tr');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText('工程师角色二技能效果');
+    await expect(rows.nth(1)).toContainText('工程师角色的一技能效果');
+    const scoreCells = reminderTop.locator('tbody tr td.score');
+    await expect(scoreCells).toHaveCount(2);
+    await expect(scoreCells.nth(0)).toContainText(/高|中|低/);
+    await expect(scoreCells.nth(1)).toContainText(/高|中|低/);
+
+    await aiBtn.click();
+    const confirmDrawer = page.locator('#appConfirmDrawer');
+    await expect(confirmDrawer).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('已有 AI 推荐结果');
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await expect(confirmDrawer).not.toHaveClass(/open/);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.state && window.app.state.settings) {
+        window.app.state.settings.missingCaseReminderAiEnabled = 'off';
+        try {
+          window.dispatchEvent(new CustomEvent('app-settings-updated', { detail: { keys: ['missingCaseReminderAiEnabled'] } }));
+        } catch (err) {
+          try {
+            const evt = document.createEvent('CustomEvent');
+            evt.initCustomEvent('app-settings-updated', false, false, { keys: ['missingCaseReminderAiEnabled'] });
+            window.dispatchEvent(evt);
+          } catch (err2) {}
+        }
+      }
+    });
+    await expect(reminderTop).toContainText('匹配得分');
+  });
+
+  test('执行视图AI推荐按钮可生成建议', async ({ page }) => {
+    const token = 'token-missing-reminder-ai-exec';
+    const user = { id: 21, username: 'missing_ai_exec', role: 'user', level: 'member' };
+    const project = { id: 4, name: 'AI执行项目', description: 'missing reminder ai exec' };
+    const missingModules = [{ id: 701, project_id: 4, name: '支付', item_count: 1 }];
+    const missingTypes = [{ id: 801, project_id: 4, name: '异常' }];
+    const missingItemsByModule = {
+      701: [{
+        id: 9901,
+        module_id: 701,
+        title: '支付失败提示',
+        priority: 'P1',
+        precondition: '账户余额不足',
+        steps: '点击支付',
+        expected: '提示余额不足',
+        type_id: 801,
+      }],
+    };
+    const files = [
+      {
+        id: 'exec-file-ai',
+        name: '执行用例AI',
+        createdAt: Date.now(),
+        requirement: '',
+        projectId: project.id,
+        versionId: '',
+        reuseEnabled: false,
+        reusePresets: [],
+        cases: [{
+          module: '支付',
+          title: '支付成功',
+          priority: 'P1',
+          precondition: '已绑定卡',
+          steps: '确认支付',
+          expected: '支付成功',
+          actual: '未执行',
+          remark: '',
+          defectLinks: [],
+        }],
+      },
+    ];
+    const modelId = 'missing-reminder-model-exec';
+    const modelBaseUrl = base + '/mock-model-exec';
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('cleaner-models-v1', JSON.stringify(payload.models)); } catch (_) {}
+      try { localStorage.setItem('cleaner-assignment-v1', JSON.stringify(payload.assignments)); } catch (_) {}
+    }, {
+      models: [{
+        id: modelId,
+        name: 'AI推荐模型执行',
+        provider: 'custom',
+        baseUrl: modelBaseUrl,
+        apiKey: 'mock-key',
+        model: 'mock-model',
+        maxTokens: 512,
+      }],
+      assignments: { missingReminderId: modelId },
+    });
+    await page.route('**/mock-model-exec', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ ids: ['1'] }) } }] }),
+      });
+    });
+    await setupTempExecReminderPage(page, {
+      token,
+      user,
+      project,
+      missingModules,
+      missingTypes,
+      missingItemsByModule,
+      files,
+      activeId: 'exec-file-ai',
+      missingReminderAiEnabled: true,
+    });
+
+    const reminder = page.locator('#tempExecView .missing-reminder-card');
+    await expect(reminder).toHaveCount(1, { timeout: 10000 });
+    const aiBtn = reminder.locator('.missing-reminder-ai-btn');
+    await expect(aiBtn).toBeVisible();
+    await expect(reminder).toContainText('匹配得分');
+    await aiBtn.click();
+    await expect(reminder).toContainText('支付失败提示');
+    const scoreCells = reminder.locator('tbody tr td.score');
+    await expect(scoreCells).toHaveCount(1);
+    await expect(scoreCells.nth(0)).toContainText(/高|中|低/);
   });
 });

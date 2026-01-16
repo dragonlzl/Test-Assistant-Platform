@@ -595,6 +595,7 @@
     if (k === 'feishuMention') return '@角色ID';
     if (k === 'missingCaseReminderPlacement') return '易漏用例提醒区域';
     if (k === 'missingCaseReminderMatchConfig') return '易漏用例命中设定';
+    if (k === 'missingCaseReminderAiEnabled') return '易漏用例推荐（大模型）';
     if (k === 'projectOrder') return '项目排序';
     if (k === 'defaultProjectId') return '默认项目';
     return k;

@@ -8,6 +8,7 @@
     var utils = ctx.utils || {};
     var api = window.app && window.app.apiClient;
     var setStatus = ctx.setStatus || utils.setStatus || function noop() {};
+    var showCenterToast = typeof utils.showCenterToast === 'function' ? utils.showCenterToast : function() {};
     var escapeHtml = typeof utils.escapeHtml === 'function'
       ? utils.escapeHtml
       : function(text) {
@@ -70,6 +71,12 @@
       || document.getElementById('saveMissingReminderMatch');
     var missingReminderMatchStatus = dom.missingReminderMatchStatus
       || document.getElementById('missingReminderMatchStatus');
+    var missingReminderAiSelect = dom.missingReminderAiSelect
+      || document.getElementById('missingReminderAiSelect');
+    var saveMissingReminderAiBtn = dom.saveMissingReminderAiBtn
+      || document.getElementById('saveMissingReminderAi');
+    var missingReminderAiStatus = dom.missingReminderAiStatus
+      || document.getElementById('missingReminderAiStatus');
     var settingsNavButtons = dom.settingsNavButtons || document.querySelectorAll('[data-settings-target]');
 
     var defaultSettings = config.defaultSettings || {};
@@ -86,6 +93,9 @@
     var defaultMissingReminderMatchConfig = defaultSettings && typeof defaultSettings.missingCaseReminderMatchConfig === 'object'
       ? defaultSettings.missingCaseReminderMatchConfig
       : { type: true, module: true };
+    var defaultMissingReminderAiEnabled = defaultSettings && defaultSettings.missingCaseReminderAiEnabled
+      ? String(defaultSettings.missingCaseReminderAiEnabled)
+      : 'off';
     var minCaseViewFontSize = Number(config.minCaseViewFontSize) || 11;
     var maxCaseViewFontSize = Number(config.maxCaseViewFontSize) || 16;
     var settingsKey = config.settingsKey || 'usecase-settings-v1';
@@ -123,6 +133,7 @@
       theme: false,
       missingCaseReminderPlacement: false,
       missingCaseReminderMatchConfig: false,
+      missingCaseReminderAiEnabled: false,
     };
 
     function setSettingsReady(source) {
@@ -243,6 +254,11 @@
       return { type: typeFlag, module: moduleFlag };
     }
 
+    function resolveMissingReminderAiEnabled(value) {
+      var raw = value === undefined || value === null ? defaultMissingReminderAiEnabled : value;
+      return String(raw || '').toLowerCase() === 'on' ? 'on' : 'off';
+    }
+
     function applyTheme(theme) {
       if (typeof document === 'undefined' || !document.documentElement) return;
       var next = resolveTheme(theme);
@@ -348,6 +364,12 @@
       }
       state.settings.missingCaseReminderMatchConfig = resolveMissingReminderMatchConfig(
         state.settings.missingCaseReminderMatchConfig
+      );
+      if (state.settings.missingCaseReminderAiEnabled === undefined || state.settings.missingCaseReminderAiEnabled === null) {
+        state.settings.missingCaseReminderAiEnabled = defaultMissingReminderAiEnabled;
+      }
+      state.settings.missingCaseReminderAiEnabled = resolveMissingReminderAiEnabled(
+        state.settings.missingCaseReminderAiEnabled
       );
       if (state.settings.smartTopNavCollapse === undefined || state.settings.smartTopNavCollapse === null) {
         state.settings.smartTopNavCollapse = defaultSettings.smartTopNavCollapse === true;
@@ -575,6 +597,18 @@
         state.settings.missingCaseReminderPlacement = defaultMissingReminderPlacement;
       }
       state.settings.missingCaseReminderPlacement = resolveMissingReminderPlacement(state.settings.missingCaseReminderPlacement);
+      if (state.settings.missingCaseReminderMatchConfig === undefined || state.settings.missingCaseReminderMatchConfig === null) {
+        state.settings.missingCaseReminderMatchConfig = defaultMissingReminderMatchConfig;
+      }
+      state.settings.missingCaseReminderMatchConfig = resolveMissingReminderMatchConfig(
+        state.settings.missingCaseReminderMatchConfig
+      );
+      if (state.settings.missingCaseReminderAiEnabled === undefined || state.settings.missingCaseReminderAiEnabled === null) {
+        state.settings.missingCaseReminderAiEnabled = defaultMissingReminderAiEnabled;
+      }
+      state.settings.missingCaseReminderAiEnabled = resolveMissingReminderAiEnabled(
+        state.settings.missingCaseReminderAiEnabled
+      );
       if (state.settings.smartTopNavCollapse === undefined || state.settings.smartTopNavCollapse === null) {
         state.settings.smartTopNavCollapse = defaultSettings.smartTopNavCollapse === true;
       } else {
@@ -697,6 +731,16 @@
         }
         if (missingReminderMatchStatus) {
           setStatus(missingReminderMatchStatus, '', '');
+        }
+      }
+      if (missingReminderAiSelect) {
+        if (!dirtyDrafts.missingCaseReminderAiEnabled) {
+          missingReminderAiSelect.value = resolveMissingReminderAiEnabled(
+            state.settings.missingCaseReminderAiEnabled
+          );
+        }
+        if (missingReminderAiStatus) {
+          setStatus(missingReminderAiStatus, '', '');
         }
       }
       if (smartTopNavToggle) {
@@ -1273,6 +1317,61 @@
       notifySettingsUpdated(['missingCaseReminderMatchConfig']);
     }
 
+    function findModelByAnyId(value) {
+      var target = value === undefined || value === null ? '' : String(value);
+      if (!target) return null;
+      var list = Array.isArray(state.models) ? state.models : [];
+      for (var i = 0; i < list.length; i += 1) {
+        var model = list[i];
+        if (!model) continue;
+        var idVal = model.id === undefined || model.id === null ? '' : String(model.id);
+        var remoteVal = model.remoteId === undefined || model.remoteId === null ? '' : String(model.remoteId);
+        if (idVal === target || remoteVal === target) return model;
+      }
+      return null;
+    }
+
+    function isModelUsable(model) {
+      if (!model || typeof model !== 'object') return false;
+      var baseUrl = model.baseUrl ? String(model.baseUrl).trim() : '';
+      var modelId = model.model ? String(model.model).trim() : '';
+      var apiKey = model.apiKey ? String(model.apiKey).trim() : '';
+      return Boolean(baseUrl && modelId && apiKey);
+    }
+
+    function canEnableMissingReminderAi() {
+      var assignments = state.assignments && typeof state.assignments === 'object' ? state.assignments : {};
+      var targetId = assignments.missingReminderId || '';
+      if (!targetId) return false;
+      var model = findModelByAnyId(targetId);
+      return isModelUsable(model);
+    }
+
+    function saveMissingReminderAiSetting() {
+      if (!missingReminderAiSelect) return;
+      var next = resolveMissingReminderAiEnabled(missingReminderAiSelect.value);
+      var prev = resolveMissingReminderAiEnabled(state.settings.missingCaseReminderAiEnabled);
+      if (next === 'on' && !canEnableMissingReminderAi()) {
+        if (missingReminderAiSelect) missingReminderAiSelect.value = 'off';
+        if (missingReminderAiStatus) {
+          setStatus(missingReminderAiStatus, '请先在功能指派配置易漏用例推荐模型', 'warn');
+        }
+        showCenterToast('请到AI功能-功能指派 页面下，配置该功能模型。', 'warn', 5000);
+        return;
+      }
+      state.settings.missingCaseReminderAiEnabled = next;
+      dirtyDrafts.missingCaseReminderAiEnabled = false;
+      persistSettings(['missingCaseReminderAiEnabled']);
+      if (missingReminderAiStatus) {
+        if (prev === next) {
+          setStatus(missingReminderAiStatus, '易漏用例推荐保持为' + (next === 'on' ? '开启' : '关闭'), 'ok');
+        } else {
+          setStatus(missingReminderAiStatus, '易漏用例推荐已设置为' + (next === 'on' ? '开启' : '关闭'), 'ok');
+        }
+      }
+      notifySettingsUpdated(['missingCaseReminderAiEnabled']);
+    }
+
     function handleMissingReminderMatchChange(e) {
       if (!missingReminderMatchTypeInput || !missingReminderMatchModuleInput) return;
       var typeChecked = Boolean(missingReminderMatchTypeInput.checked);
@@ -1430,6 +1529,15 @@
       }
       if (missingReminderMatchModuleInput) {
         missingReminderMatchModuleInput.addEventListener('change', handleMissingReminderMatchChange);
+      }
+      if (saveMissingReminderAiBtn) {
+        saveMissingReminderAiBtn.addEventListener('click', saveMissingReminderAiSetting);
+      }
+      if (missingReminderAiSelect) {
+        missingReminderAiSelect.addEventListener('change', function() {
+          dirtyDrafts.missingCaseReminderAiEnabled = true;
+          if (missingReminderAiStatus) setStatus(missingReminderAiStatus, '', '');
+        });
       }
       if (pageGuideSettingsGrid) pageGuideSettingsGrid.addEventListener('change', handlePageGuideChange);
       if (smartTopNavToggle) smartTopNavToggle.addEventListener('change', handleSmartTopNavChange);

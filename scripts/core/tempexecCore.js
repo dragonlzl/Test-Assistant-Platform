@@ -43,6 +43,12 @@
           }
           return { type: typeFlag, module: moduleFlag };
         };
+    var callModelWithConfig = deps && deps.callModelWithConfig
+      ? deps.callModelWithConfig
+      : function() { return Promise.reject(new Error('模型客户端不可用')); };
+    var getAssignedModel = deps && deps.getAssignedModel
+      ? deps.getAssignedModel
+      : function() { throw new Error('未配置模型'); };
     var defaultTempExecColumns = deps && deps.defaultTempExecColumns ? deps.defaultTempExecColumns : {};
     var defaultPlacement = deps && deps.defaultPlacement
       ? deps.defaultPlacement
@@ -217,6 +223,15 @@
     function getApiClient() {
       if (typeof window === 'undefined') return null;
       return window.app && window.app.apiClient ? window.app.apiClient : null;
+    }
+
+    var appUtils = null;
+    try {
+      if (typeof window !== 'undefined') {
+        appUtils = window.app && window.app.utils ? window.app.utils : null;
+      }
+    } catch (err) {
+      appUtils = null;
     }
 
     function isDbMode() {
@@ -4087,6 +4102,22 @@
           loaded: false,
           limit: 10,
           seq: 0,
+          aiContextSignature: '',
+          aiContextProjectId: '',
+          aiContextReady: false,
+          aiSignature: '',
+          aiProjectId: '',
+          aiItems: [],
+          aiIds: [],
+          aiLoading: false,
+          aiGenerated: false,
+          aiError: '',
+          aiSeq: 0,
+          libraryEmpty: false,
+          libraryChecked: false,
+          libraryLoading: false,
+          libraryProjectId: '',
+          librarySeq: 0,
           refreshTimer: null,
           observer: null,
           observerTarget: null,
@@ -4110,6 +4141,12 @@
       return normalizeMissingReminderMatchConfig(raw, { type: true, module: true });
     }
 
+    function resolveMissingReminderAiEnabled() {
+      var settings = state.settings && typeof state.settings === 'object' ? state.settings : {};
+      var raw = settings.missingCaseReminderAiEnabled;
+      return String(raw || '').toLowerCase() === 'on' ? 'on' : 'off';
+    }
+
     function hashReminderText(text) {
       var str = String(text || '');
       var hash = 0;
@@ -4123,6 +4160,51 @@
     var tempExecSearchFields = [
       'module', 'title', 'priority', 'preconditions', 'precondition', 'steps', 'expected', 'actual', 'remark'
     ];
+    var tempExecAiCaseFields = [
+      'module', 'title', 'priority', 'precondition', 'preconditions', 'steps', 'expected'
+    ];
+
+    function buildTempExecAiCaseEntry(item) {
+      if (!item || typeof item !== 'object') return null;
+      var moduleVal = stringifyCaseField(item.module || item.module_name || '');
+      var preconditionVal = stringifyCaseField(item.precondition || item.preconditions || '');
+      return {
+        module: moduleVal,
+        title: stringifyCaseField(item.title || ''),
+        priority: stringifyCaseField(item.priority || ''),
+        precondition: preconditionVal,
+        steps: stringifyCaseField(item.steps || ''),
+        expected: stringifyCaseField(item.expected || ''),
+      };
+    }
+
+    function buildTempExecAiCaseText(item) {
+      if (!item || typeof item !== 'object') return '';
+      var parts = [];
+      tempExecAiCaseFields.forEach(function(key) {
+        var val = stringifyCaseField(item[key]);
+        if (val) parts.push(val);
+      });
+      return parts.join(' ').toLowerCase();
+    }
+
+    function buildTempExecAiCaseContext(cases) {
+      var list = Array.isArray(cases) ? cases : [];
+      var entries = [];
+      var texts = [];
+      list.forEach(function(item) {
+        var entry = buildTempExecAiCaseEntry(item);
+        if (entry) entries.push(entry);
+        var text = buildTempExecAiCaseText(item);
+        if (text) texts.push(text);
+      });
+      return {
+        entries: entries,
+        texts: texts,
+        searchText: texts.join(' '),
+        signatureText: texts.join('\n\n'),
+      };
+    }
 
     function buildTempExecCaseText(item) {
       if (!item || typeof item !== 'object') return '';
@@ -4203,6 +4285,79 @@
       return score;
     }
 
+    function resolveTempExecMissingReminderScoreLevel(score, fallback) {
+      if (fallback) return String(fallback);
+      var num = Number(score);
+      if (!isFinite(num)) return '低';
+      if (num >= 3) return '高';
+      if (num >= 2) return '中';
+      return '低';
+    }
+
+    function resolveTempExecMissingReminderLibraryEmpty(modules) {
+      var list = Array.isArray(modules) ? modules : [];
+      if (!list.length) return true;
+      var hasCount = false;
+      for (var i = 0; i < list.length; i += 1) {
+        var item = list[i];
+        if (!item) continue;
+        if (item.item_count !== undefined && item.item_count !== null) {
+          hasCount = true;
+          var count = Number(item.item_count);
+          if (isFinite(count) && count > 0) return false;
+        }
+      }
+      if (!hasCount) return false;
+      return true;
+    }
+
+    function resetTempExecMissingReminderLibrary(reminder) {
+      var target = reminder || ensureTempExecMissingReminderState();
+      target.libraryEmpty = false;
+      target.libraryChecked = false;
+      target.libraryLoading = false;
+      target.libraryProjectId = '';
+      target.librarySeq = (target.librarySeq || 0) + 1;
+    }
+
+    function showTempExecMissingReminderLibraryEmptyToast() {
+      if (appUtils && typeof appUtils.showCenterToast === 'function') {
+        appUtils.showCenterToast('易漏库没有任何用例，请点击上方“跳转到易漏用例库”进行添加。', 'warn', 3000);
+      }
+    }
+
+    function checkTempExecMissingReminderLibrary(reminder, projectId) {
+      var target = reminder || ensureTempExecMissingReminderState();
+      var pid = projectId ? String(projectId) : '';
+      if (!pid) {
+        resetTempExecMissingReminderLibrary(target);
+        return;
+      }
+      if (target.libraryChecked && target.libraryProjectId === pid) return;
+      if (target.libraryLoading && target.libraryProjectId === pid) return;
+      var client = getApiClient();
+      if (!client || typeof client.listMissingModules !== 'function') return;
+      var seq = (target.librarySeq || 0) + 1;
+      target.librarySeq = seq;
+      target.libraryLoading = true;
+      target.libraryProjectId = pid;
+      client.listMissingModules(pid)
+        .then(function(modules) {
+          if (target.librarySeq !== seq) return;
+          target.libraryEmpty = resolveTempExecMissingReminderLibraryEmpty(modules);
+          target.libraryChecked = true;
+          target.libraryLoading = false;
+          renderTempExecView();
+        })
+        .catch(function() {
+          if (target.librarySeq !== seq) return;
+          target.libraryEmpty = false;
+          target.libraryChecked = false;
+          target.libraryLoading = false;
+          renderTempExecView();
+        });
+    }
+
     function buildTempExecMissingReminderSummary(reminder) {
       var modules = reminder && Array.isArray(reminder.matchedModules) ? reminder.matchedModules : [];
       var types = reminder && Array.isArray(reminder.matchedTypes) ? reminder.matchedTypes : [];
@@ -4272,9 +4427,17 @@
     }
 
     function buildTempExecMissingReminderTable(reminder) {
-      var list = reminder && Array.isArray(reminder.items) ? reminder.items : [];
+      var aiEnabled = resolveMissingReminderAiEnabled() === 'on';
+      var contextSignature = reminder && reminder.aiContextSignature ? String(reminder.aiContextSignature) : '';
+      var aiSignature = reminder && reminder.aiSignature ? String(reminder.aiSignature) : '';
+      var aiActive = aiEnabled && contextSignature && aiSignature === contextSignature;
+      var aiLoading = aiEnabled && aiActive && reminder && reminder.aiLoading === true;
+      var aiGenerated = aiEnabled && aiActive && reminder && reminder.aiGenerated === true;
+      var list = aiEnabled ? (aiGenerated ? (reminder.aiItems || []) : []) : (reminder && Array.isArray(reminder.items) ? reminder.items : []);
       var limit = resolveTempExecMissingReminderLimit(reminder);
       var display = list.slice(0, limit);
+      var showScore = true;
+      var cols = 8;
       var rows = display.map(function(item) {
         var moduleName = item && item.module_name ? String(item.module_name) : '--';
         var typeName = formatTempExecMissingTypeLabel(item);
@@ -4285,9 +4448,13 @@
         var expected = item && item.expected ? String(item.expected) : '';
         var score = item && item.match_score !== undefined ? Number(item.match_score) : 0;
         if (!isFinite(score) || score < 0) score = 0;
+        var scoreText = String(score);
+        if (aiEnabled) {
+          scoreText = resolveTempExecMissingReminderScoreLevel(score, item && item.match_level ? item.match_level : '');
+        }
         return (
           '<tr>' +
-            '<td class="score">' + escapeHtml(String(score)) + '</td>' +
+            (showScore ? ('<td class="score">' + escapeHtml(scoreText) + '</td>') : '') +
             '<td class="type">' + escapeHtml(typeName) + '</td>' +
             '<td class="module">' + escapeHtml(moduleName) + '</td>' +
             '<td class="title">' + escapeHtml(title) + '</td>' +
@@ -4300,15 +4467,47 @@
       }).join('');
       if (!rows) {
         var hint = '暂无匹配易漏用例';
-        if (reminder && reminder.loading) hint = '正在加载易漏用例...';
-        else if (reminder && reminder.pending) hint = '滑动到此处加载易漏用例';
-        rows = '<tr><td colspan="8"><p class="hint">' + escapeHtml(hint) + '</p></td></tr>';
+        if (aiEnabled) {
+          if (reminder && reminder.libraryEmpty === true) {
+            hint = '易漏库没有任何用例，请点击上方“跳转到易漏用例库”进行添加。';
+          } else if (aiLoading) {
+            hint = '正在生成 AI 推荐';
+          } else if (reminder && reminder.aiError) {
+            hint = reminder.aiError;
+          } else if (!aiGenerated) {
+            hint = '点击 AI 推荐生成易漏用例建议';
+          }
+        } else if (reminder && reminder.loading) {
+          hint = '正在加载易漏用例...';
+        } else if (reminder && reminder.pending) {
+          hint = '滑动到此处加载易漏用例';
+        }
+        var hintClass = aiLoading ? 'hint missing-reminder-ai-loading' : 'hint';
+        rows = '<tr><td colspan="' + cols + '"><p class="' + hintClass + '">' + escapeHtml(hint)
+          + (aiLoading ? '<span class="missing-reminder-loading-dots"></span>' : '')
+          + '</p></td></tr>';
       }
+      var colGroup =
+        '<colgroup>' +
+          (showScore ? '<col class="col-score">' : '') +
+          '<col class="col-type">' +
+          '<col class="col-module">' +
+          '<col class="col-title">' +
+          '<col class="col-priority">' +
+          '<col class="col-precondition">' +
+          '<col class="col-steps">' +
+          '<col class="col-expected">' +
+        '</colgroup>';
+      var aiButtonDisabled = aiEnabled && (!reminder || reminder.aiContextReady !== true || reminder.aiLoading === true) ? ' disabled' : '';
+      var aiButtonHtml = aiEnabled
+        ? '<button type="button" class="missing-reminder-ai-btn" data-missing-reminder-ai="1"' + aiButtonDisabled + '>AI推荐</button>'
+        : '';
       return (
         '<div class="missing-reminder-card">' +
           '<div class="missing-reminder-header">' +
             '<div class="missing-reminder-title-group">' +
               '<span class="missing-reminder-title">易漏用例参考</span>' +
+              aiButtonHtml +
               '<button type="button" class="missing-reminder-link" data-missing-reminder-link="missing-library">跳转到易漏用例库</button>' +
             '</div>' +
             '<span class="missing-reminder-meta">' +
@@ -4318,19 +4517,10 @@
           '<div class="missing-reminder-table-head">' +
             '<div class="temp-case-view">' +
               '<table class="missing-reminder-table">' +
-                '<colgroup>' +
-                  '<col class="col-score">' +
-                  '<col class="col-type">' +
-                  '<col class="col-module">' +
-                  '<col class="col-title">' +
-                  '<col class="col-priority">' +
-                  '<col class="col-precondition">' +
-                  '<col class="col-steps">' +
-                  '<col class="col-expected">' +
-                '</colgroup>' +
+                colGroup +
                 '<thead>' +
                   '<tr>' +
-                    '<th class="score">匹配得分</th>' +
+                    (showScore ? '<th class="score">匹配得分</th>' : '') +
                     '<th class="type">类型</th>' +
                     '<th class="module">模块</th>' +
                     '<th class="title">用例标题</th>' +
@@ -4346,16 +4536,7 @@
           '<div class="missing-reminder-scroll">' +
             '<div class="temp-case-view">' +
               '<table class="missing-reminder-table">' +
-                '<colgroup>' +
-                  '<col class="col-score">' +
-                  '<col class="col-type">' +
-                  '<col class="col-module">' +
-                  '<col class="col-title">' +
-                  '<col class="col-priority">' +
-                  '<col class="col-precondition">' +
-                  '<col class="col-steps">' +
-                  '<col class="col-expected">' +
-                '</colgroup>' +
+                colGroup +
                 '<tbody>' + rows + '</tbody>' +
               '</table>' +
             '</div>' +
@@ -4366,7 +4547,15 @@
 
     function renderTempExecMissingReminderBlock() {
       var reminder = ensureTempExecMissingReminderState();
-      if (!reminder.hasMatch && !reminder.loading && !reminder.pending) return '';
+      var aiEnabled = resolveMissingReminderAiEnabled() === 'on';
+      if (aiEnabled) {
+        var showAi = reminder.aiContextReady === true
+          || (reminder.aiLoading === true && reminder.aiSignature)
+          || (reminder.aiGenerated === true && reminder.aiSignature);
+        if (!showAi) return '';
+      } else if (!reminder.hasMatch && !reminder.loading && !reminder.pending) {
+        return '';
+      }
       return buildTempExecMissingReminderTable(reminder);
     }
 
@@ -4453,6 +4642,7 @@
       reminder.signature = '';
       reminder.projectId = '';
       cleanupTempExecMissingReminderObserver(reminder);
+      resetTempExecMissingReminderLibrary(reminder);
     }
 
     function requestTempExecMissingReminderRefresh() {
@@ -4466,6 +4656,24 @@
 
     function refreshTempExecMissingReminder() {
       var reminder = ensureTempExecMissingReminderState();
+      if (resolveMissingReminderAiEnabled() === 'on') {
+        var prevReady = reminder.aiContextReady;
+        var prevSig = reminder.aiContextSignature;
+        var prevProject = reminder.aiContextProjectId;
+        var readyNow = syncTempExecMissingReminderAiContext(reminder);
+        if (readyNow) {
+          checkTempExecMissingReminderLibrary(reminder, reminder.aiContextProjectId);
+        } else {
+          resetTempExecMissingReminderLibrary(reminder);
+        }
+        if (prevReady === readyNow
+          && prevSig === reminder.aiContextSignature
+          && prevProject === reminder.aiContextProjectId) {
+          return;
+        }
+        renderTempExecView();
+        return;
+      }
       var active = getTempExecFile(state.tempExecActiveId);
       if (!active || !active.projectId) {
         clearTempExecMissingReminder();
@@ -4745,6 +4953,388 @@
       });
     }
 
+    function clearTempExecMissingReminderAi(reminder, options) {
+      var target = reminder || ensureTempExecMissingReminderState();
+      target.aiItems = [];
+      target.aiIds = [];
+      target.aiLoading = false;
+      target.aiGenerated = false;
+      target.aiError = '';
+      target.aiSignature = '';
+      target.aiProjectId = '';
+      target.aiSeq = (target.aiSeq || 0) + 1;
+      resetTempExecMissingReminderLibrary(target);
+      if (!options || options.keepContext !== true) {
+        target.aiContextSignature = '';
+        target.aiContextProjectId = '';
+        target.aiContextReady = false;
+      }
+    }
+
+    function syncTempExecMissingReminderAiContext(reminder) {
+      var target = reminder || ensureTempExecMissingReminderState();
+      var active = getTempExecFile(state.tempExecActiveId);
+      if (!active || !active.projectId) {
+        target.aiContextReady = false;
+        target.aiContextSignature = '';
+        target.aiContextProjectId = '';
+        return false;
+      }
+      var cases = Array.isArray(active.cases) ? active.cases : [];
+      if (!cases.length) {
+        target.aiContextReady = false;
+        target.aiContextSignature = '';
+        target.aiContextProjectId = '';
+        return false;
+      }
+      var context = buildTempExecAiCaseContext(cases);
+      if (!context.texts.length) {
+        target.aiContextReady = false;
+        target.aiContextSignature = '';
+        target.aiContextProjectId = '';
+        return false;
+      }
+      var projectId = String(active.projectId);
+      var signature = projectId + ':' + hashReminderText(context.signatureText);
+      target.aiContextSignature = signature;
+      target.aiContextProjectId = projectId;
+      target.aiContextReady = true;
+      return true;
+    }
+
+    function buildTempExecMissingReminderAiCandidateSnapshot(items, fieldTextMap) {
+      var map = {};
+      var itemMap = {};
+      var list = Array.isArray(items) ? items : [];
+      list.forEach(function(item, idx) {
+        if (!item) return;
+        var score = buildTempExecReminderScore(item, fieldTextMap);
+        var level = resolveTempExecMissingReminderScoreLevel(score, '');
+        var clone = item && typeof item === 'object' ? Object.assign({}, item) : {};
+        clone.match_score = score;
+        clone.match_level = level;
+        var id = String(idx + 1);
+        var moduleName = clone.module_name || clone.module || '';
+        var typeName = formatTempExecMissingTypeLabel(clone);
+        map[id] = {
+          module: stringifyCaseField(moduleName),
+          type: stringifyCaseField(typeName),
+          title: stringifyCaseField(item.title || ''),
+          priority: stringifyCaseField(item.priority || ''),
+          precondition: stringifyCaseField(item.precondition || ''),
+          steps: stringifyCaseField(item.steps || ''),
+          expected: stringifyCaseField(item.expected || ''),
+          match_level: stringifyCaseField(level),
+        };
+        itemMap[id] = clone;
+      });
+      return { map: map, itemMap: itemMap };
+    }
+
+    function parseTempExecMissingReminderAiIds(content) {
+      var raw = content || '';
+      var stripped = appUtils && typeof appUtils.stripCodeFence === 'function'
+        ? appUtils.stripCodeFence(raw)
+        : String(raw || '').trim();
+      var payloadText = appUtils && typeof appUtils.extractJsonPayload === 'function'
+        ? appUtils.extractJsonPayload(stripped)
+        : '';
+      var text = payloadText || stripped;
+      var data = JSON.parse(text);
+      var ids = data && Array.isArray(data.ids) ? data.ids : [];
+      return ids.map(function(id) { return String(id).trim(); }).filter(Boolean);
+    }
+
+    function fetchTempExecMissingReminderAiCandidates(projectId, caseSearchText) {
+      var client = getApiClient();
+      if (!client || typeof client.listMissingModules !== 'function' || typeof client.listMissingTypes !== 'function') {
+        return Promise.resolve({
+          items: [],
+          matchedModules: [],
+          matchedTypes: [],
+          matchedModuleMap: {},
+          matchedTypeMap: {},
+          moduleMap: {},
+          typeNameMap: {},
+          libraryEmpty: false,
+        });
+      }
+      return Promise.all([client.listMissingModules(projectId), client.listMissingTypes(projectId)])
+        .then(function(res) {
+          var modules = Array.isArray(res && res[0]) ? res[0] : [];
+          var types = Array.isArray(res && res[1]) ? res[1] : [];
+          var moduleMatches = [];
+          var moduleIds = [];
+          var allModuleIds = [];
+          var matchedModuleMap = {};
+          var moduleMap = {};
+          var libraryEmpty = resolveTempExecMissingReminderLibraryEmpty(modules);
+          modules.forEach(function(m) {
+            if (!m || m.id === null || m.id === undefined) return;
+            var name = m.name ? String(m.name).trim() : '';
+            var idStr = String(m.id);
+            moduleMap[idStr] = m;
+            allModuleIds.push(idStr);
+            if (name && caseSearchText.indexOf(name.toLowerCase()) !== -1) {
+              moduleMatches.push(name);
+              moduleIds.push(idStr);
+              matchedModuleMap[idStr] = true;
+            }
+          });
+          var typeMatches = [];
+          var typeNameMap = {};
+          var matchedTypeMap = {};
+          types.forEach(function(t) {
+            if (!t || t.id === null || t.id === undefined) return;
+            var name = t.name ? String(t.name).trim() : '';
+            var idStr = String(t.id);
+            typeNameMap[idStr] = name || ('类型#' + idStr);
+            if (name && caseSearchText.indexOf(name.toLowerCase()) !== -1) {
+              typeMatches.push(name);
+              matchedTypeMap[idStr] = true;
+            }
+          });
+          var hasModuleMatch = moduleIds.length > 0;
+          var hasTypeMatch = Object.keys(matchedTypeMap).length > 0;
+          if (!hasModuleMatch && !hasTypeMatch) {
+            return {
+              items: [],
+              matchedModules: moduleMatches,
+              matchedTypes: typeMatches,
+              matchedModuleMap: matchedModuleMap,
+              matchedTypeMap: matchedTypeMap,
+              moduleMap: moduleMap,
+              typeNameMap: typeNameMap,
+              libraryEmpty: libraryEmpty,
+            };
+          }
+          var loadModuleIds = hasTypeMatch ? allModuleIds.slice() : moduleIds.slice();
+          if (!loadModuleIds.length) {
+            return {
+              items: [],
+              matchedModules: moduleMatches,
+              matchedTypes: typeMatches,
+              matchedModuleMap: matchedModuleMap,
+              matchedTypeMap: matchedTypeMap,
+              moduleMap: moduleMap,
+              typeNameMap: typeNameMap,
+              libraryEmpty: libraryEmpty,
+            };
+          }
+          var tasks = loadModuleIds.map(function(id) {
+            return client
+              .listMissingModuleItems(id)
+              .then(function(list) {
+                var rows = Array.isArray(list) ? list : [];
+                return rows.map(function(it) {
+                  var clone = it && typeof it === 'object' ? Object.assign({}, it) : {};
+                  clone.module_id = id;
+                  clone.module_name = moduleMap[id] && moduleMap[id].name ? moduleMap[id].name : ('模块#' + id);
+                  var typeIds = normalizeMissingReminderTypeIds(clone.type_ids);
+                  if (!typeIds.length && clone.type_id) {
+                    typeIds = normalizeMissingReminderTypeIds([clone.type_id]);
+                  }
+                  var resolvedNames = [];
+                  typeIds.forEach(function(typeId, idx) {
+                    var key = String(typeId);
+                    var base = Array.isArray(clone.type_names) ? clone.type_names[idx] : null;
+                    if (!base && clone.type_name && idx === 0) base = clone.type_name;
+                    var name = typeNameMap[key] || base || ('类型#' + typeId);
+                    resolvedNames.push(name);
+                  });
+                  clone.type_ids = typeIds;
+                  clone.type_names = resolvedNames;
+                  clone.type_name = resolvedNames.length ? resolvedNames.join('、') : '未分类';
+                  return clone;
+                });
+              })
+              .catch(function() { return []; });
+          });
+          return Promise.all(tasks).then(function(all) {
+            var combined = [];
+            (all || []).forEach(function(rows) {
+              (rows || []).forEach(function(row) {
+                if (!row) return;
+                var moduleHit = row.module_id && matchedModuleMap[String(row.module_id)];
+                var rowTypeIds = normalizeMissingReminderTypeIds(row.type_ids);
+                if (!rowTypeIds.length && row.type_id) {
+                  rowTypeIds = normalizeMissingReminderTypeIds([row.type_id]);
+                }
+                var typeHit = false;
+                for (var i = 0; i < rowTypeIds.length; i += 1) {
+                  if (matchedTypeMap[String(rowTypeIds[i])]) {
+                    typeHit = true;
+                    break;
+                  }
+                }
+                if (moduleHit || typeHit) combined.push(row);
+              });
+            });
+            return {
+              items: combined,
+              matchedModules: moduleMatches,
+              matchedTypes: typeMatches,
+              matchedModuleMap: matchedModuleMap,
+              matchedTypeMap: matchedTypeMap,
+              moduleMap: moduleMap,
+              typeNameMap: typeNameMap,
+              libraryEmpty: libraryEmpty,
+            };
+          });
+        });
+    }
+
+    function runTempExecMissingReminderAiRecommend(options) {
+      var reminder = ensureTempExecMissingReminderState();
+      if (reminder.aiLoading) return;
+      var contextReady = syncTempExecMissingReminderAiContext(reminder);
+      if (!contextReady) {
+        reminder.aiError = '暂无可用于推荐的用例内容';
+        reminder.aiGenerated = true;
+        reminder.aiLoading = false;
+        reminder.aiItems = [];
+        reminder.aiIds = [];
+        renderTempExecView();
+        return;
+      }
+      var projectId = reminder.aiContextProjectId;
+      var signature = reminder.aiContextSignature;
+      var active = getTempExecFile(state.tempExecActiveId);
+      var cases = active && Array.isArray(active.cases) ? active.cases : [];
+      var context = buildTempExecAiCaseContext(cases);
+      var fieldTextMap = buildTempExecReminderFieldTextMap(cases);
+      var caseSearchText = String(context.searchText || '').toLowerCase();
+      var model;
+      try {
+        model = getAssignedModel('missingreminder');
+      } catch (err) {
+        reminder.aiError = err && err.message ? err.message : '未找到易漏用例推荐模型';
+        reminder.aiGenerated = true;
+        reminder.aiLoading = false;
+        reminder.aiItems = [];
+        reminder.aiIds = [];
+        renderTempExecView();
+        return;
+      }
+      reminder.aiLoading = true;
+      reminder.aiGenerated = false;
+      reminder.aiError = '';
+      reminder.aiItems = [];
+      reminder.aiIds = [];
+      reminder.aiSignature = signature;
+      reminder.aiProjectId = projectId;
+      var seq = (reminder.aiSeq || 0) + 1;
+      reminder.aiSeq = seq;
+      renderTempExecView();
+      fetchTempExecMissingReminderAiCandidates(projectId, caseSearchText)
+        .then(function(res) {
+          if (reminder.aiSeq !== seq) return null;
+          var candidates = res && Array.isArray(res.items) ? res.items : [];
+          reminder.matchedModules = res && Array.isArray(res.matchedModules) ? res.matchedModules : [];
+          reminder.matchedTypes = res && Array.isArray(res.matchedTypes) ? res.matchedTypes : [];
+          if (res && res.libraryEmpty !== undefined) {
+            reminder.libraryEmpty = res.libraryEmpty === true;
+            reminder.libraryChecked = true;
+            reminder.libraryLoading = false;
+            reminder.libraryProjectId = projectId;
+          }
+          if (!candidates.length) {
+            reminder.aiLoading = false;
+            reminder.aiGenerated = true;
+            reminder.aiItems = [];
+            reminder.aiIds = [];
+            if (reminder.libraryEmpty === true) {
+              showTempExecMissingReminderLibraryEmptyToast();
+            }
+            renderTempExecView();
+            return null;
+          }
+          var snapshot = buildTempExecMissingReminderAiCandidateSnapshot(candidates, fieldTextMap);
+          var prompt = (state.assignments && state.assignments.missingReminderPrompt)
+            || (window.app && window.app.config && window.app.config.defaultPrompts
+              ? window.app.config.defaultPrompts.missingreminder
+              : '');
+          var reasoning = state.assignments && state.assignments.missingReminderReasoning
+            ? state.assignments.missingReminderReasoning
+            : '';
+          var temperature = state.assignments && state.assignments.missingReminderTemperature !== undefined
+            ? state.assignments.missingReminderTemperature
+            : 0.2;
+          var userPayload = {
+            current_cases: context.entries,
+            candidate_map: snapshot.map,
+          };
+          var userText = JSON.stringify(userPayload, null, 2);
+          return callModelWithConfig(model, userText, prompt, reasoning, temperature)
+            .then(function(content) {
+              if (reminder.aiSeq !== seq) return null;
+              var ids = parseTempExecMissingReminderAiIds(content);
+              var seen = {};
+              var selected = [];
+              ids.forEach(function(id) {
+                var key = String(id || '').trim();
+                if (!key || seen[key]) return;
+                seen[key] = true;
+                var item = snapshot.itemMap[key];
+                if (item) {
+                  var clone = Object.assign({}, item);
+                  selected.push(clone);
+                }
+              });
+              reminder.aiItems = selected;
+              reminder.aiIds = ids;
+              reminder.aiLoading = false;
+              reminder.aiGenerated = true;
+              renderTempExecView();
+              return null;
+            });
+        })
+        .catch(function(err) {
+          if (reminder.aiSeq !== seq) return;
+          reminder.aiLoading = false;
+          reminder.aiGenerated = true;
+          reminder.aiItems = [];
+          reminder.aiIds = [];
+          reminder.aiError = 'AI 推荐失败：' + (err && err.message ? err.message : err);
+          renderTempExecView();
+        });
+    }
+
+    function hasTempExecMissingReminderAiGenerated(reminder) {
+      if (!reminder || reminder.aiGenerated !== true) return false;
+      var contextSignature = reminder.aiContextSignature ? String(reminder.aiContextSignature) : '';
+      var aiSignature = reminder.aiSignature ? String(reminder.aiSignature) : '';
+      if (!contextSignature || !aiSignature) return false;
+      return contextSignature === aiSignature;
+    }
+
+    function triggerTempExecMissingReminderAiRecommend() {
+      var reminder = ensureTempExecMissingReminderState();
+      if (resolveMissingReminderAiEnabled() !== 'on') return;
+      if (reminder.aiLoading) return;
+      var ready = syncTempExecMissingReminderAiContext(reminder);
+      if (ready) {
+        checkTempExecMissingReminderLibrary(reminder, reminder.aiContextProjectId);
+        if (reminder.libraryChecked === true && reminder.libraryEmpty === true) {
+          showTempExecMissingReminderLibraryEmptyToast();
+          return;
+        }
+      }
+      if (hasTempExecMissingReminderAiGenerated(reminder)) {
+        openConfirmDrawer({
+          title: '重新生成 AI 推荐',
+          message: '已有 AI 推荐结果，是否重新生成？',
+          confirmText: '重新生成',
+          cancelText: '取消',
+        }).then(function(res) {
+          if (!res || res.ok !== true) return;
+          runTempExecMissingReminderAiRecommend({ trigger: 'confirm' });
+        });
+        return;
+      }
+      runTempExecMissingReminderAiRecommend({ trigger: 'button' });
+    }
+
     function renderTempExecView() {
       if (!tempExecView) return;
       var preserveScroll = Boolean(state.tempExecPreserveScrollOnce);
@@ -4843,7 +5433,9 @@
       renderTempExecOverview();
       syncTempExecReuseStatusAlign();
       requestTempExecMissingReminderRefresh();
-      scheduleTempExecMissingReminderLazyLoad();
+      if (resolveMissingReminderAiEnabled() !== 'on') {
+        scheduleTempExecMissingReminderLazyLoad();
+      }
       restoreScroll();
     }
 
@@ -9295,9 +9887,17 @@
       window.addEventListener('app-settings-updated', function(e) {
         var detail = e && e.detail ? e.detail : null;
         var keys = detail && Array.isArray(detail.keys) ? detail.keys : [];
+        var touchedAi = keys.indexOf('missingCaseReminderAiEnabled') !== -1;
+        if (touchedAi) {
+          var reminder = ensureTempExecMissingReminderState();
+          if (resolveMissingReminderAiEnabled() !== 'on') {
+            clearTempExecMissingReminderAi(reminder);
+          }
+        }
         if (!keys.length
           || keys.indexOf('missingCaseReminderPlacement') !== -1
-          || keys.indexOf('missingCaseReminderMatchConfig') !== -1) {
+          || keys.indexOf('missingCaseReminderMatchConfig') !== -1
+          || touchedAi) {
           renderTempExecView();
         }
       });
@@ -9395,6 +9995,7 @@
       persistTempExecState: persistTempExecState,
       renderTempExecNav: renderTempExecNav,
       renderTempExecView: renderTempExecView,
+      triggerTempExecMissingReminderAiRecommend: triggerTempExecMissingReminderAiRecommend,
       renderTempVersionGrid: renderTempVersionGrid,
       renderTempExecTable: renderTempExecTable,
       renderTempExecOverview: renderTempExecOverview,

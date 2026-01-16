@@ -582,6 +582,36 @@
 </div>
 <p class="status" id="caseFilterAssignStatus"></p>
 </div>
+<div class="model-card">
+<strong>易漏用例推荐</strong>
+<div class="row">
+<label for="missingReminderModelSelect">使用模型</label>
+<select id="missingReminderModelSelect"></select>
+</div>
+<div class="row column">
+<label for="missingReminderPrompt">提示词</label>
+<textarea class="small-textarea" id="missingReminderPrompt" placeholder="为空则使用默认易漏用例推荐提示词"></textarea>
+</div>
+<div class="row">
+<label for="missingReminderTemperature">Temperature</label>
+<input id="missingReminderTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
+<div class="row hidden" data-reasoning="missingreminder">
+<label for="missingReminderReasoning">Reasoning Effort</label>
+<select id="missingReminderReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testMissingReminderModel">测试连通性</button>
+</div>
+<p class="status" id="missingReminderAssignStatus"></p>
+</div>
 <div class="actions">
 <button id="saveAssignments">保存指派</button>
 </div>

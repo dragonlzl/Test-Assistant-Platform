@@ -39,6 +39,7 @@
       caseViewFontSize: 13,
       missingCaseReminderPlacement: 'top',
       missingCaseReminderMatchConfig: { type: true, module: true },
+      missingCaseReminderAiEnabled: 'off',
       smartTopNavCollapse: false,
       tempExecColumns: { ...defaultTempExecColumns },
       projectOrder: [],
@@ -1130,6 +1131,8 @@
         stringifyCaseField,
         buildMissingReminderKeywords,
         normalizeMissingReminderMatchConfig,
+        callModelWithConfig,
+        getAssignedModel,
         deriveCaseListFromText,
         parseXmindFile: lazyParseXmindFile,
         parseXlsxFileToRows: (window.app && window.app.xlsxCoreApi && typeof window.app.xlsxCoreApi.parseXlsxFileToRows === 'function')

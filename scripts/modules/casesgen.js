@@ -119,6 +119,9 @@
         if (area) {
           state.caseGenSuggestions[area.dataset.suggestion] = area.value;
           persistWorkflowState();
+          if (api && typeof api.renderCaseGenProgressBoard === 'function') {
+            api.renderCaseGenProgressBoard();
+          }
         }
       }
       casesGenerationContainer.addEventListener('click', handleCaseGenClick);

@@ -198,6 +198,64 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await expect(guide).toContainText('生成规则与区别');
   });
 
+  test('用例生成进度模块有生成建议时显示标记', async ({ page }) => {
+    const token = 'token-casegen-suggestion-progress';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page, {
+      modules: [
+        { module: '登录', key_scenarios: [], test_points: [], coupled_modules: [] },
+      ],
+    });
+    await openCasegenSideTab(page);
+    await ensureCasegenProgressExpanded(page);
+
+    const moduleId = await page.evaluate(() => {
+      const state = window.app && window.app.state ? window.app.state : null;
+      if (!state || !Array.isArray(state.caseGenModules) || !state.caseGenModules.length) return '';
+      const mod = state.caseGenModules[0];
+      if (!state.caseGenSuggestions) state.caseGenSuggestions = {};
+      state.caseGenSuggestions[mod.id] = '补充说明';
+      if (window.app.casesGenApi && typeof window.app.casesGenApi.renderCaseGenProgressBoard === 'function') {
+        window.app.casesGenApi.renderCaseGenProgressBoard();
+      }
+      return String(mod.id);
+    });
+    const item = page.locator('[data-casegen-module="' + moduleId + '"]');
+    await expect(item).toHaveClass(/has-suggestion/);
+  });
+
   test('新用例入库未勾选时标红全选按钮', async ({ page }) => {
     const token = 'token-casegen-store-select-all-hint';
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
