@@ -147,4 +147,30 @@ test.describe('一键执行/功能流程用例库导入', () => {
     await page.click('#caseLibraryImportSelectBtn');
     await expect(page.locator('#caseLibraryImportSelectDrawer')).toHaveClass(/open/);
   });
+
+  test('刷新后保留用例库导入的用例', async ({ page }) => {
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('auto'); });
+    await page.click('#autoCaseLibrarySelectBtn');
+    await expect(page.locator('#caseLibraryImportSelectDrawer')).toHaveClass(/open/);
+
+    await page.selectOption('#caseLibraryImportSelectProjectSelect', String(project.id));
+    await page.waitForFunction(() => {
+      var el = document.getElementById('caseLibraryImportSelectVersionSelect');
+      return el && !el.disabled;
+    });
+    await page.selectOption('#caseLibraryImportSelectVersionSelect', String(versions[0].id));
+    await page.fill('#caseLibraryImportSelectSearchInput', '用例');
+    await page.click('#caseLibraryImportSelectQueryBtn');
+    await page.waitForSelector('#caseLibraryImportSelectListBody tr');
+
+    await page.click('[data-case-lib-import-pick="501"]');
+    await expect(page.locator('#caseLibraryImportSelectDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#autoCaseFileList')).toContainText('登录用例');
+
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+    await waitForAppReady(page);
+    await expect(page.locator('#autoCaseFileList')).toContainText('登录用例');
+    await expect(page.locator('#caseFileList')).toContainText('登录用例');
+  });
 });

@@ -3829,3 +3829,23 @@
 - 更新记录：2026-01-20 提醒区可视高度提升至 4.5 行提示可滚动（`style.css`）。
 - 更新记录：2026-01-20 微调提醒区可视高度为约 4.5 行（`style.css`）。
 - 更新记录：2026-01-20 修复一键执行从用例库勾选导入重复导入（`scripts/modules/caseLibrary.js`、`tests/ui/auto_case_library_import.spec.js`）。
+- 更新记录：2026-01-20 用例生成入库操作区改为三行排序（`index.html`、`ai-workflow.html`、`style.css`、`scripts/modules/flowGuide.js`、`tests/ui/casegen_db_store.spec.js`）。
+- 更新记录：2026-01-20 补充用例生成“新用例入库”引导步骤（`scripts/modules/flowGuide.js`）。
+
+- 功能名称：一键执行跨页面不中断
+- 功能描述：一键执行过程中切换用例相关页签不再新开标签，自动在同一窗口切换到 `index.html` 对应页签继续执行，并将执行进度与状态持久化，菜单紧凑进度同步显示。
+- 操作方式：在“AI 功能/一键执行”启动流程后，点击侧边栏“用例执行/用例库”等跨页面入口，会在同一窗口切换到 `index.html?tab=...` 并自动恢复执行。
+- 使用效果：执行不中断、无需重新点击；可在同一窗口切换到用例相关页签继续操作，同时查看一键执行进度。
+- 新增内容/接口/组件：
+  - 前端：执行中跨页面改为同窗口跳转并优先落到 `index.html`，补充自动恢复执行逻辑与进度持久化同步（`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`scripts/core/autoCore.js`）。
+  - 测试：新增跨页面执行中跳转与进度同步用例（`tests/ui/html_split_pages.spec.js`、`tests/ui/auto_flow_compact_progress.spec.js`、`tests/api/workflow_nav_health.spec.js`）。
+- 测试与验证：
+  - `node --check scripts/core/appRuntime.js scripts/modules/app.js scripts/core/autoCore.js`
+  - `npx playwright test tests/ui/html_split_pages.spec.js`
+  - `npx playwright test tests/ui/auto_flow_compact_progress.spec.js`
+  - `npx playwright test tests/api/workflow_nav_health.spec.js`
+- 更新记录：2026-01-15 一键执行跨页面同窗口切换与自动恢复执行（`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`scripts/core/autoCore.js`、`tests/ui/html_split_pages.spec.js`、`tests/ui/auto_flow_compact_progress.spec.js`、`tests/api/workflow_nav_health.spec.js`）。
+- 更新记录：2026-01-15 修复用例执行搜索导致一键执行结果被清空（`scripts/core/appRuntime.js`、`tests/ui/auto_flow_compact_progress.spec.js`）。
+- 更新记录：2026-01-15 修复澄清等待时清除需求导致一键执行按钮不可用（`scripts/modules/app.js`、`tests/ui/auto_flow_compact_progress.spec.js`）。
+- 更新记录：2026-01-15 修复用例库导入用例刷新后丢失（`scripts/core/casesCore.js`、`scripts/modules/app.js`、`tests/ui/auto_case_library_import.spec.js`）。
+- 更新记录：2026-01-15 修复忽略覆盖率继续后展示缺失视图错误（`scripts/core/autoCore.js`、`tests/ui/auto_flow_compact_progress.spec.js`）。

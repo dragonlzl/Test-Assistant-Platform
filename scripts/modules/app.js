@@ -1576,6 +1576,8 @@
           setStatus,
           setCaseViewHint: proxyApi('setCaseViewHint'),
           updateFlowStatus: proxyApi('updateFlowStatus'),
+          persistWorkflowState: requestPersistWorkflowState,
+          persistWorkflowStateNow: requestPersistWorkflowStateNow,
           refreshImportedCaseView: proxyApi('refreshImportedCaseView'),
           renderCaseTable: proxyApi('renderCaseTable'),
           setStepInProgress,
@@ -1723,6 +1725,7 @@
       'buildAutoWorkflowSteps',
       'executeAutoWorkflowSteps',
       'enforceAutoCoverageRequirement',
+      'resumeAutoWorkflow',
       'runAutoWorkflow',
       'runAutoWorkflowFromClean',
       'continueAutoWorkflowAfterCoverage',
@@ -2123,6 +2126,7 @@
         else if (Object.prototype.hasOwnProperty.call(reasonMap, step)) delete reasonMap[step];
       }
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function clearStepWaiting(step) {
@@ -2132,6 +2136,7 @@
       var reasonMap = ensureWaitingReasonMap();
       if (Object.prototype.hasOwnProperty.call(reasonMap, step)) delete reasonMap[step];
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function clearAllWaitingSteps() {
@@ -2142,6 +2147,7 @@
       var reasonMap = ensureWaitingReasonMap();
       Object.keys(reasonMap).forEach(function(key) { delete reasonMap[key]; });
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function setStepFailed(step, reason) {
@@ -2153,6 +2159,7 @@
         else if (Object.prototype.hasOwnProperty.call(reasonMap, step)) delete reasonMap[step];
       }
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function clearStepFailed(step) {
@@ -2177,7 +2184,10 @@
         delete validationReasonMap[step];
         touched = true;
       }
-      if (touched) triggerUpdateFlowStatus();
+      if (touched) {
+        triggerUpdateFlowStatus();
+        requestPersistWorkflowState();
+      }
     }
 
     function clearAllFailedSteps() {
@@ -2192,6 +2202,7 @@
       Object.keys(reasonMap).forEach(function(key) { delete reasonMap[key]; });
       Object.keys(validationReasonMap).forEach(function(key) { delete validationReasonMap[key]; });
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function setStepInProgress(step) {
@@ -2201,6 +2212,7 @@
       if (step) map[step] = true;
       state.inProgressStep = '';
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function clearStepInProgress(step) {
@@ -2210,6 +2222,7 @@
         state.inProgressStep = '';
       }
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function isStepLocked(step) {
@@ -2492,6 +2505,21 @@
       });
     }
 
+    function resetAutoWorkflowProgress() {
+      state.autoRunning = false;
+      state.inProgressStep = '';
+      state.inProgressSteps = {};
+      state.failedSteps = {};
+      state.waitingSteps = {};
+      state.validationFailedSteps = {};
+      state.failedReasons = {};
+      state.waitingReasons = {};
+      state.validationFailedReasons = {};
+      state.autoClarifyResolver = null;
+      if (dom.autoWorkflowBtn) dom.autoWorkflowBtn.disabled = false;
+      if (dom.autoClarifyToggle) dom.autoClarifyToggle.disabled = false;
+    }
+
     function resetWorkflowData() {
       if (dom.rawText) dom.rawText.value = '';
       if (dom.reviewResultEl) dom.reviewResultEl.value = '';
@@ -2504,15 +2532,7 @@
       state.lastRawImportName = '';
       state.requirementLabel = '';
       state.requirementLabelSource = '';
-      state.autoRunning = false;
-      state.inProgressStep = '';
-      state.inProgressSteps = {};
-      state.failedSteps = {};
-      state.waitingSteps = {};
-      state.validationFailedSteps = {};
-      state.failedReasons = {};
-      state.waitingReasons = {};
-      state.validationFailedReasons = {};
+      resetAutoWorkflowProgress();
       state.reviewRows = [];
       state.reviewClarifications = new Map();
       state.reviewSelections = new Set();
@@ -2529,7 +2549,6 @@
       state.autoCompareSelectionTouched = false;
       state.autoCompareSuggestion = '';
       state.autoRequireClarifications = false;
-      state.autoClarifyResolver = null;
       state.caseGenModules = [];
       state.caseGenSource = '';
       state.caseGenResults = {};
@@ -2564,6 +2583,20 @@
       requestPersistWorkflowStateNow();
     }
 
+    function clearRawInput() {
+      if (dom.rawText) dom.rawText.value = '';
+      if (dom.fileName) dom.fileName.textContent = '未选择文件';
+      state.lastRawImportName = '';
+      state.requirementLabel = '';
+      state.requirementLabelSource = '';
+      resetAutoWorkflowProgress();
+      setStatus(dom.parseStatus, '', '');
+      if (typeof renderAutoRawInfo === 'function') renderAutoRawInfo();
+      if (typeof renderCleanRawView === 'function') renderCleanRawView(state.cleanViewSelection);
+      triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
+    }
+
     function guardRequirementImport() {
       if (!hasWorkflowData()) return Promise.resolve(true);
       var confirmDrawer = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
@@ -2595,6 +2628,7 @@
           guardRequirementImport: guardRequirementImport,
           handleCaseFiles,
           removeImportedCase,
+          clearRawInput: clearRawInput,
           setStepInProgress,
           clearStepInProgress,
           setRequirementLabel,

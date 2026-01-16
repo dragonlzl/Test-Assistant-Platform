@@ -3246,6 +3246,22 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 .casegen-zone-actions {
   margin: 0;
 }
+.casegen-store-actions {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.casegen-store-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.casegen-store-row-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+}
 .casegen-zone .status {
   margin: 10px 0 0;
 }
