@@ -7319,6 +7319,9 @@ tr.import-invalid-locate-active td {
     justify-content: flex-start;
     width: 100%;
   }
+  .case-library-search-group {
+    width: 100%;
+  }
   .case-library-search {
     min-width: 0;
     width: 100%;
@@ -7474,11 +7477,20 @@ tr.import-invalid-locate-active td {
   min-height: 34px;
 }
 
+.case-library-search-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  flex: 1 1 360px;
+  min-width: 260px;
+}
+
 .case-library-search {
   position: relative;
-  flex: 1 1 520px;
-  min-width: 320px;
-  max-width: 760px;
+  flex: 0 1 360px;
+  min-width: 240px;
+  max-width: 520px;
 }
 
 .case-library-search-icon {

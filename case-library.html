@@ -618,22 +618,24 @@
       </div>
       <div class="missing-reminder-card hidden" id="caseLibraryMissingReminderTop"></div>
       <div class="case-library-drawer-toolbar">
-        <div class="case-library-search">
-          <span class="case-library-search-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-              <circle cx="11" cy="11" r="7"></circle>
-              <path d="M20 20l-3.5-3.5"></path>
-            </svg>
-          </span>
-          <input id="caseLibraryEditSearchInput" type="text" placeholder="搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果"/>
+        <div class="case-library-search-group">
+          <button class="secondary" id="caseLibraryEditClearSearchBtn" type="button">清空搜索</button>
+          <div class="case-library-search">
+            <span class="case-library-search-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                <circle cx="11" cy="11" r="7"></circle>
+                <path d="M20 20l-3.5-3.5"></path>
+              </svg>
+            </span>
+            <input id="caseLibraryEditSearchInput" type="text" placeholder="搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果"/>
+          </div>
         </div>
-		        <div class="case-library-drawer-actions">
-		          <button class="secondary" id="caseLibraryEditClearSearchBtn" type="button">清空搜索</button>
-		          <input class="case-library-count-input" id="caseLibraryEditBatchAddCountInput" type="text" inputmode="numeric" placeholder="1-10" value="5" autocomplete="off" maxlength="2" aria-label="批量新增数量" title="批量新增数量（1-10）" />
-		          <button class="secondary" id="caseLibraryEditBatchAddBtn" type="button">批量新增</button>
-		          <button class="secondary" id="caseLibraryEditBatchDeleteBtn" type="button" disabled>批量删除</button>
-		          <button class="primary" id="caseLibraryEditToExecBtn" type="button">转到执行</button>
-		        </div>
+        <div class="case-library-drawer-actions">
+          <input class="case-library-count-input" id="caseLibraryEditBatchAddCountInput" type="text" inputmode="numeric" placeholder="1-10" value="5" autocomplete="off" maxlength="2" aria-label="批量新增数量" title="批量新增数量（1-10）" />
+          <button class="secondary" id="caseLibraryEditBatchAddBtn" type="button">批量新增</button>
+          <button class="secondary" id="caseLibraryEditBatchDeleteBtn" type="button" disabled>批量删除</button>
+          <button class="primary" id="caseLibraryEditToExecBtn" type="button">转到执行</button>
+        </div>
       </div>
       <p class="status" id="caseLibraryEditStatus"></p>
       <div class="temp-case-view" id="caseLibraryEditView"></div>
