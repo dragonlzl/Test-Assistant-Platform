@@ -3820,3 +3820,6 @@
   - `npx playwright test tests/ui/auto_flow_compact_progress.spec.js`
   - `npx playwright test tests/api/workflow_nav_health.spec.js`
 - 更新记录：2026-01-15 一键执行跨页面同窗口切换与自动恢复执行（`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`scripts/core/autoCore.js`、`tests/ui/html_split_pages.spec.js`、`tests/ui/auto_flow_compact_progress.spec.js`、`tests/api/workflow_nav_health.spec.js`）。
+- 更新记录：2026-01-15 修复用例执行搜索导致一键执行结果被清空（`scripts/core/appRuntime.js`、`tests/ui/auto_flow_compact_progress.spec.js`）。
+- 更新记录：2026-01-15 修复澄清等待时清除需求导致一键执行按钮不可用（`scripts/modules/app.js`、`tests/ui/auto_flow_compact_progress.spec.js`）。
+- 更新记录：2026-01-15 修复用例库导入用例刷新后丢失（`scripts/core/casesCore.js`、`scripts/modules/app.js`、`tests/ui/auto_case_library_import.spec.js`）。

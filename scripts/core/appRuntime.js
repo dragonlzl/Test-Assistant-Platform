@@ -191,19 +191,40 @@
       return list;
     }
 
+    function pickWorkflowText(domEl, key, fallbackText) {
+      if (domEl && typeof domEl.value === 'string') return domEl.value;
+      if (fallbackText !== undefined) return fallbackText;
+      return '';
+    }
+
+    function hasWorkflowDomElements() {
+      return Boolean(
+        dom.rawText || dom.reviewResultEl || dom.cleanedTextEl || dom.compareResultEl
+        || dom.splitResultEl || dom.casesCompareResultEl || dom.caseTextEl
+      );
+    }
+
     function buildWorkflowSnapshot() {
+      var navSnapshot = (state && state.workflowNavSnapshot && typeof state.workflowNavSnapshot === 'object')
+        ? state.workflowNavSnapshot
+        : {};
+      var hasWorkflowDom = hasWorkflowDomElements();
+      var importedCases = normalizeImportedCases(state.importedCases);
+      if (!importedCases.length && !hasWorkflowDom && Array.isArray(navSnapshot.importedCases)) {
+        importedCases = normalizeImportedCases(navSnapshot.importedCases);
+      }
       var data = {
         requirementLabel: state.requirementLabel || '',
         requirementLabelSource: state.requirementLabelSource || '',
         lastRawImportName: state.lastRawImportName || '',
-        rawText: dom.rawText && dom.rawText.value ? dom.rawText.value : '',
-        reviewResult: dom.reviewResultEl && dom.reviewResultEl.value ? dom.reviewResultEl.value : '',
-        cleanedText: dom.cleanedTextEl && dom.cleanedTextEl.value ? dom.cleanedTextEl.value : '',
-        compareResult: dom.compareResultEl && dom.compareResultEl.value ? dom.compareResultEl.value : '',
-        splitResult: dom.splitResultEl && dom.splitResultEl.value ? dom.splitResultEl.value : '',
-        casesCompareResult: dom.casesCompareResultEl && dom.casesCompareResultEl.value ? dom.casesCompareResultEl.value : '',
-        caseText: dom.caseTextEl && dom.caseTextEl.value ? dom.caseTextEl.value : '',
-        importedCases: normalizeImportedCases(state.importedCases),
+        rawText: pickWorkflowText(dom.rawText, 'rawText', navSnapshot.rawText),
+        reviewResult: pickWorkflowText(dom.reviewResultEl, 'reviewResult', navSnapshot.reviewResult),
+        cleanedText: pickWorkflowText(dom.cleanedTextEl, 'cleanedText', navSnapshot.cleanedText),
+        compareResult: pickWorkflowText(dom.compareResultEl, 'compareResult', navSnapshot.compareResult),
+        splitResult: pickWorkflowText(dom.splitResultEl, 'splitResult', navSnapshot.splitResult),
+        casesCompareResult: pickWorkflowText(dom.casesCompareResultEl, 'casesCompareResult', navSnapshot.casesCompareResult),
+        caseText: pickWorkflowText(dom.caseTextEl, 'caseText', navSnapshot.caseText),
+        importedCases: importedCases,
         reviewClarifications: serializeReviewClarifications(state.reviewClarifications),
         autoCompareSuggestion: state.autoCompareSuggestion || (autoCompareSuggestionInput ? autoCompareSuggestionInput.value : ''),
         autoRequireClarifications: Boolean(state.autoRequireClarifications),
@@ -296,6 +317,14 @@
       if (!storage || typeof storage.setJson !== 'function') return;
       var snapshot = buildWorkflowSnapshot();
       if (!snapshotHasContent(snapshot)) {
+        var hasWorkflowDom = hasWorkflowDomElements();
+        if (!hasWorkflowDom && storage && typeof storage.getJson === 'function') {
+          var existing = storage.getJson(workflowStorageKey, null);
+          if (existing && snapshotHasContent(existing)) {
+            if (state) state.workflowNavSnapshot = buildWorkflowNavSnapshot(existing.data);
+            return;
+          }
+        }
         if (state) state.workflowNavSnapshot = {};
         if (storage && typeof storage.remove === 'function') storage.remove(workflowStorageKey);
         return;

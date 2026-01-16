@@ -187,6 +187,36 @@ test.describe('一键执行按钮进度提示', () => {
     await expect(page.locator('[data-tab-btn="clean"] .ai-flow-substep')).toHaveClass(/hidden/);
   });
 
+  test('澄清等待时清除需求可重新一键执行', async ({ page }) => {
+    await page.evaluate(() => {
+      var raw = document.getElementById('rawText');
+      if (raw) {
+        raw.value = '需求内容';
+        raw.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      var state = window.app && window.app.state;
+      if (state) {
+        state.autoRunning = true;
+        state.inProgressSteps = {};
+        state.waitingSteps = { review: true };
+        state.failedSteps = {};
+        state.validationFailedSteps = {};
+      }
+      var btn = document.getElementById('runAutoWorkflow');
+      if (btn) btn.disabled = true;
+    });
+
+    const clearBtn = page.locator('#autoRawClear');
+    await expect(clearBtn).toBeEnabled();
+    await clearBtn.click();
+
+    await expect(page.locator('#runAutoWorkflow')).toBeEnabled();
+    const autoRunning = await page.evaluate(() => {
+      return Boolean(window.app && window.app.state && window.app.state.autoRunning);
+    });
+    expect(autoRunning).toBe(false);
+  });
+
   test('跨页面切换时同步一键执行步骤状态', async ({ page }) => {
     await page.evaluate(() => {
       var snapshot = {
@@ -261,6 +291,67 @@ test.describe('一键执行按钮进度提示', () => {
     const compareStep = compact.locator('.step[data-target=compare]');
     await expect(compareStep).toHaveClass(/active/);
     await expect(compareStep.locator('.step-status')).toHaveAttribute('data-status', 'running');
+  });
+
+  test('用例执行搜索不清空一键执行结果', async ({ page }) => {
+    await page.evaluate(() => {
+      var snapshot = {
+        version: 1,
+        user_id: '',
+        updated_at: Date.now(),
+        data: {
+          rawText: '需求内容',
+          reviewResult: '[]',
+          cleanedText: '{"summary":"ok"}',
+          compareResult: '{"coverage":100,"missing":[]}',
+          splitResult: '[{"module":"模块","key_scenarios":[],"test_points":[],"coupled_modules":[]}]',
+          casesCompareResult: '{"coverage":100,"missing":[],"extra":[]}',
+          caseText: '用例列表',
+          importedCases: [],
+        },
+      };
+      localStorage.setItem('usecase-workflow-state-v1', JSON.stringify(snapshot));
+      localStorage.setItem('tap-e2e-keep-workflow', '1');
+    });
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/case-exec.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+
+    await page.evaluate(() => {
+      var state = window.app && window.app.state;
+      var api = window.app && window.app.tempExecApi;
+      if (!state || !api || typeof api.createTempExecFile !== 'function') return;
+      var file = api.createTempExecFile('用例A', [
+        { module: '模块A', title: '用例A', priority: 'P1', steps: '步骤', expected: '预期' },
+      ]);
+      if (!file) return;
+      state.tempExecFiles = [file];
+      state.tempExecActiveId = file.id;
+      if (typeof api.renderTempExecView === 'function') {
+        api.renderTempExecView();
+      }
+    });
+
+    const searchInput = page.locator('input[data-temp-search-input]').first();
+    await expect(searchInput).toBeVisible();
+    await searchInput.fill('模块A');
+    const storedSnapshot = await page.evaluate(() => localStorage.getItem('usecase-workflow-state-v1') || '');
+    expect(storedSnapshot).toContain('需求内容');
+
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        try { localStorage.setItem('tap-e2e-keep-workflow', '1'); } catch (_) {}
+        window.app.switchTab('auto');
+      }
+    });
+    await page.waitForURL('**/ai-workflow.html*', { timeout: 15000 });
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForFunction(() => {
+      var el = document.getElementById('rawText');
+      return el && el.value && el.value.trim().length > 0;
+    }, null, { timeout: 15000 });
+    await expect(page.locator('#rawText')).toHaveValue('需求内容');
+    await expect(page.locator('#compareResult')).toHaveValue('{"coverage":100,"missing":[]}');
   });
 
   test('白色主题选中时进度样式可辨识', async ({ page }) => {
