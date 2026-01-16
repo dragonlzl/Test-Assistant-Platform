@@ -90,7 +90,6 @@
 
     var autoCompareDrawer = null;
     var autoMissingDrawer = null;
-    var autoResumeInFlight = false;
 
     if (!state.autoCompareSelections) state.autoCompareSelections = new Set();
     if (!state.autoCompareMissingList) state.autoCompareMissingList = [];
@@ -589,86 +588,6 @@
       }
     }
 
-    function pickAutoWorkflowResumeIndex(steps) {
-      if (!steps || !steps.length) return 0;
-      for (var i = 0; i < steps.length; i += 1) {
-        var step = steps[i];
-        if (step && typeof step.validate === 'function' && step.validate()) continue;
-        return i;
-      }
-      return steps.length;
-    }
-
-    async function resumeAutoWorkflow() {
-      if (!state.autoRunning || autoResumeInFlight) return false;
-      autoResumeInFlight = true;
-      var raw = rawText && rawText.value ? rawText.value.trim() : '';
-      if (!raw) {
-        setStatus(autoWorkflowStatus, '请先导入原始需求', 'warn');
-        state.autoRunning = false;
-        persistWorkflowState();
-        autoResumeInFlight = false;
-        return false;
-      }
-      if (!hasCaseSource()) {
-        setStatus(autoWorkflowStatus, '请先导入至少一份测试用例', 'warn');
-        state.autoRunning = false;
-        persistWorkflowState();
-        autoResumeInFlight = false;
-        return false;
-      }
-      clearAllWaitingSteps();
-      clearAllFailedSteps();
-      if (autoWorkflowBtn) autoWorkflowBtn.disabled = true;
-      if (autoClarifyToggle) autoClarifyToggle.disabled = true;
-      if (autoRecleanBtn) autoRecleanBtn.disabled = true;
-      if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = true;
-      if (autoFillCleanBtn) autoFillCleanBtn.disabled = true;
-      if (autoJumpCleanViewBtn) autoJumpCleanViewBtn.disabled = true;
-      if (autoMissingToggle) autoMissingToggle.disabled = true;
-      if (autoMissingCopy) autoMissingCopy.disabled = true;
-      setStatus(autoWorkflowStatus, '检测到执行未完成，正在继续执行...', 'warn');
-      persistWorkflowState();
-      var steps = buildAutoWorkflowSteps();
-      var resumeIndex = pickAutoWorkflowResumeIndex(steps);
-      if (resumeIndex >= steps.length) {
-        state.autoRunning = false;
-        persistWorkflowState();
-        updateAutoClarifyVisibility();
-        updateAutoMissingCard();
-        updateFlowStatus();
-        if (autoWorkflowBtn) autoWorkflowBtn.disabled = false;
-        if (autoClarifyToggle) autoClarifyToggle.disabled = false;
-        autoResumeInFlight = false;
-        return false;
-      }
-      try {
-        await executeAutoWorkflowSteps(resumeIndex);
-        setStatus(autoWorkflowStatus, '一键执行完成，可切换至“功能流程”查看详情', 'ok');
-        state.autoExpandMissing = true;
-        await notifyFeishuWorkflowSuccess();
-      } catch (err) {
-        console.error(err);
-        setStatus(autoWorkflowStatus, '一键执行中断：' + (err && err.message ? err.message : '执行失败'), 'err');
-      } finally {
-        state.autoRunning = false;
-        persistWorkflowState();
-        if (autoWorkflowBtn) autoWorkflowBtn.disabled = false;
-        if (autoClarifyToggle) autoClarifyToggle.disabled = false;
-        updateAutoClarifyVisibility();
-        var coverage = extractCoverageFromCompareResult();
-        updateAutoCompareActions(coverage);
-        if (state.autoExpandMissing) {
-          ensureAutoMissingViewVisible(true);
-          state.autoExpandMissing = false;
-        }
-        updateAutoMissingCard();
-        updateFlowStatus();
-        autoResumeInFlight = false;
-      }
-      return true;
-    }
-
     async function enforceAutoCoverageRequirement() {
       var coverage = syncAutoCompareStatus();
        clearStepFailed('compare');
@@ -730,7 +649,6 @@
       clearAllWaitingSteps();
       clearAllFailedSteps();
       state.autoRunning = true;
-      persistWorkflowState();
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = true;
       if (autoClarifyToggle) autoClarifyToggle.disabled = true;
       setAutoCompareStatusText('等待对比结果');
@@ -756,7 +674,6 @@
         setStatus(autoWorkflowStatus, '一键执行中断：' + err.message, 'err');
       } finally {
         state.autoRunning = false;
-        persistWorkflowState();
         if (autoWorkflowBtn) autoWorkflowBtn.disabled = false;
         if (autoClarifyToggle) autoClarifyToggle.disabled = false;
         updateAutoClarifyVisibility();
@@ -808,7 +725,6 @@
       var workflowSuccessTone = options.workflowSuccessTone || 'ok';
       var mode = options.mode || 'reclean';
       state.autoRunning = true;
-      persistWorkflowState();
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = true;
       if (autoClarifyToggle) autoClarifyToggle.disabled = true;
       if (autoRecleanBtn) autoRecleanBtn.disabled = true;
@@ -842,7 +758,6 @@
         setStatus(autoWorkflowStatus, workflowFailureMessage + '：' + err.message, 'err');
       } finally {
         state.autoRunning = false;
-        persistWorkflowState();
         if (autoWorkflowBtn) autoWorkflowBtn.disabled = false;
         if (autoClarifyToggle) autoClarifyToggle.disabled = false;
         updateAutoClarifyVisibility();
@@ -870,7 +785,6 @@
       clearAllWaitingSteps();
       clearAllFailedSteps();
       state.autoRunning = true;
-      persistWorkflowState();
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = true;
       if (autoClarifyToggle) autoClarifyToggle.disabled = true;
       if (autoRecleanBtn) autoRecleanBtn.disabled = true;
@@ -887,7 +801,6 @@
         await executeAutoWorkflowSteps(3);
         setStatus(autoRecleanStatus, '已忽略覆盖率完成剩余步骤，请检查结果', 'ok');
         setStatus(autoWorkflowStatus, '剩余步骤执行完成，覆盖率仍不足 100%，请注意风险', 'warn');
-        state.autoExpandMissing = true;
         await notifyFeishuWorkflowSuccess();
       } catch (err) {
         console.error(err);
@@ -895,20 +808,12 @@
         setStatus(autoWorkflowStatus, '忽略覆盖率继续失败：' + err.message, 'err');
       } finally {
         state.autoRunning = false;
-        persistWorkflowState();
         if (autoWorkflowBtn) autoWorkflowBtn.disabled = false;
         if (autoClarifyToggle) autoClarifyToggle.disabled = false;
         updateAutoClarifyVisibility();
-        syncAutoCompareStatus(false);
+        syncAutoCompareStatus();
         updateAutoCompareActions();
         updateAutoMissingCard();
-        if (state.autoExpandMissing) {
-          if (autoCompareDrawer && autoCompareDrawer.element && autoCompareDrawer.element.classList.contains('open')) {
-            autoCompareDrawer.close();
-          }
-          ensureAutoMissingViewVisible(true);
-          state.autoExpandMissing = false;
-        }
         updateFlowStatus();
       }
     }
@@ -937,7 +842,6 @@
       buildAutoWorkflowSteps: buildAutoWorkflowSteps,
       executeAutoWorkflowSteps: executeAutoWorkflowSteps,
       enforceAutoCoverageRequirement: enforceAutoCoverageRequirement,
-      resumeAutoWorkflow: resumeAutoWorkflow,
       runAutoWorkflow: runAutoWorkflow,
       runAutoWorkflowFromClean: runAutoWorkflowFromClean,
       continueAutoWorkflowAfterCoverage: continueAutoWorkflowAfterCoverage,

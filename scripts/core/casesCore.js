@@ -18,10 +18,6 @@
     };
     var setStatus = handlers.setStatus || function() {};
     var updateFlowStatus = handlers.updateFlowStatus || function() {};
-    var persistWorkflowState = handlers.persistWorkflowState || function() {};
-    var persistWorkflowStateNow = typeof handlers.persistWorkflowStateNow === 'function'
-      ? handlers.persistWorkflowStateNow
-      : null;
     var refreshImportedCaseView = handlers.refreshImportedCaseView || function() {};
     var renderCaseTable = handlers.renderCaseTable || function() { return ''; };
     var caseFileListEl = dom.caseFileListEl;
@@ -353,9 +349,6 @@
       renderImportedCaseList();
       syncCaseTextWithImports();
       refreshImportedCaseView();
-      updateFlowStatus();
-      if (persistWorkflowStateNow) persistWorkflowStateNow();
-      else persistWorkflowState();
     }
 
     function removeImportedCase(id) {
@@ -371,8 +364,6 @@
         setStatus(dom.caseStatus, '已移除全部导入的测试用例', 'warn');
       }
       updateFlowStatus();
-      if (persistWorkflowStateNow) persistWorkflowStateNow();
-      else persistWorkflowState();
     }
 
     function buildCasesComparePayload() {

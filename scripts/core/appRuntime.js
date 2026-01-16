@@ -125,10 +125,7 @@
       || 'usecase-workflow-state-v1';
     var storage = window.app && window.app.services && window.app.services.storage ? window.app.services.storage : null;
     var workflowPersistBound = false;
-    var workflowStorageSyncBound = false;
     var workflowRestoring = false;
-    var workflowSyncStamp = 0;
-    var autoResumeScheduled = false;
     var autoCompareSuggestionInput = typeof document !== 'undefined' ? document.getElementById('autoCompareSuggestion') : null;
 
     function getPersistUserId() {
@@ -191,40 +188,19 @@
       return list;
     }
 
-    function pickWorkflowText(domEl, key, fallbackText) {
-      if (domEl && typeof domEl.value === 'string') return domEl.value;
-      if (fallbackText !== undefined) return fallbackText;
-      return '';
-    }
-
-    function hasWorkflowDomElements() {
-      return Boolean(
-        dom.rawText || dom.reviewResultEl || dom.cleanedTextEl || dom.compareResultEl
-        || dom.splitResultEl || dom.casesCompareResultEl || dom.caseTextEl
-      );
-    }
-
     function buildWorkflowSnapshot() {
-      var navSnapshot = (state && state.workflowNavSnapshot && typeof state.workflowNavSnapshot === 'object')
-        ? state.workflowNavSnapshot
-        : {};
-      var hasWorkflowDom = hasWorkflowDomElements();
-      var importedCases = normalizeImportedCases(state.importedCases);
-      if (!importedCases.length && !hasWorkflowDom && Array.isArray(navSnapshot.importedCases)) {
-        importedCases = normalizeImportedCases(navSnapshot.importedCases);
-      }
       var data = {
         requirementLabel: state.requirementLabel || '',
         requirementLabelSource: state.requirementLabelSource || '',
         lastRawImportName: state.lastRawImportName || '',
-        rawText: pickWorkflowText(dom.rawText, 'rawText', navSnapshot.rawText),
-        reviewResult: pickWorkflowText(dom.reviewResultEl, 'reviewResult', navSnapshot.reviewResult),
-        cleanedText: pickWorkflowText(dom.cleanedTextEl, 'cleanedText', navSnapshot.cleanedText),
-        compareResult: pickWorkflowText(dom.compareResultEl, 'compareResult', navSnapshot.compareResult),
-        splitResult: pickWorkflowText(dom.splitResultEl, 'splitResult', navSnapshot.splitResult),
-        casesCompareResult: pickWorkflowText(dom.casesCompareResultEl, 'casesCompareResult', navSnapshot.casesCompareResult),
-        caseText: pickWorkflowText(dom.caseTextEl, 'caseText', navSnapshot.caseText),
-        importedCases: importedCases,
+        rawText: dom.rawText && dom.rawText.value ? dom.rawText.value : '',
+        reviewResult: dom.reviewResultEl && dom.reviewResultEl.value ? dom.reviewResultEl.value : '',
+        cleanedText: dom.cleanedTextEl && dom.cleanedTextEl.value ? dom.cleanedTextEl.value : '',
+        compareResult: dom.compareResultEl && dom.compareResultEl.value ? dom.compareResultEl.value : '',
+        splitResult: dom.splitResultEl && dom.splitResultEl.value ? dom.splitResultEl.value : '',
+        casesCompareResult: dom.casesCompareResultEl && dom.casesCompareResultEl.value ? dom.casesCompareResultEl.value : '',
+        caseText: dom.caseTextEl && dom.caseTextEl.value ? dom.caseTextEl.value : '',
+        importedCases: normalizeImportedCases(state.importedCases),
         reviewClarifications: serializeReviewClarifications(state.reviewClarifications),
         autoCompareSuggestion: state.autoCompareSuggestion || (autoCompareSuggestionInput ? autoCompareSuggestionInput.value : ''),
         autoRequireClarifications: Boolean(state.autoRequireClarifications),
@@ -237,15 +213,6 @@
         caseGenProgressNotice: cloneJson(state.caseGenProgressNotice, {}),
         caseSelections: serializeCaseSelections(state.caseSelections),
         missingSelections: serializeNumberSet(state.missingSelections),
-        inProgressStep: state.inProgressStep || '',
-        inProgressSteps: cloneJson(state.inProgressSteps, {}),
-        waitingSteps: cloneJson(state.waitingSteps, {}),
-        failedSteps: cloneJson(state.failedSteps, {}),
-        validationFailedSteps: cloneJson(state.validationFailedSteps, {}),
-        failedReasons: cloneJson(state.failedReasons, {}),
-        waitingReasons: cloneJson(state.waitingReasons, {}),
-        validationFailedReasons: cloneJson(state.validationFailedReasons, {}),
-        autoRunning: Boolean(state.autoRunning),
       };
       return {
         version: 1,
@@ -317,14 +284,6 @@
       if (!storage || typeof storage.setJson !== 'function') return;
       var snapshot = buildWorkflowSnapshot();
       if (!snapshotHasContent(snapshot)) {
-        var hasWorkflowDom = hasWorkflowDomElements();
-        if (!hasWorkflowDom && storage && typeof storage.getJson === 'function') {
-          var existing = storage.getJson(workflowStorageKey, null);
-          if (existing && snapshotHasContent(existing)) {
-            if (state) state.workflowNavSnapshot = buildWorkflowNavSnapshot(existing.data);
-            return;
-          }
-        }
         if (state) state.workflowNavSnapshot = {};
         if (storage && typeof storage.remove === 'function') storage.remove(workflowStorageKey);
         return;
@@ -408,19 +367,15 @@
       state.missingRowCache = [];
       state.missingLastList = [];
       state.caseGenRunning = new Set();
-      state.inProgressStep = data.inProgressStep ? String(data.inProgressStep) : '';
-      state.inProgressSteps = data.inProgressSteps && typeof data.inProgressSteps === 'object' ? data.inProgressSteps : {};
-      state.failedSteps = data.failedSteps && typeof data.failedSteps === 'object' ? data.failedSteps : {};
-      state.waitingSteps = data.waitingSteps && typeof data.waitingSteps === 'object' ? data.waitingSteps : {};
-      state.validationFailedSteps = data.validationFailedSteps && typeof data.validationFailedSteps === 'object'
-        ? data.validationFailedSteps
-        : {};
-      state.failedReasons = data.failedReasons && typeof data.failedReasons === 'object' ? data.failedReasons : {};
-      state.waitingReasons = data.waitingReasons && typeof data.waitingReasons === 'object' ? data.waitingReasons : {};
-      state.validationFailedReasons = data.validationFailedReasons && typeof data.validationFailedReasons === 'object'
-        ? data.validationFailedReasons
-        : {};
-      state.autoRunning = Boolean(data.autoRunning);
+      state.inProgressStep = '';
+      state.inProgressSteps = {};
+      state.failedSteps = {};
+      state.waitingSteps = {};
+      state.validationFailedSteps = {};
+      state.failedReasons = {};
+      state.waitingReasons = {};
+      state.validationFailedReasons = {};
+      state.autoRunning = false;
       return true;
     }
 
@@ -433,78 +388,6 @@
         if (String(snapshot.user_id) !== String(state.currentUser.id)) return false;
       }
       return applyWorkflowSnapshot(snapshot);
-    }
-
-    function parseWorkflowSnapshot(raw) {
-      if (!raw) return null;
-      if (typeof raw !== 'string') return null;
-      try {
-        return JSON.parse(raw);
-      } catch (err) {
-        return null;
-      }
-    }
-
-    function clearWorkflowProgressState() {
-      if (!state) return;
-      state.workflowNavSnapshot = {};
-      state.inProgressStep = '';
-      state.inProgressSteps = {};
-      state.failedSteps = {};
-      state.waitingSteps = {};
-      state.validationFailedSteps = {};
-      state.failedReasons = {};
-      state.waitingReasons = {};
-      state.validationFailedReasons = {};
-      state.autoRunning = false;
-    }
-
-    function syncWorkflowSnapshot(snapshot) {
-      if (!snapshot || typeof snapshot !== 'object') return false;
-      var updatedAt = Number(snapshot.updated_at || 0);
-      if (Number.isFinite(updatedAt) && updatedAt > 0) {
-        if (workflowSyncStamp && updatedAt <= workflowSyncStamp) return false;
-        workflowSyncStamp = updatedAt;
-      }
-      return applyWorkflowSnapshot(snapshot);
-    }
-
-    function bindWorkflowStorageSync() {
-      if (workflowStorageSyncBound) return;
-      if (typeof window === 'undefined' || !window.addEventListener) return;
-      window.addEventListener('storage', function(e) {
-        if (!e || e.key !== workflowStorageKey) return;
-        if (!e.newValue) {
-          clearWorkflowProgressState();
-          updateFlowStatus();
-          return;
-        }
-        var snapshot = parseWorkflowSnapshot(e.newValue);
-        if (!snapshot) return;
-        if (syncWorkflowSnapshot(snapshot)) {
-          updateFlowStatus();
-        }
-      });
-      workflowStorageSyncBound = true;
-    }
-
-    function shouldAutoResumeWorkflow() {
-      if (!state || !state.autoRunning) return false;
-      if (!api || typeof api.resumeAutoWorkflow !== 'function') return false;
-      if (!hasLocalTabSection('auto')) return false;
-      return true;
-    }
-
-    function scheduleAutoResumeWorkflow() {
-      if (!shouldAutoResumeWorkflow()) return;
-      if (autoResumeScheduled) return;
-      autoResumeScheduled = true;
-      setTimeout(function() {
-        autoResumeScheduled = false;
-        if (shouldAutoResumeWorkflow()) {
-          api.resumeAutoWorkflow();
-        }
-      }, 0);
     }
 
     function bindWorkflowPersistenceListeners() {
@@ -1044,7 +927,6 @@
       if (document && document.body && document.body.dataset && document.body.dataset.page) {
         pageKey = String(document.body.dataset.page || '');
       }
-      if (state && state.autoRunning) return false;
       if (pageKey === 'index') return true;
       var current = getCurrentPageName();
       return !current || current === 'index.html' || current === 'index';
@@ -1079,10 +961,9 @@
       return Boolean(document.querySelector('[data-tab-section=\"' + name + '\"]'));
     }
 
-    function redirectToTabPage(name, options) {
+    function redirectToTabPage(name) {
       var target = resolveTabPage(name);
       if (!target) return false;
-      if (options && options.forceIndex) target = 'index.html';
       var current = getCurrentPageName();
       if (current && current === target) return false;
       persistActiveTabForSession(name);
@@ -1096,11 +977,7 @@
 
     function switchTab(name, options) {
       if (name && (shouldForceRedirect() || !hasLocalTabSection(name))) {
-        var redirectOptions = options;
-        if (state && state.autoRunning) {
-          redirectOptions = Object.assign({}, options, { forceIndex: true });
-        }
-        var redirected = redirectToTabPage(name, redirectOptions);
+        var redirected = redirectToTabPage(name);
         if (redirected) return;
       }
       var now = Date.now();
@@ -1605,9 +1482,7 @@
       setCaseViewHint('请先上传或输入 XMind 测试用例');
       updateFlowStatus();
       bindWorkflowPersistenceListeners();
-      bindWorkflowStorageSync();
       workflowRestoring = false;
-      scheduleAutoResumeWorkflow();
       return { casegenHandlersModule: casegenHandlersModule, casegenCoreModule: casegenCoreModule, layoutHandlersModule: layoutHandlersModule };
     }
     window.app = window.app || {};

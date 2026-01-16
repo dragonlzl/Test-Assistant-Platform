@@ -15,11 +15,6 @@ test.describe('一键执行按钮进度提示', () => {
       try {
         localStorage.setItem('tap-e2e-skip-auth', '1');
         localStorage.removeItem('tap-auth-token');
-        var keepKey = 'tap-e2e-keep-workflow';
-        if (!localStorage.getItem(keepKey)) {
-          localStorage.removeItem('usecase-workflow-state-v1');
-        }
-        localStorage.removeItem(keepKey);
       } catch (_) {}
     });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
@@ -187,147 +182,6 @@ test.describe('一键执行按钮进度提示', () => {
     await expect(page.locator('[data-tab-btn="clean"] .ai-flow-substep')).toHaveClass(/hidden/);
   });
 
-  test('澄清等待时清除需求可重新一键执行', async ({ page }) => {
-    await page.evaluate(() => {
-      var raw = document.getElementById('rawText');
-      if (raw) {
-        raw.value = '需求内容';
-        raw.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-      var state = window.app && window.app.state;
-      if (state) {
-        state.autoRunning = true;
-        state.inProgressSteps = {};
-        state.waitingSteps = { review: true };
-        state.failedSteps = {};
-        state.validationFailedSteps = {};
-      }
-      var btn = document.getElementById('runAutoWorkflow');
-      if (btn) btn.disabled = true;
-    });
-
-    const clearBtn = page.locator('#autoRawClear');
-    await expect(clearBtn).toBeEnabled();
-    await clearBtn.click();
-
-    await expect(page.locator('#runAutoWorkflow')).toBeEnabled();
-    const autoRunning = await page.evaluate(() => {
-      return Boolean(window.app && window.app.state && window.app.state.autoRunning);
-    });
-    expect(autoRunning).toBe(false);
-  });
-
-  test('忽略覆盖率后优先展示缺失测试点视图', async ({ page }) => {
-    await page.evaluate(async () => {
-      var compareResultEl = document.getElementById('compareResult');
-      if (compareResultEl) {
-        compareResultEl.value = JSON.stringify({ coverage: 80, missing: ['缺少需求点A'] });
-      }
-      var casesCompareResultEl = document.getElementById('casesCompareResult');
-      if (casesCompareResultEl) {
-        casesCompareResultEl.value = JSON.stringify({
-          coverage: 70,
-          missing: [{ module: '模块A', key_scenarios: [], test_points: ['缺失点'], coupled_modules: [] }],
-          extra: [],
-        });
-      }
-      if (window.app && window.app.core && typeof window.app.core.syncAutoCompareStatus === 'function') {
-        window.app.core.syncAutoCompareStatus();
-      }
-
-      var state = window.app && window.app.state;
-      if (state) {
-        state.missingRowCache = [{ moduleName: '模块A', text: '缺失点' }];
-        state.missingSelections = new Set();
-      }
-      var autoCore = window.app && window.app.autoCore;
-      if (!autoCore || typeof autoCore.init !== 'function') return;
-      var utils = window.app && window.app.utils ? window.app.utils : {};
-      var setStatus = typeof utils.setStatus === 'function'
-        ? utils.setStatus
-        : function(el, text) { if (el) el.textContent = text || ''; };
-      var escapeHtml = typeof utils.escapeHtml === 'function'
-        ? utils.escapeHtml
-        : function(text) { return text ? String(text) : ''; };
-      function parseCompare() {
-        if (!compareResultEl || !compareResultEl.value) return null;
-        try { return JSON.parse(compareResultEl.value); } catch (err) { return null; }
-      }
-      var runner = autoCore.init({
-        state: state,
-        dom: window.app && window.app.dom ? window.app.dom : {},
-        setStatus: setStatus,
-        handlers: {
-          setStatus: setStatus,
-          clearAllWaitingSteps: function() {
-            if (!state) return;
-            state.waitingSteps = {};
-            state.waitingReasons = {};
-          },
-          clearAllFailedSteps: function() {
-            if (!state) return;
-            state.failedSteps = {};
-            state.failedReasons = {};
-            state.validationFailedSteps = {};
-            state.validationFailedReasons = {};
-          },
-          persistWorkflowState: function() {},
-          updateAutoClarifyVisibility: function() {},
-          updateFlowStatus: function() {},
-          compareCoverage: function() { return Promise.resolve(); },
-          splitModules: function() {
-            var splitResultEl = document.getElementById('splitResult');
-            if (splitResultEl) {
-              splitResultEl.value = '[{\"module\":\"模块A\",\"key_scenarios\":[],\"test_points\":[],\"coupled_modules\":[]}]';
-            }
-            return Promise.resolve();
-          },
-          compareCasesCoverage: function() {
-            if (casesCompareResultEl) {
-              casesCompareResultEl.value = JSON.stringify({
-                coverage: 70,
-                missing: [{ module: '模块A', key_scenarios: [], test_points: ['缺失点'], coupled_modules: [] }],
-                extra: [],
-              });
-            }
-            if (state) {
-              state.missingRowCache = [{ moduleName: '模块A', text: '缺失点' }];
-              state.missingSelections = new Set();
-            }
-            return Promise.resolve();
-          },
-          extractCoverageFromCompareResult: function() {
-            var data = parseCompare();
-            return data && typeof data.coverage === 'number' ? data.coverage : null;
-          },
-          extractCompareResultData: function() { return parseCompare(); },
-          parseMissingModules: function() { return []; },
-          buildMissingRows: function(list) { return list || []; },
-          pickMissingSelections: function() { return []; },
-          scrollElementIntoView: function() {},
-          switchTab: function() {},
-          getRequirementLabel: function() { return ''; },
-          getFeishuWebhookUrl: function() { return ''; },
-          postFeishuMessage: function() { return Promise.resolve(); },
-          shouldExpectCleanJson: function() { return false; },
-          hasCaseSource: function() { return true; },
-          runCleaning: function() { return Promise.resolve(); },
-          reviewRequirements: function() { return Promise.resolve(); },
-          renderAutoClarifyView: function() {},
-          waitForAutoClarification: function() { return Promise.resolve(); },
-        },
-        utils: { escapeHtml: escapeHtml },
-      });
-      if (runner && typeof runner.continueAutoWorkflowAfterCoverage === 'function') {
-        await runner.continueAutoWorkflowAfterCoverage();
-      }
-    });
-
-    await expect(page.locator('#autoMissingDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#autoCompareDrawer')).not.toHaveClass(/open/);
-    await expect(page.locator('#autoMissingView')).toBeVisible();
-  });
-
   test('跨页面切换时同步一键执行步骤状态', async ({ page }) => {
     await page.evaluate(() => {
       var snapshot = {
@@ -346,7 +200,6 @@ test.describe('一键执行按钮进度提示', () => {
         },
       };
       localStorage.setItem('usecase-workflow-state-v1', JSON.stringify(snapshot));
-      localStorage.setItem('tap-e2e-keep-workflow', '1');
     });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/case-exec.html');
@@ -362,107 +215,6 @@ test.describe('一键执行按钮进度提示', () => {
     await expect(autoSubstep).not.toHaveClass(/hidden/);
     await expect(autoSubstep.locator('.step-label')).toHaveText('覆盖对比');
     await expect(autoSubstep.locator('.step-status')).toHaveAttribute('data-status', 'done');
-  });
-
-  test('跨页面切换时同步执行中状态', async ({ page }) => {
-    await page.evaluate(() => {
-      var snapshot = {
-        version: 1,
-        user_id: '',
-        updated_at: Date.now(),
-        data: {
-          rawText: '需求内容',
-          reviewResult: '[]',
-          cleanedText: '{"summary":"ok"}',
-          compareResult: '',
-          splitResult: '',
-          casesCompareResult: '',
-          caseText: '用例列表',
-          importedCases: [],
-          inProgressStep: '',
-          inProgressSteps: { compare: true },
-          waitingSteps: {},
-          failedSteps: {},
-          validationFailedSteps: {},
-          failedReasons: {},
-          waitingReasons: {},
-          validationFailedReasons: {},
-          autoRunning: true,
-        },
-      };
-      localStorage.setItem('usecase-workflow-state-v1', JSON.stringify(snapshot));
-      localStorage.setItem('tap-e2e-keep-workflow', '1');
-    });
-    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-    await page.goto(base + '/case-exec.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true);
-
-    const compact = page.locator('#autoFlowCompact');
-    await expect(compact).not.toHaveClass(/hidden/);
-    const compareStep = compact.locator('.step[data-target=compare]');
-    await expect(compareStep).toHaveClass(/active/);
-    await expect(compareStep.locator('.step-status')).toHaveAttribute('data-status', 'running');
-  });
-
-  test('用例执行搜索不清空一键执行结果', async ({ page }) => {
-    await page.evaluate(() => {
-      var snapshot = {
-        version: 1,
-        user_id: '',
-        updated_at: Date.now(),
-        data: {
-          rawText: '需求内容',
-          reviewResult: '[]',
-          cleanedText: '{"summary":"ok"}',
-          compareResult: '{"coverage":100,"missing":[]}',
-          splitResult: '[{"module":"模块","key_scenarios":[],"test_points":[],"coupled_modules":[]}]',
-          casesCompareResult: '{"coverage":100,"missing":[],"extra":[]}',
-          caseText: '用例列表',
-          importedCases: [],
-        },
-      };
-      localStorage.setItem('usecase-workflow-state-v1', JSON.stringify(snapshot));
-      localStorage.setItem('tap-e2e-keep-workflow', '1');
-    });
-    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-    await page.goto(base + '/case-exec.html');
-    await page.waitForFunction(() => window.app && window.app._inited === true);
-
-    await page.evaluate(() => {
-      var state = window.app && window.app.state;
-      var api = window.app && window.app.tempExecApi;
-      if (!state || !api || typeof api.createTempExecFile !== 'function') return;
-      var file = api.createTempExecFile('用例A', [
-        { module: '模块A', title: '用例A', priority: 'P1', steps: '步骤', expected: '预期' },
-      ]);
-      if (!file) return;
-      state.tempExecFiles = [file];
-      state.tempExecActiveId = file.id;
-      if (typeof api.renderTempExecView === 'function') {
-        api.renderTempExecView();
-      }
-    });
-
-    const searchInput = page.locator('input[data-temp-search-input]').first();
-    await expect(searchInput).toBeVisible();
-    await searchInput.fill('模块A');
-    const storedSnapshot = await page.evaluate(() => localStorage.getItem('usecase-workflow-state-v1') || '');
-    expect(storedSnapshot).toContain('需求内容');
-
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') {
-        try { localStorage.setItem('tap-e2e-keep-workflow', '1'); } catch (_) {}
-        window.app.switchTab('auto');
-      }
-    });
-    await page.waitForURL('**/ai-workflow.html*', { timeout: 15000 });
-    await page.waitForFunction(() => window.app && window.app._inited === true);
-    await page.waitForFunction(() => {
-      var el = document.getElementById('rawText');
-      return el && el.value && el.value.trim().length > 0;
-    }, null, { timeout: 15000 });
-    await expect(page.locator('#rawText')).toHaveValue('需求内容');
-    await expect(page.locator('#compareResult')).toHaveValue('{"coverage":100,"missing":[]}');
   });
 
   test('白色主题选中时进度样式可辨识', async ({ page }) => {
