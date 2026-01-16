@@ -916,6 +916,7 @@
       'syncAutoCompareStatus',
       'executeAutoWorkflowSteps',
       'enforceAutoCoverageRequirement',
+      'resumeAutoWorkflow',
       'runAutoWorkflow',
       'runAutoWorkflowFromClean',
       'continueAutoWorkflowAfterCoverage',
@@ -1263,6 +1264,7 @@
         else if (Object.prototype.hasOwnProperty.call(reasonMap, step)) delete reasonMap[step];
       }
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function clearStepWaiting(step) {
@@ -1272,6 +1274,7 @@
       var reasonMap = ensureWaitingReasonMap();
       if (Object.prototype.hasOwnProperty.call(reasonMap, step)) delete reasonMap[step];
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function clearAllWaitingSteps() {
@@ -1282,6 +1285,7 @@
       var reasonMap = ensureWaitingReasonMap();
       Object.keys(reasonMap).forEach(function(key) { delete reasonMap[key]; });
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function setStepFailed(step, reason) {
@@ -1293,6 +1297,7 @@
         else if (Object.prototype.hasOwnProperty.call(reasonMap, step)) delete reasonMap[step];
       }
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function clearStepFailed(step) {
@@ -1317,7 +1322,10 @@
         delete validationReasonMap[step];
         touched = true;
       }
-      if (touched) triggerUpdateFlowStatus();
+      if (touched) {
+        triggerUpdateFlowStatus();
+        requestPersistWorkflowState();
+      }
     }
 
     function clearAllFailedSteps() {
@@ -1332,6 +1340,7 @@
       Object.keys(reasonMap).forEach(function(key) { delete reasonMap[key]; });
       Object.keys(validationReasonMap).forEach(function(key) { delete validationReasonMap[key]; });
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function setStepInProgress(step) {
@@ -1341,6 +1350,7 @@
       if (step) map[step] = true;
       state.inProgressStep = '';
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function clearStepInProgress(step) {
@@ -1350,6 +1360,7 @@
         state.inProgressStep = '';
       }
       triggerUpdateFlowStatus();
+      requestPersistWorkflowState();
     }
 
     function isStepLocked(step) {

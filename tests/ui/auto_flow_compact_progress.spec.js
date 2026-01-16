@@ -15,6 +15,11 @@ test.describe('一键执行按钮进度提示', () => {
       try {
         localStorage.setItem('tap-e2e-skip-auth', '1');
         localStorage.removeItem('tap-auth-token');
+        var keepKey = 'tap-e2e-keep-workflow';
+        if (!localStorage.getItem(keepKey)) {
+          localStorage.removeItem('usecase-workflow-state-v1');
+        }
+        localStorage.removeItem(keepKey);
       } catch (_) {}
     });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
@@ -200,6 +205,7 @@ test.describe('一键执行按钮进度提示', () => {
         },
       };
       localStorage.setItem('usecase-workflow-state-v1', JSON.stringify(snapshot));
+      localStorage.setItem('tap-e2e-keep-workflow', '1');
     });
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/case-exec.html');
@@ -215,6 +221,46 @@ test.describe('一键执行按钮进度提示', () => {
     await expect(autoSubstep).not.toHaveClass(/hidden/);
     await expect(autoSubstep.locator('.step-label')).toHaveText('覆盖对比');
     await expect(autoSubstep.locator('.step-status')).toHaveAttribute('data-status', 'done');
+  });
+
+  test('跨页面切换时同步执行中状态', async ({ page }) => {
+    await page.evaluate(() => {
+      var snapshot = {
+        version: 1,
+        user_id: '',
+        updated_at: Date.now(),
+        data: {
+          rawText: '需求内容',
+          reviewResult: '[]',
+          cleanedText: '{"summary":"ok"}',
+          compareResult: '',
+          splitResult: '',
+          casesCompareResult: '',
+          caseText: '用例列表',
+          importedCases: [],
+          inProgressStep: '',
+          inProgressSteps: { compare: true },
+          waitingSteps: {},
+          failedSteps: {},
+          validationFailedSteps: {},
+          failedReasons: {},
+          waitingReasons: {},
+          validationFailedReasons: {},
+          autoRunning: true,
+        },
+      };
+      localStorage.setItem('usecase-workflow-state-v1', JSON.stringify(snapshot));
+      localStorage.setItem('tap-e2e-keep-workflow', '1');
+    });
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/case-exec.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+
+    const compact = page.locator('#autoFlowCompact');
+    await expect(compact).not.toHaveClass(/hidden/);
+    const compareStep = compact.locator('.step[data-target=compare]');
+    await expect(compareStep).toHaveClass(/active/);
+    await expect(compareStep.locator('.step-status')).toHaveAttribute('data-status', 'running');
   });
 
   test('白色主题选中时进度样式可辨识', async ({ page }) => {

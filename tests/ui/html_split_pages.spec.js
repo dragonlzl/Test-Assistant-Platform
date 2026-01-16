@@ -53,6 +53,50 @@ test.describe('多页面拆分入口', () => {
     await expect(page.locator('[data-tab-section="tempexec"]').first()).toBeVisible();
   });
 
+  test('一键执行进行中跨页面切换保持同一页面', async ({ page }) => {
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/ai-workflow.html');
+    await page.locator('[data-tab-section="auto"]').first().waitFor({ state: 'visible', timeout: 20000 });
+    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout: 20000 });
+    await page.evaluate(() => {
+      var snapshot = {
+        version: 1,
+        user_id: '',
+        updated_at: Date.now(),
+        data: {
+          rawText: '需求内容',
+          reviewResult: '[]',
+          cleanedText: '{"summary":"ok"}',
+          compareResult: '',
+          splitResult: '',
+          casesCompareResult: '',
+          caseText: '用例列表',
+          importedCases: [],
+          inProgressStep: '',
+          inProgressSteps: { compare: true },
+          waitingSteps: {},
+          failedSteps: {},
+          validationFailedSteps: {},
+          failedReasons: {},
+          waitingReasons: {},
+          validationFailedReasons: {},
+          autoRunning: true,
+        },
+      };
+      try {
+        localStorage.setItem('usecase-workflow-state-v1', JSON.stringify(snapshot));
+      } catch (_) {}
+      if (window.app && window.app.state) window.app.state.autoRunning = true;
+    });
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('tempexec');
+      }
+    });
+    await page.waitForURL('**/index.html*tab=tempexec*', { timeout: 15000 });
+    await expect(page.locator('[data-tab-section="tempexec"]').first()).toBeVisible();
+  });
+
   test('用例执行页选择用例执行直接打开抽屉', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/case-exec.html');
