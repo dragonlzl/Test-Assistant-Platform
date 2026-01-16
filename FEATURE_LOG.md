@@ -3823,3 +3823,4 @@
 - 更新记录：2026-01-15 修复用例执行搜索导致一键执行结果被清空（`scripts/core/appRuntime.js`、`tests/ui/auto_flow_compact_progress.spec.js`）。
 - 更新记录：2026-01-15 修复澄清等待时清除需求导致一键执行按钮不可用（`scripts/modules/app.js`、`tests/ui/auto_flow_compact_progress.spec.js`）。
 - 更新记录：2026-01-15 修复用例库导入用例刷新后丢失（`scripts/core/casesCore.js`、`scripts/modules/app.js`、`tests/ui/auto_case_library_import.spec.js`）。
+- 更新记录：2026-01-15 修复忽略覆盖率继续后展示缺失视图错误（`scripts/core/autoCore.js`、`tests/ui/auto_flow_compact_progress.spec.js`）。

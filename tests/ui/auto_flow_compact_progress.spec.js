@@ -217,6 +217,117 @@ test.describe('一键执行按钮进度提示', () => {
     expect(autoRunning).toBe(false);
   });
 
+  test('忽略覆盖率后优先展示缺失测试点视图', async ({ page }) => {
+    await page.evaluate(async () => {
+      var compareResultEl = document.getElementById('compareResult');
+      if (compareResultEl) {
+        compareResultEl.value = JSON.stringify({ coverage: 80, missing: ['缺少需求点A'] });
+      }
+      var casesCompareResultEl = document.getElementById('casesCompareResult');
+      if (casesCompareResultEl) {
+        casesCompareResultEl.value = JSON.stringify({
+          coverage: 70,
+          missing: [{ module: '模块A', key_scenarios: [], test_points: ['缺失点'], coupled_modules: [] }],
+          extra: [],
+        });
+      }
+      if (window.app && window.app.core && typeof window.app.core.syncAutoCompareStatus === 'function') {
+        window.app.core.syncAutoCompareStatus();
+      }
+
+      var state = window.app && window.app.state;
+      if (state) {
+        state.missingRowCache = [{ moduleName: '模块A', text: '缺失点' }];
+        state.missingSelections = new Set();
+      }
+      var autoCore = window.app && window.app.autoCore;
+      if (!autoCore || typeof autoCore.init !== 'function') return;
+      var utils = window.app && window.app.utils ? window.app.utils : {};
+      var setStatus = typeof utils.setStatus === 'function'
+        ? utils.setStatus
+        : function(el, text) { if (el) el.textContent = text || ''; };
+      var escapeHtml = typeof utils.escapeHtml === 'function'
+        ? utils.escapeHtml
+        : function(text) { return text ? String(text) : ''; };
+      function parseCompare() {
+        if (!compareResultEl || !compareResultEl.value) return null;
+        try { return JSON.parse(compareResultEl.value); } catch (err) { return null; }
+      }
+      var runner = autoCore.init({
+        state: state,
+        dom: window.app && window.app.dom ? window.app.dom : {},
+        setStatus: setStatus,
+        handlers: {
+          setStatus: setStatus,
+          clearAllWaitingSteps: function() {
+            if (!state) return;
+            state.waitingSteps = {};
+            state.waitingReasons = {};
+          },
+          clearAllFailedSteps: function() {
+            if (!state) return;
+            state.failedSteps = {};
+            state.failedReasons = {};
+            state.validationFailedSteps = {};
+            state.validationFailedReasons = {};
+          },
+          persistWorkflowState: function() {},
+          updateAutoClarifyVisibility: function() {},
+          updateFlowStatus: function() {},
+          compareCoverage: function() { return Promise.resolve(); },
+          splitModules: function() {
+            var splitResultEl = document.getElementById('splitResult');
+            if (splitResultEl) {
+              splitResultEl.value = '[{\"module\":\"模块A\",\"key_scenarios\":[],\"test_points\":[],\"coupled_modules\":[]}]';
+            }
+            return Promise.resolve();
+          },
+          compareCasesCoverage: function() {
+            if (casesCompareResultEl) {
+              casesCompareResultEl.value = JSON.stringify({
+                coverage: 70,
+                missing: [{ module: '模块A', key_scenarios: [], test_points: ['缺失点'], coupled_modules: [] }],
+                extra: [],
+              });
+            }
+            if (state) {
+              state.missingRowCache = [{ moduleName: '模块A', text: '缺失点' }];
+              state.missingSelections = new Set();
+            }
+            return Promise.resolve();
+          },
+          extractCoverageFromCompareResult: function() {
+            var data = parseCompare();
+            return data && typeof data.coverage === 'number' ? data.coverage : null;
+          },
+          extractCompareResultData: function() { return parseCompare(); },
+          parseMissingModules: function() { return []; },
+          buildMissingRows: function(list) { return list || []; },
+          pickMissingSelections: function() { return []; },
+          scrollElementIntoView: function() {},
+          switchTab: function() {},
+          getRequirementLabel: function() { return ''; },
+          getFeishuWebhookUrl: function() { return ''; },
+          postFeishuMessage: function() { return Promise.resolve(); },
+          shouldExpectCleanJson: function() { return false; },
+          hasCaseSource: function() { return true; },
+          runCleaning: function() { return Promise.resolve(); },
+          reviewRequirements: function() { return Promise.resolve(); },
+          renderAutoClarifyView: function() {},
+          waitForAutoClarification: function() { return Promise.resolve(); },
+        },
+        utils: { escapeHtml: escapeHtml },
+      });
+      if (runner && typeof runner.continueAutoWorkflowAfterCoverage === 'function') {
+        await runner.continueAutoWorkflowAfterCoverage();
+      }
+    });
+
+    await expect(page.locator('#autoMissingDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#autoCompareDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#autoMissingView')).toBeVisible();
+  });
+
   test('跨页面切换时同步一键执行步骤状态', async ({ page }) => {
     await page.evaluate(() => {
       var snapshot = {

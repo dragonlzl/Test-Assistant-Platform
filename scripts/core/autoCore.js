@@ -887,6 +887,7 @@
         await executeAutoWorkflowSteps(3);
         setStatus(autoRecleanStatus, '已忽略覆盖率完成剩余步骤，请检查结果', 'ok');
         setStatus(autoWorkflowStatus, '剩余步骤执行完成，覆盖率仍不足 100%，请注意风险', 'warn');
+        state.autoExpandMissing = true;
         await notifyFeishuWorkflowSuccess();
       } catch (err) {
         console.error(err);
@@ -898,9 +899,16 @@
         if (autoWorkflowBtn) autoWorkflowBtn.disabled = false;
         if (autoClarifyToggle) autoClarifyToggle.disabled = false;
         updateAutoClarifyVisibility();
-        syncAutoCompareStatus();
+        syncAutoCompareStatus(false);
         updateAutoCompareActions();
         updateAutoMissingCard();
+        if (state.autoExpandMissing) {
+          if (autoCompareDrawer && autoCompareDrawer.element && autoCompareDrawer.element.classList.contains('open')) {
+            autoCompareDrawer.close();
+          }
+          ensureAutoMissingViewVisible(true);
+          state.autoExpandMissing = false;
+        }
         updateFlowStatus();
       }
     }
