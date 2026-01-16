@@ -437,7 +437,8 @@
         var points = Array.isArray(item.points)
           ? item.points.map(normalizeMissingTextValue).filter(Boolean)
           : [];
-        var entries = points.length ? points : ['（缺失测试点未解析）'];
+        if (!points.length) return;
+        var entries = points;
         entries.forEach(function(pt, pointIdx) {
           rows.push({
             moduleIndex: moduleIdx,
@@ -457,7 +458,9 @@
         rows = state.missingRowCache;
       }
       if (!rows || !rows.length) {
-        return '<p class="hint" style="padding:12px;">未解析到缺失模块</p>';
+        var hasList = state && state.missingLastList && state.missingLastList.length;
+        var hintText = hasList ? '当前没有缺失测试点' : '未解析到缺失模块';
+        return '<p class="hint" style="padding:12px;">' + hintText + '</p>';
       }
       var selections = state && state.missingSelections instanceof Set ? state.missingSelections : new Set();
       var selectAllChecked = selections.size === rows.length;
