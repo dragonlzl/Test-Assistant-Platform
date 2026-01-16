@@ -287,6 +287,7 @@
 
     function queueTempExecCaseLibraryAutoPopup(execSetId, meta) {
       if (!execSetId || !meta || !meta.shouldAutoPopup) return;
+      if (hasTempExecCaseLibraryAutoPopupSeen(execSetId, meta)) return;
       var key = getTempExecCaseLibraryAutoPopupKey(execSetId, meta);
       if (!key) return;
       var store = ensureTempExecCaseLibraryAutoPopupState();
@@ -372,23 +373,83 @@
     }
 
     var tempExecCaseLibraryAutoPopupSeen = {};
-    function markTempExecCaseLibraryAutoPopupSeen(execSetId) {
-      if (!execSetId) return;
-      tempExecCaseLibraryAutoPopupSeen[String(execSetId)] = true;
+    var tempExecCaseLibraryAutoPopupSeenLoaded = false;
+    var tempExecCaseLibraryAutoPopupSeenStorageKey = 'tap-tempexec-case-lib-auto-popup-seen';
+
+    function loadTempExecCaseLibraryAutoPopupSeen() {
+      if (tempExecCaseLibraryAutoPopupSeenLoaded) return;
+      tempExecCaseLibraryAutoPopupSeenLoaded = true;
+      if (typeof sessionStorage === 'undefined') return;
+      try {
+        var raw = sessionStorage.getItem(tempExecCaseLibraryAutoPopupSeenStorageKey) || '';
+        var parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed === 'object') tempExecCaseLibraryAutoPopupSeen = parsed;
+      } catch (err) {
+        tempExecCaseLibraryAutoPopupSeen = {};
+      }
     }
-    function hasTempExecCaseLibraryAutoPopupSeen(execSetId) {
+
+    function saveTempExecCaseLibraryAutoPopupSeen() {
+      if (typeof sessionStorage === 'undefined') return;
+      try {
+        sessionStorage.setItem(tempExecCaseLibraryAutoPopupSeenStorageKey, JSON.stringify(tempExecCaseLibraryAutoPopupSeen));
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function resolveTempExecCaseLibraryMeta(execSetId, meta) {
+      if (meta) return meta;
+      if (!execSetId) return null;
+      var store = ensureTempExecCaseLibraryDiffState();
+      return store.byExecSetId ? store.byExecSetId[String(execSetId)] : null;
+    }
+
+    function resolveTempExecCaseLibraryDiffStamp(meta) {
+      if (!meta) return '';
+      if (meta.lastDiffAt) return String(meta.lastDiffAt);
+      if (meta.history && meta.history.length && meta.history[0] && meta.history[0].diffAt) {
+        return String(meta.history[0].diffAt);
+      }
+      if (meta.caseFileUpdatedAt) return String(meta.caseFileUpdatedAt);
+      return '';
+    }
+
+    function markTempExecCaseLibraryAutoPopupSeen(execSetId, meta) {
+      if (!execSetId) return;
+      loadTempExecCaseLibraryAutoPopupSeen();
+      var resolvedMeta = resolveTempExecCaseLibraryMeta(execSetId, meta);
+      var stamp = resolveTempExecCaseLibraryDiffStamp(resolvedMeta);
+      if (!stamp) stamp = String(Date.now());
+      tempExecCaseLibraryAutoPopupSeen[String(execSetId)] = stamp;
+      saveTempExecCaseLibraryAutoPopupSeen();
+    }
+
+    function hasTempExecCaseLibraryAutoPopupSeen(execSetId, meta) {
       if (!execSetId) return false;
-      return tempExecCaseLibraryAutoPopupSeen[String(execSetId)] === true;
+      loadTempExecCaseLibraryAutoPopupSeen();
+      var stored = tempExecCaseLibraryAutoPopupSeen[String(execSetId)] || '';
+      if (!stored) return false;
+      var resolvedMeta = resolveTempExecCaseLibraryMeta(execSetId, meta);
+      var stamp = resolveTempExecCaseLibraryDiffStamp(resolvedMeta);
+      if (!stamp) return true;
+      return stored === stamp;
     }
 
     function maybeOpenTempExecCaseLibraryAutoPopup(allowAutoPopup, activeId) {
       if (!allowAutoPopup) return false;
       var execSetId = pickTempExecCaseLibraryAutoPopupExecSetId(activeId);
       if (!execSetId) return false;
+      var store = ensureTempExecCaseLibraryDiffState();
+      var meta = store.byExecSetId ? store.byExecSetId[String(execSetId)] : null;
+      if (hasTempExecCaseLibraryAutoPopupSeen(execSetId, meta)) {
+        clearTempExecCaseLibraryAutoPopup(execSetId, meta);
+        return false;
+      }
       var opened = openTempExecCaseLibraryDiffDrawer({ auto: true, execSetId: execSetId });
       if (opened) {
-        clearTempExecCaseLibraryAutoPopup(execSetId);
-        markTempExecCaseLibraryAutoPopupSeen(execSetId);
+        clearTempExecCaseLibraryAutoPopup(execSetId, meta);
+        markTempExecCaseLibraryAutoPopupSeen(execSetId, meta);
       }
       return opened;
     }
@@ -411,7 +472,7 @@
       if (opened) {
         clearTempExecPendingRestoreDiffExecSetId();
         clearTempExecCaseLibraryAutoPopup(pendingId, targetMeta);
-        markTempExecCaseLibraryAutoPopupSeen(pendingId);
+        markTempExecCaseLibraryAutoPopupSeen(pendingId, targetMeta);
       }
       return opened;
     }
@@ -6363,7 +6424,7 @@
       var fallbackOpened = openTempExecCaseLibraryDiffDrawer({ auto: true, execSetId: activeId });
       if (fallbackOpened) {
         clearTempExecCaseLibraryAutoPopup(activeId, meta);
-        markTempExecCaseLibraryAutoPopupSeen(activeId);
+        markTempExecCaseLibraryAutoPopupSeen(activeId, meta);
       }
       return fallbackOpened;
     }
