@@ -358,6 +358,7 @@
     jumpToExecBtn: document.getElementById('caseLibraryJumpExecBtn'),
     autoCaseLibrarySelectBtn: document.getElementById('autoCaseLibrarySelectBtn'),
     caseLibraryImportSelectBtn: document.getElementById('caseLibraryImportSelectBtn'),
+    editDrawerOpenBtn: document.getElementById('openCaseLibraryEditDrawerBtn'),
 
     editCard: document.getElementById('caseLibraryEditCard'),
     editCardTitle: document.getElementById('caseLibraryEditCardTitle'),
@@ -372,6 +373,23 @@
 	    editToExecBtn: document.getElementById('caseLibraryEditToExecBtn'),
 	    editStatus: document.getElementById('caseLibraryEditStatus'),
 	    editView: document.getElementById('caseLibraryEditView'),
+    aiGenBtn: document.getElementById('caseLibraryAiGenBtn'),
+    aiGenDrawer: document.getElementById('caseLibraryAiGenDrawer'),
+    aiGenDropZone: document.getElementById('caseLibraryAiGenDropZone'),
+    aiGenFileInput: document.getElementById('caseLibraryAiGenFileInput'),
+    aiGenFileName: document.getElementById('caseLibraryAiGenFileName'),
+    aiGenImportStatus: document.getElementById('caseLibraryAiGenImportStatus'),
+    aiGenRequirementInput: document.getElementById('caseLibraryAiGenRequirementInput'),
+    aiGenClearRequirementBtn: document.getElementById('caseLibraryAiGenClearRequirement'),
+    aiGenRunBtn: document.getElementById('caseLibraryAiGenRunBtn'),
+    aiGenStatus: document.getElementById('caseLibraryAiGenStatus'),
+    aiGenResult: document.getElementById('caseLibraryAiGenResult'),
+    aiGenResultBody: document.getElementById('caseLibraryAiGenResultBody'),
+    aiGenSelectAllBtn: document.getElementById('caseLibraryAiGenSelectAllBtn'),
+    aiGenSelectNoneBtn: document.getElementById('caseLibraryAiGenSelectNoneBtn'),
+    aiGenSelectAllToggle: document.getElementById('caseLibraryAiGenSelectAllToggle'),
+    aiGenSelectionHint: document.getElementById('caseLibraryAiGenSelectionHint'),
+    aiGenAppendBtn: document.getElementById('caseLibraryAiGenAppendBtn'),
     missingReminderTop: document.getElementById('caseLibraryMissingReminderTop'),
     missingReminderBottom: document.getElementById('caseLibraryMissingReminderBottom'),
     missingCard: document.getElementById('caseLibraryMissingCard'),
@@ -666,6 +684,19 @@
       restoring: false,
     },
 
+    aiGen: {
+      caseFileId: null,
+      requirementText: '',
+      requirementFileName: '',
+      loading: false,
+      generated: false,
+      error: '',
+      modules: [],
+      selection: new Set(),
+      taskSignature: '',
+      taskId: '',
+    },
+
     missingReminder: {
       projectId: null,
       signature: '',
@@ -760,6 +791,7 @@
   var importDiffDrawerInstance = null;
   var importDiffDrawerOpenTimer = 0;
 	  var importInvalidDrawerInstance = null;
+  var aiGenDrawerInstance = null;
   var editDrawerInstance = null;
   var missingDrawerInstance = null;
   var missingAddDrawerInstance = null;
@@ -784,8 +816,9 @@
   }
 
   function showCenterToast(text, type, durationMs) {
-    if (utils && typeof utils.showCenterToast === 'function') {
-      utils.showCenterToast(text, type, durationMs);
+    var appUtils = window.app && window.app.utils ? window.app.utils : utils;
+    if (appUtils && typeof appUtils.showCenterToast === 'function') {
+      appUtils.showCenterToast(text, type, durationMs);
       return;
     }
   }
@@ -6727,6 +6760,8 @@
       var execInfo = state.editDrawer.execByFileId && fileId ? state.editDrawer.execByFileId[fileId] : null;
       var activeUsers = execInfo && Array.isArray(execInfo.active_users) ? execInfo.active_users : [];
       var execStatusCell = renderExecPageStatusCell(activeUsers);
+      var showAiDot = fileId ? shouldShowCaseLibraryAiGenEditBadge(fileId) : false;
+      var editBtnClass = 'primary' + (showAiDot ? ' case-library-ai-gen-dot' : '');
       return (
         '<tr>' +
           selectCell +
@@ -6742,7 +6777,7 @@
           '<td>' + escapeHtml(updatedAt) + '</td>' +
           '<td>' +
             '<div class=\"case-library-row-actions\">' +
-              '<button class=\"primary\" type=\"button\" data-case-lib-edit=\"' + escapeHtml(f && f.id ? f.id : '') + '\">编辑</button>' +
+              '<button class=\"' + escapeHtml(editBtnClass) + '\" type=\"button\" data-case-lib-edit=\"' + escapeHtml(f && f.id ? f.id : '') + '\">编辑</button>' +
             '</div>' +
           '</td>' +
         '</tr>'
@@ -7297,6 +7332,7 @@
               state.editor.selection = new Set();
               state.editor.remarkOpen = new Set();
               showEditorCard(false);
+              syncCaseLibraryAiGenContext();
               clearEditorPersistedState();
               setStatus(dom.editStatus, '当前编辑用例已被删除', 'warn');
             }
@@ -8770,6 +8806,992 @@
         reminder.aiError = 'AI 推荐失败：' + (err && err.message ? err.message : err);
         renderMissingReminder();
       });
+  }
+
+  function ensureCaseLibraryAiGenState() {
+    if (!state.aiGen || typeof state.aiGen !== 'object') {
+      state.aiGen = {
+        caseFileId: null,
+        requirementText: '',
+        requirementFileName: '',
+        loading: false,
+        generated: false,
+        error: '',
+        modules: [],
+        selection: new Set(),
+        taskSignature: '',
+        taskId: '',
+        runToken: '',
+        resultToken: '',
+        readResultToken: '',
+        hasUnreadResult: false,
+      };
+    }
+    if (!state.aiGen.selection || !(state.aiGen.selection instanceof Set)) {
+      state.aiGen.selection = new Set();
+    }
+    if (!Array.isArray(state.aiGen.modules)) state.aiGen.modules = [];
+    return state.aiGen;
+  }
+
+  var caseLibraryAiGenBadgePersistKey = 'tap-case-library-ai-gen-badges';
+
+  function readCaseLibraryAiGenBadgePersistedState() {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      var raw = localStorage.getItem(caseLibraryAiGenBadgePersistKey);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function writeCaseLibraryAiGenBadgePersistedState(payload) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      if (!payload) {
+        localStorage.removeItem(caseLibraryAiGenBadgePersistKey);
+        return;
+      }
+      localStorage.setItem(caseLibraryAiGenBadgePersistKey, JSON.stringify(payload));
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function ensureCaseLibraryAiGenBadgeState() {
+    var userId = getCurrentUserId();
+    var store = state.aiGenBadge;
+    if (!userId) {
+      if (store && store.files && typeof store.files === 'object') return store;
+      var persisted = readCaseLibraryAiGenBadgePersistedState();
+      if (persisted && persisted.files && typeof persisted.files === 'object') {
+        state.aiGenBadge = persisted;
+        return persisted;
+      }
+      if (!store || typeof store !== 'object') {
+        store = { user_id: '', files: {}, updated_at: Date.now() };
+      }
+      state.aiGenBadge = store;
+      if (!store.files || typeof store.files !== 'object') store.files = {};
+      return store;
+    }
+    if (!store || String(store.user_id || '') !== String(userId || '')) {
+      var persisted = readCaseLibraryAiGenBadgePersistedState();
+      if (persisted && String(persisted.user_id || '') === String(userId || '')) {
+        store = persisted;
+      } else {
+        store = { user_id: userId || '', files: {}, updated_at: Date.now() };
+      }
+      state.aiGenBadge = store;
+    }
+    if (!store.files || typeof store.files !== 'object') store.files = {};
+    return store;
+  }
+
+  function getCaseLibraryAiGenBadgeRecord(fileId, create) {
+    var store = ensureCaseLibraryAiGenBadgeState();
+    var key = String(fileId || '');
+    if (!store || !key) return null;
+    var record = store.files && typeof store.files[key] === 'object' ? store.files[key] : null;
+    if (!record && !create) return null;
+    if (!record || typeof record !== 'object') record = {};
+    if (typeof record.result_token !== 'string') record.result_token = record.result_token ? String(record.result_token) : '';
+    if (typeof record.ai_read_token !== 'string') record.ai_read_token = record.ai_read_token ? String(record.ai_read_token) : '';
+    if (typeof record.nav_read_token !== 'string') record.nav_read_token = record.nav_read_token ? String(record.nav_read_token) : '';
+    if (typeof record.edit_read_token !== 'string') record.edit_read_token = record.edit_read_token ? String(record.edit_read_token) : '';
+    if (create) store.files[key] = record;
+    return record;
+  }
+
+  function getCaseLibraryAiGenBadgeRecordWithFallback(fileId, create) {
+    var record = getCaseLibraryAiGenBadgeRecord(fileId, create);
+    if (record || create) return record;
+    var userId = getCurrentUserId();
+    var persisted = readCaseLibraryAiGenBadgePersistedState();
+    if (persisted && (String(persisted.user_id || '') === String(userId || '') || !userId)) {
+      state.aiGenBadge = persisted;
+      record = getCaseLibraryAiGenBadgeRecord(fileId, create);
+    }
+    return record;
+  }
+
+  function updateCaseLibraryAiGenBadgeRecord(fileId, updates) {
+    var store = ensureCaseLibraryAiGenBadgeState();
+    if (!store) return null;
+    var record = getCaseLibraryAiGenBadgeRecord(fileId, true);
+    if (!record) return null;
+    if (updates && Object.prototype.hasOwnProperty.call(updates, 'result_token')) {
+      record.result_token = updates.result_token ? String(updates.result_token) : '';
+    }
+    if (updates && Object.prototype.hasOwnProperty.call(updates, 'ai_read_token')) {
+      record.ai_read_token = updates.ai_read_token ? String(updates.ai_read_token) : '';
+    }
+    if (updates && Object.prototype.hasOwnProperty.call(updates, 'nav_read_token')) {
+      record.nav_read_token = updates.nav_read_token ? String(updates.nav_read_token) : '';
+    }
+    if (updates && Object.prototype.hasOwnProperty.call(updates, 'edit_read_token')) {
+      record.edit_read_token = updates.edit_read_token ? String(updates.edit_read_token) : '';
+    }
+    record.updated_at = Date.now();
+    store.updated_at = record.updated_at;
+    writeCaseLibraryAiGenBadgePersistedState(store);
+    return record;
+  }
+
+  function syncCaseLibraryAiGenBadgeForFile(fileId) {
+    var ai = ensureCaseLibraryAiGenState();
+    if (!fileId) return;
+    var record = getCaseLibraryAiGenBadgeRecordWithFallback(fileId, false);
+    if (!record) return;
+    if (record.ai_read_token) ai.readResultToken = record.ai_read_token;
+    if (!ai.resultToken && record.result_token) ai.resultToken = record.result_token;
+    if (ai.resultToken) {
+      ai.hasUnreadResult = ai.readResultToken !== ai.resultToken;
+    } else {
+      ai.hasUnreadResult = false;
+    }
+  }
+
+  function hasCaseLibraryAiGenNavBadge() {
+    var store = ensureCaseLibraryAiGenBadgeState();
+    if (!store || !store.files) return false;
+    var keys = Object.keys(store.files);
+    for (var i = 0; i < keys.length; i += 1) {
+      var record = store.files[keys[i]];
+      if (!record || !record.result_token) continue;
+      if (String(record.nav_read_token || '') !== String(record.result_token || '')) return true;
+    }
+    return false;
+  }
+
+  function syncCaseLibraryAiGenNavBadge() {
+    if (!dom.editDrawerOpenBtn || !dom.editDrawerOpenBtn.classList) return;
+    if (hasCaseLibraryAiGenNavBadge()) dom.editDrawerOpenBtn.classList.add('case-library-ai-gen-dot');
+    else dom.editDrawerOpenBtn.classList.remove('case-library-ai-gen-dot');
+  }
+
+  function markCaseLibraryAiGenNavBadgeRead() {
+    var store = ensureCaseLibraryAiGenBadgeState();
+    if (!store || !store.files) return;
+    var changed = false;
+    Object.keys(store.files).forEach(function(key) {
+      var record = store.files[key];
+      if (!record || !record.result_token) return;
+      var token = String(record.result_token || '');
+      if (token && String(record.nav_read_token || '') !== token) {
+        record.nav_read_token = token;
+        record.updated_at = Date.now();
+        changed = true;
+      }
+    });
+    if (changed) {
+      store.updated_at = Date.now();
+      writeCaseLibraryAiGenBadgePersistedState(store);
+    }
+    syncCaseLibraryAiGenNavBadge();
+  }
+
+  function markCaseLibraryAiGenEditBadgeRead(fileId) {
+    if (!fileId) return;
+    var record = getCaseLibraryAiGenBadgeRecord(fileId, false);
+    var token = record && record.result_token ? String(record.result_token) : '';
+    if (!token) return;
+    updateCaseLibraryAiGenBadgeRecord(fileId, { edit_read_token: token });
+  }
+
+  function shouldShowCaseLibraryAiGenEditBadge(fileId) {
+    var record = getCaseLibraryAiGenBadgeRecord(fileId, false);
+    if (!record || !record.result_token) return false;
+    return String(record.edit_read_token || '') !== String(record.result_token || '');
+  }
+
+  function getCaseLibraryAiGenManager() {
+    return window.app && window.app.caseLibraryAiGen ? window.app.caseLibraryAiGen : null;
+  }
+
+  function resolveCaseLibraryGenCoverageThreshold() {
+    var globalState = window.app && window.app.state ? window.app.state : {};
+    var settings = globalState && globalState.settings && typeof globalState.settings === 'object'
+      ? globalState.settings
+      : {};
+    var raw = settings.caseLibraryGenCoverageThreshold;
+    var num = Number(raw);
+    if (!isFinite(num)) num = 90;
+    if (num < 50) num = 50;
+    if (num > 100) num = 100;
+    return Math.round(num);
+  }
+
+  function buildCaseLibraryAiGenModuleList(items) {
+    var list = Array.isArray(items) ? items : [];
+    var output = [];
+    var seen = {};
+    list.forEach(function(item) {
+      var name = normalizeEditorText(item && item.module ? item.module : '');
+      if (!name) return;
+      var key = name.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = true;
+      output.push(name);
+    });
+    return output;
+  }
+
+  function buildCaseLibraryAiGenCasePayload(items) {
+    var list = Array.isArray(items) ? items : [];
+    return list.map(function(item) {
+      var moduleName = normalizeEditorText(item && item.module ? item.module : '');
+      var title = normalizeEditorText(item && item.title ? item.title : '');
+      var priority = normalizePriorityInput(item && item.priority ? item.priority : '');
+      var pre = normalizeEditorText(item && item.precondition ? item.precondition : '');
+      var steps = normalizeEditorText(item && item.steps ? item.steps : '');
+      var expected = normalizeEditorText(item && item.expected ? item.expected : '');
+      var remark = normalizeEditorText(item && item.remark ? item.remark : '');
+      return {
+        module: moduleName,
+        title: title,
+        priority: priority || '',
+        precondition: pre || '',
+        steps: steps || '',
+        expected: expected || '',
+        remark: remark || '',
+      };
+    });
+  }
+
+  function buildCaseLibraryAiGenSignature(fileId, requirementText, moduleList) {
+    var seed = String(fileId || '') + '|' + String(requirementText || '') + '|' + (moduleList || []).join('|');
+    return hashReminderText(seed);
+  }
+
+  function normalizeAiGenText(value) {
+    if (value === null || value === undefined) return '';
+    if (Array.isArray(value)) {
+      return value.map(function(v) { return normalizeAiGenText(v); }).filter(Boolean).join('\n');
+    }
+    return normalizeEditorText(String(value || ''));
+  }
+
+  function normalizeAiGenCase(raw, moduleName) {
+    var item = raw && typeof raw === 'object' ? raw : {};
+    var moduleText = normalizeEditorText(item.module || '') || normalizeEditorText(moduleName || '');
+    var title = normalizeEditorText(item.title || '');
+    var priority = normalizePriorityInput(item.priority || '');
+    var pre = normalizeAiGenText(item.precondition || item.preconditions || '');
+    var steps = normalizeAiGenText(item.steps || '');
+    var expected = normalizeEditorText(item.expected || '');
+    var remark = normalizeEditorText(item.remark || '');
+    if (!priority) priority = 'P1';
+    if (!moduleText || !title || !expected) return null;
+    return {
+      module: moduleText,
+      title: title,
+      priority: priority,
+      precondition: pre,
+      steps: steps,
+      expected: expected,
+      remark: remark,
+    };
+  }
+
+  function buildCaseLibraryAiGenExistingKeyMap(items) {
+    var list = Array.isArray(items) ? items : [];
+    var map = {};
+    list.forEach(function(item) {
+      var key = buildCaseItemKey(item);
+      if (key) map[key] = true;
+    });
+    return map;
+  }
+
+  function parseCaseLibraryAiGenResult(raw, existingKeyMap) {
+    var base = raw || '';
+    var stripped = utils && typeof utils.stripCodeFence === 'function'
+      ? utils.stripCodeFence(base)
+      : String(base || '').trim();
+    var payloadText = utils && typeof utils.extractJsonPayload === 'function'
+      ? utils.extractJsonPayload(stripped)
+      : '';
+    var text = payloadText || stripped;
+    var data = JSON.parse(text);
+    if (!data || typeof data !== 'object') {
+      return { error: '模型返回格式不正确' };
+    }
+    var missing = Array.isArray(data.missing_modules) ? data.missing_modules : null;
+    var existing = Array.isArray(data.existing_modules) ? data.existing_modules : null;
+    if (!missing || !existing) {
+      return { error: '模型返回格式不正确：缺少 missing_modules/existing_modules' };
+    }
+    var modules = [];
+    var seen = {};
+    var existingMap = existingKeyMap || {};
+
+    function pushModule(entry, type) {
+      if (!entry || typeof entry !== 'object') return;
+      var moduleName = normalizeEditorText(entry.module || entry.module_name || '');
+      if (!moduleName) return;
+      var coverage = Number(entry.coverage);
+      if (!isFinite(coverage)) coverage = type === 'missing' ? 0 : 0;
+      var cases = Array.isArray(entry.cases) ? entry.cases : [];
+      var filtered = [];
+      cases.forEach(function(rawCase) {
+        var normalized = normalizeAiGenCase(rawCase, moduleName);
+        if (!normalized) return;
+        var key = buildCaseItemKey(normalized);
+        if (key && (existingMap[key] || seen[key])) return;
+        if (key) seen[key] = true;
+        normalized.__aiKey = 'ai-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6);
+        filtered.push(normalized);
+      });
+      if (!filtered.length) return;
+      modules.push({
+        module: moduleName,
+        coverage: coverage,
+        missing: type === 'missing',
+        cases: filtered,
+      });
+    }
+
+    missing.forEach(function(entry) { pushModule(entry, 'missing'); });
+    existing.forEach(function(entry) { pushModule(entry, 'existing'); });
+    return { modules: modules };
+  }
+
+  function renderCaseLibraryAiGenResult() {
+    var ai = ensureCaseLibraryAiGenState();
+    if (!dom.aiGenResult || !dom.aiGenResultBody) return;
+    var modules = Array.isArray(ai.modules) ? ai.modules : [];
+    var rows = [];
+    var selection = ai.selection instanceof Set ? ai.selection : new Set();
+    var totalCases = 0;
+    modules.forEach(function(mod) {
+      var list = Array.isArray(mod.cases) ? mod.cases : [];
+      if (!list.length) return;
+      totalCases += list.length;
+      list.forEach(function(item, idx) {
+        var checked = selection.has(item.__aiKey) ? 'checked' : '';
+        var coverageText = mod.missing ? '缺失' : (isFinite(Number(mod.coverage)) ? String(Math.round(Number(mod.coverage))) + '%' : '--');
+        var coverageCell = '';
+        var moduleCell = '';
+        if (idx === 0) {
+          coverageCell = '<td class="coverage' + (mod.missing ? ' missing' : '') + '" rowspan="' + list.length + '">' + escapeHtml(coverageText) + '</td>';
+          moduleCell = '<td class="module" rowspan="' + list.length + '">' + escapeHtml(mod.module) + '</td>';
+        }
+        rows.push(
+          '<tr>' +
+            '<td class="check"><input type="checkbox" data-case-lib-ai-select="' + escapeHtml(item.__aiKey) + '" ' + checked + '></td>' +
+            coverageCell +
+            moduleCell +
+            '<td>' + escapeHtml(item.title) + '</td>' +
+            '<td>' + escapeHtml(item.priority || '') + '</td>' +
+            '<td>' + escapeHtmlPreserve(item.precondition || '') + '</td>' +
+            '<td>' + escapeHtmlPreserve(item.steps || '') + '</td>' +
+            '<td>' + escapeHtmlPreserve(item.expected || '') + '</td>' +
+          '</tr>'
+        );
+      });
+    });
+    if (!rows.length) {
+      dom.aiGenResultBody.innerHTML = '<tr><td colspan="8"><p class="hint">暂无生成结果</p></td></tr>';
+      if (dom.aiGenResult.classList) dom.aiGenResult.classList.add('hidden');
+    } else {
+      dom.aiGenResultBody.innerHTML = rows.join('');
+      if (dom.aiGenResult.classList) dom.aiGenResult.classList.remove('hidden');
+    }
+    syncCaseLibraryAiGenSelectionHint(totalCases);
+  }
+
+  function syncCaseLibraryAiGenSelectionHint(totalCount) {
+    var ai = ensureCaseLibraryAiGenState();
+    var selection = ai.selection instanceof Set ? ai.selection : new Set();
+    var count = selection.size;
+    var total = typeof totalCount === 'number' ? totalCount : getCaseLibraryAiGenTotalCount();
+    if (dom.aiGenSelectionHint) {
+      dom.aiGenSelectionHint.textContent = '已选 ' + count + (total ? (' / ' + total) : '') + ' 条';
+    }
+    if (dom.aiGenAppendBtn) dom.aiGenAppendBtn.disabled = !count;
+    if (dom.aiGenSelectAllToggle) {
+      dom.aiGenSelectAllToggle.checked = total > 0 && count === total;
+    }
+  }
+
+  function syncCaseLibraryAiGenRunBtn() {
+    if (!dom.aiGenRunBtn) return;
+    var ai = ensureCaseLibraryAiGenState();
+    var requirementText = dom.aiGenRequirementInput ? dom.aiGenRequirementInput.value : ai.requirementText;
+    var hasRequirement = Boolean(normalizeEditorText(requirementText || ''));
+    var reason = resolveCaseLibraryAiGenDisabledReason();
+    dom.aiGenRunBtn.disabled = Boolean(ai.loading || !hasRequirement || reason);
+  }
+
+  function resolveCaseLibraryAiGenDisabledReason() {
+    if (!state.editor || !state.editor.caseFile) return 'no-case';
+    var coreApi = getCore();
+    if (!coreApi || typeof coreApi.getAssignedModel !== 'function') return 'no-model';
+    try {
+      coreApi.getAssignedModel('caselibrarygen');
+    } catch (err) {
+      return 'no-model';
+    }
+    return '';
+  }
+
+  function resolveCaseLibraryAiGenResultToken(task) {
+    if (task && task.id) return String(task.id);
+    if (task && task.contextSignature) return String(task.contextSignature);
+    var ai = ensureCaseLibraryAiGenState();
+    if (ai && ai.runToken) return String(ai.runToken);
+    if (ai && ai.taskSignature) return String(ai.taskSignature);
+    return '';
+  }
+
+  function markCaseLibraryAiGenResultReady(token, fileId) {
+    var ai = ensureCaseLibraryAiGenState();
+    var nextToken = token ? String(token) : '';
+    if (!nextToken) return;
+    var targetId = fileId || ai.caseFileId || (state.editor && state.editor.caseFile ? state.editor.caseFile.id : null);
+    var record = targetId ? updateCaseLibraryAiGenBadgeRecord(targetId, { result_token: nextToken }) : null;
+    var sameFile = targetId && ai.caseFileId && String(targetId) === String(ai.caseFileId);
+    if (sameFile) {
+      if (record && record.ai_read_token) ai.readResultToken = record.ai_read_token;
+      ai.resultToken = nextToken;
+      ai.hasUnreadResult = ai.readResultToken !== nextToken;
+    }
+    syncCaseLibraryAiGenButton();
+    syncCaseLibraryAiGenNavBadge();
+    if (editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) {
+      renderEditDrawerList();
+    }
+  }
+
+  function clearCaseLibraryAiGenResultBadge() {
+    var ai = ensureCaseLibraryAiGenState();
+    var targetId = ai.caseFileId || (state.editor && state.editor.caseFile ? state.editor.caseFile.id : null);
+    var record = targetId ? getCaseLibraryAiGenBadgeRecordWithFallback(targetId, false) : null;
+    var token = ai.resultToken || (record && record.result_token ? record.result_token : '');
+    if (token) {
+      ai.readResultToken = token;
+      ai.resultToken = token;
+    }
+    if (targetId && token) {
+      updateCaseLibraryAiGenBadgeRecord(targetId, { ai_read_token: token });
+    }
+    ai.hasUnreadResult = false;
+    syncCaseLibraryAiGenButton();
+  }
+
+  function getCaseLibraryAiGenTotalCount() {
+    var ai = ensureCaseLibraryAiGenState();
+    var modules = Array.isArray(ai.modules) ? ai.modules : [];
+    var total = 0;
+    modules.forEach(function(mod) {
+      var list = Array.isArray(mod.cases) ? mod.cases : [];
+      total += list.length;
+    });
+    return total;
+  }
+
+  function syncCaseLibraryAiGenButton() {
+    if (!dom.aiGenBtn) return;
+    var ai = ensureCaseLibraryAiGenState();
+    var loading = ai.loading === true;
+    var reason = resolveCaseLibraryAiGenDisabledReason();
+    var targetId = ai.caseFileId || (state.editor && state.editor.caseFile ? state.editor.caseFile.id : null);
+    var record = targetId ? getCaseLibraryAiGenBadgeRecordWithFallback(targetId, false) : null;
+    var showBadge = false;
+    if (!loading) {
+      if (record && record.result_token) {
+        showBadge = String(record.ai_read_token || '') !== String(record.result_token || '');
+      } else if (ai.resultToken) {
+        showBadge = ai.readResultToken !== ai.resultToken;
+      } else {
+        showBadge = ai.hasUnreadResult === true;
+      }
+    }
+    ai.hasUnreadResult = showBadge;
+    var label = loading ? '正在生成' : 'AI 用例生成';
+    if (dom.aiGenBtn.textContent !== label) dom.aiGenBtn.textContent = label;
+    dom.aiGenBtn.disabled = false;
+    if (dom.aiGenBtn.removeAttribute) dom.aiGenBtn.removeAttribute('disabled');
+    if (dom.aiGenBtn.classList) {
+      var showBadgeFlag = ai.hasUnreadResult === true && !loading;
+      if (reason) dom.aiGenBtn.classList.add('is-disabled');
+      else dom.aiGenBtn.classList.remove('is-disabled');
+      if (loading) dom.aiGenBtn.classList.add('loading');
+      else dom.aiGenBtn.classList.remove('loading');
+      if (showBadgeFlag) dom.aiGenBtn.classList.add('has-badge');
+      else dom.aiGenBtn.classList.remove('has-badge');
+    }
+    dom.aiGenBtn.setAttribute('data-disabled-reason', reason || '');
+  }
+
+  function resetCaseLibraryAiGenState(options) {
+    var ai = ensureCaseLibraryAiGenState();
+    var keepRequirement = options && options.keepRequirement === true;
+    ai.loading = false;
+    ai.generated = false;
+    ai.error = '';
+    ai.modules = [];
+    ai.selection = new Set();
+    ai.taskSignature = '';
+    ai.taskId = '';
+    ai.runToken = '';
+    ai.resultToken = '';
+    ai.readResultToken = '';
+    ai.hasUnreadResult = false;
+    if (!keepRequirement) {
+      ai.requirementText = '';
+      ai.requirementFileName = '';
+    }
+    if (dom.aiGenRequirementInput && !keepRequirement) {
+      dom.aiGenRequirementInput.value = '';
+    }
+    if (dom.aiGenFileName && !keepRequirement) {
+      dom.aiGenFileName.textContent = '未选择文件';
+    }
+    if (dom.aiGenImportStatus && !keepRequirement) {
+      setStatus(dom.aiGenImportStatus, '', '');
+    }
+    setStatus(dom.aiGenStatus, '', '');
+    renderCaseLibraryAiGenResult();
+    syncCaseLibraryAiGenRunBtn();
+    syncCaseLibraryAiGenButton();
+  }
+
+  function applyCaseLibraryAiGenTaskState(task) {
+    var ai = ensureCaseLibraryAiGenState();
+    if (!task || task.scene !== 'case-library') return false;
+    var fileId = state.editor && state.editor.caseFile ? String(state.editor.caseFile.id || '') : '';
+    var taskFileId = task.caseFileId ? String(task.caseFileId) : '';
+    if (!fileId || !taskFileId || taskFileId !== fileId) {
+      if (task.status === 'done') {
+        markCaseLibraryAiGenResultReady(resolveCaseLibraryAiGenResultToken(task), task.caseFileId);
+      }
+      syncCaseLibraryAiGenNavBadge();
+      return false;
+    }
+    var signature = task.contextSignature ? String(task.contextSignature) : '';
+    if (!signature) return false;
+    ai.taskSignature = signature;
+    ai.taskId = task.id || '';
+    ai.caseFileId = task.caseFileId || ai.caseFileId;
+    ai.loading = task.status === 'running';
+    ai.generated = task.status === 'done';
+    ai.error = task.status === 'error' ? (task.error || '') : '';
+    if (task.requirementText && (!ai.requirementText || ai.taskSignature === signature)) {
+      ai.requirementText = String(task.requirementText || '');
+      if (dom.aiGenRequirementInput) dom.aiGenRequirementInput.value = ai.requirementText;
+    }
+    if (task.requirementFileName && (!ai.requirementFileName || ai.taskSignature === signature)) {
+      ai.requirementFileName = String(task.requirementFileName || '');
+      if (dom.aiGenFileName) dom.aiGenFileName.textContent = ai.requirementFileName || '未选择文件';
+    }
+    if (ai.loading) {
+      setStatus(dom.aiGenStatus, '正在生成用例...', '');
+      ai.modules = [];
+      ai.selection = new Set();
+      renderCaseLibraryAiGenResult();
+      syncCaseLibraryAiGenRunBtn();
+      syncCaseLibraryAiGenButton();
+      return true;
+    }
+    if (ai.generated && task.resultRaw) {
+      var existingMap = buildCaseLibraryAiGenExistingKeyMap(state.editor.items || []);
+      var parsed = null;
+      try {
+        parsed = parseCaseLibraryAiGenResult(task.resultRaw, existingMap);
+      } catch (err) {
+        parsed = { error: err && err.message ? err.message : '解析失败' };
+      }
+      if (parsed && parsed.error) {
+        ai.error = parsed.error;
+        setStatus(dom.aiGenStatus, '生成失败：' + parsed.error, 'err');
+        ai.modules = [];
+        ai.selection = new Set();
+      } else {
+        ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
+        ai.selection = new Set();
+        setStatus(dom.aiGenStatus, ai.modules.length ? '生成完成' : '生成完成：未返回可追加用例', 'ok');
+        markCaseLibraryAiGenResultReady(resolveCaseLibraryAiGenResultToken(task), task.caseFileId);
+      }
+      renderCaseLibraryAiGenResult();
+      syncCaseLibraryAiGenRunBtn();
+      syncCaseLibraryAiGenButton();
+      return true;
+    }
+    if (ai.error) {
+      setStatus(dom.aiGenStatus, ai.error, 'err');
+    }
+    renderCaseLibraryAiGenResult();
+    syncCaseLibraryAiGenRunBtn();
+    syncCaseLibraryAiGenButton();
+    return true;
+  }
+
+  function syncCaseLibraryAiGenTaskState() {
+    var manager = getCaseLibraryAiGenManager();
+    if (!manager || typeof manager.getTask !== 'function') return false;
+    var currentId = state.editor && state.editor.caseFile ? state.editor.caseFile.id : null;
+    if (currentId) syncCaseLibraryAiGenBadgeForFile(currentId);
+    var task = manager.getTask('case-library');
+    return applyCaseLibraryAiGenTaskState(task);
+  }
+
+  function syncCaseLibraryAiGenContext() {
+    var ai = ensureCaseLibraryAiGenState();
+    var fileId = state.editor && state.editor.caseFile ? state.editor.caseFile.id : null;
+    if (!fileId) {
+      resetCaseLibraryAiGenState();
+      syncCaseLibraryAiGenButton();
+      syncCaseLibraryAiGenRunBtn();
+      syncCaseLibraryAiGenNavBadge();
+      return;
+    }
+    if (ai.caseFileId && String(ai.caseFileId) !== String(fileId)) {
+      resetCaseLibraryAiGenState();
+    }
+    ai.caseFileId = fileId;
+    syncCaseLibraryAiGenBadgeForFile(fileId);
+    syncCaseLibraryAiGenTaskState();
+    syncCaseLibraryAiGenButton();
+    syncCaseLibraryAiGenRunBtn();
+    syncCaseLibraryAiGenNavBadge();
+  }
+
+  function ensureCaseLibraryAiGenDrawer() {
+    if (aiGenDrawerInstance) return aiGenDrawerInstance;
+    aiGenDrawerInstance = ensureDrawer('caseLibraryAiGenDrawer', [], function() {
+      syncCaseLibraryAiGenTaskState();
+      renderCaseLibraryAiGenResult();
+      syncCaseLibraryAiGenRunBtn();
+      clearCaseLibraryAiGenResultBadge();
+    });
+    return aiGenDrawerInstance;
+  }
+
+  function openCaseLibraryAiGenDrawer() {
+    var drawer = ensureCaseLibraryAiGenDrawer();
+    if (drawer && typeof drawer.open === 'function') {
+      drawer.open();
+      return;
+    }
+    var el = dom.aiGenDrawer;
+    if (!el || !el.classList) return;
+    el.classList.add('open');
+  }
+
+  function hasNativeLabelTrigger(zone, input) {
+    if (!zone || !input || !zone.tagName) return false;
+    return zone.tagName.toLowerCase() === 'label' && zone.contains(input);
+  }
+
+  function createCaseLibraryAiGenDocxParser(JSZipCtor) {
+    if (!JSZipCtor) return null;
+    return async function parseDocx(file) {
+      if (!file) throw new Error('未选择文件');
+      var buffer = await file.arrayBuffer();
+      var zip = await JSZipCtor.loadAsync(buffer);
+      var docFile = zip.file('word/document.xml') || zip.file('word/document2.xml');
+      if (!docFile) throw new Error('docx 内容缺失，未找到 word/document.xml');
+      var xml = await docFile.async('string');
+      var paragraphs = [];
+      xml.replace(/<w:p[\s\S]*?<\/w:p>/g, function(para) {
+        var pieces = [];
+        para.replace(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g, function(_, text) {
+          pieces.push(text);
+          return '';
+        });
+        var merged = pieces.join('');
+        var decoded = decodeCaseLibraryAiGenXmlEntities(merged);
+        var normalized = decoded.replace(/\s+/g, ' ').trim();
+        if (normalized) paragraphs.push(normalized);
+        return '';
+      });
+      if (!paragraphs.length) {
+        var fallback = decodeCaseLibraryAiGenXmlEntities(xml.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+        if (fallback) paragraphs.push(fallback);
+      }
+      return paragraphs.join('\n\n');
+    };
+  }
+
+  function decodeCaseLibraryAiGenXmlEntities(text) {
+    if (!text) return '';
+    return text
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'");
+  }
+
+  function handleCaseLibraryAiGenFile(file) {
+    if (!file || !dom.aiGenRequirementInput) return;
+    var ai = ensureCaseLibraryAiGenState();
+    var name = file.name || '';
+    if (dom.aiGenFileName) dom.aiGenFileName.textContent = name || '未选择文件';
+    ai.requirementFileName = name || '';
+    setStatus(dom.aiGenImportStatus, '正在读取文件...', '');
+    var ext = name && name.split ? (name.split('.').pop() || '').toLowerCase() : '';
+    var parseDocx = createCaseLibraryAiGenDocxParser(window.JSZip || null);
+    var readPromise;
+    if (ext === 'docx' && typeof parseDocx === 'function') {
+      readPromise = parseDocx(file);
+    } else {
+      readPromise = file.text();
+    }
+    Promise.resolve(readPromise)
+      .then(function(text) {
+        var content = String(text || '');
+        ai.requirementText = content;
+        dom.aiGenRequirementInput.value = content;
+        setStatus(dom.aiGenImportStatus, '文件读取完成', 'ok');
+      })
+      .catch(function(err) {
+        setStatus(dom.aiGenImportStatus, '读取失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+      })
+      .finally(function() {
+        syncCaseLibraryAiGenRunBtn();
+      });
+  }
+
+  function clearCaseLibraryAiGenRequirement() {
+    var ai = ensureCaseLibraryAiGenState();
+    ai.requirementText = '';
+    ai.requirementFileName = '';
+    if (dom.aiGenRequirementInput) dom.aiGenRequirementInput.value = '';
+    if (dom.aiGenFileName) dom.aiGenFileName.textContent = '未选择文件';
+    if (dom.aiGenImportStatus) setStatus(dom.aiGenImportStatus, '', '');
+    syncCaseLibraryAiGenRunBtn();
+  }
+
+  function runCaseLibraryAiGen() {
+    var ai = ensureCaseLibraryAiGenState();
+    if (ai.loading) return;
+    var manager = getCaseLibraryAiGenManager();
+    if (manager && typeof manager.getTask === 'function') {
+      var activeTask = manager.getTask('case-library');
+      if (activeTask && activeTask.status === 'running') {
+        var activeFileId = activeTask.caseFileId ? String(activeTask.caseFileId) : '';
+        var currentFileId = state.editor && state.editor.caseFile ? String(state.editor.caseFile.id || '') : '';
+        var activeName = activeTask.caseFileName ? String(activeTask.caseFileName) : '';
+        if (activeFileId && currentFileId && activeFileId !== currentFileId) {
+          showCenterToast(activeName ? ('用例「' + activeName + '」正在生成，请等待完成后再生成。') : '已有用例正在生成，请等待完成后再生成。', 'warn', 4000);
+          return;
+        }
+        if (activeFileId && currentFileId && activeFileId === currentFileId) {
+          syncCaseLibraryAiGenTaskState();
+          showCenterToast('当前用例正在生成，请稍候。', 'warn', 3000);
+          return;
+        }
+      }
+    }
+    var reason = resolveCaseLibraryAiGenDisabledReason();
+    if (reason === 'no-model') {
+      showCenterToast('请到AI功能-功能指派 页面下，配置该功能模型。', 'warn', 5000);
+      return;
+    }
+    if (reason === 'no-case') {
+      showCenterToast('请先选择查看&编辑用例。', 'warn', 3000);
+      return;
+    }
+    var requirementText = dom.aiGenRequirementInput ? dom.aiGenRequirementInput.value : ai.requirementText;
+    requirementText = normalizeEditorText(requirementText || '');
+    if (!requirementText) {
+      setStatus(dom.aiGenStatus, '请先填写需求内容', 'warn');
+      return;
+    }
+    var coreApi = getCore();
+    if (!coreApi || typeof coreApi.callModelWithConfig !== 'function' || typeof coreApi.getAssignedModel !== 'function') {
+      setStatus(dom.aiGenStatus, '模型客户端不可用，请刷新页面后重试', 'err');
+      return;
+    }
+    var model;
+    try {
+      model = coreApi.getAssignedModel('caselibrarygen');
+    } catch (err) {
+      showCenterToast('请到AI功能-功能指派 页面下，配置该功能模型。', 'warn', 5000);
+      return;
+    }
+    var moduleList = buildCaseLibraryAiGenModuleList(state.editor.items || []);
+    var casePayload = buildCaseLibraryAiGenCasePayload(state.editor.items || []);
+    var threshold = resolveCaseLibraryGenCoverageThreshold();
+    var prompt = (state.assignments && state.assignments.caseLibraryGenPrompt)
+      || (window.app && window.app.config && window.app.config.defaultPrompts
+        ? window.app.config.defaultPrompts.caselibrarygen
+        : '');
+    var reasoning = state.assignments && state.assignments.caseLibraryGenReasoning
+      ? state.assignments.caseLibraryGenReasoning
+      : '';
+    var temperature = state.assignments && state.assignments.caseLibraryGenTemperature !== undefined
+      ? state.assignments.caseLibraryGenTemperature
+      : 0.2;
+    var userPayload = {
+      requirement_text: requirementText,
+      module_list: moduleList,
+      existing_cases: casePayload,
+      coverage_threshold: threshold,
+    };
+    var userText = JSON.stringify(userPayload, null, 2);
+    var signature = buildCaseLibraryAiGenSignature(state.editor.caseFile.id, requirementText, moduleList);
+    ai.runToken = 'local-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+    ai.loading = true;
+    ai.generated = false;
+    ai.error = '';
+    ai.modules = [];
+    ai.selection = new Set();
+    ai.taskSignature = signature;
+    ai.caseFileId = state.editor.caseFile ? state.editor.caseFile.id : null;
+    setStatus(dom.aiGenStatus, '正在生成用例...', '');
+    renderCaseLibraryAiGenResult();
+    syncCaseLibraryAiGenRunBtn();
+    syncCaseLibraryAiGenButton();
+
+    var manager = getCaseLibraryAiGenManager();
+    if (manager && typeof manager.createTask === 'function' && typeof manager.startTask === 'function') {
+      var task = manager.createTask('case-library', {
+        contextSignature: signature,
+        caseFileId: state.editor.caseFile ? state.editor.caseFile.id : null,
+        caseFileName: state.editor.caseFile ? state.editor.caseFile.file_name_clean || '' : '',
+        projectId: state.editor.caseFile ? state.editor.caseFile.project_id : null,
+        versionId: state.editor.caseFile ? state.editor.caseFile.version_id : null,
+        requirementText: requirementText,
+        requirementFileName: ai.requirementFileName || '',
+        moduleList: moduleList,
+        coverageThreshold: threshold,
+        model: model,
+        prompt: prompt,
+        reasoning: reasoning,
+        temperature: temperature,
+        userText: userText,
+      });
+      manager.startTask('case-library', task);
+      applyCaseLibraryAiGenTaskState(task);
+      return;
+    }
+
+    var genOk = false;
+    var resultToken = ai.runToken;
+    coreApi.callModelWithConfig(model, userText, prompt, reasoning, temperature)
+      .then(function(content) {
+        var existingMap = buildCaseLibraryAiGenExistingKeyMap(state.editor.items || []);
+        var parsed = parseCaseLibraryAiGenResult(content, existingMap);
+        if (parsed && parsed.error) {
+          ai.error = parsed.error;
+          setStatus(dom.aiGenStatus, '生成失败：' + parsed.error, 'err');
+          ai.modules = [];
+        } else {
+          ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
+          setStatus(dom.aiGenStatus, ai.modules.length ? '生成完成' : '生成完成：未返回可追加用例', 'ok');
+          genOk = true;
+        }
+      })
+      .catch(function(err) {
+        ai.error = err && err.message ? err.message : '生成失败';
+        setStatus(dom.aiGenStatus, '生成失败：' + ai.error, 'err');
+      })
+      .finally(function() {
+        ai.loading = false;
+        ai.generated = true;
+        ai.selection = new Set();
+        renderCaseLibraryAiGenResult();
+        if (genOk) markCaseLibraryAiGenResultReady(resultToken, ai.caseFileId);
+        syncCaseLibraryAiGenRunBtn();
+        syncCaseLibraryAiGenButton();
+      });
+  }
+
+  function selectAllCaseLibraryAiGenCases() {
+    var ai = ensureCaseLibraryAiGenState();
+    var modules = Array.isArray(ai.modules) ? ai.modules : [];
+    var selection = new Set();
+    var total = 0;
+    modules.forEach(function(mod) {
+      var list = Array.isArray(mod.cases) ? mod.cases : [];
+      list.forEach(function(item) {
+        if (!item || !item.__aiKey) return;
+        selection.add(item.__aiKey);
+        total += 1;
+      });
+    });
+    ai.selection = selection;
+    renderCaseLibraryAiGenResult();
+    syncCaseLibraryAiGenSelectionHint(total);
+  }
+
+  function clearCaseLibraryAiGenSelection() {
+    var ai = ensureCaseLibraryAiGenState();
+    ai.selection = new Set();
+    renderCaseLibraryAiGenResult();
+    syncCaseLibraryAiGenSelectionHint(0);
+  }
+
+  function appendCaseLibraryAiGenSelection(anchorEl) {
+    var ai = ensureCaseLibraryAiGenState();
+    var ed = state.editor;
+    if (!ed || !ed.caseFile) {
+      setStatus(dom.editStatus, '请先选择用例', 'warn');
+      return;
+    }
+    if (ed.pendingOp) {
+      setStatus(dom.editStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+      return;
+    }
+    var selection = ai.selection instanceof Set ? ai.selection : new Set();
+    if (!selection.size) return;
+    var selectedCases = [];
+    ai.modules.forEach(function(mod) {
+      var list = Array.isArray(mod.cases) ? mod.cases : [];
+      list.forEach(function(item) {
+        if (item && item.__aiKey && selection.has(item.__aiKey)) {
+          selectedCases.push(item);
+        }
+      });
+    });
+    if (!selectedCases.length) return;
+    openConfirmDrawer({
+      title: '确认追加用例',
+      message: '确定追加已勾选的 ' + selectedCases.length + ' 条用例吗？',
+      confirmText: '确认追加',
+      cancelText: '取消',
+      previousDrawer: aiGenDrawerInstance || null,
+    }).then(function(res) {
+      if (!res || res.ok !== true) return;
+      var fileId = ed.caseFile ? ed.caseFile.id : null;
+      var keys = [];
+      selectedCases.forEach(function(item, idx) {
+        var localId = 'local-ai-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6) + '-' + idx;
+        var fresh = {
+          __localId: localId,
+          case_file_id: fileId,
+          module: normalizeEditorText(item.module || ''),
+          title: normalizeEditorText(item.title || ''),
+          priority: normalizePriorityInput(item.priority || '') || 'P1',
+          precondition: normalizeEditorText(item.precondition || ''),
+          steps: normalizeEditorText(item.steps || ''),
+          expected: normalizeEditorText(item.expected || '') || '待补充',
+          remark: normalizeEditorText(item.remark || ''),
+        };
+        ensureNonEnumerableKey(fresh, '__uiKey', '');
+        markCaseLibraryNewAdded(fileId, fresh);
+        ed.items.push(fresh);
+        keys.push(localId);
+      });
+      ed.items = reorderItemsByExistingModuleAppend(ed.items);
+      ed.selection = new Set();
+      ed.remarkOpen = new Set();
+      ed.pendingOp = { type: 'insert_batch', itemKeys: keys, startIndex: ed.items.length - keys.length };
+      ai.selection = new Set();
+      renderEditorTable();
+      renderCaseLibraryAiGenResult();
+      syncCaseLibraryAiGenSelectionHint(0);
+      var anchorRect = captureCaseLibraryAnchorRect(anchorEl);
+      startPendingToast('已追加用例 ' + keys.length + ' 条，超时将自动入库', { anchorRect: anchorRect });
+    });
   }
 
   function getMissingModuleNameById(moduleId) {
@@ -10901,6 +11923,7 @@
     if (!file) {
       showEditorCard(false);
       clearMissingReminder();
+      syncCaseLibraryAiGenContext();
       return;
     }
     showEditorCard(true);
@@ -10914,6 +11937,7 @@
     syncEditorSearchControls();
     syncEditorBatchDeleteControls();
     syncEditorBatchAddControls();
+    syncCaseLibraryAiGenContext();
   }
 
   function syncEditorSearchControls() {
@@ -10971,6 +11995,7 @@
           state.editor.caseFile = null;
           state.editor.items = [];
           showEditorCard(false);
+          syncCaseLibraryAiGenContext();
           return false;
         }
 	        return apiClient.listCaseItems(caseFileId).then(function(items) {
@@ -14474,6 +15499,98 @@
     if (dom.missingReminderBottom) {
       dom.missingReminderBottom.addEventListener('click', handleMissingReminderAction);
     }
+    if (dom.aiGenBtn) {
+      dom.aiGenBtn.addEventListener('click', function() {
+        var reason = resolveCaseLibraryAiGenDisabledReason();
+        if (reason === 'no-model') {
+          showCenterToast('请到AI功能-功能指派 页面下，配置该功能模型。', 'warn', 5000);
+          return;
+        }
+        if (reason === 'no-case') {
+          showCenterToast('请先选择查看&编辑用例。', 'warn', 3000);
+          return;
+        }
+        clearCaseLibraryAiGenResultBadge();
+        syncCaseLibraryAiGenContext();
+        openCaseLibraryAiGenDrawer();
+        clearCaseLibraryAiGenResultBadge();
+      });
+    }
+    if (dom.aiGenFileInput) {
+      dom.aiGenFileInput.addEventListener('change', function(e) {
+        var files = e && e.target && e.target.files ? e.target.files : null;
+        var file = files && files[0] ? files[0] : null;
+        if (file) handleCaseLibraryAiGenFile(file);
+        try { e.target.value = ''; } catch (_) {}
+      });
+    }
+    if (dom.aiGenDropZone) {
+      dom.aiGenDropZone.addEventListener('click', function() {
+        if (!dom.aiGenFileInput) return;
+        if (hasNativeLabelTrigger(dom.aiGenDropZone, dom.aiGenFileInput)) return;
+        dom.aiGenFileInput.click();
+      });
+      dom.aiGenDropZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        dom.aiGenDropZone.classList.add('dragover');
+      });
+      dom.aiGenDropZone.addEventListener('dragleave', function() {
+        dom.aiGenDropZone.classList.remove('dragover');
+      });
+      dom.aiGenDropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dom.aiGenDropZone.classList.remove('dragover');
+        var files = e && e.dataTransfer ? e.dataTransfer.files : null;
+        var file = files && files[0] ? files[0] : null;
+        if (file) handleCaseLibraryAiGenFile(file);
+      });
+    }
+    if (dom.aiGenClearRequirementBtn) {
+      dom.aiGenClearRequirementBtn.addEventListener('click', clearCaseLibraryAiGenRequirement);
+    }
+    if (dom.aiGenRequirementInput) {
+      dom.aiGenRequirementInput.addEventListener('input', function() {
+        var ai = ensureCaseLibraryAiGenState();
+        ai.requirementText = dom.aiGenRequirementInput.value || '';
+        syncCaseLibraryAiGenRunBtn();
+      });
+    }
+    if (dom.aiGenRunBtn) {
+      dom.aiGenRunBtn.addEventListener('click', runCaseLibraryAiGen);
+    }
+    if (dom.aiGenSelectAllBtn) {
+      dom.aiGenSelectAllBtn.addEventListener('click', selectAllCaseLibraryAiGenCases);
+    }
+    if (dom.aiGenSelectNoneBtn) {
+      dom.aiGenSelectNoneBtn.addEventListener('click', clearCaseLibraryAiGenSelection);
+    }
+    if (dom.aiGenSelectAllToggle) {
+      dom.aiGenSelectAllToggle.addEventListener('change', function() {
+        if (dom.aiGenSelectAllToggle && dom.aiGenSelectAllToggle.checked) {
+          selectAllCaseLibraryAiGenCases();
+        } else {
+          clearCaseLibraryAiGenSelection();
+        }
+      });
+    }
+    if (dom.aiGenResultBody) {
+      dom.aiGenResultBody.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        if (!t || !t.getAttribute) return;
+        var key = t.getAttribute('data-case-lib-ai-select');
+        if (!key) return;
+        var ai = ensureCaseLibraryAiGenState();
+        ai.selection = ai.selection instanceof Set ? ai.selection : new Set();
+        if (t.checked) ai.selection.add(key);
+        else ai.selection.delete(key);
+        syncCaseLibraryAiGenSelectionHint(getCaseLibraryAiGenTotalCount());
+      });
+    }
+    if (dom.aiGenAppendBtn) {
+      dom.aiGenAppendBtn.addEventListener('click', function() {
+        appendCaseLibraryAiGenSelection(dom.aiGenAppendBtn);
+      });
+    }
 
     if (dom.editDrawerConfirmBtn) {
       dom.editDrawerConfirmBtn.addEventListener('click', loadEditDrawerFiles);
@@ -14527,6 +15644,8 @@
         var file = findCaseFileInEditDrawer(id);
         if (file) {
           safeLogOperation('view_case_file', 'case_file', file.id, { file_name: file.file_name_clean || '' });
+          markCaseLibraryAiGenEditBadgeRead(file.id);
+          if (btn.classList) btn.classList.remove('case-library-ai-gen-dot');
           openEditorForCaseFile(file);
         }
       });
@@ -15039,6 +16158,11 @@
           renderMissingReminder();
         }
       });
+      window.addEventListener('case-library-ai-gen-task', function(e) {
+        var detail = e && e.detail ? e.detail : null;
+        if (!detail || detail.scene !== 'case-library') return;
+        applyCaseLibraryAiGenTaskState(detail.task);
+      });
     }
 
     if (dom.selectProjectSelect) {
@@ -15282,6 +16406,8 @@
 		        });
 		    })();
 		    return restoreAfterActivatedPromise.finally(function() {
+		      syncCaseLibraryAiGenContext();
+		      syncCaseLibraryAiGenTaskState();
 		      restoreAfterActivatedPromise = null;
 		    });
 		  }
@@ -15435,6 +16561,7 @@
       'caseLibraryEditDrawer',
       ['openCaseLibraryEditDrawerBtn'],
       function() {
+        markCaseLibraryAiGenNavBadgeRead();
         var prevPersisted = readEditDrawerPersistedState();
         ensureProjectsReady().then(function() {
 	          // 进入“查看&编辑”抽屉也视为 editor 视图，刷新应能按最后操作恢复并自动打开抽屉。
@@ -15540,6 +16667,8 @@
     bindTabActivation();
     bindProjectsUpdated();
     bindUnloadPersistence();
+    syncCaseLibraryAiGenContext();
+    syncCaseLibraryAiGenTaskState();
 
     // 兜底：某些时序下可能错过 app-tab-activated/app-auth-ready，短窗口轮询一次“是否需要恢复”。
     scheduleAutoRestoreProbe();

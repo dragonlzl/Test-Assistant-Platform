@@ -47,6 +47,9 @@
     var caseViewFontSizeInput = dom.caseViewFontSizeInput || document.getElementById('caseViewFontSizeInput');
     var saveCaseViewFontSizeBtn = dom.saveCaseViewFontSizeBtn || document.getElementById('saveCaseViewFontSize');
     var caseViewFontSizeStatus = dom.caseViewFontSizeStatus || document.getElementById('caseViewFontSizeStatus');
+    var caseLibraryGenCoverageInput = dom.caseLibraryGenCoverageInput || document.getElementById('caseLibraryGenCoverageInput');
+    var saveCaseLibraryGenCoverageBtn = dom.saveCaseLibraryGenCoverageBtn || document.getElementById('saveCaseLibraryGenCoverage');
+    var caseLibraryGenCoverageStatus = dom.caseLibraryGenCoverageStatus || document.getElementById('caseLibraryGenCoverageStatus');
     var projectSortGrid = dom.projectSortGrid || document.getElementById('projectSortGrid');
     var projectSortStatus = dom.projectSortStatus || document.getElementById('projectSortStatus');
     var pageGuideSettingsGrid = dom.pageGuideSettingsGrid || document.getElementById('pageGuideSettingsGrid');
@@ -87,6 +90,11 @@
     var defaultTheme = defaultSettings && defaultSettings.theme ? String(defaultSettings.theme) : 'light';
     var defaultCaseViewFontSize = Number(config.defaultCaseViewFontSize)
       || (defaultSettings && defaultSettings.caseViewFontSize ? Number(defaultSettings.caseViewFontSize) : 13);
+    var defaultCaseLibraryGenCoverageThreshold = defaultSettings && defaultSettings.caseLibraryGenCoverageThreshold
+      ? Number(defaultSettings.caseLibraryGenCoverageThreshold)
+      : 90;
+    var minCaseLibraryGenCoverageThreshold = 50;
+    var maxCaseLibraryGenCoverageThreshold = 100;
     var defaultMissingReminderPlacement = defaultSettings && defaultSettings.missingCaseReminderPlacement
       ? String(defaultSettings.missingCaseReminderPlacement)
       : 'top';
@@ -128,6 +136,7 @@
       tempExecColumns: false,
       tempExecPageSize: false,
       caseViewFontSize: false,
+      caseLibraryGenCoverageThreshold: false,
       projectOrder: false,
       defaultProjectId: false,
       theme: false,
@@ -284,6 +293,14 @@
       return num;
     }
 
+    function clampCaseLibraryGenCoverageThreshold(value) {
+      var num = Math.round(Number(value));
+      if (!Number.isFinite(num)) return defaultCaseLibraryGenCoverageThreshold;
+      if (num < minCaseLibraryGenCoverageThreshold) return minCaseLibraryGenCoverageThreshold;
+      if (num > maxCaseLibraryGenCoverageThreshold) return maxCaseLibraryGenCoverageThreshold;
+      return num;
+    }
+
     function applyCaseViewFontSize(value) {
       if (typeof document === 'undefined' || !document.documentElement) return;
       var base = clampCaseViewFontSize(value);
@@ -348,6 +365,20 @@
         state.settings.caseViewFontSize = clampCaseViewFontSize(state.settings.caseViewFontSize);
       } else {
         state.settings.caseViewFontSize = defaultCaseViewFontSize;
+      }
+      if (state.settings.caseLibraryGenCoverageThreshold !== undefined && state.settings.caseLibraryGenCoverageThreshold !== null) {
+        state.settings.caseLibraryGenCoverageThreshold = clampCaseLibraryGenCoverageThreshold(
+          state.settings.caseLibraryGenCoverageThreshold
+        );
+      } else {
+        state.settings.caseLibraryGenCoverageThreshold = defaultCaseLibraryGenCoverageThreshold;
+      }
+      if (state.settings.caseLibraryGenCoverageThreshold !== undefined && state.settings.caseLibraryGenCoverageThreshold !== null) {
+        state.settings.caseLibraryGenCoverageThreshold = clampCaseLibraryGenCoverageThreshold(
+          state.settings.caseLibraryGenCoverageThreshold
+        );
+      } else {
+        state.settings.caseLibraryGenCoverageThreshold = defaultCaseLibraryGenCoverageThreshold;
       }
       if (state.settings.missingCaseReminderPlacement === undefined || state.settings.missingCaseReminderPlacement === null) {
         state.settings.missingCaseReminderPlacement = defaultMissingReminderPlacement;
@@ -707,6 +738,14 @@
         if (!dirtyDrafts.caseViewFontSize) {
           caseViewFontSizeInput.value = state.settings.caseViewFontSize || defaultCaseViewFontSize || '';
         }
+      }
+      if (caseLibraryGenCoverageInput) {
+        if (!dirtyDrafts.caseLibraryGenCoverageThreshold) {
+          caseLibraryGenCoverageInput.value = state.settings.caseLibraryGenCoverageThreshold || defaultCaseLibraryGenCoverageThreshold || '';
+        }
+      }
+      if (caseLibraryGenCoverageStatus) {
+        setStatus(caseLibraryGenCoverageStatus, '', '');
       }
       if (themeSelect) {
         if (!dirtyDrafts.theme) {
@@ -1215,6 +1254,32 @@
       }
     }
 
+    function saveCaseLibraryGenCoverageThreshold() {
+      if (!caseLibraryGenCoverageInput) return;
+      var raw = caseLibraryGenCoverageInput.value;
+      var value = clampCaseLibraryGenCoverageThreshold(raw);
+      if (!Number.isFinite(value)) {
+        setStatus(
+          caseLibraryGenCoverageStatus,
+          '请输入 ' + minCaseLibraryGenCoverageThreshold + '-' + maxCaseLibraryGenCoverageThreshold + ' 之间的数值',
+          'warn'
+        );
+        return;
+      }
+      var prev = state.settings.caseLibraryGenCoverageThreshold;
+      caseLibraryGenCoverageInput.value = value;
+      state.settings.caseLibraryGenCoverageThreshold = value;
+      dirtyDrafts.caseLibraryGenCoverageThreshold = false;
+      persistSettings(['caseLibraryGenCoverageThreshold']);
+      notifySettingsUpdated(['caseLibraryGenCoverageThreshold']);
+      if (!caseLibraryGenCoverageStatus) return;
+      if (prev === value) {
+        setStatus(caseLibraryGenCoverageStatus, '覆盖度阈值保持为 ' + value, 'ok');
+      } else {
+        setStatus(caseLibraryGenCoverageStatus, '覆盖度阈值已更新为 ' + value, 'ok');
+      }
+    }
+
     function getThemeLabel(theme) {
       return theme === 'dark' ? '黑色主题' : '白色主题';
     }
@@ -1505,6 +1570,11 @@
       if (caseViewFontSizeInput) caseViewFontSizeInput.addEventListener('input', function() {
         dirtyDrafts.caseViewFontSize = true;
         setStatus(caseViewFontSizeStatus, '', '');
+      });
+      if (saveCaseLibraryGenCoverageBtn) saveCaseLibraryGenCoverageBtn.addEventListener('click', saveCaseLibraryGenCoverageThreshold);
+      if (caseLibraryGenCoverageInput) caseLibraryGenCoverageInput.addEventListener('input', function() {
+        dirtyDrafts.caseLibraryGenCoverageThreshold = true;
+        setStatus(caseLibraryGenCoverageStatus, '', '');
       });
       if (saveThemeSettingBtn) saveThemeSettingBtn.addEventListener('click', saveThemeSetting);
       if (themeSelect) themeSelect.addEventListener('change', function() {

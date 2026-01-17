@@ -729,6 +729,327 @@
       };
     }
 
+    function initCaseLibraryAiGenManager(options) {
+      const utils = options && options.utils ? options.utils : {};
+      const callModel = options && typeof options.callModelWithConfig === 'function'
+        ? options.callModelWithConfig
+        : async function missingCall() {
+          throw new Error('模型客户端不可用，请刷新页面后重试');
+        };
+      const storagePrefix = 'tap-case-library-ai-gen-task:';
+      const runnerId = 'case-library-ai-gen-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      const runningMap = {};
+      const heartbeatIntervalMs = 2000;
+      const staleMs = 6000;
+      const takeoverTimers = {};
+      var pageUnloading = false;
+
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('pagehide', function() { pageUnloading = true; });
+        window.addEventListener('beforeunload', function() { pageUnloading = true; });
+      }
+
+      function buildKey(scene) {
+        return storagePrefix + scene;
+      }
+
+      function safeJsonParse(raw) {
+        if (!raw) return null;
+        try {
+          return JSON.parse(raw);
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function readTask(scene) {
+        if (!scene || typeof localStorage === 'undefined') return null;
+        try {
+          return safeJsonParse(localStorage.getItem(buildKey(scene)));
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function emitTaskUpdate(scene, task, action) {
+        if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+        try {
+          if (typeof CustomEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('case-library-ai-gen-task', { detail: { scene: scene, task: task, action: action || '' } }));
+          } else if (typeof document !== 'undefined' && typeof document.createEvent === 'function') {
+            var evt = document.createEvent('CustomEvent');
+            evt.initCustomEvent('case-library-ai-gen-task', false, false, { scene: scene, task: task, action: action || '' });
+            window.dispatchEvent(evt);
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
+
+      function writeTask(scene, task, action) {
+        if (!scene || typeof localStorage === 'undefined') return task || null;
+        if (!task) {
+          try {
+            localStorage.removeItem(buildKey(scene));
+          } catch (err) {
+            // ignore
+          }
+          emitTaskUpdate(scene, null, action || 'clear');
+          return null;
+        }
+        var next = task;
+        next.updatedAt = Date.now();
+        try {
+          localStorage.setItem(buildKey(scene), JSON.stringify(next));
+        } catch (err) {
+          // ignore
+        }
+        emitTaskUpdate(scene, next, action || 'update');
+        return next;
+      }
+
+      function clearTask(scene) {
+        writeTask(scene, null, 'clear');
+      }
+
+      function buildTaskId() {
+        return 'case-library-ai-gen-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      }
+
+      function normalizeModelSnapshot(model) {
+        if (!model || typeof model !== 'object') return null;
+        return {
+          id: model.id || '',
+          name: model.name || '',
+          provider: model.provider || '',
+          baseUrl: model.baseUrl || '',
+          apiKey: model.apiKey || '',
+          model: model.model || '',
+          maxTokens: model.maxTokens,
+        };
+      }
+
+      function createTask(scene, payload) {
+        var base = payload && typeof payload === 'object' ? Object.assign({}, payload) : {};
+        base.id = base.id || buildTaskId();
+        base.scene = scene || base.scene || '';
+        base.status = 'running';
+        base.createdAt = base.createdAt || Date.now();
+        base.updatedAt = base.updatedAt || base.createdAt;
+        base.retryCount = Number(base.retryCount || 0);
+        if (base.model) base.model = normalizeModelSnapshot(base.model);
+        return base;
+      }
+
+      function resolveUserText(task) {
+        if (!task) return '';
+        if (typeof task.userText === 'string' && task.userText.trim()) return task.userText;
+        if (task.userPayload && typeof task.userPayload === 'object') {
+          try {
+            return JSON.stringify(task.userPayload, null, 2);
+          } catch (err) {
+            return '';
+          }
+        }
+        return '';
+      }
+
+      function isTransientFetchError(err) {
+        if (!err) return false;
+        var msg = err && err.message ? String(err.message) : String(err || '');
+        if (!msg) return false;
+        if (msg.indexOf('Failed to fetch') !== -1) return true;
+        if (msg.indexOf('NetworkError') !== -1) return true;
+        return false;
+      }
+
+      function isModelTimeoutError(err) {
+        if (!err) return false;
+        var msg = err && err.message ? String(err.message) : String(err || '');
+        if (!msg) return false;
+        return msg.indexOf('模型调用超时') !== -1;
+      }
+
+      function shouldSuspendForNavigation(err) {
+        if (pageUnloading) return true;
+        if (!err) return false;
+        if (err.name === 'AbortError') return true;
+        var msg = err && err.message ? String(err.message) : String(err || '');
+        if (msg.indexOf('AbortError') !== -1) return true;
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+          if (isTransientFetchError(err)) return true;
+          if (isModelTimeoutError(err)) return true;
+          return false;
+        }
+        return false;
+      }
+
+      function isTaskStale(task) {
+        if (!task) return true;
+        var heartbeat = Number(task.heartbeatAt || 0);
+        if (!heartbeat) return true;
+        return Date.now() - heartbeat > staleMs;
+      }
+
+      function shouldTakeover(task) {
+        if (!task || task.status !== 'running') return false;
+        if (!task.runnerId || task.runnerId === runnerId) return true;
+        return isTaskStale(task);
+      }
+
+      function startHeartbeat(scene, task) {
+        if (!scene || !task) return function() {};
+        var timer = setInterval(function() {
+          var current = readTask(scene);
+          if (!current || current.id !== task.id || current.status !== 'running') {
+            clearInterval(timer);
+            return;
+          }
+          if (current.runnerId && current.runnerId !== runnerId) {
+            clearInterval(timer);
+            return;
+          }
+          current.runnerId = runnerId;
+          current.heartbeatAt = Date.now();
+          current.updatedAt = current.heartbeatAt;
+          writeTask(scene, current, 'heartbeat');
+        }, heartbeatIntervalMs);
+        return function stopHeartbeat() {
+          clearInterval(timer);
+        };
+      }
+
+      function runTask(scene, task) {
+        if (!scene || !task) return Promise.resolve(null);
+        if (runningMap[scene] && runningMap[scene].taskId === task.id) {
+          return runningMap[scene].promise;
+        }
+        var stopHeartbeat = startHeartbeat(scene, task);
+        var promise = Promise.resolve()
+          .then(function() {
+            var current = readTask(scene);
+            if (!current || current.id !== task.id) return null;
+            var model = current.model;
+            if (!model || !model.baseUrl || !model.model) {
+              throw new Error('未找到用例库生成模型');
+            }
+            var userText = resolveUserText(current);
+            if (!userText) {
+              throw new Error('生成上下文缺失');
+            }
+            return callModel(model, userText, current.prompt || '', current.reasoning || '', current.temperature);
+          })
+          .then(function(content) {
+            var current = readTask(scene);
+            if (!current || current.id !== task.id) return null;
+            if (current.runnerId && current.runnerId !== runnerId) return null;
+            current.status = 'done';
+            current.resultRaw = content;
+            current.error = '';
+            current.updatedAt = Date.now();
+            current.endedAt = current.updatedAt;
+            current.heartbeatAt = 0;
+            writeTask(scene, current, 'done');
+            return current;
+          })
+          .catch(function(err) {
+            var current = readTask(scene);
+            if (!current || current.id !== task.id) return null;
+            if (current.runnerId && current.runnerId !== runnerId) return null;
+            var msg = err && err.message ? err.message : String(err || '');
+            if (shouldSuspendForNavigation(err)) {
+              current.status = 'running';
+              current.error = '';
+              current.runnerId = '';
+              current.heartbeatAt = 0;
+              current.updatedAt = Date.now();
+              writeTask(scene, current, 'suspend');
+              return current;
+            }
+            if (isTransientFetchError(err)) {
+              current.retryCount = Number(current.retryCount || 0) + 1;
+              if (current.retryCount <= 2) {
+                current.status = 'running';
+                current.error = '';
+                current.runnerId = '';
+                current.heartbeatAt = 0;
+                current.updatedAt = Date.now();
+                writeTask(scene, current, 'retry');
+                return current;
+              }
+            }
+            current.status = 'error';
+            current.error = msg ? ('AI 用例生成失败：' + msg) : 'AI 用例生成失败';
+            current.updatedAt = Date.now();
+            current.endedAt = current.updatedAt;
+            current.heartbeatAt = 0;
+            writeTask(scene, current, 'error');
+            return current;
+          })
+          .finally(function() {
+            stopHeartbeat();
+            if (runningMap[scene] && runningMap[scene].taskId === task.id) {
+              delete runningMap[scene];
+            }
+          });
+        runningMap[scene] = { taskId: task.id, promise: promise };
+        return promise;
+      }
+
+      function startTask(scene, task, options) {
+        if (!scene) return Promise.resolve(null);
+        var active = task ? createTask(scene, task) : readTask(scene);
+        if (!active) return Promise.resolve(null);
+        if (active.status !== 'running') return Promise.resolve(active);
+        if (!options || options.force !== true) {
+          if (!shouldTakeover(active)) {
+            if (!takeoverTimers[scene]) {
+              takeoverTimers[scene] = setTimeout(function() {
+                takeoverTimers[scene] = null;
+                var latest = readTask(scene);
+                if (latest && latest.status === 'running') {
+                  startTask(scene, latest);
+                }
+              }, staleMs);
+            }
+            return Promise.resolve(active);
+          }
+        }
+        active.runnerId = runnerId;
+        active.heartbeatAt = Date.now();
+        writeTask(scene, active, 'start');
+        return runTask(scene, active);
+      }
+
+      function resumeTasks(options) {
+        ['case-library'].forEach(function(scene) {
+          var task = readTask(scene);
+          if (task && task.status === 'running') {
+            startTask(scene, task, options);
+          }
+        });
+      }
+
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('storage', function(e) {
+          var key = e && e.key ? String(e.key) : '';
+          if (!key || key.indexOf(storagePrefix) !== 0) return;
+          var scene = key.slice(storagePrefix.length);
+          emitTaskUpdate(scene, readTask(scene), 'storage');
+        });
+      }
+
+      return {
+        createTask: createTask,
+        startTask: startTask,
+        getTask: readTask,
+        clearTask: clearTask,
+        resumeTasks: resumeTasks,
+        buildTaskId: buildTaskId,
+        normalizeModelSnapshot: normalizeModelSnapshot,
+      };
+    }
+
     function initAutoWorkflowManager(options) {
       const getSteps = options && typeof options.getSteps === 'function'
         ? options.getSteps
@@ -1106,6 +1427,15 @@
       callModelWithConfig: callModelWithConfig,
     });
     window.app.missingReminderAi = missingReminderAiManager;
+
+    const caseLibraryAiGenManager = initCaseLibraryAiGenManager({
+      utils: appUtils,
+      callModelWithConfig: callModelWithConfig,
+    });
+    window.app.caseLibraryAiGen = caseLibraryAiGenManager;
+    if (caseLibraryAiGenManager && typeof caseLibraryAiGenManager.resumeTasks === 'function') {
+      caseLibraryAiGenManager.resumeTasks({ force: true });
+    }
 
     function shouldResumeMissingReminderAi() {
       return Boolean(state && state.settings && state.settings.missingCaseReminderAiEnabled === 'on');

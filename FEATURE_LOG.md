@@ -19,6 +19,23 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例库 AI 用例生成
+- 功能描述：用例库查看&编辑视图新增 AI 用例生成按钮，支持需求导入/粘贴、覆盖度阈值控制、全局生成任务与结果追加。
+- 操作方式：用例库 → 查看&编辑 → 点击“AI 用例生成” → 导入需求/填写需求 → 生成用例 → 勾选/全选 → 确认追加。
+- 使用效果：按模块输出覆盖率与缺失模块，并可基于阈值生成补充用例，一键追加到当前用例库。
+- 新增内容/接口/组件：
+  - 前端：用例库 AI 生成按钮/抽屉与结果表、全局生成任务管理、覆盖度阈值设置、功能指派新增模型位（`index.html`、`case-library.html`、`scripts/modules/caseLibrary.js`、`scripts/modules/app.js`、`settings.html`、`scripts/modules/settings.js`、`ai-tools.html`、`scripts/modules/models.js`、`scripts/modules/assign.js`、`scripts/handlers/assignHandlers.js`、`config/constants.js`、`scripts/base/state.js`、`style.css`）。
+  - 测试：新增用例库 AI 生成 UI 与设置 API 用例（`tests/ui/case_library_ai_gen.spec.js`、`tests/api/settings_case_library_gen_threshold.spec.js`）。
+- 复用说明：复用现有功能指派配置、用例追加/排序逻辑与提醒区 AI 任务持久化方案。
+- 测试与验证：
+  - `node --check scripts/modules/caseLibrary.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/case_library_ai_gen.spec.js`（通过）
+  - `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_case_library_gen_threshold.spec.js`（通过，测试库 `apitest.db`）
+- 更新记录：2026-01-14 用例库 AI 用例生成（`index.html`、`case-library.html`、`scripts/modules/caseLibrary.js`、`scripts/modules/app.js`、`settings.html`、`scripts/modules/settings.js`、`ai-tools.html`、`scripts/modules/models.js`、`scripts/modules/assign.js`、`scripts/handlers/assignHandlers.js`、`config/constants.js`、`scripts/base/state.js`、`style.css`、`tests/ui/case_library_ai_gen.spec.js`、`tests/api/settings_case_library_gen_threshold.spec.js`）。
+- 更新记录：2026-01-14 AI 用例生成按钮移至搜索框右侧并拉开间距（`index.html`、`case-library.html`、`style.css`）。
+- 更新记录：2026-01-14 AI 用例生成抽屉移除右侧需求展示区并改为下方展示（`index.html`、`case-library.html`）。
+- 更新记录：2026-01-14 AI 用例生成按钮新增生成中状态与动画（`scripts/modules/caseLibrary.js`、`style.css`）。
+
 - 功能名称：执行页复用子项状态切换去抖动
 - 功能描述：用例执行页复用子项选择执行结果时，改为局部刷新状态 UI，避免整页重绘导致抖动。
 - 操作方式：执行页开启复用 → 展开复用子项 → 选择子项执行结果。
@@ -3832,3 +3849,8 @@
 - 更新记录：2026-01-20 提醒区可视高度提升至 4.5 行提示可滚动（`style.css`）。
 - 更新记录：2026-01-20 微调提醒区可视高度为约 4.5 行（`style.css`）。
 - 更新记录：2026-01-20 修复一键执行从用例库勾选导入重复导入（`scripts/modules/caseLibrary.js`、`tests/ui/auto_case_library_import.spec.js`）。
+- 更新记录：2026-01-17 AI 用例生成按钮新增结果红点提示（`scripts/modules/caseLibrary.js`、`style.css`）。
+- 更新记录：2026-01-17 AI 用例生成结果视图字段竖线分隔（`style.css`）。
+- 更新记录：2026-01-17 AI 用例生成结果红点联动到查看&编辑入口与编辑按钮（`scripts/modules/caseLibrary.js`、`style.css`）。
+- 更新记录：2026-01-17 用例切换期间 AI 用例生成不中断（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_ai_gen.spec.js`）。
+- 更新记录：2026-01-17 修复 AI 用例生成红点在用户信息未就绪时读取异常（`scripts/modules/caseLibrary.js`）。

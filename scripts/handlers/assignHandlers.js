@@ -15,6 +15,7 @@
     var caseGenPromptEl = dom.caseGenPromptEl || document.getElementById('caseGenPrompt');
     var caseFilterPromptEl = dom.caseFilterPromptEl || document.getElementById('caseFilterPrompt');
     var missingReminderPromptEl = dom.missingReminderPromptEl || document.getElementById('missingReminderPrompt');
+    var caseLibraryGenPromptEl = dom.caseLibraryGenPromptEl || document.getElementById('caseLibraryGenPrompt');
     var defaultPromptStatus = dom.defaultPromptStatus || document.getElementById('defaultPromptStatus');
     var saveDefaultPromptsBtn = dom.saveDefaultPromptsBtn || document.getElementById('saveDefaultPrompts');
     var exportDefaultPromptsBtn = dom.exportDefaultPromptsBtn || document.getElementById('exportDefaultPrompts');
@@ -53,6 +54,7 @@
         casegen: capturePromptValue(caseGenPromptEl, assignments.caseGenPrompt, defaultPrompts.casegen),
         casefilter: capturePromptValue(caseFilterPromptEl, assignments.caseFilterPrompt, defaultPrompts.casefilter),
         missingreminder: capturePromptValue(missingReminderPromptEl, assignments.missingReminderPrompt, defaultPrompts.missingreminder),
+        caselibrarygen: capturePromptValue(caseLibraryGenPromptEl, assignments.caseLibraryGenPrompt, defaultPrompts.caselibrarygen),
       };
     }
 
@@ -67,7 +69,7 @@
     function applyDefaultPromptsOverride(source, persist, updateInputs) {
       if (!source || typeof source !== 'object') return false;
       var changed = false;
-      ['system', 'review', 'compare', 'split', 'cases', 'casegen', 'casefilter', 'missingreminder'].forEach(function(key) {
+      ['system', 'review', 'compare', 'split', 'cases', 'casegen', 'casefilter', 'missingreminder', 'caselibrarygen'].forEach(function(key) {
         if (typeof source[key] === 'string' && source[key].trim()) {
           defaultPrompts[key] = source[key];
           changed = true;
@@ -83,6 +85,7 @@
         casegen: defaultPrompts.casegen,
         casefilter: defaultPrompts.casefilter,
         missingreminder: defaultPrompts.missingreminder,
+        caselibrarygen: defaultPrompts.caselibrarygen,
       });
       }
       if (changed && updateInputs) {
@@ -94,6 +97,7 @@
         assignments.caseGenPrompt = defaultPrompts.casegen;
         assignments.caseFilterPrompt = defaultPrompts.casefilter;
         assignments.missingReminderPrompt = defaultPrompts.missingreminder;
+        assignments.caseLibraryGenPrompt = defaultPrompts.caselibrarygen;
         setInputValue(cleanPromptEl, assignments.cleanPrompt);
         setInputValue(reviewPromptEl, assignments.reviewPrompt);
         setInputValue(comparePromptEl, assignments.comparePrompt);
@@ -102,6 +106,7 @@
         setInputValue(caseGenPromptEl, assignments.caseGenPrompt);
         if (caseFilterPromptEl) setInputValue(caseFilterPromptEl, assignments.caseFilterPrompt);
         if (missingReminderPromptEl) setInputValue(missingReminderPromptEl, assignments.missingReminderPrompt);
+        if (caseLibraryGenPromptEl) setInputValue(caseLibraryGenPromptEl, assignments.caseLibraryGenPrompt);
       }
       return changed;
     }
@@ -136,6 +141,7 @@
         casegen: defaultPrompts.casegen,
         casefilter: defaultPrompts.casefilter,
         missingreminder: defaultPrompts.missingreminder,
+        caselibrarygen: defaultPrompts.caselibrarygen,
       }, null, 2);
       var stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
       downloadText('default_prompts_' + stamp + '.json', payload);

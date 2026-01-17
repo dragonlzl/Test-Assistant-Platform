@@ -612,6 +612,36 @@
 </div>
 <p class="status" id="missingReminderAssignStatus"></p>
 </div>
+<div class="model-card">
+<strong>用例库页面生成用例</strong>
+<div class="row">
+<label for="caseLibraryGenModelSelect">使用模型</label>
+<select id="caseLibraryGenModelSelect"></select>
+</div>
+<div class="row column">
+<label for="caseLibraryGenPrompt">提示词</label>
+<textarea class="small-textarea" id="caseLibraryGenPrompt" placeholder="为空则使用默认用例库生成提示词"></textarea>
+</div>
+<div class="row">
+<label for="caseLibraryGenTemperature">Temperature</label>
+<input id="caseLibraryGenTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
+<div class="row hidden" data-reasoning="caselibrarygen">
+<label for="caseLibraryGenReasoning">Reasoning Effort</label>
+<select id="caseLibraryGenReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testCaseLibraryGenModel">测试连通性</button>
+</div>
+<p class="status" id="caseLibraryGenAssignStatus"></p>
+</div>
 <div class="actions">
 <button id="saveAssignments">保存指派</button>
 </div>

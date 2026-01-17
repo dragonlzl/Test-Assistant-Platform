@@ -1,10 +1,6 @@
 Traceback (most recent call last):
-  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/runpy.py", line 193, in _run_module_as_main
-    "__main__", mod_spec)
-  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/runpy.py", line 85, in _run_code
-    exec(code, run_globals)
-  File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/uvicorn/__main__.py", line 4, in <module>
-    uvicorn.main()
+  File "/Library/Frameworks/Python.framework/Versions/3.7/bin/uvicorn", line 8, in <module>
+    sys.exit(main())
   File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/click/core.py", line 1130, in __call__
     return self.main(*args, **kwargs)
   File "/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages/click/core.py", line 1055, in main
