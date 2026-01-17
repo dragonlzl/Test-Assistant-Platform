@@ -442,7 +442,7 @@ test.describe('用例库 AI 用例生成', () => {
     await expect(page.locator('#caseLibraryAiGenResultBody')).toContainText('缺失');
     await expect(page.locator('#caseLibraryAiGenResultBody')).toContainText('60%');
     await expect(page.locator('#caseLibraryAiGenBtn')).toHaveClass(/has-badge/);
-    await expect(page.locator('#openCaseLibraryEditDrawerBtn')).toHaveClass(/case-library-ai-gen-dot/);
+    await expect(page.locator('#openCaseLibraryEditDrawerBtn')).not.toHaveClass(/case-library-ai-gen-dot/);
 
     await page.click('#caseLibraryAiGenDrawer .drawer-header [data-drawer-close="caseLibraryAiGenDrawer"]');
     await expect(page.locator('#caseLibraryAiGenDrawer')).not.toHaveClass(/open/);
@@ -450,7 +450,7 @@ test.describe('用例库 AI 用例生成', () => {
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await expect(page.locator('#openCaseLibraryEditDrawerBtn')).not.toHaveClass(/case-library-ai-gen-dot/);
     const editBtnSelector = `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`;
-    await expect(page.locator(editBtnSelector)).toHaveClass(/case-library-ai-gen-dot/);
+    await expect(page.locator(editBtnSelector)).not.toHaveClass(/case-library-ai-gen-dot/);
     await page.click(editBtnSelector);
     await expect(page.locator('#caseLibraryEditDrawer')).not.toHaveClass(/open/);
 

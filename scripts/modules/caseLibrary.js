@@ -9249,12 +9249,25 @@
     return '';
   }
 
+  function shouldAutoReadCaseLibraryAiGenBadge(fileId) {
+    if (!fileId) return false;
+    if (typeof isEditorCardVisible !== 'function' || !isEditorCardVisible()) return false;
+    var currentId = state.editor && state.editor.caseFile ? state.editor.caseFile.id : null;
+    if (!currentId) return false;
+    return String(currentId) === String(fileId);
+  }
+
   function markCaseLibraryAiGenResultReady(token, fileId) {
     var ai = ensureCaseLibraryAiGenState();
     var nextToken = token ? String(token) : '';
     if (!nextToken) return;
     var targetId = fileId || ai.caseFileId || (state.editor && state.editor.caseFile ? state.editor.caseFile.id : null);
-    var record = targetId ? updateCaseLibraryAiGenBadgeRecord(targetId, { result_token: nextToken }) : null;
+    var updates = { result_token: nextToken };
+    if (targetId && shouldAutoReadCaseLibraryAiGenBadge(targetId)) {
+      updates.nav_read_token = nextToken;
+      updates.edit_read_token = nextToken;
+    }
+    var record = targetId ? updateCaseLibraryAiGenBadgeRecord(targetId, updates) : null;
     var sameFile = targetId && ai.caseFileId && String(targetId) === String(ai.caseFileId);
     if (sameFile) {
       if (record && record.ai_read_token) ai.readResultToken = record.ai_read_token;

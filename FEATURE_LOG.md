@@ -3854,3 +3854,4 @@
 - 更新记录：2026-01-17 AI 用例生成结果红点联动到查看&编辑入口与编辑按钮（`scripts/modules/caseLibrary.js`、`style.css`）。
 - 更新记录：2026-01-17 用例切换期间 AI 用例生成不中断（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_ai_gen.spec.js`）。
 - 更新记录：2026-01-17 修复 AI 用例生成红点在用户信息未就绪时读取异常（`scripts/modules/caseLibrary.js`）。
+- 更新记录：2026-01-17 生成完成且当前正在查看用例时不再展示查看&编辑红点（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_ai_gen.spec.js`）。
