@@ -89,6 +89,7 @@
     var exportTempExecXmindBtn = deps && deps.dom && deps.dom.exportTempExecXmindBtn ? deps.dom.exportTempExecXmindBtn : null;
     var exportTempExecCasesXmindBtn = deps && deps.dom && deps.dom.exportTempExecCasesXmindBtn ? deps.dom.exportTempExecCasesXmindBtn : null;
     var tempExecCaseLibraryChangesBtn = null;
+    var tempExecAiGenBtn = null;
     var tempExecCaseLibraryDiffStatus = null;
     var tempExecCaseLibraryDiffBody = null;
     var tempExecCaseLibraryDiffAppendedPill = null;
@@ -102,6 +103,7 @@
     try {
       if (typeof document !== 'undefined') {
         tempExecCaseLibraryChangesBtn = document.getElementById('tempExecCaseLibraryChangesBtn');
+        tempExecAiGenBtn = document.getElementById('tempExecAiGenBtn');
         tempExecCaseLibraryDiffStatus = document.getElementById('tempExecCaseLibraryDiffStatus');
         tempExecCaseLibraryDiffBody = document.getElementById('tempExecCaseLibraryDiffBody');
         tempExecCaseLibraryDiffAppendedPill = document.getElementById('tempExecCaseLibraryDiffAppendedPill');
@@ -591,8 +593,12 @@
     function mountTempExecToolbarButtons() {
       if (!tempExecToolbar) return;
       var stash = document.getElementById('tempExecToolbarStash');
+      var aiSlot = tempExecToolbar.querySelector('#tempExecAiGenSlot');
       var changeSlot = tempExecToolbar.querySelector('#tempExecCaseLibraryChangeSlot');
       var exportSlot = tempExecToolbar.querySelector('#tempExecExportSlot');
+      if (tempExecAiGenBtn && aiSlot && tempExecAiGenBtn.parentNode !== aiSlot) {
+        aiSlot.appendChild(tempExecAiGenBtn);
+      }
       if (tempExecCaseLibraryChangesBtn && changeSlot && tempExecCaseLibraryChangesBtn.parentNode !== changeSlot) {
         changeSlot.appendChild(tempExecCaseLibraryChangesBtn);
       }
@@ -612,7 +618,7 @@
     function stashTempExecToolbarButtons() {
       var stash = document.getElementById('tempExecToolbarStash');
       if (!stash) return;
-      var items = [tempExecCaseLibraryChangesBtn, exportTempExecXmindBtn, exportTempExecCasesXmindBtn];
+      var items = [tempExecAiGenBtn, tempExecCaseLibraryChangesBtn, exportTempExecXmindBtn, exportTempExecCasesXmindBtn];
       items.forEach(function(btn) {
         if (!btn) return;
         if (btn.parentNode !== stash) stash.appendChild(btn);
@@ -2451,21 +2457,63 @@
       return Math.round(num);
     }
 
+    function getTempExecAiGenBadgeRecord(fileId) {
+      var store = state.tempExecAiGenBadge;
+      if (!store || typeof store !== 'object') return null;
+      if (!store.files || typeof store.files !== 'object') return null;
+      var key = String(fileId || '');
+      if (!key) return null;
+      var record = store.files[key];
+      if (!record || typeof record !== 'object') return null;
+      if (typeof record.result_token !== 'string') record.result_token = record.result_token ? String(record.result_token) : '';
+      if (typeof record.focus_read_token !== 'string') record.focus_read_token = record.focus_read_token ? String(record.focus_read_token) : '';
+      if (typeof record.assign_entry_read_token !== 'string') record.assign_entry_read_token = record.assign_entry_read_token ? String(record.assign_entry_read_token) : '';
+      if (typeof record.assign_item_read_token !== 'string') record.assign_item_read_token = record.assign_item_read_token ? String(record.assign_item_read_token) : '';
+      return record;
+    }
+
+    function canShowTempExecAiGenBadge(fileId) {
+      var file = getTempExecFile(fileId);
+      if (!file) return false;
+      if (String(file.status || '') === 'archived') return false;
+      return true;
+    }
+
+    function shouldShowTempExecAiGenFocusBadge(fileId) {
+      if (!canShowTempExecAiGenBadge(fileId)) return false;
+      var record = getTempExecAiGenBadgeRecord(fileId);
+      if (!record || !record.result_token) return false;
+      return String(record.focus_read_token || '') !== String(record.result_token || '');
+    }
+
+    function shouldShowTempExecAiGenAssignItemBadge(fileId) {
+      if (!canShowTempExecAiGenBadge(fileId)) return false;
+      var activeId = state && state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
+      if (activeId && String(fileId || '') === activeId) return false;
+      var focusSet = new Set(state.tempExecFocus || []);
+      if (focusSet.has(String(fileId || ''))) return false;
+      var record = getTempExecAiGenBadgeRecord(fileId);
+      if (!record || !record.result_token) return false;
+      return String(record.assign_item_read_token || '') !== String(record.result_token || '');
+    }
+
     function renderTempExecItemRow(file, options) {
       var opts = options || {};
       var isArchived = Boolean(file && String(file.status || '') === 'archived');
       var active = opts.activeId === file.id ? 'active' : '';
       var focusSet = opts.focusSet || new Set();
+      var showAiDot = Boolean(opts.showAiDot);
       var stateClass = resolveTempExecState(file);
       var tagHtml = buildTempExecTag(file, focusSet.has(file.id));
       var removeHtml = (opts.hideRemove || isArchived) ? '' : '<span class="remove" title="删除" data-temp-remove="' + file.id + '">×</span>';
       var reqKey = normalizeRequirementName(file && file.requirement) || '未标识需求';
       var archivedMask = isArchived ? '<div class="temp-archived-mask">已归档</div>' : '';
+      var aiDot = showAiDot && shouldShowTempExecAiGenAssignItemBadge(file && file.id ? file.id : '') ? ' case-library-ai-gen-dot' : '';
       return (
         '<div class="temp-req-row ' + stateClass + (isArchived ? ' archived' : '') + '" data-temp-file="' + file.id + '" data-temp-req="' + reqKey + '"' + (isArchived ? ' data-temp-archived="1"' : '') + ' draggable="' + (isArchived ? 'false' : 'true') + '">' +
           tagHtml +
           '<span class="temp-req-count-badge">' + getTempExecFileCaseCount(file) + ' 条</span>' +
-          '<button type="button" data-temp-file="' + file.id + '"' + (isArchived ? ' data-temp-archived="1"' : '') + ' class="temp-req-item ' + active + '" draggable="' + (isArchived ? 'false' : 'true') + '">' +
+          '<button type="button" data-temp-file="' + file.id + '"' + (isArchived ? ' data-temp-archived="1"' : '') + ' class="temp-req-item ' + active + aiDot + '" draggable="' + (isArchived ? 'false' : 'true') + '">' +
             '<div class="temp-req-line">' +
               '<span class="name" title="' + escapeHtml(file && file.name ? file.name : '测试用例') + '"><span class="name-text">' + escapeHtml(file && file.name ? file.name : '测试用例') + '</span></span>' +
             '</div>' +
@@ -2522,6 +2570,7 @@
                   focusSet: focusSet,
                   activeId: state.tempExecActiveId,
                   hideRemove: true,
+                  showAiDot: true,
                 });
               }).join('');
               return (
@@ -2729,6 +2778,7 @@
                 return renderTempExecItemRow(file, {
                   focusSet: focusSet,
                   activeId: state.tempExecActiveId,
+                  showAiDot: true,
                 });
               }).join('')
             : '<span class="hint">暂无用例</span>';
@@ -3222,6 +3272,7 @@
             '<input class="temp-search-input" data-temp-search-input="' + file.id + '" value="' + escapeHtml(searchRaw) + '" placeholder="搜索用例关键字">' +
           '</div>' +
           '<div class="toolbar-block toolbar-middle">' +
+            '<div class="toolbar-ai-slot" id="tempExecAiGenSlot"></div>' +
             '<div class="toolbar-change-slot" id="tempExecCaseLibraryChangeSlot"></div>' +
             navHtml +
             '<div class="toolbar-archive-wrap">' + archiveHtml + '</div>' +
@@ -3887,8 +3938,9 @@
         .filter(Boolean);
       var html = focusList.length
         ? focusList.map(function(file) {
+            var aiDot = shouldShowTempExecAiGenFocusBadge(file && file.id ? file.id : '') ? ' case-library-ai-gen-dot' : '';
             return (
-              '<button type="button" draggable="true" data-temp-file="' + file.id + '" class="' + (state.tempExecActiveId === file.id ? 'active' : '') + '">' +
+              '<button type="button" draggable="true" data-temp-file="' + file.id + '" class="' + (state.tempExecActiveId === file.id ? 'active' : '') + aiDot + '">' +
                 '<span class="tag tag-focus">专注</span>' +
                 '<span>' + escapeHtml(file && file.name ? file.name : '测试用例') + '（' + getTempExecFileCaseCount(file) + '）</span>' +
                 '<span class="remove" title="移出专注区" data-temp-focus-remove="' + file.id + '">×</span>' +
@@ -3998,6 +4050,7 @@
                     return renderTempExecItemRow(file, {
                       focusSet: focusSet,
                       activeId: state.tempExecActiveId,
+                      showAiDot: true,
                     });
                   }).join('') +
                 '</div>' +
@@ -7350,6 +7403,7 @@
       renderTempExecView();
       renderTempVersionGrid();
       renderTempFocusZone();
+      notifyTempExecActiveChange(state.tempExecActiveId);
     }
 
     async function importTempExecFiles(fileList) {
@@ -8364,6 +8418,15 @@
       return { imported: importedExecSetIds.length, failed: failures, duplicates: duplicates, imported_names: importedNames, mode: 'db' };
     }
 
+    function notifyTempExecActiveChange(fileId) {
+      if (!state || typeof state.onTempExecActiveChange !== 'function') return;
+      try {
+        state.onTempExecActiveChange(fileId);
+      } catch (err) {
+        // ignore
+      }
+    }
+
     function setTempExecActive(fileId) {
       if (fileId && getTempExecFile(fileId)) {
         state.tempExecActiveId = fileId;
@@ -8393,6 +8456,7 @@
       renderTempExecView();
       renderTempVersionGrid();
       renderTempFocusZone();
+      notifyTempExecActiveChange(state.tempExecActiveId);
     }
 
     function updateTempExecResult(fileId, index, value) {
@@ -8756,6 +8820,95 @@
         setStatus(tempExecStatus, '已插入空用例', 'ok');
         startTempExecUndoTimer('已插入空用例', { anchorRect: anchorRect });
       }
+    }
+
+    function normalizeTempExecModuleName(value) {
+      if (value === null || value === undefined) return '';
+      return String(value || '').trim().toLowerCase();
+    }
+
+    function resolveTempExecAppendIndex(list, moduleName) {
+      var items = Array.isArray(list) ? list : [];
+      if (!moduleName) return items.length;
+      var key = normalizeTempExecModuleName(moduleName);
+      if (!key) return items.length;
+      var lastIndex = -1;
+      for (var i = 0; i < items.length; i += 1) {
+        var item = items[i];
+        var mod = normalizeTempExecModuleName(item && item.module ? item.module : '');
+        if (mod && mod === key) lastIndex = i;
+      }
+      return lastIndex >= 0 ? lastIndex + 1 : items.length;
+    }
+
+    function appendTempExecAiCases(fileId, cases, anchorEl) {
+      var file = getTempExecFile(fileId);
+      if (!file || !Array.isArray(file.cases)) return { ok: false, reason: 'no-file' };
+      var list = Array.isArray(cases) ? cases : [];
+      if (!list.length) return { ok: false, reason: 'empty' };
+      var anchorRect = captureTempExecAnchorRect(anchorEl);
+      if (tempExecUndoTimer) {
+        if (tempExecStatus) {
+          setStatus(tempExecStatus, '当前有待确认的增删操作，请先撤回或等待入库', 'warn');
+        }
+        if (anchorRect) {
+          showTempExecBlockHint(anchorRect, '当前有待确认的增删操作，请先撤回或等待入库');
+        }
+        return { ok: false, reason: 'pending' };
+      }
+      var count = 0;
+      list.forEach(function(raw) {
+        if (!raw || typeof raw !== 'object') return;
+        var moduleName = stringifyCaseField(raw.module || '');
+        var title = stringifyCaseField(raw.title || '');
+        var priority = stringifyCaseField(raw.priority || '');
+        var preconditions = stringifyCaseField(raw.preconditions || raw.precondition || '');
+        var steps = stringifyCaseField(raw.steps || '');
+        var expected = stringifyCaseField(raw.expected || '');
+        var remark = stringifyCaseField(raw.remark || '');
+        moduleName = moduleName.trim();
+        title = title.trim();
+        priority = priority.trim();
+        preconditions = preconditions.trim();
+        steps = steps.trim();
+        expected = expected.trim();
+        remark = remark.trim();
+        if (!moduleName || !title || !expected) return;
+        if (!priority) priority = 'P1';
+        var reuseDetails = buildReuseDetailsFromPresets(file);
+        var fresh = {
+          module: moduleName,
+          title: title,
+          priority: priority,
+          preconditions: preconditions,
+          steps: steps,
+          expected: expected,
+          actual: file.reuseEnabled ? resolveReuseAggregateStatus(reuseDetails) : '未执行',
+          remark: remark,
+          reuseDetails: reuseDetails,
+          defectLinks: [],
+        };
+        ensureTempExecNewAddedUiKey(fresh);
+        if (isDbMode()) {
+          fresh._tempId = generateTempExecId();
+          fresh.pendingCreate = true;
+        }
+        var insertAt = resolveTempExecAppendIndex(file.cases, moduleName);
+        file.cases.splice(insertAt, 0, fresh);
+        markTempExecNewAdded(fileId, fresh);
+        pushTempExecUndo({ type: 'insert', fileId: fileId, index: insertAt, tempId: fresh._tempId || '' });
+        count += 1;
+      });
+      if (!count) return { ok: false, reason: 'empty' };
+      clearTempExecCaseStates(fileId);
+      persistTempExecState();
+      renderTempExecView();
+      if (tempExecStatus) {
+        var msg = '已追加用例 ' + count + ' 条';
+        setStatus(tempExecStatus, msg, 'ok');
+        startTempExecUndoTimer(msg, { anchorRect: anchorRect });
+      }
+      return { ok: true, count: count };
     }
 
     function removeTempExecCase(fileId, index, anchorEl) {
@@ -9177,6 +9330,15 @@
       scheduleTempExecUiSave();
     }
 
+    function notifyTempExecFocusChange() {
+      if (!state || typeof state.onTempExecFocusChange !== 'function') return;
+      try {
+        state.onTempExecFocusChange();
+      } catch (err) {
+        // ignore
+      }
+    }
+
     function syncTempExecFocus(skipSave) {
       var valid = state.tempExecFocus.filter(function(id) { return Boolean(getTempExecFile(id)); });
       if (valid.length !== state.tempExecFocus.length) {
@@ -9185,6 +9347,7 @@
       } else if (!skipSave) {
         saveTempExecFocus();
       }
+      notifyTempExecFocusChange();
     }
 
     function addTempExecFocus(fileId) {
@@ -9201,6 +9364,7 @@
         renderTempVersionGrid();
       }
       renderTempFocusZone();
+      notifyTempExecFocusChange();
     }
 
     function insertTempExecFocus(fileId, insertIndex) {
@@ -9222,6 +9386,7 @@
         renderTempVersionGrid();
         renderTempFocusZone();
       }
+      notifyTempExecFocusChange();
     }
 
     function removeTempExecFocus(fileId, requireConfirm) {
@@ -9239,6 +9404,7 @@
       renderTempExecNav();
       renderTempVersionGrid();
       renderTempFocusZone();
+      notifyTempExecFocusChange();
     }
 
     function buildTempExecPagination(file, totalCases, pageIndex, totalPages, start, end) {
@@ -10131,6 +10297,7 @@
       startTempExecUndoTimer: startTempExecUndoTimer,
       showTempExecBlockHint: showTempExecBlockHint,
       insertTempExecCase: insertTempExecCase,
+      appendTempExecAiCases: appendTempExecAiCases,
       removeTempExecCase: removeTempExecCase,
       updateTempExecCaseField: updateTempExecCaseField,
       toggleTempExecSelection: toggleTempExecSelection,

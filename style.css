@@ -2300,6 +2300,13 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   justify-self: center;
   flex-wrap: wrap;
 }
+.temp-exec-toolbar .toolbar-actions .toolbar-middle .toolbar-ai-slot {
+  display: inline-flex;
+  align-items: center;
+}
+.temp-exec-toolbar .temp-exec-ai-gen-btn {
+  margin-left: 0;
+}
 .temp-exec-toolbar .toolbar-actions .toolbar-export {
   justify-self: end;
   flex-wrap: wrap;

@@ -3855,3 +3855,19 @@
 - 更新记录：2026-01-17 用例切换期间 AI 用例生成不中断（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_ai_gen.spec.js`）。
 - 更新记录：2026-01-17 修复 AI 用例生成红点在用户信息未就绪时读取异常（`scripts/modules/caseLibrary.js`）。
 - 更新记录：2026-01-17 生成完成且当前正在查看用例时不再展示查看&编辑红点（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_ai_gen.spec.js`）。
+
+- 功能名称：执行页 AI 用例生成与红点提示
+- 功能描述：执行页搜索框右侧新增 AI 用例生成按钮，支持需求导入、用例生成、覆盖率展示与追加；生成完成后红点提示联动专注区/执行分配入口，跨用例切换不中断。
+- 操作方式：执行视图点击“AI 用例生成”，导入/粘贴需求后生成用例并勾选追加；生成完成后根据专注区/执行分配入口提示红点，点击对应入口或用例清除红点。
+- 使用效果：按覆盖度生成补充用例并追加到执行集，未读结果以红点提示且刷新后保持。
+- 新增内容/接口/组件：
+  - 前端：执行页 AI 生成按钮与抽屉、红点联动逻辑（`case-exec.html`、`style.css`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`）。
+  - 测试：新增执行页 AI 生成 UI 用例与执行集追加 API 用例（`tests/ui/tempexec_ai_gen.spec.js`、`tests/api/exec_ai_append.spec.js`）。
+- 测试与验证：
+  - `node --check scripts/core/tempexecCore.js scripts/modules/tempexec.js`
+  - `npx playwright test tests/ui/tempexec_ai_gen.spec.js`
+  - `npx playwright test tests/api/exec_ai_append.spec.js`
+- 更新记录：2026-01-17 执行页 AI 用例生成与红点提示（`case-exec.html`、`style.css`、`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_ai_gen.spec.js`、`tests/api/exec_ai_append.spec.js`）。
+- 更新记录：2026-01-17 执行页 AI 用例生成跨页面不中断（`scripts/modules/app.js`、`tests/ui/tempexec_ai_gen.spec.js`）。
+- 更新记录：2026-01-17 执行页 AI 用例生成按钮可点状态与生成视图对齐用例库（`case-exec.html`、`scripts/modules/tempexec.js`）。
+- 更新记录：2026-01-17 执行页 AI 用例生成刷新后按钮状态同步与续跑（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_ai_gen.spec.js`）。

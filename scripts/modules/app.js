@@ -1022,7 +1022,7 @@
       }
 
       function resumeTasks(options) {
-        ['case-library'].forEach(function(scene) {
+        ['case-library', 'temp-exec'].forEach(function(scene) {
           var task = readTask(scene);
           if (task && task.status === 'running') {
             startTask(scene, task, options);
