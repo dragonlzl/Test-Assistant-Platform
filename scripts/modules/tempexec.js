@@ -1688,9 +1688,17 @@
         if (!res || res.ok !== true) return;
         var result = api.appendTempExecAiCases(fileId, selectedCases, anchorEl);
         if (!result || result.ok !== true) return;
+        var count = Number.isFinite(Number(result.count)) ? Number(result.count) : selectedCases.length;
         ai.selection = new Set();
         renderTempExecAiGenResult();
         syncTempExecAiGenSelectionHint(0);
+        if (count > 0) {
+          if (utils && typeof utils.showCenterToast === 'function') {
+            utils.showCenterToast('追加 ' + count + '条 用例成功！', 'ok', 3000);
+          } else if (typeof showTempExecCenterToast === 'function') {
+            showTempExecCenterToast('追加 ' + count + '条 用例成功！', 'ok');
+          }
+        }
       });
     }
     function showTempExecArchiveSuccessToast() {

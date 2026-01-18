@@ -469,6 +469,7 @@ test.describe('用例库 AI 用例生成', () => {
     await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
     await expect(page.locator('#appConfirmDrawerMessage')).toContainText('确定追加');
     await page.click('#appConfirmDrawerConfirmBtn');
+    await expect(page.locator('.temp-center-toast')).toContainText('追加 2条 用例成功！');
 
     await expect(page.locator('#caseLibraryEditView')).toContainText('支付成功');
     await expect(page.locator('#caseLibraryEditView')).toContainText('登录失败-密码错误');

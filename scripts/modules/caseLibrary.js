@@ -9804,6 +9804,7 @@
       syncCaseLibraryAiGenSelectionHint(0);
       var anchorRect = captureCaseLibraryAnchorRect(anchorEl);
       startPendingToast('已追加用例 ' + keys.length + ' 条，超时将自动入库', { anchorRect: anchorRect });
+      showCenterToast('追加 ' + keys.length + '条 用例成功！', 'ok', 3000);
     });
   }
 
