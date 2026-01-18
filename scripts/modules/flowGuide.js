@@ -2032,6 +2032,14 @@
               dimOpacity: 0.55,
             },
             {
+              id: 'casesgen-store-new',
+              tab: 'casesgen',
+              target: '#caseGenStoreNewBtn',
+              tip: '选择入库方式后点击这里，将勾选用例作为新用例写入用例库（可按设置转到执行）。点击此处进入下一步引导。',
+              proxy: true,
+              dimOpacity: 0.55,
+            },
+            {
               id: 'casesgen-store-append',
               tab: 'casesgen',
               target: '#caseGenStoreAppendBtn',

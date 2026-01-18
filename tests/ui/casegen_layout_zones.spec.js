@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  await page.goto(base + '/index.html');
+  await page.goto(base + '/index.html?_=' + Date.now().toString(36));
   await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
   return base;
 }
@@ -56,6 +56,18 @@ test.describe('用例生成-页面分区', () => {
     });
     expect(order).toEqual(['general', 'store', 'modules']);
 
+    const storeLayout = await page.evaluate(() => {
+      const container = document.querySelector('[data-casegen-zone="store"] .casegen-store-actions');
+      if (!container) return null;
+      return {
+        flexDirection: window.getComputedStyle(container).flexDirection,
+        rowCount: container.querySelectorAll('.casegen-store-row').length,
+      };
+    });
+    expect(storeLayout).not.toBeNull();
+    expect(storeLayout.flexDirection).toBe('column');
+    expect(storeLayout.rowCount).toBe(3);
+
     await expect(page.locator('[data-casegen-zone="general"] #exportCaseGen')).toBeVisible();
     await expect(page.locator('[data-casegen-zone="general"] #exportCaseGenXmind')).toBeVisible();
     await expect(page.locator('[data-casegen-zone="general"] #toSplitFromCaseGen')).toBeVisible();
@@ -67,4 +79,3 @@ test.describe('用例生成-页面分区', () => {
     await expect(page.locator('[data-casegen-zone="modules"] #casesGenerationContainer')).toBeVisible();
   });
 });
-

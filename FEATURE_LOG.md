@@ -19,6 +19,21 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例生成入库操作区顺序调整
+- 功能描述：AI 功能“用例生成”页面的入库操作区改为纵向排列，依次展示全模块用例视图、新用例入库、旧用例追加入库，并同步引导文案。
+- 操作方式：在用例生成页从上到下依次使用“全模块用例视图”勾选用例，选择入库方式后点击“新用例入库”，需要追加时点击“旧用例追加入库”。
+- 使用效果：入库操作顺序更直观，操作区层级更清晰，降低误操作。
+- 新增内容/接口/组件：
+  - 前端：入库操作区布局与引导文案调整，补齐差异对比抽屉与外部调用（`index.html`、`ai-workflow.html`、`style.css`、`scripts/modules/pageGuide.js`、`scripts/modules/caseLibrary.js`）。
+  - 测试：更新用例生成布局与引导 UI 用例（`tests/ui/casegen_layout_zones.spec.js`、`tests/ui/casegen_db_store.spec.js`）。
+- 复用说明：复用现有入库按钮与引导抽屉结构，仅调整展示顺序与布局样式。
+- 测试与验证：
+  - `node --check scripts/modules/pageGuide.js scripts/modules/caseLibrary.js`
+  - `python3 -m http.server 8090`
+  - `npx playwright test tests/ui/casegen_layout_zones.spec.js tests/ui/casegen_db_store.spec.js`
+- 更新记录：2026-01-18 用例生成入库操作区顺序调整（`index.html`、`ai-workflow.html`、`style.css`、`scripts/modules/pageGuide.js`、`scripts/modules/caseLibrary.js`、`tests/ui/casegen_layout_zones.spec.js`、`tests/ui/casegen_db_store.spec.js`）。
+- 更新记录：2026-01-18 补充用例生成引导的新用例入库按钮步骤（`scripts/modules/flowGuide.js`）。
+
 - 功能名称：用例库 AI 用例生成
 - 功能描述：用例库查看&编辑视图新增 AI 用例生成按钮，支持需求导入/粘贴、覆盖度阈值控制、全局生成任务与结果追加。
 - 操作方式：用例库 → 查看&编辑 → 点击“AI 用例生成” → 导入需求/填写需求 → 生成用例 → 勾选/全选 → 确认追加。

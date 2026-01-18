@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  await page.goto(base + '/index.html');
+  await page.goto(base + '/index.html?_=' + Date.now().toString(36));
   await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
   return base;
 }
@@ -195,6 +195,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await expect(guide).toContainText('补全生成');
     await expect(guide).toContainText('全模块直接生成');
     await expect(guide).toContainText('全模块补全生成');
+    await expect(guide).toContainText('入库操作区从上到下');
     await expect(guide).toContainText('生成规则与区别');
   });
 

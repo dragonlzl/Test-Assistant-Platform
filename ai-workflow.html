@@ -885,17 +885,23 @@
         <div class="casegen-zone-title">入库操作区</div>
         <div class="hint" style="margin:0;">新用例入库 / 旧用例追加入库</div>
       </div>
-      <div class="actions casegen-zone-actions">
-        <button class="pill accent" id="caseGenAllViewBtn" type="button">全模块用例视图</button>
-        <span class="hint" style="margin:0;" id="caseGenStoreActionHint">在【全模块用例视图】中勾选用例</span>
-        <span class="hint" style="margin:0;">新用例入库后</span>
-        <select id="caseGenStoreActionSelect" class="casegen-store-action-select">
-          <option value="">请选择</option>
-          <option value="store">直接入库</option>
-          <option value="store_to_exec">入库并转到执行</option>
-        </select>
-        <button class="pill primary" disabled id="caseGenStoreNewBtn">新用例入库</button>
-        <button class="pill secondary" disabled id="caseGenStoreAppendBtn">旧用例追加入库</button>
+      <div class="actions casegen-zone-actions casegen-store-actions">
+        <div class="casegen-store-row">
+          <button class="pill accent" id="caseGenAllViewBtn" type="button">全模块用例视图</button>
+          <span class="hint" style="margin:0;" id="caseGenStoreActionHint">在【全模块用例视图】中勾选用例</span>
+        </div>
+        <div class="casegen-store-row">
+          <span class="hint" style="margin:0;">新用例入库后</span>
+          <select id="caseGenStoreActionSelect" class="casegen-store-action-select">
+            <option value="">请选择</option>
+            <option value="store">直接入库</option>
+            <option value="store_to_exec">入库并转到执行</option>
+          </select>
+          <button class="pill primary" disabled id="caseGenStoreNewBtn">新用例入库</button>
+        </div>
+        <div class="casegen-store-row">
+          <button class="pill secondary" disabled id="caseGenStoreAppendBtn">旧用例追加入库</button>
+        </div>
       </div>
       <p class="status" id="caseGenStatus"></p>
     </div>
@@ -1002,6 +1008,46 @@
 
 
 
+
+<div class="drawer" id="caseLibraryImportDiffDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryImportDiffDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseLibraryImportDiffTitle">同名用例差异对比</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryImportDiffDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">同一列表展示导入与库中差异：绿色表示新增，红色表示差异或将被覆盖/移除。</p>
+      <p class="status" id="caseLibraryImportDiffStatus"></p>
+      <div class="case-library-diff-head">
+        <p class="hint" id="caseLibraryImportDiffMeta"></p>
+      </div>
+      <div class="diff-locate-bar" id="caseLibraryImportDiffLocateBar"></div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table diff-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>模块</th>
+              <th>用例标题</th>
+              <th>优先级</th>
+              <th>前提条件</th>
+              <th>操作步骤</th>
+              <th>预期结果</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryImportDiffBody">
+            <tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="primary" id="caseLibraryImportDiffOverwriteBtn" type="button">确认覆盖导入</button>
+        <button class="ghost-btn" data-drawer-close="caseLibraryImportDiffDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="drawer" id="caseLibraryImportSelectDrawer">
   <div class="drawer-mask" data-drawer-close="caseLibraryImportSelectDrawer"></div>

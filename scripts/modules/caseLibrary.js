@@ -16475,6 +16475,7 @@
   function initDrawerOnly() {
     var hasSelectDrawer = Boolean(document.getElementById('caseLibrarySelectExecDrawer'));
     var hasImportSelectDrawer = Boolean(document.getElementById('caseLibraryImportSelectDrawer'));
+    var hasImportDiffDrawer = Boolean(document.getElementById('caseLibraryImportDiffDrawer'));
     if (!hasSelectDrawer && !hasImportSelectDrawer) return false;
 
     if (hasSelectDrawer) {
@@ -16493,6 +16494,34 @@
         });
       }, handleImportSelectDrawerClose);
     }
+    if (hasImportDiffDrawer) {
+      importDiffDrawerInstance = ensureDrawer(
+        'caseLibraryImportDiffDrawer',
+        [],
+        function() {
+          // noop
+        },
+        function() {
+          if (importDiffDrawerOpenTimer) {
+            clearTimeout(importDiffDrawerOpenTimer);
+            importDiffDrawerOpenTimer = 0;
+          }
+          var external = state.importDiff && state.importDiff.external ? state.importDiff.external : null;
+          if (external && typeof external.resolve === 'function') {
+            state.importDiff.external = null;
+            try {
+              external.resolve({ ok: false, reason: 'closed' });
+            } catch (e) {
+              // ignore
+            }
+          }
+          state.importDiff.mode = 'import';
+          state.importDiff.caseFileId = null;
+          state.importDiff.confirming = false;
+          if (dom.importDiffOverwriteBtn) dom.importDiffOverwriteBtn.textContent = '确认覆盖导入';
+        }
+      );
+    }
 
     bindEvents();
     window.app = window.app || {};
@@ -16503,6 +16532,10 @@
     window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
     if (hasImportSelectDrawer) {
       window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
+    }
+    if (hasImportDiffDrawer) {
+      window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
+      window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;
     }
     return true;
   }

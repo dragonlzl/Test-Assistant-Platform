@@ -3253,6 +3253,18 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 .casegen-zone-actions {
   margin: 0;
 }
+.casegen-store-actions {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.casegen-store-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+}
 .casegen-zone .status {
   margin: 10px 0 0;
 }

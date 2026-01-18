@@ -307,8 +307,9 @@
         + '<ol class="page-guide-steps">'
         + '<li>从“测试模块拆分”或“缺失模块视图”进入时，会自动带入模块列表。</li>'
         + '<li>在模块卡片中点击 <span class="page-guide-button">【生成用例】</span> 或补全按钮，等待模型生成。</li>'
-        + '<li>在模块内勾选用例，或点击 <span class="page-guide-button">【全模块用例视图】</span> 集中查看与勾选。</li>'
-        + '<li>选择入库方式（直接入库 / 入库并转到执行），点击 <span class="page-guide-button">【新用例入库】</span> 或 <span class="page-guide-button">【旧用例追加入库】</span> 完成入库。</li>'
+        + '<li>入库操作区从上到下：先点击 <span class="page-guide-button">【全模块用例视图】</span> 集中查看并勾选用例。</li>'
+        + '<li>在“新用例入库”区选择入库方式（直接入库 / 入库并转到执行），点击 <span class="page-guide-button">【新用例入库】</span> 完成入库。</li>'
+        + '<li>需要追加到旧用例时，使用下方 <span class="page-guide-button">【旧用例追加入库】</span>。</li>'
         + '<li>可按需导出 TXT / XMind 文件用于外部共享。</li>'
         + '</ol>';
       var rules = ''
