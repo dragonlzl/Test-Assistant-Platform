@@ -7614,6 +7614,10 @@ tr.import-invalid-locate-active td {
   width: 140px;
 }
 
+.case-library-ai-gen-table td.ai-gen-appended-cell {
+  background: #dcfce7;
+}
+
 .case-library-search-group {
   display: flex;
   flex-wrap: wrap;
@@ -8861,6 +8865,9 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .case-library-ai-gen-table th::after,
 :root[data-theme="dark"] .case-library-ai-gen-table td::after {
   background: var(--border);
+}
+:root[data-theme="dark"] .case-library-ai-gen-table td.ai-gen-appended-cell {
+  background: #1f3a27;
 }
 :root[data-theme="dark"] .case-library-ai-gen-dot::after {
   box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.9);

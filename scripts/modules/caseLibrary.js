@@ -8835,6 +8835,7 @@
   }
 
   var caseLibraryAiGenBadgePersistKey = 'tap-case-library-ai-gen-badges';
+  var caseLibraryAiGenAppendPersistKey = 'tap-case-library-ai-gen-appended';
 
   function readCaseLibraryAiGenBadgePersistedState() {
     if (typeof localStorage === 'undefined') return null;
@@ -8890,6 +8891,120 @@
     }
     if (!store.files || typeof store.files !== 'object') store.files = {};
     return store;
+  }
+
+  function readCaseLibraryAiGenAppendPersistedState() {
+    if (typeof localStorage === 'undefined') return null;
+    try {
+      var raw = localStorage.getItem(caseLibraryAiGenAppendPersistKey);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function writeCaseLibraryAiGenAppendPersistedState(payload) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      if (!payload) {
+        localStorage.removeItem(caseLibraryAiGenAppendPersistKey);
+        return;
+      }
+      localStorage.setItem(caseLibraryAiGenAppendPersistKey, JSON.stringify(payload));
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function ensureCaseLibraryAiGenAppendState() {
+    var userId = getCurrentUserId();
+    var store = state.aiGenAppend;
+    if (!userId) {
+      if (store && store.files && typeof store.files === 'object') return store;
+      var persisted = readCaseLibraryAiGenAppendPersistedState();
+      if (persisted && persisted.files && typeof persisted.files === 'object') {
+        state.aiGenAppend = persisted;
+        return persisted;
+      }
+      if (!store || typeof store !== 'object') {
+        store = { user_id: '', files: {}, updated_at: Date.now() };
+      }
+      state.aiGenAppend = store;
+      if (!store.files || typeof store.files !== 'object') store.files = {};
+      return store;
+    }
+    if (!store || String(store.user_id || '') !== String(userId || '')) {
+      var persistedUser = readCaseLibraryAiGenAppendPersistedState();
+      if (persistedUser && String(persistedUser.user_id || '') === String(userId || '')) {
+        store = persistedUser;
+      } else {
+        store = { user_id: userId || '', files: {}, updated_at: Date.now() };
+      }
+      state.aiGenAppend = store;
+    }
+    if (!store.files || typeof store.files !== 'object') store.files = {};
+    return store;
+  }
+
+  function getCaseLibraryAiGenAppendRecord(fileId, create) {
+    if (!fileId) return null;
+    var store = ensureCaseLibraryAiGenAppendState();
+    var key = String(fileId || '');
+    var record = store.files ? store.files[key] : null;
+    if (!record && create) {
+      record = { token: '', appended: {}, updated_at: Date.now() };
+      if (!store.files || typeof store.files !== 'object') store.files = {};
+      store.files[key] = record;
+      store.updated_at = Date.now();
+      writeCaseLibraryAiGenAppendPersistedState(store);
+    }
+    if (record && (!record.appended || typeof record.appended !== 'object')) record.appended = {};
+    return record;
+  }
+
+  function resetCaseLibraryAiGenAppendRecord(fileId, token) {
+    if (!fileId || !token) return null;
+    var store = ensureCaseLibraryAiGenAppendState();
+    var key = String(fileId || '');
+    var nextToken = String(token || '');
+    var record = store.files ? store.files[key] : null;
+    if (!record || String(record.token || '') !== nextToken) {
+      record = { token: nextToken, appended: {}, updated_at: Date.now() };
+      if (!store.files || typeof store.files !== 'object') store.files = {};
+      store.files[key] = record;
+      store.updated_at = Date.now();
+      writeCaseLibraryAiGenAppendPersistedState(store);
+      return record;
+    }
+    if (!record.appended || typeof record.appended !== 'object') record.appended = {};
+    return record;
+  }
+
+  function getCaseLibraryAiGenAppendMap(fileId, token) {
+    if (!fileId || !token) return {};
+    var record = getCaseLibraryAiGenAppendRecord(fileId, false);
+    if (!record || String(record.token || '') !== String(token || '')) return {};
+    if (!record.appended || typeof record.appended !== 'object') record.appended = {};
+    return record.appended;
+  }
+
+  function markCaseLibraryAiGenAppendKeys(fileId, token, keys) {
+    if (!fileId || !token) return;
+    var store = ensureCaseLibraryAiGenAppendState();
+    var record = resetCaseLibraryAiGenAppendRecord(fileId, token);
+    if (!record) return;
+    var appended = record.appended || {};
+    (Array.isArray(keys) ? keys : []).forEach(function(key) {
+      if (!key) return;
+      appended[key] = true;
+    });
+    record.appended = appended;
+    record.updated_at = Date.now();
+    store.updated_at = Date.now();
+    writeCaseLibraryAiGenAppendPersistedState(store);
   }
 
   function getCaseLibraryAiGenBadgeRecord(fileId, create) {
@@ -9144,6 +9259,7 @@
         var key = buildCaseItemKey(normalized);
         if (key && (existingMap[key] || seen[key])) return;
         if (key) seen[key] = true;
+        if (key) normalized.__aiCaseKey = key;
         normalized.__aiKey = 'ai-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6);
         filtered.push(normalized);
       });
@@ -9161,6 +9277,20 @@
     return { modules: modules };
   }
 
+  function applyCaseLibraryAiGenAppendMap(modules, appendedMap) {
+    var list = Array.isArray(modules) ? modules : [];
+    var map = appendedMap && typeof appendedMap === 'object' ? appendedMap : {};
+    list.forEach(function(mod) {
+      var cases = Array.isArray(mod.cases) ? mod.cases : [];
+      cases.forEach(function(item) {
+        if (!item || typeof item !== 'object') return;
+        var key = item.__aiCaseKey || buildCaseItemKey(item);
+        if (key) item.__aiCaseKey = key;
+        item.__aiAppended = Boolean(key && map[key]);
+      });
+    });
+  }
+
   function renderCaseLibraryAiGenResult() {
     var ai = ensureCaseLibraryAiGenState();
     if (!dom.aiGenResult || !dom.aiGenResultBody) return;
@@ -9168,12 +9298,20 @@
     var rows = [];
     var selection = ai.selection instanceof Set ? ai.selection : new Set();
     var totalCases = 0;
+    var selectableCases = 0;
     modules.forEach(function(mod) {
       var list = Array.isArray(mod.cases) ? mod.cases : [];
       if (!list.length) return;
       totalCases += list.length;
       list.forEach(function(item, idx) {
-        var checked = selection.has(item.__aiKey) ? 'checked' : '';
+        var appended = item && item.__aiAppended === true;
+        if (!appended) selectableCases += 1;
+        var checked = selection.has(item.__aiKey) && !appended ? 'checked' : '';
+        if (appended && selection.has(item.__aiKey)) selection.delete(item.__aiKey);
+        var appendedClass = appended ? ' ai-gen-appended-cell' : '';
+        var appendedAttr = appended ? ' class="ai-gen-appended-cell"' : '';
+        var appendedData = appended ? ' data-ai-appended="1"' : '';
+        var disabledAttr = appended ? ' disabled' : '';
         var coverageText = mod.missing ? '缺失' : (isFinite(Number(mod.coverage)) ? String(Math.round(Number(mod.coverage))) + '%' : '--');
         var coverageCell = '';
         var moduleCell = '';
@@ -9183,14 +9321,14 @@
         }
         rows.push(
           '<tr>' +
-            '<td class="check"><input type="checkbox" data-case-lib-ai-select="' + escapeHtml(item.__aiKey) + '" ' + checked + '></td>' +
+            '<td class="check' + appendedClass + '"><input type="checkbox" data-case-lib-ai-select="' + escapeHtml(item.__aiKey) + '"' + appendedData + disabledAttr + ' ' + checked + '></td>' +
             coverageCell +
             moduleCell +
-            '<td>' + escapeHtml(item.title) + '</td>' +
-            '<td>' + escapeHtml(item.priority || '') + '</td>' +
-            '<td>' + escapeHtmlPreserve(item.precondition || '') + '</td>' +
-            '<td>' + escapeHtmlPreserve(item.steps || '') + '</td>' +
-            '<td>' + escapeHtmlPreserve(item.expected || '') + '</td>' +
+            '<td' + appendedAttr + '>' + escapeHtml(item.title) + '</td>' +
+            '<td' + appendedAttr + '>' + escapeHtml(item.priority || '') + '</td>' +
+            '<td' + appendedAttr + '>' + escapeHtmlPreserve(item.precondition || '') + '</td>' +
+            '<td' + appendedAttr + '>' + escapeHtmlPreserve(item.steps || '') + '</td>' +
+            '<td' + appendedAttr + '>' + escapeHtmlPreserve(item.expected || '') + '</td>' +
           '</tr>'
         );
       });
@@ -9202,7 +9340,7 @@
       dom.aiGenResultBody.innerHTML = rows.join('');
       if (dom.aiGenResult.classList) dom.aiGenResult.classList.remove('hidden');
     }
-    syncCaseLibraryAiGenSelectionHint(totalCases);
+    syncCaseLibraryAiGenSelectionHint(selectableCases);
   }
 
   function syncCaseLibraryAiGenSelectionHint(totalCount) {
@@ -9303,7 +9441,10 @@
     var total = 0;
     modules.forEach(function(mod) {
       var list = Array.isArray(mod.cases) ? mod.cases : [];
-      total += list.length;
+      list.forEach(function(item) {
+        if (!item || item.__aiAppended === true) return;
+        total += 1;
+      });
     });
     return total;
   }
@@ -9415,6 +9556,8 @@
     if (ai.generated && task.resultRaw) {
       var existingMap = buildCaseLibraryAiGenExistingKeyMap(state.editor.items || []);
       var parsed = null;
+      var resultToken = resolveCaseLibraryAiGenResultToken(task);
+      if (resultToken) resetCaseLibraryAiGenAppendRecord(task.caseFileId, resultToken);
       try {
         parsed = parseCaseLibraryAiGenResult(task.resultRaw, existingMap);
       } catch (err) {
@@ -9429,6 +9572,9 @@
         ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
         ai.selection = new Set();
         setStatus(dom.aiGenStatus, ai.modules.length ? '生成完成' : '生成完成：未返回可追加用例', 'ok');
+        if (resultToken) {
+          applyCaseLibraryAiGenAppendMap(ai.modules, getCaseLibraryAiGenAppendMap(task.caseFileId, resultToken));
+        }
         markCaseLibraryAiGenResultReady(resolveCaseLibraryAiGenResultToken(task), task.caseFileId);
       }
       renderCaseLibraryAiGenResult();
@@ -9692,6 +9838,7 @@
     coreApi.callModelWithConfig(model, userText, prompt, reasoning, temperature)
       .then(function(content) {
         var existingMap = buildCaseLibraryAiGenExistingKeyMap(state.editor.items || []);
+        if (resultToken) resetCaseLibraryAiGenAppendRecord(ai.caseFileId, resultToken);
         var parsed = parseCaseLibraryAiGenResult(content, existingMap);
         if (parsed && parsed.error) {
           ai.error = parsed.error;
@@ -9699,6 +9846,7 @@
           ai.modules = [];
         } else {
           ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
+          if (resultToken) applyCaseLibraryAiGenAppendMap(ai.modules, getCaseLibraryAiGenAppendMap(ai.caseFileId, resultToken));
           setStatus(dom.aiGenStatus, ai.modules.length ? '生成完成' : '生成完成：未返回可追加用例', 'ok');
           genOk = true;
         }
@@ -9727,6 +9875,7 @@
       var list = Array.isArray(mod.cases) ? mod.cases : [];
       list.forEach(function(item) {
         if (!item || !item.__aiKey) return;
+        if (item.__aiAppended === true) return;
         selection.add(item.__aiKey);
         total += 1;
       });
@@ -9760,7 +9909,7 @@
     ai.modules.forEach(function(mod) {
       var list = Array.isArray(mod.cases) ? mod.cases : [];
       list.forEach(function(item) {
-        if (item && item.__aiKey && selection.has(item.__aiKey)) {
+        if (item && item.__aiKey && selection.has(item.__aiKey) && item.__aiAppended !== true) {
           selectedCases.push(item);
         }
       });
@@ -9776,6 +9925,8 @@
       if (!res || res.ok !== true) return;
       var fileId = ed.caseFile ? ed.caseFile.id : null;
       var keys = [];
+      var appendedKeys = [];
+      var appendToken = ai.resultToken || ai.runToken || ai.taskSignature || '';
       selectedCases.forEach(function(item, idx) {
         var localId = 'local-ai-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6) + '-' + idx;
         var fresh = {
@@ -9793,7 +9944,16 @@
         markCaseLibraryNewAdded(fileId, fresh);
         ed.items.push(fresh);
         keys.push(localId);
+        var caseKey = item.__aiCaseKey || buildCaseItemKey(item);
+        if (caseKey) {
+          item.__aiCaseKey = caseKey;
+          appendedKeys.push(caseKey);
+        }
+        item.__aiAppended = true;
       });
+      if (appendToken && appendedKeys.length) {
+        markCaseLibraryAiGenAppendKeys(fileId, appendToken, appendedKeys);
+      }
       ed.items = reorderItemsByExistingModuleAppend(ed.items);
       ed.selection = new Set();
       ed.remarkOpen = new Set();
@@ -15593,6 +15753,10 @@
         if (!t || !t.getAttribute) return;
         var key = t.getAttribute('data-case-lib-ai-select');
         if (!key) return;
+        if (t.getAttribute('data-ai-appended') === '1') {
+          t.checked = false;
+          return;
+        }
         var ai = ensureCaseLibraryAiGenState();
         ai.selection = ai.selection instanceof Set ? ai.selection : new Set();
         if (t.checked) ai.selection.add(key);

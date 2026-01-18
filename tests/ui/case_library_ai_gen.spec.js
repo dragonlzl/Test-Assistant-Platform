@@ -470,6 +470,10 @@ test.describe('用例库 AI 用例生成', () => {
     await expect(page.locator('#appConfirmDrawerMessage')).toContainText('确定追加');
     await page.click('#appConfirmDrawerConfirmBtn');
     await expect(page.locator('.temp-center-toast')).toContainText('追加 2条 用例成功！');
+    await expect(page.locator('#caseLibraryAiGenResultBody td.ai-gen-appended-cell').getByText('支付成功', { exact: true })).toBeVisible();
+    await expect(page.locator('#caseLibraryAiGenResultBody td.ai-gen-appended-cell').getByText('登录失败-密码错误', { exact: true })).toBeVisible();
+    await expect(page.locator('#caseLibraryAiGenResultBody td').getByText('支付成功', { exact: true }).locator('..').locator('input[data-case-lib-ai-select]')).toBeDisabled();
+    await expect(page.locator('#caseLibraryAiGenResultBody td').getByText('登录失败-密码错误', { exact: true }).locator('..').locator('input[data-case-lib-ai-select]')).toBeDisabled();
 
     await expect(page.locator('#caseLibraryEditView')).toContainText('支付成功');
     await expect(page.locator('#caseLibraryEditView')).toContainText('登录失败-密码错误');
@@ -483,6 +487,11 @@ test.describe('用例库 AI 用例生成', () => {
     await page.click(editBtnSelector);
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await expect(page.locator('#caseLibraryAiGenBtn')).not.toHaveClass(/has-badge/);
+
+    await page.click('#caseLibraryAiGenBtn');
+    await expect(page.locator('#caseLibraryAiGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryAiGenResultBody td.ai-gen-appended-cell').getByText('支付成功', { exact: true })).toBeVisible();
+    await expect(page.locator('#caseLibraryAiGenResultBody td').getByText('支付成功', { exact: true }).locator('..').locator('input[data-case-lib-ai-select]')).toBeDisabled();
   });
 
   test('生成过程中切换用例不影响生成', async ({ page }) => {

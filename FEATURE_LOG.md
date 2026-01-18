@@ -51,6 +51,8 @@
 - 更新记录：2026-01-14 AI 用例生成抽屉移除右侧需求展示区并改为下方展示（`index.html`、`case-library.html`）。
 - 更新记录：2026-01-14 AI 用例生成按钮新增生成中状态与动画（`scripts/modules/caseLibrary.js`、`style.css`）。
 - 更新记录：2026-01-18 AI 生成追加成功后新增悬浮提示（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_ai_gen.spec.js`）。
+- 更新记录：2026-01-18 AI 生成已追加用例行增加填充提示（`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/case_library_ai_gen.spec.js`）。
+- 更新记录：2026-01-18 AI 生成已追加用例行填充持久化并禁用勾选（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_ai_gen.spec.js`）。
 
 - 功能名称：执行页复用子项状态切换去抖动
 - 功能描述：用例执行页复用子项选择执行结果时，改为局部刷新状态 UI，避免整页重绘导致抖动。
@@ -3888,3 +3890,5 @@
 - 更新记录：2026-01-17 执行页 AI 用例生成按钮可点状态与生成视图对齐用例库（`case-exec.html`、`scripts/modules/tempexec.js`）。
 - 更新记录：2026-01-17 执行页 AI 用例生成刷新后按钮状态同步与续跑（`scripts/core/tempexecCore.js`、`scripts/modules/tempexec.js`、`tests/ui/tempexec_ai_gen.spec.js`）。
 - 更新记录：2026-01-18 执行页 AI 生成追加成功后新增悬浮提示（`scripts/modules/tempexec.js`、`tests/ui/tempexec_ai_gen.spec.js`）。
+- 更新记录：2026-01-18 执行页 AI 生成已追加用例行增加填充提示（`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_ai_gen.spec.js`）。
+- 更新记录：2026-01-18 执行页 AI 生成已追加用例行填充持久化并禁用勾选（`scripts/modules/tempexec.js`、`tests/ui/tempexec_ai_gen.spec.js`）。

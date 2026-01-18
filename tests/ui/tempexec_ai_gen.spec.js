@@ -183,6 +183,10 @@ test.describe('执行页 AI 用例生成', () => {
     await expect(page.locator('#appConfirmDrawerMessage')).toContainText('确定追加');
     await page.click('#appConfirmDrawerConfirmBtn');
     await expect(page.locator('.temp-center-toast')).toContainText('追加 2条 用例成功！');
+    await expect(page.locator('#tempExecAiGenResultBody td.ai-gen-appended-cell', { hasText: '支付失败-余额不足' })).toBeVisible();
+    await expect(page.locator('#tempExecAiGenResultBody td.ai-gen-appended-cell', { hasText: '登录失败-密码错误' })).toBeVisible();
+    await expect(page.locator('#tempExecAiGenResultBody td').getByText('支付失败-余额不足', { exact: true }).locator('..').locator('input[data-temp-exec-ai-select]')).toBeDisabled();
+    await expect(page.locator('#tempExecAiGenResultBody td').getByText('登录失败-密码错误', { exact: true }).locator('..').locator('input[data-temp-exec-ai-select]')).toBeDisabled();
     await expect(page.locator('#tempExecView')).toContainText('支付失败-余额不足');
     await expect(page.locator('#tempExecView')).toContainText('登录失败-密码错误');
   });

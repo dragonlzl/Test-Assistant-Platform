@@ -633,6 +633,7 @@
     }
 
     var tempExecAiGenBadgePersistKey = 'tap-temp-exec-ai-gen-badges';
+    var tempExecAiGenAppendPersistKey = 'tap-temp-exec-ai-gen-appended';
 
     function readTempExecAiGenBadgePersistedState() {
       if (typeof localStorage === 'undefined') return null;
@@ -688,6 +689,120 @@
       }
       if (!store.files || typeof store.files !== 'object') store.files = {};
       return store;
+    }
+
+    function readTempExecAiGenAppendPersistedState() {
+      if (typeof localStorage === 'undefined') return null;
+      try {
+        var raw = localStorage.getItem(tempExecAiGenAppendPersistKey);
+        if (!raw) return null;
+        var parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function writeTempExecAiGenAppendPersistedState(payload) {
+      if (typeof localStorage === 'undefined') return;
+      try {
+        if (!payload) {
+          localStorage.removeItem(tempExecAiGenAppendPersistKey);
+          return;
+        }
+        localStorage.setItem(tempExecAiGenAppendPersistKey, JSON.stringify(payload));
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function ensureTempExecAiGenAppendState() {
+      var userId = getCurrentUserId();
+      var store = state.tempExecAiGenAppend;
+      if (!userId) {
+        if (store && store.files && typeof store.files === 'object') return store;
+        var persisted = readTempExecAiGenAppendPersistedState();
+        if (persisted && persisted.files && typeof persisted.files === 'object') {
+          state.tempExecAiGenAppend = persisted;
+          return persisted;
+        }
+        if (!store || typeof store !== 'object') {
+          store = { user_id: '', files: {}, updated_at: Date.now() };
+        }
+        state.tempExecAiGenAppend = store;
+        if (!store.files || typeof store.files !== 'object') store.files = {};
+        return store;
+      }
+      if (!store || String(store.user_id || '') !== String(userId || '')) {
+        var persistedUser = readTempExecAiGenAppendPersistedState();
+        if (persistedUser && String(persistedUser.user_id || '') === String(userId || '')) {
+          store = persistedUser;
+        } else {
+          store = { user_id: userId || '', files: {}, updated_at: Date.now() };
+        }
+        state.tempExecAiGenAppend = store;
+      }
+      if (!store.files || typeof store.files !== 'object') store.files = {};
+      return store;
+    }
+
+    function getTempExecAiGenAppendRecord(fileId, create) {
+      if (!fileId) return null;
+      var store = ensureTempExecAiGenAppendState();
+      var key = String(fileId || '');
+      var record = store.files ? store.files[key] : null;
+      if (!record && create) {
+        record = { token: '', appended: {}, updated_at: Date.now() };
+        if (!store.files || typeof store.files !== 'object') store.files = {};
+        store.files[key] = record;
+        store.updated_at = Date.now();
+        writeTempExecAiGenAppendPersistedState(store);
+      }
+      if (record && (!record.appended || typeof record.appended !== 'object')) record.appended = {};
+      return record;
+    }
+
+    function resetTempExecAiGenAppendRecord(fileId, token) {
+      if (!fileId || !token) return null;
+      var store = ensureTempExecAiGenAppendState();
+      var key = String(fileId || '');
+      var nextToken = String(token || '');
+      var record = store.files ? store.files[key] : null;
+      if (!record || String(record.token || '') !== nextToken) {
+        record = { token: nextToken, appended: {}, updated_at: Date.now() };
+        if (!store.files || typeof store.files !== 'object') store.files = {};
+        store.files[key] = record;
+        store.updated_at = Date.now();
+        writeTempExecAiGenAppendPersistedState(store);
+        return record;
+      }
+      if (!record.appended || typeof record.appended !== 'object') record.appended = {};
+      return record;
+    }
+
+    function getTempExecAiGenAppendMap(fileId, token) {
+      if (!fileId || !token) return {};
+      var record = getTempExecAiGenAppendRecord(fileId, false);
+      if (!record || String(record.token || '') !== String(token || '')) return {};
+      if (!record.appended || typeof record.appended !== 'object') record.appended = {};
+      return record.appended;
+    }
+
+    function markTempExecAiGenAppendKeys(fileId, token, keys) {
+      if (!fileId || !token) return;
+      var store = ensureTempExecAiGenAppendState();
+      var record = resetTempExecAiGenAppendRecord(fileId, token);
+      if (!record) return;
+      var appended = record.appended || {};
+      (Array.isArray(keys) ? keys : []).forEach(function(key) {
+        if (!key) return;
+        appended[key] = true;
+      });
+      record.appended = appended;
+      record.updated_at = Date.now();
+      store.updated_at = Date.now();
+      writeTempExecAiGenAppendPersistedState(store);
     }
 
     function getTempExecAiGenBadgeRecord(fileId, create) {
@@ -978,6 +1093,7 @@
           var key = buildTempExecAiGenCaseKey(normalized);
           if (key && (existingMap[key] || seen[key])) return;
           if (key) seen[key] = true;
+          if (key) normalized.__aiCaseKey = key;
           normalized.__aiKey = 'ai-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6);
           filtered.push(normalized);
         });
@@ -995,6 +1111,20 @@
       return { modules: modules };
     }
 
+    function applyTempExecAiGenAppendMap(modules, appendedMap) {
+      var list = Array.isArray(modules) ? modules : [];
+      var map = appendedMap && typeof appendedMap === 'object' ? appendedMap : {};
+      list.forEach(function(mod) {
+        var cases = Array.isArray(mod.cases) ? mod.cases : [];
+        cases.forEach(function(item) {
+          if (!item || typeof item !== 'object') return;
+          var key = item.__aiCaseKey || buildTempExecAiGenCaseKey(item);
+          if (key) item.__aiCaseKey = key;
+          item.__aiAppended = Boolean(key && map[key]);
+        });
+      });
+    }
+
     function renderTempExecAiGenResult() {
       var ai = ensureTempExecAiGenState();
       if (!tempExecAiGenResult || !tempExecAiGenResultBody) return;
@@ -1002,12 +1132,20 @@
       var rows = [];
       var selection = ai.selection instanceof Set ? ai.selection : new Set();
       var totalCases = 0;
+      var selectableCases = 0;
       modules.forEach(function(mod) {
         var list = Array.isArray(mod.cases) ? mod.cases : [];
         if (!list.length) return;
         totalCases += list.length;
         list.forEach(function(item, idx) {
-          var checked = selection.has(item.__aiKey) ? 'checked' : '';
+          var appended = item && item.__aiAppended === true;
+          if (!appended) selectableCases += 1;
+          var checked = selection.has(item.__aiKey) && !appended ? 'checked' : '';
+          if (appended && selection.has(item.__aiKey)) selection.delete(item.__aiKey);
+          var appendedClass = appended ? ' ai-gen-appended-cell' : '';
+          var appendedAttr = appended ? ' class="ai-gen-appended-cell"' : '';
+          var appendedData = appended ? ' data-ai-appended="1"' : '';
+          var disabledAttr = appended ? ' disabled' : '';
           var coverageText = mod.missing ? '缺失' : (isFinite(Number(mod.coverage)) ? String(Math.round(Number(mod.coverage))) + '%' : '--');
           var coverageCell = '';
           var moduleCell = '';
@@ -1017,14 +1155,14 @@
           }
           rows.push(
             '<tr>' +
-              '<td class="check"><input type="checkbox" data-temp-exec-ai-select="' + escapeHtml(item.__aiKey) + '" ' + checked + '></td>' +
+              '<td class="check' + appendedClass + '"><input type="checkbox" data-temp-exec-ai-select="' + escapeHtml(item.__aiKey) + '"' + appendedData + disabledAttr + ' ' + checked + '></td>' +
               coverageCell +
               moduleCell +
-              '<td>' + escapeHtml(item.title) + '</td>' +
-              '<td>' + escapeHtml(item.priority || '') + '</td>' +
-              '<td>' + escapeHtmlPreserve(item.preconditions || '') + '</td>' +
-              '<td>' + escapeHtmlPreserve(item.steps || '') + '</td>' +
-              '<td>' + escapeHtmlPreserve(item.expected || '') + '</td>' +
+              '<td' + appendedAttr + '>' + escapeHtml(item.title) + '</td>' +
+              '<td' + appendedAttr + '>' + escapeHtml(item.priority || '') + '</td>' +
+              '<td' + appendedAttr + '>' + escapeHtmlPreserve(item.preconditions || '') + '</td>' +
+              '<td' + appendedAttr + '>' + escapeHtmlPreserve(item.steps || '') + '</td>' +
+              '<td' + appendedAttr + '>' + escapeHtmlPreserve(item.expected || '') + '</td>' +
             '</tr>'
           );
         });
@@ -1036,7 +1174,7 @@
         tempExecAiGenResultBody.innerHTML = rows.join('');
         if (tempExecAiGenResult.classList) tempExecAiGenResult.classList.remove('hidden');
       }
-      syncTempExecAiGenSelectionHint(totalCases);
+      syncTempExecAiGenSelectionHint(selectableCases);
     }
 
     function getTempExecAiGenTotalCount() {
@@ -1045,7 +1183,10 @@
       var total = 0;
       modules.forEach(function(mod) {
         var list = Array.isArray(mod.cases) ? mod.cases : [];
-        total += list.length;
+        list.forEach(function(item) {
+          if (!item || item.__aiAppended === true) return;
+          total += 1;
+        });
       });
       return total;
     }
@@ -1310,6 +1451,8 @@
         var file = api && typeof api.getTempExecFile === 'function' ? api.getTempExecFile(taskFileId) : null;
         var existingMap = buildTempExecAiGenExistingKeyMap(file && Array.isArray(file.cases) ? file.cases : []);
         var parsed = null;
+        var resultToken = resolveTempExecAiGenResultToken(task);
+        if (resultToken) resetTempExecAiGenAppendRecord(task.caseFileId, resultToken);
         try {
           parsed = parseTempExecAiGenResult(task.resultRaw, existingMap);
         } catch (err) {
@@ -1324,6 +1467,9 @@
           ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
           ai.selection = new Set();
           setStatus(tempExecAiGenStatus, ai.modules.length ? '生成完成' : '生成完成：未返回可追加用例', 'ok');
+          if (resultToken) {
+            applyTempExecAiGenAppendMap(ai.modules, getTempExecAiGenAppendMap(task.caseFileId, resultToken));
+          }
           markTempExecAiGenResultReady(resolveTempExecAiGenResultToken(task), task.caseFileId);
         }
         renderTempExecAiGenResult();
@@ -1607,6 +1753,7 @@
       core.callModelWithConfig(model, userText, prompt, reasoning, temperature)
         .then(function(content) {
           var existingMap = buildTempExecAiGenExistingKeyMap(currentFile.cases || []);
+          if (resultToken) resetTempExecAiGenAppendRecord(ai.caseFileId, resultToken);
           var parsed = parseTempExecAiGenResult(content, existingMap);
           if (parsed && parsed.error) {
             ai.error = parsed.error;
@@ -1614,6 +1761,7 @@
             ai.modules = [];
           } else {
             ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
+            if (resultToken) applyTempExecAiGenAppendMap(ai.modules, getTempExecAiGenAppendMap(ai.caseFileId, resultToken));
             setStatus(tempExecAiGenStatus, ai.modules.length ? '生成完成' : '生成完成：未返回可追加用例', 'ok');
             genOk = true;
           }
@@ -1642,6 +1790,7 @@
         var list = Array.isArray(mod.cases) ? mod.cases : [];
         list.forEach(function(item) {
           if (!item || !item.__aiKey) return;
+          if (item.__aiAppended === true) return;
           selection.add(item.__aiKey);
           total += 1;
         });
@@ -1672,7 +1821,7 @@
       ai.modules.forEach(function(mod) {
         var list = Array.isArray(mod.cases) ? mod.cases : [];
         list.forEach(function(item) {
-          if (item && item.__aiKey && selection.has(item.__aiKey)) {
+          if (item && item.__aiKey && selection.has(item.__aiKey) && item.__aiAppended !== true) {
             selectedCases.push(item);
           }
         });
@@ -1689,6 +1838,20 @@
         var result = api.appendTempExecAiCases(fileId, selectedCases, anchorEl);
         if (!result || result.ok !== true) return;
         var count = Number.isFinite(Number(result.count)) ? Number(result.count) : selectedCases.length;
+        var appendedKeys = [];
+        var appendToken = ai.resultToken || ai.runToken || ai.taskSignature || '';
+        selectedCases.forEach(function(item) {
+          if (!item || typeof item !== 'object') return;
+          var caseKey = item.__aiCaseKey || buildTempExecAiGenCaseKey(item);
+          if (caseKey) {
+            item.__aiCaseKey = caseKey;
+            appendedKeys.push(caseKey);
+          }
+          item.__aiAppended = true;
+        });
+        if (appendToken && appendedKeys.length) {
+          markTempExecAiGenAppendKeys(fileId, appendToken, appendedKeys);
+        }
         ai.selection = new Set();
         renderTempExecAiGenResult();
         syncTempExecAiGenSelectionHint(0);
@@ -7064,6 +7227,10 @@
         if (!t || !t.getAttribute) return;
         var key = t.getAttribute('data-temp-exec-ai-select');
         if (!key) return;
+        if (t.getAttribute('data-ai-appended') === '1') {
+          t.checked = false;
+          return;
+        }
         var ai = ensureTempExecAiGenState();
         ai.selection = ai.selection instanceof Set ? ai.selection : new Set();
         if (t.checked) ai.selection.add(key);
