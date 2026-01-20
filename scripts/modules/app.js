@@ -85,6 +85,7 @@
           defaultSettings,
           defaultPlacement,
           defaultTempExecPageSize,
+          defaultAgentExtraPrompt: appConfig.defaultAgentExtraPrompt || '评审流程可以忽略数值、美术等相关内容。',
         })
       : (window.app.state || {});
     window.app.state = state;
@@ -215,6 +216,33 @@
         }
         return null;
       }
+    };
+    const ensureWorkflowHiddenFields = function() {
+      if (typeof document === 'undefined') return;
+      var ids = [
+        'rawText',
+        'reviewResult',
+        'cleanedText',
+        'compareResult',
+        'splitResult',
+        'casesCompareResult',
+        'caseText',
+      ];
+      var missing = ids.filter(function(id) { return !document.getElementById(id); });
+      if (!missing.length) return;
+      var container = document.getElementById('workflowHiddenFields');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'workflowHiddenFields';
+        container.style.display = 'none';
+        document.body.appendChild(container);
+      }
+      missing.forEach(function(id) {
+        var el = document.createElement('textarea');
+        el.id = id;
+        el.setAttribute('data-hidden-workflow', '1');
+        container.appendChild(el);
+      });
     };
     let debugNodes;
     let switchTab = function(name) {
@@ -1332,6 +1360,24 @@
                 if (typeof persistWorkflowStateNow === 'function') persistWorkflowStateNow();
               } catch (err) {
                 var lastErrInner = typeof getLastError === 'function' ? getLastError() : null;
+                if (err && err.code === 'AGENT_STOPPED') {
+                  current.status = 'stopped';
+                  current.error = err.message || 'Agent 已停止';
+                  current.updatedAt = Date.now();
+                  current.endedAt = current.updatedAt;
+                  resetRunner(current);
+                  writeTask(current, 'stopped');
+                  return current;
+                }
+                if (err && err.code === 'AGENT_WAIT_MANUAL') {
+                  current.status = 'waiting';
+                  current.error = err.message || '等待人工处理';
+                  current.updatedAt = Date.now();
+                  current.endedAt = current.updatedAt;
+                  resetRunner(current);
+                  writeTask(current, 'waiting');
+                  return current;
+                }
                 if (shouldSuspendForNavigation(err) || shouldSuspendForNavigation(lastErrInner)) {
                   current.status = 'running';
                   current.error = '';
@@ -1401,6 +1447,10 @@
       function resumeTask(options) {
         var task = readTask();
         if (task && task.status === 'running') {
+          if (!task.context || typeof task.context !== 'object') task.context = {};
+          task.context.resumeAt = Date.now();
+          task.resumeCount = Number(task.resumeCount || 0) + 1;
+          writeTask(task, 'resume');
           startTask(task, options);
         }
       }
@@ -1492,6 +1542,7 @@
 
     ensureAutoWorkflowGhostFields();
 
+    ensureWorkflowHiddenFields();
     const domConfig = window.app.domConfig || {};
     const dom = buildDom(domConfig.ids, domConfig.alias);
     dom.tempFocusZone = dom.tempFocusBlock ? dom.tempFocusBlock.querySelector('[data-temp-focus-zone]') : null;
@@ -1870,7 +1921,9 @@
       'toggleAutoClarifyPanel',
       'handleAutoClarifyConfirm',
       'waitForAutoClarification',
+      'flushClarifyPendingRender',
       'syncReviewViewFromResult',
+      'autoFillReviewClarifications',
       'buildReviewClarificationContext',
     ]);
     const reviewModule = window.app.review && typeof window.app.review.init === 'function'
@@ -1889,6 +1942,7 @@
           updateAutoClarifyVisibility: proxyApi('updateAutoClarifyVisibility'),
           toggleAutoClarifyPanel: proxyApi('toggleAutoClarifyPanel'),
           handleAutoClarifyConfirm: proxyApi('handleAutoClarifyConfirm'),
+          flushClarifyPendingRender: proxyApi('flushClarifyPendingRender'),
         },
         dom,
       })
@@ -2007,6 +2061,7 @@
           scrollElementIntoView,
           switchTab,
           getRequirementLabel,
+          updateMissingView: proxyApi('updateMissingView'),
           getFeishuWebhookUrl,
           postFeishuMessage,
           reviewRequirements: proxyApi('reviewRequirements'),
@@ -2024,16 +2079,52 @@
           openAutoClarifyPanel: proxyApi('openAutoClarifyPanel'),
           waitForAutoClarification: proxyApi('waitForAutoClarification'),
           updateAutoClarifyVisibility: proxyApi('updateAutoClarifyVisibility'),
+          autoFillReviewClarifications: proxyApi('autoFillReviewClarifications'),
           jumpToCleanHighlightView: proxyApi('jumpToCleanHighlightView'),
           persistWorkflowState: requestPersistWorkflowState,
+          buildReviewClarificationContext: proxyApi('buildReviewClarificationContext'),
+          buildCasesComparePayload: proxyApi('buildCasesComparePayload'),
+          renderCleanView: proxyApi('renderCleanView'),
+          renderCleanRawView: proxyApi('renderCleanRawView'),
+          syncReviewViewFromResult: proxyApi('syncReviewViewFromResult'),
+          triggerMissingReminderAi: function() {
+            var hasCaseLibrary = Boolean(state && state.editor && state.editor.caseFile);
+            var hasTempExec = Boolean(state && state.tempExecActiveId);
+            if (hasCaseLibrary && window.app && window.app.caseLibraryApi) {
+              var fn = window.app.caseLibraryApi.triggerMissingReminderAiRecommend;
+              if (typeof fn === 'function') return fn();
+            }
+            if (hasTempExec && window.app && window.app.tempExecApi) {
+              var tempFn = window.app.tempExecApi.triggerTempExecMissingReminderAiRecommend;
+              if (typeof tempFn === 'function') return tempFn();
+            }
+            return false;
+          },
+          triggerCaseLibraryGen: function() {
+            var hasCaseLibrary = Boolean(state && state.editor && state.editor.caseFile);
+            if (!hasCaseLibrary) return false;
+            var apiRef = window.app && window.app.caseLibraryApi ? window.app.caseLibraryApi : null;
+            if (!apiRef || typeof apiRef.runCaseLibraryAiGen !== 'function') return false;
+            return apiRef.runCaseLibraryAiGen();
+          },
+          getAssignedModel,
+          getReasoningForType,
+          getTemperatureForType,
+          callModelWithConfig,
+          stripCodeFence,
+          extractJsonPayload,
+          ensureCaseGenModulesFromSplit: proxyApi('ensureCaseGenModulesFromSplit'),
+          generateAllCaseGenModules: proxyApi('generateAllCaseGenModules'),
         },
-        utils: { escapeHtml },
+        utils: { escapeHtml, stripCodeFence, extractJsonPayload },
+        config: { defaultPrompts },
       })
       : null;
     assignIfPresent(api, autoCoreModule, [
       'notifyFeishuWorkflowSuccess',
       'notifyFeishuCoverageFailure',
       'notifyFeishuClarificationNeeded',
+      'renderAgentPanel',
       'resetAutoMissingView',
       'refreshAutoMissingSelectionUI',
       'updateAutoMissingCard',
@@ -2057,6 +2148,7 @@
       'runAutoWorkflowFromClean',
       'continueAutoWorkflowAfterCoverage',
       'applyAutoWorkflowTaskState',
+      'stopAgentWorkflow',
     ]);
 
     const autoWorkflowManager = initAutoWorkflowManager({
@@ -2087,13 +2179,13 @@
       var maxAttempts = 40;
       function attemptResume() {
         attempts += 1;
-        if (window.app && window.app._inited === true) {
-          if (typeof loadModels === 'function') loadModels();
-          if (typeof loadAssignments === 'function') loadAssignments();
-          autoWorkflowManager.resumeTask({ force: true });
-          syncAutoWorkflowTaskState(autoWorkflowManager.getTask ? autoWorkflowManager.getTask() : null);
-          return;
-        }
+          if (window.app && window.app._inited === true) {
+            if (typeof loadModels === 'function') loadModels();
+            if (typeof loadAssignments === 'function') loadAssignments();
+            autoWorkflowManager.resumeTask({ force: true });
+            syncAutoWorkflowTaskState(autoWorkflowManager.getTask ? autoWorkflowManager.getTask() : null);
+            return;
+          }
         if (attempts < maxAttempts) {
           setTimeout(attemptResume, 200);
         }
@@ -2835,6 +2927,7 @@
       state.requirementLabel = '';
       state.requirementLabelSource = '';
       state.autoRunning = false;
+      state.autoAgentStopped = false;
       state.inProgressStep = '';
       state.inProgressSteps = {};
       state.failedSteps = {};
@@ -2860,6 +2953,16 @@
       state.autoCompareSuggestion = '';
       state.autoRequireClarifications = false;
       state.autoClarifyResolver = null;
+      state.autoClarifyDismissed = false;
+      state.autoAgentPromptHint = appConfig.defaultAgentExtraPrompt || '评审流程可以忽略数值、美术等相关内容。';
+      state.caseGenAgentPlan = [];
+      state.caseGenAgentPlanSource = '';
+      state.caseGenAgentLog = [];
+      state.caseGenAgentTrace = [];
+      state.caseGenAgentFixSuggestions = '';
+      state.caseGenAgentRetryCounters = {};
+      state.caseGenAgentCoverageRetries = 0;
+      state.caseGenAgentCoverageBelowFull = false;
       state.caseGenModules = [];
       state.caseGenSource = '';
       state.caseGenResults = {};
@@ -2871,6 +2974,8 @@
       state.importedCases = [];
       var autoCompareSuggestionInput = document.getElementById('autoCompareSuggestion');
       if (autoCompareSuggestionInput) autoCompareSuggestionInput.value = '';
+      var autoAgentPromptHintInput = document.getElementById('autoAgentPromptHint');
+      if (autoAgentPromptHintInput) autoAgentPromptHintInput.value = state.autoAgentPromptHint || '';
       if (dom.autoClarifyToggle) dom.autoClarifyToggle.checked = false;
       clearWorkflowStatuses();
       if (typeof renderImportedCaseList === 'function') renderImportedCaseList();

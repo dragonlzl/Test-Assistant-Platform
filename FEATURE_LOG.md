@@ -19,6 +19,41 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例生成 Agent 模式
+- 功能描述：新增“用例生成 Agent”模型/提示词配置与一键执行 Agent 决策流程，支持覆盖率阈值控制；关闭时保持原流程逻辑。
+- 操作方式：AI 功能 → 功能指派配置“用例生成 Agent”模型/提示词 → 设置页“用例生成 Agent”开启开关并填写覆盖率阈值 → 在“一键执行”执行流程（覆盖率不足时人工处理或忽略继续）。
+- 使用效果：一键执行由 Agent 串联评审/澄清/清洗/对比/拆分/覆盖对比/用例生成，并按阈值自动继续或等待确认。
+- 新增内容/接口/组件：
+  - 前端：Agent 模型/提示词配置、设置项与自动流程决策逻辑（`index.html`、`ai-tools.html`、`settings.html`、`config/constants.js`、`scripts/base/state.js`、`scripts/handlers/assignHandlers.js`、`scripts/modules/assign.js`、`scripts/modules/models.js`、`scripts/modules/settings.js`、`scripts/modules/app.js`、`scripts/core/autoCore.js`）。
+  - 测试：新增 Agent 设置 UI 与 API 用例（`tests/ui/settings_casegen_agent.spec.js`、`tests/api/settings_case_gen_agent.spec.js`）。
+- 复用说明：复用既有模型管理/功能指派配置、设置持久化与自动流程管理能力，仅扩展 Agent 逻辑。
+- 测试与验证：
+  - `node --check scripts/core/autoCore.js scripts/core/appRuntime.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/auto_casegen_agent.spec.js tests/ui/settings_casegen_agent.spec.js`（通过）
+  - `API_BASE_URL=http://127.0.0.1:8080 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_case_gen_agent.spec.js`（通过）
+- 更新记录：2026-01-19 用例生成 Agent 模式（`index.html`、`ai-tools.html`、`settings.html`、`config/constants.js`、`scripts/base/state.js`、`scripts/handlers/assignHandlers.js`、`scripts/modules/assign.js`、`scripts/modules/models.js`、`scripts/modules/settings.js`、`scripts/modules/app.js`、`scripts/core/autoCore.js`、`tests/ui/settings_casegen_agent.spec.js`、`tests/api/settings_case_gen_agent.spec.js`）。
+- 更新记录：2026-01-19 用例生成 Agent 增强（一键执行卡片展示计划/日志/修复建议，支持 Agent 生成/调整计划步骤并在一键执行卡片下方新增执行过程记录区域，澄清自动填充与确认后再评审/清洗，覆盖率自动重清洗与2次校验重试，补充易漏用例推荐与用例库生成触发）（`index.html`、`ai-workflow.html`、`style.css`、`settings.html`、`config/domConfig.js`、`config/constants.js`、`scripts/base/state.js`、`scripts/core/autoCore.js`、`scripts/core/reviewCore.js`、`scripts/core/appRuntime.js`、`scripts/core/tempexecCore.js`、`scripts/modules/app.js`、`scripts/modules/caseLibrary.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-19 用例生成 Agent 执行过程面板适配深浅主题（`style.css`）。
+- 更新记录：2026-01-19 覆盖率不足等待人工时允许再次打开覆盖缺失视图入口（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-19 Agent 全流程截至覆盖对比，跳过用例生成/易漏推荐/用例库生成（`config/constants.js`、`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-19 Agent 执行跨页面不中断，自动创建隐藏工作流字段并接入自动任务管理（`scripts/modules/app.js`、`scripts/core/autoCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-23 用例生成 Agent 后端任务化执行与状态轮询，刷新/切页后继续执行且避免重复创建任务，新增任务 API 与自动化用例覆盖（`backend/agent_runner.py`、`backend/routers/agent.py`、`backend/models.py`、`backend/migrations.py`、`backend/schemas.py`、`backend/api.py`、`services/apiClient.js`、`scripts/core/autoCore.js`、`scripts/base/state.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`tests/api/casegen_agent_tasks.spec.js`、`tests/api/playwright.api.config.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-20 用例生成 Agent 支持手动停止、补充后端执行日志展示、澄清抽屉关闭后不再反复弹出（`backend/agent_runner.py`、`config/domConfig.js`、`index.html`、`ai-workflow.html`、`scripts/base/state.js`、`scripts/core/autoCore.js`、`scripts/core/reviewCore.js`、`scripts/modules/auto.js`、`scripts/modules/app.js`、`tests/api/casegen_agent_tasks.spec.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-20 修复澄清抽屉关闭后被轮询重置导致再次弹出（`scripts/core/autoCore.js`、`scripts/core/reviewCore.js`）。
+- 更新记录：2026-01-20 需求重置时清理 Agent/澄清状态并避免切换澄清勾选触发弹出（`scripts/modules/app.js`、`scripts/modules/review.js`）。
+- 更新记录：2026-01-24 回滚用例生成 Agent 后端任务化执行，恢复前端本地执行并移除任务 API 与停止按钮（`backend/api.py`、`backend/models.py`、`backend/migrations.py`、`backend/schemas.py`、`backend/agent_runner.py`、`backend/routers/agent.py`、`services/apiClient.js`、`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`scripts/modules/auto.js`、`scripts/modules/review.js`、`scripts/base/state.js`、`config/domConfig.js`、`index.html`、`ai-workflow.html`、`tests/api/casegen_agent_tasks.spec.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-24 修复需求澄清输入法组合时输入被打断/失焦，复用组合输入保护逻辑（`scripts/core/reviewCore.js`、`scripts/modules/review.js`）。
+- 更新记录：2026-01-24 澄清视图重绘时保留输入焦点与选区，避免输入闪断（`scripts/core/reviewCore.js`）。
+- 更新记录：2026-01-24 澄清输入法组合期间暂停重绘，结束后再刷新以避免拼音被打断（`scripts/core/reviewCore.js`、`scripts/modules/review.js`、`scripts/modules/app.js`）。
+- 更新记录：2026-01-24 澄清输入完成后同步落盘，避免重绘时内容被清空（`scripts/modules/review.js`）。
+- 更新记录：2026-01-24 Agent 跨页面恢复执行时仍走模型决策并跳过已完成步骤，避免仅记录续跑（`scripts/core/autoCore.js`、`scripts/modules/app.js`）。
+- 更新记录：2026-01-24 增加前端停止 Agent 按钮（仅启用 Agent 时显示），可中断流程并阻止继续执行（`index.html`、`ai-workflow.html`、`config/domConfig.js`、`scripts/base/state.js`、`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`scripts/modules/auto.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-24 Agent 进入等待人工处理时写入 waiting 状态，允许再次打开抽屉继续处理（`scripts/core/autoCore.js`、`scripts/modules/app.js`）。
+- 更新记录：2026-01-24 移除 Agent 决策记录展示，仅保留执行过程面板（`index.html`、`ai-workflow.html`）。
+- 更新记录：2026-01-24 Agent 停止后执行计划标记为已终止，避免停留在重试状态（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-24 Agent 覆盖率不足时仅在重清洗重试耗尽后弹出覆盖缺失抽屉（`scripts/core/autoCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-24 自动执行卡片新增 Agent 额外提示词输入框，随 Agent 开关显示并提供默认提示语（`index.html`、`ai-workflow.html`、`style.css`、`config/constants.js`、`config/domConfig.js`、`scripts/base/state.js`、`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`scripts/modules/auto.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+
 - 功能名称：用例生成入库操作区顺序调整
 - 功能描述：AI 功能“用例生成”页面的入库操作区改为纵向排列，依次展示全模块用例视图、新用例入库、旧用例追加入库，并同步引导文案。
 - 操作方式：在用例生成页从上到下依次使用“全模块用例视图”勾选用例，选择入库方式后点击“新用例入库”，需要追加时点击“旧用例追加入库”。
@@ -3892,3 +3927,5 @@
 - 更新记录：2026-01-18 执行页 AI 生成追加成功后新增悬浮提示（`scripts/modules/tempexec.js`、`tests/ui/tempexec_ai_gen.spec.js`）。
 - 更新记录：2026-01-18 执行页 AI 生成已追加用例行增加填充提示（`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_ai_gen.spec.js`）。
 - 更新记录：2026-01-18 执行页 AI 生成已追加用例行填充持久化并禁用勾选（`scripts/modules/tempexec.js`、`tests/ui/tempexec_ai_gen.spec.js`）。
+- 更新记录：2026-01-19 Agent 续跑时跳过重复决策并优先复用已有结果（`scripts/modules/app.js`、`scripts/core/autoCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 覆盖率等待阶段支持忽略/补全/重清洗操作校验并继续执行（`scripts/core/autoCore.js`、`scripts/modules/auto.js`、`tests/ui/auto_casegen_agent.spec.js`）。

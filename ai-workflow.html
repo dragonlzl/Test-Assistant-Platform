@@ -448,14 +448,38 @@
 <h2>自动执行工作流</h2>
 <div class="card-body">
 <p class="hint">自动按顺序执行：导入需求 → 需求评审 → 需求清洗 → 对比完整性 → 测试模块拆分 → 测试用例覆盖对比。执行前请确保已导入需求与测试用例，并在“功能指派”中配置所有模型。</p>
+<div class="agent-extra-prompt hidden" id="autoAgentPromptHintBlock">
+  <label class="stack">
+    <span class="hint">Agent 额外提示词</span>
+    <textarea class="small-textarea" id="autoAgentPromptHint" placeholder="可补充 Agent 的执行偏好"></textarea>
+  </label>
+</div>
 <label style="display:flex;align-items:center;gap:8px;margin:8px 0;">
 <input id="autoNeedClarify" type="checkbox"/>
 <span>需要人工确认需求澄清后再继续自动流程</span>
 </label>
 <div class="actions">
 <button id="runAutoWorkflow">一键执行</button>
+<button class="secondary hidden" id="autoAgentStopBtn" type="button" disabled>停止 Agent</button>
 </div>
 <p class="status" id="autoWorkflowStatus"></p>
+<div class="agent-panel hidden" id="autoAgentPanel">
+  <div class="agent-section">
+    <h3>Agent 执行计划</h3>
+    <div class="agent-plan" id="autoAgentPlan"></div>
+  </div>
+  <div class="agent-section">
+    <h3>修复建议</h3>
+    <pre class="agent-suggestion" id="autoAgentSuggestion"></pre>
+  </div>
+</div>
+</div>
+</section>
+<section class="card hidden" data-section-id="auto-agent-trace" data-tab-section="auto" id="autoAgentTracePanel">
+<h2>Agent 执行过程</h2>
+<div class="card-body">
+<p class="hint">记录 Agent 执行过程与关键决策，重新点击“一键执行”会清空并重新生成。</p>
+<div class="agent-trace" id="autoAgentTrace"></div>
 </div>
 </section>
 <section class="card hidden" data-section-id="auto-clarify" data-tab-section="auto">

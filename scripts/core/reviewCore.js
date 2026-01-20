@@ -91,6 +91,7 @@
             autoClarifyContainer.classList.add('hidden');
             autoClarifyContainer.classList.remove('visible');
           }
+          state.autoClarifyDismissed = true;
           setAutoClarifyToggleLabel(false);
         },
       });
@@ -134,8 +135,10 @@
       return false;
     }
 
-    function updateAutoClarifyVisibility(forceOpen) {
+    function updateAutoClarifyVisibility(forceOpen, options) {
       if (forceOpen === void 0) forceOpen = false;
+      if (!options || typeof options !== 'object') options = {};
+      var resetDismissed = options.resetDismissed !== false;
       var enabled = Boolean(autoClarifyToggle && autoClarifyToggle.checked);
       state.autoRequireClarifications = enabled;
       if (autoClarifySection) {
@@ -164,6 +167,7 @@
           autoClarifyToggleBtn.disabled = false;
           setAutoClarifyToggleLabel(autoClarifyDrawer && autoClarifyDrawer.element && autoClarifyDrawer.element.classList.contains('open'));
         }
+        if (resetDismissed) state.autoClarifyDismissed = false;
         renderAutoClarifyView();
       }
       persistWorkflowState();
@@ -171,12 +175,18 @@
 
     function renderAutoClarifyView() {
       if (!autoClarifyContainer) return;
+      if (isClarifyComposing()) {
+        state.clarifyPendingRender = true;
+        return;
+      }
+      var focusInfo = snapshotClarifyFocus();
       if (!state.autoRequireClarifications) {
         autoClarifyContainer.innerHTML = '<p class="hint" style="padding:12px;">未启用需求澄清</p>';
         autoClarifyContainer.classList.add('hidden');
         autoClarifyContainer.classList.remove('visible');
         if (autoClarifyConfirmBtn) autoClarifyConfirmBtn.disabled = true;
         setAutoClarifyToggleLabel(false);
+        restoreClarifyFocus(focusInfo);
         return;
       }
       if (!state.reviewRows.length) {
@@ -185,6 +195,7 @@
         autoClarifyContainer.classList.add('visible');
         if (autoClarifyConfirmBtn) autoClarifyConfirmBtn.disabled = true;
         setAutoClarifyToggleLabel(autoClarifyDrawer && autoClarifyDrawer.element && autoClarifyDrawer.element.classList.contains('open'));
+        restoreClarifyFocus(focusInfo);
         return;
       }
       autoClarifyContainer.innerHTML = renderReviewView();
@@ -192,6 +203,7 @@
       autoClarifyContainer.classList.add('visible');
       setAutoClarifyToggleLabel(autoClarifyDrawer && autoClarifyDrawer.element && autoClarifyDrawer.element.classList.contains('open'));
       if (autoClarifyConfirmBtn) autoClarifyConfirmBtn.disabled = false;
+      restoreClarifyFocus(focusInfo);
     }
 
     function waitForAutoClarification() {
@@ -312,6 +324,66 @@
       return state.reviewExpanded;
     }
 
+    function isClarifyComposing() {
+      return Boolean(state.clarifyComposing);
+    }
+
+    function snapshotClarifyFocus() {
+      if (typeof document === 'undefined') return null;
+      var active = document.activeElement;
+      if (!active || !active.dataset || active.dataset.clarifyIndex === undefined) return null;
+      var info = {
+        index: String(active.dataset.clarifyIndex || ''),
+        scope: '',
+        selectionStart: null,
+        selectionEnd: null,
+      };
+      if (reviewViewContainer && reviewViewContainer.contains(active)) info.scope = 'review';
+      if (autoClarifyContainer && autoClarifyContainer.contains(active)) info.scope = 'auto';
+      try {
+        if (typeof active.selectionStart === 'number') info.selectionStart = active.selectionStart;
+        if (typeof active.selectionEnd === 'number') info.selectionEnd = active.selectionEnd;
+      } catch (err) {
+        // ignore
+      }
+      return info;
+    }
+
+    function restoreClarifyFocus(info) {
+      if (!info || isClarifyComposing()) return;
+      var container = info.scope === 'auto' ? autoClarifyContainer : reviewViewContainer;
+      if (!container || !container.querySelector) return;
+      var selector = 'textarea[data-clarify-index="' + info.index + '"]';
+      var input = container.querySelector(selector);
+      if (!input) return;
+      if (typeof input.focus === 'function') {
+        try {
+          input.focus();
+        } catch (err) {
+          // ignore
+        }
+      }
+      if (typeof input.setSelectionRange === 'function' && info.selectionStart !== null && info.selectionEnd !== null) {
+        var len = input.value ? input.value.length : 0;
+        var start = Math.max(0, Math.min(len, info.selectionStart));
+        var end = Math.max(0, Math.min(len, info.selectionEnd));
+        try {
+          input.setSelectionRange(start, end);
+        } catch (err) {
+          // ignore
+        }
+      }
+    }
+
+    function flushClarifyPendingRender() {
+      if (isClarifyComposing() || !state.clarifyPendingRender) return;
+      state.clarifyPendingRender = false;
+      renderAutoClarifyView();
+      if (reviewViewContainer && reviewViewContainer.classList.contains('visible')) {
+        reviewViewContainer.innerHTML = renderReviewView();
+      }
+    }
+
     function renderReviewView() {
       if (!state.reviewRows.length) {
         return '<p class="hint" style="padding:12px;">暂无评审数据，请先执行需求评审</p>';
@@ -371,12 +443,18 @@
     }
 
     function refreshClarifyTables() {
+      if (isClarifyComposing()) {
+        state.clarifyPendingRender = true;
+        return;
+      }
+      var focusInfo = snapshotClarifyFocus();
       if (reviewViewContainer && reviewViewContainer.classList.contains('visible')) {
         reviewViewContainer.innerHTML = renderReviewView();
       }
       if (autoClarifyContainer && state.autoRequireClarifications && !autoClarifyContainer.classList.contains('hidden')) {
         autoClarifyContainer.innerHTML = renderReviewView();
       }
+      restoreClarifyFocus(focusInfo);
     }
 
     function getClarifyTargets(fallbackIndex) {
@@ -419,11 +497,14 @@
     function handleClarifyInputEvent(e) {
       var textarea = e.target && e.target.closest ? e.target.closest('textarea[data-clarify-index]') : null;
       if (!textarea) return;
+      if (textarea.dataset && textarea.dataset.clarifyComposing === '1') return;
+      if (e && (e.isComposing === true || e.inputType === 'insertCompositionText')) return;
       var idx = Number(textarea.dataset.clarifyIndex);
       if (Number.isNaN(idx)) return;
-      var value = normalizeReviewText(textarea.value);
+      var raw = textarea.value || '';
+      var value = normalizeReviewText(raw);
       state.reviewClarifications.set(idx, value);
-      textarea.value = value;
+      if (value !== raw) textarea.value = value;
       persistWorkflowState();
     }
 
@@ -455,6 +536,8 @@
     }
 
     function syncReviewViewFromResult() {
+      var focusInfo = snapshotClarifyFocus();
+      var composing = isClarifyComposing();
       var list = parseReviewList(reviewResultEl && reviewResultEl.value ? reviewResultEl.value : '');
       state.reviewRows = buildReviewRows(list);
       var newMap = new Map();
@@ -490,6 +573,10 @@
       if (state.autoRequireClarifications) {
         renderAutoClarifyView();
       }
+      if (composing) {
+        state.clarifyPendingRender = true;
+        return;
+      }
       if (!reviewViewContainer) return;
       if (!hasData) {
         reviewViewContainer.classList.add('hidden');
@@ -502,6 +589,37 @@
       } else {
         reviewViewContainer.innerHTML = '<p class="hint" style="padding:12px;">点击“前往视图确认澄清”查看详情</p>';
       }
+      restoreClarifyFocus(focusInfo);
+    }
+
+    function buildAutoClarificationSuggestion(row) {
+      if (!row) return '待确认：请补充澄清结果';
+      var parts = [row.point, row.reason, row.branch, row.category].filter(Boolean);
+      if (parts.length) return '待确认：' + parts[0];
+      return '待确认：请补充澄清结果';
+    }
+
+    function autoFillReviewClarifications(options) {
+      if (!state.reviewRows.length) {
+        syncReviewViewFromResult();
+      }
+      if (!state.reviewRows.length) return false;
+      var changed = false;
+      state.reviewRows.forEach(function(row) {
+        var existing = normalizeReviewText(state.reviewClarifications.get(row.index));
+        var fallback = normalizeReviewText(row.clarification);
+        if (existing || fallback) return;
+        var suggestion = buildAutoClarificationSuggestion(row);
+        if (suggestion) {
+          state.reviewClarifications.set(row.index, suggestion);
+          changed = true;
+        }
+      });
+      if (changed) {
+        refreshClarifyTables();
+        if (typeof persistWorkflowState === 'function') persistWorkflowState();
+      }
+      return changed;
     }
 
     function toggleReviewView() {
@@ -656,7 +774,7 @@
       }
     }
 
-    async function reviewRequirements() {
+    async function reviewRequirements(extraContext) {
       var raw = rawText && rawText.value ? rawText.value.trim() : '';
       if (!raw) {
         setStatus(reviewStatus, '请先导入或填写原始需求', 'warn');
@@ -694,7 +812,12 @@
         var reasoning = getReasoningForType('review');
         var temperature = getTemperatureForType('review');
         var startTime = Date.now();
-        var content = await callModelWithConfig(model, raw, prompt, reasoning, temperature);
+        var clarifyPayload = extraContext && extraContext.clarifications ? String(extraContext.clarifications).trim() : '';
+        var userPayload = raw;
+        if (clarifyPayload) {
+          userPayload = '【原始需求】\n' + raw + '\n\n【需求澄清数据(JSON)】\n' + clarifyPayload;
+        }
+        var content = await callModelWithConfig(model, userPayload, prompt, reasoning, temperature);
         updateModelTiming(reviewTimingEl, Date.now() - startTime);
         reviewResultEl.value = wrapTextWithRequirement(formatJsonOrText(stripCodeFence(content)));
         syncReviewViewFromResult();
@@ -714,6 +837,7 @@
       if (!autoClarifyContainer) return;
       var drawer = ensureAutoClarifyDrawer();
       if (!drawer) return;
+      state.autoClarifyDismissed = false;
       renderAutoClarifyView();
       autoClarifyContainer.classList.remove('hidden');
       autoClarifyContainer.classList.add('visible');
@@ -754,7 +878,9 @@
       toggleAutoClarifyPanel: toggleAutoClarifyPanel,
       handleAutoClarifyConfirm: handleAutoClarifyConfirm,
       waitForAutoClarification: waitForAutoClarification,
+      flushClarifyPendingRender: flushClarifyPendingRender,
       syncReviewViewFromResult: syncReviewViewFromResult,
+      autoFillReviewClarifications: autoFillReviewClarifications,
       buildReviewClarificationContext: buildReviewClarificationContext,
     };
   }

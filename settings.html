@@ -582,6 +582,39 @@
 <p class="status" id="missingReminderAiStatus"></p>
 
 <div class="settings-divider"></div>
+<h3>用例生成 Agent</h3>
+<div class="settings-inline">
+<div class="meta">
+<strong>Agent 模式</strong>
+<p>开启后“一键执行”将使用 Agent 决策流程；需先在“功能指派”配置用例生成 Agent 模型。</p>
+</div>
+<div class="control">
+<select id="caseGenAgentEnabledSelect">
+<option value="off">关闭</option>
+<option value="on">开启</option>
+</select>
+</div>
+</div>
+<div class="actions">
+<button class="secondary" id="saveCaseGenAgentEnabled">保存开关</button>
+</div>
+<p class="status" id="caseGenAgentEnabledStatus"></p>
+
+<div class="settings-inline">
+<div class="meta">
+<strong>自动忽略覆盖率阈值</strong>
+<p>设置对比完整性覆盖率阈值；覆盖率低于阈值时 Agent 自动重清洗（最多 2 次），仍不足则等待人工；达到阈值继续执行，未满 100% 将提示风险。</p>
+</div>
+<div class="control">
+<input id="caseGenAgentCoverageInput" type="number" min="0" max="100" step="1" placeholder="请输入阈值"/>
+</div>
+</div>
+<div class="actions">
+<button class="secondary" id="saveCaseGenAgentCoverage">保存阈值</button>
+</div>
+<p class="status" id="caseGenAgentCoverageStatus"></p>
+
+<div class="settings-divider"></div>
 <h3>页面说明自动弹出</h3>
 <p class="hint">进入主要功能页面时自动弹出页面说明，可按页面独立关闭。</p>
 <form class="settings-grid" id="pageGuideSettingsGrid">

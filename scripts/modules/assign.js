@@ -23,6 +23,7 @@
     var caseFilterModelSelect = pick(dom.caseFilterModelSelect, 'caseFilterModelSelect');
     var missingReminderModelSelect = pick(dom.missingReminderModelSelect, 'missingReminderModelSelect');
     var caseLibraryGenModelSelect = pick(dom.caseLibraryGenModelSelect, 'caseLibraryGenModelSelect');
+    var caseGenAgentModelSelect = pick(dom.caseGenAgentModelSelect, 'caseGenAgentModelSelect');
     var cleanAssignStatus = pick(dom.cleanAssignStatus, 'cleanAssignStatus');
     var reviewAssignStatus = pick(dom.reviewAssignStatus, 'reviewAssignStatus');
     var compareAssignStatus = pick(dom.compareAssignStatus, 'compareAssignStatus');
@@ -32,6 +33,7 @@
     var caseFilterAssignStatus = pick(dom.caseFilterAssignStatus, 'caseFilterAssignStatus');
     var missingReminderAssignStatus = pick(dom.missingReminderAssignStatus, 'missingReminderAssignStatus');
     var caseLibraryGenAssignStatus = pick(dom.caseLibraryGenAssignStatus, 'caseLibraryGenAssignStatus');
+    var caseGenAgentAssignStatus = pick(dom.caseGenAgentAssignStatus, 'caseGenAgentAssignStatus');
     var cleanPromptEl = pick(dom.cleanPromptEl, 'cleanPrompt');
     var reviewPromptEl = pick(dom.reviewPromptEl, 'reviewPrompt');
     var comparePromptEl = pick(dom.comparePromptEl, 'comparePrompt');
@@ -41,6 +43,7 @@
     var caseFilterPromptEl = pick(dom.caseFilterPromptEl, 'caseFilterPrompt');
     var missingReminderPromptEl = pick(dom.missingReminderPromptEl, 'missingReminderPrompt');
     var caseLibraryGenPromptEl = pick(dom.caseLibraryGenPromptEl, 'caseLibraryGenPrompt');
+    var caseGenAgentPromptEl = pick(dom.caseGenAgentPromptEl, 'caseGenAgentPrompt');
     var cleanReasoningSelect = pick(dom.cleanReasoningSelect, 'cleanReasoning');
     var reviewReasoningSelect = pick(dom.reviewReasoningSelect, 'reviewReasoning');
     var compareReasoningSelect = pick(dom.compareReasoningSelect, 'compareReasoning');
@@ -50,6 +53,7 @@
     var caseFilterReasoningSelect = pick(dom.caseFilterReasoningSelect, 'caseFilterReasoning');
     var missingReminderReasoningSelect = pick(dom.missingReminderReasoningSelect, 'missingReminderReasoning');
     var caseLibraryGenReasoningSelect = pick(dom.caseLibraryGenReasoningSelect, 'caseLibraryGenReasoning');
+    var caseGenAgentReasoningSelect = pick(dom.caseGenAgentReasoningSelect, 'caseGenAgentReasoning');
     var cleanTemperatureEl = pick(dom.cleanTemperatureEl, 'cleanTemperature');
     var reviewTemperatureEl = pick(dom.reviewTemperatureEl, 'reviewTemperature');
     var compareTemperatureEl = pick(dom.compareTemperatureEl, 'compareTemperature');
@@ -59,6 +63,7 @@
     var caseFilterTemperatureEl = pick(dom.caseFilterTemperatureEl, 'caseFilterTemperature');
     var missingReminderTemperatureEl = pick(dom.missingReminderTemperatureEl, 'missingReminderTemperature');
     var caseLibraryGenTemperatureEl = pick(dom.caseLibraryGenTemperatureEl, 'caseLibraryGenTemperature');
+    var caseGenAgentTemperatureEl = pick(dom.caseGenAgentTemperatureEl, 'caseGenAgentTemperature');
     var saveAssignmentsBtn = pick(dom.saveAssignmentsBtn, 'saveAssignments');
     var testCleanModelBtn = pick(dom.testCleanModelBtn, 'testCleanModel');
     var testReviewModelBtn = pick(dom.testReviewModelBtn, 'testReviewModel');
@@ -69,6 +74,7 @@
     var testCaseFilterModelBtn = pick(dom.testCaseFilterModelBtn, 'testCaseFilterModel');
     var testMissingReminderModelBtn = pick(dom.testMissingReminderModelBtn, 'testMissingReminderModel');
     var testCaseLibraryGenModelBtn = pick(dom.testCaseLibraryGenModelBtn, 'testCaseLibraryGenModel');
+    var testCaseGenAgentModelBtn = pick(dom.testCaseGenAgentModelBtn, 'testCaseGenAgentModel');
 
     function setAssignmentId(key, value) {
       if (!state.assignments) state.assignments = {};
@@ -125,6 +131,7 @@
     bindModelSelect(caseGenModelSelect, 'caseGenId', 'casegen', caseGenAssignStatus);
     bindModelSelect(missingReminderModelSelect, 'missingReminderId', 'missingreminder', missingReminderAssignStatus);
     bindModelSelect(caseLibraryGenModelSelect, 'caseLibraryGenId', 'caselibrarygen', caseLibraryGenAssignStatus);
+    bindModelSelect(caseGenAgentModelSelect, 'caseGenAgentId', 'casegenagent', caseGenAgentAssignStatus);
 
     bindPromptInput(cleanPromptEl, 'cleanPrompt');
     bindPromptInput(reviewPromptEl, 'reviewPrompt');
@@ -135,6 +142,7 @@
     bindPromptInput(caseFilterPromptEl, 'caseFilterPrompt');
     bindPromptInput(missingReminderPromptEl, 'missingReminderPrompt');
     bindPromptInput(caseLibraryGenPromptEl, 'caseLibraryGenPrompt');
+    bindPromptInput(caseGenAgentPromptEl, 'caseGenAgentPrompt');
 
     bindReasoningSelect(cleanReasoningSelect, 'cleanReasoning');
     bindReasoningSelect(reviewReasoningSelect, 'reviewReasoning');
@@ -145,6 +153,7 @@
     bindReasoningSelect(caseFilterReasoningSelect, 'caseFilterReasoning');
     bindReasoningSelect(missingReminderReasoningSelect, 'missingReminderReasoning');
     bindReasoningSelect(caseLibraryGenReasoningSelect, 'caseLibraryGenReasoning');
+    bindReasoningSelect(caseGenAgentReasoningSelect, 'caseGenAgentReasoning');
     bindTemperatureInput(cleanTemperatureEl, 'cleanTemperature');
     bindTemperatureInput(reviewTemperatureEl, 'reviewTemperature');
     bindTemperatureInput(compareTemperatureEl, 'compareTemperature');
@@ -154,6 +163,7 @@
     bindTemperatureInput(caseFilterTemperatureEl, 'caseFilterTemperature');
     bindTemperatureInput(missingReminderTemperatureEl, 'missingReminderTemperature');
     bindTemperatureInput(caseLibraryGenTemperatureEl, 'caseLibraryGenTemperature');
+    bindTemperatureInput(caseGenAgentTemperatureEl, 'caseGenAgentTemperature');
 
     if (saveAssignmentsBtn) {
       saveAssignmentsBtn.addEventListener('click', function() {
@@ -189,6 +199,9 @@
     });
     if (testCaseLibraryGenModelBtn && testModel) testCaseLibraryGenModelBtn.addEventListener('click', function() {
       testModel(caseLibraryGenModelSelect ? caseLibraryGenModelSelect.value : '', caseLibraryGenAssignStatus);
+    });
+    if (testCaseGenAgentModelBtn && testModel) testCaseGenAgentModelBtn.addEventListener('click', function() {
+      testModel(caseGenAgentModelSelect ? caseGenAgentModelSelect.value : '', caseGenAgentAssignStatus);
     });
 
     return {

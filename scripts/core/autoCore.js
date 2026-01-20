@@ -19,6 +19,7 @@
     var clearStepWaiting = handlers.clearStepWaiting || function() {};
     var clearAllWaitingSteps = handlers.clearAllWaitingSteps || function() {};
     var updateFlowStatus = handlers.updateFlowStatus || function() {};
+    var updateMissingView = handlers.updateMissingView || function() {};
     var persistWorkflowState = handlers.persistWorkflowState || function() {};
     var parseMissingModules = handlers.parseMissingModules || function() { return []; };
     var buildMissingRows = handlers.buildMissingRows || function(list) { return list || []; };
@@ -43,7 +44,29 @@
     var openAutoClarifyPanel = handlers.openAutoClarifyPanel || function() {};
     var waitForAutoClarification = handlers.waitForAutoClarification || function() { return Promise.resolve(); };
     var updateAutoClarifyVisibility = handlers.updateAutoClarifyVisibility || function() {};
+    var autoFillReviewClarifications = handlers.autoFillReviewClarifications || function() { return false; };
     var jumpToCleanHighlightView = handlers.jumpToCleanHighlightView || function() {};
+    var getAssignedModel = handlers.getAssignedModel || function() { throw new Error('缺少模型'); };
+    var getReasoningForType = handlers.getReasoningForType || function() { return ''; };
+    var getTemperatureForType = handlers.getTemperatureForType || function() { return 0.2; };
+    var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
+    var stripCodeFence = handlers.stripCodeFence || utils.stripCodeFence || function(text) { return text || ''; };
+    var extractJsonPayload = handlers.extractJsonPayload || utils.extractJsonPayload || function() { return ''; };
+    var buildReviewClarificationContext = handlers.buildReviewClarificationContext || function() { return ''; };
+    var ensureCaseGenModulesFromSplit = handlers.ensureCaseGenModulesFromSplit || function() { return false; };
+    var generateAllCaseGenModules = handlers.generateAllCaseGenModules || function() { return Promise.resolve(); };
+    var buildCasesComparePayload = handlers.buildCasesComparePayload || function() { return { text: '', isJson: false }; };
+    var renderCleanView = handlers.renderCleanView || function() {};
+    var renderCleanRawView = handlers.renderCleanRawView || function() {};
+    var syncReviewViewFromResult = handlers.syncReviewViewFromResult || function() {};
+    var triggerMissingReminderAi = handlers.triggerMissingReminderAi || function() { return false; };
+    var triggerCaseLibraryGen = handlers.triggerCaseLibraryGen || function() { return false; };
+    var defaultPrompts = (ctx.config && ctx.config.defaultPrompts) ? ctx.config.defaultPrompts : {};
+    var defaultAgentExtraPrompt = (ctx.config && typeof ctx.config.defaultAgentExtraPrompt === 'string')
+      ? ctx.config.defaultAgentExtraPrompt
+      : (window.app && window.app.config && typeof window.app.config.defaultAgentExtraPrompt === 'string'
+        ? window.app.config.defaultAgentExtraPrompt
+        : '评审流程可以忽略数值、美术等相关内容。');
     var escapeHtml = utils.escapeHtml || function(text) {
       if (text === null || text === undefined) return '';
       return String(text)
@@ -65,6 +88,7 @@
     var caseGenStatus = pickEl(dom.caseGenStatus, 'caseGenStatus');
     var missingViewStatus = pickEl(dom.missingViewStatus, 'missingViewStatus');
     var autoWorkflowBtn = pickEl(dom.autoWorkflowBtn, 'runAutoWorkflow');
+    var autoAgentStopBtn = pickEl(dom.autoAgentStopBtn, 'autoAgentStopBtn');
     var autoRecleanBtn = pickEl(dom.autoRecleanBtn, 'autoRecleanBtn');
     var autoIgnoreCoverageBtn = pickEl(dom.autoIgnoreCoverageBtn, 'autoIgnoreCoverageBtn');
     var autoCompareMissing = pickEl(dom.autoCompareMissing, 'autoCompareMissing');
@@ -76,6 +100,14 @@
     var autoRecleanStatus = pickEl(dom.autoRecleanStatus, 'autoRecleanStatus');
     var autoCompareStatus = pickEl(dom.autoCompareStatus, 'autoCompareStatus');
     var autoWorkflowStatus = pickEl(dom.autoWorkflowStatus, 'autoWorkflowStatus');
+    var autoClarifyStatus = pickEl(dom.autoClarifyStatus, 'autoClarifyStatus');
+    var autoAgentPanel = pickEl(dom.autoAgentPanel, 'autoAgentPanel');
+    var autoAgentPlan = pickEl(dom.autoAgentPlan, 'autoAgentPlan');
+    var autoAgentLog = pickEl(dom.autoAgentLog, 'autoAgentLog');
+    var autoAgentSuggestion = pickEl(dom.autoAgentSuggestion, 'autoAgentSuggestion');
+    var autoAgentPromptHintBlock = pickEl(dom.autoAgentPromptHintBlock, 'autoAgentPromptHintBlock');
+    var autoAgentTracePanel = pickEl(dom.autoAgentTracePanel, 'autoAgentTracePanel');
+    var autoAgentTrace = pickEl(dom.autoAgentTrace, 'autoAgentTrace');
     var cleanedTextEl = pickEl(dom.cleanedTextEl, 'cleanedText');
     var rawText = pickEl(dom.rawText, 'rawText');
     var reviewResultEl = pickEl(dom.reviewResultEl, 'reviewResult');
@@ -94,6 +126,17 @@
     if (!state.autoCompareSelections) state.autoCompareSelections = new Set();
     if (!state.autoCompareMissingList) state.autoCompareMissingList = [];
     if (!Object.prototype.hasOwnProperty.call(state, 'autoCompareSelectionTouched')) state.autoCompareSelectionTouched = false;
+    if (!Array.isArray(state.caseGenAgentPlan)) state.caseGenAgentPlan = [];
+    if (typeof state.caseGenAgentPlanSource !== 'string') state.caseGenAgentPlanSource = '';
+    if (!Array.isArray(state.caseGenAgentLog)) state.caseGenAgentLog = [];
+    if (!Array.isArray(state.caseGenAgentTrace)) state.caseGenAgentTrace = [];
+    if (typeof state.caseGenAgentFixSuggestions !== 'string') state.caseGenAgentFixSuggestions = '';
+    if (!state.caseGenAgentRetryCounters || typeof state.caseGenAgentRetryCounters !== 'object') state.caseGenAgentRetryCounters = {};
+    if (typeof state.caseGenAgentCoverageRetries !== 'number') state.caseGenAgentCoverageRetries = 0;
+    if (typeof state.caseGenAgentCoverageBelowFull !== 'boolean') state.caseGenAgentCoverageBelowFull = false;
+    if (typeof state.autoAgentPromptHint !== 'string') state.autoAgentPromptHint = defaultAgentExtraPrompt;
+    if (typeof state.autoClarifyDismissed !== 'boolean') state.autoClarifyDismissed = false;
+    if (typeof state.autoAgentStopped !== 'boolean') state.autoAgentStopped = false;
 
     function getRequirementDisplayName() {
       return getRequirementLabel(true);
@@ -123,6 +166,825 @@
     function getAutoWorkflowManager() {
       if (typeof window === 'undefined') return null;
       return window.app && window.app.autoWorkflowManager ? window.app.autoWorkflowManager : null;
+    }
+
+    function syncAgentStopButton() {
+      if (!autoAgentStopBtn) return;
+      var enabled = isCaseGenAgentEnabled();
+      autoAgentStopBtn.classList.toggle('hidden', !enabled);
+      autoAgentStopBtn.disabled = !enabled || !state.autoRunning || state.autoAgentStopped === true;
+    }
+
+    function resetAgentStopState() {
+      state.autoAgentStopped = false;
+      syncAgentStopButton();
+    }
+
+    function createAgentStoppedError() {
+      var err = new Error('Agent 已停止');
+      err.code = 'AGENT_STOPPED';
+      return err;
+    }
+
+    function isAgentStoppedError(err) {
+      return Boolean(err && err.code === 'AGENT_STOPPED');
+    }
+
+    function ensureAgentNotStopped() {
+      if (state.autoAgentStopped) {
+        throw createAgentStoppedError();
+      }
+    }
+
+    function stopAgentWorkflow() {
+      if (!isCaseGenAgentEnabled()) return;
+      state.autoAgentStopped = true;
+      state.autoRunning = false;
+      if (autoWorkflowBtn) autoWorkflowBtn.disabled = false;
+      if (autoClarifyToggle) autoClarifyToggle.disabled = false;
+      if (autoRecleanBtn) autoRecleanBtn.disabled = false;
+      if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = false;
+      if (autoFillCleanBtn) autoFillCleanBtn.disabled = false;
+      if (autoJumpCleanViewBtn) autoJumpCleanViewBtn.disabled = false;
+      var manager = getAutoWorkflowManager();
+      if (manager && typeof manager.clearTask === 'function') {
+        manager.clearTask();
+      }
+      markAgentPlanStopped('已终止');
+      setStatus(autoWorkflowStatus, 'Agent 已停止', 'warn');
+      syncAgentStopButton();
+    }
+
+    function isCaseGenAgentEnabled() {
+      var settings = state.settings || {};
+      var raw = settings.caseGenAgentEnabled;
+      if (raw === true) return true;
+      return String(raw || '').toLowerCase() === 'on';
+    }
+
+    function isAgentCoverageWaiting() {
+      return Boolean(isCaseGenAgentEnabled() && state.waitingSteps && state.waitingSteps.compare);
+    }
+
+    function clampAgentCoverageThreshold(value) {
+      var num = Math.round(Number(value));
+      if (!Number.isFinite(num)) return 100;
+      if (num < 0) return 0;
+      if (num > 100) return 100;
+      return num;
+    }
+
+    function getAgentCoverageThreshold() {
+      var settings = state.settings || {};
+      return clampAgentCoverageThreshold(settings.caseGenAgentCoverageThreshold);
+    }
+
+    function getAgentPlanTemplate() {
+      return [
+        { key: 'review', label: '需求评审' },
+        { key: 'clarify', label: '需求澄清确认' },
+        { key: 'clean', label: '需求清洗' },
+        { key: 'compare', label: '对比完整性' },
+        { key: 'coverage', label: '覆盖率校验' },
+        { key: 'split', label: '测试模块拆分' },
+        { key: 'cases', label: '覆盖对比' },
+      ];
+    }
+
+    function normalizeAgentStepKey(key) {
+      if (!key) return '';
+      var raw = String(key).trim().toLowerCase();
+      var map = {
+        review: 'review',
+        clean: 'clean',
+        compare: 'compare',
+        split: 'split',
+        cases: 'cases',
+        clarify: 'clarify',
+        coverage: 'coverage',
+        '需求评审': 'review',
+        '需求澄清': 'clarify',
+        '需求澄清确认': 'clarify',
+        '需求清洗': 'clean',
+        '对比完整性': 'compare',
+        '测试模块拆分': 'split',
+        '覆盖对比': 'cases',
+        '覆盖率校验': 'coverage',
+      };
+      return map[raw] || raw;
+    }
+
+    function normalizeAgentPlan(list) {
+      if (!Array.isArray(list)) return [];
+      var seen = {};
+      var result = [];
+      list.forEach(function(item, idx) {
+        if (!item) return;
+        var key = item.key ? normalizeAgentStepKey(item.key) : '';
+        var label = item.label ? String(item.label).trim() : '';
+        if (!key) key = label ? normalizeAgentStepKey(label) : '';
+        if (key === 'casegen' || key === 'missingreminder' || key === 'caselibrary') return;
+        if (!key) key = 'step_' + (idx + 1);
+        if (seen[key]) key = key + '_' + (idx + 1);
+        seen[key] = true;
+        result.push({
+          key: key,
+          label: label || key,
+          status: item.status || 'pending',
+          attempts: Number(item.attempts || 0),
+          note: item.note || '',
+        });
+      });
+      return result;
+    }
+
+    function ensureAgentPlan() {
+      var template = getAgentPlanTemplate();
+      var existing = Array.isArray(state.caseGenAgentPlan) ? state.caseGenAgentPlan : [];
+      if (state.caseGenAgentPlanSource === 'agent') {
+        var normalized = normalizeAgentPlan(existing);
+        if (normalized.length) {
+          state.caseGenAgentPlan = normalized;
+          return normalized;
+        }
+        state.caseGenAgentPlanSource = '';
+      }
+      var map = {};
+      existing.forEach(function(item) {
+        if (item && item.key) map[item.key] = item;
+      });
+      var next = template.map(function(item) {
+        var prev = map[item.key] || {};
+        return {
+          key: item.key,
+          label: item.label,
+          status: prev.status || 'pending',
+          attempts: Number(prev.attempts || 0),
+          note: prev.note || '',
+        };
+      });
+      state.caseGenAgentPlan = next;
+      return next;
+    }
+
+    function updateAgentPanelVisibility() {
+      if (!autoAgentPanel) return;
+      var enabled = isCaseGenAgentEnabled();
+      autoAgentPanel.classList.toggle('hidden', !enabled);
+      if (autoAgentTracePanel) autoAgentTracePanel.classList.toggle('hidden', !enabled);
+      if (autoAgentPromptHintBlock) autoAgentPromptHintBlock.classList.toggle('hidden', !enabled);
+    }
+
+    function resolveAgentStatusMeta(status) {
+      if (status === 'running') return { text: '执行中', tone: '' };
+      if (status === 'done') return { text: '已完成', tone: 'ok' };
+      if (status === 'waiting') return { text: '等待人工', tone: 'warn' };
+      if (status === 'retrying') return { text: '重试中', tone: 'warn' };
+      if (status === 'failed') return { text: '失败', tone: 'err' };
+      if (status === 'skipped') return { text: '已跳过', tone: 'warn' };
+      if (status === 'stopped') return { text: '已终止', tone: 'warn' };
+      return { text: '待执行', tone: '' };
+    }
+
+    function renderAgentPlan() {
+      if (!autoAgentPlan) return;
+      var plan = ensureAgentPlan();
+      if (!plan.length) {
+        autoAgentPlan.innerHTML = '<p class="hint">暂无执行计划</p>';
+        return;
+      }
+      var items = plan.map(function(item) {
+        var meta = resolveAgentStatusMeta(item.status);
+        var statusClass = meta.tone ? ('status ' + meta.tone) : 'status';
+        var attemptsText = item.attempts ? ('重试 ' + item.attempts + '/2') : '';
+        var noteText = item.note ? escapeHtml(item.note) : '';
+        var metaText = [attemptsText, noteText].filter(Boolean).join(' · ');
+        return '' +
+          '<li class="agent-plan-item">' +
+            '<span class="' + statusClass + '">' + meta.text + '</span>' +
+            '<span class="agent-plan-label">' + escapeHtml(item.label || item.key || '') + '</span>' +
+            (metaText ? ('<span class="agent-plan-meta">' + metaText + '</span>') : '') +
+          '</li>';
+      }).join('');
+      autoAgentPlan.innerHTML = '<ul class="agent-plan-list">' + items + '</ul>';
+    }
+
+    function formatAgentLogTime(ts) {
+      var date = new Date(ts);
+      var hh = String(date.getHours()).padStart(2, '0');
+      var mm = String(date.getMinutes()).padStart(2, '0');
+      var ss = String(date.getSeconds()).padStart(2, '0');
+      return hh + ':' + mm + ':' + ss;
+    }
+
+    function renderAgentLog() {
+      if (!autoAgentLog) return;
+      var logs = Array.isArray(state.caseGenAgentLog) ? state.caseGenAgentLog : [];
+      if (!logs.length) {
+        autoAgentLog.innerHTML = '<p class="hint">暂无决策记录</p>';
+        return;
+      }
+      var list = logs.slice(-30).map(function(entry) {
+        var time = entry && entry.ts ? formatAgentLogTime(entry.ts) : '--:--:--';
+        var level = entry && entry.level ? String(entry.level) : 'info';
+        var message = entry && entry.message ? String(entry.message) : '';
+        var badge = level === 'warn' ? '⚠' : (level === 'err' ? '⛔' : '•');
+        return '' +
+          '<li class="agent-log-item">' +
+            '<span>' + escapeHtml(time) + '</span>' +
+            '<strong>' + badge + '</strong>' +
+            '<span>' + escapeHtml(message) + '</span>' +
+          '</li>';
+      }).join('');
+      autoAgentLog.innerHTML = '<ul class="agent-log-list">' + list + '</ul>';
+    }
+
+    function renderAgentSuggestion() {
+      if (!autoAgentSuggestion) return;
+      var text = state.caseGenAgentFixSuggestions ? state.caseGenAgentFixSuggestions.trim() : '';
+      autoAgentSuggestion.textContent = text || '暂无修复建议';
+    }
+
+    function renderAgentTrace() {
+      if (!autoAgentTrace) return;
+      var list = Array.isArray(state.caseGenAgentTrace) ? state.caseGenAgentTrace : [];
+      if (!list.length) {
+        autoAgentTrace.innerHTML = '<p class="hint">暂无执行记录</p>';
+        return;
+      }
+      var items = list.map(function(entry) {
+        var time = entry && entry.ts ? formatAgentLogTime(entry.ts) : '--:--:--';
+        var text = entry && entry.message ? escapeHtml(entry.message) : '';
+        return '<li class="agent-trace-item"><strong>' + time + '</strong><span>' + text + '</span></li>';
+      }).join('');
+      autoAgentTrace.innerHTML = '<ul class="agent-trace-list">' + items + '</ul>';
+    }
+
+    function renderAgentPanel() {
+      updateAgentPanelVisibility();
+      syncAgentStopButton();
+      renderAgentPlan();
+      renderAgentLog();
+      renderAgentSuggestion();
+      renderAgentTrace();
+    }
+
+    function pushAgentLog(level, message) {
+      var list = Array.isArray(state.caseGenAgentLog) ? state.caseGenAgentLog : [];
+      list.push({ ts: Date.now(), level: level || 'info', message: message || '' });
+      if (list.length > 200) list = list.slice(-200);
+      state.caseGenAgentLog = list;
+      renderAgentLog();
+      pushAgentTrace(level, message);
+    }
+
+    function pushAgentTrace(level, message, options) {
+      var opts = options || {};
+      var list = Array.isArray(state.caseGenAgentTrace) ? state.caseGenAgentTrace : [];
+      list.push({ ts: Date.now(), level: level || 'info', message: message || '' });
+      if (list.length > 400) list = list.slice(-400);
+      state.caseGenAgentTrace = list;
+      if (!opts.silent) renderAgentTrace();
+      if (persistWorkflowState) persistWorkflowState();
+    }
+
+    function setAgentFixSuggestions(text) {
+      state.caseGenAgentFixSuggestions = text || '';
+      renderAgentSuggestion();
+      if (persistWorkflowState) persistWorkflowState();
+    }
+
+    function setAgentPlanStatus(key, status, note, attempts) {
+      var plan = ensureAgentPlan();
+      var item = plan.find(function(entry) { return entry.key === key; });
+      if (!item) {
+        var template = getAgentPlanTemplate();
+        var fallback = template.find(function(entry) { return entry.key === key; });
+        item = {
+          key: key,
+          label: fallback ? fallback.label : key,
+          status: 'pending',
+          attempts: 0,
+          note: '',
+        };
+        plan.push(item);
+      }
+      if (status) item.status = status;
+      if (note !== undefined) item.note = note || '';
+      if (attempts !== undefined && attempts !== null) item.attempts = Number(attempts || 0);
+      renderAgentPlan();
+      if (persistWorkflowState) persistWorkflowState();
+    }
+
+    function markAgentPlanStopped(note) {
+      var plan = ensureAgentPlan();
+      var target = null;
+      var statusOrder = ['running', 'retrying', 'waiting'];
+      for (var i = 0; i < statusOrder.length; i += 1) {
+        target = plan.find(function(item) { return item && item.status === statusOrder[i]; });
+        if (target) break;
+      }
+      if (!target) {
+        target = plan.find(function(item) { return item && item.status === 'pending'; });
+      }
+      if (!target) return;
+      target.status = 'stopped';
+      target.note = note || '已终止';
+      renderAgentPlan();
+      if (persistWorkflowState) persistWorkflowState();
+    }
+
+    function applyAgentPlanOverride(list, source) {
+      var prev = Array.isArray(state.caseGenAgentPlan) ? state.caseGenAgentPlan : [];
+      var prevMap = {};
+      prev.forEach(function(item) {
+        if (item && item.key) prevMap[item.key] = item;
+      });
+      var normalized = normalizeAgentPlan(list).map(function(item) {
+        var existing = prevMap[item.key];
+        if (existing) {
+          item.status = existing.status || item.status;
+          item.attempts = Number(existing.attempts || item.attempts || 0);
+          item.note = existing.note || item.note || '';
+        }
+        return item;
+      });
+      if (!normalized.length) return false;
+      state.caseGenAgentPlan = normalized;
+      state.caseGenAgentPlanSource = source || 'agent';
+      renderAgentPlan();
+      pushAgentTrace('info', 'Agent 更新了执行计划');
+      return true;
+    }
+
+    function maybeApplyAgentPlanFromDecision(decision) {
+      if (!decision || typeof decision !== 'object') return false;
+      var plan = null;
+      if (Array.isArray(decision.plan)) plan = decision.plan;
+      if (!plan && Array.isArray(decision.plan_steps)) plan = decision.plan_steps;
+      if (!plan && Array.isArray(decision.steps)) plan = decision.steps;
+      if (!plan) return false;
+      return applyAgentPlanOverride(plan, 'agent');
+    }
+
+    function bumpAgentRetryCount(stepKey) {
+      var counters = state.caseGenAgentRetryCounters;
+      if (!counters || typeof counters !== 'object') counters = {};
+      var next = Math.min(2, Number(counters[stepKey] || 0) + 1);
+      counters[stepKey] = next;
+      state.caseGenAgentRetryCounters = counters;
+      setAgentPlanStatus(stepKey, next > 0 ? 'retrying' : '', '', next);
+      return next;
+    }
+
+    function resetAgentRetryCount(stepKey) {
+      var counters = state.caseGenAgentRetryCounters;
+      if (!counters || typeof counters !== 'object') counters = {};
+      counters[stepKey] = 0;
+      state.caseGenAgentRetryCounters = counters;
+    }
+
+    function resetAgentExecutionState() {
+      var plan = ensureAgentPlan();
+      plan.forEach(function(item) {
+        item.status = 'pending';
+        item.attempts = 0;
+        item.note = '';
+      });
+      state.caseGenAgentLog = [];
+      state.caseGenAgentTrace = [];
+      state.caseGenAgentRetryCounters = {};
+      state.caseGenAgentFixSuggestions = '';
+      state.caseGenAgentCoverageRetries = 0;
+      state.caseGenAgentCoverageBelowFull = false;
+      state.autoClarifyDismissed = false;
+      pushAgentLog('info', 'Agent 开始执行用例生成流程');
+      renderAgentPanel();
+    }
+
+    function syncAgentPlanWithContext(ctx) {
+      if (!ctx) return;
+      var plan = ensureAgentPlan();
+      function markDone(key, condition) {
+        if (!condition) return;
+        var item = plan.find(function(entry) { return entry.key === key; });
+        if (!item) return;
+        if (item.status === 'waiting' || item.status === 'failed') return;
+        item.status = 'done';
+      }
+      markDone('review', ctx.has_review);
+      markDone('clean', ctx.has_cleaned);
+      markDone('compare', ctx.has_compare);
+      markDone('coverage', ctx.coverage_percent !== null && ctx.coverage_percent !== undefined);
+      markDone('split', ctx.has_split);
+      markDone('cases', ctx.has_cases_compare);
+      markDone('casegen', ctx.has_casegen_results);
+      var clarifyItem = plan.find(function(entry) { return entry.key === 'clarify'; });
+      if (clarifyItem && clarifyItem.status === 'pending' && !state.autoRequireClarifications) {
+        clarifyItem.status = 'skipped';
+        clarifyItem.note = '未启用人工澄清';
+      }
+      renderAgentPlan();
+    }
+
+    function createAgentManualWaitError(message, stepKey) {
+      var err = new Error(message || '等待人工处理');
+      err.code = 'AGENT_WAIT_MANUAL';
+      err.stepKey = stepKey || '';
+      return err;
+    }
+
+    function isAgentManualWaitError(err) {
+      return Boolean(err && err.code === 'AGENT_WAIT_MANUAL');
+    }
+
+    function collectAgentContext(extra) {
+      var raw = rawText && rawText.value ? rawText.value.trim() : '';
+      var review = reviewResultEl && reviewResultEl.value ? reviewResultEl.value.trim() : '';
+      var cleaned = cleanedTextEl && cleanedTextEl.value ? cleanedTextEl.value.trim() : '';
+      var compare = compareResultEl && compareResultEl.value ? compareResultEl.value.trim() : '';
+      var split = splitResultEl && splitResultEl.value ? splitResultEl.value.trim() : '';
+      var casesCompare = casesCompareResultEl && casesCompareResultEl.value ? casesCompareResultEl.value.trim() : '';
+      var caseGenModules = Array.isArray(state.caseGenModules) ? state.caseGenModules : [];
+      var caseGenResults = state.caseGenResults && typeof state.caseGenResults === 'object' ? state.caseGenResults : {};
+      var coverage = extractCoverageFromCompareResult();
+      var threshold = getAgentCoverageThreshold();
+      var extraCtx = extra && typeof extra === 'object' ? extra : {};
+      var planSnapshot = ensureAgentPlan().map(function(item) {
+        return {
+          key: item.key,
+          label: item.label,
+          status: item.status,
+        };
+      });
+      var clarificationPayload = buildReviewClarificationContext();
+      var extraPrompt = state.autoAgentPromptHint ? state.autoAgentPromptHint.trim() : '';
+      return {
+        requirement_label: getRequirementLabel(true),
+        has_raw: Boolean(raw),
+        has_review: Boolean(review),
+        has_cleaned: Boolean(cleaned),
+        has_compare: Boolean(compare),
+        has_split: Boolean(split),
+        has_cases_compare: Boolean(casesCompare),
+        has_case_source: hasCaseSource(),
+        has_casegen_modules: Boolean(caseGenModules && caseGenModules.length),
+        has_casegen_results: Object.keys(caseGenResults).length > 0,
+        review_clarifications_ready: Boolean(clarificationPayload),
+        clarify_confirmed: Boolean(extraCtx.clarifyConfirmed),
+        coverage_percent: coverage,
+        coverage_threshold: threshold,
+        force_ignore_coverage: Boolean(extraCtx.forceIgnoreCoverage),
+        coverage_retry_count: Number(state.caseGenAgentCoverageRetries || 0),
+        coverage_below_full: Boolean(state.caseGenAgentCoverageBelowFull),
+        agent_extra_prompt: extraPrompt,
+        plan_source: state.caseGenAgentPlanSource || '',
+        plan_steps: planSnapshot,
+      };
+    }
+
+    function normalizeAgentAction(action) {
+      if (!action) return '';
+      var raw = String(action).trim().toLowerCase();
+      var map = {
+        review: 'review',
+        clean: 'clean',
+        compare: 'compare',
+        split: 'split',
+        cases: 'cases',
+        finish: 'finish',
+        wait_coverage: 'wait_coverage',
+        wait_clarify: 'wait_clarify',
+        clarify: 'wait_clarify',
+        coverage: 'wait_coverage',
+      };
+      return map[raw] || '';
+    }
+
+    function pickFallbackAgentAction(ctx) {
+      if (!ctx || !ctx.has_raw) return 'wait_clarify';
+      if (!ctx.has_review) return 'review';
+      if (ctx.coverage_percent !== null && ctx.coverage_percent !== undefined) {
+        if (!ctx.force_ignore_coverage && ctx.coverage_percent < ctx.coverage_threshold) return 'wait_coverage';
+      }
+      if (!ctx.has_cleaned) return 'clean';
+      if (!ctx.has_compare) return 'compare';
+      if (!ctx.has_split) return 'split';
+      if (!ctx.has_cases_compare) return 'cases';
+      return 'finish';
+    }
+
+    function pickResumeAgentAction(ctx) {
+      var plan = ensureAgentPlan();
+      var running = plan.find(function(item) {
+        return item && (item.status === 'running' || item.status === 'retrying');
+      });
+      if (running && running.key) return running.key;
+      var waiting = plan.find(function(item) { return item && item.status === 'waiting'; });
+      if (!waiting || !waiting.key) return '';
+      if (waiting.key === 'clarify') return 'wait_clarify';
+      if (waiting.key === 'coverage') return 'wait_coverage';
+      return waiting.key;
+    }
+
+    function isAgentActionSatisfied(action, ctx) {
+      if (!ctx || !action) return false;
+      if (action === 'review') return ctx.has_review;
+      if (action === 'clean') return ctx.has_cleaned;
+      if (action === 'compare') return ctx.has_compare;
+      if (action === 'split') return ctx.has_split;
+      if (action === 'cases') return ctx.has_cases_compare;
+      return false;
+    }
+
+    function resolveAgentActionLabel(action) {
+      if (!action) return '';
+      var lookup = action;
+      if (action === 'wait_coverage') lookup = 'coverage';
+      if (action === 'wait_clarify') lookup = 'clarify';
+      var plan = ensureAgentPlan();
+      for (var i = 0; i < plan.length; i += 1) {
+        var item = plan[i];
+        if (item && item.key === lookup) return item.label || lookup;
+      }
+      return lookup;
+    }
+
+    async function decideAgentNextAction(ctx) {
+      var model = getAssignedModel('casegenagent');
+      var prompt = state.assignments && state.assignments.caseGenAgentPrompt
+        ? state.assignments.caseGenAgentPrompt.trim()
+        : '';
+      if (!prompt) prompt = defaultPrompts.casegenagent || '';
+      var extraPrompt = state.autoAgentPromptHint ? state.autoAgentPromptHint.trim() : '';
+      if (extraPrompt) {
+        prompt = prompt ? (prompt + '\n\n补充提示：' + extraPrompt) : extraPrompt;
+      }
+      var reasoning = getReasoningForType('casegenagent');
+      var temperature = getTemperatureForType('casegenagent');
+      var payload = JSON.stringify(ctx, null, 2);
+      var content = await callModelWithConfig(model, payload, prompt, reasoning, temperature);
+      var parsed = null;
+      var jsonText = extractJsonPayload(content) || stripCodeFence(content);
+      if (jsonText) {
+        try {
+          parsed = JSON.parse(jsonText);
+        } catch (err) {
+          parsed = null;
+        }
+      }
+      if (!parsed || typeof parsed !== 'object') return null;
+      maybeApplyAgentPlanFromDecision(parsed);
+      return parsed;
+    }
+
+    async function runAgentStep(step, context) {
+      var handler = null;
+      var validator = null;
+      var after = null;
+      if (step === 'review') {
+        handler = function() {
+          var reviewContext = context && context.reviewContext ? context.reviewContext : '';
+          return reviewRequirements(reviewContext ? { clarifications: reviewContext } : null);
+        };
+        validator = function() { return Boolean(reviewResultEl && reviewResultEl.value && reviewResultEl.value.trim().length > 0); };
+        after = function() { return handleAutoClarifyAfterReview(context); };
+      } else if (step === 'clean') {
+        handler = function() { return runCleaning(context); };
+        validator = function() { return Boolean(cleanedTextEl && cleanedTextEl.value && cleanedTextEl.value.trim().length > 0); };
+      } else if (step === 'compare') {
+        handler = function() { return compareCoverage(); };
+        validator = function() { return Boolean(compareResultEl && compareResultEl.value && compareResultEl.value.trim().length > 0); };
+      } else if (step === 'split') {
+        handler = function() { return splitModules(); };
+        validator = function() { return Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim().length > 0); };
+      } else if (step === 'cases') {
+        handler = function() { return compareCasesCoverage(); };
+        validator = function() { return Boolean(casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim().length > 0); };
+      } else if (step === 'casegen') {
+        handler = function() {
+          if (!ensureCaseGenModulesFromSplit()) {
+            if (!state.caseGenModules || !state.caseGenModules.length) {
+              throw new Error('尚无可用的模块拆分结果，无法生成用例');
+            }
+          }
+          return generateAllCaseGenModules();
+        };
+        validator = function() { return state.caseGenResults && Object.keys(state.caseGenResults).length > 0; };
+      }
+      if (!handler) return;
+      clearStepFailed(step);
+      await handler();
+      if (validator && !validator()) {
+        var invalidReason = '步骤「' + step + '」未产生有效输出，请检查模型配置或稍后重试';
+        setStepFailed(step, invalidReason);
+        updateFlowStatus();
+        var invalidError = new Error(invalidReason);
+        invalidError.validationFailed = true;
+        throw invalidError;
+      }
+      if (after) await after();
+      if (persistWorkflowState) persistWorkflowState();
+    }
+
+    async function runAgentStepWithRetry(step, context, options) {
+      var opts = options || {};
+      var label = opts.label || step;
+      var note = opts.note || '';
+      var maxRetries = 2;
+      var attempts = 0;
+      while (attempts <= maxRetries) {
+        ensureAgentNotStopped();
+        clearStepWaiting(step);
+        if (attempts === 0) {
+          setAgentPlanStatus(step, 'running', note);
+          pushAgentTrace('info', '开始执行步骤：' + label);
+        } else {
+          setAgentPlanStatus(step, 'retrying', note, attempts);
+          pushAgentLog('warn', '步骤「' + label + '」校验失败，自动重试第 ' + attempts + ' 次');
+          pushAgentTrace('warn', '步骤「' + label + '」开始重试，第 ' + attempts + ' 次');
+        }
+        try {
+          await runAgentStep(step, context);
+          ensureAgentNotStopped();
+          setAgentPlanStatus(step, 'done', note, attempts);
+          resetAgentRetryCount(step);
+          pushAgentTrace('info', '步骤完成：' + label);
+          return;
+        } catch (err) {
+          attempts += 1;
+          bumpAgentRetryCount(step);
+          if (attempts <= maxRetries) {
+            continue;
+          }
+          var msg = err && err.message ? err.message : '步骤执行失败';
+          setAgentPlanStatus(step, 'waiting', msg, attempts - 1);
+          setStepWaiting(step, msg);
+          updateFlowStatus();
+          pushAgentTrace('warn', '步骤暂停：' + label + '，等待人工处理');
+          throw createAgentManualWaitError('步骤「' + label + '」校验失败，已等待人工处理：' + msg, step);
+        }
+      }
+    }
+
+    function normalizeAgentTriggerResult(result) {
+      if (result && typeof result === 'object') {
+        if (Object.prototype.hasOwnProperty.call(result, 'ok')) {
+          return { ok: Boolean(result.ok), reason: result.reason || '' };
+        }
+        return { ok: true, reason: '' };
+      }
+      if (result === false) return { ok: false, reason: '' };
+      if (typeof result === 'string') return { ok: false, reason: result };
+      return { ok: Boolean(result), reason: '' };
+    }
+
+    async function runAgentOptionalStep(key, label, runner) {
+      if (!runner || typeof runner !== 'function') {
+        setAgentPlanStatus(key, 'skipped', '未配置触发入口');
+        return;
+      }
+      setAgentPlanStatus(key, 'running', '');
+      try {
+        var res = runner();
+        if (res && typeof res.then === 'function') res = await res;
+        var normalized = normalizeAgentTriggerResult(res);
+        if (!normalized.ok) {
+          var reason = normalized.reason || '未满足触发条件';
+          setAgentPlanStatus(key, 'skipped', reason);
+          pushAgentLog('warn', label + '未触发：' + reason);
+          return;
+        }
+        setAgentPlanStatus(key, 'done', '');
+        pushAgentLog('info', label + '已触发');
+      } catch (err) {
+        var msg = err && err.message ? err.message : '触发失败';
+        setAgentPlanStatus(key, 'skipped', msg);
+        pushAgentLog('warn', label + '触发失败：' + msg);
+      }
+    }
+
+    async function runClarifyFollowupIfNeeded(agentContext) {
+      if (!agentContext || !agentContext.clarifyConfirmed || agentContext.clarifyReReviewed) return;
+      agentContext.clarifyReReviewed = true;
+      var reviewContext = buildReviewClarificationContext();
+      var reviewCtx = Object.assign({}, agentContext, { skipClarify: true, reviewContext: reviewContext });
+      await runAgentStepWithRetry('review', reviewCtx, { label: '需求评审', note: '澄清后再评审' });
+      var cleanCtx = Object.assign({}, agentContext, { mode: 'reclean' });
+      await runAgentStepWithRetry('clean', cleanCtx, { label: '需求清洗', note: '澄清后重新清洗' });
+      pushAgentLog('info', '已根据澄清结果重新评审并清洗');
+    }
+
+    async function runCaseGenAgentWorkflow(context) {
+      var agentContext = context && typeof context === 'object' ? Object.assign({}, context) : {};
+      var maxTurns = 16;
+      var lastSignature = '';
+      renderAgentPanel();
+      for (var i = 0; i < maxTurns; i += 1) {
+        ensureAgentNotStopped();
+        if (agentContext && agentContext.coverageAction) {
+          var manualAction = String(agentContext.coverageAction || '').trim().toLowerCase();
+          agentContext.coverageAction = '';
+          if (manualAction === 'ignore') {
+            agentContext.forceIgnoreCoverage = true;
+            pushAgentLog('info', '收到人工选择：忽略覆盖率继续');
+          } else if (manualAction === 'supplement' || manualAction === 'reclean') {
+            agentContext.mode = manualAction === 'supplement' ? 'supplement' : 'reclean';
+            pushAgentLog('info', manualAction === 'supplement' ? '收到人工选择：补全清洗并继续' : '收到人工选择：重新清洗并继续');
+            await runAgentStepWithRetry('clean', agentContext, {
+              label: '需求清洗',
+              note: manualAction === 'supplement' ? '人工补全清洗' : '人工重新清洗'
+            });
+            await runAgentStepWithRetry('compare', agentContext, {
+              label: '对比完整性',
+              note: manualAction === 'supplement' ? '人工补全后复查' : '人工重清洗后复查'
+            });
+            continue;
+          }
+        }
+        var ctx = collectAgentContext(agentContext);
+        syncAgentPlanWithContext(ctx);
+        if (!ctx.has_raw) {
+          var waitErr = '缺少原始需求';
+          setStatus(autoWorkflowStatus, '请先导入原始需求', 'warn');
+          setAgentPlanStatus('review', 'waiting', waitErr);
+          throw createAgentManualWaitError(waitErr, 'review');
+        }
+        if (ctx.has_cases_compare) {
+          return;
+        }
+        var signature = JSON.stringify({
+          has_review: ctx.has_review,
+          has_cleaned: ctx.has_cleaned,
+          has_compare: ctx.has_compare,
+          has_split: ctx.has_split,
+          has_cases_compare: ctx.has_cases_compare,
+          has_casegen_results: ctx.has_casegen_results,
+          coverage: ctx.coverage_percent,
+        });
+        if (signature === lastSignature && i > 1) {
+          throw new Error('Agent 决策未推进流程，请检查模型输出');
+        }
+        lastSignature = signature;
+        var decision = null;
+        var action = '';
+        try {
+          if (autoWorkflowStatus) setStatus(autoWorkflowStatus, 'Agent 正在决策下一步…', '');
+          decision = await decideAgentNextAction(ctx);
+        } catch (err) {
+          decision = null;
+        }
+        if (decision && decision.reason) {
+          pushAgentLog('info', 'Agent 决策：' + decision.action + '（' + decision.reason + '）');
+        } else if (decision && decision.action) {
+          pushAgentLog('info', 'Agent 决策：' + decision.action);
+        }
+        action = normalizeAgentAction(decision && decision.action ? decision.action : '');
+        if (!action) action = pickFallbackAgentAction(ctx);
+        if (isAgentActionSatisfied(action, ctx)) {
+          pushAgentLog('info', '检测到已有结果，跳过步骤：' + resolveAgentActionLabel(action));
+          action = pickFallbackAgentAction(ctx);
+        }
+        if (action === 'finish' && !ctx.has_cases_compare) {
+          action = pickFallbackAgentAction(ctx);
+        }
+        if (action === 'finish') {
+          return;
+        }
+        if (action === 'wait_coverage') {
+          await handleAgentCoverageAfterCompare(agentContext);
+          continue;
+        }
+        if (action === 'wait_clarify') {
+          await handleAutoClarifyAfterReview(agentContext);
+          await runClarifyFollowupIfNeeded(agentContext);
+          continue;
+        }
+        if (action === 'review') {
+          await runAgentStepWithRetry('review', agentContext, { label: '需求评审' });
+          await runClarifyFollowupIfNeeded(agentContext);
+          continue;
+        }
+        if (action === 'clean') {
+          await runAgentStepWithRetry('clean', agentContext, { label: '需求清洗' });
+          continue;
+        }
+        if (action === 'compare') {
+          await runAgentStepWithRetry('compare', agentContext, { label: '对比完整性' });
+          await handleAgentCoverageAfterCompare(agentContext);
+          continue;
+        }
+        if (action === 'split') {
+          await runAgentStepWithRetry('split', agentContext, { label: '测试模块拆分' });
+          continue;
+        }
+        if (action === 'cases') {
+          await runAgentStepWithRetry('cases', agentContext, { label: '覆盖对比' });
+          continue;
+        }
+        await runAgentStepWithRetry(action, agentContext, { label: action });
+      }
+      throw new Error('Agent 达到最大执行轮次仍未完成');
     }
 
     async function notifyFeishuCoverageFailure() {
@@ -484,7 +1346,10 @@
         if (autoCompareDrawerBody) autoCompareDrawerBody.scrollTop = 0;
         drawer.open();
       }
-      if (autoCompareToggleBtn) autoCompareToggleBtn.disabled = Boolean(state.autoRunning);
+      if (autoCompareToggleBtn) {
+        var waitingCompare = Boolean(state.waitingSteps && state.waitingSteps.compare);
+        autoCompareToggleBtn.disabled = Boolean(state.autoRunning && !waitingCompare);
+      }
       updateAutoCompareActions(coverage);
     }
 
@@ -523,23 +1388,34 @@
     function updateAutoCompareActions(coverage) {
       if (coverage === void 0) coverage = extractCoverageFromCompareResult();
       var hasClean = shouldExpectCleanJson() && Boolean(cleanedTextEl && cleanedTextEl.value && cleanedTextEl.value.trim());
-      var canRetry = Boolean(!state.autoRunning && coverage !== null && coverage < 100);
+      var waitingCompare = Boolean(state.waitingSteps && state.waitingSteps.compare);
+      var autoBlocked = Boolean(state.autoRunning && !waitingCompare);
+      var canRetry = Boolean(!autoBlocked && coverage !== null && coverage < 100);
       if (autoRecleanBtn) autoRecleanBtn.disabled = !canRetry;
       if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = !canRetry;
       if (autoJumpCleanViewBtn) autoJumpCleanViewBtn.disabled = !(coverage !== null && hasClean);
       var selected = getSelectedAutoCompareMissing();
       var suggestion = state.autoCompareSuggestion ? state.autoCompareSuggestion.trim() : '';
-      if (autoFillCleanBtn) autoFillCleanBtn.disabled = Boolean(state.autoRunning) || !(selected.length || suggestion);
+      if (autoFillCleanBtn) autoFillCleanBtn.disabled = Boolean(autoBlocked) || !(selected.length || suggestion);
       if (autoCompareToggleBtn) {
         var hasMissing = state.autoCompareMissingList && state.autoCompareMissingList.length;
-        autoCompareToggleBtn.disabled = Boolean(state.autoRunning) || !hasMissing;
+        autoCompareToggleBtn.disabled = Boolean(autoBlocked) || !hasMissing;
         if (!hasMissing) setAutoCompareToggleLabel(false);
       }
     }
 
     function syncAutoCompareStatus(shouldOpenDrawer) {
-      if (shouldOpenDrawer === void 0) shouldOpenDrawer = true;
       var coverage = extractCoverageFromCompareResult();
+      if (shouldOpenDrawer === void 0) {
+        shouldOpenDrawer = true;
+        if (coverage !== null && coverage < 100 && state.autoRunning && isCaseGenAgentEnabled()) {
+          var limit = getAgentCoverageThreshold();
+          var retryCount = Number(state.caseGenAgentCoverageRetries || 0);
+          if (coverage < limit && retryCount < 2) {
+            shouldOpenDrawer = false;
+          }
+        }
+      }
       var data = extractCompareResultData();
       var missing = data && Array.isArray(data.missing) ? data.missing : [];
       setAutoCompareStatusText(coverage === null ? '覆盖率：--' : '覆盖率：' + coverage + '%');
@@ -566,6 +1442,15 @@
         assignMessage('workflowFailure', '忽略覆盖率继续失败', 'err');
         return result;
       }
+      if (kind === 'agent_continue') {
+        assignMessage('recleanStart', '已忽略覆盖率不足，Agent 正在继续执行…', 'warn');
+        assignMessage('workflowStart', '已忽略覆盖率，Agent 正在继续执行后续流程', 'warn');
+        assignMessage('recleanSuccess', '已忽略覆盖率完成剩余步骤，请检查结果', 'ok');
+        assignMessage('workflowSuccess', 'Agent 已完成剩余步骤，覆盖率仍不足，请注意风险', 'warn');
+        assignMessage('recleanFailure', '忽略覆盖率继续失败', 'err');
+        assignMessage('workflowFailure', '忽略覆盖率继续失败', 'err');
+        return result;
+      }
       if (kind === 'reclean' || kind === 'supplement') {
         assignMessage('recleanStart', opts.startMessage || '重新执行中（从需求清洗开始）...', opts.startTone || '');
         assignMessage('workflowStart', opts.workflowStartMessage || '正在重新执行剩余步骤，请勿关闭页面', opts.workflowStartTone || '');
@@ -573,6 +1458,12 @@
         assignMessage('workflowSuccess', opts.workflowSuccessMessage || '重新执行完成，可切换至“功能流程”查看详情', opts.workflowSuccessTone || 'ok');
         assignMessage('recleanFailure', opts.failureMessage || '重新执行中断', opts.failureTone || 'err');
         assignMessage('workflowFailure', opts.workflowFailureMessage || '一键执行中断', opts.workflowFailureTone || 'err');
+        return result;
+      }
+      if (kind === 'agent') {
+        assignMessage('workflowStart', 'Agent 正在执行用例生成流程，请勿关闭页面', '');
+        assignMessage('workflowSuccess', 'Agent 已完成用例生成流程，请检查结果', 'ok');
+        assignMessage('workflowFailure', 'Agent 执行中断', 'err');
         return result;
       }
       assignMessage('workflowStart', '正在执行完整工作流，请勿关闭页面', '');
@@ -591,6 +1482,7 @@
       if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = running;
       if (autoFillCleanBtn) autoFillCleanBtn.disabled = running;
       if (autoJumpCleanViewBtn) autoJumpCleanViewBtn.disabled = running;
+      syncAgentStopButton();
 
       if (!hasTask) {
         updateAutoCompareActions();
@@ -623,6 +1515,14 @@
           var startReclean = resolveMessage('recleanStart', '', '');
           if (autoRecleanStatus) setStatus(autoRecleanStatus, startReclean.text, startReclean.tone);
         }
+      } else if (task.status === 'waiting') {
+        var waitText = task.error ? String(task.error) : '';
+        var waitWorkflow = resolveMessage('workflowFailure', '等待人工处理', 'warn');
+        var waitMsg = waitText ? (waitWorkflow.text + '：' + waitText) : waitWorkflow.text;
+        if (autoWorkflowStatus) setStatus(autoWorkflowStatus, waitMsg, 'warn');
+        if (kind !== 'full') {
+          if (autoRecleanStatus) setStatus(autoRecleanStatus, waitMsg, 'warn');
+        }
       } else if (task.status === 'done') {
         var doneWorkflow = resolveMessage('workflowSuccess', '一键执行完成，可切换至“功能流程”查看详情', 'ok');
         if (autoWorkflowStatus) setStatus(autoWorkflowStatus, doneWorkflow.text, doneWorkflow.tone);
@@ -630,6 +1530,15 @@
           var doneReclean = resolveMessage('recleanSuccess', '', 'ok');
           if (autoRecleanStatus) setStatus(autoRecleanStatus, doneReclean.text, doneReclean.tone);
         }
+      } else if (task.status === 'stopped') {
+        var stopText = task.error ? String(task.error) : '';
+        var stopWorkflow = resolveMessage('workflowFailure', 'Agent 已停止', 'warn');
+        var stopMsg = stopText ? (stopWorkflow.text + '：' + stopText) : stopWorkflow.text;
+        if (autoWorkflowStatus) setStatus(autoWorkflowStatus, stopMsg, 'warn');
+        if (kind !== 'full') {
+          if (autoRecleanStatus) setStatus(autoRecleanStatus, stopMsg, 'warn');
+        }
+        markAgentPlanStopped('已终止');
       } else if (task.status === 'error') {
         var errText = task.error ? String(task.error) : '';
         var failWorkflow = resolveMessage('workflowFailure', '一键执行中断', 'err');
@@ -649,6 +1558,7 @@
       if (task.status === 'done' && task.expandMissing) {
         ensureAutoMissingViewVisible(true);
       }
+      renderAgentPanel();
     }
 
     function isAutoWorkflowReady() {
@@ -663,6 +1573,14 @@
     }
 
     function buildAutoWorkflowSteps() {
+      if (isCaseGenAgentEnabled()) {
+        return [{
+          key: 'agent',
+          label: '用例生成 Agent',
+          run: function(ctx) { return runCaseGenAgentWorkflow(ctx); },
+          validate: function() { return true; },
+        }];
+      }
       return [
         {
           key: 'review',
@@ -704,9 +1622,106 @@
       }
     }
 
-    async function enforceAutoCoverageRequirement() {
+    function buildAgentCoverageFixSuggestions(coverage, limit) {
+      var data = extractCompareResultData();
+      var missing = data && Array.isArray(data.missing) ? data.missing : [];
+      if (!missing.length) return '';
+      var lines = missing.slice(0, 8).map(function(item, idx) {
+        return (idx + 1) + '. ' + formatMissingRequirement(item);
+      });
+      if (missing.length > 8) {
+        lines.push('... 还有 ' + (missing.length - 8) + ' 条未覆盖需求点');
+      }
+      var header = '覆盖率仅 ' + coverage + '%（阈值 ' + limit + '%），建议优先补充以下缺失项：';
+      return header + '\n' + lines.join('\n');
+    }
+
+    async function handleAgentCoverageAfterCompare(context) {
+      var limit = getAgentCoverageThreshold();
+      var retryCount = Number(state.caseGenAgentCoverageRetries || 0);
+      var previewCoverage = extractCoverageFromCompareResult();
+      var shouldOpenDrawer = !(previewCoverage !== null && previewCoverage < limit && retryCount < 2);
+      var coverage = syncAutoCompareStatus(shouldOpenDrawer);
+      setAgentPlanStatus('coverage', 'running', '');
+      clearStepFailed('compare');
+      clearStepWaiting('compare');
+      if (coverage === null) {
+        var msg = '对比完整性结果解析失败';
+        setAgentPlanStatus('coverage', 'waiting', msg);
+        setStepWaiting('compare', msg);
+        updateFlowStatus();
+        throw createAgentManualWaitError(msg, 'compare');
+      }
+      if (context && context.forceIgnoreCoverage) {
+        setAgentPlanStatus('coverage', 'done', '已忽略覆盖率不足');
+        return coverage;
+      }
+      if (coverage >= limit) {
+        if (coverage < 100) {
+          state.caseGenAgentCoverageBelowFull = true;
+          var warnText = '覆盖率 ' + coverage + '% 已达到阈值，但仍未满 100%';
+          setAgentPlanStatus('coverage', 'done', warnText);
+          pushAgentLog('warn', warnText);
+          var suggestion = buildAgentCoverageFixSuggestions(coverage, limit);
+          if (suggestion) setAgentFixSuggestions(suggestion);
+        } else {
+          state.caseGenAgentCoverageBelowFull = false;
+          setAgentPlanStatus('coverage', 'done', '覆盖率已满足 100%');
+        }
+        return coverage;
+      }
+      while (coverage < limit && retryCount < 2) {
+        retryCount += 1;
+        state.caseGenAgentCoverageRetries = retryCount;
+        var note = '覆盖率不足，自动重清洗第 ' + retryCount + ' 次';
+        setAgentPlanStatus('coverage', 'retrying', note, retryCount);
+        pushAgentLog('warn', '覆盖率仅 ' + coverage + '%，' + note);
+        await runAgentStepWithRetry('clean', Object.assign({}, context, {
+          mode: 'reclean',
+          compare: buildFilteredComparePayload(),
+          suggestion: state.autoCompareSuggestion || ''
+        }), { label: '需求清洗', note: '覆盖率不足自动重清洗' });
+        await runAgentStepWithRetry('compare', context, { label: '对比完整性', note: '覆盖率复查' });
+        previewCoverage = extractCoverageFromCompareResult();
+        shouldOpenDrawer = !(previewCoverage !== null && previewCoverage < limit && retryCount < 2);
+        coverage = syncAutoCompareStatus(shouldOpenDrawer);
+        if (coverage === null) break;
+      }
+      if (coverage === null) {
+        var parseMsg = '对比完整性结果解析失败';
+        setAgentPlanStatus('coverage', 'waiting', parseMsg);
+        setStepWaiting('compare', parseMsg);
+        updateFlowStatus();
+        throw createAgentManualWaitError(parseMsg, 'compare');
+      }
+      if (coverage < limit) {
+        var fixText = buildAgentCoverageFixSuggestions(coverage, limit);
+        if (fixText) setAgentFixSuggestions(fixText);
+        var waitMsg = '覆盖率仍不足 ' + limit + '%，等待人工处理';
+        setAgentPlanStatus('coverage', 'waiting', waitMsg, retryCount);
+        setStepWaiting('compare', waitMsg);
+        updateFlowStatus();
+        throw createAgentManualWaitError(waitMsg, 'compare');
+      }
+      setAgentPlanStatus('coverage', 'done', '覆盖率已达到阈值');
+      if (coverage < 100) {
+        state.caseGenAgentCoverageBelowFull = true;
+        var warnMsg = '覆盖率 ' + coverage + '% 已达到阈值，但仍未满 100%';
+        pushAgentLog('warn', warnMsg);
+        var suggest = buildAgentCoverageFixSuggestions(coverage, limit);
+        if (suggest) setAgentFixSuggestions(suggest);
+      } else {
+        state.caseGenAgentCoverageBelowFull = false;
+      }
+      return coverage;
+    }
+
+    async function enforceAutoCoverageRequirement(threshold, options) {
+      var limit = threshold === undefined || threshold === null ? 100 : clampAgentCoverageThreshold(threshold);
+      var allowContinue = options && options.allowContinue === true;
+      var agentMode = options && options.agent === true;
       var coverage = syncAutoCompareStatus();
-       clearStepFailed('compare');
+      clearStepFailed('compare');
       clearStepWaiting('compare');
       if (coverage === null) {
         setStatus(autoWorkflowStatus, '无法解析对比完整性结果，自动流程已暂停', 'warn');
@@ -717,7 +1732,7 @@
         updateFlowStatus();
         throw new Error('未解析到对比覆盖率');
       }
-      if (coverage < 100) {
+      if (!allowContinue && coverage < limit) {
         setStatus(autoWorkflowStatus, '覆盖率仅 ' + coverage + '% ，自动流程已停止', 'warn');
         if (autoRecleanBtn) autoRecleanBtn.disabled = false;
         if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = false;
@@ -725,7 +1740,10 @@
         setStepWaiting('compare', '覆盖率不足，等待确认');
         updateFlowStatus();
         await notifyFeishuCoverageFailure();
-        throw new Error('对比覆盖率不足100%');
+        throw new Error('对比覆盖率不足' + limit + '%');
+      }
+      if (coverage < 100 && limit < 100 && agentMode && autoWorkflowStatus) {
+        setStatus(autoWorkflowStatus, '覆盖率 ' + coverage + '% ，已达到阈值继续执行', 'warn');
       }
       if (autoRecleanBtn) autoRecleanBtn.disabled = true;
       if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = true;
@@ -733,16 +1751,33 @@
       if (autoRecleanStatus) setStatus(autoRecleanStatus, '', '');
     }
 
-    async function handleAutoClarifyAfterReview() {
+    async function handleAutoClarifyAfterReview(context) {
       if (!state.autoRequireClarifications) return;
+      if (context && context.skipClarify) return;
+      var agentMode = isCaseGenAgentEnabled();
       switchTab('auto');
       if (autoClarifySection) autoClarifySection.classList.remove('hidden');
+      if (agentMode) {
+        var filled = autoFillReviewClarifications({ source: 'agent' });
+        if (filled) {
+          pushAgentLog('info', '已基于评审结果自动填充澄清建议');
+        }
+      }
       renderAutoClarifyView();
       setStepWaiting('review', '等待澄清确认');
       updateFlowStatus();
+      if (agentMode) {
+        setAgentPlanStatus('clarify', 'waiting', '等待澄清确认');
+        if (openAutoClarifyPanel) openAutoClarifyPanel();
+      }
       try {
         await notifyFeishuClarificationNeeded();
         await waitForAutoClarification();
+        if (context && typeof context === 'object') context.clarifyConfirmed = true;
+        if (agentMode) {
+          setAgentPlanStatus('clarify', 'done', '澄清已确认');
+          pushAgentLog('info', '需求澄清已确认，继续执行');
+        }
       } finally {
         clearStepWaiting('review');
       }
@@ -758,6 +1793,10 @@
         setStatus(autoWorkflowStatus, '请先导入至少一份测试用例', 'warn');
         return;
       }
+      clearAllWaitingSteps();
+      clearAllFailedSteps();
+      var agentEnabled = isCaseGenAgentEnabled();
+      if (agentEnabled) resetAgentStopState();
       var autoWorkflowManager = getAutoWorkflowManager();
       if (autoWorkflowManager && typeof autoWorkflowManager.getTask === 'function') {
         var activeTask = autoWorkflowManager.getTask();
@@ -769,8 +1808,7 @@
         setStatus(autoWorkflowStatus, '正在执行，请稍候……', 'warn');
         return;
       }
-      clearAllWaitingSteps();
-      clearAllFailedSteps();
+      renderAgentPanel();
       state.autoRunning = true;
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = true;
       if (autoClarifyToggle) autoClarifyToggle.disabled = true;
@@ -786,25 +1824,37 @@
       setMissingStatus('', '');
       if (autoJumpCleanViewBtn) autoJumpCleanViewBtn.disabled = true;
       resetAutoMissingView();
-      setStatus(autoWorkflowStatus, '正在执行完整工作流，请勿关闭页面', '');
-      if (autoWorkflowManager && typeof autoWorkflowManager.startTask === 'function') {
+      setStatus(autoWorkflowStatus, agentEnabled ? 'Agent 正在执行用例生成流程，请勿关闭页面' : '正在执行完整工作流，请勿关闭页面', '');
+      var useManager = Boolean(autoWorkflowManager && typeof autoWorkflowManager.startTask === 'function');
+      if (useManager) {
+        var taskKind = agentEnabled ? 'agent' : 'full';
         autoWorkflowManager.startTask({
-          kind: 'full',
+          kind: taskKind,
           startIndex: 0,
           stepIndex: 0,
           expandMissing: true,
-          messages: buildAutoWorkflowTaskMessages('full'),
+          messages: buildAutoWorkflowTaskMessages(taskKind),
         }, { force: true });
         return;
       }
       try {
         await executeAutoWorkflowSteps(0);
-        setStatus(autoWorkflowStatus, '一键执行完成，可切换至“功能流程”查看详情', 'ok');
+        if (agentEnabled && state.caseGenAgentCoverageBelowFull) {
+          setStatus(autoWorkflowStatus, 'Agent 已完成用例生成流程，但覆盖率未满 100%，请查看修复建议', 'warn');
+        } else {
+          setStatus(autoWorkflowStatus, agentEnabled ? 'Agent 已完成用例生成流程，请检查结果' : '一键执行完成，可切换至“功能流程”查看详情', 'ok');
+        }
         state.autoExpandMissing = true;
         await notifyFeishuWorkflowSuccess();
       } catch (err) {
         console.error(err);
-        setStatus(autoWorkflowStatus, '一键执行中断：' + err.message, 'err');
+        if (agentEnabled && isAgentStoppedError(err)) {
+          setStatus(autoWorkflowStatus, err.message || 'Agent 已停止', 'warn');
+        } else if (agentEnabled && isAgentManualWaitError(err)) {
+          setStatus(autoWorkflowStatus, err.message || '等待人工处理', 'warn');
+        } else {
+          setStatus(autoWorkflowStatus, (agentEnabled ? 'Agent 执行中断：' : '一键执行中断：') + err.message, 'err');
+        }
       } finally {
         state.autoRunning = false;
         if (autoWorkflowBtn) autoWorkflowBtn.disabled = false;
@@ -840,6 +1890,12 @@
         setStatus(autoRecleanStatus, '尚无对比结果可用，请先完成一次对比', 'warn');
         return;
       }
+      var agentEnabled = isCaseGenAgentEnabled();
+      if (agentEnabled && !isAgentCoverageWaiting()) {
+        setStatus(autoRecleanStatus, 'Agent 模式请在覆盖率等待阶段使用此操作', 'warn');
+        if (autoWorkflowStatus) setStatus(autoWorkflowStatus, 'Agent 模式请使用一键执行启动流程', 'warn');
+        return;
+      }
       var autoWorkflowManager = getAutoWorkflowManager();
       if (autoWorkflowManager && typeof autoWorkflowManager.getTask === 'function') {
         var runningTask = autoWorkflowManager.getTask();
@@ -864,11 +1920,12 @@
       var successTone = options.successTone || 'ok';
       var workflowSuccessTone = options.workflowSuccessTone || 'ok';
       var mode = options.mode || 'reclean';
+      renderAgentPanel();
       state.autoRunning = true;
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = true;
       if (autoClarifyToggle) autoClarifyToggle.disabled = true;
       if (autoRecleanBtn) autoRecleanBtn.disabled = true;
-        setAutoCompareStatusText('等待对比结果');
+      setAutoCompareStatusText('等待对比结果');
       resetAutoCompareMissingView();
       resetAutoMissingView();
       if (autoMissingToggle) autoMissingToggle.disabled = true;
@@ -878,8 +1935,9 @@
       if (autoJumpCleanViewBtn) autoJumpCleanViewBtn.disabled = true;
       if (autoFillCleanBtn) autoFillCleanBtn.disabled = true;
       setStatus(autoRecleanStatus, startMessage, startTone);
-      setStatus(autoWorkflowStatus, workflowStartMessage, workflowStartTone);
-      if (autoWorkflowManager && typeof autoWorkflowManager.startTask === 'function') {
+      setStatus(autoWorkflowStatus, agentEnabled ? 'Agent 正在执行用例生成流程，请勿关闭页面' : workflowStartMessage, workflowStartTone);
+      var useManager = Boolean(autoWorkflowManager && typeof autoWorkflowManager.startTask === 'function');
+      if (useManager) {
         var comparePayload = Object.prototype.hasOwnProperty.call(options, 'compareOverride')
           ? options.compareOverride
           : buildFilteredComparePayload();
@@ -888,10 +1946,11 @@
         if (comparePayload) context.compare = comparePayload;
         if (suggestionPayload) context.suggestion = suggestionPayload;
         if (mode) context.mode = mode;
+        if (options.coverageAction) context.coverageAction = options.coverageAction;
         autoWorkflowManager.startTask({
-          kind: mode === 'supplement' ? 'supplement' : 'reclean',
-          startIndex: 1,
-          stepIndex: 1,
+          kind: agentEnabled ? 'agent' : (mode === 'supplement' ? 'supplement' : 'reclean'),
+          startIndex: agentEnabled ? 0 : 1,
+          stepIndex: agentEnabled ? 0 : 1,
           context: context,
           messageOptions: {
             startMessage: startMessage,
@@ -905,7 +1964,7 @@
             successTone: successTone,
             workflowSuccessTone: workflowSuccessTone,
           },
-          messages: buildAutoWorkflowTaskMessages(mode === 'supplement' ? 'supplement' : 'reclean', {
+          messages: buildAutoWorkflowTaskMessages(agentEnabled ? 'agent' : (mode === 'supplement' ? 'supplement' : 'reclean'), {
             startMessage: startMessage,
             workflowStartMessage: workflowStartMessage,
             successMessage: successMessage,
@@ -929,14 +1988,27 @@
         if (comparePayload) context.compare = comparePayload;
         if (suggestionPayload) context.suggestion = suggestionPayload;
         if (mode) context.mode = mode;
-        await executeAutoWorkflowSteps(1, context);
+        if (options.coverageAction) context.coverageAction = options.coverageAction;
+        await executeAutoWorkflowSteps(agentEnabled ? 0 : 1, context);
         setStatus(autoRecleanStatus, successMessage, successTone);
-        setStatus(autoWorkflowStatus, workflowSuccessMessage, workflowSuccessTone);
+        if (agentEnabled && state.caseGenAgentCoverageBelowFull) {
+          setStatus(autoWorkflowStatus, 'Agent 已完成用例生成流程，但覆盖率未满 100%，请查看修复建议', 'warn');
+        } else {
+          setStatus(autoWorkflowStatus, agentEnabled ? 'Agent 已完成用例生成流程，请检查结果' : workflowSuccessMessage, workflowSuccessTone);
+        }
         await notifyFeishuWorkflowSuccess();
       } catch (err) {
         console.error(err);
-        setStatus(autoRecleanStatus, failureMessage + '：' + err.message, 'err');
-        setStatus(autoWorkflowStatus, workflowFailureMessage + '：' + err.message, 'err');
+        if (agentEnabled && isAgentStoppedError(err)) {
+          setStatus(autoRecleanStatus, err.message || 'Agent 已停止', 'warn');
+          setStatus(autoWorkflowStatus, err.message || 'Agent 已停止', 'warn');
+        } else if (agentEnabled && isAgentManualWaitError(err)) {
+          setStatus(autoRecleanStatus, err.message || '等待人工处理', 'warn');
+          setStatus(autoWorkflowStatus, err.message || '等待人工处理', 'warn');
+        } else {
+          setStatus(autoRecleanStatus, failureMessage + '：' + err.message, 'err');
+          setStatus(autoWorkflowStatus, (agentEnabled ? 'Agent 执行中断：' : workflowFailureMessage + '：') + err.message, 'err');
+        }
       } finally {
         state.autoRunning = false;
         if (autoWorkflowBtn) autoWorkflowBtn.disabled = false;
@@ -948,14 +2020,25 @@
       }
     }
 
-    async function continueAutoWorkflowAfterCoverage() {
+    async function continueAutoWorkflowAfterCoverage(options) {
       if (!autoRecleanStatus) return;
       if (!compareResultEl || !compareResultEl.value || !compareResultEl.value.trim()) {
         setStatus(autoRecleanStatus, '当前无对比结果可用，请先执行一次对比', 'warn');
         return;
       }
+      var agentEnabled = isCaseGenAgentEnabled();
+      if (agentEnabled && !isAgentCoverageWaiting()) {
+        setStatus(autoRecleanStatus, 'Agent 模式请在覆盖率等待阶段使用此操作', 'warn');
+        if (autoWorkflowStatus) setStatus(autoWorkflowStatus, 'Agent 模式请使用一键执行启动流程', 'warn');
+        return;
+      }
       var coverage = extractCoverageFromCompareResult();
-      if (coverage === null || coverage >= 100) {
+      var limit = agentEnabled ? getAgentCoverageThreshold() : 100;
+      if (coverage === null) {
+        setStatus(autoRecleanStatus, '当前覆盖率无法解析，请修正后再继续', 'warn');
+        return;
+      }
+      if (coverage >= limit) {
         setStatus(autoRecleanStatus, '覆盖率已满足要求，无需忽略继续', 'warn');
         return;
       }
@@ -973,6 +2056,7 @@
       clearAllWaitingSteps();
       clearAllFailedSteps();
       state.autoRunning = true;
+      renderAgentPanel();
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = true;
       if (autoClarifyToggle) autoClarifyToggle.disabled = true;
       if (autoRecleanBtn) autoRecleanBtn.disabled = true;
@@ -983,26 +2067,38 @@
       if (autoMissingToggle) autoMissingToggle.disabled = true;
       if (autoMissingCopy) autoMissingCopy.disabled = true;
       setMissingStatus('', '');
-      setStatus(autoRecleanStatus, '已忽略覆盖率不足，正在执行剩余步骤…', 'warn');
-      setStatus(autoWorkflowStatus, '已忽略覆盖率，正在继续执行后续流程', 'warn');
-      if (autoWorkflowManager && typeof autoWorkflowManager.startTask === 'function') {
+      setStatus(autoRecleanStatus, agentEnabled ? '已忽略覆盖率不足，Agent 正在继续执行…' : '已忽略覆盖率不足，正在执行剩余步骤…', 'warn');
+      setStatus(autoWorkflowStatus, agentEnabled ? '已忽略覆盖率，Agent 正在继续执行后续流程' : '已忽略覆盖率，正在继续执行后续流程', 'warn');
+      var useManager = Boolean(autoWorkflowManager && typeof autoWorkflowManager.startTask === 'function');
+      var manualAction = options && options.coverageAction ? String(options.coverageAction).trim().toLowerCase() : '';
+      var agentContext = agentEnabled ? { coverageAction: manualAction || 'ignore' } : {};
+      if (useManager) {
         autoWorkflowManager.startTask({
-          kind: 'continue',
-          startIndex: 3,
-          stepIndex: 3,
-          messages: buildAutoWorkflowTaskMessages('continue'),
+          kind: agentEnabled ? 'agent_continue' : 'continue',
+          startIndex: agentEnabled ? 0 : 3,
+          stepIndex: agentEnabled ? 0 : 3,
+          context: agentContext,
+          messages: buildAutoWorkflowTaskMessages(agentEnabled ? 'agent_continue' : 'continue'),
         }, { force: true });
         return;
       }
       try {
-        await executeAutoWorkflowSteps(3);
+        await executeAutoWorkflowSteps(agentEnabled ? 0 : 3, agentContext);
         setStatus(autoRecleanStatus, '已忽略覆盖率完成剩余步骤，请检查结果', 'ok');
-        setStatus(autoWorkflowStatus, '剩余步骤执行完成，覆盖率仍不足 100%，请注意风险', 'warn');
+        setStatus(autoWorkflowStatus, agentEnabled ? 'Agent 已完成剩余步骤，覆盖率仍不足，请注意风险' : '剩余步骤执行完成，覆盖率仍不足 100%，请注意风险', 'warn');
         await notifyFeishuWorkflowSuccess();
       } catch (err) {
         console.error(err);
-        setStatus(autoRecleanStatus, '忽略覆盖率继续失败：' + err.message, 'err');
-        setStatus(autoWorkflowStatus, '忽略覆盖率继续失败：' + err.message, 'err');
+        if (agentEnabled && isAgentStoppedError(err)) {
+          setStatus(autoRecleanStatus, err.message || 'Agent 已停止', 'warn');
+          setStatus(autoWorkflowStatus, err.message || 'Agent 已停止', 'warn');
+        } else if (agentEnabled && isAgentManualWaitError(err)) {
+          setStatus(autoRecleanStatus, err.message || '等待人工处理', 'warn');
+          setStatus(autoWorkflowStatus, err.message || '等待人工处理', 'warn');
+        } else {
+          setStatus(autoRecleanStatus, '忽略覆盖率继续失败：' + err.message, 'err');
+          setStatus(autoWorkflowStatus, '忽略覆盖率继续失败：' + err.message, 'err');
+        }
       } finally {
         state.autoRunning = false;
         if (autoWorkflowBtn) autoWorkflowBtn.disabled = false;
@@ -1015,10 +2111,23 @@
       }
     }
 
+    renderAgentPanel();
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('app-settings-loaded', function() {
+        renderAgentPanel();
+      });
+      window.addEventListener('app-settings-updated', function(e) {
+        renderAgentPanel();
+        var detail = e && e.detail ? e.detail : null;
+        var keys = detail && Array.isArray(detail.keys) ? detail.keys : [];
+      });
+    }
+
     return {
       notifyFeishuCoverageFailure: notifyFeishuCoverageFailure,
       notifyFeishuWorkflowSuccess: notifyFeishuWorkflowSuccess,
       notifyFeishuClarificationNeeded: notifyFeishuClarificationNeeded,
+      stopAgentWorkflow: stopAgentWorkflow,
       resetAutoMissingView: resetAutoMissingView,
       refreshAutoMissingSelectionUI: refreshAutoMissingSelectionUI,
       updateAutoMissingCard: updateAutoMissingCard,
@@ -1044,6 +2153,7 @@
       continueAutoWorkflowAfterCoverage: continueAutoWorkflowAfterCoverage,
       applyAutoWorkflowTaskState: applyAutoWorkflowTaskState,
       isAutoWorkflowReady: isAutoWorkflowReady,
+      renderAgentPanel: renderAgentPanel,
     };
   }
 

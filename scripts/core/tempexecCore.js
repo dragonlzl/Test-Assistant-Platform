@@ -5499,14 +5499,14 @@
 
     function triggerTempExecMissingReminderAiRecommend() {
       var reminder = ensureTempExecMissingReminderState();
-      if (resolveMissingReminderAiEnabled() !== 'on') return;
-      if (reminder.aiLoading) return;
+      if (resolveMissingReminderAiEnabled() !== 'on') return false;
+      if (reminder.aiLoading) return false;
       var ready = syncTempExecMissingReminderAiContext(reminder);
       if (ready) {
         checkTempExecMissingReminderLibrary(reminder, reminder.aiContextProjectId);
         if (reminder.libraryChecked === true && reminder.libraryEmpty === true) {
           showTempExecMissingReminderLibraryEmptyToast();
-          return;
+          return false;
         }
       }
       if (hasTempExecMissingReminderAiGenerated(reminder)) {
@@ -5519,9 +5519,10 @@
           if (!res || res.ok !== true) return;
           runTempExecMissingReminderAiRecommend({ trigger: 'confirm' });
         });
-        return;
+        return true;
       }
       runTempExecMissingReminderAiRecommend({ trigger: 'button' });
+      return true;
     }
 
     function renderTempExecView() {

@@ -14,6 +14,8 @@
       missingCaseReminderPlacement: 'top',
       missingCaseReminderMatchConfig: { type: true, module: true },
       missingCaseReminderAiEnabled: 'off',
+      caseGenAgentEnabled: false,
+      caseGenAgentCoverageThreshold: 100,
       caseLibraryGenCoverageThreshold: 90,
       smartTopNavCollapse: false,
       tempExecColumns: {
@@ -54,6 +56,9 @@
     var defaultSettings = ensureDefaultSettings(options);
     var defaultPlacement = ensureDefaultPlacement(options);
     var defaultTempExecPageSize = options && options.defaultTempExecPageSize ? options.defaultTempExecPageSize : 20;
+    var defaultAgentExtraPrompt = options && typeof options.defaultAgentExtraPrompt === 'string'
+      ? options.defaultAgentExtraPrompt
+      : '评审流程可以忽略数值、美术等相关内容。';
     var settingsCopy = Object.assign({}, defaultSettings);
     if (defaultSettings && typeof defaultSettings.tempExecColumns === 'object') {
       settingsCopy.tempExecColumns = Object.assign({}, defaultSettings.tempExecColumns);
@@ -80,6 +85,7 @@
         caseFilterId: '',
         missingReminderId: '',
         caseLibraryGenId: '',
+        caseGenAgentId: '',
         cleanPrompt: '',
         reviewPrompt: '',
         comparePrompt: '',
@@ -89,6 +95,7 @@
         caseFilterPrompt: '',
         missingReminderPrompt: '',
         caseLibraryGenPrompt: '',
+        caseGenAgentPrompt: '',
         cleanReasoning: '',
         reviewReasoning: '',
         compareReasoning: '',
@@ -98,6 +105,7 @@
         caseFilterReasoning: '',
         missingReminderReasoning: '',
         caseLibraryGenReasoning: '',
+        caseGenAgentReasoning: '',
         cleanTemperature: 0.2,
         reviewTemperature: 0.2,
         compareTemperature: 0.2,
@@ -107,6 +115,7 @@
         caseFilterTemperature: 0.2,
         missingReminderTemperature: 0.2,
         caseLibraryGenTemperature: 0.2,
+        caseGenAgentTemperature: 0.2,
       },
       settings: settingsCopy,
       editingId: null,
@@ -143,9 +152,20 @@
       waitingReasons: {},
       validationFailedReasons: {},
       autoRunning: false,
+      autoAgentStopped: false,
       lastRawImportName: '',
       autoRequireClarifications: false,
+      autoClarifyDismissed: false,
       autoClarifyResolver: null,
+      autoAgentPromptHint: defaultAgentExtraPrompt,
+      caseGenAgentPlan: [],
+      caseGenAgentPlanSource: '',
+      caseGenAgentLog: [],
+      caseGenAgentTrace: [],
+      caseGenAgentFixSuggestions: '',
+      caseGenAgentRetryCounters: {},
+      caseGenAgentCoverageRetries: 0,
+      caseGenAgentCoverageBelowFull: false,
       tempExecFiles: [],
       tempExecActiveId: '',
       tempExecSelections: {},

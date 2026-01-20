@@ -43,6 +43,7 @@
     const caseFilterModelSelect = pickEl('caseFilterModelSelect', 'caseFilterModelSelect');
     const missingReminderModelSelect = pickEl('missingReminderModelSelect', 'missingReminderModelSelect');
     const caseLibraryGenModelSelect = pickEl('caseLibraryGenModelSelect', 'caseLibraryGenModelSelect');
+    const caseGenAgentModelSelect = pickEl('caseGenAgentModelSelect', 'caseGenAgentModelSelect');
     const cleanAssignStatus = pickEl('cleanAssignStatus', 'cleanAssignStatus');
     const reviewAssignStatus = pickEl('reviewAssignStatus', 'reviewAssignStatus');
     const compareAssignStatus = pickEl('compareAssignStatus', 'compareAssignStatus');
@@ -52,6 +53,7 @@
     const caseFilterAssignStatus = pickEl('caseFilterAssignStatus', 'caseFilterAssignStatus');
     const missingReminderAssignStatus = pickEl('missingReminderAssignStatus', 'missingReminderAssignStatus');
     const caseLibraryGenAssignStatus = pickEl('caseLibraryGenAssignStatus', 'caseLibraryGenAssignStatus');
+    const caseGenAgentAssignStatus = pickEl('caseGenAgentAssignStatus', 'caseGenAgentAssignStatus');
     const saveAssignmentsTopBtn = pickEl('saveAssignmentsTopBtn', 'saveAssignmentsTop');
     const assignSaveBar = pickEl('assignSaveBar', 'assignSaveBar');
     const cleanPromptEl = pickEl('cleanPromptEl', 'cleanPrompt');
@@ -63,6 +65,7 @@
     const caseFilterPromptEl = pickEl('caseFilterPromptEl', 'caseFilterPrompt');
     const missingReminderPromptEl = pickEl('missingReminderPromptEl', 'missingReminderPrompt');
     const caseLibraryGenPromptEl = pickEl('caseLibraryGenPromptEl', 'caseLibraryGenPrompt');
+    const caseGenAgentPromptEl = pickEl('caseGenAgentPromptEl', 'caseGenAgentPrompt');
     const cleanReasoningSelect = pickEl('cleanReasoningSelect', 'cleanReasoning');
     const reviewReasoningSelect = pickEl('reviewReasoningSelect', 'reviewReasoning');
     const compareReasoningSelect = pickEl('compareReasoningSelect', 'compareReasoning');
@@ -72,6 +75,7 @@
     const caseFilterReasoningSelect = pickEl('caseFilterReasoningSelect', 'caseFilterReasoning');
     const missingReminderReasoningSelect = pickEl('missingReminderReasoningSelect', 'missingReminderReasoning');
     const caseLibraryGenReasoningSelect = pickEl('caseLibraryGenReasoningSelect', 'caseLibraryGenReasoning');
+    const caseGenAgentReasoningSelect = pickEl('caseGenAgentReasoningSelect', 'caseGenAgentReasoning');
     const cleanTemperatureEl = pickEl('cleanTemperatureEl', 'cleanTemperature');
     const reviewTemperatureEl = pickEl('reviewTemperatureEl', 'reviewTemperature');
     const compareTemperatureEl = pickEl('compareTemperatureEl', 'compareTemperature');
@@ -81,6 +85,7 @@
     const caseFilterTemperatureEl = pickEl('caseFilterTemperatureEl', 'caseFilterTemperature');
     const missingReminderTemperatureEl = pickEl('missingReminderTemperatureEl', 'missingReminderTemperature');
     const caseLibraryGenTemperatureEl = pickEl('caseLibraryGenTemperatureEl', 'caseLibraryGenTemperature');
+    const caseGenAgentTemperatureEl = pickEl('caseGenAgentTemperatureEl', 'caseGenAgentTemperature');
 
     const legacyCleanStorageKey = legacyCleanKey || 'cleaner-config-v1';
     const legacyCompareStorageKey = legacyCompareKey || 'cleaner-compare-config-v1';
@@ -377,6 +382,7 @@
       merged.caseFilterId = merged.caseFilterId || '';
       merged.missingReminderId = merged.missingReminderId || '';
       merged.caseLibraryGenId = merged.caseLibraryGenId || '';
+      merged.caseGenAgentId = merged.caseGenAgentId || '';
 
       merged.cleanPrompt = merged.cleanPrompt || defaultPrompts.system;
       if (merged.cleanPrompt === legacyCleanPrompt) {
@@ -394,6 +400,7 @@
       merged.caseFilterPrompt = merged.caseFilterPrompt || defaultPrompts.casefilter;
       merged.missingReminderPrompt = merged.missingReminderPrompt || defaultPrompts.missingreminder;
       merged.caseLibraryGenPrompt = merged.caseLibraryGenPrompt || defaultPrompts.caselibrarygen;
+      merged.caseGenAgentPrompt = merged.caseGenAgentPrompt || defaultPrompts.casegenagent;
 
       merged.cleanReasoning = merged.cleanReasoning || '';
       merged.reviewReasoning = merged.reviewReasoning || '';
@@ -404,6 +411,7 @@
       merged.caseFilterReasoning = merged.caseFilterReasoning || '';
       merged.missingReminderReasoning = merged.missingReminderReasoning || '';
       merged.caseLibraryGenReasoning = merged.caseLibraryGenReasoning || '';
+      merged.caseGenAgentReasoning = merged.caseGenAgentReasoning || '';
 
       merged.cleanTemperature = normalizeTemperature(merged.cleanTemperature);
       merged.reviewTemperature = normalizeTemperature(merged.reviewTemperature);
@@ -414,6 +422,7 @@
       merged.caseFilterTemperature = normalizeTemperature(merged.caseFilterTemperature);
       merged.missingReminderTemperature = normalizeTemperature(merged.missingReminderTemperature);
       merged.caseLibraryGenTemperature = normalizeTemperature(merged.caseLibraryGenTemperature);
+      merged.caseGenAgentTemperature = normalizeTemperature(merged.caseGenAgentTemperature);
 
       if (!merged.casesPrompt) {
         merged.casesPrompt = defaultPrompts.cases;
@@ -629,7 +638,7 @@
       }
       state.models = state.models.filter(function(m) { return getStableModelId(m) !== targetId; });
       persistModelsLocal();
-      var keys = requiredAssignmentKeys.concat(['caseFilterId']);
+      var keys = requiredAssignmentKeys.concat(['caseFilterId', 'missingReminderId', 'caseLibraryGenId', 'caseGenAgentId']);
       keys.forEach(function(key) {
         if (state.assignments[key] === targetId) state.assignments[key] = '';
       });
@@ -694,7 +703,7 @@
     }
 
     const requiredAssignmentKeys = ['cleanId', 'reviewId', 'compareId', 'splitId', 'casesId', 'caseGenId'];
-    const assignmentIdKeys = requiredAssignmentKeys.concat(['caseFilterId', 'missingReminderId', 'caseLibraryGenId']);
+    const assignmentIdKeys = requiredAssignmentKeys.concat(['caseFilterId', 'missingReminderId', 'caseLibraryGenId', 'caseGenAgentId']);
 
     function persistAssignmentsLocal() {
       try {
@@ -788,6 +797,7 @@
       if (caseFilterModelSelect) state.assignments.caseFilterId = toStableId(caseFilterModelSelect.value);
       if (missingReminderModelSelect) state.assignments.missingReminderId = toStableId(missingReminderModelSelect.value);
       if (caseLibraryGenModelSelect) state.assignments.caseLibraryGenId = toStableId(caseLibraryGenModelSelect.value);
+      if (caseGenAgentModelSelect) state.assignments.caseGenAgentId = toStableId(caseGenAgentModelSelect.value);
       if (cleanPromptEl) state.assignments.cleanPrompt = cleanPromptEl.value.trim() || defaultPrompts.system;
       if (reviewPromptEl) state.assignments.reviewPrompt = reviewPromptEl.value.trim() || defaultPrompts.review;
       if (comparePromptEl) state.assignments.comparePrompt = comparePromptEl.value.trim() || defaultPrompts.compare;
@@ -797,6 +807,7 @@
       if (caseFilterPromptEl) state.assignments.caseFilterPrompt = caseFilterPromptEl.value.trim() || defaultPrompts.casefilter;
       if (missingReminderPromptEl) state.assignments.missingReminderPrompt = missingReminderPromptEl.value.trim() || defaultPrompts.missingreminder;
       if (caseLibraryGenPromptEl) state.assignments.caseLibraryGenPrompt = caseLibraryGenPromptEl.value.trim() || defaultPrompts.caselibrarygen;
+      if (caseGenAgentPromptEl) state.assignments.caseGenAgentPrompt = caseGenAgentPromptEl.value.trim() || defaultPrompts.casegenagent;
       if (cleanReasoningSelect) state.assignments.cleanReasoning = cleanReasoningSelect.value || '';
       if (reviewReasoningSelect) state.assignments.reviewReasoning = reviewReasoningSelect.value || '';
       if (compareReasoningSelect) state.assignments.compareReasoning = compareReasoningSelect.value || '';
@@ -806,6 +817,7 @@
       if (caseFilterReasoningSelect) state.assignments.caseFilterReasoning = caseFilterReasoningSelect.value || '';
       if (missingReminderReasoningSelect) state.assignments.missingReminderReasoning = missingReminderReasoningSelect.value || '';
       if (caseLibraryGenReasoningSelect) state.assignments.caseLibraryGenReasoning = caseLibraryGenReasoningSelect.value || '';
+      if (caseGenAgentReasoningSelect) state.assignments.caseGenAgentReasoning = caseGenAgentReasoningSelect.value || '';
       if (cleanTemperatureEl) state.assignments.cleanTemperature = normalizeTemperature(cleanTemperatureEl.value);
       if (reviewTemperatureEl) state.assignments.reviewTemperature = normalizeTemperature(reviewTemperatureEl.value);
       if (compareTemperatureEl) state.assignments.compareTemperature = normalizeTemperature(compareTemperatureEl.value);
@@ -815,6 +827,7 @@
       if (caseFilterTemperatureEl) state.assignments.caseFilterTemperature = normalizeTemperature(caseFilterTemperatureEl.value);
       if (missingReminderTemperatureEl) state.assignments.missingReminderTemperature = normalizeTemperature(missingReminderTemperatureEl.value);
       if (caseLibraryGenTemperatureEl) state.assignments.caseLibraryGenTemperature = normalizeTemperature(caseLibraryGenTemperatureEl.value);
+      if (caseGenAgentTemperatureEl) state.assignments.caseGenAgentTemperature = normalizeTemperature(caseGenAgentTemperatureEl.value);
       syncAssignmentsWithModels({ pushRemote: false });
       persistAssignmentsLocal();
       state.hasSavedAssignments = true;
@@ -829,6 +842,7 @@
       setStatus(caseFilterAssignStatus, '指派已保存', 'ok');
       setStatus(missingReminderAssignStatus, '指派已保存', 'ok');
       setStatus(caseLibraryGenAssignStatus, '指派已保存', 'ok');
+      setStatus(caseGenAgentAssignStatus, '指派已保存', 'ok');
       if (assignSaveBar) assignSaveBar.classList.add('hidden');
     }
 
@@ -852,6 +866,7 @@
         if (caseFilterModelSelect) caseFilterModelSelect.innerHTML = placeholder;
         if (missingReminderModelSelect) missingReminderModelSelect.innerHTML = placeholder;
         if (caseLibraryGenModelSelect) caseLibraryGenModelSelect.innerHTML = placeholder;
+        if (caseGenAgentModelSelect) caseGenAgentModelSelect.innerHTML = placeholder;
         state.assignments.cleanId = '';
         state.assignments.reviewId = '';
         state.assignments.compareId = '';
@@ -861,6 +876,7 @@
         state.assignments.caseFilterId = '';
         state.assignments.missingReminderId = '';
         state.assignments.caseLibraryGenId = '';
+        state.assignments.caseGenAgentId = '';
         if (cleanPromptEl) cleanPromptEl.value = state.assignments.cleanPrompt || defaultPrompts.system;
         if (reviewPromptEl) reviewPromptEl.value = state.assignments.reviewPrompt || defaultPrompts.review;
         if (comparePromptEl) comparePromptEl.value = state.assignments.comparePrompt || defaultPrompts.compare;
@@ -870,6 +886,7 @@
         if (caseFilterPromptEl) caseFilterPromptEl.value = state.assignments.caseFilterPrompt || defaultPrompts.casefilter;
         if (missingReminderPromptEl) missingReminderPromptEl.value = state.assignments.missingReminderPrompt || defaultPrompts.missingreminder;
         if (caseLibraryGenPromptEl) caseLibraryGenPromptEl.value = state.assignments.caseLibraryGenPrompt || defaultPrompts.caselibrarygen;
+        if (caseGenAgentPromptEl) caseGenAgentPromptEl.value = state.assignments.caseGenAgentPrompt || defaultPrompts.casegenagent;
         if (cleanTemperatureEl) cleanTemperatureEl.value = state.assignments.cleanTemperature;
         if (reviewTemperatureEl) reviewTemperatureEl.value = state.assignments.reviewTemperature;
         if (compareTemperatureEl) compareTemperatureEl.value = state.assignments.compareTemperature;
@@ -879,8 +896,9 @@
         if (caseFilterTemperatureEl) caseFilterTemperatureEl.value = state.assignments.caseFilterTemperature;
         if (missingReminderTemperatureEl) missingReminderTemperatureEl.value = state.assignments.missingReminderTemperature;
         if (caseLibraryGenTemperatureEl) caseLibraryGenTemperatureEl.value = state.assignments.caseLibraryGenTemperature;
+        if (caseGenAgentTemperatureEl) caseGenAgentTemperatureEl.value = state.assignments.caseGenAgentTemperature;
         updateAssignmentStatuses();
-        ['clean', 'review', 'compare', 'split', 'cases', 'casegen', 'casefilter', 'missingreminder', 'caselibrarygen'].forEach(updateReasoningVisibility);
+        ['clean', 'review', 'compare', 'split', 'cases', 'casegen', 'casefilter', 'missingreminder', 'caselibrarygen', 'casegenagent'].forEach(updateReasoningVisibility);
         return;
       }
 
@@ -893,6 +911,7 @@
       const seventhModelId = state.models[6] && getStableModelId(state.models[6]) ? getStableModelId(state.models[6]) : '';
       const eighthModelId = state.models[7] && getStableModelId(state.models[7]) ? getStableModelId(state.models[7]) : '';
       const ninthModelId = state.models[8] && getStableModelId(state.models[8]) ? getStableModelId(state.models[8]) : '';
+      const tenthModelId = state.models[9] && getStableModelId(state.models[9]) ? getStableModelId(state.models[9]) : '';
       const cleanSel = state.assignments.cleanId || firstModelId;
       const reviewSel = state.assignments.reviewId || (secondModelId || state.assignments.cleanId || firstModelId);
       const compareSel = state.assignments.compareId || (thirdModelId || state.assignments.reviewId || state.assignments.cleanId || firstModelId);
@@ -904,6 +923,8 @@
         || (eighthModelId || state.assignments.caseFilterId || state.assignments.caseGenId || state.assignments.casesId || state.assignments.splitId || state.assignments.compareId || state.assignments.reviewId || state.assignments.cleanId || firstModelId);
       const caseLibraryGenSel = state.assignments.caseLibraryGenId
         || (ninthModelId || state.assignments.missingReminderId || state.assignments.caseFilterId || state.assignments.caseGenId || state.assignments.casesId || state.assignments.splitId || state.assignments.compareId || state.assignments.reviewId || state.assignments.cleanId || firstModelId);
+      const caseGenAgentSel = state.assignments.caseGenAgentId
+        || (tenthModelId || state.assignments.caseLibraryGenId || state.assignments.missingReminderId || state.assignments.caseFilterId || state.assignments.caseGenId || state.assignments.casesId || state.assignments.splitId || state.assignments.compareId || state.assignments.reviewId || state.assignments.cleanId || firstModelId);
 
       cleanModelSelect.innerHTML = createOptions(cleanSel);
       if (reviewModelSelect) reviewModelSelect.innerHTML = createOptions(reviewSel);
@@ -914,6 +935,7 @@
       if (caseFilterModelSelect) caseFilterModelSelect.innerHTML = createOptions(caseFilterSel);
       if (missingReminderModelSelect) missingReminderModelSelect.innerHTML = createOptions(missingReminderSel);
       if (caseLibraryGenModelSelect) caseLibraryGenModelSelect.innerHTML = createOptions(caseLibraryGenSel);
+      if (caseGenAgentModelSelect) caseGenAgentModelSelect.innerHTML = createOptions(caseGenAgentSel);
 
       state.assignments.cleanId = cleanModelSelect.value || '';
       state.assignments.reviewId = reviewModelSelect ? reviewModelSelect.value || '' : '';
@@ -924,6 +946,7 @@
       state.assignments.caseFilterId = caseFilterModelSelect ? caseFilterModelSelect.value || '' : '';
       state.assignments.missingReminderId = missingReminderModelSelect ? missingReminderModelSelect.value || '' : '';
       state.assignments.caseLibraryGenId = caseLibraryGenModelSelect ? caseLibraryGenModelSelect.value || '' : '';
+      state.assignments.caseGenAgentId = caseGenAgentModelSelect ? caseGenAgentModelSelect.value || '' : '';
       if (cleanPromptEl) cleanPromptEl.value = state.assignments.cleanPrompt || defaultPrompts.system;
       if (reviewPromptEl) reviewPromptEl.value = state.assignments.reviewPrompt || defaultPrompts.review;
       if (comparePromptEl) comparePromptEl.value = state.assignments.comparePrompt || defaultPrompts.compare;
@@ -933,6 +956,7 @@
       if (caseFilterPromptEl) caseFilterPromptEl.value = state.assignments.caseFilterPrompt || defaultPrompts.casefilter;
       if (missingReminderPromptEl) missingReminderPromptEl.value = state.assignments.missingReminderPrompt || defaultPrompts.missingreminder;
       if (caseLibraryGenPromptEl) caseLibraryGenPromptEl.value = state.assignments.caseLibraryGenPrompt || defaultPrompts.caselibrarygen;
+      if (caseGenAgentPromptEl) caseGenAgentPromptEl.value = state.assignments.caseGenAgentPrompt || defaultPrompts.casegenagent;
       if (cleanTemperatureEl) cleanTemperatureEl.value = state.assignments.cleanTemperature;
       if (reviewTemperatureEl) reviewTemperatureEl.value = state.assignments.reviewTemperature;
       if (compareTemperatureEl) compareTemperatureEl.value = state.assignments.compareTemperature;
@@ -942,9 +966,10 @@
       if (caseFilterTemperatureEl) caseFilterTemperatureEl.value = state.assignments.caseFilterTemperature;
       if (missingReminderTemperatureEl) missingReminderTemperatureEl.value = state.assignments.missingReminderTemperature;
       if (caseLibraryGenTemperatureEl) caseLibraryGenTemperatureEl.value = state.assignments.caseLibraryGenTemperature;
+      if (caseGenAgentTemperatureEl) caseGenAgentTemperatureEl.value = state.assignments.caseGenAgentTemperature;
 
       updateAssignmentStatuses();
-      ['clean', 'review', 'compare', 'split', 'cases', 'casegen', 'casefilter', 'missingreminder', 'caselibrarygen'].forEach(updateReasoningVisibility);
+      ['clean', 'review', 'compare', 'split', 'cases', 'casegen', 'casefilter', 'missingreminder', 'caselibrarygen', 'casegenagent'].forEach(updateReasoningVisibility);
       if (cleanReasoningSelect) cleanReasoningSelect.value = state.assignments.cleanReasoning || '';
       if (reviewReasoningSelect) reviewReasoningSelect.value = state.assignments.reviewReasoning || '';
       if (compareReasoningSelect) compareReasoningSelect.value = state.assignments.compareReasoning || '';
@@ -954,6 +979,7 @@
       if (caseFilterReasoningSelect) caseFilterReasoningSelect.value = state.assignments.caseFilterReasoning || '';
       if (missingReminderReasoningSelect) missingReminderReasoningSelect.value = state.assignments.missingReminderReasoning || '';
       if (caseLibraryGenReasoningSelect) caseLibraryGenReasoningSelect.value = state.assignments.caseLibraryGenReasoning || '';
+      if (caseGenAgentReasoningSelect) caseGenAgentReasoningSelect.value = state.assignments.caseGenAgentReasoning || '';
     }
 
     function updateAssignmentStatuses() {
@@ -966,6 +992,7 @@
       const caseFilterModel = getModelById(state.assignments.caseFilterId);
       const missingReminderModel = getModelById(state.assignments.missingReminderId);
       const caseLibraryGenModel = getModelById(state.assignments.caseLibraryGenId);
+      const caseGenAgentModel = getModelById(state.assignments.caseGenAgentId);
       setStatus(cleanAssignStatus, cleanModel ? `当前清洗模型：${cleanModel.name}` : '尚未指派清洗模型', cleanModel ? 'ok' : 'warn');
       setStatus(reviewAssignStatus, reviewModel ? `当前评审模型：${reviewModel.name}` : '尚未指派评审模型', reviewModel ? 'ok' : 'warn');
       setStatus(compareAssignStatus, compareModel ? `当前对比模型：${compareModel.name}` : '尚未指派对比模型', compareModel ? 'ok' : 'warn');
@@ -975,6 +1002,7 @@
       setStatus(caseFilterAssignStatus, caseFilterModel ? `当前用例相似对比模型：${caseFilterModel.name}` : '尚未指派用例相似对比模型', caseFilterModel ? 'ok' : 'warn');
       setStatus(missingReminderAssignStatus, missingReminderModel ? `当前易漏用例推荐模型：${missingReminderModel.name}` : '尚未指派易漏用例推荐模型', missingReminderModel ? 'ok' : 'warn');
       setStatus(caseLibraryGenAssignStatus, caseLibraryGenModel ? `当前用例库生成模型：${caseLibraryGenModel.name}` : '尚未指派用例库生成模型', caseLibraryGenModel ? 'ok' : 'warn');
+      setStatus(caseGenAgentAssignStatus, caseGenAgentModel ? `当前用例生成 Agent 模型：${caseGenAgentModel.name}` : '尚未指派用例生成 Agent 模型', caseGenAgentModel ? 'ok' : 'warn');
       updateTabNotices();
     }
 
@@ -992,6 +1020,7 @@
       casefilter: 'caseFilterReasoning',
       missingreminder: 'missingReminderReasoning',
       caselibrarygen: 'caseLibraryGenReasoning',
+      casegenagent: 'caseGenAgentReasoning',
     };
     const temperatureKeys = {
       clean: 'cleanTemperature',
@@ -1003,6 +1032,7 @@
       casefilter: 'caseFilterTemperature',
       missingreminder: 'missingReminderTemperature',
       caselibrarygen: 'caseLibraryGenTemperature',
+      casegenagent: 'caseGenAgentTemperature',
     };
 
     function getAssignmentKeyPrefix(type) {
@@ -1010,6 +1040,7 @@
       if (type === 'casefilter') return 'caseFilter';
       if (type === 'missingreminder') return 'missingReminder';
       if (type === 'caselibrarygen') return 'caseLibraryGen';
+      if (type === 'casegenagent') return 'caseGenAgent';
       return type;
     }
 
@@ -1021,8 +1052,8 @@
 
     function updateReasoningVisibility(type) {
       const row = document.querySelector(`[data-reasoning="${type}"]`);
-      const select = document.getElementById(`${type}Reasoning`);
       const prefix = getAssignmentKeyPrefix(type);
+      const select = document.getElementById(`${type}Reasoning`) || document.getElementById(`${prefix}Reasoning`);
       const idKey = `${prefix}Id`;
       const model = getModelById(state.assignments[idKey]);
       const show = modelIsR1(model);
@@ -1061,6 +1092,8 @@
         ? state.assignments.missingReminderId
         : type === 'caselibrarygen'
         ? state.assignments.caseLibraryGenId
+        : type === 'casegenagent'
+        ? state.assignments.caseGenAgentId
         : state.assignments.caseGenId;
       const label = type === 'clean'
         ? '清洗'
@@ -1078,6 +1111,8 @@
         ? '易漏用例推荐'
         : type === 'caselibrarygen'
         ? '用例库生成'
+        : type === 'casegenagent'
+        ? '用例生成 Agent'
         : '用例生成';
       const model = getModelById(id);
       if (!model) throw new Error(`未找到${label}模型，请先在功能指派中选择`);

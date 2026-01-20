@@ -127,6 +127,7 @@
     var workflowPersistBound = false;
     var workflowRestoring = false;
     var autoCompareSuggestionInput = typeof document !== 'undefined' ? document.getElementById('autoCompareSuggestion') : null;
+    var autoAgentPromptHintInput = typeof document !== 'undefined' ? document.getElementById('autoAgentPromptHint') : null;
 
     function getPersistUserId() {
       if (state.currentUser && (state.currentUser.id || state.currentUser.id === 0)) {
@@ -204,6 +205,7 @@
         reviewClarifications: serializeReviewClarifications(state.reviewClarifications),
         autoCompareSuggestion: state.autoCompareSuggestion || (autoCompareSuggestionInput ? autoCompareSuggestionInput.value : ''),
         autoRequireClarifications: Boolean(state.autoRequireClarifications),
+        autoAgentPromptHint: state.autoAgentPromptHint || (autoAgentPromptHintInput ? autoAgentPromptHintInput.value : ''),
         caseGenSource: state.caseGenSource || '',
         caseGenModules: cloneJson(state.caseGenModules, []),
         caseGenResults: cloneJson(state.caseGenResults, {}),
@@ -213,6 +215,14 @@
         caseGenProgressNotice: cloneJson(state.caseGenProgressNotice, {}),
         caseSelections: serializeCaseSelections(state.caseSelections),
         missingSelections: serializeNumberSet(state.missingSelections),
+        caseGenAgentPlan: cloneJson(state.caseGenAgentPlan, []),
+        caseGenAgentPlanSource: state.caseGenAgentPlanSource || '',
+        caseGenAgentLog: cloneJson(state.caseGenAgentLog, []),
+        caseGenAgentTrace: cloneJson(state.caseGenAgentTrace, []),
+        caseGenAgentFixSuggestions: state.caseGenAgentFixSuggestions || '',
+        caseGenAgentRetryCounters: cloneJson(state.caseGenAgentRetryCounters, {}),
+        caseGenAgentCoverageRetries: Number(state.caseGenAgentCoverageRetries || 0),
+        caseGenAgentCoverageBelowFull: Boolean(state.caseGenAgentCoverageBelowFull),
       };
       return {
         version: 1,
@@ -276,6 +286,10 @@
         });
         if (hasRes) return true;
       }
+      if (Array.isArray(data.caseGenAgentLog) && data.caseGenAgentLog.length) return true;
+      if (Array.isArray(data.caseGenAgentTrace) && data.caseGenAgentTrace.length) return true;
+      if (data.caseGenAgentFixSuggestions && String(data.caseGenAgentFixSuggestions).trim()) return true;
+      if (Array.isArray(data.caseGenAgentPlan) && data.caseGenAgentPlan.length) return true;
       return false;
     }
 
@@ -349,7 +363,11 @@
       state.reviewClarifications = restoreReviewClarifications(data.reviewClarifications);
       state.autoCompareSuggestion = data.autoCompareSuggestion || '';
       state.autoRequireClarifications = Boolean(data.autoRequireClarifications);
+      if (data.autoAgentPromptHint !== undefined && data.autoAgentPromptHint !== null) {
+        state.autoAgentPromptHint = String(data.autoAgentPromptHint);
+      }
       if (autoCompareSuggestionInput) autoCompareSuggestionInput.value = state.autoCompareSuggestion;
+      if (autoAgentPromptHintInput) autoAgentPromptHintInput.value = state.autoAgentPromptHint || '';
       if (dom.autoClarifyToggle) dom.autoClarifyToggle.checked = state.autoRequireClarifications;
       state.caseGenSource = data.caseGenSource || '';
       state.caseGenModules = Array.isArray(data.caseGenModules) ? data.caseGenModules : [];
@@ -364,6 +382,16 @@
       state.caseGenProgressNotice.dotVisible = state.caseGenProgressNotice.dotVisible === true;
       state.caseSelections = restoreCaseSelections(data.caseSelections);
       state.missingSelections = restoreNumberSet(data.missingSelections);
+      state.caseGenAgentPlan = Array.isArray(data.caseGenAgentPlan) ? data.caseGenAgentPlan : [];
+      state.caseGenAgentPlanSource = data.caseGenAgentPlanSource || '';
+      state.caseGenAgentLog = Array.isArray(data.caseGenAgentLog) ? data.caseGenAgentLog : [];
+      state.caseGenAgentTrace = Array.isArray(data.caseGenAgentTrace) ? data.caseGenAgentTrace : [];
+      state.caseGenAgentFixSuggestions = data.caseGenAgentFixSuggestions || '';
+      state.caseGenAgentRetryCounters = data.caseGenAgentRetryCounters && typeof data.caseGenAgentRetryCounters === 'object'
+        ? data.caseGenAgentRetryCounters
+        : {};
+      state.caseGenAgentCoverageRetries = Number(data.caseGenAgentCoverageRetries || 0);
+      state.caseGenAgentCoverageBelowFull = Boolean(data.caseGenAgentCoverageBelowFull);
       state.missingRowCache = [];
       state.missingLastList = [];
       state.caseGenRunning = new Set();
@@ -407,6 +435,9 @@
       });
       if (autoCompareSuggestionInput && autoCompareSuggestionInput.addEventListener) {
         autoCompareSuggestionInput.addEventListener('input', function() { persistWorkflowState(); });
+      }
+      if (autoAgentPromptHintInput && autoAgentPromptHintInput.addEventListener) {
+        autoAgentPromptHintInput.addEventListener('input', function() { persistWorkflowState(); });
       }
       if (dom.autoClarifyToggle && dom.autoClarifyToggle.addEventListener) {
         dom.autoClarifyToggle.addEventListener('change', function() { persistWorkflowState(); });
@@ -1235,6 +1266,10 @@
       'clearStepFailed',
       'clearAllFailedSteps',
       'syncAutoCompareStatus',
+      'renderAgentPanel',
+      'autoFillReviewClarifications',
+      'updateAutoClarifyVisibility',
+      'renderAutoClarifyView',
     ]);
     window.app.core = core;
 
@@ -1385,6 +1420,7 @@
       updateMissingView();
       updateAutoClarifyVisibility();
       updateAutoMissingCard();
+      if (api && typeof api.renderAgentPanel === 'function') api.renderAgentPanel();
       syncReviewViewFromResult();
       syncSplitView();
       resetModelForm();
@@ -1537,6 +1573,7 @@
         renderAutoClarifyView: api.renderAutoClarifyView,
         openAutoClarifyPanel: api.openAutoClarifyPanel,
         waitForAutoClarification: api.waitForAutoClarification,
+        stopAgentWorkflow: api.stopAgentWorkflow,
         notifyFeishuWorkflowSuccess: api.notifyFeishuWorkflowSuccess,
         notifyFeishuCoverageFailure: api.notifyFeishuCoverageFailure,
         notifyFeishuClarificationNeeded: api.notifyFeishuClarificationNeeded,

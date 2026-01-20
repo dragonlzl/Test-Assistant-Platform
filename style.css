@@ -7114,6 +7114,96 @@ tr.import-invalid-locate-active td {
     .auto-compare-suggestion textarea {
       min-height: 80px;
     }
+    .agent-extra-prompt {
+      margin: 8px 0;
+    }
+    .agent-extra-prompt textarea {
+      min-height: 80px;
+    }
+    .agent-panel {
+      margin-top: 12px;
+      display: grid;
+      gap: 12px;
+    }
+    .agent-section {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: var(--panel, rgba(248, 250, 252, 0.8));
+    }
+    .agent-section h3 {
+      margin: 0 0 6px;
+      font-size: 14px;
+    }
+    .agent-plan-list,
+    .agent-log-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 6px;
+    }
+    .agent-plan-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+    .agent-plan-label {
+      flex: 1;
+      color: var(--text);
+    }
+    .agent-plan-meta {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .agent-log-item {
+      display: flex;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .agent-log-item strong {
+      color: var(--text);
+    }
+    .agent-suggestion {
+      margin: 0;
+      min-height: 48px;
+      padding: 8px 10px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      background: var(--panel-strong, #f8fafc);
+      white-space: pre-wrap;
+      font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .agent-trace {
+      max-height: 240px;
+      overflow-y: auto;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel, rgba(248, 250, 252, 0.7));
+    }
+    .agent-trace-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 8px;
+    }
+    .agent-trace-item {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .agent-trace-item strong {
+      color: var(--text);
+      white-space: nowrap;
+    }
     @media (max-width: 1100px) {
       .layout {
         flex-direction: column;

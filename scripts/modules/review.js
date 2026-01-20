@@ -31,6 +31,7 @@
     var updateAutoClarifyVisibility = handlers.updateAutoClarifyVisibility;
     var toggleAutoClarifyPanel = handlers.toggleAutoClarifyPanel;
     var handleAutoClarifyConfirm = handlers.handleAutoClarifyConfirm;
+    var flushClarifyPendingRender = handlers.flushClarifyPendingRender;
 
     if (runReviewBtn && typeof reviewRequirements === 'function') {
       runReviewBtn.addEventListener('click', reviewRequirements);
@@ -67,6 +68,26 @@
       if (typeof handleClarifyInputEvent === 'function') {
         reviewViewContainer.addEventListener('input', handleClarifyInputEvent);
       }
+      reviewViewContainer.addEventListener('compositionstart', function(e) {
+        var target = e && e.target && e.target.closest
+          ? e.target.closest('textarea[data-clarify-index]')
+          : null;
+        if (!target || !target.dataset) return;
+        state.clarifyComposing = true;
+        target.dataset.clarifyComposing = '1';
+      });
+      reviewViewContainer.addEventListener('compositionend', function(e) {
+        var target = e && e.target && e.target.closest
+          ? e.target.closest('textarea[data-clarify-index]')
+          : null;
+        if (!target || !target.dataset) return;
+        delete target.dataset.clarifyComposing;
+        state.clarifyComposing = false;
+        if (typeof handleClarifyInputEvent === 'function') {
+          handleClarifyInputEvent({ target: target });
+        }
+        if (typeof flushClarifyPendingRender === 'function') flushClarifyPendingRender();
+      });
     }
 
     if (autoClarifyContainer) {
@@ -79,6 +100,26 @@
       if (typeof handleClarifyInputEvent === 'function') {
         autoClarifyContainer.addEventListener('input', handleClarifyInputEvent);
       }
+      autoClarifyContainer.addEventListener('compositionstart', function(e) {
+        var target = e && e.target && e.target.closest
+          ? e.target.closest('textarea[data-clarify-index]')
+          : null;
+        if (!target || !target.dataset) return;
+        state.clarifyComposing = true;
+        target.dataset.clarifyComposing = '1';
+      });
+      autoClarifyContainer.addEventListener('compositionend', function(e) {
+        var target = e && e.target && e.target.closest
+          ? e.target.closest('textarea[data-clarify-index]')
+          : null;
+        if (!target || !target.dataset) return;
+        delete target.dataset.clarifyComposing;
+        state.clarifyComposing = false;
+        if (typeof handleClarifyInputEvent === 'function') {
+          handleClarifyInputEvent({ target: target });
+        }
+        if (typeof flushClarifyPendingRender === 'function') flushClarifyPendingRender();
+      });
     }
 
     if (autoClarifyToggleBtn && typeof toggleAutoClarifyPanel === 'function') {
@@ -91,7 +132,7 @@
     if (autoClarifyToggle && typeof updateAutoClarifyVisibility === 'function') {
       autoClarifyToggle.addEventListener('change', function(e) {
         var checked = Boolean(e && e.target && e.target.checked);
-        updateAutoClarifyVisibility(checked);
+        updateAutoClarifyVisibility(checked, { resetDismissed: false });
       });
     }
 

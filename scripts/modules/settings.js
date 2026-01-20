@@ -80,6 +80,18 @@
       || document.getElementById('saveMissingReminderAi');
     var missingReminderAiStatus = dom.missingReminderAiStatus
       || document.getElementById('missingReminderAiStatus');
+    var caseGenAgentEnabledSelect = dom.caseGenAgentEnabledSelect
+      || document.getElementById('caseGenAgentEnabledSelect');
+    var saveCaseGenAgentEnabledBtn = dom.saveCaseGenAgentEnabledBtn
+      || document.getElementById('saveCaseGenAgentEnabled');
+    var caseGenAgentEnabledStatus = dom.caseGenAgentEnabledStatus
+      || document.getElementById('caseGenAgentEnabledStatus');
+    var caseGenAgentCoverageInput = dom.caseGenAgentCoverageInput
+      || document.getElementById('caseGenAgentCoverageInput');
+    var saveCaseGenAgentCoverageBtn = dom.saveCaseGenAgentCoverageBtn
+      || document.getElementById('saveCaseGenAgentCoverage');
+    var caseGenAgentCoverageStatus = dom.caseGenAgentCoverageStatus
+      || document.getElementById('caseGenAgentCoverageStatus');
     var settingsNavButtons = dom.settingsNavButtons || document.querySelectorAll('[data-settings-target]');
 
     var defaultSettings = config.defaultSettings || {};
@@ -104,6 +116,14 @@
     var defaultMissingReminderAiEnabled = defaultSettings && defaultSettings.missingCaseReminderAiEnabled
       ? String(defaultSettings.missingCaseReminderAiEnabled)
       : 'off';
+    var defaultCaseGenAgentEnabled = defaultSettings && defaultSettings.caseGenAgentEnabled === true
+      ? 'on'
+      : 'off';
+    var defaultCaseGenAgentCoverageThreshold = defaultSettings && defaultSettings.caseGenAgentCoverageThreshold !== undefined
+      ? Number(defaultSettings.caseGenAgentCoverageThreshold)
+      : 100;
+    var minCaseGenAgentCoverageThreshold = 0;
+    var maxCaseGenAgentCoverageThreshold = 100;
     var minCaseViewFontSize = Number(config.minCaseViewFontSize) || 11;
     var maxCaseViewFontSize = Number(config.maxCaseViewFontSize) || 16;
     var settingsKey = config.settingsKey || 'usecase-settings-v1';
@@ -143,6 +163,8 @@
       missingCaseReminderPlacement: false,
       missingCaseReminderMatchConfig: false,
       missingCaseReminderAiEnabled: false,
+      caseGenAgentEnabled: false,
+      caseGenAgentCoverageThreshold: false,
     };
 
     function setSettingsReady(source) {
@@ -268,6 +290,12 @@
       return String(raw || '').toLowerCase() === 'on' ? 'on' : 'off';
     }
 
+    function resolveCaseGenAgentEnabled(value) {
+      var raw = value === undefined || value === null ? defaultCaseGenAgentEnabled : value;
+      if (raw === true) return 'on';
+      return String(raw || '').toLowerCase() === 'on' ? 'on' : 'off';
+    }
+
     function applyTheme(theme) {
       if (typeof document === 'undefined' || !document.documentElement) return;
       var next = resolveTheme(theme);
@@ -298,6 +326,14 @@
       if (!Number.isFinite(num)) return defaultCaseLibraryGenCoverageThreshold;
       if (num < minCaseLibraryGenCoverageThreshold) return minCaseLibraryGenCoverageThreshold;
       if (num > maxCaseLibraryGenCoverageThreshold) return maxCaseLibraryGenCoverageThreshold;
+      return num;
+    }
+
+    function clampCaseGenAgentCoverageThreshold(value) {
+      var num = Math.round(Number(value));
+      if (!Number.isFinite(num)) return defaultCaseGenAgentCoverageThreshold;
+      if (num < minCaseGenAgentCoverageThreshold) return minCaseGenAgentCoverageThreshold;
+      if (num > maxCaseGenAgentCoverageThreshold) return maxCaseGenAgentCoverageThreshold;
       return num;
     }
 
@@ -402,6 +438,19 @@
       state.settings.missingCaseReminderAiEnabled = resolveMissingReminderAiEnabled(
         state.settings.missingCaseReminderAiEnabled
       );
+      if (state.settings.caseGenAgentEnabled === undefined || state.settings.caseGenAgentEnabled === null) {
+        state.settings.caseGenAgentEnabled = defaultCaseGenAgentEnabled;
+      }
+      state.settings.caseGenAgentEnabled = resolveCaseGenAgentEnabled(
+        state.settings.caseGenAgentEnabled
+      );
+      if (state.settings.caseGenAgentCoverageThreshold !== undefined && state.settings.caseGenAgentCoverageThreshold !== null) {
+        state.settings.caseGenAgentCoverageThreshold = clampCaseGenAgentCoverageThreshold(
+          state.settings.caseGenAgentCoverageThreshold
+        );
+      } else {
+        state.settings.caseGenAgentCoverageThreshold = defaultCaseGenAgentCoverageThreshold;
+      }
       if (state.settings.smartTopNavCollapse === undefined || state.settings.smartTopNavCollapse === null) {
         state.settings.smartTopNavCollapse = defaultSettings.smartTopNavCollapse === true;
       } else {
@@ -780,6 +829,26 @@
         }
         if (missingReminderAiStatus) {
           setStatus(missingReminderAiStatus, '', '');
+        }
+      }
+      if (caseGenAgentEnabledSelect) {
+        if (!dirtyDrafts.caseGenAgentEnabled) {
+          caseGenAgentEnabledSelect.value = resolveCaseGenAgentEnabled(
+            state.settings.caseGenAgentEnabled
+          );
+        }
+        if (caseGenAgentEnabledStatus) {
+          setStatus(caseGenAgentEnabledStatus, '', '');
+        }
+      }
+      if (caseGenAgentCoverageInput) {
+        if (!dirtyDrafts.caseGenAgentCoverageThreshold) {
+          caseGenAgentCoverageInput.value = state.settings.caseGenAgentCoverageThreshold !== undefined
+            ? state.settings.caseGenAgentCoverageThreshold
+            : defaultCaseGenAgentCoverageThreshold;
+        }
+        if (caseGenAgentCoverageStatus) {
+          setStatus(caseGenAgentCoverageStatus, '', '');
         }
       }
       if (smartTopNavToggle) {
@@ -1412,6 +1481,59 @@
       return isModelUsable(model);
     }
 
+    function canEnableCaseGenAgent() {
+      var assignments = state.assignments && typeof state.assignments === 'object' ? state.assignments : {};
+      var targetId = assignments.caseGenAgentId || '';
+      if (!targetId) return false;
+      var model = findModelByAnyId(targetId);
+      return isModelUsable(model);
+    }
+
+    function saveCaseGenAgentEnabledSetting() {
+      if (!caseGenAgentEnabledSelect) return;
+      var next = resolveCaseGenAgentEnabled(caseGenAgentEnabledSelect.value);
+      var prev = resolveCaseGenAgentEnabled(state.settings.caseGenAgentEnabled);
+      if (next === 'on' && !canEnableCaseGenAgent()) {
+        if (caseGenAgentEnabledSelect) caseGenAgentEnabledSelect.value = 'off';
+        if (caseGenAgentEnabledStatus) {
+          setStatus(caseGenAgentEnabledStatus, '请先在功能指派配置用例生成 Agent 模型', 'warn');
+        }
+        showCenterToast('请到AI功能-功能指派 页面下，配置用例生成 Agent 模型。', 'warn', 5000);
+        return;
+      }
+      state.settings.caseGenAgentEnabled = next;
+      dirtyDrafts.caseGenAgentEnabled = false;
+      persistSettings(['caseGenAgentEnabled']);
+      if (caseGenAgentEnabledStatus) {
+        if (prev === next) {
+          setStatus(caseGenAgentEnabledStatus, 'Agent 模式保持为' + (next === 'on' ? '开启' : '关闭'), 'ok');
+        } else {
+          setStatus(caseGenAgentEnabledStatus, 'Agent 模式已设置为' + (next === 'on' ? '开启' : '关闭'), 'ok');
+        }
+      }
+      notifySettingsUpdated(['caseGenAgentEnabled']);
+    }
+
+    function saveCaseGenAgentCoverageSetting() {
+      if (!caseGenAgentCoverageInput) return;
+      var raw = caseGenAgentCoverageInput.value;
+      var value = clampCaseGenAgentCoverageThreshold(raw);
+      if (!Number.isFinite(value)) value = defaultCaseGenAgentCoverageThreshold;
+      var prev = state.settings.caseGenAgentCoverageThreshold;
+      caseGenAgentCoverageInput.value = value;
+      state.settings.caseGenAgentCoverageThreshold = value;
+      dirtyDrafts.caseGenAgentCoverageThreshold = false;
+      persistSettings(['caseGenAgentCoverageThreshold']);
+      if (caseGenAgentCoverageStatus) {
+        if (prev === value) {
+          setStatus(caseGenAgentCoverageStatus, '覆盖率阈值保持为 ' + value, 'ok');
+        } else {
+          setStatus(caseGenAgentCoverageStatus, '覆盖率阈值已更新为 ' + value, 'ok');
+        }
+      }
+      notifySettingsUpdated(['caseGenAgentCoverageThreshold']);
+    }
+
     function saveMissingReminderAiSetting() {
       if (!missingReminderAiSelect) return;
       var next = resolveMissingReminderAiEnabled(missingReminderAiSelect.value);
@@ -1575,6 +1697,16 @@
       if (caseLibraryGenCoverageInput) caseLibraryGenCoverageInput.addEventListener('input', function() {
         dirtyDrafts.caseLibraryGenCoverageThreshold = true;
         setStatus(caseLibraryGenCoverageStatus, '', '');
+      });
+      if (saveCaseGenAgentEnabledBtn) saveCaseGenAgentEnabledBtn.addEventListener('click', saveCaseGenAgentEnabledSetting);
+      if (caseGenAgentEnabledSelect) caseGenAgentEnabledSelect.addEventListener('change', function() {
+        dirtyDrafts.caseGenAgentEnabled = true;
+        if (caseGenAgentEnabledStatus) setStatus(caseGenAgentEnabledStatus, '', '');
+      });
+      if (saveCaseGenAgentCoverageBtn) saveCaseGenAgentCoverageBtn.addEventListener('click', saveCaseGenAgentCoverageSetting);
+      if (caseGenAgentCoverageInput) caseGenAgentCoverageInput.addEventListener('input', function() {
+        dirtyDrafts.caseGenAgentCoverageThreshold = true;
+        if (caseGenAgentCoverageStatus) setStatus(caseGenAgentCoverageStatus, '', '');
       });
       if (saveThemeSettingBtn) saveThemeSettingBtn.addEventListener('click', saveThemeSetting);
       if (themeSelect) themeSelect.addEventListener('change', function() {

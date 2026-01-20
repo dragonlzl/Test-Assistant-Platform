@@ -8024,14 +8024,14 @@
 
   function triggerMissingReminderAiRecommend() {
     var reminder = ensureMissingReminderState();
-    if (resolveMissingReminderAiEnabled() !== 'on') return;
-    if (reminder.aiLoading) return;
+    if (resolveMissingReminderAiEnabled() !== 'on') return false;
+    if (reminder.aiLoading) return false;
     var ready = syncMissingReminderAiContext(reminder);
     if (ready) {
       checkMissingReminderLibraryStatus(reminder, reminder.aiContextProjectId);
       if (reminder.libraryChecked === true && reminder.libraryEmpty === true) {
         showMissingReminderLibraryEmptyToast();
-        return;
+        return false;
       }
     }
     if (hasMissingReminderAiGenerated(reminder)) {
@@ -8044,9 +8044,10 @@
         if (!res || res.ok !== true) return;
         runMissingReminderAiRecommend({ trigger: 'confirm' });
       });
-      return;
+      return true;
     }
     runMissingReminderAiRecommend({ trigger: 'button' });
+    return true;
   }
 
   function handleMissingReminderAction(e) {
@@ -9730,7 +9731,7 @@
 
   function runCaseLibraryAiGen() {
     var ai = ensureCaseLibraryAiGenState();
-    if (ai.loading) return;
+    if (ai.loading) return false;
     var manager = getCaseLibraryAiGenManager();
     if (manager && typeof manager.getTask === 'function') {
       var activeTask = manager.getTask('case-library');
@@ -9740,41 +9741,41 @@
         var activeName = activeTask.caseFileName ? String(activeTask.caseFileName) : '';
         if (activeFileId && currentFileId && activeFileId !== currentFileId) {
           showCenterToast(activeName ? ('用例「' + activeName + '」正在生成，请等待完成后再生成。') : '已有用例正在生成，请等待完成后再生成。', 'warn', 4000);
-          return;
+          return false;
         }
         if (activeFileId && currentFileId && activeFileId === currentFileId) {
           syncCaseLibraryAiGenTaskState();
           showCenterToast('当前用例正在生成，请稍候。', 'warn', 3000);
-          return;
+          return false;
         }
       }
     }
     var reason = resolveCaseLibraryAiGenDisabledReason();
     if (reason === 'no-model') {
       showCenterToast('请到AI功能-功能指派 页面下，配置该功能模型。', 'warn', 5000);
-      return;
+      return false;
     }
     if (reason === 'no-case') {
       showCenterToast('请先选择查看&编辑用例。', 'warn', 3000);
-      return;
+      return false;
     }
     var requirementText = dom.aiGenRequirementInput ? dom.aiGenRequirementInput.value : ai.requirementText;
     requirementText = normalizeEditorText(requirementText || '');
     if (!requirementText) {
       setStatus(dom.aiGenStatus, '请先填写需求内容', 'warn');
-      return;
+      return false;
     }
     var coreApi = getCore();
     if (!coreApi || typeof coreApi.callModelWithConfig !== 'function' || typeof coreApi.getAssignedModel !== 'function') {
       setStatus(dom.aiGenStatus, '模型客户端不可用，请刷新页面后重试', 'err');
-      return;
+      return false;
     }
     var model;
     try {
       model = coreApi.getAssignedModel('caselibrarygen');
     } catch (err) {
       showCenterToast('请到AI功能-功能指派 页面下，配置该功能模型。', 'warn', 5000);
-      return;
+      return false;
     }
     var moduleList = buildCaseLibraryAiGenModuleList(state.editor.items || []);
     var casePayload = buildCaseLibraryAiGenCasePayload(state.editor.items || []);
@@ -9830,7 +9831,7 @@
       });
       manager.startTask('case-library', task);
       applyCaseLibraryAiGenTaskState(task);
-      return;
+      return true;
     }
 
     var genOk = false;
@@ -9864,6 +9865,7 @@
         syncCaseLibraryAiGenRunBtn();
         syncCaseLibraryAiGenButton();
       });
+    return true;
   }
 
   function selectAllCaseLibraryAiGenCases() {
@@ -16695,6 +16697,8 @@
     window.app.caseLibraryApi.requestSelectExecDrawer = markSelectExecDrawerRequest;
     window.app.caseLibraryApi.openMissingDrawer = openMissingDrawer;
     window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
+    window.app.caseLibraryApi.triggerMissingReminderAiRecommend = triggerMissingReminderAiRecommend;
+    window.app.caseLibraryApi.runCaseLibraryAiGen = runCaseLibraryAiGen;
     if (hasImportSelectDrawer) {
       window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
     }
@@ -16892,6 +16896,8 @@
     window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
     window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
     window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;
+    window.app.caseLibraryApi.triggerMissingReminderAiRecommend = triggerMissingReminderAiRecommend;
+    window.app.caseLibraryApi.runCaseLibraryAiGen = runCaseLibraryAiGen;
     window.app.caseLibraryApi.downloadImportExcelTemplate = downloadImportExcelTemplate;
     window.app.caseLibraryApi.downloadImportXmindTemplate = downloadImportXmindTemplate;
     window.app.caseLibraryApi.buildSimpleXlsxBlob = buildSimpleXlsxBlob;
