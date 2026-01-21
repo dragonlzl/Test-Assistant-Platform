@@ -128,6 +128,9 @@
     var workflowRestoring = false;
     var autoCompareSuggestionInput = typeof document !== 'undefined' ? document.getElementById('autoCompareSuggestion') : null;
     var autoAgentPromptHintInput = typeof document !== 'undefined' ? document.getElementById('autoAgentPromptHint') : null;
+    var defaultAgentExtraPrompt = (window.app && window.app.config && typeof window.app.config.defaultAgentExtraPrompt === 'string')
+      ? window.app.config.defaultAgentExtraPrompt
+      : '需求澄清忽略数值和美术相关内容，模块拆分也忽略数值和美术。';
 
     function getPersistUserId() {
       if (state.currentUser && (state.currentUser.id || state.currentUser.id === 0)) {
@@ -206,6 +209,7 @@
         autoCompareSuggestion: state.autoCompareSuggestion || (autoCompareSuggestionInput ? autoCompareSuggestionInput.value : ''),
         autoRequireClarifications: Boolean(state.autoRequireClarifications),
         autoAgentPromptHint: state.autoAgentPromptHint || (autoAgentPromptHintInput ? autoAgentPromptHintInput.value : ''),
+        caseGenAgentPromptRouting: cloneJson(state.caseGenAgentPromptRouting, null),
         caseGenSource: state.caseGenSource || '',
         caseGenModules: cloneJson(state.caseGenModules, []),
         caseGenResults: cloneJson(state.caseGenResults, {}),
@@ -270,6 +274,10 @@
       if (hasText(data.autoCompareSuggestion)) return true;
       if (hasRequirementLabel(data)) return true;
       if (data.autoRequireClarifications) return true;
+      if (data.autoAgentPromptHint !== undefined && data.autoAgentPromptHint !== null) {
+        var promptHint = String(data.autoAgentPromptHint);
+        if (promptHint !== defaultAgentExtraPrompt) return true;
+      }
       if (Array.isArray(data.importedCases) && data.importedCases.length) return true;
       if (Array.isArray(data.caseGenModules) && data.caseGenModules.length) return true;
       if (data.reviewClarifications && data.reviewClarifications.length) return true;
@@ -366,6 +374,9 @@
       if (data.autoAgentPromptHint !== undefined && data.autoAgentPromptHint !== null) {
         state.autoAgentPromptHint = String(data.autoAgentPromptHint);
       }
+      state.caseGenAgentPromptRouting = data.caseGenAgentPromptRouting && typeof data.caseGenAgentPromptRouting === 'object'
+        ? data.caseGenAgentPromptRouting
+        : null;
       if (autoCompareSuggestionInput) autoCompareSuggestionInput.value = state.autoCompareSuggestion;
       if (autoAgentPromptHintInput) autoAgentPromptHintInput.value = state.autoAgentPromptHint || '';
       if (dom.autoClarifyToggle) dom.autoClarifyToggle.checked = state.autoRequireClarifications;
@@ -1267,6 +1278,10 @@
       'clearAllFailedSteps',
       'syncAutoCompareStatus',
       'renderAgentPanel',
+      'markAgentPlanSkippedByFlow',
+      'applyAgentPromptRoutingDecision',
+      'applyAgentReviewDecision',
+      'applyAgentCoverageSelection',
       'autoFillReviewClarifications',
       'updateAutoClarifyVisibility',
       'renderAutoClarifyView',

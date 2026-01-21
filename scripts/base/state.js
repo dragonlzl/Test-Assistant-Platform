@@ -58,7 +58,7 @@
     var defaultTempExecPageSize = options && options.defaultTempExecPageSize ? options.defaultTempExecPageSize : 20;
     var defaultAgentExtraPrompt = options && typeof options.defaultAgentExtraPrompt === 'string'
       ? options.defaultAgentExtraPrompt
-      : '评审流程可以忽略数值、美术等相关内容。';
+      : '需求澄清忽略数值和美术相关内容，模块拆分也忽略数值和美术。';
     var settingsCopy = Object.assign({}, defaultSettings);
     if (defaultSettings && typeof defaultSettings.tempExecColumns === 'object') {
       settingsCopy.tempExecColumns = Object.assign({}, defaultSettings.tempExecColumns);
@@ -158,6 +158,7 @@
       autoClarifyDismissed: false,
       autoClarifyResolver: null,
       autoAgentPromptHint: defaultAgentExtraPrompt,
+      caseGenAgentPromptRouting: null,
       caseGenAgentPlan: [],
       caseGenAgentPlanSource: '',
       caseGenAgentLog: [],
@@ -166,6 +167,7 @@
       caseGenAgentRetryCounters: {},
       caseGenAgentCoverageRetries: 0,
       caseGenAgentCoverageBelowFull: false,
+      caseGenAgentFlowStopNote: '',
       tempExecFiles: [],
       tempExecActiveId: '',
       tempExecSelections: {},

@@ -73,6 +73,15 @@
     return html.replace(/\n/g, '<br/>');
   }
 
+  function appendPromptHint(basePrompt, hint) {
+    var base = basePrompt === undefined || basePrompt === null ? '' : String(basePrompt).trim();
+    var extra = hint === undefined || hint === null ? '' : String(hint).trim();
+    if (!extra) return base;
+    var note = '【补充要求】' + extra + '\n【注意】不得改变输出格式，只能在原格式内满足要求。';
+    if (!base) return note;
+    return base + '\n\n' + note;
+  }
+
   function tryFormatJson(text) {
     if (!text) return '';
     try {
@@ -719,6 +728,7 @@
     formatJsonOrText: formatJsonOrText,
     escapeHtml: escapeHtml,
     escapeHtmlPreserve: escapeHtmlPreserve,
+    appendPromptHint: appendPromptHint,
     formatCompactTimestamp: formatCompactTimestamp,
     scrollElementIntoView: scrollElementIntoView,
     bindMissingReminderScrollHint: bindMissingReminderScrollHint,

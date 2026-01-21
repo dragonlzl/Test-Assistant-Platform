@@ -3928,4 +3928,20 @@
 - 更新记录：2026-01-18 执行页 AI 生成已追加用例行增加填充提示（`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_ai_gen.spec.js`）。
 - 更新记录：2026-01-18 执行页 AI 生成已追加用例行填充持久化并禁用勾选（`scripts/modules/tempexec.js`、`tests/ui/tempexec_ai_gen.spec.js`）。
 - 更新记录：2026-01-19 Agent 续跑时跳过重复决策并优先复用已有结果（`scripts/modules/app.js`、`scripts/core/autoCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 额外提示词支持路由到各步骤并可限制执行范围（`config/constants.js`、`scripts/base/utils.js`、`scripts/core/autoCore.js`、`scripts/core/compareCore.js`、`scripts/core/reviewCore.js`、`scripts/core/splitCore.js`、`scripts/handlers/cleanHandlers.js`、`scripts/modules/app.js`、`scripts/modules/auto.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 额外提示词改由决策 Agent 直接分配到各步骤并更新流程约束（`config/constants.js`、`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 额外提示词路由与缺失提示记录输出到执行日志（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 修复 Agent 在无评审结果时误等待澄清导致流程卡住（`scripts/core/autoCore.js`、`config/constants.js`）。
+- 更新记录：2026-01-21 自动补齐自定义 Agent 提示词的 prompt_routing 规则并同步为默认值（`scripts/modules/models.js`、`tests/ui/auto_casegen_agent.spec.js`）。
 - 更新记录：2026-01-21 Agent 覆盖率等待阶段支持忽略/补全/重清洗操作校验并继续执行（`scripts/core/autoCore.js`、`scripts/modules/auto.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 额外提示词输入持久化（`scripts/core/appRuntime.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 额外提示词默认文案调整为澄清/拆分忽略数值与美术（`config/constants.js`、`scripts/base/state.js`、`scripts/core/appRuntime.js`、`scripts/core/autoCore.js`、`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 自动重洗覆盖率不足时保留最高覆盖率结果并记录决策过程（`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 提示词路由支持澄清/覆盖率字段映射到评审/对比完整性（`config/constants.js`、`scripts/core/autoCore.js`、`scripts/modules/models.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 决策强制输出 prompt_routing 与 routing_note 并在缺失时补齐重试（`config/constants.js`、`scripts/core/autoCore.js`、`scripts/modules/models.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 路由提示要求忽略类指令改写为硬性约束以影响评审输出（`config/constants.js`、`scripts/modules/models.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 路由忽略类提示改为固定模板并补充数值/美术显式禁止语句（`config/constants.js`、`scripts/modules/models.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 决策输出追加 understanding/decision 字段并展示理解日志（`config/constants.js`、`scripts/core/autoCore.js`、`scripts/modules/models.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 提示词投递到工具的明细输出到执行过程（`scripts/core/autoCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 路由步骤执行后复核输出并在异常时应用修正结果，补充复核中状态、复核问题条目日志，并在复核期间保持步骤为执行中（`config/constants.js`、`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 重新导入需求时保留 Agent 额外提示词输入（`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。

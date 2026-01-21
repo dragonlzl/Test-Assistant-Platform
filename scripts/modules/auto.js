@@ -200,6 +200,8 @@
       autoAgentPromptHintInput.value = typeof state.autoAgentPromptHint === 'string' ? state.autoAgentPromptHint : '';
       autoAgentPromptHintInput.addEventListener('input', function() {
         state.autoAgentPromptHint = autoAgentPromptHintInput.value;
+        state.caseGenAgentPromptRouting = null;
+        state.caseGenAgentFlowStopNote = '';
         persistWorkflowState();
       });
     }

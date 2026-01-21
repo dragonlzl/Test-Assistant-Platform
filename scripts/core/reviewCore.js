@@ -12,6 +12,14 @@
       return raw.replace(/[&<>"]/g, function(ch) { return map[ch] || ''; });
     };
     var escapeHtmlPreserve = ctx.escapeHtmlPreserve || escapeHtml;
+    var appendPromptHint = handlers.appendPromptHint || function(basePrompt, hint) {
+      var base = basePrompt === undefined || basePrompt === null ? '' : String(basePrompt).trim();
+      var extra = hint === undefined || hint === null ? '' : String(hint).trim();
+      if (!extra) return base;
+      var note = '【补充要求】' + extra + '\n【注意】不得改变输出格式，只能在原格式内满足要求。';
+      if (!base) return note;
+      return base + '\n\n' + note;
+    };
 
     var ensureRequirementLabel = handlers.ensureRequirementLabel || function() { return ''; };
     var getAssignedModel = handlers.getAssignedModel || function() { throw new Error('未配置模型'); };
@@ -809,6 +817,8 @@
       try {
         var reviewPrompt = state.assignments && state.assignments.reviewPrompt ? state.assignments.reviewPrompt.trim() : '';
         var prompt = reviewPrompt || defaultPrompts.review;
+        var hint = extraContext && extraContext.promptHint ? String(extraContext.promptHint).trim() : '';
+        prompt = appendPromptHint(prompt, hint);
         var reasoning = getReasoningForType('review');
         var temperature = getTemperatureForType('review');
         var startTime = Date.now();

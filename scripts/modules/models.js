@@ -18,6 +18,18 @@
     const defaultTemperature = 0.2;
     const assignmentName = 'default';
     const api = window.app && window.app.apiClient;
+    const defaultPromptStorageKey = 'usecase-default-prompts';
+    const agentPromptRoutingRule = [
+      '必须输出 prompt_routing 字段（结构：{prompts:{review,clean,compare,split,cases}, flow:{stop_after,only_steps,note}}），用于把用户补充提示分配到步骤并限制流程。',
+      '必须输出 routing_note 字段，用于简短说明额外提示词命中的步骤与投递摘要，不输出推理。',
+      '必须输出 understanding 字段，简短说明额外提示词命中的步骤与要点，不输出推理过程。',
+      '必须输出 decision 字段：{action, reason}，且与顶层 action/reason 一致。',
+      '输出前先判断额外提示词关联的步骤，再分别写入 prompts。',
+      'prompts 对应步骤追加提示，值为空字符串表示不追加；stop_after 仅允许 review/clean/compare/split/cases 或空字符串；only_steps 为空数组表示不限制。',
+      '提示词路由规则：评审/澄清 -> review；清洗 -> clean；覆盖率/对比完整性/对比计算 -> compare；模块拆分 -> split；覆盖对比/用例对比/XMind -> cases。',
+      '不要把澄清写入 coverage/clarify，不要把覆盖率写入 coverage。',
+      '若 has_review 为 false，必须先选择 review，不要 wait_clarify。',
+    ].join('\n');
 
     const domRefs = dom || {};
     const pickEl = function(key, id) { return domRefs[key] || document.getElementById(id); };
@@ -705,6 +717,56 @@
     const requiredAssignmentKeys = ['cleanId', 'reviewId', 'compareId', 'splitId', 'casesId', 'caseGenId'];
     const assignmentIdKeys = requiredAssignmentKeys.concat(['caseFilterId', 'missingReminderId', 'caseLibraryGenId', 'caseGenAgentId']);
 
+    function hasAgentPromptRoutingRule(text) {
+      if (!text) return false;
+      var raw = String(text);
+      var hasPromptRouting = raw.indexOf('prompt_routing') !== -1 || raw.indexOf('promptRouting') !== -1 || raw.toLowerCase().indexOf('prompt routing') !== -1;
+      var hasRoutingNote = raw.indexOf('routing_note') !== -1 || raw.indexOf('routingNote') !== -1;
+      var hasUnderstanding = raw.indexOf('必须输出 understanding 字段') !== -1;
+      var hasDecision = raw.indexOf('必须输出 decision 字段') !== -1;
+      return hasPromptRouting && hasRoutingNote && hasUnderstanding && hasDecision;
+    }
+
+    function ensureAgentPromptRoutingRule(text) {
+      if (!text) return '';
+      if (hasAgentPromptRoutingRule(text)) return text;
+      return String(text).trim() + '\n' + agentPromptRoutingRule;
+    }
+
+    function persistDefaultCaseGenAgentPrompt(promptText) {
+      if (!promptText) return false;
+      var saved = {};
+      try {
+        saved = JSON.parse(localStorage.getItem(defaultPromptStorageKey) || '{}') || {};
+      } catch (err) {
+        saved = {};
+      }
+      saved.casegenagent = promptText;
+      try {
+        localStorage.setItem(defaultPromptStorageKey, JSON.stringify(saved));
+        return true;
+      } catch (err2) {
+        console.warn('默认提示词保存失败', err2);
+        return false;
+      }
+    }
+
+    function syncAgentPromptRoutingRule() {
+      var raw = state.assignments && typeof state.assignments.caseGenAgentPrompt === 'string'
+        ? state.assignments.caseGenAgentPrompt.trim()
+        : '';
+      if (!raw) raw = defaultPrompts.casegenagent || '';
+      if (!raw) return false;
+      var normalized = ensureAgentPromptRoutingRule(raw);
+      if (!normalized || normalized === raw) return false;
+      state.assignments.caseGenAgentPrompt = normalized;
+      defaultPrompts.casegenagent = normalized;
+      persistAssignmentsLocal();
+      persistDefaultCaseGenAgentPrompt(normalized);
+      if (caseGenAgentPromptEl) caseGenAgentPromptEl.value = normalized;
+      return true;
+    }
+
     function persistAssignmentsLocal() {
       try {
         localStorage.setItem(assignmentKey, JSON.stringify(state.assignments));
@@ -807,7 +869,16 @@
       if (caseFilterPromptEl) state.assignments.caseFilterPrompt = caseFilterPromptEl.value.trim() || defaultPrompts.casefilter;
       if (missingReminderPromptEl) state.assignments.missingReminderPrompt = missingReminderPromptEl.value.trim() || defaultPrompts.missingreminder;
       if (caseLibraryGenPromptEl) state.assignments.caseLibraryGenPrompt = caseLibraryGenPromptEl.value.trim() || defaultPrompts.caselibrarygen;
-      if (caseGenAgentPromptEl) state.assignments.caseGenAgentPrompt = caseGenAgentPromptEl.value.trim() || defaultPrompts.casegenagent;
+      if (caseGenAgentPromptEl) {
+        var agentRaw = caseGenAgentPromptEl.value.trim() || defaultPrompts.casegenagent;
+        var agentPrompt = ensureAgentPromptRoutingRule(agentRaw);
+        state.assignments.caseGenAgentPrompt = agentPrompt;
+        if (caseGenAgentPromptEl.value.trim() !== agentPrompt) {
+          caseGenAgentPromptEl.value = agentPrompt;
+        }
+        defaultPrompts.casegenagent = agentPrompt;
+        persistDefaultCaseGenAgentPrompt(agentPrompt);
+      }
       if (cleanReasoningSelect) state.assignments.cleanReasoning = cleanReasoningSelect.value || '';
       if (reviewReasoningSelect) state.assignments.reviewReasoning = reviewReasoningSelect.value || '';
       if (compareReasoningSelect) state.assignments.compareReasoning = compareReasoningSelect.value || '';
@@ -1228,6 +1299,7 @@
 
     loadModels();
     loadAssignments();
+    syncAgentPromptRoutingRule();
     renderModels();
     renderAssignmentsSelect();
     updateAssignmentStatuses();

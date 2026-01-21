@@ -15,6 +15,8 @@
     var setStepFailed = handlers.setStepFailed || function() {};
     var clearStepFailed = handlers.clearStepFailed || function() {};
     var clearAllFailedSteps = handlers.clearAllFailedSteps || function() {};
+    var setStepInProgress = handlers.setStepInProgress || function() {};
+    var clearStepInProgress = handlers.clearStepInProgress || function() {};
     var setStepWaiting = handlers.setStepWaiting || function() {};
     var clearStepWaiting = handlers.clearStepWaiting || function() {};
     var clearAllWaitingSteps = handlers.clearAllWaitingSteps || function() {};
@@ -59,6 +61,7 @@
     var renderCleanView = handlers.renderCleanView || function() {};
     var renderCleanRawView = handlers.renderCleanRawView || function() {};
     var syncReviewViewFromResult = handlers.syncReviewViewFromResult || function() {};
+    var syncSplitView = handlers.syncSplitView || function() {};
     var triggerMissingReminderAi = handlers.triggerMissingReminderAi || function() { return false; };
     var triggerCaseLibraryGen = handlers.triggerCaseLibraryGen || function() { return false; };
     var defaultPrompts = (ctx.config && ctx.config.defaultPrompts) ? ctx.config.defaultPrompts : {};
@@ -66,7 +69,10 @@
       ? ctx.config.defaultAgentExtraPrompt
       : (window.app && window.app.config && typeof window.app.config.defaultAgentExtraPrompt === 'string'
         ? window.app.config.defaultAgentExtraPrompt
-        : '评审流程可以忽略数值、美术等相关内容。');
+        : '需求澄清忽略数值和美术相关内容，模块拆分也忽略数值和美术。');
+    var agentReviewPrompt = defaultPrompts && typeof defaultPrompts.agentreview === 'string'
+      ? defaultPrompts.agentreview
+      : '你是用例生成流程的结果复核 Agent。请根据输入的 step/prompt_hint/inputs/output 判断输出是否符合额外提示词与步骤要求，确保格式/字段不变且内容符合约束。你必须严格输出 JSON：{ok, reason, output, issues}，ok 为 true/false。issues 为违反要求的条目列表（字符串数组，简短描述问题点），ok 为 true 时 issues 为空数组且 output 为空字符串。若 ok 为 false，output 必须给出修正后的完整结果（保持原输出格式，不要包含多余文本或 Markdown）。reason 为简短问题说明，不输出推理过程。';
     var escapeHtml = utils.escapeHtml || function(text) {
       if (text === null || text === undefined) return '';
       return String(text)
@@ -135,8 +141,11 @@
     if (typeof state.caseGenAgentCoverageRetries !== 'number') state.caseGenAgentCoverageRetries = 0;
     if (typeof state.caseGenAgentCoverageBelowFull !== 'boolean') state.caseGenAgentCoverageBelowFull = false;
     if (typeof state.autoAgentPromptHint !== 'string') state.autoAgentPromptHint = defaultAgentExtraPrompt;
+    if (!Object.prototype.hasOwnProperty.call(state, 'caseGenAgentPromptRouting')) state.caseGenAgentPromptRouting = null;
+    if (state.caseGenAgentPromptRouting && typeof state.caseGenAgentPromptRouting !== 'object') state.caseGenAgentPromptRouting = null;
     if (typeof state.autoClarifyDismissed !== 'boolean') state.autoClarifyDismissed = false;
     if (typeof state.autoAgentStopped !== 'boolean') state.autoAgentStopped = false;
+    if (typeof state.caseGenAgentFlowStopNote !== 'string') state.caseGenAgentFlowStopNote = '';
 
     function getRequirementDisplayName() {
       return getRequirementLabel(true);
@@ -177,6 +186,7 @@
 
     function resetAgentStopState() {
       state.autoAgentStopped = false;
+      state.caseGenAgentFlowStopNote = '';
       syncAgentStopButton();
     }
 
@@ -263,15 +273,627 @@
         clarify: 'clarify',
         coverage: 'coverage',
         '需求评审': 'review',
+        '澄清': 'clarify',
         '需求澄清': 'clarify',
         '需求澄清确认': 'clarify',
         '需求清洗': 'clean',
         '对比完整性': 'compare',
+        '对比计算': 'compare',
         '测试模块拆分': 'split',
         '覆盖对比': 'cases',
         '覆盖率校验': 'coverage',
+        '覆盖率': 'coverage',
+        '覆盖率对比': 'coverage',
       };
       return map[raw] || raw;
+    }
+
+    function normalizeAgentStepList(list) {
+      var rawList = list;
+      if (typeof rawList === 'string') {
+        rawList = rawList.split(/[,\s，、]+/);
+      }
+      if (!Array.isArray(rawList)) return [];
+      var result = [];
+      rawList.forEach(function(item) {
+        var key = normalizeAgentStepKey(item);
+        if (!key) return;
+        if (result.indexOf(key) === -1) result.push(key);
+      });
+      return result;
+    }
+
+    function normalizeAgentPromptRouting(raw, source) {
+      if (!raw || typeof raw !== 'object') return null;
+      var prompts = {};
+      var rawPrompts = raw.prompts && typeof raw.prompts === 'object' ? raw.prompts : null;
+      if (rawPrompts) {
+        Object.keys(rawPrompts).forEach(function(key) {
+          var stepKey = normalizeAgentStepKey(key);
+          if (!stepKey) return;
+          var value = rawPrompts[key];
+          if (value === undefined || value === null) return;
+          var text = String(value).trim();
+          if (text) prompts[stepKey] = text;
+        });
+      }
+      var remappedPrompts = {};
+      if (prompts.clarify && !prompts.review) {
+        prompts.review = prompts.clarify;
+        remappedPrompts.review = '澄清';
+      }
+      if (prompts.coverage && !prompts.compare) {
+        prompts.compare = prompts.coverage;
+        remappedPrompts.compare = '覆盖率';
+      }
+      if (prompts.clarify) delete prompts.clarify;
+      if (prompts.coverage) delete prompts.coverage;
+      var flowRaw = raw.flow && typeof raw.flow === 'object' ? raw.flow : {};
+      var stopAfter = normalizeAgentStepKey(flowRaw.stop_after || flowRaw.stopAfter || flowRaw.stop || '');
+      var onlySteps = normalizeAgentStepList(flowRaw.only_steps || flowRaw.onlySteps || flowRaw.steps || []);
+      var note = flowRaw.note || flowRaw.reason || raw.note || '';
+      var normalized = {
+        source: source || '',
+        updatedAt: Date.now(),
+        prompts: prompts,
+        flow: {
+          stop_after: stopAfter,
+          only_steps: onlySteps,
+          note: note ? String(note).trim() : '',
+        },
+      };
+      if (Object.keys(remappedPrompts).length) normalized.remappedPrompts = remappedPrompts;
+      return normalized;
+    }
+
+    function getAgentPromptRouting() {
+      var routing = state.caseGenAgentPromptRouting;
+      if (!routing || typeof routing !== 'object') return null;
+      if (!routing.prompts || typeof routing.prompts !== 'object') routing.prompts = {};
+      if (!routing.flow || typeof routing.flow !== 'object') routing.flow = {};
+      return routing;
+    }
+
+    function setAgentPromptRouting(next) {
+      if (!next || typeof next !== 'object') {
+        state.caseGenAgentPromptRouting = null;
+        if (persistWorkflowState) persistWorkflowState();
+        return;
+      }
+      state.caseGenAgentPromptRouting = next;
+      if (persistWorkflowState) persistWorkflowState();
+    }
+
+    function buildAgentRoutingSignature(routing) {
+      if (!routing || typeof routing !== 'object') return '';
+      var prompts = routing.prompts && typeof routing.prompts === 'object' ? routing.prompts : {};
+      var flow = routing.flow && typeof routing.flow === 'object' ? routing.flow : {};
+      var promptKeys = Object.keys(prompts).sort();
+      var promptPairs = promptKeys.map(function(key) {
+        return key + '=' + String(prompts[key] || '');
+      });
+      var onlySteps = Array.isArray(flow.only_steps) ? flow.only_steps.slice().sort() : [];
+      var stopAfter = flow.stop_after ? String(flow.stop_after) : '';
+      var note = flow.note ? String(flow.note) : '';
+      return [routing.source || '', promptPairs.join('|'), stopAfter, onlySteps.join(','), note].join('#');
+    }
+
+    function extractPromptRoutingFromDecision(decision) {
+      if (!decision || typeof decision !== 'object') return null;
+      if (decision.prompt_routing && typeof decision.prompt_routing === 'object') return decision.prompt_routing;
+      if (decision.promptRouting && typeof decision.promptRouting === 'object') return decision.promptRouting;
+      if (decision.agent_prompt_routing && typeof decision.agent_prompt_routing === 'object') return decision.agent_prompt_routing;
+      var promptHints = null;
+      if (decision.prompt_hints && typeof decision.prompt_hints === 'object') promptHints = decision.prompt_hints;
+      if (!promptHints && decision.promptHints && typeof decision.promptHints === 'object') promptHints = decision.promptHints;
+      if (!promptHints && decision.step_prompts && typeof decision.step_prompts === 'object') promptHints = decision.step_prompts;
+      if (!promptHints && decision.stepPrompts && typeof decision.stepPrompts === 'object') promptHints = decision.stepPrompts;
+      if (promptHints) return { prompts: promptHints };
+      if (decision.prompts || decision.flow) {
+        return { prompts: decision.prompts || {}, flow: decision.flow || {} };
+      }
+      return null;
+    }
+
+    function extractRoutingNoteFromDecision(decision) {
+      if (!decision || typeof decision !== 'object') return '';
+      var note = '';
+      if (decision.routing_note !== undefined && decision.routing_note !== null) {
+        note = decision.routing_note;
+      } else if (decision.routingNote !== undefined && decision.routingNote !== null) {
+        note = decision.routingNote;
+      }
+      return note ? String(note).trim() : '';
+    }
+
+    function extractDecisionUnderstanding(decision) {
+      if (!decision || typeof decision !== 'object') return '';
+      var note = '';
+      if (decision.understanding !== undefined && decision.understanding !== null) {
+        note = decision.understanding;
+      } else if (decision.understanding_note !== undefined && decision.understanding_note !== null) {
+        note = decision.understanding_note;
+      } else if (decision.understandingNote !== undefined && decision.understandingNote !== null) {
+        note = decision.understandingNote;
+      }
+      return note ? String(note).trim() : '';
+    }
+
+    function extractDecisionAction(decision) {
+      if (!decision || typeof decision !== 'object') return '';
+      if (decision.action !== undefined && decision.action !== null) return String(decision.action).trim();
+      if (decision.decision && decision.decision.action !== undefined && decision.decision.action !== null) {
+        return String(decision.decision.action).trim();
+      }
+      return '';
+    }
+
+    function extractDecisionReason(decision) {
+      if (!decision || typeof decision !== 'object') return '';
+      if (decision.reason !== undefined && decision.reason !== null) return String(decision.reason).trim();
+      if (decision.decision && decision.decision.reason !== undefined && decision.decision.reason !== null) {
+        return String(decision.decision.reason).trim();
+      }
+      return '';
+    }
+
+    function isAgentPromptRoutingComplete(decision) {
+      var routing = extractPromptRoutingFromDecision(decision);
+      if (!routing) return false;
+      var note = extractRoutingNoteFromDecision(decision);
+      return Boolean(note);
+    }
+
+    function getAgentRoutingStatus(decision) {
+      var hasRouting = Boolean(extractPromptRoutingFromDecision(decision));
+      var hasNote = Boolean(extractRoutingNoteFromDecision(decision));
+      var hasUnderstanding = Boolean(extractDecisionUnderstanding(decision));
+      var hasDecision = Boolean(extractDecisionAction(decision));
+      return {
+        hasRouting: hasRouting,
+        hasNote: hasNote,
+        hasUnderstanding: hasUnderstanding,
+        hasDecision: hasDecision,
+        complete: hasRouting && hasNote && hasUnderstanding && hasDecision,
+      };
+    }
+
+    function maybeApplyAgentPromptRoutingFromDecision(decision, extraPrompt) {
+      var raw = extractPromptRoutingFromDecision(decision);
+      if (!raw) return false;
+      var source = extraPrompt ? String(extraPrompt).trim() : '';
+      if (!source) return false;
+      var normalized = normalizeAgentPromptRouting(raw, source);
+      if (!normalized) return false;
+      var remappedPrompts = normalized.remappedPrompts || null;
+      if (remappedPrompts) delete normalized.remappedPrompts;
+      var existing = getAgentPromptRouting();
+      var prevSig = buildAgentRoutingSignature(existing);
+      var nextSig = buildAgentRoutingSignature(normalized);
+      if (prevSig && prevSig === nextSig) return false;
+      setAgentPromptRouting(normalized);
+      state.caseGenAgentFlowStopNote = '';
+      pushAgentLog('info', '已根据 Agent 决策更新步骤提示');
+      if (remappedPrompts) {
+        var remapSummary = summarizeAgentPromptRouting({ prompts: remappedPrompts, flow: {} });
+        if (remapSummary) pushAgentLog('info', '已将 Agent 路由映射到对应步骤：' + remapSummary);
+      }
+      var summary = summarizeAgentPromptRouting(normalized);
+      if (summary) pushAgentLog('info', 'Agent 提示词路由：' + summary);
+      logAgentPromptDelivery(normalized.prompts);
+      return true;
+    }
+
+    function applyAgentPromptRoutingDecision(decision, promptOverride) {
+      var source = '';
+      if (promptOverride !== undefined && promptOverride !== null) {
+        source = String(promptOverride).trim();
+      } else {
+        source = state.autoAgentPromptHint ? String(state.autoAgentPromptHint).trim() : '';
+      }
+      var applied = maybeApplyAgentPromptRoutingFromDecision(decision, source);
+      var understanding = extractDecisionUnderstanding(decision);
+      if (understanding) pushAgentLog('info', 'Agent 理解：' + understanding);
+      var note = extractRoutingNoteFromDecision(decision);
+      if (note) pushAgentLog('info', 'Agent 路由说明：' + note);
+      return applied;
+    }
+
+    function resolveAgentReviewPrompt() {
+      return agentReviewPrompt ? String(agentReviewPrompt).trim() : '';
+    }
+
+    function getAgentStepOutput(step) {
+      if (step === 'review') return reviewResultEl ? reviewResultEl.value || '' : '';
+      if (step === 'clean') return cleanedTextEl ? cleanedTextEl.value || '' : '';
+      if (step === 'compare') return compareResultEl ? compareResultEl.value || '' : '';
+      if (step === 'split') return splitResultEl ? splitResultEl.value || '' : '';
+      if (step === 'cases') return casesCompareResultEl ? casesCompareResultEl.value || '' : '';
+      return '';
+    }
+
+    function setAgentStepOutput(step, text) {
+      var value = text === undefined || text === null ? '' : String(text);
+      var updated = false;
+      if (step === 'review' && reviewResultEl) {
+        if (reviewResultEl.value !== value) {
+          reviewResultEl.value = value;
+          updated = true;
+          if (typeof syncReviewViewFromResult === 'function') syncReviewViewFromResult();
+        }
+      } else if (step === 'clean' && cleanedTextEl) {
+        if (cleanedTextEl.value !== value) {
+          cleanedTextEl.value = value;
+          updated = true;
+          if (typeof renderCleanView === 'function') renderCleanView(true);
+          if (typeof renderCleanRawView === 'function') renderCleanRawView(null);
+        }
+      } else if (step === 'compare' && compareResultEl) {
+        if (compareResultEl.value !== value) {
+          compareResultEl.value = value;
+          updated = true;
+          syncAutoCompareStatus(false);
+        }
+      } else if (step === 'split' && splitResultEl) {
+        if (splitResultEl.value !== value) {
+          splitResultEl.value = value;
+          updated = true;
+          if (typeof syncSplitView === 'function') syncSplitView();
+        }
+      } else if (step === 'cases' && casesCompareResultEl) {
+        if (casesCompareResultEl.value !== value) {
+          casesCompareResultEl.value = value;
+          updated = true;
+          if (typeof updateMissingView === 'function') updateMissingView();
+        }
+      }
+      if (updated) {
+        updateFlowStatus();
+        if (persistWorkflowState) persistWorkflowState();
+      }
+      return updated;
+    }
+
+    function resolveAgentStepExpectation(step) {
+      if (step === 'review') {
+        return 'JSON 数组，元素字段：类别、不明确的需求点、不明确原因、可能存在的分支/边界情况。';
+      }
+      if (step === 'clean') {
+        return 'JSON 数组，包含清洗后的需求条目与结构化字段。';
+      }
+      if (step === 'compare') {
+        return 'JSON 对象：{coverage: 0-100, missing: []}。';
+      }
+      if (step === 'split') {
+        return 'JSON 结构化模块清单，保持模块拆分字段不变。';
+      }
+      if (step === 'cases') {
+        return 'JSON 对象：{coverage, missing, extra}，保持覆盖对比结构。';
+      }
+      return '';
+    }
+
+    function buildAgentStepReviewPayload(step, hint, output, context) {
+      var label = resolveAgentActionLabel(step) || step;
+      var raw = rawText && rawText.value ? rawText.value.trim() : '';
+      var review = reviewResultEl && reviewResultEl.value ? reviewResultEl.value.trim() : '';
+      var cleaned = cleanedTextEl && cleanedTextEl.value ? cleanedTextEl.value.trim() : '';
+      var compare = compareResultEl && compareResultEl.value ? compareResultEl.value.trim() : '';
+      var split = splitResultEl && splitResultEl.value ? splitResultEl.value.trim() : '';
+      var casesCompare = casesCompareResultEl && casesCompareResultEl.value ? casesCompareResultEl.value.trim() : '';
+      var casesPayload = buildCasesComparePayload ? buildCasesComparePayload() : null;
+      var caseText = casesPayload && casesPayload.text ? casesPayload.text : '';
+      var inputs = {};
+      if (step === 'review') {
+        if (raw) inputs.raw_requirement = raw;
+      } else if (step === 'clean') {
+        if (raw) inputs.raw_requirement = raw;
+        if (review) inputs.review_result = review;
+      } else if (step === 'compare') {
+        if (raw) inputs.raw_requirement = raw;
+        if (cleaned) inputs.cleaned_requirement = cleaned;
+      } else if (step === 'split') {
+        if (cleaned) inputs.cleaned_requirement = cleaned;
+        if (raw) inputs.raw_requirement = raw;
+      } else if (step === 'cases') {
+        if (split) inputs.split_result = split;
+        if (caseText) inputs.case_text = caseText;
+        if (casesCompare && casesCompare !== output) inputs.cases_compare = casesCompare;
+      }
+      var expectation = resolveAgentStepExpectation(step);
+      var meta = {
+        step: step,
+        step_label: label,
+        prompt_hint: hint || '',
+        output: output || '',
+      };
+      if (expectation) meta.expected_format = expectation;
+      if (Object.keys(inputs).length) meta.inputs = inputs;
+      if (context && context.mode) meta.mode = context.mode;
+      return meta;
+    }
+
+    function normalizeAgentReviewOutput(output) {
+      if (output === undefined || output === null) return '';
+      if (typeof output === 'string') return stripCodeFence(output).trim();
+      try {
+        return JSON.stringify(output, null, 2);
+      } catch (err) {
+        return String(output);
+      }
+    }
+
+    function normalizeAgentReviewDecision(decision) {
+      if (!decision || typeof decision !== 'object') return null;
+      var ok = decision.ok;
+      if (ok === undefined || ok === null) {
+        if (decision.pass !== undefined && decision.pass !== null) ok = decision.pass;
+        if (ok === undefined || ok === null) ok = decision.valid;
+      }
+      if (ok === undefined || ok === null) ok = null;
+      else ok = Boolean(ok);
+      var reason = decision.reason ? String(decision.reason).trim() : '';
+      var output = Object.prototype.hasOwnProperty.call(decision, 'output') ? decision.output : '';
+      var issues = decision.issues;
+      if (issues === undefined || issues === null) issues = decision.violations;
+      if (issues === undefined || issues === null) issues = decision.problems;
+      if (issues === undefined || issues === null) issues = decision.items;
+      return { ok: ok, reason: reason, output: output, issues: issues };
+    }
+
+    function normalizeAgentReviewIssues(raw) {
+      if (!raw) return [];
+      if (Array.isArray(raw)) {
+        return raw.map(function(item) {
+          if (item === null || item === undefined) return '';
+          if (typeof item === 'string') return item.trim();
+          if (typeof item === 'object') {
+            var idx = item.index !== undefined && item.index !== null ? String(item.index) : '';
+            var text = item.text || item.issue || item.reason || '';
+            var trimmed = text ? String(text).trim() : '';
+            if (idx && trimmed) return idx + ':' + trimmed;
+            return trimmed || idx;
+          }
+          return String(item);
+        }).filter(function(item) { return Boolean(item); });
+      }
+      if (typeof raw === 'string') {
+        var single = raw.trim();
+        return single ? [single] : [];
+      }
+      if (typeof raw === 'object') {
+        var list = raw.list || raw.items || raw.issues || [];
+        return normalizeAgentReviewIssues(list);
+      }
+      return [];
+    }
+
+    function parseAgentReviewDecisionContent(content) {
+      if (!content) return null;
+      var jsonText = extractJsonPayload(content) || stripCodeFence(content);
+      if (!jsonText) return null;
+      try {
+        var parsed = JSON.parse(jsonText);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function applyAgentReviewDecision(step, decision) {
+      var normalized = normalizeAgentReviewDecision(decision);
+      var label = resolveAgentActionLabel(step) || step;
+      if (!normalized || normalized.ok === null) {
+        pushAgentTrace('warn', 'Agent 复核失败：' + label + '未返回有效结果');
+        return false;
+      }
+      var issues = normalizeAgentReviewIssues(normalized.issues);
+      if (normalized.ok) {
+        var okNote = normalized.reason ? '（' + normalized.reason + '）' : '';
+        pushAgentTrace('info', 'Agent 复核通过：' + label + okNote);
+        return false;
+      }
+      var output = normalizeAgentReviewOutput(normalized.output);
+      var note = normalized.reason ? '（' + normalized.reason + '）' : '';
+      if (issues.length) {
+        issues.forEach(function(item) {
+          pushAgentTrace('warn', '复核问题：' + item);
+        });
+      }
+      if (!output) {
+        pushAgentTrace('warn', 'Agent 复核失败：' + label + '未返回修正结果' + note);
+        return false;
+      }
+      var updated = setAgentStepOutput(step, output);
+      if (updated) {
+        pushAgentTrace('warn', 'Agent 复核修正：' + label + note);
+      } else {
+        pushAgentTrace('warn', 'Agent 复核提示需修正但结果未变化：' + label + note);
+      }
+      return updated;
+    }
+
+    async function reviewAgentStepOutput(step, context, hint, options) {
+      if (!isCaseGenAgentEnabled()) return false;
+      var stepHint = hint ? String(hint).trim() : '';
+      if (!stepHint) return false;
+      var output = getAgentStepOutput(step);
+      if (!output || !String(output).trim()) return false;
+      var prompt = resolveAgentReviewPrompt();
+      if (!prompt) return false;
+      var label = resolveAgentActionLabel(step) || step;
+      setAgentPlanStatus(step, 'reviewing', '正在复核');
+      pushAgentTrace('info', '开始复核：' + label);
+      setStepInProgress(step);
+      var payload = buildAgentStepReviewPayload(step, stepHint, output, context || {});
+      var opts = options || {};
+      var decision = null;
+      try {
+        if (opts.decision && typeof opts.decision === 'object') {
+          decision = opts.decision;
+        } else {
+          var model = getAssignedModel('casegenagent');
+          var reasoning = getReasoningForType('casegenagent');
+          var temperature = getTemperatureForType('casegenagent');
+          ensureAgentNotStopped();
+          var content = await callModelWithConfig(model, JSON.stringify(payload, null, 2), prompt, reasoning, temperature);
+          ensureAgentNotStopped();
+          decision = parseAgentReviewDecisionContent(content);
+        }
+        return applyAgentReviewDecision(step, decision);
+      } catch (err) {
+        var msg = err && err.message ? err.message : '模型调用失败';
+        pushAgentTrace('warn', 'Agent 复核失败：' + label + '，' + msg);
+        return false;
+      } finally {
+        clearStepInProgress(step);
+      }
+    }
+
+    function getAgentStepPromptHint(step) {
+      var routing = getAgentPromptRouting();
+      if (!routing || !routing.prompts) return '';
+      var key = normalizeAgentStepKey(step) || step;
+      if (!key) return '';
+      var hint = routing.prompts[key];
+      return hint ? String(hint).trim() : '';
+    }
+
+    function resolveAgentFlowConstraint() {
+      var routing = getAgentPromptRouting();
+      if (!routing || !routing.flow) return null;
+      var flow = routing.flow || {};
+      var onlySteps = normalizeAgentStepList(flow.only_steps || []);
+      var stopAfter = normalizeAgentStepKey(flow.stop_after || '');
+      var order = ['review', 'clean', 'compare', 'split', 'cases'];
+      var allowed = order.slice();
+      if (onlySteps.length) {
+        allowed = order.filter(function(step) { return onlySteps.indexOf(step) !== -1; });
+      }
+      if (stopAfter) {
+        var stopIdx = order.indexOf(stopAfter);
+        if (stopIdx !== -1) {
+          allowed = allowed.filter(function(step) { return order.indexOf(step) <= stopIdx; });
+        }
+      }
+      if (!allowed.length) return null;
+      return {
+        allowedSteps: allowed,
+        onlySteps: onlySteps,
+        stopAfter: stopAfter,
+        note: flow.note ? String(flow.note).trim() : '',
+      };
+    }
+
+    function buildAgentFlowNote(flow) {
+      if (!flow) return '';
+      if (flow.note) return flow.note;
+      if (flow.stopAfter) return '根据提示仅执行到' + resolveAgentActionLabel(flow.stopAfter);
+      if (flow.onlySteps && flow.onlySteps.length) {
+        var labels = flow.onlySteps.map(function(step) { return resolveAgentActionLabel(step); }).filter(Boolean);
+        if (labels.length) return '根据提示仅执行：' + labels.join('、');
+      }
+      return '根据提示调整执行范围';
+    }
+
+    function formatAgentPromptSnippet(text, limit) {
+      var raw = text === undefined || text === null ? '' : String(text);
+      var trimmed = raw.replace(/\s+/g, ' ').trim();
+      var maxLen = Number(limit || 60);
+      if (!trimmed) return '';
+      if (trimmed.length <= maxLen) return trimmed;
+      return trimmed.slice(0, maxLen) + '...';
+    }
+
+    function summarizeAgentPromptRouting(routing) {
+      if (!routing || typeof routing !== 'object') return '';
+      var prompts = routing.prompts && typeof routing.prompts === 'object' ? routing.prompts : {};
+      var flow = routing.flow && typeof routing.flow === 'object' ? routing.flow : {};
+      var order = ['review', 'clean', 'compare', 'split', 'cases'];
+      var items = [];
+      order.forEach(function(step) {
+        if (!Object.prototype.hasOwnProperty.call(prompts, step)) return;
+        var hint = prompts[step];
+        if (!hint) return;
+        var label = resolveAgentActionLabel(step);
+        var snippet = formatAgentPromptSnippet(hint, 80);
+        if (label && snippet) items.push(label + ':' + snippet);
+      });
+      var flowNote = buildAgentFlowNote({
+        stopAfter: flow.stop_after || '',
+        onlySteps: flow.only_steps || [],
+        note: flow.note || '',
+      });
+      if (flowNote) items.push('流程:' + flowNote);
+      return items.join('；');
+    }
+
+    function summarizeAgentPromptDelivery(prompts) {
+      if (!prompts || typeof prompts !== 'object') return '';
+      var order = ['review', 'clean', 'compare', 'split', 'cases'];
+      var items = [];
+      order.forEach(function(step) {
+        if (!Object.prototype.hasOwnProperty.call(prompts, step)) return;
+        var hint = prompts[step];
+        if (!hint) return;
+        var label = resolveAgentActionLabel(step) || step;
+        var name = label && label !== step ? label + '(' + step + ')' : step;
+        var snippet = formatAgentPromptSnippet(hint, 120);
+        if (snippet) items.push(name + ':' + snippet);
+      });
+      return items.join('；');
+    }
+
+    function logAgentPromptDelivery(prompts) {
+      var summary = summarizeAgentPromptDelivery(prompts);
+      if (summary) pushAgentLog('info', '提示词投递到工具：' + summary);
+    }
+
+    function pickNextFlowStep(ctx, allowedSteps) {
+      if (!ctx || !Array.isArray(allowedSteps) || !allowedSteps.length) return '';
+      for (var i = 0; i < allowedSteps.length; i += 1) {
+        var step = allowedSteps[i];
+        if (!isAgentActionSatisfied(step, ctx)) return step;
+      }
+      return '';
+    }
+
+    function resolveFlowConstrainedAction(action, ctx, flow) {
+      if (!flow || !Array.isArray(flow.allowedSteps) || !flow.allowedSteps.length) return action;
+      if (action === 'wait_clarify') return action;
+      if (action === 'wait_coverage') {
+        return flow.allowedSteps.indexOf('compare') === -1 ? 'finish' : action;
+      }
+      var next = pickNextFlowStep(ctx, flow.allowedSteps);
+      if (!next) return 'finish';
+      if (action === 'finish' || flow.allowedSteps.indexOf(action) === -1) return next;
+      return action;
+    }
+
+    function markAgentPlanSkippedByFlow(flow) {
+      if (!flow || !Array.isArray(flow.allowedSteps) || !flow.allowedSteps.length) return;
+      var plan = ensureAgentPlan();
+      var allowMap = {};
+      flow.allowedSteps.forEach(function(step) { allowMap[step] = true; });
+      var allowReview = Boolean(allowMap.review);
+      var allowCompare = Boolean(allowMap.compare);
+      var note = buildAgentFlowNote(flow);
+      plan.forEach(function(item) {
+        if (!item || !item.key) return;
+        if (item.status === 'done' || item.status === 'failed' || item.status === 'waiting') return;
+        if (item.key === 'clarify') {
+          if (state.autoRequireClarifications && allowReview) return;
+        } else if (item.key === 'coverage') {
+          if (allowCompare) return;
+        } else if (allowMap[item.key]) {
+          return;
+        }
+        item.status = 'skipped';
+        item.note = note;
+      });
+      renderAgentPlan();
+      if (persistWorkflowState) persistWorkflowState();
     }
 
     function normalizeAgentPlan(list) {
@@ -337,6 +959,7 @@
 
     function resolveAgentStatusMeta(status) {
       if (status === 'running') return { text: '执行中', tone: '' };
+      if (status === 'reviewing') return { text: '复核中', tone: 'warn' };
       if (status === 'done') return { text: '已完成', tone: 'ok' };
       if (status === 'waiting') return { text: '等待人工', tone: 'warn' };
       if (status === 'retrying') return { text: '重试中', tone: 'warn' };
@@ -479,7 +1102,7 @@
     function markAgentPlanStopped(note) {
       var plan = ensureAgentPlan();
       var target = null;
-      var statusOrder = ['running', 'retrying', 'waiting'];
+      var statusOrder = ['reviewing', 'running', 'retrying', 'waiting'];
       for (var i = 0; i < statusOrder.length; i += 1) {
         target = plan.find(function(item) { return item && item.status === statusOrder[i]; });
         if (target) break;
@@ -619,6 +1242,8 @@
       });
       var clarificationPayload = buildReviewClarificationContext();
       var extraPrompt = state.autoAgentPromptHint ? state.autoAgentPromptHint.trim() : '';
+      var routing = getAgentPromptRouting();
+      var flowConstraint = resolveAgentFlowConstraint();
       return {
         requirement_label: getRequirementLabel(true),
         has_raw: Boolean(raw),
@@ -638,6 +1263,12 @@
         coverage_retry_count: Number(state.caseGenAgentCoverageRetries || 0),
         coverage_below_full: Boolean(state.caseGenAgentCoverageBelowFull),
         agent_extra_prompt: extraPrompt,
+        agent_step_hints: routing && routing.prompts ? routing.prompts : {},
+        agent_flow_constraint: flowConstraint ? {
+          stop_after: flowConstraint.stopAfter || '',
+          only_steps: flowConstraint.onlySteps || [],
+          note: flowConstraint.note || '',
+        } : {},
         plan_source: state.caseGenAgentPlanSource || '',
         plan_steps: planSnapshot,
       };
@@ -677,7 +1308,7 @@
     function pickResumeAgentAction(ctx) {
       var plan = ensureAgentPlan();
       var running = plan.find(function(item) {
-        return item && (item.status === 'running' || item.status === 'retrying');
+        return item && (item.status === 'running' || item.status === 'retrying' || item.status === 'reviewing');
       });
       if (running && running.key) return running.key;
       var waiting = plan.find(function(item) { return item && item.status === 'waiting'; });
@@ -710,6 +1341,24 @@
       return lookup;
     }
 
+    function parseAgentDecisionContent(content) {
+      if (!content) return null;
+      var jsonText = extractJsonPayload(content) || stripCodeFence(content);
+      if (!jsonText) return null;
+      try {
+        var parsed = JSON.parse(jsonText);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    async function requestAgentDecision(model, payload, prompt, reasoning, temperature) {
+      var content = await callModelWithConfig(model, payload, prompt, reasoning, temperature);
+      return parseAgentDecisionContent(content);
+    }
+
     async function decideAgentNextAction(ctx) {
       var model = getAssignedModel('casegenagent');
       var prompt = state.assignments && state.assignments.caseGenAgentPrompt
@@ -723,18 +1372,49 @@
       var reasoning = getReasoningForType('casegenagent');
       var temperature = getTemperatureForType('casegenagent');
       var payload = JSON.stringify(ctx, null, 2);
-      var content = await callModelWithConfig(model, payload, prompt, reasoning, temperature);
-      var parsed = null;
-      var jsonText = extractJsonPayload(content) || stripCodeFence(content);
-      if (jsonText) {
-        try {
-          parsed = JSON.parse(jsonText);
-        } catch (err) {
-          parsed = null;
+      var parsed = await requestAgentDecision(model, payload, prompt, reasoning, temperature);
+      if (!parsed || typeof parsed !== 'object') return null;
+      var routingRetryFailed = false;
+      var routingStatus = getAgentRoutingStatus(parsed);
+      if (!routingStatus.complete) {
+        var missing = [];
+        if (!routingStatus.hasRouting) missing.push('提示词路由');
+        if (!routingStatus.hasNote) missing.push('路由说明');
+        if (!routingStatus.hasUnderstanding) missing.push('理解字段');
+        if (!routingStatus.hasDecision) missing.push('决策字段');
+        var retryReason = 'Agent 未输出' + (missing.length ? missing.join('、') : '必要字段') + '，已发起补齐重试';
+        pushAgentLog('warn', retryReason);
+        var retryPrompt = prompt
+          ? (prompt + '\n\n补充要求：必须输出 prompt_routing、routing_note、understanding、decision 字段，不要省略。')
+          : '补充要求：必须输出 prompt_routing、routing_note、understanding、decision 字段，不要省略。';
+        var retryParsed = await requestAgentDecision(model, payload, retryPrompt, reasoning, temperature);
+        if (retryParsed && getAgentRoutingStatus(retryParsed).complete) {
+          parsed = retryParsed;
+          routingStatus = getAgentRoutingStatus(parsed);
+          pushAgentLog('info', 'Agent 已补齐提示词路由与理解说明');
+        } else {
+          routingStatus = getAgentRoutingStatus(parsed);
+          if (!routingStatus.hasRouting) {
+            routingRetryFailed = true;
+            pushAgentLog('warn', 'Agent 未输出提示词路由，本次不追加提示');
+          } else if (!routingStatus.hasNote) {
+            pushAgentLog('warn', 'Agent 未输出路由说明，本次不追加说明');
+          } else if (!routingStatus.hasUnderstanding) {
+            pushAgentLog('warn', 'Agent 未输出理解字段，本次不追加理解说明');
+          } else if (!routingStatus.hasDecision) {
+            pushAgentLog('warn', 'Agent 未输出决策字段，本次不追加决策说明');
+          }
         }
       }
-      if (!parsed || typeof parsed !== 'object') return null;
       maybeApplyAgentPlanFromDecision(parsed);
+      var routingApplied = applyAgentPromptRoutingDecision(parsed, extraPrompt);
+      if (extraPrompt && !routingApplied && !routingRetryFailed) {
+        var existing = getAgentPromptRouting();
+        var sameSource = existing && existing.source === extraPrompt;
+        if (!sameSource) {
+          pushAgentLog('warn', 'Agent 未输出额外提示词路由，本次不追加提示');
+        }
+      }
       return parsed;
     }
 
@@ -742,24 +1422,48 @@
       var handler = null;
       var validator = null;
       var after = null;
+      var stepHint = '';
       if (step === 'review') {
         handler = function() {
           var reviewContext = context && context.reviewContext ? context.reviewContext : '';
-          return reviewRequirements(reviewContext ? { clarifications: reviewContext } : null);
+          var hint = getAgentStepPromptHint('review');
+          stepHint = hint;
+          var payload = {};
+          if (reviewContext) payload.clarifications = reviewContext;
+          if (hint) payload.promptHint = hint;
+          return reviewRequirements(Object.keys(payload).length ? payload : null);
         };
         validator = function() { return Boolean(reviewResultEl && reviewResultEl.value && reviewResultEl.value.trim().length > 0); };
         after = function() { return handleAutoClarifyAfterReview(context); };
       } else if (step === 'clean') {
-        handler = function() { return runCleaning(context); };
+        handler = function() {
+          var hint = getAgentStepPromptHint('clean');
+          stepHint = hint;
+          var payload = Object.assign({}, context || {});
+          if (hint) payload.promptHint = hint;
+          return runCleaning(payload);
+        };
         validator = function() { return Boolean(cleanedTextEl && cleanedTextEl.value && cleanedTextEl.value.trim().length > 0); };
       } else if (step === 'compare') {
-        handler = function() { return compareCoverage(); };
+        handler = function() {
+          var hint = getAgentStepPromptHint('compare');
+          stepHint = hint;
+          return compareCoverage(hint ? { promptHint: hint } : {});
+        };
         validator = function() { return Boolean(compareResultEl && compareResultEl.value && compareResultEl.value.trim().length > 0); };
       } else if (step === 'split') {
-        handler = function() { return splitModules(); };
+        handler = function() {
+          var hint = getAgentStepPromptHint('split');
+          stepHint = hint;
+          return splitModules(hint ? { promptHint: hint } : {});
+        };
         validator = function() { return Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim().length > 0); };
       } else if (step === 'cases') {
-        handler = function() { return compareCasesCoverage(); };
+        handler = function() {
+          var hint = getAgentStepPromptHint('cases');
+          stepHint = hint;
+          return compareCasesCoverage(hint ? { promptHint: hint } : {});
+        };
         validator = function() { return Boolean(casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim().length > 0); };
       } else if (step === 'casegen') {
         handler = function() {
@@ -775,6 +1479,9 @@
       if (!handler) return;
       clearStepFailed(step);
       await handler();
+      if (stepHint) {
+        await reviewAgentStepOutput(step, context, stepHint);
+      }
       if (validator && !validator()) {
         var invalidReason = '步骤「' + step + '」未产生有效输出，请检查模型配置或稍后重试';
         setStepFailed(step, invalidReason);
@@ -880,6 +1587,11 @@
       var maxTurns = 16;
       var lastSignature = '';
       renderAgentPanel();
+      var extraPrompt = state.autoAgentPromptHint ? state.autoAgentPromptHint.trim() : '';
+      if (extraPrompt && !agentContext.promptHintLogged) {
+        agentContext.promptHintLogged = true;
+        pushAgentLog('info', '收到额外提示词：' + formatAgentPromptSnippet(extraPrompt, 120));
+      }
       for (var i = 0; i < maxTurns; i += 1) {
         ensureAgentNotStopped();
         if (agentContext && agentContext.coverageAction) {
@@ -934,12 +1646,14 @@
         } catch (err) {
           decision = null;
         }
-        if (decision && decision.reason) {
-          pushAgentLog('info', 'Agent 决策：' + decision.action + '（' + decision.reason + '）');
-        } else if (decision && decision.action) {
-          pushAgentLog('info', 'Agent 决策：' + decision.action);
+        var decisionAction = extractDecisionAction(decision);
+        var decisionReason = extractDecisionReason(decision);
+        if (decisionAction && decisionReason) {
+          pushAgentLog('info', 'Agent 决策：' + decisionAction + '（' + decisionReason + '）');
+        } else if (decisionAction) {
+          pushAgentLog('info', 'Agent 决策：' + decisionAction);
         }
-        action = normalizeAgentAction(decision && decision.action ? decision.action : '');
+        action = normalizeAgentAction(decisionAction);
         if (!action) action = pickFallbackAgentAction(ctx);
         if (isAgentActionSatisfied(action, ctx)) {
           pushAgentLog('info', '检测到已有结果，跳过步骤：' + resolveAgentActionLabel(action));
@@ -947,6 +1661,39 @@
         }
         if (action === 'finish' && !ctx.has_cases_compare) {
           action = pickFallbackAgentAction(ctx);
+        }
+        var flowConstraint = resolveAgentFlowConstraint();
+        if (flowConstraint) {
+          var constrained = resolveFlowConstrainedAction(action, ctx, flowConstraint);
+          if (constrained !== action && constrained !== 'finish') {
+            pushAgentLog('info', '根据提示调整下一步：' + resolveAgentActionLabel(constrained));
+          }
+          action = constrained;
+          if (action === 'finish') {
+            var flowNote = buildAgentFlowNote(flowConstraint);
+            markAgentPlanSkippedByFlow(flowConstraint);
+            if (flowNote) {
+              pushAgentLog('info', flowNote + '，已按提示结束流程');
+              if (autoWorkflowStatus) setStatus(autoWorkflowStatus, flowNote + '，Agent 已按提示结束流程', 'warn');
+              state.caseGenAgentFlowStopNote = flowNote;
+            }
+            return;
+          }
+        }
+        if (action === 'wait_clarify') {
+          if (!state.autoRequireClarifications) {
+            pushAgentLog('info', '未启用澄清确认，跳过等待');
+            action = pickFallbackAgentAction(ctx);
+          } else if (!ctx.has_review) {
+            pushAgentLog('info', '澄清前缺少评审结果，先执行需求评审');
+            action = 'review';
+          } else if (!ctx.review_clarifications_ready) {
+            pushAgentLog('warn', '评审结果未生成澄清点，重新执行需求评审');
+            action = 'review';
+          } else if (ctx.clarify_confirmed) {
+            pushAgentLog('info', '澄清已确认，继续执行后续步骤');
+            action = pickFallbackAgentAction(ctx);
+          }
         }
         if (action === 'finish') {
           return;
@@ -1636,12 +2383,117 @@
       return header + '\n' + lines.join('\n');
     }
 
+    function normalizeCoverageSnapshot(entry, fallbackIndex) {
+      var item = entry && typeof entry === 'object' ? entry : {};
+      var index = Number(item.index);
+      if (!Number.isFinite(index)) index = fallbackIndex || 0;
+      var coverage = Number(item.coverage);
+      if (!Number.isFinite(coverage)) coverage = null;
+      var compareText = '';
+      if (typeof item.compare === 'string') compareText = item.compare.trim();
+      if (!compareText && typeof item.compareText === 'string') compareText = item.compareText.trim();
+      var cleanedText = '';
+      if (typeof item.cleaned === 'string') cleanedText = item.cleaned;
+      if (!cleanedText && typeof item.cleanedText === 'string') cleanedText = item.cleanedText;
+      var note = item.note ? String(item.note) : '';
+      return {
+        index: index,
+        coverage: coverage,
+        compare: compareText,
+        cleaned: cleanedText,
+        note: note,
+      };
+    }
+
+    function summarizeCoverageSnapshots(list) {
+      if (!Array.isArray(list) || !list.length) return '';
+      var parts = list
+        .filter(function(item) { return item && Number.isFinite(item.coverage); })
+        .map(function(item) {
+          var label = '第' + item.index + '次 ' + item.coverage + '%';
+          return item.note ? (label + '（' + item.note + '）') : label;
+        })
+        .filter(Boolean);
+      return parts.join('、');
+    }
+
+    function pickBestCoverageSnapshot(list) {
+      if (!Array.isArray(list) || !list.length) return null;
+      var best = null;
+      list.forEach(function(item) {
+        if (!item || !Number.isFinite(item.coverage)) return;
+        if (!best || item.coverage > best.coverage || (item.coverage === best.coverage && item.index > best.index)) {
+          best = item;
+        }
+      });
+      return best;
+    }
+
+    function applyAgentCoverageSelection(history, options) {
+      if (!Array.isArray(history) || !history.length) return null;
+      var normalized = history.map(function(item, idx) {
+        return normalizeCoverageSnapshot(item, idx + 1);
+      });
+      var best = pickBestCoverageSnapshot(normalized);
+      if (!best) return null;
+      var summary = summarizeCoverageSnapshots(normalized);
+      var opts = options || {};
+      var logEnabled = opts.log !== false;
+      if (logEnabled) {
+        var message = 'Agent 决策：覆盖率仍不足阈值，保留最高覆盖率结果：第' + best.index + '次 ' + best.coverage + '%';
+        if (summary) message += '（记录：' + summary + '）';
+        pushAgentLog('warn', message);
+      }
+      var updated = false;
+      if (compareResultEl && best.compare && compareResultEl.value.trim() !== best.compare) {
+        compareResultEl.value = best.compare;
+        updated = true;
+      }
+      if (cleanedTextEl && best.cleaned && cleanedTextEl.value !== best.cleaned) {
+        cleanedTextEl.value = best.cleaned;
+        updated = true;
+      }
+      if (updated) {
+        if (typeof renderCleanView === 'function') renderCleanView(true);
+        if (typeof renderCleanRawView === 'function') renderCleanRawView(null);
+        if (persistWorkflowState) persistWorkflowState();
+      }
+      var shouldOpenDrawer = Object.prototype.hasOwnProperty.call(opts, 'shouldOpenDrawer')
+        ? Boolean(opts.shouldOpenDrawer)
+        : true;
+      syncAutoCompareStatus(shouldOpenDrawer);
+      updateFlowStatus();
+      return best;
+    }
+
     async function handleAgentCoverageAfterCompare(context) {
       var limit = getAgentCoverageThreshold();
       var retryCount = Number(state.caseGenAgentCoverageRetries || 0);
+      var coverageHistory = [];
+      function recordCoverageSnapshot(coverageValue, note) {
+        var attemptIndex = coverageHistory.length + 1;
+        var normalized = Number(coverageValue);
+        if (!Number.isFinite(normalized)) normalized = null;
+        var compareText = compareResultEl && compareResultEl.value ? compareResultEl.value.trim() : '';
+        var cleanedText = cleanedTextEl && cleanedTextEl.value ? cleanedTextEl.value : '';
+        coverageHistory.push({
+          index: attemptIndex,
+          coverage: normalized,
+          compare: compareText,
+          cleaned: cleanedText,
+          note: note || '',
+        });
+        var label = '覆盖率记录：第' + attemptIndex + '次对比';
+        if (!Number.isFinite(normalized)) {
+          pushAgentTrace('warn', label + '解析失败' + (note ? '（' + note + '）' : ''));
+        } else {
+          pushAgentTrace('info', label + ' ' + normalized + '%' + (note ? '（' + note + '）' : ''));
+        }
+      }
       var previewCoverage = extractCoverageFromCompareResult();
       var shouldOpenDrawer = !(previewCoverage !== null && previewCoverage < limit && retryCount < 2);
       var coverage = syncAutoCompareStatus(shouldOpenDrawer);
+      recordCoverageSnapshot(coverage, '初始');
       setAgentPlanStatus('coverage', 'running', '');
       clearStepFailed('compare');
       clearStepWaiting('compare');
@@ -1685,6 +2537,7 @@
         previewCoverage = extractCoverageFromCompareResult();
         shouldOpenDrawer = !(previewCoverage !== null && previewCoverage < limit && retryCount < 2);
         coverage = syncAutoCompareStatus(shouldOpenDrawer);
+        recordCoverageSnapshot(coverage, '重清洗后');
         if (coverage === null) break;
       }
       if (coverage === null) {
@@ -1695,9 +2548,19 @@
         throw createAgentManualWaitError(parseMsg, 'compare');
       }
       if (coverage < limit) {
+        var selected = null;
+        if (coverageHistory.length > 1) {
+          selected = applyAgentCoverageSelection(coverageHistory, { shouldOpenDrawer: true });
+          if (selected && Number.isFinite(selected.coverage)) {
+            coverage = selected.coverage;
+          }
+        }
         var fixText = buildAgentCoverageFixSuggestions(coverage, limit);
         if (fixText) setAgentFixSuggestions(fixText);
         var waitMsg = '覆盖率仍不足 ' + limit + '%，等待人工处理';
+        if (coverageHistory.length > 1 && Number.isFinite(coverage)) {
+          waitMsg = '覆盖率仍不足 ' + limit + '%（最高 ' + coverage + '%），等待人工处理';
+        }
         setAgentPlanStatus('coverage', 'waiting', waitMsg, retryCount);
         setStepWaiting('compare', waitMsg);
         updateFlowStatus();
@@ -1839,7 +2702,11 @@
       }
       try {
         await executeAutoWorkflowSteps(0);
-        if (agentEnabled && state.caseGenAgentCoverageBelowFull) {
+        if (agentEnabled && state.caseGenAgentFlowStopNote) {
+          var flowNote = state.caseGenAgentFlowStopNote;
+          state.caseGenAgentFlowStopNote = '';
+          setStatus(autoWorkflowStatus, flowNote + '，已按提示结束流程', 'warn');
+        } else if (agentEnabled && state.caseGenAgentCoverageBelowFull) {
           setStatus(autoWorkflowStatus, 'Agent 已完成用例生成流程，但覆盖率未满 100%，请查看修复建议', 'warn');
         } else {
           setStatus(autoWorkflowStatus, agentEnabled ? 'Agent 已完成用例生成流程，请检查结果' : '一键执行完成，可切换至“功能流程”查看详情', 'ok');
@@ -1991,7 +2858,12 @@
         if (options.coverageAction) context.coverageAction = options.coverageAction;
         await executeAutoWorkflowSteps(agentEnabled ? 0 : 1, context);
         setStatus(autoRecleanStatus, successMessage, successTone);
-        if (agentEnabled && state.caseGenAgentCoverageBelowFull) {
+        if (agentEnabled && state.caseGenAgentFlowStopNote) {
+          var flowNote = state.caseGenAgentFlowStopNote;
+          state.caseGenAgentFlowStopNote = '';
+          setStatus(autoRecleanStatus, flowNote + '，流程已按提示结束', 'warn');
+          setStatus(autoWorkflowStatus, flowNote + '，已按提示结束流程', 'warn');
+        } else if (agentEnabled && state.caseGenAgentCoverageBelowFull) {
           setStatus(autoWorkflowStatus, 'Agent 已完成用例生成流程，但覆盖率未满 100%，请查看修复建议', 'warn');
         } else {
           setStatus(autoWorkflowStatus, agentEnabled ? 'Agent 已完成用例生成流程，请检查结果' : workflowSuccessMessage, workflowSuccessTone);
@@ -2154,6 +3026,10 @@
       applyAutoWorkflowTaskState: applyAutoWorkflowTaskState,
       isAutoWorkflowReady: isAutoWorkflowReady,
       renderAgentPanel: renderAgentPanel,
+      markAgentPlanSkippedByFlow: markAgentPlanSkippedByFlow,
+      applyAgentPromptRoutingDecision: applyAgentPromptRoutingDecision,
+      applyAgentReviewDecision: applyAgentReviewDecision,
+      applyAgentCoverageSelection: applyAgentCoverageSelection,
     };
   }
 

@@ -85,7 +85,7 @@
           defaultSettings,
           defaultPlacement,
           defaultTempExecPageSize,
-          defaultAgentExtraPrompt: appConfig.defaultAgentExtraPrompt || '评审流程可以忽略数值、美术等相关内容。',
+          defaultAgentExtraPrompt: appConfig.defaultAgentExtraPrompt || '需求澄清忽略数值和美术相关内容，模块拆分也忽略数值和美术。',
         })
       : (window.app.state || {});
     window.app.state = state;
@@ -1699,6 +1699,7 @@
           getTemperatureForType,
           callModelWithConfig,
           updateModelTiming,
+          appendPromptHint: appUtils.appendPromptHint,
           parseSplitModules: function() { return parseSplitModules(); },
           refreshMissingSmartFillButton: proxyApi('refreshMissingSmartFillButton'),
           renderCaseGenProgressBoard: proxyApi('renderCaseGenProgressBoard'),
@@ -1756,7 +1757,7 @@
         state,
         setStatus,
         config: { defaultPrompts },
-        utils: { escapeHtml },
+        utils: { escapeHtml, appendPromptHint: appUtils.appendPromptHint },
         handlers: {
           updateAutoMissingCard: proxyApi('updateAutoMissingCard'),
           ensureRequirementLabel,
@@ -1901,6 +1902,7 @@
           setStepInProgress,
           clearStepInProgress,
           persistWorkflowState: requestPersistWorkflowState,
+          appendPromptHint: appUtils.appendPromptHint,
         },
       })
       : null;
@@ -2081,12 +2083,15 @@
           updateAutoClarifyVisibility: proxyApi('updateAutoClarifyVisibility'),
           autoFillReviewClarifications: proxyApi('autoFillReviewClarifications'),
           jumpToCleanHighlightView: proxyApi('jumpToCleanHighlightView'),
+          setStepInProgress: proxyApi('setStepInProgress'),
+          clearStepInProgress: proxyApi('clearStepInProgress'),
           persistWorkflowState: requestPersistWorkflowState,
           buildReviewClarificationContext: proxyApi('buildReviewClarificationContext'),
           buildCasesComparePayload: proxyApi('buildCasesComparePayload'),
           renderCleanView: proxyApi('renderCleanView'),
           renderCleanRawView: proxyApi('renderCleanRawView'),
           syncReviewViewFromResult: proxyApi('syncReviewViewFromResult'),
+          syncSplitView: proxyApi('syncSplitView'),
           triggerMissingReminderAi: function() {
             var hasCaseLibrary = Boolean(state && state.editor && state.editor.caseFile);
             var hasTempExec = Boolean(state && state.tempExecActiveId);
@@ -2149,6 +2154,10 @@
       'continueAutoWorkflowAfterCoverage',
       'applyAutoWorkflowTaskState',
       'stopAgentWorkflow',
+      'markAgentPlanSkippedByFlow',
+      'applyAgentPromptRoutingDecision',
+      'applyAgentReviewDecision',
+      'applyAgentCoverageSelection',
     ]);
 
     const autoWorkflowManager = initAutoWorkflowManager({
@@ -2634,6 +2643,9 @@
       triggerUpdateFlowStatus();
     }
 
+    api.setStepInProgress = setStepInProgress;
+    api.clearStepInProgress = clearStepInProgress;
+
     function isStepLocked(step) {
       var waiting = ensureWaitingMap();
       var running = ensureInProgressMap();
@@ -2915,6 +2927,7 @@
     }
 
     function resetWorkflowData() {
+      var prevAgentPromptHint = typeof state.autoAgentPromptHint === 'string' ? state.autoAgentPromptHint : '';
       if (dom.rawText) dom.rawText.value = '';
       if (dom.reviewResultEl) dom.reviewResultEl.value = '';
       if (dom.cleanedTextEl) dom.cleanedTextEl.value = '';
@@ -2954,7 +2967,8 @@
       state.autoRequireClarifications = false;
       state.autoClarifyResolver = null;
       state.autoClarifyDismissed = false;
-      state.autoAgentPromptHint = appConfig.defaultAgentExtraPrompt || '评审流程可以忽略数值、美术等相关内容。';
+      state.autoAgentPromptHint = prevAgentPromptHint || appConfig.defaultAgentExtraPrompt || '需求澄清忽略数值和美术相关内容，模块拆分也忽略数值和美术。';
+      state.caseGenAgentPromptRouting = null;
       state.caseGenAgentPlan = [];
       state.caseGenAgentPlanSource = '';
       state.caseGenAgentLog = [];
@@ -2963,6 +2977,7 @@
       state.caseGenAgentRetryCounters = {};
       state.caseGenAgentCoverageRetries = 0;
       state.caseGenAgentCoverageBelowFull = false;
+      state.caseGenAgentFlowStopNote = '';
       state.caseGenModules = [];
       state.caseGenSource = '';
       state.caseGenResults = {};
@@ -3100,6 +3115,7 @@
           setStepInProgress,
           clearStepInProgress,
           persistWorkflowState: requestPersistWorkflowState,
+          appendPromptHint: appUtils.appendPromptHint,
         },
         dom,
       })
@@ -3205,6 +3221,7 @@
     }
     if (runtime && runtime.switchTab) switchTab = runtime.switchTab;
     window.app.switchTab = switchTab;
+    window.app.resetWorkflowData = resetWorkflowData;
     initModule('flowGuide', {
       utils: appUtils,
       switchTab: switchTab,

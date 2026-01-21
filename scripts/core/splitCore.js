@@ -213,8 +213,17 @@
       var getTemperatureForType = handlers.getTemperatureForType || function() { return 0.2; };
       var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
       var updateModelTiming = handlers.updateModelTiming || function() {};
+      var appendPromptHint = handlers.appendPromptHint || function(basePrompt, hint) {
+        var base = basePrompt === undefined || basePrompt === null ? '' : String(basePrompt).trim();
+        var extra = hint === undefined || hint === null ? '' : String(hint).trim();
+        if (!extra) return base;
+        var note = '【补充要求】' + extra + '\n【注意】不得改变输出格式，只能在原格式内满足要求。';
+        if (!base) return note;
+        return base + '\n\n' + note;
+      };
 
-      async function splitModules() {
+      async function splitModules(options) {
+        if (options === void 0) options = {};
         var cleaned = getCleanedTextForModel();
         if (!cleaned) {
           setStatus(splitStatus, '请先完成清洗，获取基础内容', 'warn');
@@ -249,6 +258,8 @@
         try {
           var splitPrompt = state.assignments && state.assignments.splitPrompt ? state.assignments.splitPrompt.trim() : '';
           var prompt = splitPrompt || (defaultPrompts.split || '');
+          var hint = options && options.promptHint ? String(options.promptHint).trim() : '';
+          prompt = appendPromptHint(prompt, hint);
           var reasoning = getReasoningForType('split');
           var temperature = getTemperatureForType('split');
           var startTime = Date.now();

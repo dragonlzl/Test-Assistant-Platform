@@ -15,6 +15,14 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
     };
+    var appendPromptHint = utils.appendPromptHint || function(basePrompt, hint) {
+      var base = basePrompt === undefined || basePrompt === null ? '' : String(basePrompt).trim();
+      var extra = hint === undefined || hint === null ? '' : String(hint).trim();
+      if (!extra) return base;
+      var note = '【补充要求】' + extra + '\n【注意】不得改变输出格式，只能在原格式内满足要求。';
+      if (!base) return note;
+      return base + '\n\n' + note;
+    };
     var state = deps && deps.state ? deps.state : {};
     var dom = deps && deps.dom ? deps.dom : {};
     var pickEl = function(el, id) {
@@ -883,7 +891,8 @@
       casesModuleProgress.innerHTML = '<div class="module-progress-list">' + items + '</div>';
     }
 
-    async function compareCoverage() {
+    async function compareCoverage(options) {
+      if (options === void 0) options = {};
       var raw = rawText && rawText.value ? rawText.value.trim() : '';
       var cleaned = getCleanedTextForModel();
       if (!raw) {
@@ -912,6 +921,8 @@
       try {
         var comparePrompt = state.assignments && state.assignments.comparePrompt ? state.assignments.comparePrompt.trim() : '';
         var prompt = comparePrompt || defaultPrompts.compare;
+        var hint = options && options.promptHint ? String(options.promptHint).trim() : '';
+        prompt = appendPromptHint(prompt, hint);
         var reasoning = getReasoningForType('compare');
         var temperature = getTemperatureForType('compare');
         var startTime = Date.now();
@@ -954,7 +965,8 @@
       return parseModuleCompareResponse(content, payload.title);
     }
 
-    async function compareCasesCoverage() {
+    async function compareCasesCoverage(options) {
+      if (options === void 0) options = {};
       var modulesText = splitResultEl && splitResultEl.value ? splitResultEl.value.trim() : '';
       var casesPayloadResult = buildCasesComparePayload();
       var casesPayload = casesPayloadResult.text;
@@ -991,6 +1003,8 @@
       setStatus(casesCoverageStatus, '正在并发对比 ' + parsedModules.length + ' 个模块（并发上限 ' + concurrency + '）...', '');
       var casesPrompt = state.assignments && state.assignments.casesPrompt ? state.assignments.casesPrompt.trim() : '';
       var prompt = casesPrompt || defaultPrompts.cases;
+      var hint = options && options.promptHint ? String(options.promptHint).trim() : '';
+      prompt = appendPromptHint(prompt, hint);
       var reasoning = getReasoningForType('cases');
       var temperature = getTemperatureForType('cases');
       var startTime = Date.now();
