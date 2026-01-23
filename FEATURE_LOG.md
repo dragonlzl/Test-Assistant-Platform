@@ -3945,3 +3945,17 @@
 - 更新记录：2026-01-21 Agent 提示词投递到工具的明细输出到执行过程（`scripts/core/autoCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
 - 更新记录：2026-01-21 Agent 路由步骤执行后复核输出并在异常时应用修正结果，补充复核中状态、复核问题条目日志，并在复核期间保持步骤为执行中（`config/constants.js`、`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。
 - 更新记录：2026-01-21 重新导入需求时保留 Agent 额外提示词输入（`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 按最小链路补齐前置步骤并在步骤失败时交由 Agent 重新决策（`config/constants.js`、`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 修复 Agent 最小链路快照接口未暴露导致测试读取失败（`scripts/modules/app.js`）。
+- 更新记录：2026-01-21 Agent 流程约束存在时按最小链路强制执行前置步骤，避免直接跳到后置步骤导致失败（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 Agent 复核按步骤目标与按需输入数据校验，并支持严重不符时自动重跑一次、轻度不符时自动修正（`config/constants.js`、`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 复核过程输出复核输入项清单并标注需求/用例来源（`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 确认澄清后持久化评审结果，刷新不再丢失澄清内容（`scripts/core/reviewCore.js`、`scripts/core/appRuntime.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 澄清确认状态随评审数据持久化，刷新后按确认状态决定是否等待澄清（`scripts/base/state.js`、`scripts/core/reviewCore.js`、`scripts/core/appRuntime.js`、`scripts/core/autoCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 澄清未确认时强制进入等待并提供澄清等待判定快照（`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 澄清后复核再评审保持已确认状态，避免刷新后重复澄清（`scripts/core/reviewCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 确认澄清后立即持久化快照，防止刷新触发重复评审（`scripts/core/reviewCore.js`、`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 确认澄清后标记复核已完成并跳过澄清后再评审，避免刷新再次生成澄清（`scripts/base/state.js`、`scripts/core/reviewCore.js`、`scripts/core/appRuntime.js`、`scripts/core/autoCore.js`、`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 飞书通知仅附带最新一条 FEATURE_LOG 更新记录（`notify_feishu.py`）。
+- 更新记录：2026-01-21 Agent 刷新时按执行计划回填流程导航执行中状态，避免步骤短暂显示已完成（`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 刷新恢复时优先继续执行中的步骤并立即持久化阶段结果，避免重复评审或提前结束（`scripts/core/autoCore.js`、`scripts/modules/app.js`）。

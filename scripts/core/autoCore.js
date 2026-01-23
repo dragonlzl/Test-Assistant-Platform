@@ -23,6 +23,7 @@
     var updateFlowStatus = handlers.updateFlowStatus || function() {};
     var updateMissingView = handlers.updateMissingView || function() {};
     var persistWorkflowState = handlers.persistWorkflowState || function() {};
+    var persistWorkflowStateNow = handlers.persistWorkflowStateNow || null;
     var parseMissingModules = handlers.parseMissingModules || function() { return []; };
     var buildMissingRows = handlers.buildMissingRows || function(list) { return list || []; };
     var pickMissingSelections = handlers.pickMissingSelections || function() { return []; };
@@ -146,6 +147,8 @@
     if (typeof state.autoClarifyDismissed !== 'boolean') state.autoClarifyDismissed = false;
     if (typeof state.autoAgentStopped !== 'boolean') state.autoAgentStopped = false;
     if (typeof state.caseGenAgentFlowStopNote !== 'string') state.caseGenAgentFlowStopNote = '';
+    if (state.caseGenAgentLastFailure && typeof state.caseGenAgentLastFailure !== 'object') state.caseGenAgentLastFailure = null;
+    if (!Object.prototype.hasOwnProperty.call(state, 'caseGenAgentLastFailure')) state.caseGenAgentLastFailure = null;
 
     function getRequirementDisplayName() {
       return getRequirementLabel(true);
@@ -357,11 +360,11 @@
     function setAgentPromptRouting(next) {
       if (!next || typeof next !== 'object') {
         state.caseGenAgentPromptRouting = null;
-        if (persistWorkflowState) persistWorkflowState();
+        persistWorkflowSnapshot();
         return;
       }
       state.caseGenAgentPromptRouting = next;
-      if (persistWorkflowState) persistWorkflowState();
+      persistWorkflowSnapshot();
     }
 
     function buildAgentRoutingSignature(routing) {
@@ -549,7 +552,7 @@
       }
       if (updated) {
         updateFlowStatus();
-        if (persistWorkflowState) persistWorkflowState();
+        persistWorkflowSnapshot();
       }
       return updated;
     }
@@ -569,6 +572,25 @@
       }
       if (step === 'cases') {
         return 'JSON 对象：{coverage, missing, extra}，保持覆盖对比结构。';
+      }
+      return '';
+    }
+
+    function resolveAgentStepGoal(step) {
+      if (step === 'review') {
+        return '基于原始需求找出不明确、不全、矛盾或边界问题，输出澄清点列表。';
+      }
+      if (step === 'clean') {
+        return '将原始需求清洗为结构化条目，去噪并保持语义完整。';
+      }
+      if (step === 'compare') {
+        return '对比原始与清洗需求，输出覆盖率与缺失点。';
+      }
+      if (step === 'split') {
+        return '基于清洗需求拆分测试模块，保证模块覆盖需求。';
+      }
+      if (step === 'cases') {
+        return '对比用例与需求/模块覆盖情况，输出覆盖率与缺失点。';
       }
       return '';
     }
@@ -597,13 +619,17 @@
         if (raw) inputs.raw_requirement = raw;
       } else if (step === 'cases') {
         if (split) inputs.split_result = split;
+        if (cleaned) inputs.cleaned_requirement = cleaned;
+        if (!cleaned && raw) inputs.raw_requirement = raw;
         if (caseText) inputs.case_text = caseText;
         if (casesCompare && casesCompare !== output) inputs.cases_compare = casesCompare;
       }
       var expectation = resolveAgentStepExpectation(step);
+      var goal = resolveAgentStepGoal(step);
       var meta = {
         step: step,
         step_label: label,
+        step_goal: goal || '',
         prompt_hint: hint || '',
         output: output || '',
       };
@@ -611,6 +637,49 @@
       if (Object.keys(inputs).length) meta.inputs = inputs;
       if (context && context.mode) meta.mode = context.mode;
       return meta;
+    }
+
+    function formatAgentReviewInputSummary(inputs) {
+      if (!inputs || typeof inputs !== 'object') return '';
+      var order = [
+        'raw_requirement',
+        'review_result',
+        'cleaned_requirement',
+        'split_result',
+        'case_text',
+        'cases_compare',
+      ];
+      var labels = {
+        raw_requirement: '需求-原始需求',
+        review_result: '需求-评审结果',
+        cleaned_requirement: '需求-清洗结果',
+        split_result: '需求-模块拆分结果',
+        case_text: '用例-导入用例',
+        cases_compare: '用例-覆盖对比结果',
+      };
+      var list = [];
+      order.forEach(function(key) {
+        if (!Object.prototype.hasOwnProperty.call(inputs, key)) return;
+        var value = inputs[key];
+        if (value === undefined || value === null) return;
+        if (typeof value === 'string' && !value.trim()) return;
+        list.push(labels[key] || key);
+      });
+      return list.length ? list.join('、') : '';
+    }
+
+    function getAgentReviewPayloadSnapshot(step, hint) {
+      var key = normalizeAgentStepKey(step);
+      if (!key) return null;
+      var stepHint = hint ? String(hint).trim() : getAgentStepPromptHint(key);
+      var output = getAgentStepOutput(key);
+      return buildAgentStepReviewPayload(key, stepHint || '', output || '', {});
+    }
+
+    function getAgentReviewInputSummary(step, hint) {
+      var payload = getAgentReviewPayloadSnapshot(step, hint);
+      if (!payload || !payload.inputs) return '';
+      return formatAgentReviewInputSummary(payload.inputs);
     }
 
     function normalizeAgentReviewOutput(output) {
@@ -621,6 +690,63 @@
       } catch (err) {
         return String(output);
       }
+    }
+
+    function normalizeAgentReviewSeverity(value) {
+      if (!value) return '';
+      var raw = String(value).trim().toLowerCase();
+      var map = {
+        severe: 'severe',
+        critical: 'severe',
+        high: 'severe',
+        major: 'major',
+        medium: 'major',
+        moderate: 'major',
+        minor: 'minor',
+        low: 'minor',
+        '严重': 'severe',
+        '高': 'severe',
+        '高风险': 'severe',
+        '中': 'major',
+        '中等': 'major',
+        '一般': 'major',
+        '轻度': 'minor',
+        '轻微': 'minor',
+        '低': 'minor',
+      };
+      return map[raw] || '';
+    }
+
+    function normalizeAgentReviewAction(value, ok, output, severity) {
+      var raw = value ? String(value).trim().toLowerCase() : '';
+      var map = {
+        pass: 'pass',
+        ok: 'pass',
+        approve: 'pass',
+        fix: 'fix',
+        edit: 'fix',
+        revise: 'fix',
+        repair: 'fix',
+        rerun: 'rerun',
+        retry: 'rerun',
+        restart: 'rerun',
+        '通过': 'pass',
+        '修正': 'fix',
+        '修复': 'fix',
+        '修改': 'fix',
+        '重跑': 'rerun',
+        '重试': 'rerun',
+        '重新执行': 'rerun',
+      };
+      var action = map[raw] || '';
+      var hasOutput = output !== undefined && output !== null && String(output).trim();
+      if (!action) {
+        if (ok === true) action = 'pass';
+        else if (hasOutput) action = 'fix';
+        else if (severity === 'severe') action = 'rerun';
+        else if (ok === false) action = 'rerun';
+      }
+      return action;
     }
 
     function normalizeAgentReviewDecision(decision) {
@@ -638,7 +764,11 @@
       if (issues === undefined || issues === null) issues = decision.violations;
       if (issues === undefined || issues === null) issues = decision.problems;
       if (issues === undefined || issues === null) issues = decision.items;
-      return { ok: ok, reason: reason, output: output, issues: issues };
+      var severity = normalizeAgentReviewSeverity(decision.severity || decision.level || decision.impact || decision.severity_level || '');
+      var action = normalizeAgentReviewAction(decision.action || decision.next_action || decision.nextAction || decision.result_action || decision.resultAction || '', ok, output, severity);
+      if (!severity && ok === false) severity = action === 'rerun' ? 'severe' : 'major';
+      if (!severity && ok === true) severity = 'minor';
+      return { ok: ok, reason: reason, output: output, issues: issues, action: action, severity: severity };
     }
 
     function normalizeAgentReviewIssues(raw) {
@@ -684,15 +814,25 @@
     function applyAgentReviewDecision(step, decision) {
       var normalized = normalizeAgentReviewDecision(decision);
       var label = resolveAgentActionLabel(step) || step;
+      var result = {
+        ok: false,
+        updated: false,
+        rerun: false,
+        action: '',
+        severity: '',
+      };
       if (!normalized || normalized.ok === null) {
         pushAgentTrace('warn', 'Agent 复核失败：' + label + '未返回有效结果');
-        return false;
+        return result;
       }
+      result.ok = normalized.ok;
+      result.action = normalized.action || '';
+      result.severity = normalized.severity || '';
       var issues = normalizeAgentReviewIssues(normalized.issues);
       if (normalized.ok) {
         var okNote = normalized.reason ? '（' + normalized.reason + '）' : '';
         pushAgentTrace('info', 'Agent 复核通过：' + label + okNote);
-        return false;
+        return result;
       }
       var output = normalizeAgentReviewOutput(normalized.output);
       var note = normalized.reason ? '（' + normalized.reason + '）' : '';
@@ -701,17 +841,23 @@
           pushAgentTrace('warn', '复核问题：' + item);
         });
       }
+      if (normalized.action === 'rerun') {
+        pushAgentTrace('warn', '复核判定严重不符合：' + label + note);
+        result.rerun = true;
+        return result;
+      }
       if (!output) {
         pushAgentTrace('warn', 'Agent 复核失败：' + label + '未返回修正结果' + note);
-        return false;
+        return result;
       }
       var updated = setAgentStepOutput(step, output);
+      result.updated = updated;
       if (updated) {
         pushAgentTrace('warn', 'Agent 复核修正：' + label + note);
       } else {
         pushAgentTrace('warn', 'Agent 复核提示需修正但结果未变化：' + label + note);
       }
-      return updated;
+      return result;
     }
 
     async function reviewAgentStepOutput(step, context, hint, options) {
@@ -727,7 +873,10 @@
       pushAgentTrace('info', '开始复核：' + label);
       setStepInProgress(step);
       var payload = buildAgentStepReviewPayload(step, stepHint, output, context || {});
+      var inputSummary = formatAgentReviewInputSummary(payload && payload.inputs ? payload.inputs : null);
+      if (inputSummary) pushAgentTrace('info', '复核输入项：' + inputSummary);
       var opts = options || {};
+      var ctx = context && typeof context === 'object' ? context : {};
       var decision = null;
       try {
         if (opts.decision && typeof opts.decision === 'object') {
@@ -741,7 +890,24 @@
           ensureAgentNotStopped();
           decision = parseAgentReviewDecisionContent(content);
         }
-        return applyAgentReviewDecision(step, decision);
+        var reviewResult = applyAgentReviewDecision(step, decision);
+        if (reviewResult && reviewResult.rerun) {
+          if (opts.skipRerun) {
+            reviewResult.rerun = false;
+            pushAgentTrace('warn', '复核要求重跑已被跳过：' + label);
+            return reviewResult;
+          }
+          var reruns = ctx.agentReviewReruns && typeof ctx.agentReviewReruns === 'object' ? ctx.agentReviewReruns : {};
+          var count = Number(reruns[step] || 0);
+          if (count >= 1) {
+            reviewResult.rerun = false;
+            pushAgentTrace('warn', '复核重跑已达上限：' + label);
+            return reviewResult;
+          }
+          reruns[step] = count + 1;
+          ctx.agentReviewReruns = reruns;
+        }
+        return reviewResult;
       } catch (err) {
         var msg = err && err.message ? err.message : '模型调用失败';
         pushAgentTrace('warn', 'Agent 复核失败：' + label + '，' + msg);
@@ -760,6 +926,48 @@
       return hint ? String(hint).trim() : '';
     }
 
+    var agentStepPrereqs = {
+      review: [],
+      clean: ['review'],
+      compare: ['review', 'clean'],
+      split: ['review', 'clean'],
+      cases: ['review', 'clean', 'split'],
+      casegen: ['review', 'clean', 'split'],
+    };
+
+    function addAgentPrereqStep(step, bucket, visiting) {
+      if (!step) return;
+      if (bucket[step]) return;
+      var loopGuard = visiting || {};
+      if (loopGuard[step]) return;
+      loopGuard[step] = true;
+      var deps = agentStepPrereqs[step] || [];
+      deps.forEach(function(dep) {
+        addAgentPrereqStep(dep, bucket, loopGuard);
+      });
+      bucket[step] = true;
+    }
+
+    function expandAgentFlowSteps(steps) {
+      var order = ['review', 'clean', 'compare', 'split', 'cases', 'casegen'];
+      var bucket = {};
+      (steps || []).forEach(function(step) {
+        var key = normalizeAgentStepKey(step);
+        if (!key) return;
+        addAgentPrereqStep(key, bucket, {});
+      });
+      return order.filter(function(step) { return bucket[step]; });
+    }
+
+    function describeAgentStepList(steps) {
+      if (!steps || !steps.length) return '';
+      var labels = steps.map(function(step) {
+        var key = normalizeAgentStepKey(step);
+        return resolveAgentActionLabel(key) || key || '';
+      }).filter(Boolean);
+      return labels.join('、');
+    }
+
     function resolveAgentFlowConstraint() {
       var routing = getAgentPromptRouting();
       if (!routing || !routing.flow) return null;
@@ -767,22 +975,35 @@
       var onlySteps = normalizeAgentStepList(flow.only_steps || []);
       var stopAfter = normalizeAgentStepKey(flow.stop_after || '');
       var order = ['review', 'clean', 'compare', 'split', 'cases'];
-      var allowed = order.slice();
-      if (onlySteps.length) {
+      var desired = [];
+      if (onlySteps.length) desired = onlySteps.slice();
+      else if (stopAfter) desired = [stopAfter];
+      var expanded = desired.length ? expandAgentFlowSteps(desired) : [];
+      var allowed = expanded.length ? expanded : order.slice();
+      if (onlySteps.length && !expanded.length) {
         allowed = order.filter(function(step) { return onlySteps.indexOf(step) !== -1; });
       }
-      if (stopAfter) {
+      if (!desired.length && stopAfter) {
         var stopIdx = order.indexOf(stopAfter);
         if (stopIdx !== -1) {
           allowed = allowed.filter(function(step) { return order.indexOf(step) <= stopIdx; });
         }
       }
       if (!allowed.length) return null;
+      var desiredMap = {};
+      desired.forEach(function(step) { desiredMap[step] = true; });
+      var addedSteps = expanded.filter(function(step) { return !desiredMap[step]; });
+      var adjusted = addedSteps.length > 0;
       return {
         allowedSteps: allowed,
         onlySteps: onlySteps,
         stopAfter: stopAfter,
         note: flow.note ? String(flow.note).trim() : '',
+        desiredSteps: desired,
+        expandedSteps: expanded,
+        expandedNote: adjusted
+          ? ('已按最小链路补齐前置步骤：' + describeAgentStepList(addedSteps))
+          : '',
       };
     }
 
@@ -795,6 +1016,30 @@
         if (labels.length) return '根据提示仅执行：' + labels.join('、');
       }
       return '根据提示调整执行范围';
+    }
+
+    function getAgentFlowConstraintSnapshot() {
+      var flow = resolveAgentFlowConstraint();
+      if (!flow) return null;
+      return {
+        allowedSteps: flow.allowedSteps ? flow.allowedSteps.slice() : [],
+        desiredSteps: flow.desiredSteps ? flow.desiredSteps.slice() : [],
+        expandedSteps: flow.expandedSteps ? flow.expandedSteps.slice() : [],
+        onlySteps: flow.onlySteps ? flow.onlySteps.slice() : [],
+        stopAfter: flow.stopAfter || '',
+        note: flow.note || '',
+      };
+    }
+
+    function getAgentClarifyGuardSnapshot() {
+      var ctx = collectAgentContext({});
+      return {
+        auto_require: Boolean(state.autoRequireClarifications),
+        has_review: Boolean(ctx.has_review),
+        review_clarifications_ready: Boolean(ctx.review_clarifications_ready),
+        clarify_confirmed: Boolean(ctx.clarify_confirmed),
+        required: shouldWaitForClarify(ctx),
+      };
     }
 
     function formatAgentPromptSnippet(text, limit) {
@@ -867,6 +1112,11 @@
       }
       var next = pickNextFlowStep(ctx, flow.allowedSteps);
       if (!next) return 'finish';
+      if (flow.expandedSteps && flow.expandedSteps.length) {
+        if (action === 'finish' || flow.allowedSteps.indexOf(action) === -1) return next;
+        if (action !== next) return next;
+        return action;
+      }
       if (action === 'finish' || flow.allowedSteps.indexOf(action) === -1) return next;
       return action;
     }
@@ -893,7 +1143,7 @@
         item.note = note;
       });
       renderAgentPlan();
-      if (persistWorkflowState) persistWorkflowState();
+      persistWorkflowSnapshot();
     }
 
     function normalizeAgentPlan(list) {
@@ -1043,6 +1293,14 @@
       autoAgentTrace.innerHTML = '<ul class="agent-trace-list">' + items + '</ul>';
     }
 
+    function persistWorkflowSnapshot() {
+      if (typeof persistWorkflowStateNow === 'function') {
+        persistWorkflowStateNow();
+        return;
+      }
+      if (typeof persistWorkflowState === 'function') persistWorkflowState();
+    }
+
     function renderAgentPanel() {
       updateAgentPanelVisibility();
       syncAgentStopButton();
@@ -1068,13 +1326,23 @@
       if (list.length > 400) list = list.slice(-400);
       state.caseGenAgentTrace = list;
       if (!opts.silent) renderAgentTrace();
-      if (persistWorkflowState) persistWorkflowState();
+      persistWorkflowSnapshot();
     }
 
     function setAgentFixSuggestions(text) {
       state.caseGenAgentFixSuggestions = text || '';
       renderAgentSuggestion();
-      if (persistWorkflowState) persistWorkflowState();
+      persistWorkflowSnapshot();
+    }
+
+    function clearAgentLastFailure() {
+      if (state.caseGenAgentLastFailure) state.caseGenAgentLastFailure = null;
+    }
+
+    function recordAgentStepFailure(info) {
+      if (!info) return;
+      state.caseGenAgentLastFailure = info;
+      persistWorkflowSnapshot();
     }
 
     function setAgentPlanStatus(key, status, note, attempts) {
@@ -1096,7 +1364,7 @@
       if (note !== undefined) item.note = note || '';
       if (attempts !== undefined && attempts !== null) item.attempts = Number(attempts || 0);
       renderAgentPlan();
-      if (persistWorkflowState) persistWorkflowState();
+      persistWorkflowSnapshot();
     }
 
     function markAgentPlanStopped(note) {
@@ -1114,7 +1382,7 @@
       target.status = 'stopped';
       target.note = note || '已终止';
       renderAgentPlan();
-      if (persistWorkflowState) persistWorkflowState();
+      persistWorkflowSnapshot();
     }
 
     function applyAgentPlanOverride(list, source) {
@@ -1180,6 +1448,7 @@
       state.caseGenAgentFixSuggestions = '';
       state.caseGenAgentCoverageRetries = 0;
       state.caseGenAgentCoverageBelowFull = false;
+      state.caseGenAgentLastFailure = null;
       state.autoClarifyDismissed = false;
       pushAgentLog('info', 'Agent 开始执行用例生成流程');
       renderAgentPanel();
@@ -1244,6 +1513,15 @@
       var extraPrompt = state.autoAgentPromptHint ? state.autoAgentPromptHint.trim() : '';
       var routing = getAgentPromptRouting();
       var flowConstraint = resolveAgentFlowConstraint();
+      var clarifyConfirmed = Boolean(extraCtx.clarifyConfirmed);
+      if (!clarifyConfirmed && state.reviewClarifyConfirmed) {
+        var dataSig = state.reviewClarifyDataSignature ? String(state.reviewClarifyDataSignature) : '';
+        var confirmSig = state.reviewClarifyConfirmedSignature ? String(state.reviewClarifyConfirmedSignature) : '';
+        clarifyConfirmed = !confirmSig || (dataSig && confirmSig === dataSig);
+      }
+      var lastFailure = state.caseGenAgentLastFailure && typeof state.caseGenAgentLastFailure === 'object'
+        ? state.caseGenAgentLastFailure
+        : null;
       return {
         requirement_label: getRequirementLabel(true),
         has_raw: Boolean(raw),
@@ -1256,7 +1534,7 @@
         has_casegen_modules: Boolean(caseGenModules && caseGenModules.length),
         has_casegen_results: Object.keys(caseGenResults).length > 0,
         review_clarifications_ready: Boolean(clarificationPayload),
-        clarify_confirmed: Boolean(extraCtx.clarifyConfirmed),
+        clarify_confirmed: clarifyConfirmed,
         coverage_percent: coverage,
         coverage_threshold: threshold,
         force_ignore_coverage: Boolean(extraCtx.forceIgnoreCoverage),
@@ -1271,6 +1549,15 @@
         } : {},
         plan_source: state.caseGenAgentPlanSource || '',
         plan_steps: planSnapshot,
+        last_failure: lastFailure ? {
+          step: lastFailure.step || '',
+          label: lastFailure.label || '',
+          message: lastFailure.message || '',
+          attempts: Number(lastFailure.attempts || 0),
+          code: lastFailure.code || '',
+          kind: lastFailure.kind || '',
+          at: lastFailure.at || 0,
+        } : null,
       };
     }
 
@@ -1290,6 +1577,14 @@
         coverage: 'wait_coverage',
       };
       return map[raw] || '';
+    }
+
+    function shouldWaitForClarify(ctx) {
+      if (!state.autoRequireClarifications) return false;
+      if (!ctx || !ctx.has_review) return false;
+      if (!ctx.review_clarifications_ready) return false;
+      if (ctx.clarify_confirmed) return false;
+      return true;
     }
 
     function pickFallbackAgentAction(ctx) {
@@ -1423,6 +1718,7 @@
       var validator = null;
       var after = null;
       var stepHint = '';
+      var label = resolveAgentActionLabel(step) || step;
       if (step === 'review') {
         handler = function() {
           var reviewContext = context && context.reviewContext ? context.reviewContext : '';
@@ -1480,7 +1776,14 @@
       clearStepFailed(step);
       await handler();
       if (stepHint) {
-        await reviewAgentStepOutput(step, context, stepHint);
+        var reviewResult = await reviewAgentStepOutput(step, context, stepHint);
+        if (reviewResult && reviewResult.rerun) {
+          pushAgentTrace('warn', '复核未通过，自动重跑：' + label);
+          await handler();
+          if (stepHint) {
+            await reviewAgentStepOutput(step, context, stepHint, { skipRerun: true });
+          }
+        }
       }
       if (validator && !validator()) {
         var invalidReason = '步骤「' + step + '」未产生有效输出，请检查模型配置或稍后重试';
@@ -1491,7 +1794,7 @@
         throw invalidError;
       }
       if (after) await after();
-      if (persistWorkflowState) persistWorkflowState();
+      persistWorkflowSnapshot();
     }
 
     async function runAgentStepWithRetry(step, context, options) {
@@ -1500,6 +1803,7 @@
       var note = opts.note || '';
       var maxRetries = 2;
       var attempts = 0;
+      var allowRecovery = opts.allowRecovery !== false;
       while (attempts <= maxRetries) {
         ensureAgentNotStopped();
         clearStepWaiting(step);
@@ -1517,6 +1821,7 @@
           setAgentPlanStatus(step, 'done', note, attempts);
           resetAgentRetryCount(step);
           pushAgentTrace('info', '步骤完成：' + label);
+          clearAgentLastFailure();
           return;
         } catch (err) {
           attempts += 1;
@@ -1525,11 +1830,27 @@
             continue;
           }
           var msg = err && err.message ? err.message : '步骤执行失败';
-          setAgentPlanStatus(step, 'waiting', msg, attempts - 1);
-          setStepWaiting(step, msg);
+          if (!allowRecovery) {
+            setAgentPlanStatus(step, 'waiting', msg, attempts - 1);
+            setStepWaiting(step, msg);
+            updateFlowStatus();
+            pushAgentTrace('warn', '步骤暂停：' + label + '，等待人工处理');
+            throw createAgentManualWaitError('步骤「' + label + '」校验失败，已等待人工处理：' + msg, step);
+          }
+          var failureInfo = {
+            step: step,
+            label: label,
+            message: msg,
+            attempts: attempts - 1,
+            code: err && err.code ? String(err.code) : '',
+            kind: err && err.validationFailed ? 'validation' : 'runtime',
+            at: Date.now(),
+          };
+          setAgentPlanStatus(step, 'failed', msg, attempts - 1);
+          recordAgentStepFailure(failureInfo);
           updateFlowStatus();
-          pushAgentTrace('warn', '步骤暂停：' + label + '，等待人工处理');
-          throw createAgentManualWaitError('步骤「' + label + '」校验失败，已等待人工处理：' + msg, step);
+          pushAgentTrace('warn', '步骤失败：' + label + '，已交由 Agent 决策');
+          return { failed: true, failure: failureInfo };
         }
       }
     }
@@ -1573,13 +1894,36 @@
 
     async function runClarifyFollowupIfNeeded(agentContext) {
       if (!agentContext || !agentContext.clarifyConfirmed || agentContext.clarifyReReviewed) return;
+      var confirmSig = state.reviewClarifyConfirmedSignature ? String(state.reviewClarifyConfirmedSignature) : '';
+      if (confirmSig) {
+        if (state.reviewClarifyFollowupSignature !== confirmSig) {
+          state.reviewClarifyFollowupSignature = confirmSig;
+          persistWorkflowSnapshot();
+        }
+        return;
+      }
       agentContext.clarifyReReviewed = true;
       var reviewContext = buildReviewClarificationContext();
       var reviewCtx = Object.assign({}, agentContext, { skipClarify: true, reviewContext: reviewContext });
-      await runAgentStepWithRetry('review', reviewCtx, { label: '需求评审', note: '澄清后再评审' });
-      var cleanCtx = Object.assign({}, agentContext, { mode: 'reclean' });
-      await runAgentStepWithRetry('clean', cleanCtx, { label: '需求清洗', note: '澄清后重新清洗' });
-      pushAgentLog('info', '已根据澄清结果重新评审并清洗');
+      var flowConstraint = resolveAgentFlowConstraint();
+      var allowReview = !flowConstraint || flowConstraint.allowedSteps.indexOf('review') !== -1;
+      var allowClean = !flowConstraint || flowConstraint.allowedSteps.indexOf('clean') !== -1;
+      if (allowReview) {
+        var reviewResult = await runAgentStepWithRetry('review', reviewCtx, { label: '需求评审', note: '澄清后再评审' });
+        if (reviewResult && reviewResult.failed) return;
+      }
+      if (allowClean) {
+        var cleanCtx = Object.assign({}, agentContext, { mode: 'reclean' });
+        var cleanResult = await runAgentStepWithRetry('clean', cleanCtx, { label: '需求清洗', note: '澄清后重新清洗' });
+        if (cleanResult && cleanResult.failed) return;
+      }
+      if (allowReview && allowClean) {
+        pushAgentLog('info', '已根据澄清结果重新评审并清洗');
+      } else if (allowReview) {
+        pushAgentLog('info', '已根据澄清结果重新评审');
+      } else if (allowClean) {
+        pushAgentLog('info', '已根据澄清结果重新清洗');
+      }
     }
 
     async function runCaseGenAgentWorkflow(context) {
@@ -1594,6 +1938,7 @@
       }
       for (var i = 0; i < maxTurns; i += 1) {
         ensureAgentNotStopped();
+        if (agentContext.flowExpandedLogged === undefined) agentContext.flowExpandedLogged = false;
         if (agentContext && agentContext.coverageAction) {
           var manualAction = String(agentContext.coverageAction || '').trim().toLowerCase();
           agentContext.coverageAction = '';
@@ -1603,18 +1948,28 @@
           } else if (manualAction === 'supplement' || manualAction === 'reclean') {
             agentContext.mode = manualAction === 'supplement' ? 'supplement' : 'reclean';
             pushAgentLog('info', manualAction === 'supplement' ? '收到人工选择：补全清洗并继续' : '收到人工选择：重新清洗并继续');
-            await runAgentStepWithRetry('clean', agentContext, {
+            var cleanResult = await runAgentStepWithRetry('clean', agentContext, {
               label: '需求清洗',
               note: manualAction === 'supplement' ? '人工补全清洗' : '人工重新清洗'
             });
-            await runAgentStepWithRetry('compare', agentContext, {
+            if (cleanResult && cleanResult.failed) continue;
+            var compareResult = await runAgentStepWithRetry('compare', agentContext, {
               label: '对比完整性',
               note: manualAction === 'supplement' ? '人工补全后复查' : '人工重清洗后复查'
             });
+            if (compareResult && compareResult.failed) continue;
             continue;
           }
         }
         var ctx = collectAgentContext(agentContext);
+        if (agentContext && agentContext.resumeAt && !agentContext.resumeHandled) {
+          agentContext.resumeHandled = true;
+          var resumeStep = pickResumeAgentAction(ctx);
+          if (resumeStep) {
+            agentContext.resumeAction = resumeStep;
+            pushAgentLog('info', '检测到任务恢复，优先继续步骤：' + resolveAgentActionLabel(resumeStep));
+          }
+        }
         syncAgentPlanWithContext(ctx);
         if (!ctx.has_raw) {
           var waitErr = '缺少原始需求';
@@ -1640,22 +1995,31 @@
         lastSignature = signature;
         var decision = null;
         var action = '';
+        var skipSatisfiedCheck = false;
         try {
-          if (autoWorkflowStatus) setStatus(autoWorkflowStatus, 'Agent 正在决策下一步…', '');
-          decision = await decideAgentNextAction(ctx);
+          if (agentContext && agentContext.resumeAction) {
+            action = normalizeAgentAction(agentContext.resumeAction);
+            agentContext.resumeAction = '';
+            skipSatisfiedCheck = true;
+          } else {
+            if (autoWorkflowStatus) setStatus(autoWorkflowStatus, 'Agent 正在决策下一步…', '');
+            decision = await decideAgentNextAction(ctx);
+          }
         } catch (err) {
           decision = null;
         }
         var decisionAction = extractDecisionAction(decision);
         var decisionReason = extractDecisionReason(decision);
-        if (decisionAction && decisionReason) {
-          pushAgentLog('info', 'Agent 决策：' + decisionAction + '（' + decisionReason + '）');
-        } else if (decisionAction) {
-          pushAgentLog('info', 'Agent 决策：' + decisionAction);
+        if (!action) {
+          if (decisionAction && decisionReason) {
+            pushAgentLog('info', 'Agent 决策：' + decisionAction + '（' + decisionReason + '）');
+          } else if (decisionAction) {
+            pushAgentLog('info', 'Agent 决策：' + decisionAction);
+          }
+          action = normalizeAgentAction(decisionAction);
         }
-        action = normalizeAgentAction(decisionAction);
         if (!action) action = pickFallbackAgentAction(ctx);
-        if (isAgentActionSatisfied(action, ctx)) {
+        if (!skipSatisfiedCheck && isAgentActionSatisfied(action, ctx)) {
           pushAgentLog('info', '检测到已有结果，跳过步骤：' + resolveAgentActionLabel(action));
           action = pickFallbackAgentAction(ctx);
         }
@@ -1664,6 +2028,10 @@
         }
         var flowConstraint = resolveAgentFlowConstraint();
         if (flowConstraint) {
+          if (flowConstraint.expandedNote && !agentContext.flowExpandedLogged) {
+            pushAgentLog('info', flowConstraint.expandedNote);
+            agentContext.flowExpandedLogged = true;
+          }
           var constrained = resolveFlowConstrainedAction(action, ctx, flowConstraint);
           if (constrained !== action && constrained !== 'finish') {
             pushAgentLog('info', '根据提示调整下一步：' + resolveAgentActionLabel(constrained));
@@ -1679,6 +2047,12 @@
             }
             return;
           }
+        }
+        if (shouldWaitForClarify(ctx)) {
+          if (action !== 'wait_clarify') {
+            pushAgentLog('info', '澄清未确认，先等待人工澄清');
+          }
+          action = 'wait_clarify';
         }
         if (action === 'wait_clarify') {
           if (!state.autoRequireClarifications) {
@@ -1708,28 +2082,34 @@
           continue;
         }
         if (action === 'review') {
-          await runAgentStepWithRetry('review', agentContext, { label: '需求评审' });
+          var reviewRun = await runAgentStepWithRetry('review', agentContext, { label: '需求评审' });
+          if (reviewRun && reviewRun.failed) continue;
           await runClarifyFollowupIfNeeded(agentContext);
           continue;
         }
         if (action === 'clean') {
-          await runAgentStepWithRetry('clean', agentContext, { label: '需求清洗' });
+          var cleanRun = await runAgentStepWithRetry('clean', agentContext, { label: '需求清洗' });
+          if (cleanRun && cleanRun.failed) continue;
           continue;
         }
         if (action === 'compare') {
-          await runAgentStepWithRetry('compare', agentContext, { label: '对比完整性' });
+          var compareRun = await runAgentStepWithRetry('compare', agentContext, { label: '对比完整性' });
+          if (compareRun && compareRun.failed) continue;
           await handleAgentCoverageAfterCompare(agentContext);
           continue;
         }
         if (action === 'split') {
-          await runAgentStepWithRetry('split', agentContext, { label: '测试模块拆分' });
+          var splitRun = await runAgentStepWithRetry('split', agentContext, { label: '测试模块拆分' });
+          if (splitRun && splitRun.failed) continue;
           continue;
         }
         if (action === 'cases') {
-          await runAgentStepWithRetry('cases', agentContext, { label: '覆盖对比' });
+          var casesRun = await runAgentStepWithRetry('cases', agentContext, { label: '覆盖对比' });
+          if (casesRun && casesRun.failed) continue;
           continue;
         }
-        await runAgentStepWithRetry(action, agentContext, { label: action });
+        var genericRun = await runAgentStepWithRetry(action, agentContext, { label: action });
+        if (genericRun && genericRun.failed) continue;
       }
       throw new Error('Agent 达到最大执行轮次仍未完成');
     }
@@ -2219,6 +2599,65 @@
       return result;
     }
 
+    function mapAgentPlanKeyToFlowStep(key) {
+      var step = normalizeAgentStepKey(key);
+      if (step === 'clarify') return 'review';
+      if (step === 'coverage') return 'compare';
+      if (step === 'review' || step === 'clean' || step === 'compare' || step === 'split' || step === 'cases') {
+        return step;
+      }
+      return '';
+    }
+
+    function findActiveAgentPlanItem(plan) {
+      if (!Array.isArray(plan) || !plan.length) return null;
+      var priorities = ['failed', 'waiting', 'reviewing', 'running', 'retrying'];
+      var idx;
+      for (idx = 0; idx < priorities.length; idx += 1) {
+        var status = priorities[idx];
+        for (var j = 0; j < plan.length; j += 1) {
+          var item = plan[j];
+          if (!item || !item.status) continue;
+          if (String(item.status) === status) return item;
+        }
+      }
+      return null;
+    }
+
+    function syncAgentFlowNavFallback(task) {
+      if (!task || task.kind !== 'agent') return;
+      if (!isCaseGenAgentEnabled()) return;
+      var status = String(task.status || '');
+      if (status !== 'running' && status !== 'waiting') return;
+      var runningMap = (state && state.inProgressSteps && typeof state.inProgressSteps === 'object') ? state.inProgressSteps : {};
+      var waitingMap = (state && state.waitingSteps && typeof state.waitingSteps === 'object') ? state.waitingSteps : {};
+      var failedMap = (state && state.failedSteps && typeof state.failedSteps === 'object') ? state.failedSteps : {};
+      var validationMap = (state && state.validationFailedSteps && typeof state.validationFailedSteps === 'object')
+        ? state.validationFailedSteps
+        : {};
+      var hasFlags = Object.keys(runningMap).length
+        || Object.keys(waitingMap).length
+        || Object.keys(failedMap).length
+        || Object.keys(validationMap).length
+        || Boolean(state && state.inProgressStep);
+      if (hasFlags) return;
+      var plan = ensureAgentPlan();
+      var active = findActiveAgentPlanItem(plan);
+      if (!active) return;
+      var step = mapAgentPlanKeyToFlowStep(active.key);
+      if (!step) return;
+      var note = active.note || '';
+      if (active.status === 'waiting') {
+        setStepWaiting(step, note || '等待处理');
+        return;
+      }
+      if (active.status === 'failed') {
+        setStepFailed(step, note || '执行失败');
+        return;
+      }
+      setStepInProgress(step);
+    }
+
     function applyAutoWorkflowTaskState(task) {
       var hasTask = Boolean(task && typeof task === 'object');
       var running = Boolean(hasTask && task.status === 'running');
@@ -2237,6 +2676,8 @@
         updateFlowStatus();
         return;
       }
+
+      syncAgentFlowNavFallback(task);
 
       var kind = task.kind || 'full';
       var messages = task.messages && typeof task.messages === 'object'
@@ -2456,7 +2897,7 @@
       if (updated) {
         if (typeof renderCleanView === 'function') renderCleanView(true);
         if (typeof renderCleanRawView === 'function') renderCleanRawView(null);
-        if (persistWorkflowState) persistWorkflowState();
+        persistWorkflowSnapshot();
       }
       var shouldOpenDrawer = Object.prototype.hasOwnProperty.call(opts, 'shouldOpenDrawer')
         ? Boolean(opts.shouldOpenDrawer)
@@ -3029,7 +3470,11 @@
       markAgentPlanSkippedByFlow: markAgentPlanSkippedByFlow,
       applyAgentPromptRoutingDecision: applyAgentPromptRoutingDecision,
       applyAgentReviewDecision: applyAgentReviewDecision,
+      getAgentReviewPayloadSnapshot: getAgentReviewPayloadSnapshot,
+      getAgentReviewInputSummary: getAgentReviewInputSummary,
       applyAgentCoverageSelection: applyAgentCoverageSelection,
+      getAgentClarifyGuardSnapshot: getAgentClarifyGuardSnapshot,
+      getAgentFlowConstraintSnapshot: getAgentFlowConstraintSnapshot,
     };
   }
 

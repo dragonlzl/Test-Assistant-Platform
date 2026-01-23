@@ -291,6 +291,258 @@ test.describe('用例生成 Agent 面板与澄清填充', () => {
     await expect(page.locator('#autoAgentTrace')).toContainText('Agent 复核修正：需求评审（不符合提示）');
   });
 
+  test('Agent 复核严重问题可标记重跑', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      if (!window.app || !window.app.state || !window.app.core) return null;
+      window.app.state.settings = window.app.state.settings || {};
+      window.app.state.settings.caseGenAgentEnabled = true;
+      window.app.state.caseGenAgentTrace = [];
+      if (window.app.core.renderAgentPanel) window.app.core.renderAgentPanel();
+      return window.app.core.applyAgentReviewDecision('compare', {
+        ok: false,
+        action: 'rerun',
+        severity: 'severe',
+        reason: '严重不符',
+        issues: ['覆盖率解析失败'],
+      });
+    });
+
+    expect(result && result.rerun).toBeTruthy();
+    await expect(page.locator('#autoAgentTrace')).toContainText('复核判定严重不符合');
+  });
+
+  test('Agent 复核按需附带需求与用例数据', async ({ page }) => {
+    const payloads = await page.evaluate(() => {
+      var raw = document.getElementById('rawText');
+      if (raw) raw.value = '原始需求A';
+      var cleaned = document.getElementById('cleanedText');
+      if (cleaned) cleaned.value = '清洗需求A';
+      var split = document.getElementById('splitResult');
+      if (split) split.value = '模块拆分A';
+      var casesCompare = document.getElementById('casesCompareResult');
+      if (casesCompare) casesCompare.value = '{"coverage":90,"missing":[]}';
+      if (window.app && window.app.state) {
+        window.app.state.importedCases = [{
+          id: 'case-1',
+          name: '用例文件A',
+          text: '用例A',
+          list: [{ title: '用例A', steps: [] }],
+        }];
+      }
+      if (!window.app || !window.app.core || typeof window.app.core.getAgentReviewPayloadSnapshot !== 'function') {
+        return null;
+      }
+      return {
+        review: window.app.core.getAgentReviewPayloadSnapshot('review', '提示'),
+        cases: window.app.core.getAgentReviewPayloadSnapshot('cases', '提示'),
+        reviewSummary: window.app.core.getAgentReviewInputSummary('review', '提示'),
+        casesSummary: window.app.core.getAgentReviewInputSummary('cases', '提示'),
+      };
+    });
+
+    expect(payloads && payloads.review && payloads.cases).toBeTruthy();
+    expect(payloads.review.inputs && payloads.review.inputs.case_text).toBeFalsy();
+    expect(payloads.review.inputs && payloads.review.inputs.raw_requirement).toContain('原始需求A');
+    expect(payloads.cases.inputs && payloads.cases.inputs.case_text).toContain('"cases"');
+    expect(payloads.cases.inputs && payloads.cases.inputs.cleaned_requirement).toContain('清洗需求A');
+    expect(payloads.reviewSummary).toContain('需求-原始需求');
+    expect(payloads.reviewSummary).not.toContain('用例-');
+    expect(payloads.casesSummary).toContain('用例-导入用例');
+    expect(payloads.casesSummary).toContain('需求-清洗结果');
+  });
+
+  test('确认澄清后结果可持久化', async ({ page }) => {
+    await page.evaluate(() => {
+      try {
+        localStorage.removeItem('usecase-workflow-state-v1');
+      } catch (err) {}
+      var review = document.getElementById('reviewResult');
+      if (review) {
+        review.value = JSON.stringify([{
+          '类别': '需求模糊',
+          '不明确的需求点': '点A',
+          '不明确原因': '原因A',
+          '可能存在的分支/边界情况': '边界A'
+        }], null, 2);
+      }
+      if (window.app && window.app.state) {
+        window.app.state.reviewClarifications = new Map();
+        window.app.state.reviewClarifications.set(0, '已确认');
+      }
+      if (window.app && window.app.core && typeof window.app.core.confirmClarifications === 'function') {
+        window.app.core.confirmClarifications();
+      }
+    });
+
+    await page.waitForFunction(() => {
+      try {
+        var raw = localStorage.getItem('usecase-workflow-state-v1');
+        if (!raw) return false;
+        var snapshot = JSON.parse(raw);
+        var reviewText = snapshot && snapshot.data && snapshot.data.reviewResult ? snapshot.data.reviewResult : '';
+        var confirmed = snapshot && snapshot.data ? snapshot.data.reviewClarifyConfirmed : false;
+        var signature = snapshot && snapshot.data ? snapshot.data.reviewClarifyConfirmedSignature : '';
+        return reviewText.indexOf('需求澄清结果') !== -1 && confirmed === true && Boolean(signature);
+      } catch (err) {
+        return false;
+      }
+    });
+  });
+
+  test('确认澄清立即持久化', async ({ page }) => {
+    const snapshot = await page.evaluate(() => {
+      try {
+        localStorage.removeItem('usecase-workflow-state-v1');
+      } catch (err) {}
+      var review = document.getElementById('reviewResult');
+      if (review) {
+        review.value = JSON.stringify([{
+          '类别': '需求模糊',
+          '不明确的需求点': '点A',
+          '不明确原因': '原因A',
+          '可能存在的分支/边界情况': '边界A'
+        }], null, 2);
+      }
+      if (window.app && window.app.state) {
+        window.app.state.reviewClarifications = new Map();
+        window.app.state.reviewClarifications.set(0, '已确认');
+      }
+      if (window.app && window.app.core && typeof window.app.core.confirmClarifications === 'function') {
+        window.app.core.confirmClarifications();
+      }
+      try {
+        var raw = localStorage.getItem('usecase-workflow-state-v1');
+        return raw ? JSON.parse(raw) : null;
+      } catch (err2) {
+        return null;
+      }
+    });
+
+    expect(snapshot && snapshot.data).toBeTruthy();
+    expect(snapshot.data.reviewClarifyConfirmed).toBeTruthy();
+    expect(snapshot.data.reviewClarifyConfirmedSignature).toBeTruthy();
+    expect(snapshot.data.reviewClarifyFollowupSignature).toBeTruthy();
+    expect(snapshot.data.reviewResult).toContain('需求澄清结果');
+  });
+
+  test('新评审数据会重置澄清确认状态', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      var review = document.getElementById('reviewResult');
+      if (review) {
+        review.value = JSON.stringify([{
+          '类别': '需求模糊',
+          '不明确的需求点': '点A',
+          '不明确原因': '原因A',
+          '可能存在的分支/边界情况': '边界A'
+        }], null, 2);
+      }
+      if (window.app && window.app.state) {
+        window.app.state.reviewClarifications = new Map();
+        window.app.state.reviewClarifications.set(0, '已确认');
+      }
+      if (window.app && window.app.core && typeof window.app.core.confirmClarifications === 'function') {
+        window.app.core.confirmClarifications();
+      }
+      if (review) {
+        review.value = JSON.stringify([{
+          '类别': '需求不全',
+          '不明确的需求点': '点B',
+          '不明确原因': '原因B',
+          '可能存在的分支/边界情况': '边界B'
+        }], null, 2);
+      }
+      if (window.app && window.app.core && typeof window.app.core.syncReviewViewFromResult === 'function') {
+        window.app.core.syncReviewViewFromResult();
+      }
+      return {
+        confirmed: window.app && window.app.state ? window.app.state.reviewClarifyConfirmed : null,
+        signature: window.app && window.app.state ? window.app.state.reviewClarifyConfirmedSignature : null,
+      };
+    });
+
+    expect(result).toEqual({ confirmed: false, signature: '' });
+  });
+
+  test('澄清未确认时需要等待澄清', async ({ page }) => {
+    const snapshot = await page.evaluate(() => {
+      if (!window.app || !window.app.core || !window.app.state) return null;
+      window.app.state.autoRequireClarifications = true;
+      var review = document.getElementById('reviewResult');
+      if (review) {
+        review.value = JSON.stringify([{
+          '类别': '需求模糊',
+          '不明确的需求点': '点A',
+          '不明确原因': '原因A',
+          '可能存在的分支/边界情况': '边界A'
+        }], null, 2);
+      }
+      window.app.state.reviewClarifications = new Map();
+      window.app.state.reviewClarifications.set(0, '待确认');
+      if (typeof window.app.core.syncReviewViewFromResult === 'function') {
+        window.app.core.syncReviewViewFromResult();
+      }
+      var before = window.app.core.getAgentClarifyGuardSnapshot();
+      if (typeof window.app.core.confirmClarifications === 'function') {
+        window.app.core.confirmClarifications();
+      }
+      var after = window.app.core.getAgentClarifyGuardSnapshot();
+      return { before, after };
+    });
+
+    expect(snapshot && snapshot.before && snapshot.after).toBeTruthy();
+    expect(snapshot.before.required).toBeTruthy();
+    expect(snapshot.before.clarify_confirmed).toBeFalsy();
+    expect(snapshot.after.required).toBeFalsy();
+    expect(snapshot.after.clarify_confirmed).toBeTruthy();
+  });
+
+  test('澄清后再评审保持已确认状态', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      if (!window.app || !window.app.core || !window.app.state) return null;
+      window.app.state.autoRequireClarifications = true;
+      var review = document.getElementById('reviewResult');
+      if (review) {
+        review.value = JSON.stringify([{
+          '类别': '需求模糊',
+          '不明确的需求点': '点A',
+          '不明确原因': '原因A',
+          '可能存在的分支/边界情况': '边界A'
+        }], null, 2);
+      }
+      window.app.state.reviewClarifications = new Map();
+      window.app.state.reviewClarifications.set(0, '已确认');
+      if (typeof window.app.core.confirmClarifications === 'function') {
+        window.app.core.confirmClarifications();
+      }
+      if (review) {
+        review.value = JSON.stringify([{
+          '类别': '需求不全',
+          '不明确的需求点': '点B',
+          '不明确原因': '原因B',
+          '可能存在的分支/边界情况': '边界B'
+        }], null, 2);
+      }
+      if (window.app && window.app.state) {
+        window.app.state.reviewClarifyDataSignature = JSON.stringify([{
+          '类别': '需求不全',
+          '不明确的需求点': '点B',
+          '不明确原因': '原因B',
+          '可能存在的分支/边界情况': '边界B'
+        }]);
+        window.app.state.reviewClarifyConfirmed = true;
+        window.app.state.reviewClarifyConfirmedSignature = window.app.state.reviewClarifyDataSignature;
+      }
+      if (typeof window.app.core.getAgentClarifyGuardSnapshot === 'function') {
+        return window.app.core.getAgentClarifyGuardSnapshot();
+      }
+      return null;
+    });
+
+    expect(result).toBeTruthy();
+    expect(result.required).toBeFalsy();
+    expect(result.clarify_confirmed).toBeTruthy();
+  });
+
   test('Agent 复核中状态可展示', async ({ page }) => {
     await page.evaluate(() => {
       if (!window.app || !window.app.state) return;
@@ -323,6 +575,63 @@ test.describe('用例生成 Agent 面板与澄清填充', () => {
     const reviewStep = page.locator('#flowNav .step[data-target="review"]');
     await expect(reviewStep).toHaveClass(/active/);
     await expect(reviewStep).not.toHaveClass(/done/);
+  });
+
+  test('刷新后 Agent 执行中的步骤保持进行中', async ({ page }) => {
+    await page.evaluate(() => {
+      var review = document.getElementById('reviewResult');
+      var cleaned = document.getElementById('cleanedText');
+      var compare = document.getElementById('compareResult');
+      if (review) review.value = '评审已完成';
+      if (cleaned) cleaned.value = '清洗已完成';
+      if (compare) compare.value = JSON.stringify({ coverage: 80, missing: ['缺失点A'] }, null, 2);
+      if (window.app && window.app.state) {
+        window.app.state.settings = window.app.state.settings || {};
+        window.app.state.settings.caseGenAgentEnabled = true;
+        window.app.state.caseGenAgentPlan = [
+          { key: 'review', label: '需求评审', status: 'done', attempts: 0, note: '' },
+          { key: 'clarify', label: '需求澄清确认', status: 'done', attempts: 0, note: '' },
+          { key: 'clean', label: '需求清洗', status: 'done', attempts: 0, note: '' },
+          { key: 'compare', label: '对比完整性', status: 'running', attempts: 0, note: '' },
+          { key: 'coverage', label: '覆盖率校验', status: 'pending', attempts: 0, note: '' },
+        ];
+        window.app.state.inProgressSteps = {};
+        window.app.state.waitingSteps = {};
+        window.app.state.failedSteps = {};
+        window.app.state.validationFailedSteps = {};
+      }
+      if (window.app && window.app.core && typeof window.app.core.applyAutoWorkflowTaskState === 'function') {
+        window.app.core.applyAutoWorkflowTaskState({ kind: 'agent', status: 'running' });
+      } else if (window.app && window.app.core && typeof window.app.core.updateFlowStatus === 'function') {
+        window.app.core.updateFlowStatus();
+      }
+    });
+
+    const compareStep = page.locator('#flowNav .step[data-target="compare"]');
+    await expect(compareStep).toHaveClass(/active/);
+    await expect(compareStep).not.toHaveClass(/done/);
+  });
+
+  test('Agent 仅拆分时补齐最小前置链路', async ({ page }) => {
+    await page.evaluate(() => {
+      if (!window.app || !window.app.state || !window.app.core) return;
+      window.app.state.settings = window.app.state.settings || {};
+      window.app.state.settings.caseGenAgentEnabled = true;
+      window.app.state.caseGenAgentPromptRouting = {
+        source: '仅拆分',
+        prompts: {},
+        flow: { stop_after: 'split', only_steps: [], note: '仅执行拆分' },
+      };
+    });
+
+    const snapshot = await page.evaluate(() => {
+      if (!window.app || !window.app.core || typeof window.app.core.getAgentFlowConstraintSnapshot !== 'function') {
+        return null;
+      }
+      return window.app.core.getAgentFlowConstraintSnapshot();
+    });
+    expect(snapshot).not.toBeNull();
+    expect(snapshot.expandedSteps).toEqual(['review', 'clean', 'split']);
   });
 
   test('Agent 中文路由字段可映射到评审与对比', async ({ page }) => {

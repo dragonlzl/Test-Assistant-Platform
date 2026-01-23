@@ -206,6 +206,10 @@
         caseText: dom.caseTextEl && dom.caseTextEl.value ? dom.caseTextEl.value : '',
         importedCases: normalizeImportedCases(state.importedCases),
         reviewClarifications: serializeReviewClarifications(state.reviewClarifications),
+        reviewClarifyConfirmed: Boolean(state.reviewClarifyConfirmed),
+        reviewClarifyConfirmedSignature: state.reviewClarifyConfirmedSignature || '',
+        reviewClarifyDataSignature: state.reviewClarifyDataSignature || '',
+        reviewClarifyFollowupSignature: state.reviewClarifyFollowupSignature || '',
         autoCompareSuggestion: state.autoCompareSuggestion || (autoCompareSuggestionInput ? autoCompareSuggestionInput.value : ''),
         autoRequireClarifications: Boolean(state.autoRequireClarifications),
         autoAgentPromptHint: state.autoAgentPromptHint || (autoAgentPromptHintInput ? autoAgentPromptHintInput.value : ''),
@@ -369,6 +373,10 @@
       if (dom.caseTextEl) dom.caseTextEl.value = data.caseText || '';
       state.importedCases = normalizeImportedCases(data.importedCases);
       state.reviewClarifications = restoreReviewClarifications(data.reviewClarifications);
+      state.reviewClarifyConfirmed = Boolean(data.reviewClarifyConfirmed);
+      state.reviewClarifyConfirmedSignature = data.reviewClarifyConfirmedSignature ? String(data.reviewClarifyConfirmedSignature) : '';
+      state.reviewClarifyDataSignature = data.reviewClarifyDataSignature ? String(data.reviewClarifyDataSignature) : '';
+      state.reviewClarifyFollowupSignature = data.reviewClarifyFollowupSignature ? String(data.reviewClarifyFollowupSignature) : '';
       state.autoCompareSuggestion = data.autoCompareSuggestion || '';
       state.autoRequireClarifications = Boolean(data.autoRequireClarifications);
       if (data.autoAgentPromptHint !== undefined && data.autoAgentPromptHint !== null) {
@@ -1277,14 +1285,21 @@
       'clearStepFailed',
       'clearAllFailedSteps',
       'syncAutoCompareStatus',
+      'applyAutoWorkflowTaskState',
       'renderAgentPanel',
       'markAgentPlanSkippedByFlow',
       'applyAgentPromptRoutingDecision',
       'applyAgentReviewDecision',
+      'getAgentReviewPayloadSnapshot',
+      'getAgentReviewInputSummary',
       'applyAgentCoverageSelection',
+      'getAgentClarifyGuardSnapshot',
+      'getAgentFlowConstraintSnapshot',
+      'confirmClarifications',
       'autoFillReviewClarifications',
       'updateAutoClarifyVisibility',
       'renderAutoClarifyView',
+      'syncReviewViewFromResult',
     ]);
     window.app.core = core;
 

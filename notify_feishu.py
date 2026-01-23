@@ -14,10 +14,12 @@ import socket
 import time
 import urllib.error
 import urllib.request
+import subprocess
 
 
 MESSAGE_TEXT = "任务执行完毕！！！"
 CONFIG_FILENAME = "feishu_config.json"
+FEATURE_LOG_FILENAME = "FEATURE_LOG.md"
 
 
 def build_ssl_context() -> ssl.SSLContext:
@@ -124,6 +126,58 @@ def send_feishu_message(webhook_url: str, text: str):
     return http_status, body
 
 
+def read_feature_log_records(repo_dir: str) -> list:
+    feature_log_path = os.path.join(repo_dir, FEATURE_LOG_FILENAME)
+    if not os.path.exists(feature_log_path):
+        return []
+
+    diff_outputs = []
+    for args in (
+        ["git", "diff", "--", FEATURE_LOG_FILENAME],
+        ["git", "diff", "--cached", "--", FEATURE_LOG_FILENAME],
+    ):
+        try:
+            result = subprocess.run(
+                args,
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+        except OSError:
+            continue
+        if result.returncode == 0 and result.stdout:
+            diff_outputs.append(result.stdout)
+
+    if not diff_outputs:
+        return []
+
+    records = []
+    seen = set()
+    for output in diff_outputs:
+        for line in output.splitlines():
+            if not line.startswith("+") or line.startswith("+++"):
+                continue
+            text = line[1:].strip()
+            if "更新记录" not in text:
+                continue
+            if text in seen:
+                continue
+            seen.add(text)
+            records.append(text)
+    return records
+
+
+def build_message_text(repo_dir: str) -> str:
+    records = read_feature_log_records(repo_dir)
+    if not records:
+        return MESSAGE_TEXT
+    latest = records[-1]
+    return MESSAGE_TEXT + "\n\nFEATURE_LOG 更新记录：\n" + latest
+
+
 def main() -> int:
     webhook_env = os.environ.get("FEISHU_WEBHOOK", "").strip()
     webhook_arg = sys.argv[1].strip() if len(sys.argv) > 1 else ""
@@ -142,8 +196,11 @@ def main() -> int:
         )
         return 1
 
+    repo_dir = os.path.dirname(os.path.abspath(__file__))
+    message_text = build_message_text(repo_dir)
+
     try:
-        http_status, resp_body = send_feishu_message(webhook_url, MESSAGE_TEXT)
+        http_status, resp_body = send_feishu_message(webhook_url, message_text)
     except (urllib.error.URLError, RuntimeError) as exc:
         sys.stderr.write(f"发送失败: {exc}\n")
         return 1

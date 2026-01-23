@@ -1902,6 +1902,7 @@
           setStepInProgress,
           clearStepInProgress,
           persistWorkflowState: requestPersistWorkflowState,
+          persistWorkflowStateNow: requestPersistWorkflowStateNow,
           appendPromptHint: appUtils.appendPromptHint,
         },
       })
@@ -2086,6 +2087,7 @@
           setStepInProgress: proxyApi('setStepInProgress'),
           clearStepInProgress: proxyApi('clearStepInProgress'),
           persistWorkflowState: requestPersistWorkflowState,
+          persistWorkflowStateNow: requestPersistWorkflowStateNow,
           buildReviewClarificationContext: proxyApi('buildReviewClarificationContext'),
           buildCasesComparePayload: proxyApi('buildCasesComparePayload'),
           renderCleanView: proxyApi('renderCleanView'),
@@ -2157,7 +2159,11 @@
       'markAgentPlanSkippedByFlow',
       'applyAgentPromptRoutingDecision',
       'applyAgentReviewDecision',
+      'getAgentReviewPayloadSnapshot',
+      'getAgentReviewInputSummary',
       'applyAgentCoverageSelection',
+      'getAgentClarifyGuardSnapshot',
+      'getAgentFlowConstraintSnapshot',
     ]);
 
     const autoWorkflowManager = initAutoWorkflowManager({
@@ -2953,6 +2959,10 @@
       state.reviewClarifications = new Map();
       state.reviewSelections = new Set();
       state.reviewExpanded = new Set();
+      state.reviewClarifyConfirmed = false;
+      state.reviewClarifyConfirmedSignature = '';
+      state.reviewClarifyDataSignature = '';
+      state.reviewClarifyFollowupSignature = '';
       state.cleanEntries = [];
       state.cleanViewSelection = -1;
       state.cleanHighlightAll = false;
@@ -2978,6 +2988,7 @@
       state.caseGenAgentCoverageRetries = 0;
       state.caseGenAgentCoverageBelowFull = false;
       state.caseGenAgentFlowStopNote = '';
+      state.caseGenAgentLastFailure = null;
       state.caseGenModules = [];
       state.caseGenSource = '';
       state.caseGenResults = {};

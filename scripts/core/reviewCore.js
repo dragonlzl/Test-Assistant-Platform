@@ -42,6 +42,7 @@
     var setStepInProgress = handlers.setStepInProgress || function() {};
     var clearStepInProgress = handlers.clearStepInProgress || function() {};
     var persistWorkflowState = handlers.persistWorkflowState || function() {};
+    var persistWorkflowStateNow = handlers.persistWorkflowStateNow || null;
 
     var rawText = dom.rawText;
     var reviewStatus = dom.reviewStatus;
@@ -69,6 +70,10 @@
     if (!(state.reviewClarifications instanceof Map)) state.reviewClarifications = new Map();
     if (!(state.reviewSelections instanceof Set)) state.reviewSelections = new Set();
     if (!(state.reviewExpanded instanceof Set)) state.reviewExpanded = new Set();
+    if (typeof state.reviewClarifyConfirmed !== 'boolean') state.reviewClarifyConfirmed = false;
+    if (typeof state.reviewClarifyConfirmedSignature !== 'string') state.reviewClarifyConfirmedSignature = '';
+    if (typeof state.reviewClarifyDataSignature !== 'string') state.reviewClarifyDataSignature = '';
+    if (typeof state.reviewClarifyFollowupSignature !== 'string') state.reviewClarifyFollowupSignature = '';
 
     function ensureReviewDrawer() {
       if (reviewViewDrawer) return reviewViewDrawer;
@@ -284,6 +289,15 @@
         return text || '';
       }
       return normalizeReviewText(value);
+    }
+
+    function buildReviewDataSignature(list) {
+      if (!Array.isArray(list) || !list.length) return '';
+      try {
+        return JSON.stringify(list);
+      } catch (err) {
+        return '';
+      }
     }
 
     function extractReviewField(item, patterns) {
@@ -547,6 +561,17 @@
       var focusInfo = snapshotClarifyFocus();
       var composing = isClarifyComposing();
       var list = parseReviewList(reviewResultEl && reviewResultEl.value ? reviewResultEl.value : '');
+      var signature = buildReviewDataSignature(list);
+      state.reviewClarifyDataSignature = signature;
+      if (!signature) {
+        state.reviewClarifyConfirmed = false;
+        state.reviewClarifyConfirmedSignature = '';
+        state.reviewClarifyFollowupSignature = '';
+      } else if (state.reviewClarifyConfirmed && state.reviewClarifyConfirmedSignature && state.reviewClarifyConfirmedSignature !== signature) {
+        state.reviewClarifyConfirmed = false;
+        state.reviewClarifyConfirmedSignature = '';
+        state.reviewClarifyFollowupSignature = '';
+      }
       state.reviewRows = buildReviewRows(list);
       var newMap = new Map();
       state.reviewRows.forEach(function(row) {
@@ -666,9 +691,16 @@
       });
       try {
         reviewResultEl.value = JSON.stringify(updated, null, 2);
+        var signature = buildReviewDataSignature(updated);
+        state.reviewClarifyConfirmed = Boolean(signature);
+        state.reviewClarifyConfirmedSignature = signature;
+        state.reviewClarifyDataSignature = signature;
+        state.reviewClarifyFollowupSignature = signature;
         setClarifyStatus('澄清结果已写入评审 JSON', 'ok');
         syncReviewViewFromResult();
         updateFlowStatus();
+        if (typeof persistWorkflowStateNow === 'function') persistWorkflowStateNow();
+        else if (typeof persistWorkflowState === 'function') persistWorkflowState();
         closeClarifyDrawers();
       } catch (err) {
         console.warn('澄清结果写入失败', err);
@@ -793,7 +825,14 @@
         setStatus(reviewStatus, '已取消需求评审（需求标识为空）', 'warn');
         return;
       }
-      if (reviewResultEl) reviewResultEl.value = '';
+      var skipClarify = extraContext && extraContext.skipClarify;
+      if (reviewResultEl && !skipClarify) reviewResultEl.value = '';
+      if (!skipClarify) {
+        state.reviewClarifyConfirmed = false;
+        state.reviewClarifyConfirmedSignature = '';
+        state.reviewClarifyDataSignature = '';
+        state.reviewClarifyFollowupSignature = '';
+      }
       if (reviewViewContainer) {
         reviewViewContainer.classList.add('hidden');
         reviewViewContainer.classList.remove('visible');
@@ -831,6 +870,17 @@
         updateModelTiming(reviewTimingEl, Date.now() - startTime);
         reviewResultEl.value = wrapTextWithRequirement(formatJsonOrText(stripCodeFence(content)));
         syncReviewViewFromResult();
+        if (skipClarify) {
+          if (state.reviewClarifyDataSignature) {
+            state.reviewClarifyConfirmed = true;
+            state.reviewClarifyConfirmedSignature = state.reviewClarifyDataSignature;
+          } else {
+            state.reviewClarifyConfirmed = false;
+            state.reviewClarifyConfirmedSignature = '';
+          }
+          if (typeof persistWorkflowStateNow === 'function') persistWorkflowStateNow();
+          else if (typeof persistWorkflowState === 'function') persistWorkflowState();
+        }
         setStatus(reviewStatus, '评审完成', 'ok');
       } catch (err) {
         console.error(err);
