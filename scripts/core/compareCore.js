@@ -15,6 +15,7 @@
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
     };
+    var extractJsonObjects = utils.extractJsonObjects || function() { return []; };
     var appendPromptHint = utils.appendPromptHint || function(basePrompt, hint) {
       var base = basePrompt === undefined || basePrompt === null ? '' : String(basePrompt).trim();
       var extra = hint === undefined || hint === null ? '' : String(hint).trim();
@@ -23,6 +24,7 @@
       if (!base) return note;
       return base + '\n\n' + note;
     };
+    var repairLooseNewlines = utils.repairLooseNewlines || function(text) { return text || ''; };
     var state = deps && deps.state ? deps.state : {};
     var dom = deps && deps.dom ? deps.dom : {};
     var pickEl = function(el, id) {
@@ -206,7 +208,7 @@
     function parseModuleCompareResponse(content, moduleTitle) {
       var rawContent = stripCodeFence(content);
       var jsonOnly = extractJsonPayload(rawContent);
-      var payload = jsonOnly || rawContent;
+      var payload = repairLooseNewlines(jsonOnly || rawContent);
       var data;
       try {
         data = JSON.parse(payload);
@@ -227,18 +229,68 @@
       return hasCoverage && (hasMissing || hasExtra);
     }
 
+    function pickBestCompareCandidate(list) {
+      if (!Array.isArray(list) || !list.length) return null;
+      var best = null;
+      list.forEach(function(item, idx) {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return;
+        if (!isCoveragePayload(item)) return;
+        var coverage = clampCoveragePercent(item.coverage);
+        if (!Number.isFinite(coverage)) return;
+        if (!best || coverage > best.coverage || (coverage === best.coverage && idx > best.index)) {
+          best = { index: idx, coverage: coverage, value: item };
+        }
+      });
+      if (best) return best.value;
+      return list[list.length - 1];
+    }
+
     function extractCompareResultData() {
       var raw = compareResultEl && compareResultEl.value ? compareResultEl.value.trim() : '';
       if (!raw) return null;
-      var result = unwrapRequirementPayload(raw);
+      var result = unwrapRequirementPayload(repairLooseNewlines(raw));
       if (result.type && result.type !== 'compare') {
         setStatus(compareStatus, '导入内容类型不匹配（非对比完整性结果）', 'warn');
         return null;
       }
-      var payload = typeof result.payload === 'string' ? result.payload : result.payload;
+      var payload = typeof result.payload === 'string' ? repairLooseNewlines(result.payload) : result.payload;
       try {
-        return typeof payload === 'string' ? JSON.parse(payload) : payload;
+        var parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        if (typeof parsed === 'string' && /^[\[{]/.test(parsed.trim())) {
+          try {
+            parsed = JSON.parse(parsed);
+          } catch (err) {
+            // ignore
+          }
+        }
+        return parsed;
       } catch (err) {
+        if (typeof payload === 'string' && extractJsonObjects) {
+          var candidates = extractJsonObjects(payload);
+          var bestCandidate = pickBestCompareCandidate(candidates);
+          if (bestCandidate) return bestCandidate;
+        }
+        if (extractJsonObjects) {
+          var rawCandidates = extractJsonObjects(raw);
+          var rawBest = pickBestCompareCandidate(rawCandidates);
+          if (rawBest) return rawBest;
+        }
+        if (typeof payload === 'string' && extractJsonPayload) {
+          try {
+            var extracted = extractJsonPayload(payload);
+            if (extracted) return JSON.parse(extracted);
+          } catch (inner) {
+            // ignore
+          }
+        }
+        if (extractJsonPayload) {
+          try {
+            var rawExtracted = extractJsonPayload(raw);
+            if (rawExtracted) return JSON.parse(rawExtracted);
+          } catch (inner2) {
+            // ignore
+          }
+        }
         console.warn('对比结果解析失败', err);
         return null;
       }
@@ -423,15 +475,41 @@
     }
 
     function parseMissingModules(jsonText) {
-      var result = unwrapRequirementPayload(jsonText || '');
+      var result = unwrapRequirementPayload(repairLooseNewlines(jsonText || ''));
       var payload = typeof result.payload === 'string' ? result.payload : result.payload;
       if (!payload) return [];
       try {
-        var data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        var data = typeof payload === 'string' ? JSON.parse(repairLooseNewlines(payload)) : payload;
         var coverage = pickCoveragePayload(data);
         var missing = coverage ? normalizeMissingPayload(coverage.missing) : [];
         return (missing || []).map(function(entry) { return normalizeMissingModule(entry); }).filter(Boolean);
       } catch (err) {
+        if (typeof payload === 'string' && extractJsonPayload) {
+          try {
+            var extracted = extractJsonPayload(payload);
+            if (extracted) {
+              var parsed = JSON.parse(extracted);
+              var parsedCoverage = pickCoveragePayload(parsed);
+              var parsedMissing = parsedCoverage ? normalizeMissingPayload(parsedCoverage.missing) : [];
+              return (parsedMissing || []).map(function(entry) { return normalizeMissingModule(entry); }).filter(Boolean);
+            }
+          } catch (inner) {
+            // ignore
+          }
+        }
+        if (extractJsonPayload) {
+          try {
+            var rawExtracted = extractJsonPayload(jsonText || '');
+            if (rawExtracted) {
+              var rawParsed = JSON.parse(rawExtracted);
+              var rawCoverage = pickCoveragePayload(rawParsed);
+              var rawMissing = rawCoverage ? normalizeMissingPayload(rawCoverage.missing) : [];
+              return (rawMissing || []).map(function(entry) { return normalizeMissingModule(entry); }).filter(Boolean);
+            }
+          } catch (inner2) {
+            // ignore
+          }
+        }
         console.warn('缺失模块 JSON 解析失败', err);
         return [];
       }
@@ -561,8 +639,18 @@
       if (!state.caseGenModules.length && typeof ensureCaseGenModulesFromSplit === 'function') {
         ensureCaseGenModulesFromSplit();
       }
-      var hasMissing = state.missingLastList.length > 0;
-      missingSmartFillBtn.disabled = !hasMissing || !state.caseGenModules.length;
+      var list = state.missingLastList.length
+        ? state.missingLastList
+        : parseMissingModules(casesCompareResultEl && casesCompareResultEl.value ? casesCompareResultEl.value : '');
+      var hasFillable = (list || []).some(function(item) {
+        return item && (
+          (item.scenarios && item.scenarios.length) ||
+          (item.points && item.points.length) ||
+          (item.coupled && item.coupled.length) ||
+          (item.special && item.special.length)
+        );
+      });
+      missingSmartFillBtn.disabled = !hasFillable || !state.caseGenModules.length;
     }
 
     function refreshMissingSelectionUI() {
@@ -768,6 +856,7 @@
           setStatus(casesCoverageStatus, '导入内容为空', 'warn');
           return;
         }
+        payloadText = repairLooseNewlines(payloadText);
         var parsed;
         try {
           parsed = JSON.parse(payloadText);
@@ -839,6 +928,7 @@
           : unwrap.payload
           ? JSON.stringify(unwrap.payload)
           : '';
+        payloadText = repairLooseNewlines(payloadText);
         var parsed;
         try {
           parsed = JSON.parse(payloadText);
@@ -934,7 +1024,14 @@
           temperature
         );
         updateModelTiming(compareTimingEl, Date.now() - startTime);
-        var formatted = formatJsonOrText(stripCodeFence(content));
+        var rawContent = stripCodeFence(content);
+        var normalizedText = '';
+        if (extractJsonObjects) {
+          var outputCandidates = extractJsonObjects(rawContent);
+          var outputBest = pickBestCompareCandidate(outputCandidates);
+          if (outputBest) normalizedText = JSON.stringify(outputBest, null, 2);
+        }
+        var formatted = normalizedText || formatJsonOrText(rawContent);
         if (compareResultEl) compareResultEl.value = formatted;
         resetAutoCompareUserInputs();
         syncAutoCompareStatus();

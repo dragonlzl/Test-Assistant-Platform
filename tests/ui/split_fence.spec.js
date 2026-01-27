@@ -54,7 +54,9 @@ test('拆分结果含代码块也能解析', async ({ page }) => {
       normalizeRequirementName: normalizeRequirementName,
       unwrapRequirementPayload: unwrap,
       stripCodeFence: utils.stripCodeFence,
-    });
+      repairLooseNewlines: utils.repairLooseNewlines,
+      extractJsonPayload: utils.extractJsonPayload,
+   });
     if (!splitCore || typeof splitCore.parseSplitModules !== 'function') return [];
     var splitEl = document.getElementById('splitResult');
     var text = splitEl ? (splitEl.value || '') : '';
@@ -94,4 +96,54 @@ test('拆分结果含 #NODE 与单引号代码块时覆盖对比可正常预检'
   const status = page.locator('#casesCoverageStatus');
   await expect(status).toContainText('未找到覆盖对比模型', { timeout: 5000 });
   await expect(status).not.toContainText('拆分结果解析失败');
+});
+
+test('拆分结果重复拼接可解析首段', async ({ page }) => {
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  await page.goto(base + '/index.html');
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+  await page.click('[data-group="ai"]');
+  await page.click('[data-tab-btn="clean"]');
+
+  const duplicated = [
+    '{n "模块A":[{"test_points":["点1"]}]n}',
+    '{n "模块B":[{"test_points":["点2"]}]n}',
+  ].join('');
+  await page.evaluate((value) => {
+    var el = document.getElementById('splitResult');
+    if (el) {
+      el.removeAttribute('readonly');
+      el.value = value;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }, duplicated);
+
+  const parsed = await page.evaluate(() => {
+    const splitCoreInit = window.app && window.app.splitCore && window.app.splitCore.init;
+    const utils = window.app && window.app.utils;
+    if (!splitCoreInit || !utils) return [];
+    const reqCore = window.app && window.app.requirementCore && typeof window.app.requirementCore.init === 'function'
+      ? window.app.requirementCore.init({ state: window.app.state || {}, utils: { stripCodeFence: utils.stripCodeFence } })
+      : null;
+    const unwrap = reqCore && typeof reqCore.unwrapRequirementPayload === 'function'
+      ? reqCore.unwrapRequirementPayload
+      : function(text) { return { payload: text }; };
+    const normalizeRequirementName = reqCore && typeof reqCore.normalizeRequirementName === 'function'
+      ? reqCore.normalizeRequirementName
+      : function(text) { return text || ''; };
+    const splitCore = splitCoreInit({
+      moduleFieldAliases: window.app && window.app.config && window.app.config.moduleFieldAliases ? window.app.config.moduleFieldAliases : {},
+      normalizeRequirementName: normalizeRequirementName,
+      unwrapRequirementPayload: unwrap,
+      stripCodeFence: utils.stripCodeFence,
+      repairLooseNewlines: utils.repairLooseNewlines,
+      extractJsonPayload: utils.extractJsonPayload,
+    });
+    if (!splitCore || typeof splitCore.parseSplitModules !== 'function') return [];
+    var splitEl = document.getElementById('splitResult');
+    return splitCore.parseSplitModules(splitEl ? splitEl.value || '' : '');
+  });
+
+  expect(Array.isArray(parsed)).toBeTruthy();
+  expect(parsed.length).toBeGreaterThan(0);
 });

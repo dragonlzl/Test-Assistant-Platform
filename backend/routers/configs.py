@@ -1,7 +1,11 @@
 from datetime import datetime, timezone
-from typing import List, Optional
+import json
+import urllib.error
+import urllib.request
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
@@ -12,6 +16,40 @@ from ..dependencies import get_current_user
 
 
 router = APIRouter(tags=["settings"])
+
+
+class ModelProxyRequest(BaseModel):
+    base_url: str = Field(..., description="上游模型接口地址")
+    headers: Optional[Dict[str, Any]] = None
+    body: Optional[Any] = None
+    timeout_sec: Optional[int] = None
+
+
+def _sanitize_proxy_headers(headers: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    sanitized: Dict[str, str] = {}
+    if not headers:
+        return sanitized
+    for key, value in headers.items():
+        if value is None:
+            continue
+        k = str(key).strip()
+        if not k:
+            continue
+        lower = k.lower()
+        if lower in ("host", "content-length", "connection"):
+            continue
+        sanitized[k] = str(value)
+    return sanitized
+
+
+def _clamp_timeout(value: Optional[int]) -> int:
+    try:
+        num = int(value or 0)
+    except (TypeError, ValueError):
+        num = 0
+    if num <= 0:
+        return 300
+    return min(1800, max(5, num))
 
 
 def _normalize_scope(scope: Optional[str], allow_all: bool = False) -> str:
@@ -227,6 +265,45 @@ def update_model_config(
     db.commit()
     db.refresh(config)
     return config
+
+
+@router.post("/models/proxy")
+def proxy_model_call(
+    payload: ModelProxyRequest,
+    user: models.User = Depends(get_current_user),
+):
+    base_url = str(payload.base_url or "").strip()
+    if not base_url:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="base_url 不能为空")
+    if not (base_url.startswith("http://") or base_url.startswith("https://")):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="base_url 必须为 http/https")
+    timeout_sec = _clamp_timeout(payload.timeout_sec)
+    headers = _sanitize_proxy_headers(payload.headers)
+    if "Content-Type" not in headers:
+        headers["Content-Type"] = "application/json"
+    if payload.body is None:
+        body_bytes = b""
+    else:
+        try:
+            body_bytes = json.dumps(payload.body).encode("utf-8")
+        except (TypeError, ValueError) as err:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请求体必须为 JSON") from err
+    req = urllib.request.Request(base_url, data=body_bytes, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+            raw_body = resp.read()
+            status_code = resp.getcode()
+            content_type = resp.headers.get("Content-Type") or "application/json"
+    except urllib.error.HTTPError as err:
+        raw_body = err.read()
+        status_code = err.code or 500
+        content_type = err.headers.get("Content-Type") if err.headers else "application/json"
+    except Exception as err:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="模型转发失败：" + str(err),
+        ) from err
+    return Response(content=raw_body or b"", status_code=status_code, media_type=content_type)
 
 
 @router.get("/features", response_model=List[schemas.FeatureAssignmentOut])

@@ -394,7 +394,7 @@
 <option value="medium">Medium</option>
 <option value="high">High</option>
 </select>
-<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek 模型有效，用于控制推理力度。</p>
 </div>
 <div class="actions">
 <button class="secondary" id="testCleanModel">测试连通性</button>
@@ -725,6 +725,7 @@
 <div class="row">
 <label for="modelProvider">模型类型</label>
 <select id="modelProvider">
+<option value="openai">OpenAI</option>
 <option value="deepseek">DeepSeek</option>
 <option value="kimi">Kimi K2</option>
 <option value="custom">自定义</option>
@@ -733,6 +734,20 @@
 <div class="row">
 <label for="modelBaseUrl">接口地址</label>
 <input id="modelBaseUrl" placeholder="如：https://api.xxx.com/v1/chat/completions"/>
+</div>
+<div class="row checkbox-row">
+<label for="modelUseProxy">后端转发</label>
+<label class="checkbox-inline">
+<input id="modelUseProxy" type="checkbox"/>
+<span>通过后端转发（解决跨域/内网直连失败）</span>
+</label>
+</div>
+<div class="row checkbox-row">
+<label for="modelResponsesCompat">Responses 兼容</label>
+<label class="checkbox-inline">
+<input id="modelResponsesCompat" type="checkbox"/>
+<span>Responses 兼容模式（input 字符串 + stream=true）</span>
+</label>
 </div>
 <div class="row">
 <label for="modelApiKey">API Key</label>
@@ -746,11 +761,18 @@
 <label for="modelMaxTokens">最大输出 Tokens</label>
 <input id="modelMaxTokens" min="256" placeholder="默认 1024" step="128" type="number"/>
 </div>
+<div class="row column">
+<label for="modelRequestPreview">请求体预览</label>
+<textarea class="small-textarea" id="modelRequestPreview" placeholder="点击“预览请求体”生成" readonly></textarea>
+</div>
 <div class="actions">
 <button id="saveModelBtn">保存模型</button>
 <button class="secondary" id="resetModelForm">取消</button>
+<button class="secondary" id="previewModelRequestBtn">预览请求体</button>
+<button class="secondary" id="copyModelRequestBtn">复制请求体</button>
 </div>
 <p class="status" id="modelFormStatus"></p>
+<p class="status" id="modelRequestStatus"></p>
 </div>
 <h3>已配置模型</h3>
 <div class="model-list" id="modelList"></div>

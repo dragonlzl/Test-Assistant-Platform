@@ -36,10 +36,16 @@
     const modelDisplayNameEl = pickEl('modelDisplayNameEl', 'modelDisplayName');
     const modelProviderEl = pickEl('modelProviderEl', 'modelProvider');
     const modelBaseUrlEl = pickEl('modelBaseUrlEl', 'modelBaseUrl');
+    const modelUseProxyEl = pickEl('modelUseProxyEl', 'modelUseProxy');
+    const modelResponsesCompatEl = pickEl('modelResponsesCompatEl', 'modelResponsesCompat');
     const modelApiKeyEl = pickEl('modelApiKeyEl', 'modelApiKey');
     const modelIdentifierEl = pickEl('modelIdentifierEl', 'modelIdentifier');
     const modelMaxTokensEl = pickEl('modelMaxTokensEl', 'modelMaxTokens');
+    const modelRequestPreviewEl = pickEl('modelRequestPreviewEl', 'modelRequestPreview');
+    const previewModelRequestBtn = pickEl('previewModelRequestBtn', 'previewModelRequestBtn');
+    const copyModelRequestBtn = pickEl('copyModelRequestBtn', 'copyModelRequestBtn');
     const modelFormStatus = pickEl('modelFormStatus', 'modelFormStatus');
+    const modelRequestStatus = pickEl('modelRequestStatus', 'modelRequestStatus');
     const modelListEl = pickEl('modelListEl', 'modelList');
     const createModelBtn = pickEl('createModelBtn', 'createModelBtn');
     const modelFormWrapper = pickEl('modelFormWrapper', 'modelFormWrapper');
@@ -157,6 +163,10 @@
         if (next.id !== undefined && next.id !== null) {
           next.id = String(next.id);
         }
+        var proxyFlag = next.useProxy;
+        next.useProxy = proxyFlag === true || proxyFlag === 'true' || proxyFlag === 1 || proxyFlag === '1';
+        var compatFlag = next.responsesCompat;
+        next.responsesCompat = compatFlag === true || compatFlag === 'true' || compatFlag === 1 || compatFlag === '1';
         return next;
       });
       migrateLegacyConfigs();
@@ -275,6 +285,8 @@
       return {
         provider: model.provider,
         baseUrl: model.baseUrl,
+        useProxy: model.useProxy,
+        responsesCompat: model.responsesCompat,
         apiKey: model.apiKey,
         model: model.model,
         maxTokens: model.maxTokens,
@@ -285,6 +297,10 @@
       if (!Array.isArray(list)) return [];
       return list.map(function(item) {
         var cfg = item && item.config_json ? item.config_json : {};
+        var proxyFlag = cfg.useProxy !== undefined ? cfg.useProxy : cfg.use_proxy;
+        var useProxy = proxyFlag === true || proxyFlag === 'true' || proxyFlag === 1 || proxyFlag === '1';
+        var compatFlag = cfg.responsesCompat !== undefined ? cfg.responsesCompat : cfg.responses_compat;
+        var useCompat = compatFlag === true || compatFlag === 'true' || compatFlag === 1 || compatFlag === '1';
         var remoteId = item && item.id !== undefined && item.id !== null ? item.id : null;
         var resolvedId = remoteId !== null && remoteId !== undefined
           ? String(remoteId)
@@ -295,6 +311,8 @@
           name: item && item.name ? item.name : (cfg.name || '未命名模型'),
           provider: cfg.provider || 'custom',
           baseUrl: cfg.baseUrl || cfg.base_url || '',
+          useProxy: useProxy,
+          responsesCompat: useCompat,
           apiKey: cfg.apiKey || cfg.api_key || '',
           model: cfg.model || cfg.modelIdentifier || cfg.model_id || '',
           maxTokens: cfg.maxTokens || cfg.max_tokens || defaultMaxTokens,
@@ -606,10 +624,14 @@
       if (modelDisplayNameEl) modelDisplayNameEl.value = '';
       if (modelProviderEl) modelProviderEl.value = 'deepseek';
       if (modelBaseUrlEl) modelBaseUrlEl.value = '';
+      if (modelUseProxyEl) modelUseProxyEl.checked = false;
+      if (modelResponsesCompatEl) modelResponsesCompatEl.checked = false;
       if (modelApiKeyEl) modelApiKeyEl.value = '';
       if (modelIdentifierEl) modelIdentifierEl.value = '';
       if (modelMaxTokensEl) modelMaxTokensEl.value = defaultMaxTokens;
+      if (modelRequestPreviewEl) modelRequestPreviewEl.value = '';
       setStatus(modelFormStatus, hide ? '' : '已重置表单', '');
+      if (modelRequestStatus) modelRequestStatus.textContent = '';
       if (hide && modelFormWrapper) {
         modelFormWrapper.classList.add('hidden');
       }
@@ -625,9 +647,13 @@
       if (modelDisplayNameEl) modelDisplayNameEl.value = model.name || '';
       if (modelProviderEl) modelProviderEl.value = model.provider || 'custom';
       if (modelBaseUrlEl) modelBaseUrlEl.value = model.baseUrl || '';
+      if (modelUseProxyEl) modelUseProxyEl.checked = Boolean(model.useProxy);
+      if (modelResponsesCompatEl) modelResponsesCompatEl.checked = Boolean(model.responsesCompat);
       if (modelApiKeyEl) modelApiKeyEl.value = model.apiKey || '';
       if (modelIdentifierEl) modelIdentifierEl.value = model.model || '';
       if (modelMaxTokensEl) modelMaxTokensEl.value = model.maxTokens || defaultMaxTokens;
+      if (modelRequestPreviewEl) modelRequestPreviewEl.value = '';
+      if (modelRequestStatus) modelRequestStatus.textContent = '';
       setStatus(modelFormStatus, '已加载待编辑模型，可修改后保存', 'ok');
     }
 
@@ -670,6 +696,93 @@
       if (modelEl && !modelEl.value.trim()) modelEl.value = preset.model;
     }
 
+    function getPreviewModelConfig() {
+      var baseUrl = modelBaseUrlEl ? modelBaseUrlEl.value.trim() : '';
+      var modelId = modelIdentifierEl ? modelIdentifierEl.value.trim() : '';
+      var maxTokensVal = parseInt(modelMaxTokensEl ? modelMaxTokensEl.value : defaultMaxTokens, 10);
+      return {
+        baseUrl: baseUrl,
+        model: modelId,
+        responsesCompat: Boolean(modelResponsesCompatEl && modelResponsesCompatEl.checked),
+        maxTokens: Number.isFinite(maxTokensVal) && maxTokensVal > 0 ? maxTokensVal : defaultMaxTokens,
+      };
+    }
+
+    function buildModelRequestPreview() {
+      var cfg = getPreviewModelConfig();
+      if (!cfg.baseUrl) {
+        setStatus(modelRequestStatus, '请先填写接口地址再预览', 'warn');
+        return '';
+      }
+      if (!cfg.model) {
+        setStatus(modelRequestStatus, '请先填写模型 ID 再预览', 'warn');
+        return '';
+      }
+      var useResponses = isResponsesEndpoint(cfg);
+      var useCompat = cfg.responsesCompat === true;
+      var body;
+      if (useResponses) {
+        if (useCompat) {
+          body = {
+            model: cfg.model,
+            input: 'You are a helpful assistant.\n\nping',
+            stream: true,
+            max_output_tokens: cfg.maxTokens,
+          };
+        } else {
+          body = {
+            model: cfg.model,
+            input: [
+              { role: 'system', content: [{ type: 'input_text', text: 'You are a helpful assistant.' }] },
+              { role: 'user', content: [{ type: 'input_text', text: 'ping' }] },
+            ],
+            stream: false,
+            max_output_tokens: cfg.maxTokens,
+          };
+        }
+      } else {
+        body = {
+          model: cfg.model,
+          messages: [{ role: 'user', content: 'ping' }],
+          max_tokens: cfg.maxTokens,
+        };
+      }
+      if (modelRequestPreviewEl) {
+        modelRequestPreviewEl.value = JSON.stringify(body, null, 2);
+      }
+      setStatus(modelRequestStatus, '已生成连通性测试请求体（ping）', 'ok');
+      return modelRequestPreviewEl ? modelRequestPreviewEl.value : '';
+    }
+
+    function copyModelRequestPreview() {
+      var text = modelRequestPreviewEl ? modelRequestPreviewEl.value : '';
+      if (!text) {
+        text = buildModelRequestPreview();
+      }
+      if (!text) return;
+      if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+          setStatus(modelRequestStatus, '请求体已复制', 'ok');
+        }).catch(function() {
+          setStatus(modelRequestStatus, '复制失败，请手动复制', 'warn');
+        });
+        return;
+      }
+      if (modelRequestPreviewEl && modelRequestPreviewEl.select) {
+        modelRequestPreviewEl.focus();
+        modelRequestPreviewEl.select();
+        var ok = false;
+        try {
+          ok = document.execCommand('copy');
+        } catch (err) {
+          ok = false;
+        }
+        setStatus(modelRequestStatus, ok ? '请求体已复制' : '复制失败，请手动复制', ok ? 'ok' : 'warn');
+        return;
+      }
+      setStatus(modelRequestStatus, '复制失败，请手动复制', 'warn');
+    }
+
     function saveModel() {
       const maxTokensVal = parseInt(modelMaxTokensEl ? modelMaxTokensEl.value : defaultMaxTokens, 10);
       const editingModel = state.editingId ? findModelByAnyId(state.editingId) : null;
@@ -688,6 +801,8 @@
         name: modelDisplayNameEl ? modelDisplayNameEl.value.trim() || '未命名模型' : '未命名模型',
         provider: modelProviderEl ? modelProviderEl.value : 'custom',
         baseUrl: modelBaseUrlEl ? modelBaseUrlEl.value.trim() : '',
+        useProxy: Boolean(modelUseProxyEl && modelUseProxyEl.checked),
+        responsesCompat: Boolean(modelResponsesCompatEl && modelResponsesCompatEl.checked),
         apiKey: modelApiKeyEl ? modelApiKeyEl.value.trim() : '',
         model: modelIdentifierEl ? modelIdentifierEl.value.trim() : '',
         maxTokens: Number.isFinite(maxTokensVal) && maxTokensVal > 0 ? maxTokensVal : defaultMaxTokens,
@@ -1118,7 +1233,7 @@
     function modelIsR1(model) {
       const source = model && model.model ? model.model : '';
       const id = source ? source.toLowerCase() : '';
-      return id.includes('deepseek-r1') || id.includes('deepseek-reasoner');
+      return id.includes('deepseek');
     }
 
     function updateReasoningVisibility(type) {
@@ -1246,6 +1361,74 @@
       }
     }
 
+    function isResponsesEndpoint(model) {
+      var baseUrl = model && model.baseUrl ? String(model.baseUrl).toLowerCase() : '';
+      return baseUrl.indexOf('/responses') !== -1;
+    }
+
+    function extractResponsesOutput(data) {
+      if (!data || !Array.isArray(data.output)) return '';
+      for (var i = 0; i < data.output.length; i += 1) {
+        var item = data.output[i];
+        if (!item) continue;
+        var content = item.content;
+        if (typeof content === 'string' && content.trim()) return content;
+        if (Array.isArray(content)) {
+          for (var j = 0; j < content.length; j += 1) {
+            var part = content[j];
+            if (!part) continue;
+            if (typeof part === 'string' && part.trim()) return part;
+            if (typeof part.text === 'string' && part.text.trim()) return part.text;
+            if (typeof part.output_text === 'string' && part.output_text.trim()) return part.output_text;
+          }
+        }
+      }
+      return '';
+    }
+
+    function extractSseText(rawText) {
+      if (!rawText) return '';
+      var lines = String(rawText).split(/\r?\n/);
+      var result = '';
+      for (var i = 0; i < lines.length; i += 1) {
+        var line = lines[i];
+        if (!line) continue;
+        if (line.indexOf('data:') !== 0 && line.indexOf('data: ') !== 0) continue;
+        var payload = line.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        if (payload.indexOf('{') === 0 || payload.indexOf('[') === 0) {
+          try {
+            var parsed = JSON.parse(payload);
+            var text =
+              (parsed && parsed.delta && typeof parsed.delta === 'string' ? parsed.delta : '') ||
+              (parsed && parsed.delta && typeof parsed.delta === 'object' && parsed.delta.text ? parsed.delta.text : '') ||
+              (parsed && parsed.delta && typeof parsed.delta === 'object' && parsed.delta.output_text ? parsed.delta.output_text : '') ||
+              (parsed && parsed.output_text) ||
+              (parsed && parsed.text) ||
+              (parsed && parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) ||
+              (parsed && parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.reasoning_content) ||
+              extractResponsesOutput(parsed.response) ||
+              extractResponsesOutput(parsed);
+            if (text) result += text;
+          } catch (err) {
+            result += payload;
+          }
+        } else {
+          result += payload;
+        }
+      }
+      return result.trim();
+    }
+
+    function shouldRetryMissingRequiredFields(rawBody) {
+      if (!rawBody) return false;
+      const text = String(rawBody);
+      if (/missing_required_fields/i.test(text)) return true;
+      if (/messages[\s\S]{0,80}input/i.test(text)) return true;
+      if (/input[\s\S]{0,80}messages/i.test(text)) return true;
+      return false;
+    }
+
     async function testModel(id, statusEl) {
       const model = getModelById(id);
       if (!model) {
@@ -1254,26 +1437,105 @@
       }
       setStatus(statusEl, '正在测试模型...', '');
       try {
-        const body = {
+        const useResponses = isResponsesEndpoint(model);
+        const compatFlag = model.responsesCompat;
+        const useCompat = compatFlag === true || compatFlag === 'true' || compatFlag === 1 || compatFlag === '1';
+        const bodyCompat = {
           model: model.model,
-          messages: [{ role: 'user', content: 'ping' }],
-          max_tokens: 16,
+          input: 'ping',
+          stream: true,
+          max_output_tokens: 16,
         };
+        const bodyBlocks = {
+          model: model.model,
+          input: [{ role: 'user', content: [{ type: 'input_text', text: 'ping' }] }],
+          stream: false,
+          max_output_tokens: 16,
+        };
+        const body = useResponses
+          ? (useCompat ? bodyCompat : bodyBlocks)
+          : { model: model.model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 16 };
         const headers = { 'Content-Type': 'application/json' };
         if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`;
-        const res = await fetch(model.baseUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const proxyFlag = model.useProxy;
+        const useProxy = proxyFlag === true || proxyFlag === 'true' || proxyFlag === 1 || proxyFlag === '1';
+        async function sendRequest(payloadBody) {
+          if (useProxy) {
+            if (!api || typeof api.proxyModelCall !== 'function') {
+              throw new Error('后端转发不可用');
+            }
+            if (typeof api.getStoredToken === 'function' && typeof api.setToken === 'function') {
+              var stored = api.getStoredToken();
+              if (stored) api.setToken(stored);
+            }
+            const timeoutSec = state && state.settings && state.settings.timeoutSec ? state.settings.timeoutSec : 300;
+            return api.proxyModelCall({
+              base_url: model.baseUrl,
+              headers: headers,
+              body: payloadBody,
+              timeout_sec: timeoutSec,
+            });
+          }
+          return fetch(model.baseUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payloadBody),
+          });
+        }
+        let res = await sendRequest(body);
+        let rawBody = '';
+        if (!res.ok) {
+          let errText = '';
+          try {
+            errText = await res.text();
+          } catch (err) {
+            errText = '';
+          }
+          if (useResponses && shouldRetryMissingRequiredFields(errText)) {
+            const fallbackBody = useCompat ? bodyBlocks : bodyCompat;
+            res = await sendRequest(fallbackBody);
+            if (!res.ok) {
+              let retryText = '';
+              try {
+                retryText = await res.text();
+              } catch (err) {
+                retryText = '';
+              }
+              const detail = retryText ? `：${String(retryText).slice(0, 200)}` : '';
+              throw new Error(`HTTP ${res.status}${detail}`);
+            }
+            rawBody = await res.text();
+          } else {
+            const detail = errText ? `：${String(errText).slice(0, 200)}` : '';
+            throw new Error(`HTTP ${res.status}${detail}`);
+          }
+        } else {
+          rawBody = await res.text();
+        }
+        let data = null;
+        if (rawBody) {
+          try {
+            data = JSON.parse(rawBody);
+          } catch (err) {
+            data = null;
+          }
+        }
         const hasChoices = data && data.choices && data.choices.length;
-        const ok = hasChoices || (data && data.output_text) || (data && data.data);
-        setStatus(statusEl, ok ? '测试成功，模型可用' : '连接成功但返回为空，请检查返回格式', ok ? 'ok' : 'warn');
+        const responsesOutput = extractResponsesOutput(data);
+        const sseText = !data ? extractSseText(rawBody) : '';
+        const ok = hasChoices || Boolean(responsesOutput) || (data && data.output_text) || (data && data.data);
+        if (ok || sseText) {
+          setStatus(statusEl, sseText ? '测试成功（SSE 响应）' : '测试成功，模型可用', 'ok');
+        } else {
+          setStatus(statusEl, '连接成功但返回为空，请检查返回格式', 'warn');
+        }
       } catch (err) {
         console.error(err);
-        setStatus(statusEl, `测试失败：${err.message || err}`, 'err');
+        let msg = err && err.message ? err.message : err;
+        if (msg === 'Failed to fetch') {
+          msg = 'Failed to fetch（可能是跨域/CORS 或接口不可达）';
+        }
+        setStatus(statusEl, `测试失败：${msg}`, 'err');
       }
     }
 
@@ -1295,6 +1557,12 @@
     }
     if (saveAssignmentsTopBtn) {
       saveAssignmentsTopBtn.addEventListener('click', saveAssignments);
+    }
+    if (previewModelRequestBtn) {
+      previewModelRequestBtn.addEventListener('click', buildModelRequestPreview);
+    }
+    if (copyModelRequestBtn) {
+      copyModelRequestBtn.addEventListener('click', copyModelRequestPreview);
     }
 
     loadModels();

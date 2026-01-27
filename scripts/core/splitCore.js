@@ -5,6 +5,8 @@
     var normalizeRequirementName = deps && deps.normalizeRequirementName ? deps.normalizeRequirementName : function(text) { return text || ''; };
     var unwrapRequirementPayload = deps && deps.unwrapRequirementPayload ? deps.unwrapRequirementPayload : function(text) { return { payload: text }; };
     var stripCodeFence = deps && deps.stripCodeFence ? deps.stripCodeFence : function(text) { return text || ''; };
+    var repairLooseNewlines = deps && deps.repairLooseNewlines ? deps.repairLooseNewlines : function(text) { return text || ''; };
+    var extractJsonPayload = deps && deps.extractJsonPayload ? deps.extractJsonPayload : function(text) { return text || ''; };
 
     function pickFirstString(source, aliases) {
       if (!source) return '';
@@ -100,15 +102,38 @@
       };
     }
 
+    function normalizeParsedPayload(parsed) {
+      if (typeof parsed !== 'string') return parsed;
+      var inner = repairLooseNewlines(parsed || '');
+      if (!inner || !/^[\[{]/.test(inner)) return parsed;
+      try {
+        return JSON.parse(inner);
+      } catch (err) {
+        if (extractJsonPayload) {
+          var extracted = extractJsonPayload(inner);
+          if (extracted) {
+            try {
+              return JSON.parse(extracted);
+            } catch (err2) {
+              return parsed;
+            }
+          }
+        }
+      }
+      return parsed;
+    }
+
     function parseSplitModules(rawText, setRequirementLabel) {
       var unwrap = unwrapRequirementPayload(stripCodeFence(rawText || ''));
       var payload = unwrap.payload;
       var raw = typeof payload === 'string' ? stripCodeFence(payload).trim() : payload ? JSON.stringify(payload, null, 2) : '';
+      raw = repairLooseNewlines(raw);
       if (!raw) return [];
       var labelFromPayload = unwrap.requirement ? normalizeRequirementName(unwrap.requirement) : '';
       if (labelFromPayload && typeof setRequirementLabel === 'function') setRequirementLabel(labelFromPayload, 'import');
       try {
         var data = typeof payload === 'string' ? JSON.parse(raw) : payload;
+        data = normalizeParsedPayload(data);
         var modulesField = data && data.modules;
         var dataField = data && data.data;
         var arr = Array.isArray(data)
@@ -126,8 +151,29 @@
         }
       } catch (err) {
         try {
-          var patched = raw.replace(/}\\s*,\\s*\"/g, '],\n  \"');
+          var extracted = extractJsonPayload(raw);
+          if (extracted) {
+            var parsed = JSON.parse(extracted);
+            parsed = normalizeParsedPayload(parsed);
+            var modulesFieldExtracted = parsed && parsed.modules;
+            var dataFieldExtracted = parsed && parsed.data;
+            var arrExtracted = Array.isArray(parsed)
+              ? parsed
+              : Array.isArray(modulesFieldExtracted)
+              ? modulesFieldExtracted
+              : Array.isArray(dataFieldExtracted)
+              ? dataFieldExtracted
+              : null;
+            if (arrExtracted) return arrExtracted.map(normalizeModuleObject).filter(Boolean);
+            if (parsed && typeof parsed === 'object') {
+              return Object.entries(parsed).map(function(pair, idx) {
+                return normalizeModuleBlocks(pair[0], pair[1], idx);
+              }).filter(Boolean);
+            }
+          }
+          var patched = repairLooseNewlines(raw).replace(/}\\s*,\\s*\"/g, '],\n  \"');
           var patchedData = JSON.parse(patched);
+          patchedData = normalizeParsedPayload(patchedData);
           var modulesFieldPatched = patchedData && patchedData.modules;
           var dataFieldPatched = patchedData && patchedData.data;
           var arrPatched = Array.isArray(patchedData)

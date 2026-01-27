@@ -45,6 +45,8 @@ test.describe('模型管理与全局设置', () => {
     await expect(formWrapper).toBeVisible();
     await page.fill('#modelDisplayName', 'UI自动化模型');
     await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
+    await page.check('#modelUseProxy');
+    await page.check('#modelResponsesCompat');
     await page.fill('#modelApiKey', 'sk-test');
     await page.fill('#modelIdentifier', 'deepseek-test');
     await page.fill('#modelMaxTokens', '2048');
@@ -52,11 +54,62 @@ test.describe('模型管理与全局设置', () => {
     await expect(page.locator('#modelFormStatus')).toContainText('模型已保存');
     await expect(formWrapper).toHaveClass(/hidden/);
     await expect(page.locator('#modelList')).toContainText('UI自动化模型');
+    const stored = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]'));
+    expect(stored[0].useProxy).toBe(true);
+    expect(stored[0].responsesCompat).toBe(true);
 
     await page.click('#createModelBtn');
     await page.fill('#modelDisplayName', '表单重置模型');
     await page.click('#resetModelForm');
     await expect(formWrapper).toHaveClass(/hidden/);
+  });
+
+  test('仅 deepseek 模型展示 reasoning 选项', async ({ page }) => {
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('models'); });
+    await page.click('#createModelBtn');
+    await page.fill('#modelDisplayName', 'GPT 模型');
+    await page.fill('#modelBaseUrl', 'https://example.com/v1/responses');
+    await page.fill('#modelApiKey', 'sk-test');
+    await page.fill('#modelIdentifier', 'gpt-5.2');
+    await page.fill('#modelMaxTokens', '1024');
+    await page.click('#saveModelBtn');
+
+    await page.click('#createModelBtn');
+    await page.fill('#modelDisplayName', 'DeepSeek 模型');
+    await page.fill('#modelBaseUrl', 'https://api.deepseek.com/chat/completions');
+    await page.fill('#modelApiKey', 'sk-test');
+    await page.fill('#modelIdentifier', 'deepseek-r1');
+    await page.fill('#modelMaxTokens', '1024');
+    await page.click('#saveModelBtn');
+
+    const ids = await page.evaluate(() => {
+      const models = JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]');
+      const gpt = models.find(item => item && item.name === 'GPT 模型');
+      const deepseek = models.find(item => item && item.name === 'DeepSeek 模型');
+      return { gpt: gpt ? gpt.id : '', deepseek: deepseek ? deepseek.id : '' };
+    });
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
+    const reasoningRow = page.locator('[data-reasoning="clean"]');
+    await page.selectOption('#cleanModelSelect', ids.gpt);
+    await expect(reasoningRow).toHaveClass(/hidden/);
+    await page.selectOption('#cleanModelSelect', ids.deepseek);
+    await expect(reasoningRow).not.toHaveClass(/hidden/);
+  });
+
+  test('模型请求体预览可生成 responses 结构', async ({ page }) => {
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('models'); });
+    await page.click('#createModelBtn');
+    await page.fill('#modelDisplayName', '预览模型');
+    await page.fill('#modelBaseUrl', 'https://example.com/v1/responses');
+    await page.fill('#modelIdentifier', 'gpt-5.2');
+    await page.fill('#modelMaxTokens', '512');
+    await page.click('#previewModelRequestBtn');
+    const previewValue = await page.locator('#modelRequestPreview').inputValue();
+    const payload = JSON.parse(previewValue || '{}');
+    expect(Array.isArray(payload.input)).toBe(true);
+    expect(payload.stream).toBe(false);
+    expect(payload.max_output_tokens).toBe(512);
   });
 
   test('全局设置保存与列/分页逻辑', async ({ page }) => {

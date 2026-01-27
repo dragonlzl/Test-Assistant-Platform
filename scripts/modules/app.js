@@ -337,7 +337,14 @@
     } = requirementApi;
 
     const splitCore = window.app && window.app.splitCore && typeof window.app.splitCore.init === 'function'
-      ? window.app.splitCore.init({ moduleFieldAliases, normalizeRequirementName, unwrapRequirementPayload, stripCodeFence })
+      ? window.app.splitCore.init({
+        moduleFieldAliases,
+        normalizeRequirementName,
+        unwrapRequirementPayload,
+        stripCodeFence,
+        repairLooseNewlines: appUtils.repairLooseNewlines,
+        extractJsonPayload,
+      })
       : null;
     const pickFirstString = splitCore && splitCore.pickFirstString ? splitCore.pickFirstString : function pickFirstStringFallback() { return ''; };
     const pickFirstValue = splitCore && splitCore.pickFirstValue ? splitCore.pickFirstValue : function pickFirstValueFallback() { return undefined; };
@@ -355,6 +362,7 @@
         : null;
 
     const modelClientService = window.app && window.app.services && window.app.services.modelClient;
+    const apiClient = window.app && window.app.apiClient ? window.app.apiClient : null;
 
     function getConfiguredTimeoutSec() {
       const storedTimeout = state.settings && Object.prototype.hasOwnProperty.call(state.settings, 'timeoutSec')
@@ -365,7 +373,18 @@
 
     function isR1Model(model) {
       const source = model && model.model ? String(model.model).toLowerCase() : '';
-      return source.includes('deepseek-r1') || source.includes('deepseek-reasoner');
+      return source.includes('deepseek');
+    }
+
+    function proxyModelCall(payload) {
+      if (!apiClient || typeof apiClient.proxyModelCall !== 'function') {
+        return Promise.reject(new Error('后端转发不可用'));
+      }
+      if (typeof apiClient.getStoredToken === 'function' && typeof apiClient.setToken === 'function') {
+        var stored = apiClient.getStoredToken();
+        if (stored) apiClient.setToken(stored);
+      }
+      return apiClient.proxyModelCall(payload || {});
     }
 
     const modelClient = modelClientService && typeof modelClientService.createModelClient === 'function'
@@ -376,6 +395,7 @@
         getTimeoutSec: getConfiguredTimeoutSec,
         modelIsR1: isR1Model,
         stripCodeFence,
+        proxyCall: proxyModelCall,
       })
       : null;
 
@@ -518,6 +538,8 @@
           apiKey: model.apiKey || '',
           model: model.model || '',
           maxTokens: model.maxTokens,
+          useProxy: Boolean(model.useProxy),
+          responsesCompat: Boolean(model.responsesCompat),
         };
       }
 
@@ -854,6 +876,8 @@
           apiKey: model.apiKey || '',
           model: model.model || '',
           maxTokens: model.maxTokens,
+          useProxy: Boolean(model.useProxy),
+          responsesCompat: Boolean(model.responsesCompat),
         };
       }
 
@@ -1757,7 +1781,11 @@
         state,
         setStatus,
         config: { defaultPrompts },
-        utils: { escapeHtml, appendPromptHint: appUtils.appendPromptHint },
+        utils: {
+          escapeHtml,
+          appendPromptHint: appUtils.appendPromptHint,
+          repairLooseNewlines: appUtils.repairLooseNewlines,
+        },
         handlers: {
           updateAutoMissingCard: proxyApi('updateAutoMissingCard'),
           ensureRequirementLabel,
@@ -1890,6 +1918,7 @@
           wrapTextWithRequirement,
           formatJsonOrText,
           stripCodeFence,
+          extractJsonPayload: appUtils.extractJsonPayload,
           unwrapRequirementPayload,
           extractRequirementLabelFromText,
           setRequirementLabel,
@@ -1956,7 +1985,12 @@
 
     const casesCore = window.app && window.app.casesCore && typeof window.app.casesCore.init === 'function'
       ? window.app.casesCore.init({
-        deps: { extractJsonObjects },
+        deps: {
+          extractJsonObjects,
+          repairLooseNewlines: appUtils.repairLooseNewlines,
+          extractJsonPayload: appUtils.extractJsonPayload,
+          stripAnsiControl: appUtils.stripAnsiControl,
+        },
         state,
         dom,
         handlers: {
@@ -2229,6 +2263,9 @@
           downloadText,
           downloadBlob,
           stripCodeFence,
+          extractJsonPayload: appUtils.extractJsonPayload,
+          repairLooseNewlines: appUtils.repairLooseNewlines,
+          stripAnsiControl: appUtils.stripAnsiControl,
           unwrapRequirementPayload,
           extractRequirementLabelFromText,
           promptRequirementLabel,
@@ -2687,15 +2724,30 @@
 
     function parseCoveragePayloadFromText(text, expectedType) {
       var content = text && text.trim ? text.trim() : '';
+      if (appUtils.repairLooseNewlines) content = appUtils.repairLooseNewlines(content);
       if (!content) return null;
       try {
         var unwrap = unwrapRequirementPayload ? unwrapRequirementPayload(content) : { payload: content };
         if (expectedType && unwrap.type && unwrap.type !== expectedType) return null;
         var payload = typeof unwrap.payload === 'string' ? unwrap.payload : unwrap.payload;
         if (!payload) return null;
+        if (typeof payload === 'string' && appUtils.repairLooseNewlines) {
+          payload = appUtils.repairLooseNewlines(payload);
+        }
         var parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
         return pickCoveragePayload(parsed);
       } catch (err) {
+        if (appUtils.extractJsonPayload) {
+          try {
+            var extracted = appUtils.extractJsonPayload(content);
+            if (extracted) {
+              var fallback = JSON.parse(extracted);
+              return pickCoveragePayload(fallback);
+            }
+          } catch (inner) {
+            // ignore
+          }
+        }
         console.warn('覆盖数据解析失败', err);
         return null;
       }
@@ -2756,6 +2808,19 @@
         } catch (err) {
           parsed = null;
         }
+        if (!parsed && reviewCoreModule && typeof reviewCoreModule.tryParseReviewJson === 'function') {
+          var repaired = reviewCoreModule.tryParseReviewJson(basePayload);
+          if (repaired && repaired.parsed !== null && repaired.parsed !== undefined) {
+            parsed = repaired.parsed;
+            if (repaired.repaired && reviewResultEl) {
+              try {
+                reviewResultEl.value = JSON.stringify(parsed, null, 2);
+              } catch (err) {
+                // ignore
+              }
+            }
+          }
+        }
         if (parsed && parsed.data && Array.isArray(parsed.data)) {
           parsed = parsed.data;
         }
@@ -2786,6 +2851,19 @@
         } catch (err) {
           parsed = null;
         }
+        if (!parsed && cleanCore && typeof cleanCore.tryParseCleanJson === 'function') {
+          var repaired = cleanCore.tryParseCleanJson(raw);
+          if (repaired && repaired.parsed !== null && repaired.parsed !== undefined) {
+            parsed = repaired.parsed;
+            if (repaired.repaired && cleanedTextEl) {
+              try {
+                cleanedTextEl.value = JSON.stringify(parsed, null, 2);
+              } catch (err) {
+                // ignore
+              }
+            }
+          }
+        }
         if (parsed && parsed.payload && typeof parsed.payload === 'object' && !Array.isArray(parsed.payload)) {
           parsed = parsed.payload;
         }
@@ -2794,10 +2872,24 @@
       return applyValidationFailure('clean', !valid);
     }
 
+    function normalizeCoverageResultText(targetEl) {
+      if (!targetEl) return '';
+      var raw = targetEl.value ? targetEl.value.trim() : '';
+      if (!raw) return '';
+      if (appUtils.repairLooseNewlines) {
+        var repaired = appUtils.repairLooseNewlines(raw);
+        if (repaired && repaired !== raw) {
+          targetEl.value = repaired;
+          return repaired;
+        }
+      }
+      return raw;
+    }
+
     function validateCompareResult() {
       var targetEl = compareResultEl || (typeof document !== 'undefined' ? document.getElementById('compareResult') : null);
       if (!targetEl || isStepLocked('compare')) return false;
-      var text = targetEl.value ? targetEl.value.trim() : '';
+      var text = normalizeCoverageResultText(targetEl);
       if (!text) return applyValidationFailure('compare', false);
       var payload = parseCoveragePayloadFromText(text, 'compare');
       var valid = Boolean(payload) && isCoveragePayload(payload) && clampCoveragePercent(payload.coverage) !== null;
@@ -2817,7 +2909,7 @@
     function validateCasesResult() {
       var targetEl = casesCompareResultEl || (typeof document !== 'undefined' ? document.getElementById('casesCompareResult') : null);
       if (!targetEl || isStepLocked('cases')) return false;
-      var text = targetEl.value ? targetEl.value.trim() : '';
+      var text = normalizeCoverageResultText(targetEl);
       if (!text) return applyValidationFailure('cases', false);
       var payload = parseCoveragePayloadFromText(text, 'cases_compare');
       var valid = Boolean(payload) && isCoveragePayload(payload) && clampCoveragePercent(payload.coverage) !== null;

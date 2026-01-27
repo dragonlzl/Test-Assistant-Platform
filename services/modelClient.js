@@ -69,6 +69,99 @@
     return String(content).trim();
   }
 
+  function extractResponsesOutput(data) {
+    if (!data || !Array.isArray(data.output)) return '';
+    for (var i = 0; i < data.output.length; i += 1) {
+      var item = data.output[i];
+      if (!item) continue;
+      var content = item.content;
+      if (typeof content === 'string' && content.trim()) return content;
+      if (Array.isArray(content)) {
+        for (var j = 0; j < content.length; j += 1) {
+          var part = content[j];
+          if (!part) continue;
+          if (typeof part === 'string' && part.trim()) return part;
+          if (typeof part.text === 'string' && part.text.trim()) return part.text;
+          if (typeof part.output_text === 'string' && part.output_text.trim()) return part.output_text;
+        }
+      }
+    }
+    return '';
+  }
+
+  function isSsePayload(rawText) {
+    if (!rawText) return false;
+    return /(^|\n)\s*(event|data):/i.test(String(rawText));
+  }
+
+  function extractSseEventText(obj) {
+    if (!obj) return '';
+    if (typeof obj.delta === 'string') return obj.delta;
+    if (obj.delta && typeof obj.delta === 'object') {
+      if (typeof obj.delta.text === 'string') return obj.delta.text;
+      if (typeof obj.delta.output_text === 'string') return obj.delta.output_text;
+      if (typeof obj.delta.content === 'string') return obj.delta.content;
+      var nestedDelta = getNestedValue(obj.delta, ['content', 0, 'text']);
+      if (nestedDelta) return normalizeResponseContent(nestedDelta);
+    }
+    if (typeof obj.output_text === 'string') return obj.output_text;
+    if (typeof obj.text === 'string') return obj.text;
+    var nested =
+      getNestedValue(obj, ['choices', 0, 'delta', 'content']) ||
+      getNestedValue(obj, ['choices', 0, 'delta', 'reasoning_content']) ||
+      getNestedValue(obj, ['choices', 0, 'message', 'content']) ||
+      getNestedValue(obj, ['choices', 0, 'text']);
+    if (nested) return normalizeResponseContent(nested);
+    var responseText = extractResponsesOutput(obj.response);
+    if (responseText) return responseText;
+    var outputText = extractResponsesOutput(obj);
+    if (outputText) return outputText;
+    return '';
+  }
+
+  function extractSseText(rawText) {
+    if (!rawText) return '';
+    var lines = String(rawText).split(/\r?\n/);
+    var result = '';
+    for (var i = 0; i < lines.length; i += 1) {
+      var line = lines[i];
+      if (!line) continue;
+      if (line.indexOf('data:') !== 0 && line.indexOf('data: ') !== 0) continue;
+      var payload = line.slice(5).trim();
+      if (!payload || payload === '[DONE]') continue;
+      if (payload.indexOf('{') === 0 || payload.indexOf('[') === 0) {
+        try {
+          var parsed = JSON.parse(payload);
+          var piece = extractSseEventText(parsed);
+          if (piece) result += piece;
+        } catch (err) {
+          result += payload;
+        }
+      } else {
+        result += payload;
+      }
+    }
+    return result.trim();
+  }
+
+  function shouldRetryMissingRequiredFields(rawBody) {
+    if (!rawBody) return false;
+    var text = String(rawBody);
+    if (/missing_required_fields/i.test(text)) return true;
+    if (/messages[\s\S]{0,80}input/i.test(text)) return true;
+    if (/input[\s\S]{0,80}messages/i.test(text)) return true;
+    return false;
+  }
+
+  function shouldRetryServiceUnavailable(rawBody) {
+    if (!rawBody) return false;
+    var text = String(rawBody);
+    if (/service_unavailable_error/i.test(text)) return true;
+    if (/service unavailable/i.test(text)) return true;
+    if (/供应商暂时不可用/.test(text)) return true;
+    return false;
+  }
+
   function createModelClient(options) {
     var defaultPrompts = options && options.defaultPrompts ? options.defaultPrompts : {};
     var defaultMaxTokens = options && options.defaultMaxTokens ? options.defaultMaxTokens : 1024;
@@ -91,6 +184,7 @@
       : function getAuthHeader(apiKey) {
           return apiKey ? { Authorization: 'Bearer ' + apiKey } : {};
         };
+    var proxyCall = typeof options.proxyCall === 'function' ? options.proxyCall : null;
     var stripCodeFence = resolveStripCodeFence(options);
     var modelIsDeepseek = typeof options.modelIsDeepseek === 'function'
       ? options.modelIsDeepseek
@@ -102,6 +196,12 @@
           if (baseUrl.indexOf('deepseek') !== -1) return true;
           var name = model.model ? String(model.model).toLowerCase() : '';
           return name.indexOf('deepseek') !== -1;
+        };
+    var isResponsesEndpoint = typeof options.isResponsesEndpoint === 'function'
+      ? options.isResponsesEndpoint
+      : function isResponsesEndpoint(model) {
+          var baseUrl = model && model.baseUrl ? String(model.baseUrl).toLowerCase() : '';
+          return baseUrl.indexOf('/responses') !== -1;
         };
 
     function shouldUseDeepseekJsonMode(model, promptText) {
@@ -168,61 +268,164 @@
       var maxTokens = model.maxTokens || defaultMaxTokens;
       var tempValue = Number(temperature);
       var safeTemperature = Number.isFinite(tempValue) ? Math.min(1, Math.max(0, tempValue)) : 0.2;
-      var body = {
-        model: model.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userText }
-        ],
-        temperature: safeTemperature,
-        max_tokens: maxTokens,
-      };
+      var useResponses = isResponsesEndpoint(model);
+      var compatFlag = model && model.responsesCompat;
+      var useResponsesCompat = compatFlag === true || compatFlag === 'true' || compatFlag === 1 || compatFlag === '1';
+      var proxyFlag = model && model.useProxy;
+      var useProxy = proxyFlag === true || proxyFlag === 'true' || proxyFlag === 1 || proxyFlag === '1';
+      var body;
+      var responsesBlocksBody = null;
+      var responsesStringBody = null;
+      if (useResponses) {
+        var responsesBlocksInput = [];
+        if (systemPrompt) {
+          responsesBlocksInput.push({
+            role: 'system',
+            content: [{ type: 'input_text', text: systemPrompt }],
+          });
+        }
+        responsesBlocksInput.push({
+          role: 'user',
+          content: [{ type: 'input_text', text: userText || '' }],
+        });
+        responsesBlocksBody = {
+          model: model.model,
+          input: responsesBlocksInput,
+          temperature: safeTemperature,
+          stream: false,
+          max_output_tokens: maxTokens,
+        };
+        responsesStringBody = {
+          model: model.model,
+          input: systemPrompt ? (systemPrompt + '\n\n' + (userText || '')) : (userText || ''),
+          temperature: safeTemperature,
+          stream: true,
+          max_output_tokens: maxTokens,
+        };
+        body = useResponsesCompat ? responsesStringBody : responsesBlocksBody;
+      } else {
+        body = {
+          model: model.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userText }
+          ],
+          temperature: safeTemperature,
+          max_tokens: maxTokens,
+        };
+      }
       if (reasoningEffort && modelIsR1(model)) {
         body.reasoning_effort = reasoningEffort;
+        if (responsesStringBody) responsesStringBody.reasoning_effort = reasoningEffort;
+        if (responsesBlocksBody) responsesBlocksBody.reasoning_effort = reasoningEffort;
       }
-      if (deepseekJsonMode) {
+      if (deepseekJsonMode && !useResponses) {
         body.response_format = { type: 'json_object' };
       }
       var headers = Object.assign({ 'Content-Type': 'application/json' }, getAuthHeader(model.apiKey));
       var timeoutSec = clampTimeoutSeconds(getTimeoutSec());
       var timeoutMs = timeoutSec * 1000;
-      var controller = typeof AbortController === 'function' ? new AbortController() : null;
-      var timer = null;
-      if (controller) {
-        timer = setTimeout(function onTimeout() { controller.abort('timeout'); }, timeoutMs);
+      async function performRequest(payloadBody) {
+        var controller = typeof AbortController === 'function' ? new AbortController() : null;
+        var timer = null;
+        if (controller) {
+          timer = setTimeout(function onTimeout() { controller.abort('timeout'); }, timeoutMs);
+        }
+        try {
+          if (useProxy) {
+            if (!proxyCall) {
+              throw new Error('后端转发不可用，请检查服务或关闭“后端转发”选项');
+            }
+            return await proxyCall({
+              base_url: model.baseUrl,
+              headers: headers,
+              body: payloadBody,
+              timeout_sec: timeoutSec,
+            });
+          }
+          return await fetchImpl(model.baseUrl, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(payloadBody),
+            signal: controller ? controller.signal : undefined,
+          });
+        } catch (err) {
+          if (err && err.name === 'AbortError') {
+            throw new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
+          }
+          throw err;
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      }
+      async function readResponseText(response) {
+        try {
+          return response && typeof response.text === 'function' ? await response.text() : '';
+        } catch (err) {
+          return '';
+        }
+      }
+      function cloneBody(source) {
+        if (!source) return null;
+        try {
+          return JSON.parse(JSON.stringify(source));
+        } catch (err) {
+          return source;
+        }
       }
       var res;
       var rawBody = '';
-      try {
-        res = await fetchImpl(model.baseUrl, {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify(body),
-          signal: controller ? controller.signal : undefined,
-        });
-      } catch (err) {
-        if (err && err.name === 'AbortError') {
-          throw new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
-        }
-        throw err;
-      } finally {
-        if (timer) clearTimeout(timer);
-      }
+      res = await performRequest(body);
       if (!res || !res.ok) {
-        try {
-          rawBody = res && typeof res.text === 'function' ? await res.text() : '';
-        } catch (err) {
-          rawBody = '';
+        rawBody = await readResponseText(res);
+        if (useResponses && shouldRetryMissingRequiredFields(rawBody)) {
+          var fallbackBody = useResponsesCompat ? responsesBlocksBody : responsesStringBody;
+          if (fallbackBody) {
+            res = await performRequest(fallbackBody);
+            if (!res || !res.ok) {
+              rawBody = await readResponseText(res);
+              var retryErrText = rawBody ? ('：' + rawBody.slice(0, 200)) : '';
+              throw new Error('HTTP ' + (res ? res.status : '未知') + retryErrText);
+            }
+            rawBody = await readResponseText(res);
+          } else {
+            var errText = rawBody ? ('：' + rawBody.slice(0, 200)) : '';
+            throw new Error('HTTP ' + (res ? res.status : '未知') + errText);
+          }
+        } else if (useResponses && shouldRetryServiceUnavailable(rawBody)) {
+          var hasReasoning = body && body.reasoning_effort !== undefined && body.reasoning_effort !== null;
+          if (hasReasoning) {
+            var strippedBody = cloneBody(body);
+            if (strippedBody && strippedBody.reasoning_effort !== undefined) {
+              delete strippedBody.reasoning_effort;
+            }
+            res = await performRequest(strippedBody || body);
+            if (!res || !res.ok) {
+              rawBody = await readResponseText(res);
+              var stripErrText = rawBody ? ('：' + rawBody.slice(0, 200)) : '';
+              throw new Error('HTTP ' + (res ? res.status : '未知') + stripErrText);
+            }
+            rawBody = await readResponseText(res);
+          } else {
+            var errTextReduced = rawBody ? ('：' + rawBody.slice(0, 200)) : '';
+            throw new Error('HTTP ' + (res ? res.status : '未知') + errTextReduced);
+          }
+        } else {
+          var errTextFinal = rawBody ? ('：' + rawBody.slice(0, 200)) : '';
+          throw new Error('HTTP ' + (res ? res.status : '未知') + errTextFinal);
         }
-        var errText = rawBody ? ('：' + rawBody.slice(0, 200)) : '';
-        throw new Error('HTTP ' + (res ? res.status : '未知') + errText);
+      } else {
+        rawBody = await readResponseText(res);
       }
-      rawBody = await res.text();
       var data = null;
       if (rawBody) {
         try {
           data = JSON.parse(rawBody);
         } catch (err) {
+          if (isSsePayload(rawBody)) {
+            var sseText = extractSseText(rawBody);
+            if (sseText) return stripCodeFence(sseText);
+          }
           var trimmed = rawBody.trim();
           if (trimmed) {
             var sanitizedRaw = stripCodeFence(trimmed);
@@ -243,6 +446,7 @@
         return stripCodeFence(normalized);
       }
       var content =
+        normalizeAndStrip(extractResponsesOutput(data)) ||
         normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'content'])) ||
         normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'reasoning_content'])) ||
         normalizeAndStrip(getNestedValue(data, ['choices', 0, 'delta', 'content'])) ||

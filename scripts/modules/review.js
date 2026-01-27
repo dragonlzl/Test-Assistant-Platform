@@ -132,7 +132,7 @@
     if (autoClarifyToggle && typeof updateAutoClarifyVisibility === 'function') {
       autoClarifyToggle.addEventListener('change', function(e) {
         var checked = Boolean(e && e.target && e.target.checked);
-        updateAutoClarifyVisibility(checked, { resetDismissed: false });
+        updateAutoClarifyVisibility(checked, { resetDismissed: false, source: 'toggle' });
       });
     }
 

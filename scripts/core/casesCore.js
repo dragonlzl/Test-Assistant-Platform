@@ -3,6 +3,9 @@
     ctx = ctx || {};
     var deps = ctx.deps || ctx;
     var extractJsonObjects = deps && deps.extractJsonObjects ? deps.extractJsonObjects : function() { return []; };
+    var repairLooseNewlines = deps && deps.repairLooseNewlines ? deps.repairLooseNewlines : function(text) { return text || ''; };
+    var extractJsonPayload = deps && deps.extractJsonPayload ? deps.extractJsonPayload : function(text) { return text || ''; };
+    var stripAnsiControl = deps && deps.stripAnsiControl ? deps.stripAnsiControl : function(text) { return text || ''; };
     var state = ctx.state || {};
     var dom = ctx.dom || {};
     var handlers = ctx.handlers || {};
@@ -44,9 +47,13 @@
       if (!text || typeof text !== 'string') return [];
       var trimmed = text.trim();
       if (!trimmed) return [];
-      var codeMatch = trimmed.match(/```(?:json)?([\s\S]*?)```/i);
-      var primary = codeMatch ? codeMatch[1].trim() : trimmed.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+      var cleaned = repairLooseNewlines(stripAnsiControl(trimmed));
+      var codeMatch = cleaned.match(/```(?:json)?([\s\S]*?)```/i);
+      var primary = codeMatch ? codeMatch[1].trim() : cleaned.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+      primary = repairLooseNewlines(primary);
       var snippets = [primary];
+      var extracted = extractJsonPayload(primary);
+      if (extracted && extracted !== primary) snippets.push(extracted);
       var arraySlice = (function() {
         var start = primary.indexOf('[');
         var end = primary.lastIndexOf(']');
@@ -64,6 +71,16 @@
         if (!snippet) continue;
         try {
           var data = JSON.parse(snippet);
+          if (typeof data === 'string') {
+            var inner = repairLooseNewlines(data);
+            if (inner && /^[\[{]/.test(inner)) {
+              try {
+                data = JSON.parse(inner);
+              } catch (err) {
+                data = data;
+              }
+            }
+          }
           var casesField = data && data.cases;
           var dataField = data && data.data;
           var arr = Array.isArray(data)
@@ -80,7 +97,7 @@
           continue;
         }
       }
-      var recovered = extractJsonObjects(primary);
+      var recovered = extractJsonObjects(repairLooseNewlines(primary));
       if (recovered.length) return recovered;
       console.warn('用例 JSON 解析失败', text);
       return [];

@@ -158,6 +158,20 @@ test.describe('一键执行等待状态', () => {
     await expect(cleanStep.locator('.step-status')).toHaveAttribute('data-status', 'failed');
   });
 
+  test('评审结果格式异常时澄清区提示异常', async ({ page }) => {
+    await page.evaluate(() => {
+      var review = document.getElementById('reviewResult');
+      if (review) review.value = '评审输出包含非 JSON 内容';
+      if (window.app && window.app.state) {
+        window.app.state.reviewRows = [];
+        window.app.state.autoRequireClarifications = true;
+      }
+      var core = window.app && window.app.core;
+      if (core && typeof core.renderAutoClarifyView === 'function') core.renderAutoClarifyView();
+    });
+    await expect(page.locator('#autoClarifyContainer')).toContainText('评审结果格式异常');
+  });
+
   test('导入无效结果时自动标红', async ({ page }) => {
     await page.evaluate(() => {
       var compare = document.getElementById('compareResult');

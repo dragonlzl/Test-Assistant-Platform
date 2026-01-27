@@ -180,6 +180,9 @@
     var setCaseViewHint = handlers.setCaseViewHint || function() {};
     var parseCaseList = handlers.parseCaseList || function() { return []; };
     var extractJsonObjects = handlers.extractJsonObjects || function() { return []; };
+    var extractJsonPayload = handlers.extractJsonPayload || function(text) { return text || ''; };
+    var repairLooseNewlines = handlers.repairLooseNewlines || function(text) { return text || ''; };
+    var stripAnsiControl = handlers.stripAnsiControl || function(text) { return text || ''; };
 
     function ensureDbStoreState() {
       if (!state.caseGenDbStore || typeof state.caseGenDbStore !== 'object') {
@@ -668,14 +671,27 @@
       normalized = (normalized || '')
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/&nbsp;/gi, ' ');
+      normalized = repairLooseNewlines(stripAnsiControl(normalized));
+      var extracted = extractJsonPayload(normalized);
+      if (extracted) normalized = extracted;
       var parsed = [];
       var hadRecovery = false;
       try {
         parsed = JSON.parse(normalized || '[]');
+        if (typeof parsed === 'string') {
+          var inner = repairLooseNewlines(parsed);
+          if (inner && /^[\[{]/.test(inner)) {
+            try {
+              parsed = JSON.parse(inner);
+            } catch (err) {
+              parsed = parsed;
+            }
+          }
+        }
         if (!Array.isArray(parsed)) parsed = [];
         if (parsed.length) normalized = JSON.stringify(parsed, null, 2);
       } catch (err) {
-        parsed = extractJsonObjects(normalized);
+        parsed = extractJsonObjects(repairLooseNewlines(normalized));
         if (parsed.length) {
           normalized = JSON.stringify(parsed, null, 2);
           hadRecovery = true;
@@ -3299,11 +3315,13 @@
       if (!Array.isArray(modules) || !modules.length) throw new Error('尚未生成任何用例，无法导出');
       var payload = modules.map(function(mod) {
         var raw = caseGenResults[mod.id] || '';
-        var cases = [];
-        try {
-          cases = JSON.parse(raw || '[]');
-        } catch (err) {
-          cases = [];
+        var cases = parseCaseList(raw);
+        if (!cases.length) {
+          try {
+            cases = JSON.parse(raw || '[]');
+          } catch (err) {
+            cases = [];
+          }
         }
         return {
           module: normalizeRequirementName(mod.title || mod.module || ''),
@@ -3318,11 +3336,13 @@
     function exportSingleModuleData(mod, rawResult, requirementLabel) {
       if (!mod) throw new Error('未找到模块');
       var raw = rawResult || '';
-      var parsed = [];
-      try {
-        parsed = JSON.parse(raw || '[]');
-      } catch (err) {
-        parsed = [];
+      var parsed = parseCaseList(raw);
+      if (!parsed.length) {
+        try {
+          parsed = JSON.parse(raw || '[]');
+        } catch (err) {
+          parsed = [];
+        }
       }
       if (!parsed.length) throw new Error('该模块尚未生成用例');
       var sanitized = sanitizeCasesForExport(parsed);

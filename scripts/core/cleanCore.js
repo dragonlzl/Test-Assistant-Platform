@@ -13,6 +13,98 @@
       return /json/i.test((promptText || '').toString());
     }
 
+    function repairLooseNewlines(text) {
+      var raw = text === undefined || text === null ? '' : String(text);
+      if (!raw) return '';
+      var out = '';
+      var inString = false;
+      var escaped = false;
+      function isSpace(ch) { return ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t'; }
+      function prevNonSpace() {
+        for (var i = out.length - 1; i >= 0; i -= 1) {
+          var ch = out[i];
+          if (!isSpace(ch)) return ch;
+        }
+        return '';
+      }
+      function nextNonSpace(idx) {
+        for (var i = idx + 1; i < raw.length; i += 1) {
+          var ch = raw[i];
+          if (!isSpace(ch)) return ch;
+        }
+        return '';
+      }
+      for (var i = 0; i < raw.length; i += 1) {
+        var ch = raw[i];
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+            out += ch;
+            continue;
+          }
+          if (ch === '\\') {
+            escaped = true;
+            out += ch;
+            continue;
+          }
+          if (ch === '"') {
+            inString = false;
+            out += ch;
+            continue;
+          }
+          out += ch;
+          continue;
+        }
+        if (ch === '"') {
+          inString = true;
+          out += ch;
+          continue;
+        }
+        if (ch === 'n') {
+          var prev = prevNonSpace();
+          var next = nextNonSpace(i);
+          var prevOk = prev === '' || /[\[{,:\}\]\"]/.test(prev);
+          var nextOk = next === '' || /[\[{,\}\]\"]/.test(next);
+          if (prevOk && nextOk) {
+            continue;
+          }
+        }
+        out += ch;
+      }
+      return out;
+    }
+
+    function tryParseCleanJson(text) {
+      var raw = text === undefined || text === null ? '' : text;
+      var result = { parsed: null, text: '', repaired: false };
+      if (!raw) return result;
+      if (typeof raw !== 'string') {
+        result.parsed = raw;
+        return result;
+      }
+      var trimmed = raw.trim();
+      if (!trimmed) return result;
+      try {
+        result.parsed = JSON.parse(trimmed);
+        result.text = trimmed;
+        return result;
+      } catch (err) {
+        // continue
+      }
+      var repaired = repairLooseNewlines(trimmed);
+      if (repaired && repaired !== trimmed) {
+        try {
+          result.parsed = JSON.parse(repaired);
+          result.text = repaired;
+          result.repaired = true;
+          return result;
+        } catch (err) {
+          // continue
+        }
+      }
+      return result;
+    }
+
     function parseCleanedContent(text) {
       if (!text) return '';
       var payloadObj = unwrapRequirementPayload(text) || {};
@@ -20,17 +112,16 @@
       var stripped = typeof payload === 'string' ? payload.trim() : payload;
       if (!stripped) return '';
       if (typeof stripped !== 'string') return stripped;
+      var parsed = tryParseCleanJson(stripped);
+      if (parsed && parsed.parsed !== null) return parsed.parsed;
       try {
-        return JSON.parse(stripped);
-      } catch (err) {
-        try {
-          var recovered = extractJsonObjects(stripped);
-          if (recovered && recovered.length) {
-            return recovered.length === 1 ? recovered[0] : recovered;
-          }
-        } catch (inner) {
-          console.warn('清洗结果解析失败', inner);
+        var candidate = parsed && parsed.text ? parsed.text : stripped;
+        var recovered = extractJsonObjects(candidate);
+        if (recovered && recovered.length) {
+          return recovered.length === 1 ? recovered[0] : recovered;
         }
+      } catch (inner) {
+        console.warn('清洗结果解析失败', inner);
       }
       return stripped;
     }
@@ -301,6 +392,8 @@
       stringifyDescription: stringifyDescription,
       stripRawFields: stripRawFields,
       formatCleanList: formatCleanList,
+      tryParseCleanJson: tryParseCleanJson,
+      repairCleanJsonText: repairLooseNewlines,
     };
   }
 

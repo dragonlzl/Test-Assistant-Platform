@@ -291,6 +291,136 @@ test.describe('用例生成 Agent 面板与澄清填充', () => {
     await expect(page.locator('#autoAgentTrace')).toContainText('Agent 复核修正：需求评审（不符合提示）');
   });
 
+  test('Agent 决策解析可修复换行', async ({ page }) => {
+    const parsed = await page.evaluate(() => {
+      if (!window.app || !window.app.core || typeof window.app.core.parseAgentDecisionContent !== 'function') return null;
+      var raw = `{"action":"review","reason":"包含
+换行","prompt_routing":{},"routing_note":"","understanding":"","decision":{"action":"review","reason":"包含
+换行"}}`;
+      return window.app.core.parseAgentDecisionContent(raw);
+    });
+
+    expect(parsed && parsed.action).toBe('review');
+  });
+
+  test('Agent 复核修正时可补全需求标识', async ({ page }) => {
+    await page.evaluate(() => {
+      if (!window.app || !window.app.state || !window.app.core) return;
+      window.app.state.settings = window.app.state.settings || {};
+      window.app.state.settings.caseGenAgentEnabled = true;
+      window.app.state.caseGenAgentTrace = [];
+      window.app.state.requirementLabel = '需求A';
+      window.app.state.requirementLabelSource = 'manual';
+      if (window.app.core.renderAgentPanel) window.app.core.renderAgentPanel();
+      window.app.core.applyAgentReviewDecision('clean', {
+        ok: false,
+        reason: '格式缺失',
+        issues: ['缺少需求标识'],
+        output: '{"data":[{"feature":"A"}]}',
+      });
+    });
+
+    await expect(page.locator('#cleanedText')).toHaveValue(/"requirement": "需求A"/);
+    await expect(page.locator('#autoAgentTrace')).toContainText('格式修复：需求清洗补全需求标识');
+  });
+
+  test('Agent 复核解析可容错 output 拼接', async ({ page }) => {
+    const parsed = await page.evaluate(() => {
+      if (!window.app || !window.app.core || typeof window.app.core.parseAgentReviewDecisionContent !== 'function') {
+        return null;
+      }
+      var raw = '{"ok":false,"reason":"输出重复拼接","action":"fix","severity":"major","output":[{"a":1}][{"a":2}],"issues":["x"]}';
+      return window.app.core.parseAgentReviewDecisionContent(raw);
+    });
+
+    expect(parsed).toBeTruthy();
+    expect(parsed.ok).toBe(false);
+    expect(parsed.action).toBe('fix');
+  });
+
+  test('清洗结果可修复换行占位字符', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      if (!window.app || !window.app.state) return null;
+      window.app.state.assignments = window.app.state.assignments || {};
+      window.app.state.assignments.cleanPrompt = '请输出 JSON';
+      var cleaned = document.getElementById('cleanedText');
+      if (cleaned) cleaned.value = '[n {"feature":"A","description":"B"n}n]';
+      if (window.app.core && typeof window.app.core.updateFlowStatus === 'function') {
+        window.app.core.updateFlowStatus();
+      }
+      return {
+        invalid: window.app.state.validationFailedSteps && window.app.state.validationFailedSteps.clean,
+        value: cleaned ? cleaned.value : '',
+      };
+    });
+
+    expect(result).toBeTruthy();
+    expect(result.invalid).toBeFalsy();
+    expect(result.value).not.toContain('[n');
+  });
+
+  test('评审结果可修复换行占位字符', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      if (!window.app || !window.app.state) return null;
+      var review = document.getElementById('reviewResult');
+      if (review) review.value = '[n {"类别":"需求模糊","不明确的需求点":"A","不明确原因":"B","可能存在的分支/边界情况":"C"n}n]';
+      if (window.app.core && typeof window.app.core.syncReviewViewFromResult === 'function') {
+        window.app.core.syncReviewViewFromResult();
+      }
+      if (window.app.core && typeof window.app.core.updateFlowStatus === 'function') {
+        window.app.core.updateFlowStatus();
+      }
+      return {
+        invalid: window.app.state.validationFailedSteps && window.app.state.validationFailedSteps.review,
+        value: review ? review.value : '',
+      };
+    });
+
+    expect(result).toBeTruthy();
+    expect(result.invalid).toBeFalsy();
+    expect(result.value).not.toContain('[n');
+  });
+
+  test('对比结果可修复换行占位字符', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      var compare = document.getElementById('compareResult');
+      if (compare) compare.value = '{n  "coverage": 100,n  "missing": []n}';
+      if (window.app && window.app.core && typeof window.app.core.updateFlowStatus === 'function') {
+        window.app.core.updateFlowStatus();
+      }
+      return {
+        invalid: window.app && window.app.state && window.app.state.validationFailedSteps
+          ? window.app.state.validationFailedSteps.compare
+          : null,
+        value: compare ? compare.value : '',
+      };
+    });
+
+    expect(result).toBeTruthy();
+    expect(result.invalid).toBeFalsy();
+    expect(result.value).not.toContain('n  "coverage"');
+  });
+
+  test('覆盖对比结果可修复换行占位字符', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      var casesCompare = document.getElementById('casesCompareResult');
+      if (casesCompare) casesCompare.value = '{n  "coverage": 90,n  "missing": []n}';
+      if (window.app && window.app.core && typeof window.app.core.updateFlowStatus === 'function') {
+        window.app.core.updateFlowStatus();
+      }
+      return {
+        invalid: window.app && window.app.state && window.app.state.validationFailedSteps
+          ? window.app.state.validationFailedSteps.cases
+          : null,
+        value: casesCompare ? casesCompare.value : '',
+      };
+    });
+
+    expect(result).toBeTruthy();
+    expect(result.invalid).toBeFalsy();
+    expect(result.value).not.toContain('n  "coverage"');
+  });
+
   test('Agent 复核严重问题可标记重跑', async ({ page }) => {
     const result = await page.evaluate(() => {
       if (!window.app || !window.app.state || !window.app.core) return null;
@@ -541,6 +671,24 @@ test.describe('用例生成 Agent 面板与澄清填充', () => {
     expect(result).toBeTruthy();
     expect(result.required).toBeFalsy();
     expect(result.clarify_confirmed).toBeTruthy();
+  });
+
+  test('评审校验失败不视为已评审', async ({ page }) => {
+    const snapshot = await page.evaluate(() => {
+      var review = document.getElementById('reviewResult');
+      if (review) review.value = '非 JSON 内容';
+      if (window.app && window.app.state) {
+        window.app.state.validationFailedSteps = { review: true };
+      }
+      if (window.app && window.app.core && typeof window.app.core.getAgentClarifyGuardSnapshot === 'function') {
+        return window.app.core.getAgentClarifyGuardSnapshot();
+      }
+      return null;
+    });
+
+    expect(snapshot).toBeTruthy();
+    expect(snapshot.has_review).toBeFalsy();
+    expect(snapshot.review_clarifications_ready).toBeFalsy();
   });
 
   test('Agent 复核中状态可展示', async ({ page }) => {

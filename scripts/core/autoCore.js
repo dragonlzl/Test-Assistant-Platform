@@ -73,7 +73,7 @@
         : '需求澄清忽略数值和美术相关内容，模块拆分也忽略数值和美术。');
     var agentReviewPrompt = defaultPrompts && typeof defaultPrompts.agentreview === 'string'
       ? defaultPrompts.agentreview
-      : '你是用例生成流程的结果复核 Agent。请根据输入的 step/prompt_hint/inputs/output 判断输出是否符合额外提示词与步骤要求，确保格式/字段不变且内容符合约束。你必须严格输出 JSON：{ok, reason, output, issues}，ok 为 true/false。issues 为违反要求的条目列表（字符串数组，简短描述问题点），ok 为 true 时 issues 为空数组且 output 为空字符串。若 ok 为 false，output 必须给出修正后的完整结果（保持原输出格式，不要包含多余文本或 Markdown）。reason 为简短问题说明，不输出推理过程。';
+      : '你是用例生成流程的结果复核 Agent。请根据输入的 step/step_goal/step_prompt/expected_format/prompt_hint/inputs/output 判断输出是否符合额外提示词与步骤要求，确保格式/字段不变且内容符合约束。你必须严格输出单个 JSON：{ok, reason, action, severity, output, issues}，禁止输出多个 JSON 或解释文本。ok 为 true/false。action 取值 pass/fix/rerun；severity 取值 minor/major/severe。issues 为违反要求的条目列表（字符串数组，简短描述问题点），ok 为 true 时 issues 为空数组、action 为 pass、output 为空字符串。若 ok 为 false 且 severity 为 severe，必须返回 action=rerun 且 output 为空字符串；若为轻度/中度问题，返回 action=fix 且 output 为修正后的完整结果（保持原输出格式，不要包含多余文本或 Markdown）。若修正后的完整输出过长或无法保证完整性，可直接返回 action=rerun 且 output 为空字符串。reason 为简短问题说明，不输出推理过程。';
     var escapeHtml = utils.escapeHtml || function(text) {
       if (text === null || text === undefined) return '';
       return String(text)
@@ -141,6 +141,7 @@
     if (!state.caseGenAgentRetryCounters || typeof state.caseGenAgentRetryCounters !== 'object') state.caseGenAgentRetryCounters = {};
     if (typeof state.caseGenAgentCoverageRetries !== 'number') state.caseGenAgentCoverageRetries = 0;
     if (typeof state.caseGenAgentCoverageBelowFull !== 'boolean') state.caseGenAgentCoverageBelowFull = false;
+    if (typeof state.caseGenAgentIgnoreCoverage !== 'boolean') state.caseGenAgentIgnoreCoverage = false;
     if (typeof state.autoAgentPromptHint !== 'string') state.autoAgentPromptHint = defaultAgentExtraPrompt;
     if (!Object.prototype.hasOwnProperty.call(state, 'caseGenAgentPromptRouting')) state.caseGenAgentPromptRouting = null;
     if (state.caseGenAgentPromptRouting && typeof state.caseGenAgentPromptRouting !== 'object') state.caseGenAgentPromptRouting = null;
@@ -576,6 +577,26 @@
       return '';
     }
 
+    function resolveAgentStepPrompt(step) {
+      var assignments = state.assignments || {};
+      if (step === 'review') return assignments.reviewPrompt || defaultPrompts.review || '';
+      if (step === 'clean') return assignments.cleanPrompt || defaultPrompts.system || '';
+      if (step === 'compare') return assignments.comparePrompt || defaultPrompts.compare || '';
+      if (step === 'split') return assignments.splitPrompt || defaultPrompts.split || '';
+      if (step === 'cases') return assignments.casesPrompt || defaultPrompts.cases || '';
+      return '';
+    }
+
+    function extractPromptExpectedFormat(prompt) {
+      var text = prompt === undefined || prompt === null ? '' : String(prompt);
+      if (!text) return '';
+      var match = text.match(/输出[^。\n]*JSON[^。\n]*/);
+      if (match && match[0]) return match[0].trim();
+      match = text.match(/输出[^。\n]*(数组|对象)[^。\n]*/);
+      if (match && match[0]) return match[0].trim();
+      return '';
+    }
+
     function resolveAgentStepGoal(step) {
       if (step === 'review') {
         return '基于原始需求找出不明确、不全、矛盾或边界问题，输出澄清点列表。';
@@ -624,12 +645,14 @@
         if (caseText) inputs.case_text = caseText;
         if (casesCompare && casesCompare !== output) inputs.cases_compare = casesCompare;
       }
-      var expectation = resolveAgentStepExpectation(step);
+      var stepPrompt = resolveAgentStepPrompt(step);
+      var expectation = extractPromptExpectedFormat(stepPrompt) || resolveAgentStepExpectation(step);
       var goal = resolveAgentStepGoal(step);
       var meta = {
         step: step,
         step_label: label,
         step_goal: goal || '',
+        step_prompt: stepPrompt || '',
         prompt_hint: hint || '',
         output: output || '',
       };
@@ -798,17 +821,481 @@
       return [];
     }
 
+    function looksLikeAgentReviewDecision(parsed) {
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+      if (Object.prototype.hasOwnProperty.call(parsed, 'ok')) return true;
+      if (Object.prototype.hasOwnProperty.call(parsed, 'pass')) return true;
+      if (Object.prototype.hasOwnProperty.call(parsed, 'valid')) return true;
+      if (Object.prototype.hasOwnProperty.call(parsed, 'issues')) return true;
+      if (Object.prototype.hasOwnProperty.call(parsed, 'output')) return true;
+      if (Object.prototype.hasOwnProperty.call(parsed, 'reason')) return true;
+      if (Object.prototype.hasOwnProperty.call(parsed, 'action')) return true;
+      if (Object.prototype.hasOwnProperty.call(parsed, 'severity')) return true;
+      return false;
+    }
+
+    function findKeyIndex(text, key) {
+      if (!text) return -1;
+      var pattern = new RegExp('"' + key + '"\\s*:', 'i');
+      var match = pattern.exec(text);
+      return match ? match.index : -1;
+    }
+
+    function extractStringLiteral(text, start) {
+      var out = '';
+      var escaped = false;
+      for (var i = start + 1; i < text.length; i += 1) {
+        var ch = text[i];
+        if (escaped) {
+          out += ch;
+          escaped = false;
+          continue;
+        }
+        if (ch === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (ch === '"') {
+          return { value: out, end: i, unterminated: false };
+        }
+        if (ch === '\n') {
+          out += '\\n';
+          continue;
+        }
+        out += ch;
+      }
+      return { value: out, end: text.length - 1, unterminated: true };
+    }
+
+    function extractJsonChunkFrom(text, start) {
+      if (!text || start < 0 || start >= text.length) return { text: '', end: -1 };
+      var ch = text[start];
+      if (ch !== '{' && ch !== '[') return { text: '', end: -1 };
+      var stack = [ch];
+      var inString = false;
+      var escaped = false;
+      for (var i = start + 1; i < text.length; i += 1) {
+        var cur = text[i];
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+            continue;
+          }
+          if (cur === '\\') {
+            escaped = true;
+            continue;
+          }
+          if (cur === '"') {
+            inString = false;
+          }
+          continue;
+        }
+        if (cur === '"') {
+          inString = true;
+          continue;
+        }
+        if (cur === '{' || cur === '[') {
+          stack.push(cur);
+          continue;
+        }
+        if ((cur === '}' || cur === ']') && stack.length) {
+          stack.pop();
+          if (!stack.length) {
+            return { text: text.slice(start, i + 1), end: i };
+          }
+        }
+      }
+      return { text: text.slice(start), end: text.length - 1 };
+    }
+
+    function extractJsonValueAfterKey(text, key) {
+      var index = findKeyIndex(text, key);
+      if (index < 0) return null;
+      var colon = text.indexOf(':', index);
+      if (colon < 0) return null;
+      var pos = colon + 1;
+      while (pos < text.length && /\s/.test(text[pos])) pos += 1;
+      if (pos >= text.length) return null;
+      var ch = text[pos];
+      if (ch === '"') {
+        var literal = extractStringLiteral(text, pos);
+        var val = literal.value;
+        if (val && (val[0] === '{' || val[0] === '[')) {
+          var parsed = safeJsonParse(repairJsonText(val));
+          if (parsed !== null) return parsed;
+        }
+        return val;
+      }
+      if (ch === '{' || ch === '[') {
+        var chunk = extractJsonChunkFrom(text, pos);
+        var parsedValue = safeJsonParse(repairJsonText(chunk.text));
+        if (parsedValue !== null) return parsedValue;
+        return chunk.text;
+      }
+      return null;
+    }
+
+    function extractBooleanAfterKey(text, key) {
+      var index = findKeyIndex(text, key);
+      if (index < 0) return null;
+      var slice = text.slice(index);
+      var match = slice.match(/:\s*(true|false)/i);
+      if (!match) return null;
+      return match[1].toLowerCase() === 'true';
+    }
+
+    function parseAgentReviewDecisionLoose(raw) {
+      var text = raw === undefined || raw === null ? '' : String(raw);
+      if (!text) return null;
+      var ok = extractBooleanAfterKey(text, 'ok');
+      if (ok === null) {
+        var pass = extractBooleanAfterKey(text, 'pass');
+        if (pass !== null) ok = pass;
+      }
+      if (ok === null) {
+        var valid = extractBooleanAfterKey(text, 'valid');
+        if (valid !== null) ok = valid;
+      }
+      var action = extractJsonValueAfterKey(text, 'action');
+      if (action && typeof action !== 'string') action = '';
+      var severity = extractJsonValueAfterKey(text, 'severity');
+      if (severity && typeof severity !== 'string') severity = '';
+      var reason = extractJsonValueAfterKey(text, 'reason');
+      if (reason && typeof reason !== 'string') reason = '';
+      var issues = extractJsonValueAfterKey(text, 'issues');
+      if (typeof issues === 'string') {
+        var parsedIssues = safeJsonParse(repairJsonText(issues));
+        if (Array.isArray(parsedIssues)) issues = parsedIssues;
+      }
+      if (!Array.isArray(issues)) issues = [];
+      var output = extractJsonValueAfterKey(text, 'output');
+      if (output === null || output === undefined) output = '';
+      if (ok === null) {
+        if (action === 'pass') ok = true;
+        else if (action === 'fix' || action === 'rerun') ok = false;
+      }
+      if (!action && ok !== null) {
+        action = ok ? 'pass' : 'rerun';
+      }
+      return { ok: ok, reason: reason || '', action: action || '', severity: severity || '', output: output, issues: issues };
+    }
+
+    function extractJsonChunks(raw) {
+      var text = raw === undefined || raw === null ? '' : String(raw);
+      var list = [];
+      var start = -1;
+      var stack = [];
+      var inString = false;
+      var escaped = false;
+      for (var i = 0; i < text.length; i += 1) {
+        var ch = text[i];
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+            continue;
+          }
+          if (ch === '\\') {
+            escaped = true;
+            continue;
+          }
+          if (ch === '"') {
+            inString = false;
+          }
+          continue;
+        }
+        if (ch === '"') {
+          inString = true;
+          continue;
+        }
+        if (ch === '{' || ch === '[') {
+          if (start < 0) start = i;
+          stack.push(ch);
+          continue;
+        }
+        if ((ch === '}' || ch === ']') && stack.length) {
+          stack.pop();
+          if (!stack.length && start >= 0) {
+            list.push(text.slice(start, i + 1));
+            start = -1;
+          }
+        }
+      }
+      return list;
+    }
+
     function parseAgentReviewDecisionContent(content) {
       if (!content) return null;
-      var jsonText = extractJsonPayload(content) || stripCodeFence(content);
-      if (!jsonText) return null;
+      if (typeof content === 'object') {
+        if (looksLikeAgentReviewDecision(content)) return content;
+      }
+      var raw = String(content);
+      var jsonText = extractJsonPayload(raw) || stripCodeFence(raw);
+      var parsed = null;
+      if (jsonText) {
+        parsed = safeJsonParse(repairJsonText(jsonText));
+        if (looksLikeAgentReviewDecision(parsed)) return parsed;
+      }
+      var chunks = extractJsonChunks(raw);
+      for (var i = 0; i < chunks.length; i += 1) {
+        parsed = safeJsonParse(repairJsonText(chunks[i]));
+        if (looksLikeAgentReviewDecision(parsed)) return parsed;
+      }
+      var chunk = extractJsonChunk(raw);
+      var completed = completeJsonChunk(chunk);
+      if (completed) {
+        parsed = safeJsonParse(repairJsonText(completed));
+        if (looksLikeAgentReviewDecision(parsed)) return parsed;
+      }
+      var fallback = parseAgentReviewDecisionLoose(raw);
+      if (looksLikeAgentReviewDecision(fallback)) return fallback;
+      return null;
+    }
+
+    function safeJsonParse(text) {
       try {
-        var parsed = JSON.parse(jsonText);
-        if (!parsed || typeof parsed !== 'object') return null;
-        return parsed;
+        return JSON.parse(text);
       } catch (err) {
         return null;
       }
+    }
+
+    function extractJsonChunk(text) {
+      var raw = text === undefined || text === null ? '' : String(text);
+      if (!raw) return { text: '', stack: [] };
+      var start = -1;
+      var stack = [];
+      var inString = false;
+      var escaped = false;
+      for (var i = 0; i < raw.length; i += 1) {
+        var ch = raw[i];
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+            continue;
+          }
+          if (ch === '\\') {
+            escaped = true;
+            continue;
+          }
+          if (ch === '"') {
+            inString = false;
+          }
+          continue;
+        }
+        if (ch === '"') {
+          inString = true;
+          continue;
+        }
+        if (ch === '{' || ch === '[') {
+          if (start < 0) start = i;
+          stack.push(ch);
+          continue;
+        }
+        if ((ch === '}' || ch === ']') && stack.length) {
+          stack.pop();
+          if (!stack.length && start >= 0) {
+            return { text: raw.slice(start, i + 1), stack: [] };
+          }
+        }
+      }
+      if (start < 0) return { text: '', stack: [] };
+      return { text: raw.slice(start), stack: stack };
+    }
+
+    function completeJsonChunk(chunk) {
+      if (!chunk || !chunk.text) return '';
+      var tail = chunk.text;
+      var stack = chunk.stack || [];
+      if (!stack.length) return tail;
+      var suffix = '';
+      for (var i = stack.length - 1; i >= 0; i -= 1) {
+        suffix += stack[i] === '{' ? '}' : ']';
+      }
+      return tail + suffix;
+    }
+
+    function repairJsonText(raw) {
+      var text = raw === undefined || raw === null ? '' : String(raw);
+      if (!text) return '';
+      var normalized = text.replace(/\r\n/g, '\n');
+      normalized = normalized.replace(/[“”]/g, '"');
+      normalized = normalized.replace(/[‘’]/g, '\'');
+      normalized = normalized.replace(/,\s*([}\]])/g, '$1');
+      var out = '';
+      var inString = false;
+      var escaped = false;
+      for (var i = 0; i < normalized.length; i += 1) {
+        var ch = normalized[i];
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+            out += ch;
+            continue;
+          }
+          if (ch === '\\') {
+            escaped = true;
+            out += ch;
+            continue;
+          }
+          if (ch === '"') {
+            inString = false;
+            out += ch;
+            continue;
+          }
+          if (ch === '\n') {
+            out += '\\\\n';
+            continue;
+          }
+          if (ch === '\t') {
+            out += '\\\\t';
+            continue;
+          }
+        } else if (ch === '"') {
+          inString = true;
+        }
+        if (ch !== '\r') out += ch;
+      }
+      var replaced = out.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, function(match, content) {
+        return '"' + content.replace(/"/g, '\\"') + '"';
+      });
+      return replaced;
+    }
+
+    function buildAgentDecisionRepairPrompt() {
+      return '你是 JSON 修复器。以下文本可能包含解释或混杂内容，请提取其中的 JSON 对象并只输出该 JSON 对象。' +
+        '必须包含字段：action、reason、understanding、decision、prompt_routing、routing_note，可选 plan。' +
+        '不要输出任何说明、前后缀或 Markdown。';
+    }
+
+    function normalizeAgentRepairInput(raw) {
+      var text = raw === undefined || raw === null ? '' : String(raw);
+      if (text.length <= 8000) return text;
+      return text.slice(0, 8000) + '\n...';
+    }
+
+    async function repairAgentDecisionOutput(model, content, reasoning) {
+      var payload = normalizeAgentRepairInput(content);
+      if (!payload) return null;
+      var prompt = buildAgentDecisionRepairPrompt();
+      try {
+        var fixed = await callModelWithConfig(model, payload, prompt, reasoning, 0);
+        var parsed = parseAgentDecisionContent(fixed);
+        if (parsed) return { parsed: parsed, raw: fixed };
+      } catch (err) {
+        return { parsed: null, error: err && err.message ? err.message : String(err || '') };
+      }
+      return { parsed: null };
+    }
+
+    function shouldRepairRequirementPayload(payload) {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+      if (payload.requirement && String(payload.requirement).trim()) return false;
+      var keys = ['data', 'items', 'list', 'rows', 'result'];
+      for (var i = 0; i < keys.length; i += 1) {
+        if (Object.prototype.hasOwnProperty.call(payload, keys[i])) return true;
+      }
+      return false;
+    }
+
+    function repairAgentOutputRequirementLabel(step, text) {
+      if (!text) return null;
+      var jsonText = extractJsonPayload(text) || stripCodeFence(text);
+      if (!jsonText) return null;
+      var parsed = null;
+      try {
+        parsed = JSON.parse(jsonText);
+      } catch (err) {
+        return null;
+      }
+      if (!shouldRepairRequirementPayload(parsed)) return null;
+      var label = getRequirementLabel(true);
+      if (!label) return null;
+      parsed.requirement = label;
+      try {
+        return JSON.stringify(parsed, null, 2);
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function inspectReviewOutputStatus(text) {
+      var raw = stripCodeFence(text || '').trim();
+      if (!raw) return { valid: false, empty: true, reason: 'empty' };
+      var repaired = repairReviewOutputText(raw);
+      var jsonText = extractJsonPayload(repaired) || repaired;
+      var parsed = null;
+      try {
+        parsed = JSON.parse(jsonText);
+      } catch (err) {
+        return { valid: false, empty: false, reason: 'invalid' };
+      }
+      var list = null;
+      if (Array.isArray(parsed)) list = parsed;
+      else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.data)) list = parsed.data;
+      if (!list) return { valid: false, empty: false, reason: 'invalid' };
+      if (!list.length) return { valid: true, empty: true, reason: 'empty-list' };
+      return { valid: true, empty: false, reason: 'has' };
+    }
+
+    function repairReviewOutputText(text) {
+      var raw = text === undefined || text === null ? '' : String(text);
+      if (!raw) return '';
+      var out = '';
+      var inString = false;
+      var escaped = false;
+      function isSpace(ch) { return ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t'; }
+      function prevNonSpace() {
+        for (var i = out.length - 1; i >= 0; i -= 1) {
+          var ch = out[i];
+          if (!isSpace(ch)) return ch;
+        }
+        return '';
+      }
+      function nextNonSpace(idx) {
+        for (var i = idx + 1; i < raw.length; i += 1) {
+          var ch = raw[i];
+          if (!isSpace(ch)) return ch;
+        }
+        return '';
+      }
+      for (var i = 0; i < raw.length; i += 1) {
+        var ch = raw[i];
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+            out += ch;
+            continue;
+          }
+          if (ch === '\\') {
+            escaped = true;
+            out += ch;
+            continue;
+          }
+          if (ch === '"') {
+            inString = false;
+            out += ch;
+            continue;
+          }
+          out += ch;
+          continue;
+        }
+        if (ch === '"') {
+          inString = true;
+          out += ch;
+          continue;
+        }
+        if (ch === 'n') {
+          var prev = prevNonSpace();
+          var next = nextNonSpace(i);
+          var prevOk = prev === '' || /[\[{,:\}\]\"]/.test(prev);
+          var nextOk = next === '' || /[\[{,\}\]\"]/.test(next);
+          if (prevOk && nextOk) {
+            continue;
+          }
+        }
+        out += ch;
+      }
+      return out;
     }
 
     function applyAgentReviewDecision(step, decision) {
@@ -850,6 +1337,11 @@
         pushAgentTrace('warn', 'Agent 复核失败：' + label + '未返回修正结果' + note);
         return result;
       }
+      var repaired = repairAgentOutputRequirementLabel(step, output);
+      if (repaired) {
+        output = repaired;
+        pushAgentTrace('info', '格式修复：' + label + '补全需求标识');
+      }
       var updated = setAgentStepOutput(step, output);
       result.updated = updated;
       if (updated) {
@@ -889,6 +1381,12 @@
           var content = await callModelWithConfig(model, JSON.stringify(payload, null, 2), prompt, reasoning, temperature);
           ensureAgentNotStopped();
           decision = parseAgentReviewDecisionContent(content);
+          if (!decision) {
+            var snippet = formatAgentPromptSnippet(content, 80);
+            var note = snippet ? ('，输出片段：' + snippet) : '';
+            pushAgentTrace('warn', 'Agent 复核输出解析失败：' + label + note);
+            return false;
+          }
         }
         var reviewResult = applyAgentReviewDecision(step, decision);
         if (reviewResult && reviewResult.rerun) {
@@ -1231,7 +1729,8 @@
         var statusClass = meta.tone ? ('status ' + meta.tone) : 'status';
         var attemptsText = item.attempts ? ('重试 ' + item.attempts + '/2') : '';
         var noteText = item.note ? escapeHtml(item.note) : '';
-        var metaText = [attemptsText, noteText].filter(Boolean).join(' · ');
+        var reasonText = item.reason ? ('原因：' + escapeHtml(item.reason)) : '';
+        var metaText = [attemptsText, noteText, reasonText].filter(Boolean).join(' · ');
         return '' +
           '<li class="agent-plan-item">' +
             '<span class="' + statusClass + '">' + meta.text + '</span>' +
@@ -1345,7 +1844,7 @@
       persistWorkflowSnapshot();
     }
 
-    function setAgentPlanStatus(key, status, note, attempts) {
+    function setAgentPlanStatus(key, status, note, attempts, reason) {
       var plan = ensureAgentPlan();
       var item = plan.find(function(entry) { return entry.key === key; });
       if (!item) {
@@ -1357,11 +1856,17 @@
           status: 'pending',
           attempts: 0,
           note: '',
+          reason: '',
         };
         plan.push(item);
       }
       if (status) item.status = status;
       if (note !== undefined) item.note = note || '';
+      if (reason !== undefined) {
+        item.reason = reason || '';
+      } else if (status === 'running' || status === 'reviewing' || status === 'done') {
+        item.reason = '';
+      }
       if (attempts !== undefined && attempts !== null) item.attempts = Number(attempts || 0);
       renderAgentPlan();
       persistWorkflowSnapshot();
@@ -1448,6 +1953,7 @@
       state.caseGenAgentFixSuggestions = '';
       state.caseGenAgentCoverageRetries = 0;
       state.caseGenAgentCoverageBelowFull = false;
+      state.caseGenAgentIgnoreCoverage = false;
       state.caseGenAgentLastFailure = null;
       state.autoClarifyDismissed = false;
       pushAgentLog('info', 'Agent 开始执行用例生成流程');
@@ -1497,6 +2003,18 @@
       var compare = compareResultEl && compareResultEl.value ? compareResultEl.value.trim() : '';
       var split = splitResultEl && splitResultEl.value ? splitResultEl.value.trim() : '';
       var casesCompare = casesCompareResultEl && casesCompareResultEl.value ? casesCompareResultEl.value.trim() : '';
+      var failedMap = (state && state.failedSteps && typeof state.failedSteps === 'object') ? state.failedSteps : {};
+      var validationMap = (state && state.validationFailedSteps && typeof state.validationFailedSteps === 'object')
+        ? state.validationFailedSteps
+        : {};
+      var reviewStatus = inspectReviewOutputStatus(review);
+      var reviewValid = Boolean(reviewStatus && reviewStatus.valid);
+      var reviewFailed = Boolean(failedMap.review || validationMap.review);
+      var hasReview = Boolean(review) && reviewValid && !reviewFailed;
+      var hasCleaned = Boolean(cleaned) && !failedMap.clean && !validationMap.clean;
+      var hasCompare = Boolean(compare) && !failedMap.compare && !validationMap.compare;
+      var hasSplit = Boolean(split) && !failedMap.split && !validationMap.split;
+      var hasCasesCompare = Boolean(casesCompare) && !failedMap.cases && !validationMap.cases;
       var caseGenModules = Array.isArray(state.caseGenModules) ? state.caseGenModules : [];
       var caseGenResults = state.caseGenResults && typeof state.caseGenResults === 'object' ? state.caseGenResults : {};
       var coverage = extractCoverageFromCompareResult();
@@ -1510,6 +2028,7 @@
         };
       });
       var clarificationPayload = buildReviewClarificationContext();
+      var clarificationsReady = Boolean(clarificationPayload) && reviewValid && !reviewFailed;
       var extraPrompt = state.autoAgentPromptHint ? state.autoAgentPromptHint.trim() : '';
       var routing = getAgentPromptRouting();
       var flowConstraint = resolveAgentFlowConstraint();
@@ -1522,22 +2041,27 @@
       var lastFailure = state.caseGenAgentLastFailure && typeof state.caseGenAgentLastFailure === 'object'
         ? state.caseGenAgentLastFailure
         : null;
+      var forceIgnoreCoverage = Boolean(
+        extraCtx.forceIgnoreCoverage ||
+        extraCtx.coverageAction === 'ignore' ||
+        state.caseGenAgentIgnoreCoverage
+      );
       return {
         requirement_label: getRequirementLabel(true),
         has_raw: Boolean(raw),
-        has_review: Boolean(review),
-        has_cleaned: Boolean(cleaned),
-        has_compare: Boolean(compare),
-        has_split: Boolean(split),
-        has_cases_compare: Boolean(casesCompare),
+        has_review: hasReview,
+        has_cleaned: hasCleaned,
+        has_compare: hasCompare,
+        has_split: hasSplit,
+        has_cases_compare: hasCasesCompare,
         has_case_source: hasCaseSource(),
         has_casegen_modules: Boolean(caseGenModules && caseGenModules.length),
         has_casegen_results: Object.keys(caseGenResults).length > 0,
-        review_clarifications_ready: Boolean(clarificationPayload),
+        review_clarifications_ready: clarificationsReady,
         clarify_confirmed: clarifyConfirmed,
         coverage_percent: coverage,
         coverage_threshold: threshold,
-        force_ignore_coverage: Boolean(extraCtx.forceIgnoreCoverage),
+        force_ignore_coverage: forceIgnoreCoverage,
         coverage_retry_count: Number(state.caseGenAgentCoverageRetries || 0),
         coverage_below_full: Boolean(state.caseGenAgentCoverageBelowFull),
         agent_extra_prompt: extraPrompt,
@@ -1638,20 +2162,49 @@
 
     function parseAgentDecisionContent(content) {
       if (!content) return null;
-      var jsonText = extractJsonPayload(content) || stripCodeFence(content);
-      if (!jsonText) return null;
-      try {
-        var parsed = JSON.parse(jsonText);
-        if (!parsed || typeof parsed !== 'object') return null;
-        return parsed;
-      } catch (err) {
-        return null;
+      var rawText = stripCodeFence(content);
+      var jsonText = extractJsonPayload(rawText);
+      var candidate = jsonText || rawText;
+      var parsed = safeJsonParse(candidate);
+      if (!parsed) {
+        var chunk = extractJsonChunk(rawText);
+        var chunkText = completeJsonChunk(chunk);
+        if (chunkText) {
+          var repairedChunk = repairJsonText(chunkText);
+          parsed = safeJsonParse(repairedChunk) || safeJsonParse(chunkText);
+        }
       }
+      if (!parsed) {
+        var repaired = repairJsonText(candidate);
+        if (repaired && repaired !== candidate) {
+          parsed = safeJsonParse(repaired);
+        }
+      }
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
     }
 
-    async function requestAgentDecision(model, payload, prompt, reasoning, temperature) {
+    async function requestAgentDecision(model, payload, prompt, reasoning, temperature, options) {
+      var opts = options || {};
       var content = await callModelWithConfig(model, payload, prompt, reasoning, temperature);
-      return parseAgentDecisionContent(content);
+      var parsed = parseAgentDecisionContent(content);
+      if (!parsed && !opts.skipRepair) {
+        pushAgentLog('warn', 'Agent 决策输出解析失败，尝试提取 JSON');
+        var repaired = await repairAgentDecisionOutput(model, content, reasoning);
+        if (repaired && repaired.parsed) {
+          parsed = repaired.parsed;
+          pushAgentLog('info', 'Agent 决策输出已修复');
+        } else {
+          var repairReason = repaired && repaired.error ? ('，原因：' + repaired.error) : '';
+          pushAgentLog('warn', 'Agent 决策输出修复失败' + repairReason);
+        }
+      }
+      if (!parsed) {
+        var preview = content ? String(content).replace(/\s+/g, ' ').trim() : '';
+        if (preview.length > 160) preview = preview.slice(0, 160) + '...';
+        pushAgentLog('warn', 'Agent 决策输出解析失败' + (preview ? '：' + preview : '（输出为空）'));
+      }
+      return parsed;
     }
 
     async function decideAgentNextAction(ctx) {
@@ -1727,6 +2280,7 @@
           var payload = {};
           if (reviewContext) payload.clarifications = reviewContext;
           if (hint) payload.promptHint = hint;
+          payload.raiseOnError = true;
           return reviewRequirements(Object.keys(payload).length ? payload : null);
         };
         validator = function() { return Boolean(reviewResultEl && reviewResultEl.value && reviewResultEl.value.trim().length > 0); };
@@ -1785,6 +2339,39 @@
           }
         }
       }
+      if (step === 'review') {
+        var reviewText = reviewResultEl && reviewResultEl.value ? reviewResultEl.value.trim() : '';
+        var repairedText = repairReviewOutputText(reviewText);
+        if (repairedText && repairedText !== reviewText && reviewResultEl) {
+          reviewResultEl.value = repairedText;
+          if (typeof syncReviewViewFromResult === 'function') syncReviewViewFromResult();
+          updateFlowStatus();
+          persistWorkflowSnapshot();
+          reviewText = repairedText;
+        }
+        var reviewStatus = inspectReviewOutputStatus(reviewText);
+        if (reviewStatus && reviewStatus.reason === 'invalid') {
+          pushAgentTrace('warn', '评审结果格式异常，尝试复核修正');
+          var repairHint = stepHint
+            ? (stepHint + '；输出可能包含混杂文本，请提取有效 JSON 并严格输出数组')
+            : '输出可能包含混杂文本，请提取有效 JSON 并严格输出数组';
+          await reviewAgentStepOutput(step, context, repairHint, { skipRerun: true });
+        }
+        reviewText = reviewResultEl && reviewResultEl.value ? reviewResultEl.value.trim() : '';
+        reviewStatus = inspectReviewOutputStatus(reviewText);
+        if (reviewStatus && reviewStatus.reason === 'invalid') {
+          var reviewErr = new Error('评审结果格式异常，请检查评审输出');
+          reviewErr.validationFailed = true;
+          setStepFailed('review', reviewErr.message);
+          updateFlowStatus();
+          throw reviewErr;
+        }
+      }
+      var repairedOutput = repairAgentOutputRequirementLabel(step, getAgentStepOutput(step));
+      if (repairedOutput) {
+        setAgentStepOutput(step, repairedOutput);
+        pushAgentTrace('info', '格式修复：' + label + '补全需求标识');
+      }
       if (validator && !validator()) {
         var invalidReason = '步骤「' + step + '」未产生有效输出，请检查模型配置或稍后重试';
         setStepFailed(step, invalidReason);
@@ -1804,6 +2391,7 @@
       var maxRetries = 2;
       var attempts = 0;
       var allowRecovery = opts.allowRecovery !== false;
+      var lastErrorMessage = '';
       while (attempts <= maxRetries) {
         ensureAgentNotStopped();
         clearStepWaiting(step);
@@ -1811,9 +2399,10 @@
           setAgentPlanStatus(step, 'running', note);
           pushAgentTrace('info', '开始执行步骤：' + label);
         } else {
-          setAgentPlanStatus(step, 'retrying', note, attempts);
-          pushAgentLog('warn', '步骤「' + label + '」校验失败，自动重试第 ' + attempts + ' 次');
-          pushAgentTrace('warn', '步骤「' + label + '」开始重试，第 ' + attempts + ' 次');
+          setAgentPlanStatus(step, 'retrying', note, attempts, lastErrorMessage);
+          var reasonNote = lastErrorMessage ? ('，原因：' + lastErrorMessage) : '';
+          pushAgentLog('warn', '步骤「' + label + '」校验失败，自动重试第 ' + attempts + ' 次' + reasonNote);
+          pushAgentTrace('warn', '步骤「' + label + '」开始重试，第 ' + attempts + ' 次' + reasonNote);
         }
         try {
           await runAgentStep(step, context);
@@ -1826,17 +2415,11 @@
         } catch (err) {
           attempts += 1;
           bumpAgentRetryCount(step);
+          lastErrorMessage = err && err.message ? err.message : '步骤执行失败';
           if (attempts <= maxRetries) {
             continue;
           }
-          var msg = err && err.message ? err.message : '步骤执行失败';
-          if (!allowRecovery) {
-            setAgentPlanStatus(step, 'waiting', msg, attempts - 1);
-            setStepWaiting(step, msg);
-            updateFlowStatus();
-            pushAgentTrace('warn', '步骤暂停：' + label + '，等待人工处理');
-            throw createAgentManualWaitError('步骤「' + label + '」校验失败，已等待人工处理：' + msg, step);
-          }
+          var msg = lastErrorMessage;
           var failureInfo = {
             step: step,
             label: label,
@@ -1846,10 +2429,18 @@
             kind: err && err.validationFailed ? 'validation' : 'runtime',
             at: Date.now(),
           };
-          setAgentPlanStatus(step, 'failed', msg, attempts - 1);
+          if (!allowRecovery || failureInfo.kind === 'validation') {
+            setAgentPlanStatus(step, 'waiting', note, attempts - 1, msg);
+            recordAgentStepFailure(failureInfo);
+            setStepWaiting(step, msg);
+            updateFlowStatus();
+            pushAgentTrace('warn', '步骤暂停：' + label + '，等待人工处理，原因：' + msg);
+            throw createAgentManualWaitError('步骤「' + label + '」校验失败，等待人工处理：' + msg, step);
+          }
+          setAgentPlanStatus(step, 'failed', note, attempts - 1, msg);
           recordAgentStepFailure(failureInfo);
           updateFlowStatus();
-          pushAgentTrace('warn', '步骤失败：' + label + '，已交由 Agent 决策');
+          pushAgentTrace('warn', '步骤失败：' + label + '，原因：' + msg + '，已交由 Agent 决策');
           return { failed: true, failure: failureInfo };
         }
       }
@@ -1944,8 +2535,11 @@
           agentContext.coverageAction = '';
           if (manualAction === 'ignore') {
             agentContext.forceIgnoreCoverage = true;
+            agentContext.skipCoverageWait = true;
+            state.caseGenAgentIgnoreCoverage = true;
             pushAgentLog('info', '收到人工选择：忽略覆盖率继续');
           } else if (manualAction === 'supplement' || manualAction === 'reclean') {
+            state.caseGenAgentIgnoreCoverage = false;
             agentContext.mode = manualAction === 'supplement' ? 'supplement' : 'reclean';
             pushAgentLog('info', manualAction === 'supplement' ? '收到人工选择：补全清洗并继续' : '收到人工选择：重新清洗并继续');
             var cleanResult = await runAgentStepWithRetry('clean', agentContext, {
@@ -2002,10 +2596,22 @@
             agentContext.resumeAction = '';
             skipSatisfiedCheck = true;
           } else {
-            if (autoWorkflowStatus) setStatus(autoWorkflowStatus, 'Agent 正在决策下一步…', '');
-            decision = await decideAgentNextAction(ctx);
+            var forceBypassCoverage = Boolean(
+              ctx.force_ignore_coverage &&
+              ctx.coverage_percent !== null &&
+              ctx.coverage_percent < ctx.coverage_threshold
+            );
+            if (forceBypassCoverage) {
+              action = pickFallbackAgentAction(ctx);
+              skipSatisfiedCheck = true;
+              pushAgentLog('info', '已忽略覆盖率，按当前进度继续');
+            } else {
+              if (autoWorkflowStatus) setStatus(autoWorkflowStatus, 'Agent 正在决策下一步…', '');
+              decision = await decideAgentNextAction(ctx);
+            }
           }
         } catch (err) {
+          pushAgentLog('warn', 'Agent 决策失败：' + (err && err.message ? err.message : '未知错误'));
           decision = null;
         }
         var decisionAction = extractDecisionAction(decision);
@@ -2071,6 +2677,10 @@
         }
         if (action === 'finish') {
           return;
+        }
+        if (ctx.force_ignore_coverage && action === 'wait_coverage') {
+          pushAgentLog('info', '已忽略覆盖率，跳过等待覆盖率');
+          action = pickFallbackAgentAction(ctx);
         }
         if (action === 'wait_coverage') {
           await handleAgentCoverageAfterCompare(agentContext);
@@ -2221,15 +2831,30 @@
     function updateAutoMissingCard() {
       if (!autoMissingView || !autoMissingToggle || !autoMissingCopy) return;
       var hasData = state.missingRowCache.length > 0;
-      var disabled = !hasData || state.autoRunning;
-      autoMissingToggle.disabled = disabled;
-      autoMissingCopy.disabled = disabled;
-      if (autoMissingSmartFillBtn) autoMissingSmartFillBtn.disabled = disabled;
-      if (autoMissingGoUsecaseBtn) autoMissingGoUsecaseBtn.disabled = disabled;
+      var hasRawText = Boolean(casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim());
+      var list = state.missingLastList.length
+        ? state.missingLastList
+        : parseMissingModules(casesCompareResultEl && casesCompareResultEl.value ? casesCompareResultEl.value : '');
+      var hasFillable = (list || []).some(function(item) {
+        return item && (
+          (item.scenarios && item.scenarios.length) ||
+          (item.points && item.points.length) ||
+          (item.coupled && item.coupled.length) ||
+          (item.special && item.special.length)
+        );
+      });
+      autoMissingToggle.disabled = state.autoRunning || (!hasData && !hasRawText);
+      autoMissingCopy.disabled = state.autoRunning || !hasData;
+      if (autoMissingSmartFillBtn) autoMissingSmartFillBtn.disabled = state.autoRunning || !hasFillable || !state.caseGenModules.length;
+      if (autoMissingGoUsecaseBtn) autoMissingGoUsecaseBtn.disabled = state.autoRunning || !hasData;
       setAutoMissingToggleLabel(autoMissingDrawer && autoMissingDrawer.element && autoMissingDrawer.element.classList.contains('open'));
       if (!hasData) {
-        resetAutoMissingView();
-        setMissingStatus('', '');
+        if (hasRawText && autoMissingView.classList.contains('visible')) {
+          autoMissingView.innerHTML = renderAutoMissingTable();
+        } else {
+          resetAutoMissingView();
+          setMissingStatus('', '');
+        }
         return;
       }
       if (autoMissingView.classList.contains('visible')) {
@@ -2239,10 +2864,6 @@
 
     function toggleAutoMissingView() {
       if (!autoMissingView || !autoMissingToggle || autoMissingToggle.disabled) return;
-      if (!state.missingRowCache.length) {
-        setMissingStatus('当前没有缺失测试点', 'warn');
-        return;
-      }
       var drawer = ensureAutoMissingDrawer();
       if (!drawer) return;
       var isOpen = drawer.element && drawer.element.classList.contains('open');
@@ -2251,6 +2872,10 @@
         setMissingStatus('', '');
         return;
       }
+      var list = state.missingLastList.length ? state.missingLastList : parseMissingModules(casesCompareResultEl && casesCompareResultEl.value ? casesCompareResultEl.value : '');
+      state.missingLastList = list;
+      state.missingRowCache = buildMissingRows(list);
+      state.missingSelections = new Set(Array.from(state.missingSelections).filter(function(idx) { return idx < state.missingRowCache.length; }));
       autoMissingView.innerHTML = renderAutoMissingTable();
       autoMissingView.classList.remove('hidden');
       autoMissingView.classList.add('visible');
@@ -2357,19 +2982,38 @@
         setMissingStatus('未找到可填充的缺失测试点', 'warn');
         return;
       }
+      function hasFillableFields(item) {
+        return item && (
+          (item.scenarios && item.scenarios.length) ||
+          (item.points && item.points.length) ||
+          (item.coupled && item.coupled.length) ||
+          (item.special && item.special.length)
+        );
+      }
+      var fillableTargets = targets.filter(hasFillableFields);
+      if (!fillableTargets.length) {
+        setMissingStatus('当前没有可智能填充的缺失测试点，请先在覆盖对比结果中补充 missing 细项', 'warn');
+        return;
+      }
       var moduleMap = new Map(
         state.caseGenModules.map(function(mod) {
           var key = mod && mod.title ? mod.title.trim() : '';
           return [key, mod];
         })
       );
+      function formatUnmatchedLabel(name) {
+        var text = name === undefined || name === null ? '' : String(name).trim();
+        if (!text) return '未命名模块';
+        if (text.length > 24) return text.slice(0, 24) + '...';
+        return text;
+      }
       var unmatched = [];
       var updatedCount = 0;
-      targets.forEach(function(item) {
+      fillableTargets.forEach(function(item) {
         if (!item) return;
         var mod = moduleMap.get((item.module || '').trim());
         if (!mod) {
-          unmatched.push(item.module || '未命名模块');
+          unmatched.push(formatUnmatchedLabel(item.module));
           return;
         }
         var segments = [];
@@ -2549,7 +3193,10 @@
       updateAutoCompareActions(coverage);
       if (autoRecleanStatus && !(coverage !== null && coverage < 100)) setStatus(autoRecleanStatus, '', '');
       if (!(coverage !== null && coverage < 100) && autoWorkflowStatus) setStatus(autoWorkflowStatus, '', '');
-      if (!(coverage !== null && coverage < 100)) clearStepWaiting('compare');
+      if (coverage !== null) {
+        var limit = isCaseGenAgentEnabled() ? getAgentCoverageThreshold() : 100;
+        if (coverage >= limit) clearStepWaiting('compare');
+      }
       renderAutoCompareMissingView(missing, coverage, false, shouldOpenDrawer);
       return coverage;
     }
@@ -3100,6 +3747,7 @@
       clearAllWaitingSteps();
       clearAllFailedSteps();
       var agentEnabled = isCaseGenAgentEnabled();
+      if (agentEnabled) state.caseGenAgentIgnoreCoverage = false;
       if (agentEnabled) resetAgentStopState();
       var autoWorkflowManager = getAutoWorkflowManager();
       if (autoWorkflowManager && typeof autoWorkflowManager.getTask === 'function') {
@@ -3199,6 +3847,7 @@
         return;
       }
       var agentEnabled = isCaseGenAgentEnabled();
+      if (agentEnabled) state.caseGenAgentIgnoreCoverage = false;
       if (agentEnabled && !isAgentCoverageWaiting()) {
         setStatus(autoRecleanStatus, 'Agent 模式请在覆盖率等待阶段使用此操作', 'warn');
         if (autoWorkflowStatus) setStatus(autoWorkflowStatus, 'Agent 模式请使用一键执行启动流程', 'warn');
@@ -3340,13 +3989,13 @@
         return;
       }
       var agentEnabled = isCaseGenAgentEnabled();
-      if (agentEnabled && !isAgentCoverageWaiting()) {
+      var coverage = extractCoverageFromCompareResult();
+      var limit = agentEnabled ? getAgentCoverageThreshold() : 100;
+      if (agentEnabled && !isAgentCoverageWaiting() && !(coverage !== null && coverage < limit)) {
         setStatus(autoRecleanStatus, 'Agent 模式请在覆盖率等待阶段使用此操作', 'warn');
         if (autoWorkflowStatus) setStatus(autoWorkflowStatus, 'Agent 模式请使用一键执行启动流程', 'warn');
         return;
       }
-      var coverage = extractCoverageFromCompareResult();
-      var limit = agentEnabled ? getAgentCoverageThreshold() : 100;
       if (coverage === null) {
         setStatus(autoRecleanStatus, '当前覆盖率无法解析，请修正后再继续', 'warn');
         return;
@@ -3385,6 +4034,7 @@
       var useManager = Boolean(autoWorkflowManager && typeof autoWorkflowManager.startTask === 'function');
       var manualAction = options && options.coverageAction ? String(options.coverageAction).trim().toLowerCase() : '';
       var agentContext = agentEnabled ? { coverageAction: manualAction || 'ignore' } : {};
+      if (agentEnabled) state.caseGenAgentIgnoreCoverage = true;
       if (useManager) {
         autoWorkflowManager.startTask({
           kind: agentEnabled ? 'agent_continue' : 'continue',
@@ -3470,6 +4120,8 @@
       markAgentPlanSkippedByFlow: markAgentPlanSkippedByFlow,
       applyAgentPromptRoutingDecision: applyAgentPromptRoutingDecision,
       applyAgentReviewDecision: applyAgentReviewDecision,
+      parseAgentDecisionContent: parseAgentDecisionContent,
+      parseAgentReviewDecisionContent: parseAgentReviewDecisionContent,
       getAgentReviewPayloadSnapshot: getAgentReviewPayloadSnapshot,
       getAgentReviewInputSummary: getAgentReviewInputSummary,
       applyAgentCoverageSelection: applyAgentCoverageSelection,

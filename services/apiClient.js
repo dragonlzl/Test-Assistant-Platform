@@ -708,6 +708,14 @@
     }).then(handleResponse);
   }
 
+  function proxyModelCall(payload) {
+    return fetch('/api/models/proxy', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    });
+  }
+
   function listFeatureAssignments(scope, ownerId) {
     var query = [];
     if (scope) query.push('scope=' + encodeURIComponent(scope));
@@ -886,6 +894,7 @@
     listModelConfigs: listModelConfigs,
     createModelConfig: createModelConfig,
     updateModelConfig: updateModelConfig,
+    proxyModelCall: proxyModelCall,
     listFeatureAssignments: listFeatureAssignments,
     createFeatureAssignment: createFeatureAssignment,
     updateFeatureAssignment: updateFeatureAssignment,

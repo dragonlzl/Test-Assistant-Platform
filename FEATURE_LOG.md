@@ -3959,3 +3959,50 @@
 - 更新记录：2026-01-21 飞书通知仅附带最新一条 FEATURE_LOG 更新记录（`notify_feishu.py`）。
 - 更新记录：2026-01-21 Agent 刷新时按执行计划回填流程导航执行中状态，避免步骤短暂显示已完成（`scripts/core/autoCore.js`、`scripts/core/appRuntime.js`、`tests/ui/auto_casegen_agent.spec.js`）。
 - 更新记录：2026-01-21 Agent 刷新恢复时优先继续执行中的步骤并立即持久化阶段结果，避免重复评审或提前结束（`scripts/core/autoCore.js`、`scripts/modules/app.js`）。
+- 更新记录：2026-01-21 修复提醒区用例列表滚动抖动导致无法滚轮滚动的问题，改为稳定保留滚动槽位避免布局抖动（`style.css`）。
+- 更新记录：2026-01-21 模型管理新增 OpenAI 类型预设，默认填充 OpenAI Chat Completions 地址与推荐模型（`config/constants.js`、`ai-tools.html`、`index.html`）。
+- 更新记录：2026-01-21 模型调用与连通性测试支持 OpenAI Responses 接口，并在 Failed to fetch 时提示跨域/不可达原因（`services/modelClient.js`、`scripts/modules/models.js`、`tests/ui/model_response_strip.spec.js`）。
+- 更新记录：2026-01-21 模型管理新增后端转发开关并提供模型代理接口，解决内网/跨域直连失败（`ai-tools.html`、`index.html`、`style.css`、`scripts/modules/models.js`、`scripts/modules/app.js`、`services/modelClient.js`、`services/apiClient.js`、`backend/routers/configs.py`、`tests/ui/models_settings.spec.js`、`tests/api/models_proxy.spec.js`）。
+- 更新记录：2026-01-21 Responses 请求改为标准 input role 结构并在连通性测试中输出详细错误体，便于定位 400（`services/modelClient.js`、`scripts/modules/models.js`、`tests/ui/model_response_strip.spec.js`）。
+- 更新记录：2026-01-21 模型调用/测试支持解析 SSE 响应，避免 Responses 流式返回导致 JSON 解析失败（`services/modelClient.js`、`scripts/modules/models.js`、`tests/ui/model_response_strip.spec.js`）。
+- 更新记录：2026-01-21 Responses 请求显式禁用 stream 并增强 SSE delta 结构解析，避免输出为空（`services/modelClient.js`、`scripts/modules/models.js`）。
+- 更新记录：2026-01-21 模型管理新增 Responses 兼容模式（input 字符串 + stream=true），方便对齐第三方网关请求格式（`ai-tools.html`、`index.html`、`scripts/modules/models.js`、`services/modelClient.js`、`scripts/modules/app.js`、`tests/ui/models_settings.spec.js`、`tests/ui/model_response_strip.spec.js`）。
+- 更新记录：2026-01-21 GPT 系列模型显示 reasoning effort 设置并在调用时生效（`scripts/modules/models.js`、`scripts/modules/app.js`、`tests/ui/models_settings.spec.js`）。
+- 更新记录：2026-01-21 Responses 缺少 input/messages 报错时自动回退请求格式，避免 400 失败（`services/modelClient.js`、`scripts/modules/models.js`、`tests/ui/model_response_strip.spec.js`）。
+- 更新记录：2026-01-21 Responses 测试脚本支持识别 SSE 响应并提取输出（`responses_test.py`）。
+- 更新记录：2026-01-21 模型管理新增请求体预览/复制，便于对齐 Responses 请求格式（`ai-tools.html`、`index.html`、`scripts/modules/models.js`、`tests/ui/models_settings.spec.js`）。
+- 更新记录：2026-01-21 Responses 503 时自动降低 max_output_tokens 重试，避免大 token 导致供应商不可用（`services/modelClient.js`、`tests/ui/model_response_strip.spec.js`）。
+- 更新记录：2026-01-21 Responses 503 时移除 reasoning_effort 重试，避免网关不支持推理参数（`services/modelClient.js`、`tests/ui/model_response_strip.spec.js`）。
+- 更新记录：2026-01-21 Responses 503 重试不再降 max_output_tokens，仅移除 reasoning_effort（`services/modelClient.js`、`tests/ui/model_response_strip.spec.js`）。
+- 更新记录：2026-01-21 推理选项仅对 DeepSeek 模型展示/生效，非 deepseek 不再携带 reasoning_effort（`index.html`、`ai-tools.html`、`scripts/modules/models.js`、`scripts/modules/app.js`、`tests/ui/models_settings.spec.js`）。
+- 更新记录：2026-01-21 Agent 步骤重试/暂停/失败日志补充失败原因，便于定位校验失败（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 Agent 评审失败时抛出真实异常原因并回传日志（`scripts/core/reviewCore.js`、`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 Agent 执行计划卡片展示失败原因（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 自动流程澄清确认勾选按状态恢复，切页不再被重置（`scripts/core/reviewCore.js`、`scripts/modules/review.js`）。
+- 更新记录：2026-01-21 Agent 决策失败时输出解析/异常原因日志，便于定位 gpt5.2 无响应问题（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 需求评审输出归一为 JSON 数组并在导入时保持数组格式，避免评审结果为对象导致格式不符，同时补充 UI 校验用例（`scripts/core/reviewCore.js`、`scripts/modules/app.js`、`tests/ui/files_layout.spec.js`）。
+- 更新记录：2026-01-21 Agent 执行/复核时自动补全缺失的需求标识字段，并在执行过程输出格式修复日志（`scripts/core/autoCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 评审结果无法解析时在澄清区提示格式异常并补充容错解析，避免误报“暂无可澄清数据”，同步新增 UI 用例（`scripts/core/reviewCore.js`、`tests/ui/auto_waiting_status.spec.js`）。
+- 更新记录：2026-01-21 Agent 在评审输出混杂文本时尝试复核提取 JSON，仍无法修复则返回格式异常原因（`scripts/core/autoCore.js`、`scripts/core/reviewCore.js`）。
+- 更新记录：2026-01-21 Agent 决策解析失败时自动让模型尝试抽取 JSON，失败后返回明确原因日志（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 Agent 决策解析增加本地 JSON 修复（换行/尾逗号）并补充解析用例（`scripts/core/autoCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 修复 Agent 本地 JSON 修复对反斜杠识别错误，确保换行修复生效（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 Agent 决策解析新增 JSON 片段提取与引号修复，降低混杂文本/单引号导致的解析失败（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 Agent 校验失败（格式异常/无有效输出）时转入等待人工处理并阻止继续流程，评审无效不视为已评审，补充对应 UI 用例（`scripts/core/autoCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 Agent 复核输出解析增加 JSON 提取/修复并补充解析失败日志，降低 gpt5.2 复核无效的问题（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 Agent 复核解析改为多段 JSON 提取并收紧复核提示词（允许过长输出改为 rerun），降低复核输出解析失败（`scripts/core/autoCore.js`、`config/constants.js`）。
+- 更新记录：2026-01-21 Agent 复核解析新增容错提取（字段级扫描/拼接输出修复），降低 gpt5.2 复核 JSON 失效导致的解析失败（`scripts/core/autoCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 清洗结果解析修复“n 换行占位”导致 JSON 非法的问题，自动归一化并新增 UI 用例（`scripts/core/cleanCore.js`、`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 进一步增强清洗结果“n 换行占位”修复规则，覆盖引号后残留的占位字符（`scripts/core/cleanCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 评审结果解析增加“n 换行占位”修复与自动归一化，避免评审 JSON 格式异常（`scripts/core/reviewCore.js`、`scripts/modules/app.js`、`scripts/core/autoCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 对比完整性/覆盖对比/拆分等 JSON 解析引入“n 换行占位”修复，统一修复流程输出格式异常（`scripts/base/utils.js`、`scripts/modules/app.js`、`scripts/core/compareCore.js`、`scripts/core/splitCore.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-01-21 补齐 ANSI 控制符剥离、拆分双层 JSON 解析及用例解析修复，避免拆分/用例生成输出含异常字符导致格式校验失败（`scripts/base/utils.js`、`scripts/core/splitCore.js`、`scripts/core/casesCore.js`、`scripts/core/casesGenCore.js`、`scripts/modules/app.js`）。
+- 更新记录：2026-01-21 缺失视图空状态在暗色主题下改用暗色面板背景，避免白底刺眼（`style.css`）。
+- 更新记录：2026-01-21 智能填充缺失测试点时过滤空缺失项并禁用无效按钮，避免无缺失时弹出异常提示（`scripts/core/compareCore.js`、`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 自动流程缺失视图在无缺失测试点时仍可打开查看提示，并统一按钮可用性逻辑（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 Agent 复核阶段补充步骤提示词与格式提取，便于按流程提示修正输出格式（`scripts/core/autoCore.js`、`config/constants.js`）。
+- 更新记录：2026-01-21 对比完整性解析失败时保留等待提示，不因点击顶部流程导航被误清除（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 对比完整性/缺失解析支持多段 JSON 拼接的容错提取，避免正常数据被误判为解析失败（`scripts/core/compareCore.js`）。
+- 更新记录：2026-01-21 对比完整性输出若含多段 JSON 自动选取可用结果并格式化展示，避免重复对象干扰解析（`scripts/core/compareCore.js`）。
+- 更新记录：2026-01-21 忽略覆盖率后持久化忽略状态并放宽继续条件，避免 Agent 反复回到覆盖率等待（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 忽略覆盖率时跳过 Agent 决策覆盖等待，直接按当前进度继续下一步（`scripts/core/autoCore.js`）。

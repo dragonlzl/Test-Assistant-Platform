@@ -31,6 +31,7 @@
     var formatJsonOrText = handlers.formatJsonOrText || function(text) { return text; };
     var stripCodeFence = handlers.stripCodeFence || function(text) { return text; };
     var unwrapRequirementPayload = handlers.unwrapRequirementPayload || function(text) { return { payload: text }; };
+    var extractJsonPayload = handlers.extractJsonPayload || function() { return ''; };
     var extractRequirementLabelFromText = handlers.extractRequirementLabelFromText || function() { return ''; };
     var setRequirementLabel = handlers.setRequirementLabel || function() {};
     var promptRequirementLabel = handlers.promptRequirementLabel || function() { return ''; };
@@ -152,7 +153,16 @@
       if (forceOpen === void 0) forceOpen = false;
       if (!options || typeof options !== 'object') options = {};
       var resetDismissed = options.resetDismissed !== false;
-      var enabled = Boolean(autoClarifyToggle && autoClarifyToggle.checked);
+      var source = options.source || '';
+      var enabled = false;
+      if (source === 'toggle') {
+        enabled = Boolean(autoClarifyToggle && autoClarifyToggle.checked);
+      } else {
+        enabled = Boolean(state.autoRequireClarifications);
+        if (autoClarifyToggle && autoClarifyToggle.checked !== enabled) {
+          autoClarifyToggle.checked = enabled;
+        }
+      }
       state.autoRequireClarifications = enabled;
       if (autoClarifySection) {
         var shouldShow = enabled && state.activeTab === 'auto';
@@ -203,7 +213,15 @@
         return;
       }
       if (!state.reviewRows.length) {
-        autoClarifyContainer.innerHTML = '<p class="hint" style="padding:12px;">暂无评审结果，请先运行需求评审</p>';
+        var reviewText = reviewResultEl && reviewResultEl.value ? reviewResultEl.value.trim() : '';
+        var status = inspectReviewOutputStatus(reviewText);
+        var hintText = '暂无评审结果，请先运行需求评审';
+        if (status && status.reason === 'invalid') {
+          hintText = '评审结果格式异常，请检查输出格式';
+        } else if (status && status.reason === 'empty-list') {
+          hintText = '评审结果无澄清点，无需补充澄清';
+        }
+        autoClarifyContainer.innerHTML = '<p class="hint" style="padding:12px;">' + hintText + '</p>';
         autoClarifyContainer.classList.remove('hidden');
         autoClarifyContainer.classList.add('visible');
         if (autoClarifyConfirmBtn) autoClarifyConfirmBtn.disabled = true;
@@ -222,7 +240,15 @@
     function waitForAutoClarification() {
       if (!state.autoRequireClarifications) return Promise.resolve(true);
       if (!state.reviewRows.length) {
-        return Promise.reject(new Error('暂无可澄清的数据，请先完成需求评审'));
+        var reviewText = reviewResultEl && reviewResultEl.value ? reviewResultEl.value.trim() : '';
+        var status = inspectReviewOutputStatus(reviewText);
+        var errText = '暂无可澄清的数据，请先完成需求评审';
+        if (status && status.reason === 'invalid') {
+          errText = '评审结果格式异常，请检查评审输出';
+        } else if (status && status.reason === 'empty-list') {
+          errText = '评审结果无澄清点，无需确认澄清';
+        }
+        return Promise.reject(new Error(errText));
       }
       renderAutoClarifyView();
       return new Promise(function(resolve) {
@@ -256,14 +282,188 @@
         if (Array.isArray(result.payload)) return result.payload;
         return [];
       }
+      if (typeof raw === 'string') raw = repairReviewJsonText(raw);
       try {
         var data = typeof raw === 'string' ? JSON.parse(raw) : raw;
         if (Array.isArray(data)) return data;
         if (data && Array.isArray(data.data)) return data.data;
       } catch (err) {
-        console.warn('需求评审 JSON 解析失败', err);
+        var extracted = extractJsonPayload ? extractJsonPayload(raw) : '';
+        if (extracted) {
+          extracted = repairReviewJsonText(extracted);
+          try {
+            var fallback = JSON.parse(extracted);
+            if (Array.isArray(fallback)) return fallback;
+            if (fallback && Array.isArray(fallback.data)) return fallback.data;
+          } catch (innerErr) {
+            console.warn('需求评审 JSON 解析失败', innerErr);
+          }
+        } else {
+          console.warn('需求评审 JSON 解析失败', err);
+        }
       }
       return [];
+    }
+
+    function repairReviewJsonText(text) {
+      var raw = text === undefined || text === null ? '' : String(text);
+      if (!raw) return '';
+      var out = '';
+      var inString = false;
+      var escaped = false;
+      function isSpace(ch) { return ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t'; }
+      function prevNonSpace() {
+        for (var i = out.length - 1; i >= 0; i -= 1) {
+          var ch = out[i];
+          if (!isSpace(ch)) return ch;
+        }
+        return '';
+      }
+      function nextNonSpace(idx) {
+        for (var i = idx + 1; i < raw.length; i += 1) {
+          var ch = raw[i];
+          if (!isSpace(ch)) return ch;
+        }
+        return '';
+      }
+      for (var i = 0; i < raw.length; i += 1) {
+        var ch = raw[i];
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+            out += ch;
+            continue;
+          }
+          if (ch === '\\') {
+            escaped = true;
+            out += ch;
+            continue;
+          }
+          if (ch === '"') {
+            inString = false;
+            out += ch;
+            continue;
+          }
+          out += ch;
+          continue;
+        }
+        if (ch === '"') {
+          inString = true;
+          out += ch;
+          continue;
+        }
+        if (ch === 'n') {
+          var prev = prevNonSpace();
+          var next = nextNonSpace(i);
+          var prevOk = prev === '' || /[\[{,:\}\]\"]/.test(prev);
+          var nextOk = next === '' || /[\[{,\}\]\"]/.test(next);
+          if (prevOk && nextOk) {
+            continue;
+          }
+        }
+        out += ch;
+      }
+      return out;
+    }
+
+    function tryParseReviewJson(text) {
+      var raw = text === undefined || text === null ? '' : text;
+      var result = { parsed: null, text: '', repaired: false };
+      if (!raw) return result;
+      if (typeof raw !== 'string') {
+        result.parsed = raw;
+        return result;
+      }
+      var trimmed = raw.trim();
+      if (!trimmed) return result;
+      try {
+        result.parsed = JSON.parse(trimmed);
+        result.text = trimmed;
+        return result;
+      } catch (err) {
+        // continue
+      }
+      var repaired = repairReviewJsonText(trimmed);
+      if (repaired && repaired !== trimmed) {
+        try {
+          result.parsed = JSON.parse(repaired);
+          result.text = repaired;
+          result.repaired = true;
+          return result;
+        } catch (inner) {
+          // continue
+        }
+      }
+      return result;
+    }
+
+    function isReviewItemCandidate(payload) {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+      var patterns = [/类别/, /分类/, /不明确的需求点/, /不明确原因/, /分支/, /边界/, /澄清/];
+      var keys = Object.keys(payload);
+      for (var i = 0; i < keys.length; i += 1) {
+        var key = keys[i];
+        for (var j = 0; j < patterns.length; j += 1) {
+          if (patterns[j].test(key)) return true;
+        }
+      }
+      return false;
+    }
+
+    function extractReviewArrayPayload(payload) {
+      if (Array.isArray(payload)) return payload;
+      if (!payload || typeof payload !== 'object') return null;
+      var listKeys = ['data', 'items', 'list', 'rows', 'result', 'issues'];
+      for (var i = 0; i < listKeys.length; i += 1) {
+        var key = listKeys[i];
+        if (Array.isArray(payload[key])) return payload[key];
+      }
+      if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) {
+        if (isReviewItemCandidate(payload.data)) return [payload.data];
+      }
+      if (isReviewItemCandidate(payload)) return [payload];
+      return null;
+    }
+
+    function normalizeReviewOutput(content) {
+      var raw = stripCodeFence(content || '');
+      var trimmed = raw ? String(raw).trim() : '';
+      if (!trimmed) return '';
+      var parsed = null;
+      var jsonText = trimmed;
+      var attempt = tryParseReviewJson(trimmed);
+      if (attempt && attempt.parsed !== null && attempt.parsed !== undefined) {
+        parsed = attempt.parsed;
+        jsonText = attempt.text || trimmed;
+      } else {
+        var extracted = extractJsonPayload ? extractJsonPayload(trimmed) : '';
+        if (extracted) {
+          extracted = repairReviewJsonText(extracted);
+          jsonText = extracted;
+          try {
+            parsed = JSON.parse(extracted);
+          } catch (innerErr) {
+            parsed = null;
+          }
+        }
+      }
+      if (!parsed) return trimmed;
+      var list = extractReviewArrayPayload(parsed);
+      if (list) {
+        try {
+          return JSON.stringify(list, null, 2);
+        } catch (err) {
+          return jsonText;
+        }
+      }
+      if (parsed && typeof parsed === 'object') {
+        try {
+          return JSON.stringify(parsed, null, 2);
+        } catch (err) {
+          return jsonText;
+        }
+      }
+      return jsonText;
     }
 
     function normalizeReviewText(value) {
@@ -348,6 +548,26 @@
 
     function isClarifyComposing() {
       return Boolean(state.clarifyComposing);
+    }
+
+    function inspectReviewOutputStatus(text) {
+      var raw = stripCodeFence(text || '').trim();
+      if (!raw) return { valid: false, empty: true, reason: 'empty' };
+      var repaired = repairReviewJsonText(raw);
+      var jsonText = extractJsonPayload ? extractJsonPayload(repaired) : '';
+      var payloadText = jsonText || repaired;
+      var parsed = null;
+      try {
+        parsed = JSON.parse(payloadText);
+      } catch (err) {
+        return { valid: false, empty: false, reason: 'invalid' };
+      }
+      var list = null;
+      if (Array.isArray(parsed)) list = parsed;
+      else if (parsed && typeof parsed === 'object' && Array.isArray(parsed.data)) list = parsed.data;
+      if (!list) return { valid: false, empty: false, reason: 'invalid' };
+      if (!list.length) return { valid: true, empty: true, reason: 'empty-list' };
+      return { valid: true, empty: false, reason: 'has' };
     }
 
     function snapshotClarifyFocus() {
@@ -560,6 +780,10 @@
     function syncReviewViewFromResult() {
       var focusInfo = snapshotClarifyFocus();
       var composing = isClarifyComposing();
+      var normalized = normalizeReviewOutput(reviewResultEl && reviewResultEl.value ? reviewResultEl.value : '');
+      if (normalized && reviewResultEl && reviewResultEl.value !== normalized) {
+        reviewResultEl.value = normalized;
+      }
       var list = parseReviewList(reviewResultEl && reviewResultEl.value ? reviewResultEl.value : '');
       var signature = buildReviewDataSignature(list);
       state.reviewClarifyDataSignature = signature;
@@ -783,9 +1007,10 @@
         }
         var stripped = stripRequirementHeader(stripCodeFence(text));
         var parsed;
-        try {
-          parsed = JSON.parse(stripped);
-        } catch (err) {
+        var attempt = tryParseReviewJson(stripped);
+        if (attempt && attempt.parsed !== null && attempt.parsed !== undefined) {
+          parsed = attempt.parsed;
+        } else {
           setStatus(reviewStatus, '导入内容不是有效 JSON，请确认文件格式', 'warn');
           return;
         }
@@ -804,7 +1029,11 @@
           setStatus(reviewStatus, '未在文件中找到需求评审数组，请确认格式', 'warn');
           return;
         }
-        reviewResultEl.value = wrapTextWithRequirement(stripped);
+        try {
+          reviewResultEl.value = JSON.stringify(list, null, 2);
+        } catch (err) {
+          reviewResultEl.value = stripped;
+        }
         setStatus(reviewStatus, '已导入评审结果', 'ok');
         updateFlowStatus();
         syncReviewViewFromResult();
@@ -815,14 +1044,17 @@
     }
 
     async function reviewRequirements(extraContext) {
+      var raiseOnError = extraContext && extraContext.raiseOnError;
       var raw = rawText && rawText.value ? rawText.value.trim() : '';
       if (!raw) {
         setStatus(reviewStatus, '请先导入或填写原始需求', 'warn');
+        if (raiseOnError) throw new Error('请先导入或填写原始需求');
         return;
       }
       var requirementLabel = ensureRequirementLabel('请输入本次需求标识后再进行需求评审');
       if (!requirementLabel) {
         setStatus(reviewStatus, '已取消需求评审（需求标识为空）', 'warn');
+        if (raiseOnError) throw new Error('需求标识为空，已取消评审');
         return;
       }
       var skipClarify = extraContext && extraContext.skipClarify;
@@ -868,7 +1100,8 @@
         }
         var content = await callModelWithConfig(model, userPayload, prompt, reasoning, temperature);
         updateModelTiming(reviewTimingEl, Date.now() - startTime);
-        reviewResultEl.value = wrapTextWithRequirement(formatJsonOrText(stripCodeFence(content)));
+        var normalized = normalizeReviewOutput(content);
+        reviewResultEl.value = normalized || formatJsonOrText(stripCodeFence(content));
         syncReviewViewFromResult();
         if (skipClarify) {
           if (state.reviewClarifyDataSignature) {
@@ -886,6 +1119,7 @@
         console.error(err);
         updateModelTiming(reviewTimingEl);
         setStatus(reviewStatus, '评审失败：' + err.message, 'err');
+        if (raiseOnError) throw err;
       } finally {
         if (runReviewBtn) runReviewBtn.disabled = false;
         clearStepInProgress('review');
@@ -942,6 +1176,8 @@
       syncReviewViewFromResult: syncReviewViewFromResult,
       autoFillReviewClarifications: autoFillReviewClarifications,
       buildReviewClarificationContext: buildReviewClarificationContext,
+      tryParseReviewJson: tryParseReviewJson,
+      repairReviewJsonText: repairReviewJsonText,
     };
   }
 

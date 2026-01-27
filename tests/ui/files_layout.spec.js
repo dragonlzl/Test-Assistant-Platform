@@ -142,6 +142,8 @@ test.describe('文件导入导出与布局视图', () => {
     });
     await expect(page.locator('#reviewStatus')).toContainText('导入');
     await expect(page.locator('#reviewResult')).toHaveValue(/导入澄清/);
+    const reviewValue = await page.locator('#reviewResult').inputValue();
+    expect(reviewValue.trim().startsWith('[')).toBeTruthy();
 
     await page.evaluate(() => {
       const el = document.getElementById('compareResult');

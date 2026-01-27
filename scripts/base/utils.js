@@ -92,26 +92,146 @@
     }
   }
 
+  function stripAnsiControl(text) {
+    var raw = text === undefined || text === null ? '' : String(text);
+    if (!raw) return '';
+    return raw
+      .replace(/\x1b\[[0-9;:?]*[A-Za-z]/g, '')
+      .replace(/\x1b\][^\x1b]*\x1b\\/g, '');
+  }
+
+  function extractFirstJsonChunk(text) {
+    var raw = text === undefined || text === null ? '' : String(text);
+    if (!raw) return '';
+    var start = -1;
+    var stack = [];
+    var inString = false;
+    var escaped = false;
+    for (var i = 0; i < raw.length; i += 1) {
+      var ch = raw[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (ch === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+      if (ch === '{' || ch === '[') {
+        if (start < 0) start = i;
+        stack.push(ch);
+        continue;
+      }
+      if ((ch === '}' || ch === ']') && stack.length) {
+        stack.pop();
+        if (!stack.length && start >= 0) {
+          return raw.slice(start, i + 1);
+        }
+      }
+    }
+    return '';
+  }
+
+  function repairLooseNewlines(text) {
+    var raw = text === undefined || text === null ? '' : String(text);
+    raw = stripAnsiControl(raw);
+    if (!raw) return '';
+    var out = '';
+    var inString = false;
+    var escaped = false;
+    function isSpace(ch) { return ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t'; }
+    function prevNonSpace() {
+      for (var i = out.length - 1; i >= 0; i -= 1) {
+        var ch = out[i];
+        if (!isSpace(ch)) return ch;
+      }
+      return '';
+    }
+    function nextNonSpace(idx) {
+      for (var i = idx + 1; i < raw.length; i += 1) {
+        var ch = raw[i];
+        if (!isSpace(ch)) return ch;
+      }
+      return '';
+    }
+    for (var i = 0; i < raw.length; i += 1) {
+      var ch = raw[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          out += ch;
+          continue;
+        }
+        if (ch === '\\') {
+          escaped = true;
+          out += ch;
+          continue;
+        }
+        if (ch === '"') {
+          inString = false;
+          out += ch;
+          continue;
+        }
+        out += ch;
+        continue;
+      }
+      if (ch === '"') {
+        inString = true;
+        out += ch;
+        continue;
+      }
+      if (ch === 'n') {
+        var prev = prevNonSpace();
+        var next = nextNonSpace(i);
+        var prevOk = prev === '' || /[\[{,:\}\]\"]/.test(prev);
+        var nextOk = next === '' || /[\[{,\}\]\"]/.test(next);
+        if (prevOk && nextOk) {
+          continue;
+        }
+      }
+      out += ch;
+    }
+    return out;
+  }
+
   function extractJsonPayload(rawText) {
     var text = rawText || '';
-    var stripped = stripCodeFence(text);
+    var stripped = stripAnsiControl(stripCodeFence(text));
+    var repaired = repairLooseNewlines(stripped);
     var attempt = tryFormatJson(stripped);
+    if (attempt) return attempt;
+    attempt = tryFormatJson(repaired);
     if (attempt) return attempt;
     var fenceMatch = text.match(/```(?:json)?([\s\S]*?)```/i);
     if (fenceMatch) {
-      attempt = tryFormatJson((fenceMatch[1] || '').trim());
+      attempt = tryFormatJson(repairLooseNewlines((fenceMatch[1] || '').trim()));
       if (attempt) return attempt;
     }
-    var braceStart = stripped.indexOf('{');
-    var braceEnd = stripped.lastIndexOf('}');
+    var braceStart = repaired.indexOf('{');
+    var braceEnd = repaired.lastIndexOf('}');
     if (braceStart !== -1 && braceEnd > braceStart) {
-      attempt = tryFormatJson(stripped.slice(braceStart, braceEnd + 1));
+      attempt = tryFormatJson(repaired.slice(braceStart, braceEnd + 1));
       if (attempt) return attempt;
     }
-    var bracketStart = stripped.indexOf('[');
-    var bracketEnd = stripped.lastIndexOf(']');
+    var bracketStart = repaired.indexOf('[');
+    var bracketEnd = repaired.lastIndexOf(']');
     if (bracketStart !== -1 && bracketEnd > bracketStart) {
-      attempt = tryFormatJson(stripped.slice(bracketStart, bracketEnd + 1));
+      attempt = tryFormatJson(repaired.slice(bracketStart, bracketEnd + 1));
+      if (attempt) return attempt;
+    }
+    var chunk = extractFirstJsonChunk(repaired);
+    if (chunk) {
+      attempt = tryFormatJson(chunk);
       if (attempt) return attempt;
     }
     return '';
@@ -374,7 +494,7 @@
 
   function formatJsonOrText(text) {
     if (!text) return '';
-    var trimmed = text.trim();
+    var trimmed = repairLooseNewlines(text.trim());
     if (/^[\[{]/.test(trimmed)) {
       var formatted = tryFormatJson(trimmed);
       if (formatted) return formatted;
@@ -729,6 +849,9 @@
     escapeHtml: escapeHtml,
     escapeHtmlPreserve: escapeHtmlPreserve,
     appendPromptHint: appendPromptHint,
+    repairLooseNewlines: repairLooseNewlines,
+    stripAnsiControl: stripAnsiControl,
+    extractFirstJsonChunk: extractFirstJsonChunk,
     formatCompactTimestamp: formatCompactTimestamp,
     scrollElementIntoView: scrollElementIntoView,
     bindMissingReminderScrollHint: bindMissingReminderScrollHint,

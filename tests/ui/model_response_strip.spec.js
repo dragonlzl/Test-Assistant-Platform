@@ -204,3 +204,312 @@ test('DeepSeek JSON 数组输出严格校验', async ({ page }) => {
   expect(results.errorMsg).toMatch(/JSON 数组/);
   expect(results.systemPrompt).toMatch(/顶层必须是数组/);
 });
+
+test('Responses 接口可解析输出并使用 input 字段', async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      return route.continue();
+    }
+    return route.abort();
+  });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  await page.goto(base + '/index.html');
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+
+  const result = await page.evaluate(async () => {
+    const service = window.app && window.app.services && window.app.services.modelClient;
+    if (!service || typeof service.createModelClient !== 'function') {
+      throw new Error('模型客户端未加载');
+    }
+    const payloads = { body: '' };
+    const client = service.createModelClient({
+      fetchImpl: async function mockFetch(_, options) {
+        payloads.body = options && options.body ? options.body : '';
+        return {
+          ok: true,
+          text: async function mockText() {
+            return JSON.stringify({
+              output: [
+                {
+                  content: [{ type: 'output_text', text: 'pong' }],
+                },
+              ],
+            });
+          },
+        };
+      },
+    });
+    const output = await client.callModelWithConfig(
+      { baseUrl: 'https://api.openai.com/v1/responses', model: 'gpt-5.2', provider: 'openai' },
+      '用户输入',
+      '系统提示'
+    );
+    return { output, body: payloads.body };
+  });
+
+  const payload = JSON.parse(result.body || '{}');
+  expect(Array.isArray(payload.input)).toBe(true);
+  const roles = (payload.input || []).map(item => item && item.role).filter(Boolean);
+  expect(roles).toContain('system');
+  expect(roles).toContain('user');
+  const contentText = JSON.stringify(payload.input || []);
+  expect(contentText).toContain('系统提示');
+  expect(contentText).toContain('用户输入');
+  expect(payload.messages).toBeUndefined();
+  expect(result.output).toBe('pong');
+});
+
+test('SSE 响应可解析输出内容', async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      return route.continue();
+    }
+    return route.abort();
+  });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  await page.goto(base + '/index.html');
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+
+  const result = await page.evaluate(async () => {
+    const service = window.app && window.app.services && window.app.services.modelClient;
+    if (!service || typeof service.createModelClient !== 'function') {
+      throw new Error('模型客户端未加载');
+    }
+    const client = service.createModelClient({
+      fetchImpl: async function mockFetch() {
+        return {
+          ok: true,
+          text: async function mockText() {
+            return [
+              'event: response',
+              'data: {"choices":[{"delta":{"content":"po"}}]}',
+              '',
+              'data: {"choices":[{"delta":{"content":"ng"}}]}',
+              '',
+              'data: [DONE]',
+              ''
+            ].join('\\n');
+          },
+        };
+      },
+    });
+    return client.callModelWithConfig(
+      { baseUrl: 'http://mock.model/api', model: 'mock-model' },
+      '输入',
+      '提示'
+    );
+  });
+
+  expect(result).toBe('pong');
+});
+
+test('Responses 兼容模式发送字符串 input 并启用 stream', async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      return route.continue();
+    }
+    return route.abort();
+  });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  await page.goto(base + '/index.html');
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+
+  const payload = await page.evaluate(async () => {
+    const service = window.app && window.app.services && window.app.services.modelClient;
+    if (!service || typeof service.createModelClient !== 'function') {
+      throw new Error('模型客户端未加载');
+    }
+    let captured = '';
+    const client = service.createModelClient({
+      fetchImpl: async function mockFetch(_, options) {
+        captured = options && options.body ? options.body : '';
+        return {
+          ok: true,
+          text: async function mockText() {
+            return 'data: {"choices":[{"delta":{"content":"pong"}}]}\n\ndata: [DONE]\n';
+          },
+        };
+      },
+    });
+    await client.callModelWithConfig(
+      { baseUrl: 'https://api.openai.com/v1/responses', model: 'gpt-5.2', responsesCompat: true },
+      '用户输入',
+      '系统提示'
+    );
+    return captured;
+  });
+
+  const body = JSON.parse(payload || '{}');
+  expect(typeof body.input).toBe('string');
+  expect(body.input).toContain('系统提示');
+  expect(body.input).toContain('用户输入');
+  expect(body.stream).toBe(true);
+});
+
+test('Responses 缺少 input 报错时可自动回退格式', async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      return route.continue();
+    }
+    return route.abort();
+  });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  await page.goto(base + '/index.html');
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+
+  const result = await page.evaluate(async () => {
+    const service = window.app && window.app.services && window.app.services.modelClient;
+    if (!service || typeof service.createModelClient !== 'function') {
+      throw new Error('模型客户端未加载');
+    }
+    const payloads = [];
+    let callCount = 0;
+    const client = service.createModelClient({
+      fetchImpl: async function mockFetch(_, options) {
+        payloads.push(options && options.body ? options.body : '');
+        callCount += 1;
+        if (callCount === 1) {
+          return {
+            ok: false,
+            status: 400,
+            text: async function mockErrText() {
+              return JSON.stringify({
+                error: {
+                  message: 'Invalid request: either \"messages\" (OpenAI format) or \"input\" (Response API format) is required',
+                  code: 'missing_required_fields',
+                },
+              });
+            },
+          };
+        }
+        return {
+          ok: true,
+          text: async function mockOkText() {
+            return JSON.stringify({
+              output: [
+                {
+                  content: [{ type: 'output_text', text: 'pong' }],
+                },
+              ],
+            });
+          },
+        };
+      },
+    });
+    const output = await client.callModelWithConfig(
+      { baseUrl: 'https://api.openai.com/v1/responses', model: 'gpt-5.2', responsesCompat: true },
+      '用户输入',
+      '系统提示'
+    );
+    return { output, payloads };
+  });
+
+  const first = JSON.parse(result.payloads[0] || '{}');
+  const second = JSON.parse(result.payloads[1] || '{}');
+  expect(typeof first.input).toBe('string');
+  expect(Array.isArray(second.input)).toBe(true);
+  expect(result.output).toBe('pong');
+});
+
+test('Responses 503 时移除 reasoning_effort 重试', async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      return route.continue();
+    }
+    return route.abort();
+  });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  await page.goto(base + '/index.html');
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+
+  const result = await page.evaluate(async () => {
+    const service = window.app && window.app.services && window.app.services.modelClient;
+    if (!service || typeof service.createModelClient !== 'function') {
+      throw new Error('模型客户端未加载');
+    }
+    const payloads = [];
+    let callCount = 0;
+    const client = service.createModelClient({
+      modelIsR1: function() { return true; },
+      fetchImpl: async function mockFetch(_, options) {
+        payloads.push(options && options.body ? options.body : '');
+        callCount += 1;
+        if (callCount === 1) {
+          return {
+            ok: false,
+            status: 503,
+            text: async function mockErrText() {
+              return JSON.stringify({
+                error: {
+                  message: '所有供应商暂时不可用，请稍后重试',
+                  type: 'service_unavailable_error',
+                  code: 'service_unavailable_error',
+                },
+              });
+            },
+          };
+        }
+        return {
+          ok: true,
+          text: async function mockOkText() {
+            return JSON.stringify({
+              output: [
+                {
+                  content: [{ type: 'output_text', text: 'pong' }],
+                },
+              ],
+            });
+          },
+        };
+      },
+    });
+    const output = await client.callModelWithConfig(
+      { baseUrl: 'https://api.openai.com/v1/responses', model: 'gpt-5.2', maxTokens: 512 },
+      '用户输入',
+      '系统提示',
+      'medium'
+    );
+    return { output, payloads };
+  });
+
+  const first = JSON.parse(result.payloads[0] || '{}');
+  const second = JSON.parse(result.payloads[1] || '{}');
+  expect(first.reasoning_effort).toBe('medium');
+  expect(second.reasoning_effort).toBeUndefined();
+  expect(result.output).toBe('pong');
+});
