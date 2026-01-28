@@ -19,6 +19,28 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：登录 token 过期时间可配置
+- 功能描述：登录 token 过期时间从项目内 JSON 配置读取，未配置或配置非法时默认 7 天。
+- 操作方式：编辑 `config/auth.json` 的 `token_ttl_days` 或 `token_ttl_minutes`；重启后生效。
+- 使用效果：可按项目需求调整登录有效期，未配置保持一周兜底。
+- 新增内容/接口/组件：
+  - 后端：读取 JSON 配置并应用登录 token TTL（`backend/config.py`、`backend/routers/auth.py`、`config/auth.json`）。
+  - 测试：登录过期时间 API 用例改为读取配置（`tests/api/auth_login_expiry.spec.js`）。
+- 复用说明：复用现有登录与会话生成逻辑，仅扩展 TTL 来源。
+- 测试与验证：`API_BASE_URL=http://127.0.0.1:8080 npx playwright test --config tests/api/playwright.api.config.js tests/api/auth_login_expiry.spec.js`。
+- 更新记录：2026-01-28 登录 token 过期时间可配置（`backend/config.py`、`backend/routers/auth.py`、`config/auth.json`、`tests/api/auth_login_expiry.spec.js`）。
+
+- 功能名称：登录过期操作跳转登录
+- 功能描述：登录态过期后无需刷新页面，任何需要账号记录的操作触发 401/403 时自动清理本地 token 并跳转登录页提示重新登录。
+- 操作方式：在设置页等执行保存操作；若 token 失效触发 401/403，会自动跳转到登录页并显示“登录已过期，请重新登录”。
+- 使用效果：登录过期后不再静默执行，避免执行结果/修改记录丢失。
+- 新增内容/接口/组件：
+  - 前端：API 客户端统一拦截 401/403 并跳转登录、登录页过期提示（`services/apiClient.js`、`scripts/modules/login.js`）。
+  - 测试：登录过期跳转 UI 用例、未授权访问 API 用例（`tests/ui/auth_expiry_redirect.spec.js`、`tests/api/auth_unauthorized_access.spec.js`）。
+- 复用说明：复用现有 apiClient 与登录页流程，无新增后端接口。
+- 测试与验证：`node --check services/apiClient.js scripts/modules/login.js`；`npx playwright test --config tests/playwright.config.js tests/ui/auth_expiry_redirect.spec.js`；`API_BASE_URL=http://127.0.0.1:8080 npx playwright test --config tests/api/playwright.api.config.js tests/api/auth_unauthorized_access.spec.js`。
+- 更新记录：2026-01-28 登录过期操作跳转登录（`services/apiClient.js`、`scripts/modules/login.js`、`tests/ui/auth_expiry_redirect.spec.js`、`tests/api/auth_unauthorized_access.spec.js`）。
+
 - 功能名称：用例生成入库操作区顺序调整
 - 功能描述：AI 功能“用例生成”页面的入库操作区改为纵向排列，依次展示全模块用例视图、新用例入库、旧用例追加入库，并同步引导文案。
 - 操作方式：在用例生成页从上到下依次使用“全模块用例视图”勾选用例，选择入库方式后点击“新用例入库”，需要追加时点击“旧用例追加入库”。

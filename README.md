@@ -24,6 +24,7 @@
 - UI 自动化：`npm run test:ui`（如遇拖拽类偶发失败，可使用 `npm run test:ui -- --workers=1` 单线程重跑）。核心覆盖：模型/指派提示、工作流导入、执行抽屉与总览、页签持久化等。
 - 权限申请：如需请求提权/联网等人工确认，发起请求前先运行 `python3 notify_feishu.py` 向群里提醒（需联网）。
 - 后端 API（FastAPI + SQLite）：`pip install -r requirements.txt` 后运行 `uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080`，访问 `http://127.0.0.1:8080/index.html`；页面加载后需使用后台账号登录（默认管理员 `admin` / `chillytest_admin`）。常用环境变量：`APP_DB_FILE`（默认 `app.db`）、`ADMIN_USER`、`ADMIN_PASS`。如需本地私密覆盖，可复制 `backend/config_local.example.py` 为 `backend/config_local.py`（已加入 `.gitignore`）。  
+- 登录 token 过期时间：编辑 `config/auth.json` 的 `token_ttl_minutes` 或 `token_ttl_days`（分钟优先），缺失/非法时默认 7 天；改完需重启后端，新登录才生效。
 
 ## 约定
 - JS 兼容 ES2019，禁用可选链/空值合并等新语法；函数/DOM ID 使用 lowerCamelCase。

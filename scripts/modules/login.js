@@ -6,16 +6,20 @@
     el.textContent = text;
   }
 
-  function getRedirectTarget() {
+  function getQueryParams() {
     var search = window.location.search || '';
-    if (!search) return 'index.html';
     var params = {};
+    if (!search) return params;
     search.replace(/^\?/, '').split('&').forEach(function(pair) {
       var parts = pair.split('=');
-      if (parts.length === 2) {
-        params[decodeURIComponent(parts[0])] = decodeURIComponent(parts[1]);
-      }
+      if (!parts[0]) return;
+      params[decodeURIComponent(parts[0])] = decodeURIComponent(parts.slice(1).join('='));
     });
+    return params;
+  }
+
+  function getRedirectTarget() {
+    var params = getQueryParams();
     return params.redirect || 'index.html';
   }
 
@@ -150,6 +154,10 @@
       if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('usecase-active-tab');
     } catch (err) {
       // ignore
+    }
+    var params = getQueryParams();
+    if (params && params.reason === 'expired') {
+      setText(document.getElementById('loginStatus'), '登录已过期，请重新登录');
     }
     bindEvents();
   }

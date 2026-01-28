@@ -3,6 +3,8 @@
   var loginSeqKey = 'tap-login-seq';
   var authToken = '';
   var pendingRequests = {};
+  var authRedirecting = false;
+  var authRedirectAt = 0;
 
   function singleFlight(key, runner) {
     if (pendingRequests[key]) return pendingRequests[key];
@@ -17,6 +19,74 @@
       if (pendingRequests[key] === promise) delete pendingRequests[key];
     });
     return promise;
+  }
+
+  function isE2ESkipAuth() {
+    try {
+      if (typeof window !== 'undefined' && window.__APP_ALLOW_ANON) return true;
+      if (typeof localStorage !== 'undefined') {
+        var flag = localStorage.getItem('tap-e2e-skip-auth');
+        if (flag === '1' || flag === 'true') return true;
+      }
+    } catch (err) {
+      // ignore
+    }
+    return false;
+  }
+
+  function shouldSkipAuthRedirect(res) {
+    if (!res) return true;
+    if (isE2ESkipAuth()) return true;
+    var url = '';
+    try {
+      url = res.url || '';
+    } catch (err) {
+      url = '';
+    }
+    if (!url) return false;
+    if (url.indexOf('/api/auth/login') !== -1) return true;
+    if (url.indexOf('/api/auth/password') !== -1) return true;
+    return false;
+  }
+
+  function buildLoginRedirectUrl() {
+    var target = 'login.html';
+    var redirect = '';
+    try {
+      if (typeof window !== 'undefined' && window.location) {
+        redirect = window.location.pathname + window.location.search + window.location.hash;
+      }
+    } catch (err) {
+      redirect = '';
+    }
+    var params = [];
+    if (redirect) params.push('redirect=' + encodeURIComponent(redirect));
+    params.push('reason=expired');
+    if (params.length) target += '?' + params.join('&');
+    return target;
+  }
+
+  function handleAuthRedirect(res) {
+    if (!res || authRedirecting) return;
+    if (shouldSkipAuthRedirect(res)) return;
+    authRedirecting = true;
+    authRedirectAt = Date.now();
+    clearToken();
+    try {
+      if (window.app) window.app.authReady = false;
+      if (window.app && window.app.state) window.app.state.authReady = false;
+    } catch (err) {
+      // ignore
+    }
+    try {
+      if (typeof window !== 'undefined' && window.location) {
+        window.location.replace(buildLoginRedirectUrl());
+        return;
+      }
+    } catch (err) {
+      // ignore
+    }
+    if (Date.now() - authRedirectAt > 5000) authRedirecting = false;
   }
 
   function generateLoginSeq() {
@@ -116,6 +186,9 @@
     var status = res.status;
     return res.json().catch(function() { return {}; }).then(function(body) {
       if (res.ok) return body;
+      if (status === 401 || status === 403) {
+        handleAuthRedirect(res);
+      }
       var detail = translateDetail(body && body.detail ? body.detail : body, status);
       var error = new Error(detail);
       error.status = status;
