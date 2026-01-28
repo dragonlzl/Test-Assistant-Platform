@@ -4006,3 +4006,4 @@
 - 更新记录：2026-01-21 对比完整性输出若含多段 JSON 自动选取可用结果并格式化展示，避免重复对象干扰解析（`scripts/core/compareCore.js`）。
 - 更新记录：2026-01-21 忽略覆盖率后持久化忽略状态并放宽继续条件，避免 Agent 反复回到覆盖率等待（`scripts/core/autoCore.js`）。
 - 更新记录：2026-01-21 忽略覆盖率时跳过 Agent 决策覆盖等待，直接按当前进度继续下一步（`scripts/core/autoCore.js`）。
+- 更新记录：2026-01-21 模块拆分解析支持“模块名”字段，避免回退为模块1/模块2命名（`config/constants.js`、`scripts/modules/app.js`）。

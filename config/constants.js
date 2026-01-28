@@ -147,7 +147,7 @@
     minCaseViewFontSize: minCaseViewFontSize,
     maxCaseViewFontSize: maxCaseViewFontSize,
     moduleFieldAliases: {
-      title: ['module', 'name', 'title', '模块', '模块名称'],
+      title: ['module', 'name', 'title', '模块', '模块名称', '模块名'],
       scenarios: ['key_scenarios', '测试场景', '关键场景'],
       points: ['test_points', '测点要点', '测试要点'],
       coupled: ['coupled_modules', '耦合模块'],

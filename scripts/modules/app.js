@@ -57,7 +57,7 @@
     const legacyCaseGenPrompt = appConfig.legacyCaseGenPrompt || '你是测试用例专家，针对单个测试模块生成 JSON 用例列表，每条用例字段：{module, title, priority, preconditions, steps, expected}，steps 为数组。priority 字段必须严格使用 P0/P1/P2（三选一），不要输出“高/中/低”等描述。结合模块的关键场景/测试要点/耦合模块，给出至少 3 条高质量用例。';
     const cleanHighlightColors = appConfig.cleanHighlightColors || ['#5b8def', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6'];
     const moduleFieldAliases = appConfig.moduleFieldAliases || {
-      title: ['module', 'name', 'title', '模块', '模块名称'],
+      title: ['module', 'name', 'title', '模块', '模块名称', '模块名'],
       scenarios: ['key_scenarios', '测试场景', '关键场景'],
       points: ['test_points', '测点要点', '测试要点'],
       coupled: ['coupled_modules', '耦合模块'],
