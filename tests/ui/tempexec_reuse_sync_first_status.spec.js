@@ -15,7 +15,7 @@ test.describe('复用子项同步结果', () => {
         localStorage.setItem('usecase-temp-exec-v1', JSON.stringify({
           files: [{
             id: 'reuse-sync-file',
-            name: '复用同步首条',
+            name: '复用同步任意项',
             reuseEnabled: true,
             reusePresets: [],
             createdAt: Date.now(),
@@ -32,9 +32,9 @@ test.describe('复用子项同步结果', () => {
               actual: '未执行',
               remark: '',
               reuseDetails: [
-                { id: 'detail-1', text: '子项1', note: '', status: '通过' },
-                { id: 'detail-2', text: '子项2', note: '', status: '失败' },
-                { id: 'detail-3', text: '子项3', note: '', status: '阻塞' },
+                { id: 'detail-1', text: '子项1', note: '', status: '未执行' },
+                { id: 'detail-2', text: '子项2', note: '', status: '通过' },
+                { id: 'detail-3', text: '子项3', note: '', status: '未执行' },
               ],
               defectLinks: [],
             }],
@@ -85,8 +85,8 @@ test.describe('复用子项同步结果', () => {
       const entry = file.cases[0];
       if (Array.isArray(entry.reuseDetails)) {
         entry.reuseDetails.shift();
-        if (entry.reuseDetails[0]) entry.reuseDetails[0].status = '失败';
-        if (entry.reuseDetails[1]) entry.reuseDetails[1].status = '通过';
+        if (entry.reuseDetails[0]) entry.reuseDetails[0].status = '未执行';
+        if (entry.reuseDetails[1]) entry.reuseDetails[1].status = '失败';
       }
       if (api && api.renderTempExecView) api.renderTempExecView();
     });

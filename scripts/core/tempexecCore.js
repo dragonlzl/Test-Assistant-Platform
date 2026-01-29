@@ -10017,18 +10017,22 @@
         if (tempExecStatus) setStatus(tempExecStatus, '暂无可同步的复用子项', 'warn');
         return;
       }
-      var first = visibleDetails[0];
-      var firstStatus = normalizeReuseDetailStatus(first.status);
       var blockedStatuses = {
         '失败': true,
         '通过': true,
         '阻塞': true,
         '不适用': true,
       };
-      for (var i = 1; i < visibleDetails.length; i += 1) {
-        var other = visibleDetails[i];
-        var otherStatus = normalizeReuseDetailStatus(other.status);
-        if (otherStatus !== firstStatus && blockedStatuses[otherStatus]) {
+      var syncStatus = '';
+      for (var i = 0; i < visibleDetails.length; i += 1) {
+        var entry = visibleDetails[i];
+        var entryStatus = normalizeReuseDetailStatus(entry.status);
+        if (!blockedStatuses[entryStatus]) continue;
+        if (!syncStatus) {
+          syncStatus = entryStatus;
+          continue;
+        }
+        if (syncStatus !== entryStatus) {
           var anchorRect3 = captureTempExecAnchorRect(anchorEl);
           if (anchorRect3) {
             showTempExecBlockHint(anchorRect3, '其他子项已有执行结果，无法直接同步');
@@ -10037,15 +10041,15 @@
           return;
         }
       }
-      var changed = false;
-      if (first.status !== firstStatus) {
-        first.status = firstStatus;
-        changed = true;
+      if (!syncStatus) {
+        var first = visibleDetails[0];
+        syncStatus = normalizeReuseDetailStatus(first.status);
       }
-      for (var i = 1; i < visibleDetails.length; i += 1) {
+      var changed = false;
+      for (var i = 0; i < visibleDetails.length; i += 1) {
         var detail = visibleDetails[i];
-        if (detail.status !== firstStatus) {
-          detail.status = firstStatus;
+        if (detail.status !== syncStatus) {
+          detail.status = syncStatus;
           changed = true;
         }
       }

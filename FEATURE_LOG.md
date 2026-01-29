@@ -19,6 +19,17 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：复用子项结果同步支持任意子项
+- 功能描述：复用用例同步结果不再仅取第一项，改为任意已执行子项作为同步源；冲突时仍拦截。
+- 操作方式：在执行视图打开复用子项面板，点击“同步结果”，会以任意已执行子项的结果同步其余子项。
+- 使用效果：首项未执行也可正常同步，减少手动调整。
+- 新增内容/接口/组件：
+  - 前端：复用子项同步逻辑改为任意子项作为基准（`scripts/core/tempexecCore.js`）。
+  - 测试：更新复用子项同步 UI 用例（`tests/ui/tempexec_reuse_sync_first_status.spec.js`）。
+- 复用说明：复用现有同步与拦截规则，仅调整基准选择。
+- 测试与验证：`node --check scripts/core/tempexecCore.js`；`npx playwright test --config tests/playwright.config.js tests/ui/tempexec_reuse_sync_first_status.spec.js`。
+- 更新记录：2026-01-28 复用子项结果同步支持任意子项（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_reuse_sync_first_status.spec.js`）。
+
 - 功能名称：登录 token 过期时间可配置
 - 功能描述：登录 token 过期时间从项目内 JSON 配置读取，未配置或配置非法时默认 7 天。
 - 操作方式：编辑 `config/auth.json` 的 `token_ttl_days` 或 `token_ttl_minutes`；重启后生效。
