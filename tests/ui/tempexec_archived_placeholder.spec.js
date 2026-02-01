@@ -106,6 +106,7 @@ test.describe('用例执行-归档占位与解散归档', () => {
     });
 
     const v1Card = page.locator('#tempVersionGrid .temp-project-version', { hasText: 'v1' }).first();
+    await expect(v1Card.locator('.temp-project-version-header')).toContainText('v1（3条）');
     await expect(v1Card.locator('.archived-dissolve')).toBeVisible();
     await expect(v1Card.locator('.temp-req-row.archived')).toHaveCount(2);
     await expect(v1Card.locator('.temp-req-row.archived .temp-archived-mask')).toHaveCount(2);

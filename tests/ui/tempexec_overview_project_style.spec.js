@@ -131,12 +131,15 @@ test.describe('用例执行-个人总览对齐执行总览风格', () => {
     const projectB = page.locator('#tempExecOverview [data-temp-overview-project="2"]');
     await expect(projectB).toHaveClass(/active/);
     await expect(page.locator('#tempExecOverview .exec-overview-version-box', { hasText: 'v2' }).first()).toBeVisible();
+    await expect(page.locator('#tempExecOverview .exec-overview-version-box', { hasText: 'v2（2条）' }).first()).toBeVisible();
     await expect(page.locator('#tempExecOverview .exec-overview-file-chip', { hasText: '用例B' }).first()).toBeVisible();
 
     await page.locator('#tempExecOverview [data-temp-overview-project="1"]').click();
     await expect(page.locator('#tempExecOverview .exec-overview-version-box', { hasText: 'v1' }).first()).toBeVisible();
+    await expect(page.locator('#tempExecOverview .exec-overview-version-box', { hasText: 'v1（3条）' }).first()).toBeVisible();
     await expect(page.locator('#tempExecOverview .exec-overview-file-chip', { hasText: '用例A' }).first()).toBeVisible();
     await expect(page.locator('#tempExecOverview .exec-overview-version-box', { hasText: 'vX' }).first()).toBeVisible();
+    await expect(page.locator('#tempExecOverview .exec-overview-version-box', { hasText: 'vX（1条）' }).first()).toBeVisible();
 
     const v1Box = page.locator('#tempExecOverview .exec-overview-version-box', { hasText: 'v1' }).first();
     const v1ChipTitles = (await v1Box.locator('.exec-overview-file-chip .text').allInnerTexts()).map((t) => t.trim());

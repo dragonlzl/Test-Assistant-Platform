@@ -338,6 +338,29 @@
     return 'pending';
   }
 
+  function formatCaseCountLabel(total) {
+    var count = Number(total);
+    if (!isFinite(count) || count < 0) count = 0;
+    return '（' + count + '条）';
+  }
+
+  function getExecSetCaseCount(item) {
+    if (!item) return 0;
+    var total = item.total;
+    if (total !== null && total !== undefined && total !== '' && isFinite(Number(total))) {
+      return Number(total) || 0;
+    }
+    var fallback = item.case_count;
+    if (fallback !== null && fallback !== undefined && fallback !== '' && isFinite(Number(fallback))) {
+      return Number(fallback) || 0;
+    }
+    fallback = item.item_count;
+    if (fallback !== null && fallback !== undefined && fallback !== '' && isFinite(Number(fallback))) {
+      return Number(fallback) || 0;
+    }
+    return 0;
+  }
+
   function buildVersionSummaryRowInner(title, mainHtml) {
     return (
       '<div class="exec-overview-version-summary-title" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</div>' +
@@ -352,7 +375,7 @@
     var failed = Number(row && row.failed) || 0;
     var blocked = Number(row && row.blocked) || 0;
     var na = Number(row && row.not_applicable) || 0;
-    var title = resolveVersionNameById(row && row.version_id);
+    var title = resolveVersionNameById(row && row.version_id) + formatCaseCountLabel(total);
     var mainHtml = (
       buildFileProgressBar(total, pending, passed, failed, blocked, na) +
       buildExecSetMeta({
@@ -368,7 +391,8 @@
   }
 
   function buildVersionSummaryRowPlaceholder(row) {
-    var title = resolveVersionNameById(row && row.version_id);
+    var total = Number(row && row.total) || 0;
+    var title = resolveVersionNameById(row && row.version_id) + formatCaseCountLabel(total);
     return buildVersionSummaryRowInner(title, '<span class="exec-overview-placeholder">滚动加载</span>');
   }
 
@@ -1099,6 +1123,22 @@
         if (!byVer[vid]) byVer[vid] = [];
       });
 
+      var countByVer = {};
+      versionStats.forEach(function(stat) {
+        if (!stat) return;
+        var vid = stat.version_id === null || stat.version_id === undefined ? '' : String(stat.version_id);
+        countByVer[vid] = Number(stat.total) || 0;
+      });
+      Object.keys(byVer).forEach(function(vid) {
+        if (countByVer[vid] !== undefined) return;
+        var list = byVer[vid] || [];
+        var sum = 0;
+        list.forEach(function(es) {
+          sum += getExecSetCaseCount(es);
+        });
+        countByVer[vid] = sum;
+      });
+
       var verIds = Object.keys(byVer);
       verIds.sort(function(a, b) {
         if (String(a) === '' && String(b) !== '') return 1;
@@ -1134,6 +1174,7 @@
         return {
           versionId: vid,
           title: resolveVersionNameById(vid),
+          caseCount: countByVer[vid],
           execSets: list,
           execSetsLoaded: preloaded,
           execSetsLoading: false,
@@ -1148,6 +1189,7 @@
             '<div class="exec-overview-version-box placeholder" data-version-index="' + String(idx) + '" data-user-id="' + escapeHtml(userId) + '">' +
               '<div class="head">' +
                 '<span class="title" title="' + escapeHtml(item.title) + '">' + escapeHtml(item.title) + '</span>' +
+                '<span class="count">' + escapeHtml(formatCaseCountLabel(item.caseCount)) + '</span>' +
               '</div>' +
               '<div class="body">' + buildVersionBoxPlaceholder() + '</div>' +
             '</div>'

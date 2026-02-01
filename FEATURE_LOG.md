@@ -19,6 +19,22 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行总览与归档预览版本盒子展示用例数
+- 功能描述：执行页归档操作&进度预览、执行总览页版本盒子标题旁展示该版本用例总数；总览顶部版本汇总标题同步展示条数。
+- 操作方式：进入执行页「归档操作&进度预览」或执行总览页即可看到版本名后“（X条）”，版本筛选后数量同步更新。
+- 使用效果：无需展开即可快速识别各版本工作量。
+- 新增内容/接口/组件：
+  - 前端：版本盒子标题拼接用例总数并补充样式（`scripts/core/tempexecCore.js`、`scripts/modules/execOverview.js`、`style.css`）。
+  - 测试：更新归档预览、执行总览与归档占位 UI 用例（`tests/ui/tempexec_overview_project_style.spec.js`、`tests/ui/exec_overview.spec.js`、`tests/ui/tempexec_archived_placeholder.spec.js`）。
+- 复用说明：复用现有版本汇总/执行集统计数据，无新增接口。
+- 测试与验证：
+  - `node --check scripts/core/tempexecCore.js scripts/modules/execOverview.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_overview_project_style.spec.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/exec_overview.spec.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_archived_placeholder.spec.js`
+- 更新记录：2026-01-28 执行总览与归档预览版本盒子展示用例数（`scripts/core/tempexecCore.js`、`scripts/modules/execOverview.js`、`style.css`、`tests/ui/tempexec_overview_project_style.spec.js`、`tests/ui/exec_overview.spec.js`）。
+- 更新记录：2026-01-28 执行页版本盒子标题补充用例数且解散归档时仍可见（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_archived_placeholder.spec.js`）。
+
 - 功能名称：复用子项结果同步支持任意子项
 - 功能描述：复用用例同步结果不再仅取第一项，改为任意已执行子项作为同步源；冲突时仍拦截。
 - 操作方式：在执行视图打开复用子项面板，点击“同步结果”，会以任意已执行子项的结果同步其余子项。

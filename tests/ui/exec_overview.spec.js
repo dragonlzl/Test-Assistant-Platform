@@ -252,7 +252,9 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await expect(page.locator('#execOverviewNavProjects [data-project-id="2"]')).toHaveClass(/active/);
     await expect(page.locator('#execOverviewVersionSummary')).toBeVisible();
     await expect(page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row')).toHaveCount(1);
+    await expect(page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row')).toContainText('v1（1条）');
     await expect(page.locator('#execOverviewUserCards')).toContainText('总数 1');
+    await expect(page.locator('#execOverviewUserCards .exec-overview-version-box .head')).toContainText('v1（1条）');
     await expect(page.locator('#execOverviewUserCards .exec-overview-progress')).toHaveCount(0);
     await expect(page.locator('#execOverviewUserCards .exec-overview-file-progress')).toHaveCount(1);
     await expect(page.locator('#execOverviewUserCards')).not.toContainText('组长');
@@ -283,9 +285,9 @@ test.describe('执行总览页（DB 接口接入）', () => {
 
 	    const summaryRows = page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row');
 	    await expect(summaryRows).toHaveCount(2);
-	    await expect(summaryRows.nth(0)).toContainText('v2');
+	    await expect(summaryRows.nth(0)).toContainText('v2（2条）');
 	    await expect(summaryRows.nth(0)).toContainText('已1/2');
-	    await expect(summaryRows.nth(1)).toContainText('v1');
+	    await expect(summaryRows.nth(1)).toContainText('v1（9条）');
 	    await expect(summaryRows.nth(1)).toContainText('已4/9');
 
 	    const layoutStyles = await page.$eval('#execOverviewUserCards .exec-overview-layout', (el) => {
@@ -294,6 +296,9 @@ test.describe('执行总览页（DB 接口接入）', () => {
 	    });
 	    expect(layoutStyles.display).toBe('flex');
 	    expect(layoutStyles.overflowX).toMatch(/auto|scroll/);
+
+	    await expect(page.locator('#execOverviewUserCards .exec-overview-version-box .head', { hasText: 'v2（2条）' })).toBeVisible();
+	    await expect(page.locator('#execOverviewUserCards .exec-overview-version-box .head', { hasText: 'v1（9条）' })).toBeVisible();
 
 	    const v1Body = page.locator('#execOverviewUserCards .exec-overview-version-box', { hasText: 'v1' }).locator('.body').first();
 	    const v1BodyScrollable = await v1Body.evaluate((el) => el.scrollHeight > el.clientHeight);
@@ -336,7 +341,7 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await page.selectOption('#execOverviewVersionSelect', String(versionV1.id));
     await expect(page.locator('#execOverviewUserCards')).toContainText('总数 3');
     await expect(page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row')).toHaveCount(1);
-    await expect(page.locator('#execOverviewVersionSummary')).toContainText('v1');
+    await expect(page.locator('#execOverviewVersionSummary')).toContainText('v1（9条）');
     await expect(page.locator('#execOverviewVersionSummary')).not.toContainText('v2');
 
     await page.click('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]');

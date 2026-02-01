@@ -2784,6 +2784,13 @@
             : '<span class="hint">暂无用例</span>';
 
           var versionName = resolveVersionName(pid, vid);
+          var versionCount = 0;
+          orderedFiles.forEach(function(file) {
+            if (!file) return;
+            var count = getTempExecFileCaseCount(file);
+            versionCount += Number(count) || 0;
+          });
+          var versionCountLabel = '（' + versionCount + '条）';
           var archivedCount = orderedArchivedFiles.length;
           var dissolveBtn = archivedCount
             ? (
@@ -2801,7 +2808,7 @@
           return (
             '<div class="temp-project-version" data-temp-project-version-card="' + escapeHtml(pid + '||' + vid) + '">' +
               '<div class="temp-project-version-header" data-temp-project-version-drag="' + escapeHtml(pid + '||' + vid) + '" draggable="true">' +
-                '<span class="title" title="' + escapeHtml(versionName) + '">' + escapeHtml(versionName) + '</span>' +
+                '<span class="title-wrap"><span class="title" title="' + escapeHtml(versionName) + '">' + escapeHtml(versionName) + '</span><span class="count">' + escapeHtml(versionCountLabel) + '</span></span>' +
                 actionsHtml +
               '</div>' +
               '<div class="temp-project-version-body">' + rows + '</div>' +
@@ -3637,6 +3644,15 @@
           if (fid) byId[fid] = f;
         });
         orderedFileIds = reorderArchivedToBottom(orderedFileIds, byId);
+        var versionCount = 0;
+        orderedFileIds.forEach(function(fid) {
+          var file = byId[fid];
+          if (!file) return;
+          var summary = summaryByFileId && typeof summaryByFileId.get === 'function' ? summaryByFileId.get(fid) : null;
+          var total = summary ? (Number(summary.total) || 0) : 0;
+          if (!total) total = getTempExecFileCaseCount(file);
+          versionCount += total;
+        });
         var chips = orderedFileIds
           .map(function(fid) {
             var file = byId[fid];
@@ -3647,9 +3663,10 @@
           })
           .join('');
         var vname = pid === 'unknown' ? ('版本#' + String(vid)) : resolveVersionName(pid, vid);
+        var vcount = '（' + versionCount + '条）';
         versionBoxes.push(
           '<div class="exec-overview-version-box">' +
-            '<div class="head"><span class="title" title="' + escapeHtml(vname) + '">' + escapeHtml(vname) + '</span></div>' +
+            '<div class="head"><span class="title" title="' + escapeHtml(vname) + '">' + escapeHtml(vname) + '</span><span class="count">' + escapeHtml(vcount) + '</span></div>' +
             '<div class="body">' + (chips || '<span class="hint">暂无用例</span>') + '</div>' +
           '</div>'
         );
@@ -3670,6 +3687,15 @@
             .filter(Boolean),
           unassignedMap
         );
+        var unassignedCount = 0;
+        unassignedIds.forEach(function(fid) {
+          var file = unassignedMap[fid];
+          if (!file) return;
+          var summary = summaryByFileId && typeof summaryByFileId.get === 'function' ? summaryByFileId.get(fid) : null;
+          var total = summary ? (Number(summary.total) || 0) : 0;
+          if (!total) total = getTempExecFileCaseCount(file);
+          unassignedCount += total;
+        });
         var chips2 = unassignedIds
           .map(function(fid) {
             var file = unassignedMap[fid];
@@ -3679,9 +3705,10 @@
             return renderTempExecOverviewExecSetChip(file, summary);
           })
           .join('');
+        var unassignedCountLabel = '（' + unassignedCount + '条）';
         versionBoxes.push(
           '<div class="exec-overview-version-box">' +
-            '<div class="head"><span class="title" title="未分配版本">未分配版本</span></div>' +
+            '<div class="head"><span class="title" title="未分配版本">未分配版本</span><span class="count">' + escapeHtml(unassignedCountLabel) + '</span></div>' +
             '<div class="body">' + (chips2 || '<span class="hint">暂无用例</span>') + '</div>' +
           '</div>'
         );
@@ -3823,6 +3850,15 @@
     }
 
     function renderTempExecOverviewVersion(label, list) {
+      var versionCount = 0;
+      list.forEach(function(file) {
+        if (!file) return;
+        var summary = buildTempExecSummary(file);
+        var total = Number(summary && summary.total) || 0;
+        if (!total) total = getTempExecFileCaseCount(file);
+        versionCount += total;
+      });
+      var versionCountLabel = '（' + versionCount + '条）';
       var reqMap = new Map();
       list.forEach(function(file) {
         var req = normalizeRequirementName(file && file.requirement) || '未标识需求';
@@ -3849,7 +3885,7 @@
       }).join('');
       return (
         '<div class="temp-overview-version">' +
-          '<div class="temp-overview-version-header">' + escapeHtml(label) + '</div>' +
+          '<div class="temp-overview-version-header">' + escapeHtml(label) + '<span class="count">' + escapeHtml(versionCountLabel) + '</span></div>' +
           (reqBlocks || '<p class="hint">暂无用例</p>') +
         '</div>'
       );
@@ -7261,7 +7297,11 @@
                   // 仅在最新一次加载仍有效时写入，避免并发刷新导致状态回写错乱。
                   if (tempExecDbLoadSeq !== loadSeq) return;
                   file.cases = cases;
-                  file.caseCount = Array.isArray(cases) ? cases.length : 0;
+                  var existingCount = Number(file.caseCount);
+                  var resolvedCount = Array.isArray(cases) ? cases.length : 0;
+                  if (resolvedCount > 0 || !Number.isFinite(existingCount) || existingCount <= 0) {
+                    file.caseCount = resolvedCount;
+                  }
                   file._casesLoading = false;
                   updateTempExecFileCountBadge(file.id);
                   updateTempExecFileStateClass(file.id);
@@ -7274,7 +7314,10 @@
                 .catch(function() {
                   if (tempExecDbLoadSeq !== loadSeq) return;
                   file.cases = [];
-                  file.caseCount = 0;
+                  var existingCount = Number(file.caseCount);
+                  if (!Number.isFinite(existingCount) || existingCount <= 0) {
+                    file.caseCount = 0;
+                  }
                   file._casesLoading = false;
                   updateTempExecFileStateClass(file.id);
                   renderTempExecOverview();
@@ -7299,14 +7342,21 @@
                   var cases2 = Array.isArray(rawCases) ? rawCases.map(mapExecCaseToTempCase).filter(Boolean) : [];
                   if (tempExecDbLoadSeq !== loadSeq) return;
                   file2.cases = cases2;
-                  file2.caseCount = Array.isArray(cases2) ? cases2.length : 0;
+                  var existingCount2 = Number(file2.caseCount);
+                  var resolvedCount2 = Array.isArray(cases2) ? cases2.length : 0;
+                  if (resolvedCount2 > 0 || !Number.isFinite(existingCount2) || existingCount2 <= 0) {
+                    file2.caseCount = resolvedCount2;
+                  }
                   file2._casesLoading = false;
                   renderTempExecOverview();
                 })
                 .catch(function() {
                   if (tempExecDbLoadSeq !== loadSeq) return;
                   file2.cases = [];
-                  file2.caseCount = 0;
+                  var existingCount2 = Number(file2.caseCount);
+                  if (!Number.isFinite(existingCount2) || existingCount2 <= 0) {
+                    file2.caseCount = 0;
+                  }
                   file2._casesLoading = false;
                   renderTempExecOverview();
                 });

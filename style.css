@@ -1019,9 +1019,21 @@ body {
 .temp-project-version-header:active {
   cursor: grabbing;
 }
+.temp-project-version-header .title-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
 .temp-project-version-header .title {
   font-weight: 700;
   color: var(--text);
+}
+.temp-project-version-header .count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
 }
 .temp-project-version-header .remove {
   width: 18px;
@@ -2694,6 +2706,15 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
       font-weight: 700;
       color: var(--text);
       font-size: 14px;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .temp-overview-version-header .count {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
     }
     .temp-overview-group .hint {
       margin: 0;
@@ -8147,6 +8168,15 @@ tr.import-invalid-locate-active td {
   font-weight: 800;
   background: rgba(37, 99, 235, 0.06);
   border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.exec-overview-version-box .head .count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
 }
 .exec-overview-version-box .body {
   --exec-overview-chip-height: 88px;
