@@ -2439,10 +2439,10 @@
 
     function buildTempExecTag(file, isFocused) {
       if (isFocused) return '<span class="tag tag-focus">专注</span>';
-      if (file && file.reuseEnabled) {
-        return '<span class="tag tag-reuse">复</span>';
-      }
-      return '';
+      var tags = [];
+      if (file && file.reuseEnabled) tags.push('<span class="tag tag-reuse">复</span>');
+      if (file && file.associationEnabled) tags.push('<span class="tag tag-association">关联</span>');
+      return tags.join('');
     }
 
     function getTempExecFileCaseCount(file) {
@@ -5560,6 +5560,119 @@
       runTempExecMissingReminderAiRecommend({ trigger: 'button' });
     }
 
+    function ensureTempExecAssociationRows(file) {
+      if (!file || !file.associationEnabled) return;
+      if (!isDbMode()) return;
+      if (Array.isArray(file.associationRows)) return;
+      if (file._associationRowsLoading) return;
+      var caseFileId = file.caseFileId || file.case_file_id || null;
+      if (!caseFileId) return;
+      var client = getApiClient();
+      if (!client || typeof client.listCaseFileAssociations !== 'function') return;
+      file._associationRowsLoading = true;
+      client
+        .listCaseFileAssociations(caseFileId)
+        .then(function(rows) {
+          file._associationRowsLoading = false;
+          file.associationRows = Array.isArray(rows) ? rows : [];
+          if (String(state.tempExecActiveId || '') === String(file.id || file.execSetId || '')) {
+            renderTempExecView();
+          }
+        })
+        .catch(function() {
+          file._associationRowsLoading = false;
+          file.associationRows = [];
+        });
+    }
+
+    function normalizeTempExecAssociationDisplayName(raw, fallback) {
+      var text = raw === null || raw === undefined ? '' : String(raw);
+      text = text.replace(/\s+/g, ' ').trim();
+      if (!text) text = fallback || '';
+      return text;
+    }
+
+    function resolveTempExecMainComposeCount(file, associationRows) {
+      if (!file || !file.associationEnabled) return 0;
+      var cases = Array.isArray(file.cases) ? file.cases : [];
+      if (cases.length && !file._casesLoading) {
+        var mainCount = 0;
+        cases.forEach(function(item) {
+          if (!item) return;
+          var caseItemId = item.caseItemId;
+          if (caseItemId === null || caseItemId === undefined) caseItemId = item.case_item_id;
+          var sourceId = item.caseItemSourceId;
+          if (sourceId === null || sourceId === undefined) sourceId = item.case_item_source_id;
+          var isSubRow = (caseItemId === null || caseItemId === undefined) && !(sourceId === null || sourceId === undefined);
+          if (!isSubRow) mainCount += 1;
+        });
+        return mainCount;
+      }
+      var total = Number(file.caseCount);
+      if (Number.isFinite(total) && total >= 0) {
+        var subCount = 0;
+        (Array.isArray(associationRows) ? associationRows : []).forEach(function(row) {
+          if (!row) return;
+          var cnt = Number(row.selected_count);
+          if (!Number.isFinite(cnt) || cnt < 0) {
+            var picked = Array.isArray(row.selected_case_item_ids) ? row.selected_case_item_ids.length : 0;
+            cnt = Number(picked) || 0;
+          }
+          subCount += Math.max(0, cnt);
+        });
+        return Math.max(0, Math.round(total - subCount));
+      }
+      return 0;
+    }
+
+    function buildTempExecAssociationComposeParts(file) {
+      if (!file || !file.associationEnabled) return [];
+      var rows = Array.isArray(file.associationRows) ? file.associationRows : [];
+      if (!rows.length) return [];
+      var mainFallback = file.caseFileId ? ('用例#' + String(file.caseFileId)) : '当前用例';
+      var mainName = normalizeTempExecAssociationDisplayName(file.name, mainFallback);
+      var mainCount = resolveTempExecMainComposeCount(file, rows);
+      var parts = [{ name: mainName, role: '主', count: mainCount }];
+      rows.forEach(function(row) {
+        if (!row) return;
+        var sid = row.sub_case_file_id || '';
+        var subFallback = sid ? ('用例#' + String(sid)) : '副用例';
+        var subName = normalizeTempExecAssociationDisplayName(row.sub_case_file_name, subFallback);
+        var count = Number(row.selected_count);
+        if (!Number.isFinite(count) || count < 0) {
+          var picked = Array.isArray(row.selected_case_item_ids) ? row.selected_case_item_ids.length : 0;
+          count = Number(picked) || 0;
+        }
+        parts.push({ name: subName, role: '副', count: count });
+      });
+      return parts;
+    }
+
+    function renderTempExecAssociationComposeHtml(file) {
+      var parts = buildTempExecAssociationComposeParts(file);
+      if (!parts.length) return '';
+      var out = [];
+      for (var i = 0; i < parts.length; i += 1) {
+        var part = parts[i];
+        if (!part) continue;
+        var role = part.role ? String(part.role) : '';
+        var roleClass = role === '主' ? ' main' : ' sub';
+        var countHtml = '';
+        if (!(part.count === null || part.count === undefined)) {
+          countHtml = '<span class="temp-exec-combo-count">' + escapeHtml(String(part.count) + '条') + '</span>';
+        }
+        out.push(
+          '<span class="temp-exec-combo-item' + roleClass + '">' +
+            '<span class="temp-exec-combo-name">' + escapeHtml(part.name || '') + '</span>' +
+            '<span class="temp-exec-combo-role">' + escapeHtml('（' + role + '）') + '</span>' +
+            countHtml +
+          '</span>'
+        );
+        if (i < parts.length - 1) out.push('<span class="temp-exec-combo-sep" aria-hidden="true">+</span>');
+      }
+      return out.join('');
+    }
+
     function renderTempExecView() {
       if (!tempExecView) return;
       var preserveScroll = Boolean(state.tempExecPreserveScrollOnce);
@@ -5600,16 +5713,27 @@
         : (ctx && ctx.versionId !== null && ctx.versionId !== undefined ? String(ctx.versionId || '') : '');
       var ctxProjectName = ctxProjectId ? resolveProjectName(ctxProjectId) : '';
       var ctxVersionName = (ctxProjectId && ctxVersionId) ? resolveVersionName(ctxProjectId, ctxVersionId) : '';
+      if (active) ensureTempExecAssociationRows(active);
+      var comboHtml = renderTempExecAssociationComposeHtml(active);
       var ctxHtml = '';
-      if (ctxProjectId || ctxVersionId) {
-        ctxHtml =
-          '<div class="temp-exec-context">' +
-            '<span class="temp-exec-context-label">当前用例归属：</span>' +
-            '<span class="temp-exec-context-kv">' +
-              (ctxProjectName ? ('项目 ' + escapeHtml(ctxProjectName)) : '') +
-              (ctxVersionName ? (' / 版本 ' + escapeHtml(ctxVersionName)) : '') +
-            '</span>' +
-          '</div>';
+      var ownerText = '';
+      if (ctxProjectName) ownerText += '项目 ' + escapeHtml(ctxProjectName);
+      if (ctxVersionName) ownerText += (ownerText ? ' / ' : '') + '版本 ' + escapeHtml(ctxVersionName);
+      if (ownerText || comboHtml) {
+        if (ownerText) {
+          ctxHtml +=
+            '<div class="temp-exec-context">' +
+              '<span class="temp-exec-context-label">当前用例归属：</span>' +
+              '<span class="temp-exec-context-kv">' + ownerText + '</span>' +
+            '</div>';
+        }
+        if (comboHtml) {
+          ctxHtml +=
+            '<div class="temp-exec-context temp-exec-context-combo">' +
+              '<span class="temp-exec-context-label">当前用例组合：</span>' +
+              '<span class="temp-exec-context-kv temp-exec-context-combo-line">' + comboHtml + '</span>' +
+            '</div>';
+        }
       }
       if (!active) {
         renderTempExecToolbar(null);
@@ -5942,9 +6066,12 @@
       var ids = new Set();
       file.cases.forEach(function(item) {
         if (!item) return;
-        var id = item.caseItemId || item.case_item_id || null;
-        if (id === null || id === undefined) return;
-        ids.add(String(id));
+        var id = item.caseItemId;
+        if (id === null || id === undefined) id = item.case_item_id;
+        if (id !== null && id !== undefined) ids.add(String(id));
+        var sourceId = item.caseItemSourceId;
+        if (sourceId === null || sourceId === undefined) sourceId = item.case_item_source_id;
+        if (sourceId !== null && sourceId !== undefined) ids.add(String(sourceId));
       });
       return ids;
     }
@@ -5984,8 +6111,12 @@
       for (var i = 0; i < file.cases.length; i += 1) {
         var item = file.cases[i];
         if (!item) continue;
-        var id = item.caseItemId || item.case_item_id || null;
+        var id = item.caseItemId;
+        if (id === null || id === undefined) id = item.case_item_id;
         if (id !== null && id !== undefined && String(id) === target) return i;
+        var sourceId = item.caseItemSourceId;
+        if (sourceId === null || sourceId === undefined) sourceId = item.case_item_source_id;
+        if (sourceId !== null && sourceId !== undefined && String(sourceId) === target) return i;
       }
       return -1;
     }
@@ -6762,6 +6893,7 @@
         id: item.id,
         execCaseId: item.id,
         caseItemId: item.case_item_id || null,
+        caseItemSourceId: item.case_item_source_id || null,
         module: item.module || '',
         title: item.title || '',
         priority: item.priority || '',
@@ -7094,6 +7226,7 @@
           restoredFromId: restoredFromId,
           requirement: normalizeRequirementName(set.requirement) || '',
           reuseEnabled: Boolean(set.reuse_enabled),
+          associationEnabled: Boolean(set.association_enabled),
           createdAt: createdAt,
           reusePresets: Array.isArray(set.reuse_presets) ? normalizeReusePresets(set.reuse_presets) : [],
           versionId: resolvedVersionId,
@@ -7132,6 +7265,7 @@
           status: 'archived',
           requirement: normalizeRequirementName(set.requirement) || '',
           reuseEnabled: Boolean(set.reuse_enabled),
+          associationEnabled: Boolean(set.association_enabled),
           createdAt: createdAt,
           archivedAt: archivedAt,
           reusePresets: Array.isArray(set.reuse_presets) ? normalizeReusePresets(set.reuse_presets) : [],
@@ -9794,7 +9928,24 @@
               )
           )
           : '';
-        var rowClass = 'case-row' + (isTempExecNewAdded(file.id, item) ? ' new-added' : '');
+        var rowClassParts = ['case-row'];
+        if (isTempExecNewAdded(file.id, item)) rowClassParts.push('new-added');
+        var caseItemId = item ? item.caseItemId : null;
+        if (caseItemId === null || caseItemId === undefined) {
+          caseItemId = item && item.case_item_id !== undefined ? item.case_item_id : null;
+        }
+        var caseItemSourceId = item ? item.caseItemSourceId : null;
+        if (caseItemSourceId === null || caseItemSourceId === undefined) {
+          caseItemSourceId = item && item.case_item_source_id !== undefined ? item.case_item_source_id : null;
+        }
+        var associationSubRow = Boolean(
+          file &&
+          file.associationEnabled &&
+          (caseItemId === null || caseItemId === undefined) &&
+          !(caseItemSourceId === null || caseItemSourceId === undefined)
+        );
+        if (associationSubRow) rowClassParts.push('association-sub');
+        var rowClass = rowClassParts.join(' ');
         return (
           '<tr class="' + rowClass + '" data-temp-case-row="' + file.id + '" data-index="' + idx + '">' +
             cells.join('') +

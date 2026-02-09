@@ -3941,3 +3941,31 @@
 - 更新记录：2026-01-18 执行页 AI 生成追加成功后新增悬浮提示（`scripts/modules/tempexec.js`、`tests/ui/tempexec_ai_gen.spec.js`）。
 - 更新记录：2026-01-18 执行页 AI 生成已追加用例行增加填充提示（`scripts/modules/tempexec.js`、`style.css`、`tests/ui/tempexec_ai_gen.spec.js`）。
 - 更新记录：2026-01-18 执行页 AI 生成已追加用例行填充持久化并禁用勾选（`scripts/modules/tempexec.js`、`tests/ui/tempexec_ai_gen.spec.js`）。
+
+- 功能名称：用例关联（主副用例引用组合执行）
+- 功能描述：在用例库页与执行页的“选择用例执行”抽屉中新增“用例关联”能力，支持主用例关联多个副用例并保存勾选条目；转执行时可按开关决定是否带关联组合执行，执行页展示“关联”标识。
+- 操作方式：在“选择用例执行”列表点击“用例关联”进入关联抽屉，新增/编辑副用例并勾选关联条目后确认；在同一列表通过“关联用例”开关控制转执行是否带关联，关闭时会二次确认。
+- 使用效果：主副关联以引用方式组合，不改写原始用例；关联条目选择可持久化复用；转执行可按需带关联；执行页可识别关联执行集并保留现有 diff/同步逻辑。
+- 新增内容/接口/组件：
+  - 后端：新增用例关联数据模型与迁移、关联 CRUD/候选查询接口、执行集 `association_enabled` 字段与转执行组合逻辑（`backend/models.py`、`backend/migrations.py`、`backend/schemas.py`、`backend/routers/cases.py`、`backend/routers/exec_routes.py`）。
+  - 前端：选择执行列表新增“关联用例”列与“用例关联”按钮、关联抽屉/选择抽屉/删除确认抽屉、关联开关转执行确认链路、执行页关联标签显示（`case-library.html`、`index.html`、`case-exec.html`、`style.css`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`services/apiClient.js`）。
+  - 测试：新增关联 API/UI 自动化并更新用例库抽屉分页用例（`tests/api/case_file_associations.spec.js`、`tests/api/exec_association_transfer.spec.js`、`tests/ui/case_library_association.spec.js`、`tests/ui/case_library_drawer_pagination.spec.js`）。
+- 复用说明：复用现有抽屉、分页、确认弹窗、转执行与执行同步框架，仅在既有流程上扩展关联状态与组合数据源。
+- 测试与验证：
+  - `node --check scripts/modules/caseLibrary.js scripts/core/tempexecCore.js services/apiClient.js tests/ui/case_library_association.spec.js tests/ui/case_library_drawer_pagination.spec.js tests/api/case_file_associations.spec.js tests/api/exec_association_transfer.spec.js`
+  - `python3 -m py_compile backend/models.py backend/migrations.py backend/routers/cases.py backend/routers/exec_routes.py backend/schemas.py`
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_file_associations.spec.js tests/api/exec_association_transfer.spec.js`
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --workers=1 --config tests/playwright.config.js tests/ui/case_library_association.spec.js tests/ui/case_library_drawer_pagination.spec.js`
+- 更新记录：2026-02-09 用例关联主副引用执行、关联开关转执行与执行页关联标识（`backend/models.py`、`backend/migrations.py`、`backend/routers/cases.py`、`backend/routers/exec_routes.py`、`backend/schemas.py`、`case-library.html`、`index.html`、`case-exec.html`、`style.css`、`scripts/modules/caseLibrary.js`、`scripts/core/tempexecCore.js`、`services/apiClient.js`、`tests/api/case_file_associations.spec.js`、`tests/api/exec_association_transfer.spec.js`、`tests/ui/case_library_association.spec.js`、`tests/ui/case_library_drawer_pagination.spec.js`）。
+- 更新记录：2026-02-09 用例关联新增“先选副用例、再选条目”的双抽屉流程，避免新增关联页过长（`case-library.html`、`index.html`、`case-exec.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_association.spec.js`）。
+- 更新记录：2026-02-09 关联副用例选择页新增版本下拉与查询动作，未查询前不展示副用例列表（`backend/routers/cases.py`、`services/apiClient.js`、`case-library.html`、`index.html`、`case-exec.html`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_association.spec.js`）。
+- 更新记录：2026-02-09 关联列表点击“编辑”改为直达条目选择抽屉，复用已关联副用例并回显上次勾选条目，无需再次版本查询与副用例检索（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_association.spec.js`）。
+- 更新记录：2026-02-09 修复关联执行条目回写污染：关联引用条目在执行中更新不再自动回写主用例，且删除执行条目时不再误删副用例原始条目；重复转执行不再累积关联条目（`backend/routers/exec_routes.py`、`tests/api/exec_association_transfer.spec.js`）。
+- 更新记录：2026-02-09 关联执行语义完善：副用例引用条目在执行中“减号”仅从组合剔除并回写取消关联勾选；“加号”仍归主用例；副用例引用条目的非删除编辑同步回副用例原用例；副用例外部改动可触发组合执行 diff 提示（`backend/routers/exec_routes.py`、`tests/api/exec_association_transfer.spec.js`）。
+- 更新记录：2026-02-09 修复关联副用例外部变更漏检：执行页用例库同步改为按“主用例+关联副用例”最新更新时间判定，确保副用例原内容变更可触发组合用例同步与 diff 提示（`backend/routers/exec_routes.py`、`tests/api/exec_association_transfer.spec.js`）。
+- 更新记录：2026-02-09 修复关联副用例命中后 diff 抽屉手动重开为空：执行页用例映射补充 `case_item_source_id` 并用于 diff 过滤/定位，确保自动弹出后再次手动打开仍可见副用例命中差异（`backend/schemas.py`、`scripts/core/tempexecCore.js`、`tests/api/exec_association_transfer.spec.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。
+- 更新记录：2026-02-09 新增关联补充副用例去重：当某副用例已关联到当前主用例时，在“新增关联”候选列表中标记为不可选（可显示“已关联到当前主用例”），删除该关联后可再次被选择（`backend/routers/cases.py`、`tests/api/case_file_associations.spec.js`、`tests/ui/case_library_association.spec.js`）。
+- 更新记录：2026-02-09 执行页关联副用例行增加背景高亮：组合执行中命中“关联副用例引用”条目时，列表行增加专属背景与左侧强调条，并分别适配白色/黑色主题（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_association_row_highlight.spec.js`）。
+- 更新记录：2026-02-09 执行视图“当前用例归属”下新增“当前用例组合”展示：当执行集为关联组合用例时，显示“主用例（主） + 副用例（副）（条数）”拼接文案（如“用例名1（主） + 用例名2（副）（n条） + 用例名3（副）（m条）”），并适配深浅主题（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_association_row_highlight.spec.js`）。
+- 更新记录：2026-02-09 优化“当前用例组合”展示格式：由纯文本拼接改为结构化胶囊标签（主/副/条数）+ 固定分隔符，统一 `+` 两侧间距与视觉对齐，避免不同名称长度导致的空格不一致（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_association_row_highlight.spec.js`）。
+- 更新记录：2026-02-09 “当前用例组合”补充主用例条数展示：主用例与副用例统一展示“角色 + 条数”，其中主用例条数按组合执行视图中非关联引用行实时统计（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_association_row_highlight.spec.js`）。

@@ -151,6 +151,7 @@ class CaseFileOut(BaseModel):
     file_name_clean: str
     source: Optional[str] = None
     reuse_enabled: bool = False
+    association_count: int = 0
     item_count: Optional[int] = None
     importer_id: Optional[int]
     importer_name: Optional[str] = None
@@ -195,6 +196,37 @@ class CaseFileAppendOut(BaseModel):
     total_payload: int = 0
     total_unique: int = 0
     updated_at: datetime
+
+
+class CaseFileAssociationOut(BaseModel):
+    id: int
+    main_case_file_id: int
+    sub_case_file_id: int
+    sub_case_file_name: str
+    selected_case_item_ids: List[int] = []
+    selected_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class CaseFileAssociationPatch(BaseModel):
+    selected_case_item_ids: List[int]
+
+
+class CaseFileAssociationCreate(BaseModel):
+    sub_case_file_id: int
+    selected_case_item_ids: List[int]
+
+
+class CaseFileAssociationCandidateOut(BaseModel):
+    id: int
+    project_id: int
+    version_id: Optional[int] = None
+    file_name_clean: str
+    item_count: int = 0
+    association_count: int = 0
+    association_forbidden: bool = False
+    forbidden_reason: Optional[str] = None
 
 
 class MissingModuleCreate(BaseModel):
@@ -293,6 +325,7 @@ class ExecSetOut(BaseModel):
     requirement: Optional[str] = None
     reuse_enabled: bool = False
     reuse_presets: Optional[Any] = None
+    association_enabled: bool = False
     case_count: Optional[int] = None
     status: str
     restored_from_id: Optional[int] = None
@@ -402,6 +435,7 @@ class ExecCaseOut(BaseModel):
     id: int
     exec_set_id: int
     case_item_id: Optional[int]
+    case_item_source_id: Optional[int] = None
     module: str
     title: str
     expected: str
@@ -457,6 +491,7 @@ class ExecSetUpdate(BaseModel):
     requirement: Optional[str] = None
     reuse_enabled: Optional[bool] = None
     reuse_presets: Optional[Any] = None
+    association_enabled: Optional[bool] = None
 
 
 class ExecSetArchiveRequest(BaseModel):
@@ -520,6 +555,7 @@ class ExecSetFromCaseFileRequest(BaseModel):
     requirement: Optional[str] = None
     reuse_enabled: Optional[bool] = None
     reuse_presets: Optional[Any] = None
+    association_enabled: Optional[bool] = None
 
 
 class ExecOverviewOut(BaseModel):

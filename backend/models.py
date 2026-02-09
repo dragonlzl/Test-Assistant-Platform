@@ -169,6 +169,36 @@ class CaseItem(Base):
     case_file = relationship("CaseFile", back_populates="items")
 
 
+class CaseFileAssociation(Base):
+    __tablename__ = "case_file_associations"
+    __table_args__ = (
+        UniqueConstraint(
+            "main_case_file_id",
+            "sub_case_file_id",
+            name="uq_case_file_assoc_main_sub",
+        ),
+        Index("ix_case_file_assoc_main", "main_case_file_id"),
+        Index("ix_case_file_assoc_sub", "sub_case_file_id"),
+        Index("ix_case_file_assoc_main_order", "main_case_file_id", "order_no"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    main_case_file_id = Column(
+        Integer, ForeignKey("case_files.id", ondelete="CASCADE"), nullable=False
+    )
+    sub_case_file_id = Column(
+        Integer, ForeignKey("case_files.id", ondelete="CASCADE"), nullable=False
+    )
+    selected_case_item_ids = Column(JSON, nullable=False, default=list)
+    order_no = Column(Integer, nullable=False, default=0)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class MissingModule(Base):
     __tablename__ = "missing_modules"
     __table_args__ = (
@@ -299,6 +329,7 @@ class ExecSet(Base):
     requirement = Column(String(255), nullable=True)
     reuse_enabled = Column(Boolean, default=False, nullable=False)
     reuse_presets = Column(JSON, nullable=True)
+    association_enabled = Column(Boolean, default=False, nullable=False)
     status = Column(String(32), nullable=False, default="active")
     archived_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     archived_at = Column(DateTime(timezone=True), nullable=True)

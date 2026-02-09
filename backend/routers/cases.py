@@ -209,6 +209,121 @@ def _ensure_case_access(
     return case_file
 
 
+def _parse_assoc_item_ids(raw) -> List[int]:
+    if raw is None:
+        return []
+    data = raw
+    if isinstance(raw, str):
+        txt = str(raw).strip()
+        if not txt:
+            return []
+        try:
+            import json
+
+            data = json.loads(txt)
+        except Exception:
+            return []
+    if not isinstance(data, list):
+        return []
+    seen = set()
+    ids: List[int] = []
+    for item in data:
+        try:
+            cid = int(item)
+        except Exception:
+            continue
+        if cid <= 0:
+            continue
+        if cid in seen:
+            continue
+        seen.add(cid)
+        ids.append(cid)
+    return ids
+
+
+def _normalize_assoc_selected_ids(
+    db: Session,
+    sub_case_file_id: int,
+    selected_case_item_ids: List[int],
+) -> List[int]:
+    ids = []
+    seen = set()
+    for raw in selected_case_item_ids or []:
+        try:
+            cid = int(raw)
+        except Exception:
+            continue
+        if cid <= 0:
+            continue
+        if cid in seen:
+            continue
+        seen.add(cid)
+        ids.append(cid)
+    if not ids:
+        return []
+    rows = (
+        db.query(models.CaseItem.id)
+        .filter(models.CaseItem.case_file_id == int(sub_case_file_id))
+        .filter(models.CaseItem.id.in_(ids))
+        .order_by(models.CaseItem.order_no.asc(), models.CaseItem.id.asc())
+        .all()
+    )
+    valid = [int(r[0]) for r in (rows or []) if r and r[0]]
+    return valid
+
+
+def _build_case_file_association_out(
+    assoc: models.CaseFileAssociation,
+    sub_case_name: str,
+) -> schemas.CaseFileAssociationOut:
+    selected_ids = _parse_assoc_item_ids(getattr(assoc, "selected_case_item_ids", None))
+    return schemas.CaseFileAssociationOut(
+        id=int(assoc.id),
+        main_case_file_id=int(assoc.main_case_file_id),
+        sub_case_file_id=int(assoc.sub_case_file_id),
+        sub_case_file_name=str(sub_case_name or ("用例#" + str(assoc.sub_case_file_id))),
+        selected_case_item_ids=selected_ids,
+        selected_count=len(selected_ids),
+        created_at=assoc.created_at,
+        updated_at=assoc.updated_at,
+    )
+
+
+def _is_case_file_association_forbidden(
+    db: Session,
+    main_case_file_id: int,
+    sub_case_file_id: int,
+) -> bool:
+    if int(main_case_file_id) == int(sub_case_file_id):
+        return True
+    # 若已存在反向关联（sub -> main），则禁止 main -> sub，防止形成互为主副。
+    reverse = (
+        db.query(models.CaseFileAssociation.id)
+        .filter(models.CaseFileAssociation.main_case_file_id == int(sub_case_file_id))
+        .filter(models.CaseFileAssociation.sub_case_file_id == int(main_case_file_id))
+        .first()
+    )
+    return reverse is not None
+
+
+def _resolve_case_file_association_forbidden_reason(
+    db: Session,
+    main_case_file_id: int,
+    sub_case_file_id: int,
+) -> Optional[str]:
+    if int(main_case_file_id) == int(sub_case_file_id):
+        return "不能选择当前主用例"
+    reverse = (
+        db.query(models.CaseFileAssociation.id)
+        .filter(models.CaseFileAssociation.main_case_file_id == int(sub_case_file_id))
+        .filter(models.CaseFileAssociation.sub_case_file_id == int(main_case_file_id))
+        .first()
+    )
+    if reverse:
+        return "已存在反向关联"
+    return None
+
+
 @router.post("/import", response_model=schemas.CaseFileOut, status_code=status.HTTP_201_CREATED)
 def import_case_file(
     payload: schemas.CaseFileImportRequest,
@@ -705,6 +820,14 @@ def list_case_files(
         .group_by(models.CaseItem.case_file_id)
         .subquery()
     )
+    assoc_count_sq = (
+        db.query(
+            models.CaseFileAssociation.main_case_file_id.label("main_case_file_id"),
+            func.count(models.CaseFileAssociation.id).label("association_count"),
+        )
+        .group_by(models.CaseFileAssociation.main_case_file_id)
+        .subquery()
+    )
 
     rows = (
         base_query.with_entities(
@@ -713,6 +836,7 @@ def list_case_files(
             last_item_sq.c.last_updated_by.label("last_updated_by"),
             updater.username.label("last_updated_by_name"),
             item_count_sq.c.item_count.label("item_count"),
+            assoc_count_sq.c.association_count.label("association_count"),
         )
         .outerjoin(importer, importer.id == models.CaseFile.importer_id)
         .outerjoin(
@@ -721,13 +845,24 @@ def list_case_files(
         )
         .outerjoin(updater, updater.id == last_item_sq.c.last_updated_by)
         .outerjoin(item_count_sq, item_count_sq.c.case_file_id == models.CaseFile.id)
+        .outerjoin(
+            assoc_count_sq,
+            assoc_count_sq.c.main_case_file_id == models.CaseFile.id,
+        )
         .order_by(models.CaseFile.id.desc())
         .all()
     )
 
     result = []
     for row in rows:
-        case_file, importer_name, last_updated_by, last_updated_by_name, item_count = row
+        (
+            case_file,
+            importer_name,
+            last_updated_by,
+            last_updated_by_name,
+            item_count,
+            association_count,
+        ) = row
         result.append(
             {
                 "id": case_file.id,
@@ -736,6 +871,7 @@ def list_case_files(
                 "file_name_clean": case_file.file_name_clean,
                 "source": case_file.source,
                 "reuse_enabled": bool(getattr(case_file, "reuse_enabled", False)),
+                "association_count": int(association_count or 0),
                 "item_count": int(item_count or 0),
                 "importer_id": case_file.importer_id,
                 "importer_name": importer_name,
@@ -762,6 +898,272 @@ def list_case_items(
         .all()
     )
     return items
+
+
+@router.get("/{case_file_id}/associations", response_model=List[schemas.CaseFileAssociationOut])
+def list_case_file_associations(
+    case_file_id: int,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_case_access(db, user, case_file_id)
+    sub_case = aliased(models.CaseFile)
+    rows = (
+        db.query(models.CaseFileAssociation, sub_case.file_name_clean)
+        .join(sub_case, sub_case.id == models.CaseFileAssociation.sub_case_file_id)
+        .filter(models.CaseFileAssociation.main_case_file_id == int(case_file_id))
+        .order_by(
+            models.CaseFileAssociation.order_no.asc(),
+            models.CaseFileAssociation.id.asc(),
+        )
+        .all()
+    )
+    result: List[schemas.CaseFileAssociationOut] = []
+    for row in rows:
+        assoc, sub_name = row
+        result.append(_build_case_file_association_out(assoc, sub_name or ""))
+    return result
+
+
+@router.get(
+    "/{case_file_id}/association-candidates",
+    response_model=List[schemas.CaseFileAssociationCandidateOut],
+)
+def list_case_file_association_candidates(
+    case_file_id: int,
+    include_forbidden: bool = True,
+    version_id: Optional[int] = None,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    main_case = _ensure_case_access(db, user, case_file_id)
+    item_count_sq = (
+        db.query(
+            models.CaseItem.case_file_id.label("case_file_id"),
+            func.count(models.CaseItem.id).label("item_count"),
+        )
+        .group_by(models.CaseItem.case_file_id)
+        .subquery()
+    )
+    assoc_count_sq = (
+        db.query(
+            models.CaseFileAssociation.main_case_file_id.label("main_case_file_id"),
+            func.count(models.CaseFileAssociation.id).label("association_count"),
+        )
+        .group_by(models.CaseFileAssociation.main_case_file_id)
+        .subquery()
+    )
+    query = (
+        db.query(
+            models.CaseFile,
+            item_count_sq.c.item_count,
+            assoc_count_sq.c.association_count,
+        )
+        .outerjoin(item_count_sq, item_count_sq.c.case_file_id == models.CaseFile.id)
+        .outerjoin(
+            assoc_count_sq,
+            assoc_count_sq.c.main_case_file_id == models.CaseFile.id,
+        )
+        .filter(models.CaseFile.project_id == int(main_case.project_id))
+    )
+    if version_id is not None:
+        query = query.filter(models.CaseFile.version_id == int(version_id))
+    rows = query.order_by(models.CaseFile.id.desc()).all()
+    existing_sub_rows = (
+        db.query(models.CaseFileAssociation.sub_case_file_id)
+        .filter(models.CaseFileAssociation.main_case_file_id == int(main_case.id))
+        .all()
+    )
+    existing_sub_ids = {int(r[0]) for r in (existing_sub_rows or []) if r and r[0] is not None}
+
+    result: List[schemas.CaseFileAssociationCandidateOut] = []
+    for row in rows:
+        case_file, item_count, association_count = row
+        case_id = int(case_file.id)
+        reason = None
+        if case_id in existing_sub_ids:
+            reason = "已关联到当前主用例"
+        else:
+            reason = _resolve_case_file_association_forbidden_reason(
+                db, int(main_case.id), case_id
+            )
+        forbidden = reason is not None
+        if forbidden and not include_forbidden:
+            continue
+        result.append(
+            schemas.CaseFileAssociationCandidateOut(
+                id=case_id,
+                project_id=int(case_file.project_id),
+                version_id=case_file.version_id,
+                file_name_clean=str(case_file.file_name_clean or ("用例#" + str(case_file.id))),
+                item_count=int(item_count or 0),
+                association_count=int(association_count or 0),
+                association_forbidden=forbidden,
+                forbidden_reason=reason,
+            )
+        )
+    return result
+
+
+@router.post(
+    "/{case_file_id}/associations",
+    response_model=schemas.CaseFileAssociationOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_case_file_association(
+    case_file_id: int,
+    payload: schemas.CaseFileAssociationCreate,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    main_case = _ensure_case_access(db, user, case_file_id)
+    sub_case = _ensure_case_access(db, user, payload.sub_case_file_id)
+    if int(main_case.project_id) != int(sub_case.project_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="关联用例需属于同一项目")
+    if _is_case_file_association_forbidden(db, main_case.id, sub_case.id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该用例关系不允许建立关联（可能已存在反向关联或选择了主用例自身）",
+        )
+    existed = (
+        db.query(models.CaseFileAssociation)
+        .filter(models.CaseFileAssociation.main_case_file_id == int(main_case.id))
+        .filter(models.CaseFileAssociation.sub_case_file_id == int(sub_case.id))
+        .first()
+    )
+    if existed:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="关联已存在")
+
+    selected_ids = _normalize_assoc_selected_ids(
+        db,
+        sub_case_file_id=sub_case.id,
+        selected_case_item_ids=payload.selected_case_item_ids,
+    )
+    if not selected_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请先勾选至少一条副用例")
+
+    max_order = (
+        db.query(func.max(models.CaseFileAssociation.order_no))
+        .filter(models.CaseFileAssociation.main_case_file_id == int(main_case.id))
+        .scalar()
+    )
+    next_order = int(max_order or 0) + 1
+    now = datetime.now(timezone.utc)
+    assoc = models.CaseFileAssociation(
+        main_case_file_id=int(main_case.id),
+        sub_case_file_id=int(sub_case.id),
+        selected_case_item_ids=selected_ids,
+        order_no=next_order,
+        created_by=user.id,
+        updated_by=user.id,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(assoc)
+    log_operation(
+        db=db,
+        user_id=user.id,
+        action="create_case_file_association",
+        target_type="case_file",
+        target_id=int(main_case.id),
+        detail={
+            "main_case_file_id": int(main_case.id),
+            "sub_case_file_id": int(sub_case.id),
+            "selected_count": len(selected_ids),
+        },
+    )
+    db.commit()
+    db.refresh(assoc)
+    return _build_case_file_association_out(assoc, sub_case.file_name_clean or "")
+
+
+@router.patch(
+    "/{case_file_id}/associations/{association_id}",
+    response_model=schemas.CaseFileAssociationOut,
+)
+def update_case_file_association(
+    case_file_id: int,
+    association_id: int,
+    payload: schemas.CaseFileAssociationPatch,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_case_access(db, user, case_file_id)
+    assoc = (
+        db.query(models.CaseFileAssociation)
+        .filter(models.CaseFileAssociation.id == int(association_id))
+        .filter(models.CaseFileAssociation.main_case_file_id == int(case_file_id))
+        .first()
+    )
+    if not assoc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="关联不存在")
+    sub_case = _ensure_case_access(db, user, int(assoc.sub_case_file_id))
+    selected_ids = _normalize_assoc_selected_ids(
+        db,
+        sub_case_file_id=sub_case.id,
+        selected_case_item_ids=payload.selected_case_item_ids,
+    )
+    if not selected_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="请先勾选至少一条副用例")
+    assoc.selected_case_item_ids = selected_ids
+    assoc.updated_by = user.id
+    assoc.updated_at = datetime.now(timezone.utc)
+    db.add(assoc)
+    log_operation(
+        db=db,
+        user_id=user.id,
+        action="update_case_file_association",
+        target_type="case_file",
+        target_id=int(case_file_id),
+        detail={
+            "association_id": int(assoc.id),
+            "main_case_file_id": int(case_file_id),
+            "sub_case_file_id": int(assoc.sub_case_file_id),
+            "selected_count": len(selected_ids),
+        },
+    )
+    db.commit()
+    db.refresh(assoc)
+    return _build_case_file_association_out(assoc, sub_case.file_name_clean or "")
+
+
+@router.delete("/{case_file_id}/associations/{association_id}")
+def delete_case_file_association(
+    case_file_id: int,
+    association_id: int,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _ensure_case_access(db, user, case_file_id)
+    assoc = (
+        db.query(models.CaseFileAssociation)
+        .filter(models.CaseFileAssociation.id == int(association_id))
+        .filter(models.CaseFileAssociation.main_case_file_id == int(case_file_id))
+        .first()
+    )
+    if not assoc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="关联不存在")
+    sub_case_file_id = int(assoc.sub_case_file_id)
+    db.delete(assoc)
+    log_operation(
+        db=db,
+        user_id=user.id,
+        action="delete_case_file_association",
+        target_type="case_file",
+        target_id=int(case_file_id),
+        detail={
+            "association_id": int(association_id),
+            "main_case_file_id": int(case_file_id),
+            "sub_case_file_id": int(sub_case_file_id),
+        },
+    )
+    db.commit()
+    return {
+        "detail": "ok",
+        "association_id": int(association_id),
+        "main_case_file_id": int(case_file_id),
+        "sub_case_file_id": int(sub_case_file_id),
+    }
 
 
 def _snapshot_case_item(item: models.CaseItem):

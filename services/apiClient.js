@@ -392,6 +392,53 @@
     }).then(handleResponse);
   }
 
+  function listCaseFileAssociations(caseFileId) {
+    return fetch('/api/case-files/' + caseFileId + '/associations', {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function listCaseFileAssociationCandidates(caseFileId, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var query = [];
+    if (opts.include_forbidden === false || opts.includeForbidden === false) query.push('include_forbidden=0');
+    var versionId = opts.version_id;
+    if (versionId === undefined || versionId === null || versionId === '') versionId = opts.versionId;
+    if (versionId !== undefined && versionId !== null && versionId !== '') {
+      query.push('version_id=' + encodeURIComponent(versionId));
+    }
+    var url = '/api/case-files/' + caseFileId + '/association-candidates';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function createCaseFileAssociation(caseFileId, payload) {
+    return fetch('/api/case-files/' + caseFileId + '/associations', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function updateCaseFileAssociation(caseFileId, associationId, payload) {
+    return fetch('/api/case-files/' + caseFileId + '/associations/' + associationId, {
+      method: 'PATCH',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function deleteCaseFileAssociation(caseFileId, associationId) {
+    return fetch('/api/case-files/' + caseFileId + '/associations/' + associationId, {
+      method: 'DELETE',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
   function deleteCaseFile(caseFileId) {
     return fetch('/api/case-files/' + caseFileId, {
       method: 'DELETE',
@@ -917,6 +964,11 @@
     changeCaseFileVersion: changeCaseFileVersion,
     importCaseFile: importCaseFile,
     listCaseItems: listCaseItems,
+    listCaseFileAssociations: listCaseFileAssociations,
+    listCaseFileAssociationCandidates: listCaseFileAssociationCandidates,
+    createCaseFileAssociation: createCaseFileAssociation,
+    updateCaseFileAssociation: updateCaseFileAssociation,
+    deleteCaseFileAssociation: deleteCaseFileAssociation,
     deleteCaseFile: deleteCaseFile,
     updateCaseItem: updateCaseItem,
     createCaseItem: createCaseItem,

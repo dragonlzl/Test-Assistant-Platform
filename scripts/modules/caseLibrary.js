@@ -508,6 +508,26 @@
     selectPaginationTop: document.getElementById('caseLibrarySelectDrawerPaginationTop'),
     selectPaginationBottom: document.getElementById('caseLibrarySelectDrawerPaginationBottom'),
 
+    associationCaseName: document.getElementById('caseLibraryAssociationCaseName'),
+    associationStatus: document.getElementById('caseLibraryAssociationStatus'),
+    associationAddBtn: document.getElementById('caseLibraryAssociationAddBtn'),
+    associationListBody: document.getElementById('caseLibraryAssociationListBody'),
+
+    associationPickStatus: document.getElementById('caseLibraryAssociationPickStatus'),
+    associationPickVersionSelect: document.getElementById('caseLibraryAssociationPickVersionSelect'),
+    associationPickSearchInput: document.getElementById('caseLibraryAssociationPickSearchInput'),
+    associationPickRefreshBtn: document.getElementById('caseLibraryAssociationPickRefreshBtn'),
+    associationPickQueryBtn: document.getElementById('caseLibraryAssociationPickQueryBtn'),
+    associationPickNextBtn: document.getElementById('caseLibraryAssociationPickNextBtn'),
+    associationPickCaseBody: document.getElementById('caseLibraryAssociationPickCaseBody'),
+    associationPickSubCaseName: document.getElementById('caseLibraryAssociationPickSubCaseName'),
+    associationPickSelectAll: document.getElementById('caseLibraryAssociationPickSelectAll'),
+    associationPickItemBody: document.getElementById('caseLibraryAssociationPickItemBody'),
+    associationPickPaginationTop: document.getElementById('caseLibraryAssociationPickPaginationTop'),
+    associationPickPaginationBottom: document.getElementById('caseLibraryAssociationPickPaginationBottom'),
+    associationPickConfirmBtn: document.getElementById('caseLibraryAssociationPickConfirmBtn'),
+    associationDeleteConfirmBtn: document.getElementById('caseLibraryAssociationDeleteConfirmBtn'),
+
     importSelectProjectSelect: document.getElementById('caseLibraryImportSelectProjectSelect'),
     importSelectVersionSelect: document.getElementById('caseLibraryImportSelectVersionSelect'),
     importSelectSearchInput: document.getElementById('caseLibraryImportSelectSearchInput'),
@@ -633,6 +653,39 @@
       processing: false,
       selection: new Set(),
       pageIndex: 0,
+      associationSwitchByFileId: {},
+      associationExecIntent: null,
+    },
+
+    associationDrawer: {
+      caseFile: null,
+      rows: [],
+      loading: false,
+      processing: false,
+      previousDrawer: null,
+      pendingAction: '',
+      pendingAssociationId: null,
+    },
+
+    associationPickDrawer: {
+      mode: 'create',
+      mainCaseFile: null,
+      associationId: null,
+      subCaseFile: null,
+      originalSubCaseFileId: null,
+      originalSelectedCaseItemIds: [],
+      versionId: null,
+      queried: false,
+      candidateRows: [],
+      filteredRows: [],
+      loadingCases: false,
+      loadingItems: false,
+      processing: false,
+      searchText: '',
+      selection: new Set(),
+      items: [],
+      pageIndex: 0,
+      previousDrawer: null,
     },
 
     importSelectDrawer: {
@@ -800,6 +853,10 @@
   var missingTypeManageDrawerInstance = null;
   var shareDrawerInstance = null;
 	  var selectDrawerInstance = null;
+  var associationDrawerInstance = null;
+  var associationPickDrawerInstance = null;
+  var associationItemDrawerInstance = null;
+  var associationDeleteConfirmDrawerInstance = null;
     var importSelectDrawerInstance = null;
     var historyDrawerInstance = null;
 
@@ -2745,6 +2802,35 @@
     syncSelectDrawerControls();
   }
 
+  function handleAssociationPickPaginationAction(action) {
+    var list = Array.isArray(state.associationPickDrawer.items) ? state.associationPickDrawer.items : [];
+    var total = list.length;
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    if (!action) return;
+    if (action === 'prev') state.associationPickDrawer.pageIndex -= 1;
+    else if (action === 'next') state.associationPickDrawer.pageIndex += 1;
+    else if (action === 'first') state.associationPickDrawer.pageIndex = 0;
+    else if (action === 'last') state.associationPickDrawer.pageIndex = totalPages - 1;
+    if (state.associationPickDrawer.pageIndex < 0) state.associationPickDrawer.pageIndex = 0;
+    if (state.associationPickDrawer.pageIndex >= totalPages) {
+      state.associationPickDrawer.pageIndex = Math.max(totalPages - 1, 0);
+    }
+    renderAssociationPickItemList();
+  }
+
+  function handleAssociationPickPaginationJump(value) {
+    var list = Array.isArray(state.associationPickDrawer.items) ? state.associationPickDrawer.items : [];
+    var total = list.length;
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    var n = Number(value);
+    if (!isFinite(n)) return;
+    var idx = Math.max(0, Math.min(totalPages - 1, Math.floor(n - 1)));
+    state.associationPickDrawer.pageIndex = idx;
+    renderAssociationPickItemList();
+  }
+
   function handleImportSelectDrawerPaginationAction(action) {
     var list = getImportSelectDrawerVisibleFiles();
     var total = list.length;
@@ -3838,6 +3924,7 @@
         var execSets = Array.isArray(res && res[2]) ? res[2] : [];
         state.selectDrawer.files = files;
         state.selectDrawer.execByFileId = buildExecMapByFileId(execSets);
+        syncAssociationSwitchMapWithFiles(files);
         if (dom.selectVersionSelect) {
           syncVersionOptions(dom.selectVersionSelect, projectId, '全部版本');
           dom.selectVersionSelect.disabled = false;
@@ -13245,6 +13332,7 @@
     var execVersionId = Object.prototype.hasOwnProperty.call(opts, 'execVersionId') ? opts.execVersionId : undefined;
     var previousDrawer = opts.previousDrawer || null;
     var openAssignDrawer = opts.openAssignDrawer === true;
+    var associationEnabledProvided = Object.prototype.hasOwnProperty.call(opts, 'association_enabled');
     var projectId = caseFile && caseFile.project_id ? caseFile.project_id : null;
     var execCaseName = resolveExecCaseName(caseFile, fileName);
     var normalizedExecVersionId = execVersionId !== undefined
@@ -13322,6 +13410,7 @@
             import_cases: importCases.length ? importCases : null,
           };
           if (execVersionId !== undefined) payload.exec_version_id = execVersionId;
+          if (associationEnabledProvided) payload.association_enabled = opts.association_enabled === true;
           return apiClient.upsertExecSetFromCaseFile(payload);
         })
         .then(function(execSet) {
@@ -13543,6 +13632,740 @@
     syncSelectDrawerControls();
   }
 
+  function normalizeAssociationSwitchState(value) {
+    return value === true || value === 1 || value === '1' || value === 'true' || value === 'on';
+  }
+
+  function getAssociationSwitchState(fileId, defaultValue) {
+    if (!fileId && fileId !== 0) return normalizeAssociationSwitchState(defaultValue);
+    var key = String(fileId);
+    var map = state.selectDrawer.associationSwitchByFileId && typeof state.selectDrawer.associationSwitchByFileId === 'object'
+      ? state.selectDrawer.associationSwitchByFileId
+      : {};
+    state.selectDrawer.associationSwitchByFileId = map;
+    if (!Object.prototype.hasOwnProperty.call(map, key)) {
+      map[key] = normalizeAssociationSwitchState(defaultValue);
+    }
+    return normalizeAssociationSwitchState(map[key]);
+  }
+
+  function setAssociationSwitchState(fileId, value) {
+    if (!fileId && fileId !== 0) return;
+    var key = String(fileId);
+    var map = state.selectDrawer.associationSwitchByFileId && typeof state.selectDrawer.associationSwitchByFileId === 'object'
+      ? state.selectDrawer.associationSwitchByFileId
+      : {};
+    state.selectDrawer.associationSwitchByFileId = map;
+    map[key] = normalizeAssociationSwitchState(value);
+  }
+
+  function syncAssociationSwitchMapWithFiles(files) {
+    var list = Array.isArray(files) ? files : [];
+    var map = state.selectDrawer.associationSwitchByFileId && typeof state.selectDrawer.associationSwitchByFileId === 'object'
+      ? state.selectDrawer.associationSwitchByFileId
+      : {};
+    var keep = {};
+    list.forEach(function(file) {
+      if (!file || (file.id === null || file.id === undefined)) return;
+      var key = String(file.id);
+      var hasAssociation = Number(file && file.association_count ? file.association_count : 0) > 0;
+      if (!Object.prototype.hasOwnProperty.call(map, key)) {
+        map[key] = hasAssociation;
+      } else if (!hasAssociation) {
+        map[key] = false;
+      }
+      keep[key] = true;
+    });
+    Object.keys(map).forEach(function(key) {
+      if (!keep[key]) delete map[key];
+    });
+    state.selectDrawer.associationSwitchByFileId = map;
+  }
+
+  function normalizeCaseItemSelectionIds(itemIds) {
+    var list = Array.isArray(itemIds) ? itemIds : [];
+    var seen = {};
+    var ids = [];
+    list.forEach(function(raw) {
+      var id = normalizeId(raw);
+      if (!id || id <= 0) return;
+      var key = String(id);
+      if (seen[key]) return;
+      seen[key] = true;
+      ids.push(id);
+    });
+    return ids;
+  }
+
+  function getAssociationPickVisibleItems() {
+    var list = Array.isArray(state.associationPickDrawer.items) ? state.associationPickDrawer.items : [];
+    var page = resolveDrawerPage(list.length, state.associationPickDrawer.pageIndex);
+    state.associationPickDrawer.pageIndex = page.pageIndex;
+    return {
+      page: page,
+      list: list.slice(page.start, page.end),
+      total: list.length,
+    };
+  }
+
+  function syncAssociationPickSelectAllState() {
+    if (!dom.associationPickSelectAll) return;
+    var result = getAssociationPickVisibleItems();
+    var paged = result.list;
+    var total = paged.length;
+    var selection = state.associationPickDrawer.selection instanceof Set ? state.associationPickDrawer.selection : new Set();
+    state.associationPickDrawer.selection = selection;
+    var selected = 0;
+    paged.forEach(function(item) {
+      if (!item || !item.id) return;
+      if (selection.has(String(item.id))) selected += 1;
+    });
+    dom.associationPickSelectAll.checked = total > 0 && selected === total;
+    dom.associationPickSelectAll.indeterminate = selected > 0 && selected < total;
+    dom.associationPickSelectAll.disabled = total === 0 || Boolean(state.associationPickDrawer.loadingItems || state.associationPickDrawer.processing);
+  }
+
+  function setAssociationPickSelectionAll(checked) {
+    var result = getAssociationPickVisibleItems();
+    var paged = result.list;
+    var selection = state.associationPickDrawer.selection instanceof Set ? state.associationPickDrawer.selection : new Set();
+    state.associationPickDrawer.selection = selection;
+    paged.forEach(function(item) {
+      if (!item || !item.id) return;
+      var key = String(item.id);
+      if (checked) selection.add(key);
+      else selection.delete(key);
+    });
+    renderAssociationPickItemList();
+  }
+
+  function syncAssociationAddButtonState() {
+    if (!dom.associationAddBtn) return;
+    var disabled = Boolean(state.associationDrawer.loading || state.associationDrawer.processing || !state.associationDrawer.caseFile);
+    dom.associationAddBtn.disabled = disabled;
+  }
+
+  function resetAssociationDrawer() {
+    state.associationDrawer.caseFile = null;
+    state.associationDrawer.rows = [];
+    state.associationDrawer.loading = false;
+    state.associationDrawer.processing = false;
+    state.associationDrawer.previousDrawer = null;
+    state.associationDrawer.pendingAction = '';
+    state.associationDrawer.pendingAssociationId = null;
+    if (dom.associationCaseName) dom.associationCaseName.textContent = '--';
+    if (dom.associationStatus) setStatus(dom.associationStatus, '', '');
+    renderAssociationDrawerList();
+    syncAssociationAddButtonState();
+  }
+
+  function renderAssociationDrawerList() {
+    if (!dom.associationListBody) return;
+    var rows = Array.isArray(state.associationDrawer.rows) ? state.associationDrawer.rows : [];
+    if (state.associationDrawer.loading) {
+      dom.associationListBody.innerHTML = '<tr><td colspan="3"><p class="hint">加载中...</p></td></tr>';
+      return;
+    }
+    if (!rows.length) {
+      dom.associationListBody.innerHTML = '<tr><td colspan="3"><p class="hint">暂无关联副用例</p></td></tr>';
+      return;
+    }
+    dom.associationListBody.innerHTML = rows.map(function(row) {
+      if (!row) return '';
+      var id = row.id ? String(row.id) : '';
+      var name = row.sub_case_file_name || ('用例#' + (row.sub_case_file_id || '--'));
+      var count = Number(row.selected_count || (Array.isArray(row.selected_case_item_ids) ? row.selected_case_item_ids.length : 0));
+      return (
+        '<tr>' +
+          '<td>' + escapeHtml(name) + '</td>' +
+          '<td>' + escapeHtml(count) + '</td>' +
+          '<td>' +
+            '<button class="secondary" type="button" data-case-lib-assoc-edit="' + escapeHtml(id) + '">编辑</button>' +
+            ' ' +
+            '<button class="secondary" type="button" data-case-lib-assoc-delete="' + escapeHtml(id) + '">删除</button>' +
+          '</td>' +
+        '</tr>'
+      );
+    }).join('');
+  }
+
+  function loadAssociationDrawerRows(caseFileId) {
+    if (!apiClient || typeof apiClient.listCaseFileAssociations !== 'function') {
+      return Promise.resolve([]);
+    }
+    return apiClient.listCaseFileAssociations(caseFileId).then(function(rows) {
+      var list = Array.isArray(rows) ? rows : [];
+      state.associationDrawer.rows = list.map(function(row) {
+        var ids = normalizeCaseItemSelectionIds(row && row.selected_case_item_ids);
+        return Object.assign({}, row, {
+          selected_case_item_ids: ids,
+          selected_count: ids.length,
+        });
+      });
+      return state.associationDrawer.rows;
+    });
+  }
+
+  function openAssociationDrawerFromSelect(caseFile) {
+    if (!caseFile || !caseFile.id) return;
+    var previous = selectDrawerInstance || null;
+    state.associationDrawer.caseFile = caseFile;
+    state.associationDrawer.previousDrawer = previous;
+    state.associationDrawer.rows = [];
+    state.associationDrawer.loading = true;
+    renderAssociationDrawerList();
+    syncAssociationAddButtonState();
+    if (dom.associationCaseName) {
+      dom.associationCaseName.textContent = caseFile.file_name_clean || ('用例#' + caseFile.id);
+    }
+    if (dom.associationStatus) setStatus(dom.associationStatus, '加载关联信息...', '');
+    if (associationDrawerInstance && typeof associationDrawerInstance.open === 'function') {
+      associationDrawerInstance.open();
+    }
+    loadAssociationDrawerRows(caseFile.id)
+      .then(function(rows) {
+        state.associationDrawer.loading = false;
+        renderAssociationDrawerList();
+        syncAssociationAddButtonState();
+        var hasRows = Array.isArray(rows) && rows.length > 0;
+        if (dom.associationStatus) {
+          setStatus(dom.associationStatus, hasRows ? ('已加载 ' + rows.length + ' 条关联') : '当前暂无关联', hasRows ? 'ok' : 'warn');
+        }
+      })
+      .catch(function(err) {
+        state.associationDrawer.loading = false;
+        state.associationDrawer.rows = [];
+        renderAssociationDrawerList();
+        syncAssociationAddButtonState();
+        if (dom.associationStatus) setStatus(dom.associationStatus, err && err.message ? err.message : '加载关联失败', 'err');
+      });
+  }
+
+  function closeAssociationDrawerAndResume() {
+    if (associationDrawerInstance && typeof associationDrawerInstance.close === 'function') {
+      associationDrawerInstance.close();
+      return;
+    }
+    if (selectDrawerInstance && typeof selectDrawerInstance.open === 'function') {
+      selectDrawerInstance.open();
+    }
+  }
+
+  function resetAssociationPickDrawer() {
+    state.associationPickDrawer.mode = 'create';
+    state.associationPickDrawer.mainCaseFile = null;
+    state.associationPickDrawer.associationId = null;
+    state.associationPickDrawer.subCaseFile = null;
+    state.associationPickDrawer.originalSubCaseFileId = null;
+    state.associationPickDrawer.originalSelectedCaseItemIds = [];
+    state.associationPickDrawer.versionId = null;
+    state.associationPickDrawer.queried = false;
+    state.associationPickDrawer.candidateRows = [];
+    state.associationPickDrawer.filteredRows = [];
+    state.associationPickDrawer.loadingCases = false;
+    state.associationPickDrawer.loadingItems = false;
+    state.associationPickDrawer.processing = false;
+    state.associationPickDrawer.searchText = '';
+    state.associationPickDrawer.selection = new Set();
+    state.associationPickDrawer.items = [];
+    state.associationPickDrawer.pageIndex = 0;
+    state.associationPickDrawer.previousDrawer = null;
+    if (dom.associationPickStatus) setStatus(dom.associationPickStatus, '', '');
+    if (dom.associationPickVersionSelect) {
+      dom.associationPickVersionSelect.disabled = true;
+      dom.associationPickVersionSelect.innerHTML = '<option value="">请选择版本</option>';
+      dom.associationPickVersionSelect.value = '';
+    }
+    if (dom.associationPickSearchInput) dom.associationPickSearchInput.value = '';
+    if (dom.associationPickSubCaseName) dom.associationPickSubCaseName.textContent = '--';
+    if (dom.associationPickCaseBody) {
+      dom.associationPickCaseBody.innerHTML = '<tr><td colspan="4"><p class="hint">请先选择版本并查询</p></td></tr>';
+    }
+    renderAssociationPickItemList();
+  }
+
+  function filterAssociationCandidateRows() {
+    var rows = Array.isArray(state.associationPickDrawer.candidateRows) ? state.associationPickDrawer.candidateRows : [];
+    var term = String(state.associationPickDrawer.searchText || '').trim().toLowerCase();
+    if (!term) {
+      state.associationPickDrawer.filteredRows = rows.slice();
+      return;
+    }
+    state.associationPickDrawer.filteredRows = rows.filter(function(row) {
+      if (!row) return false;
+      var name = row.file_name_clean ? String(row.file_name_clean).toLowerCase() : '';
+      return name.indexOf(term) !== -1;
+    });
+  }
+
+  function renderAssociationCandidateList() {
+    if (!dom.associationPickCaseBody) return;
+    if (state.associationPickDrawer.loadingCases) {
+      dom.associationPickCaseBody.innerHTML = '<tr><td colspan="4"><p class="hint">加载中...</p></td></tr>';
+      return;
+    }
+    var rows = Array.isArray(state.associationPickDrawer.filteredRows) ? state.associationPickDrawer.filteredRows : [];
+    if (!rows.length) {
+      var emptyHint = state.associationPickDrawer.queried ? '暂无可选副用例' : '请先选择版本并查询';
+      dom.associationPickCaseBody.innerHTML = '<tr><td colspan="4"><p class="hint">' + escapeHtml(emptyHint) + '</p></td></tr>';
+      return;
+    }
+    var currentSubId = state.associationPickDrawer.subCaseFile && state.associationPickDrawer.subCaseFile.id
+      ? String(state.associationPickDrawer.subCaseFile.id)
+      : '';
+    dom.associationPickCaseBody.innerHTML = rows.map(function(row) {
+      if (!row) return '';
+      var id = row.id ? String(row.id) : '';
+      var checked = currentSubId && currentSubId === id ? ' checked' : '';
+      var disabled = row.association_forbidden ? ' disabled' : '';
+      var reason = row.forbidden_reason ? String(row.forbidden_reason) : '';
+      var tips = reason ? ('<span class="hint">' + escapeHtml(reason) + '</span>') : '';
+      return (
+        '<tr>' +
+          '<td><input type="radio" name="caseLibraryAssociationSubCase" data-case-lib-assoc-subcase="' + escapeHtml(id) + '"' + checked + disabled + '></td>' +
+          '<td>' + escapeHtml(row.file_name_clean || ('用例#' + id)) + (tips ? (' ' + tips) : '') + '</td>' +
+          '<td>' + escapeHtml(getVersionName(row.project_id, row.version_id)) + '</td>' +
+          '<td>' + escapeHtml(row.item_count || 0) + '</td>' +
+        '</tr>'
+      );
+    }).join('');
+  }
+
+  function renderAssociationPickItemList() {
+    if (!dom.associationPickItemBody) return;
+    var result = getAssociationPickVisibleItems();
+    var list = result.list;
+    var total = result.total;
+    if (state.associationPickDrawer.loadingItems) {
+      dom.associationPickItemBody.innerHTML = '<tr><td colspan="8"><p class="hint">加载用例中...</p></td></tr>';
+      setDrawerPagination(dom.associationPickPaginationTop, dom.associationPickPaginationBottom, '');
+      syncAssociationPickSelectAllState();
+      return;
+    }
+    if (!state.associationPickDrawer.subCaseFile) {
+      dom.associationPickItemBody.innerHTML = '<tr><td colspan="8"><p class="hint">请先在上一步选择副用例</p></td></tr>';
+      setDrawerPagination(dom.associationPickPaginationTop, dom.associationPickPaginationBottom, '');
+      syncAssociationPickSelectAllState();
+      return;
+    }
+    if (!total) {
+      dom.associationPickItemBody.innerHTML = '<tr><td colspan="8"><p class="hint">该副用例暂无条目</p></td></tr>';
+      setDrawerPagination(dom.associationPickPaginationTop, dom.associationPickPaginationBottom, '');
+      syncAssociationPickSelectAllState();
+      return;
+    }
+    var selection = state.associationPickDrawer.selection instanceof Set ? state.associationPickDrawer.selection : new Set();
+    state.associationPickDrawer.selection = selection;
+    dom.associationPickItemBody.innerHTML = list.map(function(item, idx) {
+      if (!item) return '';
+      var id = item.id ? String(item.id) : '';
+      var checked = id && selection.has(id) ? ' checked' : '';
+      var index = result.page.start + idx + 1;
+      return (
+        '<tr>' +
+          '<td><input type="checkbox" data-case-lib-assoc-item="' + escapeHtml(id) + '"' + checked + '></td>' +
+          '<td>' + escapeHtml(index) + '</td>' +
+          '<td>' + escapeHtml(item.module || '') + '</td>' +
+          '<td>' + escapeHtml(item.title || '') + '</td>' +
+          '<td>' + escapeHtml(item.priority || '') + '</td>' +
+          '<td>' + escapeHtmlPreserve(item.precondition || '') + '</td>' +
+          '<td>' + escapeHtmlPreserve(item.steps || '') + '</td>' +
+          '<td>' + escapeHtmlPreserve(item.expected || '') + '</td>' +
+        '</tr>'
+      );
+    }).join('');
+    setDrawerPagination(
+      dom.associationPickPaginationTop,
+      dom.associationPickPaginationBottom,
+      buildDrawerPagination(total, result.page.pageIndex, result.page.totalPages, result.page.start, result.page.end, 'association-pick-items')
+    );
+    syncAssociationPickSelectAllState();
+  }
+
+  function prepareAssociationPickVersionOptions(mainCase) {
+    var pick = state.associationPickDrawer;
+    var projectId = mainCase && mainCase.project_id ? Number(mainCase.project_id) : null;
+    if (!dom.associationPickVersionSelect || !projectId) {
+      pick.versionId = null;
+      return Promise.resolve([]);
+    }
+    dom.associationPickVersionSelect.disabled = true;
+    dom.associationPickVersionSelect.innerHTML = '<option value="">加载版本中...</option>';
+    dom.associationPickVersionSelect.value = '';
+    return loadVersions(projectId)
+      .then(function(list) {
+        syncVersionOptions(dom.associationPickVersionSelect, projectId, '请选择版本');
+        dom.associationPickVersionSelect.disabled = false;
+        var preferredVersionId = mainCase && mainCase.version_id ? Number(mainCase.version_id) : null;
+        if (preferredVersionId) {
+          dom.associationPickVersionSelect.value = String(preferredVersionId);
+          pick.versionId = preferredVersionId;
+        } else {
+          dom.associationPickVersionSelect.value = '';
+          pick.versionId = null;
+        }
+        return Array.isArray(list) ? list : [];
+      })
+      .catch(function(err) {
+        dom.associationPickVersionSelect.disabled = true;
+        dom.associationPickVersionSelect.innerHTML = '<option value="">加载版本失败</option>';
+        dom.associationPickVersionSelect.value = '';
+        pick.versionId = null;
+        if (dom.associationPickStatus) setStatus(dom.associationPickStatus, err && err.message ? err.message : '加载版本失败', 'err');
+        return [];
+      });
+  }
+
+  function clearAssociationCandidateAndItems(keepQueried) {
+    state.associationPickDrawer.subCaseFile = null;
+    state.associationPickDrawer.candidateRows = [];
+    state.associationPickDrawer.filteredRows = [];
+    state.associationPickDrawer.items = [];
+    state.associationPickDrawer.selection = new Set();
+    state.associationPickDrawer.pageIndex = 0;
+    if (!keepQueried) state.associationPickDrawer.queried = false;
+    renderAssociationCandidateList();
+    renderAssociationPickItemList();
+  }
+
+  function loadAssociationCandidateRows() {
+    var pick = state.associationPickDrawer;
+    var mainCase = pick.mainCaseFile;
+    if (!mainCase || !mainCase.id || !apiClient || typeof apiClient.listCaseFileAssociationCandidates !== 'function') {
+      return Promise.resolve([]);
+    }
+    var versionId = normalizeId(pick.versionId);
+    if (!versionId || versionId <= 0) {
+      clearAssociationCandidateAndItems(false);
+      if (dom.associationPickStatus) setStatus(dom.associationPickStatus, '请先选择版本', 'warn');
+      return Promise.resolve([]);
+    }
+    pick.queried = true;
+    pick.loadingCases = true;
+    clearAssociationCandidateAndItems(true);
+    renderAssociationCandidateList();
+    return apiClient
+      .listCaseFileAssociationCandidates(mainCase.id, { include_forbidden: true, version_id: versionId })
+      .then(function(rows) {
+        pick.loadingCases = false;
+        pick.candidateRows = Array.isArray(rows) ? rows : [];
+        filterAssociationCandidateRows();
+        if (pick.originalSubCaseFileId) {
+          var hit = pick.candidateRows.find(function(row) {
+            return row && String(row.id) === String(pick.originalSubCaseFileId);
+          }) || null;
+          pick.subCaseFile = hit;
+        }
+        renderAssociationCandidateList();
+        if (dom.associationPickStatus) {
+          setStatus(dom.associationPickStatus, pick.candidateRows.length ? '请选择副用例，点击“下一步选择条目”' : '当前版本暂无可选副用例', pick.candidateRows.length ? 'ok' : 'warn');
+        }
+        return pick.candidateRows;
+      })
+      .catch(function(err) {
+        pick.loadingCases = false;
+        pick.candidateRows = [];
+        filterAssociationCandidateRows();
+        renderAssociationCandidateList();
+        if (dom.associationPickStatus) setStatus(dom.associationPickStatus, err && err.message ? err.message : '加载副用例失败', 'err');
+        return [];
+      });
+  }
+
+  function loadAssociationPickItemsForSubCase(subCase, selectedIds) {
+    if (!subCase || !subCase.id || !apiClient || typeof apiClient.listCaseItems !== 'function') {
+      state.associationPickDrawer.items = [];
+      state.associationPickDrawer.selection = new Set();
+      renderAssociationPickItemList();
+      return Promise.resolve([]);
+    }
+    state.associationPickDrawer.loadingItems = true;
+    state.associationPickDrawer.pageIndex = 0;
+    state.associationPickDrawer.selection = new Set();
+    if (dom.associationPickSubCaseName) {
+      dom.associationPickSubCaseName.textContent = subCase.file_name_clean || ('用例#' + subCase.id);
+    }
+    renderAssociationPickItemList();
+    return apiClient
+      .listCaseItems(subCase.id)
+      .then(function(items) {
+        var list = Array.isArray(items) ? items : [];
+        state.associationPickDrawer.items = list;
+        var idSet = {};
+        normalizeCaseItemSelectionIds(selectedIds).forEach(function(id) {
+          idSet[String(id)] = true;
+        });
+        var selection = new Set();
+        list.forEach(function(item) {
+          if (!item || !item.id) return;
+          if (idSet[String(item.id)]) selection.add(String(item.id));
+        });
+        state.associationPickDrawer.selection = selection;
+        state.associationPickDrawer.loadingItems = false;
+        renderAssociationPickItemList();
+        if (dom.associationPickStatus) setStatus(dom.associationPickStatus, '已加载副用例条目', 'ok');
+        return list;
+      })
+      .catch(function(err) {
+        state.associationPickDrawer.loadingItems = false;
+        state.associationPickDrawer.items = [];
+        state.associationPickDrawer.selection = new Set();
+        renderAssociationPickItemList();
+        if (dom.associationPickStatus) setStatus(dom.associationPickStatus, err && err.message ? err.message : '加载副用例条目失败', 'err');
+        return [];
+      });
+  }
+
+  function openAssociationPickDrawer(mode, mainCaseFile, associationRow) {
+    var m = mode === 'edit' ? 'edit' : 'create';
+    state.associationPickDrawer.mode = m;
+    state.associationPickDrawer.mainCaseFile = mainCaseFile || null;
+    state.associationPickDrawer.associationId = associationRow && associationRow.id ? associationRow.id : null;
+    state.associationPickDrawer.subCaseFile = null;
+    state.associationPickDrawer.originalSubCaseFileId = associationRow && associationRow.sub_case_file_id ? associationRow.sub_case_file_id : null;
+    state.associationPickDrawer.originalSelectedCaseItemIds = normalizeCaseItemSelectionIds(
+      associationRow && associationRow.selected_case_item_ids ? associationRow.selected_case_item_ids : []
+    );
+    state.associationPickDrawer.searchText = '';
+    state.associationPickDrawer.items = [];
+    state.associationPickDrawer.selection = new Set();
+    state.associationPickDrawer.pageIndex = 0;
+    state.associationPickDrawer.versionId = null;
+    state.associationPickDrawer.queried = false;
+    state.associationPickDrawer.previousDrawer = associationDrawerInstance || null;
+    if (associationItemDrawerInstance && typeof associationItemDrawerInstance.close === 'function') {
+      associationItemDrawerInstance.close();
+    }
+    if (dom.associationPickSearchInput) dom.associationPickSearchInput.value = '';
+    clearAssociationCandidateAndItems(false);
+    if (m === 'edit') {
+      var editSubCaseId = normalizeId(associationRow && associationRow.sub_case_file_id ? associationRow.sub_case_file_id : null);
+      if (editSubCaseId && editSubCaseId > 0) {
+        state.associationPickDrawer.subCaseFile = {
+          id: editSubCaseId,
+          file_name_clean: associationRow && associationRow.sub_case_file_name
+            ? String(associationRow.sub_case_file_name)
+            : ('用例#' + editSubCaseId),
+        };
+        if (dom.associationPickStatus) setStatus(dom.associationPickStatus, '加载副用例条目中...', '');
+        if (associationItemDrawerInstance && typeof associationItemDrawerInstance.open === 'function') {
+          associationItemDrawerInstance.open();
+        }
+        loadAssociationPickItemsForSubCase(state.associationPickDrawer.subCaseFile, state.associationPickDrawer.originalSelectedCaseItemIds);
+        return;
+      }
+    }
+    if (dom.associationPickStatus) setStatus(dom.associationPickStatus, '加载版本中...', '');
+    if (associationPickDrawerInstance && typeof associationPickDrawerInstance.open === 'function') {
+      associationPickDrawerInstance.open();
+    }
+    prepareAssociationPickVersionOptions(mainCaseFile).then(function() {
+      renderAssociationCandidateList();
+      if (dom.associationPickStatus) {
+        setStatus(dom.associationPickStatus, '请选择版本并查询副用例', '');
+      }
+    });
+  }
+
+  function openAssociationItemDrawerFromPick() {
+    var pick = state.associationPickDrawer;
+    var mainCase = pick.mainCaseFile;
+    var subCase = pick.subCaseFile;
+    if (!mainCase || !mainCase.id) {
+      if (dom.associationPickStatus) setStatus(dom.associationPickStatus, '主用例缺失', 'err');
+      return;
+    }
+    if (!subCase || !subCase.id) {
+      if (dom.associationPickStatus) setStatus(dom.associationPickStatus, '请先选择副用例', 'warn');
+      return;
+    }
+    var selectedIds = [];
+    if (
+      pick.mode === 'edit' &&
+      pick.originalSubCaseFileId &&
+      String(subCase.id) === String(pick.originalSubCaseFileId)
+    ) {
+      selectedIds = Array.isArray(pick.originalSelectedCaseItemIds) ? pick.originalSelectedCaseItemIds.slice() : [];
+    }
+    if (dom.associationPickSubCaseName) {
+      dom.associationPickSubCaseName.textContent = subCase.file_name_clean || ('用例#' + subCase.id);
+    }
+    if (associationItemDrawerInstance && typeof associationItemDrawerInstance.open === 'function') {
+      associationItemDrawerInstance.open();
+    }
+    loadAssociationPickItemsForSubCase(subCase, selectedIds);
+  }
+
+  function refreshAssociationDrawerAfterChange(message, type) {
+    var caseFile = state.associationDrawer.caseFile;
+    if (!caseFile || !caseFile.id) return;
+    state.associationDrawer.loading = true;
+    renderAssociationDrawerList();
+    loadAssociationDrawerRows(caseFile.id)
+      .then(function(rows) {
+        state.associationDrawer.loading = false;
+        renderAssociationDrawerList();
+        syncAssociationAddButtonState();
+        if (dom.associationStatus) setStatus(dom.associationStatus, message || ('已加载 ' + rows.length + ' 条关联'), type || 'ok');
+        if (state.selectDrawer.files && state.selectDrawer.files.length) {
+          state.selectDrawer.files = state.selectDrawer.files.map(function(file) {
+            if (!file || !caseFile || String(file.id) !== String(caseFile.id)) return file;
+            return Object.assign({}, file, { association_count: rows.length });
+          });
+          syncAssociationSwitchMapWithFiles(state.selectDrawer.files);
+          renderSelectDrawerList();
+        }
+      })
+      .catch(function(err) {
+        state.associationDrawer.loading = false;
+        state.associationDrawer.rows = [];
+        renderAssociationDrawerList();
+        syncAssociationAddButtonState();
+        if (dom.associationStatus) setStatus(dom.associationStatus, err && err.message ? err.message : '刷新关联失败', 'err');
+      });
+  }
+
+  function submitAssociationItemSelection() {
+    var pick = state.associationPickDrawer;
+    var mainCase = pick.mainCaseFile;
+    var subCase = pick.subCaseFile;
+    if (!mainCase || !mainCase.id) {
+      if (dom.associationPickStatus) setStatus(dom.associationPickStatus, '主用例缺失', 'err');
+      return;
+    }
+    if (!subCase || !subCase.id) {
+      if (dom.associationPickStatus) setStatus(dom.associationPickStatus, '请先选择副用例', 'warn');
+      return;
+    }
+    pick.selection = pick.selection instanceof Set ? pick.selection : new Set();
+    var selectedIds = Array.from(pick.selection).map(function(id) { return normalizeId(id); }).filter(function(id) { return id && id > 0; });
+    if (!selectedIds.length) {
+      showCenterToast('请先勾选用例', 'warn', 5000);
+      return;
+    }
+    if (!apiClient) return;
+    pick.processing = true;
+    if (dom.associationPickConfirmBtn) dom.associationPickConfirmBtn.disabled = true;
+    if (dom.associationPickStatus) setStatus(dom.associationPickStatus, '保存关联中...', '');
+    var req = null;
+    if (pick.mode === 'edit' && pick.associationId) {
+      req = apiClient.updateCaseFileAssociation(mainCase.id, pick.associationId, {
+        selected_case_item_ids: selectedIds,
+      });
+    } else {
+      req = apiClient.createCaseFileAssociation(mainCase.id, {
+        sub_case_file_id: subCase.id,
+        selected_case_item_ids: selectedIds,
+      });
+    }
+    Promise.resolve(req)
+      .then(function() {
+        pick.processing = false;
+        if (dom.associationPickConfirmBtn) dom.associationPickConfirmBtn.disabled = false;
+        showCenterToast('已成功追加到主用例。', 'ok', 5000);
+        if (associationItemDrawerInstance && typeof associationItemDrawerInstance.close === 'function') {
+          associationItemDrawerInstance.close();
+        }
+        if (associationPickDrawerInstance && typeof associationPickDrawerInstance.close === 'function') {
+          associationPickDrawerInstance.close();
+        }
+        refreshAssociationDrawerAfterChange('已成功追加到主用例。', 'ok');
+      })
+      .catch(function(err) {
+        pick.processing = false;
+        if (dom.associationPickConfirmBtn) dom.associationPickConfirmBtn.disabled = false;
+        if (dom.associationPickStatus) setStatus(dom.associationPickStatus, err && err.message ? err.message : '保存关联失败', 'err');
+        showCenterToast(err && err.message ? err.message : '保存关联失败', 'err', 5000);
+      });
+  }
+
+  function requestDeleteAssociationRow(row) {
+    if (!row || !row.id) return;
+    state.associationDrawer.pendingAssociationId = row.id;
+    state.associationDrawer.pendingAction = 'delete';
+    if (associationDeleteConfirmDrawerInstance && typeof associationDeleteConfirmDrawerInstance.open === 'function') {
+      associationDeleteConfirmDrawerInstance.open();
+      return;
+    }
+    openConfirmDrawer({
+      title: '确认删除关联',
+      message: '确认删除该副用例关联吗？',
+      confirmText: '确认删除',
+      cancelText: '取消',
+      danger: true,
+      previousDrawer: associationDrawerInstance || null,
+    }).then(function(res) {
+      if (!res || res.ok !== true) return;
+      confirmDeleteAssociationRow();
+    });
+  }
+
+  function confirmDeleteAssociationRow() {
+    var assocId = state.associationDrawer.pendingAssociationId;
+    var mainCase = state.associationDrawer.caseFile;
+    state.associationDrawer.pendingAssociationId = null;
+    state.associationDrawer.pendingAction = '';
+    if (!assocId || !mainCase || !mainCase.id || !apiClient || typeof apiClient.deleteCaseFileAssociation !== 'function') return;
+    state.associationDrawer.processing = true;
+    syncAssociationAddButtonState();
+    if (dom.associationStatus) setStatus(dom.associationStatus, '删除关联中...', '');
+    apiClient
+      .deleteCaseFileAssociation(mainCase.id, assocId)
+      .then(function() {
+        state.associationDrawer.processing = false;
+        showCenterToast('已删除该用例的关联。', 'ok', 5000);
+        refreshAssociationDrawerAfterChange('已删除该用例的关联。', 'ok');
+      })
+      .catch(function(err) {
+        state.associationDrawer.processing = false;
+        syncAssociationAddButtonState();
+        if (dom.associationStatus) setStatus(dom.associationStatus, err && err.message ? err.message : '删除关联失败', 'err');
+      });
+  }
+
+  function getAssociationDisplayText(file) {
+    var count = Number(file && file.association_count ? file.association_count : 0);
+    if (!count) return '无关联';
+    var enabled = getAssociationSwitchState(file && file.id, true);
+    return (
+      '<label class="case-lib-association-switch">' +
+        '<input type="checkbox" data-case-lib-association-switch="' + escapeHtml(file && file.id ? String(file.id) : '') + '"' + (enabled ? ' checked' : '') + '>' +
+        '<span>关联(' + count + ')</span>' +
+      '</label>'
+    );
+  }
+
+  function buildSelectActionCell(file) {
+    var id = file && file.id ? String(file.id) : '';
+    var count = Number(file && file.association_count ? file.association_count : 0);
+    var linked = count > 0;
+    var assocClass = linked ? 'case-lib-association-btn linked' : 'case-lib-association-btn';
+    return (
+      '<div class="case-lib-select-ops">' +
+        '<button class="secondary ' + assocClass + '" type="button" data-case-lib-association="' + escapeHtml(id) + '">用例关联</button>' +
+        '<button class="primary" type="button" data-case-lib-exec="' + escapeHtml(id) + '">转到执行</button>' +
+      '</div>'
+    );
+  }
+
+  function maybeConfirmExecWithoutAssociation(file) {
+    var count = Number(file && file.association_count ? file.association_count : 0);
+    if (!count) return Promise.resolve({ ok: true, association_enabled: false });
+    var enabled = getAssociationSwitchState(file && file.id, true);
+    if (enabled) return Promise.resolve({ ok: true, association_enabled: true });
+    return openConfirmDrawer({
+      title: '确认不关联转执行',
+      message: '当前已关闭关联用例，是否不关联直接转执行？',
+      confirmText: '确认转执行',
+      cancelText: '取消',
+      previousDrawer: selectDrawerInstance || null,
+    }).then(function(res) {
+      if (!res || res.ok !== true) return { ok: false };
+      return { ok: true, association_enabled: false };
+    });
+  }
+
+
   function resetSelectDrawer() {
     state.selectDrawer.projectId = null;
     state.selectDrawer.versionId = null;
@@ -13555,6 +14378,7 @@
     state.selectDrawer.loadSeq = 0;
     state.selectDrawer.selection = new Set();
     state.selectDrawer.pageIndex = 0;
+    state.selectDrawer.associationSwitchByFileId = {};
     setStatus(dom.selectStatus, '', '');
     syncProjectOptions(dom.selectProjectSelect, '请选择项目');
     if (dom.selectProjectSelect) dom.selectProjectSelect.value = '';
@@ -13565,7 +14389,7 @@
     }
     if (dom.selectSearchInput) dom.selectSearchInput.value = '';
     if (dom.selectListBody) {
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"10\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
     }
     setDrawerPagination(dom.selectPaginationTop, dom.selectPaginationBottom, '');
     if (dom.selectSelectAll) {
@@ -13587,6 +14411,7 @@
     state.selectDrawer.processing = false;
     state.selectDrawer.selection = new Set();
     state.selectDrawer.pageIndex = 0;
+    state.selectDrawer.associationSwitchByFileId = {};
     if (dom.selectSelectAll) {
       dom.selectSelectAll.checked = false;
       dom.selectSelectAll.indeterminate = false;
@@ -13608,6 +14433,7 @@
         var execSets = Array.isArray(res && res[2]) ? res[2] : [];
         state.selectDrawer.files = files;
         state.selectDrawer.execByFileId = buildExecMapByFileId(execSets);
+        syncAssociationSwitchMapWithFiles(files);
         syncVersionOptions(dom.selectVersionSelect, projectId, '全部版本');
         dom.selectVersionSelect.disabled = false;
         setStatus(dom.selectStatus, '已加载 ' + files.length + ' 份用例文件', files.length ? 'ok' : 'warn');
@@ -13616,6 +14442,7 @@
         if (seq !== state.selectDrawer.loadSeq) return;
         state.selectDrawer.files = [];
         state.selectDrawer.execByFileId = {};
+        state.selectDrawer.associationSwitchByFileId = {};
         setStatus(dom.selectStatus, err && err.message ? err.message : '加载失败', 'err');
       })
       .finally(function() {
@@ -13668,13 +14495,13 @@
   function renderSelectDrawerList() {
     if (!dom.selectListBody) return;
     if (!state.selectDrawer.projectId) {
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"10\"><p class=\"hint\">请选择项目后自动刷新。</p></td></tr>';
       setDrawerPagination(dom.selectPaginationTop, dom.selectPaginationBottom, '');
       syncSelectDrawerControls();
       return;
     }
     if (state.selectDrawer.loading) {
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">加载中...</p></td></tr>';
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"10\"><p class=\"hint\">加载中...</p></td></tr>';
       setDrawerPagination(dom.selectPaginationTop, dom.selectPaginationBottom, '');
       syncSelectDrawerControls();
       return;
@@ -13686,7 +14513,7 @@
     if (!total) {
       var term = String(state.selectDrawer.searchText || '').trim();
       var hint = term ? '未找到匹配的用例文件' : '暂无用例文件';
-      dom.selectListBody.innerHTML = '<tr><td colspan=\"9\"><p class=\"hint\">' + escapeHtml(hint) + '</p></td></tr>';
+      dom.selectListBody.innerHTML = '<tr><td colspan=\"10\"><p class=\"hint\">' + escapeHtml(hint) + '</p></td></tr>';
       setDrawerPagination(dom.selectPaginationTop, dom.selectPaginationBottom, '');
       syncSelectDrawerControls();
       return;
@@ -13719,7 +14546,8 @@
 	          '<td>' + escapeHtml(importerName) + '</td>' +
 	          '<td>' + escapeHtml(importedAt) + '</td>' +
 	          '<td>' + escapeHtml(updatedAt) + '</td>' +
-	          '<td><button class=\"primary\" type=\"button\" data-case-lib-exec=\"' + escapeHtml(f && f.id ? f.id : '') + '\">转到执行</button></td>' +
+          '<td>' + getAssociationDisplayText(f) + '</td>' +
+          '<td>' + buildSelectActionCell(f) + '</td>' +
         '</tr>'
       );
     }).join('');
@@ -15289,6 +16117,7 @@
     state.selectDrawer.execByFileId = {};
     state.selectDrawer.processing = false;
     state.selectDrawer.selection = new Set();
+    state.selectDrawer.associationSwitchByFileId = {};
     renderSelectDrawerList();
     if (!projectId) {
       setStatus(dom.selectStatus, '请先选择项目', 'warn');
@@ -15305,12 +16134,14 @@
 	        var execSets = Array.isArray(res && res[2]) ? res[2] : [];
 	        state.selectDrawer.files = files;
 	        state.selectDrawer.execByFileId = buildExecMapByFileId(execSets);
+	        syncAssociationSwitchMapWithFiles(files);
         setStatus(dom.selectStatus, '已加载 ' + files.length + ' 份用例文件', files.length ? 'ok' : 'warn');
       })
       .catch(function(err) {
         if (seq !== state.selectDrawer.loadSeq) return;
         state.selectDrawer.files = [];
         state.selectDrawer.execByFileId = {};
+        state.selectDrawer.associationSwitchByFileId = {};
         setStatus(dom.selectStatus, err && err.message ? err.message : '加载失败', 'err');
       })
       .finally(function() {
@@ -15343,49 +16174,58 @@
     var pid = caseFile.project_id || null;
     if (!pid) return;
 
-    var wasOpen = Boolean(
-      selectDrawerInstance &&
-      selectDrawerInstance.element &&
-      selectDrawerInstance.element.classList &&
-      selectDrawerInstance.element.classList.contains('open')
-    );
-    if (wasOpen && selectDrawerInstance && typeof selectDrawerInstance.close === 'function') {
-      try { if (window.app) window.app.__drawerSkipRestoreOnce = true; } catch (_) {}
-      selectDrawerInstance.close();
-    }
-
-    var importVid = caseFile.version_id || null;
-    var importVerName = getVersionName(pid, importVid) || '';
-    openExecVersionSelectDrawer(pid, {
-      title: '选择执行版本',
-      importVersionId: importVid,
-      importVersionName: importVerName || '',
-    }).then(function(res) {
-      if (!res || res.ok !== true) {
-        if (wasOpen && selectDrawerInstance && typeof selectDrawerInstance.open === 'function') selectDrawerInstance.open();
+    maybeConfirmExecWithoutAssociation(caseFile).then(function(assocDecision) {
+      if (!assocDecision || assocDecision.ok !== true) {
         setStatus(dom.selectStatus, '已取消转到执行', 'warn');
         return;
       }
-      var execVid = Object.prototype.hasOwnProperty.call(res, 'versionId') ? res.versionId : (res.exec_version_id || null);
-      if (wasOpen && selectDrawerInstance && typeof selectDrawerInstance.open === 'function') selectDrawerInstance.open();
-      setStatus(dom.selectStatus, '加载用例条目...', '');
-      apiClient.listCaseItems(caseFile.id).then(function(items) {
-        var res = transferItemsToTempExec(
-          caseFile,
-          caseFile.file_name_clean || ('用例#' + caseFile.id),
-          items || [],
-          {
-            statusEl: dom.selectStatus,
-            execVersionId: execVid,
-            previousDrawer: selectDrawerInstance || null,
-            openAssignDrawer: true,
-          }
-        );
-        Promise.resolve(res).then(function() {
-          if (selectDrawerInstance && typeof selectDrawerInstance.close === 'function') selectDrawerInstance.close();
+      var associationEnabled = assocDecision.association_enabled === true;
+
+      var wasOpen = Boolean(
+        selectDrawerInstance &&
+        selectDrawerInstance.element &&
+        selectDrawerInstance.element.classList &&
+        selectDrawerInstance.element.classList.contains('open')
+      );
+      if (wasOpen && selectDrawerInstance && typeof selectDrawerInstance.close === 'function') {
+        try { if (window.app) window.app.__drawerSkipRestoreOnce = true; } catch (_) {}
+        selectDrawerInstance.close();
+      }
+
+      var importVid = caseFile.version_id || null;
+      var importVerName = getVersionName(pid, importVid) || '';
+      openExecVersionSelectDrawer(pid, {
+        title: '选择执行版本',
+        importVersionId: importVid,
+        importVersionName: importVerName || '',
+      }).then(function(res) {
+        if (!res || res.ok !== true) {
+          if (wasOpen && selectDrawerInstance && typeof selectDrawerInstance.open === 'function') selectDrawerInstance.open();
+          setStatus(dom.selectStatus, '已取消转到执行', 'warn');
+          return;
+        }
+        var execVid = Object.prototype.hasOwnProperty.call(res, 'versionId') ? res.versionId : (res.exec_version_id || null);
+        if (wasOpen && selectDrawerInstance && typeof selectDrawerInstance.open === 'function') selectDrawerInstance.open();
+        setStatus(dom.selectStatus, '加载用例条目...', '');
+        apiClient.listCaseItems(caseFile.id).then(function(items) {
+          var res2 = transferItemsToTempExec(
+            caseFile,
+            caseFile.file_name_clean || ('用例#' + caseFile.id),
+            items || [],
+            {
+              statusEl: dom.selectStatus,
+              execVersionId: execVid,
+              previousDrawer: selectDrawerInstance || null,
+              openAssignDrawer: true,
+              association_enabled: associationEnabled,
+            }
+          );
+          Promise.resolve(res2).then(function() {
+            if (selectDrawerInstance && typeof selectDrawerInstance.close === 'function') selectDrawerInstance.close();
+          });
+        }).catch(function(err) {
+          setStatus(dom.selectStatus, err && err.message ? err.message : '加载用例失败', 'err');
         });
-      }).catch(function(err) {
-        setStatus(dom.selectStatus, err && err.message ? err.message : '加载用例失败', 'err');
       });
     });
   }
@@ -15490,21 +16330,29 @@
               chain = chain.then(function() {
                 var name = file.file_name_clean || ('用例#' + file.id);
                 setStatus(dom.selectStatus, '加载用例条目（' + (index + 1) + '/' + total + '）：' + name, '');
-                return apiClient
-                  .listCaseItems(file.id)
-                  .then(function(items) {
-                    return transferItemsToTempExec(file, name, items || [], {
-                      statusEl: dom.selectStatus,
-                      switchTab: false,
-                      skipActiveConfirm: skipConfirm,
-                      execVersionId: execVid,
-                      previousDrawer: selectDrawerInstance || null,
-                    }).then(function(res) {
-                      if (res && res.ok) successes += 1;
-                    });
-                  })
-                  .catch(function(err) {
-                    failures.push({ name: name, err: err });
+                return maybeConfirmExecWithoutAssociation(file)
+                  .then(function(assocDecision) {
+                    if (!assocDecision || assocDecision.ok !== true) {
+                      failures.push({ name: name, err: new Error('cancelled_by_association') });
+                      return null;
+                    }
+                    return apiClient
+                      .listCaseItems(file.id)
+                      .then(function(items) {
+                        return transferItemsToTempExec(file, name, items || [], {
+                          statusEl: dom.selectStatus,
+                          switchTab: false,
+                          skipActiveConfirm: skipConfirm,
+                          execVersionId: execVid,
+                          previousDrawer: selectDrawerInstance || null,
+                          association_enabled: assocDecision.association_enabled === true,
+                        }).then(function(res) {
+                          if (res && res.ok) successes += 1;
+                        });
+                      })
+                      .catch(function(err) {
+                        failures.push({ name: name, err: err });
+                      });
                   });
               });
             });
@@ -15516,7 +16364,7 @@
                   ? window.app.switchTab
                   : (coreApi && typeof coreApi.switchTab === 'function' ? coreApi.switchTab : null);
                 if (typeof switchTab === 'function') switchTab('tempexec');
-                var section = document.querySelector('[data-section-id=\"tempexec-view\"]');
+                var section = document.querySelector('[data-section-id="tempexec-view"]');
                 if (section && coreApi && typeof coreApi.scrollElementIntoView === 'function') {
                   coreApi.scrollElementIntoView(section, 'smooth', 140);
                 }
@@ -16367,6 +17215,11 @@
       dom.selectListBody.addEventListener('change', function(e) {
         var t = e && e.target ? e.target : null;
         if (!t || !t.getAttribute) return;
+        var assocSwitchId = t.getAttribute('data-case-lib-association-switch');
+        if (assocSwitchId) {
+          setAssociationSwitchState(assocSwitchId, Boolean(t.checked));
+          return;
+        }
         var id = t.getAttribute('data-case-lib-select-select');
         if (!id) return;
         state.selectDrawer.selection = state.selectDrawer.selection instanceof Set ? state.selectDrawer.selection : new Set();
@@ -16375,11 +17228,125 @@
         syncSelectDrawerControls();
       });
       dom.selectListBody.addEventListener('click', function(e) {
+        var assocBtn = e && e.target && e.target.closest ? e.target.closest('[data-case-lib-association]') : null;
+        if (assocBtn) {
+          var assocId = assocBtn.getAttribute('data-case-lib-association');
+          var assocFile = findCaseFileInSelectDrawer(assocId);
+          if (assocFile) openAssociationDrawerFromSelect(assocFile);
+          return;
+        }
         var btn = e && e.target && e.target.closest ? e.target.closest('[data-case-lib-exec]') : null;
         if (!btn) return;
         var id = btn.getAttribute('data-case-lib-exec');
         var file = findCaseFileInSelectDrawer(id);
         if (file) execCaseFileFromDrawer(file);
+      });
+    }
+    if (dom.associationAddBtn) {
+      dom.associationAddBtn.addEventListener('click', function() {
+        var mainCase = state.associationDrawer.caseFile;
+        if (!mainCase || !mainCase.id) {
+          if (dom.associationStatus) setStatus(dom.associationStatus, '主用例缺失', 'warn');
+          return;
+        }
+        openAssociationPickDrawer('create', mainCase, null);
+      });
+    }
+    if (dom.associationListBody) {
+      dom.associationListBody.addEventListener('click', function(e) {
+        var editBtn = e && e.target && e.target.closest ? e.target.closest('[data-case-lib-assoc-edit]') : null;
+        if (editBtn) {
+          var editId = editBtn.getAttribute('data-case-lib-assoc-edit');
+          var rows = Array.isArray(state.associationDrawer.rows) ? state.associationDrawer.rows : [];
+          var hit = rows.find(function(row) { return row && String(row.id) === String(editId); }) || null;
+          if (!hit) return;
+          openAssociationPickDrawer('edit', state.associationDrawer.caseFile, hit);
+          return;
+        }
+        var delBtn = e && e.target && e.target.closest ? e.target.closest('[data-case-lib-assoc-delete]') : null;
+        if (!delBtn) return;
+        var delId = delBtn.getAttribute('data-case-lib-assoc-delete');
+        var rows2 = Array.isArray(state.associationDrawer.rows) ? state.associationDrawer.rows : [];
+        var hit2 = rows2.find(function(row) { return row && String(row.id) === String(delId); }) || null;
+        if (!hit2) return;
+        requestDeleteAssociationRow(hit2);
+      });
+    }
+    if (dom.associationPickSearchInput) {
+      dom.associationPickSearchInput.addEventListener('input', function() {
+        state.associationPickDrawer.searchText = dom.associationPickSearchInput ? dom.associationPickSearchInput.value : '';
+        filterAssociationCandidateRows();
+        renderAssociationCandidateList();
+      });
+    }
+    if (dom.associationPickVersionSelect) {
+      dom.associationPickVersionSelect.addEventListener('change', function() {
+        state.associationPickDrawer.versionId = normalizeId(dom.associationPickVersionSelect ? dom.associationPickVersionSelect.value : '');
+        state.associationPickDrawer.subCaseFile = null;
+        state.associationPickDrawer.queried = false;
+        clearAssociationCandidateAndItems(false);
+        if (dom.associationPickStatus) {
+          setStatus(dom.associationPickStatus, state.associationPickDrawer.versionId ? '点击“查询”加载副用例' : '请先选择版本', '');
+        }
+      });
+    }
+    if (dom.associationPickQueryBtn) {
+      dom.associationPickQueryBtn.addEventListener('click', function() {
+        loadAssociationCandidateRows();
+      });
+    }
+    if (dom.associationPickRefreshBtn) {
+      dom.associationPickRefreshBtn.addEventListener('click', function() {
+        var mainCase = state.associationPickDrawer.mainCaseFile;
+        prepareAssociationPickVersionOptions(mainCase).then(function() {
+          if (dom.associationPickStatus) setStatus(dom.associationPickStatus, '版本列表已刷新，请选择版本并查询', 'ok');
+          clearAssociationCandidateAndItems(false);
+        });
+      });
+    }
+    if (dom.associationPickCaseBody) {
+      dom.associationPickCaseBody.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        if (!t || !t.getAttribute) return;
+        var subId = t.getAttribute('data-case-lib-assoc-subcase');
+        if (!subId) return;
+        var rows = Array.isArray(state.associationPickDrawer.filteredRows) ? state.associationPickDrawer.filteredRows : [];
+        var hit = rows.find(function(row) { return row && String(row.id) === String(subId); }) || null;
+        state.associationPickDrawer.subCaseFile = hit;
+        if (dom.associationPickStatus) {
+          setStatus(dom.associationPickStatus, hit ? '已选择副用例，点击“下一步选择条目”' : '请先选择副用例', '');
+        }
+      });
+    }
+    if (dom.associationPickItemBody) {
+      dom.associationPickItemBody.addEventListener('change', function(e) {
+        var t = e && e.target ? e.target : null;
+        if (!t || !t.getAttribute) return;
+        var itemId = t.getAttribute('data-case-lib-assoc-item');
+        if (!itemId) return;
+        state.associationPickDrawer.selection = state.associationPickDrawer.selection instanceof Set ? state.associationPickDrawer.selection : new Set();
+        if (t.checked) state.associationPickDrawer.selection.add(String(itemId));
+        else state.associationPickDrawer.selection.delete(String(itemId));
+        syncAssociationPickSelectAllState();
+      });
+    }
+    if (dom.associationPickSelectAll) {
+      dom.associationPickSelectAll.addEventListener('change', function() {
+        setAssociationPickSelectionAll(Boolean(dom.associationPickSelectAll && dom.associationPickSelectAll.checked));
+      });
+    }
+    if (dom.associationPickNextBtn) {
+      dom.associationPickNextBtn.addEventListener('click', openAssociationItemDrawerFromPick);
+    }
+    if (dom.associationPickConfirmBtn) {
+      dom.associationPickConfirmBtn.addEventListener('click', submitAssociationItemSelection);
+    }
+    if (dom.associationDeleteConfirmBtn) {
+      dom.associationDeleteConfirmBtn.addEventListener('click', function() {
+        confirmDeleteAssociationRow();
+        if (associationDeleteConfirmDrawerInstance && typeof associationDeleteConfirmDrawerInstance.close === 'function') {
+          associationDeleteConfirmDrawerInstance.close();
+        }
       });
     }
 
@@ -16505,6 +17472,7 @@
         if (!action) return;
         if (scope === 'edit') handleEditDrawerPaginationAction(action);
         else if (scope === 'select') handleSelectDrawerPaginationAction(action);
+        else if (scope === 'association-pick-items') handleAssociationPickPaginationAction(action);
         else if (scope === 'import-select') handleImportSelectDrawerPaginationAction(action);
         else if (scope === 'history-query') handleHistoryQueryPaginationAction(action);
         else if (scope === 'missing') handleMissingDrawerPaginationAction(action);
@@ -16516,6 +17484,7 @@
         var scope = t.getAttribute('data-case-lib-drawer-scope') || '';
         if (scope === 'edit') handleEditDrawerPaginationJump(t.value);
         else if (scope === 'select') handleSelectDrawerPaginationJump(t.value);
+        else if (scope === 'association-pick-items') handleAssociationPickPaginationJump(t.value);
         else if (scope === 'import-select') handleImportSelectDrawerPaginationJump(t.value);
         else if (scope === 'history-query') handleHistoryQueryPaginationJump(t.value);
         else if (scope === 'missing') handleMissingDrawerPaginationJump(t.value);
@@ -16639,9 +17608,13 @@
 
   function initDrawerOnly() {
     var hasSelectDrawer = Boolean(document.getElementById('caseLibrarySelectExecDrawer'));
+    var hasAssociationDrawer = Boolean(document.getElementById('caseLibraryAssociationDrawer'));
+    var hasAssociationPickDrawer = Boolean(document.getElementById('caseLibraryAssociationPickDrawer'));
+    var hasAssociationItemDrawer = Boolean(document.getElementById('caseLibraryAssociationItemDrawer'));
+    var hasAssociationDeleteConfirmDrawer = Boolean(document.getElementById('caseLibraryAssociationDeleteConfirmDrawer'));
     var hasImportSelectDrawer = Boolean(document.getElementById('caseLibraryImportSelectDrawer'));
     var hasImportDiffDrawer = Boolean(document.getElementById('caseLibraryImportDiffDrawer'));
-    if (!hasSelectDrawer && !hasImportSelectDrawer) return false;
+    if (!hasSelectDrawer && !hasAssociationDrawer && !hasAssociationPickDrawer && !hasAssociationItemDrawer && !hasAssociationDeleteConfirmDrawer && !hasImportSelectDrawer) return false;
 
     if (hasSelectDrawer) {
       selectDrawerInstance = ensureDrawer('caseLibrarySelectExecDrawer', ['openCaseLibrarySelectExecDrawerBtn'], function() {
@@ -16649,6 +17622,33 @@
           resetSelectDrawer();
           return restoreSelectDrawerFromPersistedState();
         });
+      });
+    }
+
+    if (hasAssociationDrawer) {
+      associationDrawerInstance = ensureDrawer('caseLibraryAssociationDrawer', [], null, function() {
+        resetAssociationDrawer();
+      });
+    }
+
+    if (hasAssociationPickDrawer) {
+      associationPickDrawerInstance = ensureDrawer('caseLibraryAssociationPickDrawer', [], null, function() {
+        resetAssociationPickDrawer();
+      });
+    }
+
+    if (hasAssociationItemDrawer) {
+      associationItemDrawerInstance = ensureDrawer('caseLibraryAssociationItemDrawer', [], null, function() {
+        state.associationPickDrawer.loadingItems = false;
+        state.associationPickDrawer.processing = false;
+        if (dom.associationPickConfirmBtn) dom.associationPickConfirmBtn.disabled = false;
+      });
+    }
+
+    if (hasAssociationDeleteConfirmDrawer) {
+      associationDeleteConfirmDrawerInstance = ensureDrawer('caseLibraryAssociationDeleteConfirmDrawer', [], null, function() {
+        state.associationDrawer.pendingAssociationId = null;
+        state.associationDrawer.pendingAction = '';
       });
     }
 
@@ -16861,6 +17861,21 @@
         resetSelectDrawer();
         return restoreSelectDrawerFromPersistedState();
       });
+    });
+    associationDrawerInstance = ensureDrawer('caseLibraryAssociationDrawer', [], null, function() {
+      resetAssociationDrawer();
+    });
+    associationPickDrawerInstance = ensureDrawer('caseLibraryAssociationPickDrawer', [], null, function() {
+      resetAssociationPickDrawer();
+    });
+    associationItemDrawerInstance = ensureDrawer('caseLibraryAssociationItemDrawer', [], null, function() {
+      state.associationPickDrawer.loadingItems = false;
+      state.associationPickDrawer.processing = false;
+      if (dom.associationPickConfirmBtn) dom.associationPickConfirmBtn.disabled = false;
+    });
+    associationDeleteConfirmDrawerInstance = ensureDrawer('caseLibraryAssociationDeleteConfirmDrawer', [], null, function() {
+      state.associationDrawer.pendingAssociationId = null;
+      state.associationDrawer.pendingAction = '';
     });
     importSelectDrawerInstance = ensureDrawer('caseLibraryImportSelectDrawer', [], function() {
       ensureProjectsReady().then(function() {

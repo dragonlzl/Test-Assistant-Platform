@@ -960,3 +960,65 @@ def apply_migrations(engine: Engine) -> None:
                     )
                 )
             mark_applied(24)
+
+        # v25: 用例关联（主/副）与执行集关联开关。
+        if not _is_applied(conn, 25):
+            insp_v25 = inspect(conn)
+            tables_v25 = set(insp_v25.get_table_names())
+            if "case_file_associations" not in tables_v25:
+                conn.execute(
+                    text(
+                        """
+                        CREATE TABLE IF NOT EXISTS case_file_associations (
+                          id INTEGER PRIMARY KEY,
+                          main_case_file_id INTEGER NOT NULL,
+                          sub_case_file_id INTEGER NOT NULL,
+                          selected_case_item_ids TEXT NOT NULL DEFAULT '[]',
+                          order_no INTEGER NOT NULL DEFAULT 0,
+                          created_by INTEGER,
+                          updated_by INTEGER,
+                          created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                          updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                          CONSTRAINT uq_case_file_assoc_main_sub UNIQUE (main_case_file_id, sub_case_file_id),
+                          FOREIGN KEY(main_case_file_id) REFERENCES case_files (id) ON DELETE CASCADE,
+                          FOREIGN KEY(sub_case_file_id) REFERENCES case_files (id) ON DELETE CASCADE,
+                          FOREIGN KEY(created_by) REFERENCES users (id) ON DELETE SET NULL,
+                          FOREIGN KEY(updated_by) REFERENCES users (id) ON DELETE SET NULL
+                        )
+                        """
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_case_file_assoc_main "
+                        "ON case_file_associations(main_case_file_id)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_case_file_assoc_sub "
+                        "ON case_file_associations(sub_case_file_id)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_case_file_assoc_main_order "
+                        "ON case_file_associations(main_case_file_id, order_no)"
+                    )
+                )
+
+            if "exec_sets" in tables_v25:
+                cols = set([c["name"] for c in insp_v25.get_columns("exec_sets")])
+                if "association_enabled" not in cols:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE exec_sets ADD COLUMN association_enabled BOOLEAN NOT NULL DEFAULT 0"
+                        )
+                    )
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_exec_sets_association_enabled "
+                            "ON exec_sets(association_enabled)"
+                        )
+                    )
+            mark_applied(25)

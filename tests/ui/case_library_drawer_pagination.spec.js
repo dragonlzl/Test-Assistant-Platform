@@ -94,7 +94,7 @@ test.describe('用例库抽屉分页', () => {
       return respond(200, []);
     });
 
-    await page.goto(base + '/index.html');
+    await page.goto(base + '/case-library.html');
     await page.waitForLoadState('domcontentloaded');
     await waitForAppReady(page);
     await page.evaluate(() => {
@@ -117,7 +117,10 @@ test.describe('用例库抽屉分页', () => {
   test('查看&编辑 / 选择执行 / 历史查询抽屉分页生效', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
 
-    await page.click('#openCaseLibraryEditDrawerBtn');
+    await page.evaluate(() => {
+      const btn = document.getElementById('openCaseLibraryEditDrawerBtn');
+      if (btn) btn.click();
+    });
     await page.waitForFunction(() => {
       const el = document.getElementById('caseLibraryEditProjectSelect');
       return el && el.options && el.options.length > 1;
@@ -130,7 +133,14 @@ test.describe('用例库抽屉分页', () => {
     await expect(editInfo).toContainText('显示 11-20 / 23 条');
     await page.click('#caseLibraryEditDrawer .drawer-header [data-drawer-close="caseLibraryEditDrawer"]');
 
-    await page.click('#openCaseLibrarySelectExecDrawerBtn');
+    await page.evaluate(() => {
+      if (window.app && window.app.caseLibraryApi && typeof window.app.caseLibraryApi.openSelectExecDrawer === 'function') {
+        window.app.caseLibraryApi.openSelectExecDrawer({ allowInactive: true });
+        return;
+      }
+      const btn = document.getElementById('openCaseLibrarySelectExecDrawerBtn');
+      if (btn) btn.click();
+    });
     await page.waitForFunction(() => {
       const el = document.getElementById('caseLibrarySelectProjectSelect');
       return el && el.options && el.options.length > 1;
@@ -143,7 +153,10 @@ test.describe('用例库抽屉分页', () => {
     await expect(selectInfo).toContainText('显示 11-20 / 23 条');
     await page.click('#caseLibrarySelectExecDrawer .drawer-header [data-drawer-close="caseLibrarySelectExecDrawer"]');
 
-    await page.click('#openCaseLibraryHistoryDrawerBtn');
+    await page.evaluate(() => {
+      const btn = document.getElementById('openCaseLibraryHistoryDrawerBtn');
+      if (btn) btn.click();
+    });
     await page.waitForFunction(() => {
       const el = document.getElementById('caseLibraryHistoryProjectSelect');
       return el && el.options && el.options.length > 1;

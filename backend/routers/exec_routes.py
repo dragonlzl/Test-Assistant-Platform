@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 import json
 import re
+from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, aliased
@@ -430,6 +431,7 @@ def create_exec_set(
         requirement=payload.requirement,
         reuse_enabled=bool(payload.reuse_enabled),
         reuse_presets=payload.reuse_presets,
+        association_enabled=False,
         status="active",
         case_file_base_updated_at=base_updated_at,
         case_file_last_synced_at=base_updated_at,
@@ -481,7 +483,7 @@ def update_exec_set(
     case_file_reuse_before = None
     case_file_reuse_after = None
     case_file_reuse_target = None
-    for field in ["status", "requirement", "reuse_enabled", "reuse_presets"]:
+    for field in ["status", "requirement", "reuse_enabled", "reuse_presets", "association_enabled"]:
         if field not in data:
             continue
         value = data[field]
@@ -491,6 +493,8 @@ def update_exec_set(
                 turned_on_reuse = True
             if prev_reuse_enabled and (not value):
                 turned_off_reuse = True
+        if field == "association_enabled":
+            value = bool(value)
         if value != getattr(exec_set, field):
             setattr(exec_set, field, value)
             changed = True
@@ -784,6 +788,7 @@ def _rearchive_exec_set(
     archive_set.requirement = exec_set.requirement
     archive_set.reuse_enabled = exec_set.reuse_enabled
     archive_set.reuse_presets = exec_set.reuse_presets
+    archive_set.association_enabled = bool(getattr(exec_set, "association_enabled", False))
     archive_set.status = "archived"
     archive_set.archived_by = user.id
     archive_set.archived_at = now
@@ -1025,6 +1030,232 @@ def _has_reuse_execution(reuse_details_value) -> bool:
     return False
 
 
+def _parse_association_selected_item_ids(raw_value) -> List[int]:
+    if raw_value is None:
+        return []
+    data = raw_value
+    if isinstance(raw_value, str):
+        text = str(raw_value or "").strip()
+        if not text:
+            return []
+        try:
+            data = json.loads(text)
+        except Exception:
+            return []
+    if not isinstance(data, list):
+        return []
+    seen = set()
+    result: List[int] = []
+    for item in data:
+        try:
+            cid = int(item)
+        except Exception:
+            continue
+        if cid <= 0:
+            continue
+        if cid in seen:
+            continue
+        seen.add(cid)
+        result.append(cid)
+    return result
+
+
+def _is_exec_case_association_reference(
+    db: Session,
+    exec_set: models.ExecSet,
+    exec_case: models.ExecCase,
+) -> bool:
+    if not exec_set or not exec_case:
+        return False
+    main_case_file_id = getattr(exec_set, "case_file_id", None)
+    if not main_case_file_id:
+        return False
+    source_id = getattr(exec_case, "case_item_source_id", None)
+    if source_id is None:
+        return False
+    try:
+        source_id_num = int(source_id)
+    except Exception:
+        return False
+    source_item = (
+        db.query(models.CaseItem.id, models.CaseItem.case_file_id)
+        .filter(models.CaseItem.id == source_id_num)
+        .first()
+    )
+    if not source_item:
+        # 来源用例已被删除时，若当前执行集开启了关联且条目仅保留 source_id，仍视为“关联引用条目”，避免误回写主用例。
+        if bool(getattr(exec_set, "association_enabled", False)) and getattr(exec_case, "case_item_id", None) is None:
+            return True
+        return False
+    try:
+        return int(source_item.case_file_id) != int(main_case_file_id)
+    except Exception:
+        return False
+
+
+def _resolve_latest_case_file_updated_at(
+    db: Session,
+    case_file_ids: List[int],
+    fallback: Optional[datetime],
+) -> datetime:
+    ids: List[int] = []
+    seen = set()
+    for raw in case_file_ids or []:
+        try:
+            cid = int(raw)
+        except Exception:
+            continue
+        if cid <= 0 or cid in seen:
+            continue
+        seen.add(cid)
+        ids.append(cid)
+    latest = fallback
+    if ids:
+        latest_in_db = (
+            db.query(func.max(models.CaseFile.updated_at))
+            .filter(models.CaseFile.id.in_(ids))
+            .scalar()
+        )
+        if latest_in_db and (latest is None or latest_in_db > latest):
+            latest = latest_in_db
+    if latest is None:
+        latest = datetime.now(timezone.utc)
+    return latest
+
+
+def _remove_association_selected_item_from_main_case(
+    db: Session,
+    main_case_file_id: int,
+    case_item_source_id: int,
+    sub_case_file_id: Optional[int] = None,
+) -> bool:
+    if not main_case_file_id or not case_item_source_id:
+        return False
+    query = (
+        db.query(models.CaseFileAssociation)
+        .filter(models.CaseFileAssociation.main_case_file_id == int(main_case_file_id))
+    )
+    if sub_case_file_id:
+        query = query.filter(models.CaseFileAssociation.sub_case_file_id == int(sub_case_file_id))
+    rows = query.all()
+    if not rows:
+        return False
+    changed = False
+    source_id_num = int(case_item_source_id)
+    now = datetime.now(timezone.utc)
+    for assoc in rows:
+        selected_ids = _parse_association_selected_item_ids(getattr(assoc, "selected_case_item_ids", None))
+        if not selected_ids:
+            continue
+        next_selected = []
+        for raw_id in selected_ids:
+            try:
+                current_id = int(raw_id)
+            except Exception:
+                continue
+            if current_id == source_id_num:
+                continue
+            next_selected.append(current_id)
+        if len(next_selected) == len(selected_ids):
+            continue
+        assoc.selected_case_item_ids = next_selected
+        assoc.updated_at = now
+        db.add(assoc)
+        changed = True
+    return changed
+
+
+def _load_exec_source_case_items(
+    db: Session,
+    main_case_file_id: int,
+    association_enabled: bool,
+):
+    main_rows = (
+        db.query(models.CaseItem)
+        .filter(models.CaseItem.case_file_id == int(main_case_file_id))
+        .order_by(models.CaseItem.order_no.asc(), models.CaseItem.id.asc())
+        .all()
+    )
+    merged_items = []
+    source_case_file_ids = [int(main_case_file_id)]
+    for row in main_rows:
+        if not row:
+            continue
+        merged_items.append(
+            SimpleNamespace(
+                id=int(row.id),
+                case_file_id=int(row.case_file_id),
+                module=row.module,
+                title=row.title,
+                expected=row.expected,
+                priority=row.priority,
+                precondition=row.precondition,
+                steps=row.steps,
+                remark=row.remark,
+            )
+        )
+
+    if not association_enabled:
+        return {
+            "items": merged_items,
+            "source_case_file_ids": source_case_file_ids,
+        }
+
+    associations = (
+        db.query(models.CaseFileAssociation)
+        .filter(models.CaseFileAssociation.main_case_file_id == int(main_case_file_id))
+        .order_by(models.CaseFileAssociation.order_no.asc(), models.CaseFileAssociation.id.asc())
+        .all()
+    )
+    for assoc in associations:
+        if not assoc:
+            continue
+        sub_case_file_id = int(assoc.sub_case_file_id)
+        if sub_case_file_id not in source_case_file_ids:
+            source_case_file_ids.append(sub_case_file_id)
+        selected_ids = _parse_association_selected_item_ids(
+            getattr(assoc, "selected_case_item_ids", None)
+        )
+        if not selected_ids:
+            continue
+        sub_rows = (
+            db.query(models.CaseItem)
+            .filter(models.CaseItem.case_file_id == sub_case_file_id)
+            .filter(models.CaseItem.id.in_(selected_ids))
+            .order_by(models.CaseItem.order_no.asc(), models.CaseItem.id.asc())
+            .all()
+        )
+        selected_map = {int(item_id): idx for idx, item_id in enumerate(selected_ids)}
+        sub_rows.sort(
+            key=lambda row: (
+                int(selected_map.get(int(row.id), 10**9)),
+                int(row.order_no or 0),
+                int(row.id),
+            )
+        )
+        for row in sub_rows:
+            if not row:
+                continue
+            merged_items.append(
+                SimpleNamespace(
+                    id=int(row.id),
+                    case_file_id=int(row.case_file_id),
+                    module=row.module,
+                    title=row.title,
+                    expected=row.expected,
+                    priority=row.priority,
+                    precondition=row.precondition,
+                    steps=row.steps,
+                    remark=row.remark,
+                )
+            )
+
+    return {
+        "items": merged_items,
+        "source_case_file_ids": source_case_file_ids,
+    }
+
+
 @router.post("/sets/from-case-file", response_model=schemas.ExecSetOut)
 def upsert_exec_set_from_case_file(
     payload: schemas.ExecSetFromCaseFileRequest,
@@ -1099,6 +1330,11 @@ def upsert_exec_set_from_case_file(
 
     if payload.requirement is not None:
         exec_set.requirement = payload.requirement
+    association_enabled = bool(getattr(exec_set, "association_enabled", False))
+    if payload.association_enabled is not None:
+        association_enabled = bool(payload.association_enabled)
+    exec_set.association_enabled = association_enabled
+    exec_set.updated_at = now
     explicit_reuse_enabled = None
     if payload.reuse_enabled is not None:
         explicit_reuse_enabled = bool(payload.reuse_enabled)
@@ -1108,6 +1344,19 @@ def upsert_exec_set_from_case_file(
         exec_set.reuse_enabled = True
     if payload.reuse_presets is not None:
         exec_set.reuse_presets = payload.reuse_presets
+
+    if association_enabled:
+        reverse_assoc = (
+            db.query(models.CaseFileAssociation.id)
+            .filter(models.CaseFileAssociation.main_case_file_id != int(case_file.id))
+            .filter(models.CaseFileAssociation.sub_case_file_id == int(case_file.id))
+            .first()
+        )
+        if reverse_assoc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="当前主用例作为其他主用例的副用例，无法开启关联执行",
+            )
 
     # 复用类型同步到用例库（case_files.reuse_enabled），保证执行页与用例库一致，避免“取消勾选后又被反向开启”。
     if explicit_reuse_enabled is not None:
@@ -1126,11 +1375,21 @@ def upsert_exec_set_from_case_file(
             )
             import_map[key] = item
 
-    case_items = (
-        db.query(models.CaseItem)
-        .filter(models.CaseItem.case_file_id == case_file.id)
-        .order_by(models.CaseItem.order_no.asc(), models.CaseItem.id.asc())
-        .all()
+    source_pack = _load_exec_source_case_items(db, case_file.id, association_enabled)
+    case_items = source_pack.get("items") if isinstance(source_pack, dict) else []
+    source_case_file_ids = (
+        source_pack.get("source_case_file_ids")
+        if isinstance(source_pack, dict)
+        else [int(case_file.id)]
+    )
+    if not isinstance(case_items, list):
+        case_items = []
+    if not isinstance(source_case_file_ids, list) or not source_case_file_ids:
+        source_case_file_ids = [int(case_file.id)]
+    source_latest_updated_at = _resolve_latest_case_file_updated_at(
+        db,
+        source_case_file_ids,
+        case_file.updated_at,
     )
     existing_cases = (
         db.query(models.ExecCase)
@@ -1157,7 +1416,7 @@ def upsert_exec_set_from_case_file(
             continue
         existing_by_item_id[int(source_id)] = row
 
-    keep_item_ids = set([it.id for it in case_items])
+    keep_item_ids = set([int(it.id) for it in case_items if getattr(it, "id", None)])
 
     new_cases: List[models.ExecCase] = []
     updated_any = False
@@ -1169,9 +1428,10 @@ def upsert_exec_set_from_case_file(
         )
 
     for idx, item in enumerate(case_items):
-        existing = existing_by_item_id.get(item.id)
+        existing = existing_by_item_id.get(int(item.id))
         if existing and mode == "append":
             continue
+        item_id = int(item.id)
         key = _normalize_match_key(item.module, item.title, item.precondition, item.steps, item.expected)
         import_case = import_map.get(key)
 
@@ -1188,8 +1448,11 @@ def upsert_exec_set_from_case_file(
             existing.priority = item.priority
             existing.precondition = item.precondition
             existing.steps = item.steps
-            existing.case_item_id = item.id
-            existing.case_item_source_id = int(item.id)
+            if int(getattr(item, "case_file_id", case_file.id)) == int(case_file.id):
+                existing.case_item_id = item_id
+            else:
+                existing.case_item_id = None
+            existing.case_item_source_id = item_id
             existing.updated_by = user.id
             existing.updated_at = now
             if mode == "replace":
@@ -1251,8 +1514,8 @@ def upsert_exec_set_from_case_file(
         order_no = (idx + 1) if mode == "replace" else (base_order + len(new_cases))
         exec_case = models.ExecCase(
             exec_set_id=exec_set.id,
-            case_item_id=item.id,
-            case_item_source_id=int(item.id),
+            case_item_id=(item_id if int(getattr(item, "case_file_id", case_file.id)) == int(case_file.id) else None),
+            case_item_source_id=item_id,
             module=item.module,
             title=item.title,
             expected=item.expected,
@@ -1289,8 +1552,10 @@ def upsert_exec_set_from_case_file(
                 db.delete(old)
                 updated_any = True
 
-    # 标记“已同步到用例库版本”，用于后续执行页刷新判断是否存在用例库新变更。
-    exec_set.case_file_last_synced_at = case_file.updated_at
+    # 标记“已同步到来源用例版本（主用例+关联副用例）”，用于后续执行页刷新判断是否存在新变更。
+    if exec_set.case_file_base_updated_at is None:
+        exec_set.case_file_base_updated_at = source_latest_updated_at
+    exec_set.case_file_last_synced_at = source_latest_updated_at
 
     action = "upsert_exec_set_from_case_file"
     after_count = (
@@ -1308,6 +1573,7 @@ def upsert_exec_set_from_case_file(
         detail={
             "case_file_id": case_file.id,
             "case_file_name": case_file.file_name_clean,
+            "source_case_file_ids": source_case_file_ids,
             "exec_set_name": exec_set.name,
             "mode": mode,
             "created": created,
@@ -1315,6 +1581,7 @@ def upsert_exec_set_from_case_file(
             "transfer_count": len(case_items),
             "before_count": int(before_count),
             "after_count": int(after_count),
+            "association_enabled": bool(association_enabled),
         },
     )
     db.commit()
@@ -1387,6 +1654,7 @@ def list_exec_sets(
                 "requirement": exec_set.requirement,
                 "reuse_enabled": bool(exec_set.reuse_enabled),
                 "reuse_presets": exec_set.reuse_presets,
+                "association_enabled": bool(getattr(exec_set, "association_enabled", False)),
                 "case_count": int(case_count or 0),
                 "status": exec_set.status,
                 "restored_from_id": exec_set.restored_from_id,
@@ -1466,12 +1734,11 @@ def _case_snapshot(module, title, expected, priority=None, precondition="", step
 def _diff_exec_set_against_case_file(
     db: Session, exec_set: models.ExecSet, case_file: models.CaseFile, added_kind: str = "added"
 ):
-    case_items = (
-        db.query(models.CaseItem)
-        .filter(models.CaseItem.case_file_id == case_file.id)
-        .order_by(models.CaseItem.order_no.asc(), models.CaseItem.id.asc())
-        .all()
-    )
+    association_enabled = bool(getattr(exec_set, "association_enabled", False))
+    source_pack = _load_exec_source_case_items(db, case_file.id, association_enabled)
+    case_items = source_pack.get("items") if isinstance(source_pack, dict) else []
+    if not isinstance(case_items, list):
+        case_items = []
     exec_cases = (
         db.query(models.ExecCase)
         .filter(models.ExecCase.exec_set_id == exec_set.id)
@@ -1618,11 +1885,22 @@ def _sync_exec_set_from_case_file(
     db: Session, user: models.User, exec_set: models.ExecSet, case_file: models.CaseFile
 ):
     now = datetime.now(timezone.utc)
-    case_items = (
-        db.query(models.CaseItem)
-        .filter(models.CaseItem.case_file_id == case_file.id)
-        .order_by(models.CaseItem.order_no.asc(), models.CaseItem.id.asc())
-        .all()
+    association_enabled = bool(getattr(exec_set, "association_enabled", False))
+    source_pack = _load_exec_source_case_items(db, case_file.id, association_enabled)
+    case_items = source_pack.get("items") if isinstance(source_pack, dict) else []
+    source_case_file_ids = (
+        source_pack.get("source_case_file_ids")
+        if isinstance(source_pack, dict)
+        else [int(case_file.id)]
+    )
+    if not isinstance(case_items, list):
+        case_items = []
+    if not isinstance(source_case_file_ids, list) or not source_case_file_ids:
+        source_case_file_ids = [int(case_file.id)]
+    source_latest_updated_at = _resolve_latest_case_file_updated_at(
+        db,
+        source_case_file_ids,
+        case_file.updated_at,
     )
     existing_cases = (
         db.query(models.ExecCase)
@@ -1650,15 +1928,16 @@ def _sync_exec_set_from_case_file(
     new_cases = 0
 
     for idx, item in enumerate(case_items):
-        if not item or not item.id:
+        if not item or not getattr(item, "id", None):
             continue
-        existing = existing_by_item_id.get(int(item.id))
+        item_id = int(item.id)
+        existing = existing_by_item_id.get(item_id)
         if not existing and unbound_by_key:
             key = _normalize_match_key(item.module, item.title, item.precondition, item.steps, item.expected)
             existing = unbound_by_key.get(key)
             if existing:
                 unbound_by_key.pop(key, None)
-                existing_by_item_id[int(item.id)] = existing
+                existing_by_item_id[item_id] = existing
         if existing:
             before_module = existing.module
             before_title = existing.title
@@ -1692,8 +1971,11 @@ def _sync_exec_set_from_case_file(
             existing.precondition = item.precondition
             existing.steps = item.steps
             existing.order_no = idx + 1
-            existing.case_item_id = item.id
-            existing.case_item_source_id = int(item.id)
+            if int(getattr(item, "case_file_id", case_file.id)) == int(case_file.id):
+                existing.case_item_id = item_id
+            else:
+                existing.case_item_id = None
+            existing.case_item_source_id = item_id
             existing.updated_by = user.id
             existing.updated_at = now
 
@@ -1725,8 +2007,8 @@ def _sync_exec_set_from_case_file(
 
         exec_case = models.ExecCase(
             exec_set_id=exec_set.id,
-            case_item_id=item.id,
-            case_item_source_id=int(item.id),
+            case_item_id=(item_id if int(getattr(item, "case_file_id", case_file.id)) == int(case_file.id) else None),
+            case_item_source_id=item_id,
             module=item.module,
             title=item.title,
             expected=item.expected,
@@ -1767,8 +2049,8 @@ def _sync_exec_set_from_case_file(
     if updated_any:
         exec_set.updated_at = now
         if exec_set.case_file_base_updated_at is None:
-            exec_set.case_file_base_updated_at = exec_set.created_at or case_file.updated_at
-        exec_set.case_file_last_synced_at = case_file.updated_at
+            exec_set.case_file_base_updated_at = source_latest_updated_at
+        exec_set.case_file_last_synced_at = source_latest_updated_at
         db.add(exec_set)
         log_operation(
             db=db,
@@ -1782,6 +2064,8 @@ def _sync_exec_set_from_case_file(
                 "case_file_name": case_file.file_name_clean,
                 "exec_set_name": exec_set.name,
                 "new_cases": int(new_cases),
+                "source_case_file_ids": source_case_file_ids,
+                "association_enabled": bool(association_enabled),
             },
         )
         db.commit()
@@ -1868,7 +2152,20 @@ def sync_exec_set_case_library(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用例文件不存在")
     ensure_project_access(db, user, case_file.project_id)
 
-    file_updated_at = case_file.updated_at or exec_set.created_at or datetime.now(timezone.utc)
+    association_enabled = bool(getattr(exec_set, "association_enabled", False))
+    source_pack = _load_exec_source_case_items(db, case_file.id, association_enabled)
+    source_case_file_ids = (
+        source_pack.get("source_case_file_ids")
+        if isinstance(source_pack, dict)
+        else [int(case_file.id)]
+    )
+    if not isinstance(source_case_file_ids, list) or not source_case_file_ids:
+        source_case_file_ids = [int(case_file.id)]
+    file_updated_at = _resolve_latest_case_file_updated_at(
+        db,
+        source_case_file_ids,
+        case_file.updated_at or exec_set.created_at or datetime.now(timezone.utc),
+    )
     if exec_set.case_file_base_updated_at is None:
         exec_set.case_file_base_updated_at = file_updated_at
         db.add(exec_set)
@@ -2409,6 +2706,7 @@ def delete_exec_case(
     exec_set = _ensure_exec_set_access(db, user, exec_case.exec_set_id)
     removed_order = int(exec_case.order_no or 0)
     deleted_case_item = False
+    association_item_unlinked = False
     case_item_id = None
     source_id = getattr(exec_case, "case_item_source_id", None)
     if source_id is None and exec_case.case_item_id:
@@ -2418,51 +2716,70 @@ def delete_exec_case(
     if case_item_id is not None:
         case_item = db.query(models.CaseItem).filter(models.CaseItem.id == case_item_id).first()
         if case_item:
-            case_file = (
-                db.query(models.CaseFile)
-                .filter(models.CaseFile.id == case_item.case_file_id)
-                .first()
+            can_sync_delete = bool(
+                exec_set
+                and exec_set.case_file_id
+                and int(case_item.case_file_id) == int(exec_set.case_file_id)
             )
-            now = datetime.now(timezone.utc)
-            if case_file:
-                old_snap = _snapshot_case_item_for_history(case_item)
-                log_case_library_change(
-                    db=db,
-                    user=user,
-                    project_id=case_file.project_id,
-                    version_id=case_file.version_id,
-                    file_name_clean=case_file.file_name_clean,
-                    case_file_id=case_file.id,
-                    case_item_id=case_item.id,
-                    kind="deleted",
-                    old=old_snap,
-                    new=None,
-                    meta={"source": "exec_case_delete"},
-                    at=now,
+            if can_sync_delete:
+                case_file = (
+                    db.query(models.CaseFile)
+                    .filter(models.CaseFile.id == case_item.case_file_id)
+                    .first()
                 )
-                case_file.updated_by = user.id
-                case_file.updated_at = now
-                diff_entries = [
-                    _build_exec_case_library_diff_entry(
-                        "deleted", case_item.id, old_snap, None
+                now = datetime.now(timezone.utc)
+                if case_file:
+                    old_snap = _snapshot_case_item_for_history(case_item)
+                    log_case_library_change(
+                        db=db,
+                        user=user,
+                        project_id=case_file.project_id,
+                        version_id=case_file.version_id,
+                        file_name_clean=case_file.file_name_clean,
+                        case_file_id=case_file.id,
+                        case_item_id=case_item.id,
+                        kind="deleted",
+                        old=old_snap,
+                        new=None,
+                        meta={"source": "exec_case_delete"},
+                        at=now,
                     )
-                ]
-                diff_summary = schemas.ExecCaseLibraryDiffSummary(deleted=1)
-                _append_exec_set_case_library_history(
-                    exec_set,
-                    case_file,
-                    user,
-                    diff_entries,
-                    diff_summary,
-                    now,
-                    auto_ack=True,
+                    case_file.updated_by = user.id
+                    case_file.updated_at = now
+                    diff_entries = [
+                        _build_exec_case_library_diff_entry(
+                            "deleted", case_item.id, old_snap, None
+                        )
+                    ]
+                    diff_summary = schemas.ExecCaseLibraryDiffSummary(deleted=1)
+                    _append_exec_set_case_library_history(
+                        exec_set,
+                        case_file,
+                        user,
+                        diff_entries,
+                        diff_summary,
+                        now,
+                        auto_ack=True,
+                    )
+                db.delete(case_item)
+                db.query(models.CaseFile).filter(models.CaseFile.id == case_item.case_file_id).update(
+                    {models.CaseFile.updated_at: now, models.CaseFile.updated_by: user.id},
+                    synchronize_session=False,
                 )
-            db.delete(case_item)
-            db.query(models.CaseFile).filter(models.CaseFile.id == case_item.case_file_id).update(
-                {models.CaseFile.updated_at: now, models.CaseFile.updated_by: user.id},
-                synchronize_session=False,
+                deleted_case_item = True
+            elif exec_set and exec_set.case_file_id:
+                association_item_unlinked = _remove_association_selected_item_from_main_case(
+                    db,
+                    int(exec_set.case_file_id),
+                    int(case_item.id),
+                    int(case_item.case_file_id),
+                )
+        elif exec_set and exec_set.case_file_id:
+            association_item_unlinked = _remove_association_selected_item_from_main_case(
+                db,
+                int(exec_set.case_file_id),
+                int(case_item_id),
             )
-            deleted_case_item = True
     db.delete(exec_case)
     if removed_order:
         db.query(models.ExecCase).filter(
@@ -2482,6 +2799,7 @@ def delete_exec_case(
             "exec_set_id": exec_set.id,
             "case_item_id": case_item_id,
             "case_item_deleted": bool(deleted_case_item),
+            "association_item_unlinked": bool(association_item_unlinked),
         },
     )
     db.commit()
@@ -2672,6 +2990,16 @@ def update_exec_case(
                 .filter(models.CaseItem.id == exec_case.case_item_id)
                 .first()
             )
+            if case_item and exec_set and exec_set.case_file_id:
+                try:
+                    if int(case_item.case_file_id) != int(exec_set.case_file_id):
+                        if exec_case.case_item_source_id is None:
+                            exec_case.case_item_source_id = int(case_item.id)
+                        # 关联引用条目不应绑定为主用例 case_item，但仍允许把结构变更同步到其来源条目。
+                        exec_case.case_item_id = None
+                        db.add(exec_case)
+                except Exception:
+                    pass
             if case_item:
                 if exec_case.case_item_source_id is None:
                     exec_case.case_item_source_id = int(case_item.id)
@@ -2738,34 +3066,190 @@ def update_exec_case(
                         # 历史记录不应影响执行用例更新主流程
                         pass
         else:
-            # 新增的执行用例可能尚未绑定 case_item：当必填字段齐全时自动落库到用例库并绑定。
-            required_ready = _exec_case_ready_for_library(exec_case)
-            if required_ready:
-                if exec_set and exec_set.case_file_id:
-                    now = exec_case.updated_at
-                    case_file = (
-                        db.query(models.CaseFile)
-                        .filter(models.CaseFile.id == int(exec_set.case_file_id))
+            # 关联引用条目优先回写到来源用例（副用例）；来源不存在时再按原有“手工新增”逻辑处理。
+            source_case_item = None
+            source_item_id = getattr(exec_case, "case_item_source_id", None)
+            if source_item_id is not None:
+                try:
+                    source_case_item = (
+                        db.query(models.CaseItem)
+                        .filter(models.CaseItem.id == int(source_item_id))
                         .first()
                     )
-                    if case_file:
-                        existing = _find_case_item_by_exec_case(db, case_file.id, exec_case)
-                        if existing:
-                            old_snap = _snapshot_case_item_for_history(existing)
-                            updated_case = False
-                            if exec_case.priority != existing.priority:
-                                existing.priority = exec_case.priority
-                                updated_case = True
-                            exec_case.case_item_id = existing.id
-                            exec_case.case_item_source_id = int(existing.id)
-                            if updated_case:
-                                existing.updated_by = user.id
-                                existing.updated_at = now
+                except Exception:
+                    source_case_item = None
+
+            if source_case_item:
+                old_snap = _snapshot_case_item_for_history(source_case_item)
+                updated_case = False
+                for key in case_fields:
+                    if key not in payload_data:
+                        continue
+                    value = payload_data[key]
+                    if key in ("precondition", "steps") and value is None:
+                        value = ""
+                    if value != getattr(source_case_item, key):
+                        setattr(source_case_item, key, value)
+                        updated_case = True
+                if updated_case:
+                    now = exec_case.updated_at
+                    source_case_item.updated_by = user.id
+                    source_case_item.updated_at = now
+                    db.query(models.CaseFile).filter(models.CaseFile.id == source_case_item.case_file_id).update(
+                        {models.CaseFile.updated_at: now, models.CaseFile.updated_by: user.id},
+                        synchronize_session=False,
+                    )
+                    db.add(source_case_item)
+                    try:
+                        source_case_file = (
+                            db.query(models.CaseFile)
+                            .filter(models.CaseFile.id == source_case_item.case_file_id)
+                            .first()
+                        )
+                        if source_case_file:
+                            source_case_file.updated_by = user.id
+                            source_case_file.updated_at = now
+                            new_snap = _snapshot_case_item_for_history(source_case_item)
+                            log_case_library_change(
+                                db=db,
+                                user=user,
+                                project_id=source_case_file.project_id,
+                                version_id=source_case_file.version_id,
+                                file_name_clean=source_case_file.file_name_clean,
+                                case_file_id=source_case_file.id,
+                                case_item_id=source_case_item.id,
+                                kind="updated",
+                                old=old_snap,
+                                new=new_snap,
+                                meta={
+                                    "source": "exec_case_association_sync",
+                                    "changed_fields": _compute_case_item_changed_fields(old_snap or {}, new_snap or {}),
+                                },
+                                at=now,
+                            )
+                            diff_entries = [
+                                _build_exec_case_library_diff_entry(
+                                    "updated", source_case_item.id, old_snap, new_snap
+                                )
+                            ]
+                            diff_summary = schemas.ExecCaseLibraryDiffSummary(updated=1)
+                            _append_exec_set_case_library_history(
+                                exec_set,
+                                source_case_file,
+                                user,
+                                diff_entries,
+                                diff_summary,
+                                now,
+                                auto_ack=True,
+                            )
+                    except Exception:
+                        # 历史记录不应影响执行用例更新主流程
+                        pass
+                if exec_set and exec_set.case_file_id:
+                    try:
+                        if int(source_case_item.case_file_id) == int(exec_set.case_file_id):
+                            exec_case.case_item_id = int(source_case_item.id)
+                        else:
+                            exec_case.case_item_id = None
+                    except Exception:
+                        exec_case.case_item_id = None
+                exec_case.case_item_source_id = int(source_case_item.id)
+            else:
+                # 新增的执行用例可能尚未绑定 case_item：当必填字段齐全时自动落库到用例库并绑定。
+                required_ready = _exec_case_ready_for_library(exec_case)
+                is_association_reference = _is_exec_case_association_reference(db, exec_set, exec_case)
+                if required_ready and not is_association_reference:
+                    if exec_set and exec_set.case_file_id:
+                        now = exec_case.updated_at
+                        case_file = (
+                            db.query(models.CaseFile)
+                            .filter(models.CaseFile.id == int(exec_set.case_file_id))
+                            .first()
+                        )
+                        if case_file:
+                            existing = _find_case_item_by_exec_case(db, case_file.id, exec_case)
+                            if existing:
+                                old_snap = _snapshot_case_item_for_history(existing)
+                                updated_case = False
+                                if exec_case.priority != existing.priority:
+                                    existing.priority = exec_case.priority
+                                    updated_case = True
+                                exec_case.case_item_id = existing.id
+                                exec_case.case_item_source_id = int(existing.id)
+                                if updated_case:
+                                    existing.updated_by = user.id
+                                    existing.updated_at = now
+                                    case_file.updated_by = user.id
+                                    case_file.updated_at = now
+                                    db.add(existing)
+                                    db.add(case_file)
+                                    new_snap = _snapshot_case_item_for_history(existing)
+                                    log_case_library_change(
+                                        db=db,
+                                        user=user,
+                                        project_id=case_file.project_id,
+                                        version_id=case_file.version_id,
+                                        file_name_clean=case_file.file_name_clean,
+                                        case_file_id=case_file.id,
+                                        case_item_id=existing.id,
+                                        kind="updated",
+                                        old=old_snap,
+                                        new=new_snap,
+                                        meta={"source": "exec_case_auto_bind"},
+                                        at=now,
+                                    )
+                                    diff_entries = [
+                                        _build_exec_case_library_diff_entry(
+                                            "updated", existing.id, old_snap, new_snap
+                                        )
+                                    ]
+                                    diff_summary = schemas.ExecCaseLibraryDiffSummary(updated=1)
+                                    _append_exec_set_case_library_history(
+                                        exec_set,
+                                        case_file,
+                                        user,
+                                        diff_entries,
+                                        diff_summary,
+                                        now,
+                                        auto_ack=True,
+                                    )
+                            else:
+                                if not exec_case.order_no or int(exec_case.order_no or 0) <= 0:
+                                    order_map = _ensure_exec_case_order(db, exec_set.id)
+                                    if order_map and exec_case.id in order_map:
+                                        exec_case.order_no = order_map.get(exec_case.id)
+                                case_item_order_no = _resolve_case_item_insert_order(
+                                    db, exec_set.id, case_file.id, exec_case.order_no
+                                )
+                                db.query(models.CaseItem).filter(
+                                    models.CaseItem.case_file_id == case_file.id,
+                                    models.CaseItem.order_no >= case_item_order_no,
+                                ).update(
+                                    {models.CaseItem.order_no: models.CaseItem.order_no + 1},
+                                    synchronize_session=False,
+                                )
+                                case_item = models.CaseItem(
+                                    case_file_id=case_file.id,
+                                    module=exec_case.module,
+                                    title=exec_case.title,
+                                    expected=exec_case.expected,
+                                    priority=exec_case.priority,
+                                    precondition=exec_case.precondition or "",
+                                    steps=exec_case.steps or "",
+                                    remark=None,
+                                    order_no=case_item_order_no,
+                                    created_by=user.id,
+                                    updated_by=user.id,
+                                    created_at=now,
+                                    updated_at=now,
+                                )
+                                db.add(case_item)
+                                db.flush()
+                                exec_case.case_item_id = case_item.id
+                                exec_case.case_item_source_id = int(case_item.id)
                                 case_file.updated_by = user.id
                                 case_file.updated_at = now
-                                db.add(existing)
                                 db.add(case_file)
-                                new_snap = _snapshot_case_item_for_history(existing)
                                 log_case_library_change(
                                     db=db,
                                     user=user,
@@ -2773,19 +3257,22 @@ def update_exec_case(
                                     version_id=case_file.version_id,
                                     file_name_clean=case_file.file_name_clean,
                                     case_file_id=case_file.id,
-                                    case_item_id=existing.id,
-                                    kind="updated",
-                                    old=old_snap,
-                                    new=new_snap,
+                                    case_item_id=case_item.id,
+                                    kind="added",
+                                    old=None,
+                                    new=_snapshot_case_item_for_history(case_item),
                                     meta={"source": "exec_case_auto_bind"},
                                     at=now,
                                 )
                                 diff_entries = [
                                     _build_exec_case_library_diff_entry(
-                                        "updated", existing.id, old_snap, new_snap
+                                        "added",
+                                        case_item.id,
+                                        None,
+                                        _snapshot_case_item_for_history(case_item),
                                     )
                                 ]
-                                diff_summary = schemas.ExecCaseLibraryDiffSummary(updated=1)
+                                diff_summary = schemas.ExecCaseLibraryDiffSummary(added=1)
                                 _append_exec_set_case_library_history(
                                     exec_set,
                                     case_file,
@@ -2795,76 +3282,8 @@ def update_exec_case(
                                     now,
                                     auto_ack=True,
                                 )
-                        else:
-                            if not exec_case.order_no or int(exec_case.order_no or 0) <= 0:
-                                order_map = _ensure_exec_case_order(db, exec_set.id)
-                                if order_map and exec_case.id in order_map:
-                                    exec_case.order_no = order_map.get(exec_case.id)
-                            case_item_order_no = _resolve_case_item_insert_order(
-                                db, exec_set.id, case_file.id, exec_case.order_no
-                            )
-                            db.query(models.CaseItem).filter(
-                                models.CaseItem.case_file_id == case_file.id,
-                                models.CaseItem.order_no >= case_item_order_no,
-                            ).update(
-                                {models.CaseItem.order_no: models.CaseItem.order_no + 1},
-                                synchronize_session=False,
-                            )
-                            case_item = models.CaseItem(
-                                case_file_id=case_file.id,
-                                module=exec_case.module,
-                                title=exec_case.title,
-                                expected=exec_case.expected,
-                                priority=exec_case.priority,
-                                precondition=exec_case.precondition or "",
-                                steps=exec_case.steps or "",
-                                remark=None,
-                                order_no=case_item_order_no,
-                                created_by=user.id,
-                                updated_by=user.id,
-                                created_at=now,
-                                updated_at=now,
-                            )
-                            db.add(case_item)
-                            db.flush()
-                            exec_case.case_item_id = case_item.id
-                            exec_case.case_item_source_id = int(case_item.id)
-                            case_file.updated_by = user.id
-                            case_file.updated_at = now
-                            db.add(case_file)
-                            log_case_library_change(
-                                db=db,
-                                user=user,
-                                project_id=case_file.project_id,
-                                version_id=case_file.version_id,
-                                file_name_clean=case_file.file_name_clean,
-                                case_file_id=case_file.id,
-                                case_item_id=case_item.id,
-                                kind="added",
-                                old=None,
-                                new=_snapshot_case_item_for_history(case_item),
-                                meta={"source": "exec_case_auto_bind"},
-                                at=now,
-                            )
-                            diff_entries = [
-                                _build_exec_case_library_diff_entry(
-                                    "added",
-                                    case_item.id,
-                                    None,
-                                    _snapshot_case_item_for_history(case_item),
-                                )
-                            ]
-                            diff_summary = schemas.ExecCaseLibraryDiffSummary(added=1)
-                            _append_exec_set_case_library_history(
-                                exec_set,
-                                case_file,
-                                user,
-                                diff_entries,
-                                diff_summary,
-                                now,
-                                auto_ack=True,
-                            )
-                    db.add(exec_case)
+            db.add(exec_case)
+
         log_operation(
             db=db,
             user_id=user.id,
@@ -3788,6 +4207,7 @@ def restore_exec_archive(
         requirement=exec_set.requirement,
         reuse_enabled=exec_set.reuse_enabled,
         reuse_presets=exec_set.reuse_presets,
+        association_enabled=bool(getattr(exec_set, "association_enabled", False)),
         status="active",
         case_file_base_updated_at=base_updated_at,
         case_file_last_synced_at=base_updated_at,
