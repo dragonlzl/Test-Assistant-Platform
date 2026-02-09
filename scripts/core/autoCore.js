@@ -55,6 +55,7 @@
     var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
     var stripCodeFence = handlers.stripCodeFence || utils.stripCodeFence || function(text) { return text || ''; };
     var extractJsonPayload = handlers.extractJsonPayload || utils.extractJsonPayload || function() { return ''; };
+    var unwrapRequirementPayload = handlers.unwrapRequirementPayload || function(text) { return { payload: text }; };
     var buildReviewClarificationContext = handlers.buildReviewClarificationContext || function() { return ''; };
     var ensureCaseGenModulesFromSplit = handlers.ensureCaseGenModulesFromSplit || function() { return false; };
     var generateAllCaseGenModules = handlers.generateAllCaseGenModules || function() { return Promise.resolve(); };
@@ -2014,7 +2015,13 @@
       var hasCleaned = Boolean(cleaned) && !failedMap.clean && !validationMap.clean;
       var hasCompare = Boolean(compare) && !failedMap.compare && !validationMap.compare;
       var hasSplit = Boolean(split) && !failedMap.split && !validationMap.split;
-      var hasCasesCompare = Boolean(casesCompare) && !failedMap.cases && !validationMap.cases;
+      var casesValidation = casesCompare ? validateCasesCompareResult() : true;
+      var casesValid = casesValidation === true;
+      var casesInvalidReason = '';
+      if (!casesValid && casesValidation && typeof casesValidation === 'object' && casesValidation.reason) {
+        casesInvalidReason = casesValidation.reason;
+      }
+      var hasCasesCompare = Boolean(casesCompare) && casesValid && !failedMap.cases && !validationMap.cases;
       var caseGenModules = Array.isArray(state.caseGenModules) ? state.caseGenModules : [];
       var caseGenResults = state.caseGenResults && typeof state.caseGenResults === 'object' ? state.caseGenResults : {};
       var coverage = extractCoverageFromCompareResult();
@@ -2073,6 +2080,7 @@
         } : {},
         plan_source: state.caseGenAgentPlanSource || '',
         plan_steps: planSnapshot,
+        cases_compare_invalid_reason: casesInvalidReason,
         last_failure: lastFailure ? {
           step: lastFailure.step || '',
           label: lastFailure.label || '',
@@ -2310,11 +2318,15 @@
         validator = function() { return Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim().length > 0); };
       } else if (step === 'cases') {
         handler = function() {
-          var hint = getAgentStepPromptHint('cases');
+          var baseHint = getAgentStepPromptHint('cases');
+          var retryHint = context && context.retryPromptHints && context.retryPromptHints.cases
+            ? String(context.retryPromptHints.cases || '').trim()
+            : '';
+          var hint = baseHint && retryHint ? (baseHint + '；' + retryHint) : (baseHint || retryHint || '');
           stepHint = hint;
           return compareCasesCoverage(hint ? { promptHint: hint } : {});
         };
-        validator = function() { return Boolean(casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim().length > 0); };
+        validator = function() { return validateCasesCompareResult(); };
       } else if (step === 'casegen') {
         handler = function() {
           if (!ensureCaseGenModulesFromSplit()) {
@@ -2372,13 +2384,26 @@
         setAgentStepOutput(step, repairedOutput);
         pushAgentTrace('info', '格式修复：' + label + '补全需求标识');
       }
-      if (validator && !validator()) {
-        var invalidReason = '步骤「' + step + '」未产生有效输出，请检查模型配置或稍后重试';
-        setStepFailed(step, invalidReason);
-        updateFlowStatus();
-        var invalidError = new Error(invalidReason);
-        invalidError.validationFailed = true;
-        throw invalidError;
+      if (validator) {
+        var validationResult = validator();
+        if (validationResult !== true) {
+          var invalidReason = '';
+          var treatAsRuntime = false;
+          if (typeof validationResult === 'string') {
+            invalidReason = validationResult;
+          } else if (validationResult && typeof validationResult === 'object') {
+            invalidReason = validationResult.reason || '';
+            treatAsRuntime = validationResult.treatAsRuntime === true;
+          }
+          if (!invalidReason) {
+            invalidReason = '步骤「' + step + '」未产生有效输出，请检查模型配置或稍后重试';
+          }
+          setStepFailed(step, invalidReason);
+          updateFlowStatus();
+          var invalidError = new Error(invalidReason);
+          if (!treatAsRuntime) invalidError.validationFailed = true;
+          throw invalidError;
+        }
       }
       if (after) await after();
       persistWorkflowSnapshot();
@@ -2416,6 +2441,14 @@
           attempts += 1;
           bumpAgentRetryCount(step);
           lastErrorMessage = err && err.message ? err.message : '步骤执行失败';
+          if (step === 'cases' && context && lastErrorMessage) {
+            if (!context.retryPromptHints || typeof context.retryPromptHints !== 'object') {
+              context.retryPromptHints = {};
+            }
+            if (!context.retryPromptHints.cases && /占位模块名|missing|字段不完整|格式异常/.test(lastErrorMessage)) {
+              context.retryPromptHints.cases = 'missing 必须为模块 JSON 数组，包含 module/key_scenarios/test_points/coupled_modules 字段，module 必须使用拆分结果里的真实模块名称，禁止模块1/模块2/Module 1 等占位命名，仅输出 JSON。';
+            }
+          }
           if (attempts <= maxRetries) {
             continue;
           }
@@ -3407,6 +3440,84 @@
       );
     }
 
+    function isPlaceholderModuleName(name) {
+      if (!name) return true;
+      var text = String(name).trim();
+      if (!text) return true;
+      return /^(模块|module)\s*\d+$/i.test(text);
+    }
+
+    function parseCasesComparePayload(rawText) {
+      var content = stripCodeFence(rawText || '').trim();
+      if (!content) return null;
+      var unwrap = unwrapRequirementPayload ? unwrapRequirementPayload(content) : { payload: content };
+      var payload = Object.prototype.hasOwnProperty.call(unwrap, 'payload') ? unwrap.payload : content;
+      if (!payload) return null;
+      if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+        return Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload;
+      }
+      if (typeof payload === 'string') {
+        try {
+          var parsed = JSON.parse(payload);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            return Object.prototype.hasOwnProperty.call(parsed, 'data') ? parsed.data : parsed;
+          }
+          return parsed;
+        } catch (err) {
+          if (extractJsonPayload) {
+            try {
+              var extracted = extractJsonPayload(payload);
+              if (extracted) {
+                var fallback = JSON.parse(extracted);
+                if (fallback && typeof fallback === 'object' && !Array.isArray(fallback)) {
+                  return Object.prototype.hasOwnProperty.call(fallback, 'data') ? fallback.data : fallback;
+                }
+                return fallback;
+              }
+            } catch (inner) {
+              return null;
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    function validateCasesCompareResult() {
+      var text = casesCompareResultEl && casesCompareResultEl.value ? casesCompareResultEl.value.trim() : '';
+      if (!text) return { ok: false, reason: '覆盖对比结果为空', treatAsRuntime: true };
+      var payload = parseCasesComparePayload(text);
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return { ok: false, reason: '覆盖对比结果格式异常', treatAsRuntime: true };
+      }
+      var coverage = Number(payload.coverage);
+      if (!Number.isFinite(coverage)) {
+        return { ok: false, reason: '覆盖对比结果缺少有效 coverage', treatAsRuntime: true };
+      }
+      if (!Array.isArray(payload.missing)) {
+        return { ok: false, reason: '覆盖对比结果 missing 结构异常', treatAsRuntime: true };
+      }
+      if (!Array.isArray(payload.extra)) {
+        return { ok: false, reason: '覆盖对比结果 extra 结构异常', treatAsRuntime: true };
+      }
+      for (var i = 0; i < payload.missing.length; i += 1) {
+        var item = payload.missing[i];
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+          return { ok: false, reason: '覆盖对比结果 missing 项结构异常', treatAsRuntime: true };
+        }
+        if (!item.module || !String(item.module).trim()) {
+          return { ok: false, reason: '覆盖对比结果 missing 缺少模块名', treatAsRuntime: true };
+        }
+        if (isPlaceholderModuleName(item.module)) {
+          return { ok: false, reason: '覆盖对比结果包含占位模块名，请使用拆分结果真实模块名', treatAsRuntime: true };
+        }
+        if (!Array.isArray(item.key_scenarios) || !Array.isArray(item.test_points) || !Array.isArray(item.coupled_modules)) {
+          return { ok: false, reason: '覆盖对比结果 missing 字段不完整', treatAsRuntime: true };
+        }
+      }
+      return true;
+    }
+
     function buildAutoWorkflowSteps() {
       if (isCaseGenAgentEnabled()) {
         return [{
@@ -3427,7 +3538,7 @@
         { key: 'clean', label: '需求清洗', run: function(ctx) { return runCleaning(ctx); }, validate: function() { return Boolean(cleanedTextEl && cleanedTextEl.value && cleanedTextEl.value.trim().length > 0); } },
         { key: 'compare', label: '对比完整性', run: function() { return compareCoverage(); }, validate: function() { return Boolean(compareResultEl && compareResultEl.value && compareResultEl.value.trim().length > 0); }, after: function() { return enforceAutoCoverageRequirement(); } },
         { key: 'split', label: '测试模块拆分', run: function() { return splitModules(); }, validate: function() { return Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim().length > 0); } },
-        { key: 'cases', label: '覆盖对比', run: function() { return compareCasesCoverage(); }, validate: function() { return Boolean(casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim().length > 0); } },
+        { key: 'cases', label: '覆盖对比', run: function() { return compareCasesCoverage(); }, validate: function() { return validateCasesCompareResult(); } },
       ];
     }
 
@@ -3440,8 +3551,16 @@
         if (step && step.key) clearStepFailed(step.key);
         try {
           await step.run(context);
-          if (!step.validate()) {
-            var invalidReason = step.label + '未产生有效输出，请检查模型配置或稍后重试';
+          var validationResult = step.validate ? step.validate() : true;
+          if (validationResult !== true) {
+            var invalidReason = '';
+            if (typeof validationResult === 'string') {
+              invalidReason = validationResult;
+            } else if (validationResult && typeof validationResult === 'object' && validationResult.reason) {
+              invalidReason = validationResult.reason;
+            } else {
+              invalidReason = step.label + '未产生有效输出，请检查模型配置或稍后重试';
+            }
             setStepFailed(step.key, invalidReason);
             updateFlowStatus();
             throw new Error(invalidReason);
@@ -4108,6 +4227,7 @@
       buildFilteredComparePayload: buildFilteredComparePayload,
       updateAutoCompareActions: updateAutoCompareActions,
       syncAutoCompareStatus: syncAutoCompareStatus,
+      validateCasesCompareResult: validateCasesCompareResult,
       buildAutoWorkflowSteps: buildAutoWorkflowSteps,
       executeAutoWorkflowSteps: executeAutoWorkflowSteps,
       enforceAutoCoverageRequirement: enforceAutoCoverageRequirement,

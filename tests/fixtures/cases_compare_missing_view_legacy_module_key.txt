@@ -1,0 +1,21 @@
+{
+  "requirement": "当前需求",
+  "data": {
+    "coverage": 7,
+    "missing": [
+      {
+        "模块1": [
+          "模块1-缺失点A",
+          "模块1-缺失点B"
+        ]
+      },
+      {
+        "模块2": [
+          "模块2-缺失点C"
+        ]
+      }
+    ],
+    "extra": []
+  },
+  "type": "cases_compare"
+}

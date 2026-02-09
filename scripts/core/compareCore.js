@@ -112,6 +112,11 @@
       return Math.max(0, Math.min(100, Math.round(num)));
     }
 
+    function stripControlChars(text) {
+      if (!text) return '';
+      return String(text).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '');
+    }
+
     function buildSingleModulePayload(module, idx) {
       var title = module && module.title ? module.title : '模块' + (idx + 1);
       var scenarios = module && Array.isArray(module.scenarios) ? module.scenarios : [];
@@ -206,9 +211,9 @@
     }
 
     function parseModuleCompareResponse(content, moduleTitle) {
-      var rawContent = stripCodeFence(content);
+      var rawContent = stripControlChars(stripCodeFence(content));
       var jsonOnly = extractJsonPayload(rawContent);
-      var payload = repairLooseNewlines(jsonOnly || rawContent);
+      var payload = repairLooseNewlines(stripControlChars(jsonOnly || rawContent));
       var data;
       try {
         data = JSON.parse(payload);
@@ -216,7 +221,7 @@
         throw new Error('模块「' + moduleTitle + '」结果无法解析：' + (err && err.message ? err.message : 'JSON 格式错误'));
       }
       var coverage = clampCoveragePercent(data.coverage);
-      var missing = Array.isArray(data.missing) ? data.missing : [];
+      var missing = normalizeMissingModuleList(data.missing, moduleTitle);
       var extra = Array.isArray(data.extra) ? data.extra : [];
       return { module: moduleTitle, coverage: coverage, missing: missing, extra: extra };
     }
@@ -337,6 +342,93 @@
       return text ? [text] : [];
     }
 
+    function toModuleObject(entry, fallbackTitle) {
+      var moduleName = fallbackTitle || '';
+      var scenarios = [];
+      var points = [];
+      var coupled = [];
+      if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+        if (entry.module) moduleName = normalizeMissingTextValue(entry.module) || moduleName;
+        else if (entry.title) moduleName = normalizeMissingTextValue(entry.title) || moduleName;
+        else if (entry['模块']) moduleName = normalizeMissingTextValue(entry['模块']) || moduleName;
+        else if (entry['模块名']) moduleName = normalizeMissingTextValue(entry['模块名']) || moduleName;
+        if (Array.isArray(entry.key_scenarios)) scenarios = entry.key_scenarios.slice();
+        if (Array.isArray(entry.test_points)) points = entry.test_points.slice();
+        if (Array.isArray(entry.coupled_modules)) coupled = entry.coupled_modules.slice();
+      }
+      return {
+        module: moduleName,
+        key_scenarios: Array.isArray(scenarios) ? scenarios : [],
+        test_points: Array.isArray(points) ? points : [],
+        coupled_modules: Array.isArray(coupled) ? coupled : [],
+      };
+    }
+
+    function normalizeMissingModuleList(list, fallbackTitle) {
+      var rawList = Array.isArray(list) ? list : (list ? [list] : []);
+      var normalized = [];
+      rawList.forEach(function(entry) {
+        if (!entry && entry !== 0) return;
+        if (Array.isArray(entry)) {
+          var moduleFromArray = toModuleObject({}, fallbackTitle);
+          moduleFromArray.test_points = coerceMissingList(entry);
+          normalized.push(moduleFromArray);
+          return;
+        }
+        if (typeof entry === 'string' || typeof entry === 'number') {
+          var moduleFromText = toModuleObject({}, fallbackTitle);
+          moduleFromText.test_points = coerceMissingList(entry);
+          normalized.push(moduleFromText);
+          return;
+        }
+        if (entry && typeof entry === 'object') {
+          var keys = Object.keys(entry);
+          if (keys.length === 1 && !/^(module|模块)$/i.test(keys[0])) {
+            var singleKey = keys[0];
+            var singleValue = entry[singleKey];
+            var moduleObj = toModuleObject({}, normalizeMissingTextValue(singleKey) || fallbackTitle);
+            moduleObj.test_points = coerceMissingList(singleValue);
+            normalized.push(moduleObj);
+            return;
+          }
+          var moduleItem = toModuleObject(entry, fallbackTitle);
+          moduleItem.key_scenarios = coerceMissingList(moduleItem.key_scenarios);
+          moduleItem.test_points = coerceMissingList(moduleItem.test_points);
+          moduleItem.coupled_modules = coerceMissingList(moduleItem.coupled_modules);
+          normalized.push(moduleItem);
+        }
+      });
+      return normalized.filter(function(item) {
+        return item && typeof item === 'object' && !Array.isArray(item);
+      });
+    }
+
+    function isStrictMissingModuleItem(item) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+      if (!item.module || !String(item.module).trim()) return false;
+      if (!Array.isArray(item.key_scenarios)) return false;
+      if (!Array.isArray(item.test_points)) return false;
+      if (!Array.isArray(item.coupled_modules)) return false;
+      return true;
+    }
+
+    function isPlaceholderModuleName(name) {
+      if (!name) return true;
+      var text = String(name).trim();
+      if (!text) return true;
+      return /^(模块|module)\\s*\\d+$/i.test(text);
+    }
+
+    function hasPlaceholderModules(list) {
+      if (!Array.isArray(list)) return false;
+      for (var i = 0; i < list.length; i += 1) {
+        var item = list[i];
+        if (!item || typeof item !== 'object') continue;
+        if (isPlaceholderModuleName(item.module)) return true;
+      }
+      return false;
+    }
+
     function normalizeMissingModule(entry) {
       if (!entry || typeof entry !== 'object') return null;
       var normalized = {
@@ -348,6 +440,19 @@
       };
       var entries = Object.entries(entry);
       if (!entries.length) return null;
+      if (entries.length === 1) {
+        var onlyKey = entries[0][0];
+        var onlyValue = entries[0][1];
+        if (/^(module|模块)$/i.test(onlyKey)) {
+          normalized.module = normalizeMissingTextValue(onlyValue) || '';
+          return normalized.module ? normalized : null;
+        }
+        if (Array.isArray(onlyValue) || typeof onlyValue === 'string' || typeof onlyValue === 'number') {
+          normalized.module = normalizeMissingTextValue(onlyKey) || '模块';
+          normalized.points = coerceMissingList(onlyValue);
+          return normalized.points.length ? normalized : null;
+        }
+      }
       function appendList(target, value) {
         var list = coerceMissingList(value);
         if (list.length) target.push.apply(target, list);
@@ -373,7 +478,7 @@
           if (text) normalized.module = text;
         }
         if (/场景/.test(key)) appendList(normalized.scenarios, value);
-        else if (/要点|测点|测试点|缺失/.test(key)) appendList(normalized.points, value);
+        else if (/要点|测点|测试点|缺失|test[_\\s-]*points?/i.test(key)) appendList(normalized.points, value);
         else if (/耦合|相关/.test(key)) appendList(normalized.coupled, value);
         else if (/特殊|边界/.test(key)) appendList(normalized.special, value);
         else if (idx === 0 && (Array.isArray(value) || (value && typeof value === 'object'))) {
@@ -400,7 +505,7 @@
             var key = inner[0];
             var value = inner[1];
             if (/场景/.test(key)) appendList(normalized.scenarios, value);
-            else if (/要点|测点|测试点|缺失/.test(key)) appendList(normalized.points, value);
+            else if (/要点|测点|测试点|缺失|test[_\\s-]*points?/i.test(key)) appendList(normalized.points, value);
             else if (/耦合|相关/.test(key)) appendList(normalized.coupled, value);
             else if (/特殊|边界/.test(key)) appendList(normalized.special, value);
             else if (!normalized.module && /module|模块/.test(key)) {
@@ -467,7 +572,7 @@
         }
       }
       var hasModuleKey = keys.some(function(key) { return /module|模块/.test(key); });
-      var hasPointKey = keys.some(function(key) { return /要点|测点|测试点|缺失/.test(key); });
+      var hasPointKey = keys.some(function(key) { return /要点|测点|测试点|缺失|test[_\s-]*points?/i.test(key); });
       if (hasModuleKey || hasPointKey) return [rawMissing];
       return keys.map(function(moduleName) {
         return { module: moduleName, points: rawMissing[moduleName] };
@@ -1059,7 +1164,24 @@
       } catch (err) {
         throw new Error('模块「' + payload.title + '」对比失败：' + (err && err.message ? err.message : err));
       }
-      return parseModuleCompareResponse(content, payload.title);
+      var parsed = parseModuleCompareResponse(content, payload.title);
+      var missingInvalid = parsed.missing.length && !parsed.missing.every(isStrictMissingModuleItem);
+      var placeholderInvalid = parsed.missing.length && hasPlaceholderModules(parsed.missing);
+      if (missingInvalid || placeholderInvalid) {
+        var strictPrompt = prompt + '\n\n【强制输出格式】missing 必须为模块 JSON 数组，且每项包含 module/key_scenarios/test_points/coupled_modules 字段（字段必须存在且为数组），禁止输出 {模块名:[...]} 或纯字符串列表；missing 中 module 必须使用拆分结果里的模块名称，禁止输出“模块1/模块2/Module 1”等占位命名；仅输出 JSON。';
+        try {
+          content = await callModelWithConfig(model, userText, strictPrompt, reasoning, temperature);
+          parsed = parseModuleCompareResponse(content, payload.title);
+        } catch (err2) {
+          // fallback to normalized result from the first pass
+        }
+      }
+      var stillInvalid = parsed.missing.length && !parsed.missing.every(isStrictMissingModuleItem);
+      var stillPlaceholder = parsed.missing.length && hasPlaceholderModules(parsed.missing);
+      if (stillInvalid || stillPlaceholder) {
+        throw new Error('模块「' + payload.title + '」覆盖对比缺失结果格式异常（含占位模块名或字段不完整）');
+      }
+      return parsed;
     }
 
     async function compareCasesCoverage(options) {

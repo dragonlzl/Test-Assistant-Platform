@@ -972,6 +972,43 @@ test.describe('用例生成 Agent 面板与澄清填充', () => {
     await expect(textarea).toHaveValue(/待确认/);
   });
 
+  test('覆盖对比校验拦截占位模块名', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      if (window.app && window.app.state) {
+        if (!window.app.state.settings) window.app.state.settings = {};
+        window.app.state.settings.caseGenAgentEnabled = false;
+      }
+      var el = document.getElementById('casesCompareResult');
+      if (el) {
+        el.value = JSON.stringify({
+          coverage: 12,
+          missing: [{
+            module: '模块1',
+            key_scenarios: [],
+            test_points: ['示例测试点'],
+            coupled_modules: [],
+          }],
+          extra: [],
+        }, null, 2);
+      }
+      var validator = null;
+      if (window.app && window.app.core && typeof window.app.core.validateCasesCompareResult === 'function') {
+        validator = window.app.core.validateCasesCompareResult;
+      } else if (window.app && window.app.autoCore && typeof window.app.autoCore.init === 'function') {
+        var tempCore = window.app.autoCore.init({ state: window.app.state || {}, dom: {} });
+        if (tempCore && typeof tempCore.validateCasesCompareResult === 'function') {
+          validator = tempCore.validateCasesCompareResult;
+        }
+      }
+      if (!validator) return null;
+      return validator();
+    });
+
+    expect(result).toBeTruthy();
+    expect(result).not.toBe(true);
+    expect(result.reason).toContain('占位模块名');
+  });
+
   test('切换页面后仍有工作流隐藏字段', async ({ page }) => {
     await page.goto(base + '/case-exec.html');
     await page.waitForFunction(() => window.app && typeof window.app.init === 'function', null, { timeout: 20000 });

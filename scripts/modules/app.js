@@ -2128,6 +2128,7 @@
           renderCleanRawView: proxyApi('renderCleanRawView'),
           syncReviewViewFromResult: proxyApi('syncReviewViewFromResult'),
           syncSplitView: proxyApi('syncSplitView'),
+          unwrapRequirementPayload,
           triggerMissingReminderAi: function() {
             var hasCaseLibrary = Boolean(state && state.editor && state.editor.caseFile);
             var hasTempExec = Boolean(state && state.tempExecActiveId);
@@ -2182,6 +2183,7 @@
       'buildFilteredComparePayload',
       'updateAutoCompareActions',
       'syncAutoCompareStatus',
+      'validateCasesCompareResult',
       'buildAutoWorkflowSteps',
       'executeAutoWorkflowSteps',
       'enforceAutoCoverageRequirement',

@@ -63,6 +63,31 @@ test('导入带需求标识的覆盖结果仍可展示缺失模块', async ({ pa
   await expect(container.locator('tbody tr').first()).toContainText('礼包系统综合流程与业务逻辑');
 });
 
+test('兼容模块名作为 key 的覆盖缺失结构', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => window.app && window.app._inited === true);
+  await gotoCleanTab(page);
+
+  const fixturePath = path.join(__dirname, '..', 'fixtures', 'cases_compare_missing_view_legacy_module_key.txt');
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.click('#importCasesCoverage'),
+  ]);
+  await chooser.setFiles(fixturePath);
+
+  await expect(page.locator('#casesCoverageStatus')).toContainText('已导入覆盖对比结果');
+
+  const missingBtn = page.locator('#missingViewBtn');
+  await expect(missingBtn).toBeEnabled();
+  await missingBtn.click();
+
+  const container = page.locator('#missingViewContainer');
+  await expect(container).toHaveClass(/visible/);
+  await expect(container.locator('tbody tr')).toHaveCount(3);
+  await expect(container.locator('tbody tr').first()).toContainText('模块1');
+  await expect(container.locator('tbody tr').first()).toContainText('模块1-缺失点A');
+});
+
 test('缺失模块表头全选/取消有效', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.app && window.app._inited === true);

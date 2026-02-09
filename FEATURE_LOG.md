@@ -4007,3 +4007,7 @@
 - 更新记录：2026-01-21 忽略覆盖率后持久化忽略状态并放宽继续条件，避免 Agent 反复回到覆盖率等待（`scripts/core/autoCore.js`）。
 - 更新记录：2026-01-21 忽略覆盖率时跳过 Agent 决策覆盖等待，直接按当前进度继续下一步（`scripts/core/autoCore.js`）。
 - 更新记录：2026-01-21 模块拆分解析支持“模块名”字段，避免回退为模块1/模块2命名（`config/constants.js`、`scripts/modules/app.js`）。
+- 更新记录：2026-02-04 覆盖对比结果解析补充控制字符剥离与缺失模块结构归一化，并在单模块对比中增加严格格式重试，确保 missing 输出为标准模块 JSON，新增 UI 用例覆盖模块名为 key 的旧格式（`scripts/core/compareCore.js`、`config/constants.js`、`tests/ui/cases_missing_view.spec.js`、`tests/fixtures/cases_compare_missing_view_legacy_module_key.txt`）。
+- 更新记录：2026-02-04 覆盖对比缺失模块校验新增占位模块名（模块1/模块2）拦截并触发严格格式重试，确保输出使用真实模块名（`scripts/core/compareCore.js`、`config/constants.js`）。
+- 更新记录：2026-02-04 Agent 流程新增覆盖对比结果有效性校验，拦截占位模块名并提示修正，校验结果用于自动流程/Agent 决策并新增 UI 用例（`scripts/core/autoCore.js`、`scripts/modules/app.js`、`tests/ui/auto_casegen_agent.spec.js`）。
+- 更新记录：2026-02-04 覆盖对比重试时自动追加严格格式提示（占位模块名/字段不完整时），确保 Agent 首次重试即带强约束提示（`scripts/core/autoCore.js`）。
