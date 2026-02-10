@@ -6081,13 +6081,26 @@
       var file = getTempExecFile(String(execSetId));
       var idSet = buildTempExecCaseItemIdSet(file);
       if (!idSet) return rows;
+      var deletedIds = new Set();
+      rows.forEach(function(row) {
+        var entry = row && row.entry ? row.entry : null;
+        var kind = normalizeDiffKind(entry && entry.kind ? entry.kind : '');
+        if (kind !== 'deleted') return;
+        var deletedId = normalizeCaseLibDiffItemId(entry);
+        if (!deletedId) return;
+        deletedIds.add(String(deletedId));
+      });
       return rows.filter(function(row) {
         var entry = row && row.entry ? row.entry : null;
         var kind = normalizeDiffKind(entry && entry.kind ? entry.kind : '');
         if (kind === 'deleted') return true;
         var caseItemId = normalizeCaseLibDiffItemId(entry);
         if (!caseItemId) return true;
-        return idSet.has(caseItemId);
+        if (idSet.has(caseItemId)) return true;
+        if ((kind === 'added' || kind === 'appended') && deletedIds.has(String(caseItemId))) {
+          return true;
+        }
+        return false;
       });
     }
 

@@ -3969,3 +3969,4 @@
 - 更新记录：2026-02-09 执行视图“当前用例归属”下新增“当前用例组合”展示：当执行集为关联组合用例时，显示“主用例（主） + 副用例（副）（条数）”拼接文案（如“用例名1（主） + 用例名2（副）（n条） + 用例名3（副）（m条）”），并适配深浅主题（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_association_row_highlight.spec.js`）。
 - 更新记录：2026-02-09 优化“当前用例组合”展示格式：由纯文本拼接改为结构化胶囊标签（主/副/条数）+ 固定分隔符，统一 `+` 两侧间距与视觉对齐，避免不同名称长度导致的空格不一致（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_association_row_highlight.spec.js`）。
 - 更新记录：2026-02-09 “当前用例组合”补充主用例条数展示：主用例与副用例统一展示“角色 + 条数”，其中主用例条数按组合执行视图中非关联引用行实时统计（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_association_row_highlight.spec.js`）。
+- 更新记录：2026-02-09 修复执行页 diff 手动重开丢失“新增”记录：当同一条目在同批次中同时出现“新增/追加”与“删除”时，手动打开 diff 仍保留新增记录，避免仅展示删除（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。

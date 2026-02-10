@@ -2371,6 +2371,175 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await expect(diffBody).not.toContainText('暂无变更');
   });
 
+  test('新增后又被用例库删除时，手动打开 diff 仍保留新增记录', async ({ page }) => {
+    const token = 'token-added-then-deleted-keep-history';
+    const user = { id: 32, username: 'added_deleted_user', role: 'user', level: 'member' };
+    const project = { id: 32, name: '新增后删除项目', description: 'keep added row when deleted exists' };
+    const versions = [{ id: 321, name: 'v1' }];
+    const now = new Date().toISOString();
+    const execSet = {
+      id: 32001,
+      project_id: project.id,
+      version_id: versions[0].id,
+      case_file_id: 3201,
+      name: '主用例A',
+      status: 'active',
+      created_at: now,
+      updated_at: now,
+    };
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
+
+      if (pathName === '/api/exec/sets' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, [execSet]);
+      }
+
+      if (pathName === `/api/exec/sets/${execSet.id}/case-library-sync` && method === 'POST') {
+        return respond(200, {
+          exec_set_id: execSet.id,
+          case_file_id: execSet.case_file_id,
+          case_file_updated_at: now,
+          base_updated_at: now,
+          last_diff_at: now,
+          last_shown_at: null,
+          ever_changed: true,
+          has_new_diff: true,
+          should_auto_popup: true,
+          summary: { appended: 0, added: 1, updated: 0, deleted: 1 },
+          diff: [
+            {
+              kind: 'added',
+              case_item_id: 9101,
+              changed_fields: [],
+              old: null,
+              new: { module: '支付', title: '新增后又删除', priority: 'P1', precondition: '无', steps: '步骤N', expected: '成功', remark: '' },
+            },
+            {
+              kind: 'deleted',
+              case_item_id: 9101,
+              changed_fields: [],
+              old: { module: '支付', title: '新增后又删除', priority: 'P1', precondition: '无', steps: '步骤N', expected: '成功', remark: '' },
+              new: null,
+            },
+          ],
+        });
+      }
+
+      const execCasesMatch = pathName.match(/^\/api\/exec\/sets\/(\d+)\/cases$/);
+      if (execCasesMatch && method === 'GET') {
+        const id = Number(execCasesMatch[1]);
+        if (id !== execSet.id) return respond(200, []);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        return respond(200, [
+          {
+            id: 320011,
+            exec_set_id: execSet.id,
+            case_item_id: 9002,
+            module: '登录',
+            title: '保留用例',
+            expected: '成功',
+            priority: 'P0',
+            precondition: '无',
+            steps: '步骤A',
+            status: '未执行',
+            remark: '',
+            defect_links: [],
+            reuse_details: [],
+            order_no: 1,
+            created_at: now,
+            updated_at: now,
+          },
+        ]);
+      }
+
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+      try { sessionStorage.setItem('usecase-active-tab', 'tempexec'); } catch (_) {}
+    }, token);
+
+    await gotoIndex(page);
+    await ensureAuthed(page, token, user);
+    await waitAppReady(page, 30000);
+    await switchToTab(page, 'tempexec');
+    await page.evaluate(() => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
+        return window.app.tempExecApi.loadTempExecState();
+      }
+      return null;
+    });
+
+    const diffDrawer = page.locator('#tempExecCaseLibraryDiffDrawer');
+    const diffBody = page.locator('#tempExecCaseLibraryDiffBody');
+    const changeBtn = page.locator('#tempExecCaseLibraryChangesBtn');
+
+    await expect(diffDrawer).toHaveClass(/open/);
+    await expect(diffBody.locator('tr')).toHaveCount(2);
+    await expect(diffBody).toContainText('新增');
+    await expect(diffBody).toContainText('删除');
+
+    await page.click('#closeTempExecCaseLibraryDiffDrawerBtn');
+    await expect(diffDrawer).not.toHaveClass(/open/);
+
+    await page.waitForFunction(() => {
+      if (!window.app || !window.app.state) return false;
+      var files = Array.isArray(window.app.state.tempExecFiles) ? window.app.state.tempExecFiles : [];
+      if (!files.length) return false;
+      var file = files[0];
+      if (!file || file._casesLoading) return false;
+      var list = Array.isArray(file.cases) ? file.cases : [];
+      return list.length === 1 && String((list[0] && (list[0].caseItemId || list[0].case_item_id)) || '') === '9002';
+    });
+
+    await changeBtn.click({ force: true });
+    var reopenedByBtn = await diffDrawer.evaluate(function(el) {
+      return !!(el && el.classList && el.classList.contains('open'));
+    });
+    if (!reopenedByBtn) {
+      await page.evaluate(() => {
+        if (!window.app || !window.app.tempExecApi) return;
+        if (typeof window.app.tempExecApi.openTempExecCaseLibraryDiffDrawer !== 'function') return;
+        var files = window.app.state && Array.isArray(window.app.state.tempExecFiles) ? window.app.state.tempExecFiles : [];
+        var file = files.length ? files[0] : null;
+        var execSetId = file && (file.execSetId || file.id) ? String(file.execSetId || file.id) : '';
+        window.app.tempExecApi.openTempExecCaseLibraryDiffDrawer({ manual: true, execSetId: execSetId });
+      });
+    }
+    await expect(diffDrawer).toHaveClass(/open/);
+    await expect(diffBody.locator('tr')).toHaveCount(2);
+    await expect(diffBody).toContainText('新增');
+    await expect(diffBody).toContainText('删除');
+  });
+
   test('归档恢复后跨页面进入执行页自动弹出 diff', async ({ page }) => {
     const token = 'token-restore-auto-popup';
     const user = { id: 18, username: 'restore_user', role: 'user', level: 'member' };
