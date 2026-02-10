@@ -272,6 +272,100 @@ def _normalize_assoc_selected_ids(
     return valid
 
 
+def _prune_deleted_case_item_from_associations(
+    db: Session,
+    sub_case_file_id: int,
+    deleted_case_item_id: int,
+    operator_user_id: Optional[int],
+    now: Optional[datetime] = None,
+) -> Dict:
+    result = {
+        "updated_association_ids": [],
+        "removed_association_ids": [],
+        "affected_main_case_file_ids": [],
+        "removed_selected_count_total": 0,
+    }
+    try:
+        sub_case_id_num = int(sub_case_file_id)
+    except Exception:
+        return result
+    try:
+        deleted_case_item_id_num = int(deleted_case_item_id)
+    except Exception:
+        return result
+    if sub_case_id_num <= 0 or deleted_case_item_id_num <= 0:
+        return result
+
+    rows = (
+        db.query(models.CaseFileAssociation)
+        .filter(models.CaseFileAssociation.sub_case_file_id == sub_case_id_num)
+        .order_by(models.CaseFileAssociation.order_no.asc(), models.CaseFileAssociation.id.asc())
+        .all()
+    )
+    if not rows:
+        return result
+
+    effective_now = now if now is not None else datetime.now(timezone.utc)
+    updated_ids: List[int] = []
+    removed_ids: List[int] = []
+    affected_main_case_ids: Set[int] = set()
+    removed_total = 0
+
+    for assoc in rows:
+        if not assoc:
+            continue
+        selected_ids = _parse_assoc_item_ids(getattr(assoc, "selected_case_item_ids", None))
+        if not selected_ids:
+            continue
+
+        next_selected: List[int] = []
+        hit_deleted = 0
+        for raw_id in selected_ids:
+            try:
+                current_id = int(raw_id)
+            except Exception:
+                continue
+            if current_id == deleted_case_item_id_num:
+                hit_deleted += 1
+                continue
+            next_selected.append(current_id)
+
+        if hit_deleted <= 0:
+            continue
+
+        removed_total += int(hit_deleted)
+        try:
+            affected_main_case_ids.add(int(assoc.main_case_file_id))
+        except Exception:
+            pass
+
+        if next_selected:
+            assoc.selected_case_item_ids = next_selected
+            assoc.updated_at = effective_now
+            if operator_user_id is not None:
+                assoc.updated_by = int(operator_user_id)
+            db.add(assoc)
+            updated_ids.append(int(assoc.id))
+        else:
+            removed_ids.append(int(assoc.id))
+            db.delete(assoc)
+
+    if affected_main_case_ids:
+        update_values = {models.CaseFile.updated_at: effective_now}
+        if operator_user_id is not None:
+            update_values[models.CaseFile.updated_by] = int(operator_user_id)
+        db.query(models.CaseFile).filter(models.CaseFile.id.in_(list(affected_main_case_ids))).update(
+            update_values,
+            synchronize_session=False,
+        )
+
+    result["updated_association_ids"] = sorted(updated_ids)
+    result["removed_association_ids"] = sorted(removed_ids)
+    result["affected_main_case_file_ids"] = sorted(list(affected_main_case_ids))
+    result["removed_selected_count_total"] = int(removed_total)
+    return result
+
+
 def _build_case_file_association_out(
     assoc: models.CaseFileAssociation,
     sub_case_name: str,
@@ -1992,6 +2086,18 @@ def delete_case_item(
         meta=None,
         at=now,
     )
+    association_sync = _prune_deleted_case_item_from_associations(
+        db=db,
+        sub_case_file_id=int(case_item.case_file_id),
+        deleted_case_item_id=int(case_item.id),
+        operator_user_id=user.id,
+        now=now,
+    )
+    association_updated_ids = association_sync.get("updated_association_ids") or []
+    association_removed_ids = association_sync.get("removed_association_ids") or []
+    association_affected_main_ids = association_sync.get("affected_main_case_file_ids") or []
+    association_removed_selected_count = int(association_sync.get("removed_selected_count_total") or 0)
+
     db.delete(case_item)
     db.query(models.CaseFile).filter(models.CaseFile.id == case_item.case_file_id).update(
         {models.CaseFile.updated_at: now, models.CaseFile.updated_by: user.id}, synchronize_session=False
@@ -2013,6 +2119,14 @@ def delete_case_item(
             "expected": case_item.expected,
             "prev_complete": bool(prev_complete),
             "prev_delete_complete": bool(prev_delete_complete),
+            "association_updated_count": int(len(association_updated_ids)),
+            "association_deleted_count": int(len(association_removed_ids)),
+            "association_removed_selected_count": int(association_removed_selected_count),
+            "association_updated_ids": [int(item_id) for item_id in association_updated_ids],
+            "association_deleted_ids": [int(item_id) for item_id in association_removed_ids],
+            "association_affected_main_case_file_ids": [
+                int(case_file_id) for case_file_id in association_affected_main_ids
+            ],
             "before_count": int(before_count),
             "after_count": int(max(before_count - 1, 0)),
         },

@@ -539,4 +539,155 @@ test.describe('exec association transfer api', () => {
     expect([200, 404]).toContain(cleanup.status());
   });
 
+
+  test('副用例条目从库删除后，关联执行会同步删除并产出 diff', async () => {
+    const ctx = await request.newContext();
+    const token = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(health && health.status).toBe('ok');
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'exec-assoc-delete-from-library-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'assoc sub-case item delete should sync and diff' },
+    });
+    expect(createProj.status()).toBe(201);
+    const project = await createProj.json();
+
+    const createVer = await ctx.post(`${apiBase}/api/projects/${project.id}/versions`, {
+      headers,
+      data: { name: 'v1' },
+    });
+    expect(createVer.status()).toBe(201);
+    const version = await createVer.json();
+
+    const mainCase = await importCaseFile(
+      ctx,
+      headers,
+      project.id,
+      version.id,
+      `主用例DeleteHitMain_${Date.now()}.json`,
+      [
+        { module: '登录', title: 'M-1', priority: 'P0', precondition: '无', steps: '步骤M1', expected: '结果M1', remark: '' },
+      ]
+    );
+
+    const subCase = await importCaseFile(
+      ctx,
+      headers,
+      project.id,
+      version.id,
+      `副用例DeleteHitSub_${Date.now()}.json`,
+      [
+        { module: '支付', title: 'S-1', priority: 'P0', precondition: '无', steps: '步骤S1', expected: '结果S1', remark: '' },
+        { module: '支付', title: 'S-2', priority: 'P1', precondition: '无', steps: '步骤S2', expected: '结果S2', remark: '' },
+      ]
+    );
+
+    const subItems = await listCaseItems(ctx, headers, subCase.id);
+    expect(Array.isArray(subItems)).toBeTruthy();
+    expect(subItems.length).toBe(2);
+
+    const createAssocRes = await ctx.post(`${apiBase}/api/case-files/${mainCase.id}/associations`, {
+      headers,
+      data: {
+        sub_case_file_id: subCase.id,
+        selected_case_item_ids: [subItems[0].id, subItems[1].id],
+      },
+    });
+    expect(createAssocRes.status()).toBe(201);
+
+    const transferRes = await ctx.post(`${apiBase}/api/exec/sets/from-case-file`, {
+      headers,
+      data: {
+        case_file_id: mainCase.id,
+        exec_version_id: version.id,
+        mode: 'replace',
+        preserve_results: true,
+        prefer_result_source: 'db',
+        association_enabled: true,
+      },
+    });
+    expect(transferRes.status()).toBe(200);
+    const execSet = await transferRes.json();
+
+    const firstExecCasesRes = await ctx.get(`${apiBase}/api/exec/sets/${execSet.id}/cases`, { headers });
+    expect(firstExecCasesRes.status()).toBe(200);
+    const firstExecCases = await firstExecCasesRes.json();
+    expect(Array.isArray(firstExecCases)).toBeTruthy();
+    expect(firstExecCases.length).toBe(3);
+
+    const deleteSubItem1Res = await ctx.delete(`${apiBase}/api/case-files/items/${subItems[0].id}`, { headers });
+    expect(deleteSubItem1Res.status()).toBe(200);
+
+    const assocAfterDelete1Res = await ctx.get(`${apiBase}/api/case-files/${mainCase.id}/associations`, { headers });
+    expect(assocAfterDelete1Res.status()).toBe(200);
+    const assocAfterDelete1 = await assocAfterDelete1Res.json();
+    expect(Array.isArray(assocAfterDelete1)).toBeTruthy();
+    expect(assocAfterDelete1.length).toBe(1);
+    const selectedAfterDelete1 = Array.isArray(assocAfterDelete1[0] && assocAfterDelete1[0].selected_case_item_ids)
+      ? assocAfterDelete1[0].selected_case_item_ids
+      : [];
+    expect(selectedAfterDelete1.length).toBe(1);
+    expect(Number(selectedAfterDelete1[0])).toBe(Number(subItems[1].id));
+
+    const sync1Res = await ctx.post(`${apiBase}/api/exec/sets/${execSet.id}/case-library-sync`, {
+      headers,
+      data: {},
+    });
+    expect(sync1Res.status()).toBe(200);
+    const sync1 = await sync1Res.json();
+    expect(sync1 && sync1.has_new_diff).toBeTruthy();
+    expect(Number(sync1 && sync1.summary ? sync1.summary.deleted : 0)).toBe(1);
+    const sync1DiffRows = Array.isArray(sync1 && sync1.diff) ? sync1.diff : [];
+    const sync1Deleted = sync1DiffRows.find((row) => Number(row && row.case_item_id) === Number(subItems[0].id));
+    expect(sync1Deleted).toBeTruthy();
+    expect(String(sync1Deleted && sync1Deleted.kind ? sync1Deleted.kind : '')).toBe('deleted');
+
+    const afterSync1CasesRes = await ctx.get(`${apiBase}/api/exec/sets/${execSet.id}/cases`, { headers });
+    expect(afterSync1CasesRes.status()).toBe(200);
+    const afterSync1Cases = await afterSync1CasesRes.json();
+    expect(Array.isArray(afterSync1Cases)).toBeTruthy();
+    expect(afterSync1Cases.length).toBe(2);
+    expect(afterSync1Cases.filter((item) => String(item && item.title ? item.title : '') === 'S-1').length).toBe(0);
+    expect(afterSync1Cases.filter((item) => String(item && item.title ? item.title : '') === 'S-2').length).toBe(1);
+
+    const deleteSubItem2Res = await ctx.delete(`${apiBase}/api/case-files/items/${subItems[1].id}`, { headers });
+    expect(deleteSubItem2Res.status()).toBe(200);
+
+    const assocAfterDelete2Res = await ctx.get(`${apiBase}/api/case-files/${mainCase.id}/associations`, { headers });
+    expect(assocAfterDelete2Res.status()).toBe(200);
+    const assocAfterDelete2 = await assocAfterDelete2Res.json();
+    expect(Array.isArray(assocAfterDelete2)).toBeTruthy();
+    expect(assocAfterDelete2.length).toBe(0);
+
+    const sync2Res = await ctx.post(`${apiBase}/api/exec/sets/${execSet.id}/case-library-sync`, {
+      headers,
+      data: {},
+    });
+    expect(sync2Res.status()).toBe(200);
+    const sync2 = await sync2Res.json();
+    expect(sync2 && sync2.has_new_diff).toBeTruthy();
+    expect(Number(sync2 && sync2.summary ? sync2.summary.deleted : 0)).toBe(1);
+    const sync2DiffRows = Array.isArray(sync2 && sync2.diff) ? sync2.diff : [];
+    const sync2Deleted = sync2DiffRows.find((row) => Number(row && row.case_item_id) === Number(subItems[1].id));
+    expect(sync2Deleted).toBeTruthy();
+    expect(String(sync2Deleted && sync2Deleted.kind ? sync2Deleted.kind : '')).toBe('deleted');
+
+    const afterSync2CasesRes = await ctx.get(`${apiBase}/api/exec/sets/${execSet.id}/cases`, { headers });
+    expect(afterSync2CasesRes.status()).toBe(200);
+    const afterSync2Cases = await afterSync2CasesRes.json();
+    expect(Array.isArray(afterSync2Cases)).toBeTruthy();
+    expect(afterSync2Cases.length).toBe(1);
+
+    const cleanup = await ctx.delete(`${apiBase}/api/projects/${project.id}`, { headers });
+    expect([200, 404]).toContain(cleanup.status());
+    await ctx.dispose();
+  });
+
 });

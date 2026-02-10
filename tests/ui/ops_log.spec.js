@@ -77,7 +77,7 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     const logs = [
       { id: 1, user_id: 2, username: 'user_b', action: 'import_case_file', target_type: 'case_file', target_id: 100, result: 'success', detail: { file_name: 'case-0', source: 'xmind', before_count: 0, after_count: 1 }, created_at: new Date(yesterday.getTime()).toISOString() },
       { id: 2, user_id: 1, username: 'admin', action: 'login', target_type: 'auth', target_id: 1, result: 'success', detail: {}, created_at: new Date(yesterday.getTime() - 1000).toISOString() },
-      { id: 3, user_id: 2, username: 'user_b', action: 'upsert_exec_set_from_case_file', target_type: 'exec_set', target_id: 101, result: 'success', detail: { case_file_name: 'case-2', exec_set_name: 'case-2', before_count: 10, after_count: 88, new_cases: 78, transfer_count: 88 }, created_at: new Date(today.getTime() - 2 * 1000).toISOString() },
+      { id: 3, user_id: 2, username: 'user_b', action: 'upsert_exec_set_from_case_file', target_type: 'exec_set', target_id: 101, result: 'success', detail: { case_file_name: 'case-2', exec_set_name: 'case-2', before_count: 10, after_count: 88, new_cases: 78, transfer_count: 88, association_enabled: true }, created_at: new Date(today.getTime() - 2 * 1000).toISOString() },
       { id: 4, user_id: 1, username: 'admin', action: 'update_user', target_type: 'user', target_id: 2, result: 'success', detail: { username: 'user_b' }, created_at: new Date(today.getTime() - 3 * 1000).toISOString() },
       { id: 5, user_id: 2, username: 'user_b', action: 'archive_exec_set', target_type: 'exec_set', target_id: 77, result: 'success', detail: { name: 'exec-77', case_file_name: 'case-77', before_count: 12, after_count: 12 }, created_at: new Date(today.getTime() - 4 * 1000).toISOString() },
       { id: 6, user_id: 1, username: 'admin', action: 'delete_case_file', target_type: 'case_file', target_id: 103, result: 'success', detail: { file_name: 'case-5', before_count: 9, after_count: 0 }, created_at: new Date(today.getTime() - 5 * 1000).toISOString() },
@@ -136,7 +136,7 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
 
     // 使用“全局分页设置”每页 5 条。
     await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(5);
-    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例：case-2');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例：case-2（关联）');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('12 -> 12');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('9 -> 0');
     const transferRow = page.locator('#opsLogDrawerTableBody tr').filter({ hasText: '转执行' }).first();

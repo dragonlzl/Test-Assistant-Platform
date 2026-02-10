@@ -408,4 +408,105 @@ test.describe('case file association api', () => {
     await ctx.dispose();
   });
 
+
+  test('副用例条目删除命中关联后自动同步并在空勾选时解除关联', async () => {
+    const ctx = await request.newContext();
+    const token = await login(ctx, adminUser, adminPass);
+    const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+    const healthRes = await ctx.get(`${apiBase}/api/health`);
+    expect(healthRes.status()).toBe(200);
+    const health = await healthRes.json();
+    expect(health && health.status).toBe('ok');
+    expect(String(health && health.db_file ? health.db_file : '')).toContain('apitest');
+
+    const projectName = 'assoc-prune-delete-item-' + Date.now();
+    const createProj = await ctx.post(`${apiBase}/api/projects`, {
+      headers,
+      data: { name: projectName, description: 'association prunes selected ids on case item delete' },
+    });
+    expect(createProj.status()).toBe(201);
+    const project = await createProj.json();
+
+    const createVer = await ctx.post(`${apiBase}/api/projects/${project.id}/versions`, {
+      headers,
+      data: { name: 'v1' },
+    });
+    expect(createVer.status()).toBe(201);
+    const version = await createVer.json();
+
+    const mainCase = await importCaseFile(
+      ctx,
+      headers,
+      project.id,
+      version.id,
+      `主用例AutoPruneMain_${Date.now()}.json`,
+      [
+        { module: '登录', title: 'M-1', priority: 'P0', precondition: '无', steps: '步骤M1', expected: '结果M1', remark: '' },
+      ]
+    );
+
+    const subCase = await importCaseFile(
+      ctx,
+      headers,
+      project.id,
+      version.id,
+      `副用例AutoPruneSub_${Date.now()}.json`,
+      [
+        { module: '支付', title: 'S-1', priority: 'P0', precondition: '无', steps: '步骤S1', expected: '结果S1', remark: '' },
+        { module: '支付', title: 'S-2', priority: 'P1', precondition: '无', steps: '步骤S2', expected: '结果S2', remark: '' },
+      ]
+    );
+
+    const subItems = await listCaseItems(ctx, headers, subCase.id);
+    expect(Array.isArray(subItems)).toBeTruthy();
+    expect(subItems.length).toBe(2);
+
+    const createAssocRes = await ctx.post(`${apiBase}/api/case-files/${mainCase.id}/associations`, {
+      headers,
+      data: {
+        sub_case_file_id: subCase.id,
+        selected_case_item_ids: [subItems[0].id, subItems[1].id],
+      },
+    });
+    expect(createAssocRes.status()).toBe(201);
+
+    const deleteFirstSubItemRes = await ctx.delete(`${apiBase}/api/case-files/items/${subItems[0].id}`, { headers });
+    expect(deleteFirstSubItemRes.status()).toBe(200);
+
+    const assocAfterFirstDeleteRes = await ctx.get(`${apiBase}/api/case-files/${mainCase.id}/associations`, { headers });
+    expect(assocAfterFirstDeleteRes.status()).toBe(200);
+    const assocAfterFirstDelete = await assocAfterFirstDeleteRes.json();
+    expect(Array.isArray(assocAfterFirstDelete)).toBeTruthy();
+    expect(assocAfterFirstDelete.length).toBe(1);
+    const selectedAfterFirstDelete = Array.isArray(assocAfterFirstDelete[0] && assocAfterFirstDelete[0].selected_case_item_ids)
+      ? assocAfterFirstDelete[0].selected_case_item_ids
+      : [];
+    expect(selectedAfterFirstDelete.length).toBe(1);
+    expect(Number(selectedAfterFirstDelete[0])).toBe(Number(subItems[1].id));
+    expect(Number(assocAfterFirstDelete[0] && assocAfterFirstDelete[0].selected_count)).toBe(1);
+
+    const deleteSecondSubItemRes = await ctx.delete(`${apiBase}/api/case-files/items/${subItems[1].id}`, { headers });
+    expect(deleteSecondSubItemRes.status()).toBe(200);
+
+    const assocAfterSecondDeleteRes = await ctx.get(`${apiBase}/api/case-files/${mainCase.id}/associations`, { headers });
+    expect(assocAfterSecondDeleteRes.status()).toBe(200);
+    const assocAfterSecondDelete = await assocAfterSecondDeleteRes.json();
+    expect(Array.isArray(assocAfterSecondDelete)).toBeTruthy();
+    expect(assocAfterSecondDelete.length).toBe(0);
+
+    const candidatesRes = await ctx.get(`${apiBase}/api/case-files/${mainCase.id}/association-candidates?include_forbidden=0`, {
+      headers,
+    });
+    expect(candidatesRes.status()).toBe(200);
+    const candidates = await candidatesRes.json();
+    expect(Array.isArray(candidates)).toBeTruthy();
+    const subCandidate = candidates.find((item) => Number(item && item.id) === Number(subCase.id));
+    expect(subCandidate).toBeTruthy();
+
+    const cleanup = await ctx.delete(`${apiBase}/api/projects/${project.id}`, { headers });
+    expect([200, 404]).toContain(cleanup.status());
+    await ctx.dispose();
+  });
+
 });

@@ -810,8 +810,17 @@
     if (type === 'exec_set') {
       var fileName3 = String(detail.case_file_name || detail.file_name || detail.file_name_clean || '').trim();
       if (!fileName3) fileName3 = String(detail.exec_set_name || detail.name || '').trim();
-      if (fileName3) return '用例：' + fileName3;
-      return id ? ('用例#' + id) : '用例';
+      var associationSuffix = '';
+      if (action === 'upsert_exec_set_from_case_file') {
+        var associationEnabled = detail && detail.association_enabled === true;
+        if (!associationEnabled && detail && detail.association_enabled !== false) {
+          var sourceCaseFileIds = Array.isArray(detail.source_case_file_ids) ? detail.source_case_file_ids : [];
+          if (sourceCaseFileIds.length > 1) associationEnabled = true;
+        }
+        if (associationEnabled) associationSuffix = '（关联）';
+      }
+      if (fileName3) return '用例：' + fileName3 + associationSuffix;
+      return id ? ('用例#' + id + associationSuffix) : ('用例' + associationSuffix);
     }
 
     if (type) return id ? (type + '#' + id) : type;
