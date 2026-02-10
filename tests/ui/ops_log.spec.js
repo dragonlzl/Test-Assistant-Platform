@@ -481,4 +481,120 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     await expect(page.locator('#opsLogDrawerTableBody')).not.toContainText('更新设置');
     await expect(page.locator('#opsLogDrawerTableBody')).not.toContainText('settings#');
   });
+
+  test('关联与取消关联操作记录展示组合文案', async ({ page }) => {
+    const admin = { id: 1, username: 'admin', role: 'admin', level: 'leader' };
+    const now = new Date();
+    const logs = [
+      {
+        id: 301,
+        user_id: 1,
+        username: 'admin',
+        action: 'create_case_file_association',
+        target_type: 'case_file',
+        target_id: 1001,
+        result: 'success',
+        detail: {
+          main_case_file_id: 1001,
+          main_case_file_name: '主用例A',
+          sub_case_file_id: 2001,
+          sub_case_file_name: '副用例B',
+          association_snapshot_after: '主用例A+副用例B2条',
+          association_target_label: '关联用例：主用例A+副用例B2条',
+          before_count: 0,
+          after_count: 2,
+          page: 'case-library',
+        },
+        created_at: new Date(now.getTime() - 1000).toISOString(),
+      },
+      {
+        id: 302,
+        user_id: 1,
+        username: 'admin',
+        action: 'update_case_file_association',
+        target_type: 'case_file',
+        target_id: 1001,
+        result: 'success',
+        detail: {
+          association_id: 9,
+          main_case_file_id: 1001,
+          main_case_file_name: '主用例A',
+          sub_case_file_id: 2001,
+          sub_case_file_name: '副用例B',
+          association_snapshot_after: '主用例A+副用例B1条',
+          association_target_label: '编辑关联：主用例A+副用例B1条',
+          before_count: 2,
+          after_count: 1,
+          page: 'case-library',
+        },
+        created_at: new Date(now.getTime() - 1500).toISOString(),
+      },
+      {
+        id: 303,
+        user_id: 1,
+        username: 'admin',
+        action: 'delete_case_file_association',
+        target_type: 'case_file',
+        target_id: 1001,
+        result: 'success',
+        detail: {
+          main_case_file_id: 1001,
+          main_case_file_name: '主用例A',
+          sub_case_file_id: 2001,
+          sub_case_file_name: '副用例B',
+          association_removed_sub_case_name: '副用例B',
+          association_removed_selected_count: 1,
+          association_snapshot_after: '主用例A+副用例C1条',
+          association_target_label: '取消关联：主用例A+副用例C1条-副用例B1条',
+          before_count: 2,
+          after_count: 1,
+          page: 'case-library',
+        },
+        created_at: new Date(now.getTime() - 2000).toISOString(),
+      },
+    ];
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me') return respond(200, admin);
+      if (pathName === '/api/users' && method === 'GET') return respond(200, [admin]);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/ops' && method === 'GET') return respond(200, logs);
+
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/features' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/auth/logout') return respond(200, {});
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await waitAppReady(page, 30000);
+    await switchToTab(page, 'ops-log', 30000);
+
+    await expect(page.locator('#openOpsLogDrawerBtn')).toBeVisible();
+    await page.click('#openOpsLogDrawerBtn', { force: true });
+    await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
+
+    await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(3);
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('关联用例：主用例A+副用例B2条');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('编辑关联：主用例A+副用例B1条');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('取消关联：主用例A+副用例C1条-副用例B1条');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('关联用例');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('编辑关联');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('取消关联');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('0 -> 2');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('2 -> 1');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例库');
+  });
+
 });

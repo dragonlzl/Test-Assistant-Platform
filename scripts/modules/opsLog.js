@@ -623,6 +623,64 @@
     var detail = l.detail && typeof l.detail === 'object' ? l.detail : {};
     var action = normalizeAction(l.action);
 
+    if (action === 'create_case_file_association' || action === 'update_case_file_association' || action === 'delete_case_file_association') {
+      var associationTargetLabel = String(detail.association_target_label || '').trim();
+      if (associationTargetLabel) return associationTargetLabel;
+
+      var mainCaseNameAssoc = String(
+        detail.main_case_file_name || detail.file_name || detail.case_file_name || ''
+      ).trim();
+      if (!mainCaseNameAssoc) {
+        var mainCaseIdAssoc =
+          detail.main_case_file_id || detail.main_case_file_id === 0
+            ? String(detail.main_case_file_id)
+            : '';
+        if (mainCaseIdAssoc) mainCaseNameAssoc = '主用例#' + mainCaseIdAssoc;
+      }
+
+      var associationSnapshotAfter = String(detail.association_snapshot_after || '').trim();
+      if (!associationSnapshotAfter && mainCaseNameAssoc) {
+        associationSnapshotAfter = mainCaseNameAssoc;
+      }
+
+      if (action === 'create_case_file_association') {
+        if (associationSnapshotAfter) return '关联用例：' + associationSnapshotAfter;
+        return '关联用例';
+      }
+
+      if (action === 'update_case_file_association') {
+        if (associationSnapshotAfter) return '编辑关联：' + associationSnapshotAfter;
+        return '编辑关联';
+      }
+
+      var removedSubCaseName = String(
+        detail.association_removed_sub_case_name || detail.sub_case_file_name || ''
+      ).trim();
+      if (!removedSubCaseName) {
+        var removedSubCaseId =
+          detail.sub_case_file_id || detail.sub_case_file_id === 0
+            ? String(detail.sub_case_file_id)
+            : '';
+        if (removedSubCaseId) removedSubCaseName = '副用例#' + removedSubCaseId;
+      }
+
+      var removedCount = Number(detail.association_removed_selected_count);
+      if (!Number.isFinite(removedCount) || removedCount < 0) {
+        removedCount = Number(detail.selected_count);
+      }
+      if (!Number.isFinite(removedCount) || removedCount < 0) {
+        removedCount = 0;
+      }
+      removedCount = Math.floor(removedCount);
+
+      var removedLabel = removedSubCaseName ? removedSubCaseName + String(removedCount) + '条' : '';
+      if (associationSnapshotAfter && removedLabel) {
+        return '取消关联：' + associationSnapshotAfter + '-' + removedLabel;
+      }
+      if (associationSnapshotAfter) return '取消关联：' + associationSnapshotAfter;
+      return '取消关联';
+    }
+
     // 系统平台
     if (action === 'login' || action === 'logout' || action === 'change_password') return '系统平台';
     if (action === 'exec_case_run') {
@@ -2466,7 +2524,10 @@
       action === 'export_exec_xmind' ||
       action === 'export_exec_snapshot' ||
       action === 'export_cases_xmind' ||
-      action === 'exec_case_run'
+      action === 'exec_case_run' ||
+      action === 'create_case_file_association' ||
+      action === 'update_case_file_association' ||
+      action === 'delete_case_file_association'
     ) {
       return ['case'];
     }
@@ -2537,6 +2598,9 @@
     if (action === 'append_case_items') return '追加';
     if (action === 'create_exec_set') return '执行页面入库';
     if (action === 'upsert_exec_set_from_case_file') return '转执行';
+    if (action === 'create_case_file_association') return '关联用例';
+    if (action === 'update_case_file_association') return '编辑关联';
+    if (action === 'delete_case_file_association') return '取消关联';
     if (action === 'change_case_reuse_type') return '用例类型变更';
     if (action === 'archive_exec_set') return '归档';
     if (action === 'delete_exec_set') return '直接解散';

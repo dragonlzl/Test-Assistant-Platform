@@ -3970,3 +3970,6 @@
 - 更新记录：2026-02-09 优化“当前用例组合”展示格式：由纯文本拼接改为结构化胶囊标签（主/副/条数）+ 固定分隔符，统一 `+` 两侧间距与视觉对齐，避免不同名称长度导致的空格不一致（`scripts/core/tempexecCore.js`、`style.css`、`tests/ui/tempexec_association_row_highlight.spec.js`）。
 - 更新记录：2026-02-09 “当前用例组合”补充主用例条数展示：主用例与副用例统一展示“角色 + 条数”，其中主用例条数按组合执行视图中非关联引用行实时统计（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_association_row_highlight.spec.js`）。
 - 更新记录：2026-02-09 修复执行页 diff 手动重开丢失“新增”记录：当同一条目在同批次中同时出现“新增/追加”与“删除”时，手动打开 diff 仍保留新增记录，避免仅展示删除（`scripts/core/tempexecCore.js`、`tests/ui/tempexec_case_library_changes.spec.js`）。
+- 更新记录：2026-02-10 关联用例操作记录增强：新增“关联用例/取消关联”行为展示与组合快照文案（按主副累计态记录，如“关联用例：主+副B2条+副C1条”“取消关联：主+副C1条-副B2条”），并补充前后端自动化验证（`backend/routers/cases.py`、`scripts/modules/opsLog.js`、`tests/api/case_file_associations.spec.js`、`tests/ui/ops_log.spec.js`）。
+- 更新记录：2026-02-10 关联/取消关联操作记录“变化”字段增强：关联与取消关联日志新增数量变化（`before_count -> after_count`，按当前主用例下副用例勾选条目总数统计），操作记录页可直接展示关联前后数量变化（`backend/routers/cases.py`、`tests/api/case_file_associations.spec.js`、`tests/ui/ops_log.spec.js`）。
+- 更新记录：2026-02-10 补充“编辑关联”操作记录：当已关联副用例在编辑关联中调整勾选条目（如 3→2、3→5）时，新增“编辑关联”行为记录与目标文案，并在“变化”字段展示编辑前后数量变化（`before_count -> after_count`）；同步纳入操作记录筛选与展示映射（`backend/routers/cases.py`、`scripts/modules/opsLog.js`、`tests/api/case_file_associations.spec.js`、`tests/ui/ops_log.spec.js`）。

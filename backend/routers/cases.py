@@ -289,6 +289,101 @@ def _build_case_file_association_out(
     )
 
 
+def _list_case_file_association_snapshots(
+    db: Session,
+    main_case_file_id: int,
+) -> List[Dict]:
+    sub_case = aliased(models.CaseFile)
+    rows = (
+        db.query(models.CaseFileAssociation, sub_case.file_name_clean)
+        .join(sub_case, sub_case.id == models.CaseFileAssociation.sub_case_file_id)
+        .filter(models.CaseFileAssociation.main_case_file_id == int(main_case_file_id))
+        .order_by(
+            models.CaseFileAssociation.order_no.asc(),
+            models.CaseFileAssociation.id.asc(),
+        )
+        .all()
+    )
+    snapshots: List[Dict] = []
+    for row in rows or []:
+        assoc, sub_name = row
+        selected_ids = _parse_assoc_item_ids(getattr(assoc, "selected_case_item_ids", None))
+        snapshots.append(
+            {
+                "sub_case_file_id": int(assoc.sub_case_file_id),
+                "sub_case_file_name": str(sub_name or ("用例#" + str(assoc.sub_case_file_id))),
+                "selected_count": len(selected_ids),
+            }
+        )
+    return snapshots
+
+
+def _build_case_file_association_snapshot_label(
+    main_case_name: str,
+    snapshots: List[Dict],
+) -> str:
+    main_name = str(main_case_name or "").strip()
+    if not main_name:
+        main_name = "主用例"
+    parts: List[str] = [main_name]
+    for item in snapshots or []:
+        sub_case_name = str(item.get("sub_case_file_name") or "").strip()
+        if not sub_case_name:
+            sub_case_id = item.get("sub_case_file_id")
+            if sub_case_id or sub_case_id == 0:
+                sub_case_name = "副用例#" + str(sub_case_id)
+            else:
+                sub_case_name = "副用例"
+        selected_count = 0
+        try:
+            selected_count = int(item.get("selected_count") or 0)
+        except Exception:
+            selected_count = 0
+        if selected_count < 0:
+            selected_count = 0
+        parts.append(sub_case_name + str(selected_count) + "条")
+    return "+".join(parts)
+
+
+def _sum_case_file_association_selected_count(snapshots: List[Dict]) -> int:
+    total = 0
+    for item in snapshots or []:
+        selected_count = 0
+        try:
+            selected_count = int(item.get("selected_count") or 0)
+        except Exception:
+            selected_count = 0
+        if selected_count > 0:
+            total += selected_count
+    return int(total)
+
+
+def _build_case_file_association_target_label(
+    action_label: str,
+    main_case_name: str,
+    snapshots: List[Dict],
+    removed_sub_case_name: Optional[str] = None,
+    removed_selected_count: Optional[int] = None,
+) -> str:
+    snapshot_after = _build_case_file_association_snapshot_label(main_case_name, snapshots)
+    prefix = str(action_label or "").strip()
+    if prefix != "取消关联":
+        if prefix:
+            return prefix + "：" + snapshot_after
+        return snapshot_after
+    removed_name = str(removed_sub_case_name or "").strip()
+    if not removed_name:
+        removed_name = "副用例"
+    removed_count = 0
+    try:
+        removed_count = int(removed_selected_count or 0)
+    except Exception:
+        removed_count = 0
+    if removed_count < 0:
+        removed_count = 0
+    return prefix + "：" + snapshot_after + "-" + removed_name + str(removed_count) + "条"
+
+
 def _is_case_file_association_forbidden(
     db: Session,
     main_case_file_id: int,
@@ -1060,6 +1155,23 @@ def create_case_file_association(
         updated_at=now,
     )
     db.add(assoc)
+    db.flush()
+
+    association_snapshots = _list_case_file_association_snapshots(db, int(main_case.id))
+    association_snapshot_after = _build_case_file_association_snapshot_label(
+        main_case.file_name_clean or "",
+        association_snapshots,
+    )
+    association_target_label = _build_case_file_association_target_label(
+        "关联用例",
+        main_case.file_name_clean or "",
+        association_snapshots,
+    )
+    association_selected_total_after = _sum_case_file_association_selected_count(association_snapshots)
+    association_selected_total_before = association_selected_total_after - len(selected_ids)
+    if association_selected_total_before < 0:
+        association_selected_total_before = 0
+
     log_operation(
         db=db,
         user_id=user.id,
@@ -1068,8 +1180,18 @@ def create_case_file_association(
         target_id=int(main_case.id),
         detail={
             "main_case_file_id": int(main_case.id),
+            "main_case_file_name": str(main_case.file_name_clean or ("用例#" + str(main_case.id))),
             "sub_case_file_id": int(sub_case.id),
+            "sub_case_file_name": str(sub_case.file_name_clean or ("用例#" + str(sub_case.id))),
             "selected_count": len(selected_ids),
+            "association_added_sub_case_name": str(sub_case.file_name_clean or ("用例#" + str(sub_case.id))),
+            "association_added_selected_count": len(selected_ids),
+            "association_snapshot_after": association_snapshot_after,
+            "association_target_label": association_target_label,
+            "before_count": int(association_selected_total_before),
+            "after_count": int(association_selected_total_after),
+            "association_selected_total_before": int(association_selected_total_before),
+            "association_selected_total_after": int(association_selected_total_after),
         },
     )
     db.commit()
@@ -1088,7 +1210,7 @@ def update_case_file_association(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _ensure_case_access(db, user, case_file_id)
+    main_case = _ensure_case_access(db, user, case_file_id)
     assoc = (
         db.query(models.CaseFileAssociation)
         .filter(models.CaseFileAssociation.id == int(association_id))
@@ -1098,6 +1220,10 @@ def update_case_file_association(
     if not assoc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="关联不存在")
     sub_case = _ensure_case_access(db, user, int(assoc.sub_case_file_id))
+
+    before_selected_ids = _parse_assoc_item_ids(getattr(assoc, "selected_case_item_ids", None))
+    before_selected_count = len(before_selected_ids)
+
     selected_ids = _normalize_assoc_selected_ids(
         db,
         sub_case_file_id=sub_case.id,
@@ -1109,6 +1235,23 @@ def update_case_file_association(
     assoc.updated_by = user.id
     assoc.updated_at = datetime.now(timezone.utc)
     db.add(assoc)
+    db.flush()
+
+    association_snapshots = _list_case_file_association_snapshots(db, int(case_file_id))
+    association_snapshot_after = _build_case_file_association_snapshot_label(
+        main_case.file_name_clean or "",
+        association_snapshots,
+    )
+    association_target_label = _build_case_file_association_target_label(
+        "编辑关联",
+        main_case.file_name_clean or "",
+        association_snapshots,
+    )
+    association_selected_total_after = _sum_case_file_association_selected_count(association_snapshots)
+    association_selected_total_before = association_selected_total_after - len(selected_ids) + before_selected_count
+    if association_selected_total_before < 0:
+        association_selected_total_before = 0
+
     log_operation(
         db=db,
         user_id=user.id,
@@ -1118,8 +1261,18 @@ def update_case_file_association(
         detail={
             "association_id": int(assoc.id),
             "main_case_file_id": int(case_file_id),
+            "main_case_file_name": str(main_case.file_name_clean or ("用例#" + str(main_case.id))),
             "sub_case_file_id": int(assoc.sub_case_file_id),
+            "sub_case_file_name": str(sub_case.file_name_clean or ("用例#" + str(sub_case.id))),
             "selected_count": len(selected_ids),
+            "selected_count_before": int(before_selected_count),
+            "selected_count_after": len(selected_ids),
+            "association_snapshot_after": association_snapshot_after,
+            "association_target_label": association_target_label,
+            "before_count": int(before_selected_count),
+            "after_count": int(len(selected_ids)),
+            "association_selected_total_before": int(association_selected_total_before),
+            "association_selected_total_after": int(association_selected_total_after),
         },
     )
     db.commit()
@@ -1134,7 +1287,7 @@ def delete_case_file_association(
     user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _ensure_case_access(db, user, case_file_id)
+    main_case = _ensure_case_access(db, user, case_file_id)
     assoc = (
         db.query(models.CaseFileAssociation)
         .filter(models.CaseFileAssociation.id == int(association_id))
@@ -1144,7 +1297,31 @@ def delete_case_file_association(
     if not assoc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="关联不存在")
     sub_case_file_id = int(assoc.sub_case_file_id)
+    sub_case_name = (
+        db.query(models.CaseFile.file_name_clean)
+        .filter(models.CaseFile.id == int(sub_case_file_id))
+        .scalar()
+    )
+    removed_selected_count = len(_parse_assoc_item_ids(getattr(assoc, "selected_case_item_ids", None)))
+
     db.delete(assoc)
+    db.flush()
+
+    association_snapshots = _list_case_file_association_snapshots(db, int(case_file_id))
+    association_snapshot_after = _build_case_file_association_snapshot_label(
+        main_case.file_name_clean or "",
+        association_snapshots,
+    )
+    association_target_label = _build_case_file_association_target_label(
+        "取消关联",
+        main_case.file_name_clean or "",
+        association_snapshots,
+        removed_sub_case_name=str(sub_case_name or ("用例#" + str(sub_case_file_id))),
+        removed_selected_count=removed_selected_count,
+    )
+    association_selected_total_after = _sum_case_file_association_selected_count(association_snapshots)
+    association_selected_total_before = association_selected_total_after + int(removed_selected_count)
+
     log_operation(
         db=db,
         user_id=user.id,
@@ -1154,7 +1331,18 @@ def delete_case_file_association(
         detail={
             "association_id": int(association_id),
             "main_case_file_id": int(case_file_id),
+            "main_case_file_name": str(main_case.file_name_clean or ("用例#" + str(main_case.id))),
             "sub_case_file_id": int(sub_case_file_id),
+            "sub_case_file_name": str(sub_case_name or ("用例#" + str(sub_case_file_id))),
+            "association_removed_sub_case_name": str(sub_case_name or ("用例#" + str(sub_case_file_id))),
+            "association_removed_selected_count": int(removed_selected_count),
+            "selected_count": int(removed_selected_count),
+            "association_snapshot_after": association_snapshot_after,
+            "association_target_label": association_target_label,
+            "before_count": int(association_selected_total_before),
+            "after_count": int(association_selected_total_after),
+            "association_selected_total_before": int(association_selected_total_before),
+            "association_selected_total_after": int(association_selected_total_after),
         },
     )
     db.commit()
