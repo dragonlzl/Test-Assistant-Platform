@@ -863,6 +863,12 @@
     if (params && (params.user_id || params.user_id === 0)) {
       query.push('user_id=' + encodeURIComponent(params.user_id));
     }
+    if (params && (params.start_ms || params.start_ms === 0)) {
+      query.push('start_ms=' + encodeURIComponent(params.start_ms));
+    }
+    if (params && (params.end_ms || params.end_ms === 0)) {
+      query.push('end_ms=' + encodeURIComponent(params.end_ms));
+    }
     var url = '/api/ops';
     if (query.length) url += '?' + query.join('&');
     return fetch(url, {

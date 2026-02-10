@@ -13,6 +13,10 @@
   var ACTIVITY_BAR_MAX_RATIO = 82;
   var DRAWER_MAX_ALLOWED_LOGS = Number(appConfig.opsLogDrawerMaxAllowed || 500);
   if (!Number.isFinite(DRAWER_MAX_ALLOWED_LOGS) || DRAWER_MAX_ALLOWED_LOGS <= 0) DRAWER_MAX_ALLOWED_LOGS = 500;
+  var OVERVIEW_AUTO_REFRESH_INTERVAL_MS = Number(appConfig.opsOverviewAutoRefreshIntervalMs || 60000);
+  if (!Number.isFinite(OVERVIEW_AUTO_REFRESH_INTERVAL_MS) || OVERVIEW_AUTO_REFRESH_INTERVAL_MS < 0) {
+    OVERVIEW_AUTO_REFRESH_INTERVAL_MS = 60000;
+  }
 
   var TARGETS = [
     { key: 'all', label: '全部' },
@@ -69,6 +73,7 @@
       logs: [],
       behaviors: [],
       colorMap: {},
+      lastFetchedAt: 0,
     },
     contribution: {
       drawer: null,
@@ -85,6 +90,7 @@
       logs: [],
       behaviors: [],
       colorMap: {},
+      lastFetchedAt: 0,
     },
     execContribution: {
       drawer: null,
@@ -101,6 +107,7 @@
       logs: [],
       behaviors: [],
       colorMap: {},
+      lastFetchedAt: 0,
     },
   };
 
@@ -258,6 +265,16 @@
     var limit = 500;
     var offset = 0;
     var userId = options && (options.userId || options.userId === 0) ? options.userId : null;
+    var startMs = null;
+    var endMs = null;
+    if (range && range.startMs !== null && range.startMs !== undefined) {
+      var s = Number(range.startMs);
+      if (Number.isFinite(s) && s >= 0) startMs = Math.floor(s);
+    }
+    if (range && range.endMs !== null && range.endMs !== undefined) {
+      var e = Number(range.endMs);
+      if (Number.isFinite(e) && e >= 0) endMs = Math.floor(e);
+    }
     var results = [];
 
     function loadNext() {
@@ -266,6 +283,8 @@
           limit: limit,
           offset: offset,
           user_id: userId !== null ? userId : undefined,
+          start_ms: startMs !== null ? startMs : undefined,
+          end_ms: endMs !== null ? endMs : undefined,
         })
         .then(function(list) {
           var rawList = Array.isArray(list) ? list : [];
@@ -273,10 +292,6 @@
           offset += rawList.length;
           results = results.concat(rawList.filter(function(row) { return !isAutoOperation(row); }));
           var shouldContinue = rawList.length >= limit;
-          if (shouldContinue && range && range.startMs !== null) {
-            var oldest = getOldestLogTime(rawList);
-            if (oldest !== null && oldest <= range.startMs) shouldContinue = false;
-          }
           if (!shouldContinue) return results;
           return loadNext();
         });
@@ -290,6 +305,16 @@
     var offset = 0;
     var userId = options && (options.userId || options.userId === 0) ? options.userId : null;
     var maxAllowed = options && Number.isFinite(options.maxAllowed) ? options.maxAllowed : DRAWER_MAX_ALLOWED_LOGS;
+    var startMs = null;
+    var endMs = null;
+    if (range && range.startMs !== null && range.startMs !== undefined) {
+      var s = Number(range.startMs);
+      if (Number.isFinite(s) && s >= 0) startMs = Math.floor(s);
+    }
+    if (range && range.endMs !== null && range.endMs !== undefined) {
+      var e = Number(range.endMs);
+      if (Number.isFinite(e) && e >= 0) endMs = Math.floor(e);
+    }
     var results = [];
     var allowedCount = 0;
     var hasRange = Boolean(range && (range.startMs !== null || range.endMs !== null));
@@ -301,6 +326,8 @@
           limit: limit,
           offset: offset,
           user_id: userId !== null ? userId : undefined,
+          start_ms: startMs !== null ? startMs : undefined,
+          end_ms: endMs !== null ? endMs : undefined,
         })
         .then(function(list) {
           var rawList = Array.isArray(list) ? list : [];
@@ -313,10 +340,6 @@
             if (isAllowedLog(row)) allowedCount += 1;
           });
           var shouldContinue = rawList.length >= limit;
-          if (shouldContinue && range && range.startMs !== null) {
-            var oldest = getOldestLogTime(rawList);
-            if (oldest !== null && oldest <= range.startMs) shouldContinue = false;
-          }
           if (shouldContinue && !hasRange && maxAllowed && allowedCount >= maxAllowed) {
             shouldContinue = false;
             reachedCap = true;
@@ -3129,6 +3152,7 @@
       .then(function(list) {
         state.activity.logs = Array.isArray(list) ? list : [];
         state.activity.logsLoaded = true;
+        state.activity.lastFetchedAt = Date.now();
         setStatus(dom.activityStatus, '已加载 ' + state.activity.logs.length + ' 条记录', 'ok');
         return state.activity.logs;
       })
@@ -3164,6 +3188,7 @@
       .then(function(list) {
         state.contribution.logs = Array.isArray(list) ? list : [];
         state.contribution.logsLoaded = true;
+        state.contribution.lastFetchedAt = Date.now();
         setStatus(dom.contributionStatus, '已加载 ' + state.contribution.logs.length + ' 条记录', 'ok');
         return state.contribution.logs;
       })
@@ -3199,6 +3224,7 @@
       .then(function(list) {
         state.execContribution.logs = Array.isArray(list) ? list : [];
         state.execContribution.logsLoaded = true;
+        state.execContribution.lastFetchedAt = Date.now();
         setStatus(dom.execContributionStatus, '已加载 ' + state.execContribution.logs.length + ' 条记录', 'ok');
         return state.execContribution.logs;
       })
@@ -3272,6 +3298,27 @@
       renderExecContributionView();
       return state.execContribution.logs;
     });
+  }
+
+  function shouldAutoRefreshOverviewView(viewKey) {
+    if (!Number.isFinite(OVERVIEW_AUTO_REFRESH_INTERVAL_MS) || OVERVIEW_AUTO_REFRESH_INTERVAL_MS <= 0) {
+      return true;
+    }
+    var target = state.activity;
+    if (viewKey === 'contribution') target = state.contribution;
+    else if (viewKey === 'exec-contribution') target = state.execContribution;
+    if (!target || !target.logsLoaded) return true;
+    var lastFetchedAt = Number(target.lastFetchedAt || 0);
+    if (!isFinite(lastFetchedAt) || lastFetchedAt <= 0) return true;
+    var delta = Date.now() - lastFetchedAt;
+    return delta >= OVERVIEW_AUTO_REFRESH_INTERVAL_MS;
+  }
+
+  function refreshCurrentOverviewViewByPolicy() {
+    var forceReload = shouldAutoRefreshOverviewView(state.overviewView);
+    if (state.overviewView === 'contribution') return refreshContributionView(forceReload);
+    if (state.overviewView === 'exec-contribution') return refreshExecContributionView(forceReload);
+    return refreshActivityView(forceReload);
   }
 
   function ensureDrawer() {
@@ -3807,34 +3854,30 @@
     }
     bindPaginationContainer(dom.paginationTop);
     bindPaginationContainer(dom.paginationBottom);
+  }
 
   if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
     window.addEventListener('app-tab-activated', function(e) {
       var tabName = e && e.detail ? e.detail.tab : '';
       if (tabName !== 'ops-log') return;
       if (window.app && window.app.authReady !== true) {
-          state.pendingAuth = true;
-          setStatus(dom.statusEl, '登录信息加载中...', '');
-          return;
-        }
-        setStatus(dom.statusEl, '', '');
-        openDrawerIfNeeded();
-        if (state.overviewView === 'contribution') refreshContributionView(true);
-        else if (state.overviewView === 'exec-contribution') refreshExecContributionView(true);
-        else refreshActivityView(true);
-      });
-      window.addEventListener('app-auth-ready', function() {
-        if (!state.pendingAuth) return;
-        state.pendingAuth = false;
-        var visible = dom.tabSection && !dom.tabSection.classList.contains('hidden');
-        if (!visible) return;
-        setStatus(dom.statusEl, '', '');
-        openDrawerIfNeeded();
-        if (state.overviewView === 'contribution') refreshContributionView(true);
-        else if (state.overviewView === 'exec-contribution') refreshExecContributionView(true);
-        else refreshActivityView(true);
-      });
-    }
+        state.pendingAuth = true;
+        setStatus(dom.statusEl, '登录信息加载中...', '');
+        return;
+      }
+      setStatus(dom.statusEl, '', '');
+      openDrawerIfNeeded();
+      refreshCurrentOverviewViewByPolicy();
+    });
+    window.addEventListener('app-auth-ready', function() {
+      if (!state.pendingAuth) return;
+      state.pendingAuth = false;
+      var visible = dom.tabSection && !dom.tabSection.classList.contains('hidden');
+      if (!visible) return;
+      setStatus(dom.statusEl, '', '');
+      openDrawerIfNeeded();
+      refreshCurrentOverviewViewByPolicy();
+    });
   }
 
   function init() {

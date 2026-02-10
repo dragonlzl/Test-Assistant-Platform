@@ -18,6 +18,8 @@ def list_operation_logs(
     limit: int = 200,
     offset: int = 0,
     user_id: Optional[int] = None,
+    start_ms: Optional[int] = None,
+    end_ms: Optional[int] = None,
     _: models.User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -28,6 +30,32 @@ def list_operation_logs(
     query = db.query(models.OperationLog)
     if user_id is not None:
         query = query.filter(models.OperationLog.user_id == user_id)
+
+    start_dt = None
+    end_dt = None
+    if start_ms is not None:
+        try:
+            start_num = int(start_ms)
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="start_ms 非法")
+        if start_num < 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="start_ms 非法")
+        start_dt = datetime.fromtimestamp(start_num / 1000.0, tz=timezone.utc)
+    if end_ms is not None:
+        try:
+            end_num = int(end_ms)
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="end_ms 非法")
+        if end_num < 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="end_ms 非法")
+        end_dt = datetime.fromtimestamp(end_num / 1000.0, tz=timezone.utc)
+    if start_dt and end_dt and end_dt < start_dt:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="end_ms 不能小于 start_ms")
+    if start_dt is not None:
+        query = query.filter(models.OperationLog.created_at >= start_dt)
+    if end_dt is not None:
+        query = query.filter(models.OperationLog.created_at <= end_dt)
+
     logs = (
         query.order_by(models.OperationLog.created_at.desc())
         .offset(offset if offset and offset > 0 else 0)
