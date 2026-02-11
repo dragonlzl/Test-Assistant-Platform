@@ -160,6 +160,7 @@
 })();
 </script>
 <link rel="stylesheet" href="./style.css"/>
+<link rel="stylesheet" href="./scripts/vendor/mind-elixir.css"/>
 </head>
 <body data-page="case-exec">
 <div class="app-layout">
@@ -420,6 +421,7 @@
       <div class="temp-exec-toolbar" id="tempExecToolbar"></div>
       <div class="temp-exec-toolbar-stash hidden" id="tempExecToolbarStash">
         <button class="primary case-library-ai-gen-inline temp-exec-ai-gen-btn" disabled id="tempExecAiGenBtn">AI 用例生成</button>
+        <button class="secondary xmind-view-highlight-btn" disabled id="tempExecXmindViewBtn" type="button">XMind结构展示</button>
         <button class="secondary case-library-changes-btn" disabled="" id="tempExecCaseLibraryChangesBtn">用例变更</button>
         <button class="secondary" disabled="" id="exportTempExecXmindBtn">导出XMind</button>
         <button class="secondary" disabled="" id="exportTempExecCasesXmindBtn">导出XMind（无结果）</button>
@@ -1236,7 +1238,7 @@
   </div>
   <div class="drawer hidden" id="xmindStructureDrawer">
     <div class="drawer-mask" data-drawer-close="xmindStructureDrawer"></div>
-    <div class="drawer-panel drawer-panel-wide">
+    <div class="drawer-panel drawer-panel-wide drawer-panel-xmind">
       <div class="drawer-header">
         <h3 id="xmindStructureDrawerTitle">XMind 用例结构</h3>
         <button class="link-toggle" id="closeXmindStructureDrawerBtn" data-drawer-close="xmindStructureDrawer">收起</button>
@@ -1248,6 +1250,7 @@
 </div>
 </div>
 <script src="./scripts/vendor/jszip.min.js" defer></script>
+<script src="./scripts/vendor/mind-elixir.iife.js" defer></script>
 <script src="./config/constants.js" defer></script>
 <script src="./config/domConfig.js" defer></script>
 <script src="./scripts/core/appInitHelpers.js" defer></script>
@@ -1259,6 +1262,7 @@
 <script src="./scripts/core/casesCore.js" defer></script>
 <script src="./scripts/core/autoCore.js" defer></script>
 <script src="./scripts/core/xmindCore.js" defer></script>
+<script src="./scripts/core/mindElixirCore.js" defer></script>
 <script src="./scripts/core/xlsxCore.js" defer></script>
 <script src="./scripts/core/tempexecDefaults.js" defer></script>
 <script src="./scripts/core/tempexecCore.js" defer></script>

@@ -160,6 +160,7 @@
 })();
 </script>
 <link rel="stylesheet" href="./style.css"/>
+<link rel="stylesheet" href="./scripts/vendor/mind-elixir.css"/>
 </head>
 <body data-page="case-library">
 <div class="app-layout">
@@ -630,6 +631,7 @@
             <input id="caseLibraryEditSearchInput" type="text" placeholder="搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果"/>
           </div>
           <button class="primary case-library-ai-gen-inline" id="caseLibraryAiGenBtn" type="button" disabled>AI 用例生成</button>
+          <button class="secondary case-library-xmind-view-inline xmind-view-highlight-btn" id="caseLibraryXmindViewBtn" type="button" disabled>XMind结构展示</button>
         </div>
         <div class="case-library-drawer-actions">
           <input class="case-library-count-input" id="caseLibraryEditBatchAddCountInput" type="text" inputmode="numeric" placeholder="1-10" value="5" autocomplete="off" maxlength="2" aria-label="批量新增数量" title="批量新增数量（1-10）" />
@@ -1693,7 +1695,7 @@
   </div>
   <div class="drawer hidden" id="xmindStructureDrawer">
     <div class="drawer-mask" data-drawer-close="xmindStructureDrawer"></div>
-    <div class="drawer-panel drawer-panel-wide">
+    <div class="drawer-panel drawer-panel-wide drawer-panel-xmind">
       <div class="drawer-header">
         <h3 id="xmindStructureDrawerTitle">XMind 用例结构</h3>
         <button class="link-toggle" id="closeXmindStructureDrawerBtn" data-drawer-close="xmindStructureDrawer">收起</button>
@@ -1705,6 +1707,7 @@
 </div>
 </div>
 <script src="./scripts/vendor/jszip.min.js" defer></script>
+<script src="./scripts/vendor/mind-elixir.iife.js" defer></script>
 <script src="./config/constants.js" defer></script>
 <script src="./config/domConfig.js" defer></script>
 <script src="./scripts/core/appInitHelpers.js" defer></script>
@@ -1716,6 +1719,7 @@
 <script src="./scripts/core/casesCore.js" defer></script>
 <script src="./scripts/core/autoCore.js" defer></script>
 <script src="./scripts/core/xmindCore.js" defer></script>
+<script src="./scripts/core/mindElixirCore.js" defer></script>
 <script src="./scripts/core/xlsxCore.js" defer></script>
 <script src="./scripts/core/tempexecDefaults.js" defer></script>
 <script src="./scripts/core/tempexecCore.js" defer></script>

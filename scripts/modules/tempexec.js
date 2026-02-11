@@ -70,9 +70,12 @@
     var closeTempExecImportDrawerBtn = document.getElementById('closeTempExecImportDrawerBtn');
     var closeTempExecAssignDrawerBtn = document.getElementById('closeTempExecAssignDrawerBtn');
     var closeTempExecOverviewDrawerBtn = document.getElementById('closeTempExecOverviewDrawerBtn');
+    var tempExecXmindViewBtn = document.getElementById('tempExecXmindViewBtn');
     var exportTempExecCasesXmindBtn = document.getElementById('exportTempExecCasesXmindBtn');
     var tempExecCaseLibraryChangesBtn = document.getElementById('tempExecCaseLibraryChangesBtn');
     var tempExecAiGenBtn = document.getElementById('tempExecAiGenBtn');
+    var xmindStructureDrawerTitle = document.getElementById('xmindStructureDrawerTitle');
+    var xmindStructureDrawerBody = document.getElementById('xmindStructureDrawerBody');
     var tempExecAiGenDrawer = document.getElementById('tempExecAiGenDrawer');
     var tempExecAiGenDropZone = document.getElementById('tempExecAiGenDropZone');
     var tempExecAiGenFileInput = document.getElementById('tempExecAiGenFileInput');
@@ -97,7 +100,105 @@
     var caseTemplateList = [];
     var localTemplateHandles = {};
     var tempExecAiGenDrawerInstance = null;
+    var tempExecXmindDrawer = null;
+    var tempExecXmindMindInstance = null;
+    var tempExecXmindThemeObserver = null;
     var supportDirPicker = typeof window.showDirectoryPicker === 'function';
+
+    function getMindElixirApi() {
+      return window.app && window.app.mindElixirCoreApi ? window.app.mindElixirCoreApi : null;
+    }
+
+    function ensureTempExecXmindDrawer() {
+      if (tempExecXmindDrawer) return tempExecXmindDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      tempExecXmindDrawer = window.app.drawer.createDrawer({
+        drawerId: 'xmindStructureDrawer',
+        openButtons: [],
+        closeButtons: ['closeXmindStructureDrawerBtn'],
+        onClose: function() {
+          if (tempExecXmindThemeObserver && typeof tempExecXmindThemeObserver.disconnect === 'function') {
+            tempExecXmindThemeObserver.disconnect();
+          }
+          tempExecXmindThemeObserver = null;
+          var mindApi = getMindElixirApi();
+          if (mindApi && typeof mindApi.destroyMindMap === 'function') {
+            mindApi.destroyMindMap(tempExecXmindMindInstance);
+          }
+          tempExecXmindMindInstance = null;
+          if (xmindStructureDrawerBody) {
+            xmindStructureDrawerBody.innerHTML = '';
+          }
+        },
+      });
+      return tempExecXmindDrawer;
+    }
+
+    function bindTempExecXmindThemeSync(mindApi) {
+      if (!mindApi || typeof mindApi.refreshMindTheme !== 'function') return;
+      if (!document || !document.documentElement || typeof MutationObserver === 'undefined') return;
+      if (tempExecXmindThemeObserver && typeof tempExecXmindThemeObserver.disconnect === 'function') {
+        tempExecXmindThemeObserver.disconnect();
+      }
+      tempExecXmindThemeObserver = new MutationObserver(function() {
+        if (!tempExecXmindMindInstance) return;
+        mindApi.refreshMindTheme(tempExecXmindMindInstance);
+      });
+      tempExecXmindThemeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['data-theme'],
+      });
+    }
+
+    function openTempExecXmindStructure() {
+      var mindApi = getMindElixirApi();
+      if (!mindApi || typeof mindApi.buildMindDataFromCases !== 'function' || typeof mindApi.renderMindMap !== 'function') {
+        setStatus(tempExecStatus, 'XMind 结构渲染依赖未就绪', 'err');
+        return;
+      }
+      var active = api && typeof api.getTempExecFile === 'function' ? api.getTempExecFile(state.tempExecActiveId) : null;
+      var list = active && Array.isArray(active.cases) ? active.cases : [];
+      if (!active || !list.length) {
+        setStatus(tempExecStatus, '当前用例无可展示内容', 'warn');
+        return;
+      }
+      var drawer = ensureTempExecXmindDrawer();
+      if (!drawer || typeof drawer.open !== 'function') {
+        setStatus(tempExecStatus, 'XMind 结构抽屉未就绪', 'err');
+        return;
+      }
+      if (xmindStructureDrawerTitle) {
+        xmindStructureDrawerTitle.textContent = 'XMind 用例结构 - ' + (active.name || '当前用例');
+      }
+      if (!xmindStructureDrawerBody) {
+        setStatus(tempExecStatus, 'XMind 结构容器未找到', 'err');
+        return;
+      }
+
+      xmindStructureDrawerBody.innerHTML = '<div class="xmind-structure-viewer" id="tempExecXmindStructureViewer"></div>';
+      var container = document.getElementById('tempExecXmindStructureViewer');
+      if (!container) {
+        setStatus(tempExecStatus, 'XMind 结构容器初始化失败', 'err');
+        return;
+      }
+      var rootTitle = normalizeRequirementName(active.name || active.requirement || '执行用例');
+      var mindData = mindApi.buildMindDataFromCases(list, {
+        rootTitle: rootTitle,
+        fallbackModule: '执行模块',
+      });
+      try {
+        tempExecXmindMindInstance = mindApi.renderMindMap(container, mindData, {
+          instance: tempExecXmindMindInstance,
+          direction: 'side',
+        });
+        bindTempExecXmindThemeSync(mindApi);
+      } catch (err) {
+        console.error(err);
+        setStatus(tempExecStatus, 'XMind 结构渲染失败', 'err');
+        return;
+      }
+      drawer.open();
+    }
     function getTemplateBase() {
       var path = (window.location && window.location.pathname) ? window.location.pathname : '';
       if (!path) return 'caseTemplate/';
@@ -6597,6 +6698,16 @@
         }
         state.tempExecMindMode = !state.tempExecMindMode;
         api.renderTempExecView();
+      });
+    }
+    if (tempExecXmindViewBtn) {
+      tempExecXmindViewBtn.addEventListener('click', function() {
+        openTempExecXmindStructure();
+        var activeId = state && state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
+        var execSetId = activeId ? Number(activeId) : null;
+        safeLogOperation('view_exec_xmind_structure', 'exec_set', Number.isFinite(execSetId) ? execSetId : null, {
+          exec_set_id: Number.isFinite(execSetId) ? execSetId : null,
+        });
       });
     }
 

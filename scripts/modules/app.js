@@ -2238,6 +2238,11 @@
         JSZip: window.JSZip,
       })
       : null;
+    const mindElixirCore = window.app && window.app.mindElixirCore && typeof window.app.mindElixirCore.init === 'function'
+      ? window.app.mindElixirCore.init({
+        xmindApi: xmindCore,
+      })
+      : null;
     const formatXmindNodeValue = xmindCore && xmindCore.formatXmindNodeValue
       ? xmindCore.formatXmindNodeValue
       : function formatXmindNodeValueFallback(val) { return (val || '').toString(); };
@@ -2251,6 +2256,9 @@
       : null;
     if (xmindCore) {
       window.app.xmindCoreApi = xmindCore;
+    }
+    if (mindElixirCore) {
+      window.app.mindElixirCoreApi = mindElixirCore;
     }
     const parseXmindFile = xmindCore && xmindCore.parseXmindFile
       ? xmindCore.parseXmindFile
@@ -2341,6 +2349,7 @@
         tempExecResultOptions,
         buildXmindPackageFromCases: lazyBuildCasesXmindPackage,
         openConfirmDrawer: appUtils.openConfirmDrawer,
+        buildMindDataFromCases: mindElixirCore && mindElixirCore.buildMindDataFromCases,
         dom,
       })
       : null;

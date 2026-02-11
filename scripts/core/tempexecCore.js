@@ -88,6 +88,7 @@
     var exportTempExecConfigBtn = deps && deps.dom && deps.dom.exportTempExecConfigBtn ? deps.dom.exportTempExecConfigBtn : null;
     var exportTempExecXmindBtn = deps && deps.dom && deps.dom.exportTempExecXmindBtn ? deps.dom.exportTempExecXmindBtn : null;
     var exportTempExecCasesXmindBtn = deps && deps.dom && deps.dom.exportTempExecCasesXmindBtn ? deps.dom.exportTempExecCasesXmindBtn : null;
+    var tempExecXmindViewBtn = deps && deps.dom && deps.dom.tempExecXmindViewBtn ? deps.dom.tempExecXmindViewBtn : null;
     var tempExecCaseLibraryChangesBtn = null;
     var tempExecAiGenBtn = null;
     var tempExecCaseLibraryDiffStatus = null;
@@ -185,6 +186,7 @@
     };
     var buildTempExecXmindPackage = deps && deps.buildTempExecXmindPackage ? deps.buildTempExecXmindPackage : null;
     var buildXmindPackageFromCases = deps && deps.buildXmindPackageFromCases ? deps.buildXmindPackageFromCases : null;
+    var buildMindDataFromCases = deps && deps.buildMindDataFromCases ? deps.buildMindDataFromCases : null;
     var stripTimestampSuffix = deps && deps.stripTimestampSuffix ? deps.stripTimestampSuffix : function(text) { return text || ''; };
     var getSafeFileBaseName = deps && deps.getSafeFileBaseName
       ? deps.getSafeFileBaseName
@@ -594,10 +596,17 @@
       if (!tempExecToolbar) return;
       var stash = document.getElementById('tempExecToolbarStash');
       var aiSlot = tempExecToolbar.querySelector('#tempExecAiGenSlot');
+      var xmindSlot = tempExecToolbar.querySelector('#tempExecXmindSlot');
       var changeSlot = tempExecToolbar.querySelector('#tempExecCaseLibraryChangeSlot');
       var exportSlot = tempExecToolbar.querySelector('#tempExecExportSlot');
       if (tempExecAiGenBtn && aiSlot && tempExecAiGenBtn.parentNode !== aiSlot) {
         aiSlot.appendChild(tempExecAiGenBtn);
+      }
+      if (tempExecXmindViewBtn) {
+        var targetSlot = xmindSlot || exportSlot;
+        if (targetSlot && tempExecXmindViewBtn.parentNode !== targetSlot) {
+          targetSlot.appendChild(tempExecXmindViewBtn);
+        }
       }
       if (tempExecCaseLibraryChangesBtn && changeSlot && tempExecCaseLibraryChangesBtn.parentNode !== changeSlot) {
         changeSlot.appendChild(tempExecCaseLibraryChangesBtn);
@@ -618,7 +627,7 @@
     function stashTempExecToolbarButtons() {
       var stash = document.getElementById('tempExecToolbarStash');
       if (!stash) return;
-      var items = [tempExecAiGenBtn, tempExecCaseLibraryChangesBtn, exportTempExecXmindBtn, exportTempExecCasesXmindBtn];
+      var items = [tempExecAiGenBtn, tempExecCaseLibraryChangesBtn, tempExecXmindViewBtn, exportTempExecXmindBtn, exportTempExecCasesXmindBtn];
       items.forEach(function(btn) {
         if (!btn) return;
         if (btn.parentNode !== stash) stash.appendChild(btn);
@@ -3280,6 +3289,7 @@
           '</div>' +
           '<div class="toolbar-block toolbar-middle">' +
             '<div class="toolbar-ai-slot" id="tempExecAiGenSlot"></div>' +
+            '<div class="toolbar-xmind-slot" id="tempExecXmindSlot"></div>' +
             '<div class="toolbar-change-slot" id="tempExecCaseLibraryChangeSlot"></div>' +
             navHtml +
             '<div class="toolbar-archive-wrap">' + archiveHtml + '</div>' +
@@ -4099,6 +4109,12 @@
       if (exportTempExecConfigBtn) exportTempExecConfigBtn.disabled = !state.tempExecFiles.length;
       if (exportTempExecXmindBtn) exportTempExecXmindBtn.disabled = !state.tempExecActiveId;
       if (exportTempExecCasesXmindBtn) exportTempExecCasesXmindBtn.disabled = !state.tempExecActiveId;
+      if (tempExecXmindViewBtn) {
+        var activeFile = getTempExecFile(state.tempExecActiveId);
+        var hasCases = Boolean(activeFile && Array.isArray(activeFile.cases) && activeFile.cases.length);
+        var canView = Boolean(state.tempExecActiveId && hasCases && buildMindDataFromCases);
+        tempExecXmindViewBtn.disabled = !canView;
+      }
       if (tempExecMindBtn) tempExecMindBtn.disabled = !state.tempExecActiveId;
       renderTempExecOverview();
       renderTempFocusZone();
@@ -5743,6 +5759,7 @@
         state.tempExecMindMode = false;
         if (exportTempExecBtn) exportTempExecBtn.disabled = true;
         if (exportTempExecXmindBtn) exportTempExecXmindBtn.disabled = true;
+        if (tempExecXmindViewBtn) tempExecXmindViewBtn.disabled = true;
         if (tempExecCaseLibraryChangesBtn) tempExecCaseLibraryChangesBtn.disabled = true;
         if (tempExecMindBtn) {
           tempExecMindBtn.disabled = true;
@@ -5777,6 +5794,10 @@
       if (exportTempExecBtn) exportTempExecBtn.disabled = false;
       if (exportTempExecXmindBtn) exportTempExecXmindBtn.disabled = false;
       if (exportTempExecCasesXmindBtn) exportTempExecCasesXmindBtn.disabled = false;
+      if (tempExecXmindViewBtn) {
+        var hasCases2 = Boolean(active && Array.isArray(active.cases) && active.cases.length);
+        tempExecXmindViewBtn.disabled = !(hasCases2 && buildMindDataFromCases);
+      }
       if (tempExecMindBtn) tempExecMindBtn.disabled = false;
       syncTempExecCaseLibraryChangesButton(active);
       renderTempExecOverview();

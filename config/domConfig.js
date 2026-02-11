@@ -6,7 +6,7 @@
       'cleanViewContainer', 'cleanHighlightAllBtn', 'toggleCleanViewBtn', 'cleanRawView', 'toggleCleanRawViewBtn', 'cleanRawLocateBtn',
       'caseStatus', 'caseViewBtn', 'caseViewContainer', 'caseViewHint', 'autoRawDropZone', 'autoCaseDropZone', 'tempExecDropZone',
       'tempExecInput', 'tempExecStatus', 'tempExecNav', 'tempFocusBlock', 'tempVersionGrid', 'createTempVersionBtn', 'tempExecView',
-      'tempExecMindContainer', 'exportTempExecBtn', 'exportTempExecConfigBtn', 'importTempExecBtn', 'exportTempExecXmindBtn', 'exportTempExecCasesXmindBtn',
+      'tempExecMindContainer', 'exportTempExecBtn', 'exportTempExecConfigBtn', 'importTempExecBtn', 'exportTempExecXmindBtn', 'exportTempExecCasesXmindBtn', 'tempExecXmindViewBtn',
       'importTempExecConfigBtn', 'tempExecMindBtn', 'tempExecOverview', 'tempExecBackBtn', 'importTempExecFile',
       'importTempExecConfigFile', 'autoClarifyContainer', 'autoClarifyStatus', 'autoClarifyToggleBtn', 'goUsecaseGenBtn',
       'toggleTempVersion',

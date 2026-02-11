@@ -371,9 +371,10 @@
 	    editBatchAddCountInput: document.getElementById('caseLibraryEditBatchAddCountInput'),
 	    editBatchAddBtn: document.getElementById('caseLibraryEditBatchAddBtn'),
 	    editToExecBtn: document.getElementById('caseLibraryEditToExecBtn'),
-	    editStatus: document.getElementById('caseLibraryEditStatus'),
-	    editView: document.getElementById('caseLibraryEditView'),
+    editStatus: document.getElementById('caseLibraryEditStatus'),
+    editView: document.getElementById('caseLibraryEditView'),
     aiGenBtn: document.getElementById('caseLibraryAiGenBtn'),
+    xmindViewBtn: document.getElementById('caseLibraryXmindViewBtn'),
     aiGenDrawer: document.getElementById('caseLibraryAiGenDrawer'),
     aiGenDropZone: document.getElementById('caseLibraryAiGenDropZone'),
     aiGenFileInput: document.getElementById('caseLibraryAiGenFileInput'),
@@ -843,8 +844,11 @@
 	  var importDrawerInstance = null;
   var importDiffDrawerInstance = null;
   var importDiffDrawerOpenTimer = 0;
-	  var importInvalidDrawerInstance = null;
+  var importInvalidDrawerInstance = null;
   var aiGenDrawerInstance = null;
+  var xmindStructureDrawerInstance = null;
+  var caseLibraryXmindMindInstance = null;
+  var caseLibraryXmindThemeObserver = null;
   var editDrawerInstance = null;
   var missingDrawerInstance = null;
   var missingAddDrawerInstance = null;
@@ -3182,6 +3186,100 @@
     } catch (err) {
       // ignore
     }
+  }
+
+  function getMindElixirApi() {
+    return window.app && window.app.mindElixirCoreApi ? window.app.mindElixirCoreApi : null;
+  }
+
+  function ensureCaseLibraryXmindDrawer() {
+    if (xmindStructureDrawerInstance) return xmindStructureDrawerInstance;
+    xmindStructureDrawerInstance = ensureDrawer('xmindStructureDrawer', [], null, function() {
+      if (caseLibraryXmindThemeObserver && typeof caseLibraryXmindThemeObserver.disconnect === 'function') {
+        caseLibraryXmindThemeObserver.disconnect();
+      }
+      caseLibraryXmindThemeObserver = null;
+      var mindApi = getMindElixirApi();
+      if (mindApi && typeof mindApi.destroyMindMap === 'function') {
+        mindApi.destroyMindMap(caseLibraryXmindMindInstance);
+      }
+      caseLibraryXmindMindInstance = null;
+      var body = document.getElementById('xmindStructureDrawerBody');
+      if (body) body.innerHTML = '';
+    });
+    return xmindStructureDrawerInstance;
+  }
+
+  function bindCaseLibraryXmindThemeSync(mindApi) {
+    if (!mindApi || typeof mindApi.refreshMindTheme !== 'function') return;
+    if (!document || !document.documentElement || typeof MutationObserver === 'undefined') return;
+    if (caseLibraryXmindThemeObserver && typeof caseLibraryXmindThemeObserver.disconnect === 'function') {
+      caseLibraryXmindThemeObserver.disconnect();
+    }
+    caseLibraryXmindThemeObserver = new MutationObserver(function() {
+      if (!caseLibraryXmindMindInstance) return;
+      mindApi.refreshMindTheme(caseLibraryXmindMindInstance);
+    });
+    caseLibraryXmindThemeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+  }
+
+  function openCaseLibraryXmindStructure() {
+    var mindApi = getMindElixirApi();
+    if (!mindApi || typeof mindApi.buildMindDataFromCases !== 'function' || typeof mindApi.renderMindMap !== 'function') {
+      setStatus(dom.editStatus, 'XMind 结构渲染依赖未就绪', 'err');
+      return;
+    }
+    var currentFile = state.editor && state.editor.caseFile ? state.editor.caseFile : null;
+    var list = Array.isArray(state.editor && state.editor.items) ? state.editor.items : [];
+    if (!currentFile || !list.length) {
+      setStatus(dom.editStatus, '请先选择查看&编辑用例', 'warn');
+      return;
+    }
+
+    var drawer = ensureCaseLibraryXmindDrawer();
+    if (!drawer || typeof drawer.open !== 'function') {
+      setStatus(dom.editStatus, 'XMind 结构抽屉未就绪', 'err');
+      return;
+    }
+    var title = document.getElementById('xmindStructureDrawerTitle');
+    if (title) {
+      title.textContent = 'XMind 用例结构 - ' + (currentFile.file_name_clean || currentFile.file_name || '当前用例');
+    }
+    var body = document.getElementById('xmindStructureDrawerBody');
+    if (!body) {
+      setStatus(dom.editStatus, 'XMind 结构容器未找到', 'err');
+      return;
+    }
+
+    body.innerHTML = '<div class="xmind-structure-viewer" id="caseLibraryXmindStructureViewer"></div>';
+    var container = document.getElementById('caseLibraryXmindStructureViewer');
+    if (!container) {
+      setStatus(dom.editStatus, 'XMind 结构容器初始化失败', 'err');
+      return;
+    }
+    var mindData = mindApi.buildMindDataFromCases(list, {
+      rootTitle: cleanCaseFileName(currentFile.file_name_clean || currentFile.file_name || '用例'),
+      fallbackModule: '用例模块',
+    });
+    try {
+      caseLibraryXmindMindInstance = mindApi.renderMindMap(container, mindData, {
+        instance: caseLibraryXmindMindInstance,
+        direction: 'side',
+      });
+      bindCaseLibraryXmindThemeSync(mindApi);
+    } catch (err) {
+      console.error(err);
+      setStatus(dom.editStatus, 'XMind 结构渲染失败', 'err');
+      return;
+    }
+    drawer.open();
+    safeLogOperation('view_case_file_xmind_structure', 'case_file', currentFile.id || null, {
+      case_file_id: currentFile.id || null,
+      file_name: currentFile.file_name_clean || currentFile.file_name || '',
+    });
   }
 
 	  function buildInvisibleMarker(seed) {
@@ -9568,6 +9666,11 @@
       else dom.aiGenBtn.classList.remove('has-badge');
     }
     dom.aiGenBtn.setAttribute('data-disabled-reason', reason || '');
+    if (dom.xmindViewBtn) {
+      var canOpen = Boolean(state.editor && state.editor.caseFile && Array.isArray(state.editor.items) && state.editor.items.length);
+      var hasMindApi = Boolean(getMindElixirApi() && typeof getMindElixirApi().buildMindDataFromCases === 'function');
+      dom.xmindViewBtn.disabled = !(canOpen && hasMindApi);
+    }
   }
 
   function resetCaseLibraryAiGenState(options) {
@@ -9706,6 +9809,10 @@
     syncCaseLibraryAiGenButton();
     syncCaseLibraryAiGenRunBtn();
     syncCaseLibraryAiGenNavBadge();
+    if (dom.xmindViewBtn) {
+      var hasMindApi = Boolean(getMindElixirApi() && typeof getMindElixirApi().buildMindDataFromCases === 'function');
+      dom.xmindViewBtn.disabled = !(Array.isArray(state.editor.items) && state.editor.items.length && hasMindApi);
+    }
   }
 
   function ensureCaseLibraryAiGenDrawer() {
@@ -12199,6 +12306,10 @@
     syncEditorBatchDeleteControls();
     syncEditorBatchAddControls();
     syncCaseLibraryAiGenContext();
+    if (dom.xmindViewBtn) {
+      var hasMindApi = Boolean(getMindElixirApi() && typeof getMindElixirApi().buildMindDataFromCases === 'function');
+      dom.xmindViewBtn.disabled = !(Array.isArray(state.editor.items) && state.editor.items.length && hasMindApi);
+    }
   }
 
   function syncEditorSearchControls() {
@@ -16536,6 +16647,11 @@
         syncCaseLibraryAiGenContext();
         openCaseLibraryAiGenDrawer();
         clearCaseLibraryAiGenResultBadge();
+      });
+    }
+    if (dom.xmindViewBtn) {
+      dom.xmindViewBtn.addEventListener('click', function() {
+        openCaseLibraryXmindStructure();
       });
     }
     if (dom.aiGenFileInput) {

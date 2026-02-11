@@ -19,6 +19,33 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行页/用例库 XMind 结构展示
+- 功能描述：在“用例执行”和“用例库（查看&编辑）”中，于“AI 用例生成”按钮右侧新增“XMind结构展示”按钮；点击后以 XMind 结构展示当前用例。
+- 操作方式：
+  - 用例执行：进入“执行分配”，选择当前执行用例后点击“XMind结构展示”。
+  - 用例库：进入“查看&编辑”，选中目标用例文件后点击“XMind结构展示”。
+  - 两处均在抽屉内展示思维导图，关闭抽屉即销毁实例。
+- 使用效果：
+  - 当前用例按 XMind 层级结构可视化展示，结构字段与现有导出 XMind 一致。
+  - 支持白色/黑色主题切换，切换主题后导图配色同步刷新。
+- 新增内容/接口/组件：
+  - 前端：新增 `scripts/core/mindElixirCore.js`（统一构建/渲染 MindElixir 数据与主题同步）。
+  - 前端：新增 vendoring 资源 `scripts/vendor/mind-elixir.iife.js`、`scripts/vendor/mind-elixir.css`，并在 `case-exec.html`、`case-library.html`、`index.html` 按既有顺序接入。
+  - 前端：执行页新增按钮 `#tempExecXmindViewBtn`，用例库新增按钮 `#caseLibraryXmindViewBtn`；两处复用现有 `xmindStructureDrawer` 抽屉。
+  - 前端：样式补充 `xmind-structure-viewer` 及暗色主题样式，保证主题兼容。
+  - 测试：新增 `tests/ui/xmind_structure_view_buttons.spec.js`、`tests/api/xmind_structure_view_no_new_endpoint.spec.js`。
+- 复用说明：复用现有 `xmindCore.buildCaseFieldsForXmind` 字段映射与 `xmindStructureDrawer` 抽屉能力；未新增后端接口。
+- 测试与验证：
+  - `node --check scripts/core/mindElixirCore.js scripts/modules/tempexec.js scripts/modules/caseLibrary.js scripts/modules/app.js scripts/core/tempexecCore.js config/domConfig.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_view_buttons.spec.js --reporter=line`（2/2 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/tempexec_ai_gen.spec.js tests/ui/case_library_ai_gen.spec.js --workers=1 --reporter=line`（8/8 通过）
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_view_no_new_endpoint.spec.js --reporter=line`（1/1 通过）
+- 更新记录：2026-02-10 初版接入 MindElixir 并新增执行页/用例库 XMind 结构展示；同日修复 MindElixir IIFE 导出为命名空间对象导致的构造异常（`ctor is not a constructor`）。
+- 更新记录：2026-02-10 新增导图缩放（放大/缩小/全览）与放大后鼠标拖动画布能力，并将 XMind 抽屉宽度提升至不低于屏幕 2/3（`scripts/core/mindElixirCore.js`、`style.css`、`case-exec.html`、`case-library.html`、`index.html`、`tests/ui/xmind_structure_view_buttons.spec.js`）。
+- 更新记录：2026-02-10 将 XMind 画布拖拽交互统一为鼠标左键（切换 `mouseSelectionButton` 并增强捕获阶段左键拖拽监听，`scripts/core/mindElixirCore.js`）。
+- 更新记录：2026-02-10 新增 XMind 节点搜索能力（输入关键字、上/下一个命中、清空、命中计数与高亮定位），执行页与用例库统一复用（`scripts/core/mindElixirCore.js`、`style.css`、`tests/ui/xmind_structure_view_buttons.spec.js`）。
+- 更新记录：2026-02-10 强化 XMind 结构展示按钮视觉样式（亮色渐变、加粗、阴影与深色主题强调），提升按钮醒目度（`case-exec.html`、`case-library.html`、`index.html`、`style.css`）。
+
 - 功能名称：执行总览与归档预览版本盒子展示用例数
 - 功能描述：执行页归档操作&进度预览、执行总览页版本盒子标题旁展示该版本用例总数；总览顶部版本汇总标题同步展示条数。
 - 操作方式：进入执行页「归档操作&进度预览」或执行总览页即可看到版本名后“（X条）”，版本筛选后数量同步更新。
