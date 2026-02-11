@@ -257,9 +257,10 @@
       }
     }
 
-    function bindViewerInteractions(viewerEl, canvasEl, instance) {
+    function bindViewerInteractions(viewerEl, canvasEl, instance, options) {
       if (!viewerEl || !canvasEl || !instance) return null;
 
+      var opts = options || {};
       var controlsEl = viewerEl.querySelector ? viewerEl.querySelector('[data-mind-controls]') : null;
       var searchInputEl = controlsEl && controlsEl.querySelector
         ? controlsEl.querySelector('[data-mind-search-input]')
@@ -271,6 +272,9 @@
         keyword: '',
         ids: [],
         index: -1,
+      };
+      var exportState = {
+        pending: false,
       };
 
       function setSearchCount() {
@@ -417,40 +421,125 @@
         updateViewerDragState(viewerEl, instance, false);
       }
 
-      var dragging = false;
-      var lastX = 0;
-      var lastY = 0;
+      var boxSelecting = false;
+      var boxMoved = false;
+      var boxStartX = 0;
+      var boxStartY = 0;
+      var boxRectEl = null;
+      var boxMinDragDistance = 4;
 
-      function startDragging(e) {
-        if (!instance || typeof instance.move !== 'function') return;
-        if (!e || e.button !== 0) return;
-        if (resolveScale(instance) <= 1.01) return;
-        if (controlsEl && controlsEl.contains && controlsEl.contains(e.target)) return;
-        dragging = true;
-        lastX = e.clientX;
-        lastY = e.clientY;
-        updateViewerDragState(viewerEl, instance, true);
-        if (e.preventDefault) e.preventDefault();
+      function ensureBoxRectEl() {
+        if (boxRectEl || !viewerEl || !viewerEl.appendChild) return boxRectEl;
+        if (typeof document === 'undefined' || !document.createElement) return null;
+        boxRectEl = document.createElement('div');
+        boxRectEl.className = 'xmind-box-select-rect';
+        boxRectEl.style.display = 'none';
+        viewerEl.appendChild(boxRectEl);
+        return boxRectEl;
       }
 
-      function moveDragging(e) {
-        if (!dragging || !instance || typeof instance.move !== 'function') return;
-        var nextX = e.clientX;
-        var nextY = e.clientY;
-        var dx = nextX - lastX;
-        var dy = nextY - lastY;
-        if (dx || dy) {
-          instance.move(dx, dy);
-          lastX = nextX;
-          lastY = nextY;
+      function clearBoxSelectionClasses() {
+        if (!viewerEl || !viewerEl.querySelectorAll) return;
+        var selected = viewerEl.querySelectorAll('me-tpc.xmind-box-selected');
+        if (!selected || !selected.length) return;
+        Array.prototype.forEach.call(selected, function(node) {
+          if (!node || !node.classList) return;
+          node.classList.remove('xmind-box-selected');
+        });
+      }
+
+      function updateBoxSelection(currentX, currentY) {
+        if (!viewerEl) return;
+        var left = boxStartX < currentX ? boxStartX : currentX;
+        var right = boxStartX > currentX ? boxStartX : currentX;
+        var top = boxStartY < currentY ? boxStartY : currentY;
+        var bottom = boxStartY > currentY ? boxStartY : currentY;
+
+        if (boxRectEl) {
+          var viewerRect = viewerEl.getBoundingClientRect();
+          var drawLeft = left - viewerRect.left;
+          var drawTop = top - viewerRect.top;
+          var drawRight = right - viewerRect.left;
+          var drawBottom = bottom - viewerRect.top;
+          if (drawLeft < 0) drawLeft = 0;
+          if (drawTop < 0) drawTop = 0;
+          if (drawRight > viewerRect.width) drawRight = viewerRect.width;
+          if (drawBottom > viewerRect.height) drawBottom = viewerRect.height;
+          if (drawRight < drawLeft) {
+            var swapX = drawRight;
+            drawRight = drawLeft;
+            drawLeft = swapX;
+          }
+          if (drawBottom < drawTop) {
+            var swapY = drawBottom;
+            drawBottom = drawTop;
+            drawTop = swapY;
+          }
+          boxRectEl.style.display = 'block';
+          boxRectEl.style.left = drawLeft + 'px';
+          boxRectEl.style.top = drawTop + 'px';
+          boxRectEl.style.width = (drawRight - drawLeft) + 'px';
+          boxRectEl.style.height = (drawBottom - drawTop) + 'px';
         }
+
+        if (!viewerEl.querySelectorAll) return;
+        var nodes = viewerEl.querySelectorAll('me-tpc');
+        if (!nodes || !nodes.length) return;
+        Array.prototype.forEach.call(nodes, function(node) {
+          if (!node || !node.classList || !node.getBoundingClientRect) return;
+          var rectTarget = node;
+          if (node.querySelector) {
+            var topicText = node.querySelector('.text');
+            if (topicText && topicText.getBoundingClientRect) {
+              rectTarget = topicText;
+            }
+          }
+          var rect = rectTarget.getBoundingClientRect();
+          var hit = !(rect.right < left || rect.left > right || rect.bottom < top || rect.top > bottom);
+          if (hit) node.classList.add('xmind-box-selected');
+          else node.classList.remove('xmind-box-selected');
+        });
+      }
+
+      function startBoxSelection(e) {
+        if (!e || e.button !== 0) return;
+        if (e.pointerType && e.pointerType !== 'mouse') return;
+        if (controlsEl && controlsEl.contains && controlsEl.contains(e.target)) return;
+        if (e.target && e.target.closest && e.target.closest('[data-mind-controls]')) return;
+        boxSelecting = true;
+        boxMoved = false;
+        boxStartX = e.clientX;
+        boxStartY = e.clientY;
+        ensureBoxRectEl();
+        clearBoxSelectionClasses();
+        updateBoxSelection(boxStartX, boxStartY);
+        if (viewerEl && viewerEl.classList) viewerEl.classList.add('is-box-selecting');
         if (e.preventDefault) e.preventDefault();
       }
 
-      function stopDragging() {
-        if (!dragging) return;
-        dragging = false;
-        updateViewerDragState(viewerEl, instance, false);
+      function moveBoxSelection(e) {
+        if (!boxSelecting) return;
+        if (!boxMoved) {
+          var deltaX = Math.abs(e.clientX - boxStartX);
+          var deltaY = Math.abs(e.clientY - boxStartY);
+          if (deltaX >= boxMinDragDistance || deltaY >= boxMinDragDistance) {
+            boxMoved = true;
+          }
+        }
+        updateBoxSelection(e.clientX, e.clientY);
+        if (e.preventDefault) e.preventDefault();
+      }
+
+      function stopBoxSelection() {
+        if (!boxSelecting) return;
+        boxSelecting = false;
+        if (viewerEl && viewerEl.classList) viewerEl.classList.remove('is-box-selecting');
+        if (boxRectEl) {
+          boxRectEl.style.display = 'none';
+        }
+        if (!boxMoved) {
+          clearBoxSelectionClasses();
+        }
       }
 
       function onControlsClick(e) {
@@ -476,6 +565,29 @@
               // ignore
             }
           }
+        } else if (action === 'export-xmind') {
+          if (exportState.pending) return;
+          if (!opts || typeof opts.onExportXmind !== 'function') return;
+          var resetExportState = function() {
+            exportState.pending = false;
+            if (target && target.disabled) {
+              target.disabled = false;
+            }
+          };
+          try {
+            var exportResult = opts.onExportXmind();
+            if (exportResult && typeof exportResult.then === 'function') {
+              exportState.pending = true;
+              target.disabled = true;
+              Promise.resolve(exportResult).then(function() {
+                resetExportState();
+              }).catch(function() {
+                resetExportState();
+              });
+            }
+          } catch (err) {
+            resetExportState();
+          }
         }
       }
 
@@ -486,20 +598,22 @@
         searchInputEl.addEventListener('input', onSearchInput);
         searchInputEl.addEventListener('keydown', onSearchKeydown);
       }
-      if (canvasEl && typeof canvasEl.addEventListener === 'function') {
-        canvasEl.addEventListener('mousedown', startDragging, true);
+      if (viewerEl && typeof viewerEl.addEventListener === 'function') {
+        viewerEl.addEventListener('pointerdown', startBoxSelection, true);
       }
       if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
-        window.addEventListener('mousemove', moveDragging);
-        window.addEventListener('mouseup', stopDragging);
+        window.addEventListener('pointermove', moveBoxSelection);
+        window.addEventListener('pointerup', stopBoxSelection);
+        window.addEventListener('pointercancel', stopBoxSelection);
       }
 
       setSearchCount();
       updateViewerDragState(viewerEl, instance, false);
 
       return function cleanup() {
-        stopDragging();
+        stopBoxSelection();
         clearSearchClasses();
+        clearBoxSelectionClasses();
         if (controlsEl && typeof controlsEl.removeEventListener === 'function') {
           controlsEl.removeEventListener('click', onControlsClick);
         }
@@ -507,13 +621,18 @@
           searchInputEl.removeEventListener('input', onSearchInput);
           searchInputEl.removeEventListener('keydown', onSearchKeydown);
         }
-        if (canvasEl && typeof canvasEl.removeEventListener === 'function') {
-          canvasEl.removeEventListener('mousedown', startDragging, true);
+        if (viewerEl && typeof viewerEl.removeEventListener === 'function') {
+          viewerEl.removeEventListener('pointerdown', startBoxSelection, true);
         }
         if (typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
-          window.removeEventListener('mousemove', moveDragging);
-          window.removeEventListener('mouseup', stopDragging);
+          window.removeEventListener('pointermove', moveBoxSelection);
+          window.removeEventListener('pointerup', stopBoxSelection);
+          window.removeEventListener('pointercancel', stopBoxSelection);
         }
+        if (boxRectEl && boxRectEl.parentNode) {
+          boxRectEl.parentNode.removeChild(boxRectEl);
+        }
+        boxRectEl = null;
       };
     }
 
@@ -547,6 +666,8 @@
       destroyMindMap(opts.instance || null);
       container.innerHTML = '';
 
+      var exportEnabled = Boolean(opts && typeof opts.onExportXmind === 'function');
+      var exportDisabledAttr = exportEnabled ? '' : ' disabled';
       var controlsHtml = ''
         + '<div class="xmind-structure-controls" data-mind-controls>'
         + '<div class="xmind-search-group">'
@@ -560,6 +681,7 @@
         + '<button class="secondary xmind-zoom-btn" type="button" data-mind-action="zoom-out" title="缩小">-</button>'
         + '<button class="secondary xmind-zoom-btn" type="button" data-mind-action="zoom-fit" title="全览">全览</button>'
         + '<button class="secondary xmind-zoom-btn" type="button" data-mind-action="zoom-in" title="放大">+</button>'
+        + '<button class="secondary xmind-zoom-btn xmind-export-btn" type="button" data-mind-action="export-xmind" title="导出当前XMind"' + exportDisabledAttr + '>导出XMind</button>'
         + '</div>'
         + '</div>';
       var canvasHtml = '<div class="xmind-structure-canvas" data-mind-canvas></div>';
@@ -577,7 +699,7 @@
         contextMenu: false,
         toolBar: false,
         keypress: false,
-        mouseSelectionButton: 2,
+        mouseSelectionButton: 0,
         allowUndo: false,
         overflowHidden: false,
         theme: theme || undefined,
@@ -587,7 +709,7 @@
         direction: direction,
       });
 
-      var cleanup = bindViewerInteractions(container, canvasEl, instance);
+      var cleanup = bindViewerInteractions(container, canvasEl, instance, opts);
       if (cleanup) {
         instance.__tapXmindCleanupList = [cleanup];
       } else {

@@ -7793,6 +7793,11 @@ tr.import-invalid-locate-active td {
   text-align: center;
 }
 
+.xmind-structure-viewer .xmind-export-btn {
+  min-width: 88px;
+  font-weight: 600;
+}
+
 .xmind-structure-viewer me-tpc.xmind-search-hit .text {
   border-radius: 6px;
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.24);
@@ -7804,6 +7809,22 @@ tr.import-invalid-locate-active td {
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.38);
 }
 
+.xmind-structure-viewer me-tpc.xmind-box-selected .text {
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.5);
+  background: rgba(219, 234, 254, 0.9);
+}
+
+.xmind-structure-viewer .xmind-box-select-rect {
+  position: absolute;
+  z-index: 7;
+  border: 1px dashed rgba(37, 99, 235, 0.9);
+  background: rgba(147, 197, 253, 0.2);
+  border-radius: 6px;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
 .xmind-structure-viewer .xmind-structure-canvas {
   width: 100%;
   height: 100%;
@@ -7812,7 +7833,7 @@ tr.import-invalid-locate-active td {
 }
 
 .xmind-structure-viewer.is-draggable .xmind-structure-canvas {
-  cursor: grab;
+  cursor: default;
 }
 
 .xmind-structure-viewer.is-dragging .xmind-structure-canvas {
@@ -7858,6 +7879,9 @@ tr.import-invalid-locate-active td {
   .xmind-structure-viewer .xmind-zoom-btn {
     min-width: 30px;
     padding: 0 8px;
+  }
+  .xmind-structure-viewer .xmind-export-btn {
+    min-width: 78px;
   }
 }
 
@@ -9236,6 +9260,14 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-search-active .text {
   background: #1d4ed8;
   box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.56);
+}
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-box-selected .text {
+  background: rgba(30, 64, 175, 0.88);
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.75);
+}
+:root[data-theme="dark"] .xmind-structure-viewer .xmind-box-select-rect {
+  border-color: rgba(96, 165, 250, 0.95);
+  background: rgba(59, 130, 246, 0.26);
 }
 :root[data-theme="dark"] .xmind-view-highlight-btn {
   color: #bfdbfe;

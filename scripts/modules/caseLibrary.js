@@ -3226,6 +3226,48 @@
     });
   }
 
+  function exportCurrentCaseLibraryXmind() {
+    var currentFile = state.editor && state.editor.caseFile ? state.editor.caseFile : null;
+    var list = Array.isArray(state.editor && state.editor.items) ? state.editor.items : [];
+    if (!currentFile || !list.length) {
+      setStatus(dom.editStatus, '当前用例无可导出内容', 'warn');
+      return Promise.resolve(false);
+    }
+    var builder = getXmindBuilder();
+    if (!builder) {
+      setStatus(dom.editStatus, '缺少 XMind 导出依赖', 'err');
+      return Promise.resolve(false);
+    }
+    var downloadBlob = getDownloadBlob();
+    var baseName = cleanCaseFileName(currentFile.file_name_clean || currentFile.file_name || '用例');
+    setStatus(dom.editStatus, '正在导出 XMind...', '');
+    return Promise.resolve()
+      .then(function() {
+        return builder(list, baseName, '');
+      })
+      .then(function(pkg) {
+        if (!pkg || !pkg.blob) throw new Error('无导出内容');
+        var fileName = sanitizeDownloadName(baseName, '.xmind');
+        downloadBlob(fileName, pkg.blob);
+        setStatus(dom.editStatus, '已导出 XMind：' + fileName, 'ok');
+        safeLogOperation('export_case_files_xmind', 'case_file', currentFile.id || null, {
+          format: 'xmind',
+          count: 1,
+          success: 1,
+          fail: 0,
+          case_file_ids: currentFile.id !== null && currentFile.id !== undefined ? [currentFile.id] : [],
+          file_name: currentFile.file_name_clean || currentFile.file_name || '',
+          file_names: [currentFile.file_name_clean || currentFile.file_name || ''].filter(Boolean),
+          source: 'xmind_structure_viewer',
+        });
+        return true;
+      })
+      .catch(function(err) {
+        setStatus(dom.editStatus, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+        return false;
+      });
+  }
+
   function openCaseLibraryXmindStructure() {
     var mindApi = getMindElixirApi();
     if (!mindApi || typeof mindApi.buildMindDataFromCases !== 'function' || typeof mindApi.renderMindMap !== 'function') {
@@ -3268,6 +3310,7 @@
       caseLibraryXmindMindInstance = mindApi.renderMindMap(container, mindData, {
         instance: caseLibraryXmindMindInstance,
         direction: 'side',
+        onExportXmind: exportCurrentCaseLibraryXmind,
       });
       bindCaseLibraryXmindThemeSync(mindApi);
     } catch (err) {

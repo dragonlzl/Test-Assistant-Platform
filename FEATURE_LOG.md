@@ -45,6 +45,9 @@
 - 更新记录：2026-02-10 将 XMind 画布拖拽交互统一为鼠标左键（切换 `mouseSelectionButton` 并增强捕获阶段左键拖拽监听，`scripts/core/mindElixirCore.js`）。
 - 更新记录：2026-02-10 新增 XMind 节点搜索能力（输入关键字、上/下一个命中、清空、命中计数与高亮定位），执行页与用例库统一复用（`scripts/core/mindElixirCore.js`、`style.css`、`tests/ui/xmind_structure_view_buttons.spec.js`）。
 - 更新记录：2026-02-10 强化 XMind 结构展示按钮视觉样式（亮色渐变、加粗、阴影与深色主题强调），提升按钮醒目度（`case-exec.html`、`case-library.html`、`index.html`、`style.css`）。
+- 更新记录：2026-02-11 在 XMind 结构展示抽屉内新增“导出XMind”按钮，执行页复用 `tempExecApi.exportTempExecToXmind`，用例库复用 `xmindCore.buildXmindPackageFromCases` + `downloadBlob` 导出当前用例，并补充 UI 自动化覆盖（`scripts/core/mindElixirCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/xmind_structure_view_buttons.spec.js`）。
+- 更新记录：2026-02-11 将 XMind 画布交互调整为“右键拖动画布 + 左键框选节点”，并补充框选高亮样式与 UI 自动化验证（`scripts/core/mindElixirCore.js`、`style.css`、`tests/ui/xmind_structure_view_buttons.spec.js`）。
+- 更新记录：2026-02-11 框选光标样式由十字改为默认指针样式，保持右键拖拽交互不变（`style.css`）。
 
 - 功能名称：执行总览与归档预览版本盒子展示用例数
 - 功能描述：执行页归档操作&进度预览、执行总览页版本盒子标题旁展示该版本用例总数；总览顶部版本汇总标题同步展示条数。

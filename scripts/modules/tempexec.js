@@ -150,6 +150,21 @@
       });
     }
 
+    function triggerTempExecXmindExport() {
+      if (!api || typeof api.exportTempExecToXmind !== 'function') {
+        setStatus(tempExecStatus, 'XMind 导出能力未就绪', 'err');
+        return null;
+      }
+      var activeId = state && state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
+      var execSetId = activeId ? Number(activeId) : null;
+      safeLogOperation('export_exec_xmind', 'exec_set', Number.isFinite(execSetId) ? execSetId : null, {
+        exec_set_id: Number.isFinite(execSetId) ? execSetId : null,
+        format: 'xmind',
+        with_result: true,
+      });
+      return api.exportTempExecToXmind();
+    }
+
     function openTempExecXmindStructure() {
       var mindApi = getMindElixirApi();
       if (!mindApi || typeof mindApi.buildMindDataFromCases !== 'function' || typeof mindApi.renderMindMap !== 'function') {
@@ -190,6 +205,7 @@
         tempExecXmindMindInstance = mindApi.renderMindMap(container, mindData, {
           instance: tempExecXmindMindInstance,
           direction: 'side',
+          onExportXmind: triggerTempExecXmindExport,
         });
         bindTempExecXmindThemeSync(mindApi);
       } catch (err) {
@@ -7228,16 +7244,9 @@
       });
     }
 
-    if (exportTempExecXmindBtn && api.exportTempExecToXmind) {
+    if (exportTempExecXmindBtn) {
       exportTempExecXmindBtn.addEventListener('click', function() {
-        var activeId = state && state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
-        var execSetId = activeId ? Number(activeId) : null;
-        safeLogOperation('export_exec_xmind', 'exec_set', Number.isFinite(execSetId) ? execSetId : null, {
-          exec_set_id: Number.isFinite(execSetId) ? execSetId : null,
-          format: 'xmind',
-          with_result: true,
-        });
-        api.exportTempExecToXmind();
+        triggerTempExecXmindExport();
       });
     }
     if (exportTempExecCasesXmindBtn && api.exportTempExecCasesToXmind) {

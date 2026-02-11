@@ -222,6 +222,18 @@ test.describe('XMind 结构展示按钮', () => {
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-action="zoom-fit"]')).toBeVisible();
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-action="zoom-in"]')).toBeVisible();
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-search-input]')).toBeVisible();
+    await page.evaluate(() => {
+      window.__tempExecXmindExportClicks = 0;
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.exportTempExecToXmind = function() {
+          window.__tempExecXmindExportClicks += 1;
+          return Promise.resolve(true);
+        };
+      }
+    });
+    await expect(page.locator('#tempExecXmindStructureViewer [data-mind-action="export-xmind"]')).toBeVisible();
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="export-xmind"]');
+    await page.waitForFunction(() => window.__tempExecXmindExportClicks === 1);
     await page.fill('#tempExecXmindStructureViewer [data-mind-search-input]', '余额不足时支付失败');
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-search-count]')).toHaveText(/1\s*\/\s*1/);
     await expect(page.locator('#tempExecXmindStructureViewer me-tpc.xmind-search-active .text')).toContainText('余额不足时支付失败');
@@ -241,11 +253,19 @@ test.describe('XMind 结构展示按钮', () => {
     if (!dragBox) throw new Error('执行页 XMind 画布未渲染');
     var transformBeforeDrag = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
     await page.mouse.move(dragBox.x + (dragBox.width / 2), dragBox.y + (dragBox.height / 2));
-    await page.mouse.down();
+    await page.mouse.down({ button: 'right' });
     await page.mouse.move(dragBox.x + (dragBox.width / 2) + 120, dragBox.y + (dragBox.height / 2) + 30);
-    await page.mouse.up();
+    await page.mouse.up({ button: 'right' });
     var transformAfterDrag = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
     expect(transformAfterDrag).not.toBe(transformBeforeDrag);
+
+    var firstNode = page.locator('#tempExecXmindStructureViewer me-tpc .text').first();
+    var firstNodeBox = await firstNode.boundingBox();
+    if (!firstNodeBox) throw new Error('执行页 XMind 节点未渲染');
+    await page.mouse.move(firstNodeBox.x - 10, firstNodeBox.y - 10);
+    await page.mouse.down({ button: 'left' });
+    await page.mouse.move(firstNodeBox.x + firstNodeBox.width + 12, firstNodeBox.y + firstNodeBox.height + 12);
+    await page.mouse.up({ button: 'left' });
 
     const lightBg = await page.locator('#xmindStructureDrawerBody .xmind-structure-viewer').evaluate((el) => {
       return getComputedStyle(el).backgroundColor;
@@ -332,6 +352,9 @@ test.describe('XMind 结构展示按钮', () => {
     await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-action="zoom-fit"]')).toBeVisible();
     await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-action="zoom-in"]')).toBeVisible();
     await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-search-input]')).toBeVisible();
+    await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-action="export-xmind"]')).toBeVisible();
+    await page.click('#caseLibraryXmindStructureViewer [data-mind-action="export-xmind"]');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
     await page.fill('#caseLibraryXmindStructureViewer [data-mind-search-input]', '创建订单成功');
     await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-search-count]')).toHaveText(/1\s*\/\s*1/);
     await expect(page.locator('#caseLibraryXmindStructureViewer me-tpc.xmind-search-active .text')).toContainText('创建订单成功');
