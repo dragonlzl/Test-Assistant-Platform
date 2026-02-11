@@ -1570,6 +1570,65 @@
         updateEditButtons();
       }
 
+      function normalizeLocatePath(pathArr) {
+        if (!Array.isArray(pathArr)) return [];
+        return pathArr.map(function(seg) {
+          if (seg === null || seg === undefined) return '';
+          return String(seg).trim();
+        });
+      }
+
+      function collectNodeLocatePath(nodeEl) {
+        if (!nodeEl || !nodeEl.nodeObj) return [];
+        var topics = [];
+        var cursor = nodeEl.nodeObj;
+        var guard = 0;
+        while (cursor && guard < 64) {
+          var topic = cursor.topic === null || cursor.topic === undefined
+            ? ''
+            : String(cursor.topic).trim();
+          topics.unshift(topic);
+          cursor = cursor.parent || null;
+          guard += 1;
+        }
+
+        var inst = getInstance();
+        var rootTopic = inst && inst.nodeData && inst.nodeData.topic !== null && inst.nodeData.topic !== undefined
+          ? String(inst.nodeData.topic).trim()
+          : '';
+        if (rootTopic && topics.length && topics[0] === rootTopic) {
+          topics = topics.slice(1);
+        }
+        while (topics.length > 6) {
+          topics = topics.slice(topics.length - 6);
+        }
+        return normalizeLocatePath(topics);
+      }
+
+      function onViewerDblClick(e) {
+        if (editing) return;
+        if (!opts || typeof opts.onNodeDblClickLocate !== 'function') return;
+        if (controlsEl && controlsEl.contains && controlsEl.contains(e && e.target)) return;
+        if (e && e.target && e.target.closest && e.target.closest('[data-mind-controls]')) return;
+
+        var nodeEl = e && e.target && e.target.closest ? e.target.closest('me-tpc') : null;
+        if (!nodeEl || !nodeEl.nodeObj) return;
+
+        var path = collectNodeLocatePath(nodeEl);
+        if (!path.length) return;
+
+        try {
+          opts.onNodeDblClickLocate({
+            path: path,
+            topic: path[path.length - 1] || '',
+            nodeId: nodeEl.nodeObj && nodeEl.nodeObj.id ? String(nodeEl.nodeObj.id) : '',
+            depth: path.length,
+          });
+        } catch (err) {
+          // ignore
+        }
+      }
+
       function onViewerBlur(e) {
         if (!editing) return;
         var target = e && e.target ? e.target : null;
@@ -1911,6 +1970,7 @@
         if (enableCustomBoxSelection) viewerEl.addEventListener('pointerdown', startBoxSelection, true);
         viewerEl.addEventListener('keydown', onViewerKeydown, true);
         viewerEl.addEventListener('click', onViewerClick, true);
+        viewerEl.addEventListener('dblclick', onViewerDblClick, true);
         viewerEl.addEventListener('blur', onViewerBlur, true);
       }
       if (enableCustomBoxSelection && typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
@@ -1971,6 +2031,7 @@
           if (enableCustomBoxSelection) viewerEl.removeEventListener('pointerdown', startBoxSelection, true);
           viewerEl.removeEventListener('keydown', onViewerKeydown, true);
           viewerEl.removeEventListener('click', onViewerClick, true);
+          viewerEl.removeEventListener('dblclick', onViewerDblClick, true);
           viewerEl.removeEventListener('blur', onViewerBlur, true);
         }
         if (enableCustomBoxSelection && typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {

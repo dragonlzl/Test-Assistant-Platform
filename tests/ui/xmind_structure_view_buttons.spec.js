@@ -182,6 +182,15 @@ test.describe('XMind 结构展示按钮', () => {
           expected: '提示余额不足',
           actual: '未执行',
           remark: '',
+        }, {
+          module: '支付模块',
+          title: '优惠券支付成功',
+          priority: 'P2',
+          preconditions: '账号已登录且有可用优惠券',
+          steps: '选择优惠券并提交支付',
+          expected: '提示支付成功',
+          actual: '未执行',
+          remark: '',
         }],
       }],
       versions: [],
@@ -267,6 +276,28 @@ test.describe('XMind 结构展示按钮', () => {
     await page.mouse.move(firstNodeBox.x + firstNodeBox.width + 12, firstNodeBox.y + firstNodeBox.height + 12);
     await page.mouse.up({ button: 'left' });
 
+    await page.locator('#tempExecXmindStructureViewer me-tpc .text', { hasText: '优惠券支付成功' }).first().dblclick({ force: true });
+    await page.waitForTimeout(150);
+    const execLocate = await page.evaluate((payload) => {
+      var selector = '#tempExecView tr.case-row[data-temp-case-row="' + String(payload.fileId) + '"][data-index="' + String(payload.index) + '"]';
+      var row = document.querySelector(selector);
+      if (!row) return { found: false, visible: false, text: '' };
+      var rect = row.getBoundingClientRect();
+      var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      return {
+        found: true,
+        visible: rect.bottom > 0 && rect.top < vh,
+        text: String(row.textContent || ''),
+      };
+    }, { fileId, index: 1 });
+    expect(execLocate.found).toBeTruthy();
+    expect(execLocate.text).toContain('优惠券支付成功');
+    await expect(page.locator('#tempExecStatus')).toContainText('已定位到第 2 条执行用例');
+    const execLocateRow = page.locator('#tempExecView tr.case-row[data-temp-case-row="' + String(fileId) + '"][data-index="1"]').first();
+    await expect(execLocateRow).toHaveClass(/xmind-locate-highlight/);
+    await page.waitForTimeout(2200);
+    await expect(execLocateRow).toHaveClass(/xmind-locate-highlight/);
+
     const lightBg = await page.locator('#xmindStructureDrawerBody .xmind-structure-viewer').evaluate((el) => {
       return getComputedStyle(el).backgroundColor;
     });
@@ -279,6 +310,22 @@ test.describe('XMind 结构展示按钮', () => {
     });
     expect(lightBg).not.toBe(darkBg);
     expect(darkBg).toBe('rgb(15, 23, 42)');
+
+    await page.evaluate(() => {
+      window.scrollTo(0, 500);
+    });
+    const scrollBeforeClose = await page.evaluate(() => {
+      if (typeof window.scrollY === 'number') return window.scrollY;
+      return document.documentElement ? (document.documentElement.scrollTop || 0) : 0;
+    });
+    await page.click('#closeXmindStructureDrawerBtn');
+    await expect(page.locator('#xmindStructureDrawer')).not.toHaveClass(/open/);
+    await page.waitForTimeout(520);
+    const scrollAfterClose = await page.evaluate(() => {
+      if (typeof window.scrollY === 'number') return window.scrollY;
+      return document.documentElement ? (document.documentElement.scrollTop || 0) : 0;
+    });
+    expect(Math.abs(scrollAfterClose - scrollBeforeClose)).toBeLessThanOrEqual(2);
   });
 
   test('用例库支持 XMind 结构展示并切换主题', async ({ page }) => {
@@ -294,7 +341,7 @@ test.describe('XMind 结构展示按钮', () => {
       version_id: versions[0].id,
       file_name_clean: '订单用例集',
       reuse_enabled: false,
-      item_count: 1,
+      item_count: 2,
       importer_id: user.id,
       importer_name: user.username,
       imported_at: now,
@@ -312,6 +359,18 @@ test.describe('XMind 结构展示按钮', () => {
       precondition: '账号已登录',
       steps: '填写地址并提交订单',
       expected: '订单创建成功',
+      remark: '',
+      created_at: now,
+      updated_at: now,
+    }, {
+      id: 8102,
+      case_file_id: caseFileId,
+      module: '订单模块',
+      title: '取消订单成功',
+      priority: 'P2',
+      precondition: '订单尚未发货',
+      steps: '在订单详情页点击取消',
+      expected: '订单状态变更为已取消',
       remark: '',
       created_at: now,
       updated_at: now,
@@ -363,6 +422,25 @@ test.describe('XMind 结构展示按钮', () => {
     await page.click('#caseLibraryXmindStructureViewer [data-mind-action="zoom-in"]');
     var afterZoom = await getCanvasTransform(page, '#caseLibraryXmindStructureViewer .map-canvas');
     expect(afterZoom).not.toBe(beforeZoom);
+
+    await page.locator('#caseLibraryXmindStructureViewer me-tpc .text', { hasText: '取消订单成功' }).first().dblclick({ force: true });
+    await page.waitForTimeout(150);
+    const locatedEditor = await page.evaluate(() => {
+      var active = document.activeElement;
+      if (!active || !active.getAttribute) return { index: '', field: '' };
+      return {
+        index: String(active.getAttribute('data-index') || ''),
+        field: String(active.getAttribute('data-case-lib-edit-field') || ''),
+      };
+    });
+    expect(locatedEditor.field).toBeTruthy();
+    expect(locatedEditor.index).toBe('1');
+    const caseLocateHighlight = await page.evaluate(() => {
+      var cell = document.querySelector('#caseLibraryEditView [data-case-lib-edit-field="module"][data-index="1"]');
+      var row = cell && cell.closest ? cell.closest('tr') : null;
+      return Boolean(row && row.classList && row.classList.contains('xmind-locate-highlight'));
+    });
+    expect(caseLocateHighlight).toBeTruthy();
 
     const lightBg = await page.locator('#xmindStructureDrawerBody .xmind-structure-viewer').evaluate((el) => {
       return getComputedStyle(el).backgroundColor;

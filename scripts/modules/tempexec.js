@@ -103,10 +103,34 @@
     var tempExecXmindDrawer = null;
     var tempExecXmindMindInstance = null;
     var tempExecXmindThemeObserver = null;
+    var tempExecXmindLocateTimer = 0;
+    var tempExecXmindLocateTarget = null;
     var supportDirPicker = typeof window.showDirectoryPicker === 'function';
 
     function getMindElixirApi() {
       return window.app && window.app.mindElixirCoreApi ? window.app.mindElixirCoreApi : null;
+    }
+
+
+    function markXmindDrawerSkipScrollRestoreOnce() {
+      try {
+        if (window.app) window.app.__drawerSkipRestoreOnce = true;
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function bindXmindDrawerCloseScrollGuard(drawerEl) {
+      if (!drawerEl || typeof drawerEl.addEventListener !== 'function') return;
+      if (drawerEl.__tapXmindCloseScrollGuardBound) return;
+      drawerEl.__tapXmindCloseScrollGuardBound = true;
+      drawerEl.addEventListener('click', function(e) {
+        var target = e && e.target && e.target.closest
+          ? e.target.closest('[data-drawer-close="xmindStructureDrawer"]')
+          : null;
+        if (!target) return;
+        markXmindDrawerSkipScrollRestoreOnce();
+      }, true);
     }
 
     function ensureTempExecXmindDrawer() {
@@ -131,6 +155,17 @@
           }
         },
       });
+      if (tempExecXmindDrawer && tempExecXmindDrawer.element) {
+        bindXmindDrawerCloseScrollGuard(tempExecXmindDrawer.element);
+      }
+      if (tempExecXmindDrawer && typeof tempExecXmindDrawer.close === 'function' && !tempExecXmindDrawer.__tapCloseWithSkipRestore) {
+        var rawClose = tempExecXmindDrawer.close;
+        tempExecXmindDrawer.close = function() {
+          markXmindDrawerSkipScrollRestoreOnce();
+          return rawClose.apply(tempExecXmindDrawer, arguments);
+        };
+        tempExecXmindDrawer.__tapCloseWithSkipRestore = true;
+      }
       return tempExecXmindDrawer;
     }
 
@@ -203,6 +238,84 @@
       return [row.module, row.title, row.expected]
         .map(function(seg) { return normalizeXmindExecText(seg).toLowerCase(); })
         .join('::');
+    }
+
+
+    function normalizeTempExecLocatePath(pathArr) {
+      if (!Array.isArray(pathArr)) return [];
+      return pathArr.map(function(seg) {
+        if (seg === null || seg === undefined) return '';
+        return String(seg).trim();
+      });
+    }
+
+    function buildTempExecLocatePaths(list, mindApi) {
+      var items = Array.isArray(list) ? list : [];
+      if (mindApi && typeof mindApi.buildPathsFromCases === 'function') {
+        try {
+          var built = mindApi.buildPathsFromCases(items, {
+            fallbackModule: '执行模块',
+          });
+          if (Array.isArray(built) && built.length) {
+            return built.map(function(pathArr) {
+              return normalizeTempExecLocatePath(pathArr);
+            });
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
+      return items.map(function(item) {
+        var row = normalizeXmindExecCase(item || {});
+        return normalizeTempExecLocatePath([
+          row.module,
+          row.title,
+          row.priority,
+          row.preconditions,
+          row.steps,
+          row.expected,
+        ]);
+      });
+    }
+
+    function isTempExecLocatePathMatch(targetPath, fullPath) {
+      var target = Array.isArray(targetPath) ? targetPath : [];
+      var full = Array.isArray(fullPath) ? fullPath : [];
+      if (!target.length || full.length < target.length) return false;
+      for (var i = 0; i < target.length; i += 1) {
+        if (target[i] !== full[i]) return false;
+      }
+      return true;
+    }
+
+    function findTempExecIndexByXmindPath(pathArr, list, mindApi) {
+      var targetPath = normalizeTempExecLocatePath(pathArr);
+      if (!targetPath.length) return -1;
+      var locatePaths = buildTempExecLocatePaths(list, mindApi);
+      for (var i = 0; i < locatePaths.length; i += 1) {
+        if (isTempExecLocatePathMatch(targetPath, locatePaths[i])) {
+          return i;
+        }
+      }
+      return -1;
+    }
+
+    function locateTempExecCaseFromXmind(activeFile, pathArr, mindApi) {
+      var file = activeFile && typeof activeFile === 'object' ? activeFile : null;
+      var list = file && Array.isArray(file.cases) ? file.cases : [];
+      var idx = findTempExecIndexByXmindPath(pathArr, list, mindApi);
+      if (idx < 0) {
+        setStatus(tempExecStatus, '未找到对应执行用例', 'warn');
+        return;
+      }
+      var fileId = file && file.id ? file.id : state.tempExecActiveId;
+      if (!fileId) {
+        setStatus(tempExecStatus, '当前执行用例未激活，无法定位', 'warn');
+        return;
+      }
+      jumpToTempExecCase(fileId, idx);
+      flashTempExecXmindLocateHighlight(fileId, idx, 3200);
+      setStatus(tempExecStatus, '已定位到第 ' + String(idx + 1) + ' 条执行用例', 'ok');
     }
 
     function resolveExecCaseIdForXmind(item) {
@@ -499,6 +612,10 @@
           onExportXmind: triggerTempExecXmindExport,
           editableSessionKey: 'tap-temp-exec-xmind-edit-' + String(active.id || state.tempExecActiveId || ''),
           onSaveCases: saveTempExecXmindCases,
+          onNodeDblClickLocate: function(payload) {
+            if (!payload || !Array.isArray(payload.path)) return;
+            locateTempExecCaseFromXmind(active, payload.path, mindApi);
+          },
           openConfirmDrawer: openConfirmDrawer,
           showToast: utils && typeof utils.showCenterToast === 'function' ? utils.showCenterToast : null,
         });
@@ -2633,6 +2750,54 @@
     }
 
     window.addEventListener('app-path-sub-jump', handlePathSubJump);
+
+    function clearTempExecXmindLocateHighlight() {
+      if (tempExecXmindLocateTimer) {
+        clearTimeout(tempExecXmindLocateTimer);
+        tempExecXmindLocateTimer = 0;
+      }
+      if (tempExecXmindLocateTarget && tempExecXmindLocateTarget.classList) {
+        tempExecXmindLocateTarget.classList.remove('xmind-locate-highlight');
+      }
+      tempExecXmindLocateTarget = null;
+    }
+
+    function flashTempExecXmindLocateHighlight(fileId, idx, durationMs) {
+      var duration = Number(durationMs);
+      if (!isFinite(duration) || duration <= 0) duration = 3200;
+      var attempts = 0;
+      var maxAttempts = 30;
+
+      function tryApply() {
+        attempts += 1;
+        if (!tempExecView || typeof tempExecView.querySelector !== 'function') return;
+        var selector = 'tr.case-row[data-temp-case-row="' + String(fileId) + '"][data-index="' + String(idx) + '"]';
+        var row = tempExecView.querySelector(selector);
+        if (!row) {
+          if (attempts < maxAttempts) setTimeout(tryApply, 60);
+          return;
+        }
+
+        if (tempExecXmindLocateTarget && tempExecXmindLocateTarget !== row) {
+          clearTempExecXmindLocateHighlight();
+        } else if (tempExecXmindLocateTimer) {
+          clearTimeout(tempExecXmindLocateTimer);
+          tempExecXmindLocateTimer = 0;
+        }
+
+        tempExecXmindLocateTarget = row;
+        if (row.classList) row.classList.add('xmind-locate-highlight');
+        tempExecXmindLocateTimer = setTimeout(function() {
+          if (tempExecXmindLocateTarget === row && row.classList) {
+            row.classList.remove('xmind-locate-highlight');
+          }
+          if (tempExecXmindLocateTarget === row) tempExecXmindLocateTarget = null;
+          tempExecXmindLocateTimer = 0;
+        }, duration);
+      }
+
+      setTimeout(tryApply, 80);
+    }
 
     function scrollToTempExecCaseRow(fileId, idx, options) {
       var opts = options && typeof options === 'object' ? options : {};

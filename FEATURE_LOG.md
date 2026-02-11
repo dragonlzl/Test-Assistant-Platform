@@ -57,6 +57,12 @@
 - 更新记录：2026-02-11 优化 XMind 编辑态双击节点文本编辑行为：进入编辑后不再自动全选内容，光标默认定位到文本末尾，便于直接续写；补充 UI 自动化断言校验光标状态（`scripts/core/mindElixirCore.js`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
 - 更新记录：2026-02-11 优化 XMind 编辑态拖拽预览跟手与可见性：拖拽过程中同步 ghost 到光标位置，并增强 ghost 文本与标签样式，避免“拖动时看起来空白”；补充 UI 自动化断言校验位置与文本可见（`scripts/core/mindElixirCore.js`、`style.css`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
 
+- 更新记录：2026-02-11 新增 XMind 非编辑态双击定位能力：在执行页与用例库的 XMind 结构展示中，双击任意节点可按当前层级路径定位到对应列表用例；核心路径解析复用 `mindElixirCore` 的节点树并在两页复用 `buildPathsFromCases` 做前缀匹配，未新增后端接口；补充 UI 自动化覆盖执行页/用例库双击定位场景（`scripts/core/mindElixirCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`tests/ui/xmind_structure_view_buttons.spec.js`）。
+
+- 更新记录：2026-02-11 修复 XMind 抽屉关闭后页面滚动回滚：为 XMind 抽屉收起动作增加“跳过滚动恢复”保护，避免关闭时被 drawer 基础层恢复到开抽屉前位置；并补充 UI 自动化断言验证关闭后滚动位置不回滚（`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`tests/ui/xmind_structure_view_buttons.spec.js`）。
+
+- 更新记录：2026-02-11 优化 XMind 双击定位反馈：定位命中用例新增持续约 3.2 秒的外框高亮（执行页与用例库），并补充 UI 自动化断言验证高亮出现与持续可见，提升定位后可感知性（`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/xmind_structure_view_buttons.spec.js`）。
+
 - 功能名称：执行总览与归档预览版本盒子展示用例数
 - 功能描述：执行页归档操作&进度预览、执行总览页版本盒子标题旁展示该版本用例总数；总览顶部版本汇总标题同步展示条数。
 - 操作方式：进入执行页「归档操作&进度预览」或执行总览页即可看到版本名后“（X条）”，版本筛选后数量同步更新。

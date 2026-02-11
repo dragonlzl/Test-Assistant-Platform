@@ -3192,6 +3192,28 @@
     return window.app && window.app.mindElixirCoreApi ? window.app.mindElixirCoreApi : null;
   }
 
+
+  function markCaseLibraryXmindSkipScrollRestoreOnce() {
+    try {
+      if (window.app) window.app.__drawerSkipRestoreOnce = true;
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function bindCaseLibraryXmindCloseScrollGuard(drawerEl) {
+    if (!drawerEl || typeof drawerEl.addEventListener !== 'function') return;
+    if (drawerEl.__tapCaseLibraryXmindCloseScrollGuardBound) return;
+    drawerEl.__tapCaseLibraryXmindCloseScrollGuardBound = true;
+    drawerEl.addEventListener('click', function(e) {
+      var target = e && e.target && e.target.closest
+        ? e.target.closest('[data-drawer-close="xmindStructureDrawer"]')
+        : null;
+      if (!target) return;
+      markCaseLibraryXmindSkipScrollRestoreOnce();
+    }, true);
+  }
+
   function ensureCaseLibraryXmindDrawer() {
     if (xmindStructureDrawerInstance) return xmindStructureDrawerInstance;
     xmindStructureDrawerInstance = ensureDrawer('xmindStructureDrawer', [], null, function() {
@@ -3207,6 +3229,17 @@
       var body = document.getElementById('xmindStructureDrawerBody');
       if (body) body.innerHTML = '';
     });
+    if (xmindStructureDrawerInstance && xmindStructureDrawerInstance.element) {
+      bindCaseLibraryXmindCloseScrollGuard(xmindStructureDrawerInstance.element);
+    }
+    if (xmindStructureDrawerInstance && typeof xmindStructureDrawerInstance.close === 'function' && !xmindStructureDrawerInstance.__tapCloseWithSkipRestore) {
+      var rawClose = xmindStructureDrawerInstance.close;
+      xmindStructureDrawerInstance.close = function() {
+        markCaseLibraryXmindSkipScrollRestoreOnce();
+        return rawClose.apply(xmindStructureDrawerInstance, arguments);
+      };
+      xmindStructureDrawerInstance.__tapCloseWithSkipRestore = true;
+    }
     return xmindStructureDrawerInstance;
   }
 
@@ -3480,6 +3513,84 @@
       });
   }
 
+
+  function normalizeCaseLibraryLocatePath(pathArr) {
+    if (!Array.isArray(pathArr)) return [];
+    return pathArr.map(function(seg) {
+      if (seg === null || seg === undefined) return '';
+      return String(seg).trim();
+    });
+  }
+
+  function buildCaseLibraryLocatePaths(list, mindApi) {
+    var items = Array.isArray(list) ? list : [];
+    if (mindApi && typeof mindApi.buildPathsFromCases === 'function') {
+      try {
+        var built = mindApi.buildPathsFromCases(items, {
+          fallbackModule: '用例模块',
+        });
+        if (Array.isArray(built) && built.length) {
+          return built.map(function(pathArr) {
+            return normalizeCaseLibraryLocatePath(pathArr);
+          });
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+    return items.map(function(item) {
+      var row = normalizeXmindCaseLibraryCase(item || {});
+      return normalizeCaseLibraryLocatePath([
+        row.module,
+        row.title,
+        row.priority,
+        row.precondition,
+        row.steps,
+        row.expected,
+      ]);
+    });
+  }
+
+  function isCaseLibraryLocatePathMatch(targetPath, fullPath) {
+    var target = Array.isArray(targetPath) ? targetPath : [];
+    var full = Array.isArray(fullPath) ? fullPath : [];
+    if (!target.length || full.length < target.length) return false;
+    for (var i = 0; i < target.length; i += 1) {
+      if (target[i] !== full[i]) return false;
+    }
+    return true;
+  }
+
+  function findCaseLibraryIndexByXmindPath(pathArr, list, mindApi) {
+    var targetPath = normalizeCaseLibraryLocatePath(pathArr);
+    if (!targetPath.length) return -1;
+    var locatePaths = buildCaseLibraryLocatePaths(list, mindApi);
+    for (var i = 0; i < locatePaths.length; i += 1) {
+      if (isCaseLibraryLocatePathMatch(targetPath, locatePaths[i])) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function locateCaseLibraryCaseFromXmind(pathArr, mindApi) {
+    var list = Array.isArray(state.editor && state.editor.items) ? state.editor.items : [];
+    var idx = findCaseLibraryIndexByXmindPath(pathArr, list, mindApi);
+    if (idx < 0) {
+      setStatus(dom.editStatus, '未找到对应的用例条目', 'warn');
+      return;
+    }
+    var pageSize = getPageSize();
+    if (!isFinite(pageSize) || pageSize <= 0) pageSize = 20;
+    state.editor.pageIndex = Math.floor(idx / pageSize);
+    renderEditorTable();
+    setTimeout(function() {
+      scrollEditorToIndex(idx);
+      flashCaseLibraryXmindLocateHighlight(idx, 3200);
+    }, 0);
+    setStatus(dom.editStatus, '已定位到第 ' + String(idx + 1) + ' 条用例', 'ok');
+  }
+
   function openCaseLibraryXmindStructure() {
     var mindApi = getMindElixirApi();
     if (!mindApi || typeof mindApi.buildMindDataFromCases !== 'function' || typeof mindApi.renderMindMap !== 'function') {
@@ -3525,6 +3636,10 @@
         onExportXmind: exportCurrentCaseLibraryXmind,
         editableSessionKey: 'tap-case-library-xmind-edit-' + String(currentFile.id || ''),
         onSaveCases: saveCaseLibraryXmindCases,
+        onNodeDblClickLocate: function(payload) {
+          if (!payload || !Array.isArray(payload.path)) return;
+          locateCaseLibraryCaseFromXmind(payload.path, mindApi);
+        },
         openConfirmDrawer: openConfirmDrawer,
         showToast: utils && typeof utils.showCenterToast === 'function' ? utils.showCenterToast : null,
       });
@@ -12285,6 +12400,51 @@
   function setDrawerPagination(topEl, bottomEl, html) {
     if (topEl) topEl.innerHTML = html || '';
     if (bottomEl) bottomEl.innerHTML = html || '';
+  }
+
+  var caseLibraryXmindLocateTimer = 0;
+  var caseLibraryXmindLocateTarget = null;
+
+  function clearCaseLibraryXmindLocateHighlight() {
+    if (caseLibraryXmindLocateTimer) {
+      clearTimeout(caseLibraryXmindLocateTimer);
+      caseLibraryXmindLocateTimer = 0;
+    }
+    if (caseLibraryXmindLocateTarget && caseLibraryXmindLocateTarget.classList) {
+      caseLibraryXmindLocateTarget.classList.remove('xmind-locate-highlight');
+    }
+    caseLibraryXmindLocateTarget = null;
+  }
+
+  function flashCaseLibraryXmindLocateHighlight(index, durationMs) {
+    if (!dom.editView || typeof dom.editView.querySelector !== 'function') return;
+    var idx = Number(index);
+    if (!isFinite(idx) || idx < 0) return;
+    var duration = Number(durationMs);
+    if (!isFinite(duration) || duration <= 0) duration = 3200;
+
+    var selector = '[data-case-lib-edit-field="module"][data-index="' + idx + '"]';
+    var cell = dom.editView.querySelector(selector);
+    var anchor2 = cell || dom.editView.querySelector('[data-case-lib-edit-field="title"][data-index="' + idx + '"]');
+    var row = anchor2 && anchor2.closest ? anchor2.closest('tr') : null;
+    if (!row) return;
+
+    if (caseLibraryXmindLocateTarget && caseLibraryXmindLocateTarget !== row) {
+      clearCaseLibraryXmindLocateHighlight();
+    } else if (caseLibraryXmindLocateTimer) {
+      clearTimeout(caseLibraryXmindLocateTimer);
+      caseLibraryXmindLocateTimer = 0;
+    }
+
+    caseLibraryXmindLocateTarget = row;
+    if (row.classList) row.classList.add('xmind-locate-highlight');
+    caseLibraryXmindLocateTimer = setTimeout(function() {
+      if (caseLibraryXmindLocateTarget === row && row.classList) {
+        row.classList.remove('xmind-locate-highlight');
+      }
+      if (caseLibraryXmindLocateTarget === row) caseLibraryXmindLocateTarget = null;
+      caseLibraryXmindLocateTimer = 0;
+    }, duration);
   }
 
   function scrollEditorToIndex(index) {
