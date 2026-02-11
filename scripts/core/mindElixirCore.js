@@ -204,6 +204,301 @@
       };
     }
 
+    function cloneMindDataObject(value) {
+      if (!value || typeof value !== 'object') return null;
+      try {
+        return JSON.parse(JSON.stringify(value));
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function readMindEditSession(storageKey) {
+      if (!storageKey || typeof localStorage === 'undefined') return null;
+      try {
+        var raw = localStorage.getItem(String(storageKey));
+        if (!raw) return null;
+        var parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function writeMindEditSession(storageKey, payload) {
+      if (!storageKey || typeof localStorage === 'undefined') return;
+      try {
+        localStorage.setItem(String(storageKey), JSON.stringify(payload || {}));
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function clearMindEditSession(storageKey) {
+      if (!storageKey || typeof localStorage === 'undefined') return;
+      try {
+        localStorage.removeItem(String(storageKey));
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function normalizeMindTopic(value) {
+      if (value === undefined || value === null) return '';
+      return String(value).trim();
+    }
+
+    function decodeMindTopicForSave(value) {
+      var text = normalizeMindTopic(value);
+      if (!text) return '';
+      if (text === '-') return '';
+      return text;
+    }
+
+    function collectCaseLeafKeys(node, depth, pathTopics, output) {
+      if (!node) return;
+      var topics = Array.isArray(pathTopics) ? pathTopics.slice() : [];
+      if (depth > 0) {
+        topics.push(normalizeMindTopic(node.topic));
+      }
+      var children = Array.isArray(node.children) ? node.children : [];
+      if (!children.length) {
+        if (depth > 0) {
+          var key = topics.join('\u0001') + '|len=' + String(topics.length);
+          output.push(key);
+        }
+        return;
+      }
+      for (var i = 0; i < children.length; i += 1) {
+        collectCaseLeafKeys(children[i], depth + 1, topics, output);
+      }
+    }
+
+    function calculateCaseChangeSummary(baseData, currentData) {
+      var baseNode = baseData && baseData.nodeData ? baseData.nodeData : null;
+      var currentNode = currentData && currentData.nodeData ? currentData.nodeData : null;
+      var baseKeys = [];
+      var currentKeys = [];
+      collectCaseLeafKeys(baseNode, 0, [], baseKeys);
+      collectCaseLeafKeys(currentNode, 0, [], currentKeys);
+
+      function buildCounter(keys) {
+        var map = Object.create(null);
+        (keys || []).forEach(function(key) {
+          var k = String(key || '');
+          map[k] = (map[k] || 0) + 1;
+        });
+        return map;
+      }
+
+      var baseCounter = buildCounter(baseKeys);
+      var currentCounter = buildCounter(currentKeys);
+      var keys = Object.keys(baseCounter).concat(Object.keys(currentCounter));
+      var seen = Object.create(null);
+      var baseRemain = 0;
+      var currentRemain = 0;
+
+      keys.forEach(function(rawKey) {
+        var key = String(rawKey || '');
+        if (!key || seen[key]) return;
+        seen[key] = true;
+        var oldCount = Number(baseCounter[key] || 0);
+        var newCount = Number(currentCounter[key] || 0);
+        var matched = oldCount < newCount ? oldCount : newCount;
+        baseRemain += oldCount - matched;
+        currentRemain += newCount - matched;
+      });
+
+      var modified = baseRemain < currentRemain ? baseRemain : currentRemain;
+      var added = currentRemain - modified;
+      var deleted = baseRemain - modified;
+      if (modified < 0) modified = 0;
+      if (added < 0) added = 0;
+      if (deleted < 0) deleted = 0;
+
+      return {
+        modified: modified,
+        added: added,
+        deleted: deleted,
+        total: modified + added + deleted,
+      };
+    }
+
+    function validateMindDataCases(mindData, options) {
+      var opts = options || {};
+      var fieldCount = Number(opts.fieldCount);
+      if (!isFinite(fieldCount) || fieldCount <= 0) fieldCount = 6;
+      var nodeData = mindData && mindData.nodeData ? mindData.nodeData : null;
+      var emptyMap = Object.create(null);
+      var structMap = Object.create(null);
+      var cases = [];
+
+      function mark(map, id) {
+        if (id === undefined || id === null) return;
+        map[String(id)] = true;
+      }
+
+      function walk(node, depth, pathTopics, pathNodeIds) {
+        if (!node) return;
+        var topics = Array.isArray(pathTopics) ? pathTopics.slice() : [];
+        var nodeIds = Array.isArray(pathNodeIds) ? pathNodeIds.slice() : [];
+        var topic = normalizeMindTopic(node.topic);
+        if (depth > 0) {
+          topics.push(topic);
+          if (node.id || node.id === 0) nodeIds.push(String(node.id));
+          if (!topic) mark(emptyMap, node.id);
+        }
+
+        var children = Array.isArray(node.children) ? node.children : [];
+        if (!children.length) {
+          if (depth <= 0) return;
+          if (topics.length !== fieldCount) {
+            nodeIds.forEach(function(id) { mark(structMap, id); });
+            return;
+          }
+
+          var moduleRaw = normalizeMindTopic(topics[0]);
+          var titleRaw = normalizeMindTopic(topics[1]);
+          var priorityRaw = normalizeMindTopic(topics[2]);
+          var preRaw = normalizeMindTopic(topics[3]);
+          var stepsRaw = normalizeMindTopic(topics[4]);
+          var expectedRaw = normalizeMindTopic(topics[5]);
+
+          var moduleValue = decodeMindTopicForSave(moduleRaw);
+          var titleValue = decodeMindTopicForSave(titleRaw);
+          var priorityValue = decodeMindTopicForSave(priorityRaw) || 'P1';
+          var preValue = decodeMindTopicForSave(preRaw);
+          var stepsValue = decodeMindTopicForSave(stepsRaw);
+          var expectedValue = decodeMindTopicForSave(expectedRaw);
+
+          if (!moduleValue || !titleValue || !expectedValue) {
+            nodeIds.forEach(function(id) { mark(structMap, id); });
+            if (!moduleValue && nodeIds[0]) mark(emptyMap, nodeIds[0]);
+            if (!titleValue && nodeIds[1]) mark(emptyMap, nodeIds[1]);
+            if (!expectedValue && nodeIds[5]) mark(emptyMap, nodeIds[5]);
+            return;
+          }
+
+          cases.push({
+            module: moduleValue,
+            title: titleValue,
+            priority: priorityValue,
+            preconditions: preValue,
+            precondition: preValue,
+            steps: stepsValue,
+            expected: expectedValue,
+            remark: '',
+          });
+          return;
+        }
+
+        for (var i = 0; i < children.length; i += 1) {
+          walk(children[i], depth + 1, topics, nodeIds);
+        }
+      }
+
+      walk(nodeData, 0, [], []);
+      var emptyNodeIds = Object.keys(emptyMap);
+      var structuralNodeIds = Object.keys(structMap);
+      var errors = [];
+      if (emptyNodeIds.length) {
+        errors.push('存在空节点，无法保存');
+      }
+      if (structuralNodeIds.length) {
+        errors.push('存在结构不完整的用例路径，无法保存');
+      }
+
+      return {
+        ok: errors.length === 0,
+        cases: cases,
+        emptyNodeIds: emptyNodeIds,
+        structuralNodeIds: structuralNodeIds,
+        errors: errors,
+      };
+    }
+
+
+    function readMindDataFromInstance(instance) {
+      if (!instance) return null;
+      try {
+        if (typeof instance.getData === 'function') {
+          var data = instance.getData();
+          if (data && data.nodeData) {
+            var cloned = cloneMindDataObject(data);
+            if (cloned && cloned.nodeData) return cloned;
+          }
+        }
+      } catch (err0) {
+        // ignore
+      }
+      try {
+        if (typeof instance.getDataString === 'function') {
+          var raw = instance.getDataString();
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            if (parsed && parsed.nodeData) {
+              var parsedCloned = cloneMindDataObject(parsed);
+              if (parsedCloned && parsedCloned.nodeData) return parsedCloned;
+            }
+          }
+        }
+      } catch (err1) {
+        // ignore
+      }
+      try {
+        if (instance.nodeData) {
+          var fallback = JSON.parse(JSON.stringify({ nodeData: instance.nodeData }, function(key, value) {
+            if (key === 'parent') return undefined;
+            return value;
+          }));
+          if (fallback && fallback.nodeData) return fallback;
+        }
+      } catch (err2) {
+        // ignore
+      }
+      return null;
+    }
+
+    function resolveMindUtilsApi() {
+      if (typeof window === 'undefined' || !window) return null;
+      return window.app && window.app.utils ? window.app.utils : null;
+    }
+
+    function openMindConfirmDrawer(options) {
+      var opts = options || {};
+      var utilsApi = resolveMindUtilsApi();
+      if (utilsApi && typeof utilsApi.openConfirmDrawer === 'function') {
+        return utilsApi.openConfirmDrawer(opts);
+      }
+      var msg = opts && opts.message ? String(opts.message) : '';
+      var ok = true;
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        ok = window.confirm(msg);
+      }
+      return Promise.resolve({ ok: ok });
+    }
+
+    function showMindToast(message, type, durationMs) {
+      var text = message ? String(message) : '';
+      if (!text) return;
+      var utilsApi = resolveMindUtilsApi();
+      if (utilsApi && typeof utilsApi.showCenterToast === 'function') {
+        utilsApi.showCenterToast(text, type || '', durationMs || 3000);
+      }
+    }
+
+    function buildMindChangeConfirmMessage(summary, suffix) {
+      var meta = summary && typeof summary === 'object' ? summary : {};
+      var modified = Number(meta.modified || 0);
+      var added = Number(meta.added || 0);
+      var deleted = Number(meta.deleted || 0);
+      if (!isFinite(modified) || modified < 0) modified = 0;
+      if (!isFinite(added) || added < 0) added = 0;
+      if (!isFinite(deleted) || deleted < 0) deleted = 0;
+      return '修改' + modified + '条、新增' + added + '条、删除' + deleted + '条，' + String(suffix || '确认继续吗？');
+    }
+
     function clampScale(value) {
       var num = Number(value);
       if (!isFinite(num)) return 1;
@@ -226,6 +521,48 @@
       else viewerEl.classList.remove('is-draggable');
       if (canDrag && dragging) viewerEl.classList.add('is-dragging');
       else viewerEl.classList.remove('is-dragging');
+    }
+
+    function syncDetachedGhostTheme(ghostEl, instance) {
+      if (!ghostEl || !instance || !instance.container) return;
+      if (typeof window === 'undefined' || !window || typeof window.getComputedStyle !== 'function') return;
+      var styles = null;
+      try {
+        styles = window.getComputedStyle(instance.container);
+      } catch (err) {
+        styles = null;
+      }
+      if (!styles) return;
+      var mainBg = styles.getPropertyValue('--main-bgcolor');
+      var mainColor = styles.getPropertyValue('--main-color');
+      if (mainBg) ghostEl.style.backgroundColor = String(mainBg).trim();
+      if (mainColor) {
+        var color = String(mainColor).trim();
+        if (color) {
+          ghostEl.style.borderColor = color;
+          ghostEl.style.color = color;
+        }
+      }
+    }
+
+    function detachMindDragGhost(instance) {
+      if (!instance || !instance.container || !instance.container.querySelectorAll) return;
+      if (typeof document === 'undefined' || !document || !document.body || !document.body.appendChild) return;
+      var list = instance.container.querySelectorAll('.mind-elixir-ghost');
+      if (!list || !list.length) return;
+      var detached = Array.isArray(instance.__tapDetachedNodes) ? instance.__tapDetachedNodes : [];
+      Array.prototype.forEach.call(list, function(ghostEl) {
+        if (!ghostEl) return;
+        if (ghostEl.classList) ghostEl.classList.add('xmind-floating-ghost');
+        syncDetachedGhostTheme(ghostEl, instance);
+        try {
+          document.body.appendChild(ghostEl);
+          detached.push(ghostEl);
+        } catch (err) {
+          // ignore
+        }
+      });
+      instance.__tapDetachedNodes = detached;
     }
 
     function normalizeSearchKeyword(value) {
@@ -268,6 +605,44 @@
       var searchCountEl = controlsEl && controlsEl.querySelector
         ? controlsEl.querySelector('[data-mind-search-count]')
         : null;
+      var editEnterBtn = controlsEl && controlsEl.querySelector
+        ? controlsEl.querySelector('[data-mind-action="edit-enter"]')
+        : null;
+      var editCancelBtn = controlsEl && controlsEl.querySelector
+        ? controlsEl.querySelector('[data-mind-action="edit-cancel"]')
+        : null;
+      var editSaveBtn = controlsEl && controlsEl.querySelector
+        ? controlsEl.querySelector('[data-mind-action="edit-save"]')
+        : null;
+      var editAddBtn = controlsEl && controlsEl.querySelector
+        ? controlsEl.querySelector('[data-mind-action="node-add"]')
+        : null;
+      var editDeleteBtn = controlsEl && controlsEl.querySelector
+        ? controlsEl.querySelector('[data-mind-action="node-delete"]')
+        : null;
+      var editUndoBtn = controlsEl && controlsEl.querySelector
+        ? controlsEl.querySelector('[data-mind-action="undo"]')
+        : null;
+      var editRedoBtn = controlsEl && controlsEl.querySelector
+        ? controlsEl.querySelector('[data-mind-action="redo"]')
+        : null;
+
+      var editableSessionKey = opts && opts.editableSessionKey ? String(opts.editableSessionKey) : '';
+      var restoredSession = opts && opts.restoredSession && typeof opts.restoredSession === 'object'
+        ? opts.restoredSession
+        : null;
+      var editing = opts && opts.initialEditing === true;
+      var pendingSave = false;
+      var applyingHistory = false;
+      var recordTimer = 0;
+      var baseMindData = cloneMindDataObject(opts && opts.baseMindData)
+        || cloneMindDataObject(opts && opts.initialMindData)
+        || readMindDataFromInstance(instance)
+        || null;
+
+      var historyEntries = [];
+      var historyIndex = -1;
+
       var searchState = {
         keyword: '',
         ids: [],
@@ -276,6 +651,191 @@
       var exportState = {
         pending: false,
       };
+
+      var enableCustomBoxSelection = false;
+      var boxPending = false;
+      var boxSelecting = false;
+      var boxMoved = false;
+      var boxStartX = 0;
+      var boxStartY = 0;
+      var boxRectEl = null;
+      var boxMinDragDistance = 4;
+
+      function getInstance() {
+        return instance;
+      }
+
+      function getCurrentMindData() {
+        return readMindDataFromInstance(getInstance());
+      }
+
+      function callOpenConfirm(options) {
+        if (opts && typeof opts.openConfirmDrawer === 'function') {
+          return opts.openConfirmDrawer(options || {});
+        }
+        return openMindConfirmDrawer(options || {});
+      }
+
+      function callShowToast(message, type, durationMs) {
+        if (opts && typeof opts.showToast === 'function') {
+          opts.showToast(message, type || '', durationMs || 3000);
+          return;
+        }
+        showMindToast(message, type || '', durationMs || 3000);
+      }
+
+      function notifyEditStateChange() {
+        if (opts && typeof opts.onEditStateChange === 'function') {
+          try {
+            opts.onEditStateChange({ editing: editing, pendingSave: pendingSave });
+          } catch (err) {
+            // ignore
+          }
+        }
+      }
+
+      function snapshotSignature(data) {
+        if (!data || !data.nodeData) return '';
+        try {
+          return JSON.stringify(data.nodeData);
+        } catch (err) {
+          return '';
+        }
+      }
+
+      function buildHistoryEntry(data) {
+        var cloned = cloneMindDataObject(data);
+        if (!cloned || !cloned.nodeData) return null;
+        return {
+          data: cloned,
+          signature: snapshotSignature(cloned),
+        };
+      }
+
+      function persistEditSession() {
+        if (!editableSessionKey) return;
+        if (!editing) {
+          clearMindEditSession(editableSessionKey);
+          return;
+        }
+        var currentData = getCurrentMindData();
+        if (!currentData || !currentData.nodeData) return;
+
+        var historyCap = 80;
+        var start = 0;
+        if (historyEntries.length > historyCap) {
+          start = historyEntries.length - historyCap;
+        }
+        var sliced = historyEntries.slice(start);
+        var payloadHistory = sliced.map(function(entry) {
+          return cloneMindDataObject(entry.data);
+        }).filter(function(entry) {
+          return Boolean(entry && entry.nodeData);
+        });
+        var nextIndex = historyIndex - start;
+        if (nextIndex < 0) nextIndex = 0;
+        if (nextIndex >= payloadHistory.length) nextIndex = payloadHistory.length - 1;
+        if (nextIndex < 0) nextIndex = 0;
+
+        writeMindEditSession(editableSessionKey, {
+          version: 1,
+          editing: true,
+          baseData: cloneMindDataObject(baseMindData),
+          currentData: cloneMindDataObject(currentData),
+          history: payloadHistory,
+          historyIndex: nextIndex,
+          updatedAt: Date.now(),
+        });
+      }
+
+      function pushHistorySnapshot(data, options) {
+        var opts1 = options || {};
+        var entry = buildHistoryEntry(data);
+        if (!entry) return;
+
+        if (opts1.reset === true) {
+          historyEntries = [entry];
+          historyIndex = 0;
+          if (opts1.persist !== false) persistEditSession();
+          return;
+        }
+
+        var current = historyEntries[historyIndex] || null;
+        if (current && current.signature === entry.signature) {
+          if (opts1.persist !== false) persistEditSession();
+          return;
+        }
+
+        historyEntries = historyEntries.slice(0, historyIndex + 1);
+        historyEntries.push(entry);
+        historyIndex = historyEntries.length - 1;
+        if (opts1.persist !== false) persistEditSession();
+      }
+
+      function initializeHistory() {
+        var restoredHistory = restoredSession && Array.isArray(restoredSession.history)
+          ? restoredSession.history
+          : [];
+        if (editing && restoredHistory.length) {
+          var list = restoredHistory.map(function(entry) {
+            return buildHistoryEntry(entry);
+          }).filter(Boolean);
+          if (list.length) {
+            historyEntries = list;
+            var restoredIndex = Number(restoredSession && restoredSession.historyIndex);
+            if (!isFinite(restoredIndex)) restoredIndex = list.length - 1;
+            if (restoredIndex < 0) restoredIndex = 0;
+            if (restoredIndex >= list.length) restoredIndex = list.length - 1;
+            historyIndex = restoredIndex;
+            return;
+          }
+        }
+        var initial = getCurrentMindData() || cloneMindDataObject(opts && opts.initialMindData);
+        if (initial && initial.nodeData) {
+          pushHistorySnapshot(initial, { reset: true, persist: false });
+        }
+      }
+
+      function scheduleRecordSnapshot() {
+        if (!editing || applyingHistory) return;
+        if (recordTimer) clearTimeout(recordTimer);
+        recordTimer = setTimeout(function() {
+          recordTimer = 0;
+          var snapshot = getCurrentMindData();
+          if (!snapshot || !snapshot.nodeData) return;
+          pushHistorySnapshot(snapshot);
+          updateEditButtons();
+        }, 20);
+      }
+
+      function clearValidationMarks() {
+        if (!viewerEl || !viewerEl.querySelectorAll) return;
+        var nodes = viewerEl.querySelectorAll('me-tpc.xmind-node-empty-error, me-tpc.xmind-node-struct-error');
+        if (!nodes || !nodes.length) return;
+        Array.prototype.forEach.call(nodes, function(node) {
+          if (!node || !node.classList) return;
+          node.classList.remove('xmind-node-empty-error');
+          node.classList.remove('xmind-node-struct-error');
+        });
+      }
+
+      function applyValidationMarks(emptyIds, structIds) {
+        clearValidationMarks();
+        var inst = getInstance();
+        if (!inst) return;
+        var empty = Array.isArray(emptyIds) ? emptyIds : [];
+        var struct = Array.isArray(structIds) ? structIds : [];
+        empty.forEach(function(id) {
+          var el = findMindNodeElement(inst, id);
+          if (!el || !el.classList) return;
+          el.classList.add('xmind-node-empty-error');
+        });
+        struct.forEach(function(id2) {
+          var el2 = findMindNodeElement(inst, id2);
+          if (!el2 || !el2.classList) return;
+          el2.classList.add('xmind-node-struct-error');
+        });
+      }
 
       function setSearchCount() {
         if (!searchCountEl) return;
@@ -302,13 +862,14 @@
       function applySearchClasses() {
         clearSearchClasses();
         var ids = Array.isArray(searchState.ids) ? searchState.ids : [];
+        var inst = getInstance();
         for (var i = 0; i < ids.length; i += 1) {
-          var target = findMindNodeElement(instance, ids[i]);
+          var target = findMindNodeElement(inst, ids[i]);
           if (!target || !target.classList) continue;
           target.classList.add('xmind-search-hit');
         }
         if (ids.length && searchState.index >= 0 && searchState.index < ids.length) {
-          var active = findMindNodeElement(instance, ids[searchState.index]);
+          var active = findMindNodeElement(inst, ids[searchState.index]);
           if (active && active.classList) {
             active.classList.add('xmind-search-active');
           }
@@ -332,11 +893,12 @@
         }
         searchState.index = nextIndex;
         applySearchClasses();
+        var inst = getInstance();
         var activeId = ids[nextIndex];
-        var activeEl = findMindNodeElement(instance, activeId);
-        if (activeEl && typeof instance.selectNode === 'function') {
+        var activeEl = findMindNodeElement(inst, activeId);
+        if (activeEl && inst && typeof inst.selectNode === 'function') {
           try {
-            instance.selectNode(activeEl);
+            inst.selectNode(activeEl);
           } catch (err) {
             // ignore
           }
@@ -344,8 +906,8 @@
       }
 
       function runSearch(options) {
-        var opts = options || {};
-        var keepIndex = opts.keepIndex === true;
+        var opts2 = options || {};
+        var keepIndex = opts2.keepIndex === true;
         var keyword = normalizeSearchKeyword(searchInputEl ? searchInputEl.value : '');
         searchState.keyword = keyword;
         if (!keyword) {
@@ -355,7 +917,8 @@
           return;
         }
         var matchedIds = [];
-        collectSearchNodeIds(instance ? instance.nodeData : null, keyword, matchedIds);
+        var inst = getInstance();
+        collectSearchNodeIds(inst ? inst.nodeData : null, keyword, matchedIds);
         searchState.ids = matchedIds;
         if (!matchedIds.length) {
           searchState.index = -1;
@@ -406,27 +969,22 @@
       }
 
       function zoomBy(step) {
-        if (!instance || typeof instance.scale !== 'function') return;
-        var current = resolveScale(instance);
+        var inst = getInstance();
+        if (!inst || typeof inst.scale !== 'function') return;
+        var current = resolveScale(inst);
         var next = clampScale(current + step);
         var center = getCanvasCenterPoint();
-        instance.scale(next, center);
-        updateViewerDragState(viewerEl, instance, false);
+        inst.scale(next, center);
+        updateViewerDragState(viewerEl, inst, false);
       }
 
       function zoomFit() {
-        if (instance && typeof instance.scaleFit === 'function') {
-          instance.scaleFit();
+        var inst = getInstance();
+        if (inst && typeof inst.scaleFit === 'function') {
+          inst.scaleFit();
         }
-        updateViewerDragState(viewerEl, instance, false);
+        updateViewerDragState(viewerEl, inst, false);
       }
-
-      var boxSelecting = false;
-      var boxMoved = false;
-      var boxStartX = 0;
-      var boxStartY = 0;
-      var boxRectEl = null;
-      var boxMinDragDistance = 4;
 
       function ensureBoxRectEl() {
         if (boxRectEl || !viewerEl || !viewerEl.appendChild) return boxRectEl;
@@ -501,36 +1059,91 @@
         });
       }
 
+      function collectSelectedNodes() {
+        var inst = getInstance();
+        var out = [];
+        var seen = Object.create(null);
+
+        function pushNode(node) {
+          if (!node || !node.tagName || String(node.tagName).toLowerCase() !== 'me-tpc') return;
+          var key = node.getAttribute && node.getAttribute('data-nodeid')
+            ? String(node.getAttribute('data-nodeid'))
+            : '';
+          if (!key) {
+            key = node.nodeObj && node.nodeObj.id ? String(node.nodeObj.id) : String(Math.random());
+          }
+          if (seen[key]) return;
+          seen[key] = true;
+          out.push(node);
+        }
+
+        var current = inst && Array.isArray(inst.currentNodes) ? inst.currentNodes : [];
+        current.forEach(pushNode);
+
+        if (viewerEl && viewerEl.querySelectorAll) {
+          var boxed = viewerEl.querySelectorAll('me-tpc.xmind-box-selected');
+          Array.prototype.forEach.call(boxed, pushNode);
+        }
+        return out;
+      }
+
+      function syncMindSelectionFromBox() {
+        var inst = getInstance();
+        if (!inst || typeof inst.selectNodes !== 'function' || !viewerEl || !viewerEl.querySelectorAll) return;
+        var boxed = viewerEl.querySelectorAll('me-tpc.xmind-box-selected');
+        var selected = [];
+        Array.prototype.forEach.call(boxed, function(node) {
+          if (!node || !node.tagName || String(node.tagName).toLowerCase() !== 'me-tpc') return;
+          selected.push(node);
+        });
+        if (!selected.length) return;
+        try {
+          if (typeof inst.clearSelection === 'function') inst.clearSelection();
+        } catch (err) {
+          // ignore
+        }
+        try {
+          inst.selectNodes(selected);
+        } catch (err2) {
+          // ignore
+        }
+      }
+
       function startBoxSelection(e) {
+        if (!enableCustomBoxSelection) return;
         if (!e || e.button !== 0) return;
         if (e.pointerType && e.pointerType !== 'mouse') return;
         if (controlsEl && controlsEl.contains && controlsEl.contains(e.target)) return;
         if (e.target && e.target.closest && e.target.closest('[data-mind-controls]')) return;
-        boxSelecting = true;
+        boxPending = true;
+        boxSelecting = false;
         boxMoved = false;
         boxStartX = e.clientX;
         boxStartY = e.clientY;
-        ensureBoxRectEl();
-        clearBoxSelectionClasses();
-        updateBoxSelection(boxStartX, boxStartY);
-        if (viewerEl && viewerEl.classList) viewerEl.classList.add('is-box-selecting');
-        if (e.preventDefault) e.preventDefault();
       }
 
       function moveBoxSelection(e) {
-        if (!boxSelecting) return;
-        if (!boxMoved) {
-          var deltaX = Math.abs(e.clientX - boxStartX);
-          var deltaY = Math.abs(e.clientY - boxStartY);
-          if (deltaX >= boxMinDragDistance || deltaY >= boxMinDragDistance) {
-            boxMoved = true;
-          }
+        if (!enableCustomBoxSelection) return;
+        if (!boxPending && !boxSelecting) return;
+        var deltaX = Math.abs(e.clientX - boxStartX);
+        var deltaY = Math.abs(e.clientY - boxStartY);
+        if (!boxSelecting) {
+          if (deltaX < boxMinDragDistance && deltaY < boxMinDragDistance) return;
+          boxSelecting = true;
+          boxMoved = true;
+          ensureBoxRectEl();
+          clearBoxSelectionClasses();
+          if (viewerEl && viewerEl.classList) viewerEl.classList.add('is-box-selecting');
         }
+
         updateBoxSelection(e.clientX, e.clientY);
         if (e.preventDefault) e.preventDefault();
       }
 
       function stopBoxSelection() {
+        if (!enableCustomBoxSelection) return;
+        if (!boxPending && !boxSelecting) return;
+        boxPending = false;
         if (!boxSelecting) return;
         boxSelecting = false;
         if (viewerEl && viewerEl.classList) viewerEl.classList.remove('is-box-selecting');
@@ -539,7 +1152,296 @@
         }
         if (!boxMoved) {
           clearBoxSelectionClasses();
+          return;
         }
+        syncMindSelectionFromBox();
+        updateEditButtons();
+      }
+
+      function setButtonVisible(button, visible) {
+        if (!button || !button.classList) return;
+        if (visible) button.classList.remove('hidden');
+        else button.classList.add('hidden');
+      }
+
+      function setButtonDisabled(button, disabled) {
+        if (!button) return;
+        button.disabled = Boolean(disabled);
+      }
+
+      function updateEditButtons() {
+        var selected = collectSelectedNodes();
+        var canAdd = editing && selected.length === 1 && !pendingSave;
+        var canDelete = editing && selected.some(function(node) {
+          return Boolean(node && node.nodeObj && node.nodeObj.parent);
+        }) && !pendingSave;
+        var canUndo = editing && historyIndex > 0 && !pendingSave;
+        var canRedo = editing && historyEntries.length > 0 && historyIndex >= 0 && historyIndex < historyEntries.length - 1 && !pendingSave;
+
+        setButtonVisible(editEnterBtn, !editing);
+        setButtonVisible(editCancelBtn, editing);
+        setButtonVisible(editSaveBtn, editing);
+        setButtonVisible(editAddBtn, editing);
+        setButtonVisible(editDeleteBtn, editing);
+        setButtonVisible(editUndoBtn, editing);
+        setButtonVisible(editRedoBtn, editing);
+
+        setButtonDisabled(editAddBtn, !canAdd);
+        setButtonDisabled(editDeleteBtn, !canDelete);
+        setButtonDisabled(editUndoBtn, !canUndo);
+        setButtonDisabled(editRedoBtn, !canRedo);
+        setButtonDisabled(editSaveBtn, pendingSave);
+        setButtonDisabled(editCancelBtn, pendingSave);
+
+        if (viewerEl && viewerEl.classList) {
+          if (editing) viewerEl.classList.add('is-editing');
+          else viewerEl.classList.remove('is-editing');
+          if (pendingSave) viewerEl.classList.add('is-saving');
+          else viewerEl.classList.remove('is-saving');
+        }
+
+        notifyEditStateChange();
+      }
+
+      function enterEditMode() {
+        if (editing) return;
+        editing = true;
+        pendingSave = false;
+        clearValidationMarks();
+        var inst = getInstance();
+        if (inst && typeof inst.enableEdit === 'function') {
+          try {
+            inst.enableEdit();
+          } catch (err) {
+            // ignore
+          }
+        }
+        var snapshot = getCurrentMindData();
+        if (snapshot && snapshot.nodeData) {
+          baseMindData = cloneMindDataObject(snapshot);
+          pushHistorySnapshot(snapshot, { reset: true, persist: false });
+        }
+        persistEditSession();
+        updateEditButtons();
+      }
+
+      function applyHistoryAt(index) {
+        var nextIndex = Number(index);
+        if (!isFinite(nextIndex)) return;
+        if (nextIndex < 0 || nextIndex >= historyEntries.length) return;
+        var entry = historyEntries[nextIndex];
+        if (!entry || !entry.data || !entry.data.nodeData) return;
+        var inst = getInstance();
+        if (!inst || typeof inst.refresh !== 'function') return;
+        applyingHistory = true;
+        try {
+          inst.refresh(cloneMindDataObject(entry.data));
+        } catch (err) {
+          // ignore
+        }
+        applyingHistory = false;
+        historyIndex = nextIndex;
+        clearValidationMarks();
+        runSearch({ keepIndex: true });
+        persistEditSession();
+        updateEditButtons();
+      }
+
+      function runUndo() {
+        if (!editing || pendingSave) return;
+        if (historyIndex <= 0) return;
+        applyHistoryAt(historyIndex - 1);
+      }
+
+      function runRedo() {
+        if (!editing || pendingSave) return;
+        if (historyEntries.length <= 0) return;
+        if (historyIndex >= historyEntries.length - 1) return;
+        applyHistoryAt(historyIndex + 1);
+      }
+
+      function runAddNode() {
+        if (!editing || pendingSave) return;
+        var inst = getInstance();
+        if (!inst || typeof inst.addChild !== 'function') return;
+        var selected = collectSelectedNodes();
+        if (selected.length !== 1) return;
+        clearValidationMarks();
+        try {
+          inst.addChild(selected[0], {
+            id: generateNodeId(),
+            topic: '新增节点',
+            expanded: true,
+            children: [],
+          });
+          scheduleRecordSnapshot();
+        } catch (err) {
+          // ignore
+        }
+      }
+
+      function runDeleteNodes() {
+        if (!editing || pendingSave) return;
+        var inst = getInstance();
+        if (!inst || typeof inst.removeNodes !== 'function') return;
+        var selected = collectSelectedNodes().filter(function(node) {
+          return Boolean(node && node.nodeObj && node.nodeObj.parent);
+        });
+        if (!selected.length) return;
+        clearValidationMarks();
+        try {
+          inst.removeNodes(selected);
+          clearBoxSelectionClasses();
+          scheduleRecordSnapshot();
+        } catch (err) {
+          // ignore
+        }
+      }
+
+      function exitEditMode(clearSession) {
+        editing = false;
+        pendingSave = false;
+        clearValidationMarks();
+        clearBoxSelectionClasses();
+        var inst = getInstance();
+        if (inst && typeof inst.disableEdit === 'function') {
+          try {
+            inst.disableEdit();
+          } catch (err) {
+            // ignore
+          }
+        }
+        if (clearSession === true) {
+          clearMindEditSession(editableSessionKey);
+        } else {
+          persistEditSession();
+        }
+        updateEditButtons();
+      }
+
+      function cancelEditMode() {
+        if (!editing || pendingSave) return;
+        var current = getCurrentMindData();
+        var base = cloneMindDataObject(baseMindData) || cloneMindDataObject(opts && opts.initialMindData);
+        if (!base || !base.nodeData) {
+          exitEditMode(true);
+          return;
+        }
+        var summary = calculateCaseChangeSummary(base, current || base);
+        var hasChange = Boolean(summary && Number(summary.total || 0) > 0);
+
+        function applyCancel() {
+          var inst = getInstance();
+          if (inst && typeof inst.refresh === 'function') {
+            applyingHistory = true;
+            try {
+              inst.refresh(cloneMindDataObject(base));
+            } catch (err) {
+              // ignore
+            }
+            applyingHistory = false;
+          }
+          pushHistorySnapshot(base, { reset: true, persist: false });
+          runSearch({ keepIndex: false });
+          exitEditMode(true);
+        }
+
+        if (!hasChange) {
+          applyCancel();
+          return;
+        }
+
+        callOpenConfirm({
+          title: '取消编辑',
+          message: buildMindChangeConfirmMessage(summary, '确认要取消保存吗？'),
+          confirmText: '确认取消',
+          cancelText: '继续编辑',
+          danger: true,
+        }).then(function(res) {
+          if (!res || res.ok !== true) return;
+          applyCancel();
+        });
+      }
+
+      function saveEditMode() {
+        if (!editing || pendingSave) return;
+        var saveFn = opts && typeof opts.onSaveCases === 'function' ? opts.onSaveCases : null;
+        var current = getCurrentMindData();
+        if (!current || !current.nodeData) {
+          callShowToast('当前导图数据为空，无法保存', 'err', 3000);
+          return;
+        }
+        var validation = validateMindDataCases(current, { fieldCount: 6 });
+        if (!validation || validation.ok !== true) {
+          var msg = validation && Array.isArray(validation.errors) && validation.errors.length
+            ? validation.errors[0]
+            : '结构校验失败，请检查节点';
+          applyValidationMarks(
+            validation && Array.isArray(validation.emptyNodeIds) ? validation.emptyNodeIds : [],
+            validation && Array.isArray(validation.structuralNodeIds) ? validation.structuralNodeIds : []
+          );
+          callShowToast(msg, 'err', 3000);
+          return;
+        }
+
+        clearValidationMarks();
+        var base = cloneMindDataObject(baseMindData) || cloneMindDataObject(opts && opts.initialMindData) || current;
+        var summary = calculateCaseChangeSummary(base, current);
+        var hasChange = Boolean(summary && Number(summary.total || 0) > 0);
+
+        function runSave() {
+          pendingSave = true;
+          updateEditButtons();
+          var savePromise = null;
+          try {
+            if (saveFn) {
+              savePromise = saveFn(validation.cases || [], summary || {}, {
+                mindData: cloneMindDataObject(current),
+                baseMindData: cloneMindDataObject(base),
+                validation: validation,
+              });
+            } else {
+              savePromise = Promise.resolve(true);
+            }
+          } catch (err) {
+            savePromise = Promise.reject(err);
+          }
+
+          Promise.resolve(savePromise).then(function(res) {
+            pendingSave = false;
+            var latest = getCurrentMindData() || cloneMindDataObject(current);
+            baseMindData = cloneMindDataObject(latest);
+            pushHistorySnapshot(latest, { reset: true, persist: false });
+            exitEditMode(true);
+            if (opts && typeof opts.onSaveSuccess === 'function') {
+              try {
+                opts.onSaveSuccess(res || null);
+              } catch (err2) {
+                // ignore
+              }
+            }
+          }).catch(function(err) {
+            pendingSave = false;
+            updateEditButtons();
+            var msg = err && err.message ? String(err.message) : '保存失败';
+            callShowToast(msg, 'err', 3000);
+          });
+        }
+
+        if (!hasChange) {
+          runSave();
+          return;
+        }
+
+        callOpenConfirm({
+          title: '确认保存',
+          message: buildMindChangeConfirmMessage(summary, '确认要保存吗？'),
+          confirmText: '确认保存',
+          cancelText: '继续编辑',
+        }).then(function(res) {
+          if (!res || res.ok !== true) return;
+          runSave();
+        });
       }
 
       function onControlsClick(e) {
@@ -585,11 +1487,417 @@
                 resetExportState();
               });
             }
-          } catch (err) {
+          } catch (err2) {
             resetExportState();
+          }
+        } else if (action === 'edit-enter') {
+          enterEditMode();
+        } else if (action === 'edit-cancel') {
+          cancelEditMode();
+        } else if (action === 'edit-save') {
+          saveEditMode();
+        } else if (action === 'node-add') {
+          runAddNode();
+        } else if (action === 'node-delete') {
+          runDeleteNodes();
+        } else if (action === 'undo') {
+          runUndo();
+        } else if (action === 'redo') {
+          runRedo();
+        }
+      }
+
+      function isTypingTarget(target) {
+        if (!target) return false;
+        if (target.id === 'input-box') return true;
+        var tag = target.tagName ? String(target.tagName).toLowerCase() : '';
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+        if (target.isContentEditable) return true;
+        return false;
+      }
+
+      function isMutationKeyEvent(e) {
+        if (!e) return false;
+        var key = e.key ? String(e.key) : '';
+        var lower = key.toLowerCase();
+        if (key === 'Tab' || key === 'Enter' || key === 'Delete' || key === 'Backspace') return true;
+        if ((e.ctrlKey || e.metaKey) && (lower === 'c' || lower === 'v' || lower === 'x' || lower === 'z' || lower === 'y')) return true;
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && lower === 'z') return true;
+        return false;
+      }
+
+      function onViewerKeydown(e) {
+        if (!e) return;
+        if (controlsEl && controlsEl.contains && controlsEl.contains(e.target)) return;
+        var typing = isTypingTarget(e.target);
+        var lower = e.key ? String(e.key).toLowerCase() : '';
+
+        if (!editing) {
+          if (isMutationKeyEvent(e)) {
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+          }
+          return;
+        }
+
+        if (!typing && (e.ctrlKey || e.metaKey) && !e.shiftKey && lower === 'z') {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+          runUndo();
+          return;
+        }
+
+        if (!typing && (((e.ctrlKey || e.metaKey) && lower === 'y') || ((e.ctrlKey || e.metaKey) && e.shiftKey && lower === 'z'))) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+          runRedo();
+          return;
+        }
+
+        if (!typing && (e.key === 'Delete' || e.key === 'Backspace')) {
+          var selected = collectSelectedNodes().filter(function(node) {
+            return Boolean(node && node.nodeObj && node.nodeObj.parent);
+          });
+          if (selected.length) {
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            runDeleteNodes();
           }
         }
       }
+
+      function onViewerClick() {
+        updateEditButtons();
+      }
+
+      function onViewerBlur(e) {
+        if (!editing) return;
+        var target = e && e.target ? e.target : null;
+        if (!target) return;
+        if (target.id !== 'input-box') return;
+        scheduleRecordSnapshot();
+      }
+
+      function placeInputCaretToEnd() {
+        if (typeof document === 'undefined') return false;
+        var inputEl = document.getElementById('input-box');
+        if (!inputEl) return false;
+        if (typeof inputEl.focus === 'function' && document.activeElement !== inputEl) {
+          try {
+            inputEl.focus();
+          } catch (err0) {
+            // ignore
+          }
+        }
+
+        if (typeof inputEl.setSelectionRange === 'function') {
+          try {
+            var valueLen = String(inputEl.value || '').length;
+            inputEl.setSelectionRange(valueLen, valueLen);
+            return true;
+          } catch (err1) {
+            // ignore
+          }
+        }
+
+        if (typeof window === 'undefined' || !window || typeof window.getSelection !== 'function') return false;
+        if (typeof document.createRange !== 'function') return false;
+
+        var selection = null;
+        try {
+          selection = window.getSelection();
+        } catch (err2) {
+          selection = null;
+        }
+        if (!selection) return false;
+
+        try {
+          var range = document.createRange();
+          range.selectNodeContents(inputEl);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          return true;
+        } catch (err3) {
+          return false;
+        }
+      }
+
+      function scheduleInputCaretToEnd() {
+        setTimeout(function() {
+          placeInputCaretToEnd();
+        }, 0);
+        setTimeout(function() {
+          placeInputCaretToEnd();
+        }, 24);
+      }
+
+      var customDragGhostEl = null;
+      var customPointerDragState = {
+        active: false,
+        moving: false,
+        pointerId: null,
+        startX: 0,
+        startY: 0,
+        previewText: '',
+      };
+      var customPointerDragThreshold = 3;
+
+      function clearCustomPointerDragState() {
+        customPointerDragState.active = false;
+        customPointerDragState.moving = false;
+        customPointerDragState.pointerId = null;
+        customPointerDragState.startX = 0;
+        customPointerDragState.startY = 0;
+        customPointerDragState.previewText = '';
+      }
+
+      function extractNodePreviewTopic(nodeEl) {
+        if (!nodeEl || !nodeEl.nodeObj) return '';
+        if (nodeEl.nodeObj.topic === undefined || nodeEl.nodeObj.topic === null) return '';
+        return String(nodeEl.nodeObj.topic || '').trim();
+      }
+
+      function resolvePointerDragPreviewText(fallbackNodeEl) {
+        var selected = collectSelectedNodes();
+        if (selected.length > 1) return String(selected.length) + ' 个节点';
+        if (selected.length === 1) {
+          var selectedTopic = extractNodePreviewTopic(selected[0]);
+          if (selectedTopic) return selectedTopic;
+        }
+        var fallback = extractNodePreviewTopic(fallbackNodeEl);
+        if (fallback) return fallback;
+        return '拖拽节点';
+      }
+
+      function getDraggedPreviewText(inst) {
+        var dragged = inst && Array.isArray(inst.dragged) ? inst.dragged : [];
+        if (!dragged.length) return '拖拽节点';
+        if (dragged.length > 1) return String(dragged.length) + ' 个节点';
+        var node = dragged[0];
+        if (node && node.nodeObj && node.nodeObj.topic !== undefined && node.nodeObj.topic !== null) {
+          var topic = String(node.nodeObj.topic || '').trim();
+          if (topic) return topic;
+        }
+        return '拖拽节点';
+      }
+
+      function onViewerPointerDownForDragPreview(e) {
+        if (!editing) {
+          clearCustomPointerDragState();
+          return;
+        }
+        if (!e || e.button !== 0) {
+          clearCustomPointerDragState();
+          return;
+        }
+        if (controlsEl && controlsEl.contains && controlsEl.contains(e.target)) {
+          clearCustomPointerDragState();
+          return;
+        }
+        if (e.target && e.target.closest && e.target.closest('[data-mind-controls]')) {
+          clearCustomPointerDragState();
+          return;
+        }
+        var nodeEl = e.target && e.target.closest ? e.target.closest('me-tpc') : null;
+        if (!nodeEl || !nodeEl.nodeObj) {
+          clearCustomPointerDragState();
+          return;
+        }
+        customPointerDragState.active = true;
+        customPointerDragState.moving = false;
+        customPointerDragState.pointerId = typeof e.pointerId === 'number' ? e.pointerId : null;
+        customPointerDragState.startX = typeof e.clientX === 'number' ? e.clientX : 0;
+        customPointerDragState.startY = typeof e.clientY === 'number' ? e.clientY : 0;
+        customPointerDragState.previewText = resolvePointerDragPreviewText(nodeEl);
+      }
+
+      function canUsePointerDragPreview(e) {
+        if (!customPointerDragState.active) return false;
+        if (!e) return false;
+        if (customPointerDragState.pointerId !== null && typeof e.pointerId === 'number' && e.pointerId !== customPointerDragState.pointerId) {
+          return false;
+        }
+        if (typeof e.buttons === 'number' && (e.buttons & 1) !== 1) return false;
+        if (typeof e.clientX !== 'number' || typeof e.clientY !== 'number') return false;
+        return true;
+      }
+
+      function syncCustomPointerDragPreview(e) {
+        if (!canUsePointerDragPreview(e)) return false;
+        var deltaX = Math.abs(e.clientX - customPointerDragState.startX);
+        var deltaY = Math.abs(e.clientY - customPointerDragState.startY);
+        if (!customPointerDragState.moving) {
+          if (deltaX < customPointerDragThreshold && deltaY < customPointerDragThreshold) return false;
+          customPointerDragState.moving = true;
+        }
+        var preview = customPointerDragState.previewText || '拖拽节点';
+        showCustomDragGhost(e.clientX, e.clientY, preview);
+        return true;
+      }
+
+      function ensureCustomDragGhostEl() {
+        if (customDragGhostEl && customDragGhostEl.parentNode) return customDragGhostEl;
+        if (typeof document === 'undefined' || !document || !document.createElement) return null;
+        if (!document.body || !document.body.appendChild) return null;
+        var el = document.createElement('div');
+        el.className = 'xmind-custom-drag-ghost';
+        el.style.display = 'none';
+        el.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(el);
+        customDragGhostEl = el;
+        return customDragGhostEl;
+      }
+
+      function updateCustomDragGhostPosition(clientX, clientY) {
+        var el = ensureCustomDragGhostEl();
+        if (!el) return;
+        var x = Number(clientX);
+        var y = Number(clientY);
+        if (!isFinite(x) || !isFinite(y)) return;
+        var offset = 12;
+        var left = x + offset;
+        var top = y + offset;
+        el.style.transform = 'translate(' + left + 'px, ' + top + 'px)';
+      }
+
+      function showCustomDragGhost(clientX, clientY, text) {
+        var el = ensureCustomDragGhostEl();
+        if (!el) return;
+        var preview = text === undefined || text === null ? '' : String(text).trim();
+        if (!preview) preview = '拖拽节点';
+        el.textContent = preview;
+        if (el.classList) el.classList.add('is-visible');
+        el.style.display = 'block';
+        el.style.visibility = 'visible';
+        el.style.opacity = '0.98';
+        updateCustomDragGhostPosition(clientX, clientY);
+      }
+
+      function hideCustomDragGhost() {
+        var el = customDragGhostEl;
+        if (!el) return;
+        if (el.classList) el.classList.remove('is-visible');
+        el.style.opacity = '0';
+        el.style.visibility = 'hidden';
+        el.style.display = 'none';
+      }
+
+      function releaseCustomDragGhost() {
+        var el = customDragGhostEl;
+        if (!el) return;
+        hideCustomDragGhost();
+        if (!el.parentNode) {
+          customDragGhostEl = null;
+          return;
+        }
+        try {
+          el.parentNode.removeChild(el);
+        } catch (err0) {
+          // ignore
+        }
+        customDragGhostEl = null;
+      }
+
+      function getDragGhostElement(includeHidden) {
+        var inst = getInstance();
+        var ghost = null;
+        var list = inst && Array.isArray(inst.__tapDetachedNodes) ? inst.__tapDetachedNodes : [];
+        if (list && list.length) ghost = list[0];
+        if (!ghost && typeof document !== 'undefined' && document && document.querySelector) {
+          ghost = document.querySelector('.xmind-floating-ghost, .mind-elixir-ghost');
+        }
+        if (!ghost || !ghost.style) return null;
+
+        if (includeHidden) return ghost;
+
+        var visible = ghost.style.display !== 'none';
+        if (!visible && typeof window !== 'undefined' && window && typeof window.getComputedStyle === 'function') {
+          try {
+            var style = window.getComputedStyle(ghost);
+            visible = Boolean(style && style.display !== 'none');
+          } catch (err1) {
+            visible = false;
+          }
+        }
+        return visible ? ghost : null;
+      }
+
+      function setDragGhostPreviewContent(ghost, inst) {
+        var previewText = getDraggedPreviewText(inst);
+        if (!ghost) return previewText;
+        var text = String(ghost.textContent || '').trim();
+        if (text) {
+          if (ghost.removeAttribute) ghost.removeAttribute('data-drag-placeholder');
+          return text;
+        }
+
+        var textEl = ghost.querySelector ? ghost.querySelector('.text') : null;
+        if (textEl) textEl.textContent = previewText;
+        else ghost.textContent = previewText;
+        if (ghost.setAttribute) ghost.setAttribute('data-drag-placeholder', '1');
+        return previewText;
+      }
+
+      function markDragGhostIdle() {
+        var ghost = getDragGhostElement(true);
+        if (!ghost) return;
+        if (ghost.classList) ghost.classList.remove('xmind-floating-ghost-active');
+        if (ghost.removeAttribute) ghost.removeAttribute('data-drag-placeholder');
+      }
+
+      function resetDragGhostPreview() {
+        markDragGhostIdle();
+        hideCustomDragGhost();
+        clearCustomPointerDragState();
+      }
+
+      function syncDragGhostFollowPointer(e) {
+        if (!e) return;
+        var inst = getInstance();
+        var innerDragging = Boolean(inst && inst.dragged && inst.dragged.length);
+        var outerDragging = syncCustomPointerDragPreview(e);
+
+        if (!innerDragging && !outerDragging) {
+          if (!canUsePointerDragPreview(e)) {
+            resetDragGhostPreview();
+          }
+          return;
+        }
+
+        if (innerDragging) {
+          if (typeof e.clientX !== 'number' || typeof e.clientY !== 'number') return;
+          var previewText = getDraggedPreviewText(inst);
+          showCustomDragGhost(e.clientX, e.clientY, previewText);
+
+          var ghost = getDragGhostElement(false);
+          if (!ghost) return;
+          if (ghost.classList) ghost.classList.add('xmind-floating-ghost-active');
+          ghost.style.display = 'block';
+          ghost.style.visibility = 'visible';
+          ghost.style.opacity = '0.96';
+          setDragGhostPreviewContent(ghost, inst);
+          var rect = ghost.getBoundingClientRect();
+          var offsetX = rect && rect.width > 0 ? (rect.width / 2) : 0;
+          var offsetY = rect && rect.height > 0 ? (rect.height / 2) : 0;
+          var left = e.clientX - offsetX;
+          var top = e.clientY - offsetY;
+          ghost.style.transform = 'translate(' + left + 'px, ' + top + 'px)';
+        }
+      }
+
+      function operationListener(payload) {
+        if (!editing || applyingHistory) return;
+        var op = payload && payload.name ? String(payload.name) : '';
+        if (op === 'beginEdit') {
+          scheduleInputCaretToEnd();
+          return;
+        }
+        clearValidationMarks();
+        scheduleRecordSnapshot();
+      }
+
+      initializeHistory();
 
       if (controlsEl && typeof controlsEl.addEventListener === 'function') {
         controlsEl.addEventListener('click', onControlsClick);
@@ -599,21 +1907,58 @@
         searchInputEl.addEventListener('keydown', onSearchKeydown);
       }
       if (viewerEl && typeof viewerEl.addEventListener === 'function') {
-        viewerEl.addEventListener('pointerdown', startBoxSelection, true);
+        viewerEl.addEventListener('pointerdown', onViewerPointerDownForDragPreview, true);
+        if (enableCustomBoxSelection) viewerEl.addEventListener('pointerdown', startBoxSelection, true);
+        viewerEl.addEventListener('keydown', onViewerKeydown, true);
+        viewerEl.addEventListener('click', onViewerClick, true);
+        viewerEl.addEventListener('blur', onViewerBlur, true);
       }
-      if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
+      if (enableCustomBoxSelection && typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
         window.addEventListener('pointermove', moveBoxSelection);
         window.addEventListener('pointerup', stopBoxSelection);
         window.addEventListener('pointercancel', stopBoxSelection);
+      }
+      if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
+        window.addEventListener('pointermove', syncDragGhostFollowPointer);
+        window.addEventListener('mousemove', syncDragGhostFollowPointer);
+        window.addEventListener('pointerup', resetDragGhostPreview, true);
+        window.addEventListener('mouseup', resetDragGhostPreview, true);
+        window.addEventListener('pointercancel', resetDragGhostPreview, true);
+      }
+      if (instance && instance.bus && typeof instance.bus.addListener === 'function') {
+        instance.bus.addListener('operation', operationListener);
       }
 
       setSearchCount();
       updateViewerDragState(viewerEl, instance, false);
 
+      if (editing) {
+        if (instance && typeof instance.enableEdit === 'function') {
+          try {
+            instance.enableEdit();
+          } catch (err) {
+            // ignore
+          }
+        }
+        persistEditSession();
+      } else if (instance && typeof instance.disableEdit === 'function') {
+        try {
+          instance.disableEdit();
+        } catch (err2) {
+          // ignore
+        }
+      }
+      updateEditButtons();
+
       return function cleanup() {
+        if (recordTimer) {
+          clearTimeout(recordTimer);
+          recordTimer = 0;
+        }
         stopBoxSelection();
         clearSearchClasses();
         clearBoxSelectionClasses();
+        clearValidationMarks();
         if (controlsEl && typeof controlsEl.removeEventListener === 'function') {
           controlsEl.removeEventListener('click', onControlsClick);
         }
@@ -622,17 +1967,32 @@
           searchInputEl.removeEventListener('keydown', onSearchKeydown);
         }
         if (viewerEl && typeof viewerEl.removeEventListener === 'function') {
-          viewerEl.removeEventListener('pointerdown', startBoxSelection, true);
+          viewerEl.removeEventListener('pointerdown', onViewerPointerDownForDragPreview, true);
+          if (enableCustomBoxSelection) viewerEl.removeEventListener('pointerdown', startBoxSelection, true);
+          viewerEl.removeEventListener('keydown', onViewerKeydown, true);
+          viewerEl.removeEventListener('click', onViewerClick, true);
+          viewerEl.removeEventListener('blur', onViewerBlur, true);
         }
-        if (typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
+        if (enableCustomBoxSelection && typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
           window.removeEventListener('pointermove', moveBoxSelection);
           window.removeEventListener('pointerup', stopBoxSelection);
           window.removeEventListener('pointercancel', stopBoxSelection);
+        }
+        if (typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
+          window.removeEventListener('pointermove', syncDragGhostFollowPointer);
+          window.removeEventListener('mousemove', syncDragGhostFollowPointer);
+          window.removeEventListener('pointerup', resetDragGhostPreview, true);
+          window.removeEventListener('mouseup', resetDragGhostPreview, true);
+          window.removeEventListener('pointercancel', resetDragGhostPreview, true);
+        }
+        if (instance && instance.bus && typeof instance.bus.removeListener === 'function') {
+          instance.bus.removeListener('operation', operationListener);
         }
         if (boxRectEl && boxRectEl.parentNode) {
           boxRectEl.parentNode.removeChild(boxRectEl);
         }
         boxRectEl = null;
+        releaseCustomDragGhost();
       };
     }
 
@@ -648,6 +2008,16 @@
         }
       });
       instance.__tapXmindCleanupList = [];
+      var detachedNodes = Array.isArray(instance.__tapDetachedNodes) ? instance.__tapDetachedNodes : [];
+      detachedNodes.forEach(function(node) {
+        if (!node || !node.parentNode) return;
+        try {
+          node.parentNode.removeChild(node);
+        } catch (err0) {
+          // ignore
+        }
+      });
+      instance.__tapDetachedNodes = [];
       if (typeof instance.destroy !== 'function') return;
       try {
         instance.destroy();
@@ -677,11 +2047,22 @@
         + '<button class="secondary xmind-search-btn" type="button" data-mind-action="search-next" title="下一个">↓</button>'
         + '<button class="secondary xmind-search-btn" type="button" data-mind-action="search-clear" title="清空搜索">清空</button>'
         + '</div>'
+        + '<div class="xmind-action-group">'
         + '<div class="xmind-zoom-group">'
         + '<button class="secondary xmind-zoom-btn" type="button" data-mind-action="zoom-out" title="缩小">-</button>'
         + '<button class="secondary xmind-zoom-btn" type="button" data-mind-action="zoom-fit" title="全览">全览</button>'
         + '<button class="secondary xmind-zoom-btn" type="button" data-mind-action="zoom-in" title="放大">+</button>'
         + '<button class="secondary xmind-zoom-btn xmind-export-btn" type="button" data-mind-action="export-xmind" title="导出当前XMind"' + exportDisabledAttr + '>导出XMind</button>'
+        + '</div>'
+        + '<div class="xmind-edit-group">'
+        + '<button class="secondary xmind-edit-btn" type="button" data-mind-action="edit-enter">编辑</button>'
+        + '<button class="secondary xmind-edit-btn hidden" type="button" data-mind-action="edit-cancel">取消</button>'
+        + '<button class="secondary xmind-edit-btn hidden" type="button" data-mind-action="edit-save">确认保存</button>'
+        + '<button class="secondary xmind-edit-op-btn hidden" type="button" data-mind-action="node-add" disabled>增加节点</button>'
+        + '<button class="secondary xmind-edit-op-btn hidden" type="button" data-mind-action="node-delete" disabled>删除节点</button>'
+        + '<button class="secondary xmind-edit-op-btn hidden" type="button" data-mind-action="undo" disabled>撤回改动</button>'
+        + '<button class="secondary xmind-edit-op-btn hidden" type="button" data-mind-action="redo" disabled>恢复改动</button>'
+        + '</div>'
         + '</div>'
         + '</div>';
       var canvasHtml = '<div class="xmind-structure-canvas" data-mind-canvas></div>';
@@ -689,39 +2070,87 @@
       var canvasEl = container.querySelector('[data-mind-canvas]');
       if (!canvasEl) throw new Error('思维导图画布初始化失败');
 
+      var sessionKey = opts && opts.editableSessionKey ? String(opts.editableSessionKey) : '';
+      var restoredSession = sessionKey ? readMindEditSession(sessionKey) : null;
+      var restoredCurrent = restoredSession && restoredSession.currentData && restoredSession.currentData.nodeData
+        ? cloneMindDataObject(restoredSession.currentData)
+        : null;
+      var initialMindData = restoredCurrent || cloneMindDataObject(mindData) || mindData;
+      var initialEditing = Boolean(restoredSession && restoredSession.editing === true && restoredCurrent && restoredCurrent.nodeData);
+      var baseMindData = restoredSession && restoredSession.baseData && restoredSession.baseData.nodeData
+        ? cloneMindDataObject(restoredSession.baseData)
+        : cloneMindDataObject(mindData);
+
       var darkMode = typeof opts.darkMode === 'boolean' ? opts.darkMode : resolveDarkMode();
       var theme = buildTheme(darkMode);
       var direction = normalizeDirection(opts.direction, ctor);
       var instance = new ctor({
         el: canvasEl,
         direction: direction,
-        editable: false,
+        editable: true,
         contextMenu: false,
         toolBar: false,
-        keypress: false,
+        keypress: true,
+        selectionContainer: (typeof document !== 'undefined' && document && document.body) ? document.body : undefined,
         mouseSelectionButton: 0,
-        allowUndo: false,
+        allowUndo: true,
         overflowHidden: false,
         theme: theme || undefined,
       });
+      instance.newTopicName = '新增节点';
       instance.init({
-        nodeData: mindData.nodeData,
+        nodeData: initialMindData.nodeData,
         direction: direction,
       });
+      detachMindDragGhost(instance);
+      if (initialEditing) {
+        if (typeof instance.enableEdit === 'function') {
+          try {
+            instance.enableEdit();
+          } catch (err0) {
+            // ignore
+          }
+        }
+      } else if (typeof instance.disableEdit === 'function') {
+        try {
+          instance.disableEdit();
+        } catch (err1) {
+          // ignore
+        }
+      }
 
-      var cleanup = bindViewerInteractions(container, canvasEl, instance, opts);
+      var cleanup = bindViewerInteractions(container, canvasEl, instance, Object.assign({}, opts, {
+        direction: direction,
+        editableSessionKey: sessionKey,
+        restoredSession: restoredSession,
+        initialEditing: initialEditing,
+        initialMindData: cloneMindDataObject(initialMindData),
+        baseMindData: cloneMindDataObject(baseMindData),
+      }));
       if (cleanup) {
         instance.__tapXmindCleanupList = [cleanup];
       } else {
         instance.__tapXmindCleanupList = [];
       }
 
+      if (opts && typeof opts.onInstanceChange === 'function') {
+        try {
+          opts.onInstanceChange(instance);
+        } catch (err2) {
+          // ignore
+        }
+      }
+
       setTimeout(function() {
+        if (initialEditing) {
+          updateViewerDragState(container, instance, false);
+          return;
+        }
         if (instance && typeof instance.scaleFit === 'function') {
           try {
             instance.scaleFit();
             updateViewerDragState(container, instance, false);
-          } catch (err) {
+          } catch (err3) {
             // ignore
           }
         }
@@ -737,6 +2166,10 @@
       if (!nextTheme) return false;
       try {
         instance.changeTheme(nextTheme, true);
+        var detachedNodes = Array.isArray(instance.__tapDetachedNodes) ? instance.__tapDetachedNodes : [];
+        detachedNodes.forEach(function(node) {
+          syncDetachedGhostTheme(node, instance);
+        });
         return true;
       } catch (err) {
         return false;

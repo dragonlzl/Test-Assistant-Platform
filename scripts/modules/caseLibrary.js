@@ -3268,6 +3268,218 @@
       });
   }
 
+
+
+  function normalizeXmindCaseLibraryText(value) {
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
+  }
+
+  function normalizeXmindCaseLibraryCase(item) {
+    var row = item && typeof item === 'object' ? item : {};
+    var module = normalizeXmindCaseLibraryText(row.module || row.module_name || row['模块']);
+    var title = normalizeXmindCaseLibraryText(row.title || row.case_title || row['用例标题']);
+    var priority = normalizeXmindCaseLibraryText(row.priority || row.level || row['优先级']) || 'P1';
+    var pre = normalizeXmindCaseLibraryText(row.preconditions || row.precondition || row['前提条件']);
+    var steps = normalizeXmindCaseLibraryText(row.steps || row.actions || row['操作步骤']);
+    var expected = normalizeXmindCaseLibraryText(row.expected || row.result || row['预期结果']);
+    return {
+      module: module,
+      title: title,
+      priority: priority,
+      precondition: pre,
+      preconditions: pre,
+      steps: steps,
+      expected: expected,
+    };
+  }
+
+  function buildXmindCaseLibraryStrictKey(item) {
+    var row = normalizeXmindCaseLibraryCase(item || {});
+    return [row.module, row.title, row.priority, row.precondition, row.steps, row.expected]
+      .map(function(seg) { return normalizeXmindCaseLibraryText(seg).toLowerCase(); })
+      .join('::');
+  }
+
+  function buildXmindCaseLibraryLooseKey(item) {
+    var row = normalizeXmindCaseLibraryCase(item || {});
+    return [row.module, row.title, row.expected]
+      .map(function(seg) { return normalizeXmindCaseLibraryText(seg).toLowerCase(); })
+      .join('::');
+  }
+
+  function isXmindCaseLibraryStructSame(oldRow, newRow) {
+    var a = normalizeXmindCaseLibraryCase(oldRow || {});
+    var b = normalizeXmindCaseLibraryCase(newRow || {});
+    return a.module === b.module
+      && a.title === b.title
+      && a.priority === b.priority
+      && a.precondition === b.precondition
+      && a.steps === b.steps
+      && a.expected === b.expected;
+  }
+
+  function buildCaseLibraryXmindPatchDiff(existingItems, nextCases) {
+    var oldList = Array.isArray(existingItems) ? existingItems : [];
+    var nextList = Array.isArray(nextCases) ? nextCases : [];
+    var oldSlots = oldList.map(function(item, idx) {
+      return {
+        idx: idx,
+        item: item,
+        normalized: normalizeXmindCaseLibraryCase(item),
+        matched: false,
+      };
+    });
+    var nextSlots = nextList.map(function(item2, idx2) {
+      return {
+        idx: idx2,
+        normalized: normalizeXmindCaseLibraryCase(item2),
+        matchedOld: null,
+      };
+    });
+
+    function matchBy(buildOldKey, buildNewKey) {
+      nextSlots.forEach(function(nextSlot) {
+        if (nextSlot.matchedOld) return;
+        var targetKey = buildNewKey(nextSlot.normalized);
+        for (var i = 0; i < oldSlots.length; i += 1) {
+          var oldSlot = oldSlots[i];
+          if (oldSlot.matched) continue;
+          if (buildOldKey(oldSlot.normalized) !== targetKey) continue;
+          oldSlot.matched = true;
+          nextSlot.matchedOld = oldSlot;
+          break;
+        }
+      });
+    }
+
+    matchBy(buildXmindCaseLibraryStrictKey, buildXmindCaseLibraryStrictKey);
+    matchBy(buildXmindCaseLibraryLooseKey, buildXmindCaseLibraryLooseKey);
+
+    var updates = [];
+    var creates = [];
+    var deletes = [];
+
+    nextSlots.forEach(function(nextSlot2) {
+      var norm = nextSlot2.normalized;
+      if (nextSlot2.matchedOld) {
+        var oldItem = nextSlot2.matchedOld.item || {};
+        if (!isXmindCaseLibraryStructSame(oldItem, norm)) {
+          updates.push({
+            id: oldItem.id,
+            payload: {
+              module: norm.module,
+              title: norm.title,
+              priority: norm.priority,
+              precondition: norm.precondition,
+              steps: norm.steps,
+              expected: norm.expected,
+            },
+          });
+        }
+      } else {
+        creates.push({
+          payload: {
+            module: norm.module,
+            title: norm.title,
+            priority: norm.priority,
+            precondition: norm.precondition,
+            steps: norm.steps,
+            expected: norm.expected,
+            remark: '',
+          },
+        });
+      }
+    });
+
+    oldSlots.forEach(function(oldSlot2) {
+      if (oldSlot2.matched) return;
+      var oldItem2 = oldSlot2.item || {};
+      if (!oldItem2.id) return;
+      deletes.push({ id: oldItem2.id });
+    });
+
+    return {
+      updates: updates,
+      creates: creates,
+      deletes: deletes,
+    };
+  }
+
+  function saveCaseLibraryXmindCases(nextCases, summary) {
+    var file = state.editor && state.editor.caseFile ? state.editor.caseFile : null;
+    if (!file || !file.id) {
+      return Promise.reject(new Error('请先选择用例文件'));
+    }
+    var existing = Array.isArray(state.editor && state.editor.items) ? state.editor.items.slice() : [];
+    var nextList = (Array.isArray(nextCases) ? nextCases : []).map(function(entry) {
+      return normalizeXmindCaseLibraryCase(entry);
+    }).filter(function(entry2) {
+      return Boolean(entry2.module && entry2.title && entry2.expected);
+    });
+    var diff = buildCaseLibraryXmindPatchDiff(existing, nextList);
+    var changeCount = diff.updates.length + diff.creates.length + diff.deletes.length;
+
+    if (!changeCount) {
+      setStatus(dom.editStatus, 'XMind 编辑无改动，已保持当前状态', 'ok');
+      return Promise.resolve({ changed: 0, updates: 0, creates: 0, deletes: 0 });
+    }
+
+    setStatus(dom.editStatus, '正在保存 XMind 编辑...', '');
+
+    var chain = Promise.resolve();
+    diff.updates.forEach(function(entry3) {
+      chain = chain.then(function() {
+        return apiClient.updateCaseItem(entry3.id, entry3.payload || {});
+      });
+    });
+    diff.creates.forEach(function(entry4) {
+      chain = chain.then(function() {
+        return apiClient.createCaseItem(file.id, entry4.payload || {});
+      });
+    });
+    diff.deletes.forEach(function(entry5) {
+      chain = chain.then(function() {
+        return apiClient.deleteCaseItem(entry5.id);
+      });
+    });
+
+    return chain
+      .then(function() {
+        return apiClient.listCaseItems(file.id);
+      })
+      .then(function(items) {
+        state.editor.items = reorderItemsByExistingModuleAppend(Array.isArray(items) ? items : []);
+        state.editor.pageIndex = 0;
+        state.editor.selection = new Set();
+        renderEditorCard();
+        syncEditorSearchControls();
+        syncEditorBatchDeleteControls();
+        syncEditorBatchAddControls();
+        syncCaseLibraryAiGenContext();
+
+        setStatus(dom.editStatus, 'XMind 编辑保存成功', 'ok');
+        safeLogOperation('save_case_file_xmind_structure', 'case_file', file.id || null, {
+          case_file_id: file.id || null,
+          summary: summary || {},
+          updates: diff.updates.length,
+          creates: diff.creates.length,
+          deletes: diff.deletes.length,
+        });
+        return {
+          changed: changeCount,
+          updates: diff.updates.length,
+          creates: diff.creates.length,
+          deletes: diff.deletes.length,
+        };
+      })
+      .catch(function(err) {
+        var msg = err && err.message ? String(err.message) : '保存失败';
+        setStatus(dom.editStatus, 'XMind 编辑保存失败：' + msg, 'err');
+        throw err;
+      });
+  }
+
   function openCaseLibraryXmindStructure() {
     var mindApi = getMindElixirApi();
     if (!mindApi || typeof mindApi.buildMindDataFromCases !== 'function' || typeof mindApi.renderMindMap !== 'function') {
@@ -3311,6 +3523,10 @@
         instance: caseLibraryXmindMindInstance,
         direction: 'side',
         onExportXmind: exportCurrentCaseLibraryXmind,
+        editableSessionKey: 'tap-case-library-xmind-edit-' + String(currentFile.id || ''),
+        onSaveCases: saveCaseLibraryXmindCases,
+        openConfirmDrawer: openConfirmDrawer,
+        showToast: utils && typeof utils.showCenterToast === 'function' ? utils.showCenterToast : null,
       });
       bindCaseLibraryXmindThemeSync(mindApi);
     } catch (err) {

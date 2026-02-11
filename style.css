@@ -3856,6 +3856,9 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   pointer-events: auto;
   transition-delay: 0s;
 }
+#appConfirmDrawer {
+  z-index: 1800;
+}
 .drawer .drawer-mask {
   position: absolute;
   inset: 0;
@@ -7776,11 +7779,26 @@ tr.import-invalid-locate-active td {
   color: #94a3b8;
 }
 
+.xmind-structure-viewer .xmind-action-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .xmind-structure-viewer .xmind-zoom-group {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.xmind-structure-viewer .xmind-edit-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .xmind-structure-viewer .xmind-search-btn,
@@ -7796,6 +7814,35 @@ tr.import-invalid-locate-active td {
 .xmind-structure-viewer .xmind-export-btn {
   min-width: 88px;
   font-weight: 600;
+}
+
+.xmind-structure-viewer .xmind-edit-btn,
+.xmind-structure-viewer .xmind-edit-op-btn {
+  min-width: 72px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  line-height: 28px;
+  text-align: center;
+}
+
+.xmind-structure-viewer .xmind-edit-btn[data-mind-action="edit-save"] {
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.xmind-structure-viewer.is-editing .xmind-structure-controls {
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.14);
+}
+
+.xmind-structure-viewer me-tpc.xmind-node-empty-error .text {
+  background: rgba(254, 226, 226, 0.9);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.72);
+}
+
+.xmind-structure-viewer me-tpc.xmind-node-struct-error .text {
+  background: rgba(254, 242, 242, 0.88);
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.82);
 }
 
 .xmind-structure-viewer me-tpc.xmind-search-hit .text {
@@ -7823,6 +7870,104 @@ tr.import-invalid-locate-active td {
   border-radius: 6px;
   pointer-events: none;
   box-sizing: border-box;
+}
+
+.xmind-structure-viewer .selection-area,
+.selection-area {
+  border: 1px solid rgba(37, 99, 235, 0.9);
+  background: rgba(147, 197, 253, 0.2);
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.xmind-floating-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  box-sizing: content-box;
+  opacity: 0.92;
+  background: #ffffff;
+  border: 2px solid #2563eb;
+  color: #1d4ed8;
+  max-width: 360px;
+  min-height: 28px;
+  width: fit-content;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 8px 14px;
+  border-radius: 8px;
+  display: none;
+  pointer-events: none;
+  z-index: 21005;
+  transform: translate(0, 0);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.2);
+}
+
+.xmind-custom-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  box-sizing: content-box;
+  max-width: 360px;
+  min-height: 28px;
+  width: fit-content;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 2px solid #2563eb;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow: 0 12px 26px rgba(37, 99, 235, 0.24);
+  pointer-events: none;
+  display: none;
+  opacity: 0;
+  visibility: hidden;
+  z-index: 21010;
+  transform: translate(0, 0);
+}
+
+.xmind-custom-drag-ghost.is-visible {
+  display: block;
+  opacity: 0.98;
+  visibility: visible;
+}
+
+.xmind-floating-ghost,
+.xmind-floating-ghost * {
+  color: inherit !important;
+}
+
+.xmind-floating-ghost .text {
+  display: inline-block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.xmind-floating-ghost .icons {
+  display: inline-block;
+  direction: ltr;
+  margin-left: 6px;
+}
+
+.xmind-floating-ghost .icons span {
+  display: inline-block;
+  line-height: 1.3;
+  border-radius: 3px;
+  padding: 2px 4px;
+  background: rgba(37, 99, 235, 0.12);
+  margin-right: 4px;
 }
 
 .xmind-structure-viewer .xmind-structure-canvas {
@@ -7863,7 +8008,17 @@ tr.import-invalid-locate-active td {
     min-width: 0;
     flex: 1;
   }
+  .xmind-structure-viewer .xmind-action-group {
+    width: 100%;
+    justify-content: flex-end;
+    order: 2;
+    flex-wrap: wrap;
+  }
   .xmind-structure-viewer .xmind-zoom-group {
+    width: auto;
+    order: 1;
+  }
+  .xmind-structure-viewer .xmind-edit-group {
     width: 100%;
     justify-content: flex-end;
     order: 2;
@@ -7882,6 +8037,11 @@ tr.import-invalid-locate-active td {
   }
   .xmind-structure-viewer .xmind-export-btn {
     min-width: 78px;
+  }
+  .xmind-structure-viewer .xmind-edit-btn,
+  .xmind-structure-viewer .xmind-edit-op-btn {
+    min-width: 64px;
+    padding: 0 8px;
   }
 }
 
@@ -9245,14 +9405,32 @@ button.exec-overview-file-chip,
   color: #94a3b8;
 }
 :root[data-theme="dark"] .xmind-structure-viewer .xmind-search-btn,
-:root[data-theme="dark"] .xmind-structure-viewer .xmind-zoom-btn {
+:root[data-theme="dark"] .xmind-structure-viewer .xmind-zoom-btn,
+:root[data-theme="dark"] .xmind-structure-viewer .xmind-edit-btn,
+:root[data-theme="dark"] .xmind-structure-viewer .xmind-edit-op-btn {
   border-color: #475569;
   background: #1e293b;
   color: #e2e8f0;
 }
 :root[data-theme="dark"] .xmind-structure-viewer .xmind-search-btn:hover,
-:root[data-theme="dark"] .xmind-structure-viewer .xmind-zoom-btn:hover {
+:root[data-theme="dark"] .xmind-structure-viewer .xmind-zoom-btn:hover,
+:root[data-theme="dark"] .xmind-structure-viewer .xmind-edit-btn:hover,
+:root[data-theme="dark"] .xmind-structure-viewer .xmind-edit-op-btn:hover {
   border-color: #60a5fa;
+}
+:root[data-theme="dark"] .xmind-structure-viewer .xmind-edit-btn[data-mind-action="edit-save"] {
+  color: #bfdbfe;
+}
+:root[data-theme="dark"] .xmind-structure-viewer.is-editing .xmind-structure-controls {
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.45);
+}
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-node-empty-error .text {
+  background: rgba(127, 29, 29, 0.72);
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.95);
+}
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-node-struct-error .text {
+  background: rgba(127, 29, 29, 0.62);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.96);
 }
 :root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-search-hit .text {
   box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.42);
@@ -9268,6 +9446,26 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .xmind-structure-viewer .xmind-box-select-rect {
   border-color: rgba(96, 165, 250, 0.95);
   background: rgba(59, 130, 246, 0.26);
+}
+:root[data-theme="dark"] .xmind-structure-viewer .selection-area,
+:root[data-theme="dark"] .selection-area {
+  border-color: rgba(96, 165, 250, 0.95);
+  background: rgba(59, 130, 246, 0.26);
+}
+:root[data-theme="dark"] .xmind-floating-ghost {
+  background: #0f172a;
+  border-color: #60a5fa;
+  color: #bfdbfe;
+  box-shadow: 0 12px 26px rgba(2, 6, 23, 0.55);
+}
+:root[data-theme="dark"] .xmind-custom-drag-ghost {
+  background: rgba(15, 23, 42, 0.98);
+  border-color: #60a5fa;
+  color: #bfdbfe;
+  box-shadow: 0 12px 26px rgba(2, 6, 23, 0.62);
+}
+:root[data-theme="dark"] .xmind-floating-ghost .icons span {
+  background: rgba(96, 165, 250, 0.24);
 }
 :root[data-theme="dark"] .xmind-view-highlight-btn {
   color: #bfdbfe;

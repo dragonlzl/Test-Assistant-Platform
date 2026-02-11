@@ -48,6 +48,14 @@
 - 更新记录：2026-02-11 在 XMind 结构展示抽屉内新增“导出XMind”按钮，执行页复用 `tempExecApi.exportTempExecToXmind`，用例库复用 `xmindCore.buildXmindPackageFromCases` + `downloadBlob` 导出当前用例，并补充 UI 自动化覆盖（`scripts/core/mindElixirCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/xmind_structure_view_buttons.spec.js`）。
 - 更新记录：2026-02-11 将 XMind 画布交互调整为“右键拖动画布 + 左键框选节点”，并补充框选高亮样式与 UI 自动化验证（`scripts/core/mindElixirCore.js`、`style.css`、`tests/ui/xmind_structure_view_buttons.spec.js`）。
 - 更新记录：2026-02-11 框选光标样式由十字改为默认指针样式，保持右键拖拽交互不变（`style.css`）。
+- 更新记录：2026-02-11 新增 XMind 编辑模式（编辑/取消/确认保存、增加/删除节点、撤回/恢复、结构与空节点校验高亮、二次确认文案、编辑态本地持久化）并接入执行页与用例库入库保存；执行页复用现有 `exec` 增删改接口（`createExecCase/updateExecCase/deleteExecCase`），用例库复用现有 `case item` 增删改接口（`createCaseItem/updateCaseItem/deleteCaseItem`），未新增后端端点（`scripts/core/mindElixirCore.js`、`scripts/modules/tempexec.js`、`scripts/modules/caseLibrary.js`、`style.css`、`tests/ui/xmind_structure_view_buttons.spec.js`、`tests/ui/xmind_structure_edit_mode.spec.js`、`tests/api/xmind_structure_edit_reuse_endpoints.spec.js`）。
+- 更新记录：2026-02-11 修复 XMind 左键框选出现重复框问题：统一关闭自定义框选绘制层，保留 MindElixir 原生框选行为，避免与内置 selection-area 叠加导致双框（`scripts/core/mindElixirCore.js`）。
+- 更新记录：2026-02-11 修复 XMind 左键框选区域偏移：将 MindElixir 原生框选容器挂载到 `document.body`，避免抽屉 transform 场景下 `position: fixed` 参考系错位；并补充原生 selection-area 样式，保持亮/暗主题下框选可视一致（`scripts/core/mindElixirCore.js`、`style.css`）。
+- 更新记录：2026-02-11 修复 XMind 编辑态节点拖拽预览偏移：将 MindElixir 拖拽 ghost 从 map 容器提升到 `document.body` 浮层并同步主题色，避免抽屉 transform 场景下 ghost 与光标错位；补充编辑态拖拽 UI 自动化断言（`scripts/core/mindElixirCore.js`、`style.css`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 更新记录：2026-02-11 修复 XMind 编辑态二次确认抽屉层级：提升 `#appConfirmDrawer` 的 `z-index`，确保“取消编辑/确认保存”弹窗始终覆盖在 XMind 抽屉之上；补充 UI 自动化断言校验层级与命中元素（`style.css`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 更新记录：2026-02-11 修复 XMind 编辑态拖拽预览“看起来空白”问题：提升 `.xmind-floating-ghost` 层级到高于 XMind 抽屉，确保拖动时预览节点可见；补充 UI 自动化断言校验 ghost 层级高于抽屉（`style.css`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 更新记录：2026-02-11 优化 XMind 编辑态双击节点文本编辑行为：进入编辑后不再自动全选内容，光标默认定位到文本末尾，便于直接续写；补充 UI 自动化断言校验光标状态（`scripts/core/mindElixirCore.js`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 更新记录：2026-02-11 优化 XMind 编辑态拖拽预览跟手与可见性：拖拽过程中同步 ghost 到光标位置，并增强 ghost 文本与标签样式，避免“拖动时看起来空白”；补充 UI 自动化断言校验位置与文本可见（`scripts/core/mindElixirCore.js`、`style.css`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
 
 - 功能名称：执行总览与归档预览版本盒子展示用例数
 - 功能描述：执行页归档操作&进度预览、执行总览页版本盒子标题旁展示该版本用例总数；总览顶部版本汇总标题同步展示条数。
@@ -4006,3 +4014,15 @@
 - 更新记录：2026-02-10 副用例条目删除命中关联自动同步：当副用例条目从用例库删除且命中主用例关联勾选时，系统会自动从关联勾选中移除该条；若该副用例已无可关联条目则自动解除该主-副关联，并同步刷新主用例更新时间，保证执行页组合用例可触发 `deleted` diff 与条目同步移除（`backend/routers/cases.py`、`tests/api/case_file_associations.spec.js`、`tests/api/exec_association_transfer.spec.js`）。
 - 更新记录：2026-02-10 操作记录“转执行”补充关联标识：当转执行使用关联组合（`association_enabled=true`）时，操作项中的用例名后追加“（关联）”，便于区分普通转执行与关联转执行；兼容旧记录在缺少标记字段时按 `source_case_file_ids` 数量兜底识别（`scripts/modules/opsLog.js`、`tests/ui/ops_log.spec.js`）。
 - 更新记录：2026-02-10 操作记录页请求优化：`/api/ops` 新增 `start_ms/end_ms` 时间范围参数并下推筛选，前端按时间范围透传，减少跨页全量扫描；同时为活跃度/贡献/执行贡献视图增加“tab切回自动刷新节流”（默认 60s，仅在超过间隔时强制重拉），保留手动刷新与筛选变更即时生效，降低切换页面时的高频分页请求（`backend/routers/ops.py`、`services/apiClient.js`、`scripts/modules/opsLog.js`）。
+
+- 更新记录：2026-02-11 修复 XMind 编辑态节点拖拽时预览对象可见性问题：拖拽预览在跟随光标时强制可见并在空内容场景回填文案，保证拖拽过程中可明确看到被拖拽对象；同时更新编辑态 UI 断言为“光标命中拖拽预览区域”以覆盖中心跟随逻辑（`scripts/core/mindElixirCore.js`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 测试与验证：`node --check scripts/core/mindElixirCore.js tests/ui/xmind_structure_edit_mode.spec.js tests/ui/xmind_structure_view_buttons.spec.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js --reporter=line`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_view_buttons.spec.js --reporter=line`（通过）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过）。
+
+- 更新记录：2026-02-11 修复 XMind 编辑态拖拽节点“看不见拖拽项”问题：新增独立的拖拽预览浮层并与光标实时同步，拖拽中强制可见；当原始 ghost 内容为空时回填节点文案（单节点显示节点名，多节点显示数量），避免用户拖动时出现“空白拖拽”体验；深浅主题均已适配（`scripts/core/mindElixirCore.js`、`style.css`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 测试与验证：`node --check scripts/core/mindElixirCore.js style.css tests/ui/xmind_structure_edit_mode.spec.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js --reporter=line`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_view_buttons.spec.js --reporter=line`（通过）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过）。
+
+- 更新记录：2026-02-11 进一步修复 XMind 编辑态拖拽预览不显示：新增“节点按下+移动阈值”触发的独立预览状态，不再完全依赖 MindElixir 内部 `dragged` 时序；并补充 `pointer/mouse` 双通道监听与结束态清理，确保左键拖动节点时光标旁稳定显示被拖拽项（`scripts/core/mindElixirCore.js`）。
+- 测试与验证：`node --check scripts/core/mindElixirCore.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js --reporter=line`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_view_buttons.spec.js --reporter=line`（通过）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过）。
+
+- 更新记录：2026-02-11 修复拖拽预览被遮挡导致“看不见”问题：将 XMind 拖拽预览层级提升到全局高层（高于抽屉/引导遮罩），并新增“编辑态拖拽过程中展示可见节点预览”UI 自动化用例，确保左键拖拽时可见预览文本（`style.css`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 测试与验证：`node --check tests/ui/xmind_structure_edit_mode.spec.js scripts/core/mindElixirCore.js style.css`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js --reporter=line`（通过，2/2）；`npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_view_buttons.spec.js --reporter=line`（通过，2/2）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过，1/1）。

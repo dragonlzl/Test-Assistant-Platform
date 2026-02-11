@@ -165,6 +165,297 @@
       return api.exportTempExecToXmind();
     }
 
+
+
+    function normalizeXmindExecText(value) {
+      if (value === null || value === undefined) return '';
+      return String(value).trim();
+    }
+
+    function normalizeXmindExecCase(item) {
+      var row = item && typeof item === 'object' ? item : {};
+      var module = normalizeXmindExecText(row.module || row.module_name || row['模块']);
+      var title = normalizeXmindExecText(row.title || row.case_title || row['用例标题']);
+      var priority = normalizeXmindExecText(row.priority || row.level || row['优先级']) || 'P1';
+      var pre = normalizeXmindExecText(row.preconditions || row.precondition || row['前提条件']);
+      var steps = normalizeXmindExecText(row.steps || row.actions || row['操作步骤']);
+      var expected = normalizeXmindExecText(row.expected || row.result || row['预期结果']);
+      return {
+        module: module,
+        title: title,
+        priority: priority,
+        preconditions: pre,
+        precondition: pre,
+        steps: steps,
+        expected: expected,
+      };
+    }
+
+    function buildXmindExecStrictKey(item) {
+      var row = normalizeXmindExecCase(item || {});
+      return [row.module, row.title, row.priority, row.preconditions, row.steps, row.expected]
+        .map(function(seg) { return normalizeXmindExecText(seg).toLowerCase(); })
+        .join('::');
+    }
+
+    function buildXmindExecLooseKey(item) {
+      var row = normalizeXmindExecCase(item || {});
+      return [row.module, row.title, row.expected]
+        .map(function(seg) { return normalizeXmindExecText(seg).toLowerCase(); })
+        .join('::');
+    }
+
+    function resolveExecCaseIdForXmind(item) {
+      if (!item || typeof item !== 'object') return 0;
+      var id = item.execCaseId || item.id || 0;
+      var num = Number(id);
+      if (!isFinite(num) || num <= 0) return 0;
+      return num;
+    }
+
+    function isXmindExecStructSame(oldRow, newRow) {
+      var a = normalizeXmindExecCase(oldRow || {});
+      var b = normalizeXmindExecCase(newRow || {});
+      return a.module === b.module
+        && a.title === b.title
+        && a.priority === b.priority
+        && a.preconditions === b.preconditions
+        && a.steps === b.steps
+        && a.expected === b.expected;
+    }
+
+    function canPersistTempExecXmindToDb(file, client) {
+      var target = file && typeof file === 'object' ? file : null;
+      if (!target) return false;
+      var execSetId = Number(target.execSetId || target.id || 0);
+      if (!isFinite(execSetId) || execSetId <= 0) return false;
+      if (!client) return false;
+      if (typeof client.createExecCase !== 'function' || typeof client.updateExecCase !== 'function' || typeof client.deleteExecCase !== 'function') {
+        return false;
+      }
+      var globalState = window.app && window.app.state ? window.app.state : {};
+      var user = globalState && globalState.currentUser ? globalState.currentUser : null;
+      return Boolean(user && user.id);
+    }
+
+    function buildTempExecXmindPatchDiff(existingCases, nextCases) {
+      var oldList = Array.isArray(existingCases) ? existingCases : [];
+      var nextList = Array.isArray(nextCases) ? nextCases : [];
+      var oldSlots = oldList.map(function(item, idx) {
+        return {
+          idx: idx,
+          item: item,
+          normalized: normalizeXmindExecCase(item),
+          matched: false,
+        };
+      });
+      var nextSlots = nextList.map(function(item2, idx2) {
+        return {
+          idx: idx2,
+          raw: item2,
+          normalized: normalizeXmindExecCase(item2),
+          matchedOld: null,
+        };
+      });
+
+      function matchBy(buildOldKey, buildNextKey) {
+        nextSlots.forEach(function(nextSlot) {
+          if (nextSlot.matchedOld) return;
+          var targetKey = buildNextKey(nextSlot.normalized);
+          for (var i = 0; i < oldSlots.length; i += 1) {
+            var oldSlot = oldSlots[i];
+            if (oldSlot.matched) continue;
+            if (buildOldKey(oldSlot.normalized) !== targetKey) continue;
+            oldSlot.matched = true;
+            nextSlot.matchedOld = oldSlot;
+            break;
+          }
+        });
+      }
+
+      matchBy(buildXmindExecStrictKey, buildXmindExecStrictKey);
+      matchBy(buildXmindExecLooseKey, buildXmindExecLooseKey);
+
+      var merged = [];
+      var updates = [];
+      var creates = [];
+      var deletes = [];
+
+      nextSlots.forEach(function(slot) {
+        var norm = slot.normalized;
+        if (slot.matchedOld) {
+          var oldItem = slot.matchedOld.item || {};
+          var mergedItem = Object.assign({}, oldItem, {
+            module: norm.module,
+            title: norm.title,
+            priority: norm.priority,
+            preconditions: norm.preconditions,
+            precondition: norm.preconditions,
+            steps: norm.steps,
+            expected: norm.expected,
+          });
+          merged.push(mergedItem);
+          if (!isXmindExecStructSame(oldItem, norm)) {
+            updates.push({
+              oldItem: oldItem,
+              newItem: mergedItem,
+              payload: {
+                module: mergedItem.module,
+                title: mergedItem.title,
+                priority: mergedItem.priority,
+                precondition: mergedItem.preconditions,
+                steps: mergedItem.steps,
+                expected: mergedItem.expected,
+              },
+            });
+          }
+        } else {
+          var createItem = {
+            id: 'xmind-' + Date.now().toString(16) + '-' + String(slot.idx),
+            module: norm.module,
+            title: norm.title,
+            priority: norm.priority,
+            preconditions: norm.preconditions,
+            precondition: norm.preconditions,
+            steps: norm.steps,
+            expected: norm.expected,
+            actual: '未执行',
+            remark: '',
+            reuseDetails: [],
+            defectLinks: [],
+          };
+          merged.push(createItem);
+          creates.push({
+            item: createItem,
+            payload: {
+              module: createItem.module,
+              title: createItem.title,
+              priority: createItem.priority,
+              precondition: createItem.preconditions,
+              steps: createItem.steps,
+              expected: createItem.expected,
+              status: createItem.actual || '未执行',
+              remark: createItem.remark || '',
+              reuse_details: Array.isArray(createItem.reuseDetails) ? createItem.reuseDetails : [],
+              defect_links: Array.isArray(createItem.defectLinks) ? createItem.defectLinks : [],
+            },
+          });
+        }
+      });
+
+      oldSlots.forEach(function(oldSlot2) {
+        if (oldSlot2.matched) return;
+        deletes.push({ item: oldSlot2.item || null });
+      });
+
+      return {
+        merged: merged,
+        updates: updates,
+        creates: creates,
+        deletes: deletes,
+      };
+    }
+
+    function applyTempExecXmindCasesToActive(file, cases) {
+      if (!file || !Array.isArray(cases)) return;
+      file.cases = cases;
+      if (api && typeof api.persistTempExecState === 'function') {
+        api.persistTempExecState();
+      }
+      if (api && typeof api.renderTempExecView === 'function') {
+        api.renderTempExecView();
+      }
+    }
+
+    function saveTempExecXmindCases(nextCases, summary) {
+      var active = api && typeof api.getTempExecFile === 'function' ? api.getTempExecFile(state.tempExecActiveId) : null;
+      if (!active) {
+        return Promise.reject(new Error('当前执行集不存在或已失效'));
+      }
+      var existing = Array.isArray(active.cases) ? active.cases.slice() : [];
+      var nextList = (Array.isArray(nextCases) ? nextCases : []).map(function(entry) {
+        return normalizeXmindExecCase(entry);
+      }).filter(function(entry2) {
+        return Boolean(entry2.module && entry2.title && entry2.expected);
+      });
+      var diff = buildTempExecXmindPatchDiff(existing, nextList);
+      var changeCount = diff.updates.length + diff.creates.length + diff.deletes.length;
+      var apiClient = window.app && window.app.apiClient ? window.app.apiClient : null;
+      var dbWritable = canPersistTempExecXmindToDb(active, apiClient);
+      var execSetId = Number(active.execSetId || active.id || 0);
+
+      if (!changeCount) {
+        applyTempExecXmindCasesToActive(active, diff.merged);
+        setStatus(tempExecStatus, 'XMind 编辑无改动，已保持当前状态', 'ok');
+        return Promise.resolve({ changed: 0, updates: 0, creates: 0, deletes: 0 });
+      }
+
+      setStatus(tempExecStatus, '正在保存 XMind 编辑...', '');
+
+      function finalizeSuccess() {
+        applyTempExecXmindCasesToActive(active, diff.merged);
+        setStatus(tempExecStatus, 'XMind 编辑保存成功', 'ok');
+        safeLogOperation('save_exec_xmind_structure', 'exec_set', Number.isFinite(execSetId) ? execSetId : null, {
+          exec_set_id: Number.isFinite(execSetId) ? execSetId : null,
+          summary: summary || {},
+          updates: diff.updates.length,
+          creates: diff.creates.length,
+          deletes: diff.deletes.length,
+        });
+        return {
+          changed: changeCount,
+          updates: diff.updates.length,
+          creates: diff.creates.length,
+          deletes: diff.deletes.length,
+        };
+      }
+
+      if (!dbWritable) {
+        return Promise.resolve().then(finalizeSuccess);
+      }
+
+      var chain = Promise.resolve();
+      diff.deletes.forEach(function(entry) {
+        var oldItem = entry && entry.item ? entry.item : null;
+        var caseId = resolveExecCaseIdForXmind(oldItem);
+        if (!caseId) return;
+        chain = chain.then(function() {
+          return apiClient.deleteExecCase(caseId);
+        });
+      });
+      diff.updates.forEach(function(entry2) {
+        var oldItem2 = entry2 && entry2.oldItem ? entry2.oldItem : null;
+        var caseId2 = resolveExecCaseIdForXmind(oldItem2);
+        if (!caseId2) return;
+        chain = chain.then(function() {
+          return apiClient.updateExecCase(caseId2, entry2.payload || {});
+        });
+      });
+      diff.creates.forEach(function(entry3) {
+        chain = chain.then(function() {
+          return apiClient.createExecCase(execSetId, entry3.payload || {}).then(function(created) {
+            if (!created || !entry3 || !entry3.item) return;
+            var nextId = Number(created.id || 0);
+            if (isFinite(nextId) && nextId > 0) {
+              entry3.item.id = nextId;
+              entry3.item.execCaseId = nextId;
+            }
+            if (created.case_item_id || created.case_item_id === 0) {
+              entry3.item.case_item_id = created.case_item_id;
+            }
+          });
+        });
+      });
+
+      return chain.then(function() {
+        return finalizeSuccess();
+      }).catch(function(err) {
+        var msg = err && err.message ? String(err.message) : '保存失败';
+        setStatus(tempExecStatus, 'XMind 编辑保存失败：' + msg, 'err');
+        throw err;
+      });
+    }
+
     function openTempExecXmindStructure() {
       var mindApi = getMindElixirApi();
       if (!mindApi || typeof mindApi.buildMindDataFromCases !== 'function' || typeof mindApi.renderMindMap !== 'function') {
@@ -206,6 +497,10 @@
           instance: tempExecXmindMindInstance,
           direction: 'side',
           onExportXmind: triggerTempExecXmindExport,
+          editableSessionKey: 'tap-temp-exec-xmind-edit-' + String(active.id || state.tempExecActiveId || ''),
+          onSaveCases: saveTempExecXmindCases,
+          openConfirmDrawer: openConfirmDrawer,
+          showToast: utils && typeof utils.showCenterToast === 'function' ? utils.showCenterToast : null,
         });
         bindTempExecXmindThemeSync(mindApi);
       } catch (err) {

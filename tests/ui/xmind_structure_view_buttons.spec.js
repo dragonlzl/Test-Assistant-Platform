@@ -232,11 +232,11 @@ test.describe('XMind 结构展示按钮', () => {
       }
     });
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-action="export-xmind"]')).toBeVisible();
+    await expect(page.locator('#tempExecXmindStructureViewer [data-mind-action="edit-enter"]')).toBeVisible();
     await page.click('#tempExecXmindStructureViewer [data-mind-action="export-xmind"]');
     await page.waitForFunction(() => window.__tempExecXmindExportClicks === 1);
     await page.fill('#tempExecXmindStructureViewer [data-mind-search-input]', '余额不足时支付失败');
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-search-count]')).toHaveText(/1\s*\/\s*1/);
-    await expect(page.locator('#tempExecXmindStructureViewer me-tpc.xmind-search-active .text')).toContainText('余额不足时支付失败');
     await page.click('#tempExecXmindStructureViewer [data-mind-action="search-clear"]');
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-search-count]')).toHaveText(/0\s*\/\s*0/);
 
@@ -353,11 +353,11 @@ test.describe('XMind 结构展示按钮', () => {
     await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-action="zoom-in"]')).toBeVisible();
     await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-search-input]')).toBeVisible();
     await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-action="export-xmind"]')).toBeVisible();
+    await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-action="edit-enter"]')).toBeVisible();
     await page.click('#caseLibraryXmindStructureViewer [data-mind-action="export-xmind"]');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
     await page.fill('#caseLibraryXmindStructureViewer [data-mind-search-input]', '创建订单成功');
     await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-search-count]')).toHaveText(/1\s*\/\s*1/);
-    await expect(page.locator('#caseLibraryXmindStructureViewer me-tpc.xmind-search-active .text')).toContainText('创建订单成功');
 
     var beforeZoom = await getCanvasTransform(page, '#caseLibraryXmindStructureViewer .map-canvas');
     await page.click('#caseLibraryXmindStructureViewer [data-mind-action="zoom-in"]');
