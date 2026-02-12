@@ -477,6 +477,11 @@ body {
       fill: currentColor;
       stroke: none;
     }
+    .nav-entry-card.nav-entry-write .nav-entry-icon {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+      color: #1d4ed8;
+    }
     .nav-entry-card.nav-entry-import .nav-entry-icon {
       background: #eef2ff;
       border-color: #dbeafe;
@@ -7658,6 +7663,16 @@ tr.import-invalid-locate-active td {
   margin-left: 4px;
   white-space: nowrap;
 }
+.case-library-writer-publish-filters {
+  gap: 10px;
+  align-items: center;
+}
+.case-library-writer-publish-filters select {
+  min-width: 180px;
+}
+.case-library-writer-publish-filters .primary {
+  min-width: 96px;
+}
 .xmind-view-highlight-btn {
   position: relative;
   font-weight: 700;
@@ -7730,6 +7745,8 @@ tr.import-invalid-locate-active td {
   border: 1px solid var(--border);
   background: #f8fafc;
   overflow: hidden;
+  overscroll-behavior: none;
+  -ms-scroll-chaining: none;
 }
 
 .xmind-structure-viewer .xmind-structure-controls {
@@ -7987,6 +8004,11 @@ tr.import-invalid-locate-active td {
   height: 100%;
   cursor: default;
   user-select: none;
+  touch-action: none;
+  -ms-touch-action: none;
+  -ms-content-zooming: none;
+  overscroll-behavior: none;
+  -ms-scroll-chaining: none;
 }
 
 .xmind-structure-viewer.is-draggable .xmind-structure-canvas {
@@ -7999,6 +8021,11 @@ tr.import-invalid-locate-active td {
 
 .xmind-structure-viewer .map-container {
   height: 100%;
+  touch-action: none;
+  -ms-touch-action: none;
+  -ms-content-zooming: none;
+  overscroll-behavior: none;
+  -ms-scroll-chaining: none;
 }
 
 .xmind-structure-viewer .map-canvas {
@@ -9753,6 +9780,11 @@ button.exec-overview-file-chip,
   border-color: rgba(125,180,255,0.35);
   color: #93c5fd;
   box-shadow: 0 6px 14px rgba(0,0,0,0.35);
+}
+:root[data-theme="dark"] .nav-entry-card.nav-entry-write .nav-entry-icon {
+  background: rgba(30, 64, 175, 0.38);
+  border-color: rgba(96, 165, 250, 0.58);
+  color: #bfdbfe;
 }
 :root[data-theme="dark"] .notice-card,
 :root[data-theme="dark"] .notice-card.highlight,

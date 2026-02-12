@@ -105,6 +105,12 @@
     var tempExecXmindThemeObserver = null;
     var tempExecXmindLocateTimer = 0;
     var tempExecXmindLocateTarget = null;
+    var tempExecXmindGestureGuard = {
+      active: false,
+      token: '',
+      popHandler: null,
+      restoring: false,
+    };
     var supportDirPicker = typeof window.showDirectoryPicker === 'function';
 
     function getMindElixirApi() {
@@ -133,6 +139,81 @@
       }, true);
     }
 
+    function enableTempExecXmindGestureGuard() {
+      if (tempExecXmindGestureGuard.active) return;
+      if (typeof window === 'undefined' || !window || !window.history) return;
+      if (typeof window.addEventListener !== 'function' || typeof window.removeEventListener !== 'function') return;
+
+      var token = 'tap-xmind-guard-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+      tempExecXmindGestureGuard.token = token;
+      tempExecXmindGestureGuard.active = true;
+      tempExecXmindGestureGuard.restoring = false;
+
+      try {
+        window.history.pushState({ __tapXmindGestureGuard: token }, document.title, window.location.href);
+      } catch (err) {
+        // ignore
+      }
+
+      var popHandler = function() {
+        if (!tempExecXmindGestureGuard.active) return;
+        if (tempExecXmindGestureGuard.restoring) return;
+        if (window.history && typeof window.history.go === 'function') {
+          try {
+            window.history.go(1);
+          } catch (err0) {
+            // ignore
+          }
+        }
+      };
+      tempExecXmindGestureGuard.popHandler = popHandler;
+      window.addEventListener('popstate', popHandler, true);
+    }
+
+    function disableTempExecXmindGestureGuard() {
+      if (!tempExecXmindGestureGuard.active) return;
+      var popHandler = tempExecXmindGestureGuard.popHandler;
+      tempExecXmindGestureGuard.active = false;
+      tempExecXmindGestureGuard.popHandler = null;
+      if (typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function' && popHandler) {
+        window.removeEventListener('popstate', popHandler, true);
+      }
+      if (typeof window === 'undefined' || !window || !window.history) {
+        tempExecXmindGestureGuard.token = '';
+        return;
+      }
+      var state = null;
+      try {
+        state = window.history.state;
+      } catch (err1) {
+        state = null;
+      }
+      if (
+        state &&
+        typeof state === 'object' &&
+        state.__tapXmindGestureGuard &&
+        String(state.__tapXmindGestureGuard) === String(tempExecXmindGestureGuard.token || '')
+      ) {
+        var nextState = {};
+        try {
+          nextState = JSON.parse(JSON.stringify(state));
+        } catch (err2) {
+          nextState = {};
+        }
+        if (!nextState || typeof nextState !== 'object') nextState = {};
+        if (Object.prototype.hasOwnProperty.call(nextState, '__tapXmindGestureGuard')) {
+          delete nextState.__tapXmindGestureGuard;
+        }
+        try {
+          window.history.replaceState(nextState, document.title, window.location.href);
+        } catch (err3) {
+          // ignore
+        }
+        tempExecXmindGestureGuard.restoring = false;
+      }
+      tempExecXmindGestureGuard.token = '';
+    }
+
     function ensureTempExecXmindDrawer() {
       if (tempExecXmindDrawer) return tempExecXmindDrawer;
       if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
@@ -140,7 +221,11 @@
         drawerId: 'xmindStructureDrawer',
         openButtons: [],
         closeButtons: ['closeXmindStructureDrawerBtn'],
+        onOpen: function() {
+          enableTempExecXmindGestureGuard();
+        },
         onClose: function() {
+          disableTempExecXmindGestureGuard();
           if (tempExecXmindThemeObserver && typeof tempExecXmindThemeObserver.disconnect === 'function') {
             tempExecXmindThemeObserver.disconnect();
           }
@@ -594,9 +679,11 @@
         return;
       }
 
+      drawer.open();
       xmindStructureDrawerBody.innerHTML = '<div class="xmind-structure-viewer" id="tempExecXmindStructureViewer"></div>';
       var container = document.getElementById('tempExecXmindStructureViewer');
       if (!container) {
+        if (typeof drawer.close === 'function') drawer.close();
         setStatus(tempExecStatus, 'XMind 结构容器初始化失败', 'err');
         return;
       }
@@ -608,7 +695,7 @@
       try {
         tempExecXmindMindInstance = mindApi.renderMindMap(container, mindData, {
           instance: tempExecXmindMindInstance,
-          direction: 'side',
+          direction: 'right',
           onExportXmind: triggerTempExecXmindExport,
           editableSessionKey: 'tap-temp-exec-xmind-edit-' + String(active.id || state.tempExecActiveId || ''),
           onSaveCases: saveTempExecXmindCases,
@@ -622,10 +709,10 @@
         bindTempExecXmindThemeSync(mindApi);
       } catch (err) {
         console.error(err);
+        if (typeof drawer.close === 'function') drawer.close();
         setStatus(tempExecStatus, 'XMind 结构渲染失败', 'err');
         return;
       }
-      drawer.open();
     }
     function getTemplateBase() {
       var path = (window.location && window.location.pathname) ? window.location.pathname : '';

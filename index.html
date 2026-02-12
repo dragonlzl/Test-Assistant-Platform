@@ -417,6 +417,19 @@
       <div class="flow-body">
       <p class="hint" style="margin:0 0 6px;">用例库相关入口汇总于此，点击卡片快速打开。</p>
       <div class="nav-entry-grid">
+        <button class="nav-entry-card nav-entry-write" id="openCaseLibraryWriterDrawerBtn" type="button">
+          <span class="nav-entry-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <path d="M4 20h4"></path>
+              <path d="M13 5l6 6"></path>
+              <path d="M6 18 14 10l4 4-8 8H6z"></path>
+            </svg>
+          </span>
+          <span class="nav-entry-text">
+            <span class="nav-entry-title">编写用例</span>
+            <span class="nav-entry-desc">以XMind结构新建并入库</span>
+          </span>
+        </button>
         <button class="nav-entry-card nav-entry-import" id="openCaseLibraryImportDrawerBtn" type="button">
           <span class="nav-entry-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
@@ -3493,6 +3506,31 @@
         <button class="link-toggle" id="closeXmindStructureDrawerBtn" data-drawer-close="xmindStructureDrawer">收起</button>
       </div>
       <div class="drawer-body" id="xmindStructureDrawerBody"></div>
+    </div>
+  </div>
+  <div class="drawer" id="caseLibraryWriterPublishDrawer" data-tab-section="case-library">
+    <div class="drawer-mask" data-drawer-close="caseLibraryWriterPublishDrawer"></div>
+    <div class="drawer-panel">
+      <div class="drawer-header">
+        <h3 id="caseLibraryWriterPublishTitle">确认入库</h3>
+        <button class="link-toggle" data-drawer-close="caseLibraryWriterPublishDrawer">收起</button>
+      </div>
+      <div class="drawer-body">
+        <p class="hint" id="caseLibraryWriterPublishHint">请选择项目和版本后，确认将当前编写用例入库。</p>
+        <div class="case-library-drawer-toolbar case-library-drawer-toolbar-primary">
+          <div class="case-library-filters case-library-writer-publish-filters">
+            <label class="case-library-label" for="caseLibraryWriterPublishProjectSelect">项目</label>
+            <select id="caseLibraryWriterPublishProjectSelect"></select>
+            <label class="case-library-label" for="caseLibraryWriterPublishVersionSelect">版本</label>
+            <select id="caseLibraryWriterPublishVersionSelect" disabled></select>
+            <button class="primary" id="caseLibraryWriterPublishConfirmBtn" type="button" disabled>确认入库</button>
+          </div>
+        </div>
+        <p class="status" id="caseLibraryWriterPublishStatus"></p>
+        <div class="actions user-form-actions">
+          <button class="ghost-btn" data-drawer-close="caseLibraryWriterPublishDrawer" type="button">关闭</button>
+        </div>
+      </div>
     </div>
   </div>
 </main>

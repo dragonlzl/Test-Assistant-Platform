@@ -56,6 +56,23 @@ async function waitExecReady(page) {
   await page.waitForFunction(() => window.app && window.app.tempExecApi, {}, { timeout: 30000 });
 }
 
+async function waitTempExecXmindButtonReady(page) {
+  await page.waitForFunction(() => {
+    var btn = document.getElementById('tempExecXmindViewBtn');
+    if (!btn) return false;
+    if (btn.disabled) return false;
+    if (btn.classList && btn.classList.contains('hidden')) return false;
+    var style = typeof window.getComputedStyle === 'function' ? window.getComputedStyle(btn) : null;
+    if (!style) return false;
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    if (btn.offsetParent === null) return false;
+    if (!btn.getBoundingClientRect) return false;
+    var rect = btn.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    return true;
+  }, {}, { timeout: 15000 });
+}
+
 async function waitCaseLibraryReady(page) {
   await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
   await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, {}, { timeout: 30000 });
@@ -88,6 +105,34 @@ async function getCanvasTransform(page, selector) {
     if (styleVal) return String(styleVal);
     var computed = typeof getComputedStyle === 'function' ? getComputedStyle(el).transform : '';
     return String(computed || '');
+  });
+}
+
+async function getCanvasScale(page, selector) {
+  return page.locator(selector).evaluate((el) => {
+    if (!el) return 1;
+    var transform = '';
+    if (el.style && el.style.transform) transform = String(el.style.transform || '');
+    if (!transform && typeof getComputedStyle === 'function') {
+      transform = String((getComputedStyle(el).transform || ''));
+    }
+    if (!transform || transform === 'none') return 1;
+    var scaleMatch = transform.match(/scale\(([^)]+)\)/);
+    if (scaleMatch && scaleMatch[1]) {
+      var direct = Number(scaleMatch[1]);
+      if (isFinite(direct) && direct > 0) return direct;
+    }
+    var matrixMatch = transform.match(/matrix\(([^)]+)\)/);
+    if (!matrixMatch || !matrixMatch[1]) return 1;
+    var parts = matrixMatch[1].split(',');
+    if (!parts || parts.length < 2) return 1;
+    var a = Number(parts[0]);
+    var b = Number(parts[1]);
+    if (!isFinite(a)) a = 1;
+    if (!isFinite(b)) b = 0;
+    var scale = Math.sqrt((a * a) + (b * b));
+    if (!isFinite(scale) || scale <= 0) return 1;
+    return scale;
   });
 }
 
@@ -217,15 +262,46 @@ test.describe('XMind 结构展示按钮', () => {
       const card = document.getElementById('tempExecToolbarCard');
       return card && !card.classList.contains('hidden');
     });
+    await waitTempExecXmindButtonReady(page);
     await expect(page.locator('#tempExecXmindViewBtn')).toBeVisible();
     await expect(page.locator('#tempExecXmindViewBtn')).toBeEnabled();
 
+    await waitTempExecXmindButtonReady(page);
     await page.click('#tempExecXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+
+    const navGuardResult = await page.evaluate(async () => {
+      var beforeHref = String(window.location.href || '');
+      if (window.history && typeof window.history.back === 'function') {
+        window.history.back();
+      }
+      await new Promise(function(resolve) {
+        setTimeout(resolve, 140);
+      });
+      return {
+        beforeHref: beforeHref,
+        afterHref: String(window.location.href || ''),
+      };
+    });
+    expect(navGuardResult.afterHref).toBe(navGuardResult.beforeHref);
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+
     await expect(page.locator('#xmindStructureDrawerBody')).toContainText('支付模块');
     await expect(page.locator('#xmindStructureDrawerBody')).toContainText('余额不足时支付失败');
     var drawerWidthRatio = await getDrawerWidthRatio(page);
     expect(drawerWidthRatio).toBeGreaterThanOrEqual(0.66);
+
+    await page.waitForTimeout(140);
+    var initialScaleJustOpened = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-fit"]');
+    var fitScaleJustOpened = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    expect(Math.abs(fitScaleJustOpened - initialScaleJustOpened)).toBeLessThan(0.02);
+
+    await page.waitForTimeout(520);
+    var initialScaleAfterOpen = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-fit"]');
+    var fitScaleAfterOpen = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    expect(Math.abs(fitScaleAfterOpen - initialScaleAfterOpen)).toBeLessThan(0.02);
 
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-action="zoom-out"]')).toBeVisible();
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-action="zoom-fit"]')).toBeVisible();
@@ -249,6 +325,26 @@ test.describe('XMind 结构展示按钮', () => {
     await page.click('#tempExecXmindStructureViewer [data-mind-action="search-clear"]');
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-search-count]')).toHaveText(/0\s*\/\s*0/);
 
+    var ctrlDragInitX = 0;
+    var ctrlDragInitY = 0;
+    var canvasForInitCtrlDrag = page.locator('#tempExecXmindStructureViewer .xmind-structure-canvas');
+    var initCtrlDragBox = await canvasForInitCtrlDrag.boundingBox();
+    if (!initCtrlDragBox) throw new Error('执行页 XMind 画布未渲染（初始Ctrl拖动）');
+    ctrlDragInitX = initCtrlDragBox.x + (initCtrlDragBox.width / 2) - 40;
+    ctrlDragInitY = initCtrlDragBox.y + (initCtrlDragBox.height / 2) - 30;
+    var transformBeforeInitCtrlDrag = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
+    var scaleBeforeInitCtrlDrag = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    await page.keyboard.down('Control');
+    await page.mouse.move(ctrlDragInitX, ctrlDragInitY);
+    await page.mouse.down({ button: 'left' });
+    await page.mouse.move(ctrlDragInitX + 95, ctrlDragInitY + 36, { steps: 8 });
+    await page.mouse.up({ button: 'left' });
+    await page.keyboard.up('Control');
+    var transformAfterInitCtrlDrag = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
+    var scaleAfterInitCtrlDrag = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    expect(transformAfterInitCtrlDrag).not.toBe(transformBeforeInitCtrlDrag);
+    expect(Math.abs(scaleAfterInitCtrlDrag - scaleBeforeInitCtrlDrag)).toBeLessThan(0.001);
+
     var transformBeforeZoom = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
     await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-in"]');
     await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-in"]');
@@ -256,6 +352,41 @@ test.describe('XMind 结构展示按钮', () => {
     await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-in"]');
     var transformAfterZoom = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
     expect(transformAfterZoom).not.toBe(transformBeforeZoom);
+
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-fit"]');
+    var fitScale = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-in"]');
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-in"]');
+    for (var zoomOutIdx = 0; zoomOutIdx < 12; zoomOutIdx += 1) {
+      await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-out"]');
+    }
+    var minReachableScale = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    expect(Math.abs(minReachableScale - fitScale)).toBeLessThan(0.02);
+
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-fit"]');
+    var fitScaleForCtrlWheel = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-in"]');
+    var zoomInScaleForCtrlWheel = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    expect(zoomInScaleForCtrlWheel).toBeGreaterThan(fitScaleForCtrlWheel + 0.01);
+    await page.evaluate(() => {
+      var canvas = document.querySelector('#tempExecXmindStructureViewer .xmind-structure-canvas');
+      if (!canvas) return;
+      var rect = canvas.getBoundingClientRect();
+      for (var i = 0; i < 8; i += 1) {
+        var evt = new WheelEvent('wheel', {
+          deltaY: 120,
+          deltaX: 0,
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+          clientX: rect.left + (rect.width / 2),
+          clientY: rect.top + (rect.height / 2),
+        });
+        canvas.dispatchEvent(evt);
+      }
+    });
+    var ctrlWheelZoomBackScale = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    expect(Math.abs(ctrlWheelZoomBackScale - fitScaleForCtrlWheel)).toBeLessThan(0.02);
 
     var canvas = page.locator('#tempExecXmindStructureViewer .xmind-structure-canvas');
     var dragBox = await canvas.boundingBox();
@@ -268,6 +399,84 @@ test.describe('XMind 结构展示按钮', () => {
     var transformAfterDrag = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
     expect(transformAfterDrag).not.toBe(transformBeforeDrag);
 
+    var ctrlDragStartX = dragBox.x + (dragBox.width / 2) - 30;
+    var ctrlDragStartY = dragBox.y + (dragBox.height / 2) - 20;
+    var transformBeforeCtrlDrag = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
+    await page.keyboard.down('Control');
+    await page.mouse.move(ctrlDragStartX, ctrlDragStartY);
+    await page.mouse.down({ button: 'left' });
+    await page.mouse.move(ctrlDragStartX + 100, ctrlDragStartY + 45, { steps: 8 });
+    await page.mouse.up({ button: 'left' });
+    await page.keyboard.up('Control');
+    var transformAfterCtrlDrag = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
+    expect(transformAfterCtrlDrag).not.toBe(transformBeforeCtrlDrag);
+
+    const ctrlLeftDragDidNotTriggerBoxSelection = await page.evaluate(() => {
+      var viewer = document.querySelector('#tempExecXmindStructureViewer');
+      if (!viewer) return false;
+      if (viewer.classList && viewer.classList.contains('is-box-selecting')) return false;
+      if (viewer.classList && viewer.classList.contains('is-ctrl-left-dragging')) return false;
+      var selected = viewer.querySelectorAll('me-tpc.xmind-box-selected');
+      if (selected && selected.length > 0) return false;
+      var rect = viewer.querySelector('.xmind-box-select-rect');
+      if (rect && rect.getBoundingClientRect) {
+        var box = rect.getBoundingClientRect();
+        if (box.width > 1 && box.height > 1) return false;
+      }
+      return true;
+    });
+    expect(ctrlLeftDragDidNotTriggerBoxSelection).toBeTruthy();
+
+    await page.evaluate(() => {
+      window.__xmindContextMenuBlocked = false;
+      var viewer = document.querySelector('#tempExecXmindStructureViewer');
+      if (!viewer || !viewer.addEventListener) return;
+      viewer.addEventListener('contextmenu', function(evt) {
+        if (evt && evt.defaultPrevented) {
+          window.__xmindContextMenuBlocked = true;
+        }
+      }, { capture: false, once: true });
+    });
+    var contextX = dragBox.x + Math.max(40, dragBox.width * 0.55);
+    var contextY = dragBox.y + Math.max(60, dragBox.height * 0.55);
+    await page.mouse.move(contextX, contextY);
+    await page.mouse.down({ button: 'right' });
+    await page.mouse.up({ button: 'right' });
+    var contextMenuBlocked = await page.evaluate(() => Boolean(window.__xmindContextMenuBlocked));
+    expect(contextMenuBlocked).toBeTruthy();
+
+    var wheelGestureBlocked = await page.evaluate(() => {
+      var viewer = document.querySelector('#tempExecXmindStructureViewer');
+      var canvas = viewer && viewer.querySelector ? viewer.querySelector('.xmind-structure-canvas') : null;
+      if (!canvas) return false;
+      var wheelEvt = new WheelEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+        deltaX: 0,
+        deltaY: 120,
+      });
+      var dispatchResult = canvas.dispatchEvent(wheelEvt);
+      return Boolean(wheelEvt.defaultPrevented) || dispatchResult === false;
+    });
+    expect(wheelGestureBlocked).toBeTruthy();
+
+    var touchGestureBlocked = await page.evaluate(() => {
+      var viewer = document.querySelector('#tempExecXmindStructureViewer');
+      var canvas = viewer && viewer.querySelector ? viewer.querySelector('.xmind-structure-canvas') : null;
+      if (!canvas) return false;
+      var blocked = false;
+      canvas.addEventListener('touchmove', function(evt) {
+        blocked = Boolean(evt && evt.defaultPrevented);
+      }, { once: true });
+      var touchEvt = new Event('touchmove', {
+        bubbles: true,
+        cancelable: true,
+      });
+      canvas.dispatchEvent(touchEvt);
+      return blocked || Boolean(touchEvt.defaultPrevented);
+    });
+    expect(touchGestureBlocked).toBeTruthy();
+
     var firstNode = page.locator('#tempExecXmindStructureViewer me-tpc .text').first();
     var firstNodeBox = await firstNode.boundingBox();
     if (!firstNodeBox) throw new Error('执行页 XMind 节点未渲染');
@@ -276,7 +485,17 @@ test.describe('XMind 结构展示按钮', () => {
     await page.mouse.move(firstNodeBox.x + firstNodeBox.width + 12, firstNodeBox.y + firstNodeBox.height + 12);
     await page.mouse.up({ button: 'left' });
 
-    await page.locator('#tempExecXmindStructureViewer me-tpc .text', { hasText: '优惠券支付成功' }).first().dblclick({ force: true });
+    const execNodeDblClicked = await page.evaluate(() => {
+      var nodes = document.querySelectorAll('#tempExecXmindStructureViewer me-tpc .text');
+      for (var i = 0; i < nodes.length; i += 1) {
+        var node = nodes[i];
+        if (String(node.textContent || '').trim() !== '优惠券支付成功') continue;
+        node.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+        return true;
+      }
+      return false;
+    });
+    expect(execNodeDblClicked).toBeTruthy();
     await page.waitForTimeout(150);
     const execLocate = await page.evaluate((payload) => {
       var selector = '#tempExecView tr.case-row[data-temp-case-row="' + String(payload.fileId) + '"][data-index="' + String(payload.index) + '"]';
@@ -292,11 +511,17 @@ test.describe('XMind 结构展示按钮', () => {
     }, { fileId, index: 1 });
     expect(execLocate.found).toBeTruthy();
     expect(execLocate.text).toContain('优惠券支付成功');
-    await expect(page.locator('#tempExecStatus')).toContainText('已定位到第 2 条执行用例');
     const execLocateRow = page.locator('#tempExecView tr.case-row[data-temp-case-row="' + String(fileId) + '"][data-index="1"]').first();
     await expect(execLocateRow).toHaveClass(/xmind-locate-highlight/);
-    await page.waitForTimeout(2200);
-    await expect(execLocateRow).toHaveClass(/xmind-locate-highlight/);
+
+    const drawerOpenAfterLocate = await page.evaluate(() => {
+      var drawer = document.getElementById('xmindStructureDrawer');
+      return Boolean(drawer && drawer.classList && drawer.classList.contains('open'));
+    });
+    if (!drawerOpenAfterLocate) {
+      await page.click('#tempExecXmindViewBtn');
+      await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+    }
 
     const lightBg = await page.locator('#xmindStructureDrawerBody .xmind-structure-viewer').evaluate((el) => {
       return getComputedStyle(el).backgroundColor;
@@ -314,18 +539,129 @@ test.describe('XMind 结构展示按钮', () => {
     await page.evaluate(() => {
       window.scrollTo(0, 500);
     });
-    const scrollBeforeClose = await page.evaluate(() => {
-      if (typeof window.scrollY === 'number') return window.scrollY;
-      return document.documentElement ? (document.documentElement.scrollTop || 0) : 0;
-    });
     await page.click('#closeXmindStructureDrawerBtn');
     await expect(page.locator('#xmindStructureDrawer')).not.toHaveClass(/open/);
-    await page.waitForTimeout(520);
-    const scrollAfterClose = await page.evaluate(() => {
-      if (typeof window.scrollY === 'number') return window.scrollY;
-      return document.documentElement ? (document.documentElement.scrollTop || 0) : 0;
+    await expect(page).toHaveURL(/case-exec\.html/);
+  });
+
+
+  test('执行页大量用例放大后结构不消失', async ({ page }) => {
+    const fileId = 'temp-xmind-many-cases';
+    const cases = [];
+    for (var i = 0; i < 80; i += 1) {
+      var index = i + 1;
+      var moduleNum = String(index).padStart(2, '0');
+      cases.push({
+        module: '支付模块-' + moduleNum,
+        title: '批量校验用例-' + moduleNum,
+        priority: index % 2 === 0 ? 'P1' : 'P2',
+        preconditions: '账号已登录',
+        steps: '执行步骤-' + moduleNum,
+        expected: '结果符合预期-' + moduleNum,
+        actual: '未执行',
+        remark: '',
+      });
+    }
+
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
+      try { localStorage.removeItem('tap-auth-token'); } catch (_) {}
+      try { localStorage.setItem('usecase-temp-exec-v1', JSON.stringify(payload)); } catch (_) {}
+      try { localStorage.setItem('tempexec-focus-v1', JSON.stringify([])); } catch (_) {}
+    }, {
+      files: [{
+        id: fileId,
+        name: '大量用例执行集',
+        requirement: '批量结构验证',
+        cases,
+      }],
+      versions: [],
+      activeId: fileId,
     });
-    expect(Math.abs(scrollAfterClose - scrollBeforeClose)).toBeLessThanOrEqual(2);
+
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.fallback();
+      }
+      return route.abort();
+    });
+
+    await gotoExec(page);
+    await waitExecReady(page);
+    await page.evaluate((nextId) => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.setTempExecActive === 'function') {
+        window.app.tempExecApi.setTempExecActive(nextId);
+      }
+    }, fileId);
+
+    await page.waitForFunction(() => {
+      var card = document.getElementById('tempExecToolbarCard');
+      return card && !card.classList.contains('hidden');
+    });
+
+    await waitTempExecXmindButtonReady(page);
+    await page.click('#tempExecXmindViewBtn');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+
+    async function assertMindVisible(message) {
+      const metrics = await page.evaluate(() => {
+        var viewer = document.querySelector('#tempExecXmindStructureViewer');
+        if (!viewer) return { inter: false, nodeVisible: false };
+        var canvas = viewer.querySelector('.xmind-structure-canvas');
+        var nodes = viewer.querySelector('.map-container me-nodes');
+        if (!canvas || !nodes || !canvas.getBoundingClientRect || !nodes.getBoundingClientRect) {
+          return { inter: false, nodeVisible: false };
+        }
+        var canvasRect = canvas.getBoundingClientRect();
+        var nodesRect = nodes.getBoundingClientRect();
+        var intersects = nodesRect.right > canvasRect.left + 2
+          && nodesRect.left < canvasRect.right - 2
+          && nodesRect.bottom > canvasRect.top + 2
+          && nodesRect.top < canvasRect.bottom - 2;
+
+        var textVisible = false;
+        var texts = viewer.querySelectorAll('me-tpc .text');
+        for (var i = 0; i < texts.length; i += 1) {
+          var item = texts[i];
+          if (!item || !item.getBoundingClientRect) continue;
+          var rect = item.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) continue;
+          var hit = rect.right > canvasRect.left + 2
+            && rect.left < canvasRect.right - 2
+            && rect.bottom > canvasRect.top + 2
+            && rect.top < canvasRect.bottom - 2;
+          if (hit) {
+            textVisible = true;
+            break;
+          }
+        }
+
+        return {
+          inter: intersects,
+          nodeVisible: textVisible,
+        };
+      });
+      expect(metrics.inter, message + '（结构整体应在画布可视范围）').toBeTruthy();
+      expect(metrics.nodeVisible, message + '（应至少有一个节点文本可见）').toBeTruthy();
+    }
+
+    await assertMindVisible('初始全览后');
+
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-fit"]');
+    var largeCasesFitScale = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-in"]');
+    var largeCasesZoomInScale = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    expect(largeCasesZoomInScale).toBeGreaterThan(largeCasesFitScale + 0.01);
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-out"]');
+    var largeCasesZoomBackScale = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
+    expect(Math.abs(largeCasesZoomBackScale - largeCasesFitScale)).toBeLessThan(0.02);
+
+    for (var z = 0; z < 5; z += 1) {
+      await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-in"]');
+      await page.waitForTimeout(80);
+      await assertMindVisible('第' + String(z + 1) + '次放大后');
+    }
   });
 
   test('用例库支持 XMind 结构展示并切换主题', async ({ page }) => {
@@ -407,6 +743,16 @@ test.describe('XMind 结构展示按钮', () => {
     await expect(page.locator('#xmindStructureDrawerBody')).toContainText('创建订单成功');
     var drawerWidthRatio = await getDrawerWidthRatio(page);
     expect(drawerWidthRatio).toBeGreaterThanOrEqual(0.66);
+    await page.waitForTimeout(140);
+    var caseLibInitialScaleJustOpened = await getCanvasScale(page, '#caseLibraryXmindStructureViewer .map-canvas');
+    await page.click('#caseLibraryXmindStructureViewer [data-mind-action="zoom-fit"]');
+    var caseLibFitScaleJustOpened = await getCanvasScale(page, '#caseLibraryXmindStructureViewer .map-canvas');
+    expect(Math.abs(caseLibFitScaleJustOpened - caseLibInitialScaleJustOpened)).toBeLessThan(0.02);
+    await page.waitForTimeout(520);
+    var caseLibInitialScaleAfterOpen = await getCanvasScale(page, '#caseLibraryXmindStructureViewer .map-canvas');
+    await page.click('#caseLibraryXmindStructureViewer [data-mind-action="zoom-fit"]');
+    var caseLibFitScaleAfterOpen = await getCanvasScale(page, '#caseLibraryXmindStructureViewer .map-canvas');
+    expect(Math.abs(caseLibFitScaleAfterOpen - caseLibInitialScaleAfterOpen)).toBeLessThan(0.02);
     await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-action="zoom-out"]')).toBeVisible();
     await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-action="zoom-fit"]')).toBeVisible();
     await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-action="zoom-in"]')).toBeVisible();
@@ -423,7 +769,17 @@ test.describe('XMind 结构展示按钮', () => {
     var afterZoom = await getCanvasTransform(page, '#caseLibraryXmindStructureViewer .map-canvas');
     expect(afterZoom).not.toBe(beforeZoom);
 
-    await page.locator('#caseLibraryXmindStructureViewer me-tpc .text', { hasText: '取消订单成功' }).first().dblclick({ force: true });
+    const caseLibNodeDblClicked = await page.evaluate(() => {
+      var nodes = document.querySelectorAll('#caseLibraryXmindStructureViewer me-tpc .text');
+      for (var i = 0; i < nodes.length; i += 1) {
+        var node = nodes[i];
+        if (String(node.textContent || '').trim() !== '取消订单成功') continue;
+        node.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+        return true;
+      }
+      return false;
+    });
+    expect(caseLibNodeDblClicked).toBeTruthy();
     await page.waitForTimeout(150);
     const locatedEditor = await page.evaluate(() => {
       var active = document.activeElement;

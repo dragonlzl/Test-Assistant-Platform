@@ -358,6 +358,7 @@
     jumpToExecBtn: document.getElementById('caseLibraryJumpExecBtn'),
     autoCaseLibrarySelectBtn: document.getElementById('autoCaseLibrarySelectBtn'),
     caseLibraryImportSelectBtn: document.getElementById('caseLibraryImportSelectBtn'),
+    writerDrawerOpenBtn: document.getElementById('openCaseLibraryWriterDrawerBtn'),
     editDrawerOpenBtn: document.getElementById('openCaseLibraryEditDrawerBtn'),
 
     editCard: document.getElementById('caseLibraryEditCard'),
@@ -426,6 +427,12 @@
     importXmindTemplateBtn: document.getElementById('caseLibraryImportXmindTemplateBtn'),
     importConfirmBtn: document.getElementById('caseLibraryImportConfirmBtn'),
     importStatus: document.getElementById('caseLibraryImportStatus'),
+    writerPublishDrawer: document.getElementById('caseLibraryWriterPublishDrawer'),
+    writerPublishHint: document.getElementById('caseLibraryWriterPublishHint'),
+    writerPublishProjectSelect: document.getElementById('caseLibraryWriterPublishProjectSelect'),
+    writerPublishVersionSelect: document.getElementById('caseLibraryWriterPublishVersionSelect'),
+    writerPublishConfirmBtn: document.getElementById('caseLibraryWriterPublishConfirmBtn'),
+    writerPublishStatus: document.getElementById('caseLibraryWriterPublishStatus'),
 
 	    importDiffTitle: document.getElementById('caseLibraryImportDiffTitle'),
     importDiffStatus: document.getElementById('caseLibraryImportDiffStatus'),
@@ -579,6 +586,19 @@
       projectId: null,
       versionId: null,
       loading: false,
+    },
+
+    writer: {
+      loading: false,
+      projectId: null,
+      versionId: null,
+      draftItems: [],
+      draftFileName: '',
+      summary: null,
+      publishing: false,
+      pendingResolve: null,
+      pendingReject: null,
+      lastImportedCaseFileId: null,
     },
 
 	    importDiff: {
@@ -845,10 +865,17 @@
   var importDiffDrawerInstance = null;
   var importDiffDrawerOpenTimer = 0;
   var importInvalidDrawerInstance = null;
+  var writerPublishDrawerInstance = null;
   var aiGenDrawerInstance = null;
   var xmindStructureDrawerInstance = null;
   var caseLibraryXmindMindInstance = null;
   var caseLibraryXmindThemeObserver = null;
+  var caseLibraryXmindGestureGuard = {
+    active: false,
+    token: '',
+    popHandler: null,
+    restoring: false,
+  };
   var editDrawerInstance = null;
   var missingDrawerInstance = null;
   var missingAddDrawerInstance = null;
@@ -3214,9 +3241,87 @@
     }, true);
   }
 
+  function enableCaseLibraryXmindGestureGuard() {
+    if (caseLibraryXmindGestureGuard.active) return;
+    if (typeof window === 'undefined' || !window || !window.history) return;
+    if (typeof window.addEventListener !== 'function' || typeof window.removeEventListener !== 'function') return;
+
+    var token = 'tap-xmind-guard-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+    caseLibraryXmindGestureGuard.token = token;
+    caseLibraryXmindGestureGuard.active = true;
+    caseLibraryXmindGestureGuard.restoring = false;
+
+    try {
+      window.history.pushState({ __tapXmindGestureGuard: token }, document.title, window.location.href);
+    } catch (err) {
+      // ignore
+    }
+
+    var popHandler = function() {
+      if (!caseLibraryXmindGestureGuard.active) return;
+      if (caseLibraryXmindGestureGuard.restoring) return;
+      if (window.history && typeof window.history.go === 'function') {
+        try {
+          window.history.go(1);
+        } catch (err0) {
+          // ignore
+        }
+      }
+    };
+    caseLibraryXmindGestureGuard.popHandler = popHandler;
+    window.addEventListener('popstate', popHandler, true);
+  }
+
+  function disableCaseLibraryXmindGestureGuard() {
+    if (!caseLibraryXmindGestureGuard.active) return;
+    var popHandler = caseLibraryXmindGestureGuard.popHandler;
+    caseLibraryXmindGestureGuard.active = false;
+    caseLibraryXmindGestureGuard.popHandler = null;
+    if (typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function' && popHandler) {
+      window.removeEventListener('popstate', popHandler, true);
+    }
+    if (typeof window === 'undefined' || !window || !window.history) {
+      caseLibraryXmindGestureGuard.token = '';
+      return;
+    }
+    var state = null;
+    try {
+      state = window.history.state;
+    } catch (err1) {
+      state = null;
+    }
+    if (
+      state &&
+      typeof state === 'object' &&
+      state.__tapXmindGestureGuard &&
+      String(state.__tapXmindGestureGuard) === String(caseLibraryXmindGestureGuard.token || '')
+    ) {
+      var nextState = {};
+      try {
+        nextState = JSON.parse(JSON.stringify(state));
+      } catch (err2) {
+        nextState = {};
+      }
+      if (!nextState || typeof nextState !== 'object') nextState = {};
+      if (Object.prototype.hasOwnProperty.call(nextState, '__tapXmindGestureGuard')) {
+        delete nextState.__tapXmindGestureGuard;
+      }
+      try {
+        window.history.replaceState(nextState, document.title, window.location.href);
+      } catch (err3) {
+        // ignore
+      }
+      caseLibraryXmindGestureGuard.restoring = false;
+    }
+    caseLibraryXmindGestureGuard.token = '';
+  }
+
   function ensureCaseLibraryXmindDrawer() {
     if (xmindStructureDrawerInstance) return xmindStructureDrawerInstance;
-    xmindStructureDrawerInstance = ensureDrawer('xmindStructureDrawer', [], null, function() {
+    xmindStructureDrawerInstance = ensureDrawer('xmindStructureDrawer', [], function() {
+      enableCaseLibraryXmindGestureGuard();
+    }, function() {
+      disableCaseLibraryXmindGestureGuard();
       if (caseLibraryXmindThemeObserver && typeof caseLibraryXmindThemeObserver.disconnect === 'function') {
         caseLibraryXmindThemeObserver.disconnect();
       }
@@ -3619,9 +3724,11 @@
       return;
     }
 
+    drawer.open();
     body.innerHTML = '<div class="xmind-structure-viewer" id="caseLibraryXmindStructureViewer"></div>';
     var container = document.getElementById('caseLibraryXmindStructureViewer');
     if (!container) {
+      if (typeof drawer.close === 'function') drawer.close();
       setStatus(dom.editStatus, 'XMind 结构容器初始化失败', 'err');
       return;
     }
@@ -3632,7 +3739,7 @@
     try {
       caseLibraryXmindMindInstance = mindApi.renderMindMap(container, mindData, {
         instance: caseLibraryXmindMindInstance,
-        direction: 'side',
+        direction: 'right',
         onExportXmind: exportCurrentCaseLibraryXmind,
         editableSessionKey: 'tap-case-library-xmind-edit-' + String(currentFile.id || ''),
         onSaveCases: saveCaseLibraryXmindCases,
@@ -3646,17 +3753,895 @@
       bindCaseLibraryXmindThemeSync(mindApi);
     } catch (err) {
       console.error(err);
+      if (typeof drawer.close === 'function') drawer.close();
       setStatus(dom.editStatus, 'XMind 结构渲染失败', 'err');
       return;
     }
-    drawer.open();
     safeLogOperation('view_case_file_xmind_structure', 'case_file', currentFile.id || null, {
       case_file_id: currentFile.id || null,
       file_name: currentFile.file_name_clean || currentFile.file_name || '',
     });
   }
 
-	  function buildInvisibleMarker(seed) {
+
+	  function getCaseLibraryWriterDefaultPath() {
+    return [
+      '子模块：修改此处以确定子模块',
+      '用例名：修改此处以确定用例名',
+      '优先级：修改此处以确定优先级（如P1）',
+      '前置条件：修改此处以确定前置条件',
+      '执行步骤：修改此处以确定执行步骤',
+      '预期结果：修改此处以确定预期结果',
+    ];
+  }
+
+  function getCaseLibraryWriterRootTitle() {
+    return '用例：修改此处以确定用例的文件名';
+  }
+
+  function getCaseLibraryWriterSessionKey() {
+    var uid = getCurrentUserId();
+    return 'tap-case-library-writer-xmind-edit-' + String(uid || 'guest');
+  }
+
+  function collectWriterLeafDepths(node, depth, output) {
+    if (!node) return;
+    var list = Array.isArray(output) ? output : [];
+    var children = Array.isArray(node.children) ? node.children : [];
+    if (!children.length) {
+      if (depth > 0) list.push(depth);
+      return;
+    }
+    for (var i = 0; i < children.length; i += 1) {
+      collectWriterLeafDepths(children[i], depth + 1, list);
+    }
+  }
+
+  function isLegacyWriterSchemaData(data) {
+    if (!data || !data.nodeData) return false;
+    var depths = [];
+    collectWriterLeafDepths(data.nodeData, 0, depths);
+    if (!depths.length) return false;
+
+    var allSix = true;
+    for (var i = 0; i < depths.length; i += 1) {
+      if (Number(depths[i]) !== 6) {
+        allSix = false;
+        break;
+      }
+    }
+    if (!allSix) return true;
+
+    var firstChild = data.nodeData && Array.isArray(data.nodeData.children) && data.nodeData.children.length
+      ? data.nodeData.children[0]
+      : null;
+    var firstTopic = firstChild && firstChild.topic !== undefined && firstChild.topic !== null
+      ? String(firstChild.topic).trim()
+      : '';
+    if (firstTopic.indexOf('父模块') === 0) return true;
+    if (firstTopic.indexOf('用例名：修改此处以确定用例名') === 0) return true;
+    return false;
+  }
+
+  function migrateCaseLibraryWriterSessionRootTitle() {
+    if (typeof localStorage === 'undefined') return;
+    var key = getCaseLibraryWriterSessionKey();
+    if (!key) return;
+    var raw = '';
+    try {
+      raw = localStorage.getItem(String(key)) || '';
+    } catch (err1) {
+      raw = '';
+    }
+    if (!raw) return;
+
+    var payload = null;
+    try {
+      payload = JSON.parse(raw);
+    } catch (err2) {
+      payload = null;
+    }
+    if (!payload || typeof payload !== 'object') return;
+
+    var hasLegacySchema = Boolean(
+      isLegacyWriterSchemaData(payload.baseData) ||
+      isLegacyWriterSchemaData(payload.currentData) ||
+      (Array.isArray(payload.history) && payload.history.some(function(entry) {
+        return isLegacyWriterSchemaData(entry);
+      }))
+    );
+    if (hasLegacySchema) {
+      try {
+        localStorage.removeItem(String(key));
+      } catch (err3) {
+        // ignore
+      }
+      return;
+    }
+
+    var nextTitle = getCaseLibraryWriterRootTitle();
+    if (!nextTitle) return;
+    var changed = false;
+
+    function updateMindDataRoot(data) {
+      if (!data || !data.nodeData) return;
+      var topic = String(data.nodeData.topic || '').trim();
+      if (topic !== '编写用例' && topic !== '用例名：修改此处以确定用例名' && topic !== '用例') return;
+      data.nodeData.topic = nextTitle;
+      changed = true;
+    }
+
+    updateMindDataRoot(payload.baseData);
+    updateMindDataRoot(payload.currentData);
+    if (Array.isArray(payload.history)) {
+      payload.history.forEach(function(entry) {
+        updateMindDataRoot(entry);
+      });
+    }
+
+    if (!changed) return;
+    try {
+      localStorage.setItem(String(key), JSON.stringify(payload));
+    } catch (err4) {
+      // ignore
+    }
+  }
+
+  function readCaseLibraryWriterMindDataFromInstance() {
+    var inst = caseLibraryXmindMindInstance;
+    if (!inst) return null;
+    try {
+      if (typeof inst.getData === 'function') {
+        var data = inst.getData();
+        if (data && data.nodeData) {
+          return JSON.parse(JSON.stringify(data));
+        }
+      }
+    } catch (err0) {
+      // ignore
+    }
+    try {
+      if (typeof inst.getDataString === 'function') {
+        var raw = inst.getDataString();
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          if (parsed && parsed.nodeData) return parsed;
+        }
+      }
+    } catch (err1) {
+      // ignore
+    }
+    try {
+      if (inst.nodeData) {
+        return JSON.parse(JSON.stringify({ nodeData: inst.nodeData }, function(key, value) {
+          if (key === 'parent') return undefined;
+          return value;
+        }));
+      }
+    } catch (err2) {
+      // ignore
+    }
+    return null;
+  }
+
+  function collectCaseLibraryWriterLeafPaths(node, depth, pathTopics, output) {
+    if (!node) return;
+    var topics = Array.isArray(pathTopics) ? pathTopics.slice() : [];
+    if (depth > 0) {
+      topics.push(normalizeXmindCaseLibraryText(node.topic));
+    }
+    var children = Array.isArray(node.children) ? node.children : [];
+    if (!children.length) {
+      if (depth > 0) {
+        output.push(topics);
+      }
+      return;
+    }
+    for (var i = 0; i < children.length; i += 1) {
+      collectCaseLibraryWriterLeafPaths(children[i], depth + 1, topics, output);
+    }
+  }
+
+  function buildCaseLibraryWriterExportCases(mindData) {
+    var root = mindData && mindData.nodeData ? mindData.nodeData : null;
+    if (!root) return [];
+    var leafPaths = [];
+    collectCaseLibraryWriterLeafPaths(root, 0, [], leafPaths);
+    if (!leafPaths.length) return [];
+
+    return leafPaths.map(function(path) {
+      var moduleValue = normalizeCaseLibraryWriterTopic(path[0]);
+      var titleValue = normalizeCaseLibraryWriterTopic(path[1]);
+      var priorityValue = normalizePriorityInput(normalizeCaseLibraryWriterTopic(path[2])) || 'P1';
+      var preValue = normalizeCaseLibraryWriterTopic(path[3]);
+      var stepsValue = normalizeCaseLibraryWriterTopic(path[4]);
+      var expectedValue = normalizeCaseLibraryWriterTopic(path[5]);
+      return {
+        module: moduleValue || '-',
+        title: titleValue || '-',
+        priority: priorityValue || 'P1',
+        precondition: preValue || '-',
+        preconditions: preValue || '-',
+        steps: stepsValue || '-',
+        expected: expectedValue || '-',
+        remark: '',
+      };
+    }).filter(Boolean);
+  }
+
+  function deriveCaseLibraryWriterExportBaseName(mindData) {
+    var rootTopic = '';
+    if (mindData && mindData.nodeData && mindData.nodeData.topic !== undefined && mindData.nodeData.topic !== null) {
+      rootTopic = String(mindData.nodeData.topic || '').trim();
+    }
+    if (rootTopic.indexOf('用例：') === 0) {
+      rootTopic = String(rootTopic.slice(3) || '').trim();
+    }
+    if (!rootTopic || rootTopic === '修改此处以确定用例的文件名') {
+      rootTopic = '编写用例';
+    }
+    return cleanCaseFileName(rootTopic || '编写用例');
+  }
+
+  function exportCaseLibraryWriterCurrentXmind() {
+    var builder = getXmindBuilder();
+    if (!builder) {
+      setStatus(dom.status, '缺少 XMind 导出依赖', 'err');
+      return Promise.resolve(false);
+    }
+    var downloadBlob = getDownloadBlob();
+    if (!downloadBlob) {
+      setStatus(dom.status, '缺少下载能力，无法导出', 'err');
+      return Promise.resolve(false);
+    }
+
+    var mindData = readCaseLibraryWriterMindDataFromInstance();
+    if (!mindData || !mindData.nodeData) {
+      setStatus(dom.status, '当前导图无可导出内容', 'warn');
+      return Promise.resolve(false);
+    }
+
+    var cases = buildCaseLibraryWriterExportCases(mindData);
+    if (!cases.length) {
+      setStatus(dom.status, '当前导图无可导出内容', 'warn');
+      return Promise.resolve(false);
+    }
+
+    var baseName = deriveCaseLibraryWriterExportBaseName(mindData) || '编写用例';
+    setStatus(dom.status, '正在导出 XMind...', '');
+
+    return Promise.resolve()
+      .then(function() {
+        return builder(cases, baseName, '');
+      })
+      .then(function(pkg) {
+        if (!pkg || !pkg.blob) throw new Error('无导出内容');
+        var fileName = sanitizeDownloadName(baseName, '.xmind');
+        downloadBlob(fileName, pkg.blob);
+        setStatus(dom.status, '已导出 XMind：' + fileName, 'ok');
+        safeLogOperation('export_case_files_xmind', 'case_file', null, {
+          format: 'xmind',
+          count: 1,
+          success: 1,
+          fail: 0,
+          source: 'case_library_writer_xmind',
+        });
+        return true;
+      })
+      .catch(function(err) {
+        setStatus(dom.status, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
+        return false;
+      });
+  }
+
+  function buildCaseLibraryWriterMindData(mindApi) {
+    var api = mindApi || getMindElixirApi();
+    if (!api || typeof api.buildMindDataFromPaths !== 'function') return null;
+    return api.buildMindDataFromPaths([getCaseLibraryWriterDefaultPath()], {
+      rootTitle: getCaseLibraryWriterRootTitle(),
+    });
+  }
+
+  function normalizeCaseLibraryWriterTopic(value) {
+    var text = normalizeXmindCaseLibraryText(value);
+    if (!text || text === '-') return '';
+    return text;
+  }
+
+
+  function parseCaseLibraryWriterTopics(topics) {
+    var segs = Array.isArray(topics) ? topics : [];
+    var moduleValue = normalizeCaseLibraryWriterTopic(segs[0]);
+    var caseName = normalizeCaseLibraryWriterTopic(segs[1]);
+    var priorityValue = normalizeCaseLibraryWriterTopic(segs[2]);
+    priorityValue = normalizePriorityInput(priorityValue);
+    var preValue = normalizeCaseLibraryWriterTopic(segs[3]);
+    var stepsValue = normalizeCaseLibraryWriterTopic(segs[4]);
+    var expectedValue = normalizeCaseLibraryWriterTopic(segs[5]);
+
+    var emptyIndexes = [];
+    if (!moduleValue) emptyIndexes.push(0);
+    if (!caseName) emptyIndexes.push(1);
+    if (!priorityValue) emptyIndexes.push(2);
+    if (!preValue) emptyIndexes.push(3);
+    if (!stepsValue) emptyIndexes.push(4);
+    if (!expectedValue) emptyIndexes.push(5);
+    if (emptyIndexes.length) {
+      return {
+        caseItem: null,
+        emptyIndexes: emptyIndexes,
+      };
+    }
+
+    return {
+      caseItem: {
+        module: moduleValue,
+        title: caseName,
+        priority: priorityValue,
+        precondition: preValue,
+        preconditions: preValue,
+        steps: stepsValue,
+        expected: expectedValue,
+        remark: '',
+      },
+      emptyIndexes: [],
+    };
+  }
+
+  function mapWriterCasesToImportItems(cases) {
+    var list = Array.isArray(cases) ? cases : [];
+    return buildImportItems(list.map(function(item) {
+      var row = normalizeXmindCaseLibraryCase(item || {});
+      var moduleValue = normalizeCaseLibraryWriterTopic(row.module);
+      var titleValue = normalizeCaseLibraryWriterTopic(row.title);
+      var priorityValue = normalizeCaseLibraryWriterTopic(row.priority);
+      priorityValue = normalizePriorityInput(priorityValue);
+      var preValue = normalizeCaseLibraryWriterTopic(row.precondition || row.preconditions);
+      var stepsValue = normalizeCaseLibraryWriterTopic(row.steps);
+      var expectedValue = normalizeCaseLibraryWriterTopic(row.expected);
+      return {
+        module: moduleValue,
+        title: titleValue,
+        priority: priorityValue,
+        precondition: preValue,
+        preconditions: preValue,
+        steps: stepsValue,
+        expected: expectedValue,
+        remark: '',
+      };
+    }));
+  }
+
+  function deriveWriterImportFileName(items) {
+    var list = Array.isArray(items) ? items : [];
+    var raw = '';
+    if (list.length) {
+      raw = normalizeXmindCaseLibraryText(list[0].title || list[0].module || '');
+    }
+    var clean = cleanCaseFileName(raw || '编写用例');
+    if (!clean) clean = '编写用例';
+    return clean + '.xmind';
+  }
+
+  function clearCaseLibraryWriterPendingResolver() {
+    state.writer.pendingResolve = null;
+    state.writer.pendingReject = null;
+  }
+
+  function resolveCaseLibraryWriterPendingSave(payload) {
+    var resolve = state.writer.pendingResolve;
+    clearCaseLibraryWriterPendingResolver();
+    if (typeof resolve === 'function') {
+      try {
+        resolve(payload || null);
+      } catch (err) {
+        // ignore
+      }
+    }
+  }
+
+  function rejectCaseLibraryWriterPendingSave(reason, silentOnly) {
+    var reject = state.writer.pendingReject;
+    clearCaseLibraryWriterPendingResolver();
+    if (typeof reject === 'function') {
+      if (silentOnly) {
+        try {
+          reject({
+            silent: true,
+            message: reason || '已取消入库',
+          });
+        } catch (err) {
+          // ignore
+        }
+        return;
+      }
+      try {
+        reject(new Error(reason || '入库失败'));
+      } catch (err2) {
+        // ignore
+      }
+    }
+  }
+
+  function syncCaseLibraryWriterPublishConfirmEnabled() {
+    if (!dom.writerPublishConfirmBtn) return;
+    var writer = state.writer || {};
+    var can = Boolean(
+      !writer.publishing &&
+      writer.projectId &&
+      writer.versionId &&
+      Array.isArray(writer.draftItems) &&
+      writer.draftItems.length
+    );
+    dom.writerPublishConfirmBtn.disabled = !can;
+  }
+
+  function buildWriterPublishHintText() {
+    var writer = state.writer || {};
+    var count = Array.isArray(writer.draftItems) ? writer.draftItems.length : 0;
+    var firstCaseName = '';
+    if (count > 0) {
+      firstCaseName = normalizeXmindCaseLibraryText(writer.draftItems[0].title || '');
+    }
+    var cleanName = cleanCaseFileName(firstCaseName || '编写用例');
+    return '待入库用例 ' + count + ' 条；默认用例名：' + (cleanName || '编写用例') + '。请选择项目和版本后确认入库。';
+  }
+
+  function fillCaseLibraryWriterVersionOptions(projectId, preferredVersionId) {
+    if (!dom.writerPublishVersionSelect) return;
+    syncVersionOptions(dom.writerPublishVersionSelect, projectId, '请选择版本', true);
+    dom.writerPublishVersionSelect.disabled = false;
+    var desired = normalizeId(preferredVersionId || '');
+    if (desired) {
+      var versions = projectId && state.versionsByProject[projectId] ? state.versionsByProject[projectId] : [];
+      var exists = (versions || []).some(function(v) {
+        return v && String(v.id) === String(desired);
+      });
+      if (exists) {
+        dom.writerPublishVersionSelect.value = String(desired);
+        state.writer.versionId = desired;
+      }
+    }
+    syncCaseLibraryWriterPublishConfirmEnabled();
+  }
+
+  function ensureCaseLibraryWriterPublishDrawer() {
+    if (writerPublishDrawerInstance) return writerPublishDrawerInstance;
+    writerPublishDrawerInstance = ensureDrawer(
+      'caseLibraryWriterPublishDrawer',
+      [],
+      function() {
+        syncCaseLibraryWriterPublishConfirmEnabled();
+      },
+      function() {
+        if (state.writer.publishing) state.writer.publishing = false;
+        syncCaseLibraryWriterPublishConfirmEnabled();
+        if (state.writer.pendingReject) {
+          rejectCaseLibraryWriterPendingSave('已取消入库', true);
+        }
+      }
+    );
+    return writerPublishDrawerInstance;
+  }
+
+
+  function openCaseLibraryWriterPublishDrawer(items, summary) {
+    var drawer = ensureCaseLibraryWriterPublishDrawer();
+    if (!drawer || typeof drawer.open !== 'function') {
+      return Promise.reject(new Error('确认入库抽屉未就绪'));
+    }
+    var writer = state.writer || {};
+    writer.loading = false;
+    writer.publishing = false;
+    writer.summary = summary || null;
+    writer.draftItems = Array.isArray(items) ? items.slice() : [];
+    writer.draftFileName = deriveWriterImportFileName(writer.draftItems);
+
+    var preferredProjectId = null;
+    var preferredVersionId = null;
+    if (state.importDrawer && state.importDrawer.projectId) {
+      preferredProjectId = state.importDrawer.projectId;
+      preferredVersionId = state.importDrawer.versionId || null;
+    } else if (state.editDrawer && state.editDrawer.projectId) {
+      preferredProjectId = state.editDrawer.projectId;
+      preferredVersionId = state.editDrawer.versionId || null;
+    }
+
+    writer.projectId = preferredProjectId;
+    writer.versionId = null;
+    state.writer = writer;
+
+    if (dom.writerPublishHint) {
+      dom.writerPublishHint.textContent = buildWriterPublishHintText();
+    }
+    setStatus(dom.writerPublishStatus, '', '');
+
+    if (dom.writerPublishProjectSelect) {
+      dom.writerPublishProjectSelect.innerHTML = '<option value="">加载项目中...</option>';
+      dom.writerPublishProjectSelect.value = '';
+    }
+    if (dom.writerPublishVersionSelect) {
+      dom.writerPublishVersionSelect.disabled = true;
+      dom.writerPublishVersionSelect.innerHTML = '<option value="">请选择版本</option>';
+      dom.writerPublishVersionSelect.value = '';
+    }
+    syncCaseLibraryWriterPublishConfirmEnabled();
+    drawer.open();
+
+    setStatus(dom.writerPublishStatus, '加载项目中...', '');
+    return ensureProjectsReady()
+      .then(function(projects) {
+        var list = Array.isArray(projects) ? projects : [];
+        var hasPreferredProject = list.some(function(p) {
+          return p && String(p.id) === String(preferredProjectId || '');
+        });
+        if (!hasPreferredProject) {
+          preferredProjectId = null;
+          preferredVersionId = null;
+        }
+        if (!preferredProjectId && list.length === 1 && list[0] && list[0].id !== undefined && list[0].id !== null) {
+          preferredProjectId = normalizeId(list[0].id);
+        }
+
+        writer.projectId = preferredProjectId;
+        writer.versionId = null;
+        state.writer = writer;
+
+        if (dom.writerPublishProjectSelect) {
+          syncProjectOptions(dom.writerPublishProjectSelect, '请选择项目');
+          dom.writerPublishProjectSelect.value = preferredProjectId ? String(preferredProjectId) : '';
+        }
+        if (dom.writerPublishVersionSelect) {
+          dom.writerPublishVersionSelect.disabled = true;
+          dom.writerPublishVersionSelect.innerHTML = '<option value="">请选择版本</option>';
+          dom.writerPublishVersionSelect.value = '';
+        }
+        syncCaseLibraryWriterPublishConfirmEnabled();
+
+        if (!list.length) {
+          setStatus(dom.writerPublishStatus, '暂无可用项目，请先创建项目', 'warn');
+          return false;
+        }
+
+        if (!preferredProjectId) {
+          setStatus(dom.writerPublishStatus, '请选择项目和版本后确认入库', '');
+          return true;
+        }
+
+        setStatus(dom.writerPublishStatus, '加载版本中...', '');
+        return loadVersions(preferredProjectId)
+          .then(function() {
+            fillCaseLibraryWriterVersionOptions(preferredProjectId, preferredVersionId);
+            setStatus(dom.writerPublishStatus, '', '');
+            return true;
+          })
+          .catch(function(err) {
+            setStatus(dom.writerPublishStatus, err && err.message ? err.message : '加载版本失败', 'err');
+            return false;
+          });
+      })
+      .catch(function(err) {
+        setStatus(dom.writerPublishStatus, err && err.message ? err.message : '加载项目失败', 'err');
+        return false;
+      });
+  }
+
+  function handleCaseLibraryWriterPublishProjectChange() {
+    var writer = state.writer || {};
+    writer.projectId = normalizeId(dom.writerPublishProjectSelect ? dom.writerPublishProjectSelect.value : '');
+    writer.versionId = null;
+    if (!dom.writerPublishVersionSelect) {
+      syncCaseLibraryWriterPublishConfirmEnabled();
+      return;
+    }
+    dom.writerPublishVersionSelect.disabled = true;
+    dom.writerPublishVersionSelect.innerHTML = '<option value="">请选择版本</option>';
+    dom.writerPublishVersionSelect.value = '';
+    syncCaseLibraryWriterPublishConfirmEnabled();
+    if (!writer.projectId) {
+      setStatus(dom.writerPublishStatus, '请先选择项目', 'warn');
+      return;
+    }
+    setStatus(dom.writerPublishStatus, '加载版本中...', '');
+    loadVersions(writer.projectId)
+      .then(function() {
+        fillCaseLibraryWriterVersionOptions(writer.projectId, null);
+        setStatus(dom.writerPublishStatus, '', '');
+      })
+      .catch(function(err) {
+        setStatus(dom.writerPublishStatus, err && err.message ? err.message : '加载版本失败', 'err');
+      });
+  }
+
+  function handleCaseLibraryWriterPublishVersionChange() {
+    var writer = state.writer || {};
+    var raw = dom.writerPublishVersionSelect ? dom.writerPublishVersionSelect.value : '';
+    if (utils && typeof utils.isAddVersionOption === 'function' && utils.isAddVersionOption(raw)) {
+      var projectId = writer.projectId;
+      if (!projectId) {
+        setStatus(dom.writerPublishStatus, '请先选择项目', 'warn');
+        if (dom.writerPublishVersionSelect) dom.writerPublishVersionSelect.value = writer.versionId || '';
+        return;
+      }
+      if (!utils || typeof utils.openAddProjectVersionDrawer !== 'function') {
+        setStatus(dom.writerPublishStatus, '新增版本组件未就绪，请刷新后重试', 'err');
+        if (dom.writerPublishVersionSelect) dom.writerPublishVersionSelect.value = writer.versionId || '';
+        return;
+      }
+      var prevValue = writer.versionId || '';
+      if (dom.writerPublishVersionSelect) dom.writerPublishVersionSelect.value = prevValue ? String(prevValue) : '';
+      if (dom.writerPublishVersionSelect) dom.writerPublishVersionSelect.disabled = true;
+      syncCaseLibraryWriterPublishConfirmEnabled();
+      var projectName = state.projectNameById && state.projectNameById[projectId]
+        ? state.projectNameById[projectId]
+        : ('项目#' + projectId);
+      utils
+        .openAddProjectVersionDrawer({
+          projectId: projectId,
+          projectName: projectName,
+          previousDrawer: writerPublishDrawerInstance || null,
+        })
+        .then(function(res) {
+          if (!res || res.ok !== true || !res.version) return;
+          var list = state.versionsByProject[projectId];
+          if (!Array.isArray(list)) list = [];
+          var exists = list.some(function(v) {
+            return v && String(v.id) === String(res.version.id);
+          });
+          if (!exists) list.unshift(res.version);
+          state.versionsByProject[projectId] = list;
+          if (!state.versionNameByProject[projectId]) state.versionNameByProject[projectId] = {};
+          state.versionNameByProject[projectId][res.version.id] = res.version.name || ('版本#' + res.version.id);
+          fillCaseLibraryWriterVersionOptions(projectId, res.version.id);
+          writer.versionId = normalizeId(res.version.id);
+          if (dom.writerPublishVersionSelect) dom.writerPublishVersionSelect.value = String(res.version.id);
+        })
+        .finally(function() {
+          if (dom.writerPublishVersionSelect) dom.writerPublishVersionSelect.disabled = false;
+          syncCaseLibraryWriterPublishConfirmEnabled();
+        });
+      return;
+    }
+    writer.versionId = normalizeId(raw);
+    syncCaseLibraryWriterPublishConfirmEnabled();
+  }
+
+  function waitForCaseLibraryCondition(checker, timeoutMs, intervalMs) {
+    var timeout = Number(timeoutMs);
+    if (!isFinite(timeout) || timeout <= 0) timeout = 5000;
+    var interval = Number(intervalMs);
+    if (!isFinite(interval) || interval <= 0) interval = 80;
+    return new Promise(function(resolve) {
+      var done = false;
+      var started = Date.now();
+      var timer = setInterval(function() {
+        if (done) return;
+        var ok = false;
+        try {
+          ok = checker && checker() === true;
+        } catch (err) {
+          ok = false;
+        }
+        if (ok) {
+          done = true;
+          clearInterval(timer);
+          resolve(true);
+          return;
+        }
+        if (Date.now() - started >= timeout) {
+          done = true;
+          clearInterval(timer);
+          resolve(false);
+        }
+      }, interval);
+    });
+  }
+
+  function openEditorForImportedWriterCase(caseFile, projectId, cleanName) {
+    var pid = normalizeId(projectId || (caseFile && caseFile.project_id ? caseFile.project_id : ''));
+    if (!pid) return Promise.resolve(false);
+    if (!editDrawerInstance || typeof editDrawerInstance.open !== 'function') return Promise.resolve(false);
+    return ensureProjectsReady()
+      .then(function() {
+        if (dom.editDrawerProjectSelect) dom.editDrawerProjectSelect.value = String(pid);
+        if (caseFile && caseFile.version_id && dom.editDrawerVersionSelect) {
+          state.editDrawer.versionId = normalizeId(caseFile.version_id);
+        }
+        state.editDrawer.projectId = pid;
+        editDrawerInstance.open();
+        loadEditDrawerFiles();
+        return waitForCaseLibraryCondition(function() {
+          return Boolean(!state.editDrawer.loading);
+        }, 5000, 90);
+      })
+      .then(function() {
+        var target = null;
+        if (caseFile && caseFile.id) target = findCaseFileInEditDrawer(caseFile.id);
+        if (!target && cleanName) {
+          var files = Array.isArray(state.editDrawer.files) ? state.editDrawer.files : [];
+          target = files.find(function(f) {
+            return f && String(f.file_name_clean || '') === String(cleanName || '');
+          }) || null;
+        }
+        if (!target) return false;
+        openEditorForCaseFile(target);
+        return true;
+      })
+      .catch(function() {
+        return false;
+      });
+  }
+
+  function buildCaseLibraryWriterImportPayload() {
+    var writer = state.writer || {};
+    var projectId = writer.projectId;
+    var versionId = writer.versionId;
+    var items = Array.isArray(writer.draftItems) ? writer.draftItems : [];
+    if (!projectId || !versionId || !items.length) return null;
+    var payloadItems = sanitizeImportItemsForApi(items);
+    if (!payloadItems.length) return null;
+    return {
+      project_id: projectId,
+      version_id: versionId,
+      file_name: writer.draftFileName || deriveWriterImportFileName(items),
+      source: 'xmind_writer',
+      items: payloadItems,
+    };
+  }
+
+  function confirmCaseLibraryWriterPublish() {
+    var writer = state.writer || {};
+    if (writer.publishing) return;
+    var payload = buildCaseLibraryWriterImportPayload();
+    if (!payload) {
+      setStatus(dom.writerPublishStatus, '待入库数据未就绪，请检查项目、版本和用例内容', 'warn');
+      return;
+    }
+    writer.publishing = true;
+    syncCaseLibraryWriterPublishConfirmEnabled();
+    setStatus(dom.writerPublishStatus, '入库中...', '');
+
+    function handleImportSuccess(caseFile, overwriteTag) {
+      var cleanName = cleanCaseFileName(caseFile && caseFile.file_name_clean ? caseFile.file_name_clean : payload.file_name);
+      var msg = overwriteTag ? ('覆盖入库成功：' + cleanName) : ('入库成功：' + cleanName);
+      setStatus(dom.writerPublishStatus, msg, 'ok');
+      setStatus(dom.status, msg, 'ok');
+      setStatus(dom.editStatus, msg, 'ok');
+      resolveCaseLibraryWriterPendingSave({
+        caseFile: caseFile || null,
+        overwrite: overwriteTag === true,
+      });
+      if (writerPublishDrawerInstance && typeof writerPublishDrawerInstance.close === 'function') {
+        writerPublishDrawerInstance.close();
+      }
+      refreshCaseFileListsByProject(payload.project_id).then(function() {
+        openEditorForImportedWriterCase(caseFile || null, payload.project_id, cleanName);
+      });
+    }
+
+    apiClient.importCaseFile(payload)
+      .then(function(caseFile) {
+        handleImportSuccess(caseFile || null, false);
+      })
+      .catch(function(err) {
+        var msg = err && err.message ? String(err.message) : '入库失败';
+        var errPayload = err && err.payload ? err.payload : null;
+        var sameName = msg.indexOf('同名') !== -1 || Boolean(errPayload && errPayload.existing_case_file_id);
+        if (!sameName) {
+          setStatus(dom.writerPublishStatus, '入库失败：' + msg, 'err');
+          return;
+        }
+        setStatus(dom.writerPublishStatus, '检测到同名用例，打开差异对比中...', 'warn');
+        openImportDiffForExternal({
+          projectId: payload.project_id,
+          versionId: payload.version_id,
+          fileName: payload.file_name,
+          items: payload.items,
+          error: err,
+          source: payload.source,
+        }).then(function(res) {
+          if (res && res.ok === true) {
+            handleImportSuccess(res.caseFile || null, true);
+            return;
+          }
+          setStatus(dom.writerPublishStatus, '已取消同名覆盖，可继续编辑或重新入库', 'warn');
+        }).catch(function(diffErr) {
+          setStatus(dom.writerPublishStatus, diffErr && diffErr.message ? diffErr.message : '同名差异处理失败', 'err');
+        });
+      })
+      .finally(function() {
+        writer.publishing = false;
+        syncCaseLibraryWriterPublishConfirmEnabled();
+      });
+  }
+
+  function requestCaseLibraryWriterPublishFromXmind(nextCases, summary) {
+    var writerItems = mapWriterCasesToImportItems(nextCases || []);
+    var invalid = validateImportItems(writerItems);
+    if (invalid.length) {
+      return Promise.reject(new Error('编写用例存在空字段，请补齐后再保存'));
+    }
+
+    if (state.writer.pendingReject) {
+      rejectCaseLibraryWriterPendingSave('已取消上一次入库', true);
+    }
+
+    return new Promise(function(resolve, reject) {
+      state.writer.pendingResolve = resolve;
+      state.writer.pendingReject = reject;
+      openCaseLibraryWriterPublishDrawer(writerItems, summary || null).catch(function(err) {
+        rejectCaseLibraryWriterPendingSave(err && err.message ? String(err.message) : '确认入库抽屉未就绪', false);
+      });
+    });
+  }
+
+  function openCaseLibraryWriterStructure() {
+    var mindApi = getMindElixirApi();
+    if (!mindApi || typeof mindApi.buildMindDataFromPaths !== 'function' || typeof mindApi.renderMindMap !== 'function') {
+      setStatus(dom.status, 'XMind 结构渲染依赖未就绪', 'err');
+      return;
+    }
+
+    var drawer = ensureCaseLibraryXmindDrawer();
+    if (!drawer || typeof drawer.open !== 'function') {
+      setStatus(dom.status, 'XMind 结构抽屉未就绪', 'err');
+      return;
+    }
+
+    var title = document.getElementById('xmindStructureDrawerTitle');
+    if (title) title.textContent = 'XMind 编写用例';
+
+    var body = document.getElementById('xmindStructureDrawerBody');
+    if (!body) {
+      setStatus(dom.status, 'XMind 结构容器未找到', 'err');
+      return;
+    }
+
+    drawer.open();
+    body.innerHTML = '<div class="xmind-structure-viewer" id="caseLibraryWriterXmindStructureViewer"></div>';
+    var container = document.getElementById('caseLibraryWriterXmindStructureViewer');
+    if (!container) {
+      if (typeof drawer.close === 'function') drawer.close();
+      setStatus(dom.status, 'XMind 结构容器初始化失败', 'err');
+      return;
+    }
+
+    migrateCaseLibraryWriterSessionRootTitle();
+    var mindData = buildCaseLibraryWriterMindData(mindApi);
+    if (!mindData || !mindData.nodeData) {
+      setStatus(dom.status, '默认编写结构初始化失败', 'err');
+      return;
+    }
+
+    try {
+      caseLibraryXmindMindInstance = mindApi.renderMindMap(container, mindData, {
+        instance: caseLibraryXmindMindInstance,
+        direction: 'right',
+        onExportXmind: exportCaseLibraryWriterCurrentXmind,
+        editableSessionKey: getCaseLibraryWriterSessionKey(),
+        initialEditing: true,
+        cancelConfirmSuffix: '确认要取消保存吗？取消后会丢弃全部更改并恢复默认结构。',
+        fieldCount: 6,
+        topicCaseParser: parseCaseLibraryWriterTopics,
+        onSaveCases: requestCaseLibraryWriterPublishFromXmind,
+        openConfirmDrawer: openConfirmDrawer,
+        showToast: utils && typeof utils.showCenterToast === 'function' ? utils.showCenterToast : null,
+      });
+      bindCaseLibraryXmindThemeSync(mindApi);
+    } catch (err) {
+      console.error(err);
+      if (typeof drawer.close === 'function') drawer.close();
+      setStatus(dom.status, '编写结构渲染失败', 'err');
+      return;
+    }
+
+    setStatus(dom.status, '已打开编写用例视图，可直接编辑并确认入库', 'ok');
+    safeLogOperation('open_case_library_writer_xmind', 'case_file', null, {
+      source: 'case_library_writer',
+    });
+  }
+
+  function buildInvisibleMarker(seed) {
 	    var raw = '';
 	    try {
 	      raw = String(seed || '') + '|' + Date.now().toString(16) + '|' + Math.random().toString(16).slice(2);
@@ -16954,6 +17939,15 @@
     if (dom.importConfirmBtn) {
       dom.importConfirmBtn.addEventListener('click', confirmImportToDb);
     }
+    if (dom.writerPublishProjectSelect) {
+      dom.writerPublishProjectSelect.addEventListener('change', handleCaseLibraryWriterPublishProjectChange);
+    }
+    if (dom.writerPublishVersionSelect) {
+      dom.writerPublishVersionSelect.addEventListener('change', handleCaseLibraryWriterPublishVersionChange);
+    }
+    if (dom.writerPublishConfirmBtn) {
+      dom.writerPublishConfirmBtn.addEventListener('click', confirmCaseLibraryWriterPublish);
+    }
     if (dom.importExcelTemplateBtn) {
       dom.importExcelTemplateBtn.addEventListener('click', downloadImportExcelTemplate);
     }
@@ -17043,6 +18037,11 @@
     if (dom.caseLibraryImportSelectBtn) {
       dom.caseLibraryImportSelectBtn.addEventListener('click', function() {
         openImportSelectDrawer();
+      });
+    }
+    if (dom.writerDrawerOpenBtn) {
+      dom.writerDrawerOpenBtn.addEventListener('click', function() {
+        openCaseLibraryWriterStructure();
       });
     }
     if (dom.missingReminderTop) {
@@ -18229,6 +19228,7 @@
     window.app.caseLibraryApi.openSelectExecDrawer = openSelectExecDrawer;
     window.app.caseLibraryApi.requestSelectExecDrawer = markSelectExecDrawerRequest;
     window.app.caseLibraryApi.openMissingDrawer = openMissingDrawer;
+    window.app.caseLibraryApi.openWriterDrawer = openCaseLibraryWriterStructure;
     window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
     if (hasImportSelectDrawer) {
       window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
@@ -18303,6 +19303,7 @@
 	        }
 	      }
 	    );
+    ensureCaseLibraryWriterPublishDrawer();
     editDrawerInstance = ensureDrawer(
       'caseLibraryEditDrawer',
       ['openCaseLibraryEditDrawerBtn'],
@@ -18438,6 +19439,7 @@
     window.app.caseLibraryApi.openSelectExecDrawer = openSelectExecDrawer;
     window.app.caseLibraryApi.requestSelectExecDrawer = markSelectExecDrawerRequest;
     window.app.caseLibraryApi.openMissingDrawer = openMissingDrawer;
+    window.app.caseLibraryApi.openWriterDrawer = openCaseLibraryWriterStructure;
     window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
     window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
     window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;

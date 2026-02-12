@@ -216,6 +216,7 @@ test.describe('XMind 编辑模式', () => {
 
     const draggableNode = viewer.locator('me-tpc .text').nth(1);
     await draggableNode.click({ force: true });
+    const draggedText = String((await draggableNode.textContent()) || '').trim();
     const draggableBox = await draggableNode.boundingBox();
     if (!draggableBox) throw new Error('编辑态拖拽节点未渲染');
     const dragStartX = draggableBox.x + (draggableBox.width / 2);
@@ -382,6 +383,7 @@ test.describe('XMind 编辑模式', () => {
 
     const draggableNode = viewer.locator('me-tpc .text').nth(1);
     await draggableNode.click({ force: true });
+    const draggedText = String((await draggableNode.textContent()) || '').trim();
     const draggableBox = await draggableNode.boundingBox();
     if (!draggableBox) throw new Error('拖拽预览测试：节点未渲染');
 
@@ -423,7 +425,8 @@ test.describe('XMind 编辑模式', () => {
       expect(customGhost.opacity).toBeGreaterThan(0.5);
       expect(customGhost.width).toBeGreaterThan(20);
       expect(customGhost.height).toBeGreaterThan(20);
-      expect(customGhost.text).toContain('余额不足时支付失败');
+      expect(String(customGhost.text || '').length).toBeGreaterThan(0);
+      if (draggedText) expect(customGhost.text).toContain(draggedText);
       expect(customGhost.left).toBeGreaterThanOrEqual(dragMoveX + 6);
       expect(customGhost.left).toBeLessThanOrEqual(dragMoveX + 40);
       expect(customGhost.top).toBeGreaterThanOrEqual(dragMoveY + 6);

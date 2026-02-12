@@ -204,6 +204,15 @@
       };
     }
 
+    function buildMindDataFromPaths(paths, options) {
+      var opts = options || {};
+      var rootTitle = String(opts.rootTitle || '').trim() || '用例';
+      var list = Array.isArray(paths) ? paths : [];
+      return {
+        nodeData: buildNodeData(list, rootTitle),
+      };
+    }
+
     function cloneMindDataObject(value) {
       if (!value || typeof value !== 'object') return null;
       try {
@@ -325,10 +334,14 @@
       };
     }
 
+
     function validateMindDataCases(mindData, options) {
       var opts = options || {};
       var fieldCount = Number(opts.fieldCount);
       if (!isFinite(fieldCount) || fieldCount <= 0) fieldCount = 6;
+      var topicCaseParser = opts && typeof opts.topicCaseParser === 'function'
+        ? opts.topicCaseParser
+        : null;
       var nodeData = mindData && mindData.nodeData ? mindData.nodeData : null;
       var emptyMap = Object.create(null);
       var structMap = Object.create(null);
@@ -337,6 +350,78 @@
       function mark(map, id) {
         if (id === undefined || id === null) return;
         map[String(id)] = true;
+      }
+
+      function parseTopicsToCase(topics) {
+        var segs = Array.isArray(topics) ? topics : [];
+        if (topicCaseParser) {
+          try {
+            var parsed = topicCaseParser(segs.slice());
+            if (parsed && typeof parsed === 'object') {
+              var parsedCaseItem = parsed.caseItem && typeof parsed.caseItem === 'object'
+                ? parsed.caseItem
+                : null;
+              var parsedEmptyIndexes = Array.isArray(parsed.emptyIndexes)
+                ? parsed.emptyIndexes
+                : [];
+              return {
+                caseItem: parsedCaseItem,
+                emptyIndexes: parsedEmptyIndexes,
+              };
+            }
+          } catch (err) {
+            // ignore
+          }
+          return {
+            caseItem: null,
+            emptyIndexes: [],
+          };
+        }
+
+        var moduleRaw = normalizeMindTopic(segs[0]);
+        var titleRaw = normalizeMindTopic(segs[1]);
+        var priorityRaw = normalizeMindTopic(segs[2]);
+        var preRaw = normalizeMindTopic(segs[3]);
+        var stepsRaw = normalizeMindTopic(segs[4]);
+        var expectedRaw = normalizeMindTopic(segs[5]);
+
+        var moduleValue = decodeMindTopicForSave(moduleRaw);
+        var titleValue = decodeMindTopicForSave(titleRaw);
+        var priorityValue = decodeMindTopicForSave(priorityRaw) || 'P1';
+        if (priorityValue) {
+          var priorityHead = priorityValue.charAt(0);
+          if (priorityHead === 'p' || priorityHead === 'P') {
+            priorityValue = 'P' + priorityValue.slice(1);
+          }
+        }
+        var preValue = decodeMindTopicForSave(preRaw);
+        var stepsValue = decodeMindTopicForSave(stepsRaw);
+        var expectedValue = decodeMindTopicForSave(expectedRaw);
+
+        var missingIndexes = [];
+        if (!moduleValue) missingIndexes.push(0);
+        if (!titleValue) missingIndexes.push(1);
+        if (!expectedValue) missingIndexes.push(5);
+        if (missingIndexes.length) {
+          return {
+            caseItem: null,
+            emptyIndexes: missingIndexes,
+          };
+        }
+
+        return {
+          caseItem: {
+            module: moduleValue,
+            title: titleValue,
+            priority: priorityValue,
+            preconditions: preValue,
+            precondition: preValue,
+            steps: stepsValue,
+            expected: expectedValue,
+            remark: '',
+          },
+          emptyIndexes: [],
+        };
       }
 
       function walk(node, depth, pathTopics, pathNodeIds) {
@@ -358,38 +443,23 @@
             return;
           }
 
-          var moduleRaw = normalizeMindTopic(topics[0]);
-          var titleRaw = normalizeMindTopic(topics[1]);
-          var priorityRaw = normalizeMindTopic(topics[2]);
-          var preRaw = normalizeMindTopic(topics[3]);
-          var stepsRaw = normalizeMindTopic(topics[4]);
-          var expectedRaw = normalizeMindTopic(topics[5]);
+          var parsed = parseTopicsToCase(topics);
+          var caseItem = parsed && parsed.caseItem ? parsed.caseItem : null;
+          var emptyIndexes = parsed && Array.isArray(parsed.emptyIndexes)
+            ? parsed.emptyIndexes
+            : [];
 
-          var moduleValue = decodeMindTopicForSave(moduleRaw);
-          var titleValue = decodeMindTopicForSave(titleRaw);
-          var priorityValue = decodeMindTopicForSave(priorityRaw) || 'P1';
-          var preValue = decodeMindTopicForSave(preRaw);
-          var stepsValue = decodeMindTopicForSave(stepsRaw);
-          var expectedValue = decodeMindTopicForSave(expectedRaw);
-
-          if (!moduleValue || !titleValue || !expectedValue) {
+          if (!caseItem) {
             nodeIds.forEach(function(id) { mark(structMap, id); });
-            if (!moduleValue && nodeIds[0]) mark(emptyMap, nodeIds[0]);
-            if (!titleValue && nodeIds[1]) mark(emptyMap, nodeIds[1]);
-            if (!expectedValue && nodeIds[5]) mark(emptyMap, nodeIds[5]);
+            emptyIndexes.forEach(function(indexNum) {
+              var idx = Number(indexNum);
+              if (!isFinite(idx) || idx < 0) return;
+              if (nodeIds[idx]) mark(emptyMap, nodeIds[idx]);
+            });
             return;
           }
 
-          cases.push({
-            module: moduleValue,
-            title: titleValue,
-            priority: priorityValue,
-            preconditions: preValue,
-            precondition: preValue,
-            steps: stepsValue,
-            expected: expectedValue,
-            remark: '',
-          });
+          cases.push(caseItem);
           return;
         }
 
@@ -499,11 +569,20 @@
       return '修改' + modified + '条、新增' + added + '条、删除' + deleted + '条，' + String(suffix || '确认继续吗？');
     }
 
-    function clampScale(value) {
+    function clampScale(value, minValue, maxValue) {
       var num = Number(value);
       if (!isFinite(num)) return 1;
-      if (num < minScale) return minScale;
-      if (num > maxScale) return maxScale;
+      var lower = Number(minValue);
+      var upper = Number(maxValue);
+      if (!isFinite(lower) || lower <= 0) lower = minScale;
+      if (!isFinite(upper) || upper <= 0) upper = maxScale;
+      if (upper < lower) {
+        var swap = upper;
+        upper = lower;
+        lower = swap;
+      }
+      if (num < lower) return lower;
+      if (num > upper) return upper;
       return num;
     }
 
@@ -660,6 +739,22 @@
       var boxStartY = 0;
       var boxRectEl = null;
       var boxMinDragDistance = 4;
+
+      var rightDragGestureBlock = {
+        active: false,
+        pointerId: null,
+        captureTarget: null,
+        suppressContextUntil: 0,
+      };
+
+      var ctrlLeftCanvasDrag = {
+        active: false,
+        pointerId: null,
+        lastX: 0,
+        lastY: 0,
+      };
+      var ctrlModifierPressed = false;
+      var zoomMinScale = minScale;
 
       function getInstance() {
         return instance;
@@ -968,20 +1063,76 @@
         };
       }
 
+      function syncInstanceScaleBounds(inst, minValue) {
+        var target = inst || getInstance();
+        if (!target || typeof target !== 'object') return;
+        var lower = Number(minValue);
+        if (!isFinite(lower) || lower <= 0) lower = zoomMinScale;
+        if (!isFinite(lower) || lower <= 0) lower = minScale;
+        if (lower < 0.05) lower = 0.05;
+        var upper = Number(maxScale);
+        if (!isFinite(upper) || upper <= 0) upper = 2.5;
+        if (upper < lower) upper = lower;
+        try {
+          target.scaleMin = lower;
+        } catch (err) {
+          // ignore
+        }
+        try {
+          target.scaleMax = upper;
+        } catch (err2) {
+          // ignore
+        }
+      }
+
+      function syncZoomMinScaleWithCurrent(inst) {
+        var current = resolveScale(inst || getInstance());
+        if (!isFinite(current) || current <= 0) return;
+        var normalized = Number(current);
+        if (!isFinite(normalized)) return;
+        if (normalized > maxScale) normalized = maxScale;
+        if (normalized < 0.05) normalized = 0.05;
+        zoomMinScale = normalized;
+        syncInstanceScaleBounds(inst || getInstance(), zoomMinScale);
+      }
+
       function zoomBy(step) {
         var inst = getInstance();
         if (!inst || typeof inst.scale !== 'function') return;
+        syncInstanceScaleBounds(inst, zoomMinScale);
         var current = resolveScale(inst);
-        var next = clampScale(current + step);
+        var next = clampScale(current + step, zoomMinScale, maxScale);
         var center = getCanvasCenterPoint();
         inst.scale(next, center);
         updateViewerDragState(viewerEl, inst, false);
+      }
+
+      function zoomByWheelEvent(e) {
+        if (!e) return false;
+        var inst = getInstance();
+        if (!inst || typeof inst.scale !== 'function') return false;
+        var deltaY = Number(e.deltaY);
+        if (!isFinite(deltaY) || deltaY === 0) return false;
+        syncInstanceScaleBounds(inst, zoomMinScale);
+        var sensitivity = Number(inst.scaleSensitivity);
+        if (!isFinite(sensitivity) || sensitivity <= 0) sensitivity = defaultScaleStep;
+        var step = deltaY < 0 ? sensitivity : -sensitivity;
+        var current = resolveScale(inst);
+        var next = clampScale(current + step, zoomMinScale, maxScale);
+        var center = {
+          x: isFinite(Number(e.clientX)) ? Number(e.clientX) : getCanvasCenterPoint().x,
+          y: isFinite(Number(e.clientY)) ? Number(e.clientY) : getCanvasCenterPoint().y,
+        };
+        inst.scale(next, center);
+        updateViewerDragState(viewerEl, inst, false);
+        return true;
       }
 
       function zoomFit() {
         var inst = getInstance();
         if (inst && typeof inst.scaleFit === 'function') {
           inst.scaleFit();
+          syncZoomMinScaleWithCurrent(inst);
         }
         updateViewerDragState(viewerEl, inst, false);
       }
@@ -1109,12 +1260,313 @@
         }
       }
 
+      function isEventInsideMindControls(target) {
+        if (!target) return false;
+        if (controlsEl && controlsEl.contains && controlsEl.contains(target)) return true;
+        if (target.closest && target.closest('[data-mind-controls]')) return true;
+        return false;
+      }
+
+      function isEventInsideMindCanvas(target) {
+        if (!target) return false;
+        if (canvasEl && canvasEl.contains && canvasEl.contains(target)) return true;
+        if (target.closest && target.closest('[data-mind-canvas]')) return true;
+        return false;
+      }
+
+      function isCtrlModifierActive(e) {
+        if (e && e.ctrlKey) return true;
+        return ctrlModifierPressed;
+      }
+
+      function stopCtrlLeftCanvasDragEvent(e) {
+        if (!e) return;
+        if (e.cancelable !== false && e.preventDefault) e.preventDefault();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        else if (e.stopPropagation) e.stopPropagation();
+      }
+
+      function blockCanvasNativeGesture(e) {
+        if (!e) return;
+        if (!isEventInsideMindCanvas(e.target)) return;
+        if (isEventInsideMindControls(e.target)) return;
+        if (e.cancelable === false) return;
+        if (e.type === 'wheel' && (e.ctrlKey || e.metaKey)) {
+          var usedCustomWheelZoom = zoomByWheelEvent(e);
+          if (usedCustomWheelZoom) {
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            else if (e.stopPropagation) e.stopPropagation();
+            return;
+          }
+        }
+        if (e.preventDefault) e.preventDefault();
+      }
+
+      function shouldSuppressRightDragContextMenu() {
+        if (rightDragGestureBlock.active) return true;
+        return Date.now() <= Number(rightDragGestureBlock.suppressContextUntil || 0);
+      }
+
+      function resetRightDragGestureBlock() {
+        var pointerId = rightDragGestureBlock.pointerId;
+        var captureTarget = rightDragGestureBlock.captureTarget;
+        if (
+          captureTarget &&
+          pointerId !== null &&
+          typeof captureTarget.releasePointerCapture === 'function'
+        ) {
+          try {
+            var hasCapture = true;
+            if (typeof captureTarget.hasPointerCapture === 'function') {
+              hasCapture = captureTarget.hasPointerCapture(pointerId);
+            }
+            if (hasCapture) captureTarget.releasePointerCapture(pointerId);
+          } catch (err) {
+            // ignore
+          }
+        }
+        rightDragGestureBlock.active = false;
+        rightDragGestureBlock.pointerId = null;
+        rightDragGestureBlock.captureTarget = null;
+        if (viewerEl && viewerEl.classList) viewerEl.classList.remove('is-right-dragging');
+      }
+
+      function beginRightDragGestureBlock(e) {
+        if (!e || e.button !== 2) return;
+        if (e.pointerType && e.pointerType !== 'mouse') return;
+        if (isEventInsideMindControls(e.target)) return;
+
+        if (rightDragGestureBlock.active) {
+          rightDragGestureBlock.suppressContextUntil = Date.now() + 1800;
+          if (e.preventDefault) e.preventDefault();
+          return;
+        }
+
+        var pointerId = typeof e.pointerId === 'number' ? e.pointerId : null;
+        rightDragGestureBlock.active = true;
+        rightDragGestureBlock.pointerId = pointerId;
+        rightDragGestureBlock.captureTarget = null;
+        rightDragGestureBlock.suppressContextUntil = Date.now() + 1800;
+
+        if (pointerId !== null) {
+          var captureTarget = null;
+          if (e.target && typeof e.target.setPointerCapture === 'function') captureTarget = e.target;
+          else if (viewerEl && typeof viewerEl.setPointerCapture === 'function') captureTarget = viewerEl;
+          if (captureTarget) {
+            try {
+              captureTarget.setPointerCapture(pointerId);
+              rightDragGestureBlock.captureTarget = captureTarget;
+            } catch (err) {
+              // ignore
+            }
+          }
+        }
+
+        if (viewerEl && viewerEl.classList) viewerEl.classList.add('is-right-dragging');
+        if (e.preventDefault) e.preventDefault();
+      }
+
+      function onViewerMouseDownGestureGuard(e) {
+        if (!e || e.button !== 2) return;
+        if (isEventInsideMindControls(e.target)) return;
+        if (!isEventInsideMindCanvas(e.target)) return;
+        rightDragGestureBlock.suppressContextUntil = Date.now() + 1800;
+        if (!rightDragGestureBlock.active) {
+          rightDragGestureBlock.active = true;
+          rightDragGestureBlock.pointerId = null;
+          rightDragGestureBlock.captureTarget = null;
+          if (viewerEl && viewerEl.classList) viewerEl.classList.add('is-right-dragging');
+        }
+        if (e.preventDefault) e.preventDefault();
+      }
+
+      function moveRightDragGestureBlock(e) {
+        if (!rightDragGestureBlock.active) return;
+        if (!e) return;
+        if (
+          rightDragGestureBlock.pointerId !== null &&
+          typeof e.pointerId === 'number' &&
+          e.pointerId !== rightDragGestureBlock.pointerId
+        ) {
+          return;
+        }
+        if (typeof e.buttons === 'number' && (e.buttons & 2) !== 2) {
+          resetRightDragGestureBlock();
+          return;
+        }
+        rightDragGestureBlock.suppressContextUntil = Date.now() + 1800;
+        if (e.preventDefault) e.preventDefault();
+      }
+
+      function endRightDragGestureBlock(e) {
+        if (!rightDragGestureBlock.active) return;
+        if (
+          rightDragGestureBlock.pointerId !== null &&
+          e &&
+          typeof e.pointerId === 'number' &&
+          e.pointerId !== rightDragGestureBlock.pointerId
+        ) {
+          return;
+        }
+        if (e && typeof e.buttons === 'number' && (e.buttons & 2) === 2) return;
+        rightDragGestureBlock.suppressContextUntil = Date.now() + 1800;
+        if (e && e.preventDefault) e.preventDefault();
+        resetRightDragGestureBlock();
+      }
+
+      function onViewerContextMenu(e) {
+        if (!e) return;
+        if (isEventInsideMindControls(e.target)) return;
+        if (isEventInsideMindCanvas(e.target)) {
+          if (e.preventDefault) e.preventDefault();
+          return;
+        }
+        if (shouldSuppressRightDragContextMenu() && e.preventDefault) e.preventDefault();
+      }
+
+      function onWindowContextMenu(e) {
+        if (!e) return;
+        if (isEventInsideMindControls(e.target)) return;
+        if (isEventInsideMindCanvas(e.target)) {
+          if (e.preventDefault) e.preventDefault();
+          return;
+        }
+        if (!shouldSuppressRightDragContextMenu()) return;
+        if (e.preventDefault) e.preventDefault();
+      }
+
+      function onWindowDragStartWhenRightDragging(e) {
+        if (!rightDragGestureBlock.active) return;
+        if (e && e.preventDefault) e.preventDefault();
+      }
+
+      function onWindowSelectStartWhenRightDragging(e) {
+        if (!rightDragGestureBlock.active) return;
+        if (e && e.preventDefault) e.preventDefault();
+      }
+
+      function isCtrlLeftCanvasDragEvent(e) {
+        if (!e || e.button !== 0) return false;
+        if (e.pointerType && e.pointerType !== 'mouse') return false;
+        if (!isCtrlModifierActive(e)) return false;
+        if (isEventInsideMindControls(e.target)) return false;
+        if (!isEventInsideMindCanvas(e.target)) return false;
+        return true;
+      }
+
+      function resetCtrlLeftCanvasDrag() {
+        ctrlModifierPressed = false;
+        if (!ctrlLeftCanvasDrag.active) return;
+        ctrlLeftCanvasDrag.active = false;
+        ctrlLeftCanvasDrag.pointerId = null;
+        ctrlLeftCanvasDrag.lastX = 0;
+        ctrlLeftCanvasDrag.lastY = 0;
+        if (viewerEl && viewerEl.classList) viewerEl.classList.remove('is-ctrl-left-dragging');
+        updateViewerDragState(viewerEl, getInstance(), false);
+      }
+
+      function beginCtrlLeftCanvasDrag(e) {
+        if (!isCtrlLeftCanvasDragEvent(e)) return;
+        stopCtrlLeftCanvasDragEvent(e);
+        ctrlModifierPressed = true;
+        if (ctrlLeftCanvasDrag.active) return;
+        var inst = getInstance();
+        if (!inst || typeof inst.move !== 'function') return;
+        ctrlLeftCanvasDrag.active = true;
+        ctrlLeftCanvasDrag.pointerId = typeof e.pointerId === 'number' ? e.pointerId : null;
+        ctrlLeftCanvasDrag.lastX = typeof e.clientX === 'number' ? e.clientX : 0;
+        ctrlLeftCanvasDrag.lastY = typeof e.clientY === 'number' ? e.clientY : 0;
+        if (viewerEl && viewerEl.classList) viewerEl.classList.add('is-ctrl-left-dragging');
+        clearCustomPointerDragState();
+        resetDragGhostPreview();
+        updateViewerDragState(viewerEl, inst, true);
+      }
+
+      function moveCtrlLeftCanvasDrag(e) {
+        if (!ctrlLeftCanvasDrag.active) return;
+        if (!e) return;
+        if (
+          ctrlLeftCanvasDrag.pointerId !== null &&
+          typeof e.pointerId === 'number' &&
+          e.pointerId !== ctrlLeftCanvasDrag.pointerId
+        ) {
+          return;
+        }
+        if (typeof e.buttons === 'number' && (e.buttons & 1) !== 1) {
+          resetCtrlLeftCanvasDrag();
+          return;
+        }
+        if (!isCtrlModifierActive(e)) {
+          resetCtrlLeftCanvasDrag();
+          return;
+        }
+        if (typeof e.clientX !== 'number' || typeof e.clientY !== 'number') return;
+        var inst = getInstance();
+        if (!inst || typeof inst.move !== 'function') {
+          resetCtrlLeftCanvasDrag();
+          return;
+        }
+        var deltaX = e.clientX - ctrlLeftCanvasDrag.lastX;
+        var deltaY = e.clientY - ctrlLeftCanvasDrag.lastY;
+        ctrlLeftCanvasDrag.lastX = e.clientX;
+        ctrlLeftCanvasDrag.lastY = e.clientY;
+        if (deltaX !== 0 || deltaY !== 0) {
+          try {
+            inst.move(deltaX, deltaY);
+          } catch (err) {
+            // ignore
+          }
+          updateViewerDragState(viewerEl, inst, true);
+        }
+        stopCtrlLeftCanvasDragEvent(e);
+      }
+
+      function endCtrlLeftCanvasDrag(e) {
+        if (!ctrlLeftCanvasDrag.active) return;
+        if (
+          ctrlLeftCanvasDrag.pointerId !== null &&
+          e &&
+          typeof e.pointerId === 'number' &&
+          e.pointerId !== ctrlLeftCanvasDrag.pointerId
+        ) {
+          return;
+        }
+        if (e && typeof e.buttons === 'number' && (e.buttons & 1) === 1 && isCtrlModifierActive(e)) return;
+        resetCtrlLeftCanvasDrag();
+      }
+
+      function onWindowKeydownForCtrlLeftCanvasDrag(e) {
+        if (!e) return;
+        if (e.ctrlKey || String(e.key || '') === 'Control') {
+          ctrlModifierPressed = true;
+        }
+      }
+
+      function onWindowKeyupForCtrlLeftCanvasDrag(e) {
+        var key = e && e.key ? String(e.key) : '';
+        if (key === 'Control') {
+          ctrlModifierPressed = false;
+        }
+        if (ctrlLeftCanvasDrag.active && key === 'Control') {
+          resetCtrlLeftCanvasDrag();
+        }
+      }
+
+      function onWindowPointerDownForCtrlLeftCanvasDrag(e) {
+        beginCtrlLeftCanvasDrag(e);
+      }
+
+      function onWindowMouseDownForCtrlLeftCanvasDrag(e) {
+        beginCtrlLeftCanvasDrag(e);
+      }
+
       function startBoxSelection(e) {
         if (!enableCustomBoxSelection) return;
         if (!e || e.button !== 0) return;
         if (e.pointerType && e.pointerType !== 'mouse') return;
-        if (controlsEl && controlsEl.contains && controlsEl.contains(e.target)) return;
-        if (e.target && e.target.closest && e.target.closest('[data-mind-controls]')) return;
+        if (isCtrlModifierActive(e)) return;
+        if (isEventInsideMindControls(e.target)) return;
         boxPending = true;
         boxSelecting = false;
         boxMoved = false;
@@ -1327,8 +1779,13 @@
           exitEditMode(true);
           return;
         }
-        var summary = calculateCaseChangeSummary(base, current || base);
-        var hasChange = Boolean(summary && Number(summary.total || 0) > 0);
+        var currentData = current || base;
+        var snapshotChanged = snapshotSignature(base) !== snapshotSignature(currentData);
+        var summary = calculateCaseChangeSummary(base, currentData);
+        if (snapshotChanged && (!summary || Number(summary.total || 0) <= 0)) {
+          summary = { modified: 1, added: 0, deleted: 0, total: 1 };
+        }
+        var hasChange = Boolean(snapshotChanged || (summary && Number(summary.total || 0) > 0));
 
         function applyCancel() {
           var inst = getInstance();
@@ -1351,9 +1808,12 @@
           return;
         }
 
+        var cancelSuffix = opts && opts.cancelConfirmSuffix
+          ? String(opts.cancelConfirmSuffix)
+          : '确认要取消保存吗？';
         callOpenConfirm({
           title: '取消编辑',
-          message: buildMindChangeConfirmMessage(summary, '确认要取消保存吗？'),
+          message: buildMindChangeConfirmMessage(summary, cancelSuffix),
           confirmText: '确认取消',
           cancelText: '继续编辑',
           danger: true,
@@ -1371,7 +1831,12 @@
           callShowToast('当前导图数据为空，无法保存', 'err', 3000);
           return;
         }
-        var validation = validateMindDataCases(current, { fieldCount: 6 });
+        var saveFieldCount = Number(opts && opts.fieldCount);
+        if (!isFinite(saveFieldCount) || saveFieldCount <= 0) saveFieldCount = 6;
+        var validation = validateMindDataCases(current, {
+          fieldCount: saveFieldCount,
+          topicCaseParser: opts && typeof opts.topicCaseParser === 'function' ? opts.topicCaseParser : null,
+        });
         if (!validation || validation.ok !== true) {
           var msg = validation && Array.isArray(validation.errors) && validation.errors.length
             ? validation.errors[0]
@@ -1386,8 +1851,12 @@
 
         clearValidationMarks();
         var base = cloneMindDataObject(baseMindData) || cloneMindDataObject(opts && opts.initialMindData) || current;
+        var snapshotChanged = snapshotSignature(base) !== snapshotSignature(current);
         var summary = calculateCaseChangeSummary(base, current);
-        var hasChange = Boolean(summary && Number(summary.total || 0) > 0);
+        if (snapshotChanged && (!summary || Number(summary.total || 0) <= 0)) {
+          summary = { modified: 1, added: 0, deleted: 0, total: 1 };
+        }
+        var hasChange = Boolean(snapshotChanged || (summary && Number(summary.total || 0) > 0));
 
         function runSave() {
           pendingSave = true;
@@ -1423,6 +1892,7 @@
           }).catch(function(err) {
             pendingSave = false;
             updateEditButtons();
+            if (err && err.silent === true) return;
             var msg = err && err.message ? String(err.message) : '保存失败';
             callShowToast(msg, 'err', 3000);
           });
@@ -1750,11 +2220,11 @@
           clearCustomPointerDragState();
           return;
         }
-        if (controlsEl && controlsEl.contains && controlsEl.contains(e.target)) {
+        if (e.ctrlKey) {
           clearCustomPointerDragState();
           return;
         }
-        if (e.target && e.target.closest && e.target.closest('[data-mind-controls]')) {
+        if (isEventInsideMindControls(e.target)) {
           clearCustomPointerDragState();
           return;
         }
@@ -1966,6 +2436,16 @@
         searchInputEl.addEventListener('keydown', onSearchKeydown);
       }
       if (viewerEl && typeof viewerEl.addEventListener === 'function') {
+        viewerEl.addEventListener('contextmenu', onViewerContextMenu, true);
+        viewerEl.addEventListener('wheel', blockCanvasNativeGesture, { capture: true, passive: false });
+        viewerEl.addEventListener('touchstart', blockCanvasNativeGesture, { capture: true, passive: false });
+        viewerEl.addEventListener('touchmove', blockCanvasNativeGesture, { capture: true, passive: false });
+        viewerEl.addEventListener('gesturestart', blockCanvasNativeGesture, true);
+        viewerEl.addEventListener('gesturechange', blockCanvasNativeGesture, true);
+        viewerEl.addEventListener('gestureend', blockCanvasNativeGesture, true);
+        viewerEl.addEventListener('pointerdown', beginRightDragGestureBlock, true);
+        viewerEl.addEventListener('mousedown', onViewerMouseDownGestureGuard, true);
+        viewerEl.addEventListener('pointerdown', beginCtrlLeftCanvasDrag, true);
         viewerEl.addEventListener('pointerdown', onViewerPointerDownForDragPreview, true);
         if (enableCustomBoxSelection) viewerEl.addEventListener('pointerdown', startBoxSelection, true);
         viewerEl.addEventListener('keydown', onViewerKeydown, true);
@@ -1979,6 +2459,25 @@
         window.addEventListener('pointercancel', stopBoxSelection);
       }
       if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
+        window.addEventListener('pointerdown', onWindowPointerDownForCtrlLeftCanvasDrag, true);
+        window.addEventListener('mousedown', onWindowMouseDownForCtrlLeftCanvasDrag, true);
+        window.addEventListener('contextmenu', onWindowContextMenu, true);
+        window.addEventListener('pointermove', moveRightDragGestureBlock, true);
+        window.addEventListener('mousemove', moveRightDragGestureBlock, true);
+        window.addEventListener('pointerup', endRightDragGestureBlock, true);
+        window.addEventListener('mouseup', endRightDragGestureBlock, true);
+        window.addEventListener('pointercancel', endRightDragGestureBlock, true);
+        window.addEventListener('pointermove', moveCtrlLeftCanvasDrag, true);
+        window.addEventListener('mousemove', moveCtrlLeftCanvasDrag, true);
+        window.addEventListener('pointerup', endCtrlLeftCanvasDrag, true);
+        window.addEventListener('mouseup', endCtrlLeftCanvasDrag, true);
+        window.addEventListener('pointercancel', endCtrlLeftCanvasDrag, true);
+        window.addEventListener('keydown', onWindowKeydownForCtrlLeftCanvasDrag, true);
+        window.addEventListener('keyup', onWindowKeyupForCtrlLeftCanvasDrag, true);
+        window.addEventListener('dragstart', onWindowDragStartWhenRightDragging, true);
+        window.addEventListener('selectstart', onWindowSelectStartWhenRightDragging, true);
+        window.addEventListener('blur', resetRightDragGestureBlock);
+        window.addEventListener('blur', resetCtrlLeftCanvasDrag);
         window.addEventListener('pointermove', syncDragGhostFollowPointer);
         window.addEventListener('mousemove', syncDragGhostFollowPointer);
         window.addEventListener('pointerup', resetDragGhostPreview, true);
@@ -1988,8 +2487,14 @@
       if (instance && instance.bus && typeof instance.bus.addListener === 'function') {
         instance.bus.addListener('operation', operationListener);
       }
+      if (instance && typeof instance === 'object') {
+        instance.__tapSyncZoomMinScale = function() {
+          syncZoomMinScaleWithCurrent(getInstance());
+        };
+      }
 
       setSearchCount();
+      syncInstanceScaleBounds(instance, zoomMinScale);
       updateViewerDragState(viewerEl, instance, false);
 
       if (editing) {
@@ -2027,6 +2532,16 @@
           searchInputEl.removeEventListener('keydown', onSearchKeydown);
         }
         if (viewerEl && typeof viewerEl.removeEventListener === 'function') {
+          viewerEl.removeEventListener('contextmenu', onViewerContextMenu, true);
+          viewerEl.removeEventListener('wheel', blockCanvasNativeGesture, true);
+          viewerEl.removeEventListener('touchstart', blockCanvasNativeGesture, true);
+          viewerEl.removeEventListener('touchmove', blockCanvasNativeGesture, true);
+          viewerEl.removeEventListener('gesturestart', blockCanvasNativeGesture, true);
+          viewerEl.removeEventListener('gesturechange', blockCanvasNativeGesture, true);
+          viewerEl.removeEventListener('gestureend', blockCanvasNativeGesture, true);
+          viewerEl.removeEventListener('pointerdown', beginRightDragGestureBlock, true);
+          viewerEl.removeEventListener('mousedown', onViewerMouseDownGestureGuard, true);
+          viewerEl.removeEventListener('pointerdown', beginCtrlLeftCanvasDrag, true);
           viewerEl.removeEventListener('pointerdown', onViewerPointerDownForDragPreview, true);
           if (enableCustomBoxSelection) viewerEl.removeEventListener('pointerdown', startBoxSelection, true);
           viewerEl.removeEventListener('keydown', onViewerKeydown, true);
@@ -2040,6 +2555,25 @@
           window.removeEventListener('pointercancel', stopBoxSelection);
         }
         if (typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
+          window.removeEventListener('pointerdown', onWindowPointerDownForCtrlLeftCanvasDrag, true);
+          window.removeEventListener('mousedown', onWindowMouseDownForCtrlLeftCanvasDrag, true);
+          window.removeEventListener('contextmenu', onWindowContextMenu, true);
+          window.removeEventListener('pointermove', moveRightDragGestureBlock, true);
+          window.removeEventListener('mousemove', moveRightDragGestureBlock, true);
+          window.removeEventListener('pointerup', endRightDragGestureBlock, true);
+          window.removeEventListener('mouseup', endRightDragGestureBlock, true);
+          window.removeEventListener('pointercancel', endRightDragGestureBlock, true);
+          window.removeEventListener('pointermove', moveCtrlLeftCanvasDrag, true);
+          window.removeEventListener('mousemove', moveCtrlLeftCanvasDrag, true);
+          window.removeEventListener('pointerup', endCtrlLeftCanvasDrag, true);
+          window.removeEventListener('mouseup', endCtrlLeftCanvasDrag, true);
+          window.removeEventListener('pointercancel', endCtrlLeftCanvasDrag, true);
+          window.removeEventListener('keydown', onWindowKeydownForCtrlLeftCanvasDrag, true);
+          window.removeEventListener('keyup', onWindowKeyupForCtrlLeftCanvasDrag, true);
+          window.removeEventListener('dragstart', onWindowDragStartWhenRightDragging, true);
+          window.removeEventListener('selectstart', onWindowSelectStartWhenRightDragging, true);
+          window.removeEventListener('blur', resetRightDragGestureBlock);
+          window.removeEventListener('blur', resetCtrlLeftCanvasDrag);
           window.removeEventListener('pointermove', syncDragGhostFollowPointer);
           window.removeEventListener('mousemove', syncDragGhostFollowPointer);
           window.removeEventListener('pointerup', resetDragGhostPreview, true);
@@ -2049,10 +2583,19 @@
         if (instance && instance.bus && typeof instance.bus.removeListener === 'function') {
           instance.bus.removeListener('operation', operationListener);
         }
+        if (instance && typeof instance === 'object') {
+          try {
+            delete instance.__tapSyncZoomMinScale;
+          } catch (err4) {
+            instance.__tapSyncZoomMinScale = null;
+          }
+        }
         if (boxRectEl && boxRectEl.parentNode) {
           boxRectEl.parentNode.removeChild(boxRectEl);
         }
         boxRectEl = null;
+        resetRightDragGestureBlock();
+        resetCtrlLeftCanvasDrag();
         releaseCustomDragGhost();
       };
     }
@@ -2137,7 +2680,9 @@
         ? cloneMindDataObject(restoredSession.currentData)
         : null;
       var initialMindData = restoredCurrent || cloneMindDataObject(mindData) || mindData;
-      var initialEditing = Boolean(restoredSession && restoredSession.editing === true && restoredCurrent && restoredCurrent.nodeData);
+      var restoredEditing = Boolean(restoredSession && restoredSession.editing === true && restoredCurrent && restoredCurrent.nodeData);
+      var forcedEditing = Boolean(opts && opts.initialEditing === true && initialMindData && initialMindData.nodeData);
+      var initialEditing = Boolean(restoredEditing || forcedEditing);
       var baseMindData = restoredSession && restoredSession.baseData && restoredSession.baseData.nodeData
         ? cloneMindDataObject(restoredSession.baseData)
         : cloneMindDataObject(mindData);
@@ -2156,6 +2701,7 @@
         mouseSelectionButton: 0,
         allowUndo: true,
         overflowHidden: false,
+        alignment: 'nodes',
         theme: theme || undefined,
       });
       instance.newTopicName = '新增节点';
@@ -2202,20 +2748,39 @@
         }
       }
 
+      var initialAutoFitScale = 0;
+      function runAutoScaleFitIfStable(forceRun) {
+        if (!instance || typeof instance.scaleFit !== 'function') return;
+        if (!forceRun) {
+          var current = resolveScale(instance);
+          if (initialAutoFitScale > 0 && Math.abs(current - initialAutoFitScale) > 0.03) {
+            return;
+          }
+        }
+        try {
+          instance.scaleFit();
+          if (typeof instance.__tapSyncZoomMinScale === 'function') {
+            instance.__tapSyncZoomMinScale();
+          }
+          initialAutoFitScale = resolveScale(instance);
+          updateViewerDragState(container, instance, false);
+        } catch (err3) {
+          // ignore
+        }
+      }
+
       setTimeout(function() {
         if (initialEditing) {
           updateViewerDragState(container, instance, false);
           return;
         }
-        if (instance && typeof instance.scaleFit === 'function') {
-          try {
-            instance.scaleFit();
-            updateViewerDragState(container, instance, false);
-          } catch (err3) {
-            // ignore
-          }
-        }
+        runAutoScaleFitIfStable(true);
       }, 0);
+
+      setTimeout(function() {
+        if (initialEditing) return;
+        runAutoScaleFitIfStable(false);
+      }, 420);
       return instance;
     }
 
@@ -2242,6 +2807,7 @@
       resolveDarkMode: resolveDarkMode,
       buildPathsFromCases: buildPathsFromCases,
       buildMindDataFromCases: buildMindDataFromCases,
+      buildMindDataFromPaths: buildMindDataFromPaths,
       renderMindMap: renderMindMap,
       refreshMindTheme: refreshMindTheme,
       destroyMindMap: destroyMindMap,
