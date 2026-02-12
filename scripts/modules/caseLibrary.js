@@ -429,6 +429,8 @@
     importStatus: document.getElementById('caseLibraryImportStatus'),
     writerPublishDrawer: document.getElementById('caseLibraryWriterPublishDrawer'),
     writerPublishHint: document.getElementById('caseLibraryWriterPublishHint'),
+    writerPublishFileNameInput: document.getElementById('caseLibraryWriterPublishFileNameInput'),
+    writerPublishFileNameStatus: document.getElementById('caseLibraryWriterPublishFileNameStatus'),
     writerPublishProjectSelect: document.getElementById('caseLibraryWriterPublishProjectSelect'),
     writerPublishVersionSelect: document.getElementById('caseLibraryWriterPublishVersionSelect'),
     writerPublishConfirmBtn: document.getElementById('caseLibraryWriterPublishConfirmBtn'),
@@ -594,6 +596,11 @@
       versionId: null,
       draftItems: [],
       draftFileName: '',
+      fileNameInput: '',
+      fileNameClean: '',
+      fileNameDuplicate: false,
+      fileNameChecking: false,
+      duplicateCaseFileId: null,
       summary: null,
       publishing: false,
       pendingResolve: null,
@@ -866,6 +873,8 @@
   var importDiffDrawerOpenTimer = 0;
   var importInvalidDrawerInstance = null;
   var writerPublishDrawerInstance = null;
+  var writerPublishFileNameCheckTimer = 0;
+  var writerPublishFileNameCheckSeq = 0;
   var aiGenDrawerInstance = null;
   var xmindStructureDrawerInstance = null;
   var caseLibraryXmindMindInstance = null;
@@ -3377,7 +3386,11 @@
       return Promise.resolve(false);
     }
     var downloadBlob = getDownloadBlob();
-    var baseName = cleanCaseFileName(currentFile.file_name_clean || currentFile.file_name || '用例');
+    var currentMindData = readCaseLibraryWriterMindDataFromInstance();
+    var rootName = currentMindData && currentMindData.nodeData
+      ? deriveCaseLibraryWriterExportBaseName(currentMindData)
+      : '';
+    var baseName = cleanCaseFileName(rootName || currentFile.file_name_clean || currentFile.file_name || '用例');
     setStatus(dom.editStatus, '正在导出 XMind...', '');
     return Promise.resolve()
       .then(function() {
@@ -3977,7 +3990,7 @@
     if (rootTopic.indexOf('用例：') === 0) {
       rootTopic = String(rootTopic.slice(3) || '').trim();
     }
-    if (!rootTopic || rootTopic === '修改此处以确定用例的文件名') {
+    if (!rootTopic) {
       rootTopic = '编写用例';
     }
     return cleanCaseFileName(rootTopic || '编写用例');
@@ -4170,21 +4183,165 @@
       !writer.publishing &&
       writer.projectId &&
       writer.versionId &&
+      writer.fileNameInput &&
+      writer.fileNameClean &&
+      !writer.fileNameChecking &&
       Array.isArray(writer.draftItems) &&
       writer.draftItems.length
     );
     dom.writerPublishConfirmBtn.disabled = !can;
   }
 
+  function normalizeCaseLibraryWriterPublishFileName(raw) {
+    var text = raw === null || raw === undefined ? '' : String(raw);
+    text = text.trim();
+    if (!text) {
+      return {
+        input: '',
+        clean: '',
+        fileName: '',
+      };
+    }
+    var clean = cleanCaseFileName(text || '编写用例');
+    clean = clean ? String(clean).trim() : '';
+    return {
+      input: text,
+      clean: clean,
+      fileName: clean ? (clean + '.xmind') : '',
+    };
+  }
+
+  function syncCaseLibraryWriterPublishFileNameStatus() {
+    if (!dom.writerPublishFileNameStatus) return;
+    var writer = state.writer || {};
+    if (!writer.fileNameInput || !writer.fileNameClean) {
+      setStatus(dom.writerPublishFileNameStatus, '请输入用例文件名（必填）', 'warn');
+      return;
+    }
+    if (!writer.projectId) {
+      setStatus(dom.writerPublishFileNameStatus, '请选择项目后自动校验重名', '');
+      return;
+    }
+    if (writer.fileNameChecking) {
+      setStatus(dom.writerPublishFileNameStatus, '正在校验重名...', '');
+      return;
+    }
+    if (writer.fileNameDuplicate) {
+      setStatus(dom.writerPublishFileNameStatus, '检测到同名用例：' + writer.fileNameClean + '，可继续确认并在下一步决定是否覆盖', 'warn');
+      return;
+    }
+    setStatus(dom.writerPublishFileNameStatus, '文件名可用：' + writer.fileNameClean, 'ok');
+  }
+
+  function setCaseLibraryWriterPublishFileName(raw, options) {
+    var opts = options || {};
+    var writer = state.writer || {};
+    var normalized = normalizeCaseLibraryWriterPublishFileName(raw);
+    writer.fileNameInput = normalized.input;
+    writer.fileNameClean = normalized.clean;
+    writer.draftFileName = normalized.fileName;
+    writer.fileNameDuplicate = false;
+    writer.fileNameChecking = false;
+    writer.duplicateCaseFileId = null;
+    state.writer = writer;
+    if (dom.writerPublishFileNameInput && dom.writerPublishFileNameInput.value !== normalized.input) {
+      dom.writerPublishFileNameInput.value = normalized.input;
+    }
+    syncCaseLibraryWriterPublishFileNameStatus();
+    syncCaseLibraryWriterPublishConfirmEnabled();
+    if (opts.skipCheck) return;
+    scheduleCaseLibraryWriterPublishFileNameDuplicateCheck(false);
+  }
+
+  function runCaseLibraryWriterPublishFileNameDuplicateCheck() {
+    writerPublishFileNameCheckTimer = 0;
+    var writer = state.writer || {};
+    writer.fileNameChecking = false;
+    writer.fileNameDuplicate = false;
+    writer.duplicateCaseFileId = null;
+    if (!writer.fileNameInput || !writer.fileNameClean || !writer.projectId) {
+      syncCaseLibraryWriterPublishFileNameStatus();
+      syncCaseLibraryWriterPublishConfirmEnabled();
+      return;
+    }
+    if (!apiClient || typeof apiClient.listCaseFiles !== 'function') {
+      syncCaseLibraryWriterPublishFileNameStatus();
+      syncCaseLibraryWriterPublishConfirmEnabled();
+      return;
+    }
+
+    var requestSeq = writerPublishFileNameCheckSeq + 1;
+    writerPublishFileNameCheckSeq = requestSeq;
+    writer.fileNameChecking = true;
+    syncCaseLibraryWriterPublishFileNameStatus();
+    syncCaseLibraryWriterPublishConfirmEnabled();
+
+    var projectId = writer.projectId;
+    var targetCleanName = String(writer.fileNameClean || '');
+    apiClient.listCaseFiles(projectId)
+      .then(function(files) {
+        if (requestSeq !== writerPublishFileNameCheckSeq) return;
+        var list = Array.isArray(files) ? files : [];
+        var hit = null;
+        for (var i = 0; i < list.length; i += 1) {
+          var file = list[i];
+          if (!file) continue;
+          var dbName = cleanCaseFileName(file.file_name_clean || file.file_name || '');
+          if (String(dbName || '') !== String(targetCleanName || '')) continue;
+          hit = file;
+          break;
+        }
+        writer.fileNameChecking = false;
+        writer.fileNameDuplicate = Boolean(hit);
+        writer.duplicateCaseFileId = hit && hit.id ? hit.id : null;
+        syncCaseLibraryWriterPublishFileNameStatus();
+        syncCaseLibraryWriterPublishConfirmEnabled();
+      })
+      .catch(function() {
+        if (requestSeq !== writerPublishFileNameCheckSeq) return;
+        writer.fileNameChecking = false;
+        writer.fileNameDuplicate = false;
+        writer.duplicateCaseFileId = null;
+        setStatus(dom.writerPublishFileNameStatus, '重名校验失败，确认入库时会再次校验', 'warn');
+        syncCaseLibraryWriterPublishConfirmEnabled();
+      });
+  }
+
+  function scheduleCaseLibraryWriterPublishFileNameDuplicateCheck(immediate) {
+    if (writerPublishFileNameCheckTimer) {
+      clearTimeout(writerPublishFileNameCheckTimer);
+      writerPublishFileNameCheckTimer = 0;
+    }
+    var delay = immediate ? 0 : 220;
+    writerPublishFileNameCheckTimer = setTimeout(function() {
+      runCaseLibraryWriterPublishFileNameDuplicateCheck();
+    }, delay);
+  }
+
+  function deriveCaseLibraryWriterPublishDefaultFileName(items, saveMeta) {
+    var fromMindRoot = '';
+    var meta = saveMeta && typeof saveMeta === 'object' ? saveMeta : null;
+    if (meta && meta.mindData && meta.mindData.nodeData) {
+      fromMindRoot = deriveCaseLibraryWriterExportBaseName(meta.mindData);
+    }
+    if (!fromMindRoot) {
+      var currentMindData = readCaseLibraryWriterMindDataFromInstance();
+      if (currentMindData && currentMindData.nodeData) {
+        fromMindRoot = deriveCaseLibraryWriterExportBaseName(currentMindData);
+      }
+    }
+    if (!fromMindRoot) {
+      var fallbackFileName = deriveWriterImportFileName(Array.isArray(items) ? items : []);
+      fromMindRoot = cleanCaseFileName(fallbackFileName || '编写用例');
+    }
+    return fromMindRoot || '编写用例';
+  }
+
   function buildWriterPublishHintText() {
     var writer = state.writer || {};
     var count = Array.isArray(writer.draftItems) ? writer.draftItems.length : 0;
-    var firstCaseName = '';
-    if (count > 0) {
-      firstCaseName = normalizeXmindCaseLibraryText(writer.draftItems[0].title || '');
-    }
-    var cleanName = cleanCaseFileName(firstCaseName || '编写用例');
-    return '待入库用例 ' + count + ' 条；默认用例名：' + (cleanName || '编写用例') + '。请选择项目和版本后确认入库。';
+    var cleanName = writer.fileNameClean || cleanCaseFileName(writer.draftFileName || '编写用例');
+    return '待入库用例 ' + count + ' 条；文件名：' + (cleanName || '编写用例') + '。请选择项目和版本后确认入库。';
   }
 
   function fillCaseLibraryWriterVersionOptions(projectId, preferredVersionId) {
@@ -4211,10 +4368,18 @@
       'caseLibraryWriterPublishDrawer',
       [],
       function() {
+        syncCaseLibraryWriterPublishFileNameStatus();
         syncCaseLibraryWriterPublishConfirmEnabled();
       },
       function() {
+        if (writerPublishFileNameCheckTimer) {
+          clearTimeout(writerPublishFileNameCheckTimer);
+          writerPublishFileNameCheckTimer = 0;
+        }
+        writerPublishFileNameCheckSeq += 1;
         if (state.writer.publishing) state.writer.publishing = false;
+        if (state.writer) state.writer.fileNameChecking = false;
+        syncCaseLibraryWriterPublishFileNameStatus();
         syncCaseLibraryWriterPublishConfirmEnabled();
         if (state.writer.pendingReject) {
           rejectCaseLibraryWriterPendingSave('已取消入库', true);
@@ -4225,7 +4390,8 @@
   }
 
 
-  function openCaseLibraryWriterPublishDrawer(items, summary) {
+  function openCaseLibraryWriterPublishDrawer(items, summary, options) {
+    var opts = options || {};
     var drawer = ensureCaseLibraryWriterPublishDrawer();
     if (!drawer || typeof drawer.open !== 'function') {
       return Promise.reject(new Error('确认入库抽屉未就绪'));
@@ -4235,7 +4401,14 @@
     writer.publishing = false;
     writer.summary = summary || null;
     writer.draftItems = Array.isArray(items) ? items.slice() : [];
-    writer.draftFileName = deriveWriterImportFileName(writer.draftItems);
+    writer.fileNameDuplicate = false;
+    writer.fileNameChecking = false;
+    writer.duplicateCaseFileId = null;
+    var defaultFileName = deriveCaseLibraryWriterPublishDefaultFileName(writer.draftItems, opts.saveMeta || null);
+    var normalizedDefaultFileName = normalizeCaseLibraryWriterPublishFileName(defaultFileName);
+    writer.fileNameInput = normalizedDefaultFileName.input;
+    writer.fileNameClean = normalizedDefaultFileName.clean;
+    writer.draftFileName = normalizedDefaultFileName.fileName;
 
     var preferredProjectId = null;
     var preferredVersionId = null;
@@ -4254,6 +4427,10 @@
     if (dom.writerPublishHint) {
       dom.writerPublishHint.textContent = buildWriterPublishHintText();
     }
+    if (dom.writerPublishFileNameInput) {
+      dom.writerPublishFileNameInput.value = writer.fileNameInput || '';
+    }
+    setStatus(dom.writerPublishFileNameStatus, '', '');
     setStatus(dom.writerPublishStatus, '', '');
 
     if (dom.writerPublishProjectSelect) {
@@ -4265,6 +4442,12 @@
       dom.writerPublishVersionSelect.innerHTML = '<option value="">请选择版本</option>';
       dom.writerPublishVersionSelect.value = '';
     }
+    if (writerPublishFileNameCheckTimer) {
+      clearTimeout(writerPublishFileNameCheckTimer);
+      writerPublishFileNameCheckTimer = 0;
+    }
+    writerPublishFileNameCheckSeq += 1;
+    syncCaseLibraryWriterPublishFileNameStatus();
     syncCaseLibraryWriterPublishConfirmEnabled();
     drawer.open();
 
@@ -4305,6 +4488,7 @@
 
         if (!preferredProjectId) {
           setStatus(dom.writerPublishStatus, '请选择项目和版本后确认入库', '');
+          syncCaseLibraryWriterPublishFileNameStatus();
           return true;
         }
 
@@ -4313,6 +4497,7 @@
           .then(function() {
             fillCaseLibraryWriterVersionOptions(preferredProjectId, preferredVersionId);
             setStatus(dom.writerPublishStatus, '', '');
+            scheduleCaseLibraryWriterPublishFileNameDuplicateCheck(true);
             return true;
           })
           .catch(function(err) {
@@ -4337,6 +4522,15 @@
     dom.writerPublishVersionSelect.disabled = true;
     dom.writerPublishVersionSelect.innerHTML = '<option value="">请选择版本</option>';
     dom.writerPublishVersionSelect.value = '';
+    writer.fileNameChecking = false;
+    writer.fileNameDuplicate = false;
+    writer.duplicateCaseFileId = null;
+    if (writerPublishFileNameCheckTimer) {
+      clearTimeout(writerPublishFileNameCheckTimer);
+      writerPublishFileNameCheckTimer = 0;
+    }
+    writerPublishFileNameCheckSeq += 1;
+    syncCaseLibraryWriterPublishFileNameStatus();
     syncCaseLibraryWriterPublishConfirmEnabled();
     if (!writer.projectId) {
       setStatus(dom.writerPublishStatus, '请先选择项目', 'warn');
@@ -4347,6 +4541,7 @@
       .then(function() {
         fillCaseLibraryWriterVersionOptions(writer.projectId, null);
         setStatus(dom.writerPublishStatus, '', '');
+        scheduleCaseLibraryWriterPublishFileNameDuplicateCheck(true);
       })
       .catch(function(err) {
         setStatus(dom.writerPublishStatus, err && err.message ? err.message : '加载版本失败', 'err');
@@ -4404,6 +4599,14 @@
     }
     writer.versionId = normalizeId(raw);
     syncCaseLibraryWriterPublishConfirmEnabled();
+  }
+
+  function handleCaseLibraryWriterPublishFileNameInput() {
+    var raw = dom.writerPublishFileNameInput ? dom.writerPublishFileNameInput.value : '';
+    setCaseLibraryWriterPublishFileName(raw, { skipCheck: false });
+    if (dom.writerPublishHint) {
+      dom.writerPublishHint.textContent = buildWriterPublishHintText();
+    }
   }
 
   function waitForCaseLibraryCondition(checker, timeoutMs, intervalMs) {
@@ -4478,12 +4681,17 @@
     var versionId = writer.versionId;
     var items = Array.isArray(writer.draftItems) ? writer.draftItems : [];
     if (!projectId || !versionId || !items.length) return null;
+    var normalizedFileName = normalizeCaseLibraryWriterPublishFileName(writer.fileNameInput || writer.draftFileName || '');
+    writer.fileNameInput = normalizedFileName.input;
+    writer.fileNameClean = normalizedFileName.clean;
+    writer.draftFileName = normalizedFileName.fileName;
+    if (!writer.draftFileName) return null;
     var payloadItems = sanitizeImportItemsForApi(items);
     if (!payloadItems.length) return null;
     return {
       project_id: projectId,
       version_id: versionId,
-      file_name: writer.draftFileName || deriveWriterImportFileName(items),
+      file_name: writer.draftFileName,
       source: 'xmind_writer',
       items: payloadItems,
     };
@@ -4492,6 +4700,20 @@
   function confirmCaseLibraryWriterPublish() {
     var writer = state.writer || {};
     if (writer.publishing) return;
+    var normalizedName = normalizeCaseLibraryWriterPublishFileName(dom.writerPublishFileNameInput ? dom.writerPublishFileNameInput.value : writer.fileNameInput);
+    writer.fileNameInput = normalizedName.input;
+    writer.fileNameClean = normalizedName.clean;
+    writer.draftFileName = normalizedName.fileName;
+    if (!writer.fileNameInput || !writer.fileNameClean || !writer.draftFileName) {
+      setStatus(dom.writerPublishFileNameStatus, '请输入有效的用例文件名（必填）', 'warn');
+      syncCaseLibraryWriterPublishConfirmEnabled();
+      return;
+    }
+    if (writer.fileNameChecking) {
+      setStatus(dom.writerPublishFileNameStatus, '正在校验重名，请稍后再试', 'warn');
+      syncCaseLibraryWriterPublishConfirmEnabled();
+      return;
+    }
     var payload = buildCaseLibraryWriterImportPayload();
     if (!payload) {
       setStatus(dom.writerPublishStatus, '待入库数据未就绪，请检查项目、版本和用例内容', 'warn');
@@ -4555,7 +4777,7 @@
       });
   }
 
-  function requestCaseLibraryWriterPublishFromXmind(nextCases, summary) {
+  function requestCaseLibraryWriterPublishFromXmind(nextCases, summary, saveMeta) {
     var writerItems = mapWriterCasesToImportItems(nextCases || []);
     var invalid = validateImportItems(writerItems);
     if (invalid.length) {
@@ -4569,7 +4791,7 @@
     return new Promise(function(resolve, reject) {
       state.writer.pendingResolve = resolve;
       state.writer.pendingReject = reject;
-      openCaseLibraryWriterPublishDrawer(writerItems, summary || null).catch(function(err) {
+      openCaseLibraryWriterPublishDrawer(writerItems, summary || null, { saveMeta: saveMeta || null }).catch(function(err) {
         rejectCaseLibraryWriterPendingSave(err && err.message ? String(err.message) : '确认入库抽屉未就绪', false);
       });
     });
@@ -17941,6 +18163,10 @@
     }
     if (dom.writerPublishProjectSelect) {
       dom.writerPublishProjectSelect.addEventListener('change', handleCaseLibraryWriterPublishProjectChange);
+    }
+    if (dom.writerPublishFileNameInput) {
+      dom.writerPublishFileNameInput.addEventListener('input', handleCaseLibraryWriterPublishFileNameInput);
+      dom.writerPublishFileNameInput.addEventListener('change', handleCaseLibraryWriterPublishFileNameInput);
     }
     if (dom.writerPublishVersionSelect) {
       dom.writerPublishVersionSelect.addEventListener('change', handleCaseLibraryWriterPublishVersionChange);

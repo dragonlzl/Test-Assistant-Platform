@@ -3876,6 +3876,9 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 #appConfirmDrawer {
   z-index: 1800;
 }
+#caseLibraryImportDiffDrawer {
+  z-index: 1760;
+}
 .drawer .drawer-mask {
   position: absolute;
   inset: 0;
@@ -4279,10 +4282,22 @@ body.guide-active .guide-allow * {
 .diff-table {
   table-layout: fixed;
   width: 100%;
-}
-
-.diff-table {
   --diff-tag-width: 52px;
+  --diff-row-added-bg: rgba(46, 204, 113, 0.14);
+  --diff-row-removed-bg: rgba(231, 76, 60, 0.12);
+  --diff-row-changed-bg: rgba(231, 76, 60, 0.08);
+  --diff-cell-changed-bg: rgba(231, 76, 60, 0.14);
+  --diff-content-color: var(--text);
+  --diff-content-muted: var(--muted);
+  --diff-pair-tag-bg: rgba(15, 23, 42, 0.06);
+  --diff-pair-tag-color: rgba(15, 23, 42, 0.75);
+  --diff-pair-tag-border: rgba(15, 23, 42, 0.12);
+  --diff-badge-added-bg: rgba(46, 204, 113, 0.18);
+  --diff-badge-added-color: rgba(21, 128, 61, 0.95);
+  --diff-badge-removed-bg: rgba(231, 76, 60, 0.14);
+  --diff-badge-removed-color: rgba(185, 28, 28, 0.95);
+  --diff-badge-changed-bg: rgba(231, 76, 60, 0.12);
+  --diff-badge-changed-color: rgba(185, 28, 28, 0.95);
 }
 
 .diff-table th:nth-child(1),
@@ -4340,15 +4355,15 @@ body.guide-active .guide-allow * {
 }
 
 .diff-row-added td {
-  background: rgba(46, 204, 113, 0.14);
+  background: var(--diff-row-added-bg);
 }
 
 .diff-row-removed td {
-  background: rgba(231, 76, 60, 0.12);
+  background: var(--diff-row-removed-bg);
 }
 
 .diff-row-changed td {
-  background: rgba(231, 76, 60, 0.08);
+  background: var(--diff-row-changed-bg);
 }
 
 .diff-locate-bar {
@@ -4402,7 +4417,7 @@ tr.import-invalid-locate-active td {
 }
 
 .diff-cell-changed {
-  background: rgba(231, 76, 60, 0.14) !important;
+  background: var(--diff-cell-changed-bg) !important;
 }
 
 .tempexec-dup-table {
@@ -4494,15 +4509,18 @@ tr.import-invalid-locate-active td {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
-  background: rgba(15, 23, 42, 0.06);
-  color: rgba(15, 23, 42, 0.75);
+  border: 1px solid var(--diff-pair-tag-border);
+  background: var(--diff-pair-tag-bg);
+  color: var(--diff-pair-tag-color);
 }
 .diff-pair-text {
   min-width: 0;
+  color: var(--diff-content-color);
 }
 .diff-one {
   white-space: pre-wrap;
   word-break: break-word;
+  color: var(--diff-content-color);
 }
 .diff-one-with-tag {
   display: grid;
@@ -4534,16 +4552,20 @@ tr.import-invalid-locate-active td {
   letter-spacing: 0.01em;
 }
 .diff-badge-added {
-  background: rgba(46, 204, 113, 0.18);
-  color: rgba(21, 128, 61, 0.95);
+  background: var(--diff-badge-added-bg);
+  color: var(--diff-badge-added-color);
 }
 .diff-badge-removed {
-  background: rgba(231, 76, 60, 0.14);
-  color: rgba(185, 28, 28, 0.95);
+  background: var(--diff-badge-removed-bg);
+  color: var(--diff-badge-removed-color);
 }
 .diff-badge-changed {
-  background: rgba(231, 76, 60, 0.12);
-  color: rgba(185, 28, 28, 0.95);
+  background: var(--diff-badge-changed-bg);
+  color: var(--diff-badge-changed-color);
+}
+
+.diff-table .hint {
+  color: var(--diff-content-muted);
 }
 
 .invalid-cell {
@@ -7672,6 +7694,55 @@ tr.import-invalid-locate-active td {
   gap: 10px;
   align-items: center;
 }
+.case-library-writer-publish-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 10px;
+  flex-wrap: nowrap;
+}
+.case-library-writer-publish-name-row .case-library-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+#caseLibraryWriterPublishFileNameInput {
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 34px;
+  min-width: 280px;
+  max-width: 520px;
+  flex: 1 1 380px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background-color: #ffffff;
+  color: #111827;
+  font-size: 14px;
+  line-height: 1.2;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+#caseLibraryWriterPublishFileNameInput:hover:not(:disabled) {
+  border-color: #cbd5e1;
+}
+#caseLibraryWriterPublishFileNameInput:focus {
+  outline: none;
+  border-color: rgba(37, 99, 235, 0.55);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+#caseLibraryWriterPublishFileNameInput:disabled {
+  cursor: not-allowed;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  background-color: #f8fafc;
+  box-shadow: none;
+}
+#caseLibraryWriterPublishFileNameStatus {
+  margin: 0;
+  min-height: 20px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .case-library-writer-publish-filters select {
   min-width: 180px;
 }
@@ -9462,6 +9533,23 @@ button.exec-overview-file-chip,
   background: var(--panel);
   border-color: var(--border);
 }
+:root[data-theme="dark"] .diff-table {
+  --diff-row-added-bg: rgba(34, 197, 94, 0.18);
+  --diff-row-removed-bg: rgba(248, 113, 113, 0.16);
+  --diff-row-changed-bg: rgba(251, 146, 60, 0.12);
+  --diff-cell-changed-bg: rgba(251, 146, 60, 0.2);
+  --diff-content-color: var(--text);
+  --diff-content-muted: #c1cad8;
+  --diff-pair-tag-bg: rgba(125, 180, 255, 0.18);
+  --diff-pair-tag-color: #dbeafe;
+  --diff-pair-tag-border: rgba(125, 180, 255, 0.36);
+  --diff-badge-added-bg: rgba(34, 197, 94, 0.24);
+  --diff-badge-added-color: #86efac;
+  --diff-badge-removed-bg: rgba(248, 113, 113, 0.22);
+  --diff-badge-removed-color: #fecaca;
+  --diff-badge-changed-bg: rgba(251, 146, 60, 0.24);
+  --diff-badge-changed-color: #fdba74;
+}
 :root[data-theme="dark"] .diff-locate-info {
   color: var(--text);
 }
@@ -9628,6 +9716,24 @@ button.exec-overview-file-chip,
   border-color: #1d4ed8;
   background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
   box-shadow: none;
+}
+:root[data-theme="dark"] #caseLibraryWriterPublishFileNameInput {
+  border-color: #334155;
+  background-color: #0f172a;
+  color: #e2e8f0;
+  box-shadow: inset 0 1px 2px rgba(2, 6, 23, 0.4);
+}
+:root[data-theme="dark"] #caseLibraryWriterPublishFileNameInput:hover:not(:disabled) {
+  border-color: #475569;
+}
+:root[data-theme="dark"] #caseLibraryWriterPublishFileNameInput:focus {
+  border-color: rgba(96, 165, 250, 0.7);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.26);
+}
+:root[data-theme="dark"] #caseLibraryWriterPublishFileNameInput:disabled {
+  border-color: #334155;
+  background-color: #111827;
+  color: #64748b;
 }
 :root[data-theme="dark"] .case-library-section-title {
   background: rgba(125,180,255,0.16);

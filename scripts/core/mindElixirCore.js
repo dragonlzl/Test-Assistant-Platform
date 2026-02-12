@@ -222,6 +222,15 @@
       }
     }
 
+    function buildMindDataSignature(data) {
+      if (!data || !data.nodeData) return '';
+      try {
+        return JSON.stringify(data.nodeData);
+      } catch (err) {
+        return '';
+      }
+    }
+
     function readMindEditSession(storageKey) {
       if (!storageKey || typeof localStorage === 'undefined') return null;
       try {
@@ -710,6 +719,9 @@
       var restoredSession = opts && opts.restoredSession && typeof opts.restoredSession === 'object'
         ? opts.restoredSession
         : null;
+      var restoreNoticeSignature = opts && opts.restoreNoticeSignature
+        ? String(opts.restoreNoticeSignature)
+        : '';
       var editing = opts && opts.initialEditing === true;
       var pendingSave = false;
       var applyingHistory = false;
@@ -791,12 +803,7 @@
       }
 
       function snapshotSignature(data) {
-        if (!data || !data.nodeData) return '';
-        try {
-          return JSON.stringify(data.nodeData);
-        } catch (err) {
-          return '';
-        }
+        return buildMindDataSignature(data);
       }
 
       function buildHistoryEntry(data) {
@@ -840,6 +847,7 @@
           currentData: cloneMindDataObject(currentData),
           history: payloadHistory,
           historyIndex: nextIndex,
+          restoreNoticeSignature: restoreNoticeSignature,
           updatedAt: Date.now(),
         });
       }
@@ -3052,6 +3060,17 @@
       var restoredEditing = Boolean(restoredSession && restoredSession.editing === true && restoredCurrent && restoredCurrent.nodeData);
       var forcedEditing = Boolean(opts && opts.initialEditing === true && initialMindData && initialMindData.nodeData);
       var initialEditing = Boolean(restoredEditing || forcedEditing);
+      var restoreCurrentSignature = buildMindDataSignature(restoredCurrent);
+      var restoreNoticeSignature = restoredSession && restoredSession.restoreNoticeSignature
+        ? String(restoredSession.restoreNoticeSignature)
+        : '';
+      var showRestoreNotice = Boolean(
+        restoredEditing &&
+        restoreCurrentSignature &&
+        restoreCurrentSignature !== restoreNoticeSignature &&
+        !(opts && opts.showRestoreNotice === false)
+      );
+      var restoreNoticeSignatureForSession = showRestoreNotice ? restoreCurrentSignature : restoreNoticeSignature;
       var baseMindData = restoredSession && restoredSession.baseData && restoredSession.baseData.nodeData
         ? cloneMindDataObject(restoredSession.baseData)
         : cloneMindDataObject(mindData);
@@ -3099,6 +3118,7 @@
         direction: direction,
         editableSessionKey: sessionKey,
         restoredSession: restoredSession,
+        restoreNoticeSignature: restoreNoticeSignatureForSession,
         initialEditing: initialEditing,
         initialMindData: cloneMindDataObject(initialMindData),
         baseMindData: cloneMindDataObject(baseMindData),
@@ -3115,6 +3135,22 @@
         } catch (err2) {
           // ignore
         }
+      }
+      if (showRestoreNotice) {
+        setTimeout(function() {
+          var restoreMsg = '检测到上次未保存的内容编辑，已进行恢复，请继续完成编辑。';
+          if (sessionKey && restoreNoticeSignatureForSession) {
+            writeMindEditSession(sessionKey, Object.assign({}, restoredSession || {}, {
+              restoreNoticeSignature: restoreNoticeSignatureForSession,
+              restoreNoticeAt: Date.now(),
+            }));
+          }
+          if (opts && typeof opts.showToast === 'function') {
+            opts.showToast(restoreMsg, 'warn', 3000);
+            return;
+          }
+          showMindToast(restoreMsg, 'warn', 3000);
+        }, 0);
       }
 
       var initialAutoFitScale = 0;

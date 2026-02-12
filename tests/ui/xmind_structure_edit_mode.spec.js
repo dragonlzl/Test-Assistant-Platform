@@ -293,6 +293,9 @@ test.describe('XMind 编辑模式', () => {
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await page.click('#caseLibraryXmindViewBtn');
+    const restoredToast = page.locator('.temp-center-toast', { hasText: '检测到上次未保存的内容编辑，已进行恢复，请继续完成编辑。' });
+    await expect(restoredToast).toBeVisible({ timeout: 3000 });
+    await expect(restoredToast).toHaveCount(0, { timeout: 5000 });
 
     const viewerAfterReload = page.locator('#caseLibraryXmindStructureViewer');
     await expect(viewerAfterReload.locator('[data-mind-action="edit-cancel"]')).toBeVisible();
