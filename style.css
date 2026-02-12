@@ -3959,6 +3959,11 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   height: calc(100vh - 60px);
   overscroll-behavior: contain;
 }
+
+.drawer .drawer-body#xmindStructureDrawerBody {
+  padding: 10px 12px 14px;
+  overflow: hidden;
+}
 .guide-entry-card {
   width: 100%;
   text-align: left;
@@ -7909,6 +7914,52 @@ tr.import-invalid-locate-active td {
   box-sizing: border-box;
 }
 
+.xmind-node-context-menu {
+  position: fixed;
+  z-index: 2200;
+  min-width: 124px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid #dbe2ea;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18);
+  display: none;
+  pointer-events: auto;
+}
+
+.xmind-node-context-menu.is-open {
+  display: block;
+}
+
+.xmind-node-context-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid #dbe2ea;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.xmind-node-context-menu-btn:hover:not(:disabled) {
+  border-color: #60a5fa;
+  background: #eff6ff;
+}
+
+.xmind-node-context-menu-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .xmind-floating-ghost {
   position: fixed;
   top: 0;
@@ -8004,11 +8055,29 @@ tr.import-invalid-locate-active td {
   height: 100%;
   cursor: default;
   user-select: none;
+  overflow-x: auto;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.85) transparent;
   touch-action: none;
   -ms-touch-action: none;
   -ms-content-zooming: none;
   overscroll-behavior: none;
   -ms-scroll-chaining: none;
+}
+
+.xmind-structure-viewer .xmind-structure-canvas::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.xmind-structure-viewer .xmind-structure-canvas::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xmind-structure-viewer .xmind-structure-canvas::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.85);
+  border-radius: 999px;
 }
 
 .xmind-structure-viewer.is-draggable .xmind-structure-canvas {
@@ -8020,7 +8089,11 @@ tr.import-invalid-locate-active td {
 }
 
 .xmind-structure-viewer .map-container {
-  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  width: max-content;
+  height: max-content;
+  overflow: visible;
   touch-action: none;
   -ms-touch-action: none;
   -ms-content-zooming: none;
@@ -8030,6 +8103,7 @@ tr.import-invalid-locate-active td {
 
 .xmind-structure-viewer .map-canvas {
   min-height: 100%;
+  min-width: 100%;
 }
 
 @media (max-width: 1100px) {
@@ -9493,6 +9567,26 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-box-selected .text {
   background: rgba(30, 64, 175, 0.88);
   box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.75);
+}
+:root[data-theme="dark"] .xmind-node-context-menu {
+  border-color: #475569;
+  background: rgba(15, 23, 42, 0.96);
+  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.58);
+}
+:root[data-theme="dark"] .xmind-node-context-menu-btn {
+  border-color: #475569;
+  background: #1e293b;
+  color: #e2e8f0;
+}
+:root[data-theme="dark"] .xmind-node-context-menu-btn:hover:not(:disabled) {
+  border-color: #60a5fa;
+  background: #0f3460;
+}
+:root[data-theme="dark"] .xmind-structure-viewer .xmind-structure-canvas {
+  scrollbar-color: rgba(100, 116, 139, 0.88) transparent;
+}
+:root[data-theme="dark"] .xmind-structure-viewer .xmind-structure-canvas::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.88);
 }
 :root[data-theme="dark"] .xmind-structure-viewer .xmind-box-select-rect {
   border-color: rgba(96, 165, 250, 0.95);

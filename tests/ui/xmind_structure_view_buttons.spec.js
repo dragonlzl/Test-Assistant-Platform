@@ -306,6 +306,15 @@ test.describe('XMind 结构展示按钮', () => {
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-action="zoom-out"]')).toBeVisible();
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-action="zoom-fit"]')).toBeVisible();
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-action="zoom-in"]')).toBeVisible();
+    const canvasHorizontalScrollEnabled = await page.evaluate(() => {
+      var canvas = document.querySelector('#tempExecXmindStructureViewer .xmind-structure-canvas');
+      if (!canvas || typeof getComputedStyle !== 'function') return false;
+      var style = getComputedStyle(canvas);
+      var overflowXReady = style.overflowX === 'auto' || style.overflowX === 'scroll';
+      var overflowYReady = style.overflowY === 'auto' || style.overflowY === 'scroll';
+      return overflowXReady && overflowYReady;
+    });
+    expect(canvasHorizontalScrollEnabled).toBeTruthy();
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-search-input]')).toBeVisible();
     await page.evaluate(() => {
       window.__tempExecXmindExportClicks = 0;
@@ -459,6 +468,24 @@ test.describe('XMind 结构展示按钮', () => {
       return Boolean(wheelEvt.defaultPrevented) || dispatchResult === false;
     });
     expect(wheelGestureBlocked).toBeTruthy();
+    var transformBeforeWheelPan = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
+    await page.evaluate(() => {
+      var canvas = document.querySelector('#tempExecXmindStructureViewer .xmind-structure-canvas');
+      if (!canvas) return;
+      var rect = canvas.getBoundingClientRect();
+      var evt = new WheelEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+        deltaX: 0,
+        deltaY: 140,
+        clientX: rect.left + (rect.width / 2),
+        clientY: rect.top + (rect.height / 2),
+      });
+      canvas.dispatchEvent(evt);
+    });
+    await page.waitForTimeout(80);
+    var transformAfterWheelPan = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
+    expect(transformAfterWheelPan).not.toBe(transformBeforeWheelPan);
 
     var touchGestureBlocked = await page.evaluate(() => {
       var viewer = document.querySelector('#tempExecXmindStructureViewer');

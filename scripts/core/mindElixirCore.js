@@ -755,6 +755,7 @@
       };
       var ctrlModifierPressed = false;
       var zoomMinScale = minScale;
+      var nodeContextMenuEl = null;
 
       function getInstance() {
         return instance;
@@ -1128,6 +1129,28 @@
         return true;
       }
 
+      function panByWheelEvent(e) {
+        if (!e) return false;
+        var inst = getInstance();
+        if (!inst || typeof inst.move !== 'function') return false;
+        var deltaX = Number(e.deltaX);
+        var deltaY = Number(e.deltaY);
+        if (!isFinite(deltaX)) deltaX = 0;
+        if (!isFinite(deltaY)) deltaY = 0;
+        if (deltaX === 0 && deltaY === 0) return false;
+        if (e.shiftKey && deltaX === 0 && deltaY !== 0) {
+          deltaX = deltaY;
+          deltaY = 0;
+        }
+        try {
+          inst.move(-deltaX, -deltaY);
+        } catch (err) {
+          return false;
+        }
+        updateViewerDragState(viewerEl, inst, false);
+        return true;
+      }
+
       function zoomFit() {
         var inst = getInstance();
         if (inst && typeof inst.scaleFit === 'function') {
@@ -1274,6 +1297,125 @@
         return false;
       }
 
+      function ensureNodeContextMenuEl() {
+        if (nodeContextMenuEl && nodeContextMenuEl.parentNode) return nodeContextMenuEl;
+        if (typeof document === 'undefined' || !document.createElement) return null;
+        if (!document.body || !document.body.appendChild) return null;
+        var el = document.createElement('div');
+        el.className = 'xmind-node-context-menu';
+        el.setAttribute('aria-hidden', 'true');
+        el.innerHTML = '<button type="button" class="xmind-node-context-menu-btn" data-mind-node-menu="node-add">新增节点</button>';
+        el.addEventListener('click', onNodeContextMenuClick);
+        document.body.appendChild(el);
+        nodeContextMenuEl = el;
+        return nodeContextMenuEl;
+      }
+
+      function hideNodeContextMenu() {
+        if (!nodeContextMenuEl || !nodeContextMenuEl.classList) return;
+        nodeContextMenuEl.classList.remove('is-open');
+        nodeContextMenuEl.setAttribute('aria-hidden', 'true');
+      }
+
+      function showNodeContextMenu(clientX, clientY) {
+        var menu = ensureNodeContextMenuEl();
+        if (!menu || !menu.style) return;
+        var menuBtn = menu.querySelector ? menu.querySelector('[data-mind-node-menu="node-add"]') : null;
+        if (menuBtn) {
+          var selected = collectSelectedNodes();
+          menuBtn.disabled = !(editing && !pendingSave && selected.length === 1);
+        }
+        menu.style.left = '0px';
+        menu.style.top = '0px';
+        menu.classList.add('is-open');
+        menu.setAttribute('aria-hidden', 'false');
+        var menuRect = menu.getBoundingClientRect ? menu.getBoundingClientRect() : null;
+        var width = menuRect && menuRect.width ? menuRect.width : 120;
+        var height = menuRect && menuRect.height ? menuRect.height : 40;
+        var viewportWidth = typeof window !== 'undefined' && window ? (window.innerWidth || 0) : 0;
+        var viewportHeight = typeof window !== 'undefined' && window ? (window.innerHeight || 0) : 0;
+        var left = Number(clientX);
+        var top = Number(clientY);
+        if (!isFinite(left)) left = 0;
+        if (!isFinite(top)) top = 0;
+        if (viewportWidth > 0 && left + width > viewportWidth - 4) left = viewportWidth - width - 4;
+        if (viewportHeight > 0 && top + height > viewportHeight - 4) top = viewportHeight - height - 4;
+        if (left < 4) left = 4;
+        if (top < 4) top = 4;
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+      }
+
+      function isNodeContextMenuOpen() {
+        if (!nodeContextMenuEl || !nodeContextMenuEl.classList) return false;
+        return nodeContextMenuEl.classList.contains('is-open');
+      }
+
+      function isNodeCurrentlySelected(nodeEl) {
+        if (!nodeEl) return false;
+        var selected = collectSelectedNodes();
+        if (!selected || !selected.length) return false;
+        for (var i = 0; i < selected.length; i += 1) {
+          if (selected[i] === nodeEl) return true;
+        }
+        return false;
+      }
+
+      function selectSingleNodeForContextMenu(nodeEl) {
+        if (!nodeEl) return;
+        var selected = collectSelectedNodes();
+        if (selected.length === 1 && selected[0] === nodeEl) return;
+        var inst = getInstance();
+        if (enableCustomBoxSelection) {
+          clearBoxSelectionClasses();
+        }
+        if (inst && typeof inst.clearSelection === 'function') {
+          try {
+            inst.clearSelection();
+          } catch (err0) {
+            // ignore
+          }
+        }
+        if (inst && typeof inst.selectNode === 'function') {
+          try {
+            inst.selectNode(nodeEl);
+            return;
+          } catch (err1) {
+            // ignore
+          }
+        }
+        if (inst && typeof inst.selectNodes === 'function') {
+          try {
+            inst.selectNodes([nodeEl]);
+          } catch (err2) {
+            // ignore
+          }
+        }
+      }
+
+      function resolveContextMenuTargetNode(target) {
+        var nodeEl = target && target.closest ? target.closest('me-tpc') : null;
+        if (nodeEl) {
+          selectSingleNodeForContextMenu(nodeEl);
+          return nodeEl;
+        }
+        var selectedNodes = collectSelectedNodes();
+        if (selectedNodes && selectedNodes.length === 1) return selectedNodes[0];
+        return null;
+      }
+
+      function onNodeContextMenuClick(e) {
+        var target = e && e.target && e.target.closest
+          ? e.target.closest('[data-mind-node-menu]')
+          : null;
+        if (!target || !target.dataset) return;
+        var action = String(target.dataset.mindNodeMenu || '');
+        if (action === 'node-add') {
+          hideNodeContextMenu();
+          runAddNode();
+        }
+      }
+
       function isCtrlModifierActive(e) {
         if (e && e.ctrlKey) return true;
         return ctrlModifierPressed;
@@ -1288,12 +1430,19 @@
 
       function blockCanvasNativeGesture(e) {
         if (!e) return;
-        if (!isEventInsideMindCanvas(e.target)) return;
         if (isEventInsideMindControls(e.target)) return;
+        var insideCanvas = isEventInsideMindCanvas(e.target);
+        var insideViewer = Boolean(viewerEl && viewerEl.contains && viewerEl.contains(e.target));
+        if (!insideCanvas && !insideViewer) return;
         if (e.cancelable === false) return;
-        if (e.type === 'wheel' && (e.ctrlKey || e.metaKey)) {
-          var usedCustomWheelZoom = zoomByWheelEvent(e);
-          if (usedCustomWheelZoom) {
+        if (e.type === 'wheel') {
+          var usedWheelAction = false;
+          if (e.ctrlKey || e.metaKey) {
+            usedWheelAction = zoomByWheelEvent(e);
+          } else {
+            usedWheelAction = panByWheelEvent(e);
+          }
+          if (usedWheelAction) {
             if (e.preventDefault) e.preventDefault();
             if (e.stopImmediatePropagation) e.stopImmediatePropagation();
             else if (e.stopPropagation) e.stopPropagation();
@@ -1370,7 +1519,16 @@
       function onViewerMouseDownGestureGuard(e) {
         if (!e || e.button !== 2) return;
         if (isEventInsideMindControls(e.target)) return;
+        if (editing) {
+          var nodeEl = resolveContextMenuTargetNode(e.target);
+          if (nodeEl && isNodeCurrentlySelected(nodeEl)) {
+            showNodeContextMenu(e.clientX, e.clientY);
+            if (e.preventDefault) e.preventDefault();
+            return;
+          }
+        }
         if (!isEventInsideMindCanvas(e.target)) return;
+        hideNodeContextMenu();
         rightDragGestureBlock.suppressContextUntil = Date.now() + 1800;
         if (!rightDragGestureBlock.active) {
           rightDragGestureBlock.active = true;
@@ -1418,7 +1576,17 @@
       function onViewerContextMenu(e) {
         if (!e) return;
         if (isEventInsideMindControls(e.target)) return;
+        if (editing) {
+          var nodeEl = resolveContextMenuTargetNode(e.target);
+          if (nodeEl && isNodeCurrentlySelected(nodeEl)) {
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            showNodeContextMenu(e.clientX, e.clientY);
+            return;
+          }
+        }
         if (isEventInsideMindCanvas(e.target)) {
+          hideNodeContextMenu();
           if (e.preventDefault) e.preventDefault();
           return;
         }
@@ -1429,9 +1597,17 @@
         if (!e) return;
         if (isEventInsideMindControls(e.target)) return;
         if (isEventInsideMindCanvas(e.target)) {
+          if (isNodeContextMenuOpen()) {
+            if (e.preventDefault) e.preventDefault();
+            return;
+          }
+          if (!(editing && e.target && e.target.closest && e.target.closest('me-tpc'))) {
+            hideNodeContextMenu();
+          }
           if (e.preventDefault) e.preventDefault();
           return;
         }
+        hideNodeContextMenu();
         if (!shouldSuppressRightDragContextMenu()) return;
         if (e.preventDefault) e.preventDefault();
       }
@@ -1554,6 +1730,10 @@
       }
 
       function onWindowPointerDownForCtrlLeftCanvasDrag(e) {
+        var menuTarget = e && e.target && e.target.closest
+          ? e.target.closest('.xmind-node-context-menu')
+          : null;
+        if (!menuTarget) hideNodeContextMenu();
         beginCtrlLeftCanvasDrag(e);
       }
 
@@ -1915,6 +2095,7 @@
       }
 
       function onControlsClick(e) {
+        hideNodeContextMenu();
         var target = e && e.target && e.target.closest ? e.target.closest('[data-mind-action]') : null;
         if (!target || !target.dataset) return;
         var action = String(target.dataset.mindAction || '');
@@ -1998,6 +2179,7 @@
 
       function onViewerKeydown(e) {
         if (!e) return;
+        hideNodeContextMenu();
         if (controlsEl && controlsEl.contains && controlsEl.contains(e.target)) return;
         var typing = isTypingTarget(e.target);
         var lower = e.key ? String(e.key).toLowerCase() : '';
@@ -2037,6 +2219,7 @@
       }
 
       function onViewerClick() {
+        hideNodeContextMenu();
         updateEditButtons();
       }
 
@@ -2107,6 +2290,62 @@
         scheduleRecordSnapshot();
       }
 
+      function insertInputBoxLineBreak(inputEl) {
+        if (!inputEl) return false;
+        if (typeof document !== 'undefined' && document && typeof document.execCommand === 'function') {
+          try {
+            if (document.execCommand('insertLineBreak')) return true;
+          } catch (err0) {
+            // ignore
+          }
+          try {
+            if (document.execCommand('insertText', false, '\n')) return true;
+          } catch (err1) {
+            // ignore
+          }
+        }
+        if (typeof window === 'undefined' || !window || typeof window.getSelection !== 'function') return false;
+        if (typeof document === 'undefined' || !document || typeof document.createTextNode !== 'function') return false;
+        var selection = null;
+        try {
+          selection = window.getSelection();
+        } catch (err2) {
+          selection = null;
+        }
+        if (!selection || selection.rangeCount <= 0) return false;
+        try {
+          var range = selection.getRangeAt(0);
+          range.deleteContents();
+          var breakEl = document.createElement ? document.createElement('br') : null;
+          if (breakEl) {
+            range.insertNode(breakEl);
+            range.setStartAfter(breakEl);
+          } else {
+            var textNode = document.createTextNode('\n');
+            range.insertNode(textNode);
+            range.setStartAfter(textNode);
+          }
+          range.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          return true;
+        } catch (err3) {
+          return false;
+        }
+      }
+
+      function onViewerInputBoxEnterKeydown(e) {
+        if (!editing) return;
+        if (!e || e.key !== 'Enter') return;
+        var target = e.target || null;
+        if (!target || target.id !== 'input-box') return;
+        if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.preventDefault) e.preventDefault();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        else if (e.stopPropagation) e.stopPropagation();
+        insertInputBoxLineBreak(target);
+      }
+
       function placeInputCaretToEnd() {
         if (typeof document === 'undefined') return false;
         var inputEl = document.getElementById('input-box');
@@ -2169,6 +2408,7 @@
         startX: 0,
         startY: 0,
         previewText: '',
+        nodeId: '',
       };
       var customPointerDragThreshold = 3;
 
@@ -2179,6 +2419,7 @@
         customPointerDragState.startX = 0;
         customPointerDragState.startY = 0;
         customPointerDragState.previewText = '';
+        customPointerDragState.nodeId = '';
       }
 
       function extractNodePreviewTopic(nodeEl) {
@@ -2239,6 +2480,7 @@
         customPointerDragState.startX = typeof e.clientX === 'number' ? e.clientX : 0;
         customPointerDragState.startY = typeof e.clientY === 'number' ? e.clientY : 0;
         customPointerDragState.previewText = resolvePointerDragPreviewText(nodeEl);
+        customPointerDragState.nodeId = nodeEl.nodeObj && nodeEl.nodeObj.id ? String(nodeEl.nodeObj.id) : '';
       }
 
       function canUsePointerDragPreview(e) {
@@ -2415,6 +2657,120 @@
         }
       }
 
+      function findNodeWithParentById(rootNode, nodeId, parentNode) {
+        if (!rootNode || !nodeId) return null;
+        var idText = rootNode.id === undefined || rootNode.id === null ? '' : String(rootNode.id);
+        if (idText && idText === String(nodeId)) {
+          return {
+            node: rootNode,
+            parent: parentNode || null,
+          };
+        }
+        var children = Array.isArray(rootNode.children) ? rootNode.children : [];
+        for (var i = 0; i < children.length; i += 1) {
+          var found = findNodeWithParentById(children[i], nodeId, rootNode);
+          if (found) return found;
+        }
+        return null;
+      }
+
+      function applyDirectionToNodeTree(node, directionValue) {
+        if (!node) return;
+        node.direction = directionValue;
+        var children = Array.isArray(node.children) ? node.children : [];
+        for (var i = 0; i < children.length; i += 1) {
+          applyDirectionToNodeTree(children[i], directionValue);
+        }
+      }
+
+      function resolveNodeVisualDirection(nodeId, inst, nodeElFallback) {
+        var leftDirection = inst && typeof inst.LEFT === 'number' ? inst.LEFT : 0;
+        var rightDirection = inst && typeof inst.RIGHT === 'number' ? inst.RIGHT : 1;
+        var nodeEl = nodeElFallback || findMindNodeElement(inst, nodeId);
+        if (nodeEl && nodeEl.closest) {
+          var mainEl = nodeEl.closest('me-main');
+          if (mainEl && mainEl.classList) {
+            if (mainEl.classList.contains('lhs')) return leftDirection;
+            if (mainEl.classList.contains('rhs')) return rightDirection;
+          }
+        }
+        var currentData = getCurrentMindData();
+        var found = currentData && currentData.nodeData
+          ? findNodeWithParentById(currentData.nodeData, nodeId, null)
+          : null;
+        if (found && found.node && found.node.direction !== undefined && found.node.direction !== null) {
+          return Number(found.node.direction);
+        }
+        return rightDirection;
+      }
+
+      function moveRootNodeAcrossSide(nodeId, pointerClientX) {
+        if (!editing || pendingSave) return;
+        if (!nodeId) return;
+        var inst = getInstance();
+        if (!inst || typeof inst.refresh !== 'function') return;
+        if (!inst.nodeData) return;
+        if (typeof pointerClientX !== 'number' || !isFinite(pointerClientX)) return;
+        var rootTopicEl = inst.container && inst.container.querySelector
+          ? inst.container.querySelector('me-root > me-tpc')
+          : null;
+        if (!rootTopicEl || !rootTopicEl.getBoundingClientRect) return;
+
+        var rootRect = rootTopicEl.getBoundingClientRect();
+        var rootCenterX = rootRect.left + (rootRect.width / 2);
+        var leftDirection = typeof inst.LEFT === 'number' ? inst.LEFT : 0;
+        var rightDirection = typeof inst.RIGHT === 'number' ? inst.RIGHT : 1;
+        var sideDirection = typeof inst.SIDE === 'number' ? inst.SIDE : 2;
+        var nextDirection = pointerClientX < rootCenterX ? leftDirection : rightDirection;
+
+        var currentDirection = resolveNodeVisualDirection(nodeId, inst, null);
+        if (Number(currentDirection) === Number(nextDirection)) return;
+
+        var nextData = getCurrentMindData();
+        if (!nextData || !nextData.nodeData) return;
+        var target = findNodeWithParentById(nextData.nodeData, nodeId, null);
+        if (!target || !target.node || !target.parent || target.parent !== nextData.nodeData) return;
+
+        if (typeof inst.initSide === 'function' && Number(inst.direction) !== Number(sideDirection)) {
+          try {
+            inst.initSide();
+          } catch (err0) {
+            // ignore
+          }
+        }
+
+        applyDirectionToNodeTree(target.node, nextDirection);
+        applyingHistory = true;
+        try {
+          inst.refresh(nextData);
+        } catch (err1) {
+          // ignore
+        }
+        applyingHistory = false;
+        runSearch({ keepIndex: true });
+        scheduleRecordSnapshot();
+        updateEditButtons();
+      }
+
+      function onWindowPointerUpForRootSideSwitch(e) {
+        if (!editing || pendingSave) return;
+        if (!customPointerDragState.active || !customPointerDragState.moving) return;
+        if (
+          customPointerDragState.pointerId !== null &&
+          e &&
+          typeof e.pointerId === 'number' &&
+          e.pointerId !== customPointerDragState.pointerId
+        ) {
+          return;
+        }
+        var nodeId = customPointerDragState.nodeId ? String(customPointerDragState.nodeId) : '';
+        var pointerClientX = Number(e && e.clientX);
+        if (!nodeId || !isFinite(pointerClientX)) return;
+        setTimeout(function() {
+          moveRootNodeAcrossSide(nodeId, pointerClientX);
+        }, 0);
+      }
+
       function operationListener(payload) {
         if (!editing || applyingHistory) return;
         var op = payload && payload.name ? String(payload.name) : '';
@@ -2448,6 +2804,7 @@
         viewerEl.addEventListener('pointerdown', beginCtrlLeftCanvasDrag, true);
         viewerEl.addEventListener('pointerdown', onViewerPointerDownForDragPreview, true);
         if (enableCustomBoxSelection) viewerEl.addEventListener('pointerdown', startBoxSelection, true);
+        viewerEl.addEventListener('keydown', onViewerInputBoxEnterKeydown, true);
         viewerEl.addEventListener('keydown', onViewerKeydown, true);
         viewerEl.addEventListener('click', onViewerClick, true);
         viewerEl.addEventListener('dblclick', onViewerDblClick, true);
@@ -2480,6 +2837,7 @@
         window.addEventListener('blur', resetCtrlLeftCanvasDrag);
         window.addEventListener('pointermove', syncDragGhostFollowPointer);
         window.addEventListener('mousemove', syncDragGhostFollowPointer);
+        window.addEventListener('pointerup', onWindowPointerUpForRootSideSwitch, true);
         window.addEventListener('pointerup', resetDragGhostPreview, true);
         window.addEventListener('mouseup', resetDragGhostPreview, true);
         window.addEventListener('pointercancel', resetDragGhostPreview, true);
@@ -2544,6 +2902,7 @@
           viewerEl.removeEventListener('pointerdown', beginCtrlLeftCanvasDrag, true);
           viewerEl.removeEventListener('pointerdown', onViewerPointerDownForDragPreview, true);
           if (enableCustomBoxSelection) viewerEl.removeEventListener('pointerdown', startBoxSelection, true);
+          viewerEl.removeEventListener('keydown', onViewerInputBoxEnterKeydown, true);
           viewerEl.removeEventListener('keydown', onViewerKeydown, true);
           viewerEl.removeEventListener('click', onViewerClick, true);
           viewerEl.removeEventListener('dblclick', onViewerDblClick, true);
@@ -2576,6 +2935,7 @@
           window.removeEventListener('blur', resetCtrlLeftCanvasDrag);
           window.removeEventListener('pointermove', syncDragGhostFollowPointer);
           window.removeEventListener('mousemove', syncDragGhostFollowPointer);
+          window.removeEventListener('pointerup', onWindowPointerUpForRootSideSwitch, true);
           window.removeEventListener('pointerup', resetDragGhostPreview, true);
           window.removeEventListener('mouseup', resetDragGhostPreview, true);
           window.removeEventListener('pointercancel', resetDragGhostPreview, true);
@@ -2594,6 +2954,15 @@
           boxRectEl.parentNode.removeChild(boxRectEl);
         }
         boxRectEl = null;
+        if (nodeContextMenuEl) {
+          if (typeof nodeContextMenuEl.removeEventListener === 'function') {
+            nodeContextMenuEl.removeEventListener('click', onNodeContextMenuClick);
+          }
+          if (nodeContextMenuEl.parentNode) {
+            nodeContextMenuEl.parentNode.removeChild(nodeContextMenuEl);
+          }
+          nodeContextMenuEl = null;
+        }
         resetRightDragGestureBlock();
         resetCtrlLeftCanvasDrag();
         releaseCustomDragGhost();
