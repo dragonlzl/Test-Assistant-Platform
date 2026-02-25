@@ -3965,6 +3965,11 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 
 .drawer .drawer-body#xmindStructureDrawerBody {
   padding: 10px 12px 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.drawer .drawer-body#xmindStructureDrawerBody.is-mind-viewer {
   overflow: hidden;
 }
 .guide-entry-card {

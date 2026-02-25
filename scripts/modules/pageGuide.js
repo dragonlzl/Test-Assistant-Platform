@@ -222,7 +222,10 @@
       var drawer = ensureXmindDrawer();
       if (!drawer) return;
       if (xmindTitleEl) xmindTitleEl.textContent = 'XMind 用例结构';
-      if (xmindBodyEl) xmindBodyEl.innerHTML = buildXmindStructureBlock();
+      if (xmindBodyEl) {
+        if (xmindBodyEl.classList) xmindBodyEl.classList.remove('is-mind-viewer');
+        xmindBodyEl.innerHTML = buildXmindStructureBlock();
+      }
       drawer.open();
     }
 

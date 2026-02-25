@@ -3325,6 +3325,13 @@
     caseLibraryXmindGestureGuard.token = '';
   }
 
+  function setCaseLibraryXmindDrawerBodyViewerMode(enabled) {
+    var body = document.getElementById('xmindStructureDrawerBody');
+    if (!body || !body.classList) return;
+    if (enabled) body.classList.add('is-mind-viewer');
+    else body.classList.remove('is-mind-viewer');
+  }
+
   function ensureCaseLibraryXmindDrawer() {
     if (xmindStructureDrawerInstance) return xmindStructureDrawerInstance;
     xmindStructureDrawerInstance = ensureDrawer('xmindStructureDrawer', [], function() {
@@ -3341,7 +3348,10 @@
       }
       caseLibraryXmindMindInstance = null;
       var body = document.getElementById('xmindStructureDrawerBody');
-      if (body) body.innerHTML = '';
+      if (body) {
+        setCaseLibraryXmindDrawerBodyViewerMode(false);
+        body.innerHTML = '';
+      }
     });
     if (xmindStructureDrawerInstance && xmindStructureDrawerInstance.element) {
       bindCaseLibraryXmindCloseScrollGuard(xmindStructureDrawerInstance.element);
@@ -3738,6 +3748,7 @@
     }
 
     drawer.open();
+    setCaseLibraryXmindDrawerBodyViewerMode(true);
     body.innerHTML = '<div class="xmind-structure-viewer" id="caseLibraryXmindStructureViewer"></div>';
     var container = document.getElementById('caseLibraryXmindStructureViewer');
     if (!container) {
@@ -4820,6 +4831,7 @@
     }
 
     drawer.open();
+    setCaseLibraryXmindDrawerBodyViewerMode(true);
     body.innerHTML = '<div class="xmind-structure-viewer" id="caseLibraryWriterXmindStructureViewer"></div>';
     var container = document.getElementById('caseLibraryWriterXmindStructureViewer');
     if (!container) {

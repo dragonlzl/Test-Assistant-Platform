@@ -48,6 +48,27 @@ test.describe('页面说明 XMind 结构抽屉', () => {
     expect(widthRatio).toBeGreaterThan(0.5);
     expect(widthRatio).toBeLessThan(1);
     await expect(xmindDrawer).toContainText('XMind 用例层级要求');
+    const bodyMode = await page.locator('#xmindStructureDrawerBody').evaluate((el) => {
+      return {
+        overflowY: getComputedStyle(el).overflowY,
+        isMindViewer: el.classList.contains('is-mind-viewer'),
+        scrollHeight: Number(el.scrollHeight || 0),
+        clientHeight: Number(el.clientHeight || 0),
+      };
+    });
+    expect(bodyMode.overflowY).not.toBe('hidden');
+    expect(bodyMode.isMindViewer).toBeFalsy();
+    expect(bodyMode.scrollHeight).toBeGreaterThan(bodyMode.clientHeight);
+
+    const bodyBox = await page.locator('#xmindStructureDrawerBody').boundingBox();
+    if (!bodyBox) throw new Error('XMind 结构说明抽屉内容容器未渲染');
+    await page.mouse.move(bodyBox.x + 30, bodyBox.y + 30);
+    const scrollTopBefore = await page.locator('#xmindStructureDrawerBody').evaluate((el) => Number(el.scrollTop || 0));
+    await page.mouse.wheel(0, 420);
+    await page.waitForTimeout(100);
+    const scrollTopAfter = await page.locator('#xmindStructureDrawerBody').evaluate((el) => Number(el.scrollTop || 0));
+    expect(scrollTopAfter).toBeGreaterThan(scrollTopBefore);
+
     await page.click('#xmindStructureDrawer .drawer-mask', { position: { x: 10, y: 10 } });
     await expect(xmindDrawer).not.toHaveClass(/open/);
   });

@@ -117,6 +117,12 @@
       return window.app && window.app.mindElixirCoreApi ? window.app.mindElixirCoreApi : null;
     }
 
+    function setXmindDrawerBodyViewerMode(enabled) {
+      if (!xmindStructureDrawerBody || !xmindStructureDrawerBody.classList) return;
+      if (enabled) xmindStructureDrawerBody.classList.add('is-mind-viewer');
+      else xmindStructureDrawerBody.classList.remove('is-mind-viewer');
+    }
+
 
     function markXmindDrawerSkipScrollRestoreOnce() {
       try {
@@ -236,6 +242,7 @@
           }
           tempExecXmindMindInstance = null;
           if (xmindStructureDrawerBody) {
+            setXmindDrawerBodyViewerMode(false);
             xmindStructureDrawerBody.innerHTML = '';
           }
         },
@@ -680,6 +687,7 @@
       }
 
       drawer.open();
+      setXmindDrawerBodyViewerMode(true);
       xmindStructureDrawerBody.innerHTML = '<div class="xmind-structure-viewer" id="tempExecXmindStructureViewer"></div>';
       var container = document.getElementById('tempExecXmindStructureViewer');
       if (!container) {

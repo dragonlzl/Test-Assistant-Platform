@@ -288,6 +288,10 @@ test.describe('XMind 结构展示按钮', () => {
 
     await expect(page.locator('#xmindStructureDrawerBody')).toContainText('支付模块');
     await expect(page.locator('#xmindStructureDrawerBody')).toContainText('余额不足时支付失败');
+    const execViewerModeEnabled = await page.locator('#xmindStructureDrawerBody').evaluate((el) => {
+      return el.classList.contains('is-mind-viewer');
+    });
+    expect(execViewerModeEnabled).toBeTruthy();
     var drawerWidthRatio = await getDrawerWidthRatio(page);
     expect(drawerWidthRatio).toBeGreaterThanOrEqual(0.66);
 
@@ -768,6 +772,10 @@ test.describe('XMind 结构展示按钮', () => {
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
     await expect(page.locator('#xmindStructureDrawerBody')).toContainText('订单模块');
     await expect(page.locator('#xmindStructureDrawerBody')).toContainText('创建订单成功');
+    const caseLibraryViewerModeEnabled = await page.locator('#xmindStructureDrawerBody').evaluate((el) => {
+      return el.classList.contains('is-mind-viewer');
+    });
+    expect(caseLibraryViewerModeEnabled).toBeTruthy();
     var drawerWidthRatio = await getDrawerWidthRatio(page);
     expect(drawerWidthRatio).toBeGreaterThanOrEqual(0.66);
     await page.waitForTimeout(140);
