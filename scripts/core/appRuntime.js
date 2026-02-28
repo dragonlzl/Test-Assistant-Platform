@@ -976,7 +976,14 @@
     }
 
     function switchTab(name, options) {
-      if (name && (shouldForceRedirect() || !hasLocalTabSection(name))) {
+      var mappedToOtherPage = false;
+      if (name) {
+        var mappedPage = resolveTabPage(name);
+        var currentPage = getCurrentPageName();
+        // 仅依赖 data-tab-section 会被“同名抽屉”误判；优先按页面映射判断是否应跨页跳转。
+        mappedToOtherPage = Boolean(mappedPage && currentPage && mappedPage !== currentPage);
+      }
+      if (name && (shouldForceRedirect() || mappedToOtherPage || !hasLocalTabSection(name))) {
         var redirected = redirectToTabPage(name);
         if (redirected) return;
       }
