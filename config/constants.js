@@ -38,21 +38,22 @@
   var maxCaseViewFontSize = 16;
 
   var defaultPageGuideSwitches = {
-    auto: true,
-    clean: true,
-    casesgen: true,
-    assign: true,
-    models: true,
-    tempexec: true,
-    'case-library': true,
-    'case-archive': true,
-    'exec-overview': true,
+    auto: false,
+    clean: false,
+    casesgen: false,
+    assign: false,
+    models: false,
+    tempexec: false,
+    'case-library': false,
+    'case-archive': false,
+    'exec-overview': false,
   };
 
   var defaultSettings = {
     timeoutSec: 300,
     feishuWebhook: '',
     feishuMention: '',
+    caseAssistantProjectRoot: '',
     theme: 'light',
     caseViewFontSize: defaultCaseViewFontSize,
     missingCaseReminderPlacement: 'top',

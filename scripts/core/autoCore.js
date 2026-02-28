@@ -95,6 +95,9 @@
     if (!state.autoCompareMissingList) state.autoCompareMissingList = [];
     if (!Object.prototype.hasOwnProperty.call(state, 'autoCompareSelectionTouched')) state.autoCompareSelectionTouched = false;
 
+    var caseAssistantChannelName = 'case-assistant:request';
+    var caseAssistantTimeoutMs = 30 * 60 * 1000;
+
     function getRequirementDisplayName() {
       return getRequirementLabel(true);
     }
@@ -123,6 +126,176 @@
     function getAutoWorkflowManager() {
       if (typeof window === 'undefined') return null;
       return window.app && window.app.autoWorkflowManager ? window.app.autoWorkflowManager : null;
+    }
+
+    function isElectronRendererEnv() {
+      if (typeof window === 'undefined') return false;
+      if (!window.electronAPI) return false;
+      return true;
+    }
+
+    function normalizeCaseAssistantProjectRoot(value) {
+      if (value === null || value === undefined) return '';
+      return String(value).trim();
+    }
+
+    function isValidCaseAssistantProjectRoot(path) {
+      var raw = normalizeCaseAssistantProjectRoot(path);
+      if (!raw) return false;
+      if (raw.indexOf('\0') !== -1) return false;
+      var normalized = raw.replace(/\\/g, '/');
+      var isWindowsDrive = /^[A-Za-z]:\//.test(normalized);
+      var isPosix = /^\//.test(normalized);
+      var isWindowsUnc = /^\\\\[^\\\/]+\\[^\\\/]+/.test(raw);
+      if (!isWindowsDrive && !isPosix && !isWindowsUnc) return false;
+      var cleaned = normalized.replace(/\/+$/, '');
+      if (!cleaned) return false;
+      var lastSegment = cleaned.split('/').pop() || '';
+      if (!lastSegment || lastSegment === '.' || lastSegment === '..') return false;
+      return true;
+    }
+
+    function unwrapRequirementText(rawText) {
+      var text = rawText === null || rawText === undefined ? '' : String(rawText).trim();
+      if (!text) return '';
+      var lines = text.split(/\r?\n/);
+      var filtered = [];
+      for (var i = 0; i < lines.length; i += 1) {
+        var line = lines[i] || '';
+        var trimmed = line.trim();
+        if (/^#需求标识：/.test(trimmed)) continue;
+        if (/^#类型：/.test(trimmed)) continue;
+        filtered.push(line);
+      }
+      var merged = filtered.join('\n').trim();
+      if (!merged) return '';
+      try {
+        var parsed = JSON.parse(merged);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Object.prototype.hasOwnProperty.call(parsed, 'data')) {
+          parsed = parsed.data;
+        }
+        if (typeof parsed === 'string') return parsed.trim();
+        if (parsed === null || parsed === undefined) return '';
+        return JSON.stringify(parsed, null, 2);
+      } catch (err) {
+        return merged;
+      }
+    }
+
+    function buildCaseAssistantUserPrompt(projectRoot) {
+      var rawRequirement = rawText && rawText.value ? unwrapRequirementText(rawText.value) : '';
+      var expectedRequirement = cleanedTextEl && cleanedTextEl.value ? unwrapRequirementText(cleanedTextEl.value) : '';
+      var compareResult = compareResultEl && compareResultEl.value ? unwrapRequirementText(compareResultEl.value) : '';
+      if (!expectedRequirement) return '';
+      var normalizedProjectRoot = normalizeCaseAssistantProjectRoot(projectRoot);
+      var sections = [];
+      sections.push('你是需求归并专家。请阅读 projectRoot 下代码对应的实际实现，并将“预期需求”和“实际实现需求”互补整合为一份完整需求文案。');
+      sections.push('目标：为后续“测试模块拆分”提供可直接使用的完整需求输入。');
+      if (normalizedProjectRoot) {
+        sections.push('代码读取范围（projectRoot）：\n' + normalizedProjectRoot);
+      }
+      sections.push('输出要求：');
+      sections.push('1. 仅输出需求文字，不要粘贴代码、不要输出文件路径。');
+      sections.push('2. 将预期需求与实际实现互补：预期有但实现缺失标记为“待补齐”；实现存在但预期未写标记为“需补录到需求”。');
+      sections.push('3. 覆盖功能规则、边界条件、异常分支、状态变化、数据约束、权限与前置条件。');
+      sections.push('4. 最终结构包含：需求目标、功能清单、差异补充、测试关注点。');
+      sections.push('5. 结果供测试拆分使用，请保证条目清晰、可执行。');
+      if (rawRequirement) sections.push('【原始需求】\n' + rawRequirement);
+      sections.push('【预期需求（需求清洗）】\n' + expectedRequirement);
+      if (compareResult) sections.push('【对比完整性结果】\n' + compareResult);
+      sections.push('请直接输出最终完整需求文案。');
+      return sections.join('\n\n');
+    }
+
+    function createCaseAssistantRequestId() {
+      try {
+        if (typeof crypto !== 'undefined' && crypto && typeof crypto.randomUUID === 'function') {
+          return crypto.randomUUID();
+        }
+      } catch (err) {
+        // ignore
+      }
+      return 'case-assistant-' + Date.now() + '-' + Math.random().toString(16).slice(2, 10);
+    }
+
+    function extractCaseAssistantRequirementText(data) {
+      if (typeof data === 'string') return data.trim();
+      if (!data || typeof data !== 'object') return '';
+      var preferredKeys = ['requirement', 'requirementText', 'text', 'content', 'result', 'output'];
+      for (var i = 0; i < preferredKeys.length; i += 1) {
+        var key = preferredKeys[i];
+        var value = data[key];
+        if (typeof value === 'string' && value.trim()) return value.trim();
+      }
+      try {
+        return JSON.stringify(data, null, 2);
+      } catch (err) {
+        return '';
+      }
+    }
+
+    async function invokeCaseAssistantForSplit(context) {
+      if (!context || typeof context !== 'object') {
+        console.info('[CaseAssistant] 跳过调用：上下文对象无效');
+        return;
+      }
+      if (!isElectronRendererEnv()) {
+        console.info('[CaseAssistant] 跳过调用：当前非 Electron 渲染进程或 window.electronAPI.invokeChannel 不可用');
+        return;
+      }
+      if (context.caseAssistantInvoked === true && context.cleanedOverride) {
+        console.info('[CaseAssistant] 跳过调用：当前流程上下文已存在可用结果，避免重复调用');
+        return;
+      }
+      var projectRoot = state && state.settings ? normalizeCaseAssistantProjectRoot(state.settings.caseAssistantProjectRoot) : '';
+      if (!isValidCaseAssistantProjectRoot(projectRoot)) {
+        console.info('[CaseAssistant] 跳过调用：项目路径无效或未配置', projectRoot);
+        return;
+      }
+      var userPrompt = buildCaseAssistantUserPrompt(projectRoot);
+      if (!userPrompt) {
+        console.info('[CaseAssistant] 跳过调用：未生成有效 userPrompt（通常是清洗结果为空）');
+        return;
+      }
+      var requestId = createCaseAssistantRequestId();
+      var payload = {
+        projectRoot: projectRoot,
+        userPrompt: userPrompt,
+        requestId: requestId,
+        timestamp: Date.now(),
+        streamOutput: false,
+        timeoutMs: caseAssistantTimeoutMs,
+      };
+      context.caseAssistantInvoked = true;
+      context.caseAssistantRequestId = requestId;
+      console.info('[CaseAssistant] 开始调用接口 case-assistant:request', {
+        requestId: requestId,
+        projectRoot: projectRoot,
+        promptLength: userPrompt.length,
+      });
+      try {
+        var response = await window.electronAPI.invokeChannel(caseAssistantChannelName, payload);
+        if (!response || response.status !== true) {
+          console.warn('[CaseAssistant] 调用返回失败状态', response);
+          return;
+        }
+        var mergedRequirement = extractCaseAssistantRequirementText(response.data);
+        if (!mergedRequirement) {
+          console.warn('[CaseAssistant] 调用成功但未提取到有效需求文案', response && response.data);
+          return;
+        }
+        context.cleanedOverride = mergedRequirement;
+        if (state && typeof state === 'object') {
+          state.autoCaseAssistantRequestId = requestId;
+          state.autoCaseAssistantMergedRequirement = mergedRequirement;
+        }
+        console.info('[CaseAssistant] 调用成功，已写入 cleanedOverride', {
+          requestId: requestId,
+          mergedLength: mergedRequirement.length,
+        });
+      } catch (err) {
+        console.warn('Case Assistant 调用失败，已跳过并继续后续流程', err);
+      }
     }
 
     async function notifyFeishuCoverageFailure() {
@@ -672,8 +845,14 @@
           after: function() { return handleAutoClarifyAfterReview(); },
         },
         { key: 'clean', label: '需求清洗', run: function(ctx) { return runCleaning(ctx); }, validate: function() { return Boolean(cleanedTextEl && cleanedTextEl.value && cleanedTextEl.value.trim().length > 0); } },
-        { key: 'compare', label: '对比完整性', run: function() { return compareCoverage(); }, validate: function() { return Boolean(compareResultEl && compareResultEl.value && compareResultEl.value.trim().length > 0); }, after: function() { return enforceAutoCoverageRequirement(); } },
-        { key: 'split', label: '测试模块拆分', run: function() { return splitModules(); }, validate: function() { return Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim().length > 0); } },
+        {
+          key: 'compare',
+          label: '对比完整性',
+          run: function() { return compareCoverage(); },
+          validate: function() { return Boolean(compareResultEl && compareResultEl.value && compareResultEl.value.trim().length > 0); },
+          after: function(ctx) { return handleAutoCompareAfter(ctx); },
+        },
+        { key: 'split', label: '测试模块拆分', run: function(ctx) { return splitModules(ctx); }, validate: function() { return Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim().length > 0); } },
         { key: 'cases', label: '覆盖对比', run: function() { return compareCasesCoverage(); }, validate: function() { return Boolean(casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim().length > 0); } },
       ];
     }
@@ -694,7 +873,7 @@
             throw new Error(invalidReason);
           }
           if (step.after) {
-            await step.after();
+            await step.after(context);
           }
         } catch (err) {
           if (step && step.key) setStepFailed(step.key, err && err.message ? err.message : '执行失败');
@@ -731,6 +910,11 @@
       if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = true;
       if (autoJumpCleanViewBtn) autoJumpCleanViewBtn.disabled = true;
       if (autoRecleanStatus) setStatus(autoRecleanStatus, '', '');
+    }
+
+    async function handleAutoCompareAfter(context) {
+      await enforceAutoCoverageRequirement();
+      await invokeCaseAssistantForSplit(context || {});
     }
 
     async function handleAutoClarifyAfterReview() {
@@ -985,17 +1169,20 @@
       setMissingStatus('', '');
       setStatus(autoRecleanStatus, '已忽略覆盖率不足，正在执行剩余步骤…', 'warn');
       setStatus(autoWorkflowStatus, '已忽略覆盖率，正在继续执行后续流程', 'warn');
+      var continueContext = {};
+      await invokeCaseAssistantForSplit(continueContext);
       if (autoWorkflowManager && typeof autoWorkflowManager.startTask === 'function') {
         autoWorkflowManager.startTask({
           kind: 'continue',
           startIndex: 3,
           stepIndex: 3,
+          context: continueContext,
           messages: buildAutoWorkflowTaskMessages('continue'),
         }, { force: true });
         return;
       }
       try {
-        await executeAutoWorkflowSteps(3);
+        await executeAutoWorkflowSteps(3, continueContext);
         setStatus(autoRecleanStatus, '已忽略覆盖率完成剩余步骤，请检查结果', 'ok');
         setStatus(autoWorkflowStatus, '剩余步骤执行完成，覆盖率仍不足 100%，请注意风险', 'warn');
         await notifyFeishuWorkflowSuccess();
@@ -1039,6 +1226,7 @@
       buildAutoWorkflowSteps: buildAutoWorkflowSteps,
       executeAutoWorkflowSteps: executeAutoWorkflowSteps,
       enforceAutoCoverageRequirement: enforceAutoCoverageRequirement,
+      invokeCaseAssistantForSplit: invokeCaseAssistantForSplit,
       runAutoWorkflow: runAutoWorkflow,
       runAutoWorkflowFromClean: runAutoWorkflowFromClean,
       continueAutoWorkflowAfterCoverage: continueAutoWorkflowAfterCoverage,

@@ -4113,3 +4113,38 @@
 - 更新记录：2026-02-25 补充“页面说明入口滚动能力”UI 自动化：页面说明 XMind 抽屉用例新增断言，校验 `xmindStructureDrawerBody` 非 viewer 模式、可滚动高度成立，并通过鼠标滚轮验证 `scrollTop` 递增（`tests/ui/help_structure_drawer.spec.js`）。
 - 更新记录：2026-02-25 补充“导图入口 viewer 模式”UI 断言：执行页与用例库 XMind 按钮用例新增 `is-mind-viewer` 断言，保证导图入口仍使用画布内部滚动/拖拽链路，不回退为外层抽屉滚动（`tests/ui/xmind_structure_view_buttons.spec.js`）。
 - 测试与验证：`node --check scripts/modules/pageGuide.js scripts/modules/tempexec.js scripts/modules/caseLibrary.js tests/ui/help_structure_drawer.spec.js tests/ui/xmind_structure_view_buttons.spec.js`（通过）；`npm run test:ui -- tests/ui/help_structure_drawer.spec.js --workers=1`（通过，1/1）；`npm run test:ui -- tests/ui/xmind_structure_view_buttons.spec.js --workers=1`（通过，3/3）；`npm run test:api -- tests/api/xmind_structure_edit_reuse_endpoints.spec.js`（通过，1/1）。补充说明：`tests/ui/page_guide_drawer.spec.js` 全量在本地存在历史环境波动（同一场景单测重跑可通过），本次改动相关的新增/受影响用例均稳定通过。
+- 功能名称：一键执行接入 Electron Case Assistant 需求互补
+- 功能描述：在自动流程“对比完整性”步骤后，新增 Electron 环境下的可选 Case Assistant 调用；当 `window.electronAPI.invokeChannel` 可用且设置了合法项目路径时，调用 `case-assistant:request` 将“预期需求（清洗结果）”与“代码实际实现”互补整合，并把结果作为后续“测试模块拆分”的输入。
+- 操作方式：
+  - 在“通用设置”填写并保存 `Case Assistant 项目路径（Electron）`。
+  - 在“AI一键执行/功能流程”执行自动流程；完成“对比完整性”后会自动尝试调用 Case Assistant。
+  - 若环境不满足（非 Electron / 路径为空或不合法 / 接口不可用），自动跳过该调用并继续原流程。
+- 使用效果：
+  - 满足条件时，拆分步骤将使用 Case Assistant 返回的“完整需求文案”作为输入，减少预期需求与代码实现之间的信息缺漏。
+  - 不满足条件时行为与原流程一致，不引入中断。
+- 新增内容/接口/组件：
+  - 前端配置：新增用户级设置 `caseAssistantProjectRoot` 及保存 UI（`settings.html`、`index.html`、`scripts/modules/settings.js`、`config/constants.js`、`scripts/base/state.js`）。
+  - 自动流程：新增 Electron 渲染进程判断与 `case-assistant:request` 调用，调用节点位于 compare -> split 之间（`scripts/core/autoCore.js`）。
+  - 拆分衔接：`splitModules` 支持消费自动流程上下文中的 `cleanedOverride`（`scripts/core/splitCore.js`）。
+  - 任务恢复链路：自动流程任务执行器的 `step.after` 支持接收上下文参数（`scripts/modules/app.js`）。
+  - 自动化测试：新增 UI/API 用例覆盖调用与设置持久化（`tests/ui/auto_workflow_case_assistant.spec.js`、`tests/api/settings_case_assistant_project_root.spec.js`）。
+- 测试与验证：
+  - `node --check scripts/base/state.js scripts/modules/app.js scripts/modules/settings.js scripts/core/autoCore.js scripts/core/splitCore.js tests/ui/auto_workflow_case_assistant.spec.js tests/api/settings_case_assistant_project_root.spec.js`（通过）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npx playwright test tests/ui/auto_workflow_case_assistant.spec.js --config /tmp/playwright-ui-no-webserver.config.js --workers=1`（通过，2/2；使用临时本地配置执行，避免 8090 端口已有服务导致 webServer 检查失败）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_case_assistant_project_root.spec.js --workers=1`（通过，1/1；后端以 `APP_DB_FILE=apitest.db` 独立实例启动）
+- 更新记录：2026-02-27 一键执行接入 Electron Case Assistant 需求互补（`config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`、`scripts/modules/settings.js`、`scripts/core/autoCore.js`、`scripts/core/splitCore.js`、`settings.html`、`index.html`、`tests/ui/auto_workflow_case_assistant.spec.js`、`tests/api/settings_case_assistant_project_root.spec.js`）。
+- 更新记录：2026-02-27 补充“功能流程手动点击对比”链路接入 Case Assistant：手动执行 `compare` 成功后也会尝试调用 `case-assistant:request`，并在后续手动 `split` 时优先消费该返回的完整需求文案（`scripts/core/autoCore.js`、`scripts/modules/app.js`、`scripts/core/compareCore.js`、`scripts/core/splitCore.js`、`tests/ui/auto_workflow_case_assistant.spec.js`）。
+- 更新记录：2026-02-27 调整“页面说明自动弹出”默认配置为全部关闭：设置页首次进入时各页面开关默认不勾选（`config/constants.js`、`scripts/base/state.js`）。
+- 更新记录：2026-02-28 修复“切换到用例库偶发白屏”主链路：当 `getCurrentUser` 临时失败（非 401/403）时，`authGuard.ensureSession` 不再仅提示 toast，而是立即执行降级页签渲染（保证至少一个 tab section 可见）并自动限次重试鉴权（最多 2 次，指数退避）；同时新增关键日志 `[authGuard] auth check failed, fallback tab rendered` 与重试日志，便于排查现场（`scripts/modules/authGuard.js`）。
+- 更新记录：2026-02-28 增强 `case-library.html` 启动自愈：load 后若检测到“应用 API 就绪但页面仍无可见 tab section”，会主动调用 `window.app.switchTab(初始tab)` 进行一次可见性恢复；若恢复失败再按原策略限次刷新，降低“偶发全白屏需多次刷新”概率（`case-library.html`）。
+- 更新记录：2026-02-28 新增 UI 回归用例覆盖“鉴权首次失败仍可见 + 自动恢复”：模拟 `/api/users/me` 首次 503、后续成功，断言用例库页签不会白屏且会自动恢复鉴权（`tests/ui/case_library_auth_fallback.spec.js`）。
+- 测试与验证：
+  - `node --check scripts/modules/authGuard.js tests/ui/case_library_auth_fallback.spec.js`（通过）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npx playwright test tests/ui/case_library_auth_fallback.spec.js --config <临时本地无 webServer 配置> --workers=1`（通过，1/1；规避 8090 端口环境占用）
+- 更新记录：2026-02-28 修复“功能引导过程中切换到用例库偶发白屏”兜底链路：在页签运行时新增 `ensureVisibleTabSection` 可见性恢复能力；当检测到本页所有 `section[data-tab-section]` 均为隐藏时，自动回退到可用页签并重新执行 `switchTab`，同时对非法页签名做本地回退，避免异常参数导致“全隐藏”状态（`scripts/core/appRuntime.js`）。
+- 更新记录：2026-02-28 强化功能引导跨页/切页恢复：`flowGuide` 在 `ensureTab`、等待目标节点期间与目标超时场景均增加“可见页签恢复”调用；若引导步骤触发切页后出现无可见页签，会优先调用运行时恢复接口并打印日志（`scripts/modules/flowGuide.js`）。
+- 更新记录：2026-02-28 补充“设置页启动用例库引导切换后不白屏”UI 回归用例，覆盖从设置页进入 `case-library-import` 引导并跳转到用例库后的可见性断言（`tests/ui/flow_guide_drawer.spec.js`）。
+- 测试与验证：
+  - `node --check scripts/core/appRuntime.js scripts/modules/flowGuide.js tests/ui/flow_guide_drawer.spec.js`（通过）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npx playwright test tests/ui/flow_guide_drawer.spec.js -g "从设置页启动用例库引导切换后不应白屏|从设置页启动用例执行引导可继续打开选择抽屉" --config <临时本地无 webServer 配置> --workers=1`（失败：当前沙箱环境 Chromium 启动受限，`mach_port_rendezvous` 权限错误，非业务逻辑失败）
+- 更新记录：2026-02-28 二次修复“功能引导跳用例库仍白屏”：修正页签可见性判断口径，`ensureVisibleTabSection` 只统计主内容区 `section[data-tab-section]`，不再把关闭态抽屉（`div.drawer[data-tab-section]`）误判为“可见”；并追加 `getComputedStyle + getBoundingClientRect` 双重可见性校验，避免“主区全隐藏却未触发恢复”的漏判（`scripts/core/appRuntime.js`）。

@@ -1838,16 +1838,56 @@
       if (!window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return false;
       return true;
     }
+    function hasVisibleTabSection() {
+      try {
+        return Boolean(document.querySelector('[data-tab-section]:not(.hidden)'));
+      } catch (e) {
+        return false;
+      }
+    }
+    function readInitTab() {
+      var root = document && document.documentElement ? document.documentElement : null;
+      if (root && root.dataset && root.dataset.initTab) return String(root.dataset.initTab || '');
+      return '';
+    }
+    function recoverVisibleTab() {
+      if (!window.app || typeof window.app.switchTab !== 'function') return false;
+      var tab = readInitTab() || 'case-library';
+      try {
+        window.app.switchTab(tab);
+      } catch (e) {
+        return false;
+      }
+      return true;
+    }
+    function reloadWithLimit() {
+      var count = getRetryCount();
+      if (count >= 2) return;
+      setRetryCount(count + 1);
+      try { window.location.reload(); } catch (e) {}
+    }
     window.addEventListener('load', function() {
       setTimeout(function() {
-        if (isAppReady()) {
+        var appReady = isAppReady();
+        var visible = hasVisibleTabSection();
+        if (appReady && visible) {
           clearRetryCount();
           return;
         }
-        var count = getRetryCount();
-        if (count >= 2) return;
-        setRetryCount(count + 1);
-        try { window.location.reload(); } catch (e) {}
+        if (appReady && !visible) {
+          var recovered = recoverVisibleTab();
+          if (recovered) {
+            setTimeout(function() {
+              if (hasVisibleTabSection()) {
+                clearRetryCount();
+                return;
+              }
+              reloadWithLimit();
+            }, 180);
+            return;
+          }
+        }
+        reloadWithLimit();
       }, 1800);
     });
   })();

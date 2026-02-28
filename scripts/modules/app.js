@@ -35,6 +35,7 @@
       timeoutSec: 300,
       feishuWebhook: '',
       feishuMention: '',
+      caseAssistantProjectRoot: '',
       theme: 'light',
       caseViewFontSize: 13,
       missingCaseReminderPlacement: 'top',
@@ -1322,11 +1323,12 @@
                   throw new Error(invalidReason);
                 }
                 if (step && typeof step.after === 'function') {
-                  await step.after();
+                  await step.after(context);
                 }
                 current.stepIndex = i + 1;
                 current.stepKey = '';
                 current.stepLabel = '';
+                current.context = context;
                 current.updatedAt = Date.now();
                 writeTask(current, 'progress');
                 if (typeof persistWorkflowStateNow === 'function') persistWorkflowStateNow();
@@ -1358,6 +1360,7 @@
             if (current.runnerId && current.runnerId !== runnerId) return null;
             current.status = 'done';
             current.error = '';
+            current.context = context;
             current.updatedAt = Date.now();
             current.endedAt = current.updatedAt;
             current.heartbeatAt = 0;
@@ -1734,6 +1737,7 @@
           ensureCaseGenModulesFromSplit: api.ensureCaseGenModulesFromSplit,
           persistWorkflowState: requestPersistWorkflowState,
           persistWorkflowStateNow: requestPersistWorkflowStateNow,
+          invokeCaseAssistantForSplit: proxyApi('invokeCaseAssistantForSplit'),
         },
       })
       : null;
@@ -2053,6 +2057,7 @@
       'buildAutoWorkflowSteps',
       'executeAutoWorkflowSteps',
       'enforceAutoCoverageRequirement',
+      'invokeCaseAssistantForSplit',
       'runAutoWorkflow',
       'runAutoWorkflowFromClean',
       'continueAutoWorkflowAfterCoverage',

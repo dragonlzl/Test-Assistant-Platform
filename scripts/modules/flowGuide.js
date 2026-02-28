@@ -264,6 +264,43 @@
       return Boolean(document.querySelector('[data-tab-section="' + name + '"]'));
     }
 
+    function hasVisibleTabSection() {
+      if (typeof document === 'undefined' || !document.querySelector) return false;
+      return Boolean(document.querySelector('section[data-tab-section]:not(.hidden)'));
+    }
+
+    function recoverVisibleTabSection(reason, preferredTab) {
+      if (hasVisibleTabSection()) return true;
+      var runtime = window.app && typeof window.app.ensureVisibleTabSection === 'function'
+        ? window.app.ensureVisibleTabSection
+        : null;
+      try {
+        if (runtime) {
+          var recovered = runtime(reason || 'flow-guide', preferredTab || '');
+          if (recovered) return true;
+        }
+      } catch (err) {
+        // ignore
+      }
+      var fallback = preferredTab ? String(preferredTab || '') : '';
+      if (!fallback) fallback = getActiveTab() || '';
+      if (!fallback) fallback = 'case-library';
+      if (typeof switchTab === 'function') {
+        try {
+          if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
+            console.warn('[flowGuide] recover hidden tab sections', {
+              reason: reason || '',
+              fallbackTab: fallback,
+            });
+          }
+          switchTab(fallback);
+        } catch (err2) {
+          // ignore
+        }
+      }
+      return hasVisibleTabSection();
+    }
+
     function isIndexLikePage() {
       if (typeof document === 'undefined') return false;
       var pageKey = '';
@@ -1299,6 +1336,7 @@
         switchTab(step.tab);
         if (!hasLocalTabSection(step.tab) || isIndexLikePage()) return false;
       }
+      recoverVisibleTabSection('ensure-tab', step.tab);
       return true;
     }
 
@@ -1307,6 +1345,9 @@
       function check() {
         if (token !== renderToken) return;
         if (!activeFlow || !activeGuideId) return;
+        if (!hasVisibleTabSection()) {
+          recoverVisibleTabSection('wait-target', step && step.tab ? step.tab : '');
+        }
         var target = resolveTarget(step);
         if (target) {
           if (isTargetVisible(target)) {
@@ -1332,6 +1373,7 @@
         if (attempts < 80) {
           setTimeout(check, 120);
         } else {
+          recoverVisibleTabSection('target-timeout', step && step.tab ? step.tab : '');
           setStatus(null, '引导目标加载失败，请刷新页面重试', 'warn');
           endGuide();
         }
@@ -1360,6 +1402,7 @@
 
       if (!ensureTab(activeStep)) {
         pauseGuideOverlay();
+        recoverVisibleTabSection('ensure-tab-pending', activeStep && activeStep.tab ? activeStep.tab : '');
         return;
       }
       if (activeStep.prepare) activeStep.prepare();

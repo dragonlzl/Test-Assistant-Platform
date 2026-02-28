@@ -35,6 +35,9 @@
     var feishuWebhookInput = dom.feishuWebhookInput || document.getElementById('feishuWebhook');
     var feishuMentionInput = dom.feishuMentionInput || document.getElementById('feishuNotifyUser');
     var feishuWebhookStatus = dom.feishuWebhookStatus || document.getElementById('feishuWebhookStatus');
+    var caseAssistantProjectRootInput = dom.caseAssistantProjectRootInput || document.getElementById('caseAssistantProjectRoot');
+    var saveCaseAssistantProjectRootBtn = dom.saveCaseAssistantProjectRootBtn || document.getElementById('saveCaseAssistantProjectRoot');
+    var caseAssistantProjectRootStatus = dom.caseAssistantProjectRootStatus || document.getElementById('caseAssistantProjectRootStatus');
     var tempExecColumnForm = dom.tempExecColumnForm || document.getElementById('tempExecColumnForm');
     var tempExecColumnStatus = dom.tempExecColumnStatus || document.getElementById('tempExecColumnStatus');
     var saveModelTimeoutBtn = dom.saveModelTimeoutBtn || document.getElementById('saveModelTimeout');
@@ -104,6 +107,9 @@
     var defaultMissingReminderAiEnabled = defaultSettings && defaultSettings.missingCaseReminderAiEnabled
       ? String(defaultSettings.missingCaseReminderAiEnabled)
       : 'off';
+    var defaultCaseAssistantProjectRoot = defaultSettings && typeof defaultSettings.caseAssistantProjectRoot === 'string'
+      ? defaultSettings.caseAssistantProjectRoot.trim()
+      : '';
     var minCaseViewFontSize = Number(config.minCaseViewFontSize) || 11;
     var maxCaseViewFontSize = Number(config.maxCaseViewFontSize) || 16;
     var settingsKey = config.settingsKey || 'usecase-settings-v1';
@@ -133,6 +139,7 @@
       timeoutSec: false,
       feishuWebhook: false,
       feishuMention: false,
+      caseAssistantProjectRoot: false,
       tempExecColumns: false,
       tempExecPageSize: false,
       caseViewFontSize: false,
@@ -268,6 +275,11 @@
       return String(raw || '').toLowerCase() === 'on' ? 'on' : 'off';
     }
 
+    function normalizeCaseAssistantProjectRoot(value) {
+      if (value === undefined || value === null) return '';
+      return String(value).trim();
+    }
+
     function applyTheme(theme) {
       if (typeof document === 'undefined' || !document.documentElement) return;
       var next = resolveTheme(theme);
@@ -352,6 +364,11 @@
         state.settings.feishuMention = state.settings.feishuMention.trim();
       } else if (state.settings.feishuMention === null || state.settings.feishuMention === undefined) {
         state.settings.feishuMention = '';
+      }
+      if (typeof state.settings.caseAssistantProjectRoot === 'string') {
+        state.settings.caseAssistantProjectRoot = normalizeCaseAssistantProjectRoot(state.settings.caseAssistantProjectRoot);
+      } else if (state.settings.caseAssistantProjectRoot === null || state.settings.caseAssistantProjectRoot === undefined) {
+        state.settings.caseAssistantProjectRoot = defaultCaseAssistantProjectRoot;
       }
       if (state.settings.tempExecColumns && typeof state.settings.tempExecColumns === 'object') {
         state.settings.tempExecColumns = Object.assign({}, defaultTempExecColumns, state.settings.tempExecColumns);
@@ -606,6 +623,11 @@
       } else {
         state.settings.feishuMention = '';
       }
+      if (typeof state.settings.caseAssistantProjectRoot === 'string') {
+        state.settings.caseAssistantProjectRoot = normalizeCaseAssistantProjectRoot(state.settings.caseAssistantProjectRoot);
+      } else {
+        state.settings.caseAssistantProjectRoot = defaultCaseAssistantProjectRoot;
+      }
       if (state.settings.tempExecColumns && typeof state.settings.tempExecColumns === 'object') {
         state.settings.tempExecColumns = Object.assign({}, defaultTempExecColumns, state.settings.tempExecColumns);
       }
@@ -727,6 +749,11 @@
       if (feishuMentionInput) {
         if (!dirtyDrafts.feishuMention) {
           feishuMentionInput.value = state.settings.feishuMention || '';
+        }
+      }
+      if (caseAssistantProjectRootInput) {
+        if (!dirtyDrafts.caseAssistantProjectRoot) {
+          caseAssistantProjectRootInput.value = state.settings.caseAssistantProjectRoot || '';
         }
       }
       if (tempExecPageSizeInput) {
@@ -1166,6 +1193,27 @@
       }
     }
 
+    function saveCaseAssistantProjectRoot() {
+      if (!caseAssistantProjectRootInput) return;
+      var next = normalizeCaseAssistantProjectRoot(caseAssistantProjectRootInput.value);
+      var prev = normalizeCaseAssistantProjectRoot(state.settings.caseAssistantProjectRoot);
+      caseAssistantProjectRootInput.value = next;
+      state.settings.caseAssistantProjectRoot = next;
+      dirtyDrafts.caseAssistantProjectRoot = false;
+      persistSettings(['caseAssistantProjectRoot']);
+      notifySettingsUpdated(['caseAssistantProjectRoot']);
+      if (!caseAssistantProjectRootStatus) return;
+      if (!next) {
+        setStatus(caseAssistantProjectRootStatus, '项目路径已清空，后续将跳过 Electron Case Assistant 调用', 'ok');
+        return;
+      }
+      if (prev === next) {
+        setStatus(caseAssistantProjectRootStatus, '项目路径保持不变', 'ok');
+      } else {
+        setStatus(caseAssistantProjectRootStatus, '项目路径已保存', 'ok');
+      }
+    }
+
     async function testFeishuWebhookConfig() {
       if (!feishuWebhookStatus) return;
       var value = applyFeishuInput();
@@ -1558,6 +1606,11 @@
         dirtyDrafts.feishuMention = true;
         setStatus(feishuWebhookStatus, '', '');
       });
+      if (saveCaseAssistantProjectRootBtn) saveCaseAssistantProjectRootBtn.addEventListener('click', saveCaseAssistantProjectRoot);
+      if (caseAssistantProjectRootInput) caseAssistantProjectRootInput.addEventListener('input', function() {
+        dirtyDrafts.caseAssistantProjectRoot = true;
+        setStatus(caseAssistantProjectRootStatus, '', '');
+      });
       if (tempExecColumnForm) tempExecColumnForm.addEventListener('change', function() {
         saveTempExecColumnsSetting();
       });
@@ -1643,6 +1696,7 @@
       postFeishuMessage: postFeishuMessage,
       ensureTempExecColumns: ensureTempExecColumns,
       saveTempExecPageSize: saveTempExecPageSize,
+      saveCaseAssistantProjectRoot: saveCaseAssistantProjectRoot,
     };
   }
 

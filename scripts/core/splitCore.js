@@ -214,8 +214,17 @@
       var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
       var updateModelTiming = handlers.updateModelTiming || function() {};
 
-      async function splitModules() {
-        var cleaned = getCleanedTextForModel();
+      async function splitModules(context) {
+        var ctxPayload = context && typeof context === 'object' ? context : {};
+        var cleanedOverride = ctxPayload.cleanedOverride && typeof ctxPayload.cleanedOverride === 'string'
+          ? ctxPayload.cleanedOverride.trim()
+          : '';
+        var manualMergedRequirement = !state.autoRunning
+          && state.manualCaseAssistantMergedRequirement
+          && typeof state.manualCaseAssistantMergedRequirement === 'string'
+          ? state.manualCaseAssistantMergedRequirement.trim()
+          : '';
+        var cleaned = cleanedOverride || manualMergedRequirement || getCleanedTextForModel();
         if (!cleaned) {
           setStatus(splitStatus, '请先完成清洗，获取基础内容', 'warn');
           return;

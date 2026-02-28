@@ -10,6 +10,9 @@
   var userRoleEl = null;
   var userMenu = null;
   var userMenuToggle = null;
+  var sessionRetryTimer = 0;
+  var sessionRetryCount = 0;
+  var MAX_SESSION_RETRY = 2;
 
   function ensureStateInstance() {
     if (window.app && window.app.state) return window.app.state;
@@ -434,6 +437,48 @@
     }
   }
 
+  function clearSessionRetryTimer() {
+    if (!sessionRetryTimer) return;
+    clearTimeout(sessionRetryTimer);
+    sessionRetryTimer = 0;
+  }
+
+  function resetSessionRetryState() {
+    clearSessionRetryTimer();
+    sessionRetryCount = 0;
+  }
+
+  function scheduleEnsureSessionRetry(reason) {
+    if (sessionRetryTimer) return;
+    if (sessionRetryCount >= MAX_SESSION_RETRY) return;
+    sessionRetryCount += 1;
+    var delayMs = 900 + (sessionRetryCount - 1) * 1200;
+    sessionRetryTimer = setTimeout(function() {
+      sessionRetryTimer = 0;
+      if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
+        console.warn('[authGuard] retry ensureSession', {
+          retry: sessionRetryCount,
+          reason: reason || '',
+        });
+      }
+      ensureSession();
+    }, delayMs);
+  }
+
+  function renderFallbackTabAfterAuthFailure(liveState, reason) {
+    var safeState = liveState || ensureStateInstance();
+    var fallbackTab = resolveValidTab((safeState && safeState.activeTab) || getPageDefaultTab() || 'auto');
+    if (safeState) safeState.activeTab = fallbackTab;
+    updateUserDisplay();
+    applyRoleVisibility(safeState && safeState.currentUser ? safeState.currentUser : null);
+    if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
+      console.warn('[authGuard] auth check failed, fallback tab rendered', {
+        tab: fallbackTab,
+        reason: reason || '',
+      });
+    }
+  }
+
   function ensureSession() {
     var liveState = ensureStateInstance();
     // Refresh should restore current tab within the same browser session.
@@ -486,19 +531,20 @@
       liveState.authToken = liveState.authToken || 'e2e-token';
       liveState.authReady = true;
       window.app = window.app || {};
-    window.app.authReady = true;
-    try {
-      window.dispatchEvent(new CustomEvent('app-auth-ready', { detail: { user: liveState.currentUser } }));
-    } catch (err) {
-      // ignore
+      window.app.authReady = true;
+      resetSessionRetryState();
+      try {
+        window.dispatchEvent(new CustomEvent('app-auth-ready', { detail: { user: liveState.currentUser } }));
+      } catch (err) {
+        // ignore
+      }
+      updateUserDisplay();
+      applyRoleVisibility(liveState.currentUser);
+      var tab = resolveValidTab(liveState.activeTab || 'auto');
+      liveState.activeTab = tab;
+      switchToTab(tab);
+      return;
     }
-    updateUserDisplay();
-    applyRoleVisibility(liveState.currentUser);
-    var tab = resolveValidTab(liveState.activeTab || 'auto');
-    liveState.activeTab = tab;
-    switchToTab(tab);
-    return;
-  }
     if (!apiClient || typeof apiClient.getStoredToken !== 'function') {
       redirectToLogin();
       return;
@@ -530,6 +576,7 @@
       liveState.authReady = true;
       window.app = window.app || {};
       window.app.authReady = true;
+      resetSessionRetryState();
       handleUserSwitch(user);
       try {
         window.dispatchEvent(new CustomEvent('app-auth-ready', { detail: { user: user } }));
@@ -545,6 +592,7 @@
     }).catch(function(err) {
       var status = err && err.status ? Number(err.status) : 0;
       if (status === 401 || status === 403) {
+        resetSessionRetryState();
         apiClient.clearToken();
         redirectToLogin();
         return;
@@ -552,8 +600,9 @@
       liveState.authReady = false;
       window.app = window.app || {};
       window.app.authReady = false;
-      updateUserDisplay();
       var msg = err && err.message ? err.message : '服务不可用';
+      renderFallbackTabAfterAuthFailure(liveState, msg);
+      scheduleEnsureSessionRetry(msg);
       try {
         var toast = window.app && window.app.utils ? window.app.utils : null;
         if (toast && typeof toast.showCenterToast === 'function') {

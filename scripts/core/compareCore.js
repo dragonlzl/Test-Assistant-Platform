@@ -69,6 +69,7 @@
     var clearStepInProgress = handlers.clearStepInProgress || function() {};
     var persistWorkflowState = handlers.persistWorkflowState || function() {};
     var persistWorkflowStateNow = handlers.persistWorkflowStateNow || null;
+    var invokeCaseAssistantForSplit = handlers.invokeCaseAssistantForSplit || function() { return Promise.resolve(); };
     var runConcurrent = handlers.runConcurrent || function(items, concurrency, worker) {
       if (!Array.isArray(items) || !items.length) return Promise.resolve([]);
       var limit = Math.max(1, Number(concurrency) || 1);
@@ -144,6 +145,31 @@
       if (typeof persistWorkflowState === 'function') {
         persistWorkflowState();
       }
+    }
+
+    function clearManualCaseAssistantResult() {
+      state.manualCaseAssistantMergedRequirement = '';
+      state.manualCaseAssistantRequestId = '';
+    }
+
+    async function tryInvokeCaseAssistantAfterManualCompare() {
+      if (state.autoRunning) return;
+      if (typeof invokeCaseAssistantForSplit !== 'function') return;
+      var context = {};
+      try {
+        await invokeCaseAssistantForSplit(context);
+      } catch (err) {
+        console.warn('手动对比后调用 Case Assistant 失败，已跳过', err);
+      }
+      var mergedRequirement = context && typeof context.cleanedOverride === 'string'
+        ? context.cleanedOverride.trim()
+        : '';
+      if (!mergedRequirement) {
+        clearManualCaseAssistantResult();
+        return;
+      }
+      state.manualCaseAssistantMergedRequirement = mergedRequirement;
+      state.manualCaseAssistantRequestId = context.caseAssistantRequestId || '';
     }
 
     function aggregateModuleCompareResults(results, moduleList) {
@@ -886,6 +912,7 @@
     async function compareCoverage() {
       var raw = rawText && rawText.value ? rawText.value.trim() : '';
       var cleaned = getCleanedTextForModel();
+      if (!state.autoRunning) clearManualCaseAssistantResult();
       if (!raw) {
         setStatus(compareStatus, '请先导入原始需求', 'warn');
         return;
@@ -927,6 +954,7 @@
         if (compareResultEl) compareResultEl.value = formatted;
         resetAutoCompareUserInputs();
         syncAutoCompareStatus();
+        await tryInvokeCaseAssistantAfterManualCompare();
         setStatus(compareStatus, '对比完成', 'ok');
         updateFlowStatus();
         persistWorkflowSnapshot();

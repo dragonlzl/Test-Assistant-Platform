@@ -2122,6 +2122,21 @@
 <div class="settings-divider"></div>
 <div class="settings-inline">
 <div class="meta">
+<strong>Case Assistant 项目路径（Electron）</strong>
+<p>仅在 Electron 渲染进程且存在 <code>window.electronAPI.invokeChannel</code> 时生效。该路径用于调用本地 Case Assistant 进行需求互补。</p>
+</div>
+<div class="control">
+<input id="caseAssistantProjectRoot" type="text" placeholder="请输入项目根目录绝对路径，如 E:/workspace/project"/>
+</div>
+</div>
+<div class="actions">
+<button class="secondary" id="saveCaseAssistantProjectRoot">保存项目路径</button>
+</div>
+<p class="status" id="caseAssistantProjectRootStatus"></p>
+
+<div class="settings-divider"></div>
+<div class="settings-inline">
+<div class="meta">
 <strong>用例视图字号</strong>
 <p>设置用例执行/用例库编辑视图字号，范围 11-16，默认为 13。</p>
 </div>

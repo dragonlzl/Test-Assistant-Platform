@@ -127,6 +127,7 @@
     var workflowPersistBound = false;
     var workflowRestoring = false;
     var autoCompareSuggestionInput = typeof document !== 'undefined' ? document.getElementById('autoCompareSuggestion') : null;
+    var tabVisibilityRecovering = false;
 
     function getPersistUserId() {
       if (state.currentUser && (state.currentUser.id || state.currentUser.id === 0)) {
@@ -961,6 +962,79 @@
       return Boolean(document.querySelector('[data-tab-section=\"' + name + '\"]'));
     }
 
+    function getSectionTabNodes() {
+      if (typeof document === 'undefined' || !document.querySelectorAll) return [];
+      var nodes = document.querySelectorAll('section[data-tab-section]');
+      return nodes && nodes.length ? Array.prototype.slice.call(nodes) : [];
+    }
+
+    function getLocalTabCandidates() {
+      var out = [];
+      var seen = {};
+      var sections = getSectionTabNodes();
+      sections.forEach(function(sec) {
+        var tab = sec && sec.dataset ? String(sec.dataset.tabSection || '') : '';
+        if (!tab || seen[tab]) return;
+        seen[tab] = true;
+        out.push(tab);
+      });
+      return out;
+    }
+
+    function hasVisibleLocalTabSection() {
+      var sections = getSectionTabNodes();
+      if (!sections.length) return false;
+      var visible = false;
+      sections.forEach(function(sec) {
+        if (visible || !sec || !sec.classList) return;
+        if (sec.classList.contains('hidden')) return;
+        if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+          var style = window.getComputedStyle(sec);
+          if (!style) return;
+          if (style.display === 'none' || style.visibility === 'hidden') return;
+        }
+        var rect = typeof sec.getBoundingClientRect === 'function' ? sec.getBoundingClientRect() : null;
+        if (!rect) return;
+        if (rect.width <= 0 || rect.height <= 0) return;
+        visible = true;
+      });
+      return visible;
+    }
+
+    function resolveLocalFallbackTab(preferred) {
+      var candidates = getLocalTabCandidates();
+      var preferredTab = preferred ? String(preferred || '') : '';
+      if (preferredTab && candidates.indexOf(preferredTab) !== -1) return preferredTab;
+      var activeTab = state && state.activeTab ? String(state.activeTab || '') : '';
+      if (activeTab && candidates.indexOf(activeTab) !== -1) return activeTab;
+      var domTab = getActiveTabFromDom();
+      if (domTab && candidates.indexOf(domTab) !== -1) return domTab;
+      return candidates.length ? candidates[0] : '';
+    }
+
+    function ensureVisibleTabSection(reason, preferredTab) {
+      if (hasVisibleLocalTabSection()) return true;
+      var fallbackTab = resolveLocalFallbackTab(preferredTab || '');
+      if (!fallbackTab) return false;
+      if (tabVisibilityRecovering) return false;
+      tabVisibilityRecovering = true;
+      try {
+        if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
+          console.warn('[appRuntime] recover hidden tab sections', {
+            reason: reason || '',
+            fallbackTab: fallbackTab,
+            activeTab: state && state.activeTab ? String(state.activeTab || '') : '',
+          });
+        }
+        switchTab(fallbackTab, { skipHistory: true, replaceHistory: true });
+      } catch (err) {
+        // ignore
+      } finally {
+        tabVisibilityRecovering = false;
+      }
+      return hasVisibleLocalTabSection();
+    }
+
     function redirectToTabPage(name) {
       var target = resolveTabPage(name);
       if (!target) return false;
@@ -976,6 +1050,24 @@
     }
 
     function switchTab(name, options) {
+      options = options || {};
+      if (!name) {
+        var fallback = resolveLocalFallbackTab('');
+        if (!fallback) return;
+        name = fallback;
+      }
+      if (!hasLocalTabSection(name) && !resolveTabPage(name)) {
+        var localFallback = resolveLocalFallbackTab(name);
+        if (localFallback && localFallback !== name) {
+          if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
+            console.warn('[appRuntime] invalid tab name, fallback applied', {
+              requestTab: String(name || ''),
+              fallbackTab: String(localFallback || ''),
+            });
+          }
+          name = localFallback;
+        }
+      }
       if (name && (shouldForceRedirect() || !hasLocalTabSection(name))) {
         var redirected = redirectToTabPage(name);
         if (redirected) return;
@@ -1120,8 +1212,13 @@
       if (!options || !options.skipHistory) {
         syncHistoryForTab(name, options);
       }
+      setTimeout(function() {
+        ensureVisibleTabSection('switch-tab', name);
+      }, 0);
     }
     api.switchTab = switchTab;
+    window.app = window.app || {};
+    window.app.ensureVisibleTabSection = ensureVisibleTabSection;
     // 兜底：页面刷新/关闭前再写一次 activeTab，避免少数情况下首次切页后未落到 sessionStorage 的问题。
     try {
       if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
@@ -1146,6 +1243,11 @@
         window.addEventListener('popstate', function() {
           var tab = getTabFromUrl();
           if (tab) switchTab(tab, { skipHistory: true });
+        });
+        window.addEventListener('app-auth-ready', function() {
+          setTimeout(function() {
+            ensureVisibleTabSection('auth-ready');
+          }, 0);
         });
       }
     } catch (err) {

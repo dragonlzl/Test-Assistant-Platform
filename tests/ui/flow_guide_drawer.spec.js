@@ -191,6 +191,57 @@ test.describe('功能引导抽屉', () => {
     await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
   });
 
+  test('从设置页启动用例库引导切换后不应白屏', async ({ page }) => {
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    const pageErrors = [];
+    const consoleErrors = [];
+    page.on('pageerror', (err) => {
+      pageErrors.push(err && err.message ? String(err.message) : String(err));
+    });
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        consoleErrors.push(msg.text());
+      }
+    });
+
+    await page.goto(base + '/settings.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.flowGuide) {
+        window.app.flowGuide.start('case-library-import');
+      }
+    });
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('用例相关');
+
+    await page.locator('.tab-group-btn[data-group="cases"]').hover();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('用例库');
+    await page.locator('[data-tab-btn="case-library"]').click();
+
+    await page.waitForURL(/case-library\.html/);
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForFunction(() => {
+      var sec = document.querySelector('section[data-tab-section="case-library"]');
+      return Boolean(sec && !sec.classList.contains('hidden'));
+    }, null, { timeout: 20000 });
+    await expect(page.locator('section[data-tab-section="case-library"]')).toBeVisible();
+
+    const visibleCount = await page.evaluate(() => {
+      var sections = document.querySelectorAll('section[data-tab-section]');
+      var count = 0;
+      Array.prototype.forEach.call(sections, function(sec) {
+        if (sec && sec.classList && !sec.classList.contains('hidden')) count += 1;
+      });
+      return count;
+    });
+    expect(visibleCount).toBeGreaterThan(0);
+    expect(pageErrors.length).toBe(0);
+    expect(consoleErrors.some((line) => line.indexOf('Uncaught') !== -1)).toBeFalsy();
+
+    await page.locator('.guide-skip-all').evaluate((el) => el.click());
+    await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
+  });
+
   test('用例导入引导结束后解除遮罩', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/case-exec.html');
