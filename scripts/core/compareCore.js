@@ -42,6 +42,7 @@
     var compareStatus = pickEl(dom.compareStatus, 'compareStatus');
     var compareTimingEl = pickEl(dom.compareTimingEl, 'compareTiming');
     var compareBtnEl = pickEl(dom.compareBtnEl, 'compareBtn');
+    var cleanedTextEl = pickEl(dom.cleanedTextEl, 'cleanedText');
     var splitResultEl = pickEl(dom.splitResultEl, 'splitResult');
     var updateAutoMissingCard = handlers.updateAutoMissingCard || function() {};
     var ensureRequirementLabel = handlers.ensureRequirementLabel || function() { return ''; };
@@ -95,6 +96,132 @@
       var workers = Array.from({ length: Math.min(limit, items.length) }, function() { return workerLoop(); });
       return Promise.all(workers).then(function() { return results; });
     };
+    var codexChannelName = 'case-assistant:request';
+    var caseAssistantTimeoutMs = 30 * 60 * 1000;
+
+    function isElectronRendererEnv() {
+      if (typeof window === 'undefined') return false;
+      if (!window.electronAPI) return false;
+      return true;
+    }
+
+    function getCaseAssistantProjectRoot() {
+      var settings = state && state.settings && typeof state.settings === 'object' ? state.settings : {};
+      var value = settings.caseAssistantProjectRoot;
+      if (value === undefined || value === null) return '';
+      return String(value).trim();
+    }
+
+    function isLikelyAbsoluteDirectoryPath(value) {
+      var text = value === undefined || value === null ? '' : String(value).trim();
+      if (!text) return false;
+      if (text.indexOf('\0') !== -1) return false;
+      if (/^[A-Za-z]:[\\/]/.test(text)) {
+        var withoutDrive = text.replace(/^[A-Za-z]:/, '');
+        return !/[<>\"|?*]/.test(withoutDrive);
+      }
+      if (/^\\\\[^\\]+\\[^\\]+/.test(text)) {
+        return !/[<>\"|?*]/.test(text);
+      }
+      if (/^\//.test(text)) return true;
+      return false;
+    }
+
+    function getElectronInvokeChannel() {
+      if (!isElectronRendererEnv()) return null;
+      var electronApi = window.electronAPI;
+      if (electronApi && typeof electronApi.invokeChannel === 'function') {
+        return function(channel, payload) {
+          return electronApi.invokeChannel(channel, payload);
+        };
+      }
+      if (electronApi && typeof electronApi.invoke === 'function') {
+        return function(channel, payload) {
+          return electronApi.invoke(channel, payload);
+        };
+      }
+      return null;
+    }
+
+    function generateCaseAssistantRequestId() {
+      if (typeof crypto !== 'undefined' && crypto && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+      }
+      return 'case-assistant-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+    }
+
+    function normalizeCaseAssistantResponseData(data) {
+      if (data === undefined || data === null) return '';
+      if (typeof data === 'string') return data.trim();
+      if (typeof data === 'object') {
+        try {
+          return JSON.stringify(data, null, 2);
+        } catch (err) {
+          return '';
+        }
+      }
+      return String(data).trim();
+    }
+
+    function buildCaseAssistantPrompt(projectRoot, raw, cleaned, compareData) {
+      var compareText = '';
+      if (compareData && typeof compareData === 'object') {
+        try {
+          compareText = JSON.stringify(compareData, null, 2);
+        } catch (err) {
+          compareText = '';
+        }
+      }
+      var safeRaw = raw || '';
+      var safeCleaned = cleaned || '';
+      var sections = [
+        '你是资深需求分析师，请结合“预期需求”和“项目代码实际实现”输出完整需求文案。',
+        '项目代码目录（请直接据此读取实现，不要把路径当作变量名）：' + projectRoot,
+        '目标：把预期需求与当前代码实现进行互补合并，形成下一步“测试模块拆分”可直接使用的一份完整需求。',
+        '输入A（预期需求，来自需求清洗）：\n' + safeCleaned,
+        '输入B（原始需求，仅用于理解背景）：\n' + safeRaw,
+        '输入C（对比完整性结果）：\n' + (compareText || '无'),
+        '输出要求：\n1. 仅输出中文需求文案，不要输出代码片段。\n2. 对代码里已实现但预期需求缺失的内容，用需求描述补齐。\n3. 对预期需求中有但代码未体现的内容，保留并标注为“待确认/待实现”。\n4. 输出结构建议：需求背景、功能点清单、规则与约束、流程与边界、待确认项。\n5. 内容应可直接作为下一步测试模块拆分输入。'
+      ];
+      return sections.join('\n\n');
+    }
+
+    function triggerTextInput(el) {
+      if (!el || typeof el.dispatchEvent !== 'function') return;
+      try {
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      } catch (err) {
+        el.dispatchEvent(new Event('input'));
+      }
+    }
+
+    async function invokeCaseAssistantAfterCompare(raw, cleaned, compareData) {
+      var projectRoot = getCaseAssistantProjectRoot();
+      if (!projectRoot) return { applied: false, reason: 'empty_project_root' };
+      if (!isLikelyAbsoluteDirectoryPath(projectRoot)) return { applied: false, reason: 'invalid_project_root' };
+      var invokeChannel = getElectronInvokeChannel();
+      if (!invokeChannel) return { applied: false, reason: 'invoke_unavailable' };
+      var payload = {
+        projectRoot: projectRoot,
+        userPrompt: buildCaseAssistantPrompt(projectRoot, raw, cleaned, compareData),
+        requestId: generateCaseAssistantRequestId(),
+        timestamp: Date.now(),
+        streamOutput: false,
+        timeoutMs: caseAssistantTimeoutMs,
+      };
+      var response = await invokeChannel(codexChannelName, payload);
+      if (!response || typeof response !== 'object') return { applied: false, reason: 'invalid_response' };
+      if (response.status !== true) {
+        return { applied: false, reason: 'status_false', message: response.msg || '' };
+      }
+      var nextRequirementText = normalizeCaseAssistantResponseData(response.data);
+      if (!nextRequirementText) return { applied: false, reason: 'empty_data', message: response.msg || '' };
+      if (cleanedTextEl) {
+        cleanedTextEl.value = wrapTextWithRequirement(nextRequirementText, 'clean');
+        triggerTextInput(cleanedTextEl);
+      }
+      return { applied: true };
+    }
 
     function clampCoveragePercent(value) {
       var num = Number(value);
@@ -927,7 +1054,19 @@
         if (compareResultEl) compareResultEl.value = formatted;
         resetAutoCompareUserInputs();
         syncAutoCompareStatus();
-        setStatus(compareStatus, '对比完成', 'ok');
+        var caseAssistantApplied = false;
+        try {
+          var compareData = extractCompareResultData();
+          var caseAssistantResult = await invokeCaseAssistantAfterCompare(raw, cleaned, compareData);
+          caseAssistantApplied = Boolean(caseAssistantResult && caseAssistantResult.applied);
+        } catch (err2) {
+          console.warn('Case Assistant 补全调用失败，已自动跳过', err2);
+        }
+        if (caseAssistantApplied) {
+          setStatus(compareStatus, '对比完成，已融合代码实现补全需求', 'ok');
+        } else {
+          setStatus(compareStatus, '对比完成', 'ok');
+        }
         updateFlowStatus();
         persistWorkflowSnapshot();
       } catch (err) {

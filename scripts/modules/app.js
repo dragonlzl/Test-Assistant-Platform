@@ -35,6 +35,7 @@
       timeoutSec: 300,
       feishuWebhook: '',
       feishuMention: '',
+      caseAssistantProjectRoot: '',
       theme: 'light',
       caseViewFontSize: 13,
       missingCaseReminderPlacement: 'top',

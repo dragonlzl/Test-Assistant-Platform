@@ -10,6 +10,7 @@
       timeoutSec: 300,
       feishuWebhook: '',
       feishuMention: '',
+      caseAssistantProjectRoot: '',
       caseViewFontSize: 13,
       missingCaseReminderPlacement: 'top',
       missingCaseReminderMatchConfig: { type: true, module: true },

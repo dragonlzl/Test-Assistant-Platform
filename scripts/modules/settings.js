@@ -35,6 +35,9 @@
     var feishuWebhookInput = dom.feishuWebhookInput || document.getElementById('feishuWebhook');
     var feishuMentionInput = dom.feishuMentionInput || document.getElementById('feishuNotifyUser');
     var feishuWebhookStatus = dom.feishuWebhookStatus || document.getElementById('feishuWebhookStatus');
+    var caseAssistantProjectRootInput = dom.caseAssistantProjectRootInput || document.getElementById('caseAssistantProjectRootInput');
+    var saveCaseAssistantProjectRootBtn = dom.saveCaseAssistantProjectRootBtn || document.getElementById('saveCaseAssistantProjectRoot');
+    var caseAssistantProjectRootStatus = dom.caseAssistantProjectRootStatus || document.getElementById('caseAssistantProjectRootStatus');
     var tempExecColumnForm = dom.tempExecColumnForm || document.getElementById('tempExecColumnForm');
     var tempExecColumnStatus = dom.tempExecColumnStatus || document.getElementById('tempExecColumnStatus');
     var saveModelTimeoutBtn = dom.saveModelTimeoutBtn || document.getElementById('saveModelTimeout');
@@ -93,6 +96,9 @@
     var defaultCaseLibraryGenCoverageThreshold = defaultSettings && defaultSettings.caseLibraryGenCoverageThreshold
       ? Number(defaultSettings.caseLibraryGenCoverageThreshold)
       : 90;
+    var defaultCaseAssistantProjectRoot = defaultSettings && typeof defaultSettings.caseAssistantProjectRoot === 'string'
+      ? String(defaultSettings.caseAssistantProjectRoot || '')
+      : '';
     var minCaseLibraryGenCoverageThreshold = 50;
     var maxCaseLibraryGenCoverageThreshold = 100;
     var defaultMissingReminderPlacement = defaultSettings && defaultSettings.missingCaseReminderPlacement
@@ -133,6 +139,7 @@
       timeoutSec: false,
       feishuWebhook: false,
       feishuMention: false,
+      caseAssistantProjectRoot: false,
       tempExecColumns: false,
       tempExecPageSize: false,
       caseViewFontSize: false,
@@ -268,6 +275,26 @@
       return String(raw || '').toLowerCase() === 'on' ? 'on' : 'off';
     }
 
+    function normalizeCaseAssistantProjectRoot(value) {
+      if (value === undefined || value === null) return '';
+      return String(value).trim();
+    }
+
+    function isLikelyAbsoluteDirectoryPath(value) {
+      var text = normalizeCaseAssistantProjectRoot(value);
+      if (!text) return false;
+      if (text.indexOf('\0') !== -1) return false;
+      if (/^[A-Za-z]:[\\/]/.test(text)) {
+        var withoutDrive = text.replace(/^[A-Za-z]:/, '');
+        return !/[<>\"|?*]/.test(withoutDrive);
+      }
+      if (/^\\\\[^\\]+\\[^\\]+/.test(text)) {
+        return !/[<>\"|?*]/.test(text);
+      }
+      if (/^\//.test(text)) return true;
+      return false;
+    }
+
     function applyTheme(theme) {
       if (typeof document === 'undefined' || !document.documentElement) return;
       var next = resolveTheme(theme);
@@ -353,6 +380,10 @@
       } else if (state.settings.feishuMention === null || state.settings.feishuMention === undefined) {
         state.settings.feishuMention = '';
       }
+      if (state.settings.caseAssistantProjectRoot === undefined || state.settings.caseAssistantProjectRoot === null) {
+        state.settings.caseAssistantProjectRoot = defaultCaseAssistantProjectRoot;
+      }
+      state.settings.caseAssistantProjectRoot = normalizeCaseAssistantProjectRoot(state.settings.caseAssistantProjectRoot);
       if (state.settings.tempExecColumns && typeof state.settings.tempExecColumns === 'object') {
         state.settings.tempExecColumns = Object.assign({}, defaultTempExecColumns, state.settings.tempExecColumns);
       }
@@ -606,6 +637,10 @@
       } else {
         state.settings.feishuMention = '';
       }
+      if (state.settings.caseAssistantProjectRoot === undefined || state.settings.caseAssistantProjectRoot === null) {
+        state.settings.caseAssistantProjectRoot = defaultCaseAssistantProjectRoot;
+      }
+      state.settings.caseAssistantProjectRoot = normalizeCaseAssistantProjectRoot(state.settings.caseAssistantProjectRoot);
       if (state.settings.tempExecColumns && typeof state.settings.tempExecColumns === 'object') {
         state.settings.tempExecColumns = Object.assign({}, defaultTempExecColumns, state.settings.tempExecColumns);
       }
@@ -728,6 +763,14 @@
         if (!dirtyDrafts.feishuMention) {
           feishuMentionInput.value = state.settings.feishuMention || '';
         }
+      }
+      if (caseAssistantProjectRootInput) {
+        if (!dirtyDrafts.caseAssistantProjectRoot) {
+          caseAssistantProjectRootInput.value = normalizeCaseAssistantProjectRoot(state.settings.caseAssistantProjectRoot);
+        }
+      }
+      if (caseAssistantProjectRootStatus) {
+        setStatus(caseAssistantProjectRootStatus, '', '');
       }
       if (tempExecPageSizeInput) {
         if (!dirtyDrafts.tempExecPageSize) {
@@ -1166,6 +1209,30 @@
       }
     }
 
+    function saveCaseAssistantProjectRoot() {
+      if (!caseAssistantProjectRootInput) return;
+      var value = normalizeCaseAssistantProjectRoot(caseAssistantProjectRootInput.value);
+      var prev = normalizeCaseAssistantProjectRoot(state.settings.caseAssistantProjectRoot);
+      caseAssistantProjectRootInput.value = value;
+      state.settings.caseAssistantProjectRoot = value;
+      dirtyDrafts.caseAssistantProjectRoot = false;
+      persistSettings(['caseAssistantProjectRoot']);
+      if (!caseAssistantProjectRootStatus) return;
+      if (!value) {
+        setStatus(caseAssistantProjectRootStatus, '已清空项目路径，流程将跳过 Electron 补全调用', 'ok');
+        return;
+      }
+      if (!isLikelyAbsoluteDirectoryPath(value)) {
+        setStatus(caseAssistantProjectRootStatus, '项目路径已保存，但当前格式可能非法，流程会自动跳过该调用', 'warn');
+        return;
+      }
+      if (prev === value) {
+        setStatus(caseAssistantProjectRootStatus, '项目路径保持不变', 'ok');
+      } else {
+        setStatus(caseAssistantProjectRootStatus, '项目路径已保存', 'ok');
+      }
+    }
+
     async function testFeishuWebhookConfig() {
       if (!feishuWebhookStatus) return;
       var value = applyFeishuInput();
@@ -1558,6 +1625,11 @@
         dirtyDrafts.feishuMention = true;
         setStatus(feishuWebhookStatus, '', '');
       });
+      if (saveCaseAssistantProjectRootBtn) saveCaseAssistantProjectRootBtn.addEventListener('click', saveCaseAssistantProjectRoot);
+      if (caseAssistantProjectRootInput) caseAssistantProjectRootInput.addEventListener('input', function() {
+        dirtyDrafts.caseAssistantProjectRoot = true;
+        setStatus(caseAssistantProjectRootStatus, '', '');
+      });
       if (tempExecColumnForm) tempExecColumnForm.addEventListener('change', function() {
         saveTempExecColumnsSetting();
       });
@@ -1636,6 +1708,7 @@
       renderTempExecColumnSettings: renderTempExecColumnSettings,
       saveTimeoutSetting: saveTimeoutSetting,
       saveFeishuWebhookConfig: saveFeishuWebhookConfig,
+      saveCaseAssistantProjectRoot: saveCaseAssistantProjectRoot,
       testFeishuWebhookConfig: testFeishuWebhookConfig,
       saveTempExecColumnsSetting: saveTempExecColumnsSetting,
       getFeishuWebhookUrl: getFeishuWebhookUrl,

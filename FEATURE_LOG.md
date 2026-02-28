@@ -19,6 +19,27 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：Electron 环境 Case Assistant 补全需求接入
+- 功能描述：在“功能流程/一键执行”的“对比完整性”完成后，若当前页面处于 Electron 渲染进程且配置了合法项目目录，则自动调用 `case-assistant:request`，将“清洗预期需求 + 代码实际实现”融合为完整需求文案并回写，供下一步“测试模块拆分”直接使用。
+- 操作方式：
+  - 进入“设置 → 通用设置”，新增“Case Assistant 项目路径”并保存（支持清空）。
+  - 在 AI 功能中手动点击“开始对比”或触发一键流程的对比步骤。
+  - 满足条件时自动发起 Electron 调用；不满足（非 Electron/路径空或非法）则自动跳过并继续原流程。
+- 使用效果：
+  - 保持原对比流程不变，接口不可用时不会阻断工作流。
+  - 接口可用且返回成功时，清洗文本会自动替换为融合后的完整需求文案，后续拆分直接使用该文案。
+- 新增内容/接口/组件：
+  - 前端：新增 Electron 环境判断与调用链（`window.electronAPI` 存在判断、`invokeChannel`/`invoke` 兼容、请求 ID/超时/提示词组装、结果回写）`scripts/core/compareCore.js`。
+  - 前端：新增设置项“Case Assistant 项目路径”及保存逻辑、合法性提示与用户级持久化 `settings.html`、`index.html`、`scripts/modules/settings.js`。
+  - 前端：默认设置补充 `caseAssistantProjectRoot` 字段 `config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`。
+  - 测试：新增 UI 与 API 用例 `tests/ui/compare_case_assistant_electron.spec.js`、`tests/api/settings_case_assistant_project_root.spec.js`。
+- 复用说明：复用现有 settings 持久化链路（`/api/settings`）、对比步骤执行链路（`compareCoverage`）与清洗文本包装函数（`wrapTextWithRequirement`），未新增后端接口。
+- 测试与验证：
+  - `node --check scripts/modules/settings.js scripts/core/compareCore.js scripts/base/state.js scripts/modules/app.js config/constants.js tests/ui/compare_case_assistant_electron.spec.js tests/api/settings_case_assistant_project_root.spec.js`（通过）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npx playwright test tests/ui/compare_case_assistant_electron.spec.js --workers=1 --reporter=line`（通过，2/2；执行时使用临时 no-webServer 配置）
+  - `API_BASE_URL=http://127.0.0.1:8080 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_case_assistant_project_root.spec.js --reporter=line`（通过，1/1）
+- 更新记录：2026-02-28 初版接入 Electron Case Assistant 自动补全流程与路径设置项（`scripts/core/compareCore.js`、`scripts/modules/settings.js`、`settings.html`、`index.html`、`config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`、`tests/ui/compare_case_assistant_electron.spec.js`、`tests/api/settings_case_assistant_project_root.spec.js`）。
+
 - 功能名称：执行页/用例库 XMind 结构展示
 - 功能描述：在“用例执行”和“用例库（查看&编辑）”中，于“AI 用例生成”按钮右侧新增“XMind结构展示”按钮；点击后以 XMind 结构展示当前用例。
 - 操作方式：
