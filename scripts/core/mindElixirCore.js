@@ -876,6 +876,23 @@
         if (opts1.persist !== false) persistEditSession();
       }
 
+      function recordSnapshotNow() {
+        if (!editing || applyingHistory) return false;
+        var snapshot = getCurrentMindData();
+        if (!snapshot || !snapshot.nodeData) return false;
+        pushHistorySnapshot(snapshot);
+        return true;
+      }
+
+      function flushPendingEditSnapshot() {
+        if (recordTimer) {
+          clearTimeout(recordTimer);
+          recordTimer = 0;
+        }
+        if (!editing || applyingHistory) return;
+        if (!recordSnapshotNow()) persistEditSession();
+      }
+
       function initializeHistory() {
         var restoredHistory = restoredSession && Array.isArray(restoredSession.history)
           ? restoredSession.history
@@ -905,9 +922,7 @@
         if (recordTimer) clearTimeout(recordTimer);
         recordTimer = setTimeout(function() {
           recordTimer = 0;
-          var snapshot = getCurrentMindData();
-          if (!snapshot || !snapshot.nodeData) return;
-          pushHistorySnapshot(snapshot);
+          recordSnapshotNow();
           updateEditButtons();
         }, 20);
       }
@@ -2298,6 +2313,18 @@
         scheduleRecordSnapshot();
       }
 
+      function onViewerInput(e) {
+        if (!editing) return;
+        var target = e && e.target ? e.target : null;
+        if (!target) return;
+        if (target.id !== 'input-box') return;
+        scheduleRecordSnapshot();
+      }
+
+      function onWindowPageHide() {
+        flushPendingEditSnapshot();
+      }
+
       function insertInputBoxLineBreak(inputEl) {
         if (!inputEl) return false;
         if (typeof document !== 'undefined' && document && typeof document.execCommand === 'function') {
@@ -2817,6 +2844,7 @@
         viewerEl.addEventListener('click', onViewerClick, true);
         viewerEl.addEventListener('dblclick', onViewerDblClick, true);
         viewerEl.addEventListener('blur', onViewerBlur, true);
+        viewerEl.addEventListener('input', onViewerInput, true);
       }
       if (enableCustomBoxSelection && typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
         window.addEventListener('pointermove', moveBoxSelection);
@@ -2824,6 +2852,8 @@
         window.addEventListener('pointercancel', stopBoxSelection);
       }
       if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
+        window.addEventListener('pagehide', onWindowPageHide);
+        window.addEventListener('beforeunload', onWindowPageHide);
         window.addEventListener('pointerdown', onWindowPointerDownForCtrlLeftCanvasDrag, true);
         window.addEventListener('mousedown', onWindowMouseDownForCtrlLeftCanvasDrag, true);
         window.addEventListener('contextmenu', onWindowContextMenu, true);
@@ -2882,6 +2912,8 @@
       updateEditButtons();
 
       return function cleanup() {
+        // Flush pending snapshots before unbinding to avoid losing the latest unsaved edits.
+        flushPendingEditSnapshot();
         if (recordTimer) {
           clearTimeout(recordTimer);
           recordTimer = 0;
@@ -2915,6 +2947,7 @@
           viewerEl.removeEventListener('click', onViewerClick, true);
           viewerEl.removeEventListener('dblclick', onViewerDblClick, true);
           viewerEl.removeEventListener('blur', onViewerBlur, true);
+          viewerEl.removeEventListener('input', onViewerInput, true);
         }
         if (enableCustomBoxSelection && typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
           window.removeEventListener('pointermove', moveBoxSelection);
@@ -2922,6 +2955,8 @@
           window.removeEventListener('pointercancel', stopBoxSelection);
         }
         if (typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
+          window.removeEventListener('pagehide', onWindowPageHide);
+          window.removeEventListener('beforeunload', onWindowPageHide);
           window.removeEventListener('pointerdown', onWindowPointerDownForCtrlLeftCanvasDrag, true);
           window.removeEventListener('mousedown', onWindowMouseDownForCtrlLeftCanvasDrag, true);
           window.removeEventListener('contextmenu', onWindowContextMenu, true);

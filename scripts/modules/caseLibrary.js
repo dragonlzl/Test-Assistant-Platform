@@ -3808,33 +3808,8 @@
     return 'tap-case-library-writer-xmind-edit-' + String(uid || 'guest');
   }
 
-  function collectWriterLeafDepths(node, depth, output) {
-    if (!node) return;
-    var list = Array.isArray(output) ? output : [];
-    var children = Array.isArray(node.children) ? node.children : [];
-    if (!children.length) {
-      if (depth > 0) list.push(depth);
-      return;
-    }
-    for (var i = 0; i < children.length; i += 1) {
-      collectWriterLeafDepths(children[i], depth + 1, list);
-    }
-  }
-
   function isLegacyWriterSchemaData(data) {
     if (!data || !data.nodeData) return false;
-    var depths = [];
-    collectWriterLeafDepths(data.nodeData, 0, depths);
-    if (!depths.length) return false;
-
-    var allSix = true;
-    for (var i = 0; i < depths.length; i += 1) {
-      if (Number(depths[i]) !== 6) {
-        allSix = false;
-        break;
-      }
-    }
-    if (!allSix) return true;
 
     var firstChild = data.nodeData && Array.isArray(data.nodeData.children) && data.nodeData.children.length
       ? data.nodeData.children[0]
