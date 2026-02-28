@@ -4148,3 +4148,9 @@
   - `node --check scripts/core/appRuntime.js scripts/modules/flowGuide.js tests/ui/flow_guide_drawer.spec.js`（通过）
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npx playwright test tests/ui/flow_guide_drawer.spec.js -g "从设置页启动用例库引导切换后不应白屏|从设置页启动用例执行引导可继续打开选择抽屉" --config <临时本地无 webServer 配置> --workers=1`（失败：当前沙箱环境 Chromium 启动受限，`mach_port_rendezvous` 权限错误，非业务逻辑失败）
 - 更新记录：2026-02-28 二次修复“功能引导跳用例库仍白屏”：修正页签可见性判断口径，`ensureVisibleTabSection` 只统计主内容区 `section[data-tab-section]`，不再把关闭态抽屉（`div.drawer[data-tab-section]`）误判为“可见”；并追加 `getComputedStyle + getBoundingClientRect` 双重可见性校验，避免“主区全隐藏却未触发恢复”的漏判（`scripts/core/appRuntime.js`）。
+- 更新记录：2026-02-28 修复“功能引导点击用例库误入页面说明/未跨页”根因：将本页页签承载判断从任意 `[data-tab-section]` 收敛为仅识别主内容区 `section[data-tab-section]`，避免 `ai-workflow.html` 中 `#caseLibraryImportDiffDrawer[data-tab-section="case-library"]` 被误判为“本页已承载 case-library”而阻断跨页跳转（`scripts/core/appRuntime.js`、`scripts/modules/flowGuide.js`）。
+- 更新记录：2026-02-28 同步修正鉴权恢复页签校验口径：`authGuard.resolveValidTab` 改为仅从 `section[data-tab-section]` 解析有效页签，避免抽屉/头部容器污染默认页签选择（`scripts/modules/authGuard.js`）。
+- 更新记录：2026-02-28 补充“功能流程页启动用例库引导后必须跳转到 case-library.html”UI 回归用例，覆盖你反馈的“误入页面说明”场景（`tests/ui/flow_guide_drawer.spec.js`）。
+- 测试与验证：
+  - `node --check scripts/core/appRuntime.js scripts/modules/flowGuide.js scripts/modules/authGuard.js tests/ui/flow_guide_drawer.spec.js`（通过）
+  - `NODE_PATH=/Users/linzhenlong/work/casetool/Test-Assistant-Platform/node_modules PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npx playwright test tests/ui/flow_guide_drawer.spec.js -g "从功能流程页启动用例库引导点击后应跳转到用例库页面|从设置页启动用例库引导切换后不应白屏" --config /tmp/playwright-ui-no-webserver.config.js --workers=1 --reporter=line`（失败：当前沙箱环境 Chromium 启动受限，`mach_port_rendezvous` 权限错误，非业务逻辑失败）

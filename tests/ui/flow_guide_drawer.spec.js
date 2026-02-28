@@ -242,6 +242,31 @@ test.describe('功能引导抽屉', () => {
     await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
   });
 
+  test('从功能流程页启动用例库引导点击后应跳转到用例库页面', async ({ page }) => {
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/ai-workflow.html');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.flowGuide) {
+        window.app.flowGuide.start('case-library-import');
+      }
+    });
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('用例相关');
+
+    await page.locator('.tab-group-btn[data-group="cases"]').hover();
+    await expect(page.locator('#flowGuideTooltipText')).toContainText('用例库');
+    await page.locator('[data-tab-btn="case-library"]').click();
+
+    await page.waitForURL(/case-library\.html/);
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await expect(page.locator('section[data-tab-section="case-library"]')).toBeVisible();
+    await expect(page.locator('section[data-tab-section="help"]')).toHaveCount(0);
+
+    await page.locator('.guide-skip-all').evaluate((el) => el.click());
+    await expect(page.locator('#flowGuideOverlay')).toHaveClass(/hidden/);
+  });
+
   test('用例导入引导结束后解除遮罩', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/case-exec.html');

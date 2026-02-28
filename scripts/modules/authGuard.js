@@ -250,15 +250,15 @@
     if (typeof document === 'undefined') return name || 'auto';
     var target = name || '';
     if (target) {
-      var exists = document.querySelector('[data-tab-section=\"' + target + '\"]');
+      var exists = document.querySelector('section[data-tab-section=\"' + target + '\"]');
       if (exists) return target;
     }
     var defaultTab = getPageDefaultTab();
     if (defaultTab) {
-      var defaultExists = document.querySelector('[data-tab-section=\"' + defaultTab + '\"]');
+      var defaultExists = document.querySelector('section[data-tab-section=\"' + defaultTab + '\"]');
       if (defaultExists) return defaultTab;
     }
-    var first = document.querySelector('[data-tab-section]');
+    var first = document.querySelector('section[data-tab-section]');
     if (first && first.dataset && first.dataset.tabSection) return first.dataset.tabSection;
     return target || defaultTab || 'auto';
   }

@@ -261,7 +261,7 @@
 
     function hasLocalTabSection(name) {
       if (!name || typeof document === 'undefined') return false;
-      return Boolean(document.querySelector('[data-tab-section="' + name + '"]'));
+      return Boolean(document.querySelector('section[data-tab-section="' + name + '"]'));
     }
 
     function hasVisibleTabSection() {
