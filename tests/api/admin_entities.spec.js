@@ -31,6 +31,17 @@ test.describe('admin projects & users', () => {
     const projBody = await createProj.json();
     const projectId = projBody.id;
 
+    // update project name/description
+    const nextProjectName = projectName + '-renamed';
+    const updateProj = await ctx.patch(`${apiBase}/api/projects/${projectId}`, {
+      headers,
+      data: { name: nextProjectName, description: 'api spec project updated' },
+    });
+    expect(updateProj.status()).toBe(200);
+    const updatedProj = await updateProj.json();
+    expect(updatedProj.name).toBe(nextProjectName);
+    expect(updatedProj.description).toBe('api spec project updated');
+
     // create version
     const verRes = await ctx.post(`${apiBase}/api/projects/${projectId}/versions`, {
       headers,

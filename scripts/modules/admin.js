@@ -588,7 +588,7 @@
     // “新建/编辑项目”的错误提示统一展示在抽屉内，避免用户误以为是列表操作提示。
     setStatus(dom.projectFormStatus, '保存中...', '');
     const action = state.editingProjectId
-      ? api.updateProject(state.editingProjectId, { description: desc })
+      ? api.updateProject(state.editingProjectId, { name: name, description: desc })
       : api.createProject({ name: name, description: desc });
     action.then(function() {
       hideProjectForm();

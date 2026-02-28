@@ -109,8 +109,30 @@ def update_project(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="无权限修改该项目"
             )
+    detail_payload = payload.dict(exclude_none=True)
+    if payload.name is not None:
+        name = str(payload.name or "").strip()
+        if not name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="项目名称不能为空"
+            )
+        exists = (
+            db.query(models.Project)
+            .filter(
+                models.Project.id != project_id,
+                models.Project.name == name,
+            )
+            .first()
+        )
+        if exists:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="项目名已存在"
+            )
+        project.name = name
+        detail_payload["name"] = name
     if payload.description is not None:
         project.description = payload.description
+        detail_payload["description"] = payload.description
     db.add(project)
     db.commit()
     db.refresh(project)
@@ -120,7 +142,7 @@ def update_project(
         action="update_project",
         target_type="project",
         target_id=project.id,
-        detail=payload.dict(exclude_none=True),
+        detail=detail_payload,
     )
     db.commit()
     return project

@@ -72,6 +72,7 @@ class ProjectCreate(BaseModel):
 
 
 class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
     description: Optional[str] = None
 
 
