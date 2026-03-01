@@ -294,6 +294,28 @@ test.describe('XMind 结构展示按钮', () => {
     expect(execViewerModeEnabled).toBeTruthy();
     var drawerWidthRatio = await getDrawerWidthRatio(page);
     expect(drawerWidthRatio).toBeGreaterThanOrEqual(0.66);
+    var execFullscreenBtn = page.locator('#tempExecXmindStructureViewer [data-mind-action="drawer-fullscreen"]');
+    await expect(execFullscreenBtn).toBeVisible();
+    await expect(execFullscreenBtn).toHaveText('全屏');
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="drawer-fullscreen"]');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
+    var execFullscreenRatio = await getDrawerWidthRatio(page);
+    expect(execFullscreenRatio).toBeGreaterThanOrEqual(0.97);
+    await expect(execFullscreenBtn).toHaveText('复原');
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="drawer-fullscreen"]');
+    await expect(page.locator('#xmindStructureDrawer')).not.toHaveClass(/xmind-drawer-fullscreen/);
+    var execRestoredRatioByBtn = await getDrawerWidthRatio(page);
+    expect(execRestoredRatioByBtn).toBeGreaterThanOrEqual(0.66);
+    expect(execRestoredRatioByBtn).toBeLessThan(0.97);
+    await expect(execFullscreenBtn).toHaveText('全屏');
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="drawer-fullscreen"]');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#xmindStructureDrawer')).not.toHaveClass(/xmind-drawer-fullscreen/);
+    var execRestoredRatioByEsc = await getDrawerWidthRatio(page);
+    expect(execRestoredRatioByEsc).toBeGreaterThanOrEqual(0.66);
+    expect(execRestoredRatioByEsc).toBeLessThan(0.97);
+    await expect(execFullscreenBtn).toHaveText('全屏');
 
     await page.waitForTimeout(140);
     var initialScaleJustOpened = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
@@ -374,7 +396,8 @@ test.describe('XMind 结构展示按钮', () => {
       await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-out"]');
     }
     var minReachableScale = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
-    expect(Math.abs(minReachableScale - fitScale)).toBeLessThan(0.02);
+    expect(minReachableScale).toBeLessThan(fitScale - 0.05);
+    expect(minReachableScale).toBeGreaterThan(0.04);
 
     await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-fit"]');
     var fitScaleForCtrlWheel = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
@@ -778,6 +801,20 @@ test.describe('XMind 结构展示按钮', () => {
     expect(caseLibraryViewerModeEnabled).toBeTruthy();
     var drawerWidthRatio = await getDrawerWidthRatio(page);
     expect(drawerWidthRatio).toBeGreaterThanOrEqual(0.66);
+    var caseLibraryFullscreenBtn = page.locator('#caseLibraryXmindStructureViewer [data-mind-action="drawer-fullscreen"]');
+    await expect(caseLibraryFullscreenBtn).toBeVisible();
+    await expect(caseLibraryFullscreenBtn).toHaveText('全屏');
+    await page.click('#caseLibraryXmindStructureViewer [data-mind-action="drawer-fullscreen"]');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
+    var caseLibFullscreenRatio = await getDrawerWidthRatio(page);
+    expect(caseLibFullscreenRatio).toBeGreaterThanOrEqual(0.97);
+    await expect(caseLibraryFullscreenBtn).toHaveText('复原');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#xmindStructureDrawer')).not.toHaveClass(/xmind-drawer-fullscreen/);
+    var caseLibRestoredRatio = await getDrawerWidthRatio(page);
+    expect(caseLibRestoredRatio).toBeGreaterThanOrEqual(0.66);
+    expect(caseLibRestoredRatio).toBeLessThan(0.97);
+    await expect(caseLibraryFullscreenBtn).toHaveText('全屏');
     await page.waitForTimeout(140);
     var caseLibInitialScaleJustOpened = await getCanvasScale(page, '#caseLibraryXmindStructureViewer .map-canvas');
     await page.click('#caseLibraryXmindStructureViewer [data-mind-action="zoom-fit"]');

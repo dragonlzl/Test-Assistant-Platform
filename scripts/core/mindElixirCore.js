@@ -4,7 +4,7 @@
       ? deps.xmindApi
       : (window.app && window.app.xmindCoreApi ? window.app.xmindCoreApi : null);
     var defaultScaleStep = 0.15;
-    var minScale = 0.3;
+    var minScale = 0.1;
     var maxScale = 2.5;
 
     function getMindCtor() {
@@ -714,6 +714,9 @@
       var editRedoBtn = controlsEl && controlsEl.querySelector
         ? controlsEl.querySelector('[data-mind-action="redo"]')
         : null;
+      var fullscreenToggleBtn = controlsEl && controlsEl.querySelector
+        ? controlsEl.querySelector('[data-mind-action="drawer-fullscreen"]')
+        : null;
 
       var editableSessionKey = opts && opts.editableSessionKey ? String(opts.editableSessionKey) : '';
       var restoredSession = opts && opts.restoredSession && typeof opts.restoredSession === 'object'
@@ -768,6 +771,9 @@
       var ctrlModifierPressed = false;
       var zoomMinScale = minScale;
       var nodeContextMenuEl = null;
+      var drawerEl = viewerEl && typeof viewerEl.closest === 'function' ? viewerEl.closest('.drawer') : null;
+      var drawerPanelEl = viewerEl && typeof viewerEl.closest === 'function' ? viewerEl.closest('.drawer-panel') : null;
+      var drawerFullscreenClassName = 'xmind-drawer-fullscreen';
 
       function getInstance() {
         return instance;
@@ -1115,9 +1121,52 @@
         var normalized = Number(current);
         if (!isFinite(normalized)) return;
         if (normalized > maxScale) normalized = maxScale;
-        if (normalized < 0.05) normalized = 0.05;
-        zoomMinScale = normalized;
-        syncInstanceScaleBounds(inst || getInstance(), zoomMinScale);
+        if (normalized < minScale) normalized = minScale;
+        if (normalized < zoomMinScale) {
+          zoomMinScale = normalized;
+          syncInstanceScaleBounds(inst || getInstance(), zoomMinScale);
+        }
+      }
+
+      function canToggleDrawerFullscreen() {
+        return Boolean(
+          drawerEl &&
+          drawerPanelEl &&
+          drawerEl.classList &&
+          drawerPanelEl.classList
+        );
+      }
+
+      function isDrawerFullscreen() {
+        if (!canToggleDrawerFullscreen()) return false;
+        return drawerEl.classList.contains(drawerFullscreenClassName);
+      }
+
+      function syncFullscreenButtonState() {
+        if (!fullscreenToggleBtn) return;
+        if (!canToggleDrawerFullscreen()) {
+          fullscreenToggleBtn.disabled = true;
+          if (fullscreenToggleBtn.classList) fullscreenToggleBtn.classList.add('hidden');
+          return;
+        }
+        if (fullscreenToggleBtn.classList) fullscreenToggleBtn.classList.remove('hidden');
+        fullscreenToggleBtn.disabled = false;
+        var fullscreen = isDrawerFullscreen();
+        fullscreenToggleBtn.textContent = fullscreen ? '复原' : '全屏';
+        fullscreenToggleBtn.title = fullscreen ? '复原' : '全屏';
+        fullscreenToggleBtn.setAttribute('aria-pressed', fullscreen ? 'true' : 'false');
+      }
+
+      function setDrawerFullscreen(enabled) {
+        if (!canToggleDrawerFullscreen()) {
+          syncFullscreenButtonState();
+          return false;
+        }
+        if (enabled) drawerEl.classList.add(drawerFullscreenClassName);
+        else drawerEl.classList.remove(drawerFullscreenClassName);
+        syncFullscreenButtonState();
+        updateViewerDragState(viewerEl, getInstance(), false);
+        return enabled === true;
       }
 
       function zoomBy(step) {
@@ -2128,6 +2177,8 @@
           zoomBy(-defaultScaleStep);
         } else if (action === 'zoom-fit') {
           zoomFit();
+        } else if (action === 'drawer-fullscreen') {
+          setDrawerFullscreen(!isDrawerFullscreen());
         } else if (action === 'search-prev') {
           moveSearch(-1);
         } else if (action === 'search-next') {
@@ -2203,6 +2254,12 @@
       function onViewerKeydown(e) {
         if (!e) return;
         hideNodeContextMenu();
+        if (e.key === 'Escape' && isDrawerFullscreen()) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+          setDrawerFullscreen(false);
+          return;
+        }
         if (controlsEl && controlsEl.contains && controlsEl.contains(e.target)) return;
         var typing = isTypingTarget(e.target);
         var lower = e.key ? String(e.key).toLowerCase() : '';
@@ -2323,6 +2380,14 @@
 
       function onWindowPageHide() {
         flushPendingEditSnapshot();
+      }
+
+      function onWindowKeydownForDrawerFullscreen(e) {
+        if (!e || e.key !== 'Escape') return;
+        if (!isDrawerFullscreen()) return;
+        if (e.preventDefault) e.preventDefault();
+        if (e.stopPropagation) e.stopPropagation();
+        setDrawerFullscreen(false);
       }
 
       function insertInputBoxLineBreak(inputEl) {
@@ -2854,6 +2919,7 @@
       if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
         window.addEventListener('pagehide', onWindowPageHide);
         window.addEventListener('beforeunload', onWindowPageHide);
+        window.addEventListener('keydown', onWindowKeydownForDrawerFullscreen, true);
         window.addEventListener('pointerdown', onWindowPointerDownForCtrlLeftCanvasDrag, true);
         window.addEventListener('mousedown', onWindowMouseDownForCtrlLeftCanvasDrag, true);
         window.addEventListener('contextmenu', onWindowContextMenu, true);
@@ -2892,6 +2958,7 @@
       setSearchCount();
       syncInstanceScaleBounds(instance, zoomMinScale);
       updateViewerDragState(viewerEl, instance, false);
+      syncFullscreenButtonState();
 
       if (editing) {
         if (instance && typeof instance.enableEdit === 'function') {
@@ -2914,6 +2981,7 @@
       return function cleanup() {
         // Flush pending snapshots before unbinding to avoid losing the latest unsaved edits.
         flushPendingEditSnapshot();
+        setDrawerFullscreen(false);
         if (recordTimer) {
           clearTimeout(recordTimer);
           recordTimer = 0;
@@ -2957,6 +3025,7 @@
         if (typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
           window.removeEventListener('pagehide', onWindowPageHide);
           window.removeEventListener('beforeunload', onWindowPageHide);
+          window.removeEventListener('keydown', onWindowKeydownForDrawerFullscreen, true);
           window.removeEventListener('pointerdown', onWindowPointerDownForCtrlLeftCanvasDrag, true);
           window.removeEventListener('mousedown', onWindowMouseDownForCtrlLeftCanvasDrag, true);
           window.removeEventListener('contextmenu', onWindowContextMenu, true);
@@ -3068,6 +3137,7 @@
         + '<button class="secondary xmind-zoom-btn" type="button" data-mind-action="zoom-out" title="缩小">-</button>'
         + '<button class="secondary xmind-zoom-btn" type="button" data-mind-action="zoom-fit" title="全览">全览</button>'
         + '<button class="secondary xmind-zoom-btn" type="button" data-mind-action="zoom-in" title="放大">+</button>'
+        + '<button class="secondary xmind-zoom-btn xmind-fullscreen-btn" type="button" data-mind-action="drawer-fullscreen" title="全屏" aria-pressed="false">全屏</button>'
         + '<button class="secondary xmind-zoom-btn xmind-export-btn" type="button" data-mind-action="export-xmind" title="导出当前XMind"' + exportDisabledAttr + '>导出XMind</button>'
         + '</div>'
         + '<div class="xmind-edit-group">'
