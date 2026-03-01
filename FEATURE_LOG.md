@@ -94,6 +94,7 @@
 - 更新记录：2026-02-11 优先级节点输入规范化：XMind 编辑保存时将以 `p`/`P` 开头的优先级自动标准化为大写 `P`（如 `p2` 自动转为 `P2`），并补充编写用例 UI 用例断言（`scripts/core/mindElixirCore.js`、`scripts/modules/caseLibrary.js`、`tests/ui/case_library_xmind_writer.spec.js`）。
 - 更新记录：2026-02-11 修复 XMind 编辑态“取消编辑”改动判定：改为基于完整导图快照判定是否有变更，确保即便仅修改根节点（如用例文件名提示节点）也会触发二次确认抽屉；并补充 UI 用例覆盖该场景（`scripts/core/mindElixirCore.js`、`tests/ui/case_library_xmind_writer.spec.js`）。
 - 更新记录：2026-02-11 用例库“编写用例”视图导出能力增强：编辑态下即使有未保存改动，导出 XMind 按钮也保持可用，并直接导出当前导图结构（含当前改动）；补充 UI 用例覆盖“改动后可导出”场景（`scripts/modules/caseLibrary.js`、`tests/ui/case_library_xmind_writer.spec.js`）。
+- 更新记录：2026-03-01 优化 XMind 抽屉交互：执行页与用例库的 XMind 结构展示支持继续缩小（不再被全览比例锁死），并在控制栏新增“全屏/复原”按钮；全屏后抽屉覆盖整屏，支持按钮复原与 `Esc` 快捷还原。同步补充 UI 自动化断言覆盖执行页与用例库的全屏、Esc 还原及缩小下限行为（`scripts/core/mindElixirCore.js`、`style.css`、`tests/ui/xmind_structure_view_buttons.spec.js`）。
 
 - 功能名称：执行总览与归档预览版本盒子展示用例数
 - 功能描述：执行页归档操作&进度预览、执行总览页版本盒子标题旁展示该版本用例总数；总览顶部版本汇总标题同步展示条数。

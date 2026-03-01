@@ -3925,6 +3925,11 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   max-width: 96vw;
   min-width: 860px;
 }
+.drawer.xmind-drawer-fullscreen .drawer-panel.drawer-panel-xmind {
+  width: 100vw;
+  max-width: 100vw;
+  min-width: 0;
+}
 .drawer.open .drawer-panel {
   pointer-events: auto;
   transform: translateX(0);
@@ -3971,6 +3976,9 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 
 .drawer .drawer-body#xmindStructureDrawerBody.is-mind-viewer {
   overflow: hidden;
+}
+.drawer.xmind-drawer-fullscreen .drawer-body#xmindStructureDrawerBody {
+  padding: 8px 10px 12px;
 }
 .guide-entry-card {
   width: 100%;
@@ -7829,6 +7837,10 @@ tr.import-invalid-locate-active td {
   overscroll-behavior: none;
   -ms-scroll-chaining: none;
 }
+.drawer.xmind-drawer-fullscreen .xmind-structure-viewer {
+  height: calc(100vh - 110px);
+  min-height: 280px;
+}
 
 .xmind-structure-viewer .xmind-structure-controls {
   position: absolute;
@@ -7924,6 +7936,17 @@ tr.import-invalid-locate-active td {
 .xmind-structure-viewer .xmind-export-btn {
   min-width: 88px;
   font-weight: 600;
+}
+
+.xmind-structure-viewer .xmind-fullscreen-btn {
+  min-width: 64px;
+  font-weight: 600;
+}
+
+.xmind-structure-viewer .xmind-fullscreen-btn[aria-pressed="true"] {
+  border-color: #60a5fa;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .xmind-structure-viewer .xmind-edit-btn,
@@ -9637,6 +9660,11 @@ button.exec-overview-file-chip,
   border-color: #60a5fa;
 }
 :root[data-theme="dark"] .xmind-structure-viewer .xmind-edit-btn[data-mind-action="edit-save"] {
+  color: #bfdbfe;
+}
+:root[data-theme="dark"] .xmind-structure-viewer .xmind-fullscreen-btn[aria-pressed="true"] {
+  border-color: #60a5fa;
+  background: #0f3460;
   color: #bfdbfe;
 }
 :root[data-theme="dark"] .xmind-structure-viewer.is-editing .xmind-structure-controls {
