@@ -274,6 +274,112 @@
       return text;
     }
 
+    function countLeadingIndentWidth(value) {
+      var text = value === undefined || value === null ? '' : String(value);
+      if (!text) return 0;
+      var width = 0;
+      for (var i = 0; i < text.length; i += 1) {
+        var ch = text.charAt(i);
+        if (ch === '\t') width += 4;
+        else if (ch === ' ') width += 1;
+        else if (ch === '\u3000') width += 2;
+        else break;
+      }
+      return width;
+    }
+
+    function isMindElixirInternalClipboardText(rawText) {
+      var text = rawText === undefined || rawText === null ? '' : String(rawText);
+      if (!text) return false;
+      var parsed = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch (err) {
+        parsed = null;
+      }
+      if (!parsed || typeof parsed !== 'object') return false;
+      if (String(parsed.magic || '') !== 'MIND-ELIXIR-WAIT-COPY') return false;
+      return Array.isArray(parsed.data);
+    }
+
+    function parseIndentedTextToMindData(rawText) {
+      var text = rawText === undefined || rawText === null ? '' : String(rawText);
+      if (!text) return null;
+      var normalized = text
+        .replace(/\r\n?/g, '\n')
+        .replace(/\u00a0/g, ' ')
+        .replace(/\u200b/g, '');
+      var lines = normalized.split('\n');
+      if (!lines.length) return null;
+
+      var entries = [];
+      for (var i = 0; i < lines.length; i += 1) {
+        var line = String(lines[i] || '');
+        if (!line) continue;
+        var leadingMatch = line.match(/^[\t \u3000]*/);
+        var leading = leadingMatch && leadingMatch[0] ? leadingMatch[0] : '';
+        var topic = line.slice(leading.length).trim();
+        if (!topic) continue;
+        entries.push({
+          indent: countLeadingIndentWidth(leading),
+          topic: topic,
+        });
+      }
+
+      if (entries.length < 2) return null;
+      var rootIndent = Number(entries[0].indent || 0);
+      var hasNested = false;
+      for (var j = 1; j < entries.length; j += 1) {
+        if (Number(entries[j].indent || 0) > rootIndent) {
+          hasNested = true;
+          break;
+        }
+      }
+      if (!hasNested) return null;
+
+      var rootNode = createNode(entries[0].topic);
+      var stack = [{
+        node: rootNode,
+        indent: rootIndent,
+      }];
+      var nodeCount = 1;
+
+      for (var k = 1; k < entries.length; k += 1) {
+        var item = entries[k];
+        var indent = Number(item && item.indent);
+        if (!isFinite(indent)) indent = rootIndent;
+        while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
+          stack.pop();
+        }
+        var parent = indent <= rootIndent
+          ? rootNode
+          : stack[stack.length - 1].node;
+        if (!parent || typeof parent !== 'object') parent = rootNode;
+        if (!Array.isArray(parent.children)) parent.children = [];
+        var nextNode = createNode(item && item.topic ? item.topic : '-');
+        parent.children.push(nextNode);
+        stack.push({
+          node: nextNode,
+          indent: indent,
+        });
+        nodeCount += 1;
+      }
+
+      return {
+        mindData: {
+          nodeData: cleanupTree(rootNode),
+        },
+        nodeCount: nodeCount,
+        rootTopic: normalizeMindTopic(rootNode.topic),
+      };
+    }
+
+    function cloneMindNodeTree(node) {
+      if (!node || typeof node !== 'object') return null;
+      var cloned = cloneMindDataObject({ nodeData: node });
+      return cloned && cloned.nodeData ? cloned.nodeData : null;
+    }
+
     function collectCaseLeafKeys(node, depth, pathTopics, output) {
       if (!node) return;
       var topics = Array.isArray(pathTopics) ? pathTopics.slice() : [];
@@ -2378,6 +2484,112 @@
         scheduleRecordSnapshot();
       }
 
+      function readClipboardPlainText(e) {
+        if (!e) return '';
+        var clipboard = e.clipboardData ? e.clipboardData : null;
+        if (!clipboard || typeof clipboard.getData !== 'function') return '';
+        var text = '';
+        try {
+          text = clipboard.getData('text/plain');
+        } catch (err0) {
+          text = '';
+        }
+        if (!text) {
+          try {
+            text = clipboard.getData('text');
+          } catch (err1) {
+            text = '';
+          }
+        }
+        return text ? String(text) : '';
+      }
+
+      function onViewerPaste(e) {
+        if (!editing || pendingSave) return;
+        if (!e) return;
+        if (controlsEl && controlsEl.contains && controlsEl.contains(e.target)) return;
+        var target = e.target || null;
+        if (isTypingTarget(target)) return;
+
+        var rawText = readClipboardPlainText(e);
+        if (!rawText) return;
+        if (isMindElixirInternalClipboardText(rawText)) return;
+
+        var parsed = parseIndentedTextToMindData(rawText);
+        if (!parsed || !parsed.mindData || !parsed.mindData.nodeData) return;
+
+        var inst = getInstance();
+        if (!inst || typeof inst.refresh !== 'function') return;
+
+        if (e.preventDefault) e.preventDefault();
+        if (e.stopPropagation) e.stopPropagation();
+
+        var currentData = getCurrentMindData();
+        var nextData = cloneMindDataObject(currentData && currentData.nodeData ? currentData : parsed.mindData);
+        if (!nextData || !nextData.nodeData) return;
+        var nextRoot = nextData.nodeData;
+        var parsedRoot = parsed.mindData && parsed.mindData.nodeData
+          ? parsed.mindData.nodeData
+          : null;
+        if (!parsedRoot) return;
+
+        var selectedNodes = collectSelectedNodes();
+        var selectedNodeId = selectedNodes.length === 1 && selectedNodes[0] && selectedNodes[0].nodeObj && selectedNodes[0].nodeObj.id
+          ? String(selectedNodes[0].nodeObj.id)
+          : '';
+        var targetNode = nextRoot;
+        if (selectedNodeId) {
+          var foundSelected = findNodeWithParentById(nextRoot, selectedNodeId, null);
+          if (foundSelected && foundSelected.node) targetNode = foundSelected.node;
+        }
+        if (!targetNode || typeof targetNode !== 'object') targetNode = nextRoot;
+
+        var parsedRootTopic = normalizeMindTopic(parsedRoot.topic);
+        var targetTopic = normalizeMindTopic(targetNode.topic);
+        var parsedChildren = Array.isArray(parsedRoot.children) ? parsedRoot.children : [];
+        var nodesToAppend = [];
+        var allowFlattenByRoot = targetNode === nextRoot && parsedChildren.length > 0 && parsedRootTopic === normalizeMindTopic(nextRoot.topic);
+        var allowFlattenBySelection = targetNode !== nextRoot && parsedChildren.length > 0 && parsedRootTopic === targetTopic;
+        if (allowFlattenByRoot || allowFlattenBySelection) {
+          nodesToAppend = parsedChildren;
+        } else {
+          nodesToAppend = [parsedRoot];
+        }
+        if (!nodesToAppend.length) return;
+        if (!Array.isArray(targetNode.children)) targetNode.children = [];
+        for (var i = 0; i < nodesToAppend.length; i += 1) {
+          var nextNode = cloneMindNodeTree(nodesToAppend[i]);
+          if (!nextNode) continue;
+          targetNode.children.push(nextNode);
+        }
+        targetNode.expanded = true;
+
+        var refreshed = false;
+        clearValidationMarks();
+        applyingHistory = true;
+        try {
+          inst.refresh(nextData);
+          refreshed = true;
+        } catch (err) {
+          refreshed = false;
+        }
+        applyingHistory = false;
+
+        if (!refreshed) {
+          callShowToast('粘贴失败，请检查层级格式后重试', 'err', 3200);
+          return;
+        }
+
+        pushHistorySnapshot(nextData);
+        runSearch({ keepIndex: false });
+        updateEditButtons();
+
+        var rootTopic = parsed.rootTopic || '节点';
+        var nodeCount = Number(parsed.nodeCount);
+        if (!isFinite(nodeCount) || nodeCount <= 0) nodeCount = 0;
+        callShowToast('已拼接结构：' + rootTopic + '（' + String(nodeCount) + ' 节点）', '', 2200);
+      }
+
       function onWindowPageHide() {
         flushPendingEditSnapshot();
       }
@@ -2910,6 +3122,7 @@
         viewerEl.addEventListener('dblclick', onViewerDblClick, true);
         viewerEl.addEventListener('blur', onViewerBlur, true);
         viewerEl.addEventListener('input', onViewerInput, true);
+        viewerEl.addEventListener('paste', onViewerPaste, true);
       }
       if (enableCustomBoxSelection && typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
         window.addEventListener('pointermove', moveBoxSelection);
@@ -3016,6 +3229,7 @@
           viewerEl.removeEventListener('dblclick', onViewerDblClick, true);
           viewerEl.removeEventListener('blur', onViewerBlur, true);
           viewerEl.removeEventListener('input', onViewerInput, true);
+          viewerEl.removeEventListener('paste', onViewerPaste, true);
         }
         if (enableCustomBoxSelection && typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
           window.removeEventListener('pointermove', moveBoxSelection);
