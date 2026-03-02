@@ -383,6 +383,7 @@ test.describe('XMind 编辑模式', () => {
     const viewer = page.locator('#caseLibraryXmindStructureViewer');
     await viewer.locator('[data-mind-action="edit-enter"]').click();
     await expect(viewer.locator('[data-mind-action="edit-save"]')).toBeVisible();
+    const nodeCountBeforePaste = await viewer.locator('me-tpc').count();
 
     const draggableNode = viewer.locator('me-tpc .text').nth(1);
     await draggableNode.click({ force: true });
@@ -435,5 +436,147 @@ test.describe('XMind 编辑模式', () => {
       expect(customGhost.top).toBeGreaterThanOrEqual(dragMoveY + 6);
       expect(customGhost.top).toBeLessThanOrEqual(dragMoveY + 40);
     }
+  });
+
+  test('编辑态支持粘贴外部 XMind 缩进文本并渲染层级', async ({ page }) => {
+    const token = 'token-case-library-xmind-paste-plain-text';
+    const user = { id: 59, username: 'xmind_paste_user', role: 'admin', level: 'leader' };
+    const project = { id: 391, name: 'XMind粘贴兼容项目' };
+    const versions = [{ id: 491, name: 'v1' }];
+    const now = new Date().toISOString();
+    const caseFileId = 1991;
+    const caseFiles = [{
+      id: caseFileId,
+      project_id: project.id,
+      version_id: versions[0].id,
+      file_name_clean: '粘贴兼容用例集',
+      reuse_enabled: false,
+      item_count: 1,
+      importer_id: user.id,
+      importer_name: user.username,
+      imported_at: now,
+      updated_at: now,
+      last_updated_by: user.id,
+      last_updated_by_name: user.username,
+    }];
+    const caseItemsByFileId = {};
+    caseItemsByFileId[caseFileId] = [{
+      id: 18901,
+      case_file_id: caseFileId,
+      module: '旧模块',
+      title: '旧用例',
+      priority: 'P1',
+      precondition: '旧前提',
+      steps: '旧步骤',
+      expected: '旧结果',
+      remark: '',
+      created_at: now,
+      updated_at: now,
+    }];
+
+    await buildCaseLibraryRoutes(page, {
+      token,
+      user,
+      project,
+      versions,
+      caseFiles,
+      caseItemsByFileId,
+    });
+
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
+      try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { localStorage.setItem('tap-current-user', JSON.stringify(payload.user)); } catch (_) {}
+    }, { token, user });
+
+    await gotoCaseLibrary(page);
+    await waitCaseLibraryReady(page);
+    await switchToTab(page, 'case-library');
+
+    await page.click('#openCaseLibraryEditDrawerBtn');
+    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await page.click('#caseLibraryXmindViewBtn');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+
+    const viewer = page.locator('#caseLibraryXmindStructureViewer');
+    await viewer.locator('[data-mind-action="edit-enter"]').click();
+    await expect(viewer.locator('[data-mind-action="edit-save"]')).toBeVisible();
+    const nodeCountBeforePaste = await viewer.locator('me-tpc').count();
+
+    const pasteText = [
+      '商城优化',
+      '\t商城布局',
+      '\t\t页签排序',
+      '\t\t\tP1',
+      '\t\t\t\t进入商城',
+      '\t\t\t\t\t观察页签排序',
+      '\t\t\t\t\t\t改成从上到下排序，位于商城的左侧',
+      '\t推荐页面',
+      '\t\t页面布局',
+      '\t\t\tP1',
+      '\t\t\t\t进入商城',
+      '\t\t\t\t\t观察页面中商品的布局',
+      '\t\t\t\t\t\t会展示左右两个区块',
+    ].join('\n');
+
+    const pasteState = await page.evaluate((payload) => {
+      var viewerEl = document.getElementById('caseLibraryXmindStructureViewer');
+      if (!viewerEl || typeof viewerEl.dispatchEvent !== 'function') {
+        return { ok: false, reason: 'viewer-not-found' };
+      }
+      if (typeof viewerEl.focus === 'function') {
+        try {
+          viewerEl.focus();
+        } catch (_) {
+          // ignore
+        }
+      }
+
+      var clipboardData = {
+        getData: function(type) {
+          var name = type === undefined || type === null ? '' : String(type).toLowerCase();
+          if (name === 'text/plain' || name === 'text') return payload;
+          return '';
+        },
+      };
+
+      var eventObj = null;
+      try {
+        eventObj = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+      } catch (err0) {
+        eventObj = document.createEvent('Event');
+        eventObj.initEvent('paste', true, true);
+      }
+      try {
+        Object.defineProperty(eventObj, 'clipboardData', {
+          value: clipboardData,
+        });
+      } catch (err1) {
+        try {
+          eventObj.clipboardData = clipboardData;
+        } catch (err2) {
+          // ignore
+        }
+      }
+      viewerEl.dispatchEvent(eventObj);
+      return {
+        ok: true,
+        defaultPrevented: eventObj.defaultPrevented === true,
+      };
+    }, pasteText);
+
+    expect(pasteState && pasteState.ok).toBeTruthy();
+    expect(pasteState && pasteState.defaultPrevented).toBeTruthy();
+
+    await expect(viewer.locator('me-tpc .text', { hasText: '旧模块' }).first()).toBeVisible();
+    await expect(viewer.locator('me-tpc .text', { hasText: '旧用例' }).first()).toBeVisible();
+    await expect(viewer.locator('me-tpc .text', { hasText: '商城优化' }).first()).toBeVisible();
+    await expect(viewer.locator('me-tpc .text', { hasText: '推荐页面' }).first()).toBeVisible();
+    await expect(viewer.locator('me-tpc .text', { hasText: '会展示左右两个区块' }).first()).toBeVisible();
+    await expect(viewer.locator('[data-mind-action="undo"]')).toBeEnabled();
+
+    const nodeCount = await viewer.locator('me-tpc').count();
+    expect(nodeCount).toBeGreaterThan(nodeCountBeforePaste);
   });
 });
