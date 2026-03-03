@@ -663,6 +663,13 @@ class ModelConfigUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+class ModelProxyRequest(BaseModel):
+    base_url: str
+    api_key: Optional[str] = None
+    payload: Optional[Any] = None
+    timeout_sec: Optional[int] = 60
+
+
 class ModelConfigOut(ModelConfigBase):
     id: int
     owner_id: Optional[int]

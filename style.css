@@ -6212,6 +6212,43 @@ tr.import-invalid-locate-active td {
     .model-card .actions {
       margin: 4px 0 0;
     }
+    .model-capability-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      margin-top: 2px;
+    }
+    .model-capability-options .capability-option {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .model-name-line {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .model-capability-badges {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .model-capability-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 8px;
+      border-radius: 999px;
+      border: 1px solid #bfdbfe;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 12px;
+      line-height: 1.5;
+      font-weight: 600;
+    }
     .stack {
       display: flex;
       flex-direction: column;
@@ -10717,6 +10754,11 @@ button.exec-overview-file-chip,
   background: var(--panel);
   border-color: var(--border);
   box-shadow: var(--shadow);
+}
+:root[data-theme="dark"] .model-capability-badge {
+  background: rgba(96, 165, 250, 0.22);
+  border-color: rgba(96, 165, 250, 0.45);
+  color: #bfdbfe;
 }
 :root[data-theme="dark"] [data-tab-section="assign"] .notice-card strong {
   color: #fca5a5 !important;

@@ -1,7 +1,12 @@
+import json
 from datetime import datetime, timezone
 from typing import List, Optional
+from urllib import error as urllib_error
+from urllib import parse as urllib_parse
+from urllib import request as urllib_request
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
@@ -27,6 +32,35 @@ def _resolve_owner_id(scope: str, user: models.User) -> Optional[int]:
     if scope == "global":
         return None
     return user.id
+
+
+def _normalize_timeout_sec(value: Optional[int]) -> int:
+    try:
+        timeout = int(value or 60)
+    except Exception:
+        timeout = 60
+    if timeout < 5:
+        return 5
+    if timeout > 300:
+        return 300
+    return timeout
+
+
+def _validate_model_url(raw_url: Optional[str]) -> str:
+    url = (raw_url or "").strip()
+    if not url:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="模型地址不能为空")
+    parsed = urllib_parse.urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in ("http", "https"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="模型地址仅支持 http/https"
+        )
+    if not parsed.netloc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="模型地址格式不正确"
+        )
+    return url
 
 
 @router.get("/settings", response_model=List[schemas.SettingOut])
@@ -227,6 +261,81 @@ def update_model_config(
     db.commit()
     db.refresh(config)
     return config
+
+
+@router.post("/model-proxy")
+def proxy_model_request(
+    payload: schemas.ModelProxyRequest,
+    _: models.User = Depends(get_current_user),
+):
+    target_url = _validate_model_url(payload.base_url)
+    timeout_sec = _normalize_timeout_sec(payload.timeout_sec)
+    request_payload = payload.payload if payload.payload is not None else {}
+    try:
+        body_bytes = json.dumps(request_payload, ensure_ascii=False).encode("utf-8")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"模型请求体不是合法 JSON：{exc}"
+        ) from exc
+
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json,text/plain,*/*",
+        "User-Agent": "tap-model-proxy/1.0",
+    }
+    api_key = (payload.api_key or "").strip()
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    request_obj = urllib_request.Request(
+        url=target_url,
+        data=body_bytes,
+        headers=headers,
+        method="POST",
+    )
+
+    try:
+        with urllib_request.urlopen(request_obj, timeout=timeout_sec) as upstream_resp:
+            raw = upstream_resp.read()
+            content_type = upstream_resp.headers.get("Content-Type", "application/json")
+            return Response(
+                content=raw,
+                status_code=int(upstream_resp.status),
+                headers={"Content-Type": content_type},
+            )
+    except urllib_error.HTTPError as exc:
+        raw = b""
+        try:
+            raw = exc.read() or b""
+        except Exception:
+            raw = b""
+        content_type = (
+            exc.headers.get("Content-Type", "text/plain; charset=utf-8")
+            if exc.headers
+            else "text/plain; charset=utf-8"
+        )
+        if not raw:
+            reason = str(exc.reason or "upstream error")
+            raw = reason.encode("utf-8")
+        return Response(
+            content=raw,
+            status_code=int(exc.code or 502),
+            headers={"Content-Type": content_type},
+        )
+    except urllib_error.URLError as exc:
+        reason = getattr(exc, "reason", None)
+        msg = str(reason or exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"连接模型服务失败：{msg}"
+        ) from exc
+    except TimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="模型服务连接超时"
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"模型代理请求失败：{exc}"
+        ) from exc
 
 
 @router.get("/features", response_model=List[schemas.FeatureAssignmentOut])
