@@ -46,6 +46,7 @@
     const caseFilterModelSelect = pickEl('caseFilterModelSelect', 'caseFilterModelSelect');
     const missingReminderModelSelect = pickEl('missingReminderModelSelect', 'missingReminderModelSelect');
     const caseLibraryGenModelSelect = pickEl('caseLibraryGenModelSelect', 'caseLibraryGenModelSelect');
+    const globalAssignModelSelect = pickEl('globalAssignModelSelect', 'globalAssignModelSelect');
     const cleanAssignStatus = pickEl('cleanAssignStatus', 'cleanAssignStatus');
     const reviewAssignStatus = pickEl('reviewAssignStatus', 'reviewAssignStatus');
     const compareAssignStatus = pickEl('compareAssignStatus', 'compareAssignStatus');
@@ -966,12 +967,15 @@
       if (!cleanModelSelect || !caseFilterPromptEl) return;
       syncAssignmentsWithModels({ pushRemote: false });
       const placeholder = '<option value="">暂无可用模型</option>';
-      const createOptions = (selectedId) => state.models.map(m => {
-        const value = getStableModelId(m);
-        const sel = value === selectedId ? 'selected' : '';
-        const label = formatModelOptionText(m);
-        return `<option value="${escapeHtml(value)}" ${sel}>${escapeHtml(label)}</option>`;
-      }).join('');
+      const createOptions = (selectedId, includeEmpty) => {
+        var leading = includeEmpty ? '<option value="">请选择模型</option>' : '';
+        return leading + state.models.map(m => {
+          const value = getStableModelId(m);
+          const sel = value === selectedId ? 'selected' : '';
+          const label = formatModelOptionText(m);
+          return `<option value="${escapeHtml(value)}" ${sel}>${escapeHtml(label)}</option>`;
+        }).join('');
+      };
 
       if (!state.models.length) {
         cleanModelSelect.innerHTML = placeholder;
@@ -983,6 +987,7 @@
         if (caseFilterModelSelect) caseFilterModelSelect.innerHTML = placeholder;
         if (missingReminderModelSelect) missingReminderModelSelect.innerHTML = placeholder;
         if (caseLibraryGenModelSelect) caseLibraryGenModelSelect.innerHTML = placeholder;
+        if (globalAssignModelSelect) globalAssignModelSelect.innerHTML = placeholder;
         state.assignments.cleanId = '';
         state.assignments.reviewId = '';
         state.assignments.compareId = '';
@@ -1055,6 +1060,23 @@
       state.assignments.caseFilterId = caseFilterModelSelect ? caseFilterModelSelect.value || '' : '';
       state.assignments.missingReminderId = missingReminderModelSelect ? missingReminderModelSelect.value || '' : '';
       state.assignments.caseLibraryGenId = caseLibraryGenModelSelect ? caseLibraryGenModelSelect.value || '' : '';
+      if (globalAssignModelSelect) {
+        var unifiedModelId = '';
+        var mismatch = false;
+        assignmentIdKeys.forEach(function(key) {
+          var currentId = state.assignments[key] ? String(state.assignments[key]) : '';
+          if (!currentId) {
+            mismatch = true;
+            return;
+          }
+          if (!unifiedModelId) {
+            unifiedModelId = currentId;
+          } else if (unifiedModelId !== currentId) {
+            mismatch = true;
+          }
+        });
+        globalAssignModelSelect.innerHTML = createOptions(mismatch ? '' : unifiedModelId, true);
+      }
       if (cleanPromptEl) cleanPromptEl.value = state.assignments.cleanPrompt || defaultPrompts.system;
       if (reviewPromptEl) reviewPromptEl.value = state.assignments.reviewPrompt || defaultPrompts.review;
       if (comparePromptEl) comparePromptEl.value = state.assignments.comparePrompt || defaultPrompts.compare;
