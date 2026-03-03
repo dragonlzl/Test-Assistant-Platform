@@ -27,6 +27,9 @@
     const modelApiKeyEl = pickEl('modelApiKeyEl', 'modelApiKey');
     const modelIdentifierEl = pickEl('modelIdentifierEl', 'modelIdentifier');
     const modelMaxTokensEl = pickEl('modelMaxTokensEl', 'modelMaxTokens');
+    const modelCapabilityVisionEl = pickEl('modelCapabilityVisionEl', 'modelCapabilityVision');
+    const modelCapabilityReasoningEl = pickEl('modelCapabilityReasoningEl', 'modelCapabilityReasoning');
+    const modelCapabilityChatEl = pickEl('modelCapabilityChatEl', 'modelCapabilityChat');
     const modelFormStatus = pickEl('modelFormStatus', 'modelFormStatus');
     const modelListEl = pickEl('modelListEl', 'modelList');
     const createModelBtn = pickEl('createModelBtn', 'createModelBtn');
@@ -84,6 +87,20 @@
 
     const legacyCleanStorageKey = legacyCleanKey || 'cleaner-config-v1';
     const legacyCompareStorageKey = legacyCompareKey || 'cleaner-compare-config-v1';
+    const capabilityDefs = [
+      { key: 'vision', label: '视觉' },
+      { key: 'reasoning', label: '推理' },
+      { key: 'chat', label: '聊天' },
+    ];
+    const capabilityLabels = {};
+    capabilityDefs.forEach(function(item) {
+      capabilityLabels[item.key] = item.label;
+    });
+    const capabilityCheckboxes = {
+      vision: modelCapabilityVisionEl,
+      reasoning: modelCapabilityReasoningEl,
+      chat: modelCapabilityChatEl,
+    };
 
     if (!state || !config) {
       console.warn('models.init 缺少 state 或 config');
@@ -100,6 +117,99 @@
     function normalizeModelName(name) {
       if (name === undefined || name === null) return '';
       return String(name).trim().toLowerCase();
+    }
+
+    function escapeHtml(text) {
+      var source = text === undefined || text === null ? '' : String(text);
+      return source
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function normalizeCapabilityKey(value) {
+      var raw = value === undefined || value === null ? '' : String(value).trim().toLowerCase();
+      if (!raw) return '';
+      if (raw === 'vision' || raw === '视觉') return 'vision';
+      if (raw === 'reasoning' || raw === '推理') return 'reasoning';
+      if (raw === 'chat' || raw === '聊天') return 'chat';
+      return '';
+    }
+
+    function normalizeModelCapabilities(value) {
+      var result = [];
+      var seen = {};
+      var append = function(item) {
+        var key = normalizeCapabilityKey(item);
+        if (!key || seen[key]) return;
+        seen[key] = true;
+        result.push(key);
+      };
+      if (Array.isArray(value)) {
+        value.forEach(append);
+      } else if (typeof value === 'string') {
+        value.split(/[,|/、\s]+/).forEach(append);
+      } else if (value && typeof value === 'object') {
+        Object.keys(value).forEach(function(key) {
+          if (value[key]) append(key);
+        });
+      }
+      return result;
+    }
+
+    function getModelCapabilities(model) {
+      if (!model || typeof model !== 'object') return [];
+      return normalizeModelCapabilities(
+        model.capabilities
+        || model.modelCapabilities
+        || model.multiModalTags
+        || model.multimodalTags
+        || model.tags
+      );
+    }
+
+    function getModelCapabilityLabels(model) {
+      return getModelCapabilities(model).map(function(key) {
+        return capabilityLabels[key] || key;
+      });
+    }
+
+    function renderModelCapabilityBadges(model) {
+      var labels = getModelCapabilityLabels(model);
+      if (!labels.length) return '';
+      return '<span class="model-capability-badges">' + labels.map(function(label) {
+        return '<span class="model-capability-badge">' + escapeHtml(label) + '</span>';
+      }).join('') + '</span>';
+    }
+
+    function formatModelOptionText(model) {
+      var name = model && model.name ? model.name : '未命名模型';
+      var provider = model && model.provider ? model.provider : 'custom';
+      var labels = getModelCapabilityLabels(model);
+      if (!labels.length) return name + ' (' + provider + ')';
+      return name + ' [' + labels.join('/') + '] (' + provider + ')';
+    }
+
+    function readModelCapabilitiesFromForm() {
+      var selected = [];
+      capabilityDefs.forEach(function(item) {
+        var checkbox = capabilityCheckboxes[item.key];
+        if (checkbox && checkbox.checked) selected.push(item.key);
+      });
+      return selected;
+    }
+
+    function writeModelCapabilitiesToForm(value) {
+      var selected = {};
+      normalizeModelCapabilities(value).forEach(function(key) {
+        selected[key] = true;
+      });
+      capabilityDefs.forEach(function(item) {
+        var checkbox = capabilityCheckboxes[item.key];
+        if (checkbox) checkbox.checked = Boolean(selected[item.key]);
+      });
     }
 
     function hasDuplicateModelName(model) {
@@ -140,6 +250,7 @@
         if (next.id !== undefined && next.id !== null) {
           next.id = String(next.id);
         }
+        next.capabilities = getModelCapabilities(next);
         return next;
       });
       migrateLegacyConfigs();
@@ -261,6 +372,7 @@
         apiKey: model.apiKey,
         model: model.model,
         maxTokens: model.maxTokens,
+        capabilities: getModelCapabilities(model),
       };
     }
 
@@ -281,6 +393,13 @@
           apiKey: cfg.apiKey || cfg.api_key || '',
           model: cfg.model || cfg.modelIdentifier || cfg.model_id || '',
           maxTokens: cfg.maxTokens || cfg.max_tokens || defaultMaxTokens,
+          capabilities: normalizeModelCapabilities(
+            cfg.capabilities
+            || cfg.modelCapabilities
+            || cfg.multiModalTags
+            || cfg.multimodalTags
+            || cfg.tags
+          ),
         };
       });
     }
@@ -546,13 +665,21 @@
       }
       modelListEl.innerHTML = state.models.map(m => {
         const stableId = getStableModelId(m);
+        const capsHtml = renderModelCapabilityBadges(m);
+        const nameHtml = escapeHtml(m && m.name ? m.name : '未命名模型');
+        const providerHtml = escapeHtml(m && m.provider ? m.provider : 'custom');
+        const modelIdHtml = escapeHtml(m && m.model ? m.model : '');
+        const maxTokens = m && m.maxTokens ? m.maxTokens : defaultMaxTokens;
         return `
         <div class="model-card" data-id="${stableId}">
-          <strong>${m.name || '未命名模型'}</strong>
+          <div class="model-name-line">
+            <strong>${nameHtml}</strong>
+            ${capsHtml}
+          </div>
           <div class="meta">
-            <span>类型：${m.provider}</span>
-            <span>模型 ID：${m.model}</span>
-            <span>Max Tokens：${m.maxTokens || defaultMaxTokens}</span>
+            <span>类型：${providerHtml}</span>
+            <span>模型 ID：${modelIdHtml}</span>
+            <span>Max Tokens：${maxTokens}</span>
           </div>
           <div class="actions">
             <button class="secondary" data-edit="${stableId}">编辑</button>
@@ -588,6 +715,7 @@
       if (modelApiKeyEl) modelApiKeyEl.value = '';
       if (modelIdentifierEl) modelIdentifierEl.value = '';
       if (modelMaxTokensEl) modelMaxTokensEl.value = defaultMaxTokens;
+      writeModelCapabilitiesToForm([]);
       setStatus(modelFormStatus, hide ? '' : '已重置表单', '');
       if (hide && modelFormWrapper) {
         modelFormWrapper.classList.add('hidden');
@@ -607,6 +735,7 @@
       if (modelApiKeyEl) modelApiKeyEl.value = model.apiKey || '';
       if (modelIdentifierEl) modelIdentifierEl.value = model.model || '';
       if (modelMaxTokensEl) modelMaxTokensEl.value = model.maxTokens || defaultMaxTokens;
+      writeModelCapabilitiesToForm(getModelCapabilities(model));
       setStatus(modelFormStatus, '已加载待编辑模型，可修改后保存', 'ok');
     }
 
@@ -670,6 +799,7 @@
         apiKey: modelApiKeyEl ? modelApiKeyEl.value.trim() : '',
         model: modelIdentifierEl ? modelIdentifierEl.value.trim() : '',
         maxTokens: Number.isFinite(maxTokensVal) && maxTokensVal > 0 ? maxTokensVal : defaultMaxTokens,
+        capabilities: readModelCapabilitiesFromForm(),
       };
       if (!model.baseUrl || !model.apiKey || !model.model) {
         setStatus(modelFormStatus, '请至少填写接口、API Key、模型 ID', 'warn');
@@ -839,7 +969,8 @@
       const createOptions = (selectedId) => state.models.map(m => {
         const value = getStableModelId(m);
         const sel = value === selectedId ? 'selected' : '';
-        return `<option value="${value}" ${sel}>${m.name} (${m.provider})</option>`;
+        const label = formatModelOptionText(m);
+        return `<option value="${escapeHtml(value)}" ${sel}>${escapeHtml(label)}</option>`;
       }).join('');
 
       if (!state.models.length) {
@@ -1148,22 +1279,66 @@
       }
       setStatus(statusEl, '正在测试模型...', '');
       try {
-        const body = {
-          model: model.model,
-          messages: [{ role: 'user', content: 'ping' }],
-          max_tokens: 16,
-        };
-        const headers = { 'Content-Type': 'application/json' };
-        if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`;
-        const res = await fetch(model.baseUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        var baseUrl = model && model.baseUrl ? String(model.baseUrl).toLowerCase() : '';
+        var isResponsesApi = /\/responses(?:\?|$)/i.test(baseUrl);
+        const body = isResponsesApi
+          ? {
+            model: model.model,
+            input: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'input_text', text: 'ping' },
+                ],
+              },
+            ],
+          }
+          : {
+            model: model.model,
+            messages: [{ role: 'user', content: 'ping' }],
+            max_tokens: 16,
+          };
+        const proxyFn = api && typeof api.proxyModelRequest === 'function'
+          ? api.proxyModelRequest
+          : null;
+        let res;
+        if (proxyFn) {
+          try {
+            res = await proxyFn({
+              base_url: model.baseUrl,
+              api_key: model.apiKey || '',
+              payload: body,
+              timeout_sec: 30,
+            });
+          } catch (e) {
+            res = null;
+          }
+        }
+        if (!res || [401, 403, 404, 405].indexOf(Number(res.status)) !== -1) {
+          const headers = { 'Content-Type': 'application/json' };
+          if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`;
+          res = await fetch(model.baseUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+          });
+        }
+        const raw = await res.text();
+        if (!res.ok) {
+          const detail = raw ? ('：' + raw.slice(0, 200)) : '';
+          throw new Error(`HTTP ${res.status}${detail}`);
+        }
+        let data = null;
+        if (raw) {
+          try {
+            data = JSON.parse(raw);
+          } catch (e) {
+            data = null;
+          }
+        }
         const hasChoices = data && data.choices && data.choices.length;
-        const ok = hasChoices || (data && data.output_text) || (data && data.data);
+        const hasOutput = data && data.output && data.output.length;
+        const ok = hasChoices || hasOutput || (data && data.output_text) || (data && data.data) || (raw && raw.trim());
         setStatus(statusEl, ok ? '测试成功，模型可用' : '连接成功但返回为空，请检查返回格式', ok ? 'ok' : 'warn');
       } catch (err) {
         console.error(err);

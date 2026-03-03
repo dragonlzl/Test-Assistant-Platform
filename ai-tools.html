@@ -716,6 +716,14 @@
 <label for="modelMaxTokens">最大输出 Tokens</label>
 <input id="modelMaxTokens" min="256" placeholder="默认 1024" step="128" type="number"/>
 </div>
+<div class="row column">
+<label>模型能力标签（默认不勾选）</label>
+<div class="model-capability-options">
+<label class="capability-option"><input id="modelCapabilityVision" type="checkbox"/> 视觉</label>
+<label class="capability-option"><input id="modelCapabilityReasoning" type="checkbox"/> 推理</label>
+<label class="capability-option"><input id="modelCapabilityChat" type="checkbox"/> 聊天</label>
+</div>
+</div>
 <div class="actions">
 <button id="saveModelBtn">保存模型</button>
 <button class="secondary" id="resetModelForm">取消</button>

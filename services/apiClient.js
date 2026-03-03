@@ -828,6 +828,21 @@
     }).then(handleResponse);
   }
 
+  function proxyModelRequest(payload, signal) {
+    var body = payload && typeof payload === 'object' ? payload : {};
+    return fetch('/api/model-proxy', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify({
+        base_url: body.base_url || body.baseUrl || '',
+        api_key: body.api_key || body.apiKey || '',
+        payload: body.payload || {},
+        timeout_sec: body.timeout_sec || body.timeoutSec || 60,
+      }),
+      signal: signal,
+    });
+  }
+
   function listFeatureAssignments(scope, ownerId) {
     var query = [];
     if (scope) query.push('scope=' + encodeURIComponent(scope));
@@ -1017,6 +1032,7 @@
     listModelConfigs: listModelConfigs,
     createModelConfig: createModelConfig,
     updateModelConfig: updateModelConfig,
+    proxyModelRequest: proxyModelRequest,
     listFeatureAssignments: listFeatureAssignments,
     createFeatureAssignment: createFeatureAssignment,
     updateFeatureAssignment: updateFeatureAssignment,

@@ -103,6 +103,118 @@
           var name = model.model ? String(model.model).toLowerCase() : '';
           return name.indexOf('deepseek') !== -1;
         };
+    var proxyModelRequest = options && typeof options.proxyModelRequest === 'function'
+      ? options.proxyModelRequest
+      : null;
+
+    function resolveProxyModelRequest() {
+      if (proxyModelRequest) return proxyModelRequest;
+      if (window.app && window.app.apiClient && typeof window.app.apiClient.proxyModelRequest === 'function') {
+        return window.app.apiClient.proxyModelRequest;
+      }
+      return null;
+    }
+
+    function modelUsesResponsesApi(model) {
+      var baseUrl = model && model.baseUrl ? String(model.baseUrl).toLowerCase() : '';
+      if (!baseUrl) return false;
+      return /\/responses(?:\?|$)/i.test(baseUrl);
+    }
+
+    function buildModelRequestBody(model, systemPrompt, userText, safeTemperature, maxTokens, reasoningEffort, deepseekJsonMode) {
+      if (modelUsesResponsesApi(model)) {
+        var safeText = userText === undefined || userText === null ? '' : String(userText);
+        var responseBody = {
+          model: model.model,
+          input: [
+            {
+              role: 'user',
+              content: [
+                { type: 'input_text', text: safeText }
+              ],
+            }
+          ],
+          temperature: safeTemperature,
+          max_output_tokens: maxTokens,
+        };
+        if (systemPrompt) responseBody.instructions = systemPrompt;
+        return responseBody;
+      }
+      var chatBody = {
+        model: model.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userText }
+        ],
+        temperature: safeTemperature,
+        max_tokens: maxTokens,
+      };
+      if (reasoningEffort && modelIsR1(model)) {
+        chatBody.reasoning_effort = reasoningEffort;
+      }
+      if (deepseekJsonMode) {
+        chatBody.response_format = { type: 'json_object' };
+      }
+      return chatBody;
+    }
+
+    function extractResponsesOutput(data) {
+      if (!data || !Array.isArray(data.output)) return '';
+      var textParts = [];
+      data.output.forEach(function(item) {
+        if (!item) return;
+        if (typeof item.output_text === 'string' && item.output_text.trim()) {
+          textParts.push(item.output_text.trim());
+          return;
+        }
+        var content = item.content;
+        if (typeof content === 'string' && content.trim()) {
+          textParts.push(content.trim());
+          return;
+        }
+        if (!Array.isArray(content)) return;
+        content.forEach(function(block) {
+          if (block === null || block === undefined) return;
+          if (typeof block === 'string') {
+            if (block.trim()) textParts.push(block.trim());
+            return;
+          }
+          var text = '';
+          if (typeof block.text === 'string') text = block.text;
+          if (!text && typeof block.output_text === 'string') text = block.output_text;
+          if (!text && typeof block.content === 'string') text = block.content;
+          if (text && text.trim()) textParts.push(text.trim());
+        });
+      });
+      return textParts.join('\n').trim();
+    }
+
+    async function sendModelRequest(model, headers, body, timeoutSec, signal) {
+      var proxyFn = resolveProxyModelRequest();
+      if (proxyFn) {
+        try {
+          var proxied = await proxyFn({
+            base_url: model.baseUrl,
+            api_key: model.apiKey || '',
+            payload: body,
+            timeout_sec: timeoutSec,
+          }, signal);
+          // 在纯静态模式（无后端 API）或未登录态下，回退到直连，保持旧行为兼容。
+          if (proxied && [401, 403, 404, 405].indexOf(Number(proxied.status)) === -1) {
+            return proxied;
+          }
+        } catch (err) {
+          if (!fetchImpl) throw err;
+        }
+      }
+      if (!fetchImpl) throw new Error('当前环境不支持 fetch');
+      return fetchImpl(model.baseUrl, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(body),
+        signal: signal,
+      });
+    }
 
     function shouldUseDeepseekJsonMode(model, promptText) {
       if (!modelIsDeepseek(model)) return false;
@@ -155,7 +267,8 @@
       if (!model || !model.baseUrl || !model.model) {
         throw new Error('模型配置不完整');
       }
-      if (!fetchImpl) {
+      var proxyFn = resolveProxyModelRequest();
+      if (!fetchImpl && !proxyFn) {
         throw new Error('当前环境不支持 fetch');
       }
       var prompt = promptText && promptText.trim() ? promptText.trim() : (defaultPrompts.system || '');
@@ -168,21 +281,7 @@
       var maxTokens = model.maxTokens || defaultMaxTokens;
       var tempValue = Number(temperature);
       var safeTemperature = Number.isFinite(tempValue) ? Math.min(1, Math.max(0, tempValue)) : 0.2;
-      var body = {
-        model: model.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userText }
-        ],
-        temperature: safeTemperature,
-        max_tokens: maxTokens,
-      };
-      if (reasoningEffort && modelIsR1(model)) {
-        body.reasoning_effort = reasoningEffort;
-      }
-      if (deepseekJsonMode) {
-        body.response_format = { type: 'json_object' };
-      }
+      var body = buildModelRequestBody(model, systemPrompt, userText, safeTemperature, maxTokens, reasoningEffort, deepseekJsonMode);
       var headers = Object.assign({ 'Content-Type': 'application/json' }, getAuthHeader(model.apiKey));
       var timeoutSec = clampTimeoutSeconds(getTimeoutSec());
       var timeoutMs = timeoutSec * 1000;
@@ -194,12 +293,13 @@
       var res;
       var rawBody = '';
       try {
-        res = await fetchImpl(model.baseUrl, {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify(body),
-          signal: controller ? controller.signal : undefined,
-        });
+        res = await sendModelRequest(
+          model,
+          headers,
+          body,
+          timeoutSec,
+          controller ? controller.signal : undefined
+        );
       } catch (err) {
         if (err && err.name === 'AbortError') {
           throw new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
@@ -251,6 +351,7 @@
         normalizeAndStrip(getNestedValue(data, ['choices', 0, 'text'])) ||
         normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'responses'])) ||
         normalizeAndStrip(getNestedValue(data, ['data', 0, 'contents', 0, 'text'])) ||
+        normalizeAndStrip(extractResponsesOutput(data)) ||
         normalizeAndStrip(getNestedValue(data, ['output_text']));
       if (!content) {
         var preview = rawBody ? (rawBody.length > 400 ? rawBody.slice(0, 400) + '...' : rawBody) : '';
