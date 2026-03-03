@@ -3206,6 +3206,7 @@
           callModelWithContent,
           updateModelTiming,
           extractJsonPayload,
+          getLastModelError,
           setStepInProgress,
           clearStepInProgress,
           persistWorkflowState: requestPersistWorkflowState,

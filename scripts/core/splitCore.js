@@ -73,15 +73,65 @@
 
     function normalizeModuleObject(item, idx) {
       if (!item || typeof item !== 'object') return null;
-      var title = (pickFirstString(item, moduleFieldAliases.title) || ('模块' + (idx + 1))).trim();
+      var titleFromFields = pickFirstString(item, moduleFieldAliases.title);
+      var scenarios = pickFirstArray(item, moduleFieldAliases.scenarios);
+      var points = pickFirstArray(item, moduleFieldAliases.points);
+      var coupled = pickFirstArray(item, moduleFieldAliases.coupled);
+      var special = pickFirstArray(item, specialAliases);
+
+      // 兼容结构：[{ "模块名": [{测试场景:[...]}, {测点要点:[...]}, ...] }]
+      if (!titleFromFields && !scenarios.length && !points.length && !coupled.length && !special.length) {
+        var entries = Object.entries(item);
+        if (entries.length === 1) {
+          var fallback = normalizeModuleBlocks(entries[0][0], entries[0][1], idx);
+          if (fallback) return fallback;
+        }
+      }
+
+      var title = (titleFromFields || ('模块' + (idx + 1))).trim();
       return {
         id: item.id || ('split-' + idx + '-' + Date.now()),
         title: title,
-        scenarios: pickFirstArray(item, moduleFieldAliases.scenarios),
-        points: pickFirstArray(item, moduleFieldAliases.points),
-        coupled: pickFirstArray(item, moduleFieldAliases.coupled),
-        special: pickFirstArray(item, specialAliases),
+        scenarios: scenarios,
+        points: points,
+        coupled: coupled,
+        special: special,
       };
+    }
+
+    function normalizeModuleArray(arr) {
+      if (!Array.isArray(arr)) return [];
+      var modules = [];
+      arr.forEach(function(item, idx) {
+        if (!item || typeof item !== 'object') {
+          var normalized = normalizeModuleObject(item, idx);
+          if (normalized) modules.push(normalized);
+          return;
+        }
+        var hasDirectFields = Boolean(
+          pickFirstString(item, moduleFieldAliases.title) ||
+          pickFirstArray(item, moduleFieldAliases.scenarios).length ||
+          pickFirstArray(item, moduleFieldAliases.points).length ||
+          pickFirstArray(item, moduleFieldAliases.coupled).length ||
+          pickFirstArray(item, specialAliases).length
+        );
+        if (hasDirectFields) {
+          var direct = normalizeModuleObject(item, idx);
+          if (direct) modules.push(direct);
+          return;
+        }
+        var entries = Object.entries(item);
+        if (entries.length) {
+          entries.forEach(function(pair, subIdx) {
+            var fromBlock = normalizeModuleBlocks(pair[0], pair[1], String(idx) + '-' + String(subIdx));
+            if (fromBlock) modules.push(fromBlock);
+          });
+          return;
+        }
+        var fallback = normalizeModuleObject(item, idx);
+        if (fallback) modules.push(fallback);
+      });
+      return modules;
     }
 
     function normalizeModuleBlocks(name, blocks, idx) {
@@ -118,7 +168,7 @@
           : Array.isArray(dataField)
           ? dataField
           : null;
-        if (arr) return arr.map(normalizeModuleObject).filter(Boolean);
+        if (arr) return normalizeModuleArray(arr);
         if (data && typeof data === 'object') {
           return Object.entries(data).map(function(pair, idx) {
             return normalizeModuleBlocks(pair[0], pair[1], idx);
@@ -137,7 +187,7 @@
             : Array.isArray(dataFieldPatched)
             ? dataFieldPatched
             : null;
-          if (arrPatched) return arrPatched.map(normalizeModuleObject).filter(Boolean);
+          if (arrPatched) return normalizeModuleArray(arrPatched);
           if (patchedData && typeof patchedData === 'object') {
             return Object.entries(patchedData).map(function(pair, idx) {
               return normalizeModuleBlocks(pair[0], pair[1], idx);

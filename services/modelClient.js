@@ -351,6 +351,20 @@
       }
     }
 
+    function isAbortOrTimeoutError(err, signal) {
+      if (err && err.name === 'AbortError') return true;
+      if (signal && signal.aborted) return true;
+      var msg = err && err.message ? String(err.message) : String(err || '');
+      if (!msg) return false;
+      var lower = msg.toLowerCase();
+      if (lower.indexOf('aborterror') !== -1) return true;
+      if (lower.indexOf('aborted') !== -1) return true;
+      if (lower === 'timeout') return true;
+      if (lower.indexOf('timed out') !== -1) return true;
+      if (lower.indexOf('signal is aborted') !== -1) return true;
+      return false;
+    }
+
     function splitSseEvents(rawBody) {
       var text = rawBody === undefined || rawBody === null ? '' : String(rawBody);
       if (!text) return null;
@@ -652,7 +666,7 @@
           controller ? controller.signal : undefined
         );
       } catch (err) {
-        if (err && err.name === 'AbortError') {
+        if (isAbortOrTimeoutError(err, controller ? controller.signal : null)) {
           throw new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
         }
         throw err;
@@ -726,7 +740,7 @@
           controller ? controller.signal : undefined
         );
       } catch (err) {
-        if (err && err.name === 'AbortError') {
+        if (isAbortOrTimeoutError(err, controller ? controller.signal : null)) {
           throw new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
         }
         throw err;

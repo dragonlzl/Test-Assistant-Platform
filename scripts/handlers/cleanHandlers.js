@@ -30,6 +30,7 @@
     var setStepInProgress = handlers.setStepInProgress || function() {};
     var clearStepInProgress = handlers.clearStepInProgress || function() {};
     var persistWorkflowState = handlers.persistWorkflowState || function() {};
+    var getLastModelError = handlers.getLastModelError || function() { return null; };
     var basicClean = handlers.basicClean || function(text) {
       var normalized = (text || '')
         .replace(/\r\n/g, '\n')
@@ -66,6 +67,68 @@
     var multimodalMaxImages = 20;
     var multimodalMaxEdge = 1600;
     var multimodalMaxBytes = 4 * 1024 * 1024;
+
+    function normalizeErrorMessage(raw) {
+      if (raw === undefined || raw === null) return '';
+      var text = String(raw).trim();
+      if (!text) return '';
+      if (text === '[object Object]') return '';
+      return text;
+    }
+
+    function safeStringifyError(err) {
+      if (!err || typeof err !== 'object') return '';
+      try {
+        var text = JSON.stringify(err);
+        if (text && text !== '{}' && text !== '[]') return text;
+      } catch (stringifyErr) {
+        return '';
+      }
+      return '';
+    }
+
+    function resolveModelErrorMessage(err) {
+      var message = '';
+      if (typeof err === 'string') {
+        message = normalizeErrorMessage(err);
+      }
+      if (!message && err && typeof err.message === 'string') {
+        message = normalizeErrorMessage(err.message);
+      }
+      if (!message && err && typeof err.detail === 'string') {
+        message = normalizeErrorMessage(err.detail);
+      }
+      if (!message && err && typeof err.error === 'string') {
+        message = normalizeErrorMessage(err.error);
+      }
+      if (!message && err && err.error && typeof err.error.message === 'string') {
+        message = normalizeErrorMessage(err.error.message);
+      }
+      if (!message) {
+        message = normalizeErrorMessage(safeStringifyError(err));
+      }
+      if (!message) {
+        var tracked = getLastModelError();
+        if (tracked && typeof tracked.message === 'string') {
+          message = normalizeErrorMessage(tracked.message);
+        }
+        if (!message) {
+          message = normalizeErrorMessage(safeStringifyError(tracked));
+        }
+      }
+      return message || '未知错误';
+    }
+
+    function isTimeoutLikeError(err) {
+      var msg = resolveModelErrorMessage(err);
+      if (!msg) return false;
+      if (msg.indexOf('模型调用超时') !== -1) return true;
+      if (msg.indexOf('超时') !== -1) return true;
+      var lower = String(msg).toLowerCase();
+      if (lower.indexOf('timeout') !== -1) return true;
+      if (lower.indexOf('timed out') !== -1) return true;
+      return false;
+    }
 
     function findSnippetRange(fullText, snippet, startIdx) {
       var target = (snippet || '').trim();
@@ -771,21 +834,34 @@
           if (useVisionInput) {
             var imageContent = await buildImageContentBlocks(requirementImages);
             var sentImages = imageContent && imageContent.stats ? Number(imageContent.stats.sent) || 0 : 0;
+            var timeoutRetriedAsText = false;
             if (!text && sentImages < 1) {
               setStatus(cleanStatus, '当前无可用文本，且图片均未通过处理限制，请补充文本或缩小图片后重试', 'warn');
               return;
             }
             if (sentImages > 0) {
               var contentBlocks = [{ type: 'text', text: payload }].concat(imageContent.blocks || []);
-              cleaned = await callModelWithContent(model, contentBlocks, prompt, {
-                reasoningEffort: reasoning,
-                temperature: temperature,
-              });
+              try {
+                cleaned = await callModelWithContent(model, contentBlocks, prompt, {
+                  reasoningEffort: reasoning,
+                  temperature: temperature,
+                });
+              } catch (visionErr) {
+                if (isTimeoutLikeError(visionErr) && text) {
+                  timeoutRetriedAsText = true;
+                  setStatus(cleanStatus, '视觉清洗超时，自动切换纯文本重试...', 'warn');
+                  cleaned = await callModelWithConfig(model, payload, prompt, reasoning, temperature);
+                } else {
+                  throw visionErr;
+                }
+              }
             } else {
               cleaned = await callModelWithConfig(model, payload, prompt, reasoning, temperature);
             }
             var statusMsg = '清洗完成（模型返回）';
-            if (sentImages > 0) {
+            if (timeoutRetriedAsText && sentImages > 0) {
+              statusMsg += '，视觉超时后已切换文本重试（原计划携带图片' + sentImages + '张）';
+            } else if (sentImages > 0) {
               statusMsg += '，已携带图片' + sentImages + '张';
             }
             if (imageContent.stats && imageContent.stats.skipped > 0) {
@@ -797,7 +873,11 @@
             setStatus(
               cleanStatus,
               statusMsg,
-              (imageContent.stats && imageContent.stats.skipped > 0) || (!sentImages && requirementImages.length > 0) ? 'warn' : 'ok'
+              timeoutRetriedAsText
+                || (imageContent.stats && imageContent.stats.skipped > 0)
+                || (!sentImages && requirementImages.length > 0)
+                ? 'warn'
+                : 'ok'
             );
           } else {
             cleaned = await callModelWithConfig(model, payload, prompt, reasoning, temperature);
@@ -814,7 +894,7 @@
           console.warn('模型清洗失败，改用本地规则', err);
           cleaned = basicClean(text);
           updateModelTiming(cleanTimingEl);
-          setStatus(cleanStatus, '模型调用失败：' + (err && err.message ? err.message : '') + '，已使用本地规则', 'warn');
+          setStatus(cleanStatus, '模型调用失败：' + resolveModelErrorMessage(err) + '，已使用本地规则', 'warn');
         }
         if (cleanedTextEl) cleanedTextEl.value = wrapTextWithRequirement(cleaned);
         state.cleanEntries = [];
