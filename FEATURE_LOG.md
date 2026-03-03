@@ -19,6 +19,28 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：自动流程澄清开关跨页/刷新持久化修复
+- 功能描述：修复“需要人工确认需求澄清后再继续自动流程”勾选状态在刷新页面或切换到其他页面后丢失的问题。
+- 操作方式：
+  - 在“自动执行工作流”卡片勾选“需要人工确认需求澄清后再继续自动流程”；
+  - 执行跨页切换（如 `ai-workflow.html` ↔ `settings.html`）或刷新当前页；
+  - 返回自动流程页后勾选状态保持不变。
+- 使用效果：
+  - 开关状态不再被无该控件的页面初始化逻辑覆盖；
+  - 跨页跳转与页面隐藏/刷新前会强制落盘 workflow 快照，避免 debounce 导致的状态丢失。
+- 新增内容/接口/组件：
+  - 前端修复：
+    - `scripts/core/reviewCore.js`：`updateAutoClarifyVisibility` 在缺少 `autoNeedClarify` 控件时保留已恢复状态，不再强制回写 `false`。
+    - `scripts/core/appRuntime.js`：跨页跳转前、`beforeunload`、`visibilitychange(hidden)` 时调用 `persistWorkflowStateNow()` 强制持久化。
+  - UI 自动化：
+    - 新增 `tests/ui/auto_clarify_toggle_persistence.spec.js`，覆盖“勾选后跨页与刷新仍保持勾选”。
+- 复用说明：复用现有 workflow 快照持久化能力（`persistWorkflowStateNow`）与既有开关状态字段（`autoRequireClarifications`），未新增后端接口。
+- 测试与验证：
+  - `node --check scripts/core/reviewCore.js scripts/core/appRuntime.js tests/ui/auto_clarify_toggle_persistence.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/auto_clarify_toggle_persistence.spec.js --reporter=line`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/auto_workflow_persistence.spec.js --reporter=line`（失败：既有用例在本地静态服务场景下断言“正在执行”前即进入“需求评审未产生有效输出”；与本次开关持久化改动无直接耦合）
+- 更新记录：2026-03-03 首次修复勾选状态跨页/刷新丢失，并补充 UI 回归用例（`scripts/core/reviewCore.js`、`scripts/core/appRuntime.js`、`tests/ui/auto_clarify_toggle_persistence.spec.js`）。
+
 - 功能名称：执行页/用例库 XMind 结构展示
 - 功能描述：在“用例执行”和“用例库（查看&编辑）”中，于“AI 用例生成”按钮右侧新增“XMind结构展示”按钮；点击后以 XMind 结构展示当前用例。
 - 操作方式：

@@ -966,6 +966,8 @@
       if (!target) return false;
       var current = getCurrentPageName();
       if (current && current === target) return false;
+      // Flush workflow snapshot before cross-page navigation to avoid debounce loss.
+      persistWorkflowStateNow();
       persistActiveTabForSession(name);
       try {
         window.location.href = buildTabUrl(target, name) || target;
@@ -1143,6 +1145,7 @@
     try {
       if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
         window.addEventListener('beforeunload', function() {
+          persistWorkflowStateNow();
           var tab = getActiveTabFromDom();
           persistActiveTabForSession(tab);
           // 标记“刷新来源页签”，用于执行页做“仅在执行页刷新才触发自动同步/diff”的判定。
@@ -1157,6 +1160,7 @@
         });
         window.addEventListener('visibilitychange', function() {
           if (document && document.visibilityState === 'hidden') {
+            persistWorkflowStateNow();
             persistActiveTabForSession(getActiveTabFromDom());
           }
         });
@@ -1532,6 +1536,7 @@
         runAutoWorkflow: api.runAutoWorkflow,
         runAutoWorkflowFromClean: api.runAutoWorkflowFromClean,
         continueAutoWorkflowAfterCoverage: api.continueAutoWorkflowAfterCoverage,
+        cancelAutoWorkflow: api.cancelAutoWorkflow,
         executeAutoWorkflowSteps: api.executeAutoWorkflowSteps,
         enforceAutoCoverageRequirement: api.enforceAutoCoverageRequirement,
         reviewRequirements: api.reviewRequirements,

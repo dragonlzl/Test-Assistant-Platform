@@ -140,8 +140,15 @@
 
     function updateAutoClarifyVisibility(forceOpen) {
       if (forceOpen === void 0) forceOpen = false;
-      var enabled = Boolean(autoClarifyToggle && autoClarifyToggle.checked);
-      state.autoRequireClarifications = enabled;
+      // Some pages reuse the runtime but do not render the auto-clarify checkbox.
+      // In that case, preserve previously restored state instead of forcing false.
+      var enabled = false;
+      if (autoClarifyToggle) {
+        enabled = Boolean(autoClarifyToggle.checked);
+        state.autoRequireClarifications = enabled;
+      } else {
+        enabled = Boolean(state.autoRequireClarifications);
+      }
       if (autoClarifySection) {
         var shouldShow = enabled && state.activeTab === 'auto';
         autoClarifySection.classList.toggle('hidden', !shouldShow);

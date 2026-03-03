@@ -65,6 +65,7 @@
     var caseGenStatus = pickEl(dom.caseGenStatus, 'caseGenStatus');
     var missingViewStatus = pickEl(dom.missingViewStatus, 'missingViewStatus');
     var autoWorkflowBtn = pickEl(dom.autoWorkflowBtn, 'runAutoWorkflow');
+    var stopAutoWorkflowBtn = pickEl(dom.stopAutoWorkflowBtn, 'stopAutoWorkflow');
     var autoRecleanBtn = pickEl(dom.autoRecleanBtn, 'autoRecleanBtn');
     var autoIgnoreCoverageBtn = pickEl(dom.autoIgnoreCoverageBtn, 'autoIgnoreCoverageBtn');
     var autoCompareMissing = pickEl(dom.autoCompareMissing, 'autoCompareMissing');
@@ -564,6 +565,8 @@
         assignMessage('workflowSuccess', '剩余步骤执行完成，覆盖率仍不足 100%，请注意风险', 'warn');
         assignMessage('recleanFailure', '忽略覆盖率继续失败', 'err');
         assignMessage('workflowFailure', '忽略覆盖率继续失败', 'err');
+        assignMessage('recleanCancelled', '已中断继续执行', 'warn');
+        assignMessage('workflowCancelled', '已中断当前执行任务', 'warn');
         return result;
       }
       if (kind === 'reclean' || kind === 'supplement') {
@@ -573,11 +576,14 @@
         assignMessage('workflowSuccess', opts.workflowSuccessMessage || '重新执行完成，可切换至“功能流程”查看详情', opts.workflowSuccessTone || 'ok');
         assignMessage('recleanFailure', opts.failureMessage || '重新执行中断', opts.failureTone || 'err');
         assignMessage('workflowFailure', opts.workflowFailureMessage || '一键执行中断', opts.workflowFailureTone || 'err');
+        assignMessage('recleanCancelled', opts.cancelMessage || '已中断重新执行任务', opts.cancelTone || 'warn');
+        assignMessage('workflowCancelled', opts.workflowCancelMessage || '已中断当前执行任务', opts.workflowCancelTone || 'warn');
         return result;
       }
       assignMessage('workflowStart', '正在执行完整工作流，请勿关闭页面', '');
       assignMessage('workflowSuccess', '一键执行完成，可切换至“功能流程”查看详情', 'ok');
       assignMessage('workflowFailure', '一键执行中断', 'err');
+      assignMessage('workflowCancelled', '已中断当前执行任务', 'warn');
       return result;
     }
 
@@ -586,6 +592,7 @@
       var running = Boolean(hasTask && task.status === 'running');
       state.autoRunning = running;
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = running;
+      if (stopAutoWorkflowBtn) stopAutoWorkflowBtn.disabled = !running;
       if (autoClarifyToggle) autoClarifyToggle.disabled = running;
       if (autoRecleanBtn) autoRecleanBtn.disabled = running;
       if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = running;
@@ -640,6 +647,16 @@
           var recleanMsg = errText ? (failReclean.text + '：' + errText) : failReclean.text;
           if (autoRecleanStatus) setStatus(autoRecleanStatus, recleanMsg, failReclean.tone || 'err');
         }
+      } else if (task.status === 'cancelled') {
+        var cancelReason = task.error ? String(task.error) : '';
+        var cancelWorkflow = resolveMessage('workflowCancelled', '已中断当前执行任务', 'warn');
+        var cancelWorkflowMsg = cancelReason ? (cancelWorkflow.text + '：' + cancelReason) : cancelWorkflow.text;
+        if (autoWorkflowStatus) setStatus(autoWorkflowStatus, cancelWorkflowMsg, cancelWorkflow.tone || 'warn');
+        if (kind !== 'full') {
+          var cancelReclean = resolveMessage('recleanCancelled', '已中断当前执行任务', 'warn');
+          var cancelRecleanMsg = cancelReason ? (cancelReclean.text + '：' + cancelReason) : cancelReclean.text;
+          if (autoRecleanStatus) setStatus(autoRecleanStatus, cancelRecleanMsg, cancelReclean.tone || 'warn');
+        }
       }
 
       updateAutoClarifyVisibility();
@@ -649,6 +666,33 @@
       if (task.status === 'done' && task.expandMissing) {
         ensureAutoMissingViewVisible(true);
       }
+    }
+
+    function cancelAutoWorkflow(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var reason = opts.reason ? String(opts.reason) : '已中断当前执行任务';
+      var manager = getAutoWorkflowManager();
+      var cancelled = false;
+      if (manager && typeof manager.cancelTask === 'function') {
+        cancelled = Boolean(manager.cancelTask({ reason: reason }));
+        applyAutoWorkflowTaskState(manager.getTask ? manager.getTask() : null);
+      } else if (manager && typeof manager.getTask === 'function' && typeof manager.clearTask === 'function') {
+        var task = manager.getTask();
+        if (task && task.status === 'running') {
+          manager.clearTask();
+          cancelled = true;
+          applyAutoWorkflowTaskState(null);
+        }
+      } else if (state.autoRunning) {
+        cancelled = true;
+        state.autoRunning = false;
+        applyAutoWorkflowTaskState(null);
+      }
+      if (cancelled) {
+        clearAllWaitingSteps();
+        updateFlowStatus();
+      }
+      return cancelled;
     }
 
     function isAutoWorkflowReady() {
@@ -1042,6 +1086,7 @@
       runAutoWorkflow: runAutoWorkflow,
       runAutoWorkflowFromClean: runAutoWorkflowFromClean,
       continueAutoWorkflowAfterCoverage: continueAutoWorkflowAfterCoverage,
+      cancelAutoWorkflow: cancelAutoWorkflow,
       applyAutoWorkflowTaskState: applyAutoWorkflowTaskState,
       isAutoWorkflowReady: isAutoWorkflowReady,
     };

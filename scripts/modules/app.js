@@ -399,6 +399,9 @@
           throw new Error('多模态模型客户端不可用，请刷新页面后重试');
         }
     );
+    const abortAllModelRequests = modelClient && typeof modelClient.abortAllRequests === 'function'
+      ? modelClient.abortAllRequests
+      : function noopAbortAllModelRequests() {};
 
     function initMissingReminderAiManager(options) {
       const utils = options && options.utils ? options.utils : {};
@@ -1073,6 +1076,9 @@
       const clearLastError = options && typeof options.clearLastModelError === 'function'
         ? options.clearLastModelError
         : function() {};
+      const abortModelRequests = options && typeof options.abortModelRequests === 'function'
+        ? options.abortModelRequests
+        : function() {};
       const storageKey = 'tap-auto-workflow-task';
       const runnerId = 'auto-workflow-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
       const runningMap = {};
@@ -1144,6 +1150,28 @@
 
       function clearTask() {
         writeTask(null, 'clear');
+      }
+
+      function cancelTask(options) {
+        var opts = options && typeof options === 'object' ? options : {};
+        var reasonText = opts.reason ? String(opts.reason) : '已中断当前执行任务';
+        var active = readTask();
+        if (!active || active.status !== 'running') {
+          if (opts.clear === true) clearTask();
+          return false;
+        }
+        active.status = 'cancelled';
+        active.error = reasonText;
+        active.cancelledAt = Date.now();
+        active.endedAt = active.cancelledAt;
+        resetRunner(active);
+        writeTask(active, 'cancel');
+        try {
+          abortModelRequests('auto-workflow-cancelled');
+        } catch (err) {
+          // ignore
+        }
+        return true;
       }
 
       function buildTaskId() {
@@ -1300,6 +1328,7 @@
               var step = steps[i] || {};
               current = readTask();
               if (!current || current.id !== task.id) return null;
+              if (current.status !== 'running') return current;
               if (current.runnerId && current.runnerId !== runnerId) return null;
               current.stepIndex = i;
               current.stepKey = step.key || '';
@@ -1311,6 +1340,10 @@
                 if (step && typeof step.run === 'function') {
                   await step.run(context);
                 }
+                current = readTask();
+                if (!current || current.id !== task.id) return null;
+                if (current.status !== 'running') return current;
+                if (current.runnerId && current.runnerId !== runnerId) return null;
                 var valid = step && typeof step.validate === 'function' ? step.validate() : false;
                 if (!valid) {
                   var lastErr = typeof getLastError === 'function' ? getLastError() : null;
@@ -1339,6 +1372,10 @@
                 if (typeof persistWorkflowStateNow === 'function') persistWorkflowStateNow();
               } catch (err) {
                 var lastErrInner = typeof getLastError === 'function' ? getLastError() : null;
+                current = readTask();
+                if (!current || current.id !== task.id) return null;
+                if (current.status !== 'running') return current;
+                if (current.runnerId && current.runnerId !== runnerId) return null;
                 if (shouldSuspendForNavigation(err) || shouldSuspendForNavigation(lastErrInner)) {
                   current.status = 'running';
                   current.error = '';
@@ -1424,6 +1461,7 @@
         createTask: createTask,
         startTask: startTask,
         getTask: readTask,
+        cancelTask: cancelTask,
         clearTask: clearTask,
         resumeTask: resumeTask,
       };
@@ -2259,6 +2297,7 @@
       'runAutoWorkflow',
       'runAutoWorkflowFromClean',
       'continueAutoWorkflowAfterCoverage',
+      'cancelAutoWorkflow',
       'applyAutoWorkflowTaskState',
     ]);
 
@@ -2276,6 +2315,7 @@
       persistWorkflowStateNow: requestPersistWorkflowStateNow,
       getLastModelError: getLastModelError,
       clearLastModelError: clearLastModelError,
+      abortModelRequests: abortAllModelRequests,
     });
     window.app.autoWorkflowManager = autoWorkflowManager;
 
@@ -3034,6 +3074,34 @@
       });
     }
 
+    function interruptActiveExecutions(reasonText) {
+      var reason = reasonText ? String(reasonText) : '已中断当前执行任务';
+      var interrupted = false;
+      if (autoWorkflowManager && typeof autoWorkflowManager.cancelTask === 'function') {
+        try {
+          interrupted = Boolean(autoWorkflowManager.cancelTask({ reason: reason }));
+          if (interrupted && typeof syncAutoWorkflowTaskState === 'function') {
+            syncAutoWorkflowTaskState(autoWorkflowManager.getTask ? autoWorkflowManager.getTask() : null);
+          }
+        } catch (err) {
+          interrupted = false;
+        }
+      } else if (autoWorkflowManager && typeof autoWorkflowManager.getTask === 'function' && typeof autoWorkflowManager.clearTask === 'function') {
+        var task = autoWorkflowManager.getTask();
+        if (task && task.status === 'running') {
+          autoWorkflowManager.clearTask();
+          interrupted = true;
+          if (typeof syncAutoWorkflowTaskState === 'function') syncAutoWorkflowTaskState(null);
+        }
+      }
+      try {
+        abortAllModelRequests('workflow-interrupted');
+      } catch (err) {
+        // ignore
+      }
+      return interrupted;
+    }
+
     function resetWorkflowData() {
       if (dom.rawText) dom.rawText.value = '';
       if (dom.reviewResultEl) dom.reviewResultEl.value = '';
@@ -3108,12 +3176,22 @@
     }
 
     function guardRequirementImport() {
-      if (!hasWorkflowData()) return Promise.resolve(true);
+      var hasRunningTask = false;
+      if (autoWorkflowManager && typeof autoWorkflowManager.getTask === 'function') {
+        var task = autoWorkflowManager.getTask();
+        hasRunningTask = Boolean(task && task.status === 'running');
+      } else {
+        hasRunningTask = Boolean(state.autoRunning);
+      }
+      if (!hasWorkflowData() && !hasRunningTask) return Promise.resolve(true);
       var confirmDrawer = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
-      var message = '新导入需求后页面数据会被清空（含用例生成数据），需要重新执行全部操作，是否确认导入新需求？';
+      var message = '新导入需求后页面数据会被清空（含用例生成数据），并中断当前自动执行任务。需要重新执行全部操作，是否确认导入新需求？';
       if (!confirmDrawer || typeof confirmDrawer.open !== 'function') {
         var ok = window.confirm(message);
-        if (ok) resetWorkflowData();
+        if (ok) {
+          interruptActiveExecutions('导入新需求，已中断当前一键执行');
+          resetWorkflowData();
+        }
         return Promise.resolve(ok);
       }
       return confirmDrawer.open({
@@ -3124,6 +3202,7 @@
         danger: true,
       }).then(function(result) {
         if (result && result.ok) {
+          interruptActiveExecutions('导入新需求，已中断当前一键执行');
           resetWorkflowData();
           return true;
         }

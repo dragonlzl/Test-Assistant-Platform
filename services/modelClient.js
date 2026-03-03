@@ -106,6 +106,7 @@
     var proxyModelRequest = options && typeof options.proxyModelRequest === 'function'
       ? options.proxyModelRequest
       : null;
+    var activeControllers = [];
 
     function resolveProxyModelRequest() {
       if (proxyModelRequest) return proxyModelRequest;
@@ -113,6 +114,32 @@
         return window.app.apiClient.proxyModelRequest;
       }
       return null;
+    }
+
+    function registerActiveController(controller) {
+      if (!controller) return;
+      if (activeControllers.indexOf(controller) !== -1) return;
+      activeControllers.push(controller);
+    }
+
+    function unregisterActiveController(controller) {
+      if (!controller) return;
+      var idx = activeControllers.indexOf(controller);
+      if (idx === -1) return;
+      activeControllers.splice(idx, 1);
+    }
+
+    function abortAllRequests(reason) {
+      var list = activeControllers.slice();
+      activeControllers.length = 0;
+      list.forEach(function(controller) {
+        if (!controller || typeof controller.abort !== 'function') return;
+        try {
+          controller.abort(reason || 'cancelled');
+        } catch (err) {
+          // ignore
+        }
+      });
     }
 
     function modelUsesResponsesApi(model) {
@@ -653,6 +680,7 @@
       var controller = typeof AbortController === 'function' ? new AbortController() : null;
       var timer = null;
       if (controller) {
+        registerActiveController(controller);
         timer = setTimeout(function onTimeout() { controller.abort('timeout'); }, timeoutMs);
       }
       var res;
@@ -672,6 +700,7 @@
         throw err;
       } finally {
         if (timer) clearTimeout(timer);
+        if (controller) unregisterActiveController(controller);
       }
       if (!res || !res.ok) {
         try {
@@ -727,6 +756,7 @@
       var controller = typeof AbortController === 'function' ? new AbortController() : null;
       var timer = null;
       if (controller) {
+        registerActiveController(controller);
         timer = setTimeout(function onTimeout() { controller.abort('timeout'); }, timeoutMs);
       }
       var res;
@@ -746,6 +776,7 @@
         throw err;
       } finally {
         if (timer) clearTimeout(timer);
+        if (controller) unregisterActiveController(controller);
       }
       if (!res || !res.ok) {
         try {
@@ -783,6 +814,7 @@
       callModelWithConfig: callModelWithConfig,
       callModelWithContent: callModelWithContent,
       buildMultimodalRequestBody: buildMultimodalRequestBody,
+      abortAllRequests: abortAllRequests,
     };
   }
 

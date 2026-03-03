@@ -8,6 +8,7 @@
     var runAutoWorkflow = handlers.runAutoWorkflow || function() {};
     var runAutoWorkflowFromClean = handlers.runAutoWorkflowFromClean || function() {};
     var continueAutoWorkflowAfterCoverage = handlers.continueAutoWorkflowAfterCoverage || function() {};
+    var cancelAutoWorkflow = handlers.cancelAutoWorkflow || function() { return false; };
     var toggleAutoMissingView = handlers.toggleAutoMissingView || function() {};
     var copyAutoMissingJson = handlers.copyAutoMissingJson || function() {};
     var smartFillMissingSuggestions = handlers.smartFillMissingSuggestions || function() {};
@@ -33,6 +34,7 @@
       return null;
     };
     var autoWorkflowBtn = pickEl(dom.autoWorkflowBtn, 'runAutoWorkflow');
+    var stopAutoWorkflowBtn = pickEl(dom.stopAutoWorkflowBtn, 'stopAutoWorkflow');
     var autoRecleanBtn = pickEl(dom.autoRecleanBtn, 'autoRecleanBtn');
     var autoIgnoreCoverageBtn = pickEl(dom.autoIgnoreCoverageBtn, 'autoIgnoreCoverageBtn');
     var autoMissingToggle = pickEl(dom.autoMissingToggle, 'autoMissingToggle');
@@ -56,6 +58,38 @@
     if (autoWorkflowBtn) {
       autoWorkflowBtn.addEventListener('click', function() {
         runAutoWorkflow();
+      });
+    }
+    if (stopAutoWorkflowBtn) {
+      stopAutoWorkflowBtn.addEventListener('click', function() {
+        if (!state.autoRunning) {
+          setStatus(autoWorkflowStatus, '当前无执行中的任务', 'warn');
+          return;
+        }
+        var title = '确认中断执行';
+        var message = '确认中断当前全部执行任务吗？中断后可重新点击“一键执行”。';
+        var confirmDrawer = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
+        var doCancel = function() {
+          var cancelled = cancelAutoWorkflow({ reason: '手动中断全部执行' });
+          if (!cancelled) {
+            setStatus(autoWorkflowStatus, '当前无执行中的任务', 'warn');
+            return;
+          }
+          setStatus(autoWorkflowStatus, '已中断当前执行任务', 'warn');
+        };
+        if (!confirmDrawer || typeof confirmDrawer.open !== 'function') {
+          if (window.confirm(message)) doCancel();
+          return;
+        }
+        confirmDrawer.open({
+          title: title,
+          message: message,
+          confirmText: '确认中断',
+          cancelText: '取消',
+          danger: true,
+        }).then(function(result) {
+          if (result && result.ok) doCancel();
+        });
       });
     }
     if (autoRecleanBtn) {
@@ -182,6 +216,7 @@
       runAutoWorkflow: runAutoWorkflow,
       runAutoWorkflowFromClean: runAutoWorkflowFromClean,
       continueAutoWorkflowAfterCoverage: continueAutoWorkflowAfterCoverage,
+      cancelAutoWorkflow: cancelAutoWorkflow,
       executeAutoWorkflowSteps: executeAutoWorkflowSteps,
       enforceAutoCoverageRequirement: enforceAutoCoverageRequirement,
     };
