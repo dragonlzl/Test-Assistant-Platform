@@ -18,6 +18,7 @@
     var getReasoningForType = handlers.getReasoningForType || function() { return ''; };
     var getTemperatureForType = handlers.getTemperatureForType || function() { return 0.2; };
     var callModelWithConfig = handlers.callModelWithConfig || function() { return Promise.resolve(''); };
+    var callModelWithContent = handlers.callModelWithContent || function() { return Promise.reject(new Error('多模态模型客户端不可用')); };
     var updateModelTiming = handlers.updateModelTiming || function() {};
     var wrapTextWithRequirement = handlers.wrapTextWithRequirement || function(text) { return text; };
     var formatJsonOrText = handlers.formatJsonOrText || function(text) { return text; };
@@ -56,6 +57,9 @@
     var autoClarifyDrawerBody = dom.autoClarifyDrawerBody;
     var autoClarifyDrawerTitle = dom.autoClarifyDrawerTitle;
     var autoClarifyDrawer = null;
+    var multimodalMaxImages = 20;
+    var multimodalMaxEdge = 1600;
+    var multimodalMaxBytes = 4 * 1024 * 1024;
 
     if (!Array.isArray(state.reviewRows)) state.reviewRows = [];
     if (!(state.reviewClarifications instanceof Map)) state.reviewClarifications = new Map();
@@ -656,9 +660,176 @@
       }
     }
 
+    function modelSupportsVision(model) {
+      if (!model || typeof model !== 'object') return false;
+      var raw = model.capabilities || model.modelCapabilities || model.tags || model.multiModalTags || model.multimodalTags;
+      var caps = [];
+      if (Array.isArray(raw)) {
+        caps = raw;
+      } else if (typeof raw === 'string') {
+        caps = raw.split(/[,|/、\s]+/);
+      } else if (raw && typeof raw === 'object') {
+        caps = Object.keys(raw).filter(function(key) { return raw[key]; });
+      }
+      for (var i = 0; i < caps.length; i += 1) {
+        var key = String(caps[i] || '').trim().toLowerCase();
+        if (!key) continue;
+        if (key === 'vision' || key === '视觉') return true;
+      }
+      return false;
+    }
+
+    function collectRequirementImageBlobs() {
+      var list = [];
+      var media = state && state.requirementMedia && typeof state.requirementMedia === 'object'
+        ? state.requirementMedia
+        : null;
+      if (!media) return list;
+      var append = function(item, source) {
+        if (!item || typeof item !== 'object') return;
+        var blob = item.blob || item.file || null;
+        if (!blob) return;
+        list.push({
+          blob: blob,
+          source: source || '',
+          index: Number(item.index) || (list.length + 1),
+        });
+      };
+      if (Array.isArray(media.docxImages)) {
+        media.docxImages.forEach(function(item) { append(item, 'docx'); });
+      }
+      if (Array.isArray(media.pastedImages)) {
+        media.pastedImages.forEach(function(item) { append(item, 'paste'); });
+      }
+      return list;
+    }
+
+    function readBlobAsDataUrl(blob) {
+      return new Promise(function(resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function() { resolve(String(reader.result || '')); };
+        reader.onerror = function() { reject(reader.error || new Error('读取图片失败')); };
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function estimateDataUrlBytes(dataUrl) {
+      if (!dataUrl) return 0;
+      var comma = dataUrl.indexOf(',');
+      if (comma === -1) return 0;
+      var b64 = dataUrl.slice(comma + 1);
+      var padding = 0;
+      var matched = b64.match(/=+$/);
+      if (matched && matched[0]) padding = matched[0].length;
+      return Math.max(0, Math.floor(b64.length * 3 / 4) - padding);
+    }
+
+    function loadImageByDataUrl(dataUrl) {
+      return new Promise(function(resolve, reject) {
+        var img = new Image();
+        img.onload = function() { resolve(img); };
+        img.onerror = function() { reject(new Error('图片解码失败')); };
+        img.src = dataUrl;
+      });
+    }
+
+    async function resizeDataUrl(dataUrl, maxEdge, mimeType, quality) {
+      if (!dataUrl) return '';
+      if (typeof document === 'undefined' || !document.createElement) return dataUrl;
+      var image;
+      try {
+        image = await loadImageByDataUrl(dataUrl);
+      } catch (err) {
+        return dataUrl;
+      }
+      var srcW = image.naturalWidth || image.width || 0;
+      var srcH = image.naturalHeight || image.height || 0;
+      if (!srcW || !srcH) return dataUrl;
+      var longest = Math.max(srcW, srcH);
+      var ratio = longest > maxEdge ? (maxEdge / longest) : 1;
+      var targetW = Math.max(1, Math.round(srcW * ratio));
+      var targetH = Math.max(1, Math.round(srcH * ratio));
+      var canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      var ctx2d = canvas.getContext('2d');
+      if (!ctx2d) return dataUrl;
+      ctx2d.drawImage(image, 0, 0, targetW, targetH);
+      var targetMime = mimeType || 'image/jpeg';
+      try {
+        return canvas.toDataURL(targetMime, quality);
+      } catch (err) {
+        try {
+          return canvas.toDataURL('image/jpeg', quality);
+        } catch (err2) {
+          return dataUrl;
+        }
+      }
+    }
+
+    async function preprocessImageToDataUrl(blob) {
+      if (!blob) return { ok: false, reason: 'missing_blob' };
+      var dataUrl = '';
+      try {
+        dataUrl = await readBlobAsDataUrl(blob);
+      } catch (err) {
+        return { ok: false, reason: 'read_failed' };
+      }
+      var best = await resizeDataUrl(dataUrl, multimodalMaxEdge, null, 0.92);
+      if (!best) best = dataUrl;
+      var bytes = estimateDataUrlBytes(best);
+      if (bytes > multimodalMaxBytes) {
+        var jpegHigh = await resizeDataUrl(best, multimodalMaxEdge, 'image/jpeg', 0.85);
+        if (jpegHigh) {
+          best = jpegHigh;
+          bytes = estimateDataUrlBytes(best);
+        }
+      }
+      if (bytes > multimodalMaxBytes) {
+        var jpegLow = await resizeDataUrl(best, multimodalMaxEdge, 'image/jpeg', 0.72);
+        if (jpegLow) {
+          best = jpegLow;
+          bytes = estimateDataUrlBytes(best);
+        }
+      }
+      if (bytes > multimodalMaxBytes) {
+        return { ok: false, reason: 'too_large' };
+      }
+      return { ok: true, dataUrl: best };
+    }
+
+    async function buildImageContentBlocks(images) {
+      var result = [];
+      var stats = {
+        total: Array.isArray(images) ? images.length : 0,
+        sent: 0,
+        skipped: 0,
+      };
+      if (!Array.isArray(images) || !images.length) return { blocks: result, stats: stats };
+      for (var i = 0; i < images.length; i += 1) {
+        if (i >= multimodalMaxImages) {
+          stats.skipped += (images.length - i);
+          break;
+        }
+        var item = images[i];
+        var pre = await preprocessImageToDataUrl(item && item.blob ? item.blob : null);
+        if (!pre.ok || !pre.dataUrl) {
+          stats.skipped += 1;
+          continue;
+        }
+        result.push({
+          type: 'image',
+          dataUrl: pre.dataUrl,
+        });
+        stats.sent += 1;
+      }
+      return { blocks: result, stats: stats };
+    }
+
     async function reviewRequirements() {
       var raw = rawText && rawText.value ? rawText.value.trim() : '';
-      if (!raw) {
+      var requirementImages = collectRequirementImageBlobs();
+      if (!raw && !requirementImages.length) {
         setStatus(reviewStatus, '请先导入或填写原始需求', 'warn');
         return;
       }
@@ -693,12 +864,56 @@
         var prompt = reviewPrompt || defaultPrompts.review;
         var reasoning = getReasoningForType('review');
         var temperature = getTemperatureForType('review');
+        var modelHasVision = modelSupportsVision(model);
+        var useVisionInput = modelHasVision && requirementImages.length > 0;
+        if (!raw && !useVisionInput) {
+          setStatus(reviewStatus, '当前评审模型不支持视觉，且文本为空，请先输入文本或更换支持视觉的模型', 'warn');
+          return;
+        }
         var startTime = Date.now();
-        var content = await callModelWithConfig(model, raw, prompt, reasoning, temperature);
+        var content = '';
+        if (useVisionInput) {
+          var imageContent = await buildImageContentBlocks(requirementImages);
+          var sentImages = imageContent && imageContent.stats ? Number(imageContent.stats.sent) || 0 : 0;
+          if (!raw && sentImages < 1) {
+            setStatus(reviewStatus, '当前无可用文本，且图片均未通过处理限制，请补充文本或缩小图片后重试', 'warn');
+            return;
+          }
+          var visionUserText = raw || '（无文本，请根据图片进行需求评审）';
+          if (sentImages > 0) {
+            var contentBlocks = [{ type: 'text', text: visionUserText }].concat(imageContent.blocks || []);
+            content = await callModelWithContent(model, contentBlocks, prompt, {
+              reasoningEffort: reasoning,
+              temperature: temperature,
+            });
+          } else {
+            content = await callModelWithConfig(model, raw, prompt, reasoning, temperature);
+          }
+          var reviewMsg = '评审完成';
+          if (sentImages > 0) {
+            reviewMsg += '，已携带图片' + sentImages + '张';
+          }
+          if (imageContent.stats && imageContent.stats.skipped > 0) {
+            reviewMsg += '，跳过图片' + imageContent.stats.skipped + '张';
+          }
+          if (!sentImages && requirementImages.length > 0) {
+            reviewMsg += '（图片均未通过处理限制，本次仅使用文本）';
+          }
+          var warnStatus = false;
+          if (imageContent.stats && imageContent.stats.skipped > 0) warnStatus = true;
+          if (!sentImages && requirementImages.length > 0) warnStatus = true;
+          setStatus(reviewStatus, reviewMsg, warnStatus ? 'warn' : 'ok');
+        } else {
+          content = await callModelWithConfig(model, raw, prompt, reasoning, temperature);
+          if (requirementImages.length > 0 && !modelHasVision) {
+            setStatus(reviewStatus, '评审完成（当前模型不支持视觉，本次仅使用文本）', 'warn');
+          } else {
+            setStatus(reviewStatus, '评审完成', 'ok');
+          }
+        }
         updateModelTiming(reviewTimingEl, Date.now() - startTime);
         reviewResultEl.value = wrapTextWithRequirement(formatJsonOrText(stripCodeFence(content)));
         syncReviewViewFromResult();
-        setStatus(reviewStatus, '评审完成', 'ok');
       } catch (err) {
         console.error(err);
         updateModelTiming(reviewTimingEl);

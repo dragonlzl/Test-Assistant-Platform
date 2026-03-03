@@ -1034,7 +1034,17 @@
       if (name === 'assign') {
         if (!skipHooks) {
           renderAssignmentsSelect();
-          ['reviewAssignStatus', 'cleanAssignStatus', 'compareAssignStatus', 'splitAssignStatus', 'casesAssignStatus', 'caseGenAssignStatus', 'caseFilterAssignStatus']
+          [
+            'reviewAssignStatus',
+            'cleanAssignStatus',
+            'compareAssignStatus',
+            'splitAssignStatus',
+            'casesAssignStatus',
+            'caseGenAssignStatus',
+            'caseFilterAssignStatus',
+            'missingReminderAssignStatus',
+            'caseLibraryGenAssignStatus',
+          ]
             .forEach(clearStatusById);
           focusAssignSaveIfNeeded();
         }

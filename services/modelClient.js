@@ -126,6 +126,7 @@
         var safeText = userText === undefined || userText === null ? '' : String(userText);
         var responseBody = {
           model: model.model,
+          stream: false,
           input: [
             {
               role: 'user',
@@ -154,6 +155,97 @@
       }
       if (deepseekJsonMode) {
         chatBody.response_format = { type: 'json_object' };
+      }
+      return chatBody;
+    }
+
+    function normalizeContentBlocks(contentBlocks) {
+      var normalized = [];
+      if (!Array.isArray(contentBlocks)) return normalized;
+      contentBlocks.forEach(function(block) {
+        if (!block || typeof block !== 'object') return;
+        if (block.type === 'text') {
+          var text = block.text === undefined || block.text === null ? '' : String(block.text);
+          if (text.trim()) normalized.push({ type: 'text', text: text });
+          return;
+        }
+        if (block.type === 'image') {
+          var dataUrl = block.dataUrl === undefined || block.dataUrl === null ? '' : String(block.dataUrl).trim();
+          if (!dataUrl) return;
+          normalized.push({ type: 'image', dataUrl: dataUrl });
+        }
+      });
+      return normalized;
+    }
+
+    function buildMultimodalRequestBody(model, contentBlocks, promptText, options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var maxTokens = opts.maxTokens || model.maxTokens || defaultMaxTokens;
+      var tempValue = Number(opts.temperature);
+      var safeTemperature = Number.isFinite(tempValue) ? Math.min(1, Math.max(0, tempValue)) : 0.2;
+      var reasoningEffort = opts.reasoningEffort || '';
+      var systemPrompt = promptText && String(promptText).trim() ? String(promptText).trim() : '';
+      var normalizedBlocks = normalizeContentBlocks(contentBlocks);
+      if (!normalizedBlocks.length) {
+        normalizedBlocks.push({ type: 'text', text: '请处理输入内容。' });
+      }
+      if (modelUsesResponsesApi(model)) {
+        var responseContent = normalizedBlocks.map(function(block) {
+          if (block.type === 'image') {
+            return {
+              type: 'input_image',
+              image_url: block.dataUrl,
+            };
+          }
+          return {
+            type: 'input_text',
+            text: block.text,
+          };
+        });
+        var responseBody = {
+          model: model.model,
+          stream: false,
+          input: [
+            {
+              role: 'user',
+              content: responseContent,
+            }
+          ],
+          temperature: safeTemperature,
+          max_output_tokens: maxTokens,
+        };
+        if (systemPrompt) responseBody.instructions = systemPrompt;
+        return responseBody;
+      }
+      var messageContent = normalizedBlocks.map(function(block) {
+        if (block.type === 'image') {
+          return {
+            type: 'image_url',
+            image_url: { url: block.dataUrl },
+          };
+        }
+        return {
+          type: 'text',
+          text: block.text,
+        };
+      });
+      var messages = [];
+      if (systemPrompt) {
+        messages.push({ role: 'system', content: systemPrompt });
+      }
+      if (messageContent.length === 1 && messageContent[0].type === 'text') {
+        messages.push({ role: 'user', content: messageContent[0].text });
+      } else {
+        messages.push({ role: 'user', content: messageContent });
+      }
+      var chatBody = {
+        model: model.model,
+        messages: messages,
+        temperature: safeTemperature,
+        max_tokens: maxTokens,
+      };
+      if (reasoningEffort && modelIsR1(model)) {
+        chatBody.reasoning_effort = reasoningEffort;
       }
       return chatBody;
     }
@@ -187,6 +279,265 @@
         });
       });
       return textParts.join('\n').trim();
+    }
+
+    function extractTextFromContentBlocks(content) {
+      var textParts = [];
+
+      function pushText(value) {
+        if (typeof value !== 'string') return;
+        var text = value.trim();
+        if (text) textParts.push(text);
+      }
+
+      function visit(node) {
+        if (node === null || node === undefined) return;
+        if (typeof node === 'string') {
+          pushText(node);
+          return;
+        }
+        if (Array.isArray(node)) {
+          node.forEach(visit);
+          return;
+        }
+        if (typeof node !== 'object') return;
+        pushText(node.text);
+        pushText(node.output_text);
+        if (typeof node.content === 'string') {
+          pushText(node.content);
+        } else if (Array.isArray(node.content)) {
+          visit(node.content);
+        }
+        if (node.part && typeof node.part === 'object') visit(node.part);
+      }
+
+      visit(content);
+      return textParts.join('\n').trim();
+    }
+
+    function extractContentFromParsedData(data) {
+      function normalizeAndStrip(value) {
+        var extracted = extractTextFromContentBlocks(value);
+        if (extracted) return stripCodeFence(extracted);
+        var normalized = normalizeResponseContent(value);
+        if (!normalized) return '';
+        return stripCodeFence(normalized);
+      }
+      return (
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'reasoning_content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'delta', 'content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'delta', 'reasoning_content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'text'])) ||
+        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'responses'])) ||
+        normalizeAndStrip(getNestedValue(data, ['data', 0, 'contents', 0, 'text'])) ||
+        normalizeAndStrip(extractResponsesOutput(data)) ||
+        normalizeAndStrip(getNestedValue(data, ['output_text'])) ||
+        normalizeAndStrip(getNestedValue(data, ['content'])) ||
+        normalizeAndStrip(getNestedValue(data, ['text']))
+      );
+    }
+
+    function normalizeModelError(errorValue) {
+      if (!errorValue) return '';
+      if (typeof errorValue === 'string') return errorValue;
+      if (typeof errorValue.message === 'string' && errorValue.message) return errorValue.message;
+      if (typeof errorValue.code === 'string' && errorValue.code) return errorValue.code;
+      try {
+        return JSON.stringify(errorValue);
+      } catch (err) {
+        return String(errorValue);
+      }
+    }
+
+    function splitSseEvents(rawBody) {
+      var text = rawBody === undefined || rawBody === null ? '' : String(rawBody);
+      if (!text) return null;
+      var lines = text.replace(/\r\n/g, '\n').split('\n');
+      var sawStructuredLine = false;
+      var sawInvalidLine = false;
+      var events = [];
+      var eventName = '';
+      var dataLines = [];
+
+      function parseLine(line) {
+        var idx = line.indexOf(':');
+        if (idx === -1) return '';
+        var value = line.slice(idx + 1);
+        if (value.charAt(0) === ' ') value = value.slice(1);
+        return value;
+      }
+
+      function flushEvent() {
+        if (!eventName && !dataLines.length) return;
+        events.push({ event: eventName, data: dataLines.join('\n') });
+        eventName = '';
+        dataLines = [];
+      }
+
+      for (var i = 0; i < lines.length; i += 1) {
+        var line = lines[i];
+        if (!line) {
+          flushEvent();
+          continue;
+        }
+        if (line.indexOf('event:') === 0) {
+          sawStructuredLine = true;
+          eventName = parseLine(line);
+          continue;
+        }
+        if (line.indexOf('data:') === 0) {
+          sawStructuredLine = true;
+          dataLines.push(parseLine(line));
+          continue;
+        }
+        if (line.indexOf('id:') === 0 || line.indexOf('retry:') === 0 || line.indexOf(':') === 0) {
+          sawStructuredLine = true;
+          continue;
+        }
+        if (line.trim()) sawInvalidLine = true;
+      }
+      flushEvent();
+      if (!sawStructuredLine || sawInvalidLine) return null;
+      return events;
+    }
+
+    function extractSsePayloadContent(payload, fallbackEventName) {
+      var result = {
+        delta: '',
+        content: '',
+        completed: '',
+        error: '',
+      };
+      if (payload === null || payload === undefined) return result;
+      if (typeof payload !== 'object') {
+        var normalized = normalizeResponseContent(payload);
+        if (normalized) result.content = stripCodeFence(normalized);
+        return result;
+      }
+      if (payload.error) {
+        result.error = normalizeModelError(payload.error);
+        return result;
+      }
+
+      var type = typeof payload.type === 'string' ? payload.type : (fallbackEventName || '');
+      if (type === 'response.output_text.delta' && typeof payload.delta === 'string' && payload.delta) {
+        result.delta = payload.delta;
+      } else if (/\.delta$/i.test(type) && typeof payload.delta === 'string' && payload.delta) {
+        result.delta = payload.delta;
+      }
+
+      var part = payload.part || payload.content_part || payload.contentPart || null;
+      if (!result.delta && part && typeof part === 'object') {
+        if (typeof part.delta === 'string' && part.delta) {
+          result.delta = part.delta;
+        } else if (typeof part.text === 'string' && part.text) {
+          result.content = part.text;
+        }
+      }
+
+      if (!result.delta) {
+        var chatDelta = normalizeResponseContent(getNestedValue(payload, ['choices', 0, 'delta', 'content']));
+        if (chatDelta) result.delta = chatDelta;
+      }
+
+      if (!result.content) {
+        var payloadText = '';
+        if (typeof payload.text === 'string' && payload.text) payloadText = payload.text;
+        if (!payloadText && typeof payload.output_text === 'string' && payload.output_text) payloadText = payload.output_text;
+        if (!payloadText && typeof payload.content === 'string' && payload.content) payloadText = payload.content;
+        if (payloadText) result.content = stripCodeFence(normalizeResponseContent(payloadText));
+      }
+
+      if (!result.content && payload.item && typeof payload.item === 'object') {
+        var itemContent = extractContentFromParsedData(payload.item);
+        if (!itemContent) {
+          itemContent = stripCodeFence(normalizeResponseContent(getNestedValue(payload, ['item', 'text'])));
+        }
+        if (itemContent) result.content = itemContent;
+      }
+
+      if (!result.content) {
+        var directContent = extractContentFromParsedData(payload);
+        if (directContent) result.content = directContent;
+      }
+
+      if (payload.response && typeof payload.response === 'object') {
+        var completedContent = extractContentFromParsedData(payload.response);
+        if (completedContent) result.completed = completedContent;
+        if (!result.error && payload.response.error) {
+          result.error = normalizeModelError(payload.response.error);
+        }
+      }
+
+      return result;
+    }
+
+    function extractContentFromSse(rawBody) {
+      var events = splitSseEvents(rawBody);
+      if (!events || !events.length) {
+        return { detected: false, content: '', error: '' };
+      }
+      var deltaParts = [];
+      var contentParts = [];
+      var completedContent = '';
+      var sawDelta = false;
+      for (var i = 0; i < events.length; i += 1) {
+        var evt = events[i];
+        var dataText = evt && evt.data ? String(evt.data).trim() : '';
+        if (!dataText || dataText === '[DONE]') continue;
+        var parsed = null;
+        try {
+          parsed = JSON.parse(dataText);
+        } catch (err) {
+          parsed = dataText;
+        }
+        var extracted = extractSsePayloadContent(parsed, evt && evt.event ? String(evt.event) : '');
+        if (extracted.error) {
+          return { detected: true, content: '', error: extracted.error };
+        }
+        if (extracted.delta) {
+          sawDelta = true;
+          deltaParts.push(extracted.delta);
+        } else if (extracted.content) {
+          contentParts.push(extracted.content);
+        }
+        if (extracted.completed) completedContent = extracted.completed;
+      }
+      var content = '';
+      if (sawDelta && deltaParts.length) {
+        content = deltaParts.join('');
+      } else if (contentParts.length) {
+        content = contentParts.join('');
+      } else if (completedContent) {
+        content = completedContent;
+      }
+      content = content ? stripCodeFence(normalizeResponseContent(content)) : '';
+      return { detected: true, content: content, error: '' };
+    }
+
+    function parseModelRawBody(rawBody) {
+      var text = rawBody === undefined || rawBody === null ? '' : String(rawBody);
+      if (!text) {
+        return { data: null, content: '', isSse: false };
+      }
+      try {
+        return { data: JSON.parse(text), content: '', isSse: false };
+      } catch (err) {
+        // 非 JSON 时继续按 SSE 或纯文本处理。
+      }
+      var trimmed = text.trim();
+      if (!trimmed) {
+        return { data: null, content: '', isSse: false };
+      }
+      var sseResult = extractContentFromSse(trimmed);
+      if (sseResult.detected) {
+        if (sseResult.error) throw new Error(sseResult.error);
+        return { data: null, content: sseResult.content || '', isSse: true };
+      }
+      var sanitizedRaw = stripCodeFence(trimmed);
+      return { data: null, content: sanitizedRaw || trimmed, isSse: false };
     }
 
     async function sendModelRequest(model, headers, body, timeoutSec, signal) {
@@ -318,41 +669,20 @@
         throw new Error('HTTP ' + (res ? res.status : '未知') + errText);
       }
       rawBody = await res.text();
-      var data = null;
-      if (rawBody) {
-        try {
-          data = JSON.parse(rawBody);
-        } catch (err) {
-          var trimmed = rawBody.trim();
-          if (trimmed) {
-            var sanitizedRaw = stripCodeFence(trimmed);
-            return sanitizedRaw || trimmed;
-          }
-        }
+      var parsedRaw = parseModelRawBody(rawBody);
+      var data = parsedRaw.data;
+      if (!data && parsedRaw.content) return parsedRaw.content;
+      if (!data && parsedRaw.isSse) {
+        throw new Error('流式响应未解析到有效内容');
       }
       if (!data) {
         throw new Error('模型响应为空');
       }
       if (data && data.error) {
-        var errMsg = data.error.message || data.error.code || (typeof data.error === 'string' ? data.error : JSON.stringify(data.error));
+        var errMsg = normalizeModelError(data.error);
         throw new Error(errMsg);
       }
-      function normalizeAndStrip(value) {
-        var normalized = normalizeResponseContent(value);
-        if (!normalized) return '';
-        return stripCodeFence(normalized);
-      }
-      var content =
-        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'content'])) ||
-        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'reasoning_content'])) ||
-        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'delta', 'content'])) ||
-        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'delta', 'reasoning_content'])) ||
-        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'content'])) ||
-        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'text'])) ||
-        normalizeAndStrip(getNestedValue(data, ['choices', 0, 'message', 'responses'])) ||
-        normalizeAndStrip(getNestedValue(data, ['data', 0, 'contents', 0, 'text'])) ||
-        normalizeAndStrip(extractResponsesOutput(data)) ||
-        normalizeAndStrip(getNestedValue(data, ['output_text']));
+      var content = extractContentFromParsedData(data);
       if (!content) {
         var preview = rawBody ? (rawBody.length > 400 ? rawBody.slice(0, 400) + '...' : rawBody) : '';
         var extra = preview ? '（响应片段：' + preview + '）' : '';
@@ -364,8 +694,81 @@
       return content;
     }
 
+    async function callModelWithContent(model, contentBlocks, promptText, options) {
+      if (!model || !model.baseUrl || !model.model) {
+        throw new Error('模型配置不完整');
+      }
+      var proxyFn = resolveProxyModelRequest();
+      if (!fetchImpl && !proxyFn) {
+        throw new Error('当前环境不支持 fetch');
+      }
+      var opts = options && typeof options === 'object' ? options : {};
+      var safePrompt = promptText && String(promptText).trim() ? String(promptText).trim() : '';
+      var body = buildMultimodalRequestBody(model, contentBlocks, safePrompt, opts);
+      var headers = Object.assign({ 'Content-Type': 'application/json' }, getAuthHeader(model.apiKey));
+      var timeoutSec = clampTimeoutSeconds(
+        Object.prototype.hasOwnProperty.call(opts, 'timeoutSec') ? opts.timeoutSec : getTimeoutSec()
+      );
+      var timeoutMs = timeoutSec * 1000;
+      var controller = typeof AbortController === 'function' ? new AbortController() : null;
+      var timer = null;
+      if (controller) {
+        timer = setTimeout(function onTimeout() { controller.abort('timeout'); }, timeoutMs);
+      }
+      var res;
+      var rawBody = '';
+      try {
+        res = await sendModelRequest(
+          model,
+          headers,
+          body,
+          timeoutSec,
+          controller ? controller.signal : undefined
+        );
+      } catch (err) {
+        if (err && err.name === 'AbortError') {
+          throw new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
+        }
+        throw err;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+      if (!res || !res.ok) {
+        try {
+          rawBody = res && typeof res.text === 'function' ? await res.text() : '';
+        } catch (err) {
+          rawBody = '';
+        }
+        var errText = rawBody ? ('：' + rawBody.slice(0, 200)) : '';
+        throw new Error('HTTP ' + (res ? res.status : '未知') + errText);
+      }
+      rawBody = await res.text();
+      var parsedRaw = parseModelRawBody(rawBody);
+      var data = parsedRaw.data;
+      if (!data && parsedRaw.content) return parsedRaw.content;
+      if (!data && parsedRaw.isSse) {
+        throw new Error('流式响应未解析到有效内容');
+      }
+      if (!data) {
+        throw new Error('模型响应为空');
+      }
+      if (data && data.error) {
+        var errMsg = normalizeModelError(data.error);
+        throw new Error(errMsg);
+      }
+      var content = extractContentFromParsedData(data);
+      if (!content) {
+        var preview = rawBody ? (rawBody.length > 400 ? rawBody.slice(0, 400) + '...' : rawBody) : '';
+        var extra = preview ? '（响应片段：' + preview + '）' : '';
+        throw new Error('未找到模型返回内容' + extra);
+      }
+      return content;
+    }
+
     return {
       callModelWithConfig: callModelWithConfig,
+      callModelWithContent: callModelWithContent,
+      buildMultimodalRequestBody: buildMultimodalRequestBody,
     };
   }
 

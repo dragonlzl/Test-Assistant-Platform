@@ -758,7 +758,7 @@
       }
       state.models = state.models.filter(function(m) { return getStableModelId(m) !== targetId; });
       persistModelsLocal();
-      var keys = requiredAssignmentKeys.concat(['caseFilterId']);
+      var keys = assignmentIdKeys;
       keys.forEach(function(key) {
         if (state.assignments[key] === targetId) state.assignments[key] = '';
       });
