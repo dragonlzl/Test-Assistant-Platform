@@ -1302,7 +1302,14 @@
       setStatus(statusEl, '正在测试模型...', '');
       try {
         var baseUrl = model && model.baseUrl ? String(model.baseUrl).toLowerCase() : '';
-        var isResponsesApi = /\/responses(?:\?|$)/i.test(baseUrl);
+        var modelId = model && model.model ? String(model.model).toLowerCase() : '';
+        var provider = model && model.provider ? String(model.provider).toLowerCase() : '';
+        var isClaudeLike = provider === 'claude' || provider === 'anthropic' || modelId.indexOf('claude') !== -1;
+        var useClaudeCompat = isClaudeLike && /\/responses(?:\?|$)/i.test(baseUrl);
+        var requestUrl = useClaudeCompat
+          ? String(model.baseUrl || '').replace(/\/responses(\?|$)/i, '/chat/completions$1')
+          : String(model.baseUrl || '');
+        var isResponsesApi = !useClaudeCompat && /\/responses(?:\?|$)/i.test(baseUrl);
         const body = isResponsesApi
           ? {
             model: model.model,
@@ -1327,7 +1334,7 @@
         if (proxyFn) {
           try {
             res = await proxyFn({
-              base_url: model.baseUrl,
+              base_url: requestUrl,
               api_key: model.apiKey || '',
               payload: body,
               timeout_sec: 30,
@@ -1336,10 +1343,14 @@
             res = null;
           }
         }
-        if (!res || [401, 403, 404, 405].indexOf(Number(res.status)) !== -1) {
+        var statusCode = res ? Number(res.status) : 0;
+        var shouldFallback = !res
+          || [401, 403, 404, 405, 501].indexOf(statusCode) !== -1
+          || (statusCode >= 500 && statusCode < 600);
+        if (shouldFallback) {
           const headers = { 'Content-Type': 'application/json' };
           if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`;
-          res = await fetch(model.baseUrl, {
+          res = await fetch(requestUrl, {
             method: 'POST',
             headers,
             body: JSON.stringify(body),

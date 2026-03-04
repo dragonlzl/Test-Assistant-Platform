@@ -142,8 +142,42 @@
       });
     }
 
-    function modelUsesResponsesApi(model) {
+    function modelIsClaudeFamily(model) {
+      if (!model || typeof model !== 'object') return false;
+      var provider = model.provider ? String(model.provider).toLowerCase() : '';
+      if (provider === 'claude' || provider === 'anthropic') return true;
+      var modelId = model.model ? String(model.model).toLowerCase() : '';
+      return modelId.indexOf('claude') !== -1;
+    }
+
+    function modelNeedsChatCompletionsCompat(model) {
+      if (!modelIsClaudeFamily(model)) return false;
       var baseUrl = model && model.baseUrl ? String(model.baseUrl).toLowerCase() : '';
+      if (!baseUrl) return false;
+      return /\/responses(?:\?|$)/i.test(baseUrl);
+    }
+
+    function getEffectiveModelBaseUrl(model) {
+      var baseUrl = model && model.baseUrl ? String(model.baseUrl) : '';
+      if (!baseUrl) return '';
+      if (!modelNeedsChatCompletionsCompat(model)) return baseUrl;
+      return baseUrl.replace(/\/responses(\?|$)/i, '/chat/completions$1');
+    }
+
+    function getModelForRequest(model) {
+      if (!model || typeof model !== 'object') return model;
+      var nextBaseUrl = getEffectiveModelBaseUrl(model);
+      if (!nextBaseUrl || nextBaseUrl === model.baseUrl) return model;
+      var nextModel = {};
+      Object.keys(model).forEach(function(key) {
+        nextModel[key] = model[key];
+      });
+      nextModel.baseUrl = nextBaseUrl;
+      return nextModel;
+    }
+
+    function modelUsesResponsesApi(model) {
+      var baseUrl = getEffectiveModelBaseUrl(model).toLowerCase();
       if (!baseUrl) return false;
       return /\/responses(?:\?|$)/i.test(baseUrl);
     }
@@ -583,24 +617,27 @@
 
     async function sendModelRequest(model, headers, body, timeoutSec, signal) {
       var proxyFn = resolveProxyModelRequest();
+      var requestUrl = getEffectiveModelBaseUrl(model);
       if (proxyFn) {
         try {
           var proxied = await proxyFn({
-            base_url: model.baseUrl,
+            base_url: requestUrl,
             api_key: model.apiKey || '',
             payload: body,
             timeout_sec: timeoutSec,
           }, signal);
           // 在纯静态模式（无后端 API）或未登录态下，回退到直连，保持旧行为兼容。
-          if (proxied && [401, 403, 404, 405].indexOf(Number(proxied.status)) === -1) {
-            return proxied;
+          if (proxied) {
+            var status = Number(proxied.status);
+            var canFallback = [401, 403, 404, 405, 501].indexOf(status) !== -1 || (status >= 500 && status < 600);
+            if (!canFallback) return proxied;
           }
         } catch (err) {
           if (!fetchImpl) throw err;
         }
       }
       if (!fetchImpl) throw new Error('当前环境不支持 fetch');
-      return fetchImpl(model.baseUrl, {
+      return fetchImpl(requestUrl, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify(body),
@@ -673,7 +710,8 @@
       var maxTokens = model.maxTokens || defaultMaxTokens;
       var tempValue = Number(temperature);
       var safeTemperature = Number.isFinite(tempValue) ? Math.min(1, Math.max(0, tempValue)) : 0.2;
-      var body = buildModelRequestBody(model, systemPrompt, userText, safeTemperature, maxTokens, reasoningEffort, deepseekJsonMode);
+      var requestModel = getModelForRequest(model);
+      var body = buildModelRequestBody(requestModel, systemPrompt, userText, safeTemperature, maxTokens, reasoningEffort, deepseekJsonMode);
       var headers = Object.assign({ 'Content-Type': 'application/json' }, getAuthHeader(model.apiKey));
       var timeoutSec = clampTimeoutSeconds(getTimeoutSec());
       var timeoutMs = timeoutSec * 1000;
@@ -687,7 +725,7 @@
       var rawBody = '';
       try {
         res = await sendModelRequest(
-          model,
+          requestModel,
           headers,
           body,
           timeoutSec,
@@ -747,7 +785,8 @@
       }
       var opts = options && typeof options === 'object' ? options : {};
       var safePrompt = promptText && String(promptText).trim() ? String(promptText).trim() : '';
-      var body = buildMultimodalRequestBody(model, contentBlocks, safePrompt, opts);
+      var requestModel = getModelForRequest(model);
+      var body = buildMultimodalRequestBody(requestModel, contentBlocks, safePrompt, opts);
       var headers = Object.assign({ 'Content-Type': 'application/json' }, getAuthHeader(model.apiKey));
       var timeoutSec = clampTimeoutSeconds(
         Object.prototype.hasOwnProperty.call(opts, 'timeoutSec') ? opts.timeoutSec : getTimeoutSec()
@@ -763,7 +802,7 @@
       var rawBody = '';
       try {
         res = await sendModelRequest(
-          model,
+          requestModel,
           headers,
           body,
           timeoutSec,

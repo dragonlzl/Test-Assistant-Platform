@@ -19,6 +19,54 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：功能指派模型切换即时生效（免保存）
+- 功能描述：功能指派页中，单个功能卡片切换模型后立即保存并生效，不再依赖点击“保存指派”按钮。
+- 操作方式：
+  - 进入“AI 功能 → 功能指派”；
+  - 在任意功能卡片（如需求清洗/需求评审/覆盖对比等）直接更换模型；
+  - 切换后自动持久化，刷新页面仍保持最新指派。
+- 使用效果：
+  - 降低误操作风险，不会出现“已切换但忘记保存导致回退”；
+  - 一键执行/单步执行会即时使用最新指派模型。
+- 新增内容/接口/组件：
+  - 前端：`scripts/modules/assign.js`
+    - `bindModelSelect` 的 `change` 事件中新增自动保存链路：`saveAssignments()` + `renderAssignmentsSelect()`，并保持状态与可见性刷新；
+    - 保留原有“保存指派”按钮，作为可选兜底入口（不再是必需步骤）。
+  - UI 自动化：`tests/ui/models_settings.spec.js`
+    - 新增用例“功能指派切换模型后立即生效并持久化（无需点击保存指派）”，覆盖切换后本地持久化与刷新恢复。
+- 复用说明：复用现有 `saveAssignments`、本地存储与后端同步逻辑，不新增接口、不改展示结构，仅调整触发时机为模型切换事件。
+- 测试与验证：
+  - `node --check scripts/modules/assign.js tests/ui/models_settings.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/models_settings.spec.js -g "功能指派切换模型后立即生效并持久化" --reporter=line`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/models_settings.spec.js --reporter=line`（6/6 通过）
+- 更新记录：2026-03-04 新增“功能卡片模型切换自动保存”能力，并补充刷新持久化 UI 回归（`scripts/modules/assign.js`、`tests/ui/models_settings.spec.js`）。
+
+- 功能名称：Claude 兼容模型类型与 Packy `/responses` 自动兼容
+- 功能描述：修复 Claude 模型在 Packy `/v1/responses` 地址下出现 `convert_request_failed` 的问题；新增“Claude兼容”模型类型，并在请求层自动将 Claude 的 `/responses` 调用改写为 `/chat/completions`（含模型测试与正式调用链路）。
+- 操作方式：
+  - 在模型管理中选择“Claude兼容”类型，默认填充 `https://www.packyapi.com/v1/chat/completions` 与 `claude-sonnet-4-6`；
+  - 若历史配置仍为 Claude + `/responses`，系统会在请求时自动兼容到 `/chat/completions`，无需手动改写；
+  - 点击“测试模型”与实际流程调用均走同一兼容策略。
+- 使用效果：
+  - 避免 Claude 在 Packy `/responses` 路径下触发 `not implemented / convert_request_failed`；
+  - 静态页或代理不可用（如 501/5xx）场景会自动回退直连，模型测试结果更稳定；
+  - 保持原有展示结构与操作路径不变。
+- 新增内容/接口/组件：
+  - 前端页面：
+    - `index.html`、`ai-tools.html`：模型类型新增 `Claude兼容` 选项。
+  - 配置：
+    - `config/constants.js`：新增 `claude` provider 预设（`baseUrl` + `model`）。
+  - 模型调用：
+    - `services/modelClient.js`：新增 Claude 家族识别与 `/responses -> /chat/completions` 自动改写；Claude 场景按 chat body（`messages`）构造请求；代理返回 `401/403/404/405/501/5xx` 时自动回退直连。
+    - `scripts/modules/models.js`：测试模型链路同步支持 Claude 自动兼容与代理失败回退。
+  - 测试：
+    - `tests/ui/model_response_strip.spec.js`：新增 Claude + Packy `/responses` 自动兼容 UI 用例。
+- 复用说明：复用现有模型管理、provider 预设、模型请求与代理回退框架；在原链路内做兼容分支扩展，无新增后端接口。
+- 测试与验证：
+  - `node --check services/modelClient.js scripts/modules/models.js tests/ui/model_response_strip.spec.js config/constants.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/model_response_strip.spec.js --reporter=line`（4/4 通过）
+- 更新记录：2026-03-04 新增 Claude 兼容模型类型与 Packy `/responses` 自动兼容能力，并补充回归用例（`services/modelClient.js`、`scripts/modules/models.js`、`config/constants.js`、`index.html`、`ai-tools.html`、`tests/ui/model_response_strip.spec.js`）。
+
 - 功能名称：需求导入删除线内容过滤
 - 功能描述：在导入 `.docx` 需求时，自动忽略被删除线标记的文本，避免已废弃内容进入需求评审、需求清洗与后续流程。
 - 操作方式：

@@ -86,8 +86,11 @@
       el.addEventListener('change', function() {
         setAssignmentId(key, el.value || '');
         syncGlobalAssignSelection();
-        updateAssignmentStatuses();
         if (reasoningType) updateReasoningVisibility(reasoningType);
+        // 模型下拉变更后立即保存，避免还需要手动点击“保存指派”。
+        saveAssignments();
+        renderAssignmentsSelect();
+        updateAssignmentStatuses();
         updateFlowStatus();
       });
       if (statusEl) setStatus(statusEl, '', '');
