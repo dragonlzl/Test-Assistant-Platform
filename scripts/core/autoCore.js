@@ -126,6 +126,33 @@
       return window.app && window.app.autoWorkflowManager ? window.app.autoWorkflowManager : null;
     }
 
+    function isAutoClarificationPendingTask() {
+      var manager = getAutoWorkflowManager();
+      if (!manager || typeof manager.getTask !== 'function') return false;
+      var task = manager.getTask();
+      if (!task || task.status !== 'running') return false;
+      var context = task.context && typeof task.context === 'object' ? task.context : null;
+      return Boolean(context && context.awaitingClarification === true);
+    }
+
+    function markAutoClarificationPendingTask(pending) {
+      var manager = getAutoWorkflowManager();
+      if (!manager || typeof manager.updateTaskContext !== 'function') return;
+      manager.updateTaskContext(function(ctx) {
+        if (!ctx || typeof ctx !== 'object') return;
+        if (pending) {
+          ctx.awaitingClarification = true;
+          ctx.awaitingClarificationAt = Date.now();
+        } else {
+          delete ctx.awaitingClarification;
+          delete ctx.awaitingClarificationAt;
+        }
+      }, {
+        onlyRunning: true,
+        action: pending ? 'clarify-wait' : 'clarify-resume',
+      });
+    }
+
     async function notifyFeishuCoverageFailure() {
       if (!state.autoRunning || !getFeishuWebhookUrl()) return;
       await postFeishuMessage('需求：' + getRequirementDisplayName() + '，清洗覆盖率不足100%，需手动重新清洗。');
@@ -711,7 +738,13 @@
         {
           key: 'review',
           label: '需求评审',
-          run: function() { return reviewRequirements(); },
+          run: function() {
+            var hasReviewResult = Boolean(reviewResultEl && reviewResultEl.value && reviewResultEl.value.trim().length > 0);
+            if (hasReviewResult && isAutoClarificationPendingTask()) {
+              return Promise.resolve();
+            }
+            return reviewRequirements();
+          },
           validate: function() { return Boolean(reviewResultEl && reviewResultEl.value && reviewResultEl.value.trim().length > 0); },
           after: function() { return handleAutoClarifyAfterReview(); },
         },
@@ -778,16 +811,21 @@
     }
 
     async function handleAutoClarifyAfterReview() {
-      if (!state.autoRequireClarifications) return;
+      if (!state.autoRequireClarifications) {
+        markAutoClarificationPendingTask(false);
+        return;
+      }
       switchTab('auto');
       if (autoClarifySection) autoClarifySection.classList.remove('hidden');
       renderAutoClarifyView();
       setStepWaiting('review', '等待澄清确认');
       updateFlowStatus();
       try {
+        markAutoClarificationPendingTask(true);
         await notifyFeishuClarificationNeeded();
         await waitForAutoClarification();
       } finally {
+        markAutoClarificationPendingTask(false);
         clearStepWaiting('review');
       }
     }

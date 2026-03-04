@@ -1174,6 +1174,35 @@
         return true;
       }
 
+      function updateTaskContext(patch, options) {
+        var opts = options && typeof options === 'object' ? options : {};
+        var active = readTask();
+        if (!active) return null;
+        if (opts.onlyRunning === true && active.status !== 'running') return null;
+        var nextContext = active.context && typeof active.context === 'object'
+          ? Object.assign({}, active.context)
+          : {};
+        if (typeof patch === 'function') {
+          try {
+            patch(nextContext, active);
+          } catch (err) {
+            // ignore
+          }
+        } else if (patch && typeof patch === 'object') {
+          Object.keys(patch).forEach(function(key) {
+            if (patch[key] === undefined) {
+              delete nextContext[key];
+            } else {
+              nextContext[key] = patch[key];
+            }
+          });
+        }
+        active.context = nextContext;
+        active.updatedAt = Date.now();
+        writeTask(active, opts.action || 'context');
+        return active;
+      }
+
       function buildTaskId() {
         return 'auto-workflow-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
       }
@@ -1462,6 +1491,7 @@
         startTask: startTask,
         getTask: readTask,
         cancelTask: cancelTask,
+        updateTaskContext: updateTaskContext,
         clearTask: clearTask,
         resumeTask: resumeTask,
       };
