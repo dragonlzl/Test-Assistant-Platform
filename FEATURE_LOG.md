@@ -4251,3 +4251,38 @@
 - 更新记录：2026-02-25 补充“页面说明入口滚动能力”UI 自动化：页面说明 XMind 抽屉用例新增断言，校验 `xmindStructureDrawerBody` 非 viewer 模式、可滚动高度成立，并通过鼠标滚轮验证 `scrollTop` 递增（`tests/ui/help_structure_drawer.spec.js`）。
 - 更新记录：2026-02-25 补充“导图入口 viewer 模式”UI 断言：执行页与用例库 XMind 按钮用例新增 `is-mind-viewer` 断言，保证导图入口仍使用画布内部滚动/拖拽链路，不回退为外层抽屉滚动（`tests/ui/xmind_structure_view_buttons.spec.js`）。
 - 测试与验证：`node --check scripts/modules/pageGuide.js scripts/modules/tempexec.js scripts/modules/caseLibrary.js tests/ui/help_structure_drawer.spec.js tests/ui/xmind_structure_view_buttons.spec.js`（通过）；`npm run test:ui -- tests/ui/help_structure_drawer.spec.js --workers=1`（通过，1/1）；`npm run test:ui -- tests/ui/xmind_structure_view_buttons.spec.js --workers=1`（通过，3/3）；`npm run test:api -- tests/api/xmind_structure_edit_reuse_endpoints.spec.js`（通过，1/1）。补充说明：`tests/ui/page_guide_drawer.spec.js` 全量在本地存在历史环境波动（同一场景单测重跑可通过），本次改动相关的新增/受影响用例均稳定通过。
+- 功能名称：测试模块拆分导入用例提醒与模块沿用
+- 功能描述：手动点击“开始拆分”时，若未导入测试用例，新增二次确认抽屉（前往导入用例/不导入用例）；已导入用例时，拆分模型会优先参考导入用例根节点下一级模块名进行模块划分，仅在必要时新增模块，且保持拆分结果输出格式不变。
+- 操作方式：
+  - 在“测试模块拆分”卡片点击“开始拆分”。
+  - 若未导入用例：抽屉提示是否先导入；点击“前往导入用例”自动跳转到“测试用例导入（XMind）”卡片，点击“不导入用例”则继续执行现有拆分逻辑。
+  - 若已导入用例：直接执行拆分，模型提示词自动附加导入用例模块节点约束（沿用优先、必要时增补）。
+- 使用效果：
+  - 提升手动拆分前的可操作引导，避免用户在无参考用例时误拆分。
+  - 导入用例存在时，拆分结果更贴近现有模块结构，减少重复/无效新增模块。
+  - 不改变现有拆分输出格式与后续流程兼容性。
+- 新增内容/接口/组件：
+  - 前端：拆分前导入用例守卫、确认抽屉分支、导入模块节点提示词增强（`scripts/core/splitCore.js`、`scripts/modules/app.js`）。
+  - 测试：新增拆分导入守卫 UI 自动化并更新拆分按钮状态用例（`tests/ui/split_import_guard.spec.js`、`tests/ui/cases_export_and_split.spec.js`）。
+- 复用说明：复用现有 `appConfirmDrawer` 确认抽屉与 `scrollToSection('cases-upload')` 导航能力；拆分主流程仍沿用原有 `splitCore` 调用链，仅在入口守卫与提示词拼接处做最小增量扩展。
+- 测试与验证：
+  - `node --check scripts/core/splitCore.js scripts/modules/app.js tests/ui/split_import_guard.spec.js tests/ui/cases_export_and_split.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/split_import_guard.spec.js tests/ui/cases_export_and_split.spec.js tests/ui/split_go_usecase_nav.spec.js`（通过，5/5）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8080`（测试库启动）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+- 更新记录：2026-03-04 测试模块拆分导入用例提醒与模块沿用（`scripts/core/splitCore.js`、`scripts/modules/app.js`、`tests/ui/split_import_guard.spec.js`、`tests/ui/cases_export_and_split.spec.js`）。
+- 更新记录：2026-03-04 补充“对比完整性后忽略并继续”链路兼容导入提醒：当覆盖率不足后点击“忽略覆盖率继续”进入拆分步骤时，若未导入用例同样弹出二次提醒（前往导入用例/不导入用例）；点击前往导入时跳转至“测试用例导入（XMind）”卡片，点击不导入时保持现有拆分逻辑继续执行；已导入用例时不弹窗并继续沿用模块节点约束（`scripts/core/autoCore.js`、`scripts/core/splitCore.js`、`tests/ui/split_import_guard.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/splitCore.js scripts/core/autoCore.js tests/ui/split_import_guard.spec.js scripts/modules/app.js`（通过）
+  - `npm run test:ui -- tests/ui/split_import_guard.spec.js`（通过，3/3）
+  - `npm run test:ui -- tests/ui/split_import_guard.spec.js tests/ui/cases_export_and_split.spec.js`（通过，5/5）
+  - `npm run test:ui -- tests/ui/workflow.spec.js -g "自动流程覆盖率不足时按钮可用"`（通过，1/1）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8081`（测试库启动）
+  - `API_BASE_URL=http://127.0.0.1:8081 npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+- 更新记录：2026-03-04 修复“前往导入用例”定位不准确：确认抽屉点击“前往导入用例”后，等待抽屉关闭并解除页面滚动锁再执行跳转；跳转定位改为 `scrollToSection('cases-upload', { behavior: 'auto' })` + 统一偏移滚动，避免被抽屉滚动恢复覆盖或仅切换页签未到目标卡片（`scripts/core/splitCore.js`、`scripts/core/flowCore.js`）。
+- 测试与验证（定位修复）：
+  - `node --check scripts/core/splitCore.js scripts/core/flowCore.js tests/ui/split_import_guard.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/split_import_guard.spec.js`（通过，3/3）
+  - `npm run test:ui -- tests/ui/split_import_guard.spec.js tests/ui/cases_export_and_split.spec.js`（通过，5/5）
+  - `npm run test:ui -- tests/ui/workflow.spec.js -g "自动流程覆盖率不足时按钮可用"`（通过，1/1）
+  - `API_BASE_URL=http://127.0.0.1:8081 npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1，测试库 `apitest.db`）
