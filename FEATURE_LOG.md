@@ -19,6 +19,69 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：用例生成通用操作区新增“仅补全用例”按钮
+- 功能描述：在“用例生成 → 通用操作区”新增“仅补全用例”按钮。点击后只对“生成建议”非空的模块触发生成，执行链路与逐模块点击“生成用例”一致；无建议模块不会触发。
+- 操作方式：
+  - 进入“AI 功能 → 用例生成”，在模块卡片内填写“生成建议”；
+  - 点击通用操作区“仅补全用例”；
+  - 系统仅对有建议的模块执行生成，其他模块保持原状。
+- 使用效果：
+  - 可一键完成“有建议模块”的定向补全生成，避免全量重跑；
+  - 与单模块“生成用例”行为保持一致（同一模型调用与结果写回逻辑）；
+  - 按钮状态会随建议输入实时变化（无可执行目标时自动置灰）。
+- 新增内容/接口/组件：
+  - 页面：
+    - `index.html`、`ai-workflow.html`：通用操作区新增 `#caseGenSuggestionGenerateBtn`（仅补全用例）。
+  - 前端逻辑：
+    - `scripts/core/casesGenCore.js`
+      - 扩展模块元数据，新增 `hasSuggestion`；
+      - 扩展 `refreshCaseGenBatchButtons`，纳入“仅补全用例”按钮启停规则；
+      - 新增 `generateSuggestedCaseGenModules`，按“有建议且非运行中”筛选模块并复用 `generateCasesForModule` 批量执行；
+      - 导出 `refreshCaseGenBatchButtons` 供输入联动刷新。
+    - `scripts/modules/casesgen.js`
+      - 绑定 `#caseGenSuggestionGenerateBtn` 点击事件；
+      - 建议输入时实时刷新批量按钮可用态。
+    - `scripts/modules/app.js`、`scripts/core/appRuntime.js`
+      - 新增 `generateSuggestedCaseGenModules` 与 `refreshCaseGenBatchButtons` 的 API 透传。
+  - UI 自动化：
+    - `tests/ui/casegen_db_store.spec.js`
+      - 新增“仅补全用例：只触发有生成建议的模块生成”回归用例。
+- 复用说明：复用现有 `generateCasesForModule`、`runConcurrent`、模块状态与进度管理逻辑，仅新增筛选入口与按钮联动，不新增后端接口。
+- 测试与验证：
+  - `node --check scripts/core/casesGenCore.js scripts/modules/casesgen.js scripts/modules/app.js scripts/core/appRuntime.js tests/ui/casegen_db_store.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js -g "仅补全用例：只触发有生成建议的模块生成|全模块生成按钮" --reporter=line`（5/5 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js -g "超过10个模块按受控并发执行并最终清理运行态" --reporter=line`（通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_models.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-04 新增“仅补全用例”批量入口与建议联动启停，补充 UI/API 回归验证（`index.html`、`ai-workflow.html`、`scripts/core/casesGenCore.js`、`scripts/modules/casesgen.js`、`scripts/modules/app.js`、`scripts/core/appRuntime.js`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：用例生成多模块并发卡死修复（>10 模块）
+- 功能描述：修复“全模块生成/补全”在模块数量较多时（如超过 10）后续模块可能出现假运行、长期不完成且无法恢复的问题。将批量执行改为受控并发队列，并为模型调用增加硬超时守护；同时新增进度自愈逻辑，避免“运行态已结束但分组仍显示执行中”的脏状态残留。
+- 操作方式：
+  - 进入“AI 功能 → 用例生成”，在已拆分出多个模块后点击“全模块直接生成”或“全模块补全生成”；
+  - 系统按受控并发分批执行（页面状态提示会显示并发数），模块会持续推进直至完成；
+  - 若底层模型请求异常不回调，超时后会自动失败并清理运行态，可直接重试。
+- 使用效果：
+  - 多模块批量生成不再因并发过高导致后续模块长期卡住；
+  - 异常请求可自动超时退出，不会无限占用“生成中”状态；
+  - 历史/异常导致的陈旧分组“执行中”会被自动修正，避免界面假运行。
+- 新增内容/接口/组件：
+  - 前端：
+    - `scripts/core/casesGenCore.js`
+      - 新增批量执行并发控制（上限 5）；
+      - 新增模型调用硬超时守护（兜底超时，不依赖单一路径回调）；
+      - 批量任务增加单模块异常兜底，避免单点异常阻断后续队列；
+      - 新增陈旧进度自愈（非 running 模块若残留 running 分组，自动转失败并提示重试）。
+  - UI 自动化：
+    - `tests/ui/casegen_db_store.spec.js`
+      - 新增“全模块生成：超过10个模块按受控并发执行并最终清理运行态”回归用例，校验调用并发峰值不超过 5、全部模块完成且无 running 残留。
+- 复用说明：复用现有 `runConcurrent`、模型调用链路与用例生成状态管理结构，在 `casesGenCore` 内做最小增量增强；未新增后端接口。
+- 测试与验证：
+  - `node --check scripts/core/casesGenCore.js tests/ui/casegen_db_store.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js -g "超过10个模块按受控并发执行并最终清理运行态" --reporter=line`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js -g "全模块生成按钮" --reporter=line`（4/4 通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_models.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-04 首次修复多模块并发卡死与假运行问题，补充并发回归 UI 用例与 API 回归验证（`scripts/core/casesGenCore.js`、`tests/ui/casegen_db_store.spec.js`）。
+
 - 功能名称：一键执行需求评审异常结果自动中断并提示重试
 - 功能描述：修复一键执行在“需求评审”返回异常格式内容时会卡在错误状态的问题。现在评审结果若不是有效 JSON 数组或结构缺少关键字段，会自动中断流程并提示用户重新执行。
 - 操作方式：
