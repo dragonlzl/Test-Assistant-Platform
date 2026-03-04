@@ -40,6 +40,7 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/auto_clarify_toggle_persistence.spec.js --reporter=line`（通过）
   - `npx playwright test --config tests/playwright.config.js tests/ui/auto_workflow_persistence.spec.js --reporter=line`（失败：既有用例在本地静态服务场景下断言“正在执行”前即进入“需求评审未产生有效输出”；与本次开关持久化改动无直接耦合）
 - 更新记录：2026-03-03 首次修复勾选状态跨页/刷新丢失，并补充 UI 回归用例（`scripts/core/reviewCore.js`、`scripts/core/appRuntime.js`、`tests/ui/auto_clarify_toggle_persistence.spec.js`）。
+- 更新记录：2026-03-04 修复“等待澄清输入时心跳导致失焦”：`updateAutoClarifyVisibility` 在状态未变化时不再重复重绘澄清视图，避免输入节点被替换；补充渲染稳定性 UI 用例（`scripts/core/reviewCore.js`、`tests/ui/auto_clarify_render_stability.spec.js`）。验证：`node --check scripts/core/reviewCore.js tests/ui/auto_clarify_render_stability.spec.js`、`npx playwright test --config tests/playwright.config.js tests/ui/auto_clarify_render_stability.spec.js --reporter=line`、`npx playwright test --config tests/playwright.config.js tests/ui/auto_clarify_toggle_persistence.spec.js --reporter=line`（通过）。
 
 - 功能名称：执行页/用例库 XMind 结构展示
 - 功能描述：在“用例执行”和“用例库（查看&编辑）”中，于“AI 用例生成”按钮右侧新增“XMind结构展示”按钮；点击后以 XMind 结构展示当前用例。

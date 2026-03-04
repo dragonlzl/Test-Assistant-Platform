@@ -140,6 +140,7 @@
 
     function updateAutoClarifyVisibility(forceOpen) {
       if (forceOpen === void 0) forceOpen = false;
+      var prevEnabled = Boolean(state.autoRequireClarifications);
       // Some pages reuse the runtime but do not render the auto-clarify checkbox.
       // In that case, preserve previously restored state instead of forcing false.
       var enabled = false;
@@ -175,9 +176,17 @@
           autoClarifyToggleBtn.disabled = false;
           setAutoClarifyToggleLabel(autoClarifyDrawer && autoClarifyDrawer.element && autoClarifyDrawer.element.classList.contains('open'));
         }
-        renderAutoClarifyView();
+        // Avoid re-rendering on auto-workflow heartbeat updates, otherwise the textarea
+        // node is recreated and the user's typing focus gets lost.
+        var shouldRender = Boolean(forceOpen || !prevEnabled);
+        if (!shouldRender && autoClarifyContainer) {
+          if (!autoClarifyContainer.innerHTML || !String(autoClarifyContainer.innerHTML).trim()) {
+            shouldRender = true;
+          }
+        }
+        if (shouldRender) renderAutoClarifyView();
       }
-      persistWorkflowState();
+      if (enabled !== prevEnabled) persistWorkflowState();
     }
 
     function renderAutoClarifyView() {
