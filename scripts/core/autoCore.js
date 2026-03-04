@@ -815,8 +815,16 @@
         markAutoClarificationPendingTask(false);
         return;
       }
-      switchTab('auto');
-      if (autoClarifySection) autoClarifySection.classList.remove('hidden');
+      var canFocusAutoTab = true;
+      if (typeof document !== 'undefined' && document.body && document.body.dataset) {
+        var page = String(document.body.dataset.page || '');
+        // 避免在其它页面恢复任务时被强制跨页拉回“一键执行”。
+        canFocusAutoTab = (page === '' || page === 'index' || page === 'ai-workflow');
+      }
+      if (canFocusAutoTab && state.activeTab !== 'auto') {
+        switchTab('auto');
+      }
+      if (canFocusAutoTab && autoClarifySection) autoClarifySection.classList.remove('hidden');
       renderAutoClarifyView();
       setStepWaiting('review', '等待澄清确认');
       updateFlowStatus();
