@@ -374,6 +374,18 @@
       };
     }
 
+    function normalizeClipboardPlainNodeTopic(rawText) {
+      var text = rawText === undefined || rawText === null ? '' : String(rawText);
+      if (!text) return '';
+      var normalized = text
+        .replace(/\r\n?/g, '\n')
+        .replace(/\u00a0/g, ' ')
+        .replace(/\u200b/g, '');
+      normalized = normalized.trim();
+      if (!normalized) return '';
+      return normalized;
+    }
+
     function cloneMindNodeTree(node) {
       if (!node || typeof node !== 'object') return null;
       var cloned = cloneMindDataObject({ nodeData: node });
@@ -877,6 +889,11 @@
       var ctrlModifierPressed = false;
       var zoomMinScale = minScale;
       var nodeContextMenuEl = null;
+      var clickNodeEditTimer = 0;
+      var clickNodeEditDelay = 220;
+      var beginEditSelectionMode = 'select-all';
+      var beginEditSelectionResetTimer = 0;
+      var pendingKeyboardNodeEditPayload = null;
       var drawerEl = viewerEl && typeof viewerEl.closest === 'function' ? viewerEl.closest('.drawer') : null;
       var drawerPanelEl = viewerEl && typeof viewerEl.closest === 'function' ? viewerEl.closest('.drawer-panel') : null;
       var drawerFullscreenClassName = 'xmind-drawer-fullscreen';
@@ -2392,6 +2409,10 @@
           return;
         }
 
+        if (!typing && beginNodeEditByKeyboard(e)) {
+          return;
+        }
+
         if (!typing && (e.key === 'Delete' || e.key === 'Backspace')) {
           var selected = collectSelectedNodes().filter(function(node) {
             return Boolean(node && node.nodeObj && node.nodeObj.parent);
@@ -2404,8 +2425,146 @@
         }
       }
 
-      function onViewerClick() {
+      function findViewerNodeById(nodeId) {
+        var normalized = nodeId === null || nodeId === undefined ? '' : String(nodeId);
+        if (!normalized || !viewerEl || !viewerEl.querySelectorAll) return null;
+        var nodes = viewerEl.querySelectorAll('me-tpc');
+        for (var i = 0; i < nodes.length; i += 1) {
+          var node = nodes[i];
+          if (!node || !node.nodeObj || node.nodeObj.id === null || node.nodeObj.id === undefined) continue;
+          if (String(node.nodeObj.id) === normalized) return node;
+        }
+        return null;
+      }
+
+      function clearClickNodeEditTimer() {
+        if (!clickNodeEditTimer) return;
+        clearTimeout(clickNodeEditTimer);
+        clickNodeEditTimer = 0;
+      }
+
+      function scheduleBeginEditSelectionMode(mode) {
+        beginEditSelectionMode = mode === 'end' ? 'end' : 'select-all';
+        if (beginEditSelectionResetTimer) {
+          clearTimeout(beginEditSelectionResetTimer);
+          beginEditSelectionResetTimer = 0;
+        }
+        beginEditSelectionResetTimer = setTimeout(function() {
+          beginEditSelectionResetTimer = 0;
+          beginEditSelectionMode = 'select-all';
+        }, 360);
+      }
+
+      function consumeBeginEditSelectionMode() {
+        var mode = beginEditSelectionMode === 'end' ? 'end' : 'select-all';
+        beginEditSelectionMode = 'select-all';
+        if (beginEditSelectionResetTimer) {
+          clearTimeout(beginEditSelectionResetTimer);
+          beginEditSelectionResetTimer = 0;
+        }
+        return mode;
+      }
+
+      function clearPendingKeyboardNodeEdit() {
+        pendingKeyboardNodeEditPayload = null;
+      }
+
+      function queuePendingKeyboardNodeEdit(payload) {
+        if (!payload || typeof payload !== 'object') {
+          clearPendingKeyboardNodeEdit();
+          return;
+        }
+        var mode = payload.mode === 'clear' ? 'clear' : (payload.mode === 'insert' ? 'insert' : 'compose');
+        pendingKeyboardNodeEditPayload = {
+          mode: mode,
+          text: payload.text === undefined || payload.text === null ? '' : String(payload.text),
+        };
+      }
+
+      function resolveKeyboardNodeEditPayload(e) {
+        if (!e) return null;
+        if (e.ctrlKey || e.metaKey || e.altKey) return null;
+        var key = e.key === undefined || e.key === null ? '' : String(e.key);
+        if (!key) return null;
+        if (key === 'Backspace' || key === 'Delete') {
+          return { mode: 'clear', text: '' };
+        }
+        if (key === 'Process' || key === 'Unidentified') {
+          return { mode: 'compose', text: '' };
+        }
+        if (key.length === 1) {
+          return { mode: 'insert', text: key };
+        }
+        return null;
+      }
+
+      function resolveViewerEventNode(e) {
+        var target = e && e.target ? e.target : null;
+        if (!target || isTypingTarget(target)) return null;
+        if (isEventInsideMindControls(target)) return null;
+        if (target.closest && target.closest('.xmind-node-context-menu')) return null;
+        var nodeEl = target.closest ? target.closest('me-tpc') : null;
+        if (!nodeEl || !nodeEl.nodeObj) return null;
+        return nodeEl;
+      }
+
+      function triggerNodeEditWithMode(nodeEl, mode) {
+        if (!nodeEl || !nodeEl.nodeObj) return;
+        var nodeId = nodeEl.nodeObj.id === null || nodeEl.nodeObj.id === undefined
+          ? ''
+          : String(nodeEl.nodeObj.id);
+        setTimeout(function() {
+          var inst = getInstance();
+          if (!inst || typeof inst.beginEdit !== 'function') return;
+          var liveNodeEl = nodeId ? findViewerNodeById(nodeId) : nodeEl;
+          if (!liveNodeEl) return;
+          selectSingleNodeForContextMenu(liveNodeEl);
+          scheduleBeginEditSelectionMode(mode);
+          try {
+            inst.beginEdit(liveNodeEl);
+          } catch (err) {
+            // ignore
+          }
+        }, 0);
+      }
+
+      function beginNodeEditBySingleClick(e) {
+        clearClickNodeEditTimer();
+        if (!editing || pendingSave || !e) return;
+        if (e.button !== undefined && e.button !== 0) return;
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+        if (Number(e.detail) > 1) return;
+
+        var nodeEl = resolveViewerEventNode(e);
+        if (!nodeEl) return;
+
+        clickNodeEditTimer = setTimeout(function() {
+          clickNodeEditTimer = 0;
+          triggerNodeEditWithMode(nodeEl, 'select-all');
+        }, clickNodeEditDelay);
+      }
+
+      function beginNodeEditByKeyboard(e) {
+        if (!editing || pendingSave || !e) return false;
+        if (isTypingTarget(e.target)) return false;
+        var payload = resolveKeyboardNodeEditPayload(e);
+        if (!payload) return false;
+
+        var selected = collectSelectedNodes().filter(function(nodeEl) {
+          return Boolean(nodeEl && nodeEl.nodeObj);
+        });
+        if (selected.length !== 1) return false;
+
+        if (e.preventDefault) e.preventDefault();
+        if (e.stopPropagation) e.stopPropagation();
+        queuePendingKeyboardNodeEdit(payload);
+        triggerNodeEditWithMode(selected[0], 'select-all');
+        return true;
+      }
+
+      function onViewerClick(e) {
         hideNodeContextMenu();
+        clearClickNodeEditTimer();
         updateEditButtons();
       }
 
@@ -2445,7 +2604,19 @@
       }
 
       function onViewerDblClick(e) {
-        if (editing) return;
+        if (editing) {
+          clearClickNodeEditTimer();
+          var editingTargetNode = resolveViewerEventNode(e);
+          if (!editingTargetNode) {
+            var rawTarget = e && e.target ? e.target : null;
+            if (rawTarget && isTypingTarget(rawTarget)) {
+              scheduleInputCaretToEnd();
+            }
+            return;
+          }
+          scheduleBeginEditSelectionMode('end');
+          return;
+        }
         if (!opts || typeof opts.onNodeDblClickLocate !== 'function') return;
         if (controlsEl && controlsEl.contains && controlsEl.contains(e && e.target)) return;
         if (e && e.target && e.target.closest && e.target.closest('[data-mind-controls]')) return;
@@ -2516,7 +2687,14 @@
         if (isMindElixirInternalClipboardText(rawText)) return;
 
         var parsed = parseIndentedTextToMindData(rawText);
-        if (!parsed || !parsed.mindData || !parsed.mindData.nodeData) return;
+        var parsedRoot = parsed && parsed.mindData && parsed.mindData.nodeData
+          ? parsed.mindData.nodeData
+          : null;
+        var plainTopic = '';
+        if (!parsedRoot) {
+          plainTopic = normalizeClipboardPlainNodeTopic(rawText);
+          if (!plainTopic) return;
+        }
 
         var inst = getInstance();
         if (!inst || typeof inst.refresh !== 'function') return;
@@ -2525,12 +2703,13 @@
         if (e.stopPropagation) e.stopPropagation();
 
         var currentData = getCurrentMindData();
-        var nextData = cloneMindDataObject(currentData && currentData.nodeData ? currentData : parsed.mindData);
+        var fallbackMindData = parsed && parsed.mindData && parsed.mindData.nodeData
+          ? parsed.mindData
+          : { nodeData: createNode(plainTopic) };
+        var nextData = cloneMindDataObject(currentData && currentData.nodeData ? currentData : fallbackMindData);
         if (!nextData || !nextData.nodeData) return;
         var nextRoot = nextData.nodeData;
-        var parsedRoot = parsed.mindData && parsed.mindData.nodeData
-          ? parsed.mindData.nodeData
-          : null;
+        if (!parsedRoot && plainTopic) parsedRoot = createNode(plainTopic);
         if (!parsedRoot) return;
 
         var selectedNodes = collectSelectedNodes();
@@ -2584,10 +2763,21 @@
         runSearch({ keepIndex: false });
         updateEditButtons();
 
-        var rootTopic = parsed.rootTopic || '节点';
-        var nodeCount = Number(parsed.nodeCount);
-        if (!isFinite(nodeCount) || nodeCount <= 0) nodeCount = 0;
-        callShowToast('已拼接结构：' + rootTopic + '（' + String(nodeCount) + ' 节点）', '', 2200);
+        var rootTopic = parsed && parsed.rootTopic ? String(parsed.rootTopic) : '节点';
+        if (parsed && parsed.mindData && parsed.mindData.nodeData) {
+          var nodeCount = Number(parsed.nodeCount);
+          if (!isFinite(nodeCount) || nodeCount <= 0) nodeCount = 0;
+          callShowToast('已拼接结构：' + rootTopic + '（' + String(nodeCount) + ' 节点）', '', 2200);
+          return;
+        }
+        var previewTopic = plainTopic || rootTopic || '文本';
+        if (previewTopic.indexOf('\n') >= 0) {
+          previewTopic = previewTopic.split('\n')[0] + '...';
+        }
+        if (previewTopic.length > 16) {
+          previewTopic = previewTopic.slice(0, 16) + '...';
+        }
+        callShowToast('已新增子节点：' + previewTopic, '', 2200);
       }
 
       function onWindowPageHide() {
@@ -2658,6 +2848,49 @@
         insertInputBoxLineBreak(target);
       }
 
+      function selectInputBoxText() {
+        if (typeof document === 'undefined') return false;
+        var inputEl = document.getElementById('input-box');
+        if (!inputEl) return false;
+        if (typeof inputEl.focus === 'function' && document.activeElement !== inputEl) {
+          try {
+            inputEl.focus();
+          } catch (err0) {
+            // ignore
+          }
+        }
+
+        if (typeof inputEl.select === 'function') {
+          try {
+            inputEl.select();
+            return true;
+          } catch (err1) {
+            // ignore
+          }
+        }
+
+        if (typeof window === 'undefined' || !window || typeof window.getSelection !== 'function') return false;
+        if (typeof document.createRange !== 'function') return false;
+
+        var selection = null;
+        try {
+          selection = window.getSelection();
+        } catch (err2) {
+          selection = null;
+        }
+        if (!selection) return false;
+
+        try {
+          var range = document.createRange();
+          range.selectNodeContents(inputEl);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          return true;
+        } catch (err3) {
+          return false;
+        }
+      }
+
       function placeInputCaretToEnd() {
         if (typeof document === 'undefined') return false;
         var inputEl = document.getElementById('input-box');
@@ -2703,7 +2936,105 @@
         }
       }
 
+      function scheduleInputTextSelection() {
+        selectInputBoxText();
+        setTimeout(function() {
+          selectInputBoxText();
+        }, 0);
+        setTimeout(function() {
+          selectInputBoxText();
+        }, 24);
+      }
+
+      function replaceInputBoxText(text) {
+        if (typeof document === 'undefined') return false;
+        var inputEl = document.getElementById('input-box');
+        if (!inputEl) return false;
+        var nextText = text === undefined || text === null ? '' : String(text);
+        if (typeof inputEl.focus === 'function' && document.activeElement !== inputEl) {
+          try {
+            inputEl.focus();
+          } catch (err0) {
+            // ignore
+          }
+        }
+
+        var replaced = false;
+        if (typeof document.execCommand === 'function') {
+          try {
+            replaced = document.execCommand('insertText', false, nextText);
+          } catch (err1) {
+            replaced = false;
+          }
+        }
+
+        if (!replaced) {
+          try {
+            if (inputEl.value !== undefined) inputEl.value = nextText;
+            if (inputEl.textContent !== undefined) inputEl.textContent = nextText;
+            replaced = true;
+          } catch (err2) {
+            replaced = false;
+          }
+        }
+
+        if (replaced && typeof inputEl.dispatchEvent === 'function') {
+          var evt = null;
+          try {
+            evt = new Event('input', { bubbles: true, cancelable: false });
+          } catch (err3) {
+            if (typeof document.createEvent === 'function') {
+              evt = document.createEvent('Event');
+              evt.initEvent('input', true, false);
+            }
+          }
+          if (evt) {
+            try {
+              inputEl.dispatchEvent(evt);
+            } catch (err4) {
+              // ignore
+            }
+          }
+        }
+
+        return replaced;
+      }
+
+      function applyPendingKeyboardNodeEdit() {
+        if (!pendingKeyboardNodeEditPayload) return true;
+        var payload = pendingKeyboardNodeEditPayload;
+        if (!payload || payload.mode === 'compose') {
+          clearPendingKeyboardNodeEdit();
+          return true;
+        }
+        if (!selectInputBoxText()) return false;
+        var nextText = payload.mode === 'clear' ? '' : payload.text;
+        if (!replaceInputBoxText(nextText)) return false;
+        scheduleInputCaretToEnd();
+        clearPendingKeyboardNodeEdit();
+        return true;
+      }
+
+      function scheduleApplyPendingKeyboardNodeEdit() {
+        if (!pendingKeyboardNodeEditPayload) return;
+        var retries = 0;
+        var run = function(delayMs) {
+          setTimeout(function() {
+            if (!pendingKeyboardNodeEditPayload) return;
+            if (applyPendingKeyboardNodeEdit()) return;
+            retries += 1;
+            if (retries >= 4) {
+              clearPendingKeyboardNodeEdit();
+              return;
+            }
+            run(24);
+          }, delayMs);
+        };
+        run(0);
+      }
+
       function scheduleInputCaretToEnd() {
+        placeInputCaretToEnd();
         setTimeout(function() {
           placeInputCaretToEnd();
         }, 0);
@@ -2765,6 +3096,7 @@
       }
 
       function onViewerPointerDownForDragPreview(e) {
+        clearClickNodeEditTimer();
         if (!editing) {
           clearCustomPointerDragState();
           return;
@@ -3087,7 +3419,10 @@
         if (!editing || applyingHistory) return;
         var op = payload && payload.name ? String(payload.name) : '';
         if (op === 'beginEdit') {
-          scheduleInputCaretToEnd();
+          var selectionMode = consumeBeginEditSelectionMode();
+          if (selectionMode === 'end') scheduleInputCaretToEnd();
+          else scheduleInputTextSelection();
+          scheduleApplyPendingKeyboardNodeEdit();
           return;
         }
         clearValidationMarks();
@@ -3199,6 +3534,13 @@
           clearTimeout(recordTimer);
           recordTimer = 0;
         }
+        clearClickNodeEditTimer();
+        if (beginEditSelectionResetTimer) {
+          clearTimeout(beginEditSelectionResetTimer);
+          beginEditSelectionResetTimer = 0;
+        }
+        beginEditSelectionMode = 'select-all';
+        clearPendingKeyboardNodeEdit();
         stopBoxSelection();
         clearSearchClasses();
         clearBoxSelectionClasses();

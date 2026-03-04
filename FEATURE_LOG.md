@@ -4349,3 +4349,11 @@
   - `npm run test:ui -- tests/ui/split_import_guard.spec.js tests/ui/cases_export_and_split.spec.js`（通过，5/5）
   - `npm run test:ui -- tests/ui/workflow.spec.js -g "自动流程覆盖率不足时按钮可用"`（通过，1/1）
   - `API_BASE_URL=http://127.0.0.1:8081 npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1，测试库 `apitest.db`）
+
+- 更新记录：2026-03-04 优化 XMind 编辑输入体验：编辑态下“单击节点仅选中不进入编辑”；仅当用户通过键盘输入字符或按删除键时才触发节点文本编辑并覆盖原内容，避免选中节点后粘贴普通文本被误判为内容替换；同时保留双击行为，双击节点后光标定位到文本末尾，便于续写（`scripts/core/mindElixirCore.js`）。
+- 更新记录：2026-03-04 补充 XMind 编辑交互 UI 回归：交互用例新增“单击仅选中 + 按键触发编辑覆盖 + Backspace 清空内容不删节点”断言；编辑模式用例继续保留双击后光标位于末尾断言，并补充普通文本粘贴新增子节点场景，确保输入与粘贴两条链路兼容（`tests/ui/xmind_structure_edit_interactions.spec.js`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 更新记录：2026-03-04 增强 XMind 编辑页粘贴兼容：选中节点后粘贴普通文本时，在该节点下新增一个子节点，子节点完整保留原文本（含换行）；若粘贴内容可识别为缩进层级结构，则继续沿用原有结构化拼接逻辑，兼容 XMind 结构复制粘贴体验（`scripts/core/mindElixirCore.js`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/mindElixirCore.js tests/ui/xmind_structure_edit_interactions.spec.js tests/ui/xmind_structure_edit_mode.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js tests/ui/xmind_structure_edit_interactions.spec.js --reporter=line`（通过，5/5）
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过，1/1）

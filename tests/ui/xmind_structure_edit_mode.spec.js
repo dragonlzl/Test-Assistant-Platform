@@ -188,9 +188,6 @@ test.describe('XMind 编辑模式', () => {
     await expect(viewer.locator('[data-mind-action="node-add"]')).toBeVisible();
 
     const firstNode = viewer.locator('me-tpc .text').first();
-    await firstNode.click({ force: true });
-    await expect(viewer.locator('[data-mind-action="node-add"]')).toBeEnabled();
-
     await firstNode.dblclick({ force: true });
     await page.waitForTimeout(100);
     const caretState = await page.evaluate(() => {
@@ -578,5 +575,176 @@ test.describe('XMind 编辑模式', () => {
 
     const nodeCount = await viewer.locator('me-tpc').count();
     expect(nodeCount).toBeGreaterThan(nodeCountBeforePaste);
+  });
+
+  test('编辑态选中节点后粘贴普通文本会新增子节点', async ({ page }) => {
+    const token = 'token-case-library-xmind-paste-plain-child';
+    const user = { id: 69, username: 'xmind_paste_plain_user', role: 'admin', level: 'leader' };
+    const project = { id: 431, name: 'XMind纯文本粘贴项目' };
+    const versions = [{ id: 531, name: 'v1' }];
+    const now = new Date().toISOString();
+    const caseFileId = 2091;
+    const caseFiles = [{
+      id: caseFileId,
+      project_id: project.id,
+      version_id: versions[0].id,
+      file_name_clean: '纯文本粘贴用例集',
+      reuse_enabled: false,
+      item_count: 1,
+      importer_id: user.id,
+      importer_name: user.username,
+      imported_at: now,
+      updated_at: now,
+      last_updated_by: user.id,
+      last_updated_by_name: user.username,
+    }];
+    const caseItemsByFileId = {};
+    caseItemsByFileId[caseFileId] = [{
+      id: 20901,
+      case_file_id: caseFileId,
+      module: '支付模块',
+      title: '支付成功',
+      priority: 'P1',
+      precondition: '已登录',
+      steps: '输入支付密码',
+      expected: '支付成功',
+      remark: '',
+      created_at: now,
+      updated_at: now,
+    }];
+
+    await buildCaseLibraryRoutes(page, {
+      token,
+      user,
+      project,
+      versions,
+      caseFiles,
+      caseItemsByFileId,
+    });
+
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
+      try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { localStorage.setItem('tap-current-user', JSON.stringify(payload.user)); } catch (_) {}
+    }, { token, user });
+
+    await gotoCaseLibrary(page);
+    await waitCaseLibraryReady(page);
+    await switchToTab(page, 'case-library');
+
+    await page.click('#openCaseLibraryEditDrawerBtn');
+    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await page.click('#caseLibraryXmindViewBtn');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+
+    const viewer = page.locator('#caseLibraryXmindStructureViewer');
+    await viewer.locator('[data-mind-action="edit-enter"]').click();
+    await expect(viewer.locator('[data-mind-action="edit-save"]')).toBeVisible();
+
+    const targetMeta = await page.evaluate(() => {
+      var viewerEl = document.getElementById('caseLibraryXmindStructureViewer');
+      if (!viewerEl || !viewerEl.querySelector) return null;
+      var node = viewerEl.querySelector('me-main me-wrapper > me-parent > me-tpc');
+      if (!node || !node.nodeObj) return null;
+      var nodeId = node.nodeObj.id === undefined || node.nodeObj.id === null
+        ? ''
+        : String(node.nodeObj.id);
+      var children = Array.isArray(node.nodeObj.children) ? node.nodeObj.children : [];
+      return {
+        nodeId: nodeId,
+        childCount: children.length,
+      };
+    });
+    expect(targetMeta).toBeTruthy();
+
+    await viewer.locator('me-main me-wrapper > me-parent > me-tpc .text').first().click({ force: true });
+    await expect(page.locator('#input-box')).toHaveCount(0);
+
+    const pasteText = '来自普通文本的子节点\n第二行';
+    const pasteState = await page.evaluate((payload) => {
+      var viewerEl = document.getElementById('caseLibraryXmindStructureViewer');
+      if (!viewerEl || typeof viewerEl.dispatchEvent !== 'function') {
+        return { ok: false, reason: 'viewer-not-found' };
+      }
+      if (typeof viewerEl.focus === 'function') {
+        try {
+          viewerEl.focus();
+        } catch (_) {
+          // ignore
+        }
+      }
+      var clipboardData = {
+        getData: function(type) {
+          var name = type === undefined || type === null ? '' : String(type).toLowerCase();
+          if (name === 'text/plain' || name === 'text') return payload;
+          return '';
+        },
+      };
+      var eventObj = null;
+      try {
+        eventObj = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+      } catch (err0) {
+        eventObj = document.createEvent('Event');
+        eventObj.initEvent('paste', true, true);
+      }
+      try {
+        Object.defineProperty(eventObj, 'clipboardData', {
+          value: clipboardData,
+        });
+      } catch (err1) {
+        try {
+          eventObj.clipboardData = clipboardData;
+        } catch (err2) {
+          // ignore
+        }
+      }
+      viewerEl.dispatchEvent(eventObj);
+      return {
+        ok: true,
+        defaultPrevented: eventObj.defaultPrevented === true,
+      };
+    }, pasteText);
+    expect(pasteState && pasteState.ok).toBeTruthy();
+    expect(pasteState && pasteState.defaultPrevented).toBeTruthy();
+
+    const appendState = await page.evaluate((payload) => {
+      var viewerEl = document.getElementById('caseLibraryXmindStructureViewer');
+      if (!viewerEl || !viewerEl.querySelectorAll) return null;
+      var nodes = viewerEl.querySelectorAll('me-tpc');
+      var target = null;
+      for (var i = 0; i < nodes.length; i += 1) {
+        var node = nodes[i];
+        if (!node || !node.nodeObj || node.nodeObj.id === undefined || node.nodeObj.id === null) continue;
+        if (String(node.nodeObj.id) !== String(payload.nodeId)) continue;
+        target = node;
+        break;
+      }
+      if (!target || !target.nodeObj) return null;
+      var children = Array.isArray(target.nodeObj.children) ? target.nodeObj.children : [];
+      var hasExactTopic = false;
+      for (var j = 0; j < children.length; j += 1) {
+        var topic = children[j] && children[j].topic !== undefined && children[j].topic !== null
+          ? String(children[j].topic).trim()
+          : '';
+        if (topic === payload.expectedTopic) {
+          hasExactTopic = true;
+          break;
+        }
+      }
+      return {
+        childCount: children.length,
+        hasExactTopic: hasExactTopic,
+      };
+    }, {
+      nodeId: targetMeta && targetMeta.nodeId ? targetMeta.nodeId : '',
+      expectedTopic: pasteText,
+    });
+    expect(appendState).toBeTruthy();
+    if (appendState && targetMeta) {
+      expect(appendState.childCount).toBeGreaterThan(targetMeta.childCount);
+      expect(appendState.hasExactTopic).toBeTruthy();
+    }
+    await expect(viewer.locator('[data-mind-action="undo"]')).toBeEnabled();
   });
 });
