@@ -165,11 +165,24 @@ test.describe('XMind 编辑模式', () => {
 
     await page.addInitScript((payload) => {
       try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { localStorage.setItem('usecase-settings-v1', JSON.stringify({ theme: 'light' })); } catch (_) {}
+      try { localStorage.setItem('tap-theme-hint', 'light'); } catch (_) {}
+      try {
+        if (document && document.documentElement) document.documentElement.setAttribute('data-theme', 'light');
+      } catch (_) {}
     }, { token, caseFileId });
 
     await gotoCaseLibrary(page);
     await waitCaseLibraryReady(page);
     await switchToTab(page, 'case-library');
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        var root = document && document.documentElement ? document.documentElement : null;
+        if (!root) return '';
+        var theme = root.getAttribute('data-theme');
+        return String(theme || 'light').toLowerCase();
+      });
+    }).toBe('light');
 
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
@@ -259,23 +272,129 @@ test.describe('XMind 编辑模式', () => {
       expect(dragGhostRect.ghostZ).toBeGreaterThan(dragGhostRect.drawerZ);
     }
 
-    const nodeCountBeforeAdd = await viewer.locator('me-tpc').count();
-    await viewer.locator('[data-mind-action="node-add"]').click();
+    const readNodeStats = async () => {
+      return await page.evaluate(() => {
+        var viewerEl = document.getElementById('caseLibraryXmindStructureViewer');
+        if (!viewerEl || !viewerEl.querySelectorAll) return null;
+        var nodes = viewerEl.querySelectorAll('me-tpc');
+        var emptyCount = 0;
+        for (var i = 0; i < nodes.length; i += 1) {
+          var node = nodes[i];
+          var topic = node && node.nodeObj && node.nodeObj.topic !== undefined && node.nodeObj.topic !== null
+            ? String(node.nodeObj.topic).trim()
+            : '';
+          if (!topic) emptyCount += 1;
+        }
+        return {
+          nodeCount: nodes.length,
+          emptyCount: emptyCount,
+        };
+      });
+    };
+
+    const readThemeSnapshot = async () => {
+      return await page.evaluate(() => {
+        var viewerEl = document.getElementById('caseLibraryXmindStructureViewer');
+        if (!viewerEl) return null;
+        var canvasEl = viewerEl.querySelector ? viewerEl.querySelector('.xmind-structure-canvas') : null;
+        var mapContainerEl = viewerEl.querySelector ? viewerEl.querySelector('.map-container') : null;
+        var scopeEl = mapContainerEl || canvasEl || viewerEl;
+        var scopeStyle = scopeEl ? getComputedStyle(scopeEl) : null;
+        var viewerStyle = getComputedStyle(viewerEl);
+        var root = document && document.documentElement ? document.documentElement : null;
+        var rootTheme = root ? String(root.getAttribute('data-theme') || 'light').toLowerCase() : 'light';
+        var mainBg = scopeStyle ? String(scopeStyle.getPropertyValue('--main-bgcolor') || '').trim().toLowerCase() : '';
+        var bg = scopeStyle ? String(scopeStyle.getPropertyValue('--bgcolor') || '').trim().toLowerCase() : '';
+        var viewerBg = viewerStyle ? String(viewerStyle.backgroundColor || '').trim().toLowerCase() : '';
+        var mapBg = mapContainerEl ? String(getComputedStyle(mapContainerEl).backgroundColor || '').trim().toLowerCase() : '';
+        var raw = [mainBg, bg, viewerBg, mapBg].join('|');
+        var darkLike = raw.indexOf('#1f2937') >= 0
+          || raw.indexOf('#111827') >= 0
+          || raw.indexOf('#0f172a') >= 0
+          || raw.indexOf('rgb(31, 41, 55)') >= 0
+          || raw.indexOf('rgb(17, 24, 39)') >= 0
+          || raw.indexOf('rgb(15, 23, 42)') >= 0;
+        return {
+          rootTheme: rootTheme,
+          mainBg: mainBg,
+          bg: bg,
+          viewerBg: viewerBg,
+          mapBg: mapBg,
+          darkLike: darkLike,
+        };
+      });
+    };
+
+    const tabStatsBeforeAdd = await readNodeStats();
+    expect(tabStatsBeforeAdd).toBeTruthy();
+    const tabTargetNode = viewer.locator('me-main me-wrapper > me-parent > me-tpc .text').first();
+    await tabTargetNode.click({ force: true });
+    await page.keyboard.press('Tab');
     await page.waitForTimeout(120);
-    const nodeCountAfterAdd = await viewer.locator('me-tpc').count();
-    expect(nodeCountAfterAdd).toBeGreaterThan(nodeCountBeforeAdd);
+    const tabStatsAfterAdd = await readNodeStats();
+    expect(tabStatsAfterAdd).toBeTruthy();
+    if (tabStatsBeforeAdd && tabStatsAfterAdd) {
+      expect(tabStatsAfterAdd.nodeCount).toBeGreaterThan(tabStatsBeforeAdd.nodeCount);
+      expect(tabStatsAfterAdd.emptyCount).toBeGreaterThan(tabStatsBeforeAdd.emptyCount);
+    }
+
+    const themeBeforeUndo = await readThemeSnapshot();
+    expect(themeBeforeUndo).toBeTruthy();
+    if (themeBeforeUndo) {
+      expect(themeBeforeUndo.rootTheme).toBe('light');
+      expect(themeBeforeUndo.darkLike).toBeFalsy();
+    }
 
     await expect(viewer.locator('[data-mind-action="undo"]')).toBeEnabled();
     await viewer.locator('[data-mind-action="undo"]').click();
     await page.waitForTimeout(120);
-    const nodeCountAfterUndo = await viewer.locator('me-tpc').count();
-    expect(nodeCountAfterUndo).toBe(nodeCountBeforeAdd);
+    const tabStatsAfterUndo = await readNodeStats();
+    expect(tabStatsAfterUndo).toBeTruthy();
+    if (tabStatsBeforeAdd && tabStatsAfterUndo) {
+      expect(tabStatsAfterUndo.nodeCount).toBe(tabStatsBeforeAdd.nodeCount);
+      expect(tabStatsAfterUndo.emptyCount).toBe(tabStatsBeforeAdd.emptyCount);
+    }
+    const themeAfterUndo = await readThemeSnapshot();
+    expect(themeAfterUndo).toBeTruthy();
+    if (themeBeforeUndo && themeAfterUndo) {
+      expect(themeAfterUndo.rootTheme).toBe('light');
+      expect(themeAfterUndo.mainBg).toBe(themeBeforeUndo.mainBg);
+      expect(themeAfterUndo.bg).toBe(themeBeforeUndo.bg);
+      expect(themeAfterUndo.darkLike).toBeFalsy();
+    }
+
+    const addStatsBefore = await readNodeStats();
+    expect(addStatsBefore).toBeTruthy();
+    await tabTargetNode.click({ force: true });
+    await expect(viewer.locator('[data-mind-action="node-add"]')).toBeEnabled();
+    await viewer.locator('[data-mind-action="node-add"]').click();
+    await page.waitForTimeout(120);
+    const addStatsAfter = await readNodeStats();
+    expect(addStatsAfter).toBeTruthy();
+    if (addStatsBefore && addStatsAfter) {
+      expect(addStatsAfter.nodeCount).toBeGreaterThan(addStatsBefore.nodeCount);
+      expect(addStatsAfter.emptyCount).toBeGreaterThan(addStatsBefore.emptyCount);
+    }
+
+    await expect(viewer.locator('[data-mind-action="undo"]')).toBeEnabled();
+    await viewer.locator('[data-mind-action="undo"]').click();
+    await page.waitForTimeout(120);
+    const addStatsAfterUndo = await readNodeStats();
+    expect(addStatsAfterUndo).toBeTruthy();
+    if (addStatsBefore && addStatsAfterUndo) {
+      expect(addStatsAfterUndo.nodeCount).toBe(addStatsBefore.nodeCount);
+      expect(addStatsAfterUndo.emptyCount).toBe(addStatsBefore.emptyCount);
+    }
 
     await expect(viewer.locator('[data-mind-action="redo"]')).toBeEnabled();
     await viewer.locator('[data-mind-action="redo"]').click();
     await page.waitForTimeout(120);
-    const nodeCountAfterRedo = await viewer.locator('me-tpc').count();
-    expect(nodeCountAfterRedo).toBeGreaterThan(nodeCountAfterUndo);
+    const addStatsAfterRedo = await readNodeStats();
+    expect(addStatsAfterRedo).toBeTruthy();
+    if (addStatsAfterUndo && addStatsAfterRedo) {
+      expect(addStatsAfterRedo.nodeCount).toBeGreaterThan(addStatsAfterUndo.nodeCount);
+      expect(addStatsAfterRedo.emptyCount).toBeGreaterThan(addStatsAfterUndo.emptyCount);
+    }
 
     await viewer.locator('[data-mind-action="edit-save"]').click();
     await page.waitForTimeout(200);

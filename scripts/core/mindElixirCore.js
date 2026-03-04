@@ -1499,7 +1499,9 @@
         var el = document.createElement('div');
         el.className = 'xmind-node-context-menu';
         el.setAttribute('aria-hidden', 'true');
-        el.innerHTML = '<button type="button" class="xmind-node-context-menu-btn" data-mind-node-menu="node-add">新增节点</button>';
+        el.innerHTML = ''
+          + '<button type="button" class="xmind-node-context-menu-btn" data-mind-node-menu="node-add">新增节点</button>'
+          + '<button type="button" class="xmind-node-context-menu-btn" data-mind-node-menu="node-delete">删除节点</button>';
         el.addEventListener('click', onNodeContextMenuClick);
         document.body.appendChild(el);
         nodeContextMenuEl = el;
@@ -1515,10 +1517,19 @@
       function showNodeContextMenu(clientX, clientY) {
         var menu = ensureNodeContextMenuEl();
         if (!menu || !menu.style) return;
-        var menuBtn = menu.querySelector ? menu.querySelector('[data-mind-node-menu="node-add"]') : null;
-        if (menuBtn) {
-          var selected = collectSelectedNodes();
-          menuBtn.disabled = !(editing && !pendingSave && selected.length === 1);
+        var menuAddBtn = menu.querySelector ? menu.querySelector('[data-mind-node-menu="node-add"]') : null;
+        var menuDeleteBtn = menu.querySelector ? menu.querySelector('[data-mind-node-menu="node-delete"]') : null;
+        var selected = collectSelectedNodes();
+        var canAdd = editing && !pendingSave && selected.length === 1;
+        var canDelete = editing && !pendingSave && selected.some(function(node) {
+          return Boolean(node && node.nodeObj && node.nodeObj.parent);
+        });
+        if (menuAddBtn) {
+          menuAddBtn.disabled = !canAdd;
+        }
+        if (menuDeleteBtn) {
+          menuDeleteBtn.style.display = canDelete ? '' : 'none';
+          menuDeleteBtn.disabled = !canDelete;
         }
         menu.style.left = '0px';
         menu.style.top = '0px';
@@ -1608,6 +1619,9 @@
         if (action === 'node-add') {
           hideNodeContextMenu();
           runAddNode();
+        } else if (action === 'node-delete') {
+          hideNodeContextMenu();
+          runDeleteNodes();
         }
       }
 
@@ -2066,6 +2080,11 @@
         } catch (err) {
           // ignore
         }
+        // MindElixir refresh 可能重置主题变量，撤回/恢复后强制与当前页面主题保持一致。
+        refreshMindTheme(inst);
+        setTimeout(function() {
+          refreshMindTheme(inst);
+        }, 0);
         applyingHistory = false;
         historyIndex = nextIndex;
         clearValidationMarks();
@@ -2097,7 +2116,7 @@
         try {
           inst.addChild(selected[0], {
             id: generateNodeId(),
-            topic: '新增节点',
+            topic: '',
             expanded: true,
             children: [],
           });
@@ -2409,6 +2428,18 @@
           return;
         }
 
+        if (!typing && e.key === 'Delete') {
+          var deleteSelected = collectSelectedNodes().filter(function(node) {
+            return Boolean(node && node.nodeObj && node.nodeObj.parent);
+          });
+          if (deleteSelected.length) {
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            runDeleteNodes();
+            return;
+          }
+        }
+
         if (!typing && beginNodeEditByKeyboard(e)) {
           return;
         }
@@ -2486,7 +2517,7 @@
         if (e.ctrlKey || e.metaKey || e.altKey) return null;
         var key = e.key === undefined || e.key === null ? '' : String(e.key);
         if (!key) return null;
-        if (key === 'Backspace' || key === 'Delete') {
+        if (key === 'Backspace') {
           return { mode: 'clear', text: '' };
         }
         if (key === 'Process' || key === 'Unidentified') {
@@ -3753,7 +3784,7 @@
         alignment: 'nodes',
         theme: theme || undefined,
       });
-      instance.newTopicName = '新增节点';
+      instance.newTopicName = '';
       instance.init({
         nodeData: initialMindData.nodeData,
         direction: direction,

@@ -4357,3 +4357,23 @@
   - `node --check scripts/core/mindElixirCore.js tests/ui/xmind_structure_edit_interactions.spec.js tests/ui/xmind_structure_edit_mode.spec.js`（通过）
   - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js tests/ui/xmind_structure_edit_interactions.spec.js --reporter=line`（通过，5/5）
   - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过，1/1）
+- 更新记录：2026-03-04 优化 XMind 新建节点默认内容：编辑态下通过 `Tab` 快捷键新增子节点，或点击“增加节点”按钮新增子节点时，默认 `topic` 改为空字符串，不再自动填充“新增节点”；保留现有撤回/恢复与保存校验逻辑（`scripts/core/mindElixirCore.js`）。
+- 更新记录：2026-03-04 补充“新建节点默认空内容”UI 回归：编辑模式用例新增断言，验证 `Tab` 新增与按钮新增均会产生空内容节点（空 topic），并覆盖对应的撤回/恢复链路（`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/mindElixirCore.js tests/ui/xmind_structure_edit_mode.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js --reporter=line`（通过，4/4）
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过，1/1）
+- 更新记录：2026-03-04 修复 XMind 选中节点按 `Delete` 无法删除问题：编辑态下当选中非根节点并按 `Delete`，优先执行节点删除逻辑，不再触发“进入编辑并清空内容”的链路；保留 `Backspace` 触发文本编辑清空的既有行为（`scripts/core/mindElixirCore.js`）。
+- 更新记录：2026-03-04 增强 XMind 右键菜单删除能力：节点右键菜单新增“删除节点”项，并仅在当前选中节点可删除（非根节点）时显示；点击后复用既有 `runDeleteNodes` 删除链路（`scripts/core/mindElixirCore.js`）。
+- 更新记录：2026-03-04 补充 Del 删除与右键删除项 UI 回归：交互用例新增断言，验证非根节点右键菜单可见“删除节点”；选中节点按 `Delete` 后节点数量减少，确保键盘删除链路生效（`tests/ui/xmind_structure_edit_interactions.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/mindElixirCore.js tests/ui/xmind_structure_edit_interactions.spec.js tests/ui/xmind_structure_edit_mode.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_interactions.spec.js tests/ui/xmind_structure_edit_mode.spec.js --reporter=line`（通过，5/5）
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过，1/1）
+- 更新记录：2026-03-04 修复白色主题下 XMind 撤回后画面变黑：在编辑态历史回放（撤回/恢复）执行 `inst.refresh` 后，新增主题强制回灌（同步 + 下一帧兜底），确保导图颜色变量始终与当前页面主题一致，不因历史快照刷新回退为深色（`scripts/core/mindElixirCore.js`）。
+- 更新记录：2026-03-04 补充白色主题撤回颜色回归：编辑模式用例新增“白色主题下撤回前后主题变量一致、且不出现深色变量”断言，覆盖 `undo` 链路下的主题兼容风险（`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/mindElixirCore.js tests/ui/xmind_structure_edit_mode.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js --reporter=line`（通过，4/4）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_interactions.spec.js --reporter=line`（通过，1/1）
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过，1/1）

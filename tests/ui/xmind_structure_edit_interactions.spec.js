@@ -285,6 +285,7 @@ test('XMind 编辑态支持右键新增、跨侧拖拽、回车换行与横向�
     window.dispatchEvent(upEvt);
   });
   await expect(page.locator('.xmind-node-context-menu.is-open')).toBeVisible();
+  await expect(page.locator('.xmind-node-context-menu [data-mind-node-menu="node-delete"]')).toBeVisible();
   await page.evaluate(() => {
     var btn = document.querySelector('.xmind-node-context-menu [data-mind-node-menu="node-add"]');
     if (btn && typeof btn.click === 'function') btn.click();
@@ -355,4 +356,17 @@ test('XMind 编辑态支持右键新增、跨侧拖拽、回车换行与横向�
   }).toBe('');
   const nodeCountAfterClear = await viewer.locator('me-tpc').count();
   expect(nodeCountAfterClear).toBe(nodeCountBeforeClear);
+
+  await page.evaluate(() => {
+    var input = document.getElementById('input-box');
+    if (input && typeof input.blur === 'function') input.blur();
+  });
+  await page.waitForTimeout(80);
+  await editNode.click({ force: true });
+  await expect(page.locator('#input-box')).toHaveCount(0);
+  const nodeCountBeforeDelete = await viewer.locator('me-tpc').count();
+  await page.keyboard.press('Delete');
+  await page.waitForTimeout(140);
+  const nodeCountAfterDelete = await viewer.locator('me-tpc').count();
+  expect(nodeCountAfterDelete).toBeLessThan(nodeCountBeforeDelete);
 });
