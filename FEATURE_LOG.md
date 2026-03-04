@@ -19,6 +19,49 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：一键执行需求评审异常结果自动中断并提示重试
+- 功能描述：修复一键执行在“需求评审”返回异常格式内容时会卡在错误状态的问题。现在评审结果若不是有效 JSON 数组或结构缺少关键字段，会自动中断流程并提示用户重新执行。
+- 操作方式：
+  - 进入“AI 功能 → 一键执行”并启动流程；
+  - 若需求评审返回异常结构（如 SSE 事件流文本、非 JSON 数组、字段缺失对象），系统自动停止流程；
+  - 页面提示“已自动中断，请重新执行”，无需手动点击“中断全部执行”。
+- 使用效果：
+  - 避免流程卡死在“进行中”状态；
+  - 用户可直接按提示重新执行，减少排障成本。
+- 新增内容/接口/组件：
+  - 前端：
+    - `scripts/core/autoCore.js`：新增评审结果解析与结构校验（支持剥离代码块、兼容 `data` 数组包装），并在校验失败时返回明确中断原因；
+    - `scripts/core/autoCore.js`：自动流程执行器支持步骤级 `getInvalidReason`，优先展示具体失败原因；
+    - `scripts/modules/app.js`：自动流程管理器在步骤校验失败时读取步骤级失败原因，统一展示“自动中断+重试”提示。
+  - 测试：
+    - `tests/ui/auto_review_invalid_interrupt.spec.js`：新增 UI 回归，覆盖“需求评审返回异常格式后自动中断并恢复按钮状态”。
+- 复用说明：复用现有自动流程步骤框架与失败态处理链路，仅增强评审步骤的结果校验与失败文案，无新增后端接口。
+- 测试与验证：
+  - `node --check scripts/core/autoCore.js scripts/modules/app.js tests/ui/auto_review_invalid_interrupt.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/auto_review_invalid_interrupt.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-04 修复“需求评审结果异常时流程卡死需手动中断”问题，新增评审结构校验和自动中断机制，并补充 UI 回归用例（`scripts/core/autoCore.js`、`scripts/modules/app.js`、`tests/ui/auto_review_invalid_interrupt.spec.js`）。
+
+- 功能名称：一键执行原始需求导入区补充图片识别与模型能力提示
+- 功能描述：在“一键执行 → 导入数据”的“原始需求”导入区域下，新增与功能流程一致的图片上下文与模型能力提示，展示当前需求图片数量、评审/清洗模型标签，以及是否可识别图片。
+- 操作方式：
+  - 进入“AI 功能 → 一键执行”；
+  - 在“导入数据”卡片的“原始需求”导入区域下查看新增提示；
+  - 导入/粘贴图片或调整功能指派模型后，提示文案会实时刷新。
+- 使用效果：
+  - 在一键执行页无需切回功能流程，也能直接判断“当前上下文是否含图片、后续评审/清洗是否具备视觉能力”；
+  - 降低误用纯文本模型导致结果偏差的风险。
+- 新增内容/接口/组件：
+  - 前端：`scripts/modules/app.js`
+    - 复用现有 `updateRequirementMediaContextHints` 逻辑，新增 `mediaContextAutoImportHint` 输出；
+    - 在一键执行“原始需求”导入区下动态渲染与功能流程一致的图片/模型能力提示。
+  - UI 自动化：`tests/ui/auto_import_media_context_hint.spec.js`
+    - 新增用例覆盖“一键执行原始需求导入区显示图片上下文 + 模型视觉能力”。
+- 复用说明：完全复用既有图片统计、模型能力识别与提示样式逻辑（`media-context-hint`），未新增后端接口、未改变原有页面结构。
+- 测试与验证：
+  - `node --check scripts/modules/app.js tests/ui/auto_import_media_context_hint.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/auto_import_media_context_hint.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-04 新增一键执行“原始需求导入区”图片/模型能力提示及对应 UI 回归用例（`scripts/modules/app.js`、`tests/ui/auto_import_media_context_hint.spec.js`）。
+
 - 功能名称：功能指派模型切换即时生效（免保存）
 - 功能描述：功能指派页中，单个功能卡片切换模型后立即保存并生效，不再依赖点击“保存指派”按钮。
 - 操作方式：

@@ -733,7 +733,78 @@
       );
     }
 
+    function stripSimpleCodeFence(text) {
+      var content = text === undefined || text === null ? '' : String(text);
+      var trimmed = content.trim();
+      if (!trimmed) return '';
+      var match = trimmed.match(/^(```|'''|\"\"\")([\w-]*)?\n?([\s\S]*?)\1$/i);
+      if (match) return String(match[3] || '').trim();
+      return trimmed;
+    }
+
+    function parseAutoReviewList(text) {
+      var raw = stripSimpleCodeFence(text);
+      if (!raw) {
+        return { ok: false, reason: '需求评审结果为空，已自动中断，请重新执行' };
+      }
+      var lines = raw.split(/\r?\n/);
+      if (lines.length > 1 && /^\s*#\s*需求标识[：:]/.test(lines[0])) {
+        lines.shift();
+        raw = lines.join('\n').trim();
+      }
+      if (!raw) {
+        return { ok: false, reason: '需求评审结果为空，已自动中断，请重新执行' };
+      }
+      var parsed = null;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (err) {
+        return { ok: false, reason: '需求评审结果不是有效 JSON 数组，已自动中断，请重新执行' };
+      }
+      if (Array.isArray(parsed)) {
+        return { ok: true, list: parsed };
+      }
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.data)) {
+        return { ok: true, list: parsed.data };
+      }
+      return { ok: false, reason: '需求评审结果结构异常（应为数组），已自动中断，请重新执行' };
+    }
+
+    function hasReviewFieldKey(obj, pattern) {
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+      var keys = Object.keys(obj);
+      for (var i = 0; i < keys.length; i += 1) {
+        if (pattern.test(String(keys[i] || ''))) return true;
+      }
+      return false;
+    }
+
+    function isReviewItemStructurallyValid(item) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+      var hit = 0;
+      if (hasReviewFieldKey(item, /(类别|分类|category|class)/i)) hit += 1;
+      if (hasReviewFieldKey(item, /(不明确的需求点|需求点|问题点|point|issue)/i)) hit += 1;
+      if (hasReviewFieldKey(item, /(不明确原因|原因|reason)/i)) hit += 1;
+      if (hasReviewFieldKey(item, /(分支|边界|branch|edge)/i)) hit += 1;
+      return hit >= 2;
+    }
+
+    function validateAutoReviewResult() {
+      var text = reviewResultEl && reviewResultEl.value ? reviewResultEl.value.trim() : '';
+      var parsed = parseAutoReviewList(text);
+      if (!parsed.ok) return parsed;
+      var list = Array.isArray(parsed.list) ? parsed.list : [];
+      if (!list.length) return { ok: true, list: list };
+      for (var i = 0; i < list.length; i += 1) {
+        if (!isReviewItemStructurallyValid(list[i])) {
+          return { ok: false, reason: '需求评审结果结构异常（缺少关键字段），已自动中断，请重新执行' };
+        }
+      }
+      return { ok: true, list: list };
+    }
+
     function buildAutoWorkflowSteps() {
+      var reviewInvalidReason = '';
       return [
         {
           key: 'review',
@@ -745,7 +816,14 @@
             }
             return reviewRequirements();
           },
-          validate: function() { return Boolean(reviewResultEl && reviewResultEl.value && reviewResultEl.value.trim().length > 0); },
+          validate: function() {
+            var check = validateAutoReviewResult();
+            reviewInvalidReason = check && check.reason ? String(check.reason) : '';
+            return Boolean(check && check.ok);
+          },
+          getInvalidReason: function() {
+            return reviewInvalidReason || '需求评审未产生有效输出，请检查模型配置或稍后重试';
+          },
           after: function() { return handleAutoClarifyAfterReview(); },
         },
         { key: 'clean', label: '需求清洗', run: function(ctx) { return runCleaning(ctx); }, validate: function() { return Boolean(cleanedTextEl && cleanedTextEl.value && cleanedTextEl.value.trim().length > 0); } },
@@ -765,7 +843,13 @@
         try {
           await step.run(context);
           if (!step.validate()) {
-            var invalidReason = step.label + '未产生有效输出，请检查模型配置或稍后重试';
+            var invalidReason = '';
+            if (step && typeof step.getInvalidReason === 'function') {
+              invalidReason = step.getInvalidReason() || '';
+            }
+            if (!invalidReason) {
+              invalidReason = step.label + '未产生有效输出，请检查模型配置或稍后重试';
+            }
             setStepFailed(step.key, invalidReason);
             updateFlowStatus();
             throw new Error(invalidReason);

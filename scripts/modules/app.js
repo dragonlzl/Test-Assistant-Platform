@@ -1387,7 +1387,17 @@
                   if (isTransientFetchError(lastErr) && handleRetry(current, 'retry')) {
                     return current;
                   }
-                  var invalidReason = (step && step.label ? step.label : '流程步骤') + '未产生有效输出，请检查模型配置或稍后重试';
+                  var invalidReason = '';
+                  if (step && typeof step.getInvalidReason === 'function') {
+                    try {
+                      invalidReason = step.getInvalidReason() || '';
+                    } catch (errGetReason) {
+                      invalidReason = '';
+                    }
+                  }
+                  if (!invalidReason) {
+                    invalidReason = (step && step.label ? step.label : '流程步骤') + '未产生有效输出，请检查模型配置或稍后重试';
+                  }
                   throw new Error(invalidReason);
                 }
                 if (step && typeof step.after === 'function') {
@@ -1736,7 +1746,8 @@
       var importHintEl = ensureMediaContextHintElement('mediaContextImportHint', dom.parseStatus);
       var reviewHintEl = ensureMediaContextHintElement('mediaContextReviewHint', dom.reviewStatus);
       var cleanHintEl = ensureMediaContextHintElement('mediaContextCleanHint', dom.cleanStatus);
-      if (!importHintEl && !reviewHintEl && !cleanHintEl) return;
+      var autoImportHintEl = ensureMediaContextHintElement('mediaContextAutoImportHint', dom.autoRawListEl);
+      if (!importHintEl && !reviewHintEl && !cleanHintEl && !autoImportHintEl) return;
 
       var stats = getRequirementImageStats();
       var hasImages = stats.total > 0;
@@ -1755,6 +1766,19 @@
         importText += ' 当前两者未配置或标签未声明视觉/多模态，执行时可能仅基于文本。';
       }
       setMediaContextHint(importHintEl, importText, importTone);
+      if (autoImportHintEl) {
+        var autoImportText = imageLabel
+          + '。一键执行后续步骤模型能力：评审模型：' + buildModelCapabilitySummary(reviewInfo)
+          + '；清洗模型：' + buildModelCapabilitySummary(cleanInfo) + '。';
+        if (importNoImageCapability) {
+          autoImportText += ' 当前两者未配置或标签未声明视觉/多模态，后续步骤可能仅基于文本。';
+        } else if (hasImages) {
+          autoImportText += ' 若继续执行需求评审/清洗，将按模型能力尝试识别图片内容。';
+        } else {
+          autoImportText += ' 当前不含图片，后续步骤将仅基于文本。';
+        }
+        setMediaContextHint(autoImportHintEl, autoImportText, importTone);
+      }
 
       var reviewTone = '';
       var reviewText = imageLabel + '。当前评审模型：' + buildModelCapabilitySummary(reviewInfo) + '。';
