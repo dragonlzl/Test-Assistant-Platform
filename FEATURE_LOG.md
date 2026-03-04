@@ -19,6 +19,26 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：需求导入删除线内容过滤
+- 功能描述：在导入 `.docx` 需求时，自动忽略被删除线标记的文本，避免已废弃内容进入需求评审、需求清洗与后续流程。
+- 操作方式：
+  - 上传包含删除线文本的 `.docx` 需求文档；
+  - 系统导入后仅保留未删除线内容，删除线文本不写入“原始需求”输入区。
+- 使用效果：
+  - 废弃内容在导入阶段被过滤，需求评审和后续 AI 流程输入更准确；
+  - 保留原有页面展示结构与导入交互，不改变用户操作路径。
+- 新增内容/接口/组件：
+  - 前端：`scripts/modules/upload.js`
+    - DOCX 段落解析改为按 `w:r` run 处理；
+    - 新增删除线判断（`w:strike` / `w:dstrike`），命中后跳过该 run 文本；
+    - 补充 `w:delText` 过滤，避免修订删除文本被导入。
+  - 测试：新增 `tests/ui/import_docx_strikethrough.spec.js`，覆盖“删除线文本过滤 + 普通文本保留 + 显式关闭删除线保留”场景。
+- 复用说明：复用现有导入解析链路（`parseDocxWithFallback`、`extractDocxSegments`）与现有 UI 导入入口，仅增强 run 级解析规则，无新增后端接口。
+- 测试与验证：
+  - `node --check scripts/modules/upload.js tests/ui/import_docx_strikethrough.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/import_docx_strikethrough.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-04 新增 DOCX 删除线文本过滤能力并补充 UI 自动化覆盖（`scripts/modules/upload.js`、`tests/ui/import_docx_strikethrough.spec.js`）。
+
 - 功能名称：自动流程澄清开关跨页/刷新持久化修复
 - 功能描述：修复“需要人工确认需求澄清后再继续自动流程”勾选状态在刷新页面或切换到其他页面后丢失的问题。
 - 操作方式：

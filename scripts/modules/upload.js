@@ -580,9 +580,31 @@
     }
 
     function extractParagraphSegments(xml, relMap, imageSeed) {
+      if (!xml) return [];
+      var segments = [];
+      var runRegex = /<w:r\b[\s\S]*?<\/w:r>/gi;
+      var runMatch;
+      var hasRun = false;
+      while ((runMatch = runRegex.exec(xml))) {
+        hasRun = true;
+        var runXml = runMatch[0] || '';
+        if (!runXml) continue;
+        if (runHasStrikethrough(runXml)) continue;
+        var runSegments = extractInlineSegments(runXml, relMap, imageSeed);
+        if (runSegments.length) {
+          segments = segments.concat(runSegments);
+        }
+      }
+      if (!hasRun) {
+        segments = extractInlineSegments(xml, relMap, imageSeed);
+      }
+      return mergeAdjacentTextSegments(segments);
+    }
+
+    function extractInlineSegments(xml, relMap, imageSeed) {
       var segments = [];
       var textBuffer = '';
-      var tokenRegex = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>|<w:tab\b[^>]*\/>|<w:(?:br|cr)\b[^>]*\/>|<a:blip\b[^>]*>|<v:imagedata\b[^>]*>/gi;
+      var tokenRegex = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>|<w:delText\b[^>]*>[\s\S]*?<\/w:delText>|<w:tab\b[^>]*\/>|<w:(?:br|cr)\b[^>]*\/>|<a:blip\b[^>]*>|<v:imagedata\b[^>]*>/gi;
       var match;
 
       var flushText = function() {
@@ -595,6 +617,9 @@
         var full = match[0] || '';
         if (match[1] !== undefined) {
           textBuffer += decodeXmlEntities(match[1]);
+          continue;
+        }
+        if (/^<w:delText\b/i.test(full)) {
           continue;
         }
         if (/^<w:tab\b/i.test(full)) {
@@ -621,6 +646,29 @@
 
       flushText();
       return segments;
+    }
+
+    function runHasStrikethrough(runXml) {
+      if (!runXml) return false;
+      var rprMatch = runXml.match(/<w:rPr\b[\s\S]*?<\/w:rPr>/i);
+      if (!rprMatch || !rprMatch[0]) return false;
+      var rprXml = rprMatch[0];
+      var strikeRegex = /<w:(?:strike|dstrike)\b[^>]*>/gi;
+      var match;
+      while ((match = strikeRegex.exec(rprXml))) {
+        var tag = match[0] || '';
+        var attrs = parseXmlAttributes(tag);
+        var value = attrs['w:val'];
+        if (value === undefined || value === null) value = attrs.val;
+        if (value === undefined || value === null || String(value).trim() === '') return true;
+        if (!isWordFalseValue(value)) return true;
+      }
+      return false;
+    }
+
+    function isWordFalseValue(value) {
+      var normalized = String(value || '').trim().toLowerCase();
+      return normalized === '0' || normalized === 'false' || normalized === 'off' || normalized === 'no';
     }
 
     function decodeXmlEntities(text) {
