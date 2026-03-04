@@ -41,6 +41,8 @@
       missingCaseReminderMatchConfig: { type: true, module: true },
       missingCaseReminderAiEnabled: 'off',
       smartTopNavCollapse: false,
+      assistantEnabled: false,
+      assistantModelId: '',
       tempExecColumns: { ...defaultTempExecColumns },
       projectOrder: [],
       defaultProjectId: '',
@@ -1850,6 +1852,11 @@
       getFeishuMentionId,
       postFeishuMessage,
       ensureTempExecColumns,
+      getAssistantSettingsSnapshot,
+      listAssistantModels,
+      applyAssistantSettingsPatch,
+      saveAssistantSettings,
+      renderAssistantSettingsUI,
     } = settingsModule || {
       loadSettings: function noopLoad() {},
       persistSettings: function noopPersist() {},
@@ -1863,6 +1870,11 @@
       getFeishuMentionId: function noopGetMention() { return ''; },
       postFeishuMessage: async function noopPost() { return { ok: false, reason: 'settings module missing' }; },
       ensureTempExecColumns: function fallbackEnsure() { return { ...defaultTempExecColumns }; },
+      getAssistantSettingsSnapshot: function noopGetAssistant() { return { assistantEnabled: false, assistantModelId: '', assistantModelName: '' }; },
+      listAssistantModels: function noopListAssistantModels() { return []; },
+      applyAssistantSettingsPatch: function noopApplyAssistantPatch() { return { ok: false, reason: 'settings module missing' }; },
+      saveAssistantSettings: function noopSaveAssistantSettings() {},
+      renderAssistantSettingsUI: function noopRenderAssistantSettings() {},
     };
     loadSettings();
     initModule('memoPad', {
@@ -1914,6 +1926,7 @@
       getTemperatureForType,
       getAssignedModel,
       testModel,
+      applyModelPatch,
       saveModel,
     } = modelsModule || {};
 
@@ -3448,6 +3461,1148 @@
     }
     if (runtime && runtime.switchTab) switchTab = runtime.switchTab;
     window.app.switchTab = switchTab;
+
+    function assistantDispatchEvent(name, detail) {
+      if (!name) return;
+      if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+      try {
+        if (typeof CustomEvent === 'function') {
+          window.dispatchEvent(new CustomEvent(name, { detail: detail || {} }));
+        } else if (typeof document !== 'undefined' && typeof document.createEvent === 'function') {
+          var evt = document.createEvent('CustomEvent');
+          evt.initCustomEvent(name, false, false, detail || {});
+          window.dispatchEvent(evt);
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function assistantGetStableModelId(model) {
+      if (!model || typeof model !== 'object') return '';
+      if (model.remoteId !== undefined && model.remoteId !== null) return String(model.remoteId);
+      if (model.id !== undefined && model.id !== null) return String(model.id);
+      return '';
+    }
+
+    function assistantFindModelByAnyId(value) {
+      var target = value === undefined || value === null ? '' : String(value);
+      if (!target) return null;
+      var list = Array.isArray(state.models) ? state.models : [];
+      for (var i = 0; i < list.length; i += 1) {
+        var model = list[i];
+        if (!model) continue;
+        var idVal = model.id === undefined || model.id === null ? '' : String(model.id);
+        var remoteVal = model.remoteId === undefined || model.remoteId === null ? '' : String(model.remoteId);
+        if (idVal === target || remoteVal === target) return model;
+      }
+      return null;
+    }
+
+    function assistantIsModelUsable(model) {
+      if (!model || typeof model !== 'object') return false;
+      var baseUrl = model.baseUrl ? String(model.baseUrl).trim() : '';
+      var modelId = model.model ? String(model.model).trim() : '';
+      var apiKey = model.apiKey ? String(model.apiKey).trim() : '';
+      return Boolean(baseUrl && modelId && apiKey);
+    }
+
+    function assistantSanitizeBaseUrl(url) {
+      var raw = url === undefined || url === null ? '' : String(url).trim();
+      if (!raw) return '';
+      try {
+        var parsed = new URL(raw);
+        var path = parsed.pathname || '';
+        return parsed.protocol + '//' + parsed.host + path;
+      } catch (err) {
+        return raw.split('?')[0];
+      }
+    }
+
+    function assistantExtractJsonPayload(text) {
+      var raw = text === undefined || text === null ? '' : String(text);
+      if (!raw) return null;
+      var stripped = stripCodeFence ? stripCodeFence(raw) : raw;
+      var payload = extractJsonPayload ? extractJsonPayload(stripped) : '';
+      var candidate = payload || stripped;
+      if (!candidate) return null;
+      try {
+        return JSON.parse(candidate);
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function assistantNormalizeDiagPatch(patch) {
+      var incoming = patch && typeof patch === 'object' ? patch : {};
+      var normalized = {};
+      if (Object.prototype.hasOwnProperty.call(incoming, 'provider')) {
+        var provider = incoming.provider === undefined || incoming.provider === null ? '' : String(incoming.provider).trim();
+        if (provider) normalized.provider = provider;
+      }
+      if (Object.prototype.hasOwnProperty.call(incoming, 'baseUrl')) {
+        var baseUrl = incoming.baseUrl === undefined || incoming.baseUrl === null ? '' : String(incoming.baseUrl).trim();
+        if (baseUrl) normalized.baseUrl = baseUrl;
+      }
+      if (Object.prototype.hasOwnProperty.call(incoming, 'model')) {
+        var modelName = incoming.model === undefined || incoming.model === null ? '' : String(incoming.model).trim();
+        if (modelName) normalized.model = modelName;
+      }
+      if (Object.prototype.hasOwnProperty.call(incoming, 'maxTokens')) {
+        var maxTokens = Math.round(Number(incoming.maxTokens));
+        if (Number.isFinite(maxTokens) && maxTokens > 0) normalized.maxTokens = maxTokens;
+      }
+      return normalized;
+    }
+
+    function assistantGetSettings() {
+      return typeof getAssistantSettingsSnapshot === 'function'
+        ? getAssistantSettingsSnapshot()
+        : { assistantEnabled: false, assistantModelId: '', assistantModelName: '' };
+    }
+
+    function assistantGetSelectedModel(modelId) {
+      var explicitId = modelId === undefined || modelId === null ? '' : String(modelId);
+      var settingsSnapshot = assistantGetSettings();
+      var targetId = explicitId || settingsSnapshot.assistantModelId || '';
+      if (!targetId) return null;
+      return assistantFindModelByAnyId(targetId);
+    }
+
+    function assistantNormalizeHistory(history) {
+      if (!Array.isArray(history) || !history.length) return [];
+      var max = 12;
+      var list = [];
+      history.forEach(function(item) {
+        if (!item || typeof item !== 'object') return;
+        var roleRaw = item.role === undefined || item.role === null ? '' : String(item.role).toLowerCase();
+        var role = '';
+        if (roleRaw === 'user') role = 'user';
+        if (roleRaw === 'assistant' || roleRaw === 'ai') role = 'assistant';
+        if (roleRaw === 'system' || roleRaw === 'sys') role = 'system';
+        if (!role) return;
+        var content = item.content === undefined || item.content === null ? '' : String(item.content).trim();
+        if (!content) return;
+        if (content.length > 300) {
+          content = content.slice(0, 300) + '...';
+        }
+        list.push({ role: role, content: content });
+      });
+      if (list.length > max) {
+        list = list.slice(-max);
+      }
+      return list;
+    }
+
+    function assistantBuildHistoryPrompt(history) {
+      var list = assistantNormalizeHistory(history);
+      if (!list.length) return '';
+      var lines = ['以下是最近对话上下文（按时间顺序）：'];
+      list.forEach(function(item) {
+        var prefix = item.role === 'user' ? '用户' : (item.role === 'assistant' ? '助手' : '系统');
+        lines.push(prefix + '：' + item.content);
+      });
+      lines.push('请结合这些上下文回答当前用户输入。若用户存在省略表达，优先承接最近同主题语义。');
+      return lines.join('\n');
+    }
+
+    function assistantCallModel(userText, options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var model = assistantGetSelectedModel(opts.modelId);
+      if (!model) {
+        return Promise.resolve({ ok: false, reason: '未选择助手模型，请先到设置页配置' });
+      }
+      if (!assistantIsModelUsable(model)) {
+        return Promise.resolve({ ok: false, reason: '助手模型配置不完整，请补全接口/API Key/模型ID' });
+      }
+      var prompt = opts.prompt ? String(opts.prompt) : '';
+      var reasoning = opts.reasoning ? String(opts.reasoning) : '';
+      var temperature = opts.temperature;
+      var historyPrompt = assistantBuildHistoryPrompt(opts.history);
+      if (historyPrompt) {
+        prompt = prompt ? (prompt + '\n' + historyPrompt) : historyPrompt;
+      }
+      return callModelWithConfig(model, String(userText || ''), prompt, reasoning, temperature)
+        .then(function(content) {
+          return {
+            ok: true,
+            content: content,
+            modelId: assistantGetStableModelId(model),
+            modelName: model && model.name ? String(model.name) : '',
+          };
+        })
+        .catch(function(err) {
+          return {
+            ok: false,
+            reason: err && err.message ? String(err.message) : '模型调用失败',
+          };
+        });
+    }
+
+    function assistantListTabs() {
+      var list = [];
+      var buttons = document.querySelectorAll('[data-tab-btn]');
+      if (!buttons || typeof buttons.forEach !== 'function') return list;
+      buttons.forEach(function(btn) {
+        if (!btn || !btn.dataset) return;
+        var tab = btn.dataset.tabBtn || '';
+        if (!tab) return;
+        var label = btn.textContent ? String(btn.textContent).trim() : tab;
+        list.push({ tab: tab, label: label });
+      });
+      return list;
+    }
+
+    function assistantGetPageData(tabName) {
+      var tab = tabName ? String(tabName) : (state.activeTab || '');
+      var data = {
+        tab: tab,
+        requirementLabel: state.requirementLabel || '',
+        modelsCount: Array.isArray(state.models) ? state.models.length : 0,
+        importedCasesCount: Array.isArray(state.importedCases) ? state.importedCases.length : 0,
+        caseGenModuleCount: Array.isArray(state.caseGenModules) ? state.caseGenModules.length : 0,
+        tempExecFileCount: Array.isArray(state.tempExecFiles) ? state.tempExecFiles.length : 0,
+      };
+      if (tab === 'assign') {
+        data.assignments = state.assignments && typeof state.assignments === 'object' ? Object.assign({}, state.assignments) : {};
+      } else if (tab === 'casesgen') {
+        var results = state.caseGenResults && typeof state.caseGenResults === 'object' ? state.caseGenResults : {};
+        var generated = 0;
+        Object.keys(results).forEach(function(key) {
+          if (results[key] && String(results[key]).trim()) generated += 1;
+        });
+        data.generatedModuleCount = generated;
+      } else if (tab === 'tempexec') {
+        data.tempExecActiveFileId = state.tempExecActiveFileId || '';
+      }
+      return data;
+    }
+
+    function assistantReadSelectValue(id) {
+      if (!id) return '';
+      var el = document.getElementById(String(id));
+      if (!el) return '';
+      var value = el.value === undefined || el.value === null ? '' : String(el.value).trim();
+      return value;
+    }
+
+    function assistantResolveCaseLibraryProjectId(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var explicit = opts.projectId === undefined || opts.projectId === null ? '' : String(opts.projectId).trim();
+      if (explicit) return explicit;
+      var candidates = [
+        assistantReadSelectValue('caseLibraryEditProjectSelect'),
+        assistantReadSelectValue('caseLibrarySelectProjectSelect'),
+        assistantReadSelectValue('caseLibraryImportProjectSelect'),
+        assistantReadSelectValue('caseLibraryImportSelectProjectSelect'),
+        assistantReadSelectValue('caseLibraryMissingProjectSelect'),
+        assistantReadSelectValue('caseLibraryHistoryProjectSelect'),
+        assistantReadSelectValue('caseLibraryWriterPublishProjectSelect'),
+      ];
+      for (var i = 0; i < candidates.length; i += 1) {
+        if (candidates[i]) return candidates[i];
+      }
+      return '';
+    }
+
+    function assistantNormalizeCaseFile(item, index) {
+      var file = item && typeof item === 'object' ? item : {};
+      var rawItemCount = Number(file.item_count);
+      var rawAssociationCount = Number(file.association_count);
+      return {
+        index: index + 1,
+        id: file.id === undefined || file.id === null ? '' : String(file.id),
+        name: file.file_name_clean ? String(file.file_name_clean) : ('用例#' + (file.id === undefined || file.id === null ? (index + 1) : file.id)),
+        itemCount: Number.isFinite(rawItemCount) ? rawItemCount : 0,
+        associationCount: Number.isFinite(rawAssociationCount) ? rawAssociationCount : 0,
+        projectId: file.project_id === undefined || file.project_id === null ? '' : String(file.project_id),
+        versionId: file.version_id === undefined || file.version_id === null ? '' : String(file.version_id),
+        updatedAt: file.updated_at || file.imported_at || '',
+        source: file.source ? String(file.source) : '',
+      };
+    }
+
+    function assistantReadEditorCaseSnapshot(limit) {
+      var caseLibraryApi = window.app && window.app.caseLibraryApi ? window.app.caseLibraryApi : null;
+      if (!caseLibraryApi || typeof caseLibraryApi.getCurrentEditorCaseSnapshot !== 'function') return null;
+      var snapshot = null;
+      try {
+        snapshot = caseLibraryApi.getCurrentEditorCaseSnapshot({ limit: limit });
+      } catch (err) {
+        return null;
+      }
+      if (!snapshot || snapshot.ok !== true || snapshot.hasContext !== true) return null;
+      var items = Array.isArray(snapshot.items) ? snapshot.items : [];
+      var caseFile = snapshot.caseFile && typeof snapshot.caseFile === 'object'
+        ? Object.assign({}, snapshot.caseFile)
+        : null;
+      var total = Number(snapshot.total);
+      if (!Number.isFinite(total) || total < 0) total = items.length;
+      var totalAll = Number(snapshot.totalAll);
+      if (!Number.isFinite(totalAll) || totalAll < 0) totalAll = total;
+      return {
+        ok: true,
+        scope: 'editor',
+        projectId: snapshot.projectId === undefined || snapshot.projectId === null ? '' : String(snapshot.projectId),
+        caseFile: caseFile,
+        searchText: snapshot.searchText === undefined || snapshot.searchText === null ? '' : String(snapshot.searchText),
+        total: total,
+        totalAll: totalAll,
+        items: items,
+        truncated: snapshot.truncated === true,
+      };
+    }
+
+    function assistantListCurrentCases(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var limit = Number(opts.limit);
+      if (!Number.isFinite(limit) || limit <= 0) limit = 20;
+      if (limit > 100) limit = 100;
+      var editorSnapshot = assistantReadEditorCaseSnapshot(limit);
+      if (editorSnapshot && editorSnapshot.ok === true) {
+        return Promise.resolve(editorSnapshot);
+      }
+      var projectId = assistantResolveCaseLibraryProjectId(opts);
+      var apiClient = window.app && window.app.apiClient ? window.app.apiClient : null;
+      if (!apiClient || typeof apiClient.listCaseFiles !== 'function') {
+        return Promise.resolve({
+          ok: false,
+          reason: '用例列表能力暂不可用',
+          projectId: projectId || '',
+          total: 0,
+          items: [],
+        });
+      }
+      return apiClient.listCaseFiles(projectId || undefined)
+        .then(function(files) {
+          var list = Array.isArray(files) ? files : [];
+          var normalized = list.map(function(file, idx) { return assistantNormalizeCaseFile(file, idx); });
+          var items = normalized.slice(0, limit);
+          return {
+            ok: true,
+            scope: 'project',
+            projectId: projectId || '',
+            total: normalized.length,
+            items: items,
+            truncated: normalized.length > items.length,
+          };
+        })
+        .catch(function(err) {
+          return {
+            ok: false,
+            reason: err && err.message ? String(err.message) : '读取用例列表失败',
+            projectId: projectId || '',
+            total: 0,
+            items: [],
+          };
+        });
+    }
+
+    function assistantBuildSearchRequest(url, timeoutMs) {
+      var request = {
+        url: url,
+        options: { method: 'GET' },
+        timerId: 0,
+      };
+      if (typeof AbortController === 'function') {
+        var controller = new AbortController();
+        request.options.signal = controller.signal;
+        if (timeoutMs > 0) {
+          request.timerId = setTimeout(function() {
+            try {
+              controller.abort();
+            } catch (err) {
+              // ignore
+            }
+          }, timeoutMs);
+        }
+      }
+      return request;
+    }
+
+    function assistantClearSearchTimer(timerId) {
+      if (!timerId) return;
+      try {
+        clearTimeout(timerId);
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function assistantNormalizeSearchUrl(rawUrl) {
+      var source = rawUrl === undefined || rawUrl === null ? '' : String(rawUrl).trim();
+      if (!source) return '';
+      var normalized = source;
+      var uddgMatch = source.match(/[?&]uddg=([^&]+)/i);
+      if (uddgMatch && uddgMatch[1]) {
+        try {
+          normalized = decodeURIComponent(uddgMatch[1]);
+        } catch (err) {
+          normalized = source;
+        }
+      }
+      return normalized;
+    }
+
+    function assistantBuildSearchItem(title, url, snippet, sourceName) {
+      var safeTitle = title === undefined || title === null ? '' : String(title).trim();
+      var safeUrl = assistantNormalizeSearchUrl(url);
+      var safeSnippet = snippet === undefined || snippet === null ? '' : String(snippet).trim();
+      if (!safeTitle && safeSnippet) {
+        var splitIdx = safeSnippet.indexOf(' - ');
+        if (splitIdx > 0) {
+          safeTitle = safeSnippet.slice(0, splitIdx).trim();
+          safeSnippet = safeSnippet.slice(splitIdx + 3).trim();
+        } else {
+          safeTitle = safeSnippet.slice(0, 40);
+        }
+      }
+      if (!safeTitle && safeUrl) safeTitle = safeUrl;
+      if (!safeUrl && !safeSnippet) return null;
+      return {
+        title: safeTitle || '未命名结果',
+        url: safeUrl,
+        snippet: safeSnippet,
+        source: sourceName || '',
+      };
+    }
+
+    function assistantDedupSearchItems(items, limit) {
+      var list = Array.isArray(items) ? items : [];
+      var max = Number(limit);
+      if (!Number.isFinite(max) || max <= 0) max = 5;
+      if (max > 10) max = 10;
+      var seen = {};
+      var result = [];
+      for (var i = 0; i < list.length; i += 1) {
+        var item = list[i];
+        if (!item || typeof item !== 'object') continue;
+        var title = item.title ? String(item.title).trim() : '';
+        var url = item.url ? String(item.url).trim() : '';
+        var snippet = item.snippet ? String(item.snippet).trim() : '';
+        var key = (url || (title + '|' + snippet)).toLowerCase();
+        if (!key || seen[key]) continue;
+        seen[key] = true;
+        result.push({
+          title: title || '未命名结果',
+          url: url,
+          snippet: snippet,
+          source: item.source ? String(item.source) : '',
+        });
+        if (result.length >= max) break;
+      }
+      return result;
+    }
+
+    function assistantCollectDuckDuckGoTopics(rawTopics, sourceName, bucket) {
+      if (!Array.isArray(rawTopics) || !rawTopics.length) return;
+      for (var i = 0; i < rawTopics.length; i += 1) {
+        var topic = rawTopics[i];
+        if (!topic || typeof topic !== 'object') continue;
+        if (Array.isArray(topic.Topics) && topic.Topics.length) {
+          assistantCollectDuckDuckGoTopics(topic.Topics, sourceName, bucket);
+          continue;
+        }
+        var item = assistantBuildSearchItem('', topic.FirstURL || '', topic.Text || '', sourceName);
+        if (item) bucket.push(item);
+      }
+    }
+
+    function assistantWebSearchViaDuckDuckGo(query, limit, timeoutMs) {
+      var url = 'https://api.duckduckgo.com/?format=json&no_redirect=1&no_html=1&skip_disambig=1&q=' + encodeURIComponent(query);
+      var request = assistantBuildSearchRequest(url, timeoutMs);
+      return fetch(request.url, request.options)
+        .then(function(res) {
+          if (!res || !res.ok) {
+            throw new Error('DuckDuckGo 搜索失败');
+          }
+          return res.json();
+        })
+        .then(function(data) {
+          var payload = data && typeof data === 'object' ? data : {};
+          var sourceName = 'DuckDuckGo';
+          var items = [];
+          var abstractItem = assistantBuildSearchItem(
+            payload.Heading || '',
+            payload.AbstractURL || '',
+            payload.AbstractText || '',
+            sourceName
+          );
+          if (abstractItem) items.push(abstractItem);
+          if (Array.isArray(payload.Results)) {
+            payload.Results.forEach(function(entry) {
+              var item = assistantBuildSearchItem('', entry && entry.FirstURL ? entry.FirstURL : '', entry && entry.Text ? entry.Text : '', sourceName);
+              if (item) items.push(item);
+            });
+          }
+          assistantCollectDuckDuckGoTopics(payload.RelatedTopics, sourceName, items);
+          return {
+            provider: 'duckduckgo',
+            items: assistantDedupSearchItems(items, limit),
+          };
+        })
+        .finally(function() {
+          assistantClearSearchTimer(request.timerId);
+        });
+    }
+
+    function assistantWebSearchViaWikipedia(query, limit, timeoutMs) {
+      var max = Number(limit);
+      if (!Number.isFinite(max) || max <= 0) max = 5;
+      var hosts = ['zh', 'en'];
+      var idx = 0;
+      var errors = [];
+
+      function runNext() {
+        if (idx >= hosts.length) {
+          if (errors.length >= hosts.length) {
+            return Promise.reject(new Error(errors.join('; ')));
+          }
+          return Promise.resolve({ provider: 'wikipedia', items: [] });
+        }
+        var lang = hosts[idx];
+        idx += 1;
+        var url = 'https://' + lang + '.wikipedia.org/w/api.php?action=opensearch&namespace=0&format=json&origin=*&limit=' + encodeURIComponent(String(max)) + '&search=' + encodeURIComponent(query);
+        var request = assistantBuildSearchRequest(url, timeoutMs);
+        return fetch(request.url, request.options)
+          .then(function(res) {
+            if (!res || !res.ok) throw new Error('Wikipedia 搜索失败');
+            return res.json();
+          })
+          .then(function(data) {
+            var arr = Array.isArray(data) ? data : [];
+            var titles = Array.isArray(arr[1]) ? arr[1] : [];
+            var snippets = Array.isArray(arr[2]) ? arr[2] : [];
+            var urls = Array.isArray(arr[3]) ? arr[3] : [];
+            var items = [];
+            for (var i = 0; i < titles.length; i += 1) {
+              var item = assistantBuildSearchItem(
+                titles[i] || '',
+                urls[i] || '',
+                snippets[i] || '',
+                'Wikipedia'
+              );
+              if (item) items.push(item);
+            }
+            items = assistantDedupSearchItems(items, max);
+            if (items.length) {
+              return { provider: 'wikipedia', items: items };
+            }
+            return runNext();
+          })
+          .catch(function(err) {
+            errors.push(err && err.message ? String(err.message) : 'Wikipedia 搜索失败');
+            return runNext();
+          })
+          .finally(function() {
+            assistantClearSearchTimer(request.timerId);
+          });
+      }
+
+      return runNext();
+    }
+
+    function assistantNormalizeWebSearchResult(raw, query, limit, fallbackProvider) {
+      var payload = raw && typeof raw === 'object' ? raw : {};
+      var items = Array.isArray(payload.items) ? payload.items : [];
+      var normalizedItems = assistantDedupSearchItems(
+        items.map(function(entry) {
+          var item = entry && typeof entry === 'object' ? entry : {};
+          return assistantBuildSearchItem(
+            item.title || '',
+            item.url || item.link || '',
+            item.snippet || item.description || '',
+            item.source || payload.provider || fallbackProvider || ''
+          );
+        }).filter(function(item) { return !!item; }),
+        limit
+      );
+      return {
+        ok: payload.ok === false ? false : true,
+        query: payload.query ? String(payload.query) : String(query || ''),
+        provider: payload.provider ? String(payload.provider) : (fallbackProvider || ''),
+        items: normalizedItems,
+        total: Number(payload.total) || normalizedItems.length,
+        reason: payload.reason ? String(payload.reason) : '',
+      };
+    }
+
+    function assistantWebSearchViaBackend(query, limit) {
+      var apiClient = window.app && window.app.apiClient ? window.app.apiClient : null;
+      if (!apiClient || typeof apiClient.webSearch !== 'function') {
+        return Promise.resolve({ ok: false, reason: '后端搜索能力不可用', items: [] });
+      }
+      return apiClient.webSearch(query, { limit: limit })
+        .then(function(res) {
+          return assistantNormalizeWebSearchResult(res, query, limit, 'backend');
+        })
+        .catch(function(err) {
+          return {
+            ok: false,
+            query: String(query || ''),
+            provider: 'backend',
+            items: [],
+            total: 0,
+            reason: err && err.message ? String(err.message) : '后端搜索失败',
+          };
+        });
+    }
+
+    function assistantSearchWeb(query, options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var text = query === undefined || query === null ? (opts.query || '') : query;
+      var safeQuery = String(text || '').trim();
+      if (!safeQuery) {
+        return Promise.resolve({
+          ok: false,
+          query: '',
+          items: [],
+          total: 0,
+          reason: '搜索关键词不能为空',
+        });
+      }
+      var limit = Number(opts.limit);
+      if (!Number.isFinite(limit) || limit <= 0) limit = 5;
+      if (limit > 10) limit = 10;
+      var timeoutMs = Number(opts.timeoutMs);
+      if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) timeoutMs = 12000;
+      if (timeoutMs > 30000) timeoutMs = 30000;
+      var backendError = '';
+      var firstError = '';
+      var secondError = '';
+
+      return assistantWebSearchViaBackend(safeQuery, limit)
+        .then(function(backendRes) {
+          var normalizedBackend = assistantNormalizeWebSearchResult(backendRes, safeQuery, limit, 'backend');
+          if (normalizedBackend.items.length) {
+            return normalizedBackend;
+          }
+          if (normalizedBackend.ok === false) {
+            backendError = normalizedBackend.reason || '后端搜索失败';
+          }
+          return assistantWebSearchViaDuckDuckGo(safeQuery, limit, timeoutMs)
+            .catch(function(err) {
+              firstError = err && err.message ? String(err.message) : 'DuckDuckGo 搜索失败';
+              return { provider: 'duckduckgo', items: [] };
+            })
+            .then(function(primary) {
+              var firstItems = primary && Array.isArray(primary.items) ? primary.items : [];
+              if (firstItems.length) {
+                return {
+                  ok: true,
+                  query: safeQuery,
+                  provider: primary.provider || 'duckduckgo',
+                  items: firstItems,
+                  total: firstItems.length,
+                };
+              }
+              return assistantWebSearchViaWikipedia(safeQuery, limit, timeoutMs)
+                .catch(function(err) {
+                  secondError = err && err.message ? String(err.message) : 'Wikipedia 搜索失败';
+                  return { provider: 'wikipedia', items: [] };
+                })
+                .then(function(secondary) {
+                  var secondItems = secondary && Array.isArray(secondary.items) ? secondary.items : [];
+                  if (secondItems.length) {
+                    return {
+                      ok: true,
+                      query: safeQuery,
+                      provider: secondary.provider || 'wikipedia',
+                      items: secondItems,
+                      total: secondItems.length,
+                    };
+                  }
+                  var errorParts = [];
+                  if (backendError) errorParts.push(backendError);
+                  if (firstError) errorParts.push(firstError);
+                  if (secondError) errorParts.push(secondError);
+                  if (errorParts.length) {
+                    return {
+                      ok: false,
+                      query: safeQuery,
+                      provider: '',
+                      items: [],
+                      total: 0,
+                      reason: errorParts.join('; '),
+                    };
+                  }
+                  return {
+                    ok: true,
+                    query: safeQuery,
+                    provider: '',
+                    items: [],
+                    total: 0,
+                    reason: 'no_results',
+                  };
+                });
+            });
+        })
+        .catch(function(err) {
+          return {
+            ok: false,
+            query: safeQuery,
+            provider: '',
+            items: [],
+            total: 0,
+            reason: err && err.message ? String(err.message) : '搜索执行失败',
+          };
+        });
+    }
+
+    function ensureAssistantMemoPadState() {
+      if (!state.settings || typeof state.settings !== 'object') {
+        state.settings = Object.assign({}, defaultSettings);
+      }
+      var memo = state.settings.memoPad && typeof state.settings.memoPad === 'object'
+        ? state.settings.memoPad
+        : {};
+      var tabs = Array.isArray(memo.tabs) ? memo.tabs : [];
+      if (!tabs.length) {
+        tabs = [{ id: 'memo-tab-1', name: '', items: [] }];
+      }
+      tabs = tabs.slice(0, 3).map(function(tab, idx) {
+        var next = tab && typeof tab === 'object' ? tab : {};
+        var tabId = next.id ? String(next.id) : ('memo-tab-' + (idx + 1));
+        var items = Array.isArray(next.items) ? next.items : [];
+        items = items.map(function(item, itemIdx) {
+          var entry = item && typeof item === 'object' ? item : {};
+          return {
+            id: entry.id ? String(entry.id) : ('memo-item-' + Date.now() + '-' + idx + '-' + itemIdx),
+            text: typeof entry.text === 'string' ? entry.text : '',
+            done: entry.done === true,
+          };
+        });
+        return {
+          id: tabId,
+          name: typeof next.name === 'string' ? next.name : '',
+          items: items,
+        };
+      });
+      var activeTabId = memo.activeTabId ? String(memo.activeTabId) : tabs[0].id;
+      if (!tabs.some(function(tab) { return tab.id === activeTabId; })) {
+        activeTabId = tabs[0].id;
+      }
+      memo.tabs = tabs;
+      memo.activeTabId = activeTabId;
+      memo.collapsed = memo.collapsed === true;
+      state.settings.memoPad = memo;
+      return memo;
+    }
+
+    function persistAssistantMemoPad() {
+      persistSettings(['memoPad']);
+      if (window.app && window.app.memoPadApi && typeof window.app.memoPadApi.renderMemoPad === 'function') {
+        window.app.memoPadApi.renderMemoPad();
+      }
+    }
+
+    function assistantMemoList() {
+      var memo = ensureAssistantMemoPadState();
+      return memo.tabs.map(function(tab) {
+        return {
+          id: tab.id,
+          name: tab.name || '',
+          items: (tab.items || []).map(function(item, idx) {
+            return {
+              index: idx + 1,
+              id: item.id,
+              text: item.text || '',
+              done: item.done === true,
+            };
+          }),
+          isActive: tab.id === memo.activeTabId,
+        };
+      });
+    }
+
+    function assistantMemoAdd(text, tabName) {
+      var content = text === undefined || text === null ? '' : String(text).trim();
+      if (!content) return { ok: false, reason: '备忘内容不能为空' };
+      var memo = ensureAssistantMemoPadState();
+      var targetTab = null;
+      if (tabName) {
+        var keyword = String(tabName).trim().toLowerCase();
+        targetTab = memo.tabs.find(function(tab) {
+          var tabTitle = tab && tab.name ? String(tab.name).trim().toLowerCase() : '';
+          return tabTitle && tabTitle.indexOf(keyword) !== -1;
+        }) || null;
+      }
+      if (!targetTab) {
+        targetTab = memo.tabs.find(function(tab) { return tab.id === memo.activeTabId; }) || memo.tabs[0];
+      }
+      if (!targetTab.items) targetTab.items = [];
+      targetTab.items.push({
+        id: 'memo-item-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+        text: content,
+        done: false,
+      });
+      memo.activeTabId = targetTab.id;
+      persistAssistantMemoPad();
+      return { ok: true, tabId: targetTab.id, tabName: targetTab.name || '', text: content };
+    }
+
+    function assistantMemoToggle(tabId, index, done) {
+      var memo = ensureAssistantMemoPadState();
+      var targetTabId = tabId ? String(tabId) : memo.activeTabId;
+      var tab = memo.tabs.find(function(item) { return item.id === targetTabId; }) || null;
+      if (!tab) return { ok: false, reason: '未找到目标备忘页签' };
+      var idx = Number(index);
+      if (!Number.isFinite(idx) || idx <= 0 || idx > tab.items.length) {
+        return { ok: false, reason: '备忘序号无效' };
+      }
+      tab.items[idx - 1].done = done === true;
+      memo.activeTabId = tab.id;
+      persistAssistantMemoPad();
+      return { ok: true, tabId: tab.id, index: idx, done: done === true };
+    }
+
+    function assistantMemoRemove(tabId, index) {
+      var memo = ensureAssistantMemoPadState();
+      var targetTabId = tabId ? String(tabId) : memo.activeTabId;
+      var tab = memo.tabs.find(function(item) { return item.id === targetTabId; }) || null;
+      if (!tab) return { ok: false, reason: '未找到目标备忘页签' };
+      var idx = Number(index);
+      if (!Number.isFinite(idx) || idx <= 0 || idx > tab.items.length) {
+        return { ok: false, reason: '备忘序号无效' };
+      }
+      var removed = tab.items.splice(idx - 1, 1);
+      memo.activeTabId = tab.id;
+      persistAssistantMemoPad();
+      return { ok: true, removed: removed && removed[0] ? removed[0] : null, tabId: tab.id, index: idx };
+    }
+
+    function assistantRunCaseGeneration() {
+      try {
+        switchTab('casesgen');
+      } catch (err) {
+        // ignore
+      }
+      if (window.app && window.app.casesGenApi && typeof window.app.casesGenApi.goCasesGenAndScroll === 'function') {
+        try {
+          window.app.casesGenApi.goCasesGenAndScroll();
+        } catch (err2) {
+          // ignore
+        }
+      }
+      if (api && typeof api.generateAllCaseGenModules === 'function') {
+        return Promise.resolve()
+          .then(function() { return api.generateAllCaseGenModules(); })
+          .then(function() { return { ok: true, started: true }; })
+          .catch(function(err) {
+            return { ok: false, reason: err && err.message ? err.message : '用例生成触发失败' };
+          });
+      }
+      return Promise.resolve({ ok: false, reason: '当前页面无法直接触发批量用例生成' });
+    }
+
+    function assistantRunMissingRecommendation() {
+      try {
+        switchTab('auto');
+      } catch (err) {
+        // ignore
+      }
+      if (!compareCasesCoverage || !smartFillMissingSuggestions) {
+        return Promise.resolve({ ok: false, reason: '缺少漏测推荐能力依赖' });
+      }
+      return Promise.resolve()
+        .then(function() { return compareCasesCoverage(); })
+        .then(function() { return smartFillMissingSuggestions(); })
+        .then(function() { return { ok: true }; })
+        .catch(function(err) {
+          return { ok: false, reason: err && err.message ? err.message : '漏测推荐执行失败' };
+        });
+    }
+
+    function assistantHasPendingCaseDelete() {
+      if (document.querySelector('.temp-undo-toast')) return true;
+      var editStatus = document.getElementById('editStatus');
+      var missingStatus = document.getElementById('missingStatus');
+      var editText = editStatus && editStatus.textContent ? String(editStatus.textContent) : '';
+      var missingText = missingStatus && missingStatus.textContent ? String(missingStatus.textContent) : '';
+      return editText.indexOf('待确认') !== -1 || missingText.indexOf('待确认') !== -1;
+    }
+
+    function assistantPickCaseDeleteButton(index) {
+      var selectors = [
+        '[data-case-lib-edit-remove]',
+        '[data-case-lib-missing-remove]',
+      ];
+      var list = [];
+      selectors.forEach(function(selector) {
+        var nodes = document.querySelectorAll(selector);
+        if (!nodes || !nodes.length) return;
+        nodes.forEach(function(node) {
+          if (!node) return;
+          if (node.disabled) return;
+          if (node.offsetParent === null) return;
+          list.push(node);
+        });
+      });
+      if (!list.length) return null;
+      var idx = Math.max(1, Number(index) || 1);
+      if (idx > list.length) idx = list.length;
+      return { button: list[idx - 1], index: idx, count: list.length };
+    }
+
+    function assistantDeleteCase(index) {
+      if (assistantHasPendingCaseDelete()) {
+        return { ok: false, reason: '当前存在待确认增删操作，请先撤回或等待8秒入库' };
+      }
+      var picked = assistantPickCaseDeleteButton(index);
+      if (!picked || !picked.button) {
+        return { ok: false, reason: '当前页面未找到可删除的用例，请先打开用例编辑/漏测编辑视图' };
+      }
+      var first = window.confirm('确认删除第 ' + picked.index + ' 条用例？');
+      if (!first) return { ok: false, reason: '已取消删除' };
+      var second = window.confirm('删除操作将沿用现有8秒撤回机制，确定继续？');
+      if (!second) return { ok: false, reason: '已取消删除' };
+      picked.button.click();
+      return { ok: true, index: picked.index, total: picked.count };
+    }
+
+    function assistantSanitizeFailureContext(payload) {
+      var source = payload && typeof payload === 'object' ? payload : {};
+      var requestMeta = source.requestMeta && typeof source.requestMeta === 'object' ? source.requestMeta : {};
+      return {
+        scene: source.scene ? String(source.scene) : '',
+        modelId: source.modelId ? String(source.modelId) : '',
+        modelName: source.modelName ? String(source.modelName) : '',
+        provider: source.provider ? String(source.provider) : '',
+        statusCode: Number(source.statusCode) || 0,
+        errorMessage: source.errorMessage ? String(source.errorMessage) : '',
+        responsePreview: source.responsePreview ? String(source.responsePreview).slice(0, 200) : '',
+        requestMeta: {
+          hasApiKey: requestMeta.hasApiKey === true,
+          baseUrl: assistantSanitizeBaseUrl(requestMeta.baseUrl || requestMeta.requestUrl || ''),
+          isResponsesApi: requestMeta.isResponsesApi === true,
+          usedProxy: requestMeta.usedProxy === true,
+          usedFallbackDirect: requestMeta.usedFallbackDirect === true,
+          timeoutSec: Number(requestMeta.timeoutSec) || 30,
+        },
+        timestamp: source.timestamp || Date.now(),
+      };
+    }
+
+    function assistantBuildFailurePrompt() {
+      return [
+        '你是模型连通性诊断助手。',
+        '请根据给定错误上下文做自由判断，输出“问题判断 + 修复步骤 + 可执行代填项”。',
+        '输出 JSON，不要输出额外文本，结构如下：',
+        '{"judgement":"", "rootCause":"", "steps":[""], "patch":{"provider":"","baseUrl":"","model":"","maxTokens":1024}, "manualItems":[""], "confidence":"high|medium|low"}',
+        '约束：',
+        '1) patch 仅可包含 provider/baseUrl/model/maxTokens；不允许 apiKey。',
+        '2) 若无需代填，patch 输出空对象 {}。',
+        '3) steps 必须给用户明确可执行步骤。',
+      ].join('\n');
+    }
+
+    function assistantInferFailureFallback(ctx) {
+      var statusCode = Number(ctx && ctx.statusCode) || 0;
+      var errorText = ctx && ctx.errorMessage ? String(ctx.errorMessage).toLowerCase() : '';
+      var judgement = '模型连通性异常';
+      var steps = [];
+      if (statusCode === 401 || statusCode === 403) {
+        judgement = '鉴权或权限异常';
+        steps = ['检查 API Key 是否有效且权限覆盖当前模型。', '若使用组织/项目鉴权，确认账号已授权该模型。'];
+      } else if (statusCode === 404 || statusCode === 405) {
+        judgement = '接口地址或协议不匹配';
+        steps = ['检查 baseUrl 是否为正确的兼容端点。', '确认是否需要使用 /chat/completions 或 /responses 接口。'];
+      } else if (statusCode === 429) {
+        judgement = '请求被限流';
+        steps = ['降低并发或增加重试退避。', '检查平台配额与速率限制配置。'];
+      } else if (statusCode >= 500) {
+        judgement = '模型服务端异常';
+        steps = ['稍后重试并查看服务商状态页。', '适当上调超时时间或切换可用模型。'];
+      } else if (errorText.indexOf('failed to fetch') !== -1 || errorText.indexOf('networkerror') !== -1) {
+        judgement = '网络连接异常';
+        steps = ['检查本机到模型服务的网络连通性。', '确认代理/网关/CORS 配置是否阻断请求。'];
+      } else {
+        steps = ['检查模型配置项是否完整。', '查看响应片段并按状态码进一步定位。'];
+      }
+      return {
+        judgement: judgement,
+        rootCause: judgement,
+        steps: steps,
+        patch: {},
+        manualItems: ['API Key 需手动更新，助手不会自动填写。'],
+        confidence: 'medium',
+      };
+    }
+
+    async function assistantDiagnoseFailure(payload, options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var safeContext = assistantSanitizeFailureContext(payload);
+      var prompt = assistantBuildFailurePrompt();
+      var diagInput = JSON.stringify(safeContext, null, 2);
+      var modelReply = await assistantCallModel(diagInput, {
+        prompt: prompt,
+        modelId: opts.modelId || '',
+        temperature: 0.2,
+      });
+      if (!modelReply.ok) {
+        return {
+          ok: false,
+          reason: modelReply.reason || '诊断模型调用失败',
+          diagnosis: assistantInferFailureFallback(safeContext),
+          context: safeContext,
+        };
+      }
+      var parsed = assistantExtractJsonPayload(modelReply.content || '');
+      var diagnosis = parsed && typeof parsed === 'object'
+        ? parsed
+        : assistantInferFailureFallback(safeContext);
+      diagnosis.patch = assistantNormalizeDiagPatch(diagnosis.patch);
+      if (!Array.isArray(diagnosis.steps)) diagnosis.steps = [];
+      if (!Array.isArray(diagnosis.manualItems)) diagnosis.manualItems = [];
+      return {
+        ok: true,
+        diagnosis: diagnosis,
+        raw: modelReply.content || '',
+        context: safeContext,
+      };
+    }
+
+    function assistantApplyGeneralSettingsPatch(patch, options) {
+      var incoming = patch && typeof patch === 'object' ? Object.assign({}, patch) : {};
+      var opts = options && typeof options === 'object' ? options : {};
+      var changedKeys = [];
+      var assistantChangedKeys = [];
+
+      var hasAssistantKeys = Object.prototype.hasOwnProperty.call(incoming, 'assistantEnabled')
+        || Object.prototype.hasOwnProperty.call(incoming, 'assistantModelId');
+      if (hasAssistantKeys) {
+        var assistantPatch = {};
+        if (Object.prototype.hasOwnProperty.call(incoming, 'assistantEnabled')) {
+          assistantPatch.assistantEnabled = incoming.assistantEnabled === true;
+        }
+        if (Object.prototype.hasOwnProperty.call(incoming, 'assistantModelId')) {
+          assistantPatch.assistantModelId = incoming.assistantModelId;
+        }
+        var assistantRes = applyAssistantSettingsPatch(assistantPatch, opts);
+        if (!assistantRes || assistantRes.ok !== true) return assistantRes;
+        if (assistantRes.changed) {
+          if (Object.prototype.hasOwnProperty.call(assistantPatch, 'assistantEnabled')) {
+            assistantChangedKeys.push('assistantEnabled');
+          }
+          if (Object.prototype.hasOwnProperty.call(assistantPatch, 'assistantModelId')) {
+            assistantChangedKeys.push('assistantModelId');
+          }
+        }
+        delete incoming.assistantEnabled;
+        delete incoming.assistantModelId;
+      }
+
+      if (!state.settings || typeof state.settings !== 'object') {
+        state.settings = Object.assign({}, defaultSettings);
+      }
+      if (Object.prototype.hasOwnProperty.call(incoming, 'missingCaseReminderAiEnabled')) {
+        var aiEnabled = String(incoming.missingCaseReminderAiEnabled || '').toLowerCase() === 'on' ? 'on' : 'off';
+        if (state.settings.missingCaseReminderAiEnabled !== aiEnabled) {
+          state.settings.missingCaseReminderAiEnabled = aiEnabled;
+          changedKeys.push('missingCaseReminderAiEnabled');
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(incoming, 'smartTopNavCollapse')) {
+        var navCollapse = incoming.smartTopNavCollapse === true;
+        if (state.settings.smartTopNavCollapse !== navCollapse) {
+          state.settings.smartTopNavCollapse = navCollapse;
+          changedKeys.push('smartTopNavCollapse');
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(incoming, 'theme')) {
+        var theme = String(incoming.theme || '').toLowerCase() === 'dark' ? 'dark' : 'light';
+        if (state.settings.theme !== theme) {
+          state.settings.theme = theme;
+          changedKeys.push('theme');
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(incoming, 'timeoutSec')) {
+        var sec = clampTimeoutSeconds(incoming.timeoutSec);
+        if (state.settings.timeoutSec !== sec) {
+          state.settings.timeoutSec = sec;
+          changedKeys.push('timeoutSec');
+        }
+      }
+
+      var allChangedKeys = assistantChangedKeys.concat(changedKeys);
+      if (!allChangedKeys.length) {
+        return { ok: true, changed: false, keys: [] };
+      }
+      if (changedKeys.length) {
+        persistSettings(changedKeys);
+        renderSettingsUI();
+        assistantDispatchEvent('app-settings-updated', { keys: changedKeys.slice() });
+        assistantDispatchEvent('app-assistant-state-changed', {
+          source: opts.source || 'assistant',
+          changed: true,
+        });
+      }
+      return { ok: true, changed: true, keys: allChangedKeys.slice() };
+    }
+
+    function assistantDescribeSetting(key) {
+      var map = {
+        assistantEnabled: '控制右下角全局AI助手是否可用。关闭时入口可见但锁定。',
+        assistantModelId: '设置助手聊天与诊断使用的模型，需先配置完整模型信息。',
+        missingCaseReminderAiEnabled: '控制易漏用例推荐是否启用AI推断。',
+        smartTopNavCollapse: '开启后顶部导航会根据场景自动收起，减少占用。',
+        theme: '页面主题配色，支持白色/黑色主题。',
+        timeoutSec: '模型调用超时时间（秒），影响各AI功能请求等待上限。',
+      };
+      return map[key] || '该设置项暂无内置说明。';
+    }
+
+    window.app.assistantApi = {
+      listTabs: assistantListTabs,
+      switchTab: function(tab) { return switchTab(String(tab || '')); },
+      getPageData: assistantGetPageData,
+      listCurrentCases: assistantListCurrentCases,
+      listCaseFiles: assistantListCurrentCases,
+      searchWeb: assistantSearchWeb,
+      webSearch: assistantSearchWeb,
+      getSettings: assistantGetSettings,
+      listModels: function() { return typeof listAssistantModels === 'function' ? listAssistantModels() : []; },
+      callModel: assistantCallModel,
+      runCaseGeneration: assistantRunCaseGeneration,
+      runMissingRecommendation: assistantRunMissingRecommendation,
+      memoList: assistantMemoList,
+      memoAdd: assistantMemoAdd,
+      memoToggle: assistantMemoToggle,
+      memoRemove: assistantMemoRemove,
+      deleteCase: assistantDeleteCase,
+      testModel: function(modelId, scene) { return testModel(modelId, null, scene || 'assistant-manual-test'); },
+    };
+    window.app.assistantSettingsApi = {
+      getSettings: assistantGetSettings,
+      listModels: function() { return typeof listAssistantModels === 'function' ? listAssistantModels() : []; },
+      applyPatch: function(patch, options) {
+        var opts = options && typeof options === 'object' ? Object.assign({}, options) : {};
+        if (!opts.source) opts.source = 'assistant';
+        return assistantApplyGeneralSettingsPatch(patch || {}, opts);
+      },
+      saveFromUI: saveAssistantSettings,
+      renderSettingsUI: renderAssistantSettingsUI,
+      describeSetting: assistantDescribeSetting,
+    };
+    window.app.assistantModelDiagApi = {
+      sanitizeFailureContext: assistantSanitizeFailureContext,
+      diagnoseFailure: assistantDiagnoseFailure,
+      applyModelPatch: function(modelId, patch, options) {
+        if (typeof applyModelPatch !== 'function') {
+          return Promise.resolve({ ok: false, reason: '模型补丁能力不可用' });
+        }
+        return applyModelPatch(modelId, patch, options || {});
+      },
+      retestModel: function(modelId, scene) {
+        return testModel(modelId, null, scene || 'assistant-retest');
+      },
+    };
+    assistantDispatchEvent('app-assistant-api-ready', {
+      hasAssistantApi: true,
+      hasAssistantSettingsApi: true,
+      hasAssistantModelDiagApi: true,
+    });
+
     initModule('flowGuide', {
       utils: appUtils,
       switchTab: switchTab,

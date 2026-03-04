@@ -843,6 +843,20 @@
     });
   }
 
+  function webSearch(query, options) {
+    var text = query === undefined || query === null ? '' : String(query).trim();
+    if (!text) return Promise.reject(new Error('搜索关键词不能为空'));
+    var opts = options && typeof options === 'object' ? options : {};
+    var limit = Number(opts.limit);
+    if (!Number.isFinite(limit) || limit <= 0) limit = 5;
+    if (limit > 10) limit = 10;
+    var url = '/api/web-search?q=' + encodeURIComponent(text) + '&limit=' + encodeURIComponent(limit);
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
   function listFeatureAssignments(scope, ownerId) {
     var query = [];
     if (scope) query.push('scope=' + encodeURIComponent(scope));
@@ -1033,6 +1047,7 @@
     createModelConfig: createModelConfig,
     updateModelConfig: updateModelConfig,
     proxyModelRequest: proxyModelRequest,
+    webSearch: webSearch,
     listFeatureAssignments: listFeatureAssignments,
     createFeatureAssignment: createFeatureAssignment,
     updateFeatureAssignment: updateFeatureAssignment,

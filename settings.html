@@ -532,6 +532,30 @@
 <div class="settings-divider"></div>
 <div class="settings-inline">
 <div class="meta">
+<strong>AI助手</strong>
+<p>全局聊天助手开关。开启后可在右下角使用助手。助手不会通过聊天关闭自己。</p>
+</div>
+<div class="control">
+<label class="inline"><input id="assistantEnabledToggle" type="checkbox"/> 开启助手</label>
+</div>
+</div>
+<div class="settings-inline">
+<div class="meta">
+<strong>助手模型</strong>
+<p>请选择助手使用的模型；若未配置可用模型，助手无法开启。</p>
+</div>
+<div class="control">
+<select id="assistantModelSelect"></select>
+</div>
+</div>
+<div class="actions">
+<button class="secondary" id="saveAssistantSetting">保存助手设置</button>
+</div>
+<p class="status" id="assistantSettingStatus"></p>
+
+<div class="settings-divider"></div>
+<div class="settings-inline">
+<div class="meta">
 <strong>易漏用例提醒区域</strong>
 <p>选择易漏用例提醒区域展示位置，可选上方或下方。</p>
 </div>
@@ -839,6 +863,7 @@
 <script src="./scripts/modules/authGuard.js" defer></script>
 <script src="./scripts/modules/flowGuide.js" defer></script>
 <script src="./scripts/modules/pageGuide.js" defer></script>
+<script src="./scripts/modules/assistant.js" defer></script>
 <script src="./scripts/modules/app.js" defer></script>
 <script src="./scripts/modules/bootstrap.js" defer></script>
 <script>

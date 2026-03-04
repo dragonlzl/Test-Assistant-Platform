@@ -19,6 +19,46 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：全局 AI 助手与模型测试失败自动诊断闭环
+- 功能描述：新增全局悬浮 AI 聊天助手（默认关闭、设置开启），支持对话触发页面跳转、页面数据查询、个人备忘操作、用例生成与漏测推荐触发、设置项说明与白名单修改；同时打通“功能指派测试连通性失败 -> 自动送助手诊断 -> 建议代填 -> 二次确认 -> 重测”闭环。
+- 操作方式：
+  - 设置页开启“AI 助手”并选择助手模型；
+  - 右下角点击“AI 助手”进行聊天交互；
+  - 在“功能指派”点击“测试连通性”失败后，助手自动生成诊断消息；
+  - 点击“应用建议配置”完成二次确认后代填白名单字段，再点击“立即重测”验证。
+- 使用效果：
+  - 助手关闭时入口可见但锁定，点击会引导到设置页；
+  - 助手可判断用户意图并执行导航/查询/备忘/用例流程触发；
+  - 删除用例走双确认，且与原 8 秒撤回机制兼容（pending 拦截）；
+  - 模型失败自动诊断支持 401/403、404/405、429、5xx/超时、网络异常等方向提示；
+  - 诊断上下文脱敏，不泄露 API Key 明文，代填不允许写入 API Key。
+- 新增内容/接口/组件：
+  - 前端能力：
+    - 新增全局助手模块 `scripts/modules/assistant.js`（聊天面板、意图执行、失败自动诊断消息流、代填二次确认、重测触发）。
+    - `scripts/modules/app.js` 挂载 `window.app.assistantApi`、`window.app.assistantSettingsApi`、`window.app.assistantModelDiagApi`。
+    - `scripts/modules/models.js` 的 `testModel` 输出结构化结果并派发 `app-model-test-result`、`app-model-test-failed` 事件；新增 `applyModelPatch`。
+    - `scripts/modules/settings.js` 新增助手开关/模型保存逻辑与 `app-assistant-state-changed` 事件，支持“助手不可自关闭”规则。
+    - `config/constants.js`、`scripts/modules/app.js` 默认设置新增 `assistantEnabled`、`assistantModelId`。
+  - 页面接入：
+    - `index.html`、`settings.html` 新增助手设置区与悬浮窗挂载；
+    - `ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`settings.html`、`admin.html` 按顺序接入助手脚本，实现跨页全局可用。
+  - 样式：
+    - `style.css` 新增助手悬浮入口、聊天面板、消息卡片与移动端适配样式。
+  - 测试：
+    - UI：`tests/ui/assistant_global.spec.js`
+    - API：`tests/api/settings_assistant.spec.js`
+- 复用说明：复用现有模型调用与测试链路（`testModel`）、设置持久化链路（`persistSettings`）、备忘板状态结构、用例生成/漏测推荐既有 API、删除用例原有 pending+8 秒撤回机制，仅在现有能力上做可复用 API 聚合与助手编排，无新增后端端点。
+- 测试与验证：
+  - `node --check scripts/modules/settings.js scripts/modules/models.js scripts/modules/assign.js scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js tests/api/settings_assistant.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --reporter=line`（2/2 通过，headless）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8081`（测试库启动）
+  - `API_BASE_URL=http://127.0.0.1:8081 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（1/1 通过）
+- 更新记录：2026-03-04 新增全局 AI 助手、模型测试失败自动诊断与代填重测闭环，并补充 UI/API 自动化覆盖（`config/constants.js`、`index.html`、`style.css`、`scripts/modules/settings.js`、`scripts/modules/models.js`、`scripts/modules/assign.js`、`scripts/modules/app.js`、`scripts/modules/assistant.js`、`settings.html`、`ai-workflow.html`、`ai-tools.html`、`case-exec.html`、`case-library.html`、`admin.html`、`tests/ui/assistant_global.spec.js`、`tests/api/settings_assistant.spec.js`）。
+- 更新记录：2026-03-04 修复“你现在是什么页面？”问句被误判为数据查询的问题，新增当前页面问句专用意图分支并返回直答文案，同时补充 UI 回归用例（`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-04 优化助手意图分流，项目外问题（如天气）不再误走页面数据查询：新增项目上下文判定与已知页签校验、收紧分类器触发条件、补充通用问答提示词；并新增“项目外问题应走通用回答”UI 回归用例（`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-04 修复助手多轮上下文丢失问题：为聊天模型调用增加最近会话历史注入（用户/助手双向），并新增“短句续接前文语义”UI 回归用例，确保“主题提问 -> 补充信息 -> 省略表达”可连续承接（`scripts/modules/app.js`、`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-04 修复复合问句只回答单一子问题的问题：当前页面问句新增“可执行操作”子意图识别，支持同一回复中同时返回“当前页面 + 本页可操作项”；并补充对应 UI 回归用例（`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`）。
+
 - 功能名称：一键执行需求评审异常结果自动中断并提示重试
 - 功能描述：修复一键执行在“需求评审”返回异常格式内容时会卡在错误状态的问题。现在评审结果若不是有效 JSON 数组或结构缺少关键字段，会自动中断流程并提示用户重新执行。
 - 操作方式：
@@ -4251,3 +4291,34 @@
 - 更新记录：2026-02-25 补充“页面说明入口滚动能力”UI 自动化：页面说明 XMind 抽屉用例新增断言，校验 `xmindStructureDrawerBody` 非 viewer 模式、可滚动高度成立，并通过鼠标滚轮验证 `scrollTop` 递增（`tests/ui/help_structure_drawer.spec.js`）。
 - 更新记录：2026-02-25 补充“导图入口 viewer 模式”UI 断言：执行页与用例库 XMind 按钮用例新增 `is-mind-viewer` 断言，保证导图入口仍使用画布内部滚动/拖拽链路，不回退为外层抽屉滚动（`tests/ui/xmind_structure_view_buttons.spec.js`）。
 - 测试与验证：`node --check scripts/modules/pageGuide.js scripts/modules/tempexec.js scripts/modules/caseLibrary.js tests/ui/help_structure_drawer.spec.js tests/ui/xmind_structure_view_buttons.spec.js`（通过）；`npm run test:ui -- tests/ui/help_structure_drawer.spec.js --workers=1`（通过，1/1）；`npm run test:ui -- tests/ui/xmind_structure_view_buttons.spec.js --workers=1`（通过，3/3）；`npm run test:api -- tests/api/xmind_structure_edit_reuse_endpoints.spec.js`（通过，1/1）。补充说明：`tests/ui/page_guide_drawer.spec.js` 全量在本地存在历史环境波动（同一场景单测重跑可通过），本次改动相关的新增/受影响用例均稳定通过。
+- 更新记录：2026-03-04 全局 AI 助手“用例列表”智能性修复：新增 `assistantApi.listCurrentCases/listCaseFiles`（复用既有 `/api/case-files` 接口）用于真实拉取当前可见项目用例列表；助手新增“用例列表意图”前置处理，支持“当前有哪些用例/获取当前页面用例列表”等首问直返列表，不再被“当前页面”意图误拦截（`scripts/modules/app.js`、`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-04 意图分类增强：分类器新增 `query_case_list` 意图，并在 `query` 分支增加用例列表语义兜底；在不放松写操作安全边界的前提下，将“是否需要取用例列表”的决策更多交给模型（`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-04 补充 UI 自动化回归：`tests/ui/assistant_global.spec.js` 新增“首问当前有哪些用例直接返回列表”“获取当前页面用例列表不被页面意图拦截”场景，并在 mock API 提供真实用例数据以覆盖工具链路。
+- 测试与验证：`node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --reporter=line`（通过，9/9）。
+- 后端接口说明：本次未新增/修改后端 API，仅复用既有 `GET /api/case-files`，因此未新增 API 用例文件。
+- 更新记录：2026-03-04 全局助手“模型优先思考”增强：新增问句型输入的模型优先路由（`tryHandleModelDrivenReply`），由模型先决定“直接回答”或“工具动作(JSON)”再执行，减少固定模板回复；规则链路降级为保底处理强约束动作（删除/设置写入等），兼顾灵活性与安全性（`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-04 模型驱动工具路由新增动作：`navigate`、`query_page_data`、`query_case_list`；并增加场景门控 `shouldPreferModelThinking`，避免对高确定性写操作误走自由生成（`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-04 补充“咨询类问题优先走模型思考”UI 回归：新增“我应该怎么修改用例？”场景，断言优先采用模型回答而非固定模板（`tests/ui/assistant_global.spec.js`）。
+- 测试与验证：`node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --reporter=line`（通过，10/10）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过，1/1）。
+- 更新记录：2026-03-04 全局 AI 助手新增联网搜索工具：在 `assistantApi` 新增 `searchWeb/webSearch` 能力，采用 DuckDuckGo（主）+ Wikipedia（兜底）双通道检索，统一返回 `ok/query/items/total/provider/reason`，并加入去重、超时与失败降级处理（`scripts/modules/app.js`）。
+- 更新记录：2026-03-04 模型驱动动作扩展 `web_search`：助手在“模型优先思考”路由中支持 `{"action":"web_search","query":"","response":""}`，当模型判断问题依赖实时联网信息时自动触发搜索并以“标题+摘要+链接+搜索源”结构回复，搜索失败时给出友好降级提示（`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-04 补充联网搜索 UI 自动化：`tests/ui/assistant_global.spec.js` 新增“web_search 成功返回结果”和“web_search 失败降级提示”两条回归场景，覆盖工具调用与异常路径。
+- 测试与验证：`node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js`（通过，12/12）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js`（通过，1/1）。
+- 后端接口说明：本次未新增/修改后端 API，联网搜索通过前端受控工具调用公开搜索源完成。
+- 更新记录：2026-03-04 全局 AI 助手新增“清空聊天记录”能力：面板头部新增“清空”按钮，点击后需确认，确认后清空当前用户历史会话（本地存储）并立即刷新消息区（`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-04 助手面板重开自动定位最新消息：每次展开助手面板时，消息区自动滚动到底部，确保直接看到最新对话内容（`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-04 每条聊天消息新增时间展示：消息卡片增加时间字段，统一显示 `YYYY-MM-DD HH:mm:ss`，覆盖用户/助手/系统消息（`scripts/modules/assistant.js`、`style.css`）。
+- 更新记录：2026-03-04 补充聊天体验 UI 自动化：`tests/ui/assistant_global.spec.js` 新增“消息显示时间且重开滚到最新”“支持清空聊天记录”两条场景，覆盖时间展示、滚动与清理行为。
+- 测试与验证：`node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）；`npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js`（通过，14/14）；`npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js`（通过，1/1）。
+- 更新记录：2026-03-04 联网搜索后端化增强：新增 `GET /api/web-search`（鉴权）并接入 Bing RSS，补充 XML 命名空间/Atom 兼容解析；当搜索词为天气类且 RSS 无结果时，自动降级调用 Open-Meteo 生成实时天气结果，统一返回 `ok/query/provider/items/total/reason`（`backend/routers/configs.py`、`services/apiClient.js`、`scripts/modules/app.js`）。
+- 更新记录：2026-03-04 用例列表意图防误判增强：扩展“当前页面都有什么/哪些用例”等短语识别；当模型误判为 `query_page_data` 时，若用户语义属于“查用例列表”则强制改走 `query_case_list`，避免返回“当前页面是...”的答非所问（`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-04 助手联网与用例列表回归补充：UI 用例新增“当前页面都有什么用例直返列表”“模型误判 query_page_data 仍返回用例列表”“web_search 默认走后端天气结果”三条场景；新增 API 用例覆盖 `web-search` 鉴权、参数校验与查询路径（`tests/ui/assistant_global.spec.js`、`tests/api/web_search.spec.js`）。
+- 测试与验证：`python3 -m py_compile backend/routers/configs.py`（通过）；`node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js tests/api/web_search.spec.js`（通过）；`npx playwright test tests/ui/assistant_global.spec.js --config=tests/playwright.config.js`（通过，17/17）；`API_BASE_URL=http://127.0.0.1:18080 npx playwright test tests/api/settings_assistant.spec.js tests/api/web_search.spec.js --config=tests/api/playwright.api.config.js`（通过，2/2，测试库 `apitest.db`）。
+- 更新记录：2026-03-04 联网回复“先整理后回答”增强：`web_search` 动作改为“搜索 -> 模型二次整理 -> 返回结论/要点/来源”，模型整理失败时回退为简版摘要，避免直接逐条粘贴原始搜索结果（`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-04 天气问答智能增强：天气问题自动规范化查询词（如“深圳 今天天气”统一为“深圳 今日天气”）；缺少城市时先追问城市，不再盲搜；并在后端天气类搜索对结果做天气相关过滤，优先返回可用天气信息（`scripts/modules/assistant.js`、`backend/routers/configs.py`）。
+- 更新记录：2026-03-04 联网整理链路回归补充：UI 新增“天气缺少城市先追问”场景，并对联网回答新增“简版整理输出”断言（非 raw 列表）；同时调整天气查询参数断言兼容“今天天气/今日天气”规范化（`tests/ui/assistant_global.spec.js`）。
+- 测试与验证：`python3 -m py_compile backend/routers/configs.py`（通过）；`node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）；`npx playwright test tests/ui/assistant_global.spec.js --config=tests/playwright.config.js`（通过，18/18）；`API_BASE_URL=http://127.0.0.1:18080 npx playwright test tests/api/settings_assistant.spec.js tests/api/web_search.spec.js --config=tests/api/playwright.api.config.js`（通过，2/2，测试库 `apitest.db`）。
+- 更新记录：2026-03-04 修复“当前页面用例列表”上下文误取全库问题：新增 `caseLibraryApi.getCurrentEditorCaseSnapshot`（复用既有编辑态 `state.editor` 与 `applyEditorFilter`），助手查询用例时优先读取“当前正在编辑用例”的可见条目（含搜索过滤语境），仅在无编辑上下文时回退到 `/api/case-files` 全库列表（`scripts/modules/caseLibrary.js`、`scripts/modules/app.js`）。
+- 更新记录：2026-03-04 助手用例列表回复增强：当命中编辑态上下文时，回复改为“当前正在编辑用例 + 条目明细”，避免继续输出项目级文件列表，提升“当前页面的用例有哪些”这类提问的语义准确性（`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-04 补充 UI 回归用例：新增“当前页面用例优先返回正在编辑用例而非全库”场景，覆盖助手在编辑态下的上下文优先级与回退边界（`tests/ui/assistant_global.spec.js`）。
+- 测试与验证：`node --check scripts/modules/caseLibrary.js scripts/modules/app.js scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）；`npx playwright test tests/ui/assistant_global.spec.js --config=tests/playwright.config.js --reporter=line`（通过，19/19）；`APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 18080`（测试库启动后执行）+ `API_BASE_URL=http://127.0.0.1:18080 npx playwright test tests/api/settings_assistant.spec.js tests/api/web_search.spec.js --config=tests/api/playwright.api.config.js --reporter=line`（通过，2/2）。

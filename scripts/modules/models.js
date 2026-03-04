@@ -130,6 +130,85 @@
         .replace(/'/g, '&#39;');
     }
 
+    function dispatchAppEvent(name, detail) {
+      if (!name) return;
+      if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+      try {
+        if (typeof CustomEvent === 'function') {
+          window.dispatchEvent(new CustomEvent(name, { detail: detail || {} }));
+        } else if (typeof document !== 'undefined' && typeof document.createEvent === 'function') {
+          var evt = document.createEvent('CustomEvent');
+          evt.initCustomEvent(name, false, false, detail || {});
+          window.dispatchEvent(evt);
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function sanitizeResponsePreview(raw) {
+      var text = raw === undefined || raw === null ? '' : String(raw);
+      if (!text) return '';
+      var normalized = text.replace(/\s+/g, ' ').trim();
+      if (!normalized) return '';
+      return normalized.slice(0, 200);
+    }
+
+    function sanitizeRequestUrl(url) {
+      var raw = url === undefined || url === null ? '' : String(url).trim();
+      if (!raw) return '';
+      try {
+        var parsed = new URL(raw);
+        var path = parsed.pathname || '';
+        return parsed.protocol + '//' + parsed.host + path;
+      } catch (err) {
+        return raw.split('?')[0];
+      }
+    }
+
+    function buildModelTestResult(model, scene) {
+      var stableId = getStableModelId(model);
+      return {
+        ok: false,
+        scene: scene ? String(scene) : '',
+        modelId: stableId || '',
+        modelName: model && model.name ? String(model.name) : '',
+        provider: model && model.provider ? String(model.provider) : '',
+        statusCode: 0,
+        errorMessage: '',
+        responsePreview: '',
+        requestMeta: {
+          hasApiKey: Boolean(model && model.apiKey),
+          baseUrl: model && model.baseUrl ? sanitizeRequestUrl(model.baseUrl) : '',
+          requestUrl: model && model.baseUrl ? sanitizeRequestUrl(model.baseUrl) : '',
+          usedProxy: false,
+          usedFallbackDirect: false,
+          isResponsesApi: false,
+          timeoutSec: 30,
+        },
+        timestamp: Date.now(),
+      };
+    }
+
+    function emitModelTestEvents(result) {
+      var detail = result && typeof result === 'object' ? result : {};
+      dispatchAppEvent('app-model-test-result', detail);
+      if (!detail.ok) {
+        dispatchAppEvent('app-model-test-failed', detail);
+      }
+    }
+
+    function emitModelsUpdated(source, extra) {
+      var detail = { source: source || '' };
+      if (extra && typeof extra === 'object') {
+        Object.keys(extra).forEach(function(key) {
+          detail[key] = extra[key];
+        });
+      }
+      detail.count = Array.isArray(state.models) ? state.models.length : 0;
+      dispatchAppEvent('app-models-updated', detail);
+    }
+
     function normalizeCapabilityKey(value) {
       var raw = value === undefined || value === null ? '' : String(value).trim().toLowerCase();
       if (!raw) return '';
@@ -255,6 +334,7 @@
         return next;
       });
       migrateLegacyConfigs();
+      emitModelsUpdated('models', { reason: 'load-local' });
     }
 
     function migrateLegacyConfigs() {
@@ -308,7 +388,7 @@
       }
     }
 
-    function persistModelsLocal() {
+    function persistModelsLocal(options) {
       try {
         localStorage.setItem(modelsKey, JSON.stringify(state.models));
       } catch (err) {
@@ -316,10 +396,12 @@
       }
       renderModels();
       renderAssignmentsSelect();
+      var opts = options && typeof options === 'object' ? options : {};
+      emitModelsUpdated(opts.source || 'models', { reason: opts.reason || '' });
     }
 
     function saveModels() {
-      persistModelsLocal();
+      persistModelsLocal({ source: 'models', reason: 'save-models' });
       (state.models || []).forEach(function(m) {
         if (m) persistModelToServer(m);
       });
@@ -422,7 +504,7 @@
         if (!remoteModels.length) {
           if (state.userJustSwitched) {
             state.models = [];
-            persistModelsLocal();
+            persistModelsLocal({ source: 'models', reason: 'pull-empty' });
             renderModels();
             renderAssignmentsSelect();
             updateAssignmentStatuses();
@@ -431,7 +513,7 @@
           return;
         }
         state.models = remoteModels;
-        persistModelsLocal();
+        persistModelsLocal({ source: 'models', reason: 'pull-remote' });
         syncAssignmentsWithModels({ pushRemote: true });
         renderModels();
         renderAssignmentsSelect();
@@ -450,7 +532,7 @@
       if (oldId && oldId !== stableId) {
         updateAssignmentsModelId(oldId, stableId, { pushRemote: true });
       }
-      persistModelsLocal();
+      persistModelsLocal({ source: 'models', reason: 'remote-id-sync' });
     }
 
     function persistModelToServer(model) {
@@ -758,7 +840,7 @@
         }
       }
       state.models = state.models.filter(function(m) { return getStableModelId(m) !== targetId; });
-      persistModelsLocal();
+      persistModelsLocal({ source: 'models', reason: 'delete-model' });
       var keys = assignmentIdKeys;
       keys.forEach(function(key) {
         if (state.assignments[key] === targetId) state.assignments[key] = '';
@@ -1293,12 +1375,20 @@
       }
     }
 
-    async function testModel(id, statusEl) {
+    async function testModel(id, statusEl, scene) {
       const model = getModelById(id);
       if (!model) {
+        var missingResult = buildModelTestResult(null, scene);
+        missingResult.errorMessage = '未选择模型';
+        missingResult.timestamp = Date.now();
         setStatus(statusEl, '未选择模型', 'warn');
-        return;
+        emitModelTestEvents(missingResult);
+        return missingResult;
       }
+      var result = buildModelTestResult(model, scene);
+      result.modelId = getStableModelId(model);
+      result.modelName = model && model.name ? String(model.name) : '';
+      result.provider = model && model.provider ? String(model.provider) : '';
       setStatus(statusEl, '正在测试模型...', '');
       try {
         var baseUrl = model && model.baseUrl ? String(model.baseUrl).toLowerCase() : '';
@@ -1310,6 +1400,9 @@
           ? String(model.baseUrl || '').replace(/\/responses(\?|$)/i, '/chat/completions$1')
           : String(model.baseUrl || '');
         var isResponsesApi = !useClaudeCompat && /\/responses(?:\?|$)/i.test(baseUrl);
+        result.requestMeta.baseUrl = sanitizeRequestUrl(requestUrl);
+        result.requestMeta.requestUrl = sanitizeRequestUrl(requestUrl);
+        result.requestMeta.isResponsesApi = isResponsesApi;
         const body = isResponsesApi
           ? {
             model: model.model,
@@ -1330,7 +1423,7 @@
         const proxyFn = api && typeof api.proxyModelRequest === 'function'
           ? api.proxyModelRequest
           : null;
-        let res;
+        let res = null;
         if (proxyFn) {
           try {
             res = await proxyFn({
@@ -1339,6 +1432,10 @@
               payload: body,
               timeout_sec: 30,
             });
+            if (res) {
+              result.requestMeta.usedProxy = true;
+              result.statusCode = Number(res.status) || 0;
+            }
           } catch (e) {
             res = null;
           }
@@ -1348,6 +1445,7 @@
           || [401, 403, 404, 405, 501].indexOf(statusCode) !== -1
           || (statusCode >= 500 && statusCode < 600);
         if (shouldFallback) {
+          result.requestMeta.usedFallbackDirect = true;
           const headers = { 'Content-Type': 'application/json' };
           if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`;
           res = await fetch(requestUrl, {
@@ -1356,10 +1454,12 @@
             body: JSON.stringify(body),
           });
         }
-        const raw = await res.text();
-        if (!res.ok) {
+        const raw = res && typeof res.text === 'function' ? await res.text() : '';
+        result.statusCode = res ? Number(res.status) || 0 : 0;
+        result.responsePreview = sanitizeResponsePreview(raw);
+        if (!res || !res.ok) {
           const detail = raw ? ('：' + raw.slice(0, 200)) : '';
-          throw new Error(`HTTP ${res.status}${detail}`);
+          throw new Error('HTTP ' + (res ? res.status : '0') + detail);
         }
         let data = null;
         if (raw) {
@@ -1372,11 +1472,83 @@
         const hasChoices = data && data.choices && data.choices.length;
         const hasOutput = data && data.output && data.output.length;
         const ok = hasChoices || hasOutput || (data && data.output_text) || (data && data.data) || (raw && raw.trim());
-        setStatus(statusEl, ok ? '测试成功，模型可用' : '连接成功但返回为空，请检查返回格式', ok ? 'ok' : 'warn');
+        if (ok) {
+          result.ok = true;
+          result.errorMessage = '';
+          setStatus(statusEl, '测试成功，模型可用', 'ok');
+        } else {
+          result.ok = false;
+          result.errorMessage = '连接成功但返回为空，请检查返回格式';
+          setStatus(statusEl, '连接成功但返回为空，请检查返回格式', 'warn');
+        }
       } catch (err) {
         console.error(err);
-        setStatus(statusEl, `测试失败：${err.message || err}`, 'err');
+        result.ok = false;
+        result.errorMessage = err && err.message ? String(err.message) : String(err || '模型测试失败');
+        setStatus(statusEl, '测试失败：' + result.errorMessage, 'err');
       }
+      result.timestamp = Date.now();
+      emitModelTestEvents(result);
+      return result;
+    }
+
+    function normalizeModelPatch(patch) {
+      var incoming = patch && typeof patch === 'object' ? patch : {};
+      var result = {};
+      if (Object.prototype.hasOwnProperty.call(incoming, 'provider')) {
+        var provider = incoming.provider === undefined || incoming.provider === null ? '' : String(incoming.provider).trim();
+        if (provider) result.provider = provider;
+      }
+      if (Object.prototype.hasOwnProperty.call(incoming, 'baseUrl')) {
+        var baseUrl = incoming.baseUrl === undefined || incoming.baseUrl === null ? '' : String(incoming.baseUrl).trim();
+        if (baseUrl) result.baseUrl = baseUrl;
+      }
+      if (Object.prototype.hasOwnProperty.call(incoming, 'model')) {
+        var modelId = incoming.model === undefined || incoming.model === null ? '' : String(incoming.model).trim();
+        if (modelId) result.model = modelId;
+      }
+      if (Object.prototype.hasOwnProperty.call(incoming, 'maxTokens')) {
+        var maxTokens = Math.round(Number(incoming.maxTokens));
+        if (Number.isFinite(maxTokens) && maxTokens > 0) {
+          result.maxTokens = maxTokens;
+        }
+      }
+      return result;
+    }
+
+    async function applyModelPatch(id, patch, options) {
+      var target = findModelByAnyId(id);
+      if (!target) return { ok: false, reason: '目标模型不存在' };
+      var normalizedPatch = normalizeModelPatch(patch);
+      var keys = Object.keys(normalizedPatch);
+      if (!keys.length) {
+        return { ok: false, reason: '未提供可更新字段（仅支持 provider/baseUrl/model/maxTokens）' };
+      }
+      keys.forEach(function(key) {
+        target[key] = normalizedPatch[key];
+      });
+      persistModelsLocal({ source: 'assistant', reason: 'model-patch' });
+      await persistModelToServer(target);
+      renderAssignmentsSelect();
+      updateAssignmentStatuses();
+      emitModelsUpdated('assistant', {
+        reason: 'model-patch-applied',
+        modelId: getStableModelId(target),
+        keys: keys,
+      });
+      return {
+        ok: true,
+        modelId: getStableModelId(target),
+        keys: keys,
+        model: {
+          id: getStableModelId(target),
+          name: target.name || '',
+          provider: target.provider || '',
+          baseUrl: target.baseUrl || '',
+          model: target.model || '',
+          maxTokens: target.maxTokens || defaultMaxTokens,
+        },
+      };
     }
 
     if (modelProviderEl) {
@@ -1424,6 +1596,7 @@
       getTemperatureForType,
       getAssignedModel,
       testModel,
+      applyModelPatch,
       saveModel,
     };
   }

@@ -71,6 +71,8 @@
       tabs: [{ id: 'memo-tab-1', name: '', items: [] }],
     },
     smartTopNavCollapse: false,
+    assistantEnabled: false,
+    assistantModelId: '',
     tempExecColumns: Object.assign({}, defaultTempExecColumns),
     pageGuideSwitches: Object.assign({}, defaultPageGuideSwitches),
   };

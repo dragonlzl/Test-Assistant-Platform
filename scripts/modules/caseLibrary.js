@@ -13449,6 +13449,77 @@
 	      });
 	  }
 
+	  function normalizeAssistantEditorCaseItem(item, visibleIndex, sourceIndex) {
+	    var row = item && typeof item === 'object' ? item : {};
+	    var order = Number(visibleIndex);
+	    if (!Number.isFinite(order) || order < 0) order = 0;
+	    var sourceOrder = Number(sourceIndex);
+	    if (!Number.isFinite(sourceOrder) || sourceOrder < 0) sourceOrder = order;
+	    return {
+	      index: order + 1,
+	      sourceIndex: sourceOrder + 1,
+	      id: row.id === undefined || row.id === null ? '' : String(row.id),
+	      module: normalizeEditorText(row.module),
+	      title: normalizeEditorText(row.title),
+	      priority: normalizeEditorText(row.priority),
+	      precondition: normalizeEditorText(row.precondition),
+	      steps: normalizeEditorText(row.steps),
+	      expected: normalizeEditorText(row.expected),
+	      remark: normalizeEditorText(row.remark),
+	      updatedAt: row.updated_at || row.updatedAt || '',
+	    };
+	  }
+
+	  function buildAssistantEditorCaseFileSnapshot(caseFile) {
+	    var file = caseFile && typeof caseFile === 'object' ? caseFile : {};
+	    return {
+	      id: file.id === undefined || file.id === null ? '' : String(file.id),
+	      name: file.file_name_clean ? String(file.file_name_clean) : (file.file_name ? String(file.file_name) : ''),
+	      projectId: file.project_id === undefined || file.project_id === null ? '' : String(file.project_id),
+	      versionId: file.version_id === undefined || file.version_id === null ? '' : String(file.version_id),
+	      updatedAt: file.updated_at || file.imported_at || '',
+	    };
+	  }
+
+	  function getCurrentEditorCaseSnapshot(options) {
+	    var opts = options && typeof options === 'object' ? options : {};
+	    var limit = Number(opts.limit);
+	    if (!Number.isFinite(limit) || limit <= 0) limit = 20;
+	    if (limit > 100) limit = 100;
+	    var file = state.editor && state.editor.caseFile ? state.editor.caseFile : null;
+	    var allItems = Array.isArray(state.editor && state.editor.items) ? state.editor.items : [];
+	    if (!file || !file.id || !isEditorCardVisible()) {
+	      return {
+	        ok: true,
+	        hasContext: false,
+	        reason: 'no-active-editor',
+	        total: 0,
+	        totalAll: allItems.length,
+	        items: [],
+	      };
+	    }
+	    var filtered = applyEditorFilter();
+	    var normalized = filtered.map(function(entry, idx) {
+	      var row = entry && entry.item && typeof entry.item === 'object' ? entry.item : {};
+	      var sourceIndex = entry && Number.isFinite(Number(entry.idx)) ? Number(entry.idx) : idx;
+	      return normalizeAssistantEditorCaseItem(row, idx, sourceIndex);
+	    });
+	    var items = normalized.slice(0, limit);
+	    var searchText = state.editor && state.editor.searchText ? String(state.editor.searchText).trim() : '';
+	    return {
+	      ok: true,
+	      hasContext: true,
+	      scope: 'editor',
+	      projectId: file.project_id === undefined || file.project_id === null ? '' : String(file.project_id),
+	      caseFile: buildAssistantEditorCaseFileSnapshot(file),
+	      searchText: searchText,
+	      total: normalized.length,
+	      totalAll: allItems.length,
+	      items: items,
+	      truncated: normalized.length > items.length,
+	    };
+	  }
+
 	  function shouldModuleRepositionItem(item, seenModules) {
 	    if (!item) return false;
 	    var moduleName = normalizeEditorText(item.module);
@@ -19440,12 +19511,13 @@
     window.app.caseLibraryApi = window.app.caseLibraryApi || {};
     window.app.caseLibraryApi.openSelectExecDrawer = openSelectExecDrawer;
     window.app.caseLibraryApi.requestSelectExecDrawer = markSelectExecDrawerRequest;
-    window.app.caseLibraryApi.openMissingDrawer = openMissingDrawer;
-    window.app.caseLibraryApi.openWriterDrawer = openCaseLibraryWriterStructure;
-    window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
-    if (hasImportSelectDrawer) {
-      window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
-    }
+	    window.app.caseLibraryApi.openMissingDrawer = openMissingDrawer;
+	    window.app.caseLibraryApi.openWriterDrawer = openCaseLibraryWriterStructure;
+	    window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
+	    window.app.caseLibraryApi.getCurrentEditorCaseSnapshot = getCurrentEditorCaseSnapshot;
+	    if (hasImportSelectDrawer) {
+	      window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
+	    }
     if (hasImportDiffDrawer) {
       window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
       window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;
@@ -19651,11 +19723,12 @@
     window.app.caseLibraryApi = window.app.caseLibraryApi || {};
     window.app.caseLibraryApi.openSelectExecDrawer = openSelectExecDrawer;
     window.app.caseLibraryApi.requestSelectExecDrawer = markSelectExecDrawerRequest;
-    window.app.caseLibraryApi.openMissingDrawer = openMissingDrawer;
-    window.app.caseLibraryApi.openWriterDrawer = openCaseLibraryWriterStructure;
-    window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
-    window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
-    window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
+	    window.app.caseLibraryApi.openMissingDrawer = openMissingDrawer;
+	    window.app.caseLibraryApi.openWriterDrawer = openCaseLibraryWriterStructure;
+	    window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
+	    window.app.caseLibraryApi.getCurrentEditorCaseSnapshot = getCurrentEditorCaseSnapshot;
+	    window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
+	    window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
     window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;
     window.app.caseLibraryApi.downloadImportExcelTemplate = downloadImportExcelTemplate;
     window.app.caseLibraryApi.downloadImportXmindTemplate = downloadImportXmindTemplate;

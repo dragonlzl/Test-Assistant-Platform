@@ -80,6 +80,14 @@
       || document.getElementById('saveMissingReminderAi');
     var missingReminderAiStatus = dom.missingReminderAiStatus
       || document.getElementById('missingReminderAiStatus');
+    var assistantEnabledToggle = dom.assistantEnabledToggle
+      || document.getElementById('assistantEnabledToggle');
+    var assistantModelSelect = dom.assistantModelSelect
+      || document.getElementById('assistantModelSelect');
+    var saveAssistantSettingBtn = dom.saveAssistantSettingBtn
+      || document.getElementById('saveAssistantSetting');
+    var assistantSettingStatus = dom.assistantSettingStatus
+      || document.getElementById('assistantSettingStatus');
     var settingsNavButtons = dom.settingsNavButtons || document.querySelectorAll('[data-settings-target]');
 
     var defaultSettings = config.defaultSettings || {};
@@ -104,6 +112,10 @@
     var defaultMissingReminderAiEnabled = defaultSettings && defaultSettings.missingCaseReminderAiEnabled
       ? String(defaultSettings.missingCaseReminderAiEnabled)
       : 'off';
+    var defaultAssistantEnabled = defaultSettings && defaultSettings.assistantEnabled === true;
+    var defaultAssistantModelId = defaultSettings && defaultSettings.assistantModelId
+      ? String(defaultSettings.assistantModelId)
+      : '';
     var minCaseViewFontSize = Number(config.minCaseViewFontSize) || 11;
     var maxCaseViewFontSize = Number(config.maxCaseViewFontSize) || 16;
     var settingsKey = config.settingsKey || 'usecase-settings-v1';
@@ -143,6 +155,8 @@
       missingCaseReminderPlacement: false,
       missingCaseReminderMatchConfig: false,
       missingCaseReminderAiEnabled: false,
+      assistantEnabled: false,
+      assistantModelId: false,
     };
 
     function setSettingsReady(source) {
@@ -266,6 +280,212 @@
     function resolveMissingReminderAiEnabled(value) {
       var raw = value === undefined || value === null ? defaultMissingReminderAiEnabled : value;
       return String(raw || '').toLowerCase() === 'on' ? 'on' : 'off';
+    }
+
+    function dispatchAppEvent(name, detail) {
+      if (!name) return;
+      if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+      try {
+        if (typeof CustomEvent === 'function') {
+          window.dispatchEvent(new CustomEvent(name, { detail: detail || {} }));
+        } else if (typeof document !== 'undefined' && typeof document.createEvent === 'function') {
+          var evt = document.createEvent('CustomEvent');
+          evt.initCustomEvent(name, false, false, detail || {});
+          window.dispatchEvent(evt);
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function resolveAssistantEnabled(value) {
+      if (value === undefined || value === null) return defaultAssistantEnabled === true;
+      return value === true;
+    }
+
+    function resolveAssistantModelId(value) {
+      if (value === undefined || value === null) return defaultAssistantModelId || '';
+      return String(value || '').trim();
+    }
+
+    function ensureAssistantSettings() {
+      if (!state.settings || typeof state.settings !== 'object') {
+        state.settings = Object.assign({}, defaultSettings);
+      }
+      state.settings.assistantEnabled = resolveAssistantEnabled(state.settings.assistantEnabled);
+      state.settings.assistantModelId = resolveAssistantModelId(state.settings.assistantModelId);
+      if (state.settings.assistantModelId) {
+        var found = findModelByAnyId(state.settings.assistantModelId);
+        if (!found) state.settings.assistantModelId = '';
+      }
+      return {
+        assistantEnabled: state.settings.assistantEnabled === true,
+        assistantModelId: state.settings.assistantModelId || '',
+      };
+    }
+
+    function listAssistantModels() {
+      var list = Array.isArray(state.models) ? state.models : [];
+      return list.map(function(model) {
+        var mid = model && (model.id !== undefined && model.id !== null)
+          ? String(model.id)
+          : (model && model.remoteId !== undefined && model.remoteId !== null ? String(model.remoteId) : '');
+        return {
+          id: mid,
+          name: model && model.name ? String(model.name) : '未命名模型',
+          provider: model && model.provider ? String(model.provider) : 'custom',
+          model: model && model.model ? String(model.model) : '',
+          usable: isModelUsable(model),
+        };
+      });
+    }
+
+    function renderAssistantSettingsUI() {
+      ensureAssistantSettings();
+      if (assistantModelSelect) {
+        var options = listAssistantModels();
+        if (!options.length) {
+          assistantModelSelect.innerHTML = '<option value="">暂无模型可选</option>';
+          assistantModelSelect.value = '';
+        } else {
+          var html = '<option value="">请选择助手模型</option>' + options.map(function(item) {
+            var suffix = item.usable ? '' : '（配置不完整）';
+            var selected = item.id && item.id === state.settings.assistantModelId ? ' selected' : '';
+            var disabled = item.usable ? '' : ' disabled';
+            var label = escapeHtml(item.name + ' (' + item.provider + ')' + suffix);
+            return '<option value="' + escapeHtml(item.id) + '"' + selected + disabled + '>' + label + '</option>';
+          }).join('');
+          assistantModelSelect.innerHTML = html;
+          if (state.settings.assistantModelId) {
+            assistantModelSelect.value = state.settings.assistantModelId;
+          }
+          if (!assistantModelSelect.value) {
+            state.settings.assistantModelId = '';
+          }
+        }
+      }
+      if (assistantEnabledToggle) {
+        assistantEnabledToggle.checked = state.settings.assistantEnabled === true;
+      }
+      if (assistantSettingStatus && !dirtyDrafts.assistantEnabled && !dirtyDrafts.assistantModelId) {
+        setStatus(assistantSettingStatus, '', '');
+      }
+    }
+
+    function emitAssistantStateChanged(source, extra) {
+      var snapshot = ensureAssistantSettings();
+      var detail = {
+        source: source || '',
+        assistantEnabled: snapshot.assistantEnabled === true,
+        assistantModelId: snapshot.assistantModelId || '',
+      };
+      if (extra && typeof extra === 'object') {
+        Object.keys(extra).forEach(function(key) {
+          detail[key] = extra[key];
+        });
+      }
+      dispatchAppEvent('app-assistant-state-changed', detail);
+    }
+
+    function getAssistantSettingsSnapshot() {
+      var snapshot = ensureAssistantSettings();
+      var model = snapshot.assistantModelId ? findModelByAnyId(snapshot.assistantModelId) : null;
+      return {
+        assistantEnabled: snapshot.assistantEnabled === true,
+        assistantModelId: snapshot.assistantModelId || '',
+        assistantModelName: model && model.name ? String(model.name) : '',
+      };
+    }
+
+    function applyAssistantSettingsPatch(patch, options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var source = opts.source ? String(opts.source) : 'settings';
+      var allowSelfDisable = opts.allowSelfDisable === true;
+      ensureAssistantSettings();
+      var nextEnabled = state.settings.assistantEnabled === true;
+      var nextModelId = state.settings.assistantModelId || '';
+      var touched = [];
+      var incoming = patch && typeof patch === 'object' ? patch : {};
+
+      if (Object.prototype.hasOwnProperty.call(incoming, 'assistantEnabled')) {
+        var requestedEnabled = incoming.assistantEnabled === true;
+        if (!requestedEnabled && source === 'assistant' && !allowSelfDisable) {
+          return { ok: false, reason: '助手不能通过对话关闭自己' };
+        }
+        nextEnabled = requestedEnabled;
+        touched.push('assistantEnabled');
+      }
+      if (Object.prototype.hasOwnProperty.call(incoming, 'assistantModelId')) {
+        nextModelId = resolveAssistantModelId(incoming.assistantModelId);
+        touched.push('assistantModelId');
+      }
+      var chosenModel = null;
+      if (nextModelId) {
+        chosenModel = findModelByAnyId(nextModelId);
+        if (!chosenModel && nextEnabled) {
+          return { ok: false, reason: '所选助手模型不存在，请重新选择' };
+        }
+      }
+      if (nextEnabled && !nextModelId) {
+        return { ok: false, reason: '开启助手前请先选择可用模型' };
+      }
+      if (nextEnabled && !chosenModel) {
+        return { ok: false, reason: '所选助手模型不存在，请重新选择' };
+      }
+      if (nextEnabled && chosenModel && !isModelUsable(chosenModel)) {
+        return { ok: false, reason: '所选助手模型配置不完整，请补全接口/API Key/模型ID' };
+      }
+      var changed = false;
+      if (state.settings.assistantEnabled !== nextEnabled) {
+        state.settings.assistantEnabled = nextEnabled;
+        changed = true;
+      }
+      if ((state.settings.assistantModelId || '') !== (nextModelId || '')) {
+        state.settings.assistantModelId = nextModelId || '';
+        changed = true;
+      }
+      dirtyDrafts.assistantEnabled = false;
+      dirtyDrafts.assistantModelId = false;
+      renderAssistantSettingsUI();
+      if (changed) {
+        persistSettings(['assistantEnabled', 'assistantModelId']);
+        notifySettingsUpdated(['assistantEnabled', 'assistantModelId']);
+      }
+      emitAssistantStateChanged(source, { changed: changed, keys: touched });
+      return {
+        ok: true,
+        changed: changed,
+        assistantEnabled: state.settings.assistantEnabled === true,
+        assistantModelId: state.settings.assistantModelId || '',
+      };
+    }
+
+    function saveAssistantSettings() {
+      if (!assistantEnabledToggle && !assistantModelSelect) return;
+      var patch = {
+        assistantEnabled: assistantEnabledToggle ? assistantEnabledToggle.checked === true : false,
+        assistantModelId: assistantModelSelect ? String(assistantModelSelect.value || '') : '',
+      };
+      var result = applyAssistantSettingsPatch(patch, { source: 'settings-ui', allowSelfDisable: true });
+      if (!result || result.ok !== true) {
+        if (assistantSettingStatus) {
+          setStatus(assistantSettingStatus, result && result.reason ? result.reason : '助手设置保存失败', 'warn');
+        }
+        return;
+      }
+      if (assistantSettingStatus) {
+        if (result.changed) {
+          setStatus(
+            assistantSettingStatus,
+            result.assistantEnabled
+              ? 'AI 助手已开启，可在右下角使用'
+              : 'AI 助手已关闭，右下角入口保持锁定提示',
+            'ok'
+          );
+        } else {
+          setStatus(assistantSettingStatus, '助手设置未变化', '');
+        }
+      }
     }
 
     function applyTheme(theme) {
@@ -407,6 +627,7 @@
       } else {
         state.settings.smartTopNavCollapse = state.settings.smartTopNavCollapse === true;
       }
+      ensureAssistantSettings();
       ensurePageGuideSwitches();
       ensureTempExecColumns();
       if (state.settings.theme === undefined || state.settings.theme === null || state.settings.theme === '') {
@@ -422,6 +643,8 @@
       state.settings.theme = resolveTheme(state.settings.theme);
       applyTheme(state.settings.theme);
       applyCaseViewFontSize(state.settings.caseViewFontSize);
+      ensureAssistantSettings();
+      emitAssistantStateChanged('settings-server', { changed: false });
       setSettingsReady('server');
       // 如果执行页已打开，主动刷新以应用远端列/分页设置。
       try {
@@ -645,6 +868,7 @@
       } else {
         state.settings.smartTopNavCollapse = state.settings.smartTopNavCollapse === true;
       }
+      ensureAssistantSettings();
       ensurePageGuideSwitches();
       ensureTempExecColumns();
       try {
@@ -673,6 +897,7 @@
       } else {
         state.settings.defaultProjectId = String(state.settings.defaultProjectId || '');
       }
+      emitAssistantStateChanged('settings-local', { changed: false });
       if (shouldUseLocal) setSettingsReady('local');
     }
 
@@ -786,6 +1011,7 @@
         smartTopNavToggle.checked = state.settings.smartTopNavCollapse === true;
         setStatus(smartTopNavStatus, '', '');
       }
+      renderAssistantSettingsUI();
       renderTempExecColumnSettings();
       renderPageGuideSettings();
       renderProjectSortSetting();
@@ -1305,19 +1531,8 @@
     }
 
     function notifySettingsUpdated(keys) {
-      if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
       var detail = { keys: Array.isArray(keys) ? keys.slice() : [] };
-      try {
-        window.dispatchEvent(new CustomEvent('app-settings-updated', { detail: detail }));
-      } catch (err) {
-        try {
-          var evt = document.createEvent('CustomEvent');
-          evt.initCustomEvent('app-settings-updated', false, false, detail);
-          window.dispatchEvent(evt);
-        } catch (err2) {
-          // ignore
-        }
-      }
+      dispatchAppEvent('app-settings-updated', detail);
     }
 
     function saveMissingReminderPlacement() {
@@ -1461,19 +1676,7 @@
     }
 
     function notifyPageSizeChange(size) {
-      if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
-      var detail = { size: size };
-      try {
-        window.dispatchEvent(new CustomEvent('app-page-size-changed', { detail: detail }));
-      } catch (err) {
-        try {
-          var evt = document.createEvent('CustomEvent');
-          evt.initCustomEvent('app-page-size-changed', false, false, detail);
-          window.dispatchEvent(evt);
-        } catch (err2) {
-          // ignore
-        }
-      }
+      dispatchAppEvent('app-page-size-changed', { size: size });
     }
 
     function handlePageGuideChange(e) {
@@ -1609,6 +1812,21 @@
           if (missingReminderAiStatus) setStatus(missingReminderAiStatus, '', '');
         });
       }
+      if (saveAssistantSettingBtn) {
+        saveAssistantSettingBtn.addEventListener('click', saveAssistantSettings);
+      }
+      if (assistantEnabledToggle) {
+        assistantEnabledToggle.addEventListener('change', function() {
+          dirtyDrafts.assistantEnabled = true;
+          if (assistantSettingStatus) setStatus(assistantSettingStatus, '', '');
+        });
+      }
+      if (assistantModelSelect) {
+        assistantModelSelect.addEventListener('change', function() {
+          dirtyDrafts.assistantModelId = true;
+          if (assistantSettingStatus) setStatus(assistantSettingStatus, '', '');
+        });
+      }
       if (pageGuideSettingsGrid) pageGuideSettingsGrid.addEventListener('change', handlePageGuideChange);
       if (smartTopNavToggle) smartTopNavToggle.addEventListener('change', handleSmartTopNavChange);
       bindProjectSortEvents();
@@ -1619,6 +1837,14 @@
             scrollToSettingsSection(target);
           });
         });
+      }
+      try {
+        window.addEventListener('app-models-updated', function() {
+          if (dirtyDrafts.assistantModelId || dirtyDrafts.assistantEnabled) return;
+          renderAssistantSettingsUI();
+        });
+      } catch (err) {
+        // ignore
       }
     }
 
@@ -1643,6 +1869,11 @@
       postFeishuMessage: postFeishuMessage,
       ensureTempExecColumns: ensureTempExecColumns,
       saveTempExecPageSize: saveTempExecPageSize,
+      getAssistantSettingsSnapshot: getAssistantSettingsSnapshot,
+      listAssistantModels: listAssistantModels,
+      applyAssistantSettingsPatch: applyAssistantSettingsPatch,
+      saveAssistantSettings: saveAssistantSettings,
+      renderAssistantSettingsUI: renderAssistantSettingsUI,
     };
   }
 

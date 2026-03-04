@@ -234,31 +234,31 @@
     }
 
     if (testCleanModelBtn && testModel) testCleanModelBtn.addEventListener('click', function() {
-      testModel(cleanModelSelect ? cleanModelSelect.value : '', cleanAssignStatus);
+      testModel(cleanModelSelect ? cleanModelSelect.value : '', cleanAssignStatus, 'assign-clean');
     });
     if (testReviewModelBtn && testModel) testReviewModelBtn.addEventListener('click', function() {
-      testModel(reviewModelSelect ? reviewModelSelect.value : '', reviewAssignStatus);
+      testModel(reviewModelSelect ? reviewModelSelect.value : '', reviewAssignStatus, 'assign-review');
     });
     if (testCompareModelBtn && testModel) testCompareModelBtn.addEventListener('click', function() {
-      testModel(compareModelSelect ? compareModelSelect.value : '', compareAssignStatus);
+      testModel(compareModelSelect ? compareModelSelect.value : '', compareAssignStatus, 'assign-compare');
     });
     if (testSplitModelBtn && testModel) testSplitModelBtn.addEventListener('click', function() {
-      testModel(splitModelSelect ? splitModelSelect.value : '', splitAssignStatus);
+      testModel(splitModelSelect ? splitModelSelect.value : '', splitAssignStatus, 'assign-split');
     });
     if (testCasesModelBtn && testModel) testCasesModelBtn.addEventListener('click', function() {
-      testModel(casesModelSelect ? casesModelSelect.value : '', casesAssignStatus);
+      testModel(casesModelSelect ? casesModelSelect.value : '', casesAssignStatus, 'assign-cases');
     });
     if (testCaseGenModelBtn && testModel) testCaseGenModelBtn.addEventListener('click', function() {
-      testModel(caseGenModelSelect ? caseGenModelSelect.value : '', caseGenAssignStatus);
+      testModel(caseGenModelSelect ? caseGenModelSelect.value : '', caseGenAssignStatus, 'assign-casegen');
     });
     if (testCaseFilterModelBtn && testModel) testCaseFilterModelBtn.addEventListener('click', function() {
-      testModel(caseFilterModelSelect ? caseFilterModelSelect.value : '', caseFilterAssignStatus);
+      testModel(caseFilterModelSelect ? caseFilterModelSelect.value : '', caseFilterAssignStatus, 'assign-casefilter');
     });
     if (testMissingReminderModelBtn && testModel) testMissingReminderModelBtn.addEventListener('click', function() {
-      testModel(missingReminderModelSelect ? missingReminderModelSelect.value : '', missingReminderAssignStatus);
+      testModel(missingReminderModelSelect ? missingReminderModelSelect.value : '', missingReminderAssignStatus, 'assign-missingreminder');
     });
     if (testCaseLibraryGenModelBtn && testModel) testCaseLibraryGenModelBtn.addEventListener('click', function() {
-      testModel(caseLibraryGenModelSelect ? caseLibraryGenModelSelect.value : '', caseLibraryGenAssignStatus);
+      testModel(caseLibraryGenModelSelect ? caseLibraryGenModelSelect.value : '', caseLibraryGenAssignStatus, 'assign-caselibrarygen');
     });
 
     return {
