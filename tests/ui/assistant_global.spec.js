@@ -176,6 +176,178 @@ test.describe('全局AI助手', () => {
     await expect(page.locator('#assistantPanel')).toHaveClass(/hidden/);
   });
 
+  test('助手面板背景应为非透明', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    const panelBg = await page.evaluate(() => {
+      var panel = document.getElementById('assistantPanel');
+      if (!panel) return '';
+      return String(window.getComputedStyle(panel).backgroundColor || '').trim();
+    });
+    expect(panelBg).not.toBe('transparent');
+    expect(panelBg).not.toBe('rgba(0, 0, 0, 0)');
+  });
+
+  test('助手聊天框字体应更小', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    const styles = await page.evaluate(() => {
+      var input = document.getElementById('assistantInput');
+      var msgBody = document.querySelector('#assistantMessages .assistant-msg-body');
+      return {
+        inputFontSize: input ? window.getComputedStyle(input).fontSize : '',
+        messageFontSize: msgBody ? window.getComputedStyle(msgBody).fontSize : '',
+      };
+    });
+    expect(styles.inputFontSize).toBe('13px');
+    expect(styles.messageFontSize).toBe('13px');
+  });
+
+  test('助手可按模型输出渲染表格与代码块', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function() {
+          return {
+            ok: true,
+            content: [
+              '执行建议如下：',
+              '',
+              '| 方案 | 说明 |',
+              '| --- | --- |',
+              '| 快速修复 | 改动最小，交付快 |',
+              '| 稳定方案 | 可维护性更高 |',
+              '',
+              '```js',
+              'const answer = 42;',
+              'console.log(answer);',
+              '```',
+            ].join('\n'),
+          };
+        };
+      }
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await page.fill('#assistantInput', '请给我一个方案对比和代码示例');
+    await page.click('#assistantSendBtn');
+
+    const rendered = await page.evaluate(() => {
+      var cards = document.querySelectorAll('#assistantMessages .assistant-msg.ai');
+      if (!cards || !cards.length) {
+        return { hasTable: false, hasCodeBlock: false, rowCount: 0, codeText: '' };
+      }
+      var last = cards[cards.length - 1];
+      var table = last.querySelector('table');
+      var code = last.querySelector('pre code');
+      return {
+        hasTable: Boolean(table),
+        hasCodeBlock: Boolean(code),
+        rowCount: table ? table.querySelectorAll('tbody tr').length : 0,
+        codeText: code && code.textContent ? String(code.textContent) : '',
+      };
+    });
+
+    expect(rendered.hasTable).toBeTruthy();
+    expect(rendered.hasCodeBlock).toBeTruthy();
+    expect(rendered.rowCount).toBe(2);
+    expect(rendered.codeText).toContain('const answer = 42;');
+  });
+
+  test('助手代码块支持点击复制', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function() {
+          return {
+            ok: true,
+            content: [
+              '```bash',
+              'echo \"assistant-copy-test\"',
+              '```',
+            ].join('\n'),
+          };
+        };
+      }
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await page.fill('#assistantInput', '给我一段命令');
+    await page.click('#assistantSendBtn');
+    await expect(page.locator('#assistantMessages .assistant-code-copy-btn').last()).toBeVisible();
+
+    await page.locator('#assistantMessages .assistant-code-copy-btn').last().click();
+    await expect.poll(async () => {
+      var text = await page.locator('#assistantMessages .assistant-code-copy-btn').last().innerText();
+      return String(text || '').trim();
+    }).toBe('已复制');
+    await expect(page.locator('#assistantStatus')).toContainText('代码已复制');
+  });
+
   test('模型报错可自动诊断，代填前二次确认且可重测', async ({ page }) => {
     const modelId = 'assistant-model-1';
 
@@ -364,7 +536,7 @@ test.describe('全局AI助手', () => {
     await expect(page.locator('#assistantMessages')).not.toContainText('获取当前页面用例列表');
   });
 
-  test('获取当前页面用例列表不应被当前页面意图拦截', async ({ page }) => {
+  test('获取当前页面用例列表在无编辑上下文时返回下一步提示', async ({ page }) => {
     const modelId = 'assistant-model-1';
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
@@ -387,12 +559,14 @@ test.describe('全局AI助手', () => {
     await page.fill('#assistantInput', '获取当前页面用例列表');
     await page.click('#assistantSendBtn');
 
-    await expect(page.locator('#assistantMessages')).toContainText('当前用例列表');
-    await expect(page.locator('#assistantMessages')).toContainText('登录主流程');
+    await expect(page.locator('#assistantMessages')).toContainText('当前页面没有正在编辑或查看的用例');
+    await expect(page.locator('#assistantMessages')).toContainText('1. 进入“用例库 -> 查看&编辑”，打开一个用例文件');
+    await expect(page.locator('#assistantMessages')).toContainText('2. 或直接问我');
+    await expect(page.locator('#assistantMessages')).not.toContainText('当前用例列表');
     await expect(page.locator('#assistantMessages')).not.toContainText('当前页面是：');
   });
 
-  test('当前页面都有什么用例应直接返回用例列表', async ({ page }) => {
+  test('现在的页面有什么用例在无编辑上下文时返回下一步提示', async ({ page }) => {
     const modelId = 'assistant-model-1';
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
@@ -412,13 +586,63 @@ test.describe('全局AI助手', () => {
     });
     await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
 
-    await page.fill('#assistantInput', '当前页面都有什么用例');
+    await page.fill('#assistantInput', '现在的页面有什么用例');
     await page.click('#assistantSendBtn');
 
-    await expect(page.locator('#assistantMessages')).toContainText('当前用例列表');
-    await expect(page.locator('#assistantMessages')).toContainText('登录主流程');
-    await expect(page.locator('#assistantMessages')).toContainText('支付异常链路');
+    await expect(page.locator('#assistantMessages')).toContainText('当前页面没有正在编辑或查看的用例');
+    await expect(page.locator('#assistantMessages')).toContainText('1. 进入“用例库 -> 查看&编辑”，打开一个用例文件');
+    await expect(page.locator('#assistantMessages')).toContainText('2. 或直接问我');
+    await expect(page.locator('#assistantMessages')).not.toContainText('当前用例列表');
     await expect(page.locator('#assistantMessages')).not.toContainText('当前页面是：');
+  });
+
+  test('用例库页无编辑上下文时不应回退执行页结果', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'case-library';
+        window.app.state.tempExecActiveId = 'exec-file-1';
+        window.app.state.tempExecActiveFileId = 'exec-file-1';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-file-1',
+            name: '执行文件A',
+            projectId: '2001',
+            versionId: '301',
+            cases: [
+              { id: 'te-1', module: '登录', title: '账号密码登录', priority: 'P1', preconditions: '账号已注册', steps: '输入账号密码并登录', expected: '登录成功', remark: '主链路', actual: '通过' },
+            ],
+          },
+        ];
+      }
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.getCurrentEditorCaseSnapshot = function() {
+          return { ok: true, hasContext: false, scope: 'editor', items: [] };
+        };
+      }
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await page.fill('#assistantInput', '现在的页面有什么用例');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages')).toContainText('当前页面没有正在编辑或查看的用例');
+    await expect(page.locator('#assistantMessages')).not.toContainText('当前正在查看用例：执行文件A');
+    await expect(page.locator('#assistantMessages')).not.toContainText('执行结果');
   });
 
   test('当前页面用例优先返回正在编辑用例而非全库', async ({ page }) => {
@@ -461,6 +685,10 @@ test.describe('全局AI助手', () => {
                 module: '技能',
                 title: '狼人成长技能展示',
                 priority: 'P1',
+                precondition: '角色已解锁',
+                steps: '进入战斗，触发成长技能',
+                expected: '技能展示正确',
+                remark: '覆盖主流程',
               },
               {
                 index: 2,
@@ -469,6 +697,10 @@ test.describe('全局AI助手', () => {
                 module: '结算',
                 title: '技能冷却校验',
                 priority: 'P1',
+                precondition: '技能进入冷却',
+                steps: '等待冷却完成',
+                expected: '冷却时间正确',
+                remark: '边界值5秒',
               },
             ],
           };
@@ -479,17 +711,354 @@ test.describe('全局AI助手', () => {
     });
     await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
 
-    await page.fill('#assistantInput', '当前页面的用例有哪些');
+    await page.fill('#assistantInput', '现在的页面有什么用例');
     await page.click('#assistantSendBtn');
 
     await expect(page.locator('#assistantMessages')).toContainText('当前正在编辑用例：狼人技能优化');
+    await expect(page.locator('#assistantMessages')).toContainText('当前页面用例明细（完整字段）');
+    await expect(page.locator('#assistantMessages')).toContainText('前置条件');
+    await expect(page.locator('#assistantMessages')).toContainText('步骤');
+    await expect(page.locator('#assistantMessages')).toContainText('预期结果');
+    await expect(page.locator('#assistantMessages')).toContainText('备注');
     await expect(page.locator('#assistantMessages')).toContainText('狼人成长技能展示');
     await expect(page.locator('#assistantMessages')).toContainText('技能冷却校验');
+    await expect(page.locator('#assistantMessages')).toContainText('角色已解锁');
+    await expect(page.locator('#assistantMessages')).toContainText('覆盖主流程');
     await expect(page.locator('#assistantMessages')).not.toContainText('登录主流程');
     await expect(page.locator('#assistantMessages')).not.toContainText('支付异常链路');
+
+    const tableMeta = await page.evaluate(() => {
+      var cards = document.querySelectorAll('#assistantMessages .assistant-msg.ai');
+      if (!cards || !cards.length) {
+        return {
+          headers: [],
+          overflowX: '',
+          tableMinWidth: '',
+          tableLayout: '',
+          cellWhiteSpace: '',
+          cellWordBreak: '',
+          cellOverflowWrap: '',
+          hasCaseTable: false,
+          hasProxyBar: false,
+          hasProxyThumb: false,
+          proxyThumbWidth: 0,
+        };
+      }
+      var last = cards[cards.length - 1];
+      var wrapper = last ? last.querySelector('.assistant-case-table-scroll') : null;
+      var proxy = last ? last.querySelector('.assistant-case-table-scrollbar') : null;
+      var thumb = proxy ? proxy.querySelector('.assistant-table-scrollbar-thumb') : null;
+      var table = wrapper ? wrapper.querySelector('table.assistant-case-table') : null;
+      var firstDataCell = table ? table.querySelector('tbody td') : null;
+      var scrollableWidth = wrapper ? Math.max(0, (wrapper.scrollWidth || 0) - (wrapper.clientWidth || 0)) : 0;
+      var headers = [];
+      if (table) {
+        headers = Array.prototype.map.call(table.querySelectorAll('thead th'), function(th) {
+          return String(th && th.textContent ? th.textContent : '').trim();
+        });
+      }
+      return {
+        headers: headers,
+        overflowX: wrapper ? window.getComputedStyle(wrapper).overflowX : '',
+        wrapperScrollbarWidth: wrapper ? window.getComputedStyle(wrapper).getPropertyValue('scrollbar-width') : '',
+        tableMinWidth: table ? window.getComputedStyle(table).minWidth : '',
+        tableLayout: table ? window.getComputedStyle(table).tableLayout : '',
+        cellWhiteSpace: firstDataCell ? window.getComputedStyle(firstDataCell).whiteSpace : '',
+        cellWordBreak: firstDataCell ? window.getComputedStyle(firstDataCell).wordBreak : '',
+        cellOverflowWrap: firstDataCell ? window.getComputedStyle(firstDataCell).overflowWrap : '',
+        hasCaseTable: Boolean(table),
+        hasProxyBar: Boolean(proxy),
+        hasProxyThumb: Boolean(thumb),
+        proxyThumbWidth: thumb ? (parseFloat(window.getComputedStyle(thumb).width || '0') || 0) : 0,
+        scrollableWidth: scrollableWidth,
+      };
+    });
+    expect(tableMeta.hasCaseTable).toBeTruthy();
+    expect(tableMeta.headers[0]).toBe('序号');
+    expect(tableMeta.headers[1]).toBe('ID');
+    expect(tableMeta.headers).not.toContain('执行结果');
+    expect(tableMeta.overflowX === 'auto' || tableMeta.overflowX === 'scroll').toBeTruthy();
+    if (tableMeta.wrapperScrollbarWidth) {
+      expect(tableMeta.wrapperScrollbarWidth.trim()).toBe('none');
+    }
+    expect(tableMeta.tableLayout).toBe('fixed');
+    expect(parseFloat(tableMeta.tableMinWidth || '0')).toBeGreaterThanOrEqual(1300);
+    expect(tableMeta.cellWhiteSpace).toBe('pre-wrap');
+    expect(tableMeta.cellWordBreak).toBe('break-word');
+    expect(tableMeta.cellOverflowWrap).toBe('anywhere');
+    expect(tableMeta.hasProxyBar).toBeTruthy();
+    expect(tableMeta.hasProxyThumb).toBeTruthy();
+    expect(tableMeta.proxyThumbWidth).toBeGreaterThan(20);
+    expect(tableMeta.scrollableWidth).toBeGreaterThan(0);
   });
 
-  test('模型误判 query_page_data 时仍应优先返回用例列表', async ({ page }) => {
+  test('当前页面用例查询支持条件筛选（和技能无关）', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.getCurrentEditorCaseSnapshot = function() {
+          return {
+            ok: true,
+            hasContext: true,
+            scope: 'editor',
+            projectId: '2001',
+            caseFile: {
+              id: '95',
+              name: '狼人技能优化',
+              projectId: '2001',
+              versionId: '301',
+            },
+            searchText: '',
+            total: 6,
+            totalAll: 6,
+            truncated: false,
+            items: [
+              { index: 1, sourceIndex: 1, id: '7582', module: '通用', title: '技能冷却', priority: 'P1', precondition: '技能解锁', steps: '释放技能', expected: '冷却正常', remark: '' },
+              { index: 2, sourceIndex: 2, id: '7587', module: '通用', title: '死亡复活', priority: 'P1', precondition: '角色死亡', steps: '触发复活', expected: '可复活', remark: '' },
+              { index: 3, sourceIndex: 3, id: '7588', module: '通用', title: '技能演示', priority: 'P1', precondition: '演示开关开启', steps: '进入演示页', expected: '演示正常', remark: '' },
+              { index: 4, sourceIndex: 4, id: '7589', module: '通用', title: '联机', priority: 'P1', precondition: '网络正常', steps: '创建房间', expected: '联机成功', remark: '' },
+              { index: 5, sourceIndex: 5, id: '7601', module: '地图', title: '地图探索', priority: 'P1', precondition: '进入地图', steps: '移动探索', expected: '地图可交互', remark: '' },
+              { index: 6, sourceIndex: 6, id: '7602', module: '技能效果', title: '蓄力吞噬', priority: 'P1', precondition: '技能蓄力', steps: '释放吞噬', expected: '造成伤害', remark: '' },
+            ],
+          };
+        };
+      }
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await page.fill('#assistantInput', '当前页面中有哪些用例和技能无关的？');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages')).toContainText('当前正在编辑用例：狼人技能优化');
+    await expect(page.locator('#assistantMessages')).toContainText('已按条件过滤：排除“技能”');
+    await expect(page.locator('#assistantMessages')).toContainText('当前页面用例明细（完整字段）');
+    await expect(page.locator('#assistantMessages')).toContainText('死亡复活');
+    await expect(page.locator('#assistantMessages')).toContainText('联机');
+    await expect(page.locator('#assistantMessages')).toContainText('地图探索');
+    await expect(page.locator('#assistantMessages')).not.toContainText('技能冷却');
+    await expect(page.locator('#assistantMessages')).not.toContainText('技能演示');
+    await expect(page.locator('#assistantMessages')).not.toContainText('蓄力吞噬');
+  });
+
+  test('助手用例表格支持展开完整视图并可关闭，刷新后自动关闭', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.getCurrentEditorCaseSnapshot = function() {
+          return {
+            ok: true,
+            hasContext: true,
+            scope: 'editor',
+            contextSource: 'case-library',
+            projectId: '2001',
+            caseFile: { id: '48', name: '狼人技能优化', projectId: '2001', versionId: '301' },
+            searchText: '',
+            total: 3,
+            totalAll: 3,
+            truncated: false,
+            items: [
+              { index: 1, sourceIndex: 1, id: '9001', module: '技能', title: '狼人成长技能展示', priority: 'P1', precondition: '角色已解锁', steps: '进入战斗，触发成长技能', expected: '技能展示正确', remark: '覆盖主流程' },
+              { index: 2, sourceIndex: 2, id: '9002', module: '结算', title: '技能冷却校验', priority: 'P1', precondition: '技能进入冷却', steps: '等待冷却完成', expected: '冷却时间正确', remark: '边界值5秒' },
+              { index: 3, sourceIndex: 3, id: '9003', module: '联机', title: '多人联机稳定性', priority: 'P1', precondition: '网络良好', steps: '重复进出房间并结算', expected: '流程稳定无报错', remark: '长文本备注用于验证滚动与换行展示，确保完整可读' },
+            ],
+          };
+        };
+      }
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await page.fill('#assistantInput', '现在的页面有什么用例');
+    await page.click('#assistantSendBtn');
+
+    const expandBtn = page.locator('#assistantMessages .assistant-case-table-expand-btn').last();
+    await expect(expandBtn).toBeVisible();
+    await expandBtn.click();
+    await expect(page.locator('#assistantCasePreview')).not.toHaveClass(/hidden/);
+
+    const previewMeta = await page.evaluate(() => {
+      var body = document.getElementById('assistantCasePreviewBody');
+      var table = body ? body.querySelector('table.assistant-case-table') : null;
+      var proxy = body ? body.querySelector('.assistant-case-table-scrollbar') : null;
+      var thumb = proxy ? proxy.querySelector('.assistant-table-scrollbar-thumb') : null;
+      var previewScroll = body ? body.querySelector('.assistant-case-preview-table-view') : null;
+      var firstCell = table ? table.querySelector('tbody td') : null;
+      var closeBtn = document.getElementById('assistantCasePreviewClose');
+      return {
+        hasTable: Boolean(table),
+        bodyButtonCount: body ? body.querySelectorAll('button').length : 0,
+        hasProxyThumb: Boolean(thumb),
+        proxyThumbWidth: thumb ? (parseFloat(window.getComputedStyle(thumb).width || '0') || 0) : 0,
+        previewOverflowX: previewScroll ? window.getComputedStyle(previewScroll).overflowX : '',
+        hasTempCaseViewClass: previewScroll ? previewScroll.classList.contains('temp-case-view') : false,
+        previewScrollbarWidth: previewScroll ? window.getComputedStyle(previewScroll).getPropertyValue('scrollbar-width') : '',
+        tableLayout: table ? window.getComputedStyle(table).tableLayout : '',
+        tableMinWidth: table ? (parseFloat(window.getComputedStyle(table).minWidth || '0') || 0) : 0,
+        cellWhiteSpace: firstCell ? window.getComputedStyle(firstCell).whiteSpace : '',
+        cellWordBreak: firstCell ? window.getComputedStyle(firstCell).wordBreak : '',
+        cellOverflowWrap: firstCell ? window.getComputedStyle(firstCell).overflowWrap : '',
+        closeBtnDisplay: closeBtn ? window.getComputedStyle(closeBtn).display : '',
+        closeBtnAlignItems: closeBtn ? window.getComputedStyle(closeBtn).alignItems : '',
+        closeBtnJustifyContent: closeBtn ? window.getComputedStyle(closeBtn).justifyContent : '',
+      };
+    });
+    expect(previewMeta.hasTable).toBeTruthy();
+    expect(previewMeta.bodyButtonCount).toBe(0);
+    expect(previewMeta.hasProxyThumb).toBeTruthy();
+    expect(previewMeta.proxyThumbWidth).toBeGreaterThan(20);
+    expect(previewMeta.previewOverflowX === 'auto' || previewMeta.previewOverflowX === 'scroll').toBeTruthy();
+    expect(previewMeta.hasTempCaseViewClass).toBeTruthy();
+    if (previewMeta.previewScrollbarWidth) {
+      expect(previewMeta.previewScrollbarWidth.trim()).toBe('none');
+    }
+    expect(previewMeta.tableLayout).toBe('fixed');
+    expect(previewMeta.tableMinWidth).toBeGreaterThanOrEqual(1300);
+    expect(previewMeta.cellWhiteSpace).toBe('pre-wrap');
+    expect(previewMeta.cellWordBreak).toBe('break-word');
+    expect(previewMeta.cellOverflowWrap).toBe('anywhere');
+    expect(previewMeta.closeBtnDisplay).toContain('flex');
+    expect(previewMeta.closeBtnAlignItems).toBe('center');
+    expect(previewMeta.closeBtnJustifyContent).toBe('center');
+
+    await page.click('#assistantCasePreviewClose');
+    await expect(page.locator('#assistantCasePreview')).toHaveClass(/hidden/);
+
+    await expandBtn.click();
+    await expect(page.locator('#assistantCasePreview')).not.toHaveClass(/hidden/);
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForSelector('#assistantCasePreview', { state: 'attached' });
+    await expect(page.locator('#assistantCasePreview')).toHaveClass(/hidden/);
+  });
+
+  test('在用例执行页查看用例时应返回当前查看用例条目', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.goto(base + '/case-exec.html?tab=tempexec');
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.waitForSelector('#assistantLauncherBtn');
+    await page.evaluate((mid) => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.applyPatch !== 'function') return;
+      window.app.assistantSettingsApi.applyPatch(
+        { assistantEnabled: true, assistantModelId: mid },
+        { source: 'assistant-ui', allowSelfDisable: true }
+      );
+    }, modelId);
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecActiveId = 'exec-file-1';
+        window.app.state.tempExecActiveFileId = 'exec-file-1';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-file-1',
+            name: '执行文件A',
+            projectId: '2001',
+            versionId: '301',
+            cases: [
+              {
+                id: 'te-1',
+                module: '登录',
+                title: '账号密码登录',
+                priority: 'P1',
+                preconditions: '账号已注册',
+                steps: '输入账号密码并登录',
+                expected: '登录成功',
+                remark: '主链路',
+                actual: '通过',
+              },
+              {
+                id: 'te-2',
+                module: '支付',
+                title: '余额不足支付失败',
+                priority: 'P1',
+                preconditions: '余额不足',
+                steps: '提交支付',
+                expected: '提示余额不足',
+                remark: '资金不足',
+                actual: '失败',
+              },
+            ],
+          },
+        ];
+      }
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await page.fill('#assistantInput', '现在的页面有什么用例');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages')).toContainText('当前正在查看用例：执行文件A');
+    await expect(page.locator('#assistantMessages')).toContainText('当前页面用例明细（完整字段）');
+    await expect(page.locator('#assistantMessages')).toContainText('账号密码登录');
+    await expect(page.locator('#assistantMessages')).toContainText('余额不足支付失败');
+    await expect(page.locator('#assistantMessages')).toContainText('主链路');
+    await expect(page.locator('#assistantMessages')).toContainText('资金不足');
+    await expect(page.locator('#assistantMessages')).toContainText('通过');
+    await expect(page.locator('#assistantMessages')).toContainText('失败');
+
+    const execHeaders = await page.evaluate(() => {
+      var cards = document.querySelectorAll('#assistantMessages .assistant-msg.ai');
+      if (!cards || !cards.length) return [];
+      var last = cards[cards.length - 1];
+      var table = last ? last.querySelector('table.assistant-case-table') : null;
+      if (!table) return [];
+      return Array.prototype.map.call(table.querySelectorAll('thead th'), function(th) {
+        return String(th && th.textContent ? th.textContent : '').trim();
+      });
+    });
+    expect(execHeaders[0]).toBe('序号');
+    expect(execHeaders[1]).toBe('ID');
+    expect(execHeaders).toContain('执行结果');
+  });
+
+  test('模型误判 query_page_data 时仍应优先返回当前页面用例结果', async ({ page }) => {
     const modelId = 'assistant-model-1';
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
@@ -514,11 +1083,11 @@ test.describe('全局AI助手', () => {
     });
     await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
 
-    await page.fill('#assistantInput', '当前页面都有什么用例');
+    await page.fill('#assistantInput', '现在的页面有什么用例');
     await page.click('#assistantSendBtn');
 
-    await expect(page.locator('#assistantMessages')).toContainText('当前用例列表');
-    await expect(page.locator('#assistantMessages')).toContainText('登录主流程');
+    await expect(page.locator('#assistantMessages')).toContainText('当前页面没有正在编辑或查看的用例');
+    await expect(page.locator('#assistantMessages')).toContainText('1. 进入“用例库 -> 查看&编辑”，打开一个用例文件');
     await expect(page.locator('#assistantMessages')).not.toContainText('按你的意图返回页面数据');
   });
 

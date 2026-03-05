@@ -12,6 +12,9 @@
   var messagesEl = null;
   var inputEl = null;
   var sendBtn = null;
+  var casePreview = null;
+  var casePreviewCloseBtn = null;
+  var casePreviewBody = null;
 
   var historyLimit = 80;
   var conversationHistoryLimit = 12;
@@ -51,6 +54,14 @@
       '    <button id="assistantSendBtn" type="button">发送</button>',
       '  </div>',
       '</section>',
+      '<section class="assistant-case-preview hidden" id="assistantCasePreview" aria-label="助手用例完整视图" aria-hidden="true">',
+      '  <div class="assistant-case-preview-dialog">',
+      '    <header class="assistant-case-preview-head">',
+      '      <button class="assistant-case-preview-close" id="assistantCasePreviewClose" type="button" aria-label="关闭完整视图">×</button>',
+      '    </header>',
+      '    <div class="assistant-case-preview-body" id="assistantCasePreviewBody"></div>',
+      '  </div>',
+      '</section>',
     ].join('\n');
     document.body.appendChild(mount);
   }
@@ -79,6 +90,455 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  function renderPlainMessageHtml(text) {
+    return escapeHtml(text || '').replace(/\n/g, '<br/>');
+  }
+
+  function fallbackCopyText(text) {
+    var value = String(text || '');
+    if (!value) return false;
+    if (typeof document === 'undefined' || !document.body) return false;
+    var textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.setAttribute('readonly', 'readonly');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-9999px';
+    textarea.style.left = '-9999px';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    var ok = false;
+    try {
+      textarea.focus();
+      textarea.select();
+      if (typeof textarea.setSelectionRange === 'function') {
+        textarea.setSelectionRange(0, textarea.value.length);
+      }
+      if (typeof document.execCommand === 'function') {
+        ok = document.execCommand('copy') === true;
+      }
+    } catch (err) {
+      ok = false;
+    }
+    document.body.removeChild(textarea);
+    return ok;
+  }
+
+  async function copyTextToClipboard(text) {
+    var value = String(text || '');
+    if (!value) return false;
+    try {
+      if (typeof navigator !== 'undefined'
+        && navigator.clipboard
+        && typeof navigator.clipboard.writeText === 'function') {
+        await navigator.clipboard.writeText(value);
+        return true;
+      }
+    } catch (err) {
+      // fallback below
+    }
+    return fallbackCopyText(value);
+  }
+
+  function parseMarkdownCodeSegments(text) {
+    var lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+    var segments = [];
+    var textBuffer = [];
+    var codeBuffer = [];
+    var inCode = false;
+    var codeLang = '';
+
+    function pushTextBuffer() {
+      if (!textBuffer.length) return;
+      segments.push({ type: 'text', content: textBuffer.join('\n') });
+      textBuffer = [];
+    }
+
+    function pushCodeBuffer() {
+      segments.push({ type: 'code', lang: codeLang, content: codeBuffer.join('\n') });
+      codeBuffer = [];
+      codeLang = '';
+    }
+
+    for (var i = 0; i < lines.length; i += 1) {
+      var line = lines[i];
+      var trimmed = String(line || '').trim();
+      if (trimmed.indexOf('```') === 0) {
+        if (inCode) {
+          pushCodeBuffer();
+          inCode = false;
+        } else {
+          pushTextBuffer();
+          inCode = true;
+          codeLang = trimmed.slice(3).trim();
+        }
+        continue;
+      }
+      if (inCode) {
+        codeBuffer.push(line);
+      } else {
+        textBuffer.push(line);
+      }
+    }
+
+    if (inCode) {
+      pushCodeBuffer();
+    } else {
+      pushTextBuffer();
+    }
+    return segments;
+  }
+
+  function isMarkdownTableRow(line) {
+    var text = String(line || '').trim();
+    if (!text) return false;
+    return text.indexOf('|') !== -1;
+  }
+
+  function isMarkdownTableSeparator(line) {
+    var text = String(line || '').trim();
+    if (!text) return false;
+    if (text.charAt(0) === '|') text = text.slice(1);
+    if (text.charAt(text.length - 1) === '|') text = text.slice(0, -1);
+    var cells = text.split('|');
+    if (cells.length < 2) return false;
+    for (var i = 0; i < cells.length; i += 1) {
+      var cell = String(cells[i] || '').trim();
+      if (!/^:?-{3,}:?$/.test(cell)) return false;
+    }
+    return true;
+  }
+
+  function parseMarkdownTableRow(line) {
+    var text = String(line || '').trim();
+    if (text.charAt(0) === '|') text = text.slice(1);
+    if (text.charAt(text.length - 1) === '|') text = text.slice(0, -1);
+    return text.split('|').map(function(cell) {
+      return String(cell || '').trim();
+    });
+  }
+
+  function normalizeMarkdownTableRow(cells, size) {
+    var list = Array.isArray(cells) ? cells.slice() : [];
+    var colSize = Number(size);
+    if (!Number.isFinite(colSize) || colSize <= 0) colSize = 1;
+    if (list.length > colSize) {
+      var overflow = list.slice(colSize - 1).join(' | ');
+      list = list.slice(0, colSize - 1);
+      list.push(overflow);
+    }
+    while (list.length < colSize) list.push('');
+    return list;
+  }
+
+  function renderInlineMarkdown(text) {
+    var safe = escapeHtml(text || '');
+    return safe.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  }
+
+  function normalizeAssistantHeaderText(cell) {
+    return String(cell || '').replace(/\s+/g, '');
+  }
+
+  function resolveAssistantCaseTableMeta(headerCells) {
+    var headers = Array.isArray(headerCells) ? headerCells : [];
+    var normalized = headers.map(normalizeAssistantHeaderText);
+    var required = ['序号', 'ID', '模块', '标题', '优先级', '前置条件', '步骤', '预期结果', '备注'];
+    var i = 0;
+    for (i = 0; i < required.length; i += 1) {
+      if (normalized.indexOf(required[i]) === -1) {
+        return { isCaseTable: false, hasExecutionResult: false };
+      }
+    }
+    var hasExecutionResult = normalized.indexOf('执行结果') !== -1;
+    return { isCaseTable: true, hasExecutionResult: hasExecutionResult };
+  }
+
+  function renderMarkdownTableHtml(headerCells, rowCells) {
+    var headers = Array.isArray(headerCells) ? headerCells : [];
+    var rows = Array.isArray(rowCells) ? rowCells : [];
+    if (!headers.length) return '';
+    var tableMeta = resolveAssistantCaseTableMeta(headers);
+    var isCaseTable = tableMeta.isCaseTable === true;
+    var caseTypeClass = tableMeta.hasExecutionResult ? 'assistant-case-table-exec' : 'assistant-case-table-no-exec';
+    var tableClass = isCaseTable
+      ? ('assistant-msg-table assistant-case-table ' + caseTypeClass)
+      : 'assistant-msg-table';
+    var wrapperClass = isCaseTable
+      ? 'assistant-table-scroll assistant-case-table-scroll'
+      : 'assistant-table-scroll';
+    var head = '<thead><tr>' + headers.map(function(cell) {
+      return '<th>' + renderInlineMarkdown(cell) + '</th>';
+    }).join('') + '</tr></thead>';
+    var body = '';
+    if (rows.length) {
+      body = '<tbody>' + rows.map(function(row) {
+        var cells = normalizeMarkdownTableRow(row, headers.length);
+        return '<tr>' + cells.map(function(cell) {
+          return '<td>' + renderInlineMarkdown(cell) + '</td>';
+        }).join('') + '</tr>';
+      }).join('') + '</tbody>';
+    }
+    if (!isCaseTable) {
+      return '<div class="' + wrapperClass + '"><table class="' + tableClass + '">' + head + body + '</table></div>';
+    }
+    return (
+      '<div class="assistant-case-table-wrap">' +
+        '<div class="assistant-case-table-actions">' +
+          '<button type="button" class="assistant-case-table-expand-btn">展开查看</button>' +
+        '</div>' +
+        '<div class="' + wrapperClass + '">' +
+          '<table class="' + tableClass + '">' + head + body + '</table>' +
+        '</div>' +
+        '<div class="assistant-table-scrollbar assistant-case-table-scrollbar">' +
+          '<div class="assistant-table-scrollbar-track">' +
+            '<div class="assistant-table-scrollbar-thumb"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderMarkdownTextSegmentHtml(text) {
+    var lines = String(text || '').split('\n');
+    var parts = [];
+    var i = 0;
+    while (i < lines.length) {
+      var line = lines[i];
+      if (!String(line || '').trim()) {
+        i += 1;
+        continue;
+      }
+      if (i + 1 < lines.length && isMarkdownTableRow(lines[i]) && isMarkdownTableSeparator(lines[i + 1])) {
+        var headerCells = parseMarkdownTableRow(lines[i]);
+        i += 2;
+        var tableRows = [];
+        while (i < lines.length) {
+          var rowLine = lines[i];
+          if (!String(rowLine || '').trim()) break;
+          if (!isMarkdownTableRow(rowLine)) break;
+          tableRows.push(parseMarkdownTableRow(rowLine));
+          i += 1;
+        }
+        parts.push(renderMarkdownTableHtml(headerCells, tableRows));
+        continue;
+      }
+      var paragraph = [];
+      while (i < lines.length) {
+        var paraLine = lines[i];
+        if (!String(paraLine || '').trim()) break;
+        if (i + 1 < lines.length && isMarkdownTableRow(lines[i]) && isMarkdownTableSeparator(lines[i + 1])) break;
+        paragraph.push(paraLine);
+        i += 1;
+      }
+      if (paragraph.length) {
+        parts.push('<p>' + renderInlineMarkdown(paragraph.join('\n')).replace(/\n/g, '<br/>') + '</p>');
+      }
+    }
+    return parts.join('');
+  }
+
+  function renderMarkdownMessageHtml(text) {
+    var segments = parseMarkdownCodeSegments(text || '');
+    var html = [];
+    for (var i = 0; i < segments.length; i += 1) {
+      var segment = segments[i];
+      if (!segment) continue;
+      if (segment.type === 'code') {
+        var langAttr = segment.lang ? (' data-lang="' + escapeHtml(segment.lang) + '"') : '';
+        html.push(
+          '<div class="assistant-code-block">'
+          + '<button class="assistant-code-copy-btn" type="button">复制</button>'
+          + '<pre><code' + langAttr + '>' + escapeHtml(segment.content || '') + '</code></pre>'
+          + '</div>'
+        );
+      } else {
+        html.push(renderMarkdownTextSegmentHtml(segment.content || ''));
+      }
+    }
+    return html.join('');
+  }
+
+  function refreshAssistantCaseTableScrollWidth(wrap) {
+    if (!wrap || !wrap.querySelector) return;
+    var mainScroll = wrap.querySelector('.assistant-case-table-scroll');
+    var proxyScroll = wrap.querySelector('.assistant-case-table-scrollbar');
+    var proxyTrack = proxyScroll && proxyScroll.querySelector ? proxyScroll.querySelector('.assistant-table-scrollbar-track') : null;
+    var proxyThumb = proxyScroll && proxyScroll.querySelector ? proxyScroll.querySelector('.assistant-table-scrollbar-thumb') : null;
+    var table = mainScroll && mainScroll.querySelector ? mainScroll.querySelector('table.assistant-case-table') : null;
+    if (!mainScroll || !proxyScroll || !proxyTrack || !proxyThumb || !table) return;
+    var totalWidth = Math.max(Number(table.scrollWidth) || 0, Number(mainScroll.scrollWidth) || 0);
+    var viewportWidth = Number(mainScroll.clientWidth) || 0;
+    var scrollableWidth = totalWidth - viewportWidth;
+    var trackWidth = Number(proxyTrack.clientWidth) || 0;
+    if (trackWidth <= 0) trackWidth = Number(proxyScroll.clientWidth) || 0;
+    var scrollable = scrollableWidth > 1 && trackWidth > 0;
+    proxyScroll.classList.toggle('is-scrollable', scrollable);
+    if (!scrollable) {
+      proxyThumb.style.width = Math.max(trackWidth - 2, 0) + 'px';
+      proxyThumb.style.transform = 'translateX(0px)';
+      return;
+    }
+    var ratio = viewportWidth / totalWidth;
+    var thumbWidth = Math.round(trackWidth * ratio);
+    if (thumbWidth < 36) thumbWidth = 36;
+    if (thumbWidth > trackWidth) thumbWidth = trackWidth;
+    var thumbMax = trackWidth - thumbWidth;
+    var scrollLeft = Number(mainScroll.scrollLeft) || 0;
+    var thumbLeft = thumbMax > 0 ? Math.round((scrollLeft / scrollableWidth) * thumbMax) : 0;
+    if (!Number.isFinite(thumbLeft) || thumbLeft < 0) thumbLeft = 0;
+    if (thumbLeft > thumbMax) thumbLeft = thumbMax;
+    proxyThumb.style.width = thumbWidth + 'px';
+    proxyThumb.style.transform = 'translateX(' + thumbLeft + 'px)';
+  }
+
+  function setupAssistantCaseTableBehaviors(root) {
+    var scope = root && root.querySelectorAll ? root : null;
+    if (!scope) return;
+    var wraps = scope.querySelectorAll('.assistant-case-table-wrap');
+    for (var i = 0; i < wraps.length; i += 1) {
+      var wrap = wraps[i];
+      if (!wrap) continue;
+      var mainScroll = wrap.querySelector('.assistant-case-table-scroll');
+      var proxyScroll = wrap.querySelector('.assistant-case-table-scrollbar');
+      var proxyTrack = proxyScroll && proxyScroll.querySelector ? proxyScroll.querySelector('.assistant-table-scrollbar-track') : null;
+      var proxyThumb = proxyScroll && proxyScroll.querySelector ? proxyScroll.querySelector('.assistant-table-scrollbar-thumb') : null;
+      if (!mainScroll || !proxyScroll || !proxyTrack || !proxyThumb) continue;
+      if (wrap._assistantScrollSyncBound !== true) {
+        (function(mainEl, proxyEl, trackEl, thumbEl, wrapEl) {
+          var dragging = false;
+          var startClientX = 0;
+          var startScrollLeft = 0;
+
+          function resolveMetrics() {
+            var totalWidth = Number(mainEl.scrollWidth) || 0;
+            var viewportWidth = Number(mainEl.clientWidth) || 0;
+            var scrollableWidth = totalWidth - viewportWidth;
+            var trackWidth = Number(trackEl.clientWidth) || 0;
+            var thumbWidth = Number(thumbEl.offsetWidth) || 0;
+            var thumbMax = trackWidth - thumbWidth;
+            return {
+              scrollableWidth: scrollableWidth > 0 ? scrollableWidth : 0,
+              thumbMax: thumbMax > 0 ? thumbMax : 0,
+            };
+          }
+
+          function handleDragMove(ev) {
+            if (!dragging) return;
+            var metrics = resolveMetrics();
+            if (!metrics.scrollableWidth || !metrics.thumbMax) return;
+            var deltaX = (Number(ev.clientX) || 0) - startClientX;
+            var ratio = deltaX / metrics.thumbMax;
+            var next = startScrollLeft + ratio * metrics.scrollableWidth;
+            if (!Number.isFinite(next) || next < 0) next = 0;
+            if (next > metrics.scrollableWidth) next = metrics.scrollableWidth;
+            mainEl.scrollLeft = next;
+            refreshAssistantCaseTableScrollWidth(wrapEl);
+          }
+
+          function handleDragEnd() {
+            if (!dragging) return;
+            dragging = false;
+            if (typeof document !== 'undefined' && document.body && document.body.classList) {
+              document.body.classList.remove('assistant-scrollbar-dragging');
+            }
+            window.removeEventListener('mousemove', handleDragMove);
+            window.removeEventListener('mouseup', handleDragEnd);
+          }
+
+          mainEl.addEventListener('scroll', function() {
+            if (dragging) return;
+            refreshAssistantCaseTableScrollWidth(wrapEl);
+          });
+
+          trackEl.addEventListener('click', function(ev) {
+            if (ev.target === thumbEl) return;
+            var rect = trackEl.getBoundingClientRect ? trackEl.getBoundingClientRect() : null;
+            if (!rect || rect.width <= 0) return;
+            var metrics = resolveMetrics();
+            if (!metrics.scrollableWidth) return;
+            var clickX = (Number(ev.clientX) || 0) - rect.left;
+            if (clickX < 0) clickX = 0;
+            if (clickX > rect.width) clickX = rect.width;
+            var ratio = clickX / rect.width;
+            mainEl.scrollLeft = ratio * metrics.scrollableWidth;
+            refreshAssistantCaseTableScrollWidth(wrapEl);
+          });
+
+          thumbEl.addEventListener('mousedown', function(ev) {
+            if (ev.button !== 0) return;
+            var metrics = resolveMetrics();
+            if (!metrics.scrollableWidth || !metrics.thumbMax) return;
+            dragging = true;
+            startClientX = Number(ev.clientX) || 0;
+            startScrollLeft = Number(mainEl.scrollLeft) || 0;
+            if (typeof document !== 'undefined' && document.body && document.body.classList) {
+              document.body.classList.add('assistant-scrollbar-dragging');
+            }
+            window.addEventListener('mousemove', handleDragMove);
+            window.addEventListener('mouseup', handleDragEnd);
+            ev.preventDefault();
+          });
+        })(mainScroll, proxyScroll, proxyTrack, proxyThumb, wrap);
+        wrap._assistantScrollSyncBound = true;
+      }
+      refreshAssistantCaseTableScrollWidth(wrap);
+    }
+  }
+
+  function setAssistantCasePreviewVisible(visible) {
+    if (!casePreview) return;
+    var show = visible === true;
+    casePreview.classList.toggle('hidden', !show);
+    casePreview.setAttribute('aria-hidden', show ? 'false' : 'true');
+    if (typeof document !== 'undefined' && document.body && document.body.classList) {
+      document.body.classList.toggle('assistant-case-preview-open', show);
+    }
+    if (!show && casePreviewBody) {
+      casePreviewBody.innerHTML = '';
+    }
+  }
+
+  function closeAssistantCasePreview() {
+    setAssistantCasePreviewVisible(false);
+  }
+
+  function openAssistantCasePreviewFromButton(button) {
+    if (!button || !button.closest || !casePreviewBody) return;
+    var wrap = button.closest('.assistant-case-table-wrap');
+    if (!wrap || !wrap.querySelector) return;
+    var sourceTable = wrap.querySelector('table.assistant-case-table');
+    if (!sourceTable) return;
+
+    casePreviewBody.innerHTML = '';
+
+    var previewWrap = document.createElement('div');
+    previewWrap.className = 'assistant-case-table-wrap assistant-case-table-wrap-preview';
+
+    var mainScroll = document.createElement('div');
+    mainScroll.className = 'assistant-table-scroll assistant-case-table-scroll temp-case-view assistant-case-preview-table-view';
+    mainScroll.appendChild(sourceTable.cloneNode(true));
+    previewWrap.appendChild(mainScroll);
+
+    var proxyScroll = document.createElement('div');
+    proxyScroll.className = 'assistant-table-scrollbar assistant-case-table-scrollbar';
+    var proxyTrack = document.createElement('div');
+    proxyTrack.className = 'assistant-table-scrollbar-track';
+    var proxyThumb = document.createElement('div');
+    proxyThumb.className = 'assistant-table-scrollbar-thumb';
+    proxyTrack.appendChild(proxyThumb);
+    proxyScroll.appendChild(proxyTrack);
+    previewWrap.appendChild(proxyScroll);
+
+    casePreviewBody.appendChild(previewWrap);
+    setAssistantCasePreviewVisible(true);
+    setupAssistantCaseTableBehaviors(casePreviewBody);
+  }
+
+  function handleAssistantWindowResize() {
+    setupAssistantCaseTableBehaviors(messagesEl);
+    setupAssistantCaseTableBehaviors(casePreviewBody);
   }
 
   function getApis() {
@@ -251,7 +711,15 @@
 
       var body = document.createElement('div');
       body.className = 'assistant-msg-body';
-      body.innerHTML = escapeHtml(msg.text || '').replace(/\n/g, '<br/>');
+      var bodyText = msg.text === undefined || msg.text === null ? '' : String(msg.text);
+      if (msg.role === 'user') {
+        body.innerHTML = renderPlainMessageHtml(bodyText);
+      } else {
+        body.innerHTML = renderMarkdownMessageHtml(bodyText);
+        if (body.querySelector && body.querySelector('.assistant-case-table-wrap')) {
+          card.classList.add('assistant-msg-has-case-table');
+        }
+      }
       card.appendChild(body);
 
       if (Array.isArray(msg.actions) && msg.actions.length) {
@@ -275,6 +743,7 @@
 
       messagesEl.appendChild(card);
     });
+    setupAssistantCaseTableBehaviors(messagesEl);
     scrollMessagesToBottom();
   }
 
@@ -296,6 +765,12 @@
     panel.classList.toggle('hidden', !visible);
     if (visible) {
       scrollMessagesToBottom();
+      setupAssistantCaseTableBehaviors(messagesEl);
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(function() {
+          setupAssistantCaseTableBehaviors(messagesEl);
+        });
+      }
     }
   }
 
@@ -862,6 +1337,9 @@
       '本页有哪些用例',
       '本页都有什么用例',
       '本页有什么用例',
+      '现在的页面有什么用例',
+      '现在页面有什么用例',
+      '现在页面有哪些用例',
       '有啥用例',
       '什么用例',
     ])) return true;
@@ -870,6 +1348,32 @@
       return true;
     }
     return containsAny(raw, ['查看', '查询', '获取', '读取', '列出', '哪些', '有哪些', '清单', '有什么', '有啥']);
+  }
+
+  function isCurrentPageCaseIntent(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return false;
+    if (!containsAny(raw, ['用例', 'case'])) return false;
+    if (containsAny(raw, [
+      '当前页面',
+      '当前页',
+      '本页',
+      '这个页面',
+      '该页面',
+      '这个页',
+      '该页',
+      '现在页面',
+      '现在的页面',
+      '当前的页面',
+      '当前所在页面',
+      '当前所在页',
+    ])) {
+      return true;
+    }
+    if (containsAny(raw, ['页面']) && containsAny(raw, ['当前', '现在', '本页', '这个', '该'])) {
+      return true;
+    }
+    return false;
   }
 
   function formatCaseListTime(value) {
@@ -886,20 +1390,251 @@
     return year + '-' + two(month) + '-' + two(day) + ' ' + two(hours) + ':' + two(minutes);
   }
 
-  function formatEditorCaseListResponse(result) {
-    var items = Array.isArray(result.items) ? result.items : [];
-    var caseFile = result.caseFile && typeof result.caseFile === 'object' ? result.caseFile : {};
+  function buildEditorCaseListTitle(result) {
+    var data = result && typeof result === 'object' ? result : {};
+    var caseFile = data.caseFile && typeof data.caseFile === 'object' ? data.caseFile : {};
     var caseName = caseFile.name ? String(caseFile.name) : (caseFile.id ? ('用例#' + String(caseFile.id)) : '当前用例');
     var caseId = caseFile.id === undefined || caseFile.id === null ? '' : String(caseFile.id);
+    var contextSource = data.contextSource ? String(data.contextSource) : '';
+    var prefix = contextSource === 'tempexec' ? '当前正在查看用例：' : '当前正在编辑用例：';
+    var title = prefix + caseName;
+    if (caseId) title += '（ID: ' + caseId + '）';
+    return title;
+  }
+
+  function normalizeCaseTableCell(value, fallback) {
+    var text = value === undefined || value === null ? '' : String(value);
+    text = text.replace(/\r\n/g, '\n').replace(/\n/g, ' / ').replace(/\|/g, '｜').trim();
+    if (!text) return fallback || '—';
+    return text;
+  }
+
+  function resolveCaseExecutionResult(item) {
+    var row = item && typeof item === 'object' ? item : {};
+    var candidates = [
+      row.executionResult,
+      row.actual,
+      row.status,
+      row.result,
+    ];
+    for (var i = 0; i < candidates.length; i += 1) {
+      var value = candidates[i];
+      if (value === undefined || value === null) continue;
+      var text = String(value).trim();
+      if (text) return text;
+    }
+    return '';
+  }
+
+  function shouldIncludeExecutionResultColumn(result) {
+    var source = result && result.contextSource ? String(result.contextSource) : '';
+    return source === 'tempexec';
+  }
+
+  function buildEditorCaseListTableMarkdown(items, options) {
+    var list = Array.isArray(items) ? items : [];
+    var opts = options && typeof options === 'object' ? options : {};
+    var includeExecutionResult = opts.includeExecutionResult === true;
+    var lines = [
+      includeExecutionResult
+        ? '| 序号 | ID | 模块 | 标题 | 优先级 | 前置条件 | 步骤 | 预期结果 | 备注 | 执行结果 |'
+        : '| 序号 | ID | 模块 | 标题 | 优先级 | 前置条件 | 步骤 | 预期结果 | 备注 |',
+      includeExecutionResult
+        ? '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |'
+        : '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    ];
+    for (var i = 0; i < list.length; i += 1) {
+      var row = list[i] && typeof list[i] === 'object' ? list[i] : {};
+      var fallbackIndex = Number(row.sourceIndex) || Number(row.index) || (i + 1);
+      var seq = normalizeCaseTableCell(i + 1, String(i + 1));
+      var id = normalizeCaseTableCell(row.id, '—');
+      var moduleName = normalizeCaseTableCell(row.module, '—');
+      var titleText = normalizeCaseTableCell(row.title, '未命名条目#' + fallbackIndex);
+      var priority = normalizeCaseTableCell(row.priority, '—');
+      var precondition = normalizeCaseTableCell(row.precondition || row.preconditions, '—');
+      var steps = normalizeCaseTableCell(row.steps, '—');
+      var expected = normalizeCaseTableCell(row.expected, '—');
+      var remark = normalizeCaseTableCell(row.remark, '—');
+      var cells = [
+        seq,
+        id,
+        moduleName,
+        titleText,
+        priority,
+        precondition,
+        steps,
+        expected,
+        remark,
+      ];
+      if (includeExecutionResult) {
+        cells.push(normalizeCaseTableCell(resolveCaseExecutionResult(row), '—'));
+      }
+      lines.push('| ' + cells.join(' | ') + ' |');
+    }
+    return lines.join('\n');
+  }
+
+  function splitCaseFilterKeywords(rawText) {
+    var text = String(rawText || '').trim();
+    if (!text) return [];
+    var chunks = text.split(/(?:、|,|，|\/|\\|\||\s+|以及|及|和|或|或者)+/);
+    var result = [];
+    for (var i = 0; i < chunks.length; i += 1) {
+      var token = String(chunks[i] || '').trim();
+      token = token.replace(/^[“"'`【\[\(（\s]+|[”"'`】\]\)）\s]+$/g, '');
+      token = token.replace(/^(?:与|和|跟)+/, '');
+      token = token.replace(/(?:无关|不相关|有关|相关)+$/g, '');
+      token = token.replace(/(?:用例|条目|内容|字段|标题|模块|方面|情况|的)+$/g, '');
+      token = token.replace(/^(?:用例|条目|内容|字段|标题|模块|方面|情况|的)+/, '');
+      token = token.replace(/^\s+|\s+$/g, '');
+      if (!token) continue;
+      result.push(token);
+    }
+    return result;
+  }
+
+  function pushUniqueCaseFilterKeyword(list, value) {
+    var target = Array.isArray(list) ? list : null;
+    if (!target) return;
+    var key = String(value || '').trim();
+    if (!key) return;
+    for (var i = 0; i < target.length; i += 1) {
+      if (String(target[i] || '') === key) return;
+    }
+    target.push(key);
+  }
+
+  function collectCaseFilterKeywordsByPattern(raw, pattern, bucket) {
+    if (!raw || !pattern || !Array.isArray(bucket)) return;
+    var match = null;
+    while ((match = pattern.exec(raw)) !== null) {
+      var segment = match[1] ? String(match[1]) : '';
+      var tokens = splitCaseFilterKeywords(segment);
+      for (var i = 0; i < tokens.length; i += 1) {
+        pushUniqueCaseFilterKeyword(bucket, tokens[i]);
+      }
+    }
+  }
+
+  function extractCaseListFilterInfo(text) {
+    var raw = String(text || '').trim();
+    var info = {
+      includeKeywords: [],
+      excludeKeywords: [],
+      hasFilter: false,
+    };
+    if (!raw) return info;
+
+    collectCaseFilterKeywordsByPattern(raw, /(?:和|与|跟)([^，。！？!?；;：:\n]+?)无关/g, info.excludeKeywords);
+    collectCaseFilterKeywordsByPattern(raw, /(?:和|与|跟)([^，。！？!?；;：:\n]+?)(?:不相关|没关系)/g, info.excludeKeywords);
+    collectCaseFilterKeywordsByPattern(raw, /(?:不包含|不含|不看|不要|排除)([^，。！？!?；;：:\n]+)/g, info.excludeKeywords);
+    collectCaseFilterKeywordsByPattern(raw, /除了([^，。！？!?；;：:\n]+?)(?:外|以外)/g, info.excludeKeywords);
+
+    collectCaseFilterKeywordsByPattern(raw, /(?:和|与|跟)([^，。！？!?；;：:\n]+?)有关/g, info.includeKeywords);
+    collectCaseFilterKeywordsByPattern(raw, /(?:^|[^不])(?:包含|含有|只看|仅看|只要|仅要|聚焦|关注)([^，。！？!?；;：:\n]+)/g, info.includeKeywords);
+
+    info.hasFilter = info.includeKeywords.length > 0 || info.excludeKeywords.length > 0;
+    return info;
+  }
+
+  function buildCaseListFilterLabel(filterInfo) {
+    var info = filterInfo && typeof filterInfo === 'object' ? filterInfo : {};
+    var include = Array.isArray(info.includeKeywords) ? info.includeKeywords : [];
+    var exclude = Array.isArray(info.excludeKeywords) ? info.excludeKeywords : [];
+    var parts = [];
+    if (include.length) parts.push('包含“' + include.join('”、“') + '”');
+    if (exclude.length) parts.push('排除“' + exclude.join('”、“') + '”');
+    return parts.join('，');
+  }
+
+  function buildCaseItemSearchText(item) {
+    var row = item && typeof item === 'object' ? item : {};
+    var text = [
+      row.module,
+      row.title,
+      row.priority,
+      row.precondition,
+      row.preconditions,
+      row.steps,
+      row.expected,
+      row.remark,
+      row.executionResult,
+      row.actual,
+      row.status,
+      row.result,
+    ].map(function(value) {
+      return value === undefined || value === null ? '' : String(value);
+    }).join(' ');
+    return text.toLowerCase();
+  }
+
+  function applyCaseListFilter(items, filterInfo) {
+    var list = Array.isArray(items) ? items : [];
+    var info = filterInfo && typeof filterInfo === 'object' ? filterInfo : {};
+    var include = Array.isArray(info.includeKeywords) ? info.includeKeywords : [];
+    var exclude = Array.isArray(info.excludeKeywords) ? info.excludeKeywords : [];
+    if (!include.length && !exclude.length) return list.slice();
+    return list.filter(function(item) {
+      var text = buildCaseItemSearchText(item);
+      var i = 0;
+      if (include.length) {
+        var includeHit = false;
+        for (i = 0; i < include.length; i += 1) {
+          var includeKey = String(include[i] || '').toLowerCase();
+          if (includeKey && text.indexOf(includeKey) !== -1) {
+            includeHit = true;
+            break;
+          }
+        }
+        if (!includeHit) return false;
+      }
+      for (i = 0; i < exclude.length; i += 1) {
+        var excludeKey = String(exclude[i] || '').toLowerCase();
+        if (excludeKey && text.indexOf(excludeKey) !== -1) return false;
+      }
+      return true;
+    });
+  }
+
+  function formatFilteredEditorCaseListResponse(result, filteredItems, filterInfo) {
+    var items = Array.isArray(filteredItems) ? filteredItems : [];
+    var sourceItems = Array.isArray(result && result.items) ? result.items : [];
+    var total = Number(result && result.total);
+    if (!Number.isFinite(total) || total < 0) total = sourceItems.length;
+    var lines = [];
+    lines.push(buildEditorCaseListTitle(result));
+    var filterLabel = buildCaseListFilterLabel(filterInfo);
+    if (filterLabel) {
+      lines.push('已按条件过滤：' + filterLabel + '，命中 ' + items.length + ' / ' + total + ' 条。');
+    } else {
+      lines.push('已按条件过滤，命中 ' + items.length + ' / ' + total + ' 条。');
+    }
+    if (!items.length) {
+      lines.push('当前过滤条件下没有匹配条目。');
+      lines.push('你可以继续追问：');
+      lines.push('1. 放宽条件（例如：只排除标题含“技能”）。');
+      lines.push('2. 换更具体关键词（例如：排除“技能效果”，保留“联机”）。');
+      return lines.join('\n');
+    }
+    lines.push('当前页面用例明细（完整字段）：');
+    lines.push(buildEditorCaseListTableMarkdown(items, {
+      includeExecutionResult: shouldIncludeExecutionResultColumn(result),
+    }));
+    if (result && result.truncated) {
+      lines.push('注：当前仅在前 ' + sourceItems.length + ' 条可见条目中完成筛选。');
+    }
+    return lines.join('\n');
+  }
+
+  function formatEditorCaseListResponse(result) {
+    var items = Array.isArray(result.items) ? result.items : [];
     var searchText = result.searchText ? String(result.searchText).trim() : '';
     var total = Number(result.total);
     if (!Number.isFinite(total) || total < 0) total = items.length;
     var totalAll = Number(result.totalAll);
     if (!Number.isFinite(totalAll) || totalAll < 0) totalAll = total;
     var lines = [];
-    var title = '当前正在编辑用例：' + caseName;
-    if (caseId) title += '（ID: ' + caseId + '）';
-    lines.push(title);
+    lines.push(buildEditorCaseListTitle(result));
     if (!items.length) {
       if (searchText) {
         lines.push('当前搜索词“' + searchText + '”下没有匹配条目。');
@@ -912,27 +1647,28 @@
     if (searchText) {
       lines.push('已按搜索词“' + searchText + '”过滤，命中 ' + total + ' / ' + totalAll + ' 条：');
     } else {
-      lines.push('当前页面可见条目：');
+      lines.push('当前页面用例明细（完整字段）：');
     }
-    for (var i = 0; i < items.length; i += 1) {
-      var item = items[i] && typeof items[i] === 'object' ? items[i] : {};
-      var moduleName = item.module ? String(item.module) : '';
-      var titleText = item.title ? String(item.title) : '';
-      if (!titleText) {
-        var fallbackIndex = Number(item.sourceIndex) || Number(item.index) || (i + 1);
-        titleText = '未命名条目#' + fallbackIndex;
-      }
-      var line = (i + 1) + '. ';
-      if (moduleName) line += '[' + moduleName + '] ';
-      line += titleText;
-      var meta = [];
-      if (item.priority) meta.push('优先级: ' + String(item.priority));
-      if (item.id) meta.push('ID: ' + String(item.id));
-      if (meta.length) line += ' | ' + meta.join(' | ');
-      lines.push(line);
-    }
+    lines.push(buildEditorCaseListTableMarkdown(items, {
+      includeExecutionResult: shouldIncludeExecutionResultColumn(result),
+    }));
     if (result.truncated) {
       lines.push('已展示前 ' + items.length + ' 条，共 ' + (Number(result.total) || items.length) + ' 条。');
+    }
+    return lines.join('\n');
+  }
+
+  function formatNoEditorCaseContextResponse(result) {
+    var projectId = result && result.projectId ? String(result.projectId) : '';
+    var lines = [
+      '当前页面没有正在编辑或查看的用例。',
+      '你可以按下面步骤继续：',
+      '1. 进入“用例库 -> 查看&编辑”，打开一个用例文件。',
+    ];
+    if (projectId) {
+      lines.push('2. 或直接问我：“当前项目（' + projectId + '）有哪些用例”。');
+    } else {
+      lines.push('2. 或直接问我：“当前项目有哪些用例”。');
     }
     return lines.join('\n');
   }
@@ -940,6 +1676,9 @@
   function formatCaseListResponse(res) {
     var result = res && typeof res === 'object' ? res : {};
     var scope = result.scope === undefined || result.scope === null ? '' : String(result.scope).trim();
+    if (scope === 'editor' && (!result.caseFile || typeof result.caseFile !== 'object')) {
+      return formatNoEditorCaseContextResponse(result);
+    }
     if (scope === 'editor' || (result.caseFile && typeof result.caseFile === 'object')) {
       return formatEditorCaseListResponse(result);
     }
@@ -956,7 +1695,7 @@
       var itemCount = Number(item.itemCount);
       if (!Number.isFinite(itemCount) || itemCount < 0) itemCount = 0;
       var updated = formatCaseListTime(item.updatedAt || '');
-      lines.push((i + 1) + '. ' + name + ' | ID: ' + (item.id || '-') + ' | 条目: ' + itemCount + ' | 更新: ' + updated);
+      lines.push((i + 1) + '. ID: ' + (item.id || '-') + ' | 名称: ' + name + ' | 条目: ' + itemCount + ' | 更新: ' + updated);
     }
     if (result.truncated) {
       lines.push('已展示前 ' + items.length + ' 条，共 ' + (Number(result.total) || items.length) + ' 条。');
@@ -969,14 +1708,21 @@
     var opts = options && typeof options === 'object' ? options : {};
     if (!raw) return null;
     if (!opts.force && !isCaseListIntent(raw)) return null;
+    var filterInfo = extractCaseListFilterInfo(raw);
     var apis = getApis();
     if (!apis.assistantApi || typeof apis.assistantApi.listCurrentCases !== 'function') {
       return '当前环境不支持读取用例列表。';
     }
     setStatus('正在获取用例列表...');
     var res = null;
+    var pageScoped = opts.pageScoped === true || (opts.pageScoped !== false && isCurrentPageCaseIntent(raw));
+    var queryLimit = filterInfo && filterInfo.hasFilter ? 100 : 20;
     try {
-      res = await apis.assistantApi.listCurrentCases({ limit: 20 });
+      res = await apis.assistantApi.listCurrentCases({
+        limit: queryLimit,
+        scope: pageScoped ? 'editor' : 'project',
+        requireEditor: pageScoped,
+      });
     } catch (err) {
       res = { ok: false, reason: err && err.message ? String(err.message) : '读取异常' };
     }
@@ -985,6 +1731,15 @@
       return '获取用例列表失败：' + (res && res.reason ? res.reason : '未知错误');
     }
     setStatus('');
+    if (filterInfo && filterInfo.hasFilter) {
+      var scope = res && res.scope ? String(res.scope) : '';
+      if (scope === 'editor' || (res && res.caseFile && typeof res.caseFile === 'object')) {
+        var sourceItems = Array.isArray(res.items) ? res.items : [];
+        var filteredItems = applyCaseListFilter(sourceItems, filterInfo);
+        return formatFilteredEditorCaseListResponse(res, filteredItems, filterInfo);
+      }
+      return '该问题包含条件筛选，但当前结果仅有项目级用例文件列表。请先打开具体用例后再问我。';
+    }
     return formatCaseListResponse(res);
   }
 
@@ -1285,6 +2040,7 @@
       '2) 需要执行工具动作时：只输出 JSON，不要代码块。格式：',
       '{"action":"navigate|query_page_data|query_case_list|web_search","tab":"","query":"","response":""}',
       '约束：',
+      '- 直接回复可使用 Markdown；当信息需要结构化对比时可使用表格，当提供命令/代码/配置示例时可使用代码块。',
       '- 当用户问“当前有哪些用例/用例列表”时，action 用 query_case_list。',
       '- 当用户明确要求页面跳转时，action 用 navigate 并给出 tab。',
       '- 当用户明确要求读取页面统计数据时，action 用 query_page_data。',
@@ -1646,6 +2402,7 @@
     var prompt = [
       '你是测试助手平台内置AI助手。',
       '优先提供可执行建议，回答简洁。',
+      '你可以根据内容类型自行决定输出格式：结构化对比用 Markdown 表格，命令/代码/配置示例用 Markdown 代码块。',
       '当涉及删除、配置变更等写操作，提醒需要确认后执行。',
       '若用户询问页面数据，可提示他让你直接“获取某页面数据”。',
       '若用户询问“当前有哪些用例/用例列表”，优先直接返回列表结果，不要要求用户改写问题。',
@@ -1684,6 +2441,34 @@
     handleUserInput(text);
   }
 
+  async function handleCopyCodeButtonClick(button) {
+    if (!button) return;
+    var block = button.closest ? button.closest('.assistant-code-block') : null;
+    if (!block || !block.querySelector) return;
+    var codeEl = block.querySelector('pre code');
+    var codeText = codeEl && codeEl.textContent ? String(codeEl.textContent) : '';
+    if (!codeText) {
+      setStatus('未找到可复制内容');
+      return;
+    }
+    if (button.disabled) return;
+    button.disabled = true;
+    var ok = await copyTextToClipboard(codeText);
+    if (!button.isConnected) return;
+    if (!ok) {
+      button.disabled = false;
+      setStatus('复制失败，请手动复制');
+      return;
+    }
+    button.textContent = '已复制';
+    setStatus('代码已复制');
+    setTimeout(function() {
+      if (!button || !button.isConnected) return;
+      button.textContent = '复制';
+      button.disabled = false;
+    }, 1200);
+  }
+
   function bindUiEvents() {
     if (launcherBtn) {
       launcherBtn.addEventListener('click', function() {
@@ -1695,6 +2480,11 @@
         setPanelVisible(false);
       });
     }
+    if (casePreviewCloseBtn) {
+      casePreviewCloseBtn.addEventListener('click', function() {
+        closeAssistantCasePreview();
+      });
+    }
     if (clearBtn) {
       clearBtn.addEventListener('click', function() {
         handleClearChat();
@@ -1702,6 +2492,22 @@
     }
     if (sendBtn) {
       sendBtn.addEventListener('click', handleSend);
+    }
+    if (messagesEl) {
+      messagesEl.addEventListener('click', function(e) {
+        var node = e && e.target && e.target.closest ? e.target : null;
+        if (!node) return;
+        var expandBtn = node.closest('.assistant-case-table-expand-btn');
+        if (expandBtn) {
+          e.preventDefault();
+          openAssistantCasePreviewFromButton(expandBtn);
+          return;
+        }
+        var target = node.closest('.assistant-code-copy-btn');
+        if (!target) return;
+        e.preventDefault();
+        handleCopyCodeButtonClick(target);
+      });
     }
     if (inputEl) {
       inputEl.addEventListener('keydown', function(e) {
@@ -1749,6 +2555,7 @@
         loadHistory();
       });
       window.addEventListener('app-model-test-failed', onModelTestFailed);
+      window.addEventListener('resize', handleAssistantWindowResize);
     } catch (err) {
       // ignore
     }
@@ -1767,6 +2574,9 @@
     messagesEl = byId('assistantMessages');
     inputEl = byId('assistantInput');
     sendBtn = byId('assistantSendBtn');
+    casePreview = byId('assistantCasePreview');
+    casePreviewCloseBtn = byId('assistantCasePreviewClose');
+    casePreviewBody = byId('assistantCasePreviewBody');
 
     return Boolean(launcher && launcherBtn && panel && messagesEl && inputEl && sendBtn);
   }

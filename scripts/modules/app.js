@@ -3750,6 +3750,7 @@
       return {
         ok: true,
         scope: 'editor',
+        contextSource: 'case-library',
         projectId: snapshot.projectId === undefined || snapshot.projectId === null ? '' : String(snapshot.projectId),
         caseFile: caseFile,
         searchText: snapshot.searchText === undefined || snapshot.searchText === null ? '' : String(snapshot.searchText),
@@ -3760,16 +3761,118 @@
       };
     }
 
+    function assistantNormalizeTempExecCaseItem(item, index) {
+      var row = item && typeof item === 'object' ? item : {};
+      var pre = row.precondition !== undefined && row.precondition !== null
+        ? row.precondition
+        : row.preconditions;
+      var executionResultRaw = row.executionResult !== undefined && row.executionResult !== null
+        ? row.executionResult
+        : (row.actual !== undefined && row.actual !== null
+          ? row.actual
+          : (row.status !== undefined && row.status !== null
+            ? row.status
+            : row.result));
+      return {
+        index: index + 1,
+        sourceIndex: index + 1,
+        id: row.id === undefined || row.id === null ? '' : String(row.id),
+        module: row.module === undefined || row.module === null ? '' : String(row.module),
+        title: row.title === undefined || row.title === null ? '' : String(row.title),
+        priority: row.priority === undefined || row.priority === null ? '' : String(row.priority),
+        precondition: pre === undefined || pre === null ? '' : String(pre),
+        steps: row.steps === undefined || row.steps === null ? '' : String(row.steps),
+        expected: row.expected === undefined || row.expected === null ? '' : String(row.expected),
+        remark: row.remark === undefined || row.remark === null ? '' : String(row.remark),
+        actual: row.actual === undefined || row.actual === null ? '' : String(row.actual),
+        status: row.status === undefined || row.status === null ? '' : String(row.status),
+        result: row.result === undefined || row.result === null ? '' : String(row.result),
+        executionResult: executionResultRaw === undefined || executionResultRaw === null ? '' : String(executionResultRaw),
+        updatedAt: '',
+      };
+    }
+
+    function assistantReadTempExecCaseSnapshot(limit) {
+      var activeTab = state.activeTab ? String(state.activeTab) : '';
+      if (activeTab !== 'tempexec') return null;
+      var list = Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      var activeIdRaw = state.tempExecActiveId || state.tempExecActiveFileId || '';
+      var activeId = activeIdRaw === undefined || activeIdRaw === null ? '' : String(activeIdRaw);
+      if (!activeId || !list.length) return null;
+      var currentFile = null;
+      for (var i = 0; i < list.length; i += 1) {
+        var file = list[i] && typeof list[i] === 'object' ? list[i] : null;
+        if (!file) continue;
+        var fileId = file.id === undefined || file.id === null ? '' : String(file.id);
+        if (fileId && fileId === activeId) {
+          currentFile = file;
+          break;
+        }
+      }
+      if (!currentFile || !Array.isArray(currentFile.cases)) return null;
+      var allItems = currentFile.cases.map(function(item, idx) {
+        return assistantNormalizeTempExecCaseItem(item, idx);
+      });
+      var items = allItems.slice(0, limit);
+      var fileIdText = currentFile.id === undefined || currentFile.id === null ? '' : String(currentFile.id);
+      var caseName = currentFile.name || currentFile.file_name_clean || currentFile.fileName || '';
+      var caseFile = {
+        id: fileIdText,
+        name: caseName ? String(caseName) : (fileIdText ? ('用例#' + fileIdText) : '当前用例'),
+        projectId: currentFile.projectId === undefined || currentFile.projectId === null
+          ? (currentFile.project_id === undefined || currentFile.project_id === null ? '' : String(currentFile.project_id))
+          : String(currentFile.projectId),
+        versionId: currentFile.versionId === undefined || currentFile.versionId === null
+          ? (currentFile.version_id === undefined || currentFile.version_id === null ? '' : String(currentFile.version_id))
+          : String(currentFile.versionId),
+        updatedAt: '',
+      };
+      return {
+        ok: true,
+        scope: 'editor',
+        contextSource: 'tempexec',
+        projectId: caseFile.projectId || '',
+        caseFile: caseFile,
+        searchText: '',
+        total: allItems.length,
+        totalAll: allItems.length,
+        items: items,
+        truncated: allItems.length > items.length,
+      };
+    }
+
     function assistantListCurrentCases(options) {
       var opts = options && typeof options === 'object' ? options : {};
       var limit = Number(opts.limit);
       if (!Number.isFinite(limit) || limit <= 0) limit = 20;
       if (limit > 100) limit = 100;
+      var scope = opts.scope === undefined || opts.scope === null ? '' : String(opts.scope).trim().toLowerCase();
+      var requireEditor = opts.requireEditor === true || scope === 'editor';
+      var activeTab = state.activeTab ? String(state.activeTab) : '';
       var editorSnapshot = assistantReadEditorCaseSnapshot(limit);
       if (editorSnapshot && editorSnapshot.ok === true) {
         return Promise.resolve(editorSnapshot);
       }
+      if (activeTab === 'tempexec' || !requireEditor) {
+        var tempExecSnapshot = assistantReadTempExecCaseSnapshot(limit);
+        if (tempExecSnapshot && tempExecSnapshot.ok === true) {
+          return Promise.resolve(tempExecSnapshot);
+        }
+      }
       var projectId = assistantResolveCaseLibraryProjectId(opts);
+      if (requireEditor) {
+        return Promise.resolve({
+          ok: true,
+          scope: 'editor',
+          hasContext: false,
+          reason: 'no-active-editor',
+          projectId: projectId || '',
+          total: 0,
+          totalAll: 0,
+          items: [],
+          truncated: false,
+        });
+      }
       var apiClient = window.app && window.app.apiClient ? window.app.apiClient : null;
       if (!apiClient || typeof apiClient.listCaseFiles !== 'function') {
         return Promise.resolve({

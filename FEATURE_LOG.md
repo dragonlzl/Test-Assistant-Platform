@@ -19,6 +19,220 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：AI 助手“当前页面用例”查询改为优先返回编辑中用例
+- 功能描述：修正全局 AI 助手对“现在的页面有什么用例 / 获取当前页面用例列表”等问题的响应策略：优先返回当前正在编辑/查看的用例条目；若当前页面没有编辑上下文，不再回退全项目用例列表，而是明确提示“没有当前用例”并给出下一步操作建议。
+- 操作方式：
+  - 在助手中提问“现在的页面有什么用例”或“获取当前页面用例列表”；
+  - 若当前正处于用例编辑/查看上下文：返回该用例的可见条目（编号列表）；
+  - 若无编辑/查看上下文：返回“当前页面没有正在编辑或查看的用例”，并提供 2 条下一步建议（编号列表）。
+- 使用效果：
+  - 避免“当前页面问题却返回全项目列表”的语义偏差；
+  - 回答内容与用户页面上下文一致，且统一使用列表化输出便于阅读；
+  - 当模型误判为 `query_page_data` 时仍会优先回到“当前页面用例”语义，不再返回通用页面数据包。
+- 新增内容/接口/组件：
+  - 前端逻辑：
+    - `scripts/modules/assistant.js`
+      - 新增 `isCurrentPageCaseIntent`，识别“当前/现在页面”的用例查询语义；
+      - `tryHandleCaseListIntent` 在页面语义下调用 `listCurrentCases({ scope: 'editor', requireEditor: true })`；
+      - 新增 `formatNoEditorCaseContextResponse`，统一输出“无当前用例 + 下一步”编号列表；
+      - 扩展 `isCaseListIntent` 关键词，覆盖“现在的页面有什么用例”等自然表达；
+      - 页面上下文存在时统一返回编号列表格式（`1. ...`），并根据来源输出“当前正在编辑用例/当前正在查看用例”。
+    - `scripts/modules/app.js`
+      - `assistantListCurrentCases` 新增 `scope/requireEditor` 处理；
+      - 新增执行页上下文读取：当 `state.activeTab === 'tempexec'` 且存在活动执行文件时，返回当前执行文件下用例条目；
+      - 为返回结果增加 `contextSource`（`case-library` / `tempexec`），供助手文案区分“编辑中/查看中”；
+      - 当要求 `editor` 范围但无编辑上下文时，返回 `scope: 'editor'` 的空上下文结果，不再回退项目全量列表。
+    - `scripts/modules/caseLibrary.js`
+      - `getCurrentEditorCaseSnapshot` 放宽上下文判定：由“仅编辑卡片可见”调整为“编辑卡片可见或用例库页签处于激活”，减少误判为空。
+  - UI 自动化：
+    - `tests/ui/assistant_global.spec.js`
+      - 调整“当前页面用例”相关用例预期；
+      - 新增/更新“现在的页面有什么用例”话术覆盖；
+      - 增加列表格式断言（如 `1. [技能] ...`）；
+      - 新增“在用例执行页查看用例时应返回当前查看用例条目”用例并修复跨页面切换时序（先进入 `case-exec.html`，再注入执行上下文并打开助手）。
+- 复用说明：复用既有 `assistantApi.listCurrentCases` 和 `caseLibraryApi.getCurrentEditorCaseSnapshot` 链路，仅增加意图分流与返回策略，不新增后端接口。
+- 测试与验证：
+  - `node --check scripts/modules/assistant.js scripts/modules/app.js scripts/modules/caseLibrary.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "助手面板背景应为非透明|助手聊天框字体应更小|助手可按模型输出渲染表格与代码块|助手代码块支持点击复制|在用例执行页查看用例时应返回当前查看用例条目" --reporter=line`（5/5 通过）
+  - `APP_DB_FILE=apitest.db python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-05 修复“当前页面用例查询误返回全项目列表”问题，并补充无上下文下一步提示与编号列表输出（`scripts/modules/assistant.js`、`scripts/modules/app.js`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 补齐执行页（`tempexec`）上下文读取与文案区分（编辑中/查看中），并修复跨页面 UI 用例时序，确认“当前页面用例”链路回归通过（`scripts/modules/assistant.js`、`scripts/modules/app.js`、`scripts/modules/caseLibrary.js`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 增强“当前页面用例”条件筛选能力：针对“和X无关/不包含X/排除X”等问法新增关键词过滤解析，不再一律返回全量列表；新增 UI 用例覆盖“当前页面中有哪些用例和技能无关的”并回归通过（`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 优化“助手查看用例”展示为组件化列表（Markdown 表格）：当前页面用例改为完整字段表格输出（序号/ID/模块/标题/优先级/前置条件/步骤/预期结果/备注）；在用例执行页上下文追加“执行结果”列；并补齐执行页与编辑页的执行结果字段透传（如 `actual/status/result`）；“和技能无关”等条件筛选结果同样使用完整字段表格展示（`scripts/modules/assistant.js`、`scripts/modules/app.js`、`scripts/modules/caseLibrary.js`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 优化“助手查看用例”可读性：新增用例表格横向滚动容器（`overflow-x: auto`），并提升表格排版间距（单元格内边距/行高/字间距）与列最小宽度，避免信息挤压；普通 Markdown 表格继续可用，当前页面用例表格使用专用样式类（`scripts/modules/assistant.js`、`style.css`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 对齐“用例执行页”字段列宽策略：助手用例表格改为固定列宽 + 自动换行（按 `8em/9em/5em/12em/14em/14em/6em/7em` 等字段宽度近似字符数），并保持横向滚动容器；超出列宽内容自动换行，不再挤压同列可读性（`style.css`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 新增助手用例表格“外显横向滚动条 + 展开完整视图”能力：聊天框内表格增加外显滚动条（独立滚动条同步主表格滚动）；列表新增“展开查看”按钮，点击后在界面中间打开独立弹层完整展示表格；弹层仅支持滚动与右上角 `X` 关闭，刷新页面后默认关闭；不新增其它操作项（`scripts/modules/assistant.js`、`style.css`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 统一 ID 字段展示顺序：在当前页面表格与项目列表文本中均调整为“编号后紧跟 ID”（项目列表样式调整为 `1. ID: xxx | 名称: xxx ...`），避免 ID 位置不一致（`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-05 修复“用例库页无编辑上下文误回退执行页结果”问题：当用户询问“当前页面用例”且页面不在执行页时，`listCurrentCases` 不再回退 `tempexec` 快照；避免在用例库页误出现“执行结果”列与执行页数据泄漏（`scripts/modules/app.js`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 优化“展开查看”弹层视图：弹层表格容器对齐用例库/执行页的 `temp-case-view` 展示风格，并确保支持横向滚动（保留外显滚动条同步）；提升大表格在弹层内的阅读与滚动一致性（`scripts/modules/assistant.js`、`style.css`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 修复“滚动条未外显/无法触发”问题：将助手用例表格横向滚动条升级为自定义外显轨道+滑块（始终可见），支持鼠标拖拽滑块与点击轨道滚动，并与主表格横向滚动同步，避免受系统自动隐藏滚动条策略影响（`scripts/modules/assistant.js`、`style.css`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 对齐“展开查看”字段列宽与换行规则：助手用例表格按上下文分别映射到用例库/执行页列表宽度基线（无执行结果列参考 `#caseLibraryEditView`，含执行结果列参考 `temp-case-view` 执行列宽），统一使用 `pre-wrap + break-word + overflow-wrap:anywhere`，并增强外显滚动条可见度及弹层内固定可见性，避免“字段过挤/滚动条不可操作”问题（`style.css`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 将横向滚动条控件上移为“AI 助手聊天窗底部固定条”：新增聊天窗级外显滚动条并与当前激活用例表格同步，提升可点击面积与拖拽稳定性；面板打开、窗口变化、消息重渲染后会自动刷新滚动条状态，避免“滚动条难以选中/瞬间消失”（`scripts/modules/assistant.js`、`style.css`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 修复“聊天窗固定滚动条占满不可拖动”：为含用例表格的 AI 消息卡片增加宽度约束（随聊天窗拉伸而非按内容撑开），确保表格产生真实横向溢出；聊天窗滚动条滑块宽度改为按溢出比例计算，不再整条占满（`scripts/modules/assistant.js`、`style.css`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 按交互调整移除“聊天窗固定滚动条”控件，仅保留列表自身横向滚动条；同时保留用例表格消息卡片宽度约束，确保列表滚动条可正常触发与拖拽（`scripts/modules/assistant.js`、`style.css`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 修正“展开查看视图列宽未生效”问题：在展开弹层内显式覆盖 `temp-case-view table { width:100% }`，将助手用例表格恢复为与列表一致的固定列宽+自动换行规则（按用例库/执行页上下文分别映射），确保“每字段每行字数”在展开视图中与页面视图一致（`style.css`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 修复展开弹层交互细节：关闭按钮 `X` 改为严格居中（`inline-flex + center`）；隐藏用例表格容器原生横向滚动条，仅保留外显列表滚动条，消除“拖动时双滚动条并存”问题（`style.css`、`tests/ui/assistant_global.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assistant.js scripts/modules/app.js scripts/modules/caseLibrary.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "首问当前有哪些用例时应直接返回用例列表|获取当前页面用例列表在无编辑上下文时返回下一步提示|现在的页面有什么用例在无编辑上下文时返回下一步提示|当前页面用例优先返回正在编辑用例而非全库|当前页面用例查询支持条件筛选（和技能无关）|在用例执行页查看用例时应返回当前查看用例条目|模型误判 query_page_data 时仍应优先返回当前页面用例结果" --reporter=line`（7/7 通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --reporter=line`（24/25 通过；失败项为既有历史用例“助手默认锁定并点击引导到设置页”，与本次改动无直接耦合）
+  - `APP_DB_FILE=apitest.db python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+- 测试与验证（本次可读性增量）：
+  - `node --check scripts/modules/assistant.js scripts/modules/app.js scripts/modules/caseLibrary.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "助手可按模型输出渲染表格与代码块|当前页面用例优先返回正在编辑用例而非全库|当前页面用例查询支持条件筛选（和技能无关）|在用例执行页查看用例时应返回当前查看用例条目" --reporter=line`（4/4 通过）
+  - `APP_DB_FILE=apitest.db python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+- 测试与验证（本次列宽换行增量）：
+  - `node --check scripts/modules/assistant.js scripts/modules/app.js scripts/modules/caseLibrary.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "当前页面用例优先返回正在编辑用例而非全库|当前页面用例查询支持条件筛选（和技能无关）|在用例执行页查看用例时应返回当前查看用例条目" --reporter=line`（3/3 通过）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+- 测试与验证（本次弹层与滚动条增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js scripts/modules/app.js scripts/modules/caseLibrary.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "助手可按模型输出渲染表格与代码块|当前页面用例优先返回正在编辑用例而非全库|当前页面用例查询支持条件筛选（和技能无关）|助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|在用例执行页查看用例时应返回当前查看用例条目" --reporter=line`（5/5 通过）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+- 测试与验证（本次 ID 顺序增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "首问当前有哪些用例时应直接返回用例列表|当前页面用例优先返回正在编辑用例而非全库|在用例执行页查看用例时应返回当前查看用例条目" --reporter=line`（3/3 通过）
+- 测试与验证（本次用例库误回退修复）：
+  - `node --check scripts/modules/app.js tests/ui/assistant_global.spec.js scripts/modules/assistant.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "现在的页面有什么用例在无编辑上下文时返回下一步提示|用例库页无编辑上下文时不应回退执行页结果|当前页面用例优先返回正在编辑用例而非全库|在用例执行页查看用例时应返回当前查看用例条目" --reporter=line`（4/4 通过）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+- 测试与验证（本次展开视图风格与横向滚动增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|当前页面用例优先返回正在编辑用例而非全库|在用例执行页查看用例时应返回当前查看用例条目" --reporter=line`（3/3 通过）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+- 测试与验证（本次自定义外显滚动条增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "当前页面用例优先返回正在编辑用例而非全库|助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|在用例执行页查看用例时应返回当前查看用例条目" --reporter=line`（3/3 通过）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+- 测试与验证（本次展开视图列宽/换行对齐增量）：
+  - `node --check scripts/base/state.js scripts/base/utils.js scripts/modules/bootstrap.js scripts/modules/app.js scripts/modules/assistant.js scripts/modules/caseLibrary.js scripts/core/tempexecCore.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "当前页面用例优先返回正在编辑用例而非全库|助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|在用例执行页查看用例时应返回当前查看用例条目"`（3/3 通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test tests/api/settings_assistant.spec.js`（通过）
+- 测试与验证（本次聊天窗固定滚动条增量）：
+  - `node --check scripts/base/state.js scripts/base/utils.js scripts/modules/bootstrap.js scripts/modules/app.js scripts/modules/assistant.js scripts/modules/caseLibrary.js scripts/core/tempexecCore.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "当前页面用例优先返回正在编辑用例而非全库|助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|在用例执行页查看用例时应返回当前查看用例条目"`（3/3 通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test tests/api/settings_assistant.spec.js`（通过）
+- 测试与验证（本次“占满不可用”修复增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js style.css`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "当前页面用例优先返回正在编辑用例而非全库|助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|在用例执行页查看用例时应返回当前查看用例条目"`（3/3 通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test tests/api/settings_assistant.spec.js`（通过）
+- 测试与验证（本次移除聊天窗固定滚动条增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js style.css scripts/modules/app.js scripts/modules/caseLibrary.js scripts/core/tempexecCore.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "当前页面用例优先返回正在编辑用例而非全库|助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|在用例执行页查看用例时应返回当前查看用例条目"`（3/3 通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test tests/api/settings_assistant.spec.js`（通过）
+- 测试与验证（本次展开视图列宽生效修复增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js style.css scripts/modules/app.js scripts/modules/caseLibrary.js scripts/core/tempexecCore.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|当前页面用例优先返回正在编辑用例而非全库|在用例执行页查看用例时应返回当前查看用例条目"`（3/3 通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test tests/api/settings_assistant.spec.js`（通过）
+- 测试与验证（本次双滚动条与关闭按钮修复增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js scripts/modules/app.js scripts/modules/caseLibrary.js scripts/core/tempexecCore.js scripts/base/state.js scripts/base/utils.js scripts/modules/bootstrap.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "当前页面用例优先返回正在编辑用例而非全库|助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|在用例执行页查看用例时应返回当前查看用例条目"`（3/3 通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test tests/api/settings_assistant.spec.js`（通过）
+
+- 功能名称：AI 助手代码块支持点击复制
+- 功能描述：为全局 AI 助手消息中的 Markdown 代码块新增“复制”按钮，点击后可一键复制代码内容，减少手动选中文本的操作成本。
+- 操作方式：
+  - 打开 AI 助手并发送问题，让模型返回 Markdown 代码块（```）；
+  - 在代码块右上角点击“复制”按钮；
+  - 复制成功后按钮短暂显示“已复制”，状态区提示“代码已复制”。
+- 使用效果：
+  - 命令/代码示例可一键复制到剪贴板，提升执行效率；
+  - 兼容 `navigator.clipboard` 不可用场景，自动回退到 `execCommand('copy')`；
+  - 复制失败时有明确提示，避免无反馈。
+- 新增内容/接口/组件：
+  - 前端逻辑：
+    - `scripts/modules/assistant.js`
+      - 新增 `fallbackCopyText`、`copyTextToClipboard`、`handleCopyCodeButtonClick`；
+      - 代码块渲染结构新增 `.assistant-code-block` 与 `.assistant-code-copy-btn`；
+      - 在消息区增加事件代理，统一处理复制按钮点击。
+  - 前端样式：
+    - `style.css`
+      - 新增代码块复制按钮样式（默认/悬停/禁用）；
+      - 调整代码块 `pre` 顶部内边距，避免与复制按钮重叠；
+      - 补充暗色主题下复制按钮样式。
+  - UI 自动化：
+    - `tests/ui/assistant_global.spec.js`
+      - 新增用例“助手代码块支持点击复制”，校验按钮可见、点击后文本变为“已复制”且状态区提示成功。
+- 复用说明：复用现有助手消息渲染链路与消息容器事件体系，保持 ES2019 兼容，不新增第三方依赖和后端接口。
+- 测试与验证：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js -g "助手代码块支持点击复制|助手可按模型输出渲染表格与代码块|助手聊天框字体应更小|助手面板背景应为非透明" --reporter=line`（4/4 通过）
+  - `APP_DB_FILE=apitest.db python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-05 新增助手代码块复制能力并补充 UI/API 回归验证（`scripts/modules/assistant.js`、`style.css`、`tests/ui/assistant_global.spec.js`）。
+
+- 功能名称：AI 助手消息支持表格与代码块渲染
+- 功能描述：为全局 AI 助手消息区新增安全 Markdown 子集渲染能力，支持模型按内容需要自行输出表格（`| ... |`）和代码块（```），并在 UI 中正确展示。
+- 操作方式：
+  - 打开 AI 助手并提问；
+  - 模型可根据回答内容选择普通文本、Markdown 表格或 Markdown 代码块；
+  - 助手消息自动渲染为对应格式，无需手动切换。
+- 使用效果：
+  - 结构化对比信息可直接以表格展示，阅读效率更高；
+  - 命令/代码/配置示例可直接以代码块展示，复制与辨识更清晰；
+  - 保留现有动作 JSON 协议：需要触发动作时仍要求模型仅输出 JSON。
+- 新增内容/接口/组件：
+  - 前端逻辑：
+    - `scripts/modules/assistant.js`
+      - 新增消息渲染链路：`renderMarkdownMessageHtml`，支持代码块分段、表格解析、行内代码渲染；
+      - 用户消息保持纯文本渲染，助手/系统消息支持表格与代码块；
+      - 更新模型提示词，明确“结构化对比可用表格、命令/代码示例可用代码块”。
+  - 前端样式：
+    - `style.css`
+      - 新增助手消息内 `table/pre/code` 样式与暗色主题适配，确保表格与代码块在聊天气泡内可读且不破版。
+  - UI 自动化：
+    - `tests/ui/assistant_global.spec.js`
+      - 新增用例“助手可按模型输出渲染表格与代码块”，校验最后一条 AI 消息含 `table` 与 `pre code`，并断言表格行数与代码内容。
+- 复用说明：复用现有助手消息渲染入口与模型调用链路，不引入第三方库、不新增后端接口，仅在前端做最小增量增强。
+- 测试与验证：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js -g "助手可按模型输出渲染表格与代码块|助手聊天框字体应更小|助手面板背景应为非透明" --reporter=line`（3/3 通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-05 首次支持助手消息表格/代码块渲染，并补充 UI/API 回归验证（`scripts/modules/assistant.js`、`style.css`、`tests/ui/assistant_global.spec.js`）。
+
+- 功能名称：AI 助手聊天框字体缩小
+- 功能描述：将全局 AI 助手聊天框的消息正文与输入框字体下调，解决当前显示字号偏大导致阅读密度不足的问题。
+- 操作方式：
+  - 进入 `index.html`，在“设置”中启用 AI 助手；
+  - 打开右下角“AI 助手”面板并查看消息正文、输入框文本；
+  - 聊天内容应以更小字号显示。
+- 使用效果：
+  - 消息区同屏可视内容增多，长文本阅读更紧凑；
+  - 输入框字号与消息字号统一，视觉一致性更好。
+- 新增内容/接口/组件：
+  - 前端样式：
+    - `style.css`：`.assistant-msg-body` 新增 `font-size: 13px; line-height: 1.5;`。
+    - `style.css`：`#assistantInput` 新增 `font-size: 13px; line-height: 1.5;`。
+  - UI 自动化：
+    - `tests/ui/assistant_global.spec.js`：新增用例“助手聊天框字体应更小”，断言消息正文与输入框计算字体均为 `13px`。
+- 复用说明：复用现有助手面板结构与测试基座，仅调整现有样式选择器并补充回归断言；未新增后端接口。
+- 测试与验证：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js -g "助手聊天框字体应更小|助手面板背景应为非透明" --reporter=line`（2/2 通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-05 首次下调 AI 助手聊天消息与输入框字体并补充 UI/API 回归验证（`style.css`、`tests/ui/assistant_global.spec.js`）。
+
+- 功能名称：AI 助手面板背景透明修复
+- 功能描述：修复全局 AI 助手浮层在浅色主题下背景透明的问题，避免打开助手时透出页面底层内容。
+- 操作方式：
+  - 进入 `index.html`，打开“设置”并启用 AI 助手；
+  - 点击右下角“AI 助手”按钮展开面板；
+  - 面板容器应显示不透明底色，不再透出后方页面。
+- 使用效果：
+  - AI 助手浮层可读性恢复，文字与操作区不再受底层页面干扰；
+  - 深色主题行为不变，仍沿用既有 `--panel` 配色。
+- 新增内容/接口/组件：
+  - 前端样式：
+    - `style.css`：`.assistant-panel` 背景从 `var(--panel)` 调整为 `var(--panel, #ffffff)`，为浅色主题提供非透明 fallback。
+  - UI 自动化：
+    - `tests/ui/assistant_global.spec.js`：新增用例“助手面板背景应为非透明”，断言 `#assistantPanel` 的 `backgroundColor` 不是 `transparent/rgba(0, 0, 0, 0)`。
+- 复用说明：复用现有 `.assistant-panel` 样式结构与全局助手测试文件，仅做最小增量修复；未新增后端接口或页面结构。
+- 测试与验证：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js -g "助手面板背景应为非透明" --reporter=line`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --reporter=line`（19/20 通过；失败项为既有用例“助手默认锁定并点击引导到设置页”，报错 `#assistantLauncherBtn` 未找到，与本次样式修复无直接耦合）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-05 首次修复 AI 助手面板透明背景并补充 UI 回归断言（`style.css`、`tests/ui/assistant_global.spec.js`）。
+
 - 功能名称：用例生成通用操作区新增“仅补全用例”按钮
 - 功能描述：在“用例生成 → 通用操作区”新增“仅补全用例”按钮。点击后只对“生成建议”非空的模块触发生成，执行链路与逐模块点击“生成用例”一致；无建议模块不会触发。
 - 操作方式：

@@ -13455,6 +13455,13 @@
 	    if (!Number.isFinite(order) || order < 0) order = 0;
 	    var sourceOrder = Number(sourceIndex);
 	    if (!Number.isFinite(sourceOrder) || sourceOrder < 0) sourceOrder = order;
+	    var executionResultRaw = row.executionResult !== undefined && row.executionResult !== null
+	      ? row.executionResult
+	      : (row.actual !== undefined && row.actual !== null
+	        ? row.actual
+	        : (row.status !== undefined && row.status !== null
+	          ? row.status
+	          : row.result));
 	    return {
 	      index: order + 1,
 	      sourceIndex: sourceOrder + 1,
@@ -13462,10 +13469,14 @@
 	      module: normalizeEditorText(row.module),
 	      title: normalizeEditorText(row.title),
 	      priority: normalizeEditorText(row.priority),
-	      precondition: normalizeEditorText(row.precondition),
+	      precondition: normalizeEditorText(row.precondition || row.preconditions),
 	      steps: normalizeEditorText(row.steps),
 	      expected: normalizeEditorText(row.expected),
 	      remark: normalizeEditorText(row.remark),
+	      actual: normalizeEditorText(row.actual),
+	      status: normalizeEditorText(row.status),
+	      result: normalizeEditorText(row.result),
+	      executionResult: normalizeEditorText(executionResultRaw),
 	      updatedAt: row.updated_at || row.updatedAt || '',
 	    };
 	  }
@@ -13488,7 +13499,19 @@
 	    if (limit > 100) limit = 100;
 	    var file = state.editor && state.editor.caseFile ? state.editor.caseFile : null;
 	    var allItems = Array.isArray(state.editor && state.editor.items) ? state.editor.items : [];
-	    if (!file || !file.id || !isEditorCardVisible()) {
+	    if (!file || !file.id) {
+	      return {
+	        ok: true,
+	        hasContext: false,
+	        reason: 'no-active-editor',
+	        total: 0,
+	        totalAll: allItems.length,
+	        items: [],
+	      };
+	    }
+	    var cardVisible = typeof isEditorCardVisible === 'function' ? isEditorCardVisible() : false;
+	    var tabActive = typeof isCaseLibraryActive === 'function' ? isCaseLibraryActive() : false;
+	    if (!cardVisible && !tabActive) {
 	      return {
 	        ok: true,
 	        hasContext: false,
