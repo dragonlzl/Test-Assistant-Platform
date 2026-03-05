@@ -828,7 +828,15 @@
         },
         { key: 'clean', label: '需求清洗', run: function(ctx) { return runCleaning(ctx); }, validate: function() { return Boolean(cleanedTextEl && cleanedTextEl.value && cleanedTextEl.value.trim().length > 0); } },
         { key: 'compare', label: '对比完整性', run: function() { return compareCoverage(); }, validate: function() { return Boolean(compareResultEl && compareResultEl.value && compareResultEl.value.trim().length > 0); }, after: function() { return enforceAutoCoverageRequirement(); } },
-        { key: 'split', label: '测试模块拆分', run: function() { return splitModules(); }, validate: function() { return Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim().length > 0); } },
+        {
+          key: 'split',
+          label: '测试模块拆分',
+          run: function(context) {
+            var trigger = context && context.splitTrigger ? context.splitTrigger : null;
+            return splitModules(trigger);
+          },
+          validate: function() { return Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim().length > 0); }
+        },
         { key: 'cases', label: '覆盖对比', run: function() { return compareCasesCoverage(); }, validate: function() { return Boolean(casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim().length > 0); } },
       ];
     }
@@ -1164,12 +1172,23 @@
           kind: 'continue',
           startIndex: 3,
           stepIndex: 3,
+          context: {
+            splitTrigger: {
+              type: 'auto-ignore-continue',
+              requireCaseImportConfirm: true,
+            },
+          },
           messages: buildAutoWorkflowTaskMessages('continue'),
         }, { force: true });
         return;
       }
       try {
-        await executeAutoWorkflowSteps(3);
+        await executeAutoWorkflowSteps(3, {
+          splitTrigger: {
+            type: 'auto-ignore-continue',
+            requireCaseImportConfirm: true,
+          },
+        });
         setStatus(autoRecleanStatus, '已忽略覆盖率完成剩余步骤，请检查结果', 'ok');
         setStatus(autoWorkflowStatus, '剩余步骤执行完成，覆盖率仍不足 100%，请注意风险', 'warn');
         await notifyFeishuWorkflowSuccess();

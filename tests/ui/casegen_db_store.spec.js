@@ -1168,6 +1168,351 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     });
   });
 
+  test('仅补全用例：只触发有生成建议的模块生成', async ({ page }) => {
+    const token = 'token-casegen-suggestion-batch';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+    const modelRemoteId = 902;
+    const modelId = String(modelRemoteId);
+    const modules = [
+      { module: '模块A', key_scenarios: [], test_points: [], coupled_modules: [] },
+      { module: '模块B', key_scenarios: [], test_points: [], coupled_modules: [] },
+      { module: '模块C', key_scenarios: [], test_points: [], coupled_modules: [] },
+      { module: '模块D', key_scenarios: [], test_points: [], coupled_modules: [] },
+    ];
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') {
+        return respond(200, [{
+          id: modelRemoteId,
+          name: 'MockCaseGenModel',
+          owner_id: user.id,
+          scope: 'user',
+          config_json: {
+            provider: 'custom',
+            baseUrl: 'https://mock-model.local/v1/chat/completions',
+            apiKey: 'mock-key',
+            model: 'mock-model',
+            maxTokens: 1024,
+          },
+        }]);
+      }
+      if (pathName === '/api/features' && method === 'GET') {
+        return respond(200, [{
+          id: 5002,
+          name: 'default',
+          owner_id: user.id,
+          scope: 'user',
+          config_json: {
+            caseGenId: modelId,
+            caseGenPrompt: '请仅输出 JSON 数组',
+          },
+        }]);
+      }
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page, { selectIndex: -1, modules });
+    await page.waitForFunction((expectedModelId) => {
+      const state = window.app && window.app.state ? window.app.state : null;
+      if (!state || !state.assignments || !Array.isArray(state.models)) return false;
+      const assigned = state.assignments.caseGenId ? String(state.assignments.caseGenId) : '';
+      if (assigned !== String(expectedModelId)) return false;
+      return state.models.some((item) => {
+        const id = item && item.id !== undefined && item.id !== null ? String(item.id) : '';
+        return id === String(expectedModelId);
+      });
+    }, modelId, { timeout: 10000 });
+
+    await page.evaluate(() => {
+      const state = window.app && window.app.state ? window.app.state : null;
+      const api = window.app && window.app.casesGenApi ? window.app.casesGenApi : null;
+      const client = window.app && window.app.apiClient ? window.app.apiClient : null;
+      if (!state || !Array.isArray(state.caseGenModules) || state.caseGenModules.length < 4 || !client) return;
+      if (!state.caseGenSuggestions || typeof state.caseGenSuggestions !== 'object') {
+        state.caseGenSuggestions = {};
+      }
+      const ids = state.caseGenModules.map((mod) => mod.id);
+      state.caseGenSuggestions[ids[0]] = '请补充边界场景';
+      state.caseGenSuggestions[ids[1]] = '   ';
+      state.caseGenSuggestions[ids[2]] = '请增加异常路径';
+      state.caseGenSuggestions[ids[3]] = '';
+
+      window.__casegenSuggestionBatchMetrics = { calls: 0, modules: [] };
+      client.proxyModelRequest = function(payload, signal) {
+        const metrics = window.__casegenSuggestionBatchMetrics;
+        const modelPayload = payload && payload.payload ? payload.payload : {};
+        const messages = Array.isArray(modelPayload.messages) ? modelPayload.messages : [];
+        const userText = messages[1] && messages[1].content ? String(messages[1].content) : '';
+        const match = userText.match(/"module":"([^"]+)"/);
+        const moduleName = match && match[1] ? match[1] : '模块';
+        metrics.calls += 1;
+        metrics.modules.push(moduleName);
+        const content = JSON.stringify([{
+          module: moduleName,
+          title: moduleName + '-新用例',
+          priority: 'P1',
+          precondition: '前置条件',
+          steps: ['步骤1'],
+          expected: '预期结果',
+        }]);
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            resolve({
+              ok: true,
+              status: 200,
+              text: function() {
+                return Promise.resolve(JSON.stringify({
+                  choices: [{ message: { content } }],
+                }));
+              },
+            });
+          }, 50);
+          if (signal && typeof signal.addEventListener === 'function') {
+            signal.addEventListener('abort', () => {
+              clearTimeout(timer);
+              reject(new Error('aborted'));
+            }, { once: true });
+          }
+        });
+      };
+
+      if (api && typeof api.renderCaseGeneration === 'function') {
+        api.renderCaseGeneration();
+      }
+    });
+
+    await expect(page.locator('#caseGenSuggestionGenerateBtn')).toBeEnabled();
+    await page.click('#caseGenSuggestionGenerateBtn');
+
+    await page.waitForFunction(() => {
+      const state = window.app && window.app.state ? window.app.state : null;
+      const metrics = window.__casegenSuggestionBatchMetrics || { calls: 0, modules: [] };
+      if (!state || !Array.isArray(state.caseGenModules) || state.caseGenModules.length < 4) return false;
+      if (metrics.calls !== 2) return false;
+      const modules = metrics.modules.slice().sort();
+      if (modules.length !== 2 || modules[0] !== '模块A' || modules[1] !== '模块C') return false;
+      const titles = state.caseGenModules.map((mod) => {
+        const raw = state.caseGenResults && state.caseGenResults[mod.id] ? String(state.caseGenResults[mod.id]) : '[]';
+        try {
+          const parsed = JSON.parse(raw);
+          if (!Array.isArray(parsed) || !parsed.length) return '';
+          return parsed[0] && parsed[0].title ? String(parsed[0].title) : '';
+        } catch (err) {
+          return '';
+        }
+      });
+      return titles[0] === '模块A-新用例'
+        && titles[1] === '模块B-用例1'
+        && titles[2] === '模块C-新用例'
+        && titles[3] === '模块D-用例1';
+    }, {}, { timeout: 20000 });
+  });
+
+  test('全模块生成：超过10个模块按受控并发执行并最终清理运行态', async ({ page }) => {
+    const token = 'token-casegen-batch-concurrency';
+    const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
+    const project = { id: 1, name: '项目A', description: '' };
+    const versions = [{ id: 11, name: 'v1' }];
+    const modelRemoteId = 901;
+    const modelId = String(modelRemoteId);
+    const modules = Array.from({ length: 12 }).map((_, idx) => ({
+      module: '模块' + (idx + 1),
+      key_scenarios: [],
+      test_points: [],
+      coupled_modules: [],
+    }));
+
+    await page.addInitScript((tk) => {
+      try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
+    }, token);
+
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const pathName = url.pathname;
+      const method = route.request().method();
+      const tokenHeader = route.request().headers().authorization || '';
+      const authed = tokenHeader === `Bearer ${token}`;
+      const respond = (status, body) =>
+        route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+      if (pathName === '/api/users/me' && method === 'GET') {
+        if (!authed) return respond(401, { detail: 'unauthorized' });
+        return respond(200, user);
+      }
+      if (pathName === '/api/projects' && method === 'GET') return respond(200, [project]);
+      if (pathName === `/api/projects/${project.id}/versions` && method === 'GET') return respond(200, versions);
+      if (pathName === '/api/case-files' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName === '/api/models' && method === 'GET') {
+        return respond(200, [{
+          id: modelRemoteId,
+          name: 'MockCaseGenModel',
+          owner_id: user.id,
+          scope: 'user',
+          config_json: {
+            provider: 'custom',
+            baseUrl: 'https://mock-model.local/v1/chat/completions',
+            apiKey: 'mock-key',
+            model: 'mock-model',
+            maxTokens: 1024,
+          },
+        }]);
+      }
+      if (pathName === '/api/features' && method === 'GET') {
+        return respond(200, [{
+          id: 5001,
+          name: 'default',
+          owner_id: user.id,
+          scope: 'user',
+          config_json: {
+            caseGenId: modelId,
+            caseGenPrompt: '请仅输出 JSON 数组',
+          },
+        }]);
+      }
+      if (pathName.startsWith('/api/')) return respond(200, []);
+      return respond(404, { detail: 'not found' });
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenState(page, { selectIndex: -1, modules });
+    await page.waitForFunction((expectedModelId) => {
+      const state = window.app && window.app.state ? window.app.state : null;
+      if (!state || !state.assignments || !Array.isArray(state.models)) return false;
+      const assigned = state.assignments.caseGenId ? String(state.assignments.caseGenId) : '';
+      if (assigned !== String(expectedModelId)) return false;
+      return state.models.some((item) => {
+        const id = item && item.id !== undefined && item.id !== null ? String(item.id) : '';
+        return id === String(expectedModelId);
+      });
+    }, modelId, { timeout: 10000 });
+
+    await page.evaluate(() => {
+      const state = window.app && window.app.state ? window.app.state : null;
+      const api = window.app && window.app.casesGenApi ? window.app.casesGenApi : null;
+      const client = window.app && window.app.apiClient ? window.app.apiClient : null;
+      if (!state || !Array.isArray(state.caseGenModules) || !client) return;
+      state.requirementLabel = state.requirementLabel || '批量并发回归';
+
+      if (!(state.caseGenRunning instanceof Set)) state.caseGenRunning = new Set();
+      state.caseGenRunning.clear();
+      if (!state.caseGenModuleStatus || typeof state.caseGenModuleStatus !== 'object') {
+        state.caseGenModuleStatus = {};
+      } else {
+        Object.keys(state.caseGenModuleStatus).forEach((key) => { delete state.caseGenModuleStatus[key]; });
+      }
+      if (!state.caseGenProgress || typeof state.caseGenProgress !== 'object') {
+        state.caseGenProgress = {};
+      } else {
+        Object.keys(state.caseGenProgress).forEach((key) => { delete state.caseGenProgress[key]; });
+      }
+      state.caseGenModules.forEach((mod) => {
+        state.caseGenResults[mod.id] = '';
+      });
+
+      window.__casegenBatchMetrics = { active: 0, max: 0, calls: 0 };
+      client.proxyModelRequest = function(payload, signal) {
+        const metrics = window.__casegenBatchMetrics;
+        metrics.calls += 1;
+        metrics.active += 1;
+        if (metrics.active > metrics.max) metrics.max = metrics.active;
+        const modelPayload = payload && payload.payload ? payload.payload : {};
+        const messages = Array.isArray(modelPayload.messages) ? modelPayload.messages : [];
+        const userText = messages[1] && messages[1].content ? String(messages[1].content) : '';
+        const match = userText.match(/"module":"([^"]+)"/);
+        const moduleName = match && match[1] ? match[1] : '模块';
+        const content = JSON.stringify([{
+          module: moduleName,
+          title: moduleName + '-用例',
+          priority: 'P1',
+          precondition: '前置条件',
+          steps: ['步骤1'],
+          expected: '预期结果',
+        }]);
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            metrics.active -= 1;
+            resolve({
+              ok: true,
+              status: 200,
+              text: function() {
+                return Promise.resolve(JSON.stringify({
+                  choices: [{ message: { content } }],
+                }));
+              },
+            });
+          }, 60);
+          if (signal && typeof signal.addEventListener === 'function') {
+            signal.addEventListener('abort', () => {
+              clearTimeout(timer);
+              metrics.active = Math.max(0, metrics.active - 1);
+              reject(new Error('aborted'));
+            }, { once: true });
+          }
+        });
+      };
+
+      if (api && typeof api.renderCaseGeneration === 'function') {
+        api.renderCaseGeneration();
+      }
+    });
+
+    await page.click('#caseGenAllGenerateBtn');
+
+    await page.waitForFunction(() => {
+      const state = window.app && window.app.state ? window.app.state : null;
+      if (!state || !Array.isArray(state.caseGenModules) || !state.caseGenModules.length) return false;
+      const allGenerated = state.caseGenModules.every((mod) => {
+        const raw = state.caseGenResults && state.caseGenResults[mod.id] ? String(state.caseGenResults[mod.id]).trim() : '';
+        return raw && raw !== '[]';
+      });
+      if (!allGenerated) return false;
+      const running = state.caseGenRunning instanceof Set ? state.caseGenRunning.size : 0;
+      if (running !== 0) return false;
+      return state.caseGenModules.every((mod) => {
+        const progress = state.caseGenProgress && state.caseGenProgress[mod.id] ? state.caseGenProgress[mod.id] : null;
+        if (!progress) return true;
+        const states = [];
+        if (Array.isArray(progress.groups)) {
+          progress.groups.forEach((group) => {
+            if (group && group.state) states.push(String(group.state));
+          });
+        }
+        if (progress.dedupe && progress.dedupe.state) states.push(String(progress.dedupe.state));
+        if (progress.finalize && progress.finalize.state) states.push(String(progress.finalize.state));
+        return states.indexOf('running') === -1;
+      });
+    }, {}, { timeout: 20000 });
+
+    const metrics = await page.evaluate(() => window.__casegenBatchMetrics || { max: 0, calls: 0 });
+    expect(metrics.calls).toBe(12);
+    expect(metrics.max).toBeLessThanOrEqual(5);
+  });
+
   test('新用例入库：直接入库成功，且会校验未选模块二次确认', async ({ page }) => {
     const token = 'token-casegen-store-new';
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };

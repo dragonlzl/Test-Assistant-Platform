@@ -1546,7 +1546,8 @@
       </div>
       <div class="actions casegen-zone-actions">
         <button class="secondary" id="caseGenAllGenerateBtn">全模块直接生成</button>
-        <button class="secondary" id="caseGenAllTopupBtn" disabled>全模块补全生成</button>
+        <button class="secondary" id="caseGenAllTopupBtn">全模块补全生成</button>
+        <button class="secondary" id="caseGenSuggestionGenerateBtn">仅补全用例</button>
         <button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
         <button class="secondary" id="exportCaseGenXmind">导出全部勾选用例XMind</button>
         <button class="secondary" id="toSplitFromCaseGen">前往测试模块拆分</button>
@@ -2171,30 +2172,6 @@
 <button class="secondary" id="saveThemeSetting">保存主题</button>
 </div>
 <p class="status" id="themeSettingStatus"></p>
-
-<div class="settings-divider"></div>
-<div class="settings-inline">
-<div class="meta">
-<strong>AI助手</strong>
-<p>全局聊天助手开关。开启后可在右下角使用助手。助手不会通过聊天关闭自己。</p>
-</div>
-<div class="control">
-<label class="inline"><input id="assistantEnabledToggle" type="checkbox"/> 开启助手</label>
-</div>
-</div>
-<div class="settings-inline">
-<div class="meta">
-<strong>助手模型</strong>
-<p>请选择助手使用的模型；若未配置可用模型，助手无法开启。</p>
-</div>
-<div class="control">
-<select id="assistantModelSelect"></select>
-</div>
-</div>
-<div class="actions">
-<button class="secondary" id="saveAssistantSetting">保存助手设置</button>
-</div>
-<p class="status" id="assistantSettingStatus"></p>
 
 <div class="settings-divider"></div>
 <h3>页面说明自动弹出</h3>
@@ -3582,25 +3559,6 @@
       </div>
     </div>
   </div>
-  <div class="assistant-launcher" id="assistantLauncher" title="AI 助手">
-    <button class="assistant-launcher-btn" id="assistantLauncherBtn" type="button">AI 助手</button>
-    <span class="assistant-lock-dot hidden" id="assistantLockDot">未开启</span>
-  </div>
-  <section class="assistant-panel hidden" id="assistantPanel" aria-label="AI助手">
-    <header class="assistant-head">
-      <strong>AI助手</strong>
-      <div class="assistant-head-actions">
-        <select id="assistantModelPicker"></select>
-        <button class="link-toggle" id="assistantCloseBtn" type="button">收起</button>
-      </div>
-    </header>
-    <div class="assistant-status" id="assistantStatus"></div>
-    <div class="assistant-messages" id="assistantMessages"></div>
-    <div class="assistant-input-row">
-      <textarea id="assistantInput" placeholder="输入你的问题或操作指令"></textarea>
-      <button id="assistantSendBtn" type="button">发送</button>
-    </div>
-  </section>
 </main>
 </div>
 </div>
@@ -3660,7 +3618,6 @@
 <script src="./scripts/modules/authGuard.js" defer></script>
 <script src="./scripts/modules/flowGuide.js" defer></script>
 <script src="./scripts/modules/pageGuide.js" defer></script>
-<script src="./scripts/modules/assistant.js" defer></script>
 <script src="./scripts/modules/app.js" defer></script>
 <script src="./scripts/modules/bootstrap.js" defer></script>
 <script>

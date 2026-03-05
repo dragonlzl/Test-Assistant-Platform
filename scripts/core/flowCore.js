@@ -344,7 +344,7 @@
         var sectionUpload = document.querySelector('[data-section-id="cases-upload"]');
         if (sectionUpload) {
           persistCardExpanded(sectionUpload);
-          sectionUpload.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          scrollElementIntoView(sectionUpload, behavior, 240);
         }
         return;
       }
