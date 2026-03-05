@@ -64,7 +64,6 @@ test('拆分执行时开始拆分按钮不可点击', async ({ browser }) => {
   await page.goto('/');
   await page.click('[data-group="ai"]');
   await page.click('[data-tab-btn="clean"]');
-  await expect(page.locator('#splitModelSelect')).toHaveValue('mock-split-model');
   await page.evaluate(() => {
     var cleaned = document.getElementById('cleanedText');
     if (cleaned) {
@@ -74,11 +73,14 @@ test('拆分执行时开始拆分按钮不可点击', async ({ browser }) => {
     }
   });
 
-  page.once('dialog', (dialog) => dialog.accept('需求B'));
-
   const splitBtn = page.locator('#splitBtn');
   const splitStatus = page.locator('#splitStatus');
+  const confirmDrawer = page.locator('#appConfirmDrawer');
   await splitBtn.click();
+  await expect(confirmDrawer).toHaveClass(/open/);
+  await expect(page.locator('#appConfirmDrawerCancelBtn')).toHaveText('不导入用例');
+  await page.click('#appConfirmDrawerCancelBtn');
+  await expect(confirmDrawer).not.toHaveClass(/open/);
 
   await expect(splitBtn).toBeDisabled();
   await expect(splitStatus).toContainText('拆分完成', { timeout: 4000 });

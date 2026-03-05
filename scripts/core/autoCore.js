@@ -65,6 +65,7 @@
     var caseGenStatus = pickEl(dom.caseGenStatus, 'caseGenStatus');
     var missingViewStatus = pickEl(dom.missingViewStatus, 'missingViewStatus');
     var autoWorkflowBtn = pickEl(dom.autoWorkflowBtn, 'runAutoWorkflow');
+    var stopAutoWorkflowBtn = pickEl(dom.stopAutoWorkflowBtn, 'stopAutoWorkflow');
     var autoRecleanBtn = pickEl(dom.autoRecleanBtn, 'autoRecleanBtn');
     var autoIgnoreCoverageBtn = pickEl(dom.autoIgnoreCoverageBtn, 'autoIgnoreCoverageBtn');
     var autoCompareMissing = pickEl(dom.autoCompareMissing, 'autoCompareMissing');
@@ -123,6 +124,33 @@
     function getAutoWorkflowManager() {
       if (typeof window === 'undefined') return null;
       return window.app && window.app.autoWorkflowManager ? window.app.autoWorkflowManager : null;
+    }
+
+    function isAutoClarificationPendingTask() {
+      var manager = getAutoWorkflowManager();
+      if (!manager || typeof manager.getTask !== 'function') return false;
+      var task = manager.getTask();
+      if (!task || task.status !== 'running') return false;
+      var context = task.context && typeof task.context === 'object' ? task.context : null;
+      return Boolean(context && context.awaitingClarification === true);
+    }
+
+    function markAutoClarificationPendingTask(pending) {
+      var manager = getAutoWorkflowManager();
+      if (!manager || typeof manager.updateTaskContext !== 'function') return;
+      manager.updateTaskContext(function(ctx) {
+        if (!ctx || typeof ctx !== 'object') return;
+        if (pending) {
+          ctx.awaitingClarification = true;
+          ctx.awaitingClarificationAt = Date.now();
+        } else {
+          delete ctx.awaitingClarification;
+          delete ctx.awaitingClarificationAt;
+        }
+      }, {
+        onlyRunning: true,
+        action: pending ? 'clarify-wait' : 'clarify-resume',
+      });
     }
 
     async function notifyFeishuCoverageFailure() {
@@ -564,6 +592,8 @@
         assignMessage('workflowSuccess', '剩余步骤执行完成，覆盖率仍不足 100%，请注意风险', 'warn');
         assignMessage('recleanFailure', '忽略覆盖率继续失败', 'err');
         assignMessage('workflowFailure', '忽略覆盖率继续失败', 'err');
+        assignMessage('recleanCancelled', '已中断继续执行', 'warn');
+        assignMessage('workflowCancelled', '已中断当前执行任务', 'warn');
         return result;
       }
       if (kind === 'reclean' || kind === 'supplement') {
@@ -573,11 +603,14 @@
         assignMessage('workflowSuccess', opts.workflowSuccessMessage || '重新执行完成，可切换至“功能流程”查看详情', opts.workflowSuccessTone || 'ok');
         assignMessage('recleanFailure', opts.failureMessage || '重新执行中断', opts.failureTone || 'err');
         assignMessage('workflowFailure', opts.workflowFailureMessage || '一键执行中断', opts.workflowFailureTone || 'err');
+        assignMessage('recleanCancelled', opts.cancelMessage || '已中断重新执行任务', opts.cancelTone || 'warn');
+        assignMessage('workflowCancelled', opts.workflowCancelMessage || '已中断当前执行任务', opts.workflowCancelTone || 'warn');
         return result;
       }
       assignMessage('workflowStart', '正在执行完整工作流，请勿关闭页面', '');
       assignMessage('workflowSuccess', '一键执行完成，可切换至“功能流程”查看详情', 'ok');
       assignMessage('workflowFailure', '一键执行中断', 'err');
+      assignMessage('workflowCancelled', '已中断当前执行任务', 'warn');
       return result;
     }
 
@@ -586,6 +619,7 @@
       var running = Boolean(hasTask && task.status === 'running');
       state.autoRunning = running;
       if (autoWorkflowBtn) autoWorkflowBtn.disabled = running;
+      if (stopAutoWorkflowBtn) stopAutoWorkflowBtn.disabled = !running;
       if (autoClarifyToggle) autoClarifyToggle.disabled = running;
       if (autoRecleanBtn) autoRecleanBtn.disabled = running;
       if (autoIgnoreCoverageBtn) autoIgnoreCoverageBtn.disabled = running;
@@ -640,6 +674,16 @@
           var recleanMsg = errText ? (failReclean.text + '：' + errText) : failReclean.text;
           if (autoRecleanStatus) setStatus(autoRecleanStatus, recleanMsg, failReclean.tone || 'err');
         }
+      } else if (task.status === 'cancelled') {
+        var cancelReason = task.error ? String(task.error) : '';
+        var cancelWorkflow = resolveMessage('workflowCancelled', '已中断当前执行任务', 'warn');
+        var cancelWorkflowMsg = cancelReason ? (cancelWorkflow.text + '：' + cancelReason) : cancelWorkflow.text;
+        if (autoWorkflowStatus) setStatus(autoWorkflowStatus, cancelWorkflowMsg, cancelWorkflow.tone || 'warn');
+        if (kind !== 'full') {
+          var cancelReclean = resolveMessage('recleanCancelled', '已中断当前执行任务', 'warn');
+          var cancelRecleanMsg = cancelReason ? (cancelReclean.text + '：' + cancelReason) : cancelReclean.text;
+          if (autoRecleanStatus) setStatus(autoRecleanStatus, cancelRecleanMsg, cancelReclean.tone || 'warn');
+        }
       }
 
       updateAutoClarifyVisibility();
@@ -649,6 +693,33 @@
       if (task.status === 'done' && task.expandMissing) {
         ensureAutoMissingViewVisible(true);
       }
+    }
+
+    function cancelAutoWorkflow(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var reason = opts.reason ? String(opts.reason) : '已中断当前执行任务';
+      var manager = getAutoWorkflowManager();
+      var cancelled = false;
+      if (manager && typeof manager.cancelTask === 'function') {
+        cancelled = Boolean(manager.cancelTask({ reason: reason }));
+        applyAutoWorkflowTaskState(manager.getTask ? manager.getTask() : null);
+      } else if (manager && typeof manager.getTask === 'function' && typeof manager.clearTask === 'function') {
+        var task = manager.getTask();
+        if (task && task.status === 'running') {
+          manager.clearTask();
+          cancelled = true;
+          applyAutoWorkflowTaskState(null);
+        }
+      } else if (state.autoRunning) {
+        cancelled = true;
+        state.autoRunning = false;
+        applyAutoWorkflowTaskState(null);
+      }
+      if (cancelled) {
+        clearAllWaitingSteps();
+        updateFlowStatus();
+      }
+      return cancelled;
     }
 
     function isAutoWorkflowReady() {
@@ -662,18 +733,110 @@
       );
     }
 
+    function stripSimpleCodeFence(text) {
+      var content = text === undefined || text === null ? '' : String(text);
+      var trimmed = content.trim();
+      if (!trimmed) return '';
+      var match = trimmed.match(/^(```|'''|\"\"\")([\w-]*)?\n?([\s\S]*?)\1$/i);
+      if (match) return String(match[3] || '').trim();
+      return trimmed;
+    }
+
+    function parseAutoReviewList(text) {
+      var raw = stripSimpleCodeFence(text);
+      if (!raw) {
+        return { ok: false, reason: '需求评审结果为空，已自动中断，请重新执行' };
+      }
+      var lines = raw.split(/\r?\n/);
+      if (lines.length > 1 && /^\s*#\s*需求标识[：:]/.test(lines[0])) {
+        lines.shift();
+        raw = lines.join('\n').trim();
+      }
+      if (!raw) {
+        return { ok: false, reason: '需求评审结果为空，已自动中断，请重新执行' };
+      }
+      var parsed = null;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (err) {
+        return { ok: false, reason: '需求评审结果不是有效 JSON 数组，已自动中断，请重新执行' };
+      }
+      if (Array.isArray(parsed)) {
+        return { ok: true, list: parsed };
+      }
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.data)) {
+        return { ok: true, list: parsed.data };
+      }
+      return { ok: false, reason: '需求评审结果结构异常（应为数组），已自动中断，请重新执行' };
+    }
+
+    function hasReviewFieldKey(obj, pattern) {
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+      var keys = Object.keys(obj);
+      for (var i = 0; i < keys.length; i += 1) {
+        if (pattern.test(String(keys[i] || ''))) return true;
+      }
+      return false;
+    }
+
+    function isReviewItemStructurallyValid(item) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+      var hit = 0;
+      if (hasReviewFieldKey(item, /(类别|分类|category|class)/i)) hit += 1;
+      if (hasReviewFieldKey(item, /(不明确的需求点|需求点|问题点|point|issue)/i)) hit += 1;
+      if (hasReviewFieldKey(item, /(不明确原因|原因|reason)/i)) hit += 1;
+      if (hasReviewFieldKey(item, /(分支|边界|branch|edge)/i)) hit += 1;
+      return hit >= 2;
+    }
+
+    function validateAutoReviewResult() {
+      var text = reviewResultEl && reviewResultEl.value ? reviewResultEl.value.trim() : '';
+      var parsed = parseAutoReviewList(text);
+      if (!parsed.ok) return parsed;
+      var list = Array.isArray(parsed.list) ? parsed.list : [];
+      if (!list.length) return { ok: true, list: list };
+      for (var i = 0; i < list.length; i += 1) {
+        if (!isReviewItemStructurallyValid(list[i])) {
+          return { ok: false, reason: '需求评审结果结构异常（缺少关键字段），已自动中断，请重新执行' };
+        }
+      }
+      return { ok: true, list: list };
+    }
+
     function buildAutoWorkflowSteps() {
+      var reviewInvalidReason = '';
       return [
         {
           key: 'review',
           label: '需求评审',
-          run: function() { return reviewRequirements(); },
-          validate: function() { return Boolean(reviewResultEl && reviewResultEl.value && reviewResultEl.value.trim().length > 0); },
+          run: function() {
+            var hasReviewResult = Boolean(reviewResultEl && reviewResultEl.value && reviewResultEl.value.trim().length > 0);
+            if (hasReviewResult && isAutoClarificationPendingTask()) {
+              return Promise.resolve();
+            }
+            return reviewRequirements();
+          },
+          validate: function() {
+            var check = validateAutoReviewResult();
+            reviewInvalidReason = check && check.reason ? String(check.reason) : '';
+            return Boolean(check && check.ok);
+          },
+          getInvalidReason: function() {
+            return reviewInvalidReason || '需求评审未产生有效输出，请检查模型配置或稍后重试';
+          },
           after: function() { return handleAutoClarifyAfterReview(); },
         },
         { key: 'clean', label: '需求清洗', run: function(ctx) { return runCleaning(ctx); }, validate: function() { return Boolean(cleanedTextEl && cleanedTextEl.value && cleanedTextEl.value.trim().length > 0); } },
         { key: 'compare', label: '对比完整性', run: function() { return compareCoverage(); }, validate: function() { return Boolean(compareResultEl && compareResultEl.value && compareResultEl.value.trim().length > 0); }, after: function() { return enforceAutoCoverageRequirement(); } },
-        { key: 'split', label: '测试模块拆分', run: function() { return splitModules(); }, validate: function() { return Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim().length > 0); } },
+        {
+          key: 'split',
+          label: '测试模块拆分',
+          run: function(context) {
+            var trigger = context && context.splitTrigger ? context.splitTrigger : null;
+            return splitModules(trigger);
+          },
+          validate: function() { return Boolean(splitResultEl && splitResultEl.value && splitResultEl.value.trim().length > 0); }
+        },
         { key: 'cases', label: '覆盖对比', run: function() { return compareCasesCoverage(); }, validate: function() { return Boolean(casesCompareResultEl && casesCompareResultEl.value && casesCompareResultEl.value.trim().length > 0); } },
       ];
     }
@@ -688,7 +851,13 @@
         try {
           await step.run(context);
           if (!step.validate()) {
-            var invalidReason = step.label + '未产生有效输出，请检查模型配置或稍后重试';
+            var invalidReason = '';
+            if (step && typeof step.getInvalidReason === 'function') {
+              invalidReason = step.getInvalidReason() || '';
+            }
+            if (!invalidReason) {
+              invalidReason = step.label + '未产生有效输出，请检查模型配置或稍后重试';
+            }
             setStepFailed(step.key, invalidReason);
             updateFlowStatus();
             throw new Error(invalidReason);
@@ -734,16 +903,29 @@
     }
 
     async function handleAutoClarifyAfterReview() {
-      if (!state.autoRequireClarifications) return;
-      switchTab('auto');
-      if (autoClarifySection) autoClarifySection.classList.remove('hidden');
+      if (!state.autoRequireClarifications) {
+        markAutoClarificationPendingTask(false);
+        return;
+      }
+      var canFocusAutoTab = true;
+      if (typeof document !== 'undefined' && document.body && document.body.dataset) {
+        var page = String(document.body.dataset.page || '');
+        // 避免在其它页面恢复任务时被强制跨页拉回“一键执行”。
+        canFocusAutoTab = (page === '' || page === 'index' || page === 'ai-workflow');
+      }
+      if (canFocusAutoTab && state.activeTab !== 'auto') {
+        switchTab('auto');
+      }
+      if (canFocusAutoTab && autoClarifySection) autoClarifySection.classList.remove('hidden');
       renderAutoClarifyView();
       setStepWaiting('review', '等待澄清确认');
       updateFlowStatus();
       try {
+        markAutoClarificationPendingTask(true);
         await notifyFeishuClarificationNeeded();
         await waitForAutoClarification();
       } finally {
+        markAutoClarificationPendingTask(false);
         clearStepWaiting('review');
       }
     }
@@ -990,12 +1172,23 @@
           kind: 'continue',
           startIndex: 3,
           stepIndex: 3,
+          context: {
+            splitTrigger: {
+              type: 'auto-ignore-continue',
+              requireCaseImportConfirm: true,
+            },
+          },
           messages: buildAutoWorkflowTaskMessages('continue'),
         }, { force: true });
         return;
       }
       try {
-        await executeAutoWorkflowSteps(3);
+        await executeAutoWorkflowSteps(3, {
+          splitTrigger: {
+            type: 'auto-ignore-continue',
+            requireCaseImportConfirm: true,
+          },
+        });
         setStatus(autoRecleanStatus, '已忽略覆盖率完成剩余步骤，请检查结果', 'ok');
         setStatus(autoWorkflowStatus, '剩余步骤执行完成，覆盖率仍不足 100%，请注意风险', 'warn');
         await notifyFeishuWorkflowSuccess();
@@ -1042,6 +1235,7 @@
       runAutoWorkflow: runAutoWorkflow,
       runAutoWorkflowFromClean: runAutoWorkflowFromClean,
       continueAutoWorkflowAfterCoverage: continueAutoWorkflowAfterCoverage,
+      cancelAutoWorkflow: cancelAutoWorkflow,
       applyAutoWorkflowTaskState: applyAutoWorkflowTaskState,
       isAutoWorkflowReady: isAutoWorkflowReady,
     };

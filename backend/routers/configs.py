@@ -41,8 +41,8 @@ def _normalize_timeout_sec(value: Optional[int]) -> int:
         timeout = 60
     if timeout < 5:
         return 5
-    if timeout > 300:
-        return 300
+    if timeout > 1800:
+        return 1800
     return timeout
 
 

@@ -180,8 +180,71 @@ test.describe('模型管理与全局设置', () => {
       window.localStorage.setItem('cleaner-models-v1', JSON.stringify(models || []));
       window.localStorage.setItem('cleaner-assignment-v1', JSON.stringify(assignments || {}));
     }, { models: storedModels, assignments: storedAssignments });
+
     await page.reload();
     await page.waitForFunction(() => window.app && window.app._inited === true);
+    await expect(page.locator('[data-tab-btn="assign"]').locator('.tab-notice')).toHaveCount(0);
+  });
+
+  test('功能指派切换模型后立即生效并持久化（无需点击保存指派）', async ({ page }) => {
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('models'); });
+
+    await page.click('#createModelBtn');
+    await page.fill('#modelDisplayName', '自动保存模型A');
+    await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
+    await page.fill('#modelApiKey', 'sk-test-a');
+    await page.fill('#modelIdentifier', 'deepseek-chat-a');
+    await page.click('#saveModelBtn');
+
+    await page.click('#createModelBtn');
+    await page.fill('#modelDisplayName', '自动保存模型B');
+    await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
+    await page.fill('#modelApiKey', 'sk-test-b');
+    await page.fill('#modelIdentifier', 'deepseek-chat-b');
+    await page.click('#saveModelBtn');
+
+    const modelIds = await page.evaluate(() => {
+      const list = JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]');
+      return list.map((item) => item && item.id ? String(item.id) : '').filter(Boolean);
+    });
+    expect(modelIds.length).toBeGreaterThanOrEqual(2);
+    const targetModelId = modelIds[1];
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
+    await page.selectOption('#cleanModelSelect', targetModelId);
+    await expect(page.locator('#cleanModelSelect')).toHaveValue(targetModelId);
+
+    const assignment = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-assignment-v1') || '{}'));
+    expect(String(assignment.cleanId || '')).toBe(targetModelId);
+    await expect(page.locator('[data-tab-btn="assign"]').locator('.tab-notice')).toHaveCount(0);
+
+    const storedModels = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]'));
+    const storedAssignments = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-assignment-v1') || '{}'));
+    await page.addInitScript(({ models, assignments }) => {
+      window.localStorage.setItem('cleaner-models-v1', JSON.stringify(models || []));
+      window.localStorage.setItem('cleaner-assignment-v1', JSON.stringify(assignments || {}));
+    }, { models: storedModels, assignments: storedAssignments });
+
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.evaluate(() => {
+      document.querySelectorAll('.tab-group .tab-submenu').forEach(function(menu) {
+        menu.classList.remove('hidden');
+      });
+      document.querySelectorAll('.tab-group').forEach(function(group) {
+        group.classList.add('open');
+      });
+      document.querySelectorAll('.tab-group .tab-group-btn').forEach(function(btn) {
+        btn.classList.add('open');
+      });
+      document.querySelectorAll('[data-tab-btn]').forEach(function(btn) {
+        btn.classList.remove('hidden');
+        btn.classList.remove('role-hidden');
+      });
+      if (window.app && window.app.switchTab) window.app.switchTab('assign');
+    });
+
+    await expect(page.locator('#cleanModelSelect')).toHaveValue(targetModelId);
     await expect(page.locator('[data-tab-btn="assign"]').locator('.tab-notice')).toHaveCount(0);
   });
 });

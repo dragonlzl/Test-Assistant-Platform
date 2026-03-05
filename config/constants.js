@@ -20,6 +20,10 @@
       baseUrl: 'https://api.moonshot.cn/v1/chat/completions',
       model: 'k2',
     },
+    claude: {
+      baseUrl: 'https://www.packyapi.com/v1/chat/completions',
+      model: 'claude-sonnet-4-6',
+    },
   };
 
   var defaultTempExecColumns = {

@@ -535,6 +535,19 @@ body {
   font-size: 13px;
   line-height: 1.6;
 }
+.media-context-hint {
+  margin-top: 6px;
+  border-left: 3px solid #d1d5db;
+  padding-left: 10px;
+}
+.media-context-hint.is-ok {
+  border-left-color: #22c55e;
+  color: #15803d;
+}
+.media-context-hint.is-warn {
+  border-left-color: #f59e0b;
+  color: #b45309;
+}
 .hint.err {
   color: #ef4444;
 }

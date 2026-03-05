@@ -372,6 +372,16 @@
 </div>
 <p class="status" id="defaultPromptStatus"></p>
 <div class="model-card">
+<strong>全局指派</strong>
+<div class="row">
+<label for="globalAssignModelSelect">统一模型</label>
+<select id="globalAssignModelSelect"></select>
+<button class="secondary" id="applyGlobalAssignBtn" type="button">确认</button>
+</div>
+<p class="hint">选择模型后点击“确认”，将当前页面全部功能统一指派并立即保存为该模型。</p>
+<p class="status" id="globalAssignStatus"></p>
+</div>
+<div class="model-card">
 <strong>清洗功能</strong>
 <div class="row">
 <label for="cleanModelSelect">使用模型</label>
@@ -697,6 +707,7 @@
 <select id="modelProvider">
 <option value="deepseek">DeepSeek</option>
 <option value="kimi">Kimi K2</option>
+<option value="claude">Claude兼容</option>
 <option value="custom">自定义</option>
 </select>
 </div>

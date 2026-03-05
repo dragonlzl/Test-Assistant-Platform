@@ -966,6 +966,8 @@
       if (!target) return false;
       var current = getCurrentPageName();
       if (current && current === target) return false;
+      // Flush workflow snapshot before cross-page navigation to avoid debounce loss.
+      persistWorkflowStateNow();
       persistActiveTabForSession(name);
       try {
         window.location.href = buildTabUrl(target, name) || target;
@@ -1034,7 +1036,17 @@
       if (name === 'assign') {
         if (!skipHooks) {
           renderAssignmentsSelect();
-          ['reviewAssignStatus', 'cleanAssignStatus', 'compareAssignStatus', 'splitAssignStatus', 'casesAssignStatus', 'caseGenAssignStatus', 'caseFilterAssignStatus']
+          [
+            'reviewAssignStatus',
+            'cleanAssignStatus',
+            'compareAssignStatus',
+            'splitAssignStatus',
+            'casesAssignStatus',
+            'caseGenAssignStatus',
+            'caseFilterAssignStatus',
+            'missingReminderAssignStatus',
+            'caseLibraryGenAssignStatus',
+          ]
             .forEach(clearStatusById);
           focusAssignSaveIfNeeded();
         }
@@ -1133,6 +1145,7 @@
     try {
       if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
         window.addEventListener('beforeunload', function() {
+          persistWorkflowStateNow();
           var tab = getActiveTabFromDom();
           persistActiveTabForSession(tab);
           // 标记“刷新来源页签”，用于执行页做“仅在执行页刷新才触发自动同步/diff”的判定。
@@ -1147,6 +1160,7 @@
         });
         window.addEventListener('visibilitychange', function() {
           if (document && document.visibilityState === 'hidden') {
+            persistWorkflowStateNow();
             persistActiveTabForSession(getActiveTabFromDom());
           }
         });
@@ -1250,6 +1264,7 @@
       goToCaseGeneration: goToCaseGeneration,
       generateCasesForModule: generateCasesForModule,
       generateAllCaseGenModules: api.generateAllCaseGenModules || function() {},
+      generateSuggestedCaseGenModules: api.generateSuggestedCaseGenModules || function() {},
       toggleCaseView: toggleCaseView,
       exportModuleCases: exportModuleCases,
       exportSelectedCases: exportSelectedCases,
@@ -1263,6 +1278,7 @@
       topUpAllCaseGenModules: api.topUpAllCaseGenModules || function() {},
       appendSelectedCasesToImported: appendSelectedCasesToImported,
       refreshAppendExistingButton: api.refreshAppendExistingButton || function() {},
+      refreshCaseGenBatchButtons: api.refreshCaseGenBatchButtons || function() {},
       refreshExportCaseGenXmindButton: api.refreshExportCaseGenXmindButton || function() {},
       setCaseGenDbStoreNewAction: api.setCaseGenDbStoreNewAction || function() {},
       clearCaseGenDbStoreNewActionError: api.clearCaseGenDbStoreNewActionError || function() {},
@@ -1277,11 +1293,11 @@
       ensureCaseGenModulesFromSplit: ensureCaseGenModulesFromSplit,
       renderCaseGeneration: renderCaseGeneration,
     }, Object.keys({
-      goToCaseGeneration: 1, generateCasesForModule: 1, generateAllCaseGenModules: 1, toggleCaseView: 1, exportModuleCases: 1, exportSelectedCases: 1,
+      goToCaseGeneration: 1, generateCasesForModule: 1, generateAllCaseGenModules: 1, generateSuggestedCaseGenModules: 1, toggleCaseView: 1, exportModuleCases: 1, exportSelectedCases: 1,
       exportSelectedCasesToXmind: 1, exportSelectedModulesToXmind: 1, transferModuleToTempExec: 1, importModuleCases: 1, clearModuleCases: 1, topUpCasesForModule: 1,
       topUpAllCaseGenModules: 1,
       appendSelectedCasesToImported: 1, transferSelectedCasesToExec: 1,
-      refreshAppendExistingButton: 1, refreshExportCaseGenXmindButton: 1,
+      refreshAppendExistingButton: 1, refreshCaseGenBatchButtons: 1, refreshExportCaseGenXmindButton: 1,
       setCaseGenDbStoreNewAction: 1, clearCaseGenDbStoreNewActionError: 1,
       openCaseGenAllView: 1, openCaseGenDbStoreNewDrawer: 1, openCaseGenDbStoreAppendDrawer: 1,
       handleCaseSelectionChange: 1, handleCaseSelectAll: 1, handleCaseSelectAllModules: 1,
@@ -1522,6 +1538,7 @@
         runAutoWorkflow: api.runAutoWorkflow,
         runAutoWorkflowFromClean: api.runAutoWorkflowFromClean,
         continueAutoWorkflowAfterCoverage: api.continueAutoWorkflowAfterCoverage,
+        cancelAutoWorkflow: api.cancelAutoWorkflow,
         executeAutoWorkflowSteps: api.executeAutoWorkflowSteps,
         enforceAutoCoverageRequirement: api.enforceAutoCoverageRequirement,
         reviewRequirements: api.reviewRequirements,

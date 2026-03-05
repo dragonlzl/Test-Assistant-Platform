@@ -285,6 +285,7 @@ test('XMind 编辑态支持右键新增、跨侧拖拽、回车换行与横向�
     window.dispatchEvent(upEvt);
   });
   await expect(page.locator('.xmind-node-context-menu.is-open')).toBeVisible();
+  await expect(page.locator('.xmind-node-context-menu [data-mind-node-menu="node-delete"]')).toBeVisible();
   await page.evaluate(() => {
     var btn = document.querySelector('.xmind-node-context-menu [data-mind-node-menu="node-add"]');
     if (btn && typeof btn.click === 'function') btn.click();
@@ -293,9 +294,27 @@ test('XMind 编辑态支持右键新增、跨侧拖拽、回车换行与横向�
   const nodeCountAfterContextAdd = await viewer.locator('me-tpc').count();
   expect(nodeCountAfterContextAdd).toBeGreaterThan(nodeCountBeforeContextAdd);
 
+  await page.evaluate(() => {
+    var input = document.getElementById('input-box');
+    if (!input) return;
+    if (typeof input.blur === 'function') input.blur();
+  });
+  await page.waitForTimeout(80);
+
   const editNode = viewer.locator('me-main me-wrapper > me-parent > me-tpc .text').first();
-  await editNode.dblclick({ force: true });
-  await page.waitForTimeout(100);
+  const originalEditNodeText = String((await editNode.textContent()) || '').trim();
+  await editNode.click({ force: true });
+  await expect(page.locator('#input-box')).toHaveCount(0);
+  await editNode.press('a');
+  await expect(page.locator('#input-box')).toBeVisible();
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      var input = document.getElementById('input-box');
+      if (!input) return '';
+      return String(input.textContent || '').trim();
+    });
+  }).toBe('a');
+  await page.keyboard.press('Backspace');
   await page.keyboard.type('第一行');
   await page.keyboard.press('Enter');
   await page.keyboard.type('第二行');
@@ -313,5 +332,41 @@ test('XMind 编辑态支持右键新增、跨侧拖拽、回车换行与横向�
   expect(multiline.hasInput).toBeTruthy();
   expect(multiline.text).toContain('第一行');
   expect(multiline.text).toContain('第二行');
+  if (originalEditNodeText) {
+    expect(multiline.text).not.toContain(originalEditNodeText);
+  }
   expect(multiline.hasBreak).toBeTruthy();
+
+  await page.evaluate(() => {
+    var input = document.getElementById('input-box');
+    if (input && typeof input.blur === 'function') input.blur();
+  });
+  await page.waitForTimeout(80);
+  await editNode.click({ force: true });
+  await expect(page.locator('#input-box')).toHaveCount(0);
+  const nodeCountBeforeClear = await viewer.locator('me-tpc').count();
+  await page.keyboard.press('Backspace');
+  await expect(page.locator('#input-box')).toBeVisible();
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      var input = document.getElementById('input-box');
+      if (!input) return '__NO_INPUT__';
+      return String(input.textContent || '');
+    });
+  }).toBe('');
+  const nodeCountAfterClear = await viewer.locator('me-tpc').count();
+  expect(nodeCountAfterClear).toBe(nodeCountBeforeClear);
+
+  await page.evaluate(() => {
+    var input = document.getElementById('input-box');
+    if (input && typeof input.blur === 'function') input.blur();
+  });
+  await page.waitForTimeout(80);
+  await editNode.click({ force: true });
+  await expect(page.locator('#input-box')).toHaveCount(0);
+  const nodeCountBeforeDelete = await viewer.locator('me-tpc').count();
+  await page.keyboard.press('Delete');
+  await page.waitForTimeout(140);
+  const nodeCountAfterDelete = await viewer.locator('me-tpc').count();
+  expect(nodeCountAfterDelete).toBeLessThan(nodeCountBeforeDelete);
 });

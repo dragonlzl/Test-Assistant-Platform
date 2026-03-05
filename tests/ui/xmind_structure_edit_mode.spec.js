@@ -165,11 +165,24 @@ test.describe('XMind 编辑模式', () => {
 
     await page.addInitScript((payload) => {
       try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { localStorage.setItem('usecase-settings-v1', JSON.stringify({ theme: 'light' })); } catch (_) {}
+      try { localStorage.setItem('tap-theme-hint', 'light'); } catch (_) {}
+      try {
+        if (document && document.documentElement) document.documentElement.setAttribute('data-theme', 'light');
+      } catch (_) {}
     }, { token, caseFileId });
 
     await gotoCaseLibrary(page);
     await waitCaseLibraryReady(page);
     await switchToTab(page, 'case-library');
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        var root = document && document.documentElement ? document.documentElement : null;
+        if (!root) return '';
+        var theme = root.getAttribute('data-theme');
+        return String(theme || 'light').toLowerCase();
+      });
+    }).toBe('light');
 
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
@@ -188,9 +201,6 @@ test.describe('XMind 编辑模式', () => {
     await expect(viewer.locator('[data-mind-action="node-add"]')).toBeVisible();
 
     const firstNode = viewer.locator('me-tpc .text').first();
-    await firstNode.click({ force: true });
-    await expect(viewer.locator('[data-mind-action="node-add"]')).toBeEnabled();
-
     await firstNode.dblclick({ force: true });
     await page.waitForTimeout(100);
     const caretState = await page.evaluate(() => {
@@ -262,23 +272,129 @@ test.describe('XMind 编辑模式', () => {
       expect(dragGhostRect.ghostZ).toBeGreaterThan(dragGhostRect.drawerZ);
     }
 
-    const nodeCountBeforeAdd = await viewer.locator('me-tpc').count();
-    await viewer.locator('[data-mind-action="node-add"]').click();
+    const readNodeStats = async () => {
+      return await page.evaluate(() => {
+        var viewerEl = document.getElementById('caseLibraryXmindStructureViewer');
+        if (!viewerEl || !viewerEl.querySelectorAll) return null;
+        var nodes = viewerEl.querySelectorAll('me-tpc');
+        var emptyCount = 0;
+        for (var i = 0; i < nodes.length; i += 1) {
+          var node = nodes[i];
+          var topic = node && node.nodeObj && node.nodeObj.topic !== undefined && node.nodeObj.topic !== null
+            ? String(node.nodeObj.topic).trim()
+            : '';
+          if (!topic) emptyCount += 1;
+        }
+        return {
+          nodeCount: nodes.length,
+          emptyCount: emptyCount,
+        };
+      });
+    };
+
+    const readThemeSnapshot = async () => {
+      return await page.evaluate(() => {
+        var viewerEl = document.getElementById('caseLibraryXmindStructureViewer');
+        if (!viewerEl) return null;
+        var canvasEl = viewerEl.querySelector ? viewerEl.querySelector('.xmind-structure-canvas') : null;
+        var mapContainerEl = viewerEl.querySelector ? viewerEl.querySelector('.map-container') : null;
+        var scopeEl = mapContainerEl || canvasEl || viewerEl;
+        var scopeStyle = scopeEl ? getComputedStyle(scopeEl) : null;
+        var viewerStyle = getComputedStyle(viewerEl);
+        var root = document && document.documentElement ? document.documentElement : null;
+        var rootTheme = root ? String(root.getAttribute('data-theme') || 'light').toLowerCase() : 'light';
+        var mainBg = scopeStyle ? String(scopeStyle.getPropertyValue('--main-bgcolor') || '').trim().toLowerCase() : '';
+        var bg = scopeStyle ? String(scopeStyle.getPropertyValue('--bgcolor') || '').trim().toLowerCase() : '';
+        var viewerBg = viewerStyle ? String(viewerStyle.backgroundColor || '').trim().toLowerCase() : '';
+        var mapBg = mapContainerEl ? String(getComputedStyle(mapContainerEl).backgroundColor || '').trim().toLowerCase() : '';
+        var raw = [mainBg, bg, viewerBg, mapBg].join('|');
+        var darkLike = raw.indexOf('#1f2937') >= 0
+          || raw.indexOf('#111827') >= 0
+          || raw.indexOf('#0f172a') >= 0
+          || raw.indexOf('rgb(31, 41, 55)') >= 0
+          || raw.indexOf('rgb(17, 24, 39)') >= 0
+          || raw.indexOf('rgb(15, 23, 42)') >= 0;
+        return {
+          rootTheme: rootTheme,
+          mainBg: mainBg,
+          bg: bg,
+          viewerBg: viewerBg,
+          mapBg: mapBg,
+          darkLike: darkLike,
+        };
+      });
+    };
+
+    const tabStatsBeforeAdd = await readNodeStats();
+    expect(tabStatsBeforeAdd).toBeTruthy();
+    const tabTargetNode = viewer.locator('me-main me-wrapper > me-parent > me-tpc .text').first();
+    await tabTargetNode.click({ force: true });
+    await page.keyboard.press('Tab');
     await page.waitForTimeout(120);
-    const nodeCountAfterAdd = await viewer.locator('me-tpc').count();
-    expect(nodeCountAfterAdd).toBeGreaterThan(nodeCountBeforeAdd);
+    const tabStatsAfterAdd = await readNodeStats();
+    expect(tabStatsAfterAdd).toBeTruthy();
+    if (tabStatsBeforeAdd && tabStatsAfterAdd) {
+      expect(tabStatsAfterAdd.nodeCount).toBeGreaterThan(tabStatsBeforeAdd.nodeCount);
+      expect(tabStatsAfterAdd.emptyCount).toBeGreaterThan(tabStatsBeforeAdd.emptyCount);
+    }
+
+    const themeBeforeUndo = await readThemeSnapshot();
+    expect(themeBeforeUndo).toBeTruthy();
+    if (themeBeforeUndo) {
+      expect(themeBeforeUndo.rootTheme).toBe('light');
+      expect(themeBeforeUndo.darkLike).toBeFalsy();
+    }
 
     await expect(viewer.locator('[data-mind-action="undo"]')).toBeEnabled();
     await viewer.locator('[data-mind-action="undo"]').click();
     await page.waitForTimeout(120);
-    const nodeCountAfterUndo = await viewer.locator('me-tpc').count();
-    expect(nodeCountAfterUndo).toBe(nodeCountBeforeAdd);
+    const tabStatsAfterUndo = await readNodeStats();
+    expect(tabStatsAfterUndo).toBeTruthy();
+    if (tabStatsBeforeAdd && tabStatsAfterUndo) {
+      expect(tabStatsAfterUndo.nodeCount).toBe(tabStatsBeforeAdd.nodeCount);
+      expect(tabStatsAfterUndo.emptyCount).toBe(tabStatsBeforeAdd.emptyCount);
+    }
+    const themeAfterUndo = await readThemeSnapshot();
+    expect(themeAfterUndo).toBeTruthy();
+    if (themeBeforeUndo && themeAfterUndo) {
+      expect(themeAfterUndo.rootTheme).toBe('light');
+      expect(themeAfterUndo.mainBg).toBe(themeBeforeUndo.mainBg);
+      expect(themeAfterUndo.bg).toBe(themeBeforeUndo.bg);
+      expect(themeAfterUndo.darkLike).toBeFalsy();
+    }
+
+    const addStatsBefore = await readNodeStats();
+    expect(addStatsBefore).toBeTruthy();
+    await tabTargetNode.click({ force: true });
+    await expect(viewer.locator('[data-mind-action="node-add"]')).toBeEnabled();
+    await viewer.locator('[data-mind-action="node-add"]').click();
+    await page.waitForTimeout(120);
+    const addStatsAfter = await readNodeStats();
+    expect(addStatsAfter).toBeTruthy();
+    if (addStatsBefore && addStatsAfter) {
+      expect(addStatsAfter.nodeCount).toBeGreaterThan(addStatsBefore.nodeCount);
+      expect(addStatsAfter.emptyCount).toBeGreaterThan(addStatsBefore.emptyCount);
+    }
+
+    await expect(viewer.locator('[data-mind-action="undo"]')).toBeEnabled();
+    await viewer.locator('[data-mind-action="undo"]').click();
+    await page.waitForTimeout(120);
+    const addStatsAfterUndo = await readNodeStats();
+    expect(addStatsAfterUndo).toBeTruthy();
+    if (addStatsBefore && addStatsAfterUndo) {
+      expect(addStatsAfterUndo.nodeCount).toBe(addStatsBefore.nodeCount);
+      expect(addStatsAfterUndo.emptyCount).toBe(addStatsBefore.emptyCount);
+    }
 
     await expect(viewer.locator('[data-mind-action="redo"]')).toBeEnabled();
     await viewer.locator('[data-mind-action="redo"]').click();
     await page.waitForTimeout(120);
-    const nodeCountAfterRedo = await viewer.locator('me-tpc').count();
-    expect(nodeCountAfterRedo).toBeGreaterThan(nodeCountAfterUndo);
+    const addStatsAfterRedo = await readNodeStats();
+    expect(addStatsAfterRedo).toBeTruthy();
+    if (addStatsAfterUndo && addStatsAfterRedo) {
+      expect(addStatsAfterRedo.nodeCount).toBeGreaterThan(addStatsAfterUndo.nodeCount);
+      expect(addStatsAfterRedo.emptyCount).toBeGreaterThan(addStatsAfterUndo.emptyCount);
+    }
 
     await viewer.locator('[data-mind-action="edit-save"]').click();
     await page.waitForTimeout(200);
@@ -578,5 +694,176 @@ test.describe('XMind 编辑模式', () => {
 
     const nodeCount = await viewer.locator('me-tpc').count();
     expect(nodeCount).toBeGreaterThan(nodeCountBeforePaste);
+  });
+
+  test('编辑态选中节点后粘贴普通文本会新增子节点', async ({ page }) => {
+    const token = 'token-case-library-xmind-paste-plain-child';
+    const user = { id: 69, username: 'xmind_paste_plain_user', role: 'admin', level: 'leader' };
+    const project = { id: 431, name: 'XMind纯文本粘贴项目' };
+    const versions = [{ id: 531, name: 'v1' }];
+    const now = new Date().toISOString();
+    const caseFileId = 2091;
+    const caseFiles = [{
+      id: caseFileId,
+      project_id: project.id,
+      version_id: versions[0].id,
+      file_name_clean: '纯文本粘贴用例集',
+      reuse_enabled: false,
+      item_count: 1,
+      importer_id: user.id,
+      importer_name: user.username,
+      imported_at: now,
+      updated_at: now,
+      last_updated_by: user.id,
+      last_updated_by_name: user.username,
+    }];
+    const caseItemsByFileId = {};
+    caseItemsByFileId[caseFileId] = [{
+      id: 20901,
+      case_file_id: caseFileId,
+      module: '支付模块',
+      title: '支付成功',
+      priority: 'P1',
+      precondition: '已登录',
+      steps: '输入支付密码',
+      expected: '支付成功',
+      remark: '',
+      created_at: now,
+      updated_at: now,
+    }];
+
+    await buildCaseLibraryRoutes(page, {
+      token,
+      user,
+      project,
+      versions,
+      caseFiles,
+      caseItemsByFileId,
+    });
+
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
+      try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { localStorage.setItem('tap-current-user', JSON.stringify(payload.user)); } catch (_) {}
+    }, { token, user });
+
+    await gotoCaseLibrary(page);
+    await waitCaseLibraryReady(page);
+    await switchToTab(page, 'case-library');
+
+    await page.click('#openCaseLibraryEditDrawerBtn');
+    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await page.click('#caseLibraryXmindViewBtn');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+
+    const viewer = page.locator('#caseLibraryXmindStructureViewer');
+    await viewer.locator('[data-mind-action="edit-enter"]').click();
+    await expect(viewer.locator('[data-mind-action="edit-save"]')).toBeVisible();
+
+    const targetMeta = await page.evaluate(() => {
+      var viewerEl = document.getElementById('caseLibraryXmindStructureViewer');
+      if (!viewerEl || !viewerEl.querySelector) return null;
+      var node = viewerEl.querySelector('me-main me-wrapper > me-parent > me-tpc');
+      if (!node || !node.nodeObj) return null;
+      var nodeId = node.nodeObj.id === undefined || node.nodeObj.id === null
+        ? ''
+        : String(node.nodeObj.id);
+      var children = Array.isArray(node.nodeObj.children) ? node.nodeObj.children : [];
+      return {
+        nodeId: nodeId,
+        childCount: children.length,
+      };
+    });
+    expect(targetMeta).toBeTruthy();
+
+    await viewer.locator('me-main me-wrapper > me-parent > me-tpc .text').first().click({ force: true });
+    await expect(page.locator('#input-box')).toHaveCount(0);
+
+    const pasteText = '来自普通文本的子节点\n第二行';
+    const pasteState = await page.evaluate((payload) => {
+      var viewerEl = document.getElementById('caseLibraryXmindStructureViewer');
+      if (!viewerEl || typeof viewerEl.dispatchEvent !== 'function') {
+        return { ok: false, reason: 'viewer-not-found' };
+      }
+      if (typeof viewerEl.focus === 'function') {
+        try {
+          viewerEl.focus();
+        } catch (_) {
+          // ignore
+        }
+      }
+      var clipboardData = {
+        getData: function(type) {
+          var name = type === undefined || type === null ? '' : String(type).toLowerCase();
+          if (name === 'text/plain' || name === 'text') return payload;
+          return '';
+        },
+      };
+      var eventObj = null;
+      try {
+        eventObj = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+      } catch (err0) {
+        eventObj = document.createEvent('Event');
+        eventObj.initEvent('paste', true, true);
+      }
+      try {
+        Object.defineProperty(eventObj, 'clipboardData', {
+          value: clipboardData,
+        });
+      } catch (err1) {
+        try {
+          eventObj.clipboardData = clipboardData;
+        } catch (err2) {
+          // ignore
+        }
+      }
+      viewerEl.dispatchEvent(eventObj);
+      return {
+        ok: true,
+        defaultPrevented: eventObj.defaultPrevented === true,
+      };
+    }, pasteText);
+    expect(pasteState && pasteState.ok).toBeTruthy();
+    expect(pasteState && pasteState.defaultPrevented).toBeTruthy();
+
+    const appendState = await page.evaluate((payload) => {
+      var viewerEl = document.getElementById('caseLibraryXmindStructureViewer');
+      if (!viewerEl || !viewerEl.querySelectorAll) return null;
+      var nodes = viewerEl.querySelectorAll('me-tpc');
+      var target = null;
+      for (var i = 0; i < nodes.length; i += 1) {
+        var node = nodes[i];
+        if (!node || !node.nodeObj || node.nodeObj.id === undefined || node.nodeObj.id === null) continue;
+        if (String(node.nodeObj.id) !== String(payload.nodeId)) continue;
+        target = node;
+        break;
+      }
+      if (!target || !target.nodeObj) return null;
+      var children = Array.isArray(target.nodeObj.children) ? target.nodeObj.children : [];
+      var hasExactTopic = false;
+      for (var j = 0; j < children.length; j += 1) {
+        var topic = children[j] && children[j].topic !== undefined && children[j].topic !== null
+          ? String(children[j].topic).trim()
+          : '';
+        if (topic === payload.expectedTopic) {
+          hasExactTopic = true;
+          break;
+        }
+      }
+      return {
+        childCount: children.length,
+        hasExactTopic: hasExactTopic,
+      };
+    }, {
+      nodeId: targetMeta && targetMeta.nodeId ? targetMeta.nodeId : '',
+      expectedTopic: pasteText,
+    });
+    expect(appendState).toBeTruthy();
+    if (appendState && targetMeta) {
+      expect(appendState.childCount).toBeGreaterThan(targetMeta.childCount);
+      expect(appendState.hasExactTopic).toBeTruthy();
+    }
+    await expect(viewer.locator('[data-mind-action="undo"]')).toBeEnabled();
   });
 });

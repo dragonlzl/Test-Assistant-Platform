@@ -19,26 +19,204 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
-- 功能名称：Electron 环境 Case Assistant 补全需求接入
-- 功能描述：在“功能流程/一键执行”的“对比完整性”完成后，若当前页面处于 Electron 渲染进程且配置了合法项目目录，则自动调用 `case-assistant:request`，将“清洗预期需求 + 代码实际实现”融合为完整需求文案并回写，供下一步“测试模块拆分”直接使用。
+- 功能名称：用例生成通用操作区新增“仅补全用例”按钮
+- 功能描述：在“用例生成 → 通用操作区”新增“仅补全用例”按钮。点击后只对“生成建议”非空的模块触发生成，执行链路与逐模块点击“生成用例”一致；无建议模块不会触发。
 - 操作方式：
-  - 进入“设置 → 通用设置”，新增“Case Assistant 项目路径”并保存（支持清空）。
-  - 在 AI 功能中手动点击“开始对比”或触发一键流程的对比步骤。
-  - 满足条件时自动发起 Electron 调用；不满足（非 Electron/路径空或非法）则自动跳过并继续原流程。
+  - 进入“AI 功能 → 用例生成”，在模块卡片内填写“生成建议”；
+  - 点击通用操作区“仅补全用例”；
+  - 系统仅对有建议的模块执行生成，其他模块保持原状。
 - 使用效果：
-  - 保持原对比流程不变，接口不可用时不会阻断工作流。
-  - 接口可用且返回成功时，清洗文本会自动替换为融合后的完整需求文案，后续拆分直接使用该文案。
+  - 可一键完成“有建议模块”的定向补全生成，避免全量重跑；
+  - 与单模块“生成用例”行为保持一致（同一模型调用与结果写回逻辑）；
+  - 按钮状态会随建议输入实时变化（无可执行目标时自动置灰）。
 - 新增内容/接口/组件：
-  - 前端：新增 Electron 环境判断与调用链（`window.electronAPI` 存在判断、`invokeChannel`/`invoke` 兼容、请求 ID/超时/提示词组装、结果回写）`scripts/core/compareCore.js`。
-  - 前端：新增设置项“Case Assistant 项目路径”及保存逻辑、合法性提示与用户级持久化 `settings.html`、`index.html`、`scripts/modules/settings.js`。
-  - 前端：默认设置补充 `caseAssistantProjectRoot` 字段 `config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`。
-  - 测试：新增 UI 与 API 用例 `tests/ui/compare_case_assistant_electron.spec.js`、`tests/api/settings_case_assistant_project_root.spec.js`。
-- 复用说明：复用现有 settings 持久化链路（`/api/settings`）、对比步骤执行链路（`compareCoverage`）与清洗文本包装函数（`wrapTextWithRequirement`），未新增后端接口。
+  - 页面：
+    - `index.html`、`ai-workflow.html`：通用操作区新增 `#caseGenSuggestionGenerateBtn`（仅补全用例）。
+  - 前端逻辑：
+    - `scripts/core/casesGenCore.js`
+      - 扩展模块元数据，新增 `hasSuggestion`；
+      - 扩展 `refreshCaseGenBatchButtons`，纳入“仅补全用例”按钮启停规则；
+      - 新增 `generateSuggestedCaseGenModules`，按“有建议且非运行中”筛选模块并复用 `generateCasesForModule` 批量执行；
+      - 导出 `refreshCaseGenBatchButtons` 供输入联动刷新。
+    - `scripts/modules/casesgen.js`
+      - 绑定 `#caseGenSuggestionGenerateBtn` 点击事件；
+      - 建议输入时实时刷新批量按钮可用态。
+    - `scripts/modules/app.js`、`scripts/core/appRuntime.js`
+      - 新增 `generateSuggestedCaseGenModules` 与 `refreshCaseGenBatchButtons` 的 API 透传。
+  - UI 自动化：
+    - `tests/ui/casegen_db_store.spec.js`
+      - 新增“仅补全用例：只触发有生成建议的模块生成”回归用例。
+- 复用说明：复用现有 `generateCasesForModule`、`runConcurrent`、模块状态与进度管理逻辑，仅新增筛选入口与按钮联动，不新增后端接口。
 - 测试与验证：
-  - `node --check scripts/modules/settings.js scripts/core/compareCore.js scripts/base/state.js scripts/modules/app.js config/constants.js tests/ui/compare_case_assistant_electron.spec.js tests/api/settings_case_assistant_project_root.spec.js`（通过）
-  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npx playwright test tests/ui/compare_case_assistant_electron.spec.js --workers=1 --reporter=line`（通过，2/2；执行时使用临时 no-webServer 配置）
-  - `API_BASE_URL=http://127.0.0.1:8080 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_case_assistant_project_root.spec.js --reporter=line`（通过，1/1）
-- 更新记录：2026-02-28 初版接入 Electron Case Assistant 自动补全流程与路径设置项（`scripts/core/compareCore.js`、`scripts/modules/settings.js`、`settings.html`、`index.html`、`config/constants.js`、`scripts/base/state.js`、`scripts/modules/app.js`、`tests/ui/compare_case_assistant_electron.spec.js`、`tests/api/settings_case_assistant_project_root.spec.js`）。
+  - `node --check scripts/core/casesGenCore.js scripts/modules/casesgen.js scripts/modules/app.js scripts/core/appRuntime.js tests/ui/casegen_db_store.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js -g "仅补全用例：只触发有生成建议的模块生成|全模块生成按钮" --reporter=line`（5/5 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js -g "超过10个模块按受控并发执行并最终清理运行态" --reporter=line`（通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_models.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-04 新增“仅补全用例”批量入口与建议联动启停，补充 UI/API 回归验证（`index.html`、`ai-workflow.html`、`scripts/core/casesGenCore.js`、`scripts/modules/casesgen.js`、`scripts/modules/app.js`、`scripts/core/appRuntime.js`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：用例生成多模块并发卡死修复（>10 模块）
+- 功能描述：修复“全模块生成/补全”在模块数量较多时（如超过 10）后续模块可能出现假运行、长期不完成且无法恢复的问题。将批量执行改为受控并发队列，并为模型调用增加硬超时守护；同时新增进度自愈逻辑，避免“运行态已结束但分组仍显示执行中”的脏状态残留。
+- 操作方式：
+  - 进入“AI 功能 → 用例生成”，在已拆分出多个模块后点击“全模块直接生成”或“全模块补全生成”；
+  - 系统按受控并发分批执行（页面状态提示会显示并发数），模块会持续推进直至完成；
+  - 若底层模型请求异常不回调，超时后会自动失败并清理运行态，可直接重试。
+- 使用效果：
+  - 多模块批量生成不再因并发过高导致后续模块长期卡住；
+  - 异常请求可自动超时退出，不会无限占用“生成中”状态；
+  - 历史/异常导致的陈旧分组“执行中”会被自动修正，避免界面假运行。
+- 新增内容/接口/组件：
+  - 前端：
+    - `scripts/core/casesGenCore.js`
+      - 新增批量执行并发控制（上限 5）；
+      - 新增模型调用硬超时守护（兜底超时，不依赖单一路径回调）；
+      - 批量任务增加单模块异常兜底，避免单点异常阻断后续队列；
+      - 新增陈旧进度自愈（非 running 模块若残留 running 分组，自动转失败并提示重试）。
+  - UI 自动化：
+    - `tests/ui/casegen_db_store.spec.js`
+      - 新增“全模块生成：超过10个模块按受控并发执行并最终清理运行态”回归用例，校验调用并发峰值不超过 5、全部模块完成且无 running 残留。
+- 复用说明：复用现有 `runConcurrent`、模型调用链路与用例生成状态管理结构，在 `casesGenCore` 内做最小增量增强；未新增后端接口。
+- 测试与验证：
+  - `node --check scripts/core/casesGenCore.js tests/ui/casegen_db_store.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js -g "超过10个模块按受控并发执行并最终清理运行态" --reporter=line`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js -g "全模块生成按钮" --reporter=line`（4/4 通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_models.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-04 首次修复多模块并发卡死与假运行问题，补充并发回归 UI 用例与 API 回归验证（`scripts/core/casesGenCore.js`、`tests/ui/casegen_db_store.spec.js`）。
+
+- 功能名称：一键执行需求评审异常结果自动中断并提示重试
+- 功能描述：修复一键执行在“需求评审”返回异常格式内容时会卡在错误状态的问题。现在评审结果若不是有效 JSON 数组或结构缺少关键字段，会自动中断流程并提示用户重新执行。
+- 操作方式：
+  - 进入“AI 功能 → 一键执行”并启动流程；
+  - 若需求评审返回异常结构（如 SSE 事件流文本、非 JSON 数组、字段缺失对象），系统自动停止流程；
+  - 页面提示“已自动中断，请重新执行”，无需手动点击“中断全部执行”。
+- 使用效果：
+  - 避免流程卡死在“进行中”状态；
+  - 用户可直接按提示重新执行，减少排障成本。
+- 新增内容/接口/组件：
+  - 前端：
+    - `scripts/core/autoCore.js`：新增评审结果解析与结构校验（支持剥离代码块、兼容 `data` 数组包装），并在校验失败时返回明确中断原因；
+    - `scripts/core/autoCore.js`：自动流程执行器支持步骤级 `getInvalidReason`，优先展示具体失败原因；
+    - `scripts/modules/app.js`：自动流程管理器在步骤校验失败时读取步骤级失败原因，统一展示“自动中断+重试”提示。
+  - 测试：
+    - `tests/ui/auto_review_invalid_interrupt.spec.js`：新增 UI 回归，覆盖“需求评审返回异常格式后自动中断并恢复按钮状态”。
+- 复用说明：复用现有自动流程步骤框架与失败态处理链路，仅增强评审步骤的结果校验与失败文案，无新增后端接口。
+- 测试与验证：
+  - `node --check scripts/core/autoCore.js scripts/modules/app.js tests/ui/auto_review_invalid_interrupt.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/auto_review_invalid_interrupt.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-04 修复“需求评审结果异常时流程卡死需手动中断”问题，新增评审结构校验和自动中断机制，并补充 UI 回归用例（`scripts/core/autoCore.js`、`scripts/modules/app.js`、`tests/ui/auto_review_invalid_interrupt.spec.js`）。
+
+- 功能名称：一键执行原始需求导入区补充图片识别与模型能力提示
+- 功能描述：在“一键执行 → 导入数据”的“原始需求”导入区域下，新增与功能流程一致的图片上下文与模型能力提示，展示当前需求图片数量、评审/清洗模型标签，以及是否可识别图片。
+- 操作方式：
+  - 进入“AI 功能 → 一键执行”；
+  - 在“导入数据”卡片的“原始需求”导入区域下查看新增提示；
+  - 导入/粘贴图片或调整功能指派模型后，提示文案会实时刷新。
+- 使用效果：
+  - 在一键执行页无需切回功能流程，也能直接判断“当前上下文是否含图片、后续评审/清洗是否具备视觉能力”；
+  - 降低误用纯文本模型导致结果偏差的风险。
+- 新增内容/接口/组件：
+  - 前端：`scripts/modules/app.js`
+    - 复用现有 `updateRequirementMediaContextHints` 逻辑，新增 `mediaContextAutoImportHint` 输出；
+    - 在一键执行“原始需求”导入区下动态渲染与功能流程一致的图片/模型能力提示。
+  - UI 自动化：`tests/ui/auto_import_media_context_hint.spec.js`
+    - 新增用例覆盖“一键执行原始需求导入区显示图片上下文 + 模型视觉能力”。
+- 复用说明：完全复用既有图片统计、模型能力识别与提示样式逻辑（`media-context-hint`），未新增后端接口、未改变原有页面结构。
+- 测试与验证：
+  - `node --check scripts/modules/app.js tests/ui/auto_import_media_context_hint.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/auto_import_media_context_hint.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-04 新增一键执行“原始需求导入区”图片/模型能力提示及对应 UI 回归用例（`scripts/modules/app.js`、`tests/ui/auto_import_media_context_hint.spec.js`）。
+
+- 功能名称：功能指派模型切换即时生效（免保存）
+- 功能描述：功能指派页中，单个功能卡片切换模型后立即保存并生效，不再依赖点击“保存指派”按钮。
+- 操作方式：
+  - 进入“AI 功能 → 功能指派”；
+  - 在任意功能卡片（如需求清洗/需求评审/覆盖对比等）直接更换模型；
+  - 切换后自动持久化，刷新页面仍保持最新指派。
+- 使用效果：
+  - 降低误操作风险，不会出现“已切换但忘记保存导致回退”；
+  - 一键执行/单步执行会即时使用最新指派模型。
+- 新增内容/接口/组件：
+  - 前端：`scripts/modules/assign.js`
+    - `bindModelSelect` 的 `change` 事件中新增自动保存链路：`saveAssignments()` + `renderAssignmentsSelect()`，并保持状态与可见性刷新；
+    - 保留原有“保存指派”按钮，作为可选兜底入口（不再是必需步骤）。
+  - UI 自动化：`tests/ui/models_settings.spec.js`
+    - 新增用例“功能指派切换模型后立即生效并持久化（无需点击保存指派）”，覆盖切换后本地持久化与刷新恢复。
+- 复用说明：复用现有 `saveAssignments`、本地存储与后端同步逻辑，不新增接口、不改展示结构，仅调整触发时机为模型切换事件。
+- 测试与验证：
+  - `node --check scripts/modules/assign.js tests/ui/models_settings.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/models_settings.spec.js -g "功能指派切换模型后立即生效并持久化" --reporter=line`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/models_settings.spec.js --reporter=line`（6/6 通过）
+- 更新记录：2026-03-04 新增“功能卡片模型切换自动保存”能力，并补充刷新持久化 UI 回归（`scripts/modules/assign.js`、`tests/ui/models_settings.spec.js`）。
+
+- 功能名称：Claude 兼容模型类型与 Packy `/responses` 自动兼容
+- 功能描述：修复 Claude 模型在 Packy `/v1/responses` 地址下出现 `convert_request_failed` 的问题；新增“Claude兼容”模型类型，并在请求层自动将 Claude 的 `/responses` 调用改写为 `/chat/completions`（含模型测试与正式调用链路）。
+- 操作方式：
+  - 在模型管理中选择“Claude兼容”类型，默认填充 `https://www.packyapi.com/v1/chat/completions` 与 `claude-sonnet-4-6`；
+  - 若历史配置仍为 Claude + `/responses`，系统会在请求时自动兼容到 `/chat/completions`，无需手动改写；
+  - 点击“测试模型”与实际流程调用均走同一兼容策略。
+- 使用效果：
+  - 避免 Claude 在 Packy `/responses` 路径下触发 `not implemented / convert_request_failed`；
+  - 静态页或代理不可用（如 501/5xx）场景会自动回退直连，模型测试结果更稳定；
+  - 保持原有展示结构与操作路径不变。
+- 新增内容/接口/组件：
+  - 前端页面：
+    - `index.html`、`ai-tools.html`：模型类型新增 `Claude兼容` 选项。
+  - 配置：
+    - `config/constants.js`：新增 `claude` provider 预设（`baseUrl` + `model`）。
+  - 模型调用：
+    - `services/modelClient.js`：新增 Claude 家族识别与 `/responses -> /chat/completions` 自动改写；Claude 场景按 chat body（`messages`）构造请求；代理返回 `401/403/404/405/501/5xx` 时自动回退直连。
+    - `scripts/modules/models.js`：测试模型链路同步支持 Claude 自动兼容与代理失败回退。
+  - 测试：
+    - `tests/ui/model_response_strip.spec.js`：新增 Claude + Packy `/responses` 自动兼容 UI 用例。
+- 复用说明：复用现有模型管理、provider 预设、模型请求与代理回退框架；在原链路内做兼容分支扩展，无新增后端接口。
+- 测试与验证：
+  - `node --check services/modelClient.js scripts/modules/models.js tests/ui/model_response_strip.spec.js config/constants.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/model_response_strip.spec.js --reporter=line`（4/4 通过）
+- 更新记录：2026-03-04 新增 Claude 兼容模型类型与 Packy `/responses` 自动兼容能力，并补充回归用例（`services/modelClient.js`、`scripts/modules/models.js`、`config/constants.js`、`index.html`、`ai-tools.html`、`tests/ui/model_response_strip.spec.js`）。
+
+- 功能名称：需求导入删除线内容过滤
+- 功能描述：在导入 `.docx` 需求时，自动忽略被删除线标记的文本，避免已废弃内容进入需求评审、需求清洗与后续流程。
+- 操作方式：
+  - 上传包含删除线文本的 `.docx` 需求文档；
+  - 系统导入后仅保留未删除线内容，删除线文本不写入“原始需求”输入区。
+- 使用效果：
+  - 废弃内容在导入阶段被过滤，需求评审和后续 AI 流程输入更准确；
+  - 保留原有页面展示结构与导入交互，不改变用户操作路径。
+- 新增内容/接口/组件：
+  - 前端：`scripts/modules/upload.js`
+    - DOCX 段落解析改为按 `w:r` run 处理；
+    - 新增删除线判断（`w:strike` / `w:dstrike`），命中后跳过该 run 文本；
+    - 补充 `w:delText` 过滤，避免修订删除文本被导入。
+  - 测试：新增 `tests/ui/import_docx_strikethrough.spec.js`，覆盖“删除线文本过滤 + 普通文本保留 + 显式关闭删除线保留”场景。
+- 复用说明：复用现有导入解析链路（`parseDocxWithFallback`、`extractDocxSegments`）与现有 UI 导入入口，仅增强 run 级解析规则，无新增后端接口。
+- 测试与验证：
+  - `node --check scripts/modules/upload.js tests/ui/import_docx_strikethrough.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/import_docx_strikethrough.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-04 新增 DOCX 删除线文本过滤能力并补充 UI 自动化覆盖（`scripts/modules/upload.js`、`tests/ui/import_docx_strikethrough.spec.js`）。
+
+- 功能名称：自动流程澄清开关跨页/刷新持久化修复
+- 功能描述：修复“需要人工确认需求澄清后再继续自动流程”勾选状态在刷新页面或切换到其他页面后丢失的问题。
+- 操作方式：
+  - 在“自动执行工作流”卡片勾选“需要人工确认需求澄清后再继续自动流程”；
+  - 执行跨页切换（如 `ai-workflow.html` ↔ `settings.html`）或刷新当前页；
+  - 返回自动流程页后勾选状态保持不变。
+- 使用效果：
+  - 开关状态不再被无该控件的页面初始化逻辑覆盖；
+  - 跨页跳转与页面隐藏/刷新前会强制落盘 workflow 快照，避免 debounce 导致的状态丢失。
+- 新增内容/接口/组件：
+  - 前端修复：
+    - `scripts/core/reviewCore.js`：`updateAutoClarifyVisibility` 在缺少 `autoNeedClarify` 控件时保留已恢复状态，不再强制回写 `false`。
+    - `scripts/core/appRuntime.js`：跨页跳转前、`beforeunload`、`visibilitychange(hidden)` 时调用 `persistWorkflowStateNow()` 强制持久化。
+  - UI 自动化：
+    - 新增 `tests/ui/auto_clarify_toggle_persistence.spec.js`，覆盖“勾选后跨页与刷新仍保持勾选”。
+- 复用说明：复用现有 workflow 快照持久化能力（`persistWorkflowStateNow`）与既有开关状态字段（`autoRequireClarifications`），未新增后端接口。
+- 测试与验证：
+  - `node --check scripts/core/reviewCore.js scripts/core/appRuntime.js tests/ui/auto_clarify_toggle_persistence.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/auto_clarify_toggle_persistence.spec.js --reporter=line`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/auto_workflow_persistence.spec.js --reporter=line`（失败：既有用例在本地静态服务场景下断言“正在执行”前即进入“需求评审未产生有效输出”；与本次开关持久化改动无直接耦合）
+- 更新记录：2026-03-03 首次修复勾选状态跨页/刷新丢失，并补充 UI 回归用例（`scripts/core/reviewCore.js`、`scripts/core/appRuntime.js`、`tests/ui/auto_clarify_toggle_persistence.spec.js`）。
+- 更新记录：2026-03-04 修复“等待澄清输入时心跳导致失焦”：`updateAutoClarifyVisibility` 在状态未变化时不再重复重绘澄清视图，避免输入节点被替换；补充渲染稳定性 UI 用例（`scripts/core/reviewCore.js`、`tests/ui/auto_clarify_render_stability.spec.js`）。验证：`node --check scripts/core/reviewCore.js tests/ui/auto_clarify_render_stability.spec.js`、`npx playwright test --config tests/playwright.config.js tests/ui/auto_clarify_render_stability.spec.js --reporter=line`、`npx playwright test --config tests/playwright.config.js tests/ui/auto_clarify_toggle_persistence.spec.js --reporter=line`（通过）。
+- 更新记录：2026-03-04 修复“等待澄清后刷新会重复评审模型”：自动流程管理器新增 `updateTaskContext`，在进入澄清等待时写入 `awaitingClarification` 断点标记；恢复执行到评审步骤时若命中该标记且已有评审结果则跳过评审模型调用，直接恢复“等待澄清确认”。补充 UI 用例 `tests/ui/auto_clarify_resume_no_rereview.spec.js` 覆盖“刷新恢复后继续等待澄清且模型调用次数为 0”。验证：`node --check scripts/modules/app.js scripts/core/autoCore.js tests/ui/auto_clarify_resume_no_rereview.spec.js`、`npx playwright test --config tests/playwright.config.js tests/ui/auto_clarify_resume_no_rereview.spec.js --reporter=line`（通过）。
+- 更新记录：2026-03-04 修复“等待澄清时切换页面会被强制拉回一键执行”：`handleAutoClarifyAfterReview` 仅在 `ai-workflow/index` 页面内自动聚焦 `auto` 页签，避免任务在 `ai-tools/case-exec/case-library/settings/admin` 页面恢复时触发跨页重定向；补充 UI 用例 `tests/ui/auto_clarify_resume_no_rereview.spec.js` 覆盖“等待澄清时可切到模型管理且不会被拉回”。验证：`node --check scripts/core/autoCore.js tests/ui/auto_clarify_resume_no_rereview.spec.js`、`npx playwright test --config tests/playwright.config.js tests/ui/auto_clarify_resume_no_rereview.spec.js --reporter=line`（通过）。
 
 - 功能名称：执行页/用例库 XMind 结构展示
 - 功能描述：在“用例执行”和“用例库（查看&编辑）”中，于“AI 用例生成”按钮右侧新增“XMind结构展示”按钮；点击后以 XMind 结构展示当前用例。
@@ -4136,3 +4314,66 @@
 - 更新记录：2026-02-25 补充“页面说明入口滚动能力”UI 自动化：页面说明 XMind 抽屉用例新增断言，校验 `xmindStructureDrawerBody` 非 viewer 模式、可滚动高度成立，并通过鼠标滚轮验证 `scrollTop` 递增（`tests/ui/help_structure_drawer.spec.js`）。
 - 更新记录：2026-02-25 补充“导图入口 viewer 模式”UI 断言：执行页与用例库 XMind 按钮用例新增 `is-mind-viewer` 断言，保证导图入口仍使用画布内部滚动/拖拽链路，不回退为外层抽屉滚动（`tests/ui/xmind_structure_view_buttons.spec.js`）。
 - 测试与验证：`node --check scripts/modules/pageGuide.js scripts/modules/tempexec.js scripts/modules/caseLibrary.js tests/ui/help_structure_drawer.spec.js tests/ui/xmind_structure_view_buttons.spec.js`（通过）；`npm run test:ui -- tests/ui/help_structure_drawer.spec.js --workers=1`（通过，1/1）；`npm run test:ui -- tests/ui/xmind_structure_view_buttons.spec.js --workers=1`（通过，3/3）；`npm run test:api -- tests/api/xmind_structure_edit_reuse_endpoints.spec.js`（通过，1/1）。补充说明：`tests/ui/page_guide_drawer.spec.js` 全量在本地存在历史环境波动（同一场景单测重跑可通过），本次改动相关的新增/受影响用例均稳定通过。
+- 功能名称：测试模块拆分导入用例提醒与模块沿用
+- 功能描述：手动点击“开始拆分”时，若未导入测试用例，新增二次确认抽屉（前往导入用例/不导入用例）；已导入用例时，拆分模型会优先参考导入用例根节点下一级模块名进行模块划分，仅在必要时新增模块，且保持拆分结果输出格式不变。
+- 操作方式：
+  - 在“测试模块拆分”卡片点击“开始拆分”。
+  - 若未导入用例：抽屉提示是否先导入；点击“前往导入用例”自动跳转到“测试用例导入（XMind）”卡片，点击“不导入用例”则继续执行现有拆分逻辑。
+  - 若已导入用例：直接执行拆分，模型提示词自动附加导入用例模块节点约束（沿用优先、必要时增补）。
+- 使用效果：
+  - 提升手动拆分前的可操作引导，避免用户在无参考用例时误拆分。
+  - 导入用例存在时，拆分结果更贴近现有模块结构，减少重复/无效新增模块。
+  - 不改变现有拆分输出格式与后续流程兼容性。
+- 新增内容/接口/组件：
+  - 前端：拆分前导入用例守卫、确认抽屉分支、导入模块节点提示词增强（`scripts/core/splitCore.js`、`scripts/modules/app.js`）。
+  - 测试：新增拆分导入守卫 UI 自动化并更新拆分按钮状态用例（`tests/ui/split_import_guard.spec.js`、`tests/ui/cases_export_and_split.spec.js`）。
+- 复用说明：复用现有 `appConfirmDrawer` 确认抽屉与 `scrollToSection('cases-upload')` 导航能力；拆分主流程仍沿用原有 `splitCore` 调用链，仅在入口守卫与提示词拼接处做最小增量扩展。
+- 测试与验证：
+  - `node --check scripts/core/splitCore.js scripts/modules/app.js tests/ui/split_import_guard.spec.js tests/ui/cases_export_and_split.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/split_import_guard.spec.js tests/ui/cases_export_and_split.spec.js tests/ui/split_go_usecase_nav.spec.js`（通过，5/5）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8080`（测试库启动）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+- 更新记录：2026-03-04 测试模块拆分导入用例提醒与模块沿用（`scripts/core/splitCore.js`、`scripts/modules/app.js`、`tests/ui/split_import_guard.spec.js`、`tests/ui/cases_export_and_split.spec.js`）。
+- 更新记录：2026-03-04 补充“对比完整性后忽略并继续”链路兼容导入提醒：当覆盖率不足后点击“忽略覆盖率继续”进入拆分步骤时，若未导入用例同样弹出二次提醒（前往导入用例/不导入用例）；点击前往导入时跳转至“测试用例导入（XMind）”卡片，点击不导入时保持现有拆分逻辑继续执行；已导入用例时不弹窗并继续沿用模块节点约束（`scripts/core/autoCore.js`、`scripts/core/splitCore.js`、`tests/ui/split_import_guard.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/splitCore.js scripts/core/autoCore.js tests/ui/split_import_guard.spec.js scripts/modules/app.js`（通过）
+  - `npm run test:ui -- tests/ui/split_import_guard.spec.js`（通过，3/3）
+  - `npm run test:ui -- tests/ui/split_import_guard.spec.js tests/ui/cases_export_and_split.spec.js`（通过，5/5）
+  - `npm run test:ui -- tests/ui/workflow.spec.js -g "自动流程覆盖率不足时按钮可用"`（通过，1/1）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8081`（测试库启动）
+  - `API_BASE_URL=http://127.0.0.1:8081 npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+- 更新记录：2026-03-04 修复“前往导入用例”定位不准确：确认抽屉点击“前往导入用例”后，等待抽屉关闭并解除页面滚动锁再执行跳转；跳转定位改为 `scrollToSection('cases-upload', { behavior: 'auto' })` + 统一偏移滚动，避免被抽屉滚动恢复覆盖或仅切换页签未到目标卡片（`scripts/core/splitCore.js`、`scripts/core/flowCore.js`）。
+- 测试与验证（定位修复）：
+  - `node --check scripts/core/splitCore.js scripts/core/flowCore.js tests/ui/split_import_guard.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/split_import_guard.spec.js`（通过，3/3）
+  - `npm run test:ui -- tests/ui/split_import_guard.spec.js tests/ui/cases_export_and_split.spec.js`（通过，5/5）
+  - `npm run test:ui -- tests/ui/workflow.spec.js -g "自动流程覆盖率不足时按钮可用"`（通过，1/1）
+  - `API_BASE_URL=http://127.0.0.1:8081 npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1，测试库 `apitest.db`）
+
+- 更新记录：2026-03-04 优化 XMind 编辑输入体验：编辑态下“单击节点仅选中不进入编辑”；仅当用户通过键盘输入字符或按删除键时才触发节点文本编辑并覆盖原内容，避免选中节点后粘贴普通文本被误判为内容替换；同时保留双击行为，双击节点后光标定位到文本末尾，便于续写（`scripts/core/mindElixirCore.js`）。
+- 更新记录：2026-03-04 补充 XMind 编辑交互 UI 回归：交互用例新增“单击仅选中 + 按键触发编辑覆盖 + Backspace 清空内容不删节点”断言；编辑模式用例继续保留双击后光标位于末尾断言，并补充普通文本粘贴新增子节点场景，确保输入与粘贴两条链路兼容（`tests/ui/xmind_structure_edit_interactions.spec.js`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 更新记录：2026-03-04 增强 XMind 编辑页粘贴兼容：选中节点后粘贴普通文本时，在该节点下新增一个子节点，子节点完整保留原文本（含换行）；若粘贴内容可识别为缩进层级结构，则继续沿用原有结构化拼接逻辑，兼容 XMind 结构复制粘贴体验（`scripts/core/mindElixirCore.js`、`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/mindElixirCore.js tests/ui/xmind_structure_edit_interactions.spec.js tests/ui/xmind_structure_edit_mode.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js tests/ui/xmind_structure_edit_interactions.spec.js --reporter=line`（通过，5/5）
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过，1/1）
+- 更新记录：2026-03-04 优化 XMind 新建节点默认内容：编辑态下通过 `Tab` 快捷键新增子节点，或点击“增加节点”按钮新增子节点时，默认 `topic` 改为空字符串，不再自动填充“新增节点”；保留现有撤回/恢复与保存校验逻辑（`scripts/core/mindElixirCore.js`）。
+- 更新记录：2026-03-04 补充“新建节点默认空内容”UI 回归：编辑模式用例新增断言，验证 `Tab` 新增与按钮新增均会产生空内容节点（空 topic），并覆盖对应的撤回/恢复链路（`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/mindElixirCore.js tests/ui/xmind_structure_edit_mode.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js --reporter=line`（通过，4/4）
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过，1/1）
+- 更新记录：2026-03-04 修复 XMind 选中节点按 `Delete` 无法删除问题：编辑态下当选中非根节点并按 `Delete`，优先执行节点删除逻辑，不再触发“进入编辑并清空内容”的链路；保留 `Backspace` 触发文本编辑清空的既有行为（`scripts/core/mindElixirCore.js`）。
+- 更新记录：2026-03-04 增强 XMind 右键菜单删除能力：节点右键菜单新增“删除节点”项，并仅在当前选中节点可删除（非根节点）时显示；点击后复用既有 `runDeleteNodes` 删除链路（`scripts/core/mindElixirCore.js`）。
+- 更新记录：2026-03-04 补充 Del 删除与右键删除项 UI 回归：交互用例新增断言，验证非根节点右键菜单可见“删除节点”；选中节点按 `Delete` 后节点数量减少，确保键盘删除链路生效（`tests/ui/xmind_structure_edit_interactions.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/mindElixirCore.js tests/ui/xmind_structure_edit_interactions.spec.js tests/ui/xmind_structure_edit_mode.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_interactions.spec.js tests/ui/xmind_structure_edit_mode.spec.js --reporter=line`（通过，5/5）
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过，1/1）
+- 更新记录：2026-03-04 修复白色主题下 XMind 撤回后画面变黑：在编辑态历史回放（撤回/恢复）执行 `inst.refresh` 后，新增主题强制回灌（同步 + 下一帧兜底），确保导图颜色变量始终与当前页面主题一致，不因历史快照刷新回退为深色（`scripts/core/mindElixirCore.js`）。
+- 更新记录：2026-03-04 补充白色主题撤回颜色回归：编辑模式用例新增“白色主题下撤回前后主题变量一致、且不出现深色变量”断言，覆盖 `undo` 链路下的主题兼容风险（`tests/ui/xmind_structure_edit_mode.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/mindElixirCore.js tests/ui/xmind_structure_edit_mode.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js --reporter=line`（通过，4/4）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_interactions.spec.js --reporter=line`（通过，1/1）
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过，1/1）

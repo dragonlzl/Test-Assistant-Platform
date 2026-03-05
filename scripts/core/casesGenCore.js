@@ -65,6 +65,7 @@
     var exportCaseGenXmindBtn = dom.exportCaseGenXmindBtn || dom.exportCaseGenXmind;
     var caseGenAllGenerateBtn = document.getElementById('caseGenAllGenerateBtn');
     var caseGenAllTopupBtn = document.getElementById('caseGenAllTopupBtn');
+    var caseGenSuggestionGenerateBtn = document.getElementById('caseGenSuggestionGenerateBtn');
     var caseGenViewDrawerBody = dom.caseGenViewDrawerBody;
     var caseGenViewDrawerTitle = dom.caseGenViewDrawerTitle;
     var caseGenAllSelectBtn = dom.caseGenAllSelectBtn || document.getElementById('caseGenAllSelectBtn');
@@ -653,9 +654,56 @@
       return result;
     }
 
+    function resolveCaseGenBatchConcurrency(count) {
+      if (!Number.isFinite(count) || count <= 0) return 1;
+      return Math.max(1, Math.min(5, Math.round(count)));
+    }
+
     function resolveCaseSimilarityConcurrency(count) {
       if (!Number.isFinite(count) || count <= 0) return 1;
       return Math.max(1, Math.min(5, Math.round(count)));
+    }
+
+    function resolveCaseGenTimeoutSec() {
+      var raw = state && state.settings ? Number(state.settings.timeoutSec) : NaN;
+      var fallback = 300;
+      if (!Number.isFinite(raw) || raw <= 0) return fallback;
+      var normalized = Math.round(raw);
+      if (!Number.isFinite(normalized) || normalized <= 0) return fallback;
+      return Math.max(30, Math.min(1800, normalized));
+    }
+
+    function callCaseGenModelWithGuard(executor) {
+      var task = typeof executor === 'function' ? executor : null;
+      if (!task) return Promise.reject(new Error('模型调用任务不可用'));
+      var timeoutSec = resolveCaseGenTimeoutSec();
+      var timeoutMs = timeoutSec * 1000 + 1500;
+      var timer = null;
+      return new Promise(function(resolve, reject) {
+        var settled = false;
+        function finishError(err) {
+          if (settled) return;
+          settled = true;
+          if (timer) clearTimeout(timer);
+          reject(err);
+        }
+        function finishOk(data) {
+          if (settled) return;
+          settled = true;
+          if (timer) clearTimeout(timer);
+          resolve(data);
+        }
+        timer = setTimeout(function() {
+          finishError(new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态'));
+        }, timeoutMs);
+        Promise.resolve().then(function() {
+          return task();
+        }).then(function(result) {
+          finishOk(result);
+        }).catch(function(err) {
+          finishError(err);
+        });
+      });
     }
 
     function parseGeneratedCases(content) {
@@ -839,6 +887,7 @@
         var title = resolveModuleTitle(mod.title || mod.module || '');
         var list = getCaseListForModule(mod.id);
         var running = isCaseModuleRunning(mod.id);
+        var suggestion = getModuleSuggestion(mod.id);
         if (!running && state.caseGenRunning instanceof Set) {
           if (state.caseGenRunning.has(mod.id)) {
             running = true;
@@ -862,6 +911,7 @@
           id: mod.id,
           title: title,
           hasResult: Boolean(list && list.length),
+          hasSuggestion: Boolean(suggestion),
           running: running,
         });
       });
@@ -879,21 +929,25 @@
     function refreshCaseGenBatchButtons() {
       if (!caseGenAllGenerateBtn) caseGenAllGenerateBtn = document.getElementById('caseGenAllGenerateBtn');
       if (!caseGenAllTopupBtn) caseGenAllTopupBtn = document.getElementById('caseGenAllTopupBtn');
-      if (!caseGenAllGenerateBtn && !caseGenAllTopupBtn) return;
+      if (!caseGenSuggestionGenerateBtn) caseGenSuggestionGenerateBtn = document.getElementById('caseGenSuggestionGenerateBtn');
+      if (!caseGenAllGenerateBtn && !caseGenAllTopupBtn && !caseGenSuggestionGenerateBtn) return;
       var meta = buildCaseGenModuleMeta();
       var hasGenerateTarget = false;
       var hasTopupTarget = false;
+      var hasSuggestionTarget = false;
       var allRunning = meta.length > 0;
       meta.forEach(function(entry) {
         if (!entry) return;
         if (!entry.running) {
           hasGenerateTarget = true;
           if (entry.hasResult) hasTopupTarget = true;
+          if (entry.hasSuggestion) hasSuggestionTarget = true;
           allRunning = false;
         }
       });
       if (caseGenAllGenerateBtn) caseGenAllGenerateBtn.disabled = !meta.length || !hasGenerateTarget || allRunning;
       if (caseGenAllTopupBtn) caseGenAllTopupBtn.disabled = !meta.length || !hasTopupTarget || allRunning;
+      if (caseGenSuggestionGenerateBtn) caseGenSuggestionGenerateBtn.disabled = !meta.length || !hasSuggestionTarget || allRunning;
     }
 
     function refreshAppendExistingButton() {
@@ -972,14 +1026,23 @@
           return false;
         }
         var skipped = meta.filter(function(entry) { return entry && entry.running; }).length;
-        var hint = '已触发全模块' + actionLabel + '（' + candidates.length + '个模块）';
+        var concurrency = resolveCaseGenBatchConcurrency(candidates.length);
+        var hint = '已触发全模块' + actionLabel + '（' + candidates.length + '个模块，并发 ' + concurrency + '）';
         if (skipped) hint += '，已跳过' + skipped + '个生成中的模块';
         setStatus(caseGenStatus, hint, 'ok');
-        var concurrency = candidates.length;
         return runConcurrent(candidates, concurrency, function(entry) {
           if (!entry || !entry.id) return Promise.resolve(false);
-          if (action === 'topup') return topUpCasesForModule(entry.id);
-          return generateCasesForModule(entry.id);
+          var runTask = action === 'topup' ? topUpCasesForModule : generateCasesForModule;
+          return Promise.resolve().then(function() {
+            return runTask(entry.id);
+          }).catch(function(err) {
+            var title = entry && entry.title ? String(entry.title) : '当前模块';
+            var msg = err && err.message ? err.message : '未知异常';
+            console.error('全模块' + actionLabel + '执行异常', err);
+            setCaseModuleStatus(entry.id, '【' + title + '】' + actionLabel + '失败：' + msg, 'err');
+            setCaseModuleRunning(entry.id, false);
+            return false;
+          });
         });
       });
     }
@@ -990,6 +1053,41 @@
 
     function topUpAllCaseGenModules() {
       return runCaseGenBatch('topup');
+    }
+
+    function generateSuggestedCaseGenModules() {
+      var meta = buildCaseGenModuleMeta();
+      if (!meta.length) {
+        setStatus(caseGenStatus, '请先在“测试模块拆分”中生成模块', 'warn');
+        return Promise.resolve(false);
+      }
+      var candidates = meta.filter(function(entry) {
+        return entry && entry.hasSuggestion && !entry.running;
+      });
+      if (!candidates.length) {
+        setStatus(caseGenStatus, '暂无包含生成建议的模块可执行仅补全用例', 'warn');
+        return Promise.resolve(false);
+      }
+      var skipped = meta.filter(function(entry) {
+        return entry && entry.hasSuggestion && entry.running;
+      }).length;
+      var concurrency = resolveCaseGenBatchConcurrency(candidates.length);
+      var hint = '已触发仅补全用例（' + candidates.length + '个模块，并发 ' + concurrency + '）';
+      if (skipped) hint += '，已跳过' + skipped + '个生成中的模块';
+      setStatus(caseGenStatus, hint, 'ok');
+      return runConcurrent(candidates, concurrency, function(entry) {
+        if (!entry || !entry.id) return Promise.resolve(false);
+        return Promise.resolve().then(function() {
+          return generateCasesForModule(entry.id);
+        }).catch(function(err) {
+          var title = entry && entry.title ? String(entry.title) : '当前模块';
+          var msg = err && err.message ? err.message : '未知异常';
+          console.error('仅补全用例执行异常', err);
+          setCaseModuleStatus(entry.id, '【' + title + '】仅补全用例失败：' + msg, 'err');
+          setCaseModuleRunning(entry.id, false);
+          return false;
+        });
+      });
     }
 
     function buildCaseItemPayloadFromGenerated(item, fallbackModule) {
@@ -2154,7 +2252,9 @@
         if (moduleId) setCaseProgressGroupState(moduleId, idx, 'running');
         var candidateJson = JSON.stringify(sanitizeCasesForExport(group), null, 2);
         var userContent = '模块：' + moduleTitle + '\n\n导入用例(JSON)：' + baseJson + '\n\n生成用例候选(JSON)：' + candidateJson + '\n\n请删除与导入用例重复或高度相似的候选，仅返回保留的候选 JSON 数组，不需要解释或额外文本。';
-        return callModelWithConfig(model, userContent, prompt, reasoning, temperature).then(function(content) {
+        return callCaseGenModelWithGuard(function() {
+          return callModelWithConfig(model, userContent, prompt, reasoning, temperature);
+        }).then(function(content) {
           var parsed = parseGeneratedCases(content).parsed;
           if (moduleId) setCaseProgressGroupState(moduleId, idx, 'done');
           return parsed.length ? parsed : [];
@@ -2178,6 +2278,36 @@
       });
     }
 
+    function normalizeStaleCaseProgress(moduleId, moduleTitle) {
+      if (!moduleId || isCaseModuleRunning(moduleId)) return;
+      var progress = state.caseGenProgress[moduleId];
+      if (!progress || typeof progress !== 'object') return;
+      var hasStaleRunning = false;
+      if (Array.isArray(progress.groups)) {
+        progress.groups.forEach(function(group) {
+          if (!group || group.state !== 'running') return;
+          group.state = 'error';
+          hasStaleRunning = true;
+        });
+      }
+      if (progress.dedupe && progress.dedupe.state === 'running') {
+        progress.dedupe.state = 'error';
+        hasStaleRunning = true;
+      }
+      if (progress.finalize && progress.finalize.state === 'running') {
+        progress.finalize.state = 'error';
+        hasStaleRunning = true;
+      }
+      if (!hasStaleRunning) return;
+      var moduleName = resolveModuleTitle(moduleTitle || '');
+      var statusInfo = ensureCaseModuleStatusState()[moduleId];
+      var statusType = statusInfo && statusInfo.type ? String(statusInfo.type) : '';
+      var statusText = statusInfo && statusInfo.text ? String(statusInfo.text) : '';
+      if (statusType === 'err' || statusType === 'warn') return;
+      if (statusText.indexOf('已中断') !== -1 || statusText.indexOf('失败') !== -1) return;
+      setCaseModuleStatus(moduleId, '【' + (moduleName || '当前模块') + '】生成任务已中断，请重新执行', 'warn');
+    }
+
     function renderCaseGeneration() {
       if (!casesGenerationContainer) return;
       if (!state.caseGenModules.length) {
@@ -2189,6 +2319,7 @@
         return;
       }
       casesGenerationContainer.innerHTML = state.caseGenModules.map(function(mod, idx) {
+        normalizeStaleCaseProgress(mod.id, mod.title || mod.module || '');
         var rawResult = (state.caseGenResults[mod.id] || '').trim();
         var hasResult = Boolean(rawResult && !/^\[\s*\]$/.test(rawResult));
         var moduleBusy = isCaseModuleRunning(mod.id);
@@ -2294,7 +2425,9 @@
         var reasoning = getReasoningForType('casegen');
         var temperature = getTemperatureForType('casegen');
         var startTime = Date.now();
-        var content = await callModelWithConfig(model, userContent, prompt, reasoning, temperature);
+        var content = await callCaseGenModelWithGuard(function() {
+          return callModelWithConfig(model, userContent, prompt, reasoning, temperature);
+        });
         var durationMs = Date.now() - startTime;
         updateModelTiming(caseGenTimingEl, durationMs);
         setCaseModuleTiming(moduleId, durationMs);
@@ -2434,7 +2567,9 @@
         var reasoning = getReasoningForType('casegen');
         var temperature = getTemperatureForType('casegen');
         var startTime = Date.now();
-        var content = await callModelWithConfig(model, userContent, prompt, reasoning, temperature);
+        var content = await callCaseGenModelWithGuard(function() {
+          return callModelWithConfig(model, userContent, prompt, reasoning, temperature);
+        });
         var durationMs = Date.now() - startTime;
         updateModelTiming(caseGenTimingEl, durationMs);
         setCaseModuleTiming(moduleId, durationMs);
@@ -3334,6 +3469,7 @@
       renderCaseGeneration: renderCaseGeneration,
       generateCasesForModule: generateCasesForModule,
       generateAllCaseGenModules: generateAllCaseGenModules,
+      generateSuggestedCaseGenModules: generateSuggestedCaseGenModules,
       topUpCasesForModule: topUpCasesForModule,
       topUpAllCaseGenModules: topUpAllCaseGenModules,
       exportCaseGenerationResults: exportCaseGenerationResults,
@@ -3354,6 +3490,7 @@
       refreshCaseSelectionUI: refreshCaseSelectionUI,
       updateSupplementButtons: updateSupplementButtons,
       refreshAppendExistingButton: refreshAppendExistingButton,
+      refreshCaseGenBatchButtons: refreshCaseGenBatchButtons,
       setCaseGenDbStoreNewAction: setCaseGenDbStoreNewAction,
       clearCaseGenDbStoreNewActionError: clearCaseGenDbStoreNewActionError,
       openCaseGenDbStoreNewDrawer: function() { bindCaseGenDbStoreEvents(); return openCaseGenDbStoreNewDrawer(); },

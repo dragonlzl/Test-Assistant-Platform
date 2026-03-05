@@ -204,3 +204,63 @@ test('DeepSeek JSON 数组输出严格校验', async ({ page }) => {
   expect(results.errorMsg).toMatch(/JSON 数组/);
   expect(results.systemPrompt).toMatch(/顶层必须是数组/);
 });
+
+test('Claude 模型走 Packy responses 地址时自动兼容为 chat/completions', async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      return route.continue();
+    }
+    return route.abort();
+  });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  await page.goto(base + '/index.html');
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+
+  const captured = await page.evaluate(async () => {
+    const service = window.app && window.app.services && window.app.services.modelClient;
+    if (!service || typeof service.createModelClient !== 'function') {
+      throw new Error('模型客户端未加载');
+    }
+    const request = { url: '', body: '' };
+    const client = service.createModelClient({
+      fetchImpl: async function mockFetch(url, options) {
+        request.url = String(url || '');
+        request.body = options && options.body ? String(options.body) : '';
+        return {
+          ok: true,
+          text: async function mockText() {
+            return JSON.stringify({ choices: [{ message: { content: 'ok' } }] });
+          },
+        };
+      },
+    });
+
+    await client.callModelWithConfig(
+      {
+        baseUrl: 'https://www.packyapi.com/v1/responses',
+        model: 'claude-sonnet-4-6',
+        provider: 'custom',
+      },
+      'ping',
+      '你是助手'
+    );
+
+    const body = request.body ? JSON.parse(request.body) : {};
+    return {
+      url: request.url,
+      hasMessages: Array.isArray(body.messages),
+      hasInput: Array.isArray(body.input),
+    };
+  });
+
+  expect(captured.url).toContain('/v1/chat/completions');
+  expect(captured.hasMessages).toBeTruthy();
+  expect(captured.hasInput).toBeFalsy();
+});
