@@ -6138,6 +6138,261 @@
       return summary;
     }
 
+
+    function cloneTempExecCaseLibraryDiffSummary(summary) {
+      var source = summary && typeof summary === 'object' ? summary : {};
+      return {
+        appended: Number(source.appended) || 0,
+        added: Number(source.added) || 0,
+        updated: Number(source.updated) || 0,
+        deleted: Number(source.deleted) || 0,
+      };
+    }
+
+    function formatCaseLibDiffTime(iso) {
+      if (!iso) return '';
+      var ts = parseDbTimeMs(iso);
+      if (!ts) return String(iso || '');
+      var d = new Date(ts);
+      var pad = function(n) { return n < 10 ? '0' + n : String(n); };
+      return (
+        d.getFullYear() + '-' +
+        pad(d.getMonth() + 1) + '-' +
+        pad(d.getDate()) + ' ' +
+        pad(d.getHours()) + ':' +
+        pad(d.getMinutes()) + ':' +
+        pad(d.getSeconds())
+      );
+    }
+
+    function resolveTempExecCaseLibraryDiffViewData(execSetId) {
+      var store = ensureTempExecCaseLibraryDiffState();
+      var resolvedExecSetId = execSetId ? String(execSetId) : '';
+      var meta = resolvedExecSetId ? store.byExecSetId[resolvedExecSetId] : null;
+      var filter = resolvedExecSetId && store.filterByExecSetId[resolvedExecSetId]
+        ? String(store.filterByExecSetId[resolvedExecSetId])
+        : '';
+      if (filter !== 'appended' && filter !== 'added' && filter !== 'updated' && filter !== 'deleted') filter = '';
+
+      var batches = meta && Array.isArray(meta.history) && meta.history.length ? meta.history : [];
+      if (!batches.length) {
+        var fallbackDiff = meta && Array.isArray(meta.diff) ? meta.diff : [];
+        var fallbackSummary = meta && meta.summary ? meta.summary : { appended: 0, added: 0, updated: 0, deleted: 0 };
+        if (fallbackDiff.length) {
+          batches = [{
+            diffAt: meta && meta.lastDiffAt ? String(meta.lastDiffAt) : '',
+            summary: fallbackSummary,
+            diff: fallbackDiff,
+          }];
+        }
+      }
+
+      var totalSummary = { appended: 0, added: 0, updated: 0, deleted: 0 };
+      var rows = [];
+      batches.forEach(function(batch) {
+        if (!batch) return;
+        var diffAt = batch.diffAt ? String(batch.diffAt) : '';
+        var operator = batch.operator ? String(batch.operator) : '';
+        var batchTs = parseDbTimeMs(diffAt);
+        if (!isFinite(batchTs)) batchTs = 0;
+        var sum = batch.summary && typeof batch.summary === 'object' ? batch.summary : {};
+        var diff = Array.isArray(batch.diff) ? batch.diff : [];
+        var hasSum = Number.isFinite(Number(sum.appended)) || Number.isFinite(Number(sum.added)) || Number.isFinite(Number(sum.updated)) || Number.isFinite(Number(sum.deleted));
+        if (hasSum) {
+          totalSummary.appended += Number(sum.appended) || 0;
+          totalSummary.added += Number(sum.added) || 0;
+          totalSummary.updated += Number(sum.updated) || 0;
+          totalSummary.deleted += Number(sum.deleted) || 0;
+        } else {
+          diff.forEach(function(entry) {
+            var k = normalizeDiffKind(entry && entry.kind);
+            if (k === 'appended') totalSummary.appended += 1;
+            if (k === 'added') totalSummary.added += 1;
+            if (k === 'updated') totalSummary.updated += 1;
+            if (k === 'deleted') totalSummary.deleted += 1;
+          });
+        }
+        diff.forEach(function(entry) {
+          rows.push({ entry: entry, diffAt: diffAt, operator: operator, ts: batchTs });
+        });
+      });
+      if (!rows.length && meta && meta.summary) {
+        var fallbackSummary2 = meta.summary || {};
+        var hasFallback = Number(fallbackSummary2.appended) || Number(fallbackSummary2.added) || Number(fallbackSummary2.updated) || Number(fallbackSummary2.deleted);
+        var emptyTotals = !(totalSummary.appended || totalSummary.added || totalSummary.updated || totalSummary.deleted);
+        if (hasFallback && emptyTotals) {
+          totalSummary.appended = Number(fallbackSummary2.appended) || 0;
+          totalSummary.added = Number(fallbackSummary2.added) || 0;
+          totalSummary.updated = Number(fallbackSummary2.updated) || 0;
+          totalSummary.deleted = Number(fallbackSummary2.deleted) || 0;
+        }
+      }
+
+      rows.sort(function(a, b) {
+        var ta = a && a.ts ? Number(a.ts) : 0;
+        var tb = b && b.ts ? Number(b.ts) : 0;
+        if (ta != tb) return tb - ta;
+        var ka = normalizeDiffKind(a && a.entry ? a.entry.kind : '');
+        var kb = normalizeDiffKind(b && b.entry ? b.entry.kind : '');
+        if (ka !== kb) return String(kb).localeCompare(String(ka));
+        return 0;
+      });
+
+      var availableRows = filterTempExecCaseLibraryDiffRows(resolvedExecSetId, rows);
+      if (availableRows.length !== rows.length) {
+        totalSummary = summarizeTempExecCaseLibraryDiffRows(availableRows);
+      }
+
+      var visibleRows = availableRows.filter(function(row) {
+        var entry = row && row.entry ? row.entry : null;
+        var kind = normalizeDiffKind(entry && entry.kind);
+        if (!kind) return false;
+        if (!filter) return true;
+        return kind === filter;
+      });
+      var filteredSummary = filter ? summarizeTempExecCaseLibraryDiffRows(visibleRows) : cloneTempExecCaseLibraryDiffSummary(totalSummary);
+      var hasSignal = hasCaseLibraryChangeSignal(meta);
+      var statusText = '';
+      if (!meta) {
+        statusText = '暂无用例变更数据';
+      } else if (meta.hasNewDiff) {
+        statusText = '已同步用例变更到执行页：追加 ' + totalSummary.appended + '，新增 ' + totalSummary.added + '，改动 ' + totalSummary.updated + '，删除 ' + totalSummary.deleted;
+      } else if (meta.everChanged || hasSignal) {
+        statusText = '暂无新的用例变更，可查看历史差异：追加 ' + totalSummary.appended + '，新增 ' + totalSummary.added + '，改动 ' + totalSummary.updated + '，删除 ' + totalSummary.deleted;
+      } else {
+        statusText = '当前用例未发生用例变更';
+      }
+
+      return {
+        execSetId: resolvedExecSetId,
+        meta: meta,
+        filter: filter,
+        totalSummary: cloneTempExecCaseLibraryDiffSummary(totalSummary),
+        filteredSummary: cloneTempExecCaseLibraryDiffSummary(filteredSummary),
+        rows: availableRows,
+        visibleRows: visibleRows,
+        hasSignal: hasSignal,
+        statusText: statusText,
+      };
+    }
+
+    function buildAssistantTempExecCaseLibraryCaseSnapshot(snapshot) {
+      var data = snapshot && typeof snapshot === 'object' ? snapshot : null;
+      if (!data) return null;
+      return {
+        module: data.module === undefined || data.module === null ? '' : String(data.module),
+        title: data.title === undefined || data.title === null ? '' : String(data.title),
+        priority: data.priority === undefined || data.priority === null ? '' : String(data.priority),
+        precondition: data.precondition === undefined || data.precondition === null ? '' : String(data.precondition),
+        steps: data.steps === undefined || data.steps === null ? '' : String(data.steps),
+        expected: data.expected === undefined || data.expected === null ? '' : String(data.expected),
+        remark: data.remark === undefined || data.remark === null ? '' : String(data.remark),
+      };
+    }
+
+    function buildAssistantTempExecCaseLibraryDiffEntrySnapshot(row, index) {
+      var item = row && typeof row === 'object' ? row : {};
+      var entry = item.entry && typeof item.entry === 'object' ? item.entry : {};
+      var kind = normalizeDiffKind(entry.kind);
+      var oldSnap = buildAssistantTempExecCaseLibraryCaseSnapshot(entry.old);
+      var newSnap = buildAssistantTempExecCaseLibraryCaseSnapshot(entry.new);
+      var changedFields = Array.isArray(entry.changed_fields)
+        ? entry.changed_fields.map(function(field) {
+            return field === undefined || field === null ? '' : String(field);
+          }).filter(function(field) { return field; })
+        : [];
+      var title = newSnap && newSnap.title ? String(newSnap.title) : (oldSnap && oldSnap.title ? String(oldSnap.title) : '');
+      var moduleName = newSnap && newSnap.module ? String(newSnap.module) : (oldSnap && oldSnap.module ? String(oldSnap.module) : '');
+      return {
+        index: Number(index) + 1,
+        caseItemId: normalizeCaseLibDiffItemId(entry),
+        kind: kind,
+        kindLabel: getCaseLibDiffKindLabel(kind),
+        changedAt: item.diffAt === undefined || item.diffAt === null ? '' : String(item.diffAt),
+        operator: item.operator === undefined || item.operator === null ? '' : String(item.operator),
+        changedFields: changedFields,
+        module: moduleName,
+        title: title,
+        old: oldSnap,
+        new: newSnap,
+      };
+    }
+
+    function getCurrentCaseLibraryDiffSnapshot(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var limit = Number(opts.limit);
+      if (!Number.isFinite(limit) || limit <= 0) limit = 40;
+      if (limit > 100) limit = 100;
+      var pageLimit = Number(opts.pageLimit);
+      if (!Number.isFinite(pageLimit) || pageLimit <= 0) pageLimit = 20;
+      if (pageLimit > 100) pageLimit = 100;
+      var explicitExecSetId = opts.execSetId === undefined || opts.execSetId === null ? '' : String(opts.execSetId).trim();
+      var activeId = state.tempExecActiveId ? String(state.tempExecActiveId) : '';
+      var activeFile = activeId ? getTempExecFile(activeId) : null;
+      if (!activeFile && explicitExecSetId) {
+        activeFile = getTempExecFile(explicitExecSetId);
+      }
+      var execSetId = explicitExecSetId;
+      if (!execSetId && activeFile) {
+        if (activeFile.execSetId !== undefined && activeFile.execSetId !== null) execSetId = String(activeFile.execSetId);
+        else if (activeFile.id !== undefined && activeFile.id !== null) execSetId = String(activeFile.id);
+      }
+      if (!activeFile && execSetId) {
+        activeFile = getTempExecFile(execSetId);
+      }
+      if (!activeFile && !execSetId) {
+        return {
+          ok: true,
+          hasContext: false,
+          reason: 'no-active-temp-exec-file',
+          total: 0,
+          filteredTotal: 0,
+          events: [],
+          pageEvents: [],
+        };
+      }
+      var viewData = resolveTempExecCaseLibraryDiffViewData(execSetId);
+      var meta = viewData.meta;
+      var visibleRows = Array.isArray(viewData.visibleRows) ? viewData.visibleRows : [];
+      var allRows = Array.isArray(viewData.rows) ? viewData.rows : [];
+      var fileName = '';
+      if (activeFile && activeFile.name) fileName = String(activeFile.name);
+      else if (activeFile && activeFile.file_name_clean) fileName = String(activeFile.file_name_clean);
+      else fileName = getTempExecFileNameByExecSetId(execSetId || '');
+      var pageEvents = visibleRows.slice(0, pageLimit).map(function(row, idx) {
+        return buildAssistantTempExecCaseLibraryDiffEntrySnapshot(row, idx);
+      });
+      var events = visibleRows.slice(0, limit).map(function(row, idx) {
+        return buildAssistantTempExecCaseLibraryDiffEntrySnapshot(row, idx);
+      });
+      return {
+        ok: true,
+        hasContext: true,
+        activeFileId: activeFile && activeFile.id !== undefined && activeFile.id !== null ? String(activeFile.id) : activeId,
+        execSetId: execSetId,
+        caseFileId: meta && meta.caseFileId !== undefined && meta.caseFileId !== null ? String(meta.caseFileId) : '',
+        fileName: fileName,
+        baseUpdatedAt: meta && meta.baseUpdatedAt ? String(meta.baseUpdatedAt) : '',
+        caseFileUpdatedAt: meta && meta.caseFileUpdatedAt ? String(meta.caseFileUpdatedAt) : '',
+        lastDiffAt: meta && meta.lastDiffAt ? String(meta.lastDiffAt) : '',
+        lastShownAt: meta && meta.lastShownAt ? String(meta.lastShownAt) : '',
+        everChanged: meta && meta.everChanged === true,
+        hasNewDiff: meta && meta.hasNewDiff === true,
+        shouldAutoPopup: meta && meta.shouldAutoPopup === true,
+        hasSignal: viewData.hasSignal === true,
+        filter: viewData.filter ? String(viewData.filter) : '',
+        filterLabel: viewData.filter ? getCaseLibDiffKindLabel(viewData.filter) : '',
+        total: allRows.length,
+        filteredTotal: visibleRows.length,
+        summary: cloneTempExecCaseLibraryDiffSummary(viewData.totalSummary),
+        filteredSummary: cloneTempExecCaseLibraryDiffSummary(viewData.filteredSummary),
+        statusText: viewData.statusText ? String(viewData.statusText) : '',
+        pageEvents: pageEvents,
+        events: events,
+        truncated: visibleRows.length > events.length,
+      };
+    }
+
     function findTempExecCaseIndexByItemId(file, caseItemId) {
       if (!file || !Array.isArray(file.cases)) return -1;
       var target = String(caseItemId || '');
@@ -6312,110 +6567,17 @@
         store.filterByExecSetId[nextRendered] = '';
         state.tempExecCaseLibraryDiffLastRenderedExecSetId = nextRendered;
       }
-      var meta = execSetId ? store.byExecSetId[String(execSetId)] : null;
-      var filter = execSetId && store.filterByExecSetId[String(execSetId)]
-        ? String(store.filterByExecSetId[String(execSetId)])
-        : '';
-      if (filter !== 'added' && filter !== 'updated' && filter !== 'deleted') filter = '';
+      var viewData = resolveTempExecCaseLibraryDiffViewData(execSetId);
+      var meta = viewData.meta;
+      var filter = viewData.filter;
+      var totalSummary = cloneTempExecCaseLibraryDiffSummary(viewData.totalSummary);
+      var visible = Array.isArray(viewData.visibleRows) ? viewData.visibleRows : [];
 
       setTempExecCaseLibraryDiffSelectedExecSetId(execSetId);
       if (tempExecCaseLibraryDiffCaseName) {
         tempExecCaseLibraryDiffCaseName.textContent = getTempExecFileNameByExecSetId(execSetId || '');
       }
       renderTempExecCaseLibraryDiffCaseTabs(execSetId);
-
-      function formatCaseLibDiffTime(iso) {
-        if (!iso) return '';
-        var ts = parseDbTimeMs(iso);
-        if (!ts) return String(iso || '');
-        var d = new Date(ts);
-        var pad = function(n) { return n < 10 ? '0' + n : String(n); };
-        return (
-          d.getFullYear() + '-' +
-          pad(d.getMonth() + 1) + '-' +
-          pad(d.getDate()) + ' ' +
-          pad(d.getHours()) + ':' +
-          pad(d.getMinutes()) + ':' +
-          pad(d.getSeconds())
-        );
-      }
-
-      var batches = meta && Array.isArray(meta.history) && meta.history.length ? meta.history : [];
-      if (!batches.length) {
-        var fallbackDiff = meta && Array.isArray(meta.diff) ? meta.diff : [];
-        var fallbackSummary = meta && meta.summary ? meta.summary : { appended: 0, added: 0, updated: 0, deleted: 0 };
-        if (fallbackDiff.length) {
-          batches = [{
-            diffAt: meta && meta.lastDiffAt ? String(meta.lastDiffAt) : '',
-            summary: fallbackSummary,
-            diff: fallbackDiff,
-          }];
-        }
-      }
-
-      var totalSummary = { appended: 0, added: 0, updated: 0, deleted: 0 };
-      var rows = [];
-      batches.forEach(function(batch) {
-        if (!batch) return;
-        var diffAt = batch.diffAt ? String(batch.diffAt) : '';
-        var operator = batch.operator ? String(batch.operator) : '';
-        var batchTs = parseDbTimeMs(diffAt);
-        if (!isFinite(batchTs)) batchTs = 0;
-        var sum = batch.summary && typeof batch.summary === 'object' ? batch.summary : {};
-        var diff = Array.isArray(batch.diff) ? batch.diff : [];
-        var hasSum = Number.isFinite(Number(sum.appended)) || Number.isFinite(Number(sum.added)) || Number.isFinite(Number(sum.updated)) || Number.isFinite(Number(sum.deleted));
-        if (hasSum) {
-          totalSummary.appended += Number(sum.appended) || 0;
-          totalSummary.added += Number(sum.added) || 0;
-          totalSummary.updated += Number(sum.updated) || 0;
-          totalSummary.deleted += Number(sum.deleted) || 0;
-        } else {
-          diff.forEach(function(entry) {
-            var k = normalizeDiffKind(entry && entry.kind);
-            if (k === 'appended') totalSummary.appended += 1;
-            if (k === 'added') totalSummary.added += 1;
-            if (k === 'updated') totalSummary.updated += 1;
-            if (k === 'deleted') totalSummary.deleted += 1;
-          });
-        }
-        diff.forEach(function(entry) {
-          rows.push({ entry: entry, diffAt: diffAt, operator: operator, ts: batchTs });
-        });
-      });
-      if (!rows.length && meta && meta.summary) {
-        var fallbackSummary = meta.summary || {};
-        var hasFallback = Number(fallbackSummary.appended) || Number(fallbackSummary.added) || Number(fallbackSummary.updated) || Number(fallbackSummary.deleted);
-        var emptyTotals = !(totalSummary.appended || totalSummary.added || totalSummary.updated || totalSummary.deleted);
-        if (hasFallback && emptyTotals) {
-          totalSummary.appended = Number(fallbackSummary.appended) || 0;
-          totalSummary.added = Number(fallbackSummary.added) || 0;
-          totalSummary.updated = Number(fallbackSummary.updated) || 0;
-          totalSummary.deleted = Number(fallbackSummary.deleted) || 0;
-        }
-      }
-
-      rows.sort(function(a, b) {
-        var ta = a && a.ts ? Number(a.ts) : 0;
-        var tb = b && b.ts ? Number(b.ts) : 0;
-        if (ta !== tb) return tb - ta;
-        var ka = normalizeDiffKind(a && a.entry ? a.entry.kind : '');
-        var kb = normalizeDiffKind(b && b.entry ? b.entry.kind : '');
-        if (ka !== kb) return String(kb).localeCompare(String(ka));
-        return 0;
-      });
-
-      var availableRows = filterTempExecCaseLibraryDiffRows(execSetId, rows);
-      if (availableRows.length !== rows.length) {
-        totalSummary = summarizeTempExecCaseLibraryDiffRows(availableRows);
-      }
-
-      var visible = availableRows.filter(function(row) {
-        var entry = row && row.entry ? row.entry : null;
-        var kind = normalizeDiffKind(entry && entry.kind);
-        if (!kind) return false;
-        if (!filter) return true;
-        return kind === filter;
-      });
 
       if (tempExecCaseLibraryDiffAppendedPill) {
         tempExecCaseLibraryDiffAppendedPill.textContent = '追加 ' + (totalSummary.appended || 0);
@@ -6435,18 +6597,7 @@
       }
 
       if (tempExecCaseLibraryDiffStatus) {
-        var statusText = '';
-        var hasSignal = hasCaseLibraryChangeSignal(meta);
-        if (!meta) {
-          statusText = '暂无用例变更数据';
-        } else if (meta.hasNewDiff) {
-          statusText = '已同步用例变更到执行页：追加 ' + totalSummary.appended + '，新增 ' + totalSummary.added + '，改动 ' + totalSummary.updated + '，删除 ' + totalSummary.deleted;
-        } else if (meta.everChanged || hasSignal) {
-          statusText = '暂无新的用例变更，可查看历史差异：追加 ' + totalSummary.appended + '，新增 ' + totalSummary.added + '，改动 ' + totalSummary.updated + '，删除 ' + totalSummary.deleted;
-        } else {
-          statusText = '当前用例未发生用例变更';
-        }
-        setStatus(tempExecCaseLibraryDiffStatus, statusText, meta && (meta.everChanged || hasSignal) ? 'ok' : '');
+        setStatus(tempExecCaseLibraryDiffStatus, viewData.statusText, meta && (meta.everChanged || viewData.hasSignal) ? 'ok' : '');
       }
 
       if (!visible.length) {
@@ -10587,6 +10738,7 @@
       removeTempExecFocus: removeTempExecFocus,
       prioritizeTempExecUnassignedRequirements: prioritizeTempExecUnassignedRequirements,
       openTempExecCaseLibraryDiffDrawer: openTempExecCaseLibraryDiffDrawer,
+      getCurrentCaseLibraryDiffSnapshot: getCurrentCaseLibraryDiffSnapshot,
       tryAutoOpenTempExecCaseLibraryDiff: tryAutoOpenTempExecCaseLibraryDiff,
       jumpToTempExecCase: jumpToTempExecCase,
     };

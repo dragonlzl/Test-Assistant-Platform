@@ -11085,6 +11085,48 @@ button.exec-overview-file-chip,
   white-space: pre-wrap;
   word-break: break-word;
 }
+.assistant-msg.ai.assistant-msg-thinking {
+  min-width: 160px;
+}
+.assistant-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+.assistant-thinking-label {
+  color: var(--text);
+  opacity: 0.88;
+}
+.assistant-thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.assistant-thinking-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.2;
+  animation: assistant-thinking-dot 1.2s ease-in-out infinite;
+}
+.assistant-thinking-dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.assistant-thinking-dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes assistant-thinking-dot {
+  0%, 80%, 100% {
+    opacity: 0.2;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 0.95;
+    transform: translateY(-1px);
+  }
+}
 .assistant-msg-body p {
   margin: 0;
 }
@@ -11115,8 +11157,16 @@ button.exec-overview-file-chip,
 }
 .assistant-case-table-actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 6px;
+}
+.assistant-case-table-summary {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
 }
 .assistant-case-table-expand-btn {
   border: 1px solid var(--border);
@@ -11200,6 +11250,15 @@ button.exec-overview-file-chip,
   word-break: break-word;
   overflow-wrap: anywhere;
   letter-spacing: normal;
+}
+.assistant-msg-body table.assistant-case-table .assistant-case-table-ellipsis-row td {
+  background: rgba(148,163,184,0.12);
+  color: var(--muted);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  border-top-style: dashed;
+  letter-spacing: 0.01em;
 }
 /* 助手用例列表列宽对齐：
    - 无“执行结果”列时，参考用例库编辑视图（#caseLibraryEditView）
@@ -11306,12 +11365,48 @@ button.exec-overview-file-chip,
   gap: 8px;
   flex-wrap: wrap;
 }
+.assistant-actions .assistant-action-btn,
 .assistant-actions button {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel);
+  color: var(--text);
+  font-weight: 700;
   padding: 4px 8px;
   cursor: pointer;
+  transition: background .2s ease, border-color .2s ease, color .2s ease;
+}
+.assistant-actions .assistant-action-btn:hover,
+.assistant-actions button:hover {
+  background: rgba(148,163,184,0.22);
+}
+.assistant-actions .assistant-action-btn-allow {
+  background: #16a34a;
+  border-color: #15803d;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(22,163,74,0.26);
+}
+.assistant-actions .assistant-action-btn-deny {
+  background: #ef4444;
+  border-color: #dc2626;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(239,68,68,0.25);
+}
+.assistant-actions .assistant-action-btn-deny:hover {
+  background: #dc2626;
+  border-color: #b91c1c;
+}
+.assistant-actions .assistant-action-btn-allow:hover {
+  background: #15803d;
+  border-color: #166534;
+}
+.assistant-actions .assistant-action-btn:focus-visible {
+  outline: 2px solid rgba(37,99,235,0.5);
+  outline-offset: 1px;
+}
+.assistant-actions .assistant-action-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 .assistant-input-row {
   border-top: 1px solid var(--border);
@@ -11329,6 +11424,10 @@ button.exec-overview-file-chip,
 }
 #assistantSendBtn {
   min-width: 60px;
+}
+#assistantSendBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 .assistant-case-preview {
   position: fixed;
@@ -11477,6 +11576,16 @@ body.assistant-case-preview-open {
 :root[data-theme="dark"] .assistant-msg-body code {
   background: rgba(100,116,139,0.35);
   color: #e2e8f0;
+}
+:root[data-theme="dark"] .assistant-actions .assistant-action-btn-allow {
+  background: #15803d;
+  border-color: #4ade80;
+  color: #f0fdf4;
+}
+:root[data-theme="dark"] .assistant-actions .assistant-action-btn-deny {
+  background: #b91c1c;
+  border-color: #f87171;
+  color: #fef2f2;
 }
 :root[data-theme="dark"] .assistant-code-copy-btn {
   border-color: rgba(100,116,139,0.75);

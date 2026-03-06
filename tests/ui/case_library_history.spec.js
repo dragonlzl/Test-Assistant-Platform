@@ -210,7 +210,7 @@ test.describe('用例库-用例改动历史抽屉', () => {
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', '1');
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('登录');
-    await page.locator('#caseLibraryEditListBody').getByText('查看&编辑').click();
+    await page.locator('#caseLibraryEditListBody [data-case-lib-edit]').first().click();
     await expect(page.locator('#caseLibraryEditCard')).not.toHaveClass(/hidden/);
     await expect(page.locator('#caseLibraryEditFileName')).toContainText('登录');
 
@@ -403,7 +403,7 @@ test.describe('用例库-用例改动历史抽屉', () => {
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', '1');
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('登录');
-    await page.locator('#caseLibraryEditListBody').getByText('查看&编辑').click();
+    await page.locator('#caseLibraryEditListBody [data-case-lib-edit]').first().click();
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await expect(page.locator('#caseLibraryHistoryDetailCard')).toBeHidden();
 

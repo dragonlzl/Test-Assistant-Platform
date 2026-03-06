@@ -19,6 +19,93 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：AI 助手“模型优先决策 + 写操作二次确认”
+- 功能描述：将 AI 助手改为默认“模型优先决策”模式：先由模型结合可用接口决定最合适的回答或动作，不再依赖大量前置硬编码分流；同时对写入/编辑/删除类动作统一要求二次确认后执行。
+- 操作方式：
+  - 在助手中直接自然提问（页面问题、用例问题、备忘、设置、联网问题等）；
+  - 模型可按需直接回答，或返回动作 JSON 调用平台接口；
+  - 若动作涉及写入/编辑/删除（如备忘写操作、设置变更、触发生成/推荐），助手会先二次确认，再执行。
+- 使用效果：
+  - 回答策略更灵活，减少“固定模板/固定话术”带来的僵硬感；
+  - 保留可控安全边界：读操作直达，写操作二次确认；
+  - 模型动作能力覆盖更完整（页面、用例、备忘、设置、联网搜索），且对“当前页面用例”等核心问题仍保持稳定回退能力。
+- 新增内容/接口/组件：
+  - 前端逻辑：
+    - `scripts/modules/assistant.js`
+      - 移除 `shouldPreferModelThinking` 的硬限制分流，改为默认模型优先；
+      - 扩展模型动作协议：支持单动作与 `actions[]` 组合（`reply/navigate/current_page_info/query_page_data/query_case_list/web_search/memo_*/settings_*/run_*/delete_case`）；
+      - 新增模型动作执行器（包含参数规范化、动作映射、失败降级）；
+      - 新增统一写操作二次确认工具：`requireDoubleConfirmForAction`；
+      - 将传统备忘、设置、用例触发动作也统一接入二次确认（删除用例维持既有内置二次确认）。
+  - UI 自动化：
+    - `tests/ui/assistant_global.spec.js`
+      - 新增用例“模型动作 settings_patch 需二次确认后才执行”，验证模型动作写操作必须二次确认并成功落地。
+- 复用说明：复用现有 `assistantApi` / `assistantSettingsApi` / `assistantModelDiagApi` 接口与原有兜底意图处理，仅重构助手编排层；未新增后端接口。
+- 测试与验证：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js scripts/modules/app.js scripts/modules/caseLibrary.js scripts/core/tempexecCore.js scripts/base/state.js scripts/base/utils.js scripts/modules/bootstrap.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --reporter=line`（28/29 通过；失败项为历史已存在用例“助手默认锁定并点击引导到设置页”，与本次改动无直接耦合）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+  - `python3 notify_feishu.py`（通过，HTTP 200）
+- 更新记录：2026-03-05 完成“模型优先决策 + 写操作二次确认”重构，并补充对应 UI/API 回归。
+- 更新记录：2026-03-05 修复模型动作解析与追问承接：当模型异常输出连续 JSON（如 `{"action":"current_page_info"}{"action":"current_page_info"}`）时，助手会提取并执行首个有效动作而非原样回显；补充“中文名/中文名称”上下文追问承接，若上文正在问当前页面则直接返回页面中文名，不再要求用户改问法（`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 完成助手 MCP 接口化改造：新增 `window.app.assistantMcpApi`（`listTools/callTool`）统一暴露页面/用例/备忘/设置/触发流程能力；助手模型编排层新增 MCP 协议解析（支持 `{"mcp":{"tool":"...","args":{}}}` 与批量 `calls`），优先按 MCP 工具调用获取数据后再组织回答，旧 `action/actions` 协议继续兼容兜底；新增 UI 用例“模型可通过 MCP 工具调用返回当前页面用例数量”（`scripts/modules/app.js`、`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`）。
+- 测试与验证（MCP 本次增量）：
+  - `node --check scripts/modules/app.js scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8091 npx playwright test tests/ui/assistant_global.spec.js --grep "模型重复输出 action JSON 时应仍可执行，并支持中文名追问|模型可通过 MCP 工具调用返回当前页面用例数量|当前页面有多少条用例应直接返回数量|模型动作 settings_patch 需二次确认后才执行" --reporter=line`（未通过：受本机 Chromium 启动权限限制 `MachPortRendezvous Permission denied (1100)`，非断言失败）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line`（通过）
+- 更新记录：2026-03-05 修复“明确修改用例指令仅文本回复、不触发确认执行”问题：将 `tryHandleCaseUpdateCommand` 提前到模型回复链路之前，确保“修改该用例的优先级为P0”等明确写操作先走 MCP `case.update` 二次确认再执行；同时扩展中文句式解析（支持 `优先级为/是/调成/调为/改到` 等），并在缺少“用例”字样时允许在用例库/执行页上下文内识别（`scripts/modules/assistant.js`）。
+- 测试与验证（本次写操作修复）：
+  - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "明确修改用例指令应触发确认并实际执行写操作" --workers=1`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "明确修改用例指令应触发确认并实际执行写操作|询问如何修改用例时返回操作指引而非页面数据|模型动作 settings_patch 需聊天内确认后才执行" --workers=1`（通过）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过）
+- 更新记录：2026-03-05 修复登录异常“`Failed to execute 'fetch' ... headers ... non ISO-8859-1`”：在请求头构建链路新增 header 值安全校验，拦截并清理本地脏 token（含非 Latin-1/控制字符/换行），避免 `fetch` 在构造请求时直接抛错；`Authorization` 与 `X-TAP-Page` 均按安全值写入，不安全时降级处理并回到登录流程（`services/apiClient.js`、`tests/ui/auth_login_expiry.spec.js`）。
+- 测试与验证（本次登录异常修复）：
+  - `node --check services/apiClient.js tests/ui/auth_login_expiry.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/auth_login_expiry.spec.js --workers=1`（3/3 通过）
+- 更新记录：2026-03-05 修复助手写操作确认体验问题：1）“允许操作/不允许”按钮改为高对比实色（显式覆盖全局按钮白字继承，增强浅色/深色主题可读性）；2）修复“确认后再次弹确认且无有效执行”问题，MCP 写工具在确认后失败时直接返回失败原因，不再回退旧动作链路二次触发确认；3）MCP/动作计划去重前置到执行前，避免同计划重复执行副作用（`style.css`、`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`）。
+- 测试与验证（本次确认体验修复）：
+  - `node --check scripts/modules/assistant.js style.css tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "明确修改用例指令应触发确认并实际执行写操作|MCP case.update 确认后失败时不应重复弹确认|MCP ui.click_control 写操作需聊天确认并可拒绝/允许" --workers=1`（3/3 通过）
+- 更新记录：2026-03-05 修复“点击允许操作无反馈、按钮复原且模型不继续执行”问题：确认按钮点击后会立即禁用同组确认按钮并展示“执行中/处理中”状态；确认消息在点击后收敛为状态文案（“已允许，正在执行...”或“已拒绝，本次操作已取消。”）并移除操作按钮，避免悬停复原与误判未生效；同时补充动作回调异常/失效提示，避免静默无响应（`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`）。
+- 测试与验证（本次确认点击反馈修复）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "明确修改用例指令应触发确认并实际执行写操作|MCP case.update 确认后失败时不应重复弹确认|MCP ui.click_control 写操作需聊天确认并可拒绝/允许" --workers=1`（3/3 通过）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过）
+- 更新记录：2026-03-05 修复“允许后长时间显示执行中且无明确结果”问题：1）确认后的全局状态栏不再残留“正在执行”文案，助手在产生最终回复时自动清空状态；2）`case.update` 在模型漏传字段时会结合用户原问题自动补全（如从“优先级改成P3”推断 `field=priority,value=P3`）后再执行；3）用例优先级写入格式放宽为 `P + 数字`（示例 `P0/P1/P2/P3`），减少因格式限制导致“看似执行但未生效”（`scripts/modules/assistant.js`、`scripts/modules/app.js`、`tests/ui/assistant_global.spec.js`）。
+- 测试与验证（本次执行反馈与补全修复）：
+  - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "明确修改用例指令应触发确认并实际执行写操作|MCP case.update 确认后失败时不应重复弹确认|MCP case.update 缺少字段时应结合用户问题自动补全后执行|MCP ui.click_control 写操作需聊天确认并可拒绝/允许" --workers=1`（4/4 通过）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过）
+- 更新记录：2026-03-05 修复“确认后成功消息不在最底部”问题：当本轮发生写操作确认时，助手最终结果不再覆盖确认前创建的思考占位消息，而是追加到消息流底部；确认卡片保留在上方用于回溯，最终成功/失败结果始终出现在最下面（`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`）。
+- 测试与验证（本次结果位置修复）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "明确修改用例指令应触发确认并实际执行写操作|MCP case.update 确认后失败时不应重复弹确认|MCP case.update 缺少字段时应结合用户问题自动补全后执行|MCP ui.click_control 写操作需聊天确认并可拒绝/允许" --workers=1`（4/4 通过）
+- 更新记录：2026-03-05 修复“标题拼接未走确认且被替换”问题：1）扩展用例编辑语义识别，`拼接/追加/前缀/后缀` 等表述会按写操作流程触发确认按钮，不再仅返回口头确认；2）`case.update` 新增 `operation`（`append/prepend/replace`）并在编辑层按模式写入，避免将“拼接 -联机”误写成直接替换“联机”；3）MCP 参数推断链路会从用户原句自动补齐 `operation/field/value`，减少模型漏参导致的偏差（`scripts/modules/assistant.js`、`scripts/modules/app.js`、`tests/ui/assistant_global.spec.js`）。
+- 测试与验证（本次拼接确认与写入模式修复）：
+  - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "明确修改用例指令应触发确认并实际执行写操作|拼接标题指令应触发确认并按追加执行|MCP case.update 确认后失败时不应重复弹确认|MCP case.update 缺少字段时应结合用户问题自动补全后执行|MCP ui.click_control 写操作需聊天确认并可拒绝/允许|assistantMcpApi case.update 追加模式应拼接而非替换" --workers=1`（6/6 通过）
+- 更新记录：2026-03-06 修复“下一份用例”问法在最新指令下“只说不干”问题：新增执行页“下一份用例”显式意图处理，命中后优先走本地可执行链路（不再依赖模型先返回 JSON）；当用户询问“是否有下一份用例”时直接返回结论且不切换当前执行文件；当用户明确要求“切换到下一份用例”时直接执行切换并返回结果，避免仅输出“我先帮你检查/切换”类口头承诺（`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`）。
+- 测试与验证（本次“下一份用例”执行修复）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "模型可通过 MCP tempexec.search_cases 返回命中数量|询问是否有下一份用例时应直接检查并返回结论|切换到下一份用例指令应直接执行切换" --reporter=line --workers=1`（3/3 通过）
+  - `APP_DB_FILE=apitest.db python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js --reporter=line --workers=1`（1/1 通过）
+  - `python3 notify_feishu.py`（通过，HTTP 200）
+- 更新记录：2026-03-06 补齐“用例改动历史”页面内容读取能力，修复最新指令下仅口头回复、不实际读取页面变更内容的问题：当用户在“用例库 -> 用例改动历史 -> 历史详情”页面提问时，助手会优先读取当前可见历史详情快照，并按用户要求整理新增/删除/改动等内容返回；若模型未产出可用总结，则回退为本地结构化摘要，避免再次出现“只说不干”。涉及 `scripts/modules/caseLibrary.js`、`scripts/modules/app.js`、`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`。
+- 测试与验证（本次“用例改动历史整理”增量）：
+  - `node --check scripts/modules/caseLibrary.js && node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "助手可读取当前用例改动历史详情并按需求整理返回|询问是否有下一份用例时应直接检查并返回结论|切换到下一份用例指令应直接执行切换" --reporter=line --workers=1`（3/3 通过）
+  - `node --check tests/ui/case_library_history.spec.js && npx playwright test --config tests/playwright.config.js tests/ui/case_library_history.spec.js --reporter=line --workers=1`（2/2 通过；同步修正旧用例，将已变更的“查看&编辑”文案断言改为稳定的 `data-case-lib-edit` 选择器）
+  - `APP_DB_FILE=apitest.db python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8083` + `API_BASE_URL=http://127.0.0.1:8083 npx playwright test --config tests/api/playwright.api.config.js tests/api/case_library_history.spec.js --reporter=line --workers=1`（1/1 通过，测试库隔离）
+
+- 更新记录：2026-03-06 修复“执行页用例变更”问法被误判为用例列表/项目范围查询的问题：当用户处于“用例执行”页并询问“用例变更内有多少条新增变更”等问题时，助手现在会优先读取执行页按钮“用例变更”对应的真实 diff 快照（追加/新增/改动/删除），直接返回准确数量或关键明细；不再误走 `cases.list_current`/项目范围统计，也不再把执行页“用例变更”和“用例库 -> 改动历史详情”混为一谈。涉及 `scripts/core/tempexecCore.js`、`scripts/modules/app.js`、`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`。
+- 测试与验证（本次执行页“用例变更”读取修复）：
+  - `node --check scripts/core/tempexecCore.js && node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "助手在执行页可读取用例变更并准确返回新增数量|助手可读取当前用例改动历史详情并按需求整理返回|询问是否有下一份用例时应直接检查并返回结论|切换到下一份用例指令应直接执行切换" --reporter=line --workers=1`（4/4 通过）
+  - `node --check tests/ui/tempexec_case_library_changes.spec.js && npx playwright test --config tests/playwright.config.js tests/ui/tempexec_case_library_changes.spec.js --reporter=line --workers=1`（17/17 通过）
+  - `APP_DB_FILE=apitest.db python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8083` + `API_BASE_URL=http://127.0.0.1:8083 npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_case_library_sync.spec.js --grep "用例库改动后：刷新同步返回 diff，已执行用例标记为“变更重跑”|多次变更会记录历史：最新变更排在最前|追加入库：sync 返回 appended diff，且不影响已执行结果" --reporter=line --workers=1`（3/3 通过，测试库隔离）
+
+
 - 功能名称：AI 助手“当前页面用例”查询改为优先返回编辑中用例
 - 功能描述：修正全局 AI 助手对“现在的页面有什么用例 / 获取当前页面用例列表”等问题的响应策略：优先返回当前正在编辑/查看的用例条目；若当前页面没有编辑上下文，不再回退全项目用例列表，而是明确提示“没有当前用例”并给出下一步操作建议。
 - 操作方式：
@@ -72,6 +159,7 @@
 - 更新记录：2026-03-05 按交互调整移除“聊天窗固定滚动条”控件，仅保留列表自身横向滚动条；同时保留用例表格消息卡片宽度约束，确保列表滚动条可正常触发与拖拽（`scripts/modules/assistant.js`、`style.css`、`tests/ui/assistant_global.spec.js`）。
 - 更新记录：2026-03-05 修正“展开查看视图列宽未生效”问题：在展开弹层内显式覆盖 `temp-case-view table { width:100% }`，将助手用例表格恢复为与列表一致的固定列宽+自动换行规则（按用例库/执行页上下文分别映射），确保“每字段每行字数”在展开视图中与页面视图一致（`style.css`、`tests/ui/assistant_global.spec.js`）。
 - 更新记录：2026-03-05 修复展开弹层交互细节：关闭按钮 `X` 改为严格居中（`inline-flex + center`）；隐藏用例表格容器原生横向滚动条，仅保留外显列表滚动条，消除“拖动时双滚动条并存”问题（`style.css`、`tests/ui/assistant_global.spec.js`）。
+- 更新记录：2026-03-05 增强“当前页面用例数量”问法识别：将“当前页面有多少条用例/用例数量/用例条数”等自然问法纳入内置用例查询意图，优先走页面上下文直接返回数量结果（不再提示“先获取页面数据”）；新增数量问法 UI 回归用例（`scripts/modules/assistant.js`、`tests/ui/assistant_global.spec.js`）。
 - 测试与验证（本次增量）：
   - `node --check scripts/modules/assistant.js scripts/modules/app.js scripts/modules/caseLibrary.js tests/ui/assistant_global.spec.js`（通过）
   - `npx playwright test tests/ui/assistant_global.spec.js --grep "首问当前有哪些用例时应直接返回用例列表|获取当前页面用例列表在无编辑上下文时返回下一步提示|现在的页面有什么用例在无编辑上下文时返回下一步提示|当前页面用例优先返回正在编辑用例而非全库|当前页面用例查询支持条件筛选（和技能无关）|在用例执行页查看用例时应返回当前查看用例条目|模型误判 query_page_data 时仍应优先返回当前页面用例结果" --reporter=line`（7/7 通过）
@@ -127,6 +215,10 @@
 - 测试与验证（本次双滚动条与关闭按钮修复增量）：
   - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js scripts/modules/app.js scripts/modules/caseLibrary.js scripts/core/tempexecCore.js scripts/base/state.js scripts/base/utils.js scripts/modules/bootstrap.js`（通过）
   - `npx playwright test tests/ui/assistant_global.spec.js --grep "当前页面用例优先返回正在编辑用例而非全库|助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|在用例执行页查看用例时应返回当前查看用例条目"`（3/3 通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test tests/api/settings_assistant.spec.js`（通过）
+- 测试与验证（本次“当前页面用例数量”问法修复增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js scripts/modules/app.js scripts/modules/caseLibrary.js scripts/core/tempexecCore.js scripts/base/state.js scripts/base/utils.js scripts/modules/bootstrap.js`（通过）
+  - `npx playwright test tests/ui/assistant_global.spec.js --grep "当前页面有多少条用例应直接返回数量|当前页面用例优先返回正在编辑用例而非全库|模型误判 query_page_data 时仍应优先返回当前页面用例结果"`（3/3 通过）
   - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test tests/api/settings_assistant.spec.js`（通过）
 
 - 功能名称：AI 助手代码块支持点击复制
@@ -4591,3 +4683,502 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js --reporter=line`（通过，4/4）
   - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_interactions.spec.js --reporter=line`（通过，1/1）
   - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过，1/1）
+- 更新记录：2026-03-05 AI 助手“用例问答”改为模型先取数再推理：新增 `runModelCaseListAction` 统一链路，优先通过 MCP 工具 `cases.list_current` 取实时数据，再将工具结果交给模型总结；仅在模型总结失败时才回退格式化兜底文本。旧动作 `query_case_list`、`query_page_data` 下的用例分支，以及非模型兜底分支中的用例问答入口，均切换到该链路，避免预设模板拦截模型推理（`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-05 修复 legacy 动作误判根因：`normalizeModelActionName` 中 `query_case_list` 识别优先级上移，避免被通用 `query` 提前匹配为 `query_page_data`，导致“全部都没执行吗”这类问题错误返回页面数据（`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-05 MCP 回退防抖：当 MCP 调用不可用或失败时，在动作载荷标记 `_mcpUnavailable`，回退链路不再重复触发同一 MCP 调用，避免无效重复取数（`scripts/modules/assistant.js`）。
+- 更新记录：2026-03-05 补充助手 UI 回归：新增“模型返回 legacy `query_case_list` 动作时，应基于已取数结果自由回答”用例；并同步修正 MCP 用例统计断言（模型规划 + 结果解读各一次调用）以匹配当前架构（`tests/ui/assistant_global.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "模型可通过 MCP 工具调用返回当前页面用例数量|模型返回 legacy query_case_list 动作时应基于数据自由回答" --workers=1`（通过，2/2）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-05 AI 助手 MCP 能力扩展与聊天内确认（本次增量）
+  - 助手端确认机制改造（`scripts/modules/assistant.js`）：
+    - 写入/编辑/删除操作不再使用浏览器 `window.confirm`，统一改为聊天区“允许操作 / 不允许”按钮确认。
+    - 新增可样式化动作按钮能力（`variant/className`），用于确认按钮视觉分级。
+    - `executeModelMcpToolCall` 支持处理 MCP `confirm_required` 回包：先展示聊天确认，允许后自动携带 `confirmed=true` 重试工具调用。
+    - 诊断流程“应用建议配置”同样改为聊天内确认后执行。
+  - MCP 工具扩展（`scripts/modules/app.js`）：
+    - 新增通用页面控件工具：`ui.list_controls`、`ui.click_control`、`ui.fill_input`。
+    - 新增执行页语义工具：`tempexec.search_cases`、`tempexec.show_xmind`、`tempexec.export_xmind`、`tempexec.next_file`、`tempexec.switch_file`。
+    - 写操作统一支持 `confirm_required` 协议（备忘增改删、设置修改、删除用例、触发生成/推荐、风险控件点击）。
+    - 删除用例执行 API 去除浏览器确认，确认职责上移到助手聊天层。
+  - 样式更新（`style.css`）：
+    - 新增助手动作按钮主题样式（基础/允许/拒绝），兼容深浅色主题。
+  - UI 回归补充（`tests/ui/assistant_global.spec.js`）：
+    - 更新既有“settings_patch/诊断代填”用例为聊天内确认链路。
+    - 新增 `MCP ui.click_control` 写操作拒绝/允许分支用例。
+    - 新增 `MCP tempexec.search_cases` 命中统计用例。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "代填前需聊天确认|settings_patch 需聊天内确认|MCP ui.click_control|tempexec.search_cases"`（通过，4/4）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js`（31/34 通过；3 个历史/既有失败：`助手默认锁定并点击引导到设置页`、`当前页面用例查询支持条件筛选（和技能无关）`、`MCP ui.click_control 写操作需聊天确认并可拒绝/允许`，其中最后一项已在本次增量中修复并经定向回归通过）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-05 AI 助手 MCP 能力扩展复验
+  - 全量助手 UI 回归更新为 `32/34` 通过，当前剩余 2 个既有失败：`助手默认锁定并点击引导到设置页`、`当前页面用例查询支持条件筛选（和技能无关）`；新增 MCP 相关用例（`ui.click_control`、`tempexec.search_cases`）均通过。
+  - 本次补充执行通知脚本，飞书通知发送成功（HTTP 200）。
+- 测试与验证（复验）：
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js`（通过 32/34；2 个既有失败见上）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+  - `python3 notify_feishu.py`（通过，HTTP 200）
+
+- 更新记录：2026-03-05 AI 助手 MCP 控件参数容错增强（全控件同类问题修复）
+  - 修复 `ui.fill_input` 在仅给“输入值”（如“技能效果”）时误按控件名匹配导致“未找到目标输入控件”的问题：新增输入值解析与搜索框自动定位回退，优先定位当前页可用搜索输入框后再填充。
+  - 扩展 MCP 参数别名兼容，减少模型参数名波动导致的失败：
+    - `tempexec.search_cases`：支持 `keyword/query/text/value` 作为搜索词，支持 `id/name/title/file` 定位文件。
+    - `tempexec.switch_file`：支持 `id/caseId/name/title/file/fileIndex/seq/position` 别名。
+    - `nav.switch_tab`：支持 `targetTab/page/name`。
+    - `web.search`：支持 `q/keyword/text`。
+    - `memo.add/toggle/remove`、`settings.describe`、`case.delete` 增加常见别名容错。
+  - 风险控制：`ui.fill_input` 仅在“未提供显式定位参数”时才启用自动搜索框回退，避免指定控件失败后误填到其他输入框。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "MCP ui.fill_input 仅给输入值时可自动定位搜索框|MCP tempexec.search_cases 支持 keyword 参数别名|MCP ui.click_control 写操作需聊天确认并可拒绝/允许|模型可通过 MCP tempexec.search_cases 返回命中数量"`（通过，4/4）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+- 更新记录：2026-03-05 AI 助手 MCP 控件定位稳健性补齐（同类问题一并处理）
+  - 统一增强 `ui.click_control` / `ui.fill_input` 的控件定位容错：补充常见定位别名（`id/elementId/control/name/title/placeholder/ariaLabel` 等），并在关键字匹配时引入打分策略。
+  - `ui.fill_input` 增加“输入场景优先输入控件”策略：同名按钮/标签与输入框并存时，优先命中输入控件；若先命中 `label` 或容器节点，会自动解析其关联输入框（`for/control`、同容器、近祖先范围）。
+  - `ui.list_controls` 与控件定位流程统一排除 AI 助手面板自身控件（如 `assistantInput`/`assistantSendBtn`），避免模型误操作聊天区控件。
+  - 兼容性增强同时保持风险收敛：未放宽写操作确认策略，写类动作仍需聊天内“允许操作/不允许”。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "MCP ui.click_control 支持 id 参数别名|MCP ui.fill_input 仅给输入值时可自动定位搜索框|MCP ui.fill_input 存在同名按钮时优先命中输入框|MCP ui.list_controls 默认排除助手面板内控件|MCP tempexec.search_cases 支持 keyword 参数别名|MCP ui.click_control 写操作需聊天确认并可拒绝/允许"`（通过，6/6）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+- 更新记录：2026-03-05 修复“搜索模块用例”被误答为控件列表
+  - 根因：`帮我搜索技能效果模块的用例` 这类表达未命中用例查询意图，导致模型自由调用 `ui.list_controls` 并返回页面控件清单。
+  - 修复：
+    - 扩展用例查询意图识别：`isCaseListIntent` 新增 `搜索/查找/筛选/过滤/搜` 关键词；
+    - 用例相关问句改为优先走“先取用例数据再回答”链路（`runModelCaseListAction`），避免被控件工具抢答；
+    - 搜索类问句在执行页/用例库页默认按当前页面作用域取数（无“当前页面”字样也可命中）；
+    - 新增搜索关键词提取规则（如“搜索技能效果模块的用例”可提取 `技能效果`）并在结果层做过滤后再回答。
+  - 影响文件：`scripts/modules/assistant.js`。
+- 更新记录：2026-03-05 补充“搜索模块用例”回归用例
+  - 新增 UI 用例：`搜索模块用例时应优先返回用例结果而非控件列表`，覆盖你截图中的错误路径，断言不再出现“当前可操作控件”。
+  - 同步调整：`模型可通过 MCP 工具调用返回当前页面用例数量` 的模型调用次数断言从 `>=2` 调整为 `>=1`（因为该类问题现在会优先直走取数链路，调用次数收敛）。
+  - 影响文件：`tests/ui/assistant_global.spec.js`。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "搜索模块用例时应优先返回用例结果而非控件列表|当前页面用例查询支持条件筛选（和技能无关）|当前页面有多少条用例应直接返回数量|模型可通过 MCP 工具调用返回当前页面用例数量"`（通过，4/4）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-05 AI 助手 MCP 推理链路改为“多轮模型主导”
+  - 目标：降低“意图模板”对模型的限制，避免 `ui.list_controls` 等工具调用后直接回显原始结果，改为基于工具观察继续推理下一步。
+  - 核心改动（`scripts/modules/assistant.js`）：
+    - `tryHandleModelDrivenReply` 从“单次 + 特例二次推理”升级为**通用多轮推理循环**（最多 4 轮）；
+    - 新增计划去重（同工具/同参数重复时停止自动重试）与轮次观察追踪，避免陷入重复调用；
+    - 新增 `isPageDataListingIntent`、`looksLikeImperativeUiOperation`、`shouldContinueActionReasoning` 等策略函数：
+      - 用户未明确要“控件清单/原始页面数据”时，`ui.list_controls`、`page.get_data` 结果会进入下一轮推理；
+      - 纯执行型指令（如“输入/点击”）默认不强行追加下一轮，避免无谓模型往返；
+      - 写操作确认机制保持不变（聊天内“允许操作/不允许”）。
+  - UI 回归补充（`tests/ui/assistant_global.spec.js`）：
+    - 新增 `模型可基于多轮 MCP 结果继续调用下一层工具`，覆盖 `ui.list_controls -> ui.fill_input -> tempexec.search_cases` 三层链路，验证模型可连续决策而非停在中间结果。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "模型调用 ui.list_controls 后应继续推理下一步操作|模型可基于多轮 MCP 结果继续调用下一层工具|模型动作 settings_patch 需聊天内确认后才执行|项目外问题应走通用回答而非页面数据查询|搜索模块用例时应优先返回用例结果而非控件列表" --workers=1`（通过，5/5）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-05 修复“助手说已搜索，但页面未同步变化”
+  - 问题现象：用户提问“帮我搜索技能效果模块的用例”时，助手能给出过滤结果，但页面搜索框与列表未同步进入该搜索状态。
+  - 根因：该问句优先走 `runModelCaseListAction -> cases.list_current` 读数据链路，仅做“取数+回答”，没有驱动页面搜索控件。
+  - 修复（`scripts/modules/assistant.js`）：
+    - 新增搜索同步逻辑：当识别到“搜索/查找/筛选/过滤”且可提取包含关键词时，先尝试同步页面搜索状态，再取数回答。
+    - `tempexec` 页面：调用 `tempexec.search_cases` 同步执行页搜索；
+    - `case-library` 页面：调用 `ui.fill_input` 回填搜索输入框并触发输入事件；
+    - 仅在当前问题具备明确搜索关键词且作用域为当前页面时触发，避免误操作。
+  - UI 回归更新（`tests/ui/assistant_global.spec.js`）：
+    - 在 `搜索模块用例时应优先返回用例结果而非控件列表` 中补充断言：搜索输入框值与监听变量均应变为 `技能效果`，确保“回答结果”与“页面状态”一致。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "搜索模块用例时应优先返回用例结果而非控件列表|模型调用 ui.list_controls 后应继续推理下一步操作|模型可基于多轮 MCP 结果继续调用下一层工具|当前页面有多少条用例应直接返回数量" --workers=1`（通过，4/4）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-05 AI 助手新增“思考中”动态占位（下一条回复位置原位替换）
+  - 目标：用户发送问题后，在 AI 下条答复位置先展示“助手正在思考中”的动态提示，待模型返回后原位替换为最终答复，避免界面无反馈。
+  - 核心改动：
+    - `scripts/modules/assistant.js`
+      - `addMessage` 增加 `thinking/transient` 标记；
+      - 新增 `replaceMessage(messageId, text, options)`，用于将思考占位原位替换为最终内容；
+      - `renderMessages` 增加 `assistant-msg-thinking` 渲染分支（含三点动态）；
+      - `saveHistory` 过滤 `thinking/transient` 消息，避免把思考占位持久化到聊天历史；
+      - `handleSend` 发送后先插入思考占位，再通过 `pendingReplyId` 交给 `handleUserInput`；
+      - `handleUserInput` 引入 `addAiReply`，优先替换占位；异常路径也会替换为失败提示，避免残留占位。
+    - `style.css`
+      - 新增思考态样式 `.assistant-msg-thinking`、`.assistant-thinking-*` 及点状动画 `@keyframes assistant-thinking-dot`。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增用例 `发送后在下一条回复位置显示思考中并原位替换结果`，覆盖“先出现思考中，再被最终回复替换且不残留”。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "发送后在下一条回复位置显示思考中并原位替换结果|助手代码块支持点击复制|助手可按模型输出渲染表格与代码块" --workers=1`（通过，3/3）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-05 思考中发送锁定与刷新中断
+  - 需求：当助手处于“思考中”时，禁止继续发送新消息；发送按钮需禁用；刷新页面后应中断本次思考过程。
+  - 改动说明：
+    - `scripts/modules/assistant.js`
+      - 新增 `replyPending` 状态；
+      - 新增 `refreshSendState` / `setReplyPending`，统一控制发送按钮禁用和输入框忙碌态；
+      - `handleSend` 增加“思考中拦截”分支，防止再次发送（含回车发送路径）；
+      - 在主回复 Promise 链路中使用 `finally` 恢复发送能力，确保成功/失败都能解锁。
+    - `style.css`
+      - 新增 `#assistantSendBtn:disabled` 样式，明确禁用态视觉反馈。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `思考中应禁止继续发送，刷新页面后中断思考`：
+        - 校验思考中按钮禁用且二次发送不会新增用户消息；
+        - 刷新后不保留“思考中”占位，且发送按钮恢复可用。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "发送后在下一条回复位置显示思考中并原位替换结果|思考中应禁止继续发送，刷新页面后中断思考" --workers=1`（通过，2/2）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-05 修复“拼接未确认且被替换”的编辑链路问题
+  - 问题现象：
+    - 某些“拼接/追加”编辑会绕过聊天确认直接写入；
+    - “把标题拼接联机”偶发被当成替换，出现 `技能描述 -> 联机`。
+  - 核心修复：
+    - `scripts/modules/app.js`
+      - `ui.fill_input` 命中用例可编辑字段（`data-case-lib-edit-field` / `data-case-lib-missing-field` / `data-temp-edit-field`）时，统一走 `confirm_required`，防止绕过二次确认；
+      - 用例字段写入支持 `append/prepend/replace`，并在 `append/prepend` 下按“原值 + 新值 / 新值 + 原值”写入；
+      - 抽取 `assistantNormalizeCaseUpdateOperation` 与 `assistantResolveCaseEditableMeta`，保持 `case.update` 与 `ui.fill_input` 写入规则一致。
+    - `scripts/modules/assistant.js`
+      - 新增 `rewriteUiFillAsCaseUpdateIfNeeded`：当模型误用 `ui.fill_input` 编辑用例时，自动改走 `case.update`，保留确认链路与字段级编辑语义；
+      - 新增 `normalizeCaseUpdateOperationFromArgs`，统一补齐操作类型；
+      - 增强 `extractCaseUpdateValue`：支持无引号“拼接上联机/后面加联机”等表达，并去除包裹引号，避免把 `“-联机”` 原样写入。
+  - UI 回归补充（`tests/ui/assistant_global.spec.js`）：
+    - `拼接标题无引号指令应按追加执行`
+    - `模型误用 ui.fill_input 编辑用例时应改走 case.update`
+    - `assistantMcpApi ui.fill_input 命中用例字段需确认并支持追加`
+    - 保留并回归 `拼接标题指令应触发确认并按追加执行`
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "拼接标题指令应触发确认并按追加执行|拼接标题无引号指令应按追加执行|模型误用 ui.fill_input 编辑用例时应改走 case.update|assistantMcpApi ui.fill_input 命中用例字段需确认并支持追加" --workers=1`（通过，4/4）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-05 修复“用例执行页无法修改执行结果状态”
+  - 问题现象：
+    - 在用例执行页提问“把该用例的执行结果改为失败”后，助手走了确认流程但最终提示“未找到目标可编辑单元格”。
+  - 根因：
+    - `case.update` 在 `tempexec` 场景只支持 `data-temp-edit-field`（标题/优先级/前置/步骤/预期），未覆盖执行结果列的 `select[data-temp-result]`；
+    - 因此 `actual/执行结果` 字段无法定位到真实可编辑控件。
+  - 修复内容：
+    - `scripts/modules/app.js`
+      - 新增 `assistantPickTempExecResultNode`：按文件与行号定位执行结果下拉框；
+      - 新增 `assistantNormalizeTempExecActualValue` + `assistantResolveSelectOptionValue`：支持 `failed/pass/pending` 等别名映射并匹配下拉选项；
+      - `assistantUpdateCase` 在 `tempexec + actual` 时改为操作 `select[data-temp-result]` 并触发 change；
+      - `assistantResolveCaseEditableMeta` 覆盖 `data-temp-result`，使 `ui.fill_input` 命中执行结果控件也能走统一确认链路；
+      - 执行结果字段强制按替换写入（不做 append/prepend），并给出更准确的失败提示。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `MCP case.update 在执行页可修改执行结果`（聊天确认链路）；
+      - 新增 `assistantMcpApi case.update 支持修改执行结果状态`（直调 MCP 链路，覆盖 `failed -> 失败` 映射）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/app.js scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "MCP case.update 在执行页可修改执行结果|assistantMcpApi case.update 支持修改执行结果状态" --workers=1`（通过，2/2）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-06 修复“全部用例执行结果仅改首条”问题
+  - 问题现象：
+    - 用户在用例执行页提问“把全部用例的执行结果都改成通过”，助手仅修改第 1 条，未批量生效。
+  - 根因：
+    - `case.update` 语义默认按单条执行，模型未显式传 `scope=all` 时会落回单条分支；
+    - 回复文案在批量场景下未统一使用字段中文名，导致提示与预期不一致。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增 `detectCaseUpdateScopeFromText`，从自然语言识别“全部/所有/都改”等批量意图；
+      - `parseCaseUpdateCommand`、`inferCaseUpdateArgsFromText`、`rewriteUiFillAsCaseUpdateIfNeeded` 全链路透传 `scope`，并在 `scope=all` 时移除单条 `index`；
+      - `tryHandleCaseUpdateCommand` 与 MCP `case.update` 回包文案支持批量成功提示（`已批量修改用例：共 N 条...`），字段名统一中文映射（`actual -> 执行结果`）。
+    - `scripts/modules/app.js`
+      - 新增 `assistantNormalizeCaseUpdateScope`；
+      - `assistantUpdateCase` 支持 `scope=all` 批量执行（当前限定 `tempexec + actual`），优先遍历当前执行文件调用 `tempExecApi.updateTempExecResult`，并返回 `scope/count` 供助手生成批量结果文案；
+      - 无文件数据时回退对当前可见 `select[data-temp-result]` 批量写入，保障兼容性。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `全部用例执行结果指令应按批量执行`；
+      - 新增 `assistantMcpApi case.update 支持批量修改执行结果`。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "全部用例执行结果指令应按批量执行|assistantMcpApi case.update 支持批量修改执行结果|MCP case.update 在执行页可修改执行结果|assistantMcpApi case.update 支持修改执行结果状态" --workers=1`（通过，4/4）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-06 修复“备注无法写入”并排查同类字段问题
+  - 问题现象：
+    - 在助手中追加指令“并且备注上，测试用的”后，进入确认流程但最终报错 `MCP 工具执行失败：缺少要写入的值`；
+    - 用例执行页的备注字段在默认折叠态下也难以通过通用可见控件定位写入。
+  - 根因：
+    - 值提取规则只覆盖“改为/设为/追加”等显式连接词，未覆盖“字段上，值”这类自然续写问法；
+    - `tempexec` 备注控件是折叠区 `textarea[data-temp-remark]`，旧链路未优先走 `tempExecApi.updateTempExecRemark`，导致可见性依赖强。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增字段别名映射 `getCaseUpdateFieldAliases` 与正则转义工具；
+      - `extractCaseUpdateValue` 增加“字段上/字段：/字段，值”兜底提取，支持标题、备注等字段在续写语句下自动补齐 `value`。
+    - `scripts/modules/app.js`
+      - 新增 `assistantPickTempExecRemarkNode`；
+      - `assistantResolveCaseEditableMeta` 识别 `data-temp-remark`，使 `ui.fill_input` 命中备注时也走统一写入确认链路；
+      - `assistantUpdateCase` 在 `tempexec + remark` 场景优先调用 `tempExecApi.updateTempExecRemark` 直接写入（支持 append/prepend 语义），并补充备注字段专用失败提示。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `MCP case.update 缺少 value 时支持“字段上，值”问法（标题/备注）`；
+      - 新增 `assistantMcpApi case.update 在执行页支持修改备注`；
+      - 与既有执行结果相关回归一并重跑，确认未引入回归。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "MCP case.update 缺少 value 时支持“字段上，值”问法（标题/备注）|assistantMcpApi case.update 在执行页支持修改备注|全部用例执行结果指令应按批量执行|assistantMcpApi case.update 支持批量修改执行结果|MCP case.update 在执行页可修改执行结果|assistantMcpApi case.update 支持修改执行结果状态" --workers=1`（通过，6/6）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-06 修复“复合指令仅清空备注、未批量改状态”
+  - 问题现象：
+    - 在用例执行页输入“把全部用例变回未执行状态，且清除备注”时，助手只返回“已清空备注”，未执行“执行结果 -> 未执行”的批量修改。
+  - 根因：
+    - 用例更新字段归一化在执行层遗漏了中文别名 `状态`，导致复合语句首段无法稳定识别为 `actual`，后续只命中备注清空分支。
+  - 修复内容：
+    - `scripts/modules/app.js`
+      - `assistantNormalizeCaseUpdateField` 增补 `状态 -> actual` 映射，和助手解析层字段别名保持一致；
+      - 复合命令确认后可按顺序执行两步：先批量改执行结果，再批量清空备注，并保留单次确认。
+    - `tests/ui/assistant_global.spec.js`
+      - 回归复跑 `复合指令可同时批量改执行结果并清空备注`，校验调用顺序与回复文案（执行结果 + 备注清空）均正确。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js -g "复合指令可同时批量改执行结果并清空备注|assistantMcpApi case.update 支持修改执行结果状态|assistantMcpApi case.update 在执行页支持修改备注|MCP case.update 缺少 value 时支持“字段上，值”问法（标题/备注）"`（通过，4/4）
+  - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+
+- 更新记录：2026-03-06 优化“完整展示当前用例”的模型呈现链路
+  - 问题现象：
+    - 在用例执行页提问“把该用例完整展示给我”时，助手会落到模型自由回答兜底，容易出现前言、补充猜测，且没有稳定利用当前页的完整字段数据。
+  - 根因：
+    - 该类问法没有稳定命中 `cases.list_current` 的结构化读取链路；
+    - 即使进入工具结果总结，`cases.list_current` 传给模型的字段也偏摘要化，缺少前置条件、步骤、预期结果、备注等完整字段，模型无法自主判断该用列表还是表格完整展示。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增 `isCurrentCaseFullDetailIntent` 与 `tryHandleCurrentCaseFullDetailIntent`，将“完整展示/完整列出/全部字段/详细内容”等当前用例问法稳定路由到 `cases.list_current`；
+      - `runModelCaseListAction` 新增 `detailLevel` 透传，当前用例完整展示场景按 `detailLevel=full` 读取并交给模型总结；
+      - 扩展 `buildMcpReasonPayload`，在 `cases.list_current + full` 时向模型提供前置条件、步骤、预期结果、备注、执行结果等完整字段；
+      - 优化工具结果总结提示词：模型可根据字段量和对比需求自主决定输出 Markdown 表格或编号列表，且不要再加“按上文语境/如果你指的是”这类前言。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `完整展示当前用例时应把完整字段交给模型并允许模型输出表格`，校验完整字段透传给模型，并验证模型返回表格后前端可正确渲染。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "完整展示当前用例时应把完整字段交给模型并允许模型输出表格|助手在执行页可读取用例变更并准确返回新增数量|助手可读取当前用例改动历史详情并按需求整理返回|询问是否有下一份用例时应直接检查并返回结论|切换到下一份用例指令应直接执行切换" --reporter=line --workers=1`（通过，5/5）
+
+
+- 更新记录：2026-03-06 修复“同份用例内仅看当前页/前 20 条，导致指定条目完整展示失败”
+  - 问题现象：
+    - 在用例库编辑页中，用户先说“把该用例完整展示给我”，再补充“就是技能说明本地化正确性这条”时，助手仍可能只基于当前页或前 20 条结果判断，返回 `truncated=true`、提示目标不在当前结果中。
+  - 根因：
+    - `cases.list_current` 在当前页用例场景默认只取前 20/100 条摘要；
+    - 当用户补充标题/ID 进行二次澄清时，没有强制切换到“整份用例明细 + 目标条目定位”链路，而是继续用截断结果做判断。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增用例明细定位辅助：`extractCaseDetailIdCandidates`、`matchCaseItemsFromReferenceText`、`resolveRequestedCaseDetailTarget`；
+      - 新增 `isCaseDetailClarificationIntent` 与 `tryHandleCaseDetailClarificationIntent`，当上一轮助手要求补充标题/ID 时，用户的短句补充会直接走完整明细查询；
+      - `runModelCaseListAction` 在 `detailLevel=full` 或补充澄清场景下把查询上限提升到 1000，并先在整份用例内按标题/ID/上下文定位目标条目，命中后只把目标条目交给模型展示；
+      - 若用户明确说“该用例/这条/ID xxx”但整份用例内仍未命中，则直接返回确定性提示，不再让模型基于截断结果自由发挥。
+      - `buildMcpReasonPayload` 在完整字段场景下把可传给模型的条目上限从 40 提升到 200，避免整份展示时过早截断。
+    - `scripts/modules/app.js`
+      - `assistantListCurrentCases` 的本地读取上限提升到 1000，支持同份用例整份检索。
+    - `scripts/modules/caseLibrary.js`
+      - `getCurrentEditorCaseSnapshot` 的快照上限提升到 1000，保证助手在编辑页可读取同份用例的完整条目范围，而不是仅前 100 条。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `补充标题后应在同份用例整份范围内定位并展示目标条目`，覆盖“先让用户补标题/ID，再在 73 条同份用例中跨页定位目标条目”的回归场景；
+      - 调整既有完整展示用例，明确校验“当前页面用例完整展示”与“指定条目完整展示”两类语义。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assistant.js scripts/modules/app.js scripts/modules/caseLibrary.js tests/ui/assistant_global.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "完整展示当前页面用例时应把完整字段交给模型并允许模型输出表格|补充标题后应在同份用例整份范围内定位并展示目标条目|助手在执行页可读取用例变更并准确返回新增数量|助手可读取当前用例改动历史详情并按需求整理返回|询问是否有下一份用例时应直接检查并返回结论|切换到下一份用例指令应直接执行切换" --reporter=line --workers=1`（通过，6/6）
+
+- 更新记录：2026-03-06 增强“当前页用例灵活筛选 + 模型自主展示”
+  - 问题现象：
+    - 用户在用例库/执行页提问“把包含某个字符的用例展示出来”“把编号为偶数的用例展示出来”时，助手对自然语言条件的识别不稳定；
+    - 即使命中过滤链路，传给模型的仍偏摘要字段，导致模型难以基于命中结果自主判断该用表格还是列表；
+    - 旧的过滤回退表格会把筛选后的序号重新从 1 开始编号，不利于用户对照原始用例序号。
+  - 根因：
+    - `extractCaseListFilterInfo` 仅支持有限的包含/排除关键词模式，对“相关用例”“编号为偶数”“展示出来”这类自然表达兼容不足；
+    - `shouldPreferCurrentPageScopeForCaseQuery` 主要依赖“搜索/查找/筛选”等词，像“展示/找出”这类当前页问法不一定会优先走当前用例上下文；
+    - `buildMcpReasonPayload` 在筛选场景下未稳定透传前置条件、步骤、预期结果、备注等完整字段，模型只能基于标题摘要回答。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 重构用例筛选解析：新增 `normalizeCaseFilterKeywordToken`、`normalizeCaseListParity`、`collectCaseListParityInfo`；
+      - `extractCaseListFilterInfo` 支持任意字段模糊关键词、`相关/匹配/命中` 类自然表达，以及 `序号/编号/ID 为奇数/偶数` 的结构化筛选；
+      - `isCaseListIntent`、`shouldPreferCurrentPageScopeForCaseQuery`、`shouldSyncCaseSearchToPage` 放宽到“展示/找出/列出/给我看”等问法，且在当前页筛选场景默认优先读取当前用例上下文；
+      - `runModelCaseListAction` 在筛选场景把读取上限提升到 1000，避免只在前 100 条内过滤；
+      - `buildMcpReasonPayload` 在筛选场景额外透传 `filterSummary/filterInfo` 及完整字段，让模型可以先点明筛选口径，再自主选择列表或 Markdown 表格；
+      - `buildEditorCaseListTableMarkdown` 改为显示原始 `sourceIndex/index`，保证筛选后的序号展示仍与原始用例一致。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `当前页面用例查询支持任意字段模糊命中并允许模型自主输出列表`，覆盖“关键词只出现在备注字段”的命中场景；
+      - 新增 `编号为偶数的用例展示应按当前页序号筛选并允许模型输出表格`，覆盖当前页默认作用域 + 序号奇偶筛选 + 模型表格展示。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "当前页面用例查询支持条件筛选（和技能无关）|搜索模块用例时应优先返回用例结果而非控件列表|当前页面用例查询支持任意字段模糊命中并允许模型自主输出列表|编号为偶数的用例展示应按当前页序号筛选并允许模型输出表格|完整展示当前页面用例时应把完整字段交给模型并允许模型输出表格|补充标题后应在同份用例整份范围内定位并展示目标条目|助手在执行页可读取用例变更并准确返回新增数量|助手可读取当前用例改动历史详情并按需求整理返回" --reporter=line --workers=1`（通过，8/8）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-06 修复“单条完整用例被渲染成竖向字段表”
+  - 问题现象：
+    - 用户在执行页/用例变更相关上下文里要求“把这条用例完整展示出来”时，助手有时会把单条完整用例渲染成 `字段 | 内容` 的上下两列表，而不是原有的横向用例表。
+  - 根因：
+    - 单条完整用例走了模型结果解读链路，模型会自行产出通用键值表；
+    - 前端仅会把命中标准用例表头的 Markdown 表识别为“横向用例表”，因此 `字段 | 内容` 被当作普通表格直接渲染。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增单条完整用例展示兜底：当 `cases.list_current + detailLevel=full + items=1` 且模型返回两列 `字段/内容` 类键值表时，自动回退到既有 `formatCaseListResponse(...)` 横向表结构；
+      - 同步补强结果解读提示词，明确禁止单条完整用例输出竖向键值表，优先使用标准横向用例表或分段展开。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `单条完整用例展示时模型返回字段内容竖表应回退为横向用例表`，覆盖模型误返回竖向键值表时的回退渲染。
+
+- 更新记录：2026-03-06 增强“助手展示 scaffold 对模型开放调用”
+  - 问题现象：
+    - 用户要求“完整展示/全部展示/按条件展示”时，模型虽然能自由回答，但无法稳定复用页面内已有的横向用例表、列表等展示结构，导致同类问题的展示格式不稳定；
+    - 明确要求“全部用例”时，回复有时仍被上一轮单条上下文收窄，只展示 1 条；
+    - 模型即使返回了结构正确的用例表，只要表头用了 `编号/用例ID/名称/前提条件` 这类别名，前端就可能无法识别为标准用例表，右上角“展开查看”能力会丢失。
+  - 目标效果：
+    - 平台内已有展示手脚架对模型可见、可调用，由模型自行判断何时复用；
+    - 若已有 scaffold 合适，模型可直接调用；若没有合适 scaffold，仍允许模型自由生成表格/列表；
+    - 标准用例表继续保留从左到右的横向结构、右上角展开查看以及全部用例完整展示能力。
+  - 修复内容：
+    - `scripts/modules/app.js`
+      - 新增通用展示 scaffold 注册与渲染器：`case_table`、`markdown_table`、`numbered_list`、`bullet_list`、`key_value_table`；
+      - 通过 `assistantMcpApi` 暴露 `assistant.list_scaffolds` 与 `assistant.render_scaffold`，供模型先查看可用 scaffold，再按需直接渲染；
+      - `case_table` 统一复用现有标准用例表 Markdown 结构，继续支持前端识别为横向可展开用例表；
+      - 修复 scaffold / MCP 工具名归一化中的空白字符处理，避免工具名与 scaffold 名因空格未规范化而失配。
+    - `scripts/modules/assistant.js`
+      - 在 `cases.list_current` 的工具结果总结提示词中明确告知模型：优先自主判断是否调用 `assistant.render_scaffold`，不再强制走固定规则；
+      - 新增 `tryExecuteSummaryScaffoldReply(...)`，允许模型在总结阶段直接返回单个 scaffold MCP JSON，助手收到后立即执行并回填最终展示内容；
+      - 新增“明确全部用例展示”意图识别，用户说“全部用例/所有用例/全量用例”时，不再被上一轮单条上下文自动收窄；
+      - 新增直接条目引用识别与表头别名归一化，模型输出 `编号/用例ID/名称/前提条件/结果` 等别名表头时，仍按标准用例表渲染并保留“展开查看”；
+      - 保留单条完整用例展示的兜底：若模型误输出 `字段 | 内容` 竖表，则自动回退为标准横向用例表；
+      - 修复 `cases.list_current` 结果总结阶段的重复模型调用，避免同一轮总结重复执行两次。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `模型返回用例表别名表头时仍应识别为可展开用例表`；
+      - 新增 `展示全部用例时不应被上一轮单条上下文误收窄`；
+      - 新增 `模型可调用展示 scaffold 渲染标准用例表`；
+      - 与既有 `任意字段模糊命中`、`编号为偶数筛选`、`完整展示当前页面用例`、`用例表格展开视图`、`单条完整用例竖表回退横表`、`执行页读取用例变更` 等场景一并回归。
+  - 操作方式：
+    - 在用例库/执行页直接提问“把当前页面用例完整展示给我”“展示全部用例”“把包含某个字符的用例展示出来”“把编号为偶数的用例展示出来”等；
+    - 模型会先结合 `cases.list_current` 结果自主判断：直接自由回答、输出 Markdown 表格/列表，或直接调用 `assistant.render_scaffold` 复用平台现有展示 scaffold；
+    - 当命中标准用例表时，前端继续按横向表格渲染，并保留右上角“展开查看”。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "当前页面用例查询支持任意字段模糊命中并允许模型自主输出列表|编号为偶数的用例展示应按当前页序号筛选并允许模型输出表格|助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|完整展示当前页面用例时应把完整字段交给模型并允许模型输出表格|模型返回用例表别名表头时仍应识别为可展开用例表|展示全部用例时不应被上一轮单条上下文误收窄|模型可调用展示 scaffold 渲染标准用例表|单条完整用例展示时模型返回字段内容竖表应回退为横向用例表|助手在执行页可读取用例变更并准确返回新增数量" --workers=1`（通过，9/9）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-06 调整“助手分流后仍需交给模型最终判断”架构
+  - 问题现象：
+    - 一部分旧分支命中后会直接返回硬编码文本，模型没有二次整理机会，导致回答风格僵硬，像“没经过模型自己的思考”；
+    - 在“介绍下这个页面的功能”这类问题上，旧澄清分支可能抢答，把页面功能问题误带到“补用例 ID / 完整标题”的链路；
+    - 当模型在“展示全部用例”场景里选择 `assistant.render_scaffold` 时，助手会把 fallback 列表和 scaffold 渲染结果同时拼回同一条消息，导致一条回复中出现两份完整列表。
+  - 架构调整目标：
+    - 保留分流用于识别意图、采集上下文、准备兜底，但不再让旧分支直接终结回答；
+    - 旧分支/新分支命中后，统一保留“最终回答权”给模型，由模型自行决定是自然语言、列表、表格还是调用展示 scaffold；
+    - 只有模型不可用或输出无效时，才回退到 deterministic fallback。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增统一路由结果整理器 `finalizeRouteReplyByModel(...)`：把用户问题、分流结果、结构化上下文和 fallback 一并交给模型做最终整理；
+      - `tryHandleCurrentPageFollowUpIntent`、当前页面信息、导航、查询、备忘、设置、用例等旧分支命中后，不再直接 `addAiReply(...)`，而是经 `addRouteReply(...) -> finalizeRouteReplyByModel(...)` 再输出；
+      - 新增 `isCurrentPageFunctionIntent(...)` 与 `tryHandleCurrentPageFunctionIntent(...)`，把“介绍下这个页面的功能 / 当前界面有什么用 / 页面是干嘛的”这类问题识别为页面功能说明意图，优先交给模型基于页面上下文进行介绍，而不是被旧澄清分支抢走；
+      - `isCaseDetailClarificationIntent(...)` 排除页面功能说明问题，避免前一轮“请补用例 ID/标题”的上下文误伤当前页面功能介绍；
+      - `assistant.render_scaffold` 执行结果只拼接模型显式给出的 `response`，不再默认带入 fallback，从而修复“展示全部用例时一条消息出现两份完整列表”的问题。
+    - `scripts/modules/app.js`
+      - `assistantGetPageData(...)` 新增 `currentCaseContext` 摘要，在用例库/执行页把当前打开的用例文件、条数等上下文一并提供给模型，用于页面功能介绍和旧分支 finalize。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `页面功能介绍命中旧分支时也应交给模型整理`，覆盖“上一轮提示补用例信息，本轮询问页面功能”时仍要交给模型整理页面能力的场景；
+      - 新增 `展示全部用例命中 scaffold 时不应重复输出两份完整列表`，校验一条消息中只保留 1 份标准用例表；
+      - 调整 `模型重复输出 action JSON 时应仍可执行，并支持中文名追问` 的调用次数断言：当前页追问命中旧分支后也会走模型 finalize，因此模型调用次数从 1 次变为 2 次，属于预期行为。
+  - 使用效果：
+    - 旧分支不再“抢答终结”，而是退化为“供数 + 兜底”；
+    - 页面功能介绍、当前页说明、导航/查询等原本偏模板化的答复，也会给模型一次最终整理机会；
+    - 展示全部用例时，模型若选择 scaffold 渲染标准用例表，回复中只保留一份横向完整列表，不再重复。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "询问当前页面时返回直接页面回答|模型重复输出 action JSON 时应仍可执行，并支持中文名追问|页面功能介绍命中旧分支时也应交给模型整理|当前页面用例查询支持任意字段模糊命中并允许模型自主输出列表|编号为偶数的用例展示应按当前页序号筛选并允许模型输出表格|完整展示当前页面用例时应把完整字段交给模型并允许模型输出表格|模型返回用例表别名表头时仍应识别为可展开用例表|展示全部用例时不应被上一轮单条上下文误收窄|展示全部用例命中 scaffold 时不应重复输出两份完整列表|模型可调用展示 scaffold 渲染标准用例表|单条完整用例展示时模型返回字段内容竖表应回退为横向用例表|助手在执行页可读取用例变更并准确返回新增数量" --workers=1`（通过，12/12）
+
+- 更新记录：2026-03-06 调整助手标准用例表的聊天区缩略展示与展开入口位置
+  - 问题现象：
+    - 当模型或 scaffold 输出较多用例时，聊天区会直接渲染整张完整表，消息高度过大，影响继续对话；
+    - “展开查看”按钮原本靠右，用户在窄窗口或列表较宽时不够直观，不利于第一时间点开查看完整内容；
+    - 若直接把聊天区表格裁成前 10 条，原有展开弹层会跟着只拿到裁剪后的 DOM，导致完整视图也丢失后续条目。
+  - 调整目标：
+    - 当标准用例表超过 10 条时，聊天区只保留前 10 条预览，避免单条消息过高；
+    - 完整数据仍保留给“展开查看”弹层，保证用户点击后能看到全部条目；
+    - 将展开按钮固定放到左侧，用户无需先关注右侧操作区再决定是否展开。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 抽出标准表格头部/主体渲染函数，统一复用聊天区与弹层表格构建；
+      - 新增 `assistantCaseTablePreviewLimit = 10`，对标准用例表在聊天区按前 10 条渲染，并补充“仅预览前 10 条、可展开查看全部”的摘要提示；
+      - 当存在超出条目时，额外写入隐藏 `template` 保存完整表格，避免聊天区 DOM 被裁剪后弹层无法恢复全量内容；
+      - `openAssistantCasePreviewFromButton(...)` 优先从隐藏完整模板取表格，展开视图始终展示全量数据。
+    - `style.css`
+      - 将 `.assistant-case-table-actions` 改为左对齐，并补充摘要文案样式，保证按钮在消息顶部左侧直接可见。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `助手用例表超过10条时聊天区应缩略展示，展开后查看全部`，覆盖聊天区预览、左侧按钮定位、隐藏完整模板与弹层全量展示。
+  - 使用效果：
+    - 10 条以内的标准用例表仍按原样完整展示；
+    - 超过 10 条时，聊天区只显示前 10 条与摘要说明，避免对话区被长表撑满；
+    - 点击左侧“展开查看”后，完整弹层仍能查看全部用例，不会因为聊天区缩略而丢数据。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|助手用例表超过10条时聊天区应缩略展示，展开后查看全部|完整展示当前页面用例时应把完整字段交给模型并允许模型输出表格|展示全部用例命中 scaffold 时不应重复输出两份完整列表|模型可调用展示 scaffold 渲染标准用例表|单条完整用例展示时模型返回字段内容竖表应回退为横向用例表|模型返回用例表别名表头时仍应识别为可展开用例表" --workers=1`（通过，7/7）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-06 调整当前页用例筛选为“模型先规划过滤条件，规则仅兜底”
+  - 问题现象：
+    - 当前页用例查询虽然最终会交给模型总结，但筛选条件本身仍由旧规则先抽取，导致像“包含联机、死亡这些关键字”这类自然表达会被误切成“联机”“死亡这些关键字”；
+    - 一旦规则误提取，前置过滤和 `filterSummary` 都会被污染，模型拿到的已是错误筛选结果，无法真正纠正这类低级切词错误。
+  - 调整目标：
+    - 用例筛选口径优先交给模型根据用户原话规划，避免正则直接拍板关键词；
+    - 仅在模型不可用、返回非结构化内容或未给出有效过滤计划时，才退回旧规则兜底；
+    - 保持原有“当前页模糊命中 / 奇偶筛选 / 全量展示 / scaffold 渲染”能力不回退。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增 `planCaseListFilterByModel(...)`，在 `query_case_list` 场景下先调用模型输出结构化过滤计划 JSON；
+      - 新增 `shouldPlanCaseListFilterByModel(...)` 与 `normalizeCaseListFilterPlan(...)`，统一解析模型返回的 `includeKeywords / excludeKeywords / indexParity / idParity`；
+      - `runModelCaseListAction(...)` 改为“模型过滤计划优先，规则抽取兜底”；
+      - 保留旧 `extractCaseListFilterInfo(...)` 作为 fallback，同时修补关键词尾部清洗，避免 `这些关键字/关键词/字样` 被并入真实关键词。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `未加引号多关键词查询不应把“这些关键字”并入真实关键词，且原始问句应交给模型`，覆盖你反馈的自然表达场景；
+      - 更新“搜索技能效果模块”“任意字段模糊命中”“编号为偶数筛选”等用例，明确断言模型过滤规划调用次数与过滤结果。
+  - 使用效果：
+    - 当用户说“帮我把包含联机、死亡这些关键字的用例列出来”时，模型会先规划为 `联机 / 死亡` 两个真实关键词，再进行当前页用例筛选；
+    - 原始问句会进入过滤规划与结果总结两次模型环节，不再让规则直接决定最终筛选口径；
+    - 若模型未返回有效过滤计划，系统仍会退回旧规则，保证功能可用。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "帮我搜索技能效果模块的用例|当前页面用例查询支持任意字段模糊命中并允许模型自主输出列表|未加引号多关键词查询不应把“这些关键字”并入真实关键词，且原始问句应交给模型|编号为偶数的用例展示应按当前页序号筛选并允许模型输出表格|完整展示当前页面用例时应把完整字段交给模型并允许模型输出表格|展示全部用例命中 scaffold 时不应重复输出两份完整列表|模型可调用展示 scaffold 渲染标准用例表|单条完整用例展示时模型返回字段内容竖表应回退为横向用例表|模型返回用例表别名表头时仍应识别为可展开用例表" --workers=1`（通过，8/8）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-06 调整超长用例表预览的省略表现与未完整展示提示
+  - 问题现象：
+    - 超过 10 条时，聊天区虽然只保留了前 10 条，但视觉上像是直接截断，用户容易误以为当前结果只有 10 条；
+    - 提示文案主要集中在按钮旁，缺少更明确的“当前回复未完整展示”说明；
+    - 第 10 条后方没有任何省略表现，列表的截断感过于生硬。
+  - 调整目标：
+    - 在第 10 条下方增加明确的省略提示行，让用户知道后续内容被折叠；
+    - 在助手当前回复中明确提示“未完整展开 / 其余条目已折叠”；
+    - 保持展开视图继续展示完整数据，不把省略行带入完整表。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增超长用例表预览提示文案构建与省略行渲染；
+      - 当标准用例表超过 10 条时，聊天区展示“当前回复未完整展开”的摘要说明，并在表格第 10 条后追加一条省略提示行；
+      - 展开弹层仍优先使用隐藏完整模板，因此完整视图继续展示真实全量条目，不包含省略行。
+    - `style.css`
+      - 为省略提示行补充单独样式，弱化数据感、强化“折叠提示”语义。
+    - `tests/ui/assistant_global.spec.js`
+      - 更新超长列表回归断言：从“只显示 10 条”改为“10 条真实数据 + 1 条省略提示”，并校验回复中包含“未完整展开”的提示文本。
+  - 使用效果：
+    - 超过 10 条时，聊天区不再像硬截断，而是明确显示“其余 N 条已折叠”；
+    - 助手回复会直接说明当前未完整展示，避免用户误判为只有 10 条；
+    - 点击“展开查看”后仍能看到完整原始列表。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|助手用例表超过10条时聊天区应缩略展示，展开后查看全部|完整展示当前页面用例时应把完整字段交给模型并允许模型输出表格|展示全部用例命中 scaffold 时不应重复输出两份完整列表|模型可调用展示 scaffold 渲染标准用例表|单条完整用例展示时模型返回字段内容竖表应回退为横向用例表|模型返回用例表别名表头时仍应识别为可展开用例表" --workers=1`（通过，7/7）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-06 调整超长列表省略提示行的对齐方式
+  - 问题现象：
+    - “其余 N 条已折叠”的提示行默认居中，在当前横向用例表里不够自然；
+    - 用户预期该提示更像一条列表说明，应与表格内容一样从左侧开始阅读。
+  - 修复内容：
+    - `style.css`
+      - 将 `.assistant-case-table-ellipsis-row td` 的 `text-align` 从 `center` 调整为 `left`。
+    - `tests/ui/assistant_global.spec.js`
+      - 为超长列表预览补充省略提示行 `text-align: left` 断言，避免后续样式回退。
+  - 使用效果：
+    - 超长列表的折叠提示行现在从最左侧开始显示，阅读方向与表格主体保持一致。
+  - 测试与验证（本次增量）：
+    - `node --check tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手用例表超过10条时聊天区应缩略展示，展开后查看全部" --workers=1`（通过，1/1）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）

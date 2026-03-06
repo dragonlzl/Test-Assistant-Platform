@@ -3660,6 +3660,27 @@
       return list;
     }
 
+    function assistantBuildPageCaseContextSummary(snapshot) {
+      var data = snapshot && typeof snapshot === 'object' ? snapshot : {};
+      var caseFile = data.caseFile && typeof data.caseFile === 'object' ? data.caseFile : null;
+      var total = Number(data.total);
+      var totalAll = Number(data.totalAll);
+      if (!caseFile) return null;
+      if (!Number.isFinite(total) || total < 0) total = 0;
+      if (!Number.isFinite(totalAll) || totalAll < 0) totalAll = total;
+      return {
+        contextSource: data.contextSource ? String(data.contextSource) : '',
+        fileId: caseFile.id === undefined || caseFile.id === null ? '' : String(caseFile.id),
+        fileName: caseFile.name === undefined || caseFile.name === null ? '' : String(caseFile.name),
+        projectId: caseFile.projectId === undefined || caseFile.projectId === null ? '' : String(caseFile.projectId),
+        versionId: caseFile.versionId === undefined || caseFile.versionId === null ? '' : String(caseFile.versionId),
+        total: total,
+        totalAll: totalAll,
+        searchText: data.searchText === undefined || data.searchText === null ? '' : String(data.searchText),
+        truncated: data.truncated === true,
+      };
+    }
+
     function assistantGetPageData(tabName) {
       var tab = tabName ? String(tabName) : (state.activeTab || '');
       var data = {
@@ -3679,8 +3700,23 @@
           if (results[key] && String(results[key]).trim()) generated += 1;
         });
         data.generatedModuleCount = generated;
+      } else if (tab === 'case-library') {
+        var editorSnapshot = assistantReadEditorCaseSnapshot(20);
+        var editorContext = assistantBuildPageCaseContextSummary(editorSnapshot);
+        if (editorContext) data.currentCaseContext = editorContext;
+        var historySnapshot = assistantReadCaseLibraryHistorySnapshot(60);
+        if (historySnapshot && historySnapshot.ok === true && historySnapshot.hasContext === true) {
+          data.caseLibraryHistoryDetail = historySnapshot;
+        }
       } else if (tab === 'tempexec') {
         data.tempExecActiveFileId = state.tempExecActiveFileId || '';
+        var tempExecSnapshot = assistantReadTempExecCaseSnapshot(20);
+        var tempExecContext = assistantBuildPageCaseContextSummary(tempExecSnapshot);
+        if (tempExecContext) data.currentCaseContext = tempExecContext;
+        var tempExecDiffSnapshot = assistantReadTempExecCaseLibraryDiffSnapshot(60);
+        if (tempExecDiffSnapshot && tempExecDiffSnapshot.ok === true && tempExecDiffSnapshot.hasContext === true) {
+          data.tempExecCaseLibraryDiffDetail = tempExecDiffSnapshot;
+        }
       }
       return data;
     }
@@ -3727,6 +3763,33 @@
         updatedAt: file.updated_at || file.imported_at || '',
         source: file.source ? String(file.source) : '',
       };
+    }
+
+    function assistantReadCaseLibraryHistorySnapshot(limit) {
+      var caseLibraryApi = window.app && window.app.caseLibraryApi ? window.app.caseLibraryApi : null;
+      if (!caseLibraryApi || typeof caseLibraryApi.getCurrentHistoryDetailSnapshot !== 'function') return null;
+      var snapshot = null;
+      try {
+        snapshot = caseLibraryApi.getCurrentHistoryDetailSnapshot({ limit: limit });
+      } catch (err) {
+        return null;
+      }
+      if (!snapshot || snapshot.ok !== true || snapshot.hasContext !== true) return null;
+      return snapshot;
+    }
+
+
+    function assistantReadTempExecCaseLibraryDiffSnapshot(limit) {
+      var tempExecApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      if (!tempExecApi || typeof tempExecApi.getCurrentCaseLibraryDiffSnapshot !== 'function') return null;
+      var snapshot = null;
+      try {
+        snapshot = tempExecApi.getCurrentCaseLibraryDiffSnapshot({ limit: limit });
+      } catch (err) {
+        return null;
+      }
+      if (!snapshot || snapshot.ok !== true || snapshot.hasContext !== true) return null;
+      return snapshot;
     }
 
     function assistantReadEditorCaseSnapshot(limit) {
@@ -3845,7 +3908,7 @@
       var opts = options && typeof options === 'object' ? options : {};
       var limit = Number(opts.limit);
       if (!Number.isFinite(limit) || limit <= 0) limit = 20;
-      if (limit > 100) limit = 100;
+      if (limit > 1000) limit = 1000;
       var scope = opts.scope === undefined || opts.scope === null ? '' : String(opts.scope).trim().toLowerCase();
       var requireEditor = opts.requireEditor === true || scope === 'editor';
       var activeTab = state.activeTab ? String(state.activeTab) : '';
@@ -4462,12 +4525,696 @@
       if (!picked || !picked.button) {
         return { ok: false, reason: '当前页面未找到可删除的用例，请先打开用例编辑/漏测编辑视图' };
       }
-      var first = window.confirm('确认删除第 ' + picked.index + ' 条用例？');
-      if (!first) return { ok: false, reason: '已取消删除' };
-      var second = window.confirm('删除操作将沿用现有8秒撤回机制，确定继续？');
-      if (!second) return { ok: false, reason: '已取消删除' };
       picked.button.click();
       return { ok: true, index: picked.index, total: picked.count };
+    }
+
+    function assistantNormalizeCaseUpdateField(rawField, context) {
+      var text = rawField === undefined || rawField === null ? '' : String(rawField).trim().toLowerCase();
+      text = text.replace(/\s+/g, '');
+      if (!text) return '';
+      var isTempExec = context === 'tempexec';
+      if (text === 'priority' || text === 'level' || text === '优先级') return 'priority';
+      if (text === 'module' || text === '模块') return 'module';
+      if (text === 'title' || text === 'name' || text === '标题' || text === '用例标题' || text === 'case') return 'title';
+      if (text === 'precondition' || text === 'preconditions' || text === '前提条件' || text === '前置条件' || text === '前置') {
+        return isTempExec ? 'preconditions' : 'precondition';
+      }
+      if (text === 'steps' || text === 'step' || text === '步骤' || text === '操作步骤') return 'steps';
+      if (text === 'expected' || text === 'expect' || text === '预期' || text === '预期结果') return 'expected';
+      if (text === 'remark' || text === 'remarks' || text === 'note' || text === 'comment' || text === '备注') return 'remark';
+      if (text === 'actual' || text === 'result' || text === 'status' || text === '执行结果' || text === '状态') return 'actual';
+      return '';
+    }
+
+    function assistantDispatchNodeEvent(node, typeName, bubbles) {
+      if (!node || !typeName) return;
+      var evt = null;
+      try {
+        evt = new Event(typeName, { bubbles: bubbles !== false, cancelable: true });
+      } catch (err) {
+        evt = null;
+      }
+      if (!evt && typeof document !== 'undefined' && document.createEvent) {
+        try {
+          evt = document.createEvent('Event');
+          evt.initEvent(typeName, bubbles !== false, true);
+        } catch (err2) {
+          evt = null;
+        }
+      }
+      if (!evt) return;
+      try {
+        node.dispatchEvent(evt);
+      } catch (err3) {
+        // ignore
+      }
+    }
+
+    function assistantIsEditableNodeVisible(node) {
+      if (!node) return false;
+      if (node.disabled) return false;
+      if (node.offsetParent !== null) return true;
+      var style = null;
+      try {
+        style = window.getComputedStyle ? window.getComputedStyle(node) : null;
+      } catch (err) {
+        style = null;
+      }
+      if (!style) return false;
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+      return style.position === 'fixed';
+    }
+
+    function assistantCollectVisibleNodes(selectors) {
+      var list = [];
+      var seen = [];
+      var arr = Array.isArray(selectors) ? selectors : [];
+      arr.forEach(function(selector) {
+        if (!selector || !document.querySelectorAll) return;
+        var nodes = document.querySelectorAll(selector);
+        if (!nodes || !nodes.length) return;
+        nodes.forEach(function(node) {
+          if (!node || !assistantIsEditableNodeVisible(node)) return;
+          if (seen.indexOf(node) !== -1) return;
+          seen.push(node);
+          list.push(node);
+        });
+      });
+      return list;
+    }
+
+    function assistantPickCaseLibraryEditableNode(field, index) {
+      var idx = Number(index);
+      var hasIndex = Number.isFinite(idx) && idx > 0;
+      var sourceIndex = hasIndex ? (idx - 1) : -1;
+      var selectors = [];
+      if (field === 'remark') {
+        selectors.push('[data-case-lib-remark]');
+      } else {
+        selectors.push('[data-case-lib-edit-field="' + field + '"]');
+        selectors.push('[data-case-lib-missing-field="' + field + '"]');
+      }
+      if (hasIndex) {
+        for (var i = 0; i < selectors.length; i += 1) {
+          var exactSelector = selectors[i] + '[data-index="' + sourceIndex + '"]';
+          var exactNode = document.querySelector(exactSelector);
+          if (assistantIsEditableNodeVisible(exactNode)) return exactNode;
+        }
+      }
+      var list = assistantCollectVisibleNodes(selectors);
+      if (!list.length) return null;
+      if (hasIndex && sourceIndex >= 0 && sourceIndex < list.length) return list[sourceIndex];
+      return list[0];
+    }
+
+    function assistantPickTempExecEditableNode(field, index, fileId) {
+      var selector = '[data-temp-edit-field="' + field + '"]';
+      var list = assistantCollectVisibleNodes([selector]);
+      if (!list.length) return null;
+      var fileIdText = fileId === undefined || fileId === null ? '' : String(fileId).trim();
+      if (fileIdText) {
+        list = list.filter(function(node) {
+          var fid = node && node.dataset ? String(node.dataset.tempEditFile || '') : '';
+          return fid === fileIdText;
+        });
+      }
+      if (!list.length) return null;
+      var idx = Number(index);
+      var hasIndex = Number.isFinite(idx) && idx > 0;
+      var sourceIndex = hasIndex ? (idx - 1) : -1;
+      if (hasIndex) {
+        for (var i = 0; i < list.length; i += 1) {
+          var node = list[i];
+          var nodeIdx = node && node.dataset ? Number(node.dataset.tempEditIndex) : NaN;
+          if (Number.isFinite(nodeIdx) && nodeIdx === sourceIndex) return node;
+        }
+        if (sourceIndex >= 0 && sourceIndex < list.length) return list[sourceIndex];
+      }
+      return list[0];
+    }
+
+    function assistantPickTempExecResultNode(index, fileId) {
+      var list = assistantCollectVisibleNodes(['select[data-temp-result]']);
+      if (!list.length) return null;
+      var fileIdText = fileId === undefined || fileId === null ? '' : String(fileId).trim();
+      if (fileIdText) {
+        list = list.filter(function(node) {
+          var fid = node && node.dataset ? String(node.dataset.tempResult || '') : '';
+          return fid === fileIdText;
+        });
+      }
+      if (!list.length) return null;
+      var idx = Number(index);
+      var hasIndex = Number.isFinite(idx) && idx > 0;
+      var sourceIndex = hasIndex ? (idx - 1) : -1;
+      if (hasIndex) {
+        for (var i = 0; i < list.length; i += 1) {
+          var node = list[i];
+          var nodeIdx = node && node.dataset ? Number(node.dataset.index) : NaN;
+          if (Number.isFinite(nodeIdx) && nodeIdx === sourceIndex) return node;
+        }
+        if (sourceIndex >= 0 && sourceIndex < list.length) return list[sourceIndex];
+      }
+      return list[0];
+    }
+
+    function assistantPickTempExecRemarkNode(index, fileId) {
+      var list = assistantCollectVisibleNodes(['textarea[data-temp-remark]']);
+      if (!list.length) return null;
+      var fileIdText = fileId === undefined || fileId === null ? '' : String(fileId).trim();
+      if (fileIdText) {
+        list = list.filter(function(node) {
+          var fid = node && node.dataset ? String(node.dataset.tempRemark || '') : '';
+          return fid === fileIdText;
+        });
+      }
+      if (!list.length) return null;
+      var idx = Number(index);
+      var hasIndex = Number.isFinite(idx) && idx > 0;
+      var sourceIndex = hasIndex ? (idx - 1) : -1;
+      if (hasIndex) {
+        for (var i = 0; i < list.length; i += 1) {
+          var node = list[i];
+          var nodeIdx = node && node.dataset ? Number(node.dataset.index) : NaN;
+          if (Number.isFinite(nodeIdx) && nodeIdx === sourceIndex) return node;
+        }
+        if (sourceIndex >= 0 && sourceIndex < list.length) return list[sourceIndex];
+      }
+      return list[0];
+    }
+
+    function assistantApplyEditableNodeValue(node, value) {
+      if (!node) return false;
+      var next = value === undefined || value === null ? '' : String(value);
+      var tag = node.tagName ? String(node.tagName).toLowerCase() : '';
+      if (tag === 'textarea' || tag === 'input' || tag === 'select') {
+        if (node.value !== next) node.value = next;
+        assistantDispatchNodeEvent(node, 'input', true);
+        assistantDispatchNodeEvent(node, 'change', true);
+        if (typeof node.blur === 'function') node.blur();
+        return true;
+      }
+      if (typeof node.focus === 'function') node.focus();
+      if (node.textContent !== next) node.textContent = next;
+      assistantDispatchNodeEvent(node, 'input', true);
+      if (typeof node.blur === 'function') node.blur();
+      return true;
+    }
+
+    function assistantReadEditableNodeValue(node) {
+      if (!node) return '';
+      var tag = node.tagName ? String(node.tagName).toLowerCase() : '';
+      if (tag === 'textarea' || tag === 'input' || tag === 'select') {
+        return node.value === undefined || node.value === null ? '' : String(node.value);
+      }
+      return node.textContent === undefined || node.textContent === null ? '' : String(node.textContent);
+    }
+
+    function assistantNormalizeTempExecActualValue(rawValue) {
+      var raw = rawValue === undefined || rawValue === null ? '' : String(rawValue).trim();
+      if (!raw) return '';
+      var compact = raw.toLowerCase().replace(/\s+/g, '');
+      var map = {
+        '未执行': '未执行',
+        '待执行': '未执行',
+        'pending': '未执行',
+        'notrun': '未执行',
+        '未测': '未执行',
+        '通过': '通过',
+        '成功': '通过',
+        'pass': '通过',
+        'passed': '通过',
+        'ok': '通过',
+        '失败': '失败',
+        '不通过': '失败',
+        'fail': '失败',
+        'failed': '失败',
+        'error': '失败',
+        '阻塞': '阻塞',
+        'blocked': '阻塞',
+        'block': '阻塞',
+        '不适用': '不适用',
+        'na': '不适用',
+        'n/a': '不适用',
+        'skip': '不适用',
+        'skipped': '不适用',
+        '变更重跑': '变更重跑',
+        '有改动': '有改动',
+      };
+      if (Object.prototype.hasOwnProperty.call(map, compact)) return map[compact];
+      return raw;
+    }
+
+    function assistantResolveSelectOptionValue(node, rawValue) {
+      if (!node) return '';
+      var value = rawValue === undefined || rawValue === null ? '' : String(rawValue).trim();
+      if (!value) return '';
+      var options = node.options ? Array.from(node.options) : [];
+      if (!options.length) return '';
+      for (var i = 0; i < options.length; i += 1) {
+        var option = options[i];
+        if (!option) continue;
+        var ov = option.value === undefined || option.value === null ? '' : String(option.value).trim();
+        if (ov === value) return ov;
+      }
+      for (var j = 0; j < options.length; j += 1) {
+        var option2 = options[j];
+        if (!option2) continue;
+        var text = option2.textContent === undefined || option2.textContent === null ? '' : String(option2.textContent).trim();
+        if (text === value) {
+          return option2.value === undefined || option2.value === null ? text : String(option2.value).trim();
+        }
+      }
+      return '';
+    }
+
+    function assistantNormalizeCaseUpdateOperation(args, fallback) {
+      var payload = args && typeof args === 'object' ? args : {};
+      var opRaw = '';
+      if (payload.operation !== undefined && payload.operation !== null) opRaw = String(payload.operation).trim().toLowerCase();
+      if (!opRaw && payload.mode !== undefined && payload.mode !== null) opRaw = String(payload.mode).trim().toLowerCase();
+      if (!opRaw && payload.action !== undefined && payload.action !== null) opRaw = String(payload.action).trim().toLowerCase();
+      if (opRaw === 'append' || opRaw === 'prepend' || opRaw === 'replace') return opRaw;
+      return fallback === 'append' || fallback === 'prepend' || fallback === 'replace' ? fallback : 'replace';
+    }
+
+    function assistantNormalizeCaseUpdateScope(args) {
+      var payload = args && typeof args === 'object' ? args : {};
+      if (payload.all === true || payload.applyAll === true || payload.batch === true) return 'all';
+      var scopeRaw = '';
+      if (payload.scope !== undefined && payload.scope !== null) scopeRaw = String(payload.scope).trim().toLowerCase();
+      if (!scopeRaw && payload.target !== undefined && payload.target !== null) scopeRaw = String(payload.target).trim().toLowerCase();
+      if (!scopeRaw && payload.range !== undefined && payload.range !== null) scopeRaw = String(payload.range).trim().toLowerCase();
+      scopeRaw = scopeRaw.replace(/\s+/g, '');
+      if (!scopeRaw) return 'single';
+      if (
+        scopeRaw === 'all' ||
+        scopeRaw === '*' ||
+        scopeRaw === 'batch' ||
+        scopeRaw === 'global' ||
+        scopeRaw === '全部' ||
+        scopeRaw === '所有' ||
+        scopeRaw === '全部用例' ||
+        scopeRaw === '所有用例' ||
+        scopeRaw === '全量'
+      ) return 'all';
+      return 'single';
+    }
+
+    function assistantIsTruthyFlag(raw) {
+      if (raw === true) return true;
+      if (raw === false || raw === undefined || raw === null) return false;
+      var text = String(raw).trim().toLowerCase();
+      return text === '1' || text === 'true' || text === 'yes' || text === 'y' || text === 'on' || text === 'ok';
+    }
+
+    function assistantIsCaseFieldClearable(field) {
+      return field === 'module'
+        || field === 'title'
+        || field === 'precondition'
+        || field === 'preconditions'
+        || field === 'steps'
+        || field === 'expected'
+        || field === 'remark';
+    }
+
+    function assistantShouldAllowCaseEmptyValue(field, payload) {
+      if (!assistantIsCaseFieldClearable(field)) return false;
+      var source = payload && typeof payload === 'object' ? payload : {};
+      if (assistantIsTruthyFlag(source.clear)) return true;
+      if (assistantIsTruthyFlag(source.clearValue)) return true;
+      if (assistantIsTruthyFlag(source.remove)) return true;
+      if (assistantIsTruthyFlag(source.empty)) return true;
+      return false;
+    }
+
+    function assistantResolveCaseEditableMeta(node) {
+      if (!node || typeof node.getAttribute !== 'function') return null;
+      var field = '';
+      var context = '';
+      var libField = node.getAttribute('data-case-lib-edit-field') || node.getAttribute('data-case-lib-missing-field');
+      if (libField) {
+        field = String(libField);
+        context = 'case-library';
+      } else {
+        var tempField = node.getAttribute('data-temp-edit-field');
+        if (tempField) {
+          field = String(tempField);
+          context = 'tempexec';
+        }
+      }
+      if (!field && node.getAttribute('data-temp-remark') !== null) {
+        field = 'remark';
+        context = 'tempexec';
+      }
+      if (!field && node.getAttribute('data-temp-result') !== null) {
+        field = 'actual';
+        context = 'tempexec';
+      }
+      if (!field || !context) return null;
+      var normalized = assistantNormalizeCaseUpdateField(field, context);
+      if (!normalized) return null;
+      return {
+        context: context,
+        field: normalized,
+      };
+    }
+
+    function assistantNormalizeCaseUpdateValue(field, rawValue, options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var allowEmpty = opts.allowEmpty === true;
+      var value = rawValue === undefined || rawValue === null ? '' : String(rawValue).trim();
+      if (!value) {
+        if (allowEmpty && assistantIsCaseFieldClearable(field)) return { ok: true, value: '' };
+        return { ok: false, reason: '缺少要写入的值' };
+      }
+      if (field === 'priority') {
+        var normalized = value.toUpperCase().replace(/\s+/g, '');
+        if (!/^P[0-9]{1,2}$/.test(normalized)) {
+          return { ok: false, reason: '优先级格式应为 P + 数字（如 P0/P1/P2/P3）' };
+        }
+        return { ok: true, value: normalized };
+      }
+      if (field === 'actual') {
+        return { ok: true, value: assistantNormalizeTempExecActualValue(value) };
+      }
+      return { ok: true, value: value };
+    }
+
+    function assistantExtractCaseUpdateFromPatch(patch, context) {
+      var source = patch && typeof patch === 'object' ? patch : {};
+      var keys = Object.keys(source);
+      for (var i = 0; i < keys.length; i += 1) {
+        var key = keys[i];
+        var field = assistantNormalizeCaseUpdateField(key, context);
+        if (!field) continue;
+        return {
+          field: field,
+          value: source[key],
+        };
+      }
+      return null;
+    }
+
+    function assistantUpdateCase(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var contextRaw = args.context === undefined || args.context === null ? '' : String(args.context).trim().toLowerCase();
+      var context = contextRaw || (state.activeTab === 'tempexec' ? 'tempexec' : (state.activeTab === 'case-library' ? 'case-library' : ''));
+      if (context !== 'tempexec' && context !== 'case-library') {
+        return { ok: false, reason: '当前页面不支持用例编辑，请先进入“用例库”或“用例执行”页面' };
+      }
+
+      var pair = null;
+      if (args.patch && typeof args.patch === 'object') {
+        pair = assistantExtractCaseUpdateFromPatch(args.patch, context);
+      }
+      if (!pair) {
+        var fieldRaw = '';
+        if (args.field !== undefined && args.field !== null) fieldRaw = String(args.field);
+        if (!fieldRaw && args.key !== undefined && args.key !== null) fieldRaw = String(args.key);
+        if (!fieldRaw && args.column !== undefined && args.column !== null) fieldRaw = String(args.column);
+        if (!fieldRaw && args.name !== undefined && args.name !== null) fieldRaw = String(args.name);
+        var normalizedField = assistantNormalizeCaseUpdateField(fieldRaw, context);
+        if (!normalizedField) return { ok: false, reason: '缺少可编辑字段，支持：模块/标题/优先级/前置条件/步骤/预期结果/备注' };
+        var valueRaw = args.value;
+        if (valueRaw === undefined) valueRaw = args.to;
+        if (valueRaw === undefined) valueRaw = args.text;
+        if (valueRaw === undefined) valueRaw = args.content;
+        if (valueRaw === undefined) valueRaw = args.newValue;
+        pair = { field: normalizedField, value: valueRaw };
+      }
+      if (!pair || !pair.field) return { ok: false, reason: '未找到可编辑字段' };
+      var allowEmptyValue = assistantShouldAllowCaseEmptyValue(pair.field, args);
+      var normalizeValueRes = assistantNormalizeCaseUpdateValue(pair.field, pair.value, { allowEmpty: allowEmptyValue });
+      if (!normalizeValueRes.ok) return normalizeValueRes;
+      var normalizedValue = normalizeValueRes.value;
+      var operation = assistantNormalizeCaseUpdateOperation(args, 'replace');
+      var scope = assistantNormalizeCaseUpdateScope(args);
+      var cleared = allowEmptyValue && normalizedValue === '';
+      if (cleared) operation = 'replace';
+
+      var idxRaw = args.index;
+      if ((idxRaw === undefined || idxRaw === null) && args.itemIndex !== undefined && args.itemIndex !== null) idxRaw = args.itemIndex;
+      if ((idxRaw === undefined || idxRaw === null) && args.seq !== undefined && args.seq !== null) idxRaw = args.seq;
+      if ((idxRaw === undefined || idxRaw === null) && args.row !== undefined && args.row !== null) idxRaw = args.row;
+      if ((idxRaw === undefined || idxRaw === null) && args.sourceIndex !== undefined && args.sourceIndex !== null) idxRaw = args.sourceIndex;
+      var index = Number(idxRaw);
+      if (!Number.isFinite(index) || index <= 0) index = 0;
+
+      var fileIdRaw = args.fileId;
+      if ((fileIdRaw === undefined || fileIdRaw === null) && args.caseFileId !== undefined && args.caseFileId !== null) fileIdRaw = args.caseFileId;
+      if ((fileIdRaw === undefined || fileIdRaw === null) && args.caseId !== undefined && args.caseId !== null) fileIdRaw = args.caseId;
+      var fileId = fileIdRaw === undefined || fileIdRaw === null ? '' : String(fileIdRaw).trim();
+
+      if (scope === 'all') {
+        if (!(context === 'tempexec' && (pair.field === 'actual' || pair.field === 'remark'))) {
+          return { ok: false, reason: '当前仅支持在用例执行页批量修改“执行结果/备注”字段' };
+        }
+        var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+        var targetFileId = fileId || assistantResolveTempExecActiveFileId(tempApi);
+        var targetFile = targetFileId ? assistantGetTempExecFileById(targetFileId) : null;
+        if (!targetFile && Array.isArray(state.tempExecFiles) && state.tempExecFiles.length) {
+          targetFile = state.tempExecFiles[0];
+          targetFileId = targetFile && targetFile.id !== undefined && targetFile.id !== null ? String(targetFile.id) : '';
+        }
+
+        if (pair.field === 'actual') {
+          operation = 'replace';
+          var finalBulkValue = normalizedValue;
+          var sampleNode = assistantPickTempExecResultNode(1, targetFileId);
+          if (sampleNode) {
+            finalBulkValue = assistantResolveSelectOptionValue(sampleNode, normalizedValue);
+            if (!finalBulkValue) {
+              return { ok: false, reason: '执行结果仅支持：未执行 / 通过 / 失败 / 阻塞 / 不适用' };
+            }
+          }
+          if (targetFile && Array.isArray(targetFile.cases) && targetFile.cases.length && tempApi && typeof tempApi.updateTempExecResult === 'function') {
+            var total = targetFile.cases.length;
+            var fileIdText = targetFile.id !== undefined && targetFile.id !== null ? String(targetFile.id) : String(targetFileId || '');
+            var touched = 0;
+            for (var bi = 0; bi < total; bi += 1) {
+              tempApi.updateTempExecResult(fileIdText, bi, finalBulkValue);
+              touched += 1;
+            }
+            return {
+              ok: true,
+              context: context,
+              field: 'actual',
+              value: finalBulkValue,
+              operation: operation,
+              scope: 'all',
+              count: touched,
+              index: 1,
+              fileId: fileIdText,
+              cleared: false,
+            };
+          }
+          var allVisible = assistantCollectVisibleNodes(['select[data-temp-result]']);
+          if (targetFileId) {
+            allVisible = allVisible.filter(function(node) {
+              var fid = node && node.dataset ? String(node.dataset.tempResult || '') : '';
+              return fid === targetFileId;
+            });
+          }
+          if (!allVisible.length) {
+            return { ok: false, reason: '未找到执行结果下拉框，请先确认当前在“用例执行”列表视图并且目标行可见' };
+          }
+          if (!sampleNode) {
+            finalBulkValue = assistantResolveSelectOptionValue(allVisible[0], normalizedValue);
+            if (!finalBulkValue) {
+              return { ok: false, reason: '执行结果仅支持：未执行 / 通过 / 失败 / 阻塞 / 不适用' };
+            }
+          }
+          var changed = 0;
+          allVisible.forEach(function(node) {
+            if (assistantApplyEditableNodeValue(node, finalBulkValue)) changed += 1;
+          });
+          if (changed <= 0) return { ok: false, reason: '写入失败，请重试' };
+          return {
+            ok: true,
+            context: context,
+            field: 'actual',
+            value: finalBulkValue,
+            operation: operation,
+            scope: 'all',
+            count: changed,
+            index: 1,
+            fileId: targetFileId,
+            cleared: false,
+          };
+        }
+
+        var finalRemarkValue = normalizedValue;
+        if (targetFile && Array.isArray(targetFile.cases) && targetFile.cases.length && tempApi && typeof tempApi.updateTempExecRemark === 'function') {
+          var totalRemark = targetFile.cases.length;
+          var fileIdForRemark = targetFile.id !== undefined && targetFile.id !== null ? String(targetFile.id) : String(targetFileId || '');
+          var touchedRemark = 0;
+          for (var ri = 0; ri < totalRemark; ri += 1) {
+            tempApi.updateTempExecRemark(fileIdForRemark, ri, finalRemarkValue);
+            touchedRemark += 1;
+          }
+          return {
+            ok: true,
+            context: context,
+            field: 'remark',
+            value: finalRemarkValue,
+            operation: operation,
+            scope: 'all',
+            count: touchedRemark,
+            index: 1,
+            fileId: fileIdForRemark,
+            cleared: finalRemarkValue === '',
+          };
+        }
+        var allRemarkVisible = assistantCollectVisibleNodes(['textarea[data-temp-remark]']);
+        if (targetFileId) {
+          allRemarkVisible = allRemarkVisible.filter(function(node) {
+            var rid = node && node.dataset ? String(node.dataset.tempRemark || '') : '';
+            return rid === targetFileId;
+          });
+        }
+        if (!allRemarkVisible.length) {
+          return { ok: false, reason: '未找到备注输入框，请先展开目标行备注并重试' };
+        }
+        var changedRemark = 0;
+        allRemarkVisible.forEach(function(node) {
+          if (assistantApplyEditableNodeValue(node, finalRemarkValue)) changedRemark += 1;
+        });
+        if (changedRemark <= 0) return { ok: false, reason: '写入失败，请重试' };
+        return {
+          ok: true,
+          context: context,
+          field: 'remark',
+          value: finalRemarkValue,
+          operation: operation,
+          scope: 'all',
+          count: changedRemark,
+          index: 1,
+          fileId: targetFileId,
+          cleared: finalRemarkValue === '',
+        };
+      }
+
+      var node = null;
+      if (context === 'case-library') {
+        if (pair.field === 'actual') return { ok: false, reason: '用例库页面不支持修改执行结果字段' };
+        node = assistantPickCaseLibraryEditableNode(pair.field, index);
+      } else {
+        var tempField = pair.field;
+        if (tempField === 'precondition') tempField = 'preconditions';
+        if (tempField === 'remark') {
+          var tempApiForRemark = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+          var remarkFileId = fileId || assistantResolveTempExecActiveFileId(tempApiForRemark);
+          var remarkFile = remarkFileId ? assistantGetTempExecFileById(remarkFileId) : null;
+          if (!remarkFile && Array.isArray(state.tempExecFiles) && state.tempExecFiles.length) {
+            remarkFile = state.tempExecFiles[0];
+            remarkFileId = remarkFile && remarkFile.id !== undefined && remarkFile.id !== null ? String(remarkFile.id) : '';
+          }
+          var remarkIndex = Number(index);
+          if (!Number.isFinite(remarkIndex) || remarkIndex <= 0) remarkIndex = 1;
+          var remarkSourceIndex = remarkIndex - 1;
+          if (remarkFile && Array.isArray(remarkFile.cases) && remarkFile.cases.length) {
+            if (remarkSourceIndex < 0 || remarkSourceIndex >= remarkFile.cases.length) {
+              if (Number.isFinite(index) && index > 0) {
+                return { ok: false, reason: '未找到目标可编辑单元格，请先确认已打开可编辑用例列表并可见目标行' };
+              }
+              remarkSourceIndex = 0;
+              remarkIndex = 1;
+            }
+            var prevRemark = '';
+            var remarkRow = remarkFile.cases[remarkSourceIndex];
+            if (remarkRow && remarkRow.remark !== undefined && remarkRow.remark !== null) prevRemark = String(remarkRow.remark);
+            var nextRemark = String(normalizedValue || '');
+            if (operation === 'append') {
+              nextRemark = String(prevRemark || '') + nextRemark;
+            } else if (operation === 'prepend') {
+              nextRemark = nextRemark + String(prevRemark || '');
+            }
+            if (tempApiForRemark && typeof tempApiForRemark.updateTempExecRemark === 'function' && remarkFileId) {
+              tempApiForRemark.updateTempExecRemark(String(remarkFileId), remarkSourceIndex, nextRemark);
+              return {
+                ok: true,
+                context: context,
+                field: 'remark',
+                value: nextRemark,
+                operation: operation,
+                scope: 'single',
+                count: 1,
+                index: remarkSourceIndex + 1,
+                fileId: String(remarkFileId),
+                cleared: nextRemark === '',
+              };
+            }
+            normalizedValue = nextRemark;
+            operation = 'replace';
+            index = remarkIndex;
+            fileId = String(remarkFileId || '');
+          }
+          node = assistantPickTempExecRemarkNode(index, fileId || remarkFileId || '');
+        } else if (tempField === 'actual') {
+          node = assistantPickTempExecResultNode(index, fileId);
+        } else {
+          node = assistantPickTempExecEditableNode(tempField, index, fileId);
+        }
+        pair.field = tempField;
+      }
+      if (!node) {
+        if (context === 'tempexec' && pair.field === 'actual') {
+          return { ok: false, reason: '未找到执行结果下拉框，请先确认当前在“用例执行”列表视图并且目标行可见' };
+        }
+        if (context === 'tempexec' && pair.field === 'remark') {
+          return { ok: false, reason: '未找到备注输入框，请先展开目标行备注并重试' };
+        }
+        return { ok: false, reason: '未找到目标可编辑单元格，请先确认已打开可编辑用例列表并可见目标行' };
+      }
+      var finalValue = normalizedValue;
+      if (pair.field === 'actual') {
+        operation = 'replace';
+        finalValue = assistantResolveSelectOptionValue(node, normalizedValue);
+        if (!finalValue) {
+          return { ok: false, reason: '执行结果仅支持：未执行 / 通过 / 失败 / 阻塞 / 不适用' };
+        }
+      } else if (pair.field !== 'priority') {
+        var prevValue = assistantReadEditableNodeValue(node);
+        if (operation === 'append') {
+          finalValue = String(prevValue || '') + String(normalizedValue || '');
+        } else if (operation === 'prepend') {
+          finalValue = String(normalizedValue || '') + String(prevValue || '');
+        }
+      }
+      if (!assistantApplyEditableNodeValue(node, finalValue)) {
+        return { ok: false, reason: '写入失败，请重试' };
+      }
+
+      var resolvedIndex = 0;
+      if (context === 'case-library') {
+        var idxText = node.getAttribute ? node.getAttribute('data-index') : '';
+        var idxNum = Number(idxText);
+        if (Number.isFinite(idxNum) && idxNum >= 0) resolvedIndex = idxNum + 1;
+      } else {
+        var tempIdx = node && node.dataset ? Number(node.dataset.tempEditIndex) : NaN;
+        if (!Number.isFinite(tempIdx)) tempIdx = node && node.dataset ? Number(node.dataset.index) : NaN;
+        if (Number.isFinite(tempIdx) && tempIdx >= 0) resolvedIndex = tempIdx + 1;
+      }
+
+      var resolvedFileId = fileId;
+      if (context === 'tempexec' && node && node.dataset) {
+        resolvedFileId = String(node.dataset.tempEditFile || node.dataset.tempResult || fileId || '');
+      }
+
+      return {
+        ok: true,
+        context: context,
+        field: pair.field,
+        value: finalValue,
+        operation: operation,
+        scope: scope === 'all' ? 'all' : 'single',
+        count: 1,
+        index: resolvedIndex > 0 ? resolvedIndex : (index > 0 ? index : 1),
+        fileId: context === 'tempexec' ? resolvedFileId : fileId,
+        cleared: assistantIsCaseFieldClearable(pair.field) && String(finalValue || '') === '',
+      };
     }
 
     function assistantSanitizeFailureContext(payload) {
@@ -4662,6 +5409,1264 @@
       return map[key] || '该设置项暂无内置说明。';
     }
 
+    var assistantUiControlRegistry = {};
+    var assistantUiControlSeq = 0;
+
+    function assistantBuildMcpConfirmRequired(tool, payload) {
+      return {
+        ok: false,
+        tool: tool,
+        reason: 'confirm_required',
+        data: payload && typeof payload === 'object' ? Object.assign({}, payload) : {},
+      };
+    }
+
+    function assistantIsElementVisible(node) {
+      if (!node || node.nodeType !== 1) return false;
+      if (node.hidden) return false;
+      if (node.offsetParent !== null) return true;
+      if (typeof node.getClientRects === 'function' && node.getClientRects().length > 0) return true;
+      return false;
+    }
+
+    function assistantControlText(node) {
+      if (!node) return '';
+      var tag = node.tagName ? String(node.tagName).toLowerCase() : '';
+      if (tag === 'input') {
+        var inputType = node.type ? String(node.type).toLowerCase() : '';
+        if (inputType === 'button' || inputType === 'submit' || inputType === 'reset') {
+          if (node.value !== undefined && node.value !== null && String(node.value).trim()) return String(node.value).trim();
+        }
+      }
+      var aria = node.getAttribute ? node.getAttribute('aria-label') : '';
+      if (aria && String(aria).trim()) return String(aria).trim();
+      if (node.textContent && String(node.textContent).trim()) return String(node.textContent).trim();
+      if (node.placeholder && String(node.placeholder).trim()) return String(node.placeholder).trim();
+      if (node.value !== undefined && node.value !== null && String(node.value).trim()) return String(node.value).trim();
+      return '';
+    }
+
+    function assistantControlType(node) {
+      if (!node) return '';
+      var tag = node.tagName ? String(node.tagName).toLowerCase() : '';
+      if (node.dataset && node.dataset.tabBtn !== undefined) return 'tab';
+      if (tag === 'button') return 'button';
+      if (tag === 'textarea') return 'textarea';
+      if (tag === 'select') return 'select';
+      if (tag === 'a') return 'link';
+      if (tag === 'input') {
+        var inputType = node.type ? String(node.type).toLowerCase() : 'text';
+        if (inputType === 'search') return 'search';
+        if (inputType === 'checkbox' || inputType === 'radio') return 'toggle';
+        return 'input';
+      }
+      if (node.getAttribute && node.getAttribute('role') === 'button') return 'button';
+      return tag || 'node';
+    }
+
+    function assistantControlRequiresConfirm(meta) {
+      var item = meta && typeof meta === 'object' ? meta : {};
+      var text = [
+        item.text || '',
+        item.domId || '',
+        item.className || '',
+      ].join(' ').toLowerCase();
+      var writeKeywords = [
+        'save', 'submit', 'delete', 'remove', 'clear', 'create', 'add', 'update', 'edit', 'apply',
+        'patch', 'archive', 'publish', 'overwrite', 'sync', 'generate', 'import', 'execute',
+        '保存', '提交', '删除', '移除', '清空', '创建', '新增', '更新', '修改', '编辑', '应用',
+        '归档', '发布', '覆盖', '同步', '生成', '导入', '执行', '触发', '确认',
+      ];
+      for (var i = 0; i < writeKeywords.length; i += 1) {
+        if (text.indexOf(writeKeywords[i]) !== -1) return true;
+      }
+      return false;
+    }
+
+    function assistantInspectUiControl(node) {
+      if (!node || node.nodeType !== 1) return null;
+      if (assistantIsInsideAssistantPanel(node)) return null;
+      var tag = node.tagName ? String(node.tagName).toLowerCase() : '';
+      if (!tag) return null;
+      if (tag === 'input') {
+        var inputType = node.type ? String(node.type).toLowerCase() : '';
+        if (inputType === 'hidden' || inputType === 'file') return null;
+      }
+      var info = {
+        element: node,
+        tag: tag,
+        type: assistantControlType(node),
+        text: assistantControlText(node),
+        domId: node.id ? String(node.id) : '',
+        className: node.className ? String(node.className) : '',
+        disabled: Boolean(node.disabled),
+        visible: assistantIsElementVisible(node),
+      };
+      info.requiresConfirm = assistantControlRequiresConfirm(info);
+      return info;
+    }
+
+    function assistantListUiControls(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var includeDisabled = opts.includeDisabled === true;
+      var max = Number(opts.max);
+      if (!Number.isFinite(max) || max <= 0) max = 120;
+      if (max > 240) max = 240;
+      assistantUiControlRegistry = {};
+      var controls = [];
+      var selectors = [
+        'button',
+        '[role="button"]',
+        'a[href]',
+        'input',
+        'textarea',
+        'select',
+        '[data-tab-btn]',
+      ].join(',');
+      var nodes = document.querySelectorAll(selectors);
+      var seen = [];
+      for (var i = 0; i < nodes.length; i += 1) {
+        var node = nodes[i];
+        if (!node || seen.indexOf(node) !== -1) continue;
+        seen.push(node);
+        var info = assistantInspectUiControl(node);
+        if (!info) continue;
+        if (!info.visible) continue;
+        if (!includeDisabled && info.disabled) continue;
+        var controlId = 'ctl-' + Date.now() + '-' + String(++assistantUiControlSeq);
+        assistantUiControlRegistry[controlId] = node;
+        controls.push({
+          controlId: controlId,
+          type: info.type,
+          tag: info.tag,
+          text: info.text,
+          domId: info.domId,
+          disabled: info.disabled,
+          requiresConfirm: info.requiresConfirm === true,
+        });
+        if (controls.length >= max) break;
+      }
+      return controls;
+    }
+
+    function assistantReadFirstArgString(args, keys) {
+      var payload = args && typeof args === 'object' ? args : {};
+      var list = Array.isArray(keys) ? keys : [];
+      for (var i = 0; i < list.length; i += 1) {
+        var key = String(list[i] || '').trim();
+        if (!key) continue;
+        if (payload[key] === undefined || payload[key] === null) continue;
+        var text = String(payload[key]).trim();
+        if (text) return text;
+      }
+      return '';
+    }
+
+    function assistantCollectUiLocateKeywords(args) {
+      var payload = args && typeof args === 'object' ? args : {};
+      var keys = ['controlText', 'target', 'targetText', 'label', 'field', 'text', 'control', 'name', 'title', 'placeholder', 'ariaLabel', 'keyword'];
+      var out = [];
+      for (var i = 0; i < keys.length; i += 1) {
+        var key = keys[i];
+        if (payload[key] === undefined || payload[key] === null) continue;
+        var value = String(payload[key]).trim();
+        if (!value) continue;
+        if (out.indexOf(value) === -1) out.push(value);
+      }
+      return out;
+    }
+
+    function assistantResolveUiControl(payload, options) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var opts = options && typeof options === 'object' ? options : {};
+      var preferInput = opts.preferInput === true;
+      var allowAssistantPanel = opts.allowAssistantPanel === true;
+      if (args.controlId) {
+        var nodeById = assistantUiControlRegistry[String(args.controlId)] || null;
+        if (nodeById && (allowAssistantPanel || !assistantIsInsideAssistantPanel(nodeById))) return nodeById;
+      }
+      var domIdValue = assistantReadFirstArgString(args, ['domId', 'id', 'elementId']);
+      if (domIdValue) {
+        var byDomId = document.getElementById(String(domIdValue));
+        if (byDomId && (allowAssistantPanel || !assistantIsInsideAssistantPanel(byDomId))) return byDomId;
+      }
+      if (args.selector) {
+        try {
+          var bySelector = document.querySelector(String(args.selector));
+          if (bySelector && (allowAssistantPanel || !assistantIsInsideAssistantPanel(bySelector))) return bySelector;
+        } catch (err) {
+          return null;
+        }
+      }
+      var locateKeywords = assistantCollectUiLocateKeywords(args);
+      for (var k = 0; k < locateKeywords.length; k += 1) {
+        var keyword = String(locateKeywords[k] || '').trim().toLowerCase();
+        if (!keyword) continue;
+        var nodes = document.querySelectorAll('button,[role="button"],a[href],label,input,textarea,select,[data-tab-btn]');
+        var best = null;
+        var bestScore = -1;
+        for (var i = 0; i < nodes.length; i += 1) {
+          var node = nodes[i];
+          if (!assistantIsElementVisible(node)) continue;
+          if (!allowAssistantPanel && assistantIsInsideAssistantPanel(node)) continue;
+          var controlText = assistantControlText(node).toLowerCase();
+          var idText = node.id ? String(node.id).toLowerCase() : '';
+          var nameText = node.name ? String(node.name).toLowerCase() : '';
+          var placeholderText = node.placeholder ? String(node.placeholder).toLowerCase() : '';
+          var ariaText = node.getAttribute ? String(node.getAttribute('aria-label') || '').toLowerCase() : '';
+          var classText = node.className ? String(node.className).toLowerCase() : '';
+          var searchable = [controlText, idText, nameText, placeholderText, ariaText, classText].join(' ');
+          if (!searchable || searchable.indexOf(keyword) === -1) continue;
+          var score = 0;
+          if (controlText) {
+            if (controlText === keyword) score += 6;
+            else if (controlText.indexOf(keyword) !== -1) score += 4;
+          }
+          if (idText) {
+            if (idText === keyword) score += 5;
+            else if (idText.indexOf(keyword) !== -1) score += 3;
+          }
+          if (nameText) {
+            if (nameText === keyword) score += 4;
+            else if (nameText.indexOf(keyword) !== -1) score += 2;
+          }
+          if (placeholderText) {
+            if (placeholderText === keyword) score += 4;
+            else if (placeholderText.indexOf(keyword) !== -1) score += 3;
+          }
+          if (ariaText) {
+            if (ariaText === keyword) score += 4;
+            else if (ariaText.indexOf(keyword) !== -1) score += 2;
+          }
+          if (preferInput && assistantIsInputLikeControl(node)) score += 8;
+          var tag = node.tagName ? String(node.tagName).toLowerCase() : '';
+          if (tag === 'label') score -= 2;
+          if (score > bestScore) {
+            best = node;
+            bestScore = score;
+          }
+        }
+        if (best) return best;
+      }
+      return null;
+    }
+
+    function assistantIsInputLikeControl(node) {
+      if (!node || node.nodeType !== 1) return false;
+      var tag = node.tagName ? String(node.tagName).toLowerCase() : '';
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+      if (node.isContentEditable) return true;
+      return false;
+    }
+
+    function assistantIsInsideAssistantPanel(node) {
+      if (!node || typeof node.closest !== 'function') return false;
+      return !!node.closest('#assistantPanel');
+    }
+
+    function assistantIsUsableInputControl(node) {
+      if (!assistantIsInputLikeControl(node)) return false;
+      if (!assistantIsElementVisible(node)) return false;
+      if (node.disabled) return false;
+      if (node.readOnly === true) return false;
+      if (assistantIsInsideAssistantPanel(node)) return false;
+      return true;
+    }
+
+    function assistantContainsSearchHint(text) {
+      var source = text === undefined || text === null ? '' : String(text).toLowerCase();
+      if (!source) return false;
+      var keys = ['search', 'keyword', 'filter', 'query', 'q=', '搜索', '筛选', '关键字', '关键词'];
+      for (var i = 0; i < keys.length; i += 1) {
+        if (source.indexOf(keys[i]) !== -1) return true;
+      }
+      return false;
+    }
+
+    function assistantIsSearchLikeInput(node) {
+      if (!assistantIsUsableInputControl(node)) return false;
+      var tag = node.tagName ? String(node.tagName).toLowerCase() : '';
+      if (tag === 'input') {
+        var inputType = node.type ? String(node.type).toLowerCase() : '';
+        if (inputType === 'search') return true;
+      }
+      if (node.dataset && node.dataset.tempSearchInput !== undefined) return true;
+      var parts = [];
+      if (node.id) parts.push(String(node.id));
+      if (node.name) parts.push(String(node.name));
+      if (node.className) parts.push(String(node.className));
+      if (node.placeholder) parts.push(String(node.placeholder));
+      if (node.getAttribute) {
+        var aria = node.getAttribute('aria-label');
+        if (aria) parts.push(String(aria));
+      }
+      return assistantContainsSearchHint(parts.join(' '));
+    }
+
+    function assistantPickFirstUsableInput(selectors) {
+      var list = Array.isArray(selectors) ? selectors : [];
+      for (var i = 0; i < list.length; i += 1) {
+        var selector = String(list[i] || '').trim();
+        if (!selector) continue;
+        var nodes = [];
+        try {
+          nodes = document.querySelectorAll(selector);
+        } catch (err) {
+          nodes = [];
+        }
+        if (!nodes || !nodes.length) continue;
+        for (var j = 0; j < nodes.length; j += 1) {
+          var node = nodes[j];
+          if (!assistantIsUsableInputControl(node)) continue;
+          return node;
+        }
+      }
+      return null;
+    }
+
+    function assistantFindUsableInputInNode(node) {
+      if (!node || typeof node.querySelectorAll !== 'function') return null;
+      var nodes = [];
+      try {
+        nodes = node.querySelectorAll('input:not([type="hidden"]):not([type="file"]),textarea,select,[contenteditable]');
+      } catch (err) {
+        nodes = [];
+      }
+      for (var i = 0; i < nodes.length; i += 1) {
+        var current = nodes[i];
+        if (assistantIsUsableInputControl(current)) return current;
+      }
+      return null;
+    }
+
+    function assistantResolveRelatedInputControl(node) {
+      if (!node || node.nodeType !== 1) return null;
+      if (assistantIsUsableInputControl(node)) return node;
+      var tag = node.tagName ? String(node.tagName).toLowerCase() : '';
+      if (tag === 'label') {
+        if (node.control && assistantIsUsableInputControl(node.control)) return node.control;
+        var forId = node.getAttribute ? String(node.getAttribute('for') || '').trim() : '';
+        if (forId) {
+          var byFor = document.getElementById(forId);
+          if (assistantIsUsableInputControl(byFor)) return byFor;
+        }
+      }
+      var inNode = assistantFindUsableInputInNode(node);
+      if (inNode) return inNode;
+      var parent = node.parentElement;
+      var depth = 0;
+      while (parent && depth < 4) {
+        var inParent = assistantFindUsableInputInNode(parent);
+        if (inParent) return inParent;
+        parent = parent.parentElement;
+        depth += 1;
+      }
+      return null;
+    }
+
+    function assistantResolveFallbackInputControl(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var preferSearch = args.preferSearch !== false;
+      var active = document.activeElement;
+      if (assistantIsUsableInputControl(active)) {
+        if (!preferSearch || assistantIsSearchLikeInput(active)) return active;
+      }
+      var activeTab = state && state.activeTab ? String(state.activeTab) : '';
+      var tabSelectorMap = {
+        tempexec: ['#tempExecToolbar input[data-temp-search-input]'],
+        'case-library': [
+          '#caseLibraryEditSearchInput',
+          '#caseLibraryEditFileSearchInput',
+          '#caseLibrarySelectSearchInput',
+          '#caseLibraryAssociationPickSearchInput',
+          '#caseLibraryHistorySearchInput',
+          '#caseLibraryImportSelectSearchInput',
+        ],
+        'case-archive': ['#caseArchiveSearchInput', '#caseArchiveDetailSearchInput'],
+        'exec-overview': ['#execOverviewExecSetSearchInput'],
+      };
+      if (Object.prototype.hasOwnProperty.call(tabSelectorMap, activeTab)) {
+        var tabNode = assistantPickFirstUsableInput(tabSelectorMap[activeTab]);
+        if (tabNode) return tabNode;
+      }
+      var searchSelectors = [
+        'input[data-temp-search-input]',
+        'input[type="search"]',
+        'input[placeholder*="搜索"]',
+        'input[placeholder*="search" i]',
+        'input[id*="Search" i]',
+        'textarea[placeholder*="搜索"]',
+        'textarea[placeholder*="search" i]',
+      ];
+      var searchNode = assistantPickFirstUsableInput(searchSelectors);
+      if (searchNode) return searchNode;
+      if (preferSearch) return null;
+      return assistantPickFirstUsableInput(['input:not([type="hidden"]):not([type="file"])', 'textarea', 'select', '[contenteditable]']);
+    }
+
+    function assistantResolveUiFillValue(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      if (args.value !== undefined && args.value !== null) return String(args.value);
+      if (args.input !== undefined && args.input !== null) return String(args.input);
+      if (args.content !== undefined && args.content !== null) return String(args.content);
+      if (args.keyword !== undefined && args.keyword !== null) return String(args.keyword);
+      if (args.term !== undefined && args.term !== null) return String(args.term);
+      if (args.query !== undefined && args.query !== null) return String(args.query);
+      if (args.text !== undefined && args.text !== null) return String(args.text);
+      return '';
+    }
+
+    function assistantClickUiControl(payload, tool) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var target = assistantResolveUiControl(args);
+      if (!target) return { ok: false, tool: tool, reason: '未找到目标控件' };
+      var info = assistantInspectUiControl(target);
+      if (!info) return { ok: false, tool: tool, reason: '目标控件不可操作' };
+      if (!info.visible) return { ok: false, tool: tool, reason: '目标控件当前不可见' };
+      if (info.disabled) return { ok: false, tool: tool, reason: '目标控件当前不可用' };
+      if (info.requiresConfirm && args.confirmed !== true) {
+        return assistantBuildMcpConfirmRequired(tool, {
+          actionLabel: '点击控件',
+          message: '该控件可能触发写操作，请确认后执行。',
+          controlText: info.text || info.domId || '',
+          controlId: args.controlId || '',
+        });
+      }
+      try {
+        target.click();
+      } catch (err2) {
+        return { ok: false, tool: tool, reason: err2 && err2.message ? String(err2.message) : '点击失败' };
+      }
+      return {
+        ok: true,
+        tool: tool,
+        data: {
+          controlId: args.controlId || '',
+          domId: info.domId || '',
+          controlText: info.text || '',
+          type: info.type || '',
+        },
+      };
+    }
+
+    function assistantFillUiInput(payload, tool) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var hasExplicitLocator = Boolean(
+        args.controlId ||
+        args.domId ||
+        args.id ||
+        args.elementId ||
+        args.selector ||
+        args.controlText ||
+        args.target ||
+        args.targetText ||
+        args.label ||
+        args.field ||
+        args.control ||
+        args.name ||
+        args.title ||
+        args.placeholder ||
+        args.ariaLabel
+      );
+      var resolveArgs = Object.assign({}, args);
+      if (!hasExplicitLocator && resolveArgs.text !== undefined && resolveArgs.text !== null) {
+        // 仅有 text 参数时优先将其视为“输入值”，避免被误当成控件定位词。
+        delete resolveArgs.text;
+      }
+      var target = assistantResolveUiControl(resolveArgs, { preferInput: true });
+      if (target && !assistantIsUsableInputControl(target)) {
+        var related = assistantResolveRelatedInputControl(target);
+        if (related) target = related;
+      }
+      if (!target && !hasExplicitLocator) target = assistantResolveFallbackInputControl({ preferSearch: true });
+      if (!target) return { ok: false, tool: tool, reason: '未找到目标输入控件' };
+      if (!assistantIsUsableInputControl(target)) return { ok: false, tool: tool, reason: '目标输入控件当前不可用' };
+      var tag = target.tagName ? String(target.tagName).toLowerCase() : '';
+      var value = assistantResolveUiFillValue(args);
+      var caseEditableMeta = assistantResolveCaseEditableMeta(target);
+      var operation = 'replace';
+      if (caseEditableMeta) {
+        if (args.confirmed !== true) {
+          return assistantBuildMcpConfirmRequired(tool, {
+            actionLabel: '修改用例',
+            message: '该操作会写入用例内容，请确认继续。',
+            controlText: assistantControlText(target),
+            domId: target.id ? String(target.id) : '',
+          });
+        }
+        operation = assistantNormalizeCaseUpdateOperation(args, 'replace');
+        var normalizeValueRes = assistantNormalizeCaseUpdateValue(caseEditableMeta.field, value, {
+          allowEmpty: assistantShouldAllowCaseEmptyValue(caseEditableMeta.field, args),
+        });
+        if (!normalizeValueRes.ok) {
+          return { ok: false, tool: tool, reason: normalizeValueRes.reason || '缺少要写入的值' };
+        }
+        value = normalizeValueRes.value;
+        if (caseEditableMeta.field !== 'priority' && caseEditableMeta.field !== 'actual') {
+          var prev = assistantReadEditableNodeValue(target);
+          if (operation === 'append') {
+            value = String(prev || '') + String(value || '');
+          } else if (operation === 'prepend') {
+            value = String(value || '') + String(prev || '');
+          }
+        }
+      }
+      try {
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+          target.value = value;
+        } else if (target.isContentEditable) {
+          target.textContent = value;
+        } else {
+          return { ok: false, tool: tool, reason: '目标控件不支持输入' };
+        }
+        var inputEvent = new Event('input', { bubbles: true });
+        target.dispatchEvent(inputEvent);
+        var changeEvent = new Event('change', { bubbles: true });
+        target.dispatchEvent(changeEvent);
+        if (args.submit === true || args.enter === true) {
+          var keyEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+          target.dispatchEvent(keyEvent);
+        }
+      } catch (err) {
+        return { ok: false, tool: tool, reason: err && err.message ? String(err.message) : '输入失败' };
+      }
+      return {
+        ok: true,
+        tool: tool,
+        data: {
+          controlId: args.controlId || '',
+          domId: target.id ? String(target.id) : '',
+          controlText: assistantControlText(target),
+          value: value,
+          operation: operation,
+          context: caseEditableMeta ? caseEditableMeta.context : '',
+          field: caseEditableMeta ? caseEditableMeta.field : '',
+        },
+      };
+    }
+
+    function assistantResolveTempExecActiveFileId(tempApi) {
+      var list = Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      if (!list.length) return '';
+      var activeId = state.tempExecActiveId || state.tempExecActiveFileId || '';
+      if (activeId) return String(activeId);
+      return list[0] && list[0].id !== undefined && list[0].id !== null ? String(list[0].id) : '';
+    }
+
+    function assistantGetTempExecFileById(fileId) {
+      var list = Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      var id = fileId === undefined || fileId === null ? '' : String(fileId);
+      if (!id) return null;
+      for (var i = 0; i < list.length; i += 1) {
+        var item = list[i];
+        if (!item) continue;
+        if (String(item.id || '') === id) return item;
+      }
+      return null;
+    }
+
+    function assistantFindTempExecFileIdByName(keyword) {
+      var list = Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      var key = keyword === undefined || keyword === null ? '' : String(keyword).trim().toLowerCase();
+      if (!key) return '';
+      for (var i = 0; i < list.length; i += 1) {
+        var item = list[i] && typeof list[i] === 'object' ? list[i] : null;
+        if (!item) continue;
+        var name = item.name || item.file_name_clean || item.fileName || '';
+        if (name && String(name).toLowerCase().indexOf(key) !== -1) return String(item.id || '');
+      }
+      return '';
+    }
+
+    function assistantBuildTempExecSearchText(item) {
+      var row = item && typeof item === 'object' ? item : {};
+      return [
+        row.module || '',
+        row.title || '',
+        row.priority || '',
+        row.precondition || row.preconditions || '',
+        row.steps || '',
+        row.expected || '',
+        row.remark || '',
+        row.actual || '',
+        row.status || '',
+        row.result || '',
+        row.executionResult || '',
+      ].join(' ').toLowerCase();
+    }
+
+    function assistantRunTempExecSearch(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      if (!tempApi || typeof tempApi.applyTempExecSearch !== 'function') {
+        return { ok: false, reason: '当前页面不支持执行页搜索' };
+      }
+      if (state.activeTab !== 'tempexec') {
+        try { switchTab('tempexec'); } catch (err) { /* ignore */ }
+      }
+      var activeId = '';
+      if (args.fileId !== undefined && args.fileId !== null) activeId = String(args.fileId).trim();
+      if (!activeId && args.id !== undefined && args.id !== null) activeId = String(args.id).trim();
+      if (!activeId && args.caseId !== undefined && args.caseId !== null) activeId = String(args.caseId).trim();
+      var fileNameAlias = '';
+      if (args.fileName !== undefined && args.fileName !== null) fileNameAlias = String(args.fileName).trim();
+      if (!fileNameAlias && args.name !== undefined && args.name !== null) fileNameAlias = String(args.name).trim();
+      if (!fileNameAlias && args.title !== undefined && args.title !== null) fileNameAlias = String(args.title).trim();
+      if (!fileNameAlias && args.file !== undefined && args.file !== null) fileNameAlias = String(args.file).trim();
+      if (!activeId && fileNameAlias) activeId = assistantFindTempExecFileIdByName(fileNameAlias);
+      if (!activeId) activeId = assistantResolveTempExecActiveFileId(tempApi);
+      if (!activeId) return { ok: false, reason: '当前没有可搜索的执行用例' };
+      if (typeof tempApi.setTempExecActive === 'function') {
+        tempApi.setTempExecActive(activeId);
+      }
+      var termRaw = '';
+      if (args.term !== undefined && args.term !== null) termRaw = String(args.term);
+      if (!termRaw && args.keyword !== undefined && args.keyword !== null) termRaw = String(args.keyword);
+      if (!termRaw && args.query !== undefined && args.query !== null) termRaw = String(args.query);
+      if (!termRaw && args.text !== undefined && args.text !== null) termRaw = String(args.text);
+      if (!termRaw && args.value !== undefined && args.value !== null) termRaw = String(args.value);
+      var normalized = termRaw.trim().toLowerCase();
+      tempApi.applyTempExecSearch(activeId, normalized, termRaw);
+      var file = assistantGetTempExecFileById(activeId);
+      var cases = file && Array.isArray(file.cases) ? file.cases : [];
+      var matched = cases.length;
+      if (normalized) {
+        matched = 0;
+        for (var i = 0; i < cases.length; i += 1) {
+          if (assistantBuildTempExecSearchText(cases[i]).indexOf(normalized) !== -1) matched += 1;
+        }
+      }
+      return {
+        ok: true,
+        data: {
+          fileId: activeId,
+          fileName: file && (file.name || file.file_name_clean || file.fileName) ? String(file.name || file.file_name_clean || file.fileName) : '',
+          term: termRaw,
+          matched: matched,
+          total: cases.length,
+        },
+      };
+    }
+
+    function assistantSwitchTempExecFile(payload, useNext) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      if (!tempApi || typeof tempApi.setTempExecActive !== 'function') {
+        return { ok: false, reason: '当前页面不支持切换执行用例' };
+      }
+      if (state.activeTab !== 'tempexec') {
+        try { switchTab('tempexec'); } catch (err) { /* ignore */ }
+      }
+      var list = Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      if (!list.length) return { ok: false, reason: '当前没有执行用例文件' };
+      var targetId = '';
+      if (useNext === true) {
+        var ordered = typeof tempApi.getTempExecOrderedFileIds === 'function'
+          ? tempApi.getTempExecOrderedFileIds()
+          : list.map(function(item) { return item && item.id !== undefined && item.id !== null ? String(item.id) : ''; }).filter(Boolean);
+        if (!ordered.length) return { ok: false, reason: '未找到可切换的执行用例' };
+        var current = state.tempExecActiveId || state.tempExecActiveFileId || '';
+        var idx = ordered.indexOf(String(current || ''));
+        if (idx < 0) idx = 0;
+        targetId = ordered[(idx + 1) % ordered.length];
+      } else {
+        if (args.fileId !== undefined && args.fileId !== null) targetId = String(args.fileId).trim();
+        if (!targetId && args.id !== undefined && args.id !== null) targetId = String(args.id).trim();
+        if (!targetId && args.caseId !== undefined && args.caseId !== null) targetId = String(args.caseId).trim();
+        var fileNameAlias = '';
+        if (!targetId && args.fileName !== undefined && args.fileName !== null) fileNameAlias = String(args.fileName).trim();
+        if (!targetId && !fileNameAlias && args.name !== undefined && args.name !== null) fileNameAlias = String(args.name).trim();
+        if (!targetId && !fileNameAlias && args.title !== undefined && args.title !== null) fileNameAlias = String(args.title).trim();
+        if (!targetId && !fileNameAlias && args.file !== undefined && args.file !== null) fileNameAlias = String(args.file).trim();
+        if (!targetId && fileNameAlias) targetId = assistantFindTempExecFileIdByName(fileNameAlias);
+        var indexAlias = args.index;
+        if ((indexAlias === undefined || indexAlias === null) && args.fileIndex !== undefined && args.fileIndex !== null) indexAlias = args.fileIndex;
+        if ((indexAlias === undefined || indexAlias === null) && args.seq !== undefined && args.seq !== null) indexAlias = args.seq;
+        if ((indexAlias === undefined || indexAlias === null) && args.position !== undefined && args.position !== null) indexAlias = args.position;
+        if (!targetId && indexAlias !== undefined && indexAlias !== null) {
+          var num = Math.floor(Number(indexAlias));
+          if (Number.isFinite(num) && num > 0 && num <= list.length) {
+            targetId = String(list[num - 1].id || '');
+          }
+        }
+        if (!targetId) targetId = assistantResolveTempExecActiveFileId(tempApi);
+      }
+      if (!targetId) return { ok: false, reason: '未找到目标执行用例' };
+      tempApi.setTempExecActive(targetId);
+      var file = assistantGetTempExecFileById(targetId);
+      return {
+        ok: true,
+        data: {
+          fileId: targetId,
+          fileName: file && (file.name || file.file_name_clean || file.fileName) ? String(file.name || file.file_name_clean || file.fileName) : '',
+        },
+      };
+    }
+
+    function assistantShowTempExecXmind() {
+      if (state.activeTab !== 'tempexec') {
+        try { switchTab('tempexec'); } catch (err) { /* ignore */ }
+      }
+      var btn = document.getElementById('tempExecXmindViewBtn');
+      if (!btn) return { ok: false, reason: '未找到 XMind 结构展示按钮' };
+      if (btn.disabled) return { ok: false, reason: '当前无法打开 XMind 结构展示' };
+      try {
+        btn.click();
+      } catch (err2) {
+        return { ok: false, reason: err2 && err2.message ? String(err2.message) : '打开失败' };
+      }
+      return { ok: true, data: { opened: true } };
+    }
+
+    function assistantExportTempExecXmind(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      if (!tempApi) return Promise.resolve({ ok: false, reason: '当前页面不支持 XMind 导出' });
+      if (state.activeTab !== 'tempexec') {
+        try { switchTab('tempexec'); } catch (err) { /* ignore */ }
+      }
+      var withoutResult = args.withoutResult === true || args.withResult === false;
+      var fn = withoutResult ? tempApi.exportTempExecCasesToXmind : tempApi.exportTempExecToXmind;
+      if (typeof fn !== 'function') return Promise.resolve({ ok: false, reason: '缺少导出能力' });
+      return Promise.resolve()
+        .then(function() { return fn(); })
+        .then(function() {
+          return { ok: true, data: { withoutResult: withoutResult === true } };
+        })
+        .catch(function(err2) {
+          return { ok: false, reason: err2 && err2.message ? String(err2.message) : '导出失败' };
+        });
+    }
+
+    function assistantNormalizeScaffoldName(name) {
+      var raw = name === undefined || name === null ? '' : String(name).trim().toLowerCase();
+      if (!raw) return '';
+      raw = raw.replace(/\s+/g, '_').replace(/-/g, '_');
+      if (raw === 'case_table' || raw === 'cases_table' || raw === 'case_list_table') return 'case_table';
+      if (raw === 'markdown_table' || raw === 'table' || raw === 'standard_table') return 'markdown_table';
+      if (raw === 'numbered_list' || raw === 'ordered_list' || raw === 'orderedlist') return 'numbered_list';
+      if (raw === 'bullet_list' || raw === 'unordered_list' || raw === 'bulleted_list') return 'bullet_list';
+      if (raw === 'key_value_table' || raw === 'kv_table' || raw === 'field_value_table' || raw === 'field_content_table') return 'key_value_table';
+      return raw;
+    }
+
+    function assistantEscapeMarkdownTableCell(value) {
+      var text = value === undefined || value === null ? '' : String(value);
+      return text.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
+    }
+    function assistantScaffoldValueText(value) {
+      if (value === undefined || value === null) return '';
+      if (typeof value === 'string') return value;
+      if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+      try {
+        return JSON.stringify(value);
+      } catch (err) {
+        return String(value);
+      }
+    }
+
+    function assistantBuildMarkdownTable(headers, rows) {
+      var head = Array.isArray(headers) ? headers : [];
+      var body = Array.isArray(rows) ? rows : [];
+      if (!head.length) return '';
+      var lines = [];
+      lines.push('| ' + head.map(assistantEscapeMarkdownTableCell).join(' | ') + ' |');
+      lines.push('| ' + head.map(function() { return '---'; }).join(' | ') + ' |');
+      body.forEach(function(row) {
+        var cells = Array.isArray(row) ? row.slice() : [];
+        while (cells.length < head.length) cells.push('');
+        if (cells.length > head.length) {
+          var overflow = cells.slice(head.length - 1).map(assistantScaffoldValueText).join(' | ');
+          cells = cells.slice(0, head.length - 1);
+          cells.push(overflow);
+        }
+        lines.push('| ' + cells.map(function(cell) {
+          return assistantEscapeMarkdownTableCell(assistantScaffoldValueText(cell));
+        }).join(' | ') + ' |');
+      });
+      return lines.join('\n');
+    }
+
+    function assistantResolveScaffoldItems(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var data = args.data && typeof args.data === 'object' ? args.data : {};
+      if (Array.isArray(args.items)) return args.items.slice();
+      if (Array.isArray(data.items)) return data.items.slice();
+      return [];
+    }
+
+    function assistantNormalizeCaseScaffoldItem(item, index) {
+      var row = item && typeof item === 'object' ? item : {};
+      var executionResultRaw = row.executionResult !== undefined && row.executionResult !== null
+        ? row.executionResult
+        : (row.actual !== undefined && row.actual !== null
+          ? row.actual
+          : (row.status !== undefined && row.status !== null
+            ? row.status
+            : row.result));
+      var sourceIndex = row.sourceIndex !== undefined && row.sourceIndex !== null
+        ? row.sourceIndex
+        : (row.index !== undefined && row.index !== null ? row.index : (index + 1));
+      return {
+        index: sourceIndex,
+        id: row.id === undefined || row.id === null ? '' : String(row.id),
+        module: row.module === undefined || row.module === null ? '' : String(row.module),
+        title: row.title === undefined || row.title === null ? '' : String(row.title),
+        priority: row.priority === undefined || row.priority === null ? '' : String(row.priority),
+        precondition: row.precondition !== undefined && row.precondition !== null
+          ? String(row.precondition)
+          : (row.preconditions !== undefined && row.preconditions !== null ? String(row.preconditions) : ''),
+        steps: row.steps === undefined || row.steps === null ? '' : String(row.steps),
+        expected: row.expected === undefined || row.expected === null ? '' : String(row.expected),
+        remark: row.remark === undefined || row.remark === null ? '' : String(row.remark),
+        executionResult: executionResultRaw === undefined || executionResultRaw === null ? '' : String(executionResultRaw),
+      };
+    }
+
+    function assistantBuildCaseTableScaffold(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var data = args.data && typeof args.data === 'object' ? args.data : {};
+      var items = assistantResolveScaffoldItems(args).map(function(item, index) {
+        return assistantNormalizeCaseScaffoldItem(item, index);
+      });
+      var includeExecutionResult = false;
+      var headers = ['序号', 'ID', '模块', '标题', '优先级', '前置条件', '步骤', '预期结果', '备注'];
+      var rows = [];
+      var lines = [];
+      var title = args.title !== undefined && args.title !== null ? String(args.title) : '';
+      if (!title && args.intro !== undefined && args.intro !== null) title = String(args.intro);
+      if (!title && args.header !== undefined && args.header !== null) title = String(args.header);
+      if (!items.length) return { ok: false, reason: '缺少可渲染的用例数据' };
+      includeExecutionResult = args.includeExecutionResult === true
+        || args.withExecutionResult === true
+        || items.some(function(item) { return String(item.executionResult || '').trim(); });
+      if (includeExecutionResult) headers.push('执行结果');
+      rows = items.map(function(item) {
+        var row = [
+          item.index,
+          item.id,
+          item.module,
+          item.title,
+          item.priority,
+          item.precondition,
+          item.steps,
+          item.expected,
+          item.remark,
+        ];
+        if (includeExecutionResult) row.push(item.executionResult);
+        return row;
+      });
+      if (title) lines.push(title);
+      lines.push(assistantBuildMarkdownTable(headers, rows));
+      if (data.truncated === true) {
+        var total = Number(data.total);
+        if (!Number.isFinite(total) || total < 0) total = items.length;
+        lines.push('已展示前 ' + items.length + ' 条，共 ' + total + ' 条。');
+      }
+      return { ok: true, scaffold: 'case_table', content: lines.join('\n') };
+    }
+
+    function assistantResolveTableHeaders(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var data = args.data && typeof args.data === 'object' ? args.data : {};
+      if (Array.isArray(args.headers)) return args.headers.slice();
+      if (Array.isArray(args.columns)) return args.columns.slice();
+      if (Array.isArray(data.headers)) return data.headers.slice();
+      if (Array.isArray(data.columns)) return data.columns.slice();
+      return [];
+    }
+
+    function assistantResolveTableRows(payload, headers) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var data = args.data && typeof args.data === 'object' ? args.data : {};
+      var rows = Array.isArray(args.rows) ? args.rows : (Array.isArray(data.rows) ? data.rows : []);
+      var head = Array.isArray(headers) ? headers : [];
+      return rows.map(function(row) {
+        if (Array.isArray(row)) return row.slice();
+        if (row && typeof row === 'object' && head.length) {
+          return head.map(function(key) {
+            return row[key] === undefined || row[key] === null ? '' : row[key];
+          });
+        }
+        return [assistantScaffoldValueText(row)];
+      });
+    }
+
+    function assistantBuildGenericTableScaffold(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var headers = assistantResolveTableHeaders(args);
+      var rows = assistantResolveTableRows(args, headers);
+      var lines = [];
+      var title = args.title !== undefined && args.title !== null ? String(args.title) : '';
+      if (!headers.length) return { ok: false, reason: '缺少表头 headers' };
+      if (title) lines.push(title);
+      lines.push(assistantBuildMarkdownTable(headers, rows));
+      return { ok: true, scaffold: 'markdown_table', content: lines.join('\n') };
+    }
+
+    function assistantResolveListEntries(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var data = args.data && typeof args.data === 'object' ? args.data : {};
+      var list = Array.isArray(args.items) ? args.items : (Array.isArray(data.items) ? data.items : []);
+      return list.map(function(item) {
+        if (item && typeof item === 'object') {
+          if (item.text !== undefined && item.text !== null) return String(item.text);
+          if (item.label !== undefined && item.label !== null) return String(item.label);
+          if (item.title !== undefined && item.title !== null) return String(item.title);
+          if (item.name !== undefined && item.name !== null) return String(item.name);
+        }
+        return assistantScaffoldValueText(item);
+      }).filter(function(item) { return String(item || '').trim(); });
+    }
+
+    function assistantBuildListScaffold(payload, ordered) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var lines = [];
+      var title = args.title !== undefined && args.title !== null ? String(args.title) : '';
+      var list = assistantResolveListEntries(args);
+      var marker = ordered === true ? function(index) { return (index + 1) + '. '; } : function() { return '- '; };
+      if (!list.length) return { ok: false, reason: '缺少列表项 items' };
+      if (title) lines.push(title);
+      list.forEach(function(item, index) {
+        lines.push(marker(index) + item);
+      });
+      return { ok: true, scaffold: ordered === true ? 'numbered_list' : 'bullet_list', content: lines.join('\n') };
+    }
+
+    function assistantBuildKeyValueTableScaffold(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var data = args.data && typeof args.data === 'object' ? args.data : {};
+      var entries = Array.isArray(args.entries) ? args.entries : (Array.isArray(data.entries) ? data.entries : []);
+      var title = args.title !== undefined && args.title !== null ? String(args.title) : '';
+      var lines = [];
+      var rows = entries.map(function(entry) {
+        var row = entry && typeof entry === 'object' ? entry : {};
+        var key = row.key !== undefined && row.key !== null
+          ? row.key
+          : (row.label !== undefined && row.label !== null ? row.label : (row.name !== undefined && row.name !== null ? row.name : ''));
+        var value = row.value !== undefined && row.value !== null
+          ? row.value
+          : (row.content !== undefined && row.content !== null ? row.content : (row.text !== undefined && row.text !== null ? row.text : ''));
+        return [key, value];
+      });
+      if (!rows.length) return { ok: false, reason: '缺少键值项 entries' };
+      if (title) lines.push(title);
+      lines.push(assistantBuildMarkdownTable(['字段', '内容'], rows));
+      return { ok: true, scaffold: 'key_value_table', content: lines.join('\n') };
+    }
+
+    function assistantListScaffolds() {
+      return [
+        { name: 'case_table', description: '标准用例横向表，自动保留展开查看能力' },
+        { name: 'markdown_table', description: '通用 Markdown 表格' },
+        { name: 'numbered_list', description: '有序列表' },
+        { name: 'bullet_list', description: '无序列表' },
+        { name: 'key_value_table', description: '字段-内容键值表' },
+      ];
+    }
+
+    function assistantRenderScaffold(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var scaffold = assistantNormalizeScaffoldName(args.scaffold || args.name || args.type || '');
+      if (!scaffold) return { ok: false, reason: '缺少 scaffold 参数' };
+      if (scaffold === 'case_table') return assistantBuildCaseTableScaffold(args);
+      if (scaffold === 'markdown_table') return assistantBuildGenericTableScaffold(args);
+      if (scaffold === 'numbered_list') return assistantBuildListScaffold(args, true);
+      if (scaffold === 'bullet_list') return assistantBuildListScaffold(args, false);
+      if (scaffold === 'key_value_table') return assistantBuildKeyValueTableScaffold(args);
+      return { ok: false, reason: '未知展示手脚架：' + scaffold };
+    }
+
+    function assistantNormalizeMcpToolName(name) {
+      var raw = name === undefined || name === null ? '' : String(name).trim().toLowerCase();
+      if (!raw) return '';
+      raw = raw.replace(/\s+/g, '_').replace(/-/g, '_');
+      if (raw === 'page.current_info' || raw === 'current_page_info' || raw === 'page.info') return 'page.current_info';
+      if (raw === 'page.get_data' || raw === 'query_page_data' || raw === 'page_data') return 'page.get_data';
+      if (raw === 'nav.switch_tab' || raw === 'navigate' || raw === 'switch_tab') return 'nav.switch_tab';
+      if (raw === 'cases.list_current' || raw === 'query_case_list' || raw === 'case_list') return 'cases.list_current';
+      if (raw === 'ui.list_controls' || raw === 'list_controls' || raw === 'list_ui_controls') return 'ui.list_controls';
+      if (raw === 'ui.click_control' || raw === 'click_control' || raw === 'click_ui_control') return 'ui.click_control';
+      if (raw === 'ui.fill_input' || raw === 'fill_input' || raw === 'fill_ui_input') return 'ui.fill_input';
+      if (raw === 'tempexec.search_cases' || raw === 'search_tempexec_cases') return 'tempexec.search_cases';
+      if (raw === 'tempexec.show_xmind' || raw === 'show_tempexec_xmind' || raw === 'tempexec_xmind_view') return 'tempexec.show_xmind';
+      if (raw === 'tempexec.export_xmind' || raw === 'export_tempexec_xmind') return 'tempexec.export_xmind';
+      if (raw === 'tempexec.next_file' || raw === 'next_tempexec_file') return 'tempexec.next_file';
+      if (raw === 'tempexec.switch_file' || raw === 'switch_tempexec_file') return 'tempexec.switch_file';
+      if (raw === 'web.search' || raw === 'web_search' || raw === 'search_web') return 'web.search';
+      if (raw === 'memo.list' || raw === 'memo_list') return 'memo.list';
+      if (raw === 'memo.add' || raw === 'memo_add') return 'memo.add';
+      if (raw === 'memo.toggle' || raw === 'memo_toggle') return 'memo.toggle';
+      if (raw === 'memo.remove' || raw === 'memo_remove') return 'memo.remove';
+      if (raw === 'settings.describe' || raw === 'settings_describe') return 'settings.describe';
+      if (raw === 'settings.patch' || raw === 'settings_patch') return 'settings.patch';
+      if (raw === 'assistant.list_scaffolds' || raw === 'assistant_list_scaffolds' || raw === 'list_scaffolds') return 'assistant.list_scaffolds';
+      if (raw === 'assistant.render_scaffold' || raw === 'assistant_render_scaffold' || raw === 'render_scaffold') return 'assistant.render_scaffold';
+      if (raw === 'case.update' || raw === 'case_update' || raw === 'update_case' || raw === 'edit_case' || raw === 'case_edit' || raw === 'case.patch' || raw === 'case_patch') return 'case.update';
+      if (raw === 'case.delete' || raw === 'delete_case') return 'case.delete';
+      if (raw === 'casegen.run' || raw === 'run_case_generation') return 'casegen.run';
+      if (raw === 'missing_recommend.run' || raw === 'run_missing_recommendation') return 'missing_recommend.run';
+      return raw;
+    }
+
+    function assistantMcpListTools() {
+      return [
+        { name: 'page.current_info', mode: 'read', description: '获取当前页面名称/标识信息' },
+        { name: 'page.get_data', mode: 'read', description: '读取指定页面的数据快照' },
+        { name: 'nav.switch_tab', mode: 'write', description: '切换到目标页签' },
+        { name: 'cases.list_current', mode: 'read', description: '读取当前页面或项目用例列表' },
+        { name: 'ui.list_controls', mode: 'read', description: '列出当前页可操作控件（按钮/输入框/选择器等）' },
+        { name: 'ui.click_control', mode: 'write', description: '点击指定控件（写操作会触发确认）' },
+        { name: 'ui.fill_input', mode: 'write', description: '填写输入控件并触发输入事件' },
+        { name: 'tempexec.search_cases', mode: 'read', description: '在用例执行页按关键词搜索当前用例' },
+        { name: 'tempexec.show_xmind', mode: 'read', description: '打开用例执行页 XMind 结构展示' },
+        { name: 'tempexec.export_xmind', mode: 'write', description: '导出用例执行页 XMind' },
+        { name: 'tempexec.next_file', mode: 'read', description: '切换到下一份执行用例' },
+        { name: 'tempexec.switch_file', mode: 'read', description: '按编号/名称切换执行用例' },
+        { name: 'web.search', mode: 'read', description: '执行联网搜索' },
+        { name: 'memo.list', mode: 'read', description: '查看备忘列表' },
+        { name: 'memo.add', mode: 'write', description: '新增备忘' },
+        { name: 'memo.toggle', mode: 'write', description: '更新备忘完成状态' },
+        { name: 'memo.remove', mode: 'write', description: '删除备忘' },
+        { name: 'settings.describe', mode: 'read', description: '读取设置项说明' },
+        { name: 'settings.patch', mode: 'write', description: '修改助手设置' },
+        { name: 'assistant.list_scaffolds', mode: 'read', description: '查看可调用的标准展示手脚架' },
+        { name: 'assistant.render_scaffold', mode: 'read', description: '渲染标准展示手脚架（如 case_table、markdown_table、numbered_list、bullet_list、key_value_table）' },
+        { name: 'case.update', mode: 'write', description: '修改当前可见用例字段（优先级/标题/步骤等）' },
+        { name: 'case.delete', mode: 'write', description: '删除当前可见用例条目' },
+        { name: 'casegen.run', mode: 'write', description: '触发用例生成流程' },
+        { name: 'missing_recommend.run', mode: 'write', description: '触发漏测推荐流程' },
+      ];
+    }
+
+    function assistantMcpCallTool(name, args) {
+      var tool = assistantNormalizeMcpToolName(name);
+      var payload = args && typeof args === 'object' ? Object.assign({}, args) : {};
+      if (!tool) return Promise.resolve({ ok: false, reason: 'tool 不能为空', tool: '' });
+
+      if (tool === 'page.current_info') {
+        return Promise.resolve({ ok: true, tool: tool, data: assistantGetPageData('') });
+      }
+      if (tool === 'page.get_data') {
+        var tab = '';
+        if (payload.tab !== undefined && payload.tab !== null) tab = String(payload.tab);
+        if (!tab && payload.page !== undefined && payload.page !== null) tab = String(payload.page);
+        return Promise.resolve({ ok: true, tool: tool, data: assistantGetPageData(tab) });
+      }
+      if (tool === 'nav.switch_tab') {
+        var targetTab = '';
+        if (payload.tab !== undefined && payload.tab !== null) targetTab = String(payload.tab).trim();
+        if (!targetTab && payload.targetTab !== undefined && payload.targetTab !== null) targetTab = String(payload.targetTab).trim();
+        if (!targetTab && payload.page !== undefined && payload.page !== null) targetTab = String(payload.page).trim();
+        if (!targetTab && payload.name !== undefined && payload.name !== null) targetTab = String(payload.name).trim();
+        if (!targetTab) return Promise.resolve({ ok: false, tool: tool, reason: '缺少 tab 参数' });
+        switchTab(targetTab);
+        return Promise.resolve({ ok: true, tool: tool, data: { tab: targetTab } });
+      }
+      if (tool === 'cases.list_current') {
+        return assistantListCurrentCases(payload).then(function(res) {
+          if (!res || res.ok !== true) {
+            return { ok: false, tool: tool, data: res || null, reason: res && res.reason ? String(res.reason) : '读取用例失败' };
+          }
+          return { ok: true, tool: tool, data: res };
+        });
+      }
+      if (tool === 'ui.list_controls') {
+        return Promise.resolve({ ok: true, tool: tool, data: { controls: assistantListUiControls(payload) } });
+      }
+      if (tool === 'ui.click_control') {
+        return Promise.resolve(assistantClickUiControl(payload, tool));
+      }
+      if (tool === 'ui.fill_input') {
+        return Promise.resolve(assistantFillUiInput(payload, tool));
+      }
+      if (tool === 'tempexec.search_cases') {
+        var searchRes = assistantRunTempExecSearch(payload);
+        return Promise.resolve(searchRes && searchRes.ok
+          ? { ok: true, tool: tool, data: searchRes.data || {} }
+          : { ok: false, tool: tool, reason: searchRes && searchRes.reason ? String(searchRes.reason) : '搜索失败', data: searchRes || null });
+      }
+      if (tool === 'tempexec.show_xmind') {
+        var viewRes = assistantShowTempExecXmind();
+        return Promise.resolve(viewRes && viewRes.ok
+          ? { ok: true, tool: tool, data: viewRes.data || {} }
+          : { ok: false, tool: tool, reason: viewRes && viewRes.reason ? String(viewRes.reason) : '打开失败', data: viewRes || null });
+      }
+      if (tool === 'tempexec.export_xmind') {
+        return assistantExportTempExecXmind(payload).then(function(res) {
+          return res && res.ok
+            ? { ok: true, tool: tool, data: res.data || {} }
+            : { ok: false, tool: tool, reason: res && res.reason ? String(res.reason) : '导出失败', data: res || null };
+        });
+      }
+      if (tool === 'tempexec.next_file') {
+        var nextRes = assistantSwitchTempExecFile(payload, true);
+        return Promise.resolve(nextRes && nextRes.ok
+          ? { ok: true, tool: tool, data: nextRes.data || {} }
+          : { ok: false, tool: tool, reason: nextRes && nextRes.reason ? String(nextRes.reason) : '切换失败', data: nextRes || null });
+      }
+      if (tool === 'tempexec.switch_file') {
+        var switchRes = assistantSwitchTempExecFile(payload, false);
+        return Promise.resolve(switchRes && switchRes.ok
+          ? { ok: true, tool: tool, data: switchRes.data || {} }
+          : { ok: false, tool: tool, reason: switchRes && switchRes.reason ? String(switchRes.reason) : '切换失败', data: switchRes || null });
+      }
+      if (tool === 'web.search') {
+        var query = '';
+        if (payload.query !== undefined && payload.query !== null) query = String(payload.query).trim();
+        if (!query && payload.q !== undefined && payload.q !== null) query = String(payload.q).trim();
+        if (!query && payload.keyword !== undefined && payload.keyword !== null) query = String(payload.keyword).trim();
+        if (!query && payload.text !== undefined && payload.text !== null) query = String(payload.text).trim();
+        if (!query) return Promise.resolve({ ok: false, tool: tool, reason: '缺少 query 参数' });
+        return assistantSearchWeb(query, payload).then(function(res) {
+          if (!res || res.ok !== true) {
+            return { ok: false, tool: tool, data: res || null, reason: res && res.reason ? String(res.reason) : '联网搜索失败' };
+          }
+          return { ok: true, tool: tool, data: res };
+        });
+      }
+      if (tool === 'memo.list') {
+        return Promise.resolve({ ok: true, tool: tool, data: assistantMemoList() });
+      }
+      if (tool === 'memo.add') {
+        if (payload.confirmed !== true) {
+          return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
+            actionLabel: '新增备忘',
+            message: '该操作会写入备忘内容，请确认继续。',
+          }));
+        }
+        var addText = '';
+        if (payload.text !== undefined && payload.text !== null) addText = String(payload.text).trim();
+        if (!addText && payload.content !== undefined && payload.content !== null) addText = String(payload.content).trim();
+        if (!addText && payload.value !== undefined && payload.value !== null) addText = String(payload.value).trim();
+        var addRes = assistantMemoAdd(addText, payload.tab || '');
+        return Promise.resolve(addRes && addRes.ok
+          ? { ok: true, tool: tool, data: addRes }
+          : { ok: false, tool: tool, data: addRes || null, reason: addRes && addRes.reason ? String(addRes.reason) : '新增失败' });
+      }
+      if (tool === 'memo.toggle') {
+        if (payload.confirmed !== true) {
+          return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
+            actionLabel: '更新备忘状态',
+            message: '该操作会修改备忘状态，请确认继续。',
+          }));
+        }
+        var toggleIndexRaw = payload.index;
+        if ((toggleIndexRaw === undefined || toggleIndexRaw === null) && payload.itemIndex !== undefined && payload.itemIndex !== null) toggleIndexRaw = payload.itemIndex;
+        if ((toggleIndexRaw === undefined || toggleIndexRaw === null) && payload.seq !== undefined && payload.seq !== null) toggleIndexRaw = payload.seq;
+        var toggleIndex = Number(toggleIndexRaw);
+        var done = payload.done === undefined
+          ? (payload.completed === undefined ? (payload.checked === undefined ? true : payload.checked === true) : payload.completed === true)
+          : payload.done === true;
+        var toggleRes = assistantMemoToggle(payload.tab || '', toggleIndex, done);
+        return Promise.resolve(toggleRes && toggleRes.ok
+          ? { ok: true, tool: tool, data: toggleRes }
+          : { ok: false, tool: tool, data: toggleRes || null, reason: toggleRes && toggleRes.reason ? String(toggleRes.reason) : '更新失败' });
+      }
+      if (tool === 'memo.remove') {
+        if (payload.confirmed !== true) {
+          return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
+            actionLabel: '删除备忘',
+            message: '该操作会删除备忘内容，请确认继续。',
+          }));
+        }
+        var removeIndexRaw = payload.index;
+        if ((removeIndexRaw === undefined || removeIndexRaw === null) && payload.itemIndex !== undefined && payload.itemIndex !== null) removeIndexRaw = payload.itemIndex;
+        if ((removeIndexRaw === undefined || removeIndexRaw === null) && payload.seq !== undefined && payload.seq !== null) removeIndexRaw = payload.seq;
+        var removeIndex = Number(removeIndexRaw);
+        var removeRes = assistantMemoRemove(payload.tab || '', removeIndex);
+        return Promise.resolve(removeRes && removeRes.ok
+          ? { ok: true, tool: tool, data: removeRes }
+          : { ok: false, tool: tool, data: removeRes || null, reason: removeRes && removeRes.reason ? String(removeRes.reason) : '删除失败' });
+      }
+      if (tool === 'settings.describe') {
+        var key = '';
+        if (payload.key !== undefined && payload.key !== null) key = String(payload.key).trim();
+        if (!key && payload.setting !== undefined && payload.setting !== null) key = String(payload.setting).trim();
+        if (!key && payload.name !== undefined && payload.name !== null) key = String(payload.name).trim();
+        if (!key) return Promise.resolve({ ok: false, tool: tool, reason: '缺少 key 参数' });
+        return Promise.resolve({ ok: true, tool: tool, data: { key: key, description: assistantDescribeSetting(key) } });
+      }
+      if (tool === 'settings.patch') {
+        if (payload.confirmed !== true) {
+          return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
+            actionLabel: '修改助手设置',
+            message: '该操作会写入设置，请确认继续。',
+          }));
+        }
+        var patch = payload.patch && typeof payload.patch === 'object'
+          ? payload.patch
+          : (payload.settings && typeof payload.settings === 'object' ? payload.settings : payload);
+        var patchRes = assistantApplyGeneralSettingsPatch(patch || {}, { source: 'assistant-mcp' });
+        return Promise.resolve(patchRes && patchRes.ok
+          ? { ok: true, tool: tool, data: patchRes }
+          : { ok: false, tool: tool, data: patchRes || null, reason: patchRes && patchRes.reason ? String(patchRes.reason) : '设置失败' });
+      }
+      if (tool === 'assistant.list_scaffolds') {
+        return Promise.resolve({ ok: true, tool: tool, data: { scaffolds: assistantListScaffolds() } });
+      }
+      if (tool === 'assistant.render_scaffold') {
+        var scaffoldRes = assistantRenderScaffold(payload);
+        return Promise.resolve(scaffoldRes && scaffoldRes.ok === true
+          ? { ok: true, tool: tool, data: scaffoldRes }
+          : { ok: false, tool: tool, data: scaffoldRes || null, reason: scaffoldRes && scaffoldRes.reason ? String(scaffoldRes.reason) : '渲染失败' });
+      }
+      if (tool === 'case.update') {
+        if (payload.confirmed !== true) {
+          return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
+            actionLabel: '修改用例',
+            message: '该操作会写入用例内容，请确认继续。',
+          }));
+        }
+        var updateRes = assistantUpdateCase(payload || {});
+        return Promise.resolve(updateRes && updateRes.ok
+          ? { ok: true, tool: tool, data: updateRes }
+          : { ok: false, tool: tool, data: updateRes || null, reason: updateRes && updateRes.reason ? String(updateRes.reason) : '修改失败' });
+      }
+      if (tool === 'case.delete') {
+        if (payload.confirmed !== true) {
+          return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
+            actionLabel: '删除用例',
+            message: '该操作会删除当前可见用例，请确认继续。',
+          }));
+        }
+        var deleteIndexRaw = payload.index;
+        if ((deleteIndexRaw === undefined || deleteIndexRaw === null) && payload.itemIndex !== undefined && payload.itemIndex !== null) deleteIndexRaw = payload.itemIndex;
+        if ((deleteIndexRaw === undefined || deleteIndexRaw === null) && payload.seq !== undefined && payload.seq !== null) deleteIndexRaw = payload.seq;
+        var delRes = assistantDeleteCase(Number(deleteIndexRaw));
+        return Promise.resolve(delRes && delRes.ok
+          ? { ok: true, tool: tool, data: delRes }
+          : { ok: false, tool: tool, data: delRes || null, reason: delRes && delRes.reason ? String(delRes.reason) : '删除失败' });
+      }
+      if (tool === 'casegen.run') {
+        if (payload.confirmed !== true) {
+          return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
+            actionLabel: '触发用例生成',
+            message: '该操作会触发批量生成流程，请确认继续。',
+          }));
+        }
+        return assistantRunCaseGeneration().then(function(res) {
+          return res && res.ok
+            ? { ok: true, tool: tool, data: res }
+            : { ok: false, tool: tool, data: res || null, reason: res && res.reason ? String(res.reason) : '触发失败' };
+        });
+      }
+      if (tool === 'missing_recommend.run') {
+        if (payload.confirmed !== true) {
+          return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
+            actionLabel: '触发漏测推荐',
+            message: '该操作会写入推荐结果，请确认继续。',
+          }));
+        }
+        return assistantRunMissingRecommendation().then(function(res) {
+          return res && res.ok
+            ? { ok: true, tool: tool, data: res }
+            : { ok: false, tool: tool, data: res || null, reason: res && res.reason ? String(res.reason) : '触发失败' };
+        });
+      }
+      return Promise.resolve({ ok: false, tool: tool, reason: '未知 MCP 工具：' + tool });
+    }
+
     window.app.assistantApi = {
       listTabs: assistantListTabs,
       switchTab: function(tab) { return switchTab(String(tab || '')); },
@@ -4679,8 +6684,15 @@
       memoAdd: assistantMemoAdd,
       memoToggle: assistantMemoToggle,
       memoRemove: assistantMemoRemove,
+      updateCase: assistantUpdateCase,
       deleteCase: assistantDeleteCase,
       testModel: function(modelId, scene) { return testModel(modelId, null, scene || 'assistant-manual-test'); },
+    };
+    window.app.assistantMcpApi = {
+      listTools: assistantMcpListTools,
+      callTool: function(name, args) {
+        return assistantMcpCallTool(name, args || {});
+      },
     };
     window.app.assistantSettingsApi = {
       getSettings: assistantGetSettings,
@@ -4709,6 +6721,7 @@
     };
     assistantDispatchEvent('app-assistant-api-ready', {
       hasAssistantApi: true,
+      hasAssistantMcpApi: true,
       hasAssistantSettingsApi: true,
       hasAssistantModelDiagApi: true,
     });

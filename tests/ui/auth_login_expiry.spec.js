@@ -4,9 +4,11 @@ test.describe('登录过期时间返回', () => {
   let loginResponseBody = null;
   let expectedExpiresAt = '';
   let forceUserMeError = false;
+  let requireAuthHeader = false;
 
   test.beforeEach(async ({ page }) => {
     forceUserMeError = false;
+    requireAuthHeader = false;
     await page.route('**/*', (route) => {
       const url = route.request().url();
       if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
@@ -30,6 +32,12 @@ test.describe('登录过期时间返回', () => {
         return respond(200, loginResponseBody);
       }
       if (path === '/api/users/me') {
+        if (requireAuthHeader) {
+          const auth = String(route.request().headers()['authorization'] || '');
+          if (!auth || auth !== 'Bearer safe-token') {
+            return respond(401, { detail: 'unauthorized' });
+          }
+        }
         if (forceUserMeError) return respond(500, { detail: 'server error' });
         return respond(200, { id: 1, username: 'test_user', role: 'admin', level: 'leader' });
       }
@@ -72,7 +80,7 @@ test.describe('登录过期时间返回', () => {
     await page.goto(base + '/index.html');
 
     await page.waitForTimeout(800);
-    await expect(page).toHaveURL(/index\.html/);
+    await expect.poll(() => page.url()).not.toMatch(/login\.html/);
     const stored = await page.evaluate(() => {
       try {
         return localStorage.getItem('tap-auth-token');
@@ -81,5 +89,23 @@ test.describe('登录过期时间返回', () => {
       }
     });
     expect(stored).toBe('keep-token');
+  });
+
+  test('本地 token 含非 Latin-1 字符时应降级为未登录并跳转登录页', async ({ page }) => {
+    requireAuthHeader = true;
+    await page.addInitScript(() => {
+      try { localStorage.setItem('tap-auth-token', '测试🔒token'); } catch (_) {}
+    });
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/index.html');
+    await expect.poll(() => page.url(), { timeout: 20000 }).toMatch(/login\.html/);
+    const stored = await page.evaluate(() => {
+      try {
+        return localStorage.getItem('tap-auth-token') || '';
+      } catch (err) {
+        return '';
+      }
+    });
+    expect(stored).toBe('');
   });
 });

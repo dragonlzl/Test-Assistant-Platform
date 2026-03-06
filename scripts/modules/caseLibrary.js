@@ -13496,7 +13496,7 @@
 	    var opts = options && typeof options === 'object' ? options : {};
 	    var limit = Number(opts.limit);
 	    if (!Number.isFinite(limit) || limit <= 0) limit = 20;
-	    if (limit > 100) limit = 100;
+	    if (limit > 1000) limit = 1000;
 	    var file = state.editor && state.editor.caseFile ? state.editor.caseFile : null;
 	    var allItems = Array.isArray(state.editor && state.editor.items) ? state.editor.items : [];
 	    if (!file || !file.id) {
@@ -13540,6 +13540,141 @@
 	      totalAll: allItems.length,
 	      items: items,
 	      truncated: normalized.length > items.length,
+	    };
+	  }
+
+	  function buildAssistantHistoryCaseSnapshot(snapshot) {
+	    var data = snapshot && typeof snapshot === 'object' ? snapshot : null;
+	    if (!data) return null;
+	    return {
+	      module: data.module === undefined || data.module === null ? '' : String(data.module),
+	      title: data.title === undefined || data.title === null ? '' : String(data.title),
+	      priority: data.priority === undefined || data.priority === null ? '' : String(data.priority),
+	      precondition: data.precondition === undefined || data.precondition === null ? '' : String(data.precondition),
+	      steps: data.steps === undefined || data.steps === null ? '' : String(data.steps),
+	      expected: data.expected === undefined || data.expected === null ? '' : String(data.expected),
+	      remark: data.remark === undefined || data.remark === null ? '' : String(data.remark),
+	    };
+	  }
+
+	  function buildAssistantHistoryEntrySnapshot(entry, index) {
+	    var row = entry && typeof entry === 'object' ? entry : {};
+	    var kind = normalizeCaseLibHistoryKind(row.kind);
+	    var oldSnap = buildAssistantHistoryCaseSnapshot(row.old);
+	    var newSnap = buildAssistantHistoryCaseSnapshot(row.new);
+	    var changedFields = Array.isArray(row.changed_fields)
+	      ? row.changed_fields.map(function(field) {
+	          return field === undefined || field === null ? '' : String(field);
+	        }).filter(function(field) { return field; })
+	      : [];
+	    var title = newSnap && newSnap.title ? String(newSnap.title) : (oldSnap && oldSnap.title ? String(oldSnap.title) : '');
+	    var moduleName = newSnap && newSnap.module ? String(newSnap.module) : (oldSnap && oldSnap.module ? String(oldSnap.module) : '');
+	    return {
+	      index: Number(index) + 1,
+	      id: row.id === undefined || row.id === null ? '' : String(row.id),
+	      kind: kind,
+	      kindLabel: getCaseLibHistoryKindLabel(kind),
+	      changedAt: row.changed_at === undefined || row.changed_at === null ? '' : String(row.changed_at),
+	      operator: row.operator === undefined || row.operator === null ? '' : String(row.operator),
+	      changedFields: changedFields,
+	      module: moduleName,
+	      title: title,
+	      old: oldSnap,
+	      new: newSnap,
+	    };
+	  }
+
+	  function getCurrentHistoryDetailSnapshot(options) {
+	    var opts = options && typeof options === 'object' ? options : {};
+	    var limit = Number(opts.limit);
+	    if (!Number.isFinite(limit) || limit <= 0) limit = 40;
+	    if (limit > 100) limit = 100;
+	    var fileNameClean = state.historyDetail && state.historyDetail.fileNameClean
+	      ? String(state.historyDetail.fileNameClean).trim()
+	      : '';
+	    var cardVisible = typeof isHistoryDetailVisible === 'function' ? isHistoryDetailVisible() : false;
+	    if (!fileNameClean || !cardVisible) {
+	      return {
+	        ok: true,
+	        hasContext: false,
+	        reason: 'no-visible-history-detail',
+	        total: 0,
+	        filteredTotal: 0,
+	        events: [],
+	        pageEvents: [],
+	      };
+	    }
+	    var history = Array.isArray(state.historyDetail && state.historyDetail.history) ? state.historyDetail.history : [];
+	    var filter = normalizeCaseLibHistoryKind(state.historyDetail && state.historyDetail.filter ? state.historyDetail.filter : '');
+	    var filtered = filter
+	      ? history.filter(function(item) {
+	          return normalizeCaseLibHistoryKind(item && item.kind) === filter;
+	        })
+	      : history.slice();
+	    var summary = { append: 0, added: 0, updated: 0, deleted: 0, import: 0, reimport: 0, file_deleted: 0, version_changed: 0 };
+	    history.forEach(function(item) {
+	      var kind = normalizeCaseLibHistoryKind(item && item.kind);
+	      if (summary[kind] === undefined) return;
+	      summary[kind] += 1;
+	    });
+	    var filteredSummary = { append: 0, added: 0, updated: 0, deleted: 0, import: 0, reimport: 0, file_deleted: 0, version_changed: 0 };
+	    filtered.forEach(function(item) {
+	      var kind = normalizeCaseLibHistoryKind(item && item.kind);
+	      if (filteredSummary[kind] === undefined) return;
+	      filteredSummary[kind] += 1;
+	    });
+	    var pageSize = getPageSize();
+	    var total = filtered.length;
+	    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+	    var pageIndex = state.historyDetail && Number.isFinite(Number(state.historyDetail.pageIndex))
+	      ? Number(state.historyDetail.pageIndex)
+	      : 0;
+	    if (pageIndex < 0) pageIndex = 0;
+	    if (pageIndex >= totalPages) pageIndex = Math.max(totalPages - 1, 0);
+	    var start = pageIndex * pageSize;
+	    var end = Math.min(total, start + pageSize);
+	    var pageEvents = filtered.slice(start, end).map(function(item, idx) {
+	      return buildAssistantHistoryEntrySnapshot(item, start + idx);
+	    });
+	    var events = filtered.slice(0, limit).map(function(item, idx) {
+	      return buildAssistantHistoryEntrySnapshot(item, idx);
+	    });
+	    var projectId = state.historyDetail && state.historyDetail.projectId !== undefined && state.historyDetail.projectId !== null
+	      ? String(state.historyDetail.projectId)
+	      : '';
+	    var versionId = state.historyDetail && state.historyDetail.versionId !== undefined && state.historyDetail.versionId !== null
+	      ? String(state.historyDetail.versionId)
+	      : '';
+	    var projectName = projectId && state.projectNameById && state.projectNameById[projectId]
+	      ? String(state.projectNameById[projectId])
+	      : (projectId ? ('项目#' + projectId) : '');
+	    var versionName = projectId && versionId ? getVersionName(projectId, versionId) : '';
+	    return {
+	      ok: true,
+	      hasContext: true,
+	      scope: 'history-detail',
+	      projectId: projectId,
+	      projectName: projectName,
+	      versionId: versionId,
+	      versionName: versionName,
+	      fileNameClean: fileNameClean,
+	      isDeleted: state.historyDetail && state.historyDetail.isDeleted === true,
+	      loading: state.historyDetail && state.historyDetail.loading === true,
+	      filter: filter,
+	      filterLabel: filter ? getCaseLibHistoryKindLabel(filter) : '',
+	      total: history.length,
+	      filteredTotal: total,
+	      pageIndex: pageIndex,
+	      currentPage: total ? (pageIndex + 1) : 1,
+	      pageSize: pageSize,
+	      totalPages: totalPages,
+	      pageStart: total ? (start + 1) : 0,
+	      pageEnd: end,
+	      summary: summary,
+	      filteredSummary: filteredSummary,
+	      pageEvents: pageEvents,
+	      events: events,
+	      truncated: total > events.length,
 	    };
 	  }
 
@@ -19538,6 +19673,7 @@
 	    window.app.caseLibraryApi.openWriterDrawer = openCaseLibraryWriterStructure;
 	    window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
 	    window.app.caseLibraryApi.getCurrentEditorCaseSnapshot = getCurrentEditorCaseSnapshot;
+	    window.app.caseLibraryApi.getCurrentHistoryDetailSnapshot = getCurrentHistoryDetailSnapshot;
 	    if (hasImportSelectDrawer) {
 	      window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
 	    }
@@ -19750,6 +19886,7 @@
 	    window.app.caseLibraryApi.openWriterDrawer = openCaseLibraryWriterStructure;
 	    window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
 	    window.app.caseLibraryApi.getCurrentEditorCaseSnapshot = getCurrentEditorCaseSnapshot;
+	    window.app.caseLibraryApi.getCurrentHistoryDetailSnapshot = getCurrentHistoryDetailSnapshot;
 	    window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
 	    window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
     window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;

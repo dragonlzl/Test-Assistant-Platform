@@ -6,6 +6,28 @@
   var authRedirecting = false;
   var authRedirectAt = 0;
 
+  function isHeaderValueSafe(value) {
+    if (value === undefined || value === null) return false;
+    var text = String(value);
+    if (!text) return false;
+    for (var i = 0; i < text.length; i += 1) {
+      var code = text.charCodeAt(i);
+      if (code > 255) return false;
+      if (code === 10 || code === 13) return false;
+      if (code < 32 && code !== 9) return false;
+      if (code === 127) return false;
+    }
+    return true;
+  }
+
+  function toSafeHeaderValue(value) {
+    if (value === undefined || value === null) return '';
+    var text = String(value);
+    if (!text) return '';
+    if (!isHeaderValueSafe(text)) return '';
+    return text;
+  }
+
   function singleFlight(key, runner) {
     if (pendingRequests[key]) return pendingRequests[key];
     var promise = null;
@@ -96,7 +118,8 @@
   }
 
   function setToken(token) {
-    authToken = token || '';
+    var rawToken = token === undefined || token === null ? '' : String(token);
+    authToken = isHeaderValueSafe(rawToken) ? rawToken : '';
     if (typeof localStorage !== 'undefined') {
       try {
         if (authToken) {
@@ -147,7 +170,13 @@
   function buildHeaders() {
     var headers = { 'Content-Type': 'application/json' };
     if (authToken) {
-      headers.Authorization = 'Bearer ' + authToken;
+      var authHeader = toSafeHeaderValue('Bearer ' + authToken);
+      if (authHeader) {
+        headers.Authorization = authHeader;
+      } else {
+        // 避免本地脏 token 导致 fetch 在构造 headers 时直接抛错。
+        clearToken();
+      }
     }
     try {
       var page = '';
@@ -159,7 +188,10 @@
           if (path && path.indexOf('login.html') !== -1) page = 'login';
         }
       }
-      if (page) headers['X-TAP-Page'] = page;
+      if (page) {
+        var safePage = toSafeHeaderValue(page);
+        if (safePage) headers['X-TAP-Page'] = safePage;
+      }
     } catch (err) {
       // ignore
     }
