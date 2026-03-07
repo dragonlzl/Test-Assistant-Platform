@@ -5182,3 +5182,133 @@
     - `node --check tests/ui/assistant_global.spec.js`（通过）
     - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手用例表超过10条时聊天区应缩略展示，展开后查看全部" --workers=1`（通过，1/1）
     - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-06 增强 AI 助手跨页面查询能力，支持当前用例与漏测用例库联动匹配
+  - 问题现象：
+    - 用户当前处于执行页或用例编辑页时，询问“当前这份用例有没有匹配的漏测用例库用例”，助手会被当前页用例查询分支抢走，只读取当前页用例，拿不到漏测用例库数据；
+    - 漏测/易漏用例库此前没有对助手暴露标准只读工具，模型即使想跨页面判断，也缺少可调用的数据入口；
+    - 当前 `page.get_data(case-library)` 也无法带出易漏视图明细，导致模型对用例库页面上下文理解不完整。
+  - 调整目标：
+    - 为助手补齐漏测用例库只读快照与跨页面匹配工具，让模型可以自主发起“当前用例 vs 漏测库”的联动查询；
+    - 让涉及漏测库的提问优先交给模型选择合适工具，而不是被旧 `query_case_list` 逻辑直接收窄成当前页列表；
+    - 保留旧分支兜底能力：即使模型或分类器仍落到 `query_case_list`，也能自动切换到漏测库查询/跨页面匹配结果。
+  - 修复内容：
+    - `scripts/modules/caseLibrary.js`
+      - 新增 `getCurrentMissingViewSnapshot(...)`，把当前易漏视图的项目、模块、类型筛选、分页与条目明细以只读快照形式暴露给助手；
+      - `window.app.caseLibraryApi` 新增 `getCurrentMissingViewSnapshot` 导出，供 `page.get_data(case-library)` 与后续 MCP 工具复用。
+    - `scripts/modules/app.js`
+      - `assistantGetPageData('case-library')` 新增 `missingCaseLibraryView`，当前位于用例库时可直接把易漏视图上下文交给模型；
+      - 新增漏测库读取与跨页面匹配能力：
+        - `missing_library.list_current`：读取当前项目漏测/易漏用例库，可跨页面调用；
+        - `cross_page.match_missing_cases`：把当前页面用例与当前项目漏测库做跨页面比对，返回匹配条目、命中数量与依据；
+      - MCP 工具目录与调用分发新增上述两类只读工具；
+      - 漏测库匹配复用现有关键词拆分能力，对标题/前置/步骤/预期/模块做多字段命中评分，避免只看单一字段。
+    - `scripts/modules/assistant.js`
+      - MCP fallback catalog、工具名归一化、工具结果解读 payload 全量补齐 `missing_library.list_current` 与 `cross_page.match_missing_cases`；
+      - `tryHandleModelDrivenReply(...)` 的主提示新增跨页面指导：涉及“当前用例 vs 漏测用例库”时，优先由模型调用 `cross_page.match_missing_cases`；
+      - `summarizeMcpToolResultByModel(...)` 新增跨页面匹配回答规则，要求先给结论与数量，再给关键依据；
+      - `handleUserInput(...)` 对漏测库问题不再走早期当前页用例分支，先让模型自由选择工具；
+      - `runModelCaseListAction(...)` 新增漏测库兜底：即使旧动作仍命中 `query_case_list`，也会自动改走漏测库读取/跨页面匹配，再交给模型总结。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `助手可在执行页跨页面匹配漏测用例库，并由模型自主调用工具`，覆盖执行页提问、模型主动调用跨页面工具、命中 2 组匹配且不回退到 `cases.list_current` 的完整链路。
+  - 使用效果：
+    - 在执行页直接问“帮我看看当前的这份用例，有没有匹配的漏测用例库用例”，模型现在会主动调用跨页面工具并返回匹配结果，而不是只复述当前页 73 条用例；
+    - 在用例库页调用 `page.get_data(case-library)` 时，模型也能看到当前易漏视图的项目、筛选与条目明细；
+    - 即使后续某些问题仍命中旧 `query_case_list` 分支，也不会再因为旧分支抢答而失去跨页面漏测库判断能力。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js scripts/modules/assistant.js scripts/modules/caseLibrary.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手可在执行页跨页面匹配漏测用例库，并由模型自主调用工具|当前页面用例优先返回正在编辑用例而非全库|当前页面用例查询支持任意字段模糊命中并允许模型自主输出列表|展示全部用例命中 scaffold 时不应重复输出两份完整列表|助手在执行页可读取用例变更并准确返回新增数量" --workers=1`（通过，5/5）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-06 放宽跨页面漏测匹配的召回口径，改为“规则高置信 + 宽召回候选 + 模型判断”
+  - 问题现象：
+    - 之前 `cross_page.match_missing_cases` 会先用规则打分并直接做最终裁剪，`matchTotal=0` 时助手很容易直接回答“没有匹配”，即使其实已经存在明显相关、但未达到硬阈值的补看候选；
+    - 工具回传给模型的跨页面匹配 payload 只有少量标题字段，模型看不到前置条件、步骤、预期和字段命中细节，无法做更完整的语义判断；
+    - fallback 文案把“规则未直命中”和“完全没有相关内容”混为一谈，容易造成漏测。
+  - 调整目标：
+    - 保留规则层做快速初筛，但不再让规则层直接决定“有/无相关用例”；
+    - 把更宽的候选集合与完整字段一并交给模型，让模型自行判断“高相关 / 建议补看 / 弱相关”；
+    - 当规则直命中为 0 但候选不为空时，回答必须体现“仍有建议复核候选”，不能直接判空。
+  - 修复内容：
+    - `scripts/modules/app.js`
+      - 将跨页面匹配结果拆分为两层：`matches`（规则高置信命中）与 `candidates`（宽召回候选）；
+      - 新增候选等级、字段命中计数、关键词命中明细、候选去重与排序逻辑，保证模型能看到更广但仍有依据的补看范围；
+      - `cross_page.match_missing_cases` 返回新增 `candidateTotal`、`candidateMatchedCaseCount`、`candidateMatchedMissingItemCount`、`candidateTruncated` 等字段。
+    - `scripts/modules/assistant.js`
+      - `buildMcpReasonPayload(...)` 为跨页面匹配补齐完整字段：当前用例/漏测条目的模块、标题、优先级、前置条件、步骤、预期、命中明细、候选等级等；
+      - `summarizeMcpToolResultByModel(...)` 新增明确约束：`matchTotal` 仅表示规则高置信命中，`candidateTotal` 表示宽召回候选；即使 `matchTotal=0` 也必须继续检查候选，不得直接回答“没有相关用例”；
+      - `formatCrossPageMissingCaseMatchResponse(...)` fallback 改为区分“高置信匹配”和“建议复核候选”，在 strict=0/candidate>0 时明确提示“暂未直命中，但已召回候选”。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `跨页面漏测匹配在规则未直命中时仍应把候选交给模型判断`，覆盖 `matchTotal=0`、`candidateTotal>0`、模型继续判断并给出补看建议的回归场景。
+  - 使用效果：
+    - 助手跨页面比对漏测库时不再被硬阈值过早截断，能把更多高相关候选交给模型补充判断，降低漏测风险；
+    - 模型现在可以基于完整字段和命中依据，自主给出“规则命中”与“建议补看”的分层结论，而不是只复述分数；
+    - 当规则没有直接命中时，回答也会保留建议复核候选，不会再机械地回“没有匹配”。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手可在执行页跨页面匹配漏测用例库，并由模型自主调用工具|跨页面漏测匹配在规则未直命中时仍应把候选交给模型判断|当前页面用例优先返回正在编辑用例而非全库|当前页面用例查询支持任意字段模糊命中并允许模型自主输出列表|展示全部用例命中 scaffold 时不应重复输出两份完整列表|助手在执行页可读取用例变更并准确返回新增数量" --workers=1`（通过，6/6）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-06 为跨页面/通用表格补齐“展开查看”能力
+  - 问题现象：
+    - 通过其他页面或跨页面工具拿到的列表，若模型渲染成普通 Markdown 表格（如“序号/ID/模块/类型/标题/优先级”这类通用表），不会出现右上角“展开查看”按钮；
+    - 当前展开弹层与外显滚动条能力只挂在完整用例表识别链路上，普通表格虽然也有横向阅读和全屏查看诉求，却无法复用已有能力。
+  - 调整目标：
+    - 把表格展开能力从“完整用例表专属”放宽到通用 Markdown 表格；
+    - 保持原有用例表展开、滚动条、预览弹层行为不变，同时让跨页面列表天然可展开。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - `renderMarkdownTableHtml(...)` 对普通 Markdown 表格也统一包裹 `assistant-case-table-wrap`、外显滚动条与“展开查看”按钮；
+      - `refreshAssistantCaseTableScrollWidth(...)` 与 `openAssistantCasePreviewFromButton(...)` 的表格查找范围从 `table.assistant-case-table` 放宽到 `table.assistant-msg-table`，使普通表格也能进入预览弹层；
+      - 保留完整用例表原有的预览缩略/省略行逻辑，普通表格则默认展示全量聊天区内容，但同样支持展开查看。
+    - `style.css`
+      - 为预览弹层内的通用 `assistant-msg-table` 补齐基础表格样式，避免普通表格展开后丢失宽度与排版。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `模型可调用 markdown_table scaffold 时也应支持展开查看`，覆盖通用表格按钮展示与预览弹层打开链路。
+  - 使用效果：
+    - 像漏测用例库、跨页面查询结果这类通用列表表格，现在也会出现“展开查看”按钮；
+    - 点击后可进入和用例表一致的预览弹层，不需要再受聊天区宽度限制；
+    - 现有完整用例表的展开能力与缩略展示保持不变。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手用例表格支持展开完整视图并可关闭，刷新后自动关闭|模型可调用 markdown_table scaffold 时也应支持展开查看|模型可调用展示 scaffold 渲染标准用例表" --workers=1`（通过，3/3）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-07 AI 助手聊天框升级为图文混合输入输出，并按模型视觉能力决定是否允许发送图片
+  - 问题现象：
+    - 助手聊天框此前只支持纯文本，无法像 Codex 一样把图片和文字一起发送给模型，也无法在对话里直接展示图片；
+    - 用户粘贴或拖入截图后，图片不会进入助手上下文，模型也拿不到图片数据；
+    - 当所选助手模型不支持视觉/多模态时，界面也没有前置拦截，缺少明确的“不能发图”反馈。
+  - 调整目标：
+    - 将助手输入区改为“附件区在上、文本区在下”的组合式聊天框，支持图片拖入、粘贴、文件选择和多图同时发送；
+    - 让用户消息与助手消息都支持图片展示，助手返回 Markdown 图片时直接在聊天区渲染；
+    - 严格按当前所选模型能力判断：模型不支持视觉/多模态时，直接阻止发送图片，不把图片提交给模型。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 重构助手输入区 DOM，新增附件区、文件选择入口、附件列表与移除按钮；
+      - 新增图片粘贴、拖拽、文件选择处理链路，支持多图、发送前压缩与 data URL 预处理；
+      - `handleSend(...)` 改为支持“文字 + 图片”联合发送，并在发送前调用 `assistantApi.getSelectedModelInfo()` 做视觉能力判断；
+      - 若模型不支持视觉/多模态，则直接保留附件并提示“不支持图片输入”，不会发送图片；
+      - 扩展消息模型与渲染逻辑，用户消息可展示已发送图片，助手消息可展示图片附件与 Markdown 图片；
+      - 对带图消息不再写入 localStorage，避免本地历史被 base64 图片撑爆。
+    - `scripts/modules/app.js`
+      - 新增 `assistantNormalizeContentBlocks(...)`、`assistantContentBlocksHaveImage(...)`、`assistantGetSelectedModelInfo(...)`；
+      - `assistantCallModel(...)` 支持 `contentBlocks` 多模态入参，并在存在图片输入时改走 `callModelWithContent(...)`；
+      - 再加一层底层兜底：即使 UI 侧漏判，只要模型能力不含视觉/多模态，也会直接拒绝图片输入请求；
+      - `window.app.assistantApi` 新增 `getSelectedModelInfo` 导出，供助手 UI 与后续手脚架统一复用。
+    - `style.css`
+      - 新增助手附件区、附件行、消息图片卡片、Markdown 图片块和移动端布局样式，使整体交互更接近 Codex 风格；
+      - 发送按钮会随“是否有文本/附件、图片是否仍在处理、是否正在回复”自动切换可用状态。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `助手支持图片附件与文本一起发送给多模态模型`，覆盖多图附件、文件名展示、图文一起发送和模型收到 multimodal blocks；
+      - 新增 `助手在当前模型不支持视觉时阻止图片发送`，覆盖图片发送前拦截和“不发送图片”的负向场景；
+      - 新增 `助手回复中的 Markdown 图片会直接渲染展示`，覆盖助手输出图片的渲染链路。
+  - 使用效果：
+    - 现在可以在助手输入区直接拖入、粘贴或选择多张图片，附件会先在上方独立列表展示文件名，再与下方文本一起发送；
+    - 如果当前助手模型具备视觉/多模态能力，模型可以读取这些图片并结合文本回答；
+    - 如果模型不具备视觉/多模态能力，发送前会被直接拦截，不会把图片发出去；
+    - 助手回复中若包含 Markdown 图片，聊天区会直接渲染图片，不再只显示原始链接文本。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手支持图片附件与文本一起发送给多模态模型|助手在当前模型不支持视觉时阻止图片发送|助手回复中的 Markdown 图片会直接渲染展示|模型可调用 markdown_table scaffold 时也应支持展开查看|多轮对话应承接上下文而非丢失语义" --workers=1`（通过，5/5）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）

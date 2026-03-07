@@ -3576,6 +3576,49 @@
       return assistantFindModelByAnyId(targetId);
     }
 
+    function assistantNormalizeContentBlocks(blocks) {
+      if (!Array.isArray(blocks)) return [];
+      var normalized = [];
+      blocks.forEach(function(block) {
+        if (!block || typeof block !== 'object') return;
+        if (block.type === 'text') {
+          var text = block.text === undefined || block.text === null ? '' : String(block.text);
+          if (text.trim()) normalized.push({ type: 'text', text: text });
+          return;
+        }
+        if (block.type === 'image') {
+          var dataUrl = block.dataUrl === undefined || block.dataUrl === null
+            ? (block.url === undefined || block.url === null ? '' : String(block.url))
+            : String(block.dataUrl);
+          dataUrl = dataUrl.trim();
+          if (!dataUrl) return;
+          normalized.push({ type: 'image', dataUrl: dataUrl });
+        }
+      });
+      return normalized;
+    }
+
+    function assistantContentBlocksHaveImage(blocks) {
+      var list = assistantNormalizeContentBlocks(blocks);
+      for (var i = 0; i < list.length; i += 1) {
+        if (list[i] && list[i].type === 'image') return true;
+      }
+      return false;
+    }
+
+    function assistantGetSelectedModelInfo(modelId) {
+      var model = assistantGetSelectedModel(modelId);
+      var capabilities = normalizeModelCapabilityList(model);
+      return {
+        configured: Boolean(model),
+        usable: assistantIsModelUsable(model),
+        modelId: assistantGetStableModelId(model),
+        modelName: model && model.name ? String(model.name) : getModelDisplayName(model, '未配置'),
+        supportsImage: capabilitySupportsImage(capabilities),
+        capabilities: capabilities,
+      };
+    }
+
     function assistantNormalizeHistory(history) {
       if (!Array.isArray(history) || !history.length) return [];
       var max = 12;
@@ -3626,8 +3669,37 @@
       var reasoning = opts.reasoning ? String(opts.reasoning) : '';
       var temperature = opts.temperature;
       var historyPrompt = assistantBuildHistoryPrompt(opts.history);
+      var normalizedBlocks = assistantNormalizeContentBlocks(Array.isArray(userText) ? userText : opts.contentBlocks);
+      var hasImageInput = assistantContentBlocksHaveImage(normalizedBlocks);
       if (historyPrompt) {
         prompt = prompt ? (prompt + '\n' + historyPrompt) : historyPrompt;
+      }
+      if (hasImageInput && !capabilitySupportsImage(normalizeModelCapabilityList(model))) {
+        return Promise.resolve({
+          ok: false,
+          reason: '当前助手模型不支持图片输入，请切换支持视觉/多模态的模型。',
+          modelId: assistantGetStableModelId(model),
+          modelName: model && model.name ? String(model.name) : '',
+          unsupportedMedia: 'image',
+        });
+      }
+      if (normalizedBlocks.length) {
+        return callModelWithContent(model, normalizedBlocks, prompt, {
+          reasoningEffort: reasoning,
+          temperature: temperature,
+        }).then(function(content) {
+          return {
+            ok: true,
+            content: content,
+            modelId: assistantGetStableModelId(model),
+            modelName: model && model.name ? String(model.name) : '',
+          };
+        }).catch(function(err) {
+          return {
+            ok: false,
+            reason: err && err.message ? String(err.message) : '模型调用失败',
+          };
+        });
       }
       return callModelWithConfig(model, String(userText || ''), prompt, reasoning, temperature)
         .then(function(content) {
@@ -3707,6 +3779,10 @@
         var historySnapshot = assistantReadCaseLibraryHistorySnapshot(60);
         if (historySnapshot && historySnapshot.ok === true && historySnapshot.hasContext === true) {
           data.caseLibraryHistoryDetail = historySnapshot;
+        }
+        var missingViewSnapshot = assistantReadMissingViewSnapshot(60);
+        if (missingViewSnapshot && missingViewSnapshot.ok === true && missingViewSnapshot.hasContext === true) {
+          data.missingCaseLibraryView = missingViewSnapshot;
         }
       } else if (tab === 'tempexec') {
         data.tempExecActiveFileId = state.tempExecActiveFileId || '';
@@ -3822,6 +3898,678 @@
         items: items,
         truncated: snapshot.truncated === true,
       };
+    }
+
+
+    function assistantReadMissingViewSnapshot(limit) {
+      var caseLibraryApi = window.app && window.app.caseLibraryApi ? window.app.caseLibraryApi : null;
+      if (!caseLibraryApi || typeof caseLibraryApi.getCurrentMissingViewSnapshot !== 'function') return null;
+      var snapshot = null;
+      try {
+        snapshot = caseLibraryApi.getCurrentMissingViewSnapshot({ limit: limit });
+      } catch (err) {
+        return null;
+      }
+      if (!snapshot || snapshot.ok !== true || snapshot.hasContext !== true) return null;
+      return snapshot;
+    }
+
+    function assistantResolveMissingLibraryProjectId(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var explicit = opts.projectId === undefined || opts.projectId === null ? '' : String(opts.projectId).trim();
+      if (explicit) return explicit;
+      var currentCases = opts.currentCases && typeof opts.currentCases === 'object' ? opts.currentCases : null;
+      if (currentCases && currentCases.projectId) return String(currentCases.projectId);
+      var missingViewSnapshot = assistantReadMissingViewSnapshot(1);
+      if (missingViewSnapshot && missingViewSnapshot.projectId) return String(missingViewSnapshot.projectId);
+      var tempExecSnapshot = assistantReadTempExecCaseSnapshot(1);
+      if (tempExecSnapshot && tempExecSnapshot.projectId) return String(tempExecSnapshot.projectId);
+      var editorSnapshot = assistantReadEditorCaseSnapshot(1);
+      if (editorSnapshot && editorSnapshot.projectId) return String(editorSnapshot.projectId);
+      return assistantResolveCaseLibraryProjectId(opts);
+    }
+
+    function assistantNormalizeMissingLibraryText(value) {
+      return value === undefined || value === null ? '' : String(value).trim().toLowerCase();
+    }
+
+    function assistantNormalizeMissingLibraryModule(module, index) {
+      var row = module && typeof module === 'object' ? module : {};
+      var itemCount = Number(row.item_count);
+      if (!Number.isFinite(itemCount) || itemCount < 0) itemCount = 0;
+      return {
+        index: Number(index) + 1,
+        id: row.id === undefined || row.id === null ? '' : String(row.id),
+        name: row.name === undefined || row.name === null ? '' : String(row.name),
+        projectId: row.project_id === undefined || row.project_id === null ? '' : String(row.project_id),
+        itemCount: itemCount,
+      };
+    }
+
+    function assistantResolveMissingLibraryTypeIds(item) {
+      var row = item && typeof item === 'object' ? item : {};
+      var source = Array.isArray(row.type_ids) ? row.type_ids : (Array.isArray(row.typeIds) ? row.typeIds : []);
+      var seen = {};
+      var ids = [];
+      source.forEach(function(raw) {
+        if (raw === undefined || raw === null || raw === '') return;
+        var key = String(raw);
+        if (seen[key]) return;
+        seen[key] = true;
+        ids.push(key);
+      });
+      if (!ids.length && row.type_id !== undefined && row.type_id !== null && row.type_id !== '') {
+        ids.push(String(row.type_id));
+      }
+      return ids;
+    }
+
+    function assistantResolveMissingLibraryTypeNames(item, typeIds) {
+      var row = item && typeof item === 'object' ? item : {};
+      var ids = Array.isArray(typeIds) ? typeIds : assistantResolveMissingLibraryTypeIds(row);
+      var names = [];
+      ids.forEach(function(typeId, idx) {
+        var base = Array.isArray(row.type_names) ? row.type_names[idx] : (Array.isArray(row.typeNames) ? row.typeNames[idx] : null);
+        if (!base && row.type_name && idx === 0) base = row.type_name;
+        if (!base && row.typeName && idx === 0) base = row.typeName;
+        if (!base) return;
+        names.push(String(base));
+      });
+      return names;
+    }
+
+    function assistantNormalizeMissingLibraryItem(item, index, module) {
+      var row = item && typeof item === 'object' ? item : {};
+      var moduleRow = module && typeof module === 'object' ? module : {};
+      var moduleId = row.module_id === undefined || row.module_id === null ? '' : String(row.module_id);
+      if (!moduleId && moduleRow.id !== undefined && moduleRow.id !== null) moduleId = String(moduleRow.id);
+      var moduleName = row.module_name || row.module || moduleRow.name || '';
+      var typeIds = assistantResolveMissingLibraryTypeIds(row);
+      var typeNames = assistantResolveMissingLibraryTypeNames(row, typeIds);
+      return {
+        index: Number(index) + 1,
+        id: row.id === undefined || row.id === null ? '' : String(row.id),
+        moduleId: moduleId,
+        module: moduleName ? String(moduleName) : '',
+        typeIds: typeIds,
+        typeNames: typeNames,
+        typeLabel: typeNames.length ? typeNames.join('、') : '未分类',
+        title: row.title === undefined || row.title === null ? '' : String(row.title),
+        priority: row.priority === undefined || row.priority === null ? '' : String(row.priority),
+        precondition: row.precondition === undefined || row.precondition === null ? '' : String(row.precondition),
+        steps: row.steps === undefined || row.steps === null ? '' : String(row.steps),
+        expected: row.expected === undefined || row.expected === null ? '' : String(row.expected),
+      };
+    }
+
+    function assistantBuildMissingLibrarySearchText(item) {
+      var row = item && typeof item === 'object' ? item : {};
+      var parts = [
+        row.module,
+        row.typeLabel,
+        Array.isArray(row.typeNames) ? row.typeNames.join(' '): '',
+        row.title,
+        row.priority,
+        row.precondition,
+        row.steps,
+        row.expected,
+      ];
+      return assistantNormalizeMissingLibraryText(parts.join('\n'));
+    }
+
+    function assistantFilterMissingLibraryItems(items, queryText) {
+      var list = Array.isArray(items) ? items : [];
+      var raw = queryText === undefined || queryText === null ? '' : String(queryText).trim();
+      if (!raw) return list.slice();
+      var normalized = assistantNormalizeMissingLibraryText(raw);
+      var keywords = typeof buildMissingReminderKeywords === 'function' ? buildMissingReminderKeywords(raw) : [];
+      return list.filter(function(item) {
+        var searchText = assistantBuildMissingLibrarySearchText(item);
+        if (!searchText) return false;
+        if (normalized && searchText.indexOf(normalized) !== -1) return true;
+        if (!keywords.length) return false;
+        var hitCount = 0;
+        for (var i = 0; i < keywords.length; i += 1) {
+          if (!keywords[i]) continue;
+          if (searchText.indexOf(String(keywords[i]).toLowerCase()) !== -1) hitCount += 1;
+        }
+        return hitCount >= Math.min(2, keywords.length);
+      });
+    }
+
+    function assistantLoadMissingLibraryProjectData(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var projectId = assistantResolveMissingLibraryProjectId(opts);
+      if (!projectId) {
+        return Promise.resolve({
+          ok: true,
+          hasContext: false,
+          reason: 'no-project-context',
+          projectId: '',
+          totalModules: 0,
+          totalItems: 0,
+          modules: [],
+          items: [],
+          libraryEmpty: false,
+        });
+      }
+      var apiClient = window.app && window.app.apiClient ? window.app.apiClient : null;
+      if (!apiClient || typeof apiClient.listMissingModules !== 'function' || typeof apiClient.listMissingModuleItems !== 'function') {
+        return Promise.resolve({
+          ok: false,
+          reason: '漏测用例库能力暂不可用',
+          projectId: projectId,
+          totalModules: 0,
+          totalItems: 0,
+          modules: [],
+          items: [],
+          libraryEmpty: false,
+        });
+      }
+      return apiClient.listMissingModules(projectId)
+        .then(function(modules) {
+          var list = Array.isArray(modules) ? modules : [];
+          var normalizedModules = list.map(function(module, index) {
+            return assistantNormalizeMissingLibraryModule(module, index);
+          });
+          var tasks = normalizedModules.map(function(module) {
+            if (!module.id) return Promise.resolve([]);
+            return apiClient.listMissingModuleItems(module.id)
+              .then(function(items) {
+                var rows = Array.isArray(items) ? items : [];
+                return rows.map(function(item) {
+                  var clone = item && typeof item === 'object' ? Object.assign({}, item) : {};
+                  if (clone.module_id === undefined || clone.module_id === null || clone.module_id === '') clone.module_id = module.id;
+                  if (!clone.module_name) clone.module_name = module.name || ('模块#' + module.id);
+                  return clone;
+                });
+              })
+              .catch(function() { return []; });
+          });
+          return Promise.all(tasks).then(function(result) {
+            var normalizedItems = [];
+            (result || []).forEach(function(rows) {
+              (rows || []).forEach(function(row) {
+                var source = row && typeof row === 'object' ? row : {};
+                var moduleId = source.module_id === undefined || source.module_id === null ? '' : String(source.module_id);
+                var moduleMeta = null;
+                for (var i = 0; i < normalizedModules.length; i += 1) {
+                  if (normalizedModules[i] && String(normalizedModules[i].id || '') === moduleId) {
+                    moduleMeta = normalizedModules[i];
+                    break;
+                  }
+                }
+                normalizedItems.push(assistantNormalizeMissingLibraryItem(source, normalizedItems.length, moduleMeta));
+              });
+            });
+            return {
+              ok: true,
+              hasContext: true,
+              scope: 'project',
+              projectId: projectId,
+              totalModules: normalizedModules.length,
+              totalItems: normalizedItems.length,
+              modules: normalizedModules,
+              items: normalizedItems,
+              libraryEmpty: normalizedItems.length === 0,
+            };
+          });
+        })
+        .catch(function(err) {
+          return {
+            ok: false,
+            reason: err && err.message ? String(err.message) : '读取漏测用例库失败',
+            projectId: projectId,
+            totalModules: 0,
+            totalItems: 0,
+            modules: [],
+            items: [],
+            libraryEmpty: false,
+          };
+        });
+    }
+
+    function assistantReadMissingLibrarySnapshot(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var scope = opts.scope === undefined || opts.scope === null ? '' : String(opts.scope).trim().toLowerCase();
+      var queryText = opts.query === undefined || opts.query === null
+        ? (opts.searchText === undefined || opts.searchText === null ? '' : String(opts.searchText).trim())
+        : String(opts.query).trim();
+      var limit = Number(opts.limit);
+      if (!Number.isFinite(limit) || limit <= 0) limit = 40;
+      if (limit > 1000) limit = 1000;
+      if (scope === 'view' || scope === 'visible') {
+        var snapshot = assistantReadMissingViewSnapshot(limit);
+        if (snapshot) {
+          var visibleItems = Array.isArray(snapshot.items) ? snapshot.items : [];
+          var filteredVisible = queryText ? assistantFilterMissingLibraryItems(visibleItems, queryText) : visibleItems.slice();
+          var viewItems = filteredVisible.slice(0, limit);
+          return Promise.resolve({
+            ok: true,
+            hasContext: true,
+            scope: snapshot.scope || 'missing-view',
+            contextSource: 'case-library',
+            projectId: snapshot.projectId || '',
+            projectName: snapshot.projectName || '',
+            totalModules: Number(snapshot.totalModules) || 0,
+            totalItems: Number(snapshot.totalAll) || visibleItems.length,
+            total: filteredVisible.length,
+            totalAll: Number(snapshot.total) || visibleItems.length,
+            typeFilters: Array.isArray(snapshot.typeFilters) ? snapshot.typeFilters.slice() : [],
+            typeFilterLabels: Array.isArray(snapshot.typeFilterLabels) ? snapshot.typeFilterLabels.slice() : [],
+            modules: Array.isArray(snapshot.modules) ? snapshot.modules.slice() : [],
+            items: viewItems,
+            queryText: queryText,
+            truncated: filteredVisible.length > viewItems.length,
+            libraryEmpty: (Number(snapshot.totalAll) || visibleItems.length) <= 0,
+          });
+        }
+      }
+      return assistantLoadMissingLibraryProjectData(opts).then(function(res) {
+        if (!res || res.ok !== true) return res;
+        var sourceItems = Array.isArray(res.items) ? res.items : [];
+        var filteredItems = queryText ? assistantFilterMissingLibraryItems(sourceItems, queryText) : sourceItems.slice();
+        var visibleItems = filteredItems.slice(0, limit);
+        return {
+          ok: true,
+          hasContext: res.hasContext === true,
+          scope: 'project',
+          contextSource: 'project',
+          projectId: res.projectId || '',
+          projectName: res.projectName || '',
+          totalModules: Number(res.totalModules) || 0,
+          totalItems: Number(res.totalItems) || sourceItems.length,
+          total: filteredItems.length,
+          totalAll: sourceItems.length,
+          modules: Array.isArray(res.modules) ? res.modules.slice(0, 200) : [],
+          items: visibleItems,
+          queryText: queryText,
+          truncated: filteredItems.length > visibleItems.length,
+          libraryEmpty: res.libraryEmpty === true,
+        };
+      });
+    }
+
+    function assistantBuildCaseMatchFieldMap(item) {
+      var row = item && typeof item === 'object' ? item : {};
+      var precondition = row.precondition !== undefined && row.precondition !== null ? row.precondition : row.preconditions;
+      var moduleText = assistantNormalizeMissingLibraryText(row.module);
+      var titleText = assistantNormalizeMissingLibraryText(row.title);
+      var preText = assistantNormalizeMissingLibraryText(precondition);
+      var stepsText = assistantNormalizeMissingLibraryText(row.steps);
+      var expectedText = assistantNormalizeMissingLibraryText(row.expected);
+      return {
+        module: moduleText,
+        title: titleText,
+        precondition: preText,
+        steps: stepsText,
+        expected: expectedText,
+        combined: [moduleText, titleText, preText, stepsText, expectedText].filter(Boolean).join('\n'),
+      };
+    }
+
+    function assistantBuildMissingLibraryKeywordInfo(item) {
+      var row = item && typeof item === 'object' ? item : {};
+      return {
+        module: typeof buildMissingReminderKeywords === 'function' ? buildMissingReminderKeywords(row.module || '') : [],
+        title: typeof buildMissingReminderKeywords === 'function' ? buildMissingReminderKeywords(row.title || '') : [],
+        precondition: typeof buildMissingReminderKeywords === 'function' ? buildMissingReminderKeywords(row.precondition || '') : [],
+        steps: typeof buildMissingReminderKeywords === 'function' ? buildMissingReminderKeywords(row.steps || '') : [],
+        expected: typeof buildMissingReminderKeywords === 'function' ? buildMissingReminderKeywords(row.expected || '') : [],
+      };
+    }
+
+    function assistantCollectMissingLibraryKeywordHits(text, keywords, limit) {
+      var sourceText = assistantNormalizeMissingLibraryText(text);
+      var list = Array.isArray(keywords) ? keywords : [];
+      var max = Number(limit);
+      if (!Number.isFinite(max) || max <= 0) max = 3;
+      var hits = [];
+      var seen = {};
+      if (!sourceText || !list.length) return hits;
+      for (var i = 0; i < list.length; i += 1) {
+        var keyword = list[i] === undefined || list[i] === null ? '' : String(list[i]).trim().toLowerCase();
+        if (!keyword || seen[keyword]) continue;
+        if (sourceText.indexOf(keyword) === -1) continue;
+        seen[keyword] = true;
+        hits.push(keyword);
+        if (hits.length >= max) break;
+      }
+      return hits;
+    }
+
+    function assistantResolveMissingLibraryMatchLevel(score) {
+      var num = Number(score);
+      if (!Number.isFinite(num)) return '低';
+      if (num >= 5) return '高';
+      if (num >= 3) return '中';
+      return '低';
+    }
+
+    function assistantCompareCrossPageMissingCaseMatch(a, b) {
+      var left = a && typeof a === 'object' ? a : {};
+      var right = b && typeof b === 'object' ? b : {};
+      var strictA = left.strictMatched === true ? 1 : 0;
+      var strictB = right.strictMatched === true ? 1 : 0;
+      if (strictA !== strictB) return strictB - strictA;
+      var scoreA = Number(left.score);
+      var scoreB = Number(right.score);
+      if (!Number.isFinite(scoreA)) scoreA = 0;
+      if (!Number.isFinite(scoreB)) scoreB = 0;
+      if (scoreA !== scoreB) return scoreB - scoreA;
+      var fieldHitA = Number(left.fieldHitCount);
+      var fieldHitB = Number(right.fieldHitCount);
+      if (!Number.isFinite(fieldHitA)) fieldHitA = 0;
+      if (!Number.isFinite(fieldHitB)) fieldHitB = 0;
+      if (fieldHitA !== fieldHitB) return fieldHitB - fieldHitA;
+      var caseA = Number(left.currentCase ? left.currentCase.index : 0);
+      var caseB = Number(right.currentCase ? right.currentCase.index : 0);
+      if (!Number.isFinite(caseA)) caseA = 0;
+      if (!Number.isFinite(caseB)) caseB = 0;
+      if (caseA !== caseB) return caseA - caseB;
+      var missingA = Number(left.missingItem ? left.missingItem.index : 0);
+      var missingB = Number(right.missingItem ? right.missingItem.index : 0);
+      if (!Number.isFinite(missingA)) missingA = 0;
+      if (!Number.isFinite(missingB)) missingB = 0;
+      return missingA - missingB;
+    }
+
+    function assistantResolveCrossPageMissingCaseCandidateLevel(match) {
+      var row = match && typeof match === 'object' ? match : {};
+      if (row.strictMatched === true) return '高相关';
+      var score = Number(row.score);
+      if (!Number.isFinite(score)) score = 0;
+      var fieldHitCount = Number(row.fieldHitCount);
+      if (!Number.isFinite(fieldHitCount)) fieldHitCount = 0;
+      var titleHitCount = Number(row.titleHitCount);
+      if (!Number.isFinite(titleHitCount)) titleHitCount = 0;
+      var preHitCount = Number(row.preHitCount);
+      if (!Number.isFinite(preHitCount)) preHitCount = 0;
+      var stepHitCount = Number(row.stepHitCount);
+      if (!Number.isFinite(stepHitCount)) stepHitCount = 0;
+      var expectedHitCount = Number(row.expectedHitCount);
+      if (!Number.isFinite(expectedHitCount)) expectedHitCount = 0;
+      if (score >= 4 || (titleHitCount && fieldHitCount >= 2) || (stepHitCount + expectedHitCount) >= 2) return '高相关候选';
+      if (score >= 2 || fieldHitCount >= 2 || titleHitCount || preHitCount) return '建议关注';
+      return '弱相关候选';
+    }
+
+    function assistantShouldKeepCrossPageMissingCaseCandidate(match) {
+      var row = match && typeof match === 'object' ? match : {};
+      if (row.strictMatched === true) return true;
+      var fieldHitCount = Number(row.fieldHitCount);
+      if (!Number.isFinite(fieldHitCount) || fieldHitCount <= 0) return false;
+      var titleHitCount = Number(row.titleHitCount);
+      if (!Number.isFinite(titleHitCount)) titleHitCount = 0;
+      var moduleHitCount = Number(row.moduleHitCount);
+      if (!Number.isFinite(moduleHitCount)) moduleHitCount = 0;
+      var preHitCount = Number(row.preHitCount);
+      if (!Number.isFinite(preHitCount)) preHitCount = 0;
+      var stepHitCount = Number(row.stepHitCount);
+      if (!Number.isFinite(stepHitCount)) stepHitCount = 0;
+      var expectedHitCount = Number(row.expectedHitCount);
+      if (!Number.isFinite(expectedHitCount)) expectedHitCount = 0;
+      if (titleHitCount > 0) return true;
+      if ((stepHitCount + expectedHitCount) >= 2) return true;
+      if (fieldHitCount >= 2) return true;
+      return moduleHitCount > 0 && (preHitCount > 0 || stepHitCount > 0 || expectedHitCount > 0);
+    }
+
+    function assistantBuildCrossPageMissingCasePairKey(match) {
+      var row = match && typeof match === 'object' ? match : {};
+      var currentCase = row.currentCase && typeof row.currentCase === 'object' ? row.currentCase : {};
+      var missingItem = row.missingItem && typeof row.missingItem === 'object' ? row.missingItem : {};
+      var caseKey = String(currentCase.id || currentCase.index || '');
+      var missingKey = String(missingItem.id || missingItem.index || '');
+      return caseKey + '::' + missingKey;
+    }
+
+    function assistantDecorateCrossPageMissingCaseMatch(match, index) {
+      var row = match && typeof match === 'object' ? match : {};
+      return {
+        index: Number(index) + 1,
+        score: Number(row.score) || 0,
+        matchLevel: row.matchLevel ? String(row.matchLevel) : '',
+        candidateLevel: row.candidateLevel ? String(row.candidateLevel) : assistantResolveCrossPageMissingCaseCandidateLevel(row),
+        strictMatched: row.strictMatched === true,
+        fieldHitCount: Number(row.fieldHitCount) || 0,
+        moduleHitCount: Number(row.moduleHitCount) || 0,
+        titleHitCount: Number(row.titleHitCount) || 0,
+        preHitCount: Number(row.preHitCount) || 0,
+        stepHitCount: Number(row.stepHitCount) || 0,
+        expectedHitCount: Number(row.expectedHitCount) || 0,
+        reasons: Array.isArray(row.reasons) ? row.reasons.slice(0, 4) : [],
+        keywordHits: row.keywordHits && typeof row.keywordHits === 'object' ? {
+          module: Array.isArray(row.keywordHits.module) ? row.keywordHits.module.slice(0, 2) : [],
+          title: Array.isArray(row.keywordHits.title) ? row.keywordHits.title.slice(0, 4) : [],
+          precondition: Array.isArray(row.keywordHits.precondition) ? row.keywordHits.precondition.slice(0, 3) : [],
+          steps: Array.isArray(row.keywordHits.steps) ? row.keywordHits.steps.slice(0, 4) : [],
+          expected: Array.isArray(row.keywordHits.expected) ? row.keywordHits.expected.slice(0, 4) : [],
+        } : {
+          module: [],
+          title: [],
+          precondition: [],
+          steps: [],
+          expected: [],
+        },
+        currentCase: row.currentCase,
+        missingItem: row.missingItem,
+      };
+    }
+
+    function assistantComputeCrossPageMissingCaseMatch(caseItem, missingItem) {
+      var currentCase = caseItem && typeof caseItem === 'object' ? caseItem : {};
+      var target = missingItem && typeof missingItem === 'object' ? missingItem : {};
+      var caseMap = assistantBuildCaseMatchFieldMap(currentCase);
+      var keywordInfo = assistantBuildMissingLibraryKeywordInfo(target);
+      var score = 0;
+      var reasons = [];
+      var moduleHits = assistantCollectMissingLibraryKeywordHits(caseMap.combined, keywordInfo.module, 2);
+      var titleHits = assistantCollectMissingLibraryKeywordHits(caseMap.combined, keywordInfo.title, 4);
+      var preHits = assistantCollectMissingLibraryKeywordHits(caseMap.precondition + '\n' + caseMap.steps + '\n' + caseMap.expected, keywordInfo.precondition, 3);
+      var stepHits = assistantCollectMissingLibraryKeywordHits(caseMap.steps + '\n' + caseMap.expected, keywordInfo.steps, 4);
+      var expectedHits = assistantCollectMissingLibraryKeywordHits(caseMap.expected + '\n' + caseMap.steps, keywordInfo.expected, 4);
+      if (moduleHits.length) {
+        score += 1;
+        reasons.push('模块命中：' + moduleHits.join('、'));
+      }
+      if (titleHits.length) {
+        score += Math.min(3, titleHits.length + 1);
+        reasons.push('标题命中：' + titleHits.join('、'));
+      }
+      if (preHits.length) {
+        score += 1;
+        reasons.push('前置命中：' + preHits.join('、'));
+      }
+      if (stepHits.length) {
+        score += 1;
+        reasons.push('步骤命中：' + stepHits.join('、'));
+      }
+      if (expectedHits.length) {
+        score += 1;
+        reasons.push('预期命中：' + expectedHits.join('、'));
+      }
+      var fieldHitCount = 0;
+      if (moduleHits.length) fieldHitCount += 1;
+      if (titleHits.length) fieldHitCount += 1;
+      if (preHits.length) fieldHitCount += 1;
+      if (stepHits.length) fieldHitCount += 1;
+      if (expectedHits.length) fieldHitCount += 1;
+      if (!fieldHitCount) return null;
+      var strictMatched = true;
+      if (score < 2 && titleHits.length < 2 && fieldHitCount < 2 && !(stepHits.length && expectedHits.length)) strictMatched = false;
+      if (!titleHits.length && !moduleHits.length && !(stepHits.length && expectedHits.length)) strictMatched = false;
+      var result = {
+        score: score,
+        matchLevel: assistantResolveMissingLibraryMatchLevel(score),
+        strictMatched: strictMatched,
+        fieldHitCount: fieldHitCount,
+        moduleHitCount: moduleHits.length,
+        titleHitCount: titleHits.length,
+        preHitCount: preHits.length,
+        stepHitCount: stepHits.length,
+        expectedHitCount: expectedHits.length,
+        reasons: reasons,
+        keywordHits: {
+          module: moduleHits,
+          title: titleHits,
+          precondition: preHits,
+          steps: stepHits,
+          expected: expectedHits,
+        },
+        currentCase: {
+          index: currentCase.index === undefined || currentCase.index === null ? '' : currentCase.index,
+          id: currentCase.id === undefined || currentCase.id === null ? '' : String(currentCase.id),
+          module: currentCase.module === undefined || currentCase.module === null ? '' : String(currentCase.module),
+          title: currentCase.title === undefined || currentCase.title === null ? '' : String(currentCase.title),
+          priority: currentCase.priority === undefined || currentCase.priority === null ? '' : String(currentCase.priority),
+          precondition: currentCase.precondition === undefined || currentCase.precondition === null ? '' : String(currentCase.precondition),
+          steps: currentCase.steps === undefined || currentCase.steps === null ? '' : String(currentCase.steps),
+          expected: currentCase.expected === undefined || currentCase.expected === null ? '' : String(currentCase.expected),
+        },
+        missingItem: {
+          index: target.index === undefined || target.index === null ? '' : target.index,
+          id: target.id === undefined || target.id === null ? '' : String(target.id),
+          module: target.module === undefined || target.module === null ? '' : String(target.module),
+          typeLabel: target.typeLabel === undefined || target.typeLabel === null ? '' : String(target.typeLabel),
+          title: target.title === undefined || target.title === null ? '' : String(target.title),
+          priority: target.priority === undefined || target.priority === null ? '' : String(target.priority),
+          precondition: target.precondition === undefined || target.precondition === null ? '' : String(target.precondition),
+          steps: target.steps === undefined || target.steps === null ? '' : String(target.steps),
+          expected: target.expected === undefined || target.expected === null ? '' : String(target.expected),
+        },
+      };
+      result.candidateLevel = assistantResolveCrossPageMissingCaseCandidateLevel(result);
+      return result;
+    }
+
+    function assistantMatchCurrentCasesWithMissingLibrary(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var caseLimit = Number(opts.caseLimit);
+      if (!Number.isFinite(caseLimit) || caseLimit <= 0) caseLimit = 1000;
+      if (caseLimit > 2000) caseLimit = 2000;
+      var matchLimit = Number(opts.limit);
+      if (!Number.isFinite(matchLimit) || matchLimit <= 0) matchLimit = 60;
+      if (matchLimit > 500) matchLimit = 500;
+      var candidateLimit = Number(opts.candidateLimit);
+      if (!Number.isFinite(candidateLimit) || candidateLimit <= 0) candidateLimit = Math.max(matchLimit * 2, 40);
+      if (candidateLimit > 200) candidateLimit = 200;
+      var candidatePerMissingLimit = Number(opts.candidatePerMissingLimit);
+      if (!Number.isFinite(candidatePerMissingLimit) || candidatePerMissingLimit <= 0) candidatePerMissingLimit = 3;
+      if (candidatePerMissingLimit > 5) candidatePerMissingLimit = 5;
+      return assistantListCurrentCases({
+        limit: caseLimit,
+        scope: 'editor',
+        requireEditor: true,
+        detailLevel: 'full',
+      }).then(function(currentCases) {
+        var currentRes = currentCases && typeof currentCases === 'object' ? currentCases : null;
+        var currentItems = currentRes && Array.isArray(currentRes.items) ? currentRes.items : [];
+        if (!currentRes || currentRes.ok !== true || !currentItems.length || !currentRes.caseFile || typeof currentRes.caseFile !== 'object') {
+          return {
+            ok: true,
+            hasContext: false,
+            reason: 'no-current-cases',
+            projectId: assistantResolveMissingLibraryProjectId(opts),
+            currentCaseTotal: currentRes && Number.isFinite(Number(currentRes.total)) ? Number(currentRes.total) : currentItems.length,
+            missingLibraryTotal: 0,
+            totalModules: 0,
+            matchTotal: 0,
+            matchedCaseCount: 0,
+            matchedMissingItemCount: 0,
+            candidateTotal: 0,
+            candidateMatchedCaseCount: 0,
+            candidateMatchedMissingItemCount: 0,
+            matches: [],
+            candidates: [],
+            truncated: false,
+            candidateTruncated: false,
+            libraryEmpty: false,
+          };
+        }
+        return assistantLoadMissingLibraryProjectData({ projectId: assistantResolveMissingLibraryProjectId({ currentCases: currentRes, projectId: opts.projectId }) })
+          .then(function(libraryRes) {
+            if (!libraryRes || libraryRes.ok !== true) return libraryRes;
+            var missingItems = Array.isArray(libraryRes.items) ? libraryRes.items : [];
+            var matches = [];
+            var candidates = [];
+            var matchedCaseMap = {};
+            var matchedMissingMap = {};
+            var candidateCaseMap = {};
+            var candidateMissingMap = {};
+            var candidatePairMap = {};
+            missingItems.forEach(function(missingItem) {
+              var rankedMatches = [];
+              currentItems.forEach(function(caseItem) {
+                var nextMatch = assistantComputeCrossPageMissingCaseMatch(caseItem, missingItem);
+                if (!nextMatch) return;
+                rankedMatches.push(nextMatch);
+              });
+              if (!rankedMatches.length) return;
+              rankedMatches.sort(assistantCompareCrossPageMissingCaseMatch);
+              var bestStrict = null;
+              for (var i = 0; i < rankedMatches.length; i += 1) {
+                if (rankedMatches[i] && rankedMatches[i].strictMatched === true) {
+                  bestStrict = rankedMatches[i];
+                  break;
+                }
+              }
+              var bestStrictKey = '';
+              if (bestStrict) {
+                matches.push(bestStrict);
+                bestStrictKey = assistantBuildCrossPageMissingCasePairKey(bestStrict);
+                var caseKey = String(bestStrict.currentCase.id || bestStrict.currentCase.index || matches.length);
+                var missingKey = String(bestStrict.missingItem.id || bestStrict.missingItem.index || matches.length);
+                matchedCaseMap[caseKey] = true;
+                matchedMissingMap[missingKey] = true;
+              }
+              var candidateCount = 0;
+              rankedMatches.forEach(function(row) {
+                if (candidateCount >= candidatePerMissingLimit) return;
+                if (!assistantShouldKeepCrossPageMissingCaseCandidate(row)) return;
+                var pairKey = assistantBuildCrossPageMissingCasePairKey(row);
+                if (!pairKey) return;
+                if (bestStrictKey && pairKey === bestStrictKey) return;
+                if (candidatePairMap[pairKey]) return;
+                candidatePairMap[pairKey] = true;
+                candidates.push(row);
+                candidateCaseMap[String(row.currentCase.id || row.currentCase.index || candidates.length)] = true;
+                candidateMissingMap[String(row.missingItem.id || row.missingItem.index || candidates.length)] = true;
+                candidateCount += 1;
+              });
+            });
+            matches.sort(assistantCompareCrossPageMissingCaseMatch);
+            candidates.sort(assistantCompareCrossPageMissingCaseMatch);
+            var visibleMatches = matches.slice(0, matchLimit).map(function(match, index) {
+              return assistantDecorateCrossPageMissingCaseMatch(match, index);
+            });
+            var visibleCandidates = candidates.slice(0, candidateLimit).map(function(match, index) {
+              return assistantDecorateCrossPageMissingCaseMatch(match, index);
+            });
+            return {
+              ok: true,
+              hasContext: true,
+              scope: 'cross-page',
+              projectId: currentRes.projectId || libraryRes.projectId || '',
+              projectName: libraryRes.projectName || '',
+              caseFile: currentRes.caseFile && typeof currentRes.caseFile === 'object' ? Object.assign({}, currentRes.caseFile) : null,
+              currentCaseTotal: Number.isFinite(Number(currentRes.total)) ? Number(currentRes.total) : currentItems.length,
+              missingLibraryTotal: Number(libraryRes.totalItems) || missingItems.length,
+              totalModules: Number(libraryRes.totalModules) || 0,
+              matchTotal: matches.length,
+              matchedCaseCount: Object.keys(matchedCaseMap).length,
+              matchedMissingItemCount: Object.keys(matchedMissingMap).length,
+              candidateTotal: candidates.length,
+              candidateMatchedCaseCount: Object.keys(candidateCaseMap).length,
+              candidateMatchedMissingItemCount: Object.keys(candidateMissingMap).length,
+              matches: visibleMatches,
+              candidates: visibleCandidates,
+              truncated: matches.length > visibleMatches.length,
+              candidateTruncated: candidates.length > visibleCandidates.length,
+              libraryEmpty: libraryRes.libraryEmpty === true,
+            };
+          });
+      });
     }
 
     function assistantNormalizeTempExecCaseItem(item, index) {
@@ -6385,6 +7133,8 @@
       if (raw === 'page.get_data' || raw === 'query_page_data' || raw === 'page_data') return 'page.get_data';
       if (raw === 'nav.switch_tab' || raw === 'navigate' || raw === 'switch_tab') return 'nav.switch_tab';
       if (raw === 'cases.list_current' || raw === 'query_case_list' || raw === 'case_list') return 'cases.list_current';
+      if (raw === 'missing_library.list_current' || raw === 'missing_library_list_current' || raw === 'list_missing_library' || raw === 'missing_case_library_list') return 'missing_library.list_current';
+      if (raw === 'cross_page.match_missing_cases' || raw === 'cross_page_match_missing_cases' || raw === 'match_missing_cases' || raw === 'match_case_missing_library') return 'cross_page.match_missing_cases';
       if (raw === 'ui.list_controls' || raw === 'list_controls' || raw === 'list_ui_controls') return 'ui.list_controls';
       if (raw === 'ui.click_control' || raw === 'click_control' || raw === 'click_ui_control') return 'ui.click_control';
       if (raw === 'ui.fill_input' || raw === 'fill_input' || raw === 'fill_ui_input') return 'ui.fill_input';
@@ -6415,6 +7165,8 @@
         { name: 'page.get_data', mode: 'read', description: '读取指定页面的数据快照' },
         { name: 'nav.switch_tab', mode: 'write', description: '切换到目标页签' },
         { name: 'cases.list_current', mode: 'read', description: '读取当前页面或项目用例列表' },
+        { name: 'missing_library.list_current', mode: 'read', description: '读取当前项目的漏测/易漏用例库，可跨页面查询' },
+        { name: 'cross_page.match_missing_cases', mode: 'read', description: '将当前页面用例与当前项目漏测用例库做跨页面匹配' },
         { name: 'ui.list_controls', mode: 'read', description: '列出当前页可操作控件（按钮/输入框/选择器等）' },
         { name: 'ui.click_control', mode: 'write', description: '点击指定控件（写操作会触发确认）' },
         { name: 'ui.fill_input', mode: 'write', description: '填写输入控件并触发输入事件' },
@@ -6467,6 +7219,22 @@
         return assistantListCurrentCases(payload).then(function(res) {
           if (!res || res.ok !== true) {
             return { ok: false, tool: tool, data: res || null, reason: res && res.reason ? String(res.reason) : '读取用例失败' };
+          }
+          return { ok: true, tool: tool, data: res };
+        });
+      }
+      if (tool === 'missing_library.list_current') {
+        return assistantReadMissingLibrarySnapshot(payload).then(function(res) {
+          if (!res || res.ok !== true) {
+            return { ok: false, tool: tool, data: res || null, reason: res && res.reason ? String(res.reason) : '读取漏测用例库失败' };
+          }
+          return { ok: true, tool: tool, data: res };
+        });
+      }
+      if (tool === 'cross_page.match_missing_cases') {
+        return assistantMatchCurrentCasesWithMissingLibrary(payload).then(function(res) {
+          if (!res || res.ok !== true) {
+            return { ok: false, tool: tool, data: res || null, reason: res && res.reason ? String(res.reason) : '跨页面匹配失败' };
           }
           return { ok: true, tool: tool, data: res };
         });
@@ -6677,6 +7445,7 @@
       webSearch: assistantSearchWeb,
       getSettings: assistantGetSettings,
       listModels: function() { return typeof listAssistantModels === 'function' ? listAssistantModels() : []; },
+      getSelectedModelInfo: assistantGetSelectedModelInfo,
       callModel: assistantCallModel,
       runCaseGeneration: assistantRunCaseGeneration,
       runMissingRecommendation: assistantRunMissingRecommendation,

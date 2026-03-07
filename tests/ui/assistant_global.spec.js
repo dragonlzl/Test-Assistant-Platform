@@ -1,6 +1,15 @@
 const { test, expect } = require('@playwright/test');
 
 const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wn0k1cAAAAASUVORK5CYII=';
+
+function makeTinyPngFile(name) {
+  return {
+    name: name,
+    mimeType: 'image/png',
+    buffer: Buffer.from(TINY_PNG_BASE64, 'base64'),
+  };
+}
 
 async function allowLocalOnly(page) {
   await page.route('**/*', (route) => {
@@ -3231,6 +3240,114 @@ test.describe('全局AI助手', () => {
     expect(rendered.text).toContain('离线');
   });
 
+  test('模型可调用 markdown_table scaffold 时也应支持展开查看', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.toolResult && payload.toolResult.tool === 'missing_library.list_current') {
+            return {
+              ok: true,
+              content: '{"mcp":{"tool":"assistant.render_scaffold","args":{"scaffold":"markdown_table","title":"漏测用例库列表","headers":["序号","ID","模块","类型","标题","优先级"],"rows":[["1","1","云存档","白嫖","皮肤解锁","P1"],["2","2","云存档","白嫖","撒大声地","P2"],["3","3","云存档","白嫖","阿斯顿法师打发","P3"]]}}}',
+            };
+          }
+          return {
+            ok: true,
+            content: '{"mcp":{"tool":"missing_library.list_current","args":{"limit":20}}}',
+          };
+        };
+      }
+      if (window.app && window.app.apiClient) {
+        window.app.apiClient.listMissingModules = async function(projectId) {
+          return [
+            { id: 'm1', project_id: projectId, name: '云存档', item_count: 3 },
+          ];
+        };
+        window.app.apiClient.listMissingModuleItems = async function() {
+          return [
+            { id: '1', title: '皮肤解锁', priority: 'P1', type_name: '白嫖', module_name: '云存档' },
+            { id: '2', title: '撒大声地', priority: 'P2', type_name: '白嫖', module_name: '云存档' },
+            { id: '3', title: '阿斯顿法师打发', priority: 'P3', type_name: '白嫖', module_name: '云存档' },
+          ];
+        };
+      }
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecActiveId = 'exec-file-1';
+        window.app.state.tempExecActiveFileId = 'exec-file-1';
+        window.app.state.tempExecFiles = [
+          { id: 'exec-file-1', name: '执行文件A', projectId: '2001', versionId: '301', cases: [] },
+        ];
+      }
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await page.fill('#assistantInput', '漏测用例库都有哪些用例');
+    await page.click('#assistantSendBtn');
+
+    const rendered = await page.evaluate(() => {
+      var cards = document.querySelectorAll('#assistantMessages .assistant-msg.ai');
+      if (!cards || !cards.length) {
+        return { hasTable: false, hasExpandButton: false, rowCount: 0, text: '' };
+      }
+      var last = cards[cards.length - 1];
+      var table = last ? last.querySelector('table.assistant-msg-table') : null;
+      var button = last ? last.querySelector('.assistant-case-table-expand-btn') : null;
+      return {
+        hasTable: Boolean(table),
+        hasExpandButton: Boolean(button),
+        rowCount: table ? table.querySelectorAll('tbody tr').length : 0,
+        text: String(last && last.textContent ? last.textContent : ''),
+      };
+    });
+    expect(rendered.hasTable).toBeTruthy();
+    expect(rendered.hasExpandButton).toBeTruthy();
+    expect(rendered.rowCount).toBe(3);
+    expect(rendered.text).toContain('漏测用例库列表');
+
+    const expandBtn = page.locator('#assistantMessages .assistant-case-table-expand-btn').last();
+    await expect(expandBtn).toBeVisible();
+    await expandBtn.click();
+    await expect(page.locator('#assistantCasePreview')).not.toHaveClass(/hidden/);
+
+    const previewMeta = await page.evaluate(() => {
+      var body = document.getElementById('assistantCasePreviewBody');
+      var table = body ? body.querySelector('table.assistant-msg-table') : null;
+      var firstHead = table ? table.querySelector('thead th') : null;
+      var firstCell = table ? table.querySelector('tbody td') : null;
+      return {
+        hasTable: Boolean(table),
+        headText: firstHead ? String(firstHead.textContent || '') : '',
+        firstCellText: firstCell ? String(firstCell.textContent || '') : '',
+        rowCount: table ? table.querySelectorAll('tbody tr').length : 0,
+      };
+    });
+    expect(previewMeta.hasTable).toBeTruthy();
+    expect(previewMeta.headText).toContain('序号');
+    expect(previewMeta.firstCellText).toContain('1');
+    expect(previewMeta.rowCount).toBe(3);
+  });
+
   test('模型可调用展示 scaffold 渲染标准用例表', async ({ page }) => {
     const modelId = 'assistant-model-1';
 
@@ -5744,4 +5861,446 @@ test.describe('全局AI助手', () => {
       return hasWeather && hasCity;
     })).toBe(true);
   });
+  test('助手可在执行页跨页面匹配漏测用例库，并由模型自主调用工具', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      window.__assistantCrossPageToolCalls = [];
+      window.__assistantCrossPageModelCalls = [];
+      window.__assistantCrossPageToolPayload = null;
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecActiveId = 'exec-cross-1';
+        window.app.state.tempExecActiveFileId = 'exec-cross-1';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-cross-1',
+            name: '联机死亡复盘',
+            projectId: '3001',
+            cases: [
+              {
+                id: 'c1',
+                module: '联机',
+                title: '联机后玩家死亡回放',
+                priority: 'P1',
+                precondition: '双人联机房间',
+                steps: '玩家死亡后查看回放',
+                expected: '死亡信息同步',
+              },
+              {
+                id: 'c2',
+                module: '身份',
+                title: '死亡后身份牌展示',
+                priority: 'P1',
+                precondition: '玩家已出局',
+                steps: '死亡结算后查看身份牌',
+                expected: '身份牌展示正确',
+              },
+            ],
+          },
+        ];
+      }
+      if (window.app && window.app.apiClient) {
+        window.app.apiClient.listMissingModules = async function(projectId) {
+          return [
+            { id: 'm1', project_id: projectId, name: '联机', item_count: 1 },
+            { id: 'm2', project_id: projectId, name: '身份', item_count: 2 },
+          ];
+        };
+        window.app.apiClient.listMissingModuleItems = async function(moduleId) {
+          if (String(moduleId) === 'm1') {
+            return [
+              {
+                id: 'mi-1',
+                title: '联机状态下死亡信息同步',
+                priority: 'P1',
+                precondition: '多人联机房间',
+                steps: '玩家死亡后观察队友视角',
+                expected: '死亡信息同步到全部客户端',
+              },
+            ];
+          }
+          if (String(moduleId) === 'm2') {
+            return [
+              {
+                id: 'mi-2',
+                title: '死亡后身份牌展示',
+                priority: 'P1',
+                precondition: '玩家出局',
+                steps: '查看死亡结算',
+                expected: '身份牌展示正确',
+              },
+              {
+                id: 'mi-3',
+                title: '白天投票动画',
+                priority: 'P2',
+                precondition: '正常白天',
+                steps: '发起投票',
+                expected: '动画正常',
+              },
+            ];
+          }
+          return [];
+        };
+      }
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var oldCallTool = window.app.assistantMcpApi.callTool;
+        window.app.assistantMcpApi.callTool = async function(name, args) {
+          var safeArgs = JSON.parse(JSON.stringify(args || {}));
+          window.__assistantCrossPageToolCalls.push({ name: String(name || ''), args: safeArgs });
+          return oldCallTool.apply(this, arguments);
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText, options) {
+          window.__assistantCrossPageModelCalls.push({
+            inputText: String(inputText || ''),
+            prompt: options && options.prompt ? String(options.prompt) : '',
+          });
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.toolResult && payload.toolResult.tool === 'cross_page.match_missing_cases') {
+            window.__assistantCrossPageToolPayload = payload.toolResult;
+            return {
+              ok: true,
+              content: [
+                '找到了 2 组匹配：',
+                '1. 联机后玩家死亡回放 -> 联机状态下死亡信息同步。',
+                '2. 死亡后身份牌展示 -> 死亡后身份牌展示。',
+              ].join('\n'),
+            };
+          }
+          return {
+            ok: true,
+            content: '{"mcp":{"tool":"cross_page.match_missing_cases","args":{"limit":20}}}',
+          };
+        };
+      }
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await page.fill('#assistantInput', '帮我看看当前的这份用例，有没有匹配的漏测用例库用例');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages')).toContainText('找到了 2 组匹配');
+    await expect(page.locator('#assistantMessages')).toContainText('联机后玩家死亡回放');
+    await expect(page.locator('#assistantMessages')).toContainText('死亡后身份牌展示');
+    await expect(page.locator('#assistantMessages')).not.toContainText('当前页面用例明细');
+
+    const toolCalls = await page.evaluate(() => window.__assistantCrossPageToolCalls || []);
+    expect(toolCalls.map(item => item.name)).toContain('cross_page.match_missing_cases');
+    expect(toolCalls.map(item => item.name)).not.toContain('cases.list_current');
+
+    const modelCalls = await page.evaluate(() => window.__assistantCrossPageModelCalls || []);
+    expect(modelCalls.length).toBeGreaterThanOrEqual(2);
+    expect(String(modelCalls[0] && modelCalls[0].prompt || '')).toContain('cross_page.match_missing_cases');
+
+    const toolPayload = await page.evaluate(() => window.__assistantCrossPageToolPayload || null);
+    expect(toolPayload && toolPayload.matchTotal).toBe(2);
+    expect(toolPayload && toolPayload.matchedCaseCount).toBe(2);
+    expect(toolPayload && toolPayload.missingLibraryTotal).toBe(3);
+  });
+
+  test('跨页面漏测匹配在规则未直命中时仍应把候选交给模型判断', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      window.__assistantCrossPageCandidateToolCalls = [];
+      window.__assistantCrossPageCandidateModelCalls = [];
+      window.__assistantCrossPageCandidatePayload = null;
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecActiveId = 'exec-cross-2';
+        window.app.state.tempExecActiveFileId = 'exec-cross-2';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-cross-2',
+            name: '主持人保护补测',
+            projectId: '3002',
+            cases: [
+              {
+                id: 'c-guard-1',
+                module: '流程',
+                title: '主持人离线保护',
+                priority: 'P1',
+                precondition: '玩家 长时间 未操作',
+                steps: '等待 倒计时 结束 后 观察 是否 自动 托管',
+                expected: '界面 给出 托管 提示',
+              },
+            ],
+          },
+        ];
+      }
+      if (window.app && window.app.apiClient) {
+        window.app.apiClient.listMissingModules = async function(projectId) {
+          return [
+            { id: 'm-guard', project_id: projectId, name: '挂机', item_count: 2 },
+          ];
+        };
+        window.app.apiClient.listMissingModuleItems = async function(moduleId) {
+          if (String(moduleId) === 'm-guard') {
+            return [
+              {
+                id: 'mi-guard-1',
+                title: '超时保护补测',
+                priority: 'P1',
+                precondition: '长时间 未操作',
+                steps: '等待 倒计时 结束',
+                expected: '系统 继续 推进',
+              },
+              {
+                id: 'mi-guard-2',
+                title: '发言动画补测',
+                priority: 'P2',
+                precondition: '正常 白天',
+                steps: '点击 麦克风',
+                expected: '发言 动画 正常',
+              },
+            ];
+          }
+          return [];
+        };
+      }
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var oldCallTool = window.app.assistantMcpApi.callTool;
+        window.app.assistantMcpApi.callTool = async function(name, args) {
+          var safeArgs = JSON.parse(JSON.stringify(args || {}));
+          window.__assistantCrossPageCandidateToolCalls.push({ name: String(name || ''), args: safeArgs });
+          return oldCallTool.apply(this, arguments);
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText, options) {
+          window.__assistantCrossPageCandidateModelCalls.push({
+            inputText: String(inputText || ''),
+            prompt: options && options.prompt ? String(options.prompt) : '',
+          });
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.toolResult && payload.toolResult.tool === 'cross_page.match_missing_cases') {
+            window.__assistantCrossPageCandidatePayload = payload.toolResult;
+            return {
+              ok: true,
+              content: [
+                '规则直命中 0 组，但我认为有 1 组高相关候选需要补看：',
+                '1. 主持人离线保护 -> 超时保护补测。',
+              ].join('\n'),
+            };
+          }
+          return {
+            ok: true,
+            content: '{"mcp":{"tool":"cross_page.match_missing_cases","args":{"limit":20}}}',
+          };
+        };
+      }
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await page.fill('#assistantInput', '帮我看看当前这份用例有没有需要补看的漏测用例库内容');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages')).toContainText('规则直命中 0 组');
+    await expect(page.locator('#assistantMessages')).toContainText('主持人离线保护');
+    await expect(page.locator('#assistantMessages')).toContainText('超时保护补测');
+    await expect(page.locator('#assistantMessages')).not.toContainText('暂未找到明确匹配项');
+
+    const toolCalls = await page.evaluate(() => window.__assistantCrossPageCandidateToolCalls || []);
+    expect(toolCalls.map(item => item.name)).toContain('cross_page.match_missing_cases');
+    expect(toolCalls.map(item => item.name)).not.toContain('cases.list_current');
+
+    const modelCalls = await page.evaluate(() => window.__assistantCrossPageCandidateModelCalls || []);
+    expect(modelCalls.length).toBeGreaterThanOrEqual(2);
+    expect(modelCalls.some(item => String(item && item.prompt || '').indexOf('不要把 matchTotal=0 直接回答成“没有相关用例”') !== -1)).toBe(true);
+
+    const toolPayload = await page.evaluate(() => window.__assistantCrossPageCandidatePayload || null);
+    expect(toolPayload && toolPayload.matchTotal).toBe(0);
+    expect(toolPayload && toolPayload.candidateTotal).toBeGreaterThan(0);
+    expect(toolPayload && Array.isArray(toolPayload.candidates)).toBe(true);
+    expect(String(toolPayload && toolPayload.candidates && toolPayload.candidates[0] && toolPayload.candidates[0].currentCase && toolPayload.candidates[0].currentCase.steps || '')).toContain('等待');
+    expect(String(toolPayload && toolPayload.candidates && toolPayload.candidates[0] && toolPayload.candidates[0].missingItem && toolPayload.candidates[0].missingItem.precondition || '')).toContain('长时间');
+  });
+
+  test('助手支持图片附件与文本一起发送给多模态模型', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      if (window.app && window.app.state && Array.isArray(window.app.state.models)) {
+        window.app.state.models.forEach(function(model) {
+          if (String(model && model.id || '') === 'assistant-model-1') {
+            model.capabilities = ['vision', 'image'];
+          }
+        });
+      }
+      window.__assistantMultimodalCalls = [];
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.getSelectedModelInfo = function() {
+          return {
+            configured: true,
+            usable: true,
+            modelId: 'assistant-model-1',
+            modelName: '助手测试模型',
+            supportsImage: true,
+            capabilities: ['vision', 'image'],
+          };
+        };
+        window.app.assistantApi.callModel = async function(userText, options) {
+          var blocks = options && Array.isArray(options.contentBlocks) ? options.contentBlocks : [];
+          window.__assistantMultimodalCalls.push({
+            userText: String(userText || ''),
+            blocks: JSON.parse(JSON.stringify(blocks)),
+          });
+          return { ok: true, content: '已结合 2 张图片和文本完成分析。' };
+        };
+      }
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await page.setInputFiles('#assistantImageInput', [
+      makeTinyPngFile('scene-a.png'),
+      makeTinyPngFile('scene-b.png'),
+    ]);
+    await expect(page.locator('#assistantAttachmentList .assistant-attachment-row')).toHaveCount(2);
+    await expect(page.locator('#assistantAttachmentList')).toContainText('scene-a.png');
+    await expect(page.locator('#assistantAttachmentList')).toContainText('scene-b.png');
+
+    await page.fill('#assistantInput', '请结合两张图片告诉我差异');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages')).toContainText('已结合 2 张图片和文本完成分析');
+    await expect(page.locator('#assistantMessages .assistant-msg.user .assistant-msg-image')).toHaveCount(2);
+
+    const call = await page.evaluate(() => {
+      var list = window.__assistantMultimodalCalls || [];
+      return list.length ? list[0] : null;
+    });
+    expect(call).not.toBeNull();
+    expect(String(call.userText || '')).toContain('请结合两张图片告诉我差异');
+    expect(Array.isArray(call.blocks)).toBe(true);
+    expect(call.blocks.filter(item => item && item.type === 'image')).toHaveLength(2);
+    expect(call.blocks.some(item => item && item.type === 'text' && String(item.text || '').indexOf('请结合两张图片告诉我差异') !== -1)).toBe(true);
+    expect(String(call.blocks[1] && call.blocks[1].dataUrl || '')).toContain('data:image/');
+  });
+
+  test('助手在当前模型不支持视觉时阻止图片发送', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      window.__assistantBlockedImageCalls = 0;
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function() {
+          window.__assistantBlockedImageCalls += 1;
+          return { ok: true, content: '不应被调用' };
+        };
+      }
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await page.setInputFiles('#assistantImageInput', [makeTinyPngFile('blocked.png')]);
+    await expect(page.locator('#assistantAttachmentList .assistant-attachment-row')).toHaveCount(1);
+    await page.fill('#assistantInput', '请识别这张图');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantStatus')).toContainText('不支持图片输入');
+    await expect(page.locator('#assistantAttachmentList .assistant-attachment-row')).toHaveCount(1);
+    await expect(page.locator('#assistantMessages .assistant-msg.user')).toHaveCount(0);
+    const blockedCalls = await page.evaluate(() => window.__assistantBlockedImageCalls || 0);
+    expect(blockedCalls).toBe(0);
+  });
+
+  test('助手回复中的 Markdown 图片会直接渲染展示', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate((tinyBase64) => {
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function() {
+          return {
+            ok: true,
+            content: '这是生成结果：\n\n![结果图](data:image/png;base64,' + tinyBase64 + ')',
+          };
+        };
+      }
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    }, TINY_PNG_BASE64);
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await page.fill('#assistantInput', '给我一张示意图');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages')).toContainText('这是生成结果');
+    await expect(page.locator('#assistantMessages .assistant-markdown-image').last()).toBeVisible();
+    await expect(page.locator('#assistantMessages .assistant-markdown-image').last()).toHaveAttribute('src', /data:image\/png;base64/);
+  });
+
 });

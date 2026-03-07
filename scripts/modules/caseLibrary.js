@@ -13758,7 +13758,131 @@
       return { items: ordered, matched: true };
     }
 
-  function buildEditorPagination(totalCases, pageIndex, totalPages, start, end) {
+
+  function buildAssistantMissingModuleSnapshot(module, index) {
+    var row = module && typeof module === 'object' ? module : {};
+    var itemCount = Number(row.item_count);
+    if (!Number.isFinite(itemCount) || itemCount < 0) itemCount = 0;
+    return {
+      index: Number(index) + 1,
+      id: row.id === undefined || row.id === null ? '' : String(row.id),
+      name: row.name === undefined || row.name === null ? '' : String(row.name),
+      projectId: row.project_id === undefined || row.project_id === null ? '' : String(row.project_id),
+      itemCount: itemCount,
+    };
+  }
+
+  function buildAssistantMissingItemSnapshot(item, filteredIndex, sourceIndex) {
+    var row = item && typeof item === 'object' ? item : {};
+    var typeIds = normalizeMissingTypeIds(row.type_ids);
+    if (!typeIds.length && row.type_id) {
+      typeIds = normalizeMissingTypeIds([row.type_id]);
+    }
+    var typeNames = [];
+    typeIds.forEach(function(typeId, idx) {
+      var base = Array.isArray(row.type_names) ? row.type_names[idx] : null;
+      if (!base && row.type_name && idx === 0) base = row.type_name;
+      var resolved = base || getMissingTypeNameById(typeId) || ('类型#' + typeId);
+      if (!resolved) return;
+      typeNames.push(String(resolved));
+    });
+    if (!typeNames.length && row.type_name) typeNames.push(String(row.type_name));
+    var moduleName = row.module_name || getMissingModuleNameById(row.module_id) || '';
+    return {
+      index: Number(sourceIndex) + 1,
+      filteredIndex: Number(filteredIndex) + 1,
+      sourceIndex: Number(sourceIndex) + 1,
+      id: row.id === undefined || row.id === null ? '' : String(row.id),
+      moduleId: row.module_id === undefined || row.module_id === null ? '' : String(row.module_id),
+      module: moduleName ? String(moduleName) : '',
+      typeIds: typeIds,
+      typeNames: typeNames,
+      typeLabel: typeNames.length ? typeNames.join('、') : '未分类',
+      title: row.title === undefined || row.title === null ? '' : String(row.title),
+      priority: row.priority === undefined || row.priority === null ? '' : String(row.priority),
+      precondition: row.precondition === undefined || row.precondition === null ? '' : String(row.precondition),
+      steps: row.steps === undefined || row.steps === null ? '' : String(row.steps),
+      expected: row.expected === undefined || row.expected === null ? '' : String(row.expected),
+    };
+  }
+
+  function getCurrentMissingViewSnapshot(options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var limit = Number(opts.limit);
+    if (!Number.isFinite(limit) || limit <= 0) limit = 40;
+    if (limit > 1000) limit = 1000;
+    var mv = state.missingView && typeof state.missingView === 'object' ? state.missingView : {};
+    var modules = Array.isArray(mv.modules) ? mv.modules : [];
+    var items = Array.isArray(mv.items) ? mv.items : [];
+    var projectId = mv.projectId === undefined || mv.projectId === null ? '' : String(mv.projectId);
+    if (!projectId && modules.length) {
+      var firstModule = modules[0] && typeof modules[0] === 'object' ? modules[0] : null;
+      if (firstModule && firstModule.project_id !== undefined && firstModule.project_id !== null) {
+        projectId = String(firstModule.project_id);
+      }
+    }
+    if (!projectId && !modules.length && !items.length) {
+      return {
+        ok: true,
+        hasContext: false,
+        reason: 'no-missing-view-context',
+        totalModules: 0,
+        total: 0,
+        totalAll: 0,
+        items: [],
+        modules: [],
+      };
+    }
+    var filteredIndexes = getMissingViewFilteredIndexes(items);
+    var total = filteredIndexes.length;
+    var pageSize = getPageSize();
+    var totalPages = total ? Math.ceil(total / pageSize) : 1;
+    var pageIndex = Number.isFinite(Number(mv.pageIndex)) ? Number(mv.pageIndex) : 0;
+    if (pageIndex < 0) pageIndex = 0;
+    if (pageIndex >= totalPages) pageIndex = Math.max(totalPages - 1, 0);
+    var start = pageIndex * pageSize;
+    var end = Math.min(total, start + pageSize);
+    var pageIndexes = filteredIndexes.slice(start, end);
+    var pageItems = pageIndexes.map(function(sourceIdx, idx) {
+      return buildAssistantMissingItemSnapshot(items[sourceIdx], start + idx, sourceIdx);
+    });
+    var previewItems = filteredIndexes.slice(0, limit).map(function(sourceIdx, idx) {
+      return buildAssistantMissingItemSnapshot(items[sourceIdx], idx, sourceIdx);
+    });
+    var typeFilters = mv.typeFilters instanceof Set ? Array.from(mv.typeFilters) : [];
+    var typeFilterLabels = typeFilters.map(function(typeId) {
+      if (String(typeId) === 'none') return '未分类';
+      return getMissingTypeNameById(typeId) || ('类型#' + typeId);
+    }).filter(Boolean);
+    var projectName = projectId && state.projectNameById && state.projectNameById[projectId]
+      ? String(state.projectNameById[projectId])
+      : (projectId ? ('项目#' + projectId) : '');
+    return {
+      ok: true,
+      hasContext: true,
+      scope: 'missing-view',
+      projectId: projectId,
+      projectName: projectName,
+      totalModules: modules.length,
+      total: total,
+      totalAll: items.length,
+      pageIndex: pageIndex,
+      currentPage: total ? (pageIndex + 1) : 1,
+      pageSize: pageSize,
+      totalPages: totalPages,
+      pageStart: total ? (start + 1) : 0,
+      pageEnd: end,
+      moduleIds: Array.isArray(mv.moduleIds) ? mv.moduleIds.map(function(id) { return String(id); }) : [],
+      typeFilters: typeFilters.map(function(id) { return String(id); }),
+      typeFilterLabels: typeFilterLabels.map(function(label) { return String(label); }),
+      modules: modules.map(function(module, idx) { return buildAssistantMissingModuleSnapshot(module, idx); }),
+      items: previewItems,
+      pageItems: pageItems,
+      truncated: total > previewItems.length,
+    };
+  }
+
+function buildEditorPagination(totalCases, pageIndex, totalPages, start, end) {
     var pageSize = getPageSize();
     var displayStart = totalCases ? start + 1 : 0;
     var displayEnd = totalCases ? Math.min(end, totalCases) : 0;
@@ -19674,6 +19798,7 @@
 	    window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
 	    window.app.caseLibraryApi.getCurrentEditorCaseSnapshot = getCurrentEditorCaseSnapshot;
 	    window.app.caseLibraryApi.getCurrentHistoryDetailSnapshot = getCurrentHistoryDetailSnapshot;
+	    window.app.caseLibraryApi.getCurrentMissingViewSnapshot = getCurrentMissingViewSnapshot;
 	    if (hasImportSelectDrawer) {
 	      window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
 	    }
@@ -19887,6 +20012,7 @@
 	    window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
 	    window.app.caseLibraryApi.getCurrentEditorCaseSnapshot = getCurrentEditorCaseSnapshot;
 	    window.app.caseLibraryApi.getCurrentHistoryDetailSnapshot = getCurrentHistoryDetailSnapshot;
+	    window.app.caseLibraryApi.getCurrentMissingViewSnapshot = getCurrentMissingViewSnapshot;
 	    window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
 	    window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
     window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;

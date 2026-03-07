@@ -15,6 +15,14 @@
   var casePreview = null;
   var casePreviewCloseBtn = null;
   var casePreviewBody = null;
+  var composerEl = null;
+  var attachBtn = null;
+  var imageInputEl = null;
+  var attachmentListEl = null;
+  var attachmentEmptyEl = null;
+
+  var pendingAttachments = [];
+  var attachmentPendingCount = 0;
 
   var historyLimit = 80;
   var conversationHistoryLimit = 12;
@@ -26,6 +34,9 @@
   var replyPending = false;
   var initialized = false;
   var assistantCaseTablePreviewLimit = 10;
+  var assistantInputImageMaxCount = 10;
+  var assistantInputImageMaxEdge = 1600;
+  var assistantInputImageMaxBytes = 4 * 1024 * 1024;
 
   function byId(id) {
     return document.getElementById(id);
@@ -53,7 +64,20 @@
       '  <div class="assistant-status" id="assistantStatus"></div>',
       '  <div class="assistant-messages" id="assistantMessages"></div>',
       '  <div class="assistant-input-row">',
-      '    <textarea id="assistantInput" placeholder="输入你的问题或操作指令"></textarea>',
+      '    <div class="assistant-composer" id="assistantComposer">',
+      '      <div class="assistant-attachments" id="assistantAttachments">',
+      '        <div class="assistant-attachment-empty" id="assistantAttachmentEmpty">可拖入、粘贴或添加多张图片，发送时会与下方文本一起提交。</div>',
+      '        <div class="assistant-attachment-list hidden" id="assistantAttachmentList"></div>',
+      '      </div>',
+      '      <div class="assistant-input-main">',
+      '        <div class="assistant-input-tools">',
+      '          <button class="link-toggle" id="assistantAttachBtn" type="button">添加图片</button>',
+      '          <span class="assistant-input-hint">支持图片拖入 / 粘贴，可与文字一起发送</span>',
+      '        </div>',
+      '        <textarea id="assistantInput" placeholder="输入你的问题或操作指令"></textarea>',
+      '      </div>',
+      '    </div>',
+      '    <input id="assistantImageInput" class="hidden" type="file" accept="image/*" multiple/>',
       '    <button id="assistantSendBtn" type="button">发送</button>',
       '  </div>',
       '</section>',
@@ -97,6 +121,396 @@
 
   function renderPlainMessageHtml(text) {
     return escapeHtml(text || '').replace(/\n/g, '<br/>');
+  }
+
+  function normalizeAssistantAttachmentName(name, fallback) {
+    var text = name === undefined || name === null ? '' : String(name).trim();
+    if (text) return text;
+    return fallback || '图片';
+  }
+
+  function sanitizeAssistantImageSrc(value) {
+    var text = value === undefined || value === null ? '' : String(value).trim();
+    if (!text) return '';
+    if (text.indexOf('data:image/') === 0) return text;
+    if (text.indexOf('blob:') === 0) return text;
+    if (text.indexOf('https://') === 0 || text.indexOf('http://') === 0) return text;
+    if (text.indexOf('/') === 0 || text.indexOf('./') === 0 || text.indexOf('../') === 0) return text;
+    return '';
+  }
+
+  function normalizeAssistantMessageAttachments(list) {
+    var items = Array.isArray(list) ? list : [];
+    var normalized = [];
+    items.forEach(function(item) {
+      if (!item || typeof item !== 'object') return;
+      var dataUrl = item.dataUrl === undefined || item.dataUrl === null ? '' : String(item.dataUrl).trim();
+      var url = item.url === undefined || item.url === null ? '' : String(item.url).trim();
+      if (!dataUrl && !url && !item.name) return;
+      normalized.push({
+        id: item.id ? String(item.id) : ('att-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)),
+        name: normalizeAssistantAttachmentName(item.name, '图片-' + (normalized.length + 1)),
+        type: item.type ? String(item.type) : '',
+        size: Number(item.size) || 0,
+        dataUrl: dataUrl,
+        url: url,
+      });
+    });
+    return normalized;
+  }
+
+  function cloneAssistantAttachments(list) {
+    return normalizeAssistantMessageAttachments(list).map(function(item) {
+      return {
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        size: item.size,
+        dataUrl: item.dataUrl,
+        url: item.url,
+      };
+    });
+  }
+
+  function buildAssistantAttachmentSummaryText(attachments) {
+    var list = normalizeAssistantMessageAttachments(attachments);
+    if (!list.length) return '';
+    var names = [];
+    for (var i = 0; i < list.length && i < 4; i += 1) {
+      names.push(list[i].name || ('图片' + (i + 1)));
+    }
+    var text = '[附图' + list.length + '张';
+    if (names.length) {
+      text += '：' + names.join('、');
+      if (list.length > names.length) text += ' 等';
+    }
+    return text + ']';
+  }
+
+  function composeAssistantConversationContent(text, attachments) {
+    var content = text === undefined || text === null ? '' : String(text).trim();
+    var attachmentText = buildAssistantAttachmentSummaryText(attachments);
+    if (content && attachmentText) return content + '\n' + attachmentText;
+    return content || attachmentText;
+  }
+
+  function normalizeAssistantContentBlocks(blocks) {
+    if (!Array.isArray(blocks)) return [];
+    var normalized = [];
+    blocks.forEach(function(block) {
+      if (!block || typeof block !== 'object') return;
+      if (block.type === 'text') {
+        var text = block.text === undefined || block.text === null ? '' : String(block.text);
+        if (text.trim()) normalized.push({ type: 'text', text: text });
+        return;
+      }
+      if (block.type === 'image') {
+        var dataUrl = block.dataUrl === undefined || block.dataUrl === null
+          ? (block.url === undefined || block.url === null ? '' : String(block.url))
+          : String(block.dataUrl);
+        dataUrl = dataUrl.trim();
+        if (!dataUrl) return;
+        normalized.push({ type: 'image', dataUrl: dataUrl });
+      }
+    });
+    return normalized;
+  }
+
+  function assistantContentBlocksHaveImage(blocks) {
+    var list = normalizeAssistantContentBlocks(blocks);
+    for (var i = 0; i < list.length; i += 1) {
+      if (list[i] && list[i].type === 'image') return true;
+    }
+    return false;
+  }
+
+  function isAssistantImageFile(file) {
+    if (!file) return false;
+    var type = file.type ? String(file.type).toLowerCase() : '';
+    if (type.indexOf('image/') === 0) return true;
+    var name = file.name ? String(file.name).toLowerCase() : '';
+    return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name);
+  }
+
+  function collectClipboardImageFiles(event) {
+    var clipboard = event && event.clipboardData;
+    var items = clipboard && clipboard.items ? clipboard.items : [];
+    var files = [];
+    for (var i = 0; i < items.length; i += 1) {
+      var item = items[i];
+      if (!item || item.kind !== 'file') continue;
+      var type = item.type ? String(item.type).toLowerCase() : '';
+      if (type.indexOf('image/') !== 0) continue;
+      var file = item.getAsFile ? item.getAsFile() : null;
+      if (file) files.push(file);
+    }
+    return files;
+  }
+
+  function collectDataTransferImageFiles(dataTransfer) {
+    var files = dataTransfer && dataTransfer.files ? dataTransfer.files : [];
+    var result = [];
+    for (var i = 0; i < files.length; i += 1) {
+      if (isAssistantImageFile(files[i])) result.push(files[i]);
+    }
+    return result;
+  }
+
+  function readAssistantBlobAsDataUrl(blob) {
+    return new Promise(function(resolve, reject) {
+      if (!blob) {
+        reject(new Error('missing_blob'));
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function() { resolve(String(reader.result || '')); };
+      reader.onerror = function() { reject(reader.error || new Error('读取图片失败')); };
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function estimateAssistantDataUrlBytes(dataUrl) {
+    if (!dataUrl) return 0;
+    var comma = dataUrl.indexOf(',');
+    if (comma === -1) return 0;
+    var b64 = dataUrl.slice(comma + 1);
+    var padding = 0;
+    var matched = b64.match(/=+$/);
+    if (matched && matched[0]) padding = matched[0].length;
+    return Math.max(0, Math.floor(b64.length * 3 / 4) - padding);
+  }
+
+  function loadAssistantImageByDataUrl(dataUrl) {
+    return new Promise(function(resolve, reject) {
+      var img = new Image();
+      img.onload = function() { resolve(img); };
+      img.onerror = function() { reject(new Error('图片解码失败')); };
+      img.src = dataUrl;
+    });
+  }
+
+  async function resizeAssistantDataUrl(dataUrl, maxEdge, mimeType, quality) {
+    if (!dataUrl) return '';
+    if (typeof document === 'undefined' || !document.createElement) return dataUrl;
+    var image;
+    try {
+      image = await loadAssistantImageByDataUrl(dataUrl);
+    } catch (err) {
+      return dataUrl;
+    }
+    var srcW = image.naturalWidth || image.width || 0;
+    var srcH = image.naturalHeight || image.height || 0;
+    if (!srcW || !srcH) return dataUrl;
+    var longest = Math.max(srcW, srcH);
+    var ratio = longest > maxEdge ? (maxEdge / longest) : 1;
+    var targetW = Math.max(1, Math.round(srcW * ratio));
+    var targetH = Math.max(1, Math.round(srcH * ratio));
+    var canvas = document.createElement('canvas');
+    canvas.width = targetW;
+    canvas.height = targetH;
+    var ctx2d = canvas.getContext('2d');
+    if (!ctx2d) return dataUrl;
+    ctx2d.drawImage(image, 0, 0, targetW, targetH);
+    var targetMime = mimeType || 'image/jpeg';
+    try {
+      return canvas.toDataURL(targetMime, quality);
+    } catch (err) {
+      try {
+        return canvas.toDataURL('image/jpeg', quality);
+      } catch (err2) {
+        return dataUrl;
+      }
+    }
+  }
+
+  async function preprocessAssistantImageFile(file) {
+    if (!file) return { ok: false, reason: 'missing_file' };
+    var dataUrl = '';
+    try {
+      dataUrl = await readAssistantBlobAsDataUrl(file);
+    } catch (err) {
+      return { ok: false, reason: 'read_failed' };
+    }
+    var best = await resizeAssistantDataUrl(dataUrl, assistantInputImageMaxEdge, null, 0.92);
+    if (!best) best = dataUrl;
+    var bytes = estimateAssistantDataUrlBytes(best);
+    if (bytes > assistantInputImageMaxBytes) {
+      var jpegHigh = await resizeAssistantDataUrl(best, assistantInputImageMaxEdge, 'image/jpeg', 0.85);
+      if (jpegHigh) {
+        best = jpegHigh;
+        bytes = estimateAssistantDataUrlBytes(best);
+      }
+    }
+    if (bytes > assistantInputImageMaxBytes) {
+      var jpegLow = await resizeAssistantDataUrl(best, assistantInputImageMaxEdge, 'image/jpeg', 0.72);
+      if (jpegLow) {
+        best = jpegLow;
+        bytes = estimateAssistantDataUrlBytes(best);
+      }
+    }
+    if (bytes > assistantInputImageMaxBytes) {
+      return { ok: false, reason: 'too_large' };
+    }
+    return {
+      ok: true,
+      attachment: {
+        id: 'att-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+        name: normalizeAssistantAttachmentName(file.name, '图片-' + (pendingAttachments.length + 1)),
+        type: file.type ? String(file.type) : '',
+        size: bytes,
+        dataUrl: best,
+      },
+    };
+  }
+
+  function buildAssistantRequestContentBlocks(text, attachments) {
+    var list = normalizeAssistantMessageAttachments(attachments);
+    var blocks = [];
+    var content = text === undefined || text === null ? '' : String(text).trim();
+    if (content) {
+      blocks.push({ type: 'text', text: content });
+    } else if (list.length) {
+      blocks.push({ type: 'text', text: '请结合我上传的图片直接分析并回答。' });
+    }
+    list.forEach(function(item) {
+      var dataUrl = item.dataUrl || item.url || '';
+      if (!dataUrl) return;
+      blocks.push({ type: 'image', dataUrl: dataUrl });
+    });
+    return blocks;
+  }
+
+  function renderPendingAttachments() {
+    if (!attachmentListEl) return;
+    attachmentListEl.innerHTML = '';
+    var hasAttachments = pendingAttachments.length > 0;
+    if (attachmentEmptyEl) {
+      attachmentEmptyEl.classList.toggle('hidden', hasAttachments);
+    }
+    attachmentListEl.classList.toggle('hidden', !hasAttachments);
+    pendingAttachments.forEach(function(item) {
+      var row = document.createElement('div');
+      row.className = 'assistant-attachment-row';
+      row.dataset.attachmentId = item.id || '';
+
+      var name = document.createElement('div');
+      name.className = 'assistant-attachment-name';
+      name.textContent = item.name || '图片';
+      name.title = item.name || '图片';
+      row.appendChild(name);
+
+      var removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'assistant-attachment-remove';
+      removeBtn.textContent = '移除';
+      removeBtn.dataset.attachmentId = item.id || '';
+      row.appendChild(removeBtn);
+
+      attachmentListEl.appendChild(row);
+    });
+  }
+
+  function removePendingAttachment(attachmentId) {
+    var targetId = attachmentId === undefined || attachmentId === null ? '' : String(attachmentId).trim();
+    if (!targetId) return false;
+    for (var i = 0; i < pendingAttachments.length; i += 1) {
+      var item = pendingAttachments[i];
+      if (!item || String(item.id || '') !== targetId) continue;
+      pendingAttachments.splice(i, 1);
+      renderPendingAttachments();
+      refreshSendState();
+      return true;
+    }
+    return false;
+  }
+
+  function clearPendingAttachments() {
+    pendingAttachments = [];
+    if (imageInputEl) imageInputEl.value = '';
+    renderPendingAttachments();
+    refreshSendState();
+  }
+
+  async function appendPendingAttachments(files, source) {
+    var inputList = Array.isArray(files) ? files : Array.prototype.slice.call(files || []);
+    if (!inputList.length) return { added: 0, ignored: 0, tooLarge: 0, failed: 0, overflow: 0 };
+    var imageFiles = inputList.filter(isAssistantImageFile);
+    var ignored = inputList.length - imageFiles.length;
+    var remaining = assistantInputImageMaxCount - pendingAttachments.length;
+    if (remaining <= 0) {
+      setStatus('当前最多可同时发送 ' + assistantInputImageMaxCount + ' 张图片。');
+      return { added: 0, ignored: inputList.length, tooLarge: 0, failed: 0, overflow: 0 };
+    }
+    var selected = imageFiles.slice(0, remaining);
+    var overflow = Math.max(0, imageFiles.length - selected.length);
+    var added = 0;
+    var tooLarge = 0;
+    var failed = 0;
+    attachmentPendingCount += selected.length;
+    refreshSendState();
+    try {
+      for (var i = 0; i < selected.length; i += 1) {
+        var prepared = await preprocessAssistantImageFile(selected[i]);
+        if (!prepared.ok || !prepared.attachment) {
+          if (prepared.reason === 'too_large') {
+            tooLarge += 1;
+          } else {
+            failed += 1;
+          }
+          continue;
+        }
+        pendingAttachments.push(prepared.attachment);
+        added += 1;
+      }
+    } finally {
+      attachmentPendingCount = Math.max(0, attachmentPendingCount - selected.length);
+      renderPendingAttachments();
+      refreshSendState();
+    }
+    var statusParts = [];
+    if (added > 0) statusParts.push('已添加 ' + added + ' 张图片');
+    if (overflow > 0) statusParts.push('超出上限的 ' + overflow + ' 张已忽略');
+    if (ignored > 0) statusParts.push('非图片内容 ' + ignored + ' 项已忽略');
+    if (tooLarge > 0) statusParts.push(tooLarge + ' 张图片过大未加入');
+    if (failed > 0) statusParts.push(failed + ' 张图片读取失败');
+    if (statusParts.length) {
+      setStatus(statusParts.join('，') + '。');
+    } else if (source) {
+      setStatus('未检测到可发送的图片。');
+    }
+    return { added: added, ignored: ignored, tooLarge: tooLarge, failed: failed, overflow: overflow };
+  }
+
+  function appendMessageAttachments(container, attachments, options) {
+    if (!container || typeof document === 'undefined' || !document.createElement) return;
+    var list = normalizeAssistantMessageAttachments(attachments);
+    if (!list.length) return;
+    var opts = options && typeof options === 'object' ? options : {};
+    var wrap = document.createElement('div');
+    wrap.className = 'assistant-msg-attachments';
+    list.forEach(function(item) {
+      var src = item.dataUrl || sanitizeAssistantImageSrc(item.url);
+      var card = document.createElement('figure');
+      card.className = 'assistant-msg-attachment';
+      if (src) {
+        var img = document.createElement('img');
+        img.className = 'assistant-msg-image';
+        img.loading = 'lazy';
+        img.alt = item.name || '图片';
+        img.src = src;
+        card.appendChild(img);
+      }
+      var caption = document.createElement('figcaption');
+      caption.className = 'assistant-msg-attachment-name';
+      caption.textContent = item.name || '图片';
+      card.appendChild(caption);
+      wrap.appendChild(card);
+    });
+    if (opts.prepend === true && container.firstChild) {
+      container.insertBefore(wrap, container.firstChild);
+      return;
+    }
+    container.appendChild(wrap);
   }
 
   function fallbackCopyText(text) {
@@ -461,21 +875,16 @@
     var caseTypeClass = tableMeta.hasExecutionResult ? 'assistant-case-table-exec' : 'assistant-case-table-no-exec';
     var tableClass = isCaseTable
       ? ('assistant-msg-table assistant-case-table ' + caseTypeClass)
-      : 'assistant-msg-table';
-    var wrapperClass = isCaseTable
-      ? 'assistant-table-scroll assistant-case-table-scroll'
-      : 'assistant-table-scroll';
+      : 'assistant-msg-table assistant-generic-table';
+    var wrapperClass = 'assistant-table-scroll assistant-case-table-scroll';
     var head = renderAssistantTableHeadHtml(renderHeaders);
     var body = renderAssistantTableBodyHtml(rows, renderHeaders.length);
-    if (!isCaseTable) {
-      return '<div class="' + wrapperClass + '">' + buildAssistantTableHtml(tableClass, head, body) + '</div>';
-    }
     var previewRows = rows;
     var previewSummary = '';
     var previewBody = body;
     var fullTemplate = '';
     var omittedCount = 0;
-    if (rows.length > assistantCaseTablePreviewLimit) {
+    if (isCaseTable && rows.length > assistantCaseTablePreviewLimit) {
       previewRows = rows.slice(0, assistantCaseTablePreviewLimit);
       omittedCount = rows.length - previewRows.length;
       previewSummary = '<span class="assistant-case-table-summary">' + escapeHtml(buildAssistantCaseTablePreviewSummaryText(previewRows.length, rows.length, omittedCount)) + '</span>';
@@ -483,7 +892,7 @@
       fullTemplate = '<template class="assistant-case-table-full-template">' + buildAssistantTableHtml(tableClass, head, body) + '</template>';
     }
     return (
-      '<div class="assistant-case-table-wrap">' +
+      '<div class="assistant-case-table-wrap' + (isCaseTable ? '' : ' assistant-generic-table-wrap') + '">' +
         '<div class="assistant-case-table-actions">' +
           '<button type="button" class="assistant-case-table-expand-btn">展开查看</button>' +
           previewSummary +
@@ -499,6 +908,40 @@
         fullTemplate +
       '</div>'
     );
+  }
+
+  function renderAssistantMarkdownImageHtml(alt, src) {
+    var safeSrc = sanitizeAssistantImageSrc(src);
+    if (!safeSrc) return renderInlineMarkdown('![' + (alt || '') + '](' + (src || '') + ')');
+    var safeAlt = escapeHtml(alt || '图片');
+    var safeCaption = safeAlt && safeAlt !== '图片'
+      ? ('<figcaption class="assistant-msg-image-caption">' + safeAlt + '</figcaption>')
+      : '';
+    return '<figure class="assistant-markdown-image-wrap"><img class="assistant-markdown-image" loading="lazy" src="' + escapeHtml(safeSrc) + '" alt="' + safeAlt + '"/>' + safeCaption + '</figure>';
+  }
+
+  function renderMarkdownParagraphHtml(text) {
+    var raw = String(text || '');
+    var pattern = /!\[([^\]]*)\]\(([^)]+)\)/g;
+    var match = null;
+    var lastIndex = 0;
+    var parts = [];
+    while ((match = pattern.exec(raw))) {
+      var before = raw.slice(lastIndex, match.index);
+      if (before && before.trim()) {
+        parts.push('<p>' + renderInlineMarkdown(before).replace(/\n/g, '<br/>') + '</p>');
+      }
+      parts.push(renderAssistantMarkdownImageHtml(match[1], match[2]));
+      lastIndex = match.index + match[0].length;
+    }
+    var tail = raw.slice(lastIndex);
+    if (tail && tail.trim()) {
+      parts.push('<p>' + renderInlineMarkdown(tail).replace(/\n/g, '<br/>') + '</p>');
+    }
+    if (!parts.length && raw.trim()) {
+      parts.push('<p>' + renderInlineMarkdown(raw).replace(/\n/g, '<br/>') + '</p>');
+    }
+    return parts.join('');
   }
 
   function renderMarkdownTextSegmentHtml(text) {
@@ -534,7 +977,7 @@
         i += 1;
       }
       if (paragraph.length) {
-        parts.push('<p>' + renderInlineMarkdown(paragraph.join('\n')).replace(/\n/g, '<br/>') + '</p>');
+        parts.push(renderMarkdownParagraphHtml(paragraph.join('\n')));
       }
     }
     return parts.join('');
@@ -567,7 +1010,7 @@
     var proxyScroll = wrap.querySelector('.assistant-case-table-scrollbar');
     var proxyTrack = proxyScroll && proxyScroll.querySelector ? proxyScroll.querySelector('.assistant-table-scrollbar-track') : null;
     var proxyThumb = proxyScroll && proxyScroll.querySelector ? proxyScroll.querySelector('.assistant-table-scrollbar-thumb') : null;
-    var table = mainScroll && mainScroll.querySelector ? mainScroll.querySelector('table.assistant-case-table') : null;
+    var table = mainScroll && mainScroll.querySelector ? mainScroll.querySelector('table.assistant-msg-table') : null;
     if (!mainScroll || !proxyScroll || !proxyTrack || !proxyThumb || !table) return;
     var totalWidth = Math.max(Number(table.scrollWidth) || 0, Number(mainScroll.scrollWidth) || 0);
     var viewportWidth = Number(mainScroll.clientWidth) || 0;
@@ -710,12 +1153,12 @@
     var wrap = button.closest('.assistant-case-table-wrap');
     if (!wrap || !wrap.querySelector) return;
     var sourceTable = null;
-    var fullTemplate = wrap.querySelector('template.assistant-case-table-full-template');
+    var fullTemplate = wrap.querySelector('template.assistant-case-table-full-template, template.assistant-table-full-template');
     if (fullTemplate && fullTemplate.content && fullTemplate.content.querySelector) {
-      sourceTable = fullTemplate.content.querySelector('table.assistant-case-table');
+      sourceTable = fullTemplate.content.querySelector('table.assistant-msg-table');
     }
     if (!sourceTable) {
-      sourceTable = wrap.querySelector('table.assistant-case-table');
+      sourceTable = wrap.querySelector('table.assistant-msg-table');
     }
     if (!sourceTable) return;
 
@@ -787,6 +1230,7 @@
             text: String(item.text || ''),
             createdAt: Number(item.createdAt) || Date.now(),
             actions: [],
+            attachments: [],
           };
         });
       }
@@ -803,6 +1247,9 @@
       if (!item || typeof item !== 'object') return false;
       if (item.transient === true) return false;
       if (item.thinking === true) return false;
+      if (Array.isArray(item.attachments) && item.attachments.length) return false;
+      var text = item.text === undefined || item.text === null ? '' : String(item.text);
+      if (text.indexOf('data:image/') !== -1) return false;
       return true;
     }).map(function(item) {
       return {
@@ -859,18 +1306,34 @@
   }
 
   function refreshSendState() {
+    var hasText = inputEl ? Boolean(String(inputEl.value || '').trim()) : false;
+    var hasAttachments = pendingAttachments.length > 0;
+    var disabled = replyPending === true || attachmentPendingCount > 0 || (!hasText && !hasAttachments);
     if (sendBtn) {
-      sendBtn.disabled = replyPending === true;
-      sendBtn.setAttribute('aria-disabled', replyPending === true ? 'true' : 'false');
+      sendBtn.disabled = disabled;
+      sendBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    }
+    if (attachBtn) {
+      attachBtn.disabled = replyPending === true || attachmentPendingCount > 0;
+    }
+    if (imageInputEl) {
+      imageInputEl.disabled = replyPending === true || attachmentPendingCount > 0;
     }
     if (inputEl) {
-      inputEl.setAttribute('aria-busy', replyPending === true ? 'true' : 'false');
+      inputEl.setAttribute('aria-busy', replyPending === true || attachmentPendingCount > 0 ? 'true' : 'false');
+    }
+    if (composerEl) {
+      composerEl.classList.toggle('is-busy', replyPending === true || attachmentPendingCount > 0);
     }
   }
 
   function setReplyPending(value) {
     replyPending = value === true;
     refreshSendState();
+  }
+
+  function buildMessageBodyContent(text, attachments) {
+    return composeAssistantConversationContent(text, attachments);
   }
 
   function getRoleTitle(role, customTitle) {
@@ -925,6 +1388,7 @@
       actions: actions,
       thinking: opts.thinking === true,
       transient: opts.transient === true,
+      attachments: normalizeAssistantMessageAttachments(opts.attachments),
     };
     chatHistory.push(msg);
     if (chatHistory.length > historyLimit) {
@@ -945,6 +1409,9 @@
       if (opts.role) msg.role = String(opts.role);
       if (opts.title !== undefined) msg.title = String(opts.title || '');
       if (text !== undefined) msg.text = text === null ? '' : String(text);
+      if (Object.prototype.hasOwnProperty.call(opts, 'attachments')) {
+        msg.attachments = normalizeAssistantMessageAttachments(opts.attachments);
+      }
       msg.createdAt = Date.now();
       msg.actions = buildAssistantMessageActions(opts);
       msg.thinking = opts.thinking === true;
@@ -968,6 +1435,15 @@
       return true;
     }
     return false;
+  }
+
+  function appendMessageTextBlock(container, html) {
+    if (!container) return null;
+    var wrap = document.createElement('div');
+    wrap.className = 'assistant-msg-text';
+    wrap.innerHTML = html;
+    container.appendChild(wrap);
+    return wrap;
   }
 
   function renderMessages() {
@@ -994,8 +1470,14 @@
       var body = document.createElement('div');
       body.className = 'assistant-msg-body';
       var bodyText = msg.text === undefined || msg.text === null ? '' : String(msg.text);
+      var attachments = normalizeAssistantMessageAttachments(msg.attachments);
       if (msg.role === 'user') {
-        body.innerHTML = renderPlainMessageHtml(bodyText);
+        if (attachments.length) {
+          appendMessageAttachments(body, attachments);
+        }
+        if (bodyText) {
+          appendMessageTextBlock(body, renderPlainMessageHtml(bodyText));
+        }
       } else {
         if (msg.thinking === true) {
           card.classList.add('assistant-msg-thinking');
@@ -1006,7 +1488,12 @@
             + '</div>'
           );
         } else {
-          body.innerHTML = renderMarkdownMessageHtml(bodyText);
+          if (bodyText) {
+            appendMessageTextBlock(body, renderMarkdownMessageHtml(bodyText));
+          }
+          if (attachments.length) {
+            appendMessageAttachments(body, attachments);
+          }
           if (body.querySelector && body.querySelector('.assistant-case-table-wrap')) {
             card.classList.add('assistant-msg-has-case-table');
           }
@@ -1230,7 +1717,7 @@
       if (!msg || typeof msg !== 'object') continue;
       var role = normalizeConversationRole(msg.role);
       if (!role) continue;
-      var content = msg.text === undefined || msg.text === null ? '' : String(msg.text).trim();
+      var content = buildMessageBodyContent(msg.text, msg.attachments);
       if (!content) continue;
       if (skipUserText && role === 'user' && content === skipUserText) {
         skipUserText = '';
@@ -1783,6 +2270,26 @@
     }
     return containsAny(raw, ['查看', '查询', '获取', '读取', '列出', '列一下', '展示', '显示', '搜索', '查找', '筛选', '过滤', '搜', '找出', '筛出', '挑出', '哪些', '有哪些', '清单', '有什么', '有啥', '多少', '条数', '数量', '总数', '给我看', '看下', '看一下', '看看']);
   }
+
+  function isMissingLibraryIntent(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return false;
+    if (containsAny(raw, ['漏测推荐', '易漏推荐']) && containsAny(raw, ['触发', '生成', '运行', '执行'])) return false;
+    if (containsAny(raw, ['漏测用例库', '易漏用例库', '漏测库', '易漏库'])) return true;
+    if (containsAny(raw, ['漏测', '易漏']) && containsAny(raw, ['用例', 'case'])) return true;
+    return false;
+  }
+
+  function isCrossPageCaseMissingMatchIntent(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return false;
+    if (!isMissingLibraryIntent(raw)) return false;
+    if (containsAny(raw, ['跨页面', '跨页'])) return true;
+    if (containsAny(raw, ['当前页面', '当前页', '本页', '当前执行', '当前用例', '这份用例', '当前的这份', '当前这份'])) return true;
+    if (containsAny(raw, ['匹配', '命中', '关联', '相关', '对比', '比对', '比较', '有没有'])) return true;
+    return false;
+  }
+
 
   function isCaseCountIntent(text) {
     var raw = String(text || '').trim();
@@ -3093,6 +3600,125 @@
     }
     return '当前用例数量：' + projectTotal + ' 份用例文件。';
   }
+
+  function formatMissingLibraryListResponse(res) {
+    var result = res && typeof res === 'object' ? res : {};
+    var totalItems = Number(result.totalItems);
+    if (!Number.isFinite(totalItems) || totalItems < 0) totalItems = 0;
+    var total = Number(result.total);
+    if (!Number.isFinite(total) || total < 0) total = totalItems;
+    var totalModules = Number(result.totalModules);
+    if (!Number.isFinite(totalModules) || totalModules < 0) totalModules = 0;
+    var items = Array.isArray(result.items) ? result.items : [];
+    if (result.hasContext === false) {
+      return '当前没有可用于查询的漏测用例库上下文，请先打开带项目信息的用例页或项目页。';
+    }
+    if (result.libraryEmpty === true || totalItems <= 0) {
+      return result.projectId ? ('当前项目（' + result.projectId + '）的漏测用例库暂无条目。') : '当前项目的漏测用例库暂无条目。';
+    }
+    var lines = [];
+    if (result.queryText) {
+      lines.push('漏测用例库按“' + String(result.queryText) + '”命中 ' + total + ' 条，涉及 ' + totalModules + ' 个模块。');
+    } else {
+      lines.push((result.projectId ? ('当前项目（' + result.projectId + '）') : '当前项目') + '的漏测用例库共 ' + totalItems + ' 条，涉及 ' + totalModules + ' 个模块。');
+    }
+    for (var i = 0; i < items.length; i += 1) {
+      var item = items[i] && typeof items[i] === 'object' ? items[i] : {};
+      var moduleName = item.module ? String(item.module) : '--';
+      var title = item.title ? String(item.title) : ('漏测条目#' + (item.id || (i + 1)));
+      var typeLabel = item.typeLabel ? String(item.typeLabel) : '未分类';
+      var priority = item.priority ? String(item.priority) : '--';
+      lines.push((i + 1) + '. [' + moduleName + '] ' + title + ' | 类型: ' + typeLabel + ' | 优先级: ' + priority);
+    }
+    if (result.truncated) {
+      lines.push('未完整展开，当前仅展示前 ' + items.length + ' 条。');
+    }
+    return lines.join('\n');
+  }
+
+  function formatCrossPageMissingCaseMatchResponse(res) {
+    var result = res && typeof res === 'object' ? res : {};
+    var currentCaseTotal = Number(result.currentCaseTotal);
+    if (!Number.isFinite(currentCaseTotal) || currentCaseTotal < 0) currentCaseTotal = 0;
+    var missingTotal = Number(result.missingLibraryTotal);
+    if (!Number.isFinite(missingTotal) || missingTotal < 0) missingTotal = 0;
+    var matchTotal = Number(result.matchTotal);
+    if (!Number.isFinite(matchTotal) || matchTotal < 0) matchTotal = 0;
+    var matchedCaseCount = Number(result.matchedCaseCount);
+    if (!Number.isFinite(matchedCaseCount) || matchedCaseCount < 0) matchedCaseCount = 0;
+    var matchedMissingItemCount = Number(result.matchedMissingItemCount);
+    if (!Number.isFinite(matchedMissingItemCount) || matchedMissingItemCount < 0) matchedMissingItemCount = 0;
+    var candidateTotal = Number(result.candidateTotal);
+    if (!Number.isFinite(candidateTotal) || candidateTotal < 0) candidateTotal = 0;
+    var candidateMatchedCaseCount = Number(result.candidateMatchedCaseCount);
+    if (!Number.isFinite(candidateMatchedCaseCount) || candidateMatchedCaseCount < 0) candidateMatchedCaseCount = 0;
+    var candidateMatchedMissingItemCount = Number(result.candidateMatchedMissingItemCount);
+    if (!Number.isFinite(candidateMatchedMissingItemCount) || candidateMatchedMissingItemCount < 0) candidateMatchedMissingItemCount = 0;
+    var matches = Array.isArray(result.matches) ? result.matches : [];
+    var candidates = Array.isArray(result.candidates) ? result.candidates : [];
+    if (result.hasContext === false && String(result.reason || '') === 'no-current-cases') {
+      return '当前页面没有可用于跨页面比对的用例，请先打开执行用例或用例编辑视图。';
+    }
+    if (result.libraryEmpty === true || missingTotal <= 0) {
+      return result.projectId ? ('当前项目（' + result.projectId + '）的漏测用例库为空，暂时无法匹配。') : '当前项目的漏测用例库为空，暂时无法匹配。';
+    }
+    var caseFileName = result.caseFile && result.caseFile.name ? String(result.caseFile.name) : '';
+    if (!matchTotal || !matches.length) {
+      if (!candidateTotal || !candidates.length) {
+        return '已比对当前页面 ' + currentCaseTotal + ' 条用例与漏测用例库 ' + missingTotal + ' 条条目，暂未找到明确匹配项。';
+      }
+      var candidateLines = [];
+      if (caseFileName) {
+        candidateLines.push('当前用例“' + caseFileName + '”暂未命中规则高置信匹配，但召回了 ' + candidateTotal + ' 组建议复核候选。');
+      } else {
+        candidateLines.push('当前页面用例暂未命中规则高置信匹配，但召回了 ' + candidateTotal + ' 组建议复核候选。');
+      }
+      candidateLines.push('涉及当前页 ' + candidateMatchedCaseCount + ' 条用例、漏测库 ' + candidateMatchedMissingItemCount + ' 条条目。');
+      for (var c = 0; c < candidates.length; c += 1) {
+        var candidateRow = candidates[c] && typeof candidates[c] === 'object' ? candidates[c] : {};
+        var candidateCase = candidateRow.currentCase && typeof candidateRow.currentCase === 'object' ? candidateRow.currentCase : {};
+        var candidateMissing = candidateRow.missingItem && typeof candidateRow.missingItem === 'object' ? candidateRow.missingItem : {};
+        var candidateReason = Array.isArray(candidateRow.reasons) && candidateRow.reasons.length ? candidateRow.reasons.join('；') : '内容相关';
+        var candidateTitle = candidateCase.title ? String(candidateCase.title) : ('当前用例#' + (candidateCase.index || (c + 1)));
+        var missingTitle = candidateMissing.title ? String(candidateMissing.title) : ('漏测条目#' + (candidateMissing.index || (c + 1)));
+        var missingModule = candidateMissing.module ? String(candidateMissing.module) : '--';
+        var candidateLevel = candidateRow.candidateLevel ? String(candidateRow.candidateLevel) : '建议关注';
+        candidateLines.push((c + 1) + '. [' + candidateLevel + '] 当前用例#' + (candidateCase.index || '-') + ' ' + candidateTitle + ' -> 漏测库[' + missingModule + '] ' + missingTitle + '（依据：' + candidateReason + '）');
+      }
+      if (result.candidateTruncated) {
+        candidateLines.push('候选未完整展开，还有 ' + Math.max(candidateTotal - candidates.length, 0) + ' 组可继续复核。');
+      }
+      return candidateLines.join('\n');
+    }
+    var lines = [];
+    if (caseFileName) {
+      lines.push('当前用例“' + caseFileName + '”与漏测用例库共找到 ' + matchTotal + ' 组高置信匹配。');
+    } else {
+      lines.push('当前页面用例与漏测用例库共找到 ' + matchTotal + ' 组高置信匹配。');
+    }
+    lines.push('涉及当前页 ' + matchedCaseCount + ' 条用例、漏测库 ' + matchedMissingItemCount + ' 条条目。');
+    if (candidateTotal > 0) {
+      lines.push('另外还召回了 ' + candidateTotal + ' 组建议复核候选，可继续补看。');
+    }
+    for (var i = 0; i < matches.length; i += 1) {
+      var row = matches[i] && typeof matches[i] === 'object' ? matches[i] : {};
+      var currentCase = row.currentCase && typeof row.currentCase === 'object' ? row.currentCase : {};
+      var missingItem = row.missingItem && typeof row.missingItem === 'object' ? row.missingItem : {};
+      var reasonText = Array.isArray(row.reasons) && row.reasons.length ? row.reasons.join('；') : '内容匹配';
+      var currentTitle = currentCase.title ? String(currentCase.title) : ('当前用例#' + (currentCase.index || (i + 1)));
+      var missingTitle = missingItem.title ? String(missingItem.title) : ('漏测条目#' + (missingItem.index || (i + 1)));
+      var missingModule = missingItem.module ? String(missingItem.module) : '--';
+      lines.push((i + 1) + '. 当前用例#' + (currentCase.index || '-') + ' ' + currentTitle + ' -> 漏测库[' + missingModule + '] ' + missingTitle + '（依据：' + reasonText + '）');
+    }
+    if (result.truncated) {
+      lines.push('未完整展开，还有 ' + Math.max(matchTotal - matches.length, 0) + ' 组高置信匹配结果。');
+    }
+    if (candidateTotal > 0 && result.candidateTruncated) {
+      lines.push('建议复核候选未完整展开，还有 ' + Math.max(candidateTotal - candidates.length, 0) + ' 组候选。');
+    }
+    return lines.join('\n');
+  }
+
 
   function normalizeCaseDetailLookupText(value) {
     return String(value || '').toLowerCase()
@@ -4406,6 +5032,8 @@
       { name: 'page.get_data', mode: 'read', description: '读取页面数据快照' },
       { name: 'nav.switch_tab', mode: 'write', description: '切换目标页签' },
       { name: 'cases.list_current', mode: 'read', description: '读取当前页面或项目用例列表' },
+      { name: 'missing_library.list_current', mode: 'read', description: '读取当前项目的漏测/易漏用例库，可跨页面查询' },
+      { name: 'cross_page.match_missing_cases', mode: 'read', description: '将当前页面用例与当前项目漏测用例库做跨页面匹配' },
       { name: 'ui.list_controls', mode: 'read', description: '列出当前页可操作控件' },
       { name: 'ui.click_control', mode: 'write', description: '点击指定页面控件' },
       { name: 'ui.fill_input', mode: 'write', description: '填写输入控件并触发事件' },
@@ -4451,6 +5079,8 @@
     if (raw === 'page.get_data' || raw === 'query_page_data' || raw === 'page_data') return 'page.get_data';
     if (raw === 'nav.switch_tab' || raw === 'navigate' || raw === 'switch_tab') return 'nav.switch_tab';
     if (raw === 'cases.list_current' || raw === 'query_case_list' || raw === 'case_list') return 'cases.list_current';
+    if (raw === 'missing_library.list_current' || raw === 'missing_library_list_current' || raw === 'list_missing_library' || raw === 'missing_case_library_list') return 'missing_library.list_current';
+    if (raw === 'cross_page.match_missing_cases' || raw === 'cross_page_match_missing_cases' || raw === 'match_missing_cases' || raw === 'match_case_missing_library') return 'cross_page.match_missing_cases';
     if (raw === 'ui.list_controls' || raw === 'list_controls' || raw === 'list_ui_controls') return 'ui.list_controls';
     if (raw === 'ui.click_control' || raw === 'click_control' || raw === 'click_ui_control') return 'ui.click_control';
     if (raw === 'ui.fill_input' || raw === 'fill_input' || raw === 'fill_ui_input') return 'ui.fill_input';
@@ -4787,6 +5417,55 @@
     return text.slice(0, limit) + '...';
   }
 
+  function buildCrossPageReasonMatchItem(item, idx) {
+    var row = item && typeof item === 'object' ? item : {};
+    var currentCase = row.currentCase && typeof row.currentCase === 'object' ? row.currentCase : {};
+    var missingItem = row.missingItem && typeof row.missingItem === 'object' ? row.missingItem : {};
+    var keywordHits = row.keywordHits && typeof row.keywordHits === 'object' ? row.keywordHits : {};
+    return {
+      index: row.index === undefined || row.index === null ? (idx + 1) : row.index,
+      score: Number(row.score) || 0,
+      matchLevel: row.matchLevel ? String(row.matchLevel) : '',
+      candidateLevel: row.candidateLevel ? String(row.candidateLevel) : '',
+      strictMatched: row.strictMatched === true,
+      fieldHitCount: Number(row.fieldHitCount) || 0,
+      moduleHitCount: Number(row.moduleHitCount) || 0,
+      titleHitCount: Number(row.titleHitCount) || 0,
+      preHitCount: Number(row.preHitCount) || 0,
+      stepHitCount: Number(row.stepHitCount) || 0,
+      expectedHitCount: Number(row.expectedHitCount) || 0,
+      reasons: Array.isArray(row.reasons) ? row.reasons.slice(0, 4) : [],
+      keywordHits: {
+        module: Array.isArray(keywordHits.module) ? keywordHits.module.slice(0, 2) : [],
+        title: Array.isArray(keywordHits.title) ? keywordHits.title.slice(0, 4) : [],
+        precondition: Array.isArray(keywordHits.precondition) ? keywordHits.precondition.slice(0, 3) : [],
+        steps: Array.isArray(keywordHits.steps) ? keywordHits.steps.slice(0, 4) : [],
+        expected: Array.isArray(keywordHits.expected) ? keywordHits.expected.slice(0, 4) : [],
+      },
+      currentCase: {
+        index: currentCase.index === undefined || currentCase.index === null ? '' : currentCase.index,
+        id: currentCase.id === undefined || currentCase.id === null ? '' : String(currentCase.id),
+        module: trimMcpReasonField(currentCase.module, 60),
+        title: trimMcpReasonField(currentCase.title, 100),
+        priority: currentCase.priority === undefined || currentCase.priority === null ? '' : String(currentCase.priority),
+        precondition: trimMcpReasonField(currentCase.precondition, 120),
+        steps: trimMcpReasonField(currentCase.steps, 180),
+        expected: trimMcpReasonField(currentCase.expected, 180),
+      },
+      missingItem: {
+        index: missingItem.index === undefined || missingItem.index === null ? '' : missingItem.index,
+        id: missingItem.id === undefined || missingItem.id === null ? '' : String(missingItem.id),
+        module: trimMcpReasonField(missingItem.module, 60),
+        typeLabel: trimMcpReasonField(missingItem.typeLabel, 40),
+        title: trimMcpReasonField(missingItem.title, 100),
+        priority: missingItem.priority === undefined || missingItem.priority === null ? '' : String(missingItem.priority),
+        precondition: trimMcpReasonField(missingItem.precondition, 120),
+        steps: trimMcpReasonField(missingItem.steps, 180),
+        expected: trimMcpReasonField(missingItem.expected, 180),
+      },
+    };
+  }
+
   function buildMcpReasonPayload(tool, args, data) {
     var name = normalizeMcpToolName(tool);
     var payloadArgs = args && typeof args === 'object' ? Object.assign({}, args) : {};
@@ -4833,6 +5512,65 @@
         items: compactItems,
       };
     }
+    if (name === 'missing_library.list_current') {
+      var missingItems = Array.isArray(sourceData.items) ? sourceData.items : [];
+      return {
+        tool: name,
+        args: payloadArgs,
+        scope: sourceData.scope || '',
+        projectId: sourceData.projectId || '',
+        totalModules: Number(sourceData.totalModules) || 0,
+        totalItems: Number(sourceData.totalItems) || missingItems.length,
+        total: Number(sourceData.total) || missingItems.length,
+        queryText: sourceData.queryText || '',
+        truncated: sourceData.truncated === true,
+        items: missingItems.slice(0, 120).map(function(item, idx) {
+          var row = item && typeof item === 'object' ? item : {};
+          return {
+            index: row.index === undefined || row.index === null ? (idx + 1) : row.index,
+            id: row.id === undefined || row.id === null ? '' : String(row.id),
+            module: trimMcpReasonField(row.module, 60),
+            typeLabel: trimMcpReasonField(row.typeLabel, 40),
+            title: trimMcpReasonField(row.title, 100),
+            priority: row.priority === undefined || row.priority === null ? '' : String(row.priority),
+            precondition: trimMcpReasonField(row.precondition, 120),
+            steps: trimMcpReasonField(row.steps, 160),
+            expected: trimMcpReasonField(row.expected, 160),
+          };
+        }),
+      };
+    }
+    if (name === 'cross_page.match_missing_cases') {
+      var matches = Array.isArray(sourceData.matches) ? sourceData.matches : [];
+      var candidates = Array.isArray(sourceData.candidates) ? sourceData.candidates : [];
+      return {
+        tool: name,
+        args: payloadArgs,
+        projectId: sourceData.projectId || '',
+        currentCaseTotal: Number(sourceData.currentCaseTotal) || 0,
+        missingLibraryTotal: Number(sourceData.missingLibraryTotal) || 0,
+        matchDefinition: 'matchTotal 仅表示规则高置信命中。',
+        candidateDefinition: 'candidateTotal 表示宽召回候选，需结合内容做最终判断。',
+        matchTotal: Number(sourceData.matchTotal) || matches.length,
+        matchedCaseCount: Number(sourceData.matchedCaseCount) || 0,
+        matchedMissingItemCount: Number(sourceData.matchedMissingItemCount) || 0,
+        candidateTotal: Number(sourceData.candidateTotal) || candidates.length,
+        candidateMatchedCaseCount: Number(sourceData.candidateMatchedCaseCount) || 0,
+        candidateMatchedMissingItemCount: Number(sourceData.candidateMatchedMissingItemCount) || 0,
+        truncated: sourceData.truncated === true,
+        candidateTruncated: sourceData.candidateTruncated === true,
+        caseFile: sourceData.caseFile && typeof sourceData.caseFile === 'object' ? {
+          id: sourceData.caseFile.id || '',
+          name: sourceData.caseFile.name || '',
+        } : null,
+        matches: matches.slice(0, 80).map(function(item, idx) {
+          return buildCrossPageReasonMatchItem(item, idx);
+        }),
+        candidates: candidates.slice(0, 120).map(function(item, idx) {
+          return buildCrossPageReasonMatchItem(item, idx);
+        }),
+      };
+    }
     return {
       tool: name,
       args: payloadArgs,
@@ -4861,6 +5599,9 @@
       '- 若只有 1 条完整用例，禁止输出“字段 | 内容”这类纵向键值表；优先输出标准横向用例表，或改用分段小标题展开。',
       '- 若工具结果已提供完整字段，不要省略前置条件、步骤、预期结果、备注、执行结果等关键字段。',
       '- 若工具结果包含筛选条件（如任意字段模糊包含、相关匹配、编号奇偶），先点明筛选口径，再按你判断最清晰的格式展示命中条目。',
+      '- 若工具结果是跨页面匹配（如当前用例 vs 漏测用例库），先回答是否命中与命中数量，再展示最关键的匹配依据。',
+      '- 对于 cross_page.match_missing_cases：matchTotal 仅表示规则高置信命中，candidateTotal 表示规则宽召回候选；不要把 matchTotal=0 直接回答成“没有相关用例”。',
+      '- 当 cross_page.match_missing_cases 提供 candidates 时，你需要结合 currentCase、missingItem、reasons 自主判断哪些候选很可能相关、哪些只是建议补看，并明确区分“规则命中”和“模型建议关注”。',
       '- 只有用户明确要求“列表/明细/逐条”，或你判断表格/列表更清晰时，才输出列表或表格。',
       '- 若输出 JSON，必须只输出一个 JSON 对象，不要代码块。',
       '- 输出中文自然语言，可用 Markdown。',
@@ -5071,6 +5812,18 @@
       var summarizedCases = await summarizeMcpToolResultByModel(userText, tool, args, toolData || {}, fallbackCasesText);
       if (summarizedCases) return { handled: true, text: summarizedCases };
       return { handled: true, text: fallbackCasesText };
+    }
+    if (tool === 'missing_library.list_current') {
+      var fallbackMissingLibraryText = formatMissingLibraryListResponse(toolData || {});
+      var summarizedMissingLibrary = await summarizeMcpToolResultByModel(userText, tool, args, toolData || {}, fallbackMissingLibraryText);
+      if (summarizedMissingLibrary) return { handled: true, text: summarizedMissingLibrary };
+      return { handled: true, text: fallbackMissingLibraryText };
+    }
+    if (tool === 'cross_page.match_missing_cases') {
+      var fallbackCrossPageMatchText = formatCrossPageMissingCaseMatchResponse(toolData || {});
+      var summarizedCrossPageMatch = await summarizeMcpToolResultByModel(userText, tool, args, toolData || {}, fallbackCrossPageMatchText);
+      if (summarizedCrossPageMatch) return { handled: true, text: summarizedCrossPageMatch };
+      return { handled: true, text: fallbackCrossPageMatchText };
     }
     if (tool === 'web.search') {
       var query = args.query && String(args.query).trim() ? String(args.query).trim() : String(userText || '').trim();
@@ -5300,6 +6053,61 @@
     return { synced: false };
   }
 
+
+  async function runModelMissingLibraryAction(userText, actionPayload, defaultResponse, options) {
+    var payload = actionPayload && typeof actionPayload === 'object' ? actionPayload : {};
+    var responseHint = payload.response && String(payload.response).trim()
+      ? String(payload.response).trim()
+      : (defaultResponse ? String(defaultResponse).trim() : '');
+    var queryText = payload.query && String(payload.query).trim()
+      ? String(payload.query).trim()
+      : String(userText || '').trim();
+    var compareWithCurrent = payload.compareWithCurrent === true || payload.matchCurrent === true || isCrossPageCaseMissingMatchIntent(queryText || userText);
+    var tool = compareWithCurrent ? 'cross_page.match_missing_cases' : 'missing_library.list_current';
+    var limit = toPositiveInt(payload.limit, compareWithCurrent ? 60 : 200);
+    if (compareWithCurrent && limit > 500) limit = 500;
+    if (!compareWithCurrent && limit > 1000) limit = 1000;
+    var toolArgs = { limit: limit };
+    if (payload.projectId !== undefined && payload.projectId !== null && String(payload.projectId).trim()) {
+      toolArgs.projectId = String(payload.projectId).trim();
+    }
+    if (compareWithCurrent) {
+      toolArgs.caseLimit = toPositiveInt(payload.caseLimit, 1000);
+    } else if (payload.scope !== undefined && payload.scope !== null && String(payload.scope).trim()) {
+      toolArgs.scope = String(payload.scope).trim();
+    }
+    var opts = options && typeof options === 'object' ? options : {};
+    var apis = getApis();
+    var res = null;
+    setStatus(compareWithCurrent ? '正在跨页面比对漏测用例库...' : '正在读取漏测用例库...');
+    if (!opts.skipMcp && apis.assistantMcpApi && typeof apis.assistantMcpApi.callTool === 'function') {
+      try {
+        var mcpRes = await apis.assistantMcpApi.callTool(tool, toolArgs);
+        if (mcpRes && mcpRes.ok === true && mcpRes.data && typeof mcpRes.data === 'object') {
+          res = mcpRes.data;
+        }
+      } catch (err) {
+        res = null;
+      }
+    }
+    if (!res) {
+      setStatus(compareWithCurrent ? '跨页面比对失败' : '漏测用例库读取失败');
+      return { handled: true, text: compareWithCurrent ? '当前环境不支持跨页面漏测用例库匹配。' : '当前环境不支持读取漏测用例库。' };
+    }
+    if (res.ok !== true) {
+      setStatus(compareWithCurrent ? '跨页面比对失败' : '漏测用例库读取失败');
+      return { handled: true, text: (compareWithCurrent ? '跨页面漏测用例库匹配失败：' : '读取漏测用例库失败：') + (res.reason ? String(res.reason) : '未知错误') };
+    }
+    setStatus('');
+    var fallbackText = compareWithCurrent ? formatCrossPageMissingCaseMatchResponse(res) : formatMissingLibraryListResponse(res);
+    var summarized = await summarizeMcpToolResultByModel(userText, tool, toolArgs, res, fallbackText);
+    if (summarized) return { handled: true, text: summarized };
+    if (responseHint && responseHint !== fallbackText) {
+      return { handled: true, text: responseHint + '\n' + fallbackText };
+    }
+    return { handled: true, text: fallbackText };
+  }
+
   async function runModelCaseListAction(userText, actionPayload, defaultResponse, options) {
     var payload = actionPayload && typeof actionPayload === 'object' ? actionPayload : {};
     var opts = options && typeof options === 'object' ? options : {};
@@ -5309,6 +6117,11 @@
     var queryText = payload.query && String(payload.query).trim()
       ? String(payload.query).trim()
       : String(userText || '').trim();
+    if (isMissingLibraryIntent(queryText || userText)) {
+      return runModelMissingLibraryAction(userText, Object.assign({}, payload, {
+        compareWithCurrent: payload.compareWithCurrent === true || payload.matchCurrent === true || isCrossPageCaseMissingMatchIntent(queryText || userText),
+      }), defaultResponse, options);
+    }
     var scopeRaw = payload.scope === undefined || payload.scope === null ? '' : String(payload.scope).trim().toLowerCase();
     var pageScoped = payload.pageScoped === true
       || isEditorScopedCaseListQuery(scopeRaw)
@@ -5666,9 +6479,13 @@
     return null;
   }
 
-  async function tryHandleModelDrivenReply(text) {
-    var content = String(text || '').trim();
-    if (!content) return null;
+  async function tryHandleModelDrivenReply(text, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var attachments = normalizeAssistantMessageAttachments(opts.attachments);
+    var contentBlocks = normalizeAssistantContentBlocks(opts.contentBlocks);
+    var hasImageInput = assistantContentBlocksHaveImage(contentBlocks) || attachments.length > 0;
+    var content = composeAssistantConversationContent(text, attachments);
+    if (!content && !hasImageInput) return null;
     var apis = getApis();
     if (!apis.assistantApi || typeof apis.assistantApi.callModel !== 'function') return null;
     var mcpTools = getAvailableMcpTools();
@@ -5702,7 +6519,9 @@
       'MCP 工具列表：',
       mcpToolLines.join('\n'),
       '如果平台已有合适的展示手脚架，可调用 assistant.render_scaffold；当不确定有哪些手脚架时，可先调用 assistant.list_scaffolds。',
+      hasImageInput ? '若用户附带图片，先理解图片内容，再决定是否需要调用工具；图片理解必须由模型完成。' : '',
       '当用户要求“完整展示/完整列出当前或该用例”时，优先使用 cases.list_current 读取完整字段；若需要标准横向用例表，优先调用 assistant.render_scaffold 的 case_table。',
+      '当问题涉及当前页面/当前执行用例与漏测/易漏用例库的跨页面查询、匹配或补充时，优先调用 cross_page.match_missing_cases；若用户想看漏测库原始明细，再调用 missing_library.list_current。',
       'MCP JSON 格式支持：',
       '{"mcp":{"tool":"tool.name","args":{}},"response":""}',
       '{"mcp":{"calls":[{"tool":"tool.name","args":{}}]},"response":""}',
@@ -5715,6 +6534,7 @@
       '- 当用户询问当前用例改动历史、执行页“用例变更”或变更内容时，优先使用 page.get_data 读取当前页面对应的变更快照后再整理回答。',
       '- 当用户追问“中文名/中文名称”且上文在问当前页面时，直接返回 current_page_info 或直接回答，不要让用户改问法。',
       '- 当问题依赖实时信息（天气/新闻/最新版本）时，优先使用 web_search。',
+      '- 若需要展示图片，可直接使用 Markdown 图片语法输出，界面会自动渲染。',
       '- 写入、编辑、删除类动作会在聊天区展示“允许操作/不允许”确认按钮；不要伪造执行结果。',
       '- 项目外问题正常回答，不要强行返回页面数据。',
     ].join('\n');
@@ -5730,6 +6550,7 @@
           prompt: promptText,
           temperature: 0.2,
           history: conversationHistory,
+          contentBlocks: contentBlocks,
         });
       } catch (err) {
         res = { ok: false, reason: err && err.message ? String(err.message) : '模型调用异常' };
@@ -6049,9 +6870,12 @@
   }
 
   async function handleUserInput(text, options) {
-    var content = String(text || '').trim();
-    if (!content) return;
     var opts = options && typeof options === 'object' ? options : {};
+    var attachments = normalizeAssistantMessageAttachments(opts.attachments);
+    var contentBlocks = normalizeAssistantContentBlocks(opts.contentBlocks);
+    var hasImageInput = assistantContentBlocksHaveImage(contentBlocks) || attachments.length > 0;
+    var content = composeAssistantConversationContent(text, attachments);
+    if (!content && !hasImageInput) return;
     var pendingReplyId = opts.pendingReplyId === undefined || opts.pendingReplyId === null
       ? ''
       : String(opts.pendingReplyId);
@@ -6090,168 +6914,184 @@
       return;
     }
 
-    var followUpCurrentPageReply = tryHandleCurrentPageFollowUpIntent(content);
-    if (followUpCurrentPageReply) {
-      await addRouteReply('current_page_follow_up', followUpCurrentPageReply, {
-        pageData: getSafePageDataSnapshot(''),
-      }, {});
-      return;
-    }
-
-    var currentPageFunctionReply = await tryHandleCurrentPageFunctionIntent(content);
-    if (currentPageFunctionReply) {
-      addAiReply(currentPageFunctionReply);
-      return;
-    }
-
-    var caseDetailClarificationReply = await tryHandleCaseDetailClarificationIntent(content);
-    if (caseDetailClarificationReply && caseDetailClarificationReply.handled === true && caseDetailClarificationReply.text) {
-      addAiReply(caseDetailClarificationReply.text);
-      return;
-    }
-
-    var currentCaseFullDetailReply = await tryHandleCurrentCaseFullDetailIntent(content);
-    if (currentCaseFullDetailReply && currentCaseFullDetailReply.handled === true && currentCaseFullDetailReply.text) {
-      addAiReply(currentCaseFullDetailReply.text);
-      return;
-    }
-
-    if (isCaseListIntent(content)) {
-      var earlyCaseListReply = await runModelCaseListAction(content, {
-        action: 'query_case_list',
-        query: content,
-      }, '');
-      if (earlyCaseListReply && earlyCaseListReply.handled === true && earlyCaseListReply.text) {
-        addAiReply(earlyCaseListReply.text);
+    if (hasImageInput) {
+      var imageFirstReply = await tryHandleModelDrivenReply(text, {
+        attachments: attachments,
+        contentBlocks: contentBlocks,
+      });
+      if (imageFirstReply && imageFirstReply.handled && imageFirstReply.text) {
+        addAiReply(imageFirstReply.text, imageFirstReply.messageOptions || {});
         return;
       }
     }
 
-    var directCaseUpdateReply = await tryHandleCaseUpdateCommand(content);
-    if (directCaseUpdateReply) {
-      await addRouteReply('direct_case_update', directCaseUpdateReply, {
-        pageData: getSafePageDataSnapshot(''),
-      }, {});
-      return;
-    }
+    if (!hasImageInput) {
+      var followUpCurrentPageReply = tryHandleCurrentPageFollowUpIntent(content);
+      if (followUpCurrentPageReply) {
+        await addRouteReply('current_page_follow_up', followUpCurrentPageReply, {
+          pageData: getSafePageDataSnapshot(''),
+        }, {});
+        return;
+      }
 
-    var tempExecFileReply = await tryHandleTempExecFileIntent(content);
-    if (tempExecFileReply) {
-      await addRouteReply('tempexec_file', tempExecFileReply, {
-        pageData: getSafePageDataSnapshot(''),
-      }, {});
-      return;
-    }
+      var currentPageFunctionReply = await tryHandleCurrentPageFunctionIntent(content);
+      if (currentPageFunctionReply) {
+        addAiReply(currentPageFunctionReply);
+        return;
+      }
 
-    var caseHistoryReply = await tryHandleCaseHistoryIntent(content);
-    if (caseHistoryReply) {
-      addAiReply(caseHistoryReply);
-      return;
-    }
+      var caseDetailClarificationReply = await tryHandleCaseDetailClarificationIntent(content);
+      if (caseDetailClarificationReply && caseDetailClarificationReply.handled === true && caseDetailClarificationReply.text) {
+        addAiReply(caseDetailClarificationReply.text);
+        return;
+      }
 
-    var modelDriven = await tryHandleModelDrivenReply(content);
-    if (modelDriven && modelDriven.handled && modelDriven.text) {
-      addAiReply(modelDriven.text);
-      return;
-    }
+      var currentCaseFullDetailReply = await tryHandleCurrentCaseFullDetailIntent(content);
+      if (currentCaseFullDetailReply && currentCaseFullDetailReply.handled === true && currentCaseFullDetailReply.text) {
+        addAiReply(currentCaseFullDetailReply.text);
+        return;
+      }
 
-    var currentPageReply = tryHandleCurrentPageIntent(content);
-    if (currentPageReply) {
-      await addRouteReply('current_page_info', currentPageReply, {
-        pageData: getSafePageDataSnapshot(''),
-      }, {});
-      return;
-    }
-
-    var navReply = tryHandleNavigationIntent(content);
-    if (navReply) {
-      await addRouteReply('navigation', navReply, {
-        targetTab: parseTabFromText(content) || '',
-      }, {});
-      return;
-    }
-
-    var queryReply = tryHandleQueryIntent(content);
-    if (queryReply) {
-      await addRouteReply('query', queryReply, {
-        pageData: getSafePageDataSnapshot(parseTabFromText(content) || ''),
-      }, {});
-      return;
-    }
-
-    var memoReply = await tryHandleMemoIntent(content);
-    if (memoReply) {
-      await addRouteReply('memo', memoReply, {}, {});
-      return;
-    }
-
-    var settingReply = await tryHandleSettingsIntent(content);
-    if (settingReply) {
-      await addRouteReply('settings', settingReply, {
-        pageData: getSafePageDataSnapshot('settings'),
-      }, {});
-      return;
-    }
-
-    var caseReply = await tryHandleCaseIntent(content);
-    if (caseReply) {
-      await addRouteReply('case', caseReply, {
-        pageData: getSafePageDataSnapshot(''),
-      }, {});
-      return;
-    }
-
-    if (shouldRunIntentClassifier(content)) {
-      var classified = await classifyIntentByModel(content);
-      if (classified && typeof classified === 'object') {
-        if (classified.intent === 'query_case_list') {
-          var caseListReplyByModel = await runModelCaseListAction(content, {
-            action: 'query_case_list',
-            query: content,
-          }, '');
-          if (caseListReplyByModel && caseListReplyByModel.handled === true && caseListReplyByModel.text) {
-            addAiReply(caseListReplyByModel.text);
-            return;
-          }
+      if (isCaseListIntent(content) && !isMissingLibraryIntent(content)) {
+        var earlyCaseListReply = await runModelCaseListAction(content, {
+          action: 'query_case_list',
+          query: content,
+        }, '');
+        if (earlyCaseListReply && earlyCaseListReply.handled === true && earlyCaseListReply.text) {
+          addAiReply(earlyCaseListReply.text);
+          return;
         }
-        if (classified.intent === 'navigate') {
-          var targetTabRaw = classified.tab ? String(classified.tab) : '';
-          var targetTab = targetTabRaw && isKnownTabId(targetTabRaw) ? targetTabRaw : parseTabFromText(content);
-          if (targetTab) {
-            var apis0 = getApis();
-            if (apis0.assistantApi && typeof apis0.assistantApi.switchTab === 'function') {
-              apis0.assistantApi.switchTab(targetTab);
-              await addRouteReply('classified_navigation', '已按意图跳转到：' + targetTab, {
-                targetTab: targetTab,
-              }, {});
-              return;
-            }
-          }
-        }
-        if (classified.intent === 'query') {
-          if (isCaseListIntent(content)) {
-            var caseListReplyByQuery = await runModelCaseListAction(content, {
+      }
+
+      var directCaseUpdateReply = await tryHandleCaseUpdateCommand(content);
+      if (directCaseUpdateReply) {
+        await addRouteReply('direct_case_update', directCaseUpdateReply, {
+          pageData: getSafePageDataSnapshot(''),
+        }, {});
+        return;
+      }
+
+      var tempExecFileReply = await tryHandleTempExecFileIntent(content);
+      if (tempExecFileReply) {
+        await addRouteReply('tempexec_file', tempExecFileReply, {
+          pageData: getSafePageDataSnapshot(''),
+        }, {});
+        return;
+      }
+
+      var caseHistoryReply = await tryHandleCaseHistoryIntent(content);
+      if (caseHistoryReply) {
+        addAiReply(caseHistoryReply);
+        return;
+      }
+
+      var modelDriven = await tryHandleModelDrivenReply(content, {
+        attachments: attachments,
+        contentBlocks: contentBlocks,
+      });
+      if (modelDriven && modelDriven.handled && modelDriven.text) {
+        addAiReply(modelDriven.text, modelDriven.messageOptions || {});
+        return;
+      }
+
+      var currentPageReply = tryHandleCurrentPageIntent(content);
+      if (currentPageReply) {
+        await addRouteReply('current_page_info', currentPageReply, {
+          pageData: getSafePageDataSnapshot(''),
+        }, {});
+        return;
+      }
+
+      var navReply = tryHandleNavigationIntent(content);
+      if (navReply) {
+        await addRouteReply('navigation', navReply, {
+          targetTab: parseTabFromText(content) || '',
+        }, {});
+        return;
+      }
+
+      var queryReply = tryHandleQueryIntent(content);
+      if (queryReply) {
+        await addRouteReply('query', queryReply, {
+          pageData: getSafePageDataSnapshot(parseTabFromText(content) || ''),
+        }, {});
+        return;
+      }
+
+      var memoReply = await tryHandleMemoIntent(content);
+      if (memoReply) {
+        await addRouteReply('memo', memoReply, {}, {});
+        return;
+      }
+
+      var settingReply = await tryHandleSettingsIntent(content);
+      if (settingReply) {
+        await addRouteReply('settings', settingReply, {
+          pageData: getSafePageDataSnapshot('settings'),
+        }, {});
+        return;
+      }
+
+      var caseReply = await tryHandleCaseIntent(content);
+      if (caseReply) {
+        await addRouteReply('case', caseReply, {
+          pageData: getSafePageDataSnapshot(''),
+        }, {});
+        return;
+      }
+
+      if (shouldRunIntentClassifier(content)) {
+        var classified = await classifyIntentByModel(content);
+        if (classified && typeof classified === 'object') {
+          if (classified.intent === 'query_case_list') {
+            var caseListReplyByModel = await runModelCaseListAction(content, {
               action: 'query_case_list',
               query: content,
             }, '');
-            if (caseListReplyByQuery && caseListReplyByQuery.handled === true && caseListReplyByQuery.text) {
-              addAiReply(caseListReplyByQuery.text);
+            if (caseListReplyByModel && caseListReplyByModel.handled === true && caseListReplyByModel.text) {
+              addAiReply(caseListReplyByModel.text);
               return;
             }
           }
-          var queryTabRaw = classified.tab ? String(classified.tab) : '';
-          var queryTab = queryTabRaw && isKnownTabId(queryTabRaw) ? queryTabRaw : parseTabFromText(content);
-          if (!queryTab && !isProjectScopedText(content)) {
-            // 非项目上下文问题走通用问答，不返回页面数据包。
-          } else {
-            var apis1 = getApis();
-            if (apis1.assistantApi && typeof apis1.assistantApi.getPageData === 'function') {
-              var data = apis1.assistantApi.getPageData(queryTab || '');
-              await addRouteReply('classified_query', '按你的意图返回页面数据：\n' + formatJsonCompact(data), {
-                pageData: data,
-                targetTab: queryTab || '',
-              }, {});
-              return;
+          if (classified.intent === 'navigate') {
+            var targetTabRaw = classified.tab ? String(classified.tab) : '';
+            var targetTab = targetTabRaw && isKnownTabId(targetTabRaw) ? targetTabRaw : parseTabFromText(content);
+            if (targetTab) {
+              var apis0 = getApis();
+              if (apis0.assistantApi && typeof apis0.assistantApi.switchTab === 'function') {
+                apis0.assistantApi.switchTab(targetTab);
+                await addRouteReply('classified_navigation', '已按意图跳转到：' + targetTab, {
+                  targetTab: targetTab,
+                }, {});
+                return;
+              }
+            }
+          }
+          if (classified.intent === 'query') {
+            if (isCaseListIntent(content)) {
+              var caseListReplyByQuery = await runModelCaseListAction(content, {
+                action: 'query_case_list',
+                query: content,
+              }, '');
+              if (caseListReplyByQuery && caseListReplyByQuery.handled === true && caseListReplyByQuery.text) {
+                addAiReply(caseListReplyByQuery.text);
+                return;
+              }
+            }
+            var queryTabRaw = classified.tab ? String(classified.tab) : '';
+            var queryTab = queryTabRaw && isKnownTabId(queryTabRaw) ? queryTabRaw : parseTabFromText(content);
+            if (!queryTab && !isProjectScopedText(content)) {
+              // 非项目上下文问题走通用问答，不返回页面数据包。
+            } else {
+              var apis1 = getApis();
+              if (apis1.assistantApi && typeof apis1.assistantApi.getPageData === 'function') {
+                var data = apis1.assistantApi.getPageData(queryTab || '');
+                await addRouteReply('classified_query', '按你的意图返回页面数据：\n' + formatJsonCompact(data), {
+                  pageData: data,
+                  targetTab: queryTab || '',
+                }, {});
+                return;
+              }
             }
           }
         }
@@ -6268,12 +7108,14 @@
       '你是测试助手平台内置AI助手。',
       '优先提供可执行建议，回答简洁。',
       '你可以根据内容类型自行决定输出格式：结构化对比用 Markdown 表格，命令/代码/配置示例用 Markdown 代码块。',
+      hasImageInput ? '若用户附带图片，请先阅读图片内容，再结合文本回答；图片理解必须由模型自主完成。' : '',
       '当涉及删除、配置变更等写操作，提醒需要确认后执行。',
       '若用户询问页面数据，可提示他让你直接“获取某页面数据”。',
       '若用户询问“当前有哪些用例/用例列表”，优先直接返回列表结果，不要要求用户改写问题。',
       '请结合最近对话上下文回答，用户使用“就这个/按刚才那个/就今天的”等省略表达时要承接前文语义。',
       '对于项目外问题（如天气、常识、日常咨询）也要正常回答，不要误返回页面数据。',
-      '如果问题依赖实时信息（如天气）且缺少地点，可先询问城市后再回答。'
+      '如果问题依赖实时信息（如天气）且缺少地点，可先询问城市后再回答。',
+      '如果你要展示图片，可直接输出 Markdown 图片语法，界面会自动渲染。'
     ].join('\n');
     var conversationHistory = buildConversationHistory(conversationHistoryLimit, content);
 
@@ -6282,13 +7124,16 @@
       prompt: prompt,
       temperature: 0.2,
       history: conversationHistory,
+      contentBlocks: contentBlocks,
     });
     if (!res || res.ok !== true) {
       addAiReply('回复失败：' + (res && res.reason ? res.reason : '未知错误'));
       setStatus('回复失败');
       return;
     }
-    addAiReply(String(res.content || ''));
+    addAiReply(String(res.content || ''), {
+      attachments: res && res.attachments ? res.attachments : [],
+    });
     setStatus('');
   }
 
@@ -6298,15 +7143,33 @@
       setStatus('助手正在思考中，请稍候。');
       return;
     }
+    if (attachmentPendingCount > 0) {
+      setStatus('图片仍在处理中，请稍候再发送。');
+      return;
+    }
     if (!isAssistantEnabled()) {
       setStatus('助手未开启，请先到设置页开启。');
       openSettingsForAssistant();
       return;
     }
     var text = String(inputEl.value || '').trim();
-    if (!text) return;
+    var attachments = cloneAssistantAttachments(pendingAttachments);
+    if (!text && !attachments.length) return;
+    if (attachments.length) {
+      var apis = getApis();
+      var modelInfo = apis.assistantApi && typeof apis.assistantApi.getSelectedModelInfo === 'function'
+        ? apis.assistantApi.getSelectedModelInfo()
+        : null;
+      if (modelInfo && modelInfo.configured && modelInfo.supportsImage !== true) {
+        var modelName = modelInfo.modelName ? '“' + modelInfo.modelName + '”' : '当前模型';
+        setStatus(modelName + '不支持图片输入，请切换支持视觉/多模态的模型，或先移除图片后再发送。');
+        return;
+      }
+    }
+    var contentBlocks = buildAssistantRequestContentBlocks(text, attachments);
     inputEl.value = '';
-    addMessage('user', text);
+    clearPendingAttachments();
+    addMessage('user', text, { attachments: attachments });
     var thinking = addMessage('ai', '', {
       thinking: true,
       transient: true,
@@ -6316,6 +7179,8 @@
     setReplyPending(true);
     handleUserInput(text, {
       pendingReplyId: pendingId,
+      attachments: attachments,
+      contentBlocks: contentBlocks,
     }).catch(function(err) {
       var reason = err && err.message ? String(err.message) : '未知错误';
       if (pendingId) {
@@ -6387,6 +7252,30 @@
     if (sendBtn) {
       sendBtn.addEventListener('click', handleSend);
     }
+    if (attachBtn) {
+      attachBtn.addEventListener('click', function() {
+        if (replyPending || attachmentPendingCount > 0 || !imageInputEl) return;
+        imageInputEl.click();
+      });
+    }
+    if (imageInputEl) {
+      imageInputEl.addEventListener('change', function() {
+        var files = imageInputEl.files ? Array.prototype.slice.call(imageInputEl.files) : [];
+        appendPendingAttachments(files, 'picker').finally(function() {
+          if (imageInputEl) imageInputEl.value = '';
+        });
+      });
+    }
+    if (attachmentListEl) {
+      attachmentListEl.addEventListener('click', function(e) {
+        var node = e && e.target && e.target.closest ? e.target.closest('.assistant-attachment-remove') : null;
+        if (!node) return;
+        e.preventDefault();
+        if (removePendingAttachment(node.dataset.attachmentId || '')) {
+          setStatus('已移除图片。');
+        }
+      });
+    }
     if (messagesEl) {
       messagesEl.addEventListener('click', function(e) {
         var node = e && e.target && e.target.closest ? e.target : null;
@@ -6409,6 +7298,37 @@
           e.preventDefault();
           handleSend();
         }
+      });
+      inputEl.addEventListener('input', function() {
+        refreshSendState();
+      });
+      inputEl.addEventListener('paste', function(e) {
+        var files = collectClipboardImageFiles(e);
+        if (!files.length) return;
+        e.preventDefault();
+        appendPendingAttachments(files, 'paste');
+      });
+    }
+    if (composerEl) {
+      ['dragenter', 'dragover'].forEach(function(name) {
+        composerEl.addEventListener(name, function(e) {
+          var files = collectDataTransferImageFiles(e && e.dataTransfer ? e.dataTransfer : null);
+          if (!files.length || replyPending || attachmentPendingCount > 0) return;
+          e.preventDefault();
+          composerEl.classList.add('dragover');
+        });
+      });
+      ['dragleave', 'dragend'].forEach(function(name) {
+        composerEl.addEventListener(name, function() {
+          composerEl.classList.remove('dragover');
+        });
+      });
+      composerEl.addEventListener('drop', function(e) {
+        var files = collectDataTransferImageFiles(e && e.dataTransfer ? e.dataTransfer : null);
+        composerEl.classList.remove('dragover');
+        if (!files.length || replyPending || attachmentPendingCount > 0) return;
+        e.preventDefault();
+        appendPendingAttachments(files, 'drop');
       });
     }
     if (modelPicker) {
@@ -6466,12 +7386,19 @@
     modelPicker = byId('assistantModelPicker');
     statusEl = byId('assistantStatus');
     messagesEl = byId('assistantMessages');
+    composerEl = byId('assistantComposer');
+    attachBtn = byId('assistantAttachBtn');
+    imageInputEl = byId('assistantImageInput');
+    attachmentListEl = byId('assistantAttachmentList');
+    attachmentEmptyEl = byId('assistantAttachmentEmpty');
     inputEl = byId('assistantInput');
     sendBtn = byId('assistantSendBtn');
     casePreview = byId('assistantCasePreview');
     casePreviewCloseBtn = byId('assistantCasePreviewClose');
     casePreviewBody = byId('assistantCasePreviewBody');
 
+    renderPendingAttachments();
+    refreshSendState();
     return Boolean(launcher && launcherBtn && panel && messagesEl && inputEl && sendBtn);
   }
 
@@ -6482,6 +7409,8 @@
     bindUiEvents();
     bindRuntimeEvents();
     loadHistory();
+    renderPendingAttachments();
+    refreshSendState();
     refreshState();
     if (!chatHistory.length) {
       addMessage('ai', '你好，我可以帮你做页面跳转、数据查询、备忘处理、用例生成触发、漏测推荐触发，以及模型报错自动诊断。');
