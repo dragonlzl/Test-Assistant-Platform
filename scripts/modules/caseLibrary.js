@@ -15401,6 +15401,64 @@ function buildEditorPagination(totalCases, pageIndex, totalPages, start, end) {
     return '版本#' + execVersionId;
   }
 
+  function waitForTempExecFileCasesReady(fileId, options) {
+    var targetId = fileId === undefined || fileId === null ? '' : String(fileId).trim();
+    var opts = options && typeof options === 'object' ? options : {};
+    var timeoutMs = Number(opts.timeoutMs);
+    var intervalMs = Number(opts.intervalMs);
+    if (!targetId) return Promise.resolve({ ok: true, file: null });
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) timeoutMs = 8000;
+    if (!Number.isFinite(intervalMs) || intervalMs <= 0) intervalMs = 60;
+    return new Promise(function(resolve) {
+      var settled = false;
+      var timerId = 0;
+      var deadline = Date.now() + timeoutMs;
+      function finish(result) {
+        if (settled) return;
+        settled = true;
+        if (timerId) clearTimeout(timerId);
+        resolve(result || { ok: true, file: null });
+      }
+      function readFile() {
+        var tempApi = getTempExecApi();
+        var stateObj = window.app && window.app.state ? window.app.state : null;
+        var list = stateObj && Array.isArray(stateObj.tempExecFiles) ? stateObj.tempExecFiles : [];
+        var file = null;
+        var i = 0;
+        if (tempApi && typeof tempApi.getTempExecFile === 'function') {
+          try {
+            file = tempApi.getTempExecFile(targetId);
+          } catch (err) {
+            file = null;
+          }
+        }
+        if (!file && list.length) {
+          for (i = 0; i < list.length; i += 1) {
+            if (!list[i]) continue;
+            if (String(list[i].id || '') === targetId) {
+              file = list[i];
+              break;
+            }
+          }
+        }
+        return file;
+      }
+      function check() {
+        var file = readFile();
+        if (file && file._casesLoading !== true) {
+          finish({ ok: true, file: file });
+          return;
+        }
+        if (Date.now() >= deadline) {
+          finish({ ok: false, reason: '执行用例加载超时，请稍后再试', file: file || null });
+          return;
+        }
+        timerId = setTimeout(check, intervalMs);
+      }
+      check();
+    });
+  }
+
   function transferItemsToTempExec(caseFile, fileName, items, options) {
     var opts = options && typeof options === 'object' ? options : {};
     var statusEl = opts.statusEl || dom.status;
@@ -15503,11 +15561,7 @@ function buildEditorPagination(totalCases, pageIndex, totalPages, start, end) {
             return execSet;
           });
         })
-        .then(function() {
-          setStatus(statusEl, '已转到执行：' + name, 'ok');
-          if (openAssignDrawer) {
-            requestTempExecAssignDrawer({ caseName: name, versionName: execVersionLabel });
-          }
+        .then(function(execSet) {
           if (shouldSwitchTab) {
             var coreApi = getCore();
             var switchTab = window.app && typeof window.app.switchTab === 'function'
@@ -15519,12 +15573,29 @@ function buildEditorPagination(totalCases, pageIndex, totalPages, start, end) {
               coreApi.scrollElementIntoView(section, 'smooth', 140);
             }
           }
+          if (opts.waitForCasesLoaded === true && execSet && execSet.id !== undefined && execSet.id !== null) {
+            return waitForTempExecFileCasesReady(String(execSet.id), {
+              timeoutMs: opts.waitForCasesTimeout,
+            }).then(function(readyRes) {
+              if (!readyRes || readyRes.ok !== true) {
+                throw new Error(readyRes && readyRes.reason ? String(readyRes.reason) : '执行用例加载超时，请稍后再试');
+              }
+              return execSet;
+            });
+          }
+          return execSet;
+        })
+        .then(function() {
+          setStatus(statusEl, '已转到执行：' + name, 'ok');
+          if (openAssignDrawer) {
+            requestTempExecAssignDrawer({ caseName: name, versionName: execVersionLabel });
+          }
           return { ok: true };
         })
         .catch(function(err) {
           if (err && err._cancel) return { ok: false, reason: 'cancel' };
           setStatus(statusEl, '转到执行失败：' + (err && err.message ? err.message : '未知错误'), 'err');
-          return { ok: false, err: err };
+          return { ok: false, reason: err && err.message ? String(err.message) : '转到执行失败', err: err };
         });
     }
     var globalState = window.app.state;
@@ -15623,6 +15694,531 @@ function buildEditorPagination(totalCases, pageIndex, totalPages, start, end) {
       }
     }
     return Promise.resolve({ ok: true });
+  }
+
+  function normalizeAssistantExecSearchText(value) {
+    return String(value === undefined || value === null ? '' : value)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/[_-—－]+/g, '')
+      .replace(/[()（）\[\]【】]/g, '');
+  }
+
+  function buildAssistantExecSearchAliases(value) {
+    var raw = String(value === undefined || value === null ? '' : value).trim();
+    if (!raw) return [];
+    var aliases = [];
+    function pushAlias(text) {
+      var normalized = normalizeAssistantExecSearchText(text);
+      if (!normalized) return;
+      if (aliases.indexOf(normalized) === -1) aliases.push(normalized);
+    }
+    pushAlias(raw);
+    pushAlias(raw.replace(/(?:项目|工程|版本|用例|测试|场景)$/g, ''));
+    pushAlias(raw.replace(/(?:项目|工程)/g, ''));
+    pushAlias(raw.replace(/(?:用例|测试|场景)/g, ''));
+    return aliases;
+  }
+
+  function resolveAssistantSearchProjectId(projectId, projectName) {
+    var explicitId = projectId === undefined || projectId === null ? '' : String(projectId).trim();
+    if (explicitId) return explicitId;
+    var aliases = buildAssistantExecSearchAliases(projectName);
+    if (!aliases.length) return '';
+    var list = Array.isArray(state.projects) ? state.projects : [];
+    var bestId = '';
+    var bestScore = 0;
+    list.forEach(function(project) {
+      if (!project || project.id === undefined || project.id === null) return;
+      var pid = String(project.id);
+      var projectAliases = buildAssistantExecSearchAliases(project.name || '');
+      if (!projectAliases.length) return;
+      var score = 0;
+      aliases.forEach(function(alias) {
+        projectAliases.forEach(function(projectAlias) {
+          if (!alias || !projectAlias) return;
+          if (alias === projectAlias) score = Math.max(score, 320);
+          else if (alias.indexOf(projectAlias) !== -1 || projectAlias.indexOf(alias) !== -1) score = Math.max(score, 220);
+        });
+      });
+      if (score > bestScore) {
+        bestScore = score;
+        bestId = pid;
+      }
+    });
+    return bestId;
+  }
+
+  function resolveAssistantSearchVersionId(projectId, versionId, versionName) {
+    var explicitId = versionId === undefined || versionId === null ? '' : String(versionId).trim();
+    if (explicitId) return explicitId;
+    if (!projectId) return '';
+    var aliases = buildAssistantExecSearchAliases(versionName);
+    if (!aliases.length) return '';
+    var list = state.versionsByProject && state.versionsByProject[projectId] ? state.versionsByProject[projectId] : [];
+    var bestId = '';
+    var bestScore = 0;
+    list.forEach(function(version) {
+      if (!version || version.id === undefined || version.id === null) return;
+      var vid = String(version.id);
+      var versionAliases = buildAssistantExecSearchAliases(version.name || '');
+      if (!versionAliases.length) return;
+      var score = 0;
+      aliases.forEach(function(alias) {
+        versionAliases.forEach(function(versionAlias) {
+          if (!alias || !versionAlias) return;
+          if (alias === versionAlias) score = Math.max(score, 260);
+          else if (alias.indexOf(versionAlias) !== -1 || versionAlias.indexOf(alias) !== -1) score = Math.max(score, 180);
+        });
+      });
+      if (score > bestScore) {
+        bestScore = score;
+        bestId = vid;
+      }
+    });
+    return bestId;
+  }
+
+  function buildAssistantExecCandidateItem(file) {
+    var row = file && typeof file === 'object' ? file : {};
+    var projectId = row.project_id === undefined || row.project_id === null ? '' : String(row.project_id);
+    var versionId = row.version_id === undefined || row.version_id === null ? '' : String(row.version_id);
+    var rawItemCount = Number(row.item_count);
+    var rawAssociationCount = Number(row.association_count);
+    return {
+      id: row.id === undefined || row.id === null ? '' : String(row.id),
+      name: row.file_name_clean ? String(row.file_name_clean) : '',
+      projectId: projectId,
+      projectName: projectId && state.projectNameById && state.projectNameById[projectId]
+        ? String(state.projectNameById[projectId])
+        : (projectId ? ('项目#' + projectId) : ''),
+      versionId: versionId,
+      versionName: projectId && versionId ? getVersionName(projectId, versionId) : '',
+      itemCount: Number.isFinite(rawItemCount) ? rawItemCount : 0,
+      associationCount: Number.isFinite(rawAssociationCount) ? rawAssociationCount : 0,
+      updatedAt: row.updated_at || row.imported_at || '',
+      source: row.source ? String(row.source) : '',
+      file: row,
+    };
+  }
+
+  function scoreAssistantExecCandidate(candidate, context) {
+    var row = candidate && typeof candidate === 'object' ? candidate : {};
+    var ctx = context && typeof context === 'object' ? context : {};
+    var score = 0;
+    var matchedFields = [];
+    function pushField(field) {
+      if (field && matchedFields.indexOf(field) === -1) matchedFields.push(field);
+    }
+    function scoreAliases(inputAliases, fieldAliases, fieldName, exactScore, containScore) {
+      if (!inputAliases.length || !fieldAliases.length) return 0;
+      var best = 0;
+      inputAliases.forEach(function(inputAlias) {
+        fieldAliases.forEach(function(fieldAlias) {
+          if (!inputAlias || !fieldAlias) return;
+          if (inputAlias === fieldAlias) best = Math.max(best, exactScore);
+          else if (inputAlias.indexOf(fieldAlias) !== -1 || fieldAlias.indexOf(inputAlias) !== -1) best = Math.max(best, containScore);
+        });
+      });
+      if (best > 0) pushField(fieldName);
+      return best;
+    }
+    var nameAliases = buildAssistantExecSearchAliases(row.name || '');
+    var projectAliases = buildAssistantExecSearchAliases(row.projectName || '');
+    var versionAliases = buildAssistantExecSearchAliases(row.versionName || '');
+    var idText = row.id ? String(row.id) : '';
+    if (ctx.caseFileId && idText && idText === ctx.caseFileId) {
+      score += 1200;
+      pushField('id');
+    }
+    score += scoreAliases(ctx.caseNameAliases, nameAliases, 'name', 760, 620);
+    score += scoreAliases(ctx.queryAliases, nameAliases, 'name', 620, 480);
+    score += scoreAliases(ctx.projectAliases, projectAliases, 'project', 360, 240);
+    score += scoreAliases(ctx.queryAliases, projectAliases, 'project', 200, 120);
+    score += scoreAliases(ctx.versionAliases, versionAliases, 'version', 220, 160);
+    if (!score && !ctx.caseFileId && !ctx.queryAliases.length && !ctx.caseNameAliases.length) {
+      score = 10;
+    }
+    return {
+      score: score,
+      matchedFields: matchedFields,
+    };
+  }
+
+  function assistantSearchExecCandidates(options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var limit = Number(opts.limit);
+    if (!Number.isFinite(limit) || limit <= 0) limit = 8;
+    if (limit > 20) limit = 20;
+    return ensureProjectsReady().then(function() {
+      var requestedProjectName = opts.projectName === undefined || opts.projectName === null ? '' : String(opts.projectName).trim();
+      var projectId = resolveAssistantSearchProjectId(opts.projectId, requestedProjectName);
+      var query = opts.query === undefined || opts.query === null ? '' : String(opts.query).trim();
+      var caseFileName = opts.caseFileName === undefined || opts.caseFileName === null ? '' : String(opts.caseFileName).trim();
+      var versionId = '';
+      if (projectId) {
+        return loadVersions(projectId).catch(function() { return []; }).then(function() {
+          versionId = resolveAssistantSearchVersionId(projectId, opts.versionId, opts.versionName);
+          return apiClient.listCaseFiles(projectId || undefined).then(function(files) {
+            return {
+              files: Array.isArray(files) ? files : [],
+              projectId: projectId,
+              versionId: versionId,
+              requestedProjectName: requestedProjectName,
+              query: query,
+              caseFileName: caseFileName,
+            };
+          });
+        });
+      }
+      return apiClient.listCaseFiles(undefined).then(function(files) {
+        return {
+          files: Array.isArray(files) ? files : [],
+          projectId: projectId,
+          versionId: versionId,
+          requestedProjectName: requestedProjectName,
+          query: query,
+          caseFileName: caseFileName,
+        };
+      });
+    }).then(function(ctx) {
+      var files = Array.isArray(ctx.files) ? ctx.files : [];
+      var projectId = ctx.projectId || '';
+      var versionId = ctx.versionId || '';
+      var requestedProjectName = ctx.requestedProjectName || '';
+      var query = ctx.query || '';
+      var caseFileName = ctx.caseFileName || '';
+      var context = {
+        caseFileId: opts.caseFileId === undefined || opts.caseFileId === null ? '' : String(opts.caseFileId).trim(),
+        queryAliases: buildAssistantExecSearchAliases(query),
+        caseNameAliases: buildAssistantExecSearchAliases(caseFileName || query),
+        projectAliases: buildAssistantExecSearchAliases(requestedProjectName),
+        versionAliases: buildAssistantExecSearchAliases(opts.versionName),
+      };
+      var scored = files.map(function(file) {
+        var item = buildAssistantExecCandidateItem(file);
+        return Object.assign(item, scoreAssistantExecCandidate(item, context));
+      }).filter(function(item) {
+        if (!item.id) return false;
+        if (projectId && item.projectId && item.projectId !== String(projectId)) return false;
+        if (versionId && item.versionId && item.versionId !== String(versionId)) return false;
+        if ((context.caseFileId || context.queryAliases.length || context.caseNameAliases.length || context.projectAliases.length || context.versionAliases.length) && item.score <= 0) return false;
+        return true;
+      });
+      scored.sort(function(a, b) {
+        var scoreDiff = Number(b.score || 0) - Number(a.score || 0);
+        if (scoreDiff) return scoreDiff;
+        return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+      });
+      var selectionRequired = false;
+      if (scored.length > 1) {
+        var first = scored[0];
+        var second = scored[1];
+        var gap = Number(first && first.score ? first.score : 0) - Number(second && second.score ? second.score : 0);
+        selectionRequired = gap < 260 || !first || first.matchedFields.indexOf('name') === -1;
+      }
+      var visible = scored.slice(0, limit).map(function(item, index) {
+        return {
+          index: index + 1,
+          id: item.id,
+          name: item.name,
+          projectId: item.projectId,
+          projectName: item.projectName,
+          versionId: item.versionId,
+          versionName: item.versionName,
+          itemCount: item.itemCount,
+          associationCount: item.associationCount,
+          updatedAt: item.updatedAt,
+          source: item.source,
+          score: item.score,
+          matchedFields: Array.isArray(item.matchedFields) ? item.matchedFields.slice() : [],
+        };
+      });
+      return {
+        ok: true,
+        query: query,
+        caseFileName: caseFileName,
+        projectId: projectId,
+        projectName: projectId && state.projectNameById && state.projectNameById[projectId]
+          ? String(state.projectNameById[projectId])
+          : requestedProjectName,
+        versionId: versionId,
+        total: scored.length,
+        truncated: scored.length > visible.length,
+        selectionRequired: selectionRequired,
+        recommended: !selectionRequired && scored.length ? visible[0] : null,
+        items: visible,
+      };
+    }).catch(function(err) {
+      return {
+        ok: false,
+        reason: err && err.message ? String(err.message) : '搜索用例失败',
+        total: 0,
+        items: [],
+      };
+    });
+  }
+
+  function assistantFindExecCaseFileById(caseFileId, projectId) {
+    var targetId = caseFileId === undefined || caseFileId === null ? '' : String(caseFileId).trim();
+    if (!targetId) return Promise.resolve(null);
+    function findInList(list) {
+      var files = Array.isArray(list) ? list : [];
+      for (var i = 0; i < files.length; i += 1) {
+        var file = files[i];
+        if (!file || file.id === undefined || file.id === null) continue;
+        if (String(file.id) === targetId) return file;
+      }
+      return null;
+    }
+    return apiClient.listCaseFiles(projectId || undefined).then(function(files) {
+      var matched = findInList(files);
+      if (matched || projectId) return matched;
+      return apiClient.listCaseFiles(undefined).then(function(allFiles) {
+        return findInList(allFiles);
+      });
+    });
+  }
+
+  function resolveAssistantAssociationEnabled(file, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    if (Object.prototype.hasOwnProperty.call(opts, 'association_enabled')) return opts.association_enabled === true;
+    if (Object.prototype.hasOwnProperty.call(opts, 'associationEnabled')) return opts.associationEnabled === true;
+    // 助手转执行默认不继承页面上的“关联用例”开关，避免用户未明确要求时被关联执行拦截。
+    return false;
+  }
+
+
+  function sortAssistantExecVersionsByLatest(list) {
+    var versions = Array.isArray(list) ? list.slice() : [];
+    function parseTime(version) {
+      if (!version) return 0;
+      var raw = version.updated_at || version.created_at || '';
+      var ts = Date.parse(raw);
+      return isFinite(ts) ? ts : 0;
+    }
+    versions.sort(function(a, b) {
+      var ta = parseTime(a);
+      var tb = parseTime(b);
+      if (tb !== ta) return tb - ta;
+      var ia = Number(a && a.id);
+      var ib = Number(b && b.id);
+      if (isFinite(ia) && isFinite(ib) && ib !== ia) return ib - ia;
+      return String(b && b.name || '').localeCompare(String(a && a.name || ''), 'zh-Hans-CN');
+    });
+    return versions;
+  }
+
+  function rememberAssistantProjectVersion(projectId, version) {
+    var pid = projectId === undefined || projectId === null ? '' : String(projectId).trim();
+    var row = version && typeof version === 'object' ? version : null;
+    if (!pid || !row || row.id === undefined || row.id === null) return;
+    if (!state.versionsByProject) state.versionsByProject = {};
+    if (!state.versionNameByProject) state.versionNameByProject = {};
+    var list = Array.isArray(state.versionsByProject[pid]) ? state.versionsByProject[pid].slice() : [];
+    var replaced = false;
+    for (var i = 0; i < list.length; i += 1) {
+      var current = list[i];
+      if (!current || current.id === undefined || current.id === null) continue;
+      if (String(current.id) !== String(row.id)) continue;
+      list[i] = Object.assign({}, current, row);
+      replaced = true;
+      break;
+    }
+    if (!replaced) list.unshift(row);
+    state.versionsByProject[pid] = sortAssistantExecVersionsByLatest(list);
+    if (!state.versionNameByProject[pid]) state.versionNameByProject[pid] = {};
+    state.versionNameByProject[pid][row.id] = row.name || ('版本#' + row.id);
+  }
+
+  function buildAssistantExecTransferBaseInfo(file) {
+    var row = file && typeof file === 'object' ? file : {};
+    var projectId = row.project_id === undefined || row.project_id === null ? '' : String(row.project_id);
+    var importVersionId = row.version_id === undefined || row.version_id === null ? '' : String(row.version_id);
+    return {
+      caseFileId: row.id === undefined || row.id === null ? '' : String(row.id),
+      name: row.file_name_clean ? String(row.file_name_clean) : (row.id === undefined || row.id === null ? '用例' : ('用例#' + row.id)),
+      projectId: projectId,
+      projectName: projectId && state.projectNameById && state.projectNameById[projectId]
+        ? String(state.projectNameById[projectId])
+        : (projectId ? ('项目#' + projectId) : ''),
+      importVersionId: importVersionId,
+      importVersionName: projectId && importVersionId ? getVersionName(projectId, importVersionId) : '',
+    };
+  }
+
+  function buildAssistantExecVersionItems(projectId, versions, importVersionId) {
+    var pid = projectId === undefined || projectId === null ? '' : String(projectId);
+    var importId = importVersionId === undefined || importVersionId === null ? '' : String(importVersionId);
+    return sortAssistantExecVersionsByLatest(versions).map(function(version, index) {
+      var row = version && typeof version === 'object' ? version : {};
+      var id = row.id === undefined || row.id === null ? '' : String(row.id);
+      return {
+        index: index + 1,
+        id: id,
+        name: row.name ? String(row.name) : (id ? ('版本#' + id) : ''),
+        projectId: pid,
+        updatedAt: row.updated_at || row.created_at || '',
+        isImportedVersion: Boolean(importId && id && id === importId),
+      };
+    }).filter(function(item) {
+      return item.id && item.name;
+    });
+  }
+
+  function buildAssistantExecVersionSelectionResult(file, versions) {
+    var baseInfo = buildAssistantExecTransferBaseInfo(file);
+    var items = buildAssistantExecVersionItems(baseInfo.projectId, versions, baseInfo.importVersionId);
+    return Object.assign({
+      ok: true,
+      versionSelectionRequired: true,
+      totalVersions: items.length,
+      items: items,
+    }, baseInfo);
+  }
+
+  function buildAssistantExecVersionCreateConfirmResult(file, versions, requestedVersionName) {
+    var baseInfo = buildAssistantExecTransferBaseInfo(file);
+    var items = buildAssistantExecVersionItems(baseInfo.projectId, versions, baseInfo.importVersionId);
+    return Object.assign({
+      ok: true,
+      versionCreateConfirmRequired: true,
+      requestedVersionName: requestedVersionName ? String(requestedVersionName) : '',
+      totalVersions: items.length,
+      items: items,
+    }, baseInfo);
+  }
+
+  function assistantTransferCaseFileToExec(options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var caseFileId = opts.caseFileId === undefined || opts.caseFileId === null
+      ? (opts.id === undefined || opts.id === null ? '' : String(opts.id).trim())
+      : String(opts.caseFileId).trim();
+    if (!caseFileId) {
+      return Promise.resolve({ ok: false, reason: '缺少 caseFileId' });
+    }
+    return ensureProjectsReady().then(function() {
+      var projectId = resolveAssistantSearchProjectId(opts.projectId, opts.projectName);
+      return assistantFindExecCaseFileById(caseFileId, projectId).then(function(file) {
+        if (!file) return null;
+        var fileProjectId = file.project_id === undefined || file.project_id === null ? '' : String(file.project_id);
+        return loadVersions(fileProjectId).catch(function() { return []; }).then(function(list) {
+          return {
+            file: file,
+            versions: Array.isArray(list) ? list : [],
+          };
+        });
+      });
+    }).then(function(ctx) {
+      if (!ctx || !ctx.file) {
+        return {
+          ok: false,
+          reason: '未找到指定用例文件：' + caseFileId,
+        };
+      }
+      var file = ctx.file;
+      var versions = Array.isArray(ctx.versions) ? ctx.versions : [];
+      var baseInfo = buildAssistantExecTransferBaseInfo(file);
+      if (!baseInfo.projectId) {
+        return {
+          ok: false,
+          reason: '目标用例缺少项目，无法选择执行版本',
+        };
+      }
+      var hasExecVersionId = Object.prototype.hasOwnProperty.call(opts, 'execVersionId');
+      var rawExecVersionId = hasExecVersionId ? (opts.execVersionId === undefined || opts.execVersionId === null ? '' : String(opts.execVersionId).trim()) : '';
+      var requestedVersionName = opts.execVersionName === undefined || opts.execVersionName === null
+        ? ''
+        : String(opts.execVersionName).trim();
+      var resolvedExecVersionId = rawExecVersionId;
+      if (!resolvedExecVersionId && requestedVersionName) {
+        resolvedExecVersionId = resolveAssistantSearchVersionId(baseInfo.projectId, '', requestedVersionName);
+      }
+      if (!resolvedExecVersionId) {
+        if (requestedVersionName) {
+          if (opts.createVersionIfMissing === true || opts.create_missing_version === true) {
+            return apiClient.createVersion(baseInfo.projectId, { name: requestedVersionName }).then(function(version) {
+              rememberAssistantProjectVersion(baseInfo.projectId, version);
+              return {
+                ok: true,
+                file: file,
+                execVersionId: version && version.id !== undefined && version.id !== null ? String(version.id) : '',
+                execVersionName: version && version.name ? String(version.name) : requestedVersionName,
+                createdVersion: version || null,
+                createdVersionCreated: true,
+              };
+            }).catch(function(err) {
+              return {
+                ok: false,
+                reason: err && err.message ? String(err.message) : '新增版本失败',
+              };
+            });
+          }
+          return buildAssistantExecVersionCreateConfirmResult(file, versions, requestedVersionName);
+        }
+        return buildAssistantExecVersionSelectionResult(file, versions);
+      }
+      return {
+        ok: true,
+        file: file,
+        execVersionId: resolvedExecVersionId,
+        execVersionName: getVersionName(baseInfo.projectId, resolvedExecVersionId) || requestedVersionName || ('版本#' + resolvedExecVersionId),
+        createdVersion: null,
+        createdVersionCreated: false,
+      };
+    }).then(function(ctx) {
+      if (!ctx || ctx.ok !== true) return ctx;
+      if (ctx.versionSelectionRequired === true || ctx.versionCreateConfirmRequired === true) return ctx;
+      var file = ctx.file;
+      if (!file) {
+        return {
+          ok: false,
+          reason: '未找到目标用例，无法转到执行',
+        };
+      }
+      return apiClient.listCaseItems(file.id).then(function(items) {
+        return transferItemsToTempExec(file, file.file_name_clean || '', items || [], {
+          switchTab: opts.switchTab !== false,
+          skipActiveConfirm: true,
+          openAssignDrawer: opts.openAssignDrawer === true,
+          association_enabled: resolveAssistantAssociationEnabled(file, opts),
+          execVersionId: ctx.execVersionId,
+          waitForCasesLoaded: true,
+          waitForCasesTimeout: 8000,
+        }).then(function(res) {
+          if (!res || res.ok !== true) {
+            return {
+              ok: false,
+              reason: res && res.reason ? String(res.reason) : '转到执行失败',
+            };
+          }
+          var baseInfo = buildAssistantExecTransferBaseInfo(file);
+          return {
+            ok: true,
+            caseFileId: baseInfo.caseFileId,
+            name: baseInfo.name,
+            projectId: baseInfo.projectId,
+            projectName: baseInfo.projectName,
+            versionId: ctx.execVersionId,
+            versionName: ctx.execVersionName || (ctx.execVersionId ? getVersionName(baseInfo.projectId, ctx.execVersionId) : ''),
+            createdVersionId: ctx.createdVersion && ctx.createdVersion.id !== undefined && ctx.createdVersion.id !== null ? String(ctx.createdVersion.id) : '',
+            createdVersionName: ctx.createdVersion && ctx.createdVersion.name ? String(ctx.createdVersion.name) : '',
+            createdVersionCreated: ctx.createdVersionCreated === true,
+          };
+        });
+      }).catch(function(err) {
+        return {
+          ok: false,
+          reason: err && err.message ? String(err.message) : '转到执行失败',
+        };
+      });
+    }).catch(function(err) {
+      return {
+        ok: false,
+        reason: err && err.message ? String(err.message) : '转到执行失败',
+      };
+    });
   }
 
   function getSelectDrawerVisibleFiles() {
@@ -19799,6 +20395,8 @@ function buildEditorPagination(totalCases, pageIndex, totalPages, start, end) {
 	    window.app.caseLibraryApi.getCurrentEditorCaseSnapshot = getCurrentEditorCaseSnapshot;
 	    window.app.caseLibraryApi.getCurrentHistoryDetailSnapshot = getCurrentHistoryDetailSnapshot;
 	    window.app.caseLibraryApi.getCurrentMissingViewSnapshot = getCurrentMissingViewSnapshot;
+    window.app.caseLibraryApi.searchExecCandidates = assistantSearchExecCandidates;
+    window.app.caseLibraryApi.transferCaseFileToExec = assistantTransferCaseFileToExec;
 	    if (hasImportSelectDrawer) {
 	      window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
 	    }
@@ -20013,6 +20611,8 @@ function buildEditorPagination(totalCases, pageIndex, totalPages, start, end) {
 	    window.app.caseLibraryApi.getCurrentEditorCaseSnapshot = getCurrentEditorCaseSnapshot;
 	    window.app.caseLibraryApi.getCurrentHistoryDetailSnapshot = getCurrentHistoryDetailSnapshot;
 	    window.app.caseLibraryApi.getCurrentMissingViewSnapshot = getCurrentMissingViewSnapshot;
+	    window.app.caseLibraryApi.searchExecCandidates = assistantSearchExecCandidates;
+	    window.app.caseLibraryApi.transferCaseFileToExec = assistantTransferCaseFileToExec;
 	    window.app.caseLibraryApi.openImportSelectDrawer = openImportSelectDrawer;
 	    window.app.caseLibraryApi.openImportDiffForExternal = openImportDiffForExternal;
     window.app.caseLibraryApi.openAppendDiffForExternal = openAppendDiffForExternal;

@@ -16,16 +16,18 @@
   var casePreviewCloseBtn = null;
   var casePreviewBody = null;
   var composerEl = null;
+  var attachmentsEl = null;
+  var inputBoxEl = null;
   var attachBtn = null;
   var imageInputEl = null;
   var attachmentListEl = null;
-  var attachmentEmptyEl = null;
 
   var pendingAttachments = [];
   var attachmentPendingCount = 0;
 
   var historyLimit = 80;
   var conversationHistoryLimit = 12;
+  var conversationHistoryReferenceLimit = 6;
   var failureHistoryLimit = 10;
   var actionHandlers = {};
   var approvalCounter = 0;
@@ -37,6 +39,10 @@
   var assistantInputImageMaxCount = 10;
   var assistantInputImageMaxEdge = 1600;
   var assistantInputImageMaxBytes = 4 * 1024 * 1024;
+  var pendingExecTransferSelection = null;
+  var pendingExecTransferVersionSelection = null;
+  var pendingExecTransferCreateVersionConfirm = null;
+  var pendingExecTransferVersionNameClarify = null;
 
   function byId(id) {
     return document.getElementById(id);
@@ -65,16 +71,14 @@
       '  <div class="assistant-messages" id="assistantMessages"></div>',
       '  <div class="assistant-input-row">',
       '    <div class="assistant-composer" id="assistantComposer">',
-      '      <div class="assistant-attachments" id="assistantAttachments">',
-      '        <div class="assistant-attachment-empty" id="assistantAttachmentEmpty">可拖入、粘贴或添加多张图片，发送时会与下方文本一起提交。</div>',
-      '        <div class="assistant-attachment-list hidden" id="assistantAttachmentList"></div>',
+      '      <div class="assistant-attachments hidden" id="assistantAttachments">',
+      '        <div class="assistant-attachment-list" id="assistantAttachmentList"></div>',
       '      </div>',
       '      <div class="assistant-input-main">',
-      '        <div class="assistant-input-tools">',
-      '          <button class="link-toggle" id="assistantAttachBtn" type="button">添加图片</button>',
-      '          <span class="assistant-input-hint">支持图片拖入 / 粘贴，可与文字一起发送</span>',
+      '        <div class="assistant-input-box" id="assistantInputBox">',
+      '          <textarea id="assistantInput" placeholder="输入你的问题或操作指令"></textarea>',
+      '          <button class="assistant-attach-icon-btn" id="assistantAttachBtn" type="button" aria-label="添加图片" title="添加图片"></button>',
       '        </div>',
-      '        <textarea id="assistantInput" placeholder="输入你的问题或操作指令"></textarea>',
       '      </div>',
       '    </div>',
       '    <input id="assistantImageInput" class="hidden" type="file" accept="image/*" multiple/>',
@@ -384,30 +388,58 @@
     if (!attachmentListEl) return;
     attachmentListEl.innerHTML = '';
     var hasAttachments = pendingAttachments.length > 0;
-    if (attachmentEmptyEl) {
-      attachmentEmptyEl.classList.toggle('hidden', hasAttachments);
+    if (attachmentsEl) {
+      attachmentsEl.classList.toggle('hidden', !hasAttachments);
     }
     attachmentListEl.classList.toggle('hidden', !hasAttachments);
     pendingAttachments.forEach(function(item) {
-      var row = document.createElement('div');
+      var row = document.createElement('span');
       row.className = 'assistant-attachment-row';
       row.dataset.attachmentId = item.id || '';
 
-      var name = document.createElement('div');
-      name.className = 'assistant-attachment-name';
-      name.textContent = item.name || '图片';
-      name.title = item.name || '图片';
-      row.appendChild(name);
+      var link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'assistant-attachment-link';
+      link.dataset.attachmentId = item.id || '';
+      link.textContent = item.name || '图片';
+      link.title = item.name || '图片';
+      row.appendChild(link);
 
       var removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.className = 'assistant-attachment-remove';
-      removeBtn.textContent = '移除';
+      removeBtn.textContent = 'x';
+      removeBtn.setAttribute('aria-label', '移除图片');
       removeBtn.dataset.attachmentId = item.id || '';
       row.appendChild(removeBtn);
 
       attachmentListEl.appendChild(row);
     });
+  }
+
+  function findPendingAttachmentById(attachmentId) {
+    var targetId = attachmentId === undefined || attachmentId === null ? '' : String(attachmentId).trim();
+    if (!targetId) return null;
+    for (var i = 0; i < pendingAttachments.length; i += 1) {
+      var item = pendingAttachments[i];
+      if (!item || String(item.id || '') !== targetId) continue;
+      return item;
+    }
+    return null;
+  }
+
+  function openAssistantImagePreview(src, name) {
+    var safeSrc = sanitizeAssistantImageSrc(src);
+    if (!safeSrc || !casePreviewBody) return;
+    var title = name === undefined || name === null ? '' : String(name).trim();
+    var html = '<div class="assistant-image-preview-wrap">';
+    if (title) {
+      html += '<div class="assistant-image-preview-name">' + escapeHtml(title) + '</div>';
+    }
+    html += '<img class="assistant-image-preview" src="' + escapeHtml(safeSrc) + '" alt="' + escapeHtml(title || '图片预览') + '"/>';
+    html += '</div>';
+    casePreviewBody.innerHTML = html;
+    setAssistantCasePreviewVisible(true);
   }
 
   function removePendingAttachment(attachmentId) {
@@ -494,10 +526,12 @@
       card.className = 'assistant-msg-attachment';
       if (src) {
         var img = document.createElement('img');
-        img.className = 'assistant-msg-image';
+        img.className = 'assistant-msg-image assistant-image-preview-trigger';
         img.loading = 'lazy';
         img.alt = item.name || '图片';
         img.src = src;
+        img.dataset.previewSrc = src;
+        img.dataset.previewName = item.name || '图片';
         card.appendChild(img);
       }
       var caption = document.createElement('figcaption');
@@ -682,7 +716,7 @@
     var detailLevel = payloadArgs.detailLevel === undefined || payloadArgs.detailLevel === null
       ? ''
       : String(payloadArgs.detailLevel).trim().toLowerCase();
-    if (toolName !== 'cases.list_current') return text;
+    if (toolName !== 'cases.list_current' && toolName !== 'case_library.query_cases') return text;
     if (detailLevel !== 'full') return text;
     if (items.length !== 1) return text;
     if (!fallbackText) return text;
@@ -699,7 +733,7 @@
       ? ''
       : String(payloadArgs.detailLevel).trim().toLowerCase();
     var caseTable = null;
-    if (toolName !== 'cases.list_current') return text;
+    if (toolName !== 'cases.list_current' && toolName !== 'case_library.query_cases') return text;
     if (detailLevel !== 'full') return text;
     if (!isExplicitAllCaseDisplayIntent(userText)) return text;
     if (items.length <= 1) return text;
@@ -917,7 +951,7 @@
     var safeCaption = safeAlt && safeAlt !== '图片'
       ? ('<figcaption class="assistant-msg-image-caption">' + safeAlt + '</figcaption>')
       : '';
-    return '<figure class="assistant-markdown-image-wrap"><img class="assistant-markdown-image" loading="lazy" src="' + escapeHtml(safeSrc) + '" alt="' + safeAlt + '"/>' + safeCaption + '</figure>';
+    return '<figure class="assistant-markdown-image-wrap"><img class="assistant-markdown-image assistant-image-preview-trigger" loading="lazy" src="' + escapeHtml(safeSrc) + '" alt="' + safeAlt + '" data-preview-src="' + escapeHtml(safeSrc) + '" data-preview-name="' + safeAlt + '"/>' + safeCaption + '</figure>';
   }
 
   function renderMarkdownParagraphHtml(text) {
@@ -1213,6 +1247,145 @@
     return 'tap-assistant-history:' + getUserKey();
   }
 
+  function normalizeAssistantTaskStatus(value) {
+    var raw = value === undefined || value === null ? '' : String(value).trim().toLowerCase();
+    if (!raw) return '';
+    if (raw === 'done' || raw === 'success' || raw === 'completed') return 'completed';
+    if (raw === 'running' || raw === 'in_progress' || raw === 'processing') return 'running';
+    if (raw === 'waiting' || raw === 'pending' || raw === 'paused' || raw === 'awaiting_user') return 'waiting';
+    if (raw === 'blocked' || raw === 'failed' || raw === 'error') return 'blocked';
+    if (raw === 'cancelled' || raw === 'canceled') return 'cancelled';
+    return '';
+  }
+
+  function getAssistantTaskStatusLabel(status) {
+    var normalized = normalizeAssistantTaskStatus(status);
+    if (normalized === 'completed') return '已完成';
+    if (normalized === 'waiting') return '等待继续';
+    if (normalized === 'blocked') return '执行受阻';
+    if (normalized === 'cancelled') return '已取消';
+    return '执行中';
+  }
+
+  function normalizeAssistantTaskState(taskState) {
+    var data = taskState && typeof taskState === 'object' ? taskState : null;
+    var steps = [];
+    var status = '';
+    if (!data) return null;
+    if (Array.isArray(data.steps)) {
+      steps = data.steps.map(function(step, index) {
+        var item = step && typeof step === 'object' ? step : {};
+        var label = item.label !== undefined && item.label !== null
+          ? String(item.label).trim()
+          : (item.name !== undefined && item.name !== null ? String(item.name).trim() : '');
+        var description = item.description !== undefined && item.description !== null
+          ? String(item.description).trim()
+          : '';
+        var stepStatus = normalizeAssistantTaskStatus(item.status);
+        if (!label) label = '步骤 ' + (index + 1);
+        if (!stepStatus) stepStatus = 'waiting';
+        return {
+          label: label,
+          description: description,
+          status: stepStatus,
+          planKey: item.planKey !== undefined && item.planKey !== null ? String(item.planKey) : '',
+          preview: item.preview === true,
+        };
+      }).filter(function(step) {
+        return !!(step && step.label);
+      });
+    }
+    status = normalizeAssistantTaskStatus(data.status);
+    if (!status) {
+      if (steps.some(function(step) { return step.status === 'running'; })) status = 'running';
+      else if (steps.some(function(step) { return step.status === 'waiting'; })) status = 'waiting';
+      else if (steps.some(function(step) { return step.status === 'blocked'; })) status = 'blocked';
+      else if (steps.some(function(step) { return step.status === 'cancelled'; })) status = 'cancelled';
+      else if (steps.length) status = 'completed';
+      else status = 'running';
+    }
+    return {
+      title: data.title !== undefined && data.title !== null && String(data.title).trim() ? String(data.title).trim() : '当前任务',
+      summary: data.summary !== undefined && data.summary !== null ? String(data.summary).trim() : '',
+      status: status,
+      steps: steps,
+    };
+  }
+
+  function cloneAssistantTaskState(taskState) {
+    var normalized = normalizeAssistantTaskState(taskState);
+    if (!normalized) return null;
+    return {
+      title: normalized.title,
+      summary: normalized.summary,
+      status: normalized.status,
+      steps: normalized.steps.map(function(step) {
+        return {
+          label: step.label,
+          description: step.description,
+          status: step.status,
+          planKey: step.planKey || '',
+          preview: step.preview === true,
+        };
+      }),
+    };
+  }
+
+  function cloneAssistantTaskContinuation(continuation) {
+    var data = continuation && typeof continuation === 'object' ? continuation : null;
+    var type = '';
+    var items = [];
+    var stepIndices = [];
+    var i = 0;
+    if (!data) return null;
+    type = data.type === 'action' ? 'action' : (data.type === 'mcp' ? 'mcp' : '');
+    if (!type) return null;
+    if (Array.isArray(data.items)) {
+      for (i = 0; i < data.items.length; i += 1) {
+        if (!data.items[i] || typeof data.items[i] !== 'object') continue;
+        items.push(JSON.parse(JSON.stringify(data.items[i])));
+      }
+    }
+    if (!items.length) return null;
+    if (Array.isArray(data.stepIndices)) {
+      for (i = 0; i < data.stepIndices.length; i += 1) {
+        var num = Number(data.stepIndices[i]);
+        stepIndices.push(Number.isFinite(num) ? num : -1);
+      }
+    }
+    return {
+      type: type,
+      userText: data.userText === undefined || data.userText === null ? '' : String(data.userText),
+      responseHint: data.responseHint === undefined || data.responseHint === null ? '' : String(data.responseHint),
+      items: items,
+      stepIndices: stepIndices,
+    };
+  }
+
+  function buildAssistantTaskContinuation(type, items, stepIndices, userText, responseHint) {
+    var continuationType = type === 'action' ? 'action' : (type === 'mcp' ? 'mcp' : '');
+    var list = Array.isArray(items) ? items : [];
+    var indices = Array.isArray(stepIndices) ? stepIndices : [];
+    if (!continuationType || !list.length) return null;
+    return cloneAssistantTaskContinuation({
+      type: continuationType,
+      userText: userText === undefined || userText === null ? '' : String(userText),
+      responseHint: responseHint === undefined || responseHint === null ? '' : String(responseHint),
+      items: list,
+      stepIndices: indices,
+    });
+  }
+
+  function consumeAssistantTaskContinuationStep(continuation, toolName) {
+    var data = cloneAssistantTaskContinuation(continuation);
+    var normalizedTool = normalizeMcpToolName(toolName);
+    var firstTool = '';
+    if (!data || data.type !== 'mcp' || !data.items.length || !normalizedTool) return data;
+    firstTool = normalizeMcpToolName(data.items[0] && (data.items[0].tool || data.items[0].name || ''));
+    if (firstTool !== normalizedTool) return data;
+    return buildAssistantTaskContinuation('mcp', data.items.slice(1), data.stepIndices.slice(1), data.userText || '', data.responseHint || '');
+  }
+
   function loadHistory() {
     var key = getHistoryStorageKey();
     var list = [];
@@ -1231,6 +1404,7 @@
             createdAt: Number(item.createdAt) || Date.now(),
             actions: [],
             attachments: [],
+            taskState: normalizeAssistantTaskState(item.taskState),
           };
         });
       }
@@ -1258,6 +1432,7 @@
         title: item.title,
         text: item.text,
         createdAt: item.createdAt,
+        taskState: normalizeAssistantTaskState(item.taskState),
       };
     });
     try {
@@ -1322,6 +1497,9 @@
     if (inputEl) {
       inputEl.setAttribute('aria-busy', replyPending === true || attachmentPendingCount > 0 ? 'true' : 'false');
     }
+    if (inputBoxEl && (replyPending === true || attachmentPendingCount > 0)) {
+      inputBoxEl.classList.remove('dragover');
+    }
     if (composerEl) {
       composerEl.classList.toggle('is-busy', replyPending === true || attachmentPendingCount > 0);
     }
@@ -1358,6 +1536,133 @@
     return '';
   }
 
+  function splitAssistantBinaryReplyTokens(value) {
+    var raw = String(value === undefined || value === null ? '' : value).trim();
+    if (!raw) return [];
+    return raw.split(/[\/｜|、,，或]+/).map(function(item) {
+      return String(item || '').trim();
+    }).filter(function(item) {
+      return !!item;
+    });
+  }
+
+  function normalizeAssistantBinaryReplyToken(value) {
+    return String(value === undefined || value === null ? '' : value)
+      .trim()
+      .toLowerCase()
+      .replace(/[“”"'`]/g, '')
+      .replace(/\s+/g, '');
+  }
+
+  function classifyAssistantBinaryReplyTokens(tokens) {
+    var list = Array.isArray(tokens) ? tokens : [];
+    var i = 0;
+    for (i = 0; i < list.length; i += 1) {
+      var token = normalizeAssistantBinaryReplyToken(list[i]);
+      if (!token) continue;
+      if (/^(?:是|好|好的|可以|确认|确定|行|继续|新建|创建|允许|允许操作)$/.test(token)) return 'positive';
+      if (/^(?:否|不是|不|不要|不用|取消|算了|不允许|拒绝)$/.test(token)) return 'negative';
+    }
+    return '';
+  }
+
+  function pickAssistantBinaryReplySubmitText(tokens, type) {
+    var list = Array.isArray(tokens) ? tokens : [];
+    var expected = type === 'negative' ? 'negative' : 'positive';
+    var i = 0;
+    for (i = 0; i < list.length; i += 1) {
+      if (classifyAssistantBinaryReplyTokens([list[i]]) === expected) return String(list[i]).trim();
+    }
+    return list.length ? String(list[0]).trim() : '';
+  }
+
+  function pickAssistantBinaryReplyDisplayLabel(tokens, type, fullText) {
+    var list = Array.isArray(tokens) ? tokens : [];
+    var normalized = list.map(function(item) {
+      return normalizeAssistantBinaryReplyToken(item);
+    });
+    var raw = String(fullText || '');
+    if (type === 'negative') {
+      if (normalized.indexOf('取消') !== -1) return '取消';
+      if (normalized.indexOf('不允许') !== -1) return '不允许';
+      if (normalized.indexOf('拒绝') !== -1) return '拒绝';
+      if (normalized.indexOf('否') !== -1) return '否';
+      return list.length ? String(list[0]).trim() : '取消';
+    }
+    if (normalized.indexOf('继续') !== -1) return '继续';
+    if (normalized.indexOf('允许操作') !== -1) return '允许操作';
+    if (normalized.indexOf('允许') !== -1) return '允许';
+    if (normalized.indexOf('新建') !== -1) return raw.indexOf('继续') !== -1 ? '新建并继续' : '新建';
+    if (normalized.indexOf('创建') !== -1) return raw.indexOf('继续') !== -1 ? '创建并继续' : '创建';
+    if (normalized.indexOf('确认') !== -1 || normalized.indexOf('确定') !== -1) return '确认';
+    if (normalized.indexOf('是') !== -1) return '是';
+    return list.length ? String(list[0]).trim() : '继续';
+  }
+
+  function buildAssistantQuickReplyActions(choices) {
+    var list = Array.isArray(choices) ? choices : [];
+    return list.map(function(choice) {
+      var item = choice && typeof choice === 'object' ? choice : {};
+      var replyText = item.replyText === undefined || item.replyText === null ? '' : String(item.replyText).trim();
+      var label = item.label === undefined || item.label === null ? '' : String(item.label).trim();
+      var className = item.className ? String(item.className).trim() : '';
+      if (!replyText && !label) return null;
+      if (!replyText) replyText = label;
+      return {
+        label: label || replyText,
+        variant: normalizeAssistantActionVariant(item.variant || item.type || item.style),
+        title: item.title ? String(item.title) : '',
+        className: (className ? (className + ' ') : '') + 'assistant-quick-reply-btn assistant-one-shot-btn',
+        busyLabel: item.busyLabel ? String(item.busyLabel) : '已发送...',
+        onClick: function() {
+          return submitAssistantQuickReply(replyText);
+        },
+      };
+    }).filter(function(item) { return !!item; });
+  }
+
+  function inferAssistantBinaryReplyActionsFromText(text) {
+    var raw = String(text === undefined || text === null ? '' : text).trim();
+    var groupMatches = [];
+    var match = null;
+    var i = 0;
+    if (!raw || raw.indexOf('回复') === -1) return [];
+    var regex = /[“"]([^”"\n]{1,24})[”"]/g;
+    while ((match = regex.exec(raw)) !== null) {
+      if (match[1]) groupMatches.push(String(match[1]));
+      if (groupMatches.length >= 4) break;
+    }
+    if (groupMatches.length < 2) return [];
+    for (i = 0; i < groupMatches.length - 1; i += 1) {
+      var leftTokens = splitAssistantBinaryReplyTokens(groupMatches[i]);
+      var rightTokens = splitAssistantBinaryReplyTokens(groupMatches[i + 1]);
+      var leftType = classifyAssistantBinaryReplyTokens(leftTokens);
+      var rightType = classifyAssistantBinaryReplyTokens(rightTokens);
+      var positiveTokens = null;
+      var negativeTokens = null;
+      if (!leftType || !rightType || leftType === rightType) continue;
+      positiveTokens = leftType === 'positive' ? leftTokens : rightTokens;
+      negativeTokens = leftType === 'negative' ? leftTokens : rightTokens;
+      return buildAssistantQuickReplyActions([
+        {
+          label: pickAssistantBinaryReplyDisplayLabel(positiveTokens, 'positive', raw),
+          replyText: pickAssistantBinaryReplySubmitText(positiveTokens, 'positive'),
+          variant: 'allow',
+          title: '快速回复：' + pickAssistantBinaryReplySubmitText(positiveTokens, 'positive'),
+          busyLabel: '已发送...',
+        },
+        {
+          label: pickAssistantBinaryReplyDisplayLabel(negativeTokens, 'negative', raw),
+          replyText: pickAssistantBinaryReplySubmitText(negativeTokens, 'negative'),
+          variant: 'deny',
+          title: '快速回复：' + pickAssistantBinaryReplySubmitText(negativeTokens, 'negative'),
+          busyLabel: '已发送...',
+        },
+      ]);
+    }
+    return [];
+  }
+
   function buildAssistantMessageActions(options) {
     var opts = options && typeof options === 'object' ? options : {};
     var actions = [];
@@ -1371,24 +1676,41 @@
         variant: normalizeAssistantActionVariant(item.variant || item.type || item.style),
         title: item.title ? String(item.title) : '',
         className: item.className ? String(item.className) : '',
+        busyLabel: item.busyLabel ? String(item.busyLabel) : '',
       };
     }).filter(function(item) { return item.id; });
     return actions;
   }
 
+  function resolveAssistantMessageActions(role, text, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var explicitActions = buildAssistantMessageActions(opts);
+    var normalizedRole = String(role === undefined || role === null ? '' : role).trim().toLowerCase();
+    var autoActions = [];
+    if (explicitActions.length) return explicitActions;
+    if (opts.autoReplyActions === false) return [];
+    if (normalizedRole !== 'ai' && normalizedRole !== 'assistant' && normalizedRole !== 'sys') return [];
+    autoActions = inferAssistantBinaryReplyActionsFromText(text);
+    if (!autoActions.length) return [];
+    return buildAssistantMessageActions({ actions: autoActions });
+  }
+
   function addMessage(role, text, options) {
     var opts = options && typeof options === 'object' ? options : {};
-    var actions = buildAssistantMessageActions(opts);
+    var msgRole = role || 'ai';
+    var msgText = text === undefined || text === null ? '' : String(text);
+    var actions = resolveAssistantMessageActions(msgRole, msgText, opts);
     var msg = {
       id: 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
-      role: role || 'ai',
+      role: msgRole,
       title: getRoleTitle(role, opts.title),
-      text: text === undefined || text === null ? '' : String(text),
+      text: msgText,
       createdAt: Date.now(),
       actions: actions,
       thinking: opts.thinking === true,
       transient: opts.transient === true,
       attachments: normalizeAssistantMessageAttachments(opts.attachments),
+      taskState: normalizeAssistantTaskState(opts.taskState),
     };
     chatHistory.push(msg);
     if (chatHistory.length > historyLimit) {
@@ -1412,8 +1734,11 @@
       if (Object.prototype.hasOwnProperty.call(opts, 'attachments')) {
         msg.attachments = normalizeAssistantMessageAttachments(opts.attachments);
       }
+      if (Object.prototype.hasOwnProperty.call(opts, 'taskState')) {
+        msg.taskState = normalizeAssistantTaskState(opts.taskState);
+      }
       msg.createdAt = Date.now();
-      msg.actions = buildAssistantMessageActions(opts);
+      msg.actions = resolveAssistantMessageActions(msg.role, msg.text, opts);
       msg.thinking = opts.thinking === true;
       msg.transient = opts.transient === true;
       renderMessages();
@@ -1444,6 +1769,75 @@
     wrap.innerHTML = html;
     container.appendChild(wrap);
     return wrap;
+  }
+
+  function appendMessageTaskState(container, taskState) {
+    var data = normalizeAssistantTaskState(taskState);
+    if (!container || !data) return null;
+    var card = document.createElement('section');
+    var status = data.status || 'running';
+    var steps = Array.isArray(data.steps) ? data.steps : [];
+    card.className = 'assistant-task-card assistant-task-status-' + status;
+    card.setAttribute('data-task-status', status);
+
+    var head = document.createElement('div');
+    head.className = 'assistant-task-head';
+
+    var title = document.createElement('div');
+    title.className = 'assistant-task-title';
+    title.textContent = data.title || '当前任务';
+    head.appendChild(title);
+
+    var badge = document.createElement('div');
+    badge.className = 'assistant-task-badge';
+    badge.textContent = getAssistantTaskStatusLabel(status);
+    head.appendChild(badge);
+    card.appendChild(head);
+
+    if (data.summary) {
+      var summary = document.createElement('div');
+      summary.className = 'assistant-task-summary';
+      summary.textContent = data.summary;
+      card.appendChild(summary);
+    }
+
+    if (steps.length) {
+      var list = document.createElement('ol');
+      list.className = 'assistant-task-step-list';
+      steps.forEach(function(step) {
+        var item = step && typeof step === 'object' ? step : {};
+        var itemStatus = normalizeAssistantTaskStatus(item.status) || 'waiting';
+        var row = document.createElement('li');
+        row.className = 'assistant-task-step assistant-task-step-' + itemStatus;
+        row.setAttribute('data-step-status', itemStatus);
+
+        var icon = document.createElement('span');
+        icon.className = 'assistant-task-step-icon';
+        row.appendChild(icon);
+
+        var textWrap = document.createElement('div');
+        textWrap.className = 'assistant-task-step-text';
+
+        var label = document.createElement('div');
+        label.className = 'assistant-task-step-label';
+        label.textContent = item.label || '步骤';
+        textWrap.appendChild(label);
+
+        if (item.description) {
+          var desc = document.createElement('div');
+          desc.className = 'assistant-task-step-desc';
+          desc.textContent = item.description;
+          textWrap.appendChild(desc);
+        }
+
+        row.appendChild(textWrap);
+        list.appendChild(row);
+      });
+      card.appendChild(list);
+    }
+
+    container.appendChild(card);
+    return card;
   }
 
   function renderMessages() {
@@ -1488,6 +1882,9 @@
             + '</div>'
           );
         } else {
+          if (msg.taskState) {
+            appendMessageTaskState(body, msg.taskState);
+          }
           if (bodyText) {
             appendMessageTextBlock(body, renderMarkdownMessageHtml(bodyText));
           }
@@ -1523,21 +1920,28 @@
           btn.dataset.actionId = action.id || '';
           btn.addEventListener('click', function() {
             if (btn.disabled) return;
-            if (btn.classList.contains('assistant-approval-btn')) {
-              var approvalBtns = actionsWrap.querySelectorAll('button.assistant-approval-btn');
-              for (var ab = 0; ab < approvalBtns.length; ab += 1) {
-                approvalBtns[ab].disabled = true;
+            var fn = actionHandlers[action.id || ''];
+            var shouldLock = btn.classList.contains('assistant-approval-btn') || btn.classList.contains('assistant-one-shot-btn');
+            function lockActionButtons() {
+              var selector = btn.classList.contains('assistant-approval-btn')
+                ? 'button.assistant-approval-btn'
+                : 'button.assistant-action-btn';
+              var relatedBtns = actionsWrap.querySelectorAll(selector);
+              for (var ab = 0; ab < relatedBtns.length; ab += 1) {
+                relatedBtns[ab].disabled = true;
               }
-              if (btn.classList.contains('assistant-action-btn-allow')) {
+              if (action.busyLabel) {
+                btn.textContent = action.busyLabel;
+              } else if (btn.classList.contains('assistant-action-btn-allow')) {
                 btn.textContent = '执行中...';
               } else if (btn.classList.contains('assistant-action-btn-deny')) {
                 btn.textContent = '处理中...';
               }
             }
-            var fn = actionHandlers[action.id || ''];
             if (typeof fn === 'function') {
               try {
                 var res = fn();
+                if (res !== false && shouldLock) lockActionButtons();
                 if (res && typeof res.then === 'function') {
                   res.catch(function(err) {
                     addMessage('sys', '操作执行失败：' + (err && err.message ? String(err.message) : '未知错误'), { title: '系统' });
@@ -1657,6 +2061,8 @@
   function clearChatHistory() {
     chatHistory = [];
     actionHandlers = {};
+    clearPendingExecTransferSelection();
+    clearPendingExecTransferManualState();
     saveHistory();
     renderMessages();
   }
@@ -1705,9 +2111,44 @@
     return '';
   }
 
+  function trimConversationHistoryReferenceText(text, maxLen) {
+    var raw = text === undefined || text === null ? '' : String(text);
+    raw = raw.replace(/\s+/g, ' ').trim();
+    var max = Number(maxLen);
+    if (!Number.isFinite(max) || max <= 0) max = 180;
+    if (raw.length <= max) return raw;
+    return raw.slice(0, Math.max(1, max - 1)) + '…';
+  }
+
+  function buildConversationPriorityPrompt(latestUserText) {
+    var latest = trimConversationHistoryReferenceText(latestUserText, 140);
+    var lines = [
+      '上下文处理策略：',
+      '- 本轮最新消息是主任务，重要性约 90%。',
+      '- 历史对话只作为弱参考，重要性约 10%。',
+      '- 先只根据本轮最新消息判断：这是延续上文，还是一个新的独立指令/问题。',
+      '- 只有当最新消息与上文强相关，或出现“这个/那个/继续/刚才/上一个/就今天的/按刚才那个”等承接、省略、补充表达时，才回看历史。',
+      '- 如果最新消息本身已经完整明确，应把它当作新的独立请求，忽略大部分历史，不要被旧话题带偏。',
+      '- 若历史信息与本轮最新消息冲突，以本轮最新消息为准。',
+      latest ? ('- 本轮最新消息（90%）：' + latest) : '- 本轮最新消息（90%）：见当前用户输入。',
+      '- history 中提供的仅是“弱参考上下文（10%）”，请只在确认强相关后再使用。',
+    ];
+    return lines.join('\n');
+  }
+
+  function buildConversationPromptWithPriority(basePrompt, latestUserText) {
+    var prompt = basePrompt === undefined || basePrompt === null ? '' : String(basePrompt).trim();
+    var strategy = buildConversationPriorityPrompt(latestUserText);
+    if (!prompt) return strategy;
+    return prompt + '\n' + strategy;
+  }
+
   function buildConversationHistory(limit, latestUserText) {
     var max = Number(limit);
     if (!Number.isFinite(max) || max <= 0) max = conversationHistoryLimit;
+    if (Number.isFinite(conversationHistoryReferenceLimit) && conversationHistoryReferenceLimit > 0) {
+      max = Math.min(max, conversationHistoryReferenceLimit);
+    }
     var list = [];
     var skipUserText = latestUserText === undefined || latestUserText === null
       ? ''
@@ -1717,16 +2158,25 @@
       if (!msg || typeof msg !== 'object') continue;
       var role = normalizeConversationRole(msg.role);
       if (!role) continue;
-      var content = buildMessageBodyContent(msg.text, msg.attachments);
-      if (!content) continue;
-      if (skipUserText && role === 'user' && content === skipUserText) {
+      var rawContent = buildMessageBodyContent(msg.text, msg.attachments);
+      if (!rawContent) continue;
+      if (skipUserText && role === 'user' && rawContent === skipUserText) {
         skipUserText = '';
         continue;
       }
-      list.unshift({ role: role, content: content });
+      list.unshift({
+        role: role,
+        content: trimConversationHistoryReferenceText(rawContent, 180),
+      });
       if (list.length >= max) break;
     }
-    return list;
+    return list.map(function(item, index) {
+      var roleLabel = item.role === 'assistant' ? '助手历史' : '用户历史';
+      return {
+        role: item.role,
+        content: '[弱参考上下文#' + (index + 1) + ' | ' + roleLabel + ' | 仅强相关时使用 | 权重约10%] ' + item.content,
+      };
+    });
   }
 
   function formatJsonCompact(data) {
@@ -1768,7 +2218,7 @@
     if (result.provider) {
       lines.push('搜索源：' + String(result.provider));
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   function requestAssistantOperationApproval(actionName, meta) {
@@ -1823,6 +2273,1471 @@
           },
         ],
       });
+    });
+  }
+
+
+  function clearPendingExecTransferSelection() {
+    pendingExecTransferSelection = null;
+  }
+
+  function clearPendingExecTransferVersionSelection() {
+    pendingExecTransferVersionSelection = null;
+  }
+
+  function clearPendingExecTransferCreateVersionConfirm() {
+    pendingExecTransferCreateVersionConfirm = null;
+  }
+
+  function clearPendingExecTransferVersionNameClarify() {
+    pendingExecTransferVersionNameClarify = null;
+  }
+
+  function clearPendingExecTransferManualState() {
+    clearPendingExecTransferVersionSelection();
+    clearPendingExecTransferCreateVersionConfirm();
+    clearPendingExecTransferVersionNameClarify();
+  }
+
+  function getActivePendingExecTransferState() {
+    if (pendingExecTransferVersionNameClarify) return pendingExecTransferVersionNameClarify;
+    if (pendingExecTransferCreateVersionConfirm) return pendingExecTransferCreateVersionConfirm;
+    if (pendingExecTransferVersionSelection) return pendingExecTransferVersionSelection;
+    if (pendingExecTransferSelection) return pendingExecTransferSelection;
+    return null;
+  }
+
+  function updateActivePendingExecTransferState(options) {
+    var pending = getActivePendingExecTransferState();
+    var opts = options && typeof options === 'object' ? options : {};
+    var taskStepIndex = Number(opts.taskStepIndex);
+    if (!pending) return null;
+    if (Object.prototype.hasOwnProperty.call(opts, 'taskState')) {
+      pending.taskState = cloneAssistantTaskState(opts.taskState);
+    }
+    if (Number.isFinite(taskStepIndex)) pending.taskStepIndex = taskStepIndex;
+    if (Object.prototype.hasOwnProperty.call(opts, 'continuation')) {
+      pending.continuation = cloneAssistantTaskContinuation(opts.continuation);
+    }
+    if (Object.prototype.hasOwnProperty.call(opts, 'sourceUserText')) {
+      pending.sourceUserText = opts.sourceUserText === undefined || opts.sourceUserText === null ? '' : String(opts.sourceUserText);
+    }
+    return pending;
+  }
+
+  function getPendingExecTransferWaitingSummary() {
+    if (pendingExecTransferVersionNameClarify) return '等待你确认是否按新版本处理。';
+    if (pendingExecTransferCreateVersionConfirm) return '等待你确认是否新建执行版本。';
+    if (pendingExecTransferVersionSelection) return '等待你选择执行版本。';
+    if (pendingExecTransferSelection) return '等待你选择目标用例。';
+    return '';
+  }
+
+  function normalizeExecTransferSelectionText(value) {
+    return String(value === undefined || value === null ? '' : value)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/[_\-—－]+/g, '')
+      .replace(/[()（）\[\]【】]/g, '');
+  }
+
+  function looksLikeExecTransferPositiveReply(text) {
+    var compact = String(text === undefined || text === null ? '' : text)
+      .trim()
+      .replace(/\s+/g, '');
+    if (!compact) return false;
+    return /^(?:是|好|好的|可以|确认|确定|行|继续|新建|创建|新建吧|创建吧)$/.test(compact);
+  }
+
+  function looksLikeExecTransferNegativeReply(text) {
+    var compact = String(text === undefined || text === null ? '' : text)
+      .trim()
+      .replace(/\s+/g, '');
+    if (!compact) return false;
+    return /^(?:否|不是|不|不要|不用|不新建|先不|取消|算了)$/.test(compact);
+  }
+
+  function buildExecTransferSelectionCandidateLabel(item) {
+    var row = item && typeof item === 'object' ? item : {};
+    var parts = [];
+    var name = row.name ? String(row.name) : '';
+    if (name) parts.push(name);
+    if (row.projectName) parts.push('项目：' + String(row.projectName));
+    if (row.versionName) parts.push('版本：' + String(row.versionName));
+    if (row.itemCount !== undefined && row.itemCount !== null && String(row.itemCount) !== '') parts.push('条目：' + String(row.itemCount));
+    if (row.id) parts.push('caseFileId=' + String(row.id));
+    return parts.join(' | ');
+  }
+
+  function buildExecTransferVersionCandidateLabel(item) {
+    var row = item && typeof item === 'object' ? item : {};
+    var parts = [];
+    var name = row.name ? String(row.name) : '';
+    if (name) {
+      if (row.isImportedVersion === true) name += '（原用例版本）';
+      parts.push(name);
+    }
+    if (row.updatedAt) parts.push('更新时间：' + String(row.updatedAt));
+    if (row.id) parts.push('versionId=' + String(row.id));
+    return parts.join(' | ');
+  }
+
+  function rememberExecTransferSelection(result, options) {
+    var data = result && typeof result === 'object' ? result : {};
+    var opts = options && typeof options === 'object' ? options : {};
+    var items = Array.isArray(data.items) ? data.items : [];
+    var taskStepIndex = Number(opts.taskStepIndex);
+    if (!Number.isFinite(taskStepIndex)) taskStepIndex = -1;
+    if (!items.length || data.selectionRequired !== true) {
+      clearPendingExecTransferSelection();
+      return;
+    }
+    pendingExecTransferSelection = {
+      createdAt: Date.now(),
+      query: data.query ? String(data.query) : '',
+      projectName: data.projectName ? String(data.projectName) : '',
+      sourceUserText: opts.sourceUserText !== undefined && opts.sourceUserText !== null ? String(opts.sourceUserText) : '',
+      taskState: cloneAssistantTaskState(opts.taskState),
+      taskStepIndex: taskStepIndex,
+      continuation: cloneAssistantTaskContinuation(opts.continuation),
+      items: items.map(function(item, index) {
+        var row = item && typeof item === 'object' ? item : {};
+        return {
+          index: index + 1,
+          id: row.id ? String(row.id) : '',
+          name: row.name ? String(row.name) : '',
+          projectId: row.projectId ? String(row.projectId) : '',
+          projectName: row.projectName ? String(row.projectName) : '',
+          versionId: row.versionId ? String(row.versionId) : '',
+          versionName: row.versionName ? String(row.versionName) : '',
+          itemCount: row.itemCount === undefined || row.itemCount === null ? '' : String(row.itemCount),
+        };
+      }).filter(function(item) { return item.id; }),
+    };
+    if (!pendingExecTransferSelection.items.length) clearPendingExecTransferSelection();
+  }
+
+  function getPendingExecTransferContinuationStepArgs(continuation, toolName) {
+    var data = cloneAssistantTaskContinuation(continuation);
+    var normalizedTool = normalizeMcpToolName(toolName);
+    var first = null;
+    if (!data || data.type !== 'mcp' || !data.items.length || !normalizedTool) return null;
+    first = data.items[0] && typeof data.items[0] === 'object' ? data.items[0] : null;
+    if (!first) return null;
+    if (normalizeMcpToolName(first.tool || first.name || '') !== normalizedTool) return null;
+    return first.args && typeof first.args === 'object' ? JSON.parse(JSON.stringify(first.args)) : {};
+  }
+
+  function rememberExecTransferVersionSelection(result, options) {
+    var data = result && typeof result === 'object' ? result : {};
+    var opts = options && typeof options === 'object' ? options : {};
+    var caseFileId = data.caseFileId ? String(data.caseFileId) : '';
+    var projectId = data.projectId ? String(data.projectId) : '';
+    var taskStepIndex = Number(opts.taskStepIndex);
+    if (!Number.isFinite(taskStepIndex)) taskStepIndex = -1;
+    if (!caseFileId || !projectId) {
+      clearPendingExecTransferVersionSelection();
+      return;
+    }
+    var items = Array.isArray(data.items) ? data.items : [];
+    pendingExecTransferVersionSelection = {
+      createdAt: Date.now(),
+      approved: opts.approved === true,
+      caseFileId: caseFileId,
+      name: data.name ? String(data.name) : '',
+      projectId: projectId,
+      projectName: data.projectName ? String(data.projectName) : '',
+      importVersionId: data.importVersionId ? String(data.importVersionId) : '',
+      importVersionName: data.importVersionName ? String(data.importVersionName) : '',
+      requestedVersionName: opts.requestedVersionName !== undefined && opts.requestedVersionName !== null ? String(opts.requestedVersionName).trim() : '',
+      sourceUserText: opts.sourceUserText !== undefined && opts.sourceUserText !== null ? String(opts.sourceUserText) : '',
+      taskState: cloneAssistantTaskState(opts.taskState),
+      taskStepIndex: taskStepIndex,
+      continuation: cloneAssistantTaskContinuation(opts.continuation),
+      items: items.map(function(item, index) {
+        var row = item && typeof item === 'object' ? item : {};
+        return {
+          index: index + 1,
+          id: row.id ? String(row.id) : '',
+          name: row.name ? String(row.name) : '',
+          updatedAt: row.updatedAt ? String(row.updatedAt) : '',
+          isImportedVersion: row.isImportedVersion === true,
+        };
+      }).filter(function(item) {
+        return item.id && item.name;
+      }),
+    };
+  }
+
+  function rememberExecTransferCreateVersionConfirm(result, requestedVersionName, options) {
+    var pending = pendingExecTransferVersionSelection && typeof pendingExecTransferVersionSelection === 'object'
+      ? pendingExecTransferVersionSelection
+      : null;
+    var data = result && typeof result === 'object' ? result : {};
+    var opts = options && typeof options === 'object' ? options : {};
+    var caseFileId = data.caseFileId ? String(data.caseFileId) : (pending && pending.caseFileId ? String(pending.caseFileId) : '');
+    var projectId = data.projectId ? String(data.projectId) : (pending && pending.projectId ? String(pending.projectId) : '');
+    var requestedName = requestedVersionName === undefined || requestedVersionName === null ? '' : String(requestedVersionName).trim();
+    var taskStepIndex = Number(opts.taskStepIndex);
+    if (!Number.isFinite(taskStepIndex)) taskStepIndex = pending && Number.isFinite(Number(pending.taskStepIndex)) ? Number(pending.taskStepIndex) : -1;
+    if (!caseFileId || !projectId || !requestedName) {
+      clearPendingExecTransferCreateVersionConfirm();
+      return;
+    }
+    pendingExecTransferCreateVersionConfirm = {
+      createdAt: Date.now(),
+      approved: opts.approved === true || Boolean(pending && pending.approved === true),
+      caseFileId: caseFileId,
+      name: data.name ? String(data.name) : (pending && pending.name ? String(pending.name) : ''),
+      projectId: projectId,
+      projectName: data.projectName ? String(data.projectName) : (pending && pending.projectName ? String(pending.projectName) : ''),
+      requestedVersionName: requestedName,
+      sourceUserText: opts.sourceUserText !== undefined && opts.sourceUserText !== null
+        ? String(opts.sourceUserText)
+        : (pending && pending.sourceUserText ? String(pending.sourceUserText) : ''),
+      taskState: cloneAssistantTaskState(opts.taskState || (pending ? pending.taskState : null)),
+      taskStepIndex: taskStepIndex,
+      continuation: cloneAssistantTaskContinuation(opts.continuation || (pending ? pending.continuation : null)),
+      items: pending && Array.isArray(pending.items) ? pending.items.slice() : [],
+    };
+  }
+
+  function rememberExecTransferVersionNameClarify(result, requestedVersionName, rawInput, options) {
+    var pending = result && typeof result === 'object' ? result : null;
+    var opts = options && typeof options === 'object' ? options : {};
+    var requestedName = requestedVersionName === undefined || requestedVersionName === null ? '' : String(requestedVersionName).trim();
+    var taskStepIndex = Number(opts.taskStepIndex);
+    if (!Number.isFinite(taskStepIndex)) taskStepIndex = pending && Number.isFinite(Number(pending.taskStepIndex)) ? Number(pending.taskStepIndex) : -1;
+    if (!pending || !pending.caseFileId || !pending.projectId || !requestedName) {
+      clearPendingExecTransferVersionNameClarify();
+      return;
+    }
+    pendingExecTransferVersionNameClarify = {
+      createdAt: Date.now(),
+      approved: pending.approved === true,
+      caseFileId: String(pending.caseFileId),
+      name: pending.name ? String(pending.name) : '',
+      projectId: String(pending.projectId),
+      projectName: pending.projectName ? String(pending.projectName) : '',
+      requestedVersionName: requestedName,
+      sourceUserText: opts.sourceUserText !== undefined && opts.sourceUserText !== null
+        ? String(opts.sourceUserText)
+        : (pending.sourceUserText ? String(pending.sourceUserText) : ''),
+      rawInput: rawInput === undefined || rawInput === null ? requestedName : String(rawInput).trim(),
+      items: Array.isArray(pending.items) ? pending.items.slice() : [],
+      taskState: cloneAssistantTaskState(opts.taskState || pending.taskState),
+      taskStepIndex: taskStepIndex,
+      continuation: cloneAssistantTaskContinuation(opts.continuation || pending.continuation),
+    };
+  }
+
+  function buildExecTransferSearchResultText(result, responseHint) {
+    var data = result && typeof result === 'object' ? result : {};
+    var prefix = responseHint ? String(responseHint).trim() : '';
+    var items = Array.isArray(data.items) ? data.items : [];
+    var lines = [];
+    if (prefix) lines.push(prefix);
+    if (!items.length) {
+      lines.push('未找到可转到当前执行的用例文件。');
+      if (data.projectName) lines.push('范围：' + String(data.projectName));
+      if (data.query) lines.push('查询：' + String(data.query));
+      lines.push('你可以补充更具体的项目名或用例名后再试。');
+  return lines.join('\n');
+    }
+    if (data.selectionRequired === true) {
+      lines.push('找到 ' + items.length + ' 个候选用例，请先选择再转执行：');
+      items.forEach(function(item, idx) {
+        lines.push((idx + 1) + '. ' + buildExecTransferSelectionCandidateLabel(item));
+      });
+      if (data.truncated === true && Number(data.total) > items.length) {
+        lines.push('还有 ' + (Number(data.total) - items.length) + ' 个候选未展开。');
+      }
+      lines.push('请直接回复“选第1个”或回复候选名。');
+  return lines.join('\n');
+    }
+    var target = data.recommended && typeof data.recommended === 'object'
+      ? data.recommended
+      : (items[0] && typeof items[0] === 'object' ? items[0] : null);
+    if (!target) {
+      lines.push('未找到明确候选。');
+  return lines.join('\n');
+    }
+    lines.push('已定位到可转执行的目标用例：');
+    lines.push('1. ' + buildExecTransferSelectionCandidateLabel(target));
+    lines.push('可继续调用 case_library.transfer_to_exec 完成转入。');
+return lines.join('\n');
+  }
+
+  function buildExecTransferVersionSelectionText(result) {
+    var data = result && typeof result === 'object' ? result : {};
+    var items = Array.isArray(data.items) ? data.items : [];
+    var lines = [];
+    if (data.name) lines.push('已定位到用例【' + String(data.name) + '】。');
+    lines.push('请选择要转入的执行版本：');
+    if (data.projectName) lines.push('项目：' + String(data.projectName));
+    if (data.importVersionName) lines.push('原用例版本：' + String(data.importVersionName));
+    if (items.length) {
+      items.forEach(function(item, idx) {
+        lines.push((idx + 1) + '. ' + buildExecTransferVersionCandidateLabel(item));
+      });
+      lines.push('请回复“选第1个”或直接回复版本名；若要新建版本，也可以直接回复新的版本名。');
+    } else {
+      lines.push('当前项目下还没有可用执行版本。');
+      lines.push('你可以直接回复想新建的版本名，或回复“取消”。');
+    }
+return lines.join('\n');
+  }
+
+  function buildExecTransferCreateVersionConfirmText(result) {
+    var data = result && typeof result === 'object' ? result : {};
+    var requested = data.requestedVersionName ? String(data.requestedVersionName) : '';
+    var lines = [];
+    if (data.name) lines.push('目标用例：' + String(data.name));
+    if (data.projectName) lines.push('项目：' + String(data.projectName));
+    lines.push('当前项目下不存在执行版本【' + requested + '】。是否为你新建后继续转执行？');
+    lines.push('回复“是/新建”继续，回复“否/取消”返回版本选择。');
+return lines.join('\n');
+  }
+
+  function buildExecTransferVersionNameClarifyText(result) {
+    var data = result && typeof result === 'object' ? result : {};
+    var requested = data.requestedVersionName ? String(data.requestedVersionName) : '';
+    var lines = [];
+    if (data.name) lines.push('目标用例：' + String(data.name));
+    if (data.projectName) lines.push('项目：' + String(data.projectName));
+    lines.push('我没有在当前可选执行版本中识别到【' + requested + '】。这是你想输入的新版本名吗？');
+    lines.push('回复“是/继续”我会按新版本处理；回复“否/取消”我会继续帮你判断更像现有版本笔误，还是回到版本选择。');
+return lines.join('\n');
+  }
+
+  function buildExecTransferSuccessText(data, fallbackName) {
+    var row = data && typeof data === 'object' ? data : {};
+    var name = row.name ? String(row.name) : (fallbackName ? String(fallbackName) : '目标用例');
+    if (row.createdVersionCreated === true && row.createdVersionName) {
+      return '已新建版本【' + String(row.createdVersionName) + '】，并将【' + name + '】转到当前执行。';
+    }
+    return '已将【' + name + '】转到当前执行。';
+  }
+
+  function buildExecTransferVersionSelectionRetryText() {
+    var pending = pendingExecTransferVersionSelection && typeof pendingExecTransferVersionSelection === 'object'
+      ? pendingExecTransferVersionSelection
+      : null;
+    if (!pending) return '请回复版本名或“选第1个”。';
+    if (Array.isArray(pending.items) && pending.items.length) {
+      return '未识别到有效执行版本，请回复“选第1个”或直接回复版本名；若要新建版本，也可以直接回复新的版本名。';
+    }
+    return '当前还没有可选执行版本，请直接回复想新建的版本名，或回复“取消”。';
+  }
+
+  async function interpretExecTransferVersionClarifyNegativeReply(pending) {
+    var data = pending && typeof pending === 'object' ? pending : null;
+    var apis = getApis();
+    var requested = data && data.requestedVersionName ? String(data.requestedVersionName) : '';
+    var rawInput = data && data.rawInput ? String(data.rawInput) : requested;
+    var items = data && Array.isArray(data.items) ? data.items : [];
+    var payload = null;
+    var res = null;
+    var parsed = null;
+    var mode = '';
+    var suggestedName = '';
+    var i = 0;
+    if (!data || !rawInput) return '';
+    if (!apis.assistantApi || typeof apis.assistantApi.callModel !== 'function') return '';
+    payload = {
+      task: 'interpret_exec_transfer_version_name',
+      rawInput: rawInput,
+      requestedVersionName: requested,
+      caseName: data.name ? String(data.name) : '',
+      projectName: data.projectName ? String(data.projectName) : '',
+      availableVersions: items.map(function(item) {
+        return item && item.name ? String(item.name) : '';
+      }).filter(function(item) { return !!item; }),
+    };
+    try {
+      res = await apis.assistantApi.callModel(JSON.stringify(payload, null, 2), {
+        prompt: buildConversationPromptWithPriority([
+          '你是测试助手平台内置 AI 助手。',
+          '当前场景：用户在“选择执行版本”阶段输入了一个未匹配成功的内容。',
+          '助手刚追问“这是不是想输入的新版本名”，用户回答了否。',
+          '请根据 rawInput 与 availableVersions 判断：更像是现有版本笔误，还是应回到版本选择。',
+          '若能高置信推断某个现有版本，输出单个 JSON：{"mode":"retry_existing","versionName":"版本名","response":"给用户的简洁回复"}',
+          '若不能高置信推断，输出：{"mode":"return_selection","response":"给用户的简洁回复"}',
+          '只输出一个 JSON 对象，不要代码块。'
+        ].join('\n'), rawInput),
+        temperature: 0.1,
+        history: buildConversationHistory(4, rawInput),
+      });
+    } catch (err) {
+      res = null;
+    }
+    if (!res || res.ok !== true || !res.content) return '';
+    parsed = parseJsonObjectFromText(String(res.content || '').trim());
+    if (!parsed || typeof parsed !== 'object') return '';
+    mode = parsed.mode ? String(parsed.mode).trim().toLowerCase() : '';
+    suggestedName = parsed.versionName ? String(parsed.versionName).trim() : '';
+    if (mode === 'retry_existing' && suggestedName) {
+      for (i = 0; i < items.length; i += 1) {
+        if (!items[i] || !items[i].name) continue;
+        if (normalizeExecTransferSelectionText(items[i].name) === normalizeExecTransferSelectionText(suggestedName)) {
+          return parsed.response && String(parsed.response).trim()
+            ? String(parsed.response).trim()
+            : ('我先不把【' + requested + '】当作新版本，更像是现有版本【' + items[i].name + '】。如果是它，直接回复版本名即可；如果不是，我会继续保留版本列表供你选择。');
+        }
+      }
+    }
+    if (parsed.response && String(parsed.response).trim()) return String(parsed.response).trim();
+    return '';
+  }
+
+  function handleExecTransferToolData(toolData, responseHint, options) {
+    var data = toolData && typeof toolData === 'object' ? toolData : {};
+    var opts = options && typeof options === 'object' ? options : {};
+    if (data.versionSelectionRequired === true) {
+      clearPendingExecTransferSelection();
+      clearPendingExecTransferCreateVersionConfirm();
+      clearPendingExecTransferVersionNameClarify();
+      rememberExecTransferVersionSelection(data, {
+        approved: opts.approved === true,
+        taskState: opts.taskState,
+        taskStepIndex: opts.taskStepIndex,
+        continuation: opts.continuation,
+        sourceUserText: opts.sourceUserText,
+        requestedVersionName: opts.requestedVersionName,
+      });
+      return responseHint ? String(responseHint) : buildExecTransferVersionSelectionText(data);
+    }
+    if (data.versionCreateConfirmRequired === true) {
+      clearPendingExecTransferSelection();
+      clearPendingExecTransferVersionNameClarify();
+      rememberExecTransferVersionSelection(data, {
+        approved: opts.approved === true,
+        taskState: opts.taskState,
+        taskStepIndex: opts.taskStepIndex,
+        continuation: opts.continuation,
+        sourceUserText: opts.sourceUserText,
+        requestedVersionName: opts.requestedVersionName,
+      });
+      rememberExecTransferCreateVersionConfirm(data, data.requestedVersionName || '', {
+        approved: opts.approved === true,
+        taskState: opts.taskState,
+        taskStepIndex: opts.taskStepIndex,
+        continuation: opts.continuation,
+        sourceUserText: opts.sourceUserText,
+      });
+      return responseHint ? String(responseHint) : buildExecTransferCreateVersionConfirmText(data);
+    }
+    clearPendingExecTransferSelection();
+    clearPendingExecTransferManualState();
+    if (responseHint) return String(responseHint);
+    return buildExecTransferSuccessText(data, opts.fallbackName || '目标用例');
+  }
+
+  function parseSimpleChinesePositiveInt(value) {
+    var raw = value === undefined || value === null ? '' : String(value).trim();
+    if (!raw) return 0;
+    var map = { '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
+    if (raw === '十') return 10;
+    if (raw.indexOf('十') === -1) return map[raw] || 0;
+    var parts = raw.split('十');
+    var tens = parts[0] ? (map[parts[0]] || 0) : 1;
+    var units = parts[1] ? (map[parts[1]] || 0) : 0;
+    return tens * 10 + units;
+  }
+
+  function resolvePendingExecTransferCandidate(text) {
+    var raw = text === undefined || text === null ? '' : String(text).trim();
+    var pending = pendingExecTransferSelection && Array.isArray(pendingExecTransferSelection.items)
+      ? pendingExecTransferSelection
+      : null;
+    if (!pending || !pending.items.length || !raw) return { candidate: null, invalid: false, cancelled: false };
+    if (containsAny(raw, ['取消', '先不', '不用', '算了'])) {
+      return { candidate: null, invalid: false, cancelled: true };
+    }
+    var compact = raw.replace(/\s+/g, '');
+    var index = 0;
+    var digitMatch = compact.match(/^(?:选|就|用|转|执行)?第?(\d+)(?:个|条|项|份|号)?$/);
+    if (digitMatch) {
+      index = toPositiveInt(digitMatch[1], 0);
+    } else {
+      var chineseMatch = compact.match(/^(?:选|就|用|转|执行)?第?([一二两三四五六七八九十]+)(?:个|条|项|份|号)?$/);
+      if (chineseMatch) index = parseSimpleChinesePositiveInt(chineseMatch[1]);
+    }
+    if (index > 0) {
+      return {
+        candidate: pending.items[index - 1] || null,
+        invalid: !(pending.items[index - 1]),
+        cancelled: false,
+      };
+    }
+    var normalized = normalizeExecTransferSelectionText(raw);
+    if (normalized) {
+      for (var i = 0; i < pending.items.length; i += 1) {
+        var item = pending.items[i];
+        if (!item) continue;
+        var name = normalizeExecTransferSelectionText(item.name || '');
+        if (name && (normalized.indexOf(name) !== -1 || name.indexOf(normalized) !== -1)) {
+          return { candidate: item, invalid: false, cancelled: false };
+        }
+      }
+    }
+    var looksLikeChoice = Boolean(digitMatch) || /第.+个/.test(compact) || /^\d+$/.test(compact);
+    return { candidate: null, invalid: looksLikeChoice, cancelled: false };
+  }
+
+  function resolveAssistantChoiceIndexFromText(text) {
+    var compact = String(text === undefined || text === null ? '' : text).trim().replace(/\s+/g, '');
+    var index = 0;
+    var digitMatch = null;
+    var chineseMatch = null;
+    if (!compact) return 0;
+    digitMatch = compact.match(/^(?:选|就|用|转|执行)第?(\d+)(?:个|条|项|份|号)?$/);
+    if (!digitMatch) digitMatch = compact.match(/^第(\d+)(?:个|条|项|份|号)$/);
+    if (digitMatch) return toPositiveInt(digitMatch[1], 0);
+    chineseMatch = compact.match(/^(?:选|就|用|转|执行)第?([一二两三四五六七八九十]+)(?:个|条|项|份|号)?$/);
+    if (!chineseMatch) chineseMatch = compact.match(/^第([一二两三四五六七八九十]+)(?:个|条|项|份|号)$/);
+    if (chineseMatch) index = parseSimpleChinesePositiveInt(chineseMatch[1]);
+    return index > 0 ? index : 0;
+  }
+
+  function findAssistantChoiceItemByModelSelection(items, parsed) {
+    var list = Array.isArray(items) ? items : [];
+    var data = parsed && typeof parsed === 'object' ? parsed : {};
+    var selectedIndex = toPositiveInt(data.selectedIndex, 0);
+    var selectedId = data.selectedId !== undefined && data.selectedId !== null ? String(data.selectedId).trim() : '';
+    var selectedName = data.selectedName !== undefined && data.selectedName !== null ? String(data.selectedName).trim() : '';
+    var normalizedSelectedName = normalizeExecTransferSelectionText(selectedName);
+    var i = 0;
+    if (selectedIndex > 0 && list[selectedIndex - 1]) return list[selectedIndex - 1];
+    if (selectedId) {
+      for (i = 0; i < list.length; i += 1) {
+        if (!list[i]) continue;
+        if (String(list[i].id || '') === selectedId) return list[i];
+      }
+    }
+    if (normalizedSelectedName) {
+      for (i = 0; i < list.length; i += 1) {
+        if (!list[i]) continue;
+        if (normalizeExecTransferSelectionText(list[i].name || '') === normalizedSelectedName) return list[i];
+      }
+    }
+    return null;
+  }
+
+  async function resolveExecTransferChoiceByModel(options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var latestUserInput = opts.latestUserInput === undefined || opts.latestUserInput === null ? '' : String(opts.latestUserInput).trim();
+    var originalUserRequest = opts.originalUserRequest === undefined || opts.originalUserRequest === null ? '' : String(opts.originalUserRequest).trim();
+    var entityLabel = opts.entityLabel ? String(opts.entityLabel) : '目标项';
+    var items = Array.isArray(opts.items) ? opts.items : [];
+    var allowCreate = opts.allowCreate === true;
+    var apis = getApis();
+    var payload = null;
+    var res = null;
+    var parsed = null;
+    if (!latestUserInput || !apis.assistantApi || typeof apis.assistantApi.callModel !== 'function') return null;
+    payload = {
+      task: 'resolve_exec_transfer_choice',
+      entityLabel: entityLabel,
+      latestUserInput: latestUserInput,
+      originalUserRequest: originalUserRequest,
+      allowCreate: allowCreate,
+      caseName: opts.caseName ? String(opts.caseName) : '',
+      projectName: opts.projectName ? String(opts.projectName) : '',
+      importVersionName: opts.importVersionName ? String(opts.importVersionName) : '',
+      availableItems: items.map(function(item, index) {
+        var row = item && typeof item === 'object' ? item : {};
+        return {
+          index: index + 1,
+          id: row.id ? String(row.id) : '',
+          name: row.name ? String(row.name) : '',
+          label: opts.labelBuilder ? String(opts.labelBuilder(row) || '') : (row.name ? String(row.name) : ''),
+        };
+      }),
+    };
+    try {
+      res = await apis.assistantApi.callModel(JSON.stringify(payload, null, 2), {
+        prompt: buildConversationPromptWithPriority([
+          '你是测试助手平台内置 AI 助手。',
+          '当前任务：根据用户最新输入，从给定的候选列表中判断他想选中的' + entityLabel + '。',
+          '必须优先理解 latestUserInput，同时参考 originalUserRequest；不要只做机械字符串切分。',
+          '如果只有 1 个候选明显符合用户意图，输出 {"mode":"select","selectedIndex":1}。',
+          '如果有多个候选都合理，例如用户说 912，而可选项同时有 912 / aa912 / 912新建，输出 {"mode":"ambiguous","candidateIndices":[1,2],"response":"..."}。',
+          allowCreate ? '如果没有现有候选命中，但用户明显是在指定一个新' + entityLabel + '名，输出 {"mode":"create_confirm","requestedName":"...","response":"..."}。' : '',
+          allowCreate ? '如果没有现有候选命中，但还需要先确认用户输入是不是想作为新' + entityLabel + '名，输出 {"mode":"clarify_new_name","requestedName":"...","response":"..."}。' : '',
+          '如果信息不足或无法可靠判断，输出 {"mode":"invalid","response":"..."}。',
+          '只输出一个 JSON 对象，不要代码块，不要额外解释。'
+        ].filter(function(line) { return !!line; }).join('\n'), latestUserInput),
+        temperature: 0.1,
+        history: buildConversationHistory(4, latestUserInput),
+      });
+    } catch (err) {
+      res = null;
+    }
+    if (!res || res.ok !== true || !res.content) return null;
+    parsed = parseJsonObjectFromText(String(res.content || '').trim());
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      mode: parsed.mode ? String(parsed.mode).trim().toLowerCase() : '',
+      requestedName: parsed.requestedName ? String(parsed.requestedName).trim() : '',
+      response: parsed.response ? String(parsed.response).trim() : '',
+      selectedItem: findAssistantChoiceItemByModelSelection(items, parsed),
+      raw: parsed,
+    };
+  }
+
+
+  function buildExecTransferSearchArgsFromModelResult(parsed) {
+    var data = parsed && typeof parsed === 'object' ? parsed : {};
+    var nextArgs = {};
+    var keys = ['query', 'caseFileName', 'projectName', 'projectId', 'versionName', 'versionId'];
+    var i = 0;
+    for (i = 0; i < keys.length; i += 1) {
+      var key = keys[i];
+      var value = '';
+      if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
+      value = data[key] === undefined || data[key] === null ? '' : String(data[key]).trim();
+      if (!value) continue;
+      nextArgs[key] = value;
+    }
+    var limit = toPositiveInt(data.limit, 0);
+    if (limit > 0) nextArgs.limit = limit;
+    return nextArgs;
+  }
+
+  function buildExecTransferSearchOutcomeForModel(result) {
+    var row = result && typeof result === 'object' ? result : {};
+    var data = row.data && typeof row.data === 'object' ? row.data : {};
+    var items = Array.isArray(data.items) ? data.items : [];
+    return {
+      ok: row.ok === true,
+      reason: row.reason ? String(row.reason) : '',
+      query: data.query ? String(data.query) : '',
+      projectName: data.projectName ? String(data.projectName) : '',
+      total: Number(data.total || items.length || 0),
+      selectionRequired: data.selectionRequired === true,
+      items: items.slice(0, 5).map(function(item, index) {
+        var hit = item && typeof item === 'object' ? item : {};
+        return {
+          index: index + 1,
+          id: hit.id ? String(hit.id) : '',
+          name: hit.name ? String(hit.name) : '',
+          projectName: hit.projectName ? String(hit.projectName) : '',
+          versionName: hit.versionName ? String(hit.versionName) : '',
+        };
+      }),
+    };
+  }
+
+  function areExecTransferSearchArgsEquivalent(left, right) {
+    var a = left && typeof left === 'object' ? left : {};
+    var b = right && typeof right === 'object' ? right : {};
+    var keys = ['query', 'caseFileName', 'projectName', 'projectId', 'versionName', 'versionId', 'limit'];
+    var i = 0;
+    for (i = 0; i < keys.length; i += 1) {
+      var key = keys[i];
+      var av = a[key] === undefined || a[key] === null ? '' : String(a[key]).trim();
+      var bv = b[key] === undefined || b[key] === null ? '' : String(b[key]).trim();
+      if (av !== bv) return false;
+    }
+    return true;
+  }
+
+  async function resolveExecTransferSearchArgsByModel(options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var latestUserInput = opts.latestUserInput === undefined || opts.latestUserInput === null ? '' : String(opts.latestUserInput).trim();
+    var originalUserRequest = opts.originalUserRequest === undefined || opts.originalUserRequest === null ? '' : String(opts.originalUserRequest).trim();
+    var attemptedArgs = opts.attemptedArgs && typeof opts.attemptedArgs === 'object' ? opts.attemptedArgs : {};
+    var apis = getApis();
+    var payload = null;
+    var res = null;
+    var parsed = null;
+    var nextArgs = null;
+    if (!latestUserInput || !apis.assistantApi || typeof apis.assistantApi.callModel !== 'function') return null;
+    payload = {
+      task: 'repair_exec_transfer_search_args',
+      latestUserInput: latestUserInput,
+      originalUserRequest: originalUserRequest || latestUserInput,
+      attemptedArgs: {
+        query: attemptedArgs.query === undefined || attemptedArgs.query === null ? '' : String(attemptedArgs.query).trim(),
+        caseFileName: attemptedArgs.caseFileName === undefined || attemptedArgs.caseFileName === null ? '' : String(attemptedArgs.caseFileName).trim(),
+        projectName: attemptedArgs.projectName === undefined || attemptedArgs.projectName === null ? '' : String(attemptedArgs.projectName).trim(),
+        projectId: attemptedArgs.projectId === undefined || attemptedArgs.projectId === null ? '' : String(attemptedArgs.projectId).trim(),
+        versionName: attemptedArgs.versionName === undefined || attemptedArgs.versionName === null ? '' : String(attemptedArgs.versionName).trim(),
+        versionId: attemptedArgs.versionId === undefined || attemptedArgs.versionId === null ? '' : String(attemptedArgs.versionId).trim(),
+      },
+      lastToolResult: buildExecTransferSearchOutcomeForModel(opts.lastToolResult),
+    };
+    try {
+      res = await apis.assistantApi.callModel(JSON.stringify(payload, null, 2), {
+        prompt: buildConversationPromptWithPriority([
+          '你是测试助手平台内置 AI 助手。',
+          '当前任务：修正 case_library.search_exec_candidates 的搜索参数。',
+          '必须优先理解 latestUserInput，同时参考 originalUserRequest；不要只做机械关键词切分。',
+          '像“皮肤用例”“联机死亡用例”这类完整短语，优先完整保留，不要无依据缩成“皮肤”“死亡这些关键字”。',
+          '如果项目或版本条件并不确定，宁可留空，不要误把目标执行版本当成搜索过滤条件。',
+          '只输出一个 JSON 对象，可包含 query、caseFileName、projectName、projectId、versionName、versionId、limit；不需要的字段留空字符串或省略。'
+        ].join('\n'), latestUserInput),
+        temperature: 0.1,
+        history: buildConversationHistory(4, latestUserInput),
+      });
+    } catch (err) {
+      res = null;
+    }
+    if (!res || res.ok !== true || !res.content) return null;
+    parsed = parseJsonObjectFromText(String(res.content || '').trim());
+    if (!parsed || typeof parsed !== 'object') return null;
+    nextArgs = buildExecTransferSearchArgsFromModelResult(parsed);
+    return Object.keys(nextArgs).length ? nextArgs : null;
+  }
+
+  async function retryExecTransferSearchByModel(callToolFn, currentArgs, currentResult, userText) {
+    var latestUserInput = userText === undefined || userText === null ? '' : String(userText).trim();
+    var attemptedArgs = currentArgs && typeof currentArgs === 'object' ? Object.assign({}, currentArgs) : {};
+    var result = currentResult && typeof currentResult === 'object' ? currentResult : null;
+    var data = result && result.data && typeof result.data === 'object' ? result.data : {};
+    var items = Array.isArray(data.items) ? data.items : [];
+    var shouldRetry = false;
+    var repairedArgs = null;
+    var retriedResult = null;
+    if (!latestUserInput || typeof callToolFn !== 'function') return null;
+    if (!result || result.ok !== true) shouldRetry = true;
+    else if (!items.length && Number(data.total || 0) <= 0) shouldRetry = true;
+    if (!shouldRetry) return null;
+    repairedArgs = await resolveExecTransferSearchArgsByModel({
+      latestUserInput: latestUserInput,
+      originalUserRequest: latestUserInput,
+      attemptedArgs: attemptedArgs,
+      lastToolResult: result,
+    });
+    if (!repairedArgs || areExecTransferSearchArgsEquivalent(attemptedArgs, repairedArgs)) return null;
+    try {
+      retriedResult = await callToolFn(repairedArgs);
+    } catch (err) {
+      retriedResult = { ok: false, reason: err && err.message ? String(err.message) : 'MCP 调用异常' };
+    }
+    if (retriedResult && typeof retriedResult === 'object') {
+      retriedResult.__assistantRetryInfo = {
+        attemptedArgs: Object.assign({}, attemptedArgs),
+        repairedArgs: Object.assign({}, repairedArgs),
+      };
+    }
+    return {
+      args: repairedArgs,
+      result: retriedResult,
+    };
+  }
+
+  async function resolvePendingExecTransferVersion(text, pendingOverride, options) {
+    var raw = text === undefined || text === null ? '' : String(text).trim();
+    var pending = pendingOverride && typeof pendingOverride === 'object'
+      ? pendingOverride
+      : (pendingExecTransferVersionSelection && typeof pendingExecTransferVersionSelection === 'object' ? pendingExecTransferVersionSelection : null);
+    var opts = options && typeof options === 'object' ? options : {};
+    var index = 0;
+    var modelResolved = null;
+    if (!pending || !raw) {
+      return { version: null, invalid: false, cancelled: false, createName: '', confirmCreateName: '', response: '' };
+    }
+    if (containsAny(raw, ['取消', '先不', '不用', '算了'])) {
+      return { version: null, invalid: false, cancelled: true, createName: '', confirmCreateName: '', response: '' };
+    }
+    index = resolveAssistantChoiceIndexFromText(raw);
+    if (index > 0) {
+      return {
+        version: pending.items && pending.items[index - 1] ? pending.items[index - 1] : null,
+        invalid: !(pending.items && pending.items[index - 1]),
+        cancelled: false,
+        createName: '',
+        confirmCreateName: '',
+        response: '',
+      };
+    }
+    if (looksLikeExecTransferPositiveReply(raw) || looksLikeExecTransferNegativeReply(raw)) {
+      return { version: null, invalid: true, cancelled: false, createName: '', confirmCreateName: '', response: '' };
+    }
+    modelResolved = await resolveExecTransferChoiceByModel({
+      latestUserInput: raw,
+      originalUserRequest: opts.sourceUserText || (pending.sourceUserText ? String(pending.sourceUserText) : ''),
+      entityLabel: '执行版本',
+      allowCreate: true,
+      caseName: pending.name || '',
+      projectName: pending.projectName || '',
+      importVersionName: pending.importVersionName || '',
+      items: pending.items || [],
+      labelBuilder: buildExecTransferVersionCandidateLabel,
+    });
+    if (!modelResolved) {
+      return { version: null, invalid: true, cancelled: false, createName: '', confirmCreateName: '', response: '' };
+    }
+    if (modelResolved.mode === 'select' && modelResolved.selectedItem) {
+      return { version: modelResolved.selectedItem, invalid: false, cancelled: false, createName: '', confirmCreateName: '', response: modelResolved.response || '' };
+    }
+    if (modelResolved.mode === 'create_confirm' && modelResolved.requestedName) {
+      return { version: null, invalid: false, cancelled: false, createName: modelResolved.requestedName, confirmCreateName: '', response: modelResolved.response || '' };
+    }
+    if (modelResolved.mode === 'clarify_new_name' && modelResolved.requestedName) {
+      return { version: null, invalid: false, cancelled: false, createName: '', confirmCreateName: modelResolved.requestedName, response: modelResolved.response || '' };
+    }
+    return { version: null, invalid: true, cancelled: false, createName: '', confirmCreateName: '', response: modelResolved.response || '' };
+  }
+
+  async function continueExecTransferWithVersionSelection(pending, version, options) {
+    var data = pending && typeof pending === 'object' ? pending : null;
+    var selectedVersion = version && typeof version === 'object' ? version : null;
+    var opts = options && typeof options === 'object' ? options : {};
+    var nextContinuation = null;
+    var continuedPending = null;
+    var args = null;
+    var runResult = null;
+    var replyText = '';
+    var followPending = null;
+    if (!data || !selectedVersion || !selectedVersion.id) return null;
+    clearPendingExecTransferCreateVersionConfirm();
+    clearPendingExecTransferVersionNameClarify();
+    nextContinuation = consumeAssistantTaskContinuationStep(data && data.continuation, 'case_library.transfer_to_exec');
+    continuedPending = Object.assign({}, data, {
+      continuation: nextContinuation,
+    });
+    args = {
+      caseFileId: data.caseFileId,
+      projectId: data.projectId,
+      execVersionId: selectedVersion.id,
+    };
+    if (data.approved === true) args.confirmed = true;
+    setStatus('正在转到执行...');
+    runResult = await callAssistantMcpToolWithApproval('case_library.transfer_to_exec', args, '转到当前执行');
+    setStatus('');
+    if (!runResult || runResult.ok !== true) {
+      if (runResult && runResult.cancelled === true) {
+        return {
+          handled: true,
+          text: '已取消，本次执行版本选择仍保留，你可以继续回复版本名。',
+          messageOptions: {
+            taskState: buildExecTransferPendingTaskState(data, 'waiting', '任务等待你继续选择执行版本。'),
+          },
+        };
+      }
+      return {
+        handled: true,
+        text: '转到执行失败：' + (runResult && runResult.reason ? String(runResult.reason) : '未知错误'),
+        messageOptions: {
+          taskState: buildExecTransferPendingTaskState(data, 'blocked', '转到执行失败，任务已中断。'),
+        },
+      };
+    }
+    replyText = handleExecTransferToolData(runResult.data || {}, '', {
+      approved: true,
+      fallbackName: data.name || '目标用例',
+      taskState: data.taskState,
+      taskStepIndex: data.taskStepIndex,
+      continuation: nextContinuation,
+      sourceUserText: opts.sourceUserText || data.sourceUserText || '',
+    });
+    followPending = pendingExecTransferVersionNameClarify || pendingExecTransferCreateVersionConfirm || pendingExecTransferVersionSelection;
+    if (followPending) {
+      return {
+        handled: true,
+        text: replyText,
+        messageOptions: {
+          taskState: buildExecTransferPendingTaskState(followPending, 'waiting', pendingExecTransferVersionNameClarify
+            ? '等待你确认是否按新版本处理。'
+            : (pendingExecTransferCreateVersionConfirm ? '等待你确认是否新建执行版本。' : '等待你选择执行版本。')),
+        },
+      };
+    }
+    return continuePendingExecTransferTask(continuedPending, replyText, {
+      onTaskStateChange: opts.onTaskStateChange,
+    });
+  }
+
+  async function tryAutoResolvePendingExecTransferVersionFromSource(pending, options) {
+    var data = pending && typeof pending === 'object' ? pending : null;
+    var opts = options && typeof options === 'object' ? options : {};
+    var sourceText = opts.sourceUserText !== undefined && opts.sourceUserText !== null
+      ? String(opts.sourceUserText).trim()
+      : (data && data.sourceUserText ? String(data.sourceUserText).trim() : '');
+    var resolved = null;
+    if (!data || !sourceText) return null;
+    resolved = await resolvePendingExecTransferVersion(sourceText, data, {
+      sourceUserText: sourceText,
+    });
+    if (!resolved || resolved.cancelled === true) return null;
+    if (resolved.version) {
+      return continueExecTransferWithVersionSelection(data, resolved.version, {
+        onTaskStateChange: opts.onTaskStateChange,
+        sourceUserText: sourceText,
+      });
+    }
+    if (resolved.confirmCreateName) {
+      rememberExecTransferVersionNameClarify(data, resolved.confirmCreateName, sourceText, {
+        taskState: data.taskState,
+        taskStepIndex: data.taskStepIndex,
+        continuation: data.continuation,
+        sourceUserText: sourceText,
+      });
+      return {
+        handled: true,
+        text: buildExecTransferVersionNameClarifyText({
+          name: data.name || '',
+          projectName: data.projectName || '',
+          requestedVersionName: resolved.confirmCreateName,
+        }),
+        messageOptions: {
+          taskState: buildExecTransferPendingTaskState(pendingExecTransferVersionSelection || data, 'waiting', '等待你确认是否按新版本处理。'),
+        },
+      };
+    }
+    if (resolved.createName) {
+      rememberExecTransferCreateVersionConfirm(data, resolved.createName, {
+        approved: data.approved === true,
+        taskState: data.taskState,
+        taskStepIndex: data.taskStepIndex,
+        continuation: data.continuation,
+        sourceUserText: sourceText,
+      });
+      return {
+        handled: true,
+        text: buildExecTransferCreateVersionConfirmText({
+          name: data.name || '',
+          projectName: data.projectName || '',
+          requestedVersionName: resolved.createName,
+        }),
+        messageOptions: {
+          taskState: buildExecTransferPendingTaskState(pendingExecTransferVersionSelection || data, 'waiting', '等待你确认是否新建执行版本。'),
+        },
+      };
+    }
+    var requestedVersionName = data.requestedVersionName ? String(data.requestedVersionName).trim() : '';
+    if (requestedVersionName && Array.isArray(data.items) && data.items.length === 1) {
+      var singleVersion = data.items[0] && typeof data.items[0] === 'object' ? data.items[0] : null;
+      if (singleVersion && singleVersion.id
+        && normalizeExecTransferSelectionText(singleVersion.name || '') === normalizeExecTransferSelectionText(requestedVersionName)) {
+        return continueExecTransferWithVersionSelection(data, singleVersion, {
+          onTaskStateChange: opts.onTaskStateChange,
+          sourceUserText: sourceText,
+        });
+      }
+    }
+    return null;
+  }
+
+  async function callAssistantMcpToolWithApproval(tool, args, actionLabel) {
+    var apis = getApis();
+    if (!apis.assistantMcpApi || typeof apis.assistantMcpApi.callTool !== 'function') {
+      return { ok: false, reason: 'MCP 工具暂不可用' };
+    }
+    async function callOnce(payload) {
+      try {
+        return await apis.assistantMcpApi.callTool(tool, payload || {});
+      } catch (err) {
+        return { ok: false, reason: err && err.message ? String(err.message) : 'MCP 调用异常' };
+      }
+    }
+    var result = await callOnce(args || {});
+    if (result && result.ok !== true && String(result.reason || '') === 'confirm_required') {
+      var info = result.data && typeof result.data === 'object' ? result.data : {};
+      var detail = '';
+      if (info.message) detail = String(info.message);
+      else if (info.hint) detail = String(info.hint);
+      var approved = await requestAssistantOperationApproval(info.actionLabel || actionLabel || tool, {
+        detail: detail,
+        reason: '当前操作涉及写入、编辑或删除。',
+      });
+      if (!approved) {
+        return { ok: false, reason: '已取消', cancelled: true };
+      }
+      result = await callOnce(Object.assign({}, args || {}, { confirmed: true }));
+    }
+    return result;
+  }
+
+
+  function mergeAssistantReplyTextParts(parts) {
+    var list = Array.isArray(parts) ? parts : [];
+    var merged = [];
+    var i = 0;
+    for (i = 0; i < list.length; i += 1) {
+      var value = list[i] === undefined || list[i] === null ? '' : String(list[i]).trim();
+      if (!value) continue;
+      if (merged.indexOf(value) !== -1) continue;
+      merged.push(value);
+    }
+    return merged.join('\n');
+  }
+
+  async function runAssistantTaskContinuation(continuation, options) {
+    var data = cloneAssistantTaskContinuation(continuation);
+    var opts = options && typeof options === 'object' ? options : {};
+    var taskState = cloneAssistantTaskState(opts.taskState);
+    var onTaskStateChange = typeof opts.onTaskStateChange === 'function' ? opts.onTaskStateChange : null;
+    var outputs = [];
+    var haltedStatus = '';
+    var haltedSummary = '';
+    var i = 0;
+    function pushTaskUpdate() {
+      if (!onTaskStateChange || !taskState) return;
+      onTaskStateChange(cloneAssistantTaskState(taskState), '已进入任务状态，正在执行。');
+    }
+    if (!data || data.type !== 'mcp' || !data.items.length) {
+      return {
+        status: 'completed',
+        summary: '任务已完成。',
+        text: '',
+        taskState: taskState,
+      };
+    }
+    for (i = 0; i < data.items.length; i += 1) {
+      var stepIndex = data.stepIndices[i] !== undefined ? Number(data.stepIndices[i]) : -1;
+      if (!Number.isFinite(stepIndex)) stepIndex = -1;
+      if (taskState && stepIndex >= 0 && taskState.steps && taskState.steps[stepIndex]) {
+        setAssistantTaskStateStepStatus(taskState, stepIndex, 'running', '正在执行：' + taskState.steps[stepIndex].label);
+        pushTaskUpdate();
+      }
+      var result = await executeModelMcpToolCall(data.items[i], data.userText || '', data.responseHint || '');
+      if (!result || result.handled !== true) {
+        haltedStatus = 'blocked';
+        haltedSummary = '当前步骤未产出可用结果。';
+        if (taskState && stepIndex >= 0) {
+          setAssistantTaskStateStepStatus(taskState, stepIndex, 'blocked', haltedSummary);
+          pushTaskUpdate();
+        }
+        break;
+      }
+      var textOut = result.text === undefined || result.text === null ? '' : String(result.text).trim();
+      var waitingSummary = getPendingExecTransferWaitingSummary();
+      if (waitingSummary) {
+        var continuation = buildAssistantTaskContinuation('mcp', data.items.slice(i + 1), data.stepIndices.slice(i + 1), data.userText || '', data.responseHint || '');
+        var pendingStepIndex = stepIndex;
+        var currentToolName = normalizeMcpToolName(data.items[i] && (data.items[i].tool || data.items[i].name || ''));
+        haltedStatus = 'waiting';
+        haltedSummary = waitingSummary;
+        if (pendingExecTransferSelection && currentToolName === 'case_library.search_exec_candidates' && continuation && continuation.stepIndices.length) {
+          pendingStepIndex = Number(continuation.stepIndices[0]);
+          if (!Number.isFinite(pendingStepIndex)) pendingStepIndex = stepIndex;
+          if (taskState && stepIndex >= 0) {
+            setAssistantTaskStateStepStatus(taskState, stepIndex, 'completed', '已完成当前步骤，等待你确认目标用例。');
+          }
+          if (taskState && pendingStepIndex >= 0 && taskState.steps && taskState.steps[pendingStepIndex]) {
+            setAssistantTaskStateStepStatus(taskState, pendingStepIndex, 'waiting', waitingSummary);
+          }
+        } else if (taskState && stepIndex >= 0) {
+          setAssistantTaskStateStepStatus(taskState, stepIndex, 'waiting', waitingSummary);
+        }
+        updateActivePendingExecTransferState({
+          taskState: taskState,
+          taskStepIndex: pendingStepIndex,
+          continuation: continuation,
+          sourceUserText: data.userText || '',
+        });
+        pushTaskUpdate();
+      } else if (textOut.indexOf('MCP 工具执行失败：') === 0) {
+        haltedStatus = 'blocked';
+        haltedSummary = '当前步骤执行失败。';
+        if (taskState && stepIndex >= 0) {
+          setAssistantTaskStateStepStatus(taskState, stepIndex, 'blocked', haltedSummary);
+          pushTaskUpdate();
+        }
+      } else if (textOut === '已取消。') {
+        haltedStatus = 'cancelled';
+        haltedSummary = '当前步骤已取消。';
+        if (taskState && stepIndex >= 0) {
+          setAssistantTaskStateStepStatus(taskState, stepIndex, 'cancelled', haltedSummary);
+          pushTaskUpdate();
+        }
+      } else if (taskState && stepIndex >= 0) {
+        setAssistantTaskStateStepStatus(taskState, stepIndex, 'completed', i < data.items.length - 1 ? '当前步骤已完成，继续执行后续步骤。' : taskState.summary);
+        pushTaskUpdate();
+      }
+      if (textOut && outputs.indexOf(textOut) === -1) outputs.push(textOut);
+      if (haltedStatus) break;
+    }
+    if (!haltedStatus) {
+      haltedStatus = 'completed';
+      haltedSummary = '任务已完成。';
+      if (taskState) {
+        setAssistantTaskStateStatus(taskState, 'completed', haltedSummary);
+      }
+    } else if (taskState) {
+      setAssistantTaskStateStatus(taskState, haltedStatus, haltedSummary);
+    }
+    return {
+      status: haltedStatus,
+      summary: haltedSummary,
+      text: outputs.join('\n').trim(),
+      taskState: taskState,
+    };
+  }
+
+  async function continuePendingExecTransferTask(pending, leadingText, options) {
+    var data = pending && typeof pending === 'object' ? pending : null;
+    var opts = options && typeof options === 'object' ? options : {};
+    var taskState = buildExecTransferPendingTaskState(data, 'completed', data && data.continuation ? '已完成当前选择，继续执行后续步骤。' : '任务已完成。');
+    var continuation = data ? cloneAssistantTaskContinuation(data.continuation) : null;
+    if (!continuation) {
+      return {
+        handled: true,
+        text: String(leadingText || ''),
+        messageOptions: {
+          taskState: taskState,
+        },
+      };
+    }
+    var continued = await runAssistantTaskContinuation(continuation, {
+      taskState: taskState,
+      onTaskStateChange: opts.onTaskStateChange,
+    });
+    return {
+      handled: true,
+      text: mergeAssistantReplyTextParts([leadingText, continued && continued.text ? continued.text : '']),
+      messageOptions: {
+        taskState: continued && continued.taskState ? continued.taskState : taskState,
+      },
+    };
+  }
+
+  async function tryHandlePendingExecTransferCreateVersionConfirmIntent(text, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    if (!pendingExecTransferCreateVersionConfirm || !pendingExecTransferCreateVersionConfirm.requestedVersionName) return null;
+    if (looksLikeExecTransferNegativeReply(text) || containsAny(text, ['取消', '先不', '不用', '算了'])) {
+      var cancelledPending = pendingExecTransferCreateVersionConfirm;
+      clearPendingExecTransferCreateVersionConfirm();
+      return {
+        handled: true,
+        text: '已取消新建版本，你可以继续回复“选第1个”或直接回复现有版本名。',
+        messageOptions: {
+          taskState: buildExecTransferPendingTaskState(cancelledPending, 'waiting', '已取消新建版本，等待你继续选择执行版本。'),
+        },
+      };
+    }
+    if (!looksLikeExecTransferPositiveReply(text)) return null;
+    var pending = pendingExecTransferCreateVersionConfirm;
+    var nextContinuation = consumeAssistantTaskContinuationStep(pending && pending.continuation, 'case_library.transfer_to_exec');
+    var continuedPending = Object.assign({}, pending, {
+      continuation: nextContinuation,
+    });
+    var args = {
+      caseFileId: pending.caseFileId,
+      projectId: pending.projectId,
+      execVersionName: pending.requestedVersionName,
+      createVersionIfMissing: true,
+    };
+    clearPendingExecTransferVersionNameClarify();
+    if (pending.approved === true) args.confirmed = true;
+    setStatus('正在新建版本并转到执行...');
+    var runResult = await callAssistantMcpToolWithApproval('case_library.transfer_to_exec', args, '新建版本并转到当前执行');
+    setStatus('');
+    if (!runResult || runResult.ok !== true) {
+      if (runResult && runResult.cancelled === true) {
+        return {
+          handled: true,
+          text: '已取消，本次版本选择仍保留，你可以继续回复现有版本名。',
+          messageOptions: {
+            taskState: buildExecTransferPendingTaskState(pending, 'waiting', '任务等待你继续选择执行版本。'),
+          },
+        };
+      }
+      return {
+        handled: true,
+        text: '转到执行失败：' + (runResult && runResult.reason ? String(runResult.reason) : '未知错误'),
+        messageOptions: {
+          taskState: buildExecTransferPendingTaskState(pending, 'blocked', '转到执行失败，任务已中断。'),
+        },
+      };
+    }
+    var replyText = handleExecTransferToolData(runResult.data || {}, '', {
+      approved: true,
+      fallbackName: pending.name || '目标用例',
+      taskState: pending.taskState,
+      taskStepIndex: pending.taskStepIndex,
+      continuation: nextContinuation,
+      sourceUserText: pending && pending.sourceUserText ? String(pending.sourceUserText) : '',
+      requestedVersionName: pending && pending.requestedVersionName ? String(pending.requestedVersionName) : '',
+    });
+    var followPending = pendingExecTransferVersionNameClarify || pendingExecTransferCreateVersionConfirm || pendingExecTransferVersionSelection;
+    if (followPending) {
+      var followSummary = pendingExecTransferVersionNameClarify
+        ? '等待你确认是否按新版本处理。'
+        : (pendingExecTransferCreateVersionConfirm
+          ? '等待你确认是否新建执行版本。'
+          : '等待你选择执行版本。');
+      return {
+        handled: true,
+        text: replyText,
+        messageOptions: {
+          taskState: buildExecTransferPendingTaskState(followPending, 'waiting', followSummary),
+        },
+      };
+    }
+    return continuePendingExecTransferTask(continuedPending, replyText, {
+      onTaskStateChange: opts.onTaskStateChange,
+    });
+  }
+
+  async function tryHandlePendingExecTransferVersionNameClarifyIntent(text, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    if (!pendingExecTransferVersionNameClarify || !pendingExecTransferVersionNameClarify.requestedVersionName) return null;
+    var pending = pendingExecTransferVersionNameClarify;
+    var raw = text === undefined || text === null ? '' : String(text).trim();
+    if (!raw) return null;
+    if (!looksLikeExecTransferPositiveReply(raw)
+      && !looksLikeExecTransferNegativeReply(raw)
+      && !containsAny(raw, ['取消', '先不', '不用', '算了'])) {
+      clearPendingExecTransferVersionNameClarify();
+      return null;
+    }
+    if (looksLikeExecTransferPositiveReply(raw)) {
+      clearPendingExecTransferVersionNameClarify();
+      var nextContinuation = consumeAssistantTaskContinuationStep(pending && pending.continuation, 'case_library.transfer_to_exec');
+      var continuedPending = Object.assign({}, pending, {
+        continuation: nextContinuation,
+      });
+      var args = {
+        caseFileId: pending.caseFileId,
+        projectId: pending.projectId,
+        execVersionName: pending.requestedVersionName,
+        createVersionIfMissing: true,
+      };
+      if (pending.approved === true) args.confirmed = true;
+      setStatus('正在按新版本处理并转到执行...');
+      var runResult = await callAssistantMcpToolWithApproval('case_library.transfer_to_exec', args, '按新版本转到当前执行');
+      setStatus('');
+      if (!runResult || runResult.ok !== true) {
+        if (runResult && runResult.cancelled === true) {
+          return {
+            handled: true,
+            text: '已取消，本次执行版本选择仍保留，你可以继续回复现有版本名。',
+            messageOptions: {
+              taskState: buildExecTransferPendingTaskState(pending, 'waiting', '任务等待你继续选择执行版本。'),
+            },
+          };
+        }
+        return {
+          handled: true,
+          text: '转到执行失败：' + (runResult && runResult.reason ? String(runResult.reason) : '未知错误'),
+          messageOptions: {
+            taskState: buildExecTransferPendingTaskState(pending, 'blocked', '转到执行失败，任务已中断。'),
+          },
+        };
+      }
+      var replyText = handleExecTransferToolData(runResult.data || {}, '', {
+        approved: true,
+        fallbackName: pending.name || '目标用例',
+        taskState: pending.taskState,
+        taskStepIndex: pending.taskStepIndex,
+        continuation: nextContinuation,
+        sourceUserText: pending && pending.sourceUserText ? String(pending.sourceUserText) : '',
+        requestedVersionName: pending && pending.requestedVersionName ? String(pending.requestedVersionName) : '',
+      });
+      var followPending = pendingExecTransferVersionNameClarify || pendingExecTransferCreateVersionConfirm || pendingExecTransferVersionSelection;
+      if (followPending) {
+        var followSummary = pendingExecTransferVersionNameClarify
+          ? '等待你确认是否按新版本处理。'
+          : (pendingExecTransferCreateVersionConfirm
+            ? '等待你确认是否新建执行版本。'
+            : '等待你选择执行版本。');
+        return {
+          handled: true,
+          text: replyText,
+          messageOptions: {
+            taskState: buildExecTransferPendingTaskState(followPending, 'waiting', followSummary),
+          },
+        };
+      }
+      return continuePendingExecTransferTask(continuedPending, replyText, {
+        onTaskStateChange: opts.onTaskStateChange,
+      });
+    }
+    clearPendingExecTransferVersionNameClarify();
+    var guidance = await interpretExecTransferVersionClarifyNegativeReply(pending);
+    if (!guidance) guidance = buildExecTransferVersionSelectionText(pendingExecTransferVersionSelection || pending);
+    return {
+      handled: true,
+      text: guidance,
+      messageOptions: {
+        taskState: buildExecTransferPendingTaskState(pending, 'waiting', '已回到现有版本选择，等待你继续。'),
+      },
+    };
+  }
+
+  async function tryHandlePendingExecTransferVersionSelectionIntent(text, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var pending = pendingExecTransferVersionSelection;
+    var resolved = null;
+    if (!pending) return null;
+    resolved = await resolvePendingExecTransferVersion(text, pending, {
+      sourceUserText: pending && pending.sourceUserText ? String(pending.sourceUserText) : '',
+    });
+    if (!resolved) return null;
+    if (resolved.cancelled === true) {
+      var cancelledPending = pendingExecTransferVersionSelection;
+      clearPendingExecTransferManualState();
+      return {
+        handled: true,
+        text: '已取消本次执行版本选择。',
+        messageOptions: {
+          taskState: buildExecTransferPendingTaskState(cancelledPending, 'cancelled', '任务已取消。'),
+        },
+      };
+    }
+    if (!resolved.version) {
+      if (resolved.confirmCreateName) {
+        rememberExecTransferVersionNameClarify(pending, resolved.confirmCreateName, text, {
+          taskState: pending && pending.taskState,
+          taskStepIndex: pending && pending.taskStepIndex,
+          continuation: pending && pending.continuation,
+          sourceUserText: pending && pending.sourceUserText,
+        });
+        return {
+          handled: true,
+          text: buildExecTransferVersionNameClarifyText({
+            name: pending.name || '',
+            projectName: pending.projectName || '',
+            requestedVersionName: resolved.confirmCreateName,
+          }),
+          messageOptions: {
+            taskState: buildExecTransferPendingTaskState(pendingExecTransferVersionSelection || pending, 'waiting', '等待你确认是否按新版本处理。'),
+          },
+        };
+      }
+      if (resolved.createName) {
+        rememberExecTransferCreateVersionConfirm(pending, resolved.createName, {
+          approved: pending && pending.approved === true,
+          taskState: pending && pending.taskState,
+          taskStepIndex: pending && pending.taskStepIndex,
+          continuation: pending && pending.continuation,
+          sourceUserText: pending && pending.sourceUserText,
+        });
+        return {
+          handled: true,
+          text: buildExecTransferCreateVersionConfirmText({
+            name: pending.name || '',
+            projectName: pending.projectName || '',
+            requestedVersionName: resolved.createName,
+          }),
+          messageOptions: {
+            taskState: buildExecTransferPendingTaskState(pendingExecTransferVersionSelection || pending, 'waiting', '等待你确认是否新建执行版本。'),
+          },
+        };
+      }
+      if (!resolved.invalid) return null;
+      return {
+        handled: true,
+        text: resolved.response || buildExecTransferVersionSelectionRetryText(),
+        messageOptions: {
+          taskState: buildExecTransferPendingTaskState(pending, 'waiting', '等待你重新选择执行版本。'),
+        },
+      };
+    }
+    return continueExecTransferWithVersionSelection(pending, resolved.version, {
+      onTaskStateChange: opts.onTaskStateChange,
+      sourceUserText: pending && pending.sourceUserText ? String(pending.sourceUserText) : '',
+    });
+  }
+
+  async function tryHandlePendingExecTransferSelectionIntent(text, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var pending = null;
+    var resolved = null;
+    var nextContinuation = null;
+    var continuedPending = null;
+    var runResult = null;
+    var replyText = '';
+    var followPending = null;
+    var autoVersionReply = null;
+    var plannedTransferArgs = null;
+    var requestedVersionName = '';
+    if (!pendingExecTransferSelection || !pendingExecTransferSelection.items || !pendingExecTransferSelection.items.length) return null;
+    resolved = resolvePendingExecTransferCandidate(text);
+    if (!resolved) return null;
+    if (resolved.cancelled === true) {
+      var cancelledPending = pendingExecTransferSelection;
+      clearPendingExecTransferSelection();
+      return {
+        handled: true,
+        text: '已取消本次转执行选择。',
+        messageOptions: {
+          taskState: buildExecTransferPendingTaskState(cancelledPending, 'cancelled', '任务已取消。'),
+        },
+      };
+    }
+    if (!resolved.candidate) {
+      if (!resolved.invalid) return null;
+      return {
+        handled: true,
+        text: '未识别到有效候选，请回复“选第1个”或直接回复候选名。',
+        messageOptions: {
+          taskState: buildExecTransferPendingTaskState(pendingExecTransferSelection, 'waiting', '等待你选择目标用例。'),
+        },
+      };
+    }
+    pending = pendingExecTransferSelection;
+    plannedTransferArgs = getPendingExecTransferContinuationStepArgs(pending && pending.continuation, 'case_library.transfer_to_exec');
+    requestedVersionName = plannedTransferArgs && plannedTransferArgs.execVersionName !== undefined && plannedTransferArgs.execVersionName !== null
+      ? String(plannedTransferArgs.execVersionName).trim()
+      : '';
+    nextContinuation = consumeAssistantTaskContinuationStep(pending && pending.continuation, 'case_library.transfer_to_exec');
+    continuedPending = Object.assign({}, pending, {
+      continuation: nextContinuation,
+    });
+    setStatus('正在转到执行...');
+    runResult = await callAssistantMcpToolWithApproval('case_library.transfer_to_exec', {
+      caseFileId: resolved.candidate.id,
+      projectId: resolved.candidate.projectId,
+    }, '转到当前执行');
+    setStatus('');
+    if (!runResult || runResult.ok !== true) {
+      if (runResult && runResult.cancelled === true) {
+        return {
+          handled: true,
+          text: '已取消，本次候选仍保留，你可以继续回复“选第N个”。',
+          messageOptions: {
+            taskState: buildExecTransferPendingTaskState(pending, 'waiting', '任务等待你继续选择目标用例。'),
+          },
+        };
+      }
+      return {
+        handled: true,
+        text: '转到执行失败：' + (runResult && runResult.reason ? String(runResult.reason) : '未知错误'),
+        messageOptions: {
+          taskState: buildExecTransferPendingTaskState(pending, 'blocked', '转到执行失败，任务已中断。'),
+        },
+      };
+    }
+    replyText = handleExecTransferToolData(runResult.data || {}, '', {
+      approved: true,
+      fallbackName: resolved.candidate.name || '目标用例',
+      taskState: pending.taskState,
+      taskStepIndex: pending.taskStepIndex,
+      continuation: nextContinuation,
+      sourceUserText: pending && pending.sourceUserText ? String(pending.sourceUserText) : '',
+      requestedVersionName: requestedVersionName,
+    });
+    if (pendingExecTransferVersionSelection) {
+      autoVersionReply = await tryAutoResolvePendingExecTransferVersionFromSource(pendingExecTransferVersionSelection, {
+        onTaskStateChange: opts.onTaskStateChange,
+        sourceUserText: pending && pending.sourceUserText ? String(pending.sourceUserText) : '',
+        requestedVersionName: requestedVersionName,
+      });
+      if (autoVersionReply && autoVersionReply.handled === true) {
+        return autoVersionReply;
+      }
+    }
+    followPending = pendingExecTransferVersionNameClarify || pendingExecTransferCreateVersionConfirm || pendingExecTransferVersionSelection;
+    if (followPending) {
+      return {
+        handled: true,
+        text: replyText,
+        messageOptions: {
+          taskState: buildExecTransferPendingTaskState(followPending, 'waiting', pendingExecTransferVersionNameClarify
+            ? '等待你确认是否按新版本处理。'
+            : (pendingExecTransferCreateVersionConfirm ? '等待你确认是否新建执行版本。' : '等待你选择执行版本。')),
+        },
+      };
+    }
+    return continuePendingExecTransferTask(continuedPending, replyText, {
+      onTaskStateChange: opts.onTaskStateChange,
     });
   }
 
@@ -1941,7 +3856,7 @@
       }
     }
     if (result.provider) lines.push('搜索源：' + String(result.provider));
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   async function summarizeWebSearchByModel(userText, query, searchRes, responseHint) {
@@ -1973,7 +3888,7 @@
     var res = null;
     try {
       res = await apis.assistantApi.callModel(JSON.stringify(payload, null, 2), {
-        prompt: prompt,
+        prompt: buildConversationPromptWithPriority(prompt, userText),
         temperature: 0.1,
         history: history,
       });
@@ -2218,6 +4133,7 @@
     var hasFlexibleFilter = false;
     if (!raw) return false;
     if (!containsAny(raw, ['用例', 'case'])) return false;
+    if (isExplicitExecTransferIntent(raw)) return false;
     if (containsAny(raw, ['用例生成', '生成用例', '删除用例', '修改用例', '编辑用例'])) return false;
     if (containsAny(raw, ['用例改动历史', '用例变更', '改动历史', '变更历史', '历史详情', '变更内容', '变更记录', '用例差异', '差异'])) return false;
     filterInfo = extractCaseListFilterInfo(raw);
@@ -2271,6 +4187,30 @@
     return containsAny(raw, ['查看', '查询', '获取', '读取', '列出', '列一下', '展示', '显示', '搜索', '查找', '筛选', '过滤', '搜', '找出', '筛出', '挑出', '哪些', '有哪些', '清单', '有什么', '有啥', '多少', '条数', '数量', '总数', '给我看', '看下', '看一下', '看看']);
   }
 
+  function isCaseLibraryContentQueryIntent(text) {
+    var raw = String(text || '').trim();
+    var hasLibraryScope = false;
+    var hasQuerySignal = false;
+    if (!raw) return false;
+    if (!containsAny(raw, ['用例', 'case'])) return false;
+    if (isExplicitExecTransferIntent(raw)) return false;
+    if (isMissingLibraryIntent(raw)) return false;
+    hasLibraryScope = containsAny(raw, ['用例库', 'case library', 'case-library', '库里', '库中', '全库', '跨页面', '跨页']);
+    if (!hasLibraryScope) return false;
+    if (containsAny(raw, ['当前这条', '该用例', '这个用例', '本用例', '当前用例'])
+      && !containsAny(raw, ['查询', '搜索', '查找', '筛选', '过滤', '有没有', '是否有', '相关', '匹配', '命中', '关键字', '关键词', '模糊', '库中', '库里', '全库', '跨页面', '跨页'])) {
+      return false;
+    }
+    hasQuerySignal = containsAny(raw, ['查询', '搜索', '查找', '搜', '筛选', '过滤', '匹配', '命中', '有没有', '是否有', '相关', '关键字', '关键词', '模糊', '内容', '包含', '含有', '找出', '找一下', '列出', '展示', '显示', '全部', '所有', '多少', '数量']);
+    return hasQuerySignal;
+  }
+
+  function shouldSearchCaseLibraryAcrossAllProjects(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return false;
+    return containsAny(raw, ['所有项目', '全部项目', '跨项目', '全库', '全项目']);
+  }
+
   function isMissingLibraryIntent(text) {
     var raw = String(text || '').trim();
     if (!raw) return false;
@@ -2305,6 +4245,7 @@
     var raw = String(text || '').trim();
     if (!raw) return false;
     if (!containsAny(raw, ['用例', 'case'])) return false;
+    if (isExplicitExecTransferIntent(raw)) return false;
     if (containsAny(raw, ['用例改动历史', '用例变更', '改动历史', '变更历史', '历史详情', '变更内容', '变更记录', '用例差异', '差异'])) return false;
     if (containsAny(raw, ['当前项目', '项目里', '项目中', '项目下', '全项目', '所有项目'])) return false;
     var hasDetailWord = containsAny(raw, [
@@ -2397,17 +4338,24 @@
     return false;
   }
 
+  function isSearchListDisplayIntent(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return false;
+    return containsAny(raw, ['搜索', '查找', '筛选', '过滤', '搜', '找出', '筛出', '挑出', '列出', '列一下', '展示', '显示', '给我看', '看下', '看一下', '看看']);
+  }
+
   function shouldPreferCurrentPageScopeForCaseQuery(text) {
     var raw = String(text || '').trim();
     var filterInfo = null;
     var hasFlexibleFilter = false;
     if (!raw) return false;
     if (!containsAny(raw, ['用例', 'case'])) return false;
+    if (isExplicitExecTransferIntent(raw)) return false;
     if (isCurrentPageCaseIntent(raw)) return true;
     if (containsAny(raw, ['当前项目', '项目里', '项目中', '项目下', '全项目', '所有项目'])) return false;
     filterInfo = extractCaseListFilterInfo(raw);
     hasFlexibleFilter = filterInfo && filterInfo.hasFilter === true;
-    if (!hasFlexibleFilter && !containsAny(raw, ['搜索', '查找', '筛选', '过滤', '搜', '找出', '筛出', '挑出', '列出', '列一下', '展示', '显示', '给我看', '看下', '看一下', '看看'])) return false;
+    if (!hasFlexibleFilter && !isSearchListDisplayIntent(raw)) return false;
     var apis = getApis();
     if (!apis.assistantApi || typeof apis.assistantApi.getPageData !== 'function') return false;
     var pageData = null;
@@ -2418,6 +4366,50 @@
     }
     var tab = pageData && pageData.tab ? String(pageData.tab).trim().toLowerCase() : '';
     return tab === 'tempexec' || tab === 'case-library';
+  }
+
+  function hasExecTransferVerb(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return false;
+    return containsAny(raw, ['转到', '转入', '加入', '添加到', '放到', '放入', '导入到', '移到', '同步到']);
+  }
+
+  function isVersionScopedExecTransferIntent(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return false;
+    if (!containsAny(raw, ['用例', 'case'])) return false;
+    if (!hasExecTransferVerb(raw)) return false;
+    if (!containsAny(raw, ['版本', '执行'])) return false;
+    if (containsAny(raw, ['执行结果', '执行状态'])) return false;
+    if (containsAny(raw, ['这个版本的执行', '该版本的执行', '当前版本的执行', '目标版本的执行'])) return true;
+    if (/(?:这个|该|当前|目标|指定|新)\s*版本(?:的)?执行/.test(raw)) return true;
+    if (/(?:转到|转入|加入|添加到|放到|放入|导入到|移到|同步到).{0,24}版本(?:的)?执行/.test(raw)) return true;
+    if (/版本.{0,8}(?:执行页|执行列表|执行文件|执行版本|的执行)/.test(raw)) return true;
+    return false;
+  }
+
+  function isExecArchiveIntent(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return false;
+    if (!containsAny(raw, ['归档'])) return false;
+    if (containsAny(raw, ['查看归档', '打开归档', '归档列表', '归档页面', '用例归档页', '解散归档', '删除归档', '恢复归档'])) return false;
+    if (containsAny(raw, ['执行', '用例', '结果'])) return true;
+    return /(?:再|然后|之后|最后)?\s*归档/.test(raw);
+  }
+
+  function isExplicitExecTransferIntent(text) {
+    var raw = String(text || '').trim();
+    var hasExecTarget = false;
+    var hasTransferVerb = false;
+    if (!raw) return false;
+    if (!containsAny(raw, ['用例', 'case', '执行'])) return false;
+    if (containsAny(raw, ['切换到当前执行文件', '切换执行文件', '下一份执行用例', '下一份执行文件'])) return false;
+    if (containsAny(raw, ['查看当前执行', '列出当前执行', '展示当前执行', '当前执行有哪些'])) return false;
+    if (containsAny(raw, ['转到当前执行', '转入当前执行', '转到执行', '转执行', '加入当前执行', '加到当前执行', '放到当前执行', '放入当前执行', '导入到当前执行', '移到当前执行', '同步到当前执行'])) return true;
+    hasExecTarget = containsAny(raw, ['当前执行', '执行页', '执行列表', '执行文件']) || isVersionScopedExecTransferIntent(raw);
+    hasTransferVerb = hasExecTransferVerb(raw);
+    if (containsAny(raw, ['切换', '切到', '换到', '跳到']) && !hasTransferVerb) return false;
+    return hasExecTarget && hasTransferVerb;
   }
 
   function isTempExecNextFileIntent(text) {
@@ -2716,7 +4708,7 @@
     if (!detail.hasSignal && total <= 0) {
       lines.push('当前执行页“用例变更”暂无可读取的差异记录。');
       if (detail.statusText) lines.push(String(detail.statusText));
-      return lines.join('\n');
+  return lines.join('\n');
     }
     if (kindFilters.length === 1 && isCount) {
       var kind = kindFilters[0];
@@ -2726,7 +4718,7 @@
       lines.push('统计范围：' + fileName + '。');
       var summaryTextSingle = buildTempExecCaseLibraryDiffTypeSummaryText(summary);
       if (summaryTextSingle) lines.push('全部变更统计：' + summaryTextSingle + '。');
-      return lines.join('\n');
+  return lines.join('\n');
     }
     if (isCount && kindFilters.length > 1) {
       var totalByKinds = 0;
@@ -2735,14 +4727,14 @@
       }
       lines.push('按你的问题口径，当前执行页“用例变更”命中 ' + totalByKinds + ' 条。');
       lines.push('统计范围：' + fileName + '。');
-      return lines.join('\n');
+  return lines.join('\n');
     }
     if (isCount) {
       lines.push('当前执行页“用例变更”共 ' + total + ' 条。');
       lines.push('统计范围：' + fileName + '。');
       var summaryText = buildTempExecCaseLibraryDiffTypeSummaryText(summary);
       if (summaryText) lines.push('类型统计：' + summaryText + '。');
-      return lines.join('\n');
+  return lines.join('\n');
     }
     lines.push('当前执行页“用例变更”（用例库同步差异）：' + fileName);
     if (detail.statusText) lines.push(String(detail.statusText));
@@ -2757,7 +4749,7 @@
     var events = filterTempExecCaseLibraryDiffEventsByKinds(sourceEvents, kindFilters);
     if (!events.length) {
       lines.push(kindFilters.length ? '当前没有命中你指定类型的变更。' : '当前没有可展示的变更明细。');
-      return lines.join('\n');
+  return lines.join('\n');
     }
     lines.push('关键记录：');
     for (var j = 0; j < events.length && j < 5; j += 1) {
@@ -2773,7 +4765,7 @@
     if (detail.truncated === true) {
       lines.push('当前仅整理了前 ' + (Array.isArray(detail.events) ? detail.events.length : 0) + ' 条可读记录。');
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   function buildCaseHistoryReasonPayload(pageData) {
@@ -2844,7 +4836,7 @@
     var events = filterCaseHistoryEventsByKinds(sourceEvents, kindFilters);
     if (!events.length) {
       lines.push(kindFilters.length ? '当前页没有命中你指定类型的变更记录。' : '当前页没有可展示的变更记录。');
-      return lines.join('\n');
+  return lines.join('\n');
     }
     lines.push('当前页关键记录：');
     for (var i = 0; i < events.length && i < 5; i += 1) {
@@ -2859,7 +4851,7 @@
     if (Number(detail.totalPages) > 1) {
       lines.push('当前显示第 ' + (Number(detail.currentPage) || 1) + ' / ' + (Number(detail.totalPages) || 1) + ' 页。');
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   async function summarizeCaseHistoryPageDataByModel(userText, pageData, responseHint) {
@@ -2892,7 +4884,7 @@
     var res = null;
     try {
       res = await apis.assistantApi.callModel(JSON.stringify(payload, null, 2), {
-        prompt: prompt,
+        prompt: buildConversationPromptWithPriority(prompt, userText),
         temperature: 0.1,
         history: history,
       });
@@ -3030,7 +5022,7 @@
       }
       lines.push('| ' + cells.join(' | ') + ' |');
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   function normalizeCaseFilterKeywordToken(rawText) {
@@ -3296,7 +5288,7 @@
     ].join('\n');
     try {
       res = await apis.assistantApi.callModel(JSON.stringify(payload, null, 2), {
-        prompt: prompt,
+        prompt: buildConversationPromptWithPriority(prompt, raw),
         temperature: 0,
         history: buildConversationHistory(4, raw),
       });
@@ -3311,6 +5303,61 @@
       planned: true,
       filterInfo: info,
     };
+  }
+
+  async function buildCaseLibraryQueryArgsFromUserText(baseArgs, userText) {
+    var raw = String(userText || '').trim();
+    var payload = baseArgs && typeof baseArgs === 'object' ? Object.assign({}, baseArgs) : {};
+    var explicitFilter = null;
+    var plannedFilter = null;
+    var fallbackFilter = null;
+    var fullDetail = false;
+    var rawLimit = Number(payload.limit);
+    if (!payload.query && raw) payload.query = raw;
+    if (!payload.projectName && payload.project !== undefined && payload.project !== null) {
+      payload.projectName = String(payload.project).trim();
+    }
+    explicitFilter = normalizeCaseListFilterPlan(payload.filterInfo);
+    if ((!explicitFilter || explicitFilter.hasFilter !== true)
+      && (payload.includeKeywords !== undefined || payload.keywords !== undefined || payload.keyword !== undefined
+        || payload.excludeKeywords !== undefined || payload.exclude !== undefined
+        || payload.indexParity !== undefined || payload.sequenceParity !== undefined
+        || payload.idParity !== undefined || payload.caseIdParity !== undefined)) {
+      explicitFilter = normalizeCaseListFilterPlan({
+        includeKeywords: payload.includeKeywords !== undefined ? payload.includeKeywords : (payload.keywords !== undefined ? payload.keywords : payload.keyword),
+        excludeKeywords: payload.excludeKeywords !== undefined ? payload.excludeKeywords : payload.exclude,
+        indexParity: payload.indexParity !== undefined ? payload.indexParity : payload.sequenceParity,
+        idParity: payload.idParity !== undefined ? payload.idParity : payload.caseIdParity,
+      });
+    }
+    if ((!explicitFilter || explicitFilter.hasFilter !== true) && raw && shouldPlanCaseListFilterByModel(raw)) {
+      plannedFilter = await planCaseListFilterByModel(raw);
+      if (plannedFilter && plannedFilter.filterInfo && plannedFilter.filterInfo.hasFilter === true) {
+        explicitFilter = plannedFilter.filterInfo;
+      }
+    }
+    if ((!explicitFilter || explicitFilter.hasFilter !== true) && raw && shouldPlanCaseListFilterByModel(raw)) {
+      fallbackFilter = extractCaseListFilterInfo(raw);
+      if (fallbackFilter && fallbackFilter.hasFilter === true) {
+        explicitFilter = fallbackFilter;
+      }
+    }
+    if (explicitFilter && explicitFilter.hasFilter === true) {
+      payload.filterInfo = explicitFilter;
+    }
+    fullDetail = String(payload.detailLevel || '').trim().toLowerCase() === 'full'
+      || isCurrentCaseFullDetailIntent(raw)
+      || isExplicitAllCaseDisplayIntent(raw)
+      || isCaseDetailClarificationIntent(raw);
+    payload.detailLevel = fullDetail ? 'full' : 'summary';
+    if (payload.allProjects === undefined) payload.allProjects = shouldSearchCaseLibraryAcrossAllProjects(raw);
+    if (payload.preferCurrentProject === undefined) payload.preferCurrentProject = payload.allProjects === true ? false : true;
+    if (!Number.isFinite(rawLimit) || rawLimit <= 0) {
+      rawLimit = fullDetail || (explicitFilter && explicitFilter.hasFilter === true) ? 120 : 40;
+    }
+    if (rawLimit > 200) rawLimit = 200;
+    payload.limit = rawLimit;
+    return payload;
   }
 
   function buildCaseListFilterLabel(filterInfo) {
@@ -3462,7 +5509,7 @@
       lines.push('你可以继续追问：');
       lines.push('1. 放宽条件（例如：只排除标题含“技能”）。');
       lines.push('2. 换更具体关键词（例如：排除“技能效果”，保留“联机”）。');
-      return lines.join('\n');
+  return lines.join('\n');
     }
     lines.push('当前页面用例明细（完整字段）：');
     lines.push(buildEditorCaseListTableMarkdown(items, {
@@ -3471,7 +5518,7 @@
     if (result && result.truncated) {
       lines.push('注：当前仅在前 ' + sourceItems.length + ' 条可见条目中完成筛选。');
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   function formatFilteredEditorCaseCountResponse(result, filteredItems, filterInfo) {
@@ -3489,7 +5536,7 @@
     if (!items.length) {
       lines.push('当前过滤条件下没有匹配条目。');
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   function formatEditorCaseListResponse(result) {
@@ -3508,7 +5555,7 @@
       } else {
         lines.push('当前用例暂无条目。');
       }
-      return lines.join('\n');
+  return lines.join('\n');
     }
     if (searchText) {
       lines.push('已按搜索词“' + searchText + '”过滤，命中 ' + total + ' / ' + totalAll + ' 条：');
@@ -3521,7 +5568,7 @@
     if (result.truncated) {
       lines.push('已展示前 ' + items.length + ' 条，共 ' + (Number(result.total) || items.length) + ' 条。');
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   function formatNoEditorCaseContextResponse(result) {
@@ -3536,7 +5583,7 @@
     } else {
       lines.push('2. 或直接问我：“当前项目有哪些用例”。');
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   function formatCaseListResponse(res) {
@@ -3566,7 +5613,7 @@
     if (result.truncated) {
       lines.push('已展示前 ' + items.length + ' 条，共 ' + (Number(result.total) || items.length) + ' 条。');
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   function formatCaseCountResponse(res) {
@@ -3588,7 +5635,7 @@
         lines.push('当前搜索词“' + searchText + '”命中 ' + total + ' / ' + totalAll + ' 条。');
       }
       lines.push('当前页面用例数量：' + total + ' 条。');
-      return lines.join('\n');
+  return lines.join('\n');
     }
     var projectTotal = Number(result.total);
     if (!Number.isFinite(projectTotal) || projectTotal < 0) {
@@ -3599,6 +5646,120 @@
       return '当前项目（' + result.projectId + '）用例数量：' + projectTotal + ' 份用例文件。';
     }
     return '当前用例数量：' + projectTotal + ' 份用例文件。';
+  }
+
+  function buildCaseLibraryQueryScopeLabel(result) {
+    var data = result && typeof result === 'object' ? result : {};
+    var projectName = data.projectName ? String(data.projectName) : '';
+    var projectId = data.projectId ? String(data.projectId) : '';
+    if (data.scope === 'all-projects') return '跨项目用例库';
+    if (projectName && projectId) return '项目“' + projectName + '”（' + projectId + '）用例库';
+    if (projectName) return '项目“' + projectName + '”用例库';
+    if (projectId) return '项目（' + projectId + '）用例库';
+    return '用例库';
+  }
+
+  function buildCaseLibraryQueryMatchLine(item, index, fullDetail) {
+    var row = item && typeof item === 'object' ? item : {};
+    var seq = Number(row.sourceIndex);
+    var caseSeq = Number.isFinite(seq) && seq > 0 ? seq : (row.index || (index + 1));
+    var projectName = row.projectName ? String(row.projectName) : '';
+    var fileName = row.caseFileName ? String(row.caseFileName) : (row.caseFileId ? ('用例#' + String(row.caseFileId)) : '未命名用例');
+    var moduleName = row.module ? String(row.module) : '--';
+    var title = row.title ? String(row.title) : ('条目#' + caseSeq);
+    var priority = row.priority ? String(row.priority) : '--';
+    var id = row.id ? String(row.id) : '--';
+    var matchedKeywords = Array.isArray(row.matchedKeywords) ? row.matchedKeywords.filter(Boolean) : [];
+    var lines = [];
+    lines.push((index + 1) + '. [' + (projectName || '当前项目') + ' / ' + fileName + '] [' + moduleName + '] ' + title + ' | 序号: ' + caseSeq + ' | ID: ' + id + ' | 优先级: ' + priority + (matchedKeywords.length ? (' | 命中: ' + matchedKeywords.join(' / ')) : ''));
+    if (fullDetail) {
+      lines.push('前置条件: ' + (row.precondition ? String(row.precondition) : '—'));
+      lines.push('步骤: ' + (row.steps ? String(row.steps) : '—'));
+      lines.push('预期结果: ' + (row.expected ? String(row.expected) : '—'));
+    }
+    return lines.join('\n');
+  }
+
+  function formatCaseLibraryQueryResponse(res) {
+    var result = res && typeof res === 'object' ? res : {};
+    var items = Array.isArray(result.items) ? result.items : [];
+    var total = Number(result.total);
+    var matchedFileCount = Number(result.matchedFileCount);
+    var searchedFileCount = Number(result.searchedFileCount);
+    var searchedItemCount = Number(result.searchedItemCount);
+    var projectCount = Number(result.projectCount);
+    var errorCount = Number(result.errorCount);
+    var filterLabel = buildCaseListFilterLabel(result.filterInfo);
+    var scopeLabel = buildCaseLibraryQueryScopeLabel(result);
+    var lines = [];
+    var fullDetail = String(result.detailLevel || '').trim().toLowerCase() === 'full';
+    if (!Number.isFinite(total) || total < 0) total = items.length;
+    if (!Number.isFinite(matchedFileCount) || matchedFileCount < 0) matchedFileCount = 0;
+    if (!Number.isFinite(searchedFileCount) || searchedFileCount < 0) searchedFileCount = 0;
+    if (!Number.isFinite(searchedItemCount) || searchedItemCount < 0) searchedItemCount = 0;
+    if (!Number.isFinite(projectCount) || projectCount < 0) projectCount = 0;
+    if (!Number.isFinite(errorCount) || errorCount < 0) errorCount = 0;
+    if (total <= 0) {
+      lines.push(scopeLabel + '中未找到匹配用例。');
+    } else {
+      lines.push(scopeLabel + '共命中 ' + total + ' 条用例，涉及 ' + matchedFileCount + ' 份用例文件。');
+    }
+    if (result.queryText) {
+      lines.push('查询内容：' + String(result.queryText) + (filterLabel ? ('；筛选口径：' + filterLabel) : ''));
+    } else if (filterLabel) {
+      lines.push('筛选口径：' + filterLabel);
+    }
+    var scanLine = '已扫描 ' + searchedFileCount + ' 份用例文件 / ' + searchedItemCount + ' 条用例';
+    if (result.scope === 'all-projects' && projectCount > 0) scanLine += '，覆盖 ' + projectCount + ' 个项目';
+    if (result.multiAgent && result.multiAgent.used === true) {
+      scanLine += '；主 agent 已拆成 ' + (Number(result.multiAgent.chunkCount) || 0) + ' 个子任务并发检索';
+    }
+    lines.push(scanLine + '。');
+    if (!items.length) {
+      if (errorCount > 0) lines.push('另有 ' + errorCount + ' 份用例文件读取失败，结果可能不完整。');
+      return lines.join('\n');
+    }
+    lines.push('命中用例：');
+    items.forEach(function(item, index) {
+      lines.push(buildCaseLibraryQueryMatchLine(item, index, fullDetail));
+    });
+    if (result.truncated) {
+      lines.push('当前仅展示前 ' + items.length + ' 条，另有 ' + Math.max(total - items.length, 0) + ' 条未展开。');
+    }
+    if (errorCount > 0) {
+      lines.push('另有 ' + errorCount + ' 份用例文件读取失败，结果可能不完整。');
+    }
+    return lines.join('\n');
+  }
+
+  function formatCaseLibraryQueryCountResponse(res) {
+    var result = res && typeof res === 'object' ? res : {};
+    var total = Number(result.total);
+    var matchedFileCount = Number(result.matchedFileCount);
+    var searchedFileCount = Number(result.searchedFileCount);
+    var searchedItemCount = Number(result.searchedItemCount);
+    var projectCount = Number(result.projectCount);
+    var filterLabel = buildCaseListFilterLabel(result.filterInfo);
+    var scopeLabel = buildCaseLibraryQueryScopeLabel(result);
+    var lines = [];
+    if (!Number.isFinite(total) || total < 0) total = Array.isArray(result.items) ? result.items.length : 0;
+    if (!Number.isFinite(matchedFileCount) || matchedFileCount < 0) matchedFileCount = 0;
+    if (!Number.isFinite(searchedFileCount) || searchedFileCount < 0) searchedFileCount = 0;
+    if (!Number.isFinite(searchedItemCount) || searchedItemCount < 0) searchedItemCount = 0;
+    if (!Number.isFinite(projectCount) || projectCount < 0) projectCount = 0;
+    lines.push(scopeLabel + '命中 ' + total + ' 条用例，涉及 ' + matchedFileCount + ' 份用例文件。');
+    if (result.queryText) {
+      lines.push('查询内容：' + String(result.queryText) + (filterLabel ? ('；筛选口径：' + filterLabel) : ''));
+    } else if (filterLabel) {
+      lines.push('筛选口径：' + filterLabel);
+    }
+    var scanLine = '已扫描 ' + searchedFileCount + ' 份用例文件 / ' + searchedItemCount + ' 条用例';
+    if (result.scope === 'all-projects' && projectCount > 0) scanLine += '，覆盖 ' + projectCount + ' 个项目';
+    if (result.multiAgent && result.multiAgent.used === true) {
+      scanLine += '；主 agent 已拆成 ' + (Number(result.multiAgent.chunkCount) || 0) + ' 个子任务并发检索';
+    }
+    lines.push(scanLine + '。');
+    return lines.join('\n');
   }
 
   function formatMissingLibraryListResponse(res) {
@@ -3633,7 +5794,7 @@
     if (result.truncated) {
       lines.push('未完整展开，当前仅展示前 ' + items.length + ' 条。');
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   function formatCrossPageMissingCaseMatchResponse(res) {
@@ -3716,7 +5877,7 @@
     if (candidateTotal > 0 && result.candidateTruncated) {
       lines.push('建议复核候选未完整展开，还有 ' + Math.max(candidateTotal - candidates.length, 0) + ' 组候选。');
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
 
@@ -3774,6 +5935,7 @@
     var raw = String(text || '').trim();
     if (!raw) return false;
     if (isCurrentCaseFullDetailIntent(raw)) return false;
+    if (isExplicitExecTransferIntent(raw)) return false;
     if (isCurrentPageFunctionIntent(raw)) return false;
     var prevAiText = getLatestAssistantMessageText();
     if (!prevAiText) return false;
@@ -3849,7 +6011,7 @@
     lines.push('已按当前这份用例的完整条目范围检索' + (label ? ('：' + label) : '') + '。');
     lines.push('当前同份用例共 ' + total + ' 条，但没有命中目标条目。');
     lines.push('你可以继续直接发我：1. 用例 ID。2. 完整标题。');
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   async function tryHandleCaseDetailClarificationIntent(text) {
@@ -3869,6 +6031,7 @@
   async function tryHandleCurrentCaseFullDetailIntent(text) {
     var raw = String(text || '').trim();
     if (!raw) return null;
+    if (isCaseLibraryContentQueryIntent(raw)) return null;
     if (!isCurrentCaseFullDetailIntent(raw)) return null;
     return runModelCaseListAction(raw, {
       action: 'query_case_list',
@@ -3877,6 +6040,16 @@
       scope: 'editor',
       detailLevel: 'full',
       limit: 1000,
+    }, '');
+  }
+
+  async function tryHandleCaseLibraryContentQueryIntent(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return null;
+    if (!isCaseLibraryContentQueryIntent(raw)) return null;
+    return runModelCaseLibraryQueryAction(raw, {
+      action: 'query_case_list',
+      query: raw,
     }, '');
   }
 
@@ -3975,7 +6148,7 @@
     history = buildConversationHistory(6, userText);
     try {
       res = await apis.assistantApi.callModel(JSON.stringify(payload, null, 2), {
-        prompt: prompt,
+        prompt: buildConversationPromptWithPriority(prompt, userText),
         temperature: 0.1,
         history: history,
       });
@@ -4020,7 +6193,7 @@
       }
       lines.push(contextLine + '。');
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   async function tryHandleCurrentPageFunctionIntent(text) {
@@ -4095,7 +6268,7 @@
         lines.push((i + 1) + '. ' + hints[i]);
       }
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   function tryHandleNavigationIntent(text) {
@@ -4230,7 +6403,7 @@
         lines.push('  ' + (row.index || 1) + '. (' + mark + ') ' + (row.text || ''));
       });
     });
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   function getMutationActionLabel(actionName, meta) {
@@ -4241,6 +6414,20 @@
     if (action === 'memo_remove') return '删除备忘';
     if (action === 'settings_patch') return '修改设置';
     if (action === 'update_case' || action === 'case.update' || action === 'case_update') return '修改用例';
+    if (action === 'case_library.batch_update_exec_results') return '修改用例执行结果（批量）';
+    if (action === 'case_library.batch_archive_exec_cases') return '归档当前执行用例';
+    if (action === 'ui.click_control') {
+      var inspectText = [
+        payload.controlId,
+        payload.controlText,
+        payload.text,
+        payload.label,
+        payload.name,
+        payload.query,
+      ].join(' ');
+      if (containsAny(inspectText, ['归档', 'archive'])) return '归档当前执行用例';
+      return '点击控件';
+    }
     if (action === 'run_case_generation') return '触发用例生成';
     if (action === 'run_missing_recommendation') return '触发漏测推荐';
     if (action === 'delete_case') {
@@ -4442,15 +6629,16 @@
       }
     }
     if (normalizedField === 'actual') {
-      var am = text.match(/(?:执行结果|状态)\s*(?:改成|修改为|改为|设为|设成|设置为|更新为|更新成|变回|变为|变成|切到|调成|调为|调整为|调整成|为|是)\s*(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)/i);
-      if (!am) am = text.match(/(?:变回|变成|变为|设为|设成|改为|改成|调整为|调整成|更新为|更新成|切到)\s*(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)(?:状态|结果)?/i);
+      var am = text.match(/(?:执行结果|状态)\s*(?:改成|修改为|改为|改回|设为|设成|设置为|更新为|更新成|变回|变为|变成|切到|调成|调为|调回|调整为|调整成|为|是)\s*(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)/i);
+      if (!am) am = text.match(/(?:变回|变成|变为|设为|设成|改为|改成|改回|调整为|调整成|更新为|更新成|切到|调回|置为|置成|置)\s*(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)(?:状态|结果)?/i);
+      if (!am) am = text.match(/(?:全部|所有|全都|批量|统一)(?:的执行结果|执行结果|结果|状态)?[^\n。；;，,]{0,12}?(?:置为|置成|置|改为|改成|改回|设为|设成|设置为|更新为|更新成|变回|变为|变成|切到|调成|调为|调回|调整为|调整成)\s*(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)/i);
       if (!am) am = text.match(/\b(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)\b/i);
       if (am && am[1]) {
         var actualValue = normalizeCaseActualValueToken(am[1]);
         if (actualValue) return actualValue;
       }
     }
-    var connector = text.match(/(?:改成|修改为|改为|设为|设成|设置为|更新为|更新成|改到|调成|调为|调整为|调整成|变为|变成|切到|为|是)\s*([^\n。；;，,]+)$/);
+    var connector = text.match(/(?:改成|修改为|改为|改回|设为|设成|设置为|更新为|更新成|改到|调成|调为|调回|调整为|调整成|变为|变成|切到|为|是)\s*([^\n。；;，,]+)$/);
     if (connector && connector[1]) {
       var candidate = stripWrappedQuotes(connector[1]);
       if (normalizedField === 'priority') {
@@ -4479,7 +6667,7 @@
         ));
         if (fieldAnchored && fieldAnchored[1]) {
           var anchoredValue = stripWrappedQuotes(fieldAnchored[1]);
-          anchoredValue = anchoredValue.replace(/^(?:是|为|写成|写为|写|填成|填为|填|加上|加|追加|补充|改成|改为|设为|设成|更新为|更新成)\s*/i, '').trim();
+          anchoredValue = anchoredValue.replace(/^(?:是|为|写成|写为|写|填成|填为|填|加上|加|追加|补充|改成|改为|改回|设为|设成|更新为|更新成|调回)\s*/i, '').trim();
           if (normalizedField === 'priority') {
             var p2 = anchoredValue.toUpperCase().replace(/[^P0-9]/g, '');
             if (/^P[0-9]{1,2}$/.test(p2)) return p2;
@@ -4515,10 +6703,61 @@
     return '';
   }
 
+  function containsCaseUpdateActionVerb(raw) {
+    var text = String(raw || '').trim();
+    if (!text) return false;
+    return containsAny(text, [
+      '改成', '修改为', '改为', '改回', '设为', '设成', '设置为', '更新为', '更新成',
+      '修改', '编辑', '调成', '调为', '调回', '调整为', '调整成', '变为', '变成', '变回',
+      '改到', '切到', '切回', '恢复为', '恢复成', '恢复到',
+      '拼接', '追加', '后缀', '前缀', '后面加', '前面加', '开头加', '末尾加', '结尾加',
+      '清空', '清除', '删除', '移除', '去掉', '置空'
+    ]);
+  }
+
+  function isLikelyCaseUpdateIntent(raw) {
+    var text = String(raw || '').trim();
+    var field = '';
+    var hasCaseContextWord = false;
+    var hasRecognizableValue = false;
+    var index = 0;
+    var scope = '';
+    var apis = null;
+    var tab = '';
+    if (!text) return false;
+    if (!containsCaseUpdateActionVerb(text)) return false;
+    if (containsAny(text, ['怎么改', '如何改', '怎么修改', '如何修改', '修改步骤', '修改方法', '编辑方法', '怎么编辑', '如何编辑'])) return false;
+    field = detectCaseUpdateFieldFromText(text);
+    hasCaseContextWord = containsAny(text, ['用例', '该用例', '当前用例', '这条', '当前行', '本条']);
+    hasRecognizableValue = /\b[Pp]\s*\d{1,2}\b/.test(text)
+      || /(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)/i.test(text);
+    index = extractCaseUpdateTargetIndex(text);
+    scope = detectCaseUpdateScopeFromText(text);
+    if (!field && !hasRecognizableValue && index <= 0 && !scope) return false;
+    if (hasCaseContextWord) return true;
+    apis = getApis();
+    if (apis.assistantApi && typeof apis.assistantApi.getPageData === 'function') {
+      var pageData = apis.assistantApi.getPageData('');
+      tab = pageData && pageData.tab ? String(pageData.tab) : '';
+    }
+    return tab === 'case-library' || tab === 'tempexec';
+  }
+
+  function shouldPreferModelDrivenCaseUpdateRoute(raw) {
+    var text = String(raw || '').trim();
+    var parsed = null;
+    if (!isLikelyCaseUpdateIntent(text)) return false;
+    parsed = parseCaseUpdateCommand(text);
+    if (!parsed) return true;
+    if (containsAny(text, ['改回', '调回', '变回', '切回', '恢复为', '恢复成', '恢复到'])) return true;
+    if (!parsed.value && parsed.clear !== true) return true;
+    return false;
+  }
+
   function parseCaseUpdateCommand(raw) {
     var text = String(raw || '').trim();
     if (!text) return null;
-    if (!containsAny(text, ['改成', '修改为', '改为', '设为', '设成', '设置为', '更新为', '更新成', '修改', '编辑', '调成', '调为', '调整为', '调整成', '变为', '变成', '变回', '改到', '切到', '拼接', '追加', '后缀', '前缀', '后面加', '前面加', '开头加', '末尾加', '结尾加', '清空', '清除', '删除', '移除', '去掉', '置空'])) return null;
+    if (!containsCaseUpdateActionVerb(text)) return null;
     var field = detectCaseUpdateFieldFromText(text);
     if (!field) return null;
     var hasCaseContextWord = containsAny(text, ['用例', '该用例', '当前用例', '这条', '当前行', '本条']);
@@ -4548,6 +6787,56 @@
     };
   }
 
+  function collectAssistantTaskIntentDomains(text) {
+    var raw = String(text || '').trim();
+    var domains = [];
+    var caseUpdate = null;
+    function pushDomain(name) {
+      if (!name) return;
+      if (domains.indexOf(name) !== -1) return;
+      domains.push(name);
+    }
+    if (!raw) return domains;
+    if (isExplicitExecTransferIntent(raw)) pushDomain('exec_transfer');
+    caseUpdate = parseCaseUpdateCommand(raw);
+    if (caseUpdate || isLikelyCaseUpdateIntent(raw)) pushDomain('case_update');
+    if (isExecArchiveIntent(raw)) pushDomain('archive');
+    if (isCaseLibraryContentQueryIntent(raw)) pushDomain('case_library_query');
+    return domains;
+  }
+
+  function hasCompositeTaskConnector(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return false;
+    if (containsAny(raw, ['并把', '并将', '并且', '而且', '同时', '然后', '接着', '顺便', '另外', '之后', '后再'])) return true;
+    if (containsAny(raw, ['且']) && (containsAny(raw, ['用例', '执行', '归档', '版本']) || raw.indexOf('，') !== -1 || raw.indexOf(',') !== -1)) return true;
+    if (/先.+再/.test(raw)) return true;
+    if (/(?:转到|转入|加入|添加到|放到|放入|导入到|移到|同步到).+(?:改成|修改为|改为|设为|设成|更新为|更新成|归档)/.test(raw)) return true;
+    if (/(?:改成|修改为|改为|设为|设成|更新为|更新成).+归档/.test(raw)) return true;
+    return false;
+  }
+
+  function shouldPreferModelDrivenTaskRoute(text) {
+    var domains = collectAssistantTaskIntentDomains(text);
+    if (domains.length < 2) return false;
+    return hasCompositeTaskConnector(text);
+  }
+
+  function detectImplicitActualBulkUpdate(raw) {
+    var text = String(raw || '').trim();
+    var actualValue = '';
+    if (!text) return null;
+    if (!containsAny(text, ['全部', '所有', '全都', '批量', '统一'])) return null;
+    if (!containsAny(text, ['置', '改', '设', '更新', '调整', '变', '切'])) return null;
+    actualValue = extractCaseUpdateValue(text, 'actual');
+    if (!actualValue) return null;
+    return {
+      field: 'actual',
+      value: actualValue,
+      scope: 'all',
+    };
+  }
+
   function inferCaseUpdateArgsFromText(baseArgs, rawText) {
     var args = baseArgs && typeof baseArgs === 'object' ? Object.assign({}, baseArgs) : {};
     var raw = String(rawText || '');
@@ -4557,7 +6846,12 @@
     if (!fieldRaw && args.column !== undefined && args.column !== null) fieldRaw = String(args.column);
     if (!fieldRaw && args.name !== undefined && args.name !== null) fieldRaw = String(args.name);
     var field = normalizeCaseUpdateFieldName(fieldRaw);
+    var implicitActual = null;
     if (!field) field = detectCaseUpdateFieldFromText(raw);
+    if (!field) {
+      implicitActual = detectImplicitActualBulkUpdate(raw);
+      if (implicitActual && implicitActual.field) field = implicitActual.field;
+    }
     if (field) args.field = field;
     var clearIntent = field && detectCaseUpdateClearIntent(raw, field) && isCaseUpdateClearableField(field);
     if (!clearIntent && field && isCaseUpdateClearableField(field) && (args.clear === true || String(args.mode || '').toLowerCase() === 'clear')) {
@@ -4571,6 +6865,9 @@
     if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && args.newValue !== undefined && args.newValue !== null) valueRaw = args.newValue;
     if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && field) {
       valueRaw = extractCaseUpdateValue(raw, field);
+    }
+    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && implicitActual && implicitActual.value) {
+      valueRaw = implicitActual.value;
     }
     if (valueRaw !== undefined && valueRaw !== null && String(valueRaw).trim() !== '') {
       args.value = String(valueRaw).trim();
@@ -4596,12 +6893,31 @@
     if (scopeRaw !== 'all' && scopeRaw !== 'single') {
       scopeRaw = detectCaseUpdateScopeFromText(raw) || '';
     }
+    if (!scopeRaw && implicitActual && implicitActual.scope) scopeRaw = implicitActual.scope;
     if (Number.isFinite(hasIndex) && hasIndex > 0) scopeRaw = 'single';
     if (scopeRaw === 'all') {
       args.scope = 'all';
       if (Object.prototype.hasOwnProperty.call(args, 'index')) delete args.index;
     } else if (scopeRaw === 'single') {
       args.scope = 'single';
+    }
+
+    var contextRaw = '';
+    if (args.context !== undefined && args.context !== null) contextRaw = String(args.context).trim().toLowerCase();
+    if (!contextRaw && args.pageContext !== undefined && args.pageContext !== null) contextRaw = String(args.pageContext).trim().toLowerCase();
+    if (!contextRaw && args.tab !== undefined && args.tab !== null) {
+      var tabContext = String(args.tab).trim().toLowerCase();
+      if (tabContext === 'tempexec' || tabContext === 'case-library') contextRaw = tabContext;
+    }
+    if (!contextRaw) {
+      if (scopeRaw === 'all' && (field === 'actual' || field === 'remark')) {
+        contextRaw = 'tempexec';
+      } else if (field === 'actual' && containsAny(raw, ['执行', '执行页', '执行用例', '执行列表'])) {
+        contextRaw = 'tempexec';
+      }
+    }
+    if (contextRaw === 'tempexec' || contextRaw === 'case-library') {
+      args.context = contextRaw;
     }
 
     var operationRaw = '';
@@ -4704,6 +7020,99 @@
       return { tool: tool, args: args, rewritten: false };
     }
     return { tool: 'case.update', args: candidate, rewritten: true };
+  }
+
+  function rewriteLegacyExecBatchToolIfNeeded(tool, args, userText) {
+    var payload = args && typeof args === 'object' ? Object.assign({}, args) : {};
+    var value = '';
+    if (tool === 'case_library.batch_update_exec_results') {
+      if (payload.value !== undefined && payload.value !== null && String(payload.value).trim()) value = String(payload.value).trim();
+      if (!value && payload.result !== undefined && payload.result !== null && String(payload.result).trim()) value = String(payload.result).trim();
+      if (!value && payload.status !== undefined && payload.status !== null && String(payload.status).trim()) value = String(payload.status).trim();
+      if (!value && payload.to !== undefined && payload.to !== null && String(payload.to).trim()) value = String(payload.to).trim();
+      return {
+        tool: 'case.update',
+        args: inferCaseUpdateArgsFromText(Object.assign({
+          context: 'tempexec',
+          scope: 'all',
+          field: 'actual'
+        }, value ? { value: value } : {}, payload), userText),
+        rewritten: true,
+      };
+    }
+    if (tool === 'case_library.batch_archive_exec_cases') {
+      return {
+        tool: tool,
+        args: payload,
+        rewritten: false,
+      };
+    }
+    return { tool: tool, args: payload, rewritten: false };
+  }
+
+  function isAssistantArchiveControlArgs(args) {
+    var payload = args && typeof args === 'object' ? args : {};
+    var inspectText = [
+      payload.controlId,
+      payload.controlText,
+      payload.text,
+      payload.label,
+      payload.name,
+      payload.query,
+    ].join(' ');
+    return containsAny(inspectText, ['归档', 'archive']);
+  }
+
+  function buildAssistantFriendlyTaskLabel(tool, args) {
+    var payload = args && typeof args === 'object' ? args : {};
+    var normalizedField = normalizeCaseUpdateFieldName(payload.field || payload.key || payload.column || payload.name || '');
+    var value = payload.value !== undefined && payload.value !== null ? String(payload.value).trim() : '';
+    var versionText = payload.execVersionName !== undefined && payload.execVersionName !== null && String(payload.execVersionName).trim()
+      ? String(payload.execVersionName).trim()
+      : (payload.versionName !== undefined && payload.versionName !== null && String(payload.versionName).trim()
+        ? String(payload.versionName).trim()
+        : (payload.execVersionId !== undefined && payload.execVersionId !== null && String(payload.execVersionId).trim()
+          ? ('版本 ' + String(payload.execVersionId).trim())
+          : ''));
+    if (tool === 'cases.list_current') {
+      return payload.countOnly === true || payload.count === true
+        ? '统计当前用例数量'
+        : '读取当前用例列表';
+    }
+    if (tool === 'case_library.search_exec_candidates') {
+      return payload.query !== undefined && payload.query !== null && String(payload.query).trim()
+        ? ('搜索要转执行的用例：' + trimAssistantTaskLabelText(String(payload.query).trim(), 24))
+        : '搜索要转执行的用例';
+    }
+    if (tool === 'case_library.transfer_to_exec') {
+      return versionText ? ('把选中的用例转到执行版本：' + trimAssistantTaskLabelText(versionText, 18)) : '把选中的用例转到执行版本';
+    }
+    if (tool === 'case_library.batch_update_exec_results') {
+      return value ? ('把全部执行结果改为' + trimAssistantTaskLabelText(value, 12)) : '批量修改执行结果';
+    }
+    if (tool === 'case_library.batch_archive_exec_cases') {
+      return '归档当前执行用例';
+    }
+    if (tool === 'case.update') {
+      var context = payload.context === undefined || payload.context === null ? '' : String(payload.context).trim().toLowerCase();
+      var scope = payload.scope === undefined || payload.scope === null ? '' : String(payload.scope).trim().toLowerCase();
+      if (scope === 'all' && normalizedField === 'actual') {
+        return value ? ('把全部执行结果改为' + trimAssistantTaskLabelText(value, 12)) : '批量修改执行结果';
+      }
+      if (scope === 'all' && normalizedField === 'remark') {
+        return '批量修改执行备注';
+      }
+      if (scope === 'all' && normalizedField) return '批量修改用例' + buildCaseUpdateFieldLabel(normalizedField);
+      if (context === 'tempexec' && normalizedField === 'actual') {
+        return value ? ('修改用例执行结果为' + trimAssistantTaskLabelText(value, 12)) : '修改用例执行结果';
+      }
+      if (normalizedField) return '修改用例' + buildCaseUpdateFieldLabel(normalizedField);
+      return '修改用例';
+    }
+    if (tool === 'ui.click_control' && isAssistantArchiveControlArgs(payload)) {
+      return '归档当前执行用例';
+    }
+    return '';
   }
 
   function buildCaseUpdateFieldLabel(field) {
@@ -5032,6 +7441,11 @@
       { name: 'page.get_data', mode: 'read', description: '读取页面数据快照' },
       { name: 'nav.switch_tab', mode: 'write', description: '切换目标页签' },
       { name: 'cases.list_current', mode: 'read', description: '读取当前页面或项目用例列表' },
+      { name: 'case_library.query_cases', mode: 'read', description: '跨页面查询用例库内容，并在大数据量时自动拆分子任务并发检索' },
+      { name: 'case_library.search_exec_candidates', mode: 'read', description: '按项目/名称搜索可转到当前执行的用例文件候选' },
+      { name: 'case_library.transfer_to_exec', mode: 'write', description: '将指定用例文件转到当前执行，并切换到执行页' },
+      { name: 'case_library.batch_update_exec_results', mode: 'write', description: '批量修改当前执行用例的执行结果' },
+      { name: 'case_library.batch_archive_exec_cases', mode: 'write', description: '归档当前执行中的用例' },
       { name: 'missing_library.list_current', mode: 'read', description: '读取当前项目的漏测/易漏用例库，可跨页面查询' },
       { name: 'cross_page.match_missing_cases', mode: 'read', description: '将当前页面用例与当前项目漏测用例库做跨页面匹配' },
       { name: 'ui.list_controls', mode: 'read', description: '列出当前页可操作控件' },
@@ -5071,6 +7485,17 @@
     return getFallbackMcpToolCatalog();
   }
 
+  function getAvailableMcpToolsForUserText(userText) {
+    var tools = getAvailableMcpTools();
+    if (!isExplicitExecTransferIntent(userText)) return tools;
+    return tools.filter(function(item) {
+      var row = item && typeof item === 'object' ? item : {};
+      var name = normalizeMcpToolName(row.name || '');
+      if (name === 'tempexec.switch_file' || name === 'tempexec.next_file') return false;
+      return true;
+    });
+  }
+
   function normalizeMcpToolName(rawName) {
     var raw = rawName === undefined || rawName === null ? '' : String(rawName).trim().toLowerCase();
     if (!raw) return '';
@@ -5078,9 +7503,14 @@
     if (raw === 'page.current_info' || raw === 'current_page_info' || raw === 'page.info') return 'page.current_info';
     if (raw === 'page.get_data' || raw === 'query_page_data' || raw === 'page_data') return 'page.get_data';
     if (raw === 'nav.switch_tab' || raw === 'navigate' || raw === 'switch_tab') return 'nav.switch_tab';
-    if (raw === 'cases.list_current' || raw === 'query_case_list' || raw === 'case_list') return 'cases.list_current';
+    if (raw === 'cases.list_current' || raw === 'query_case_list' || raw === 'case_list' || raw === 'case_library.query_exec_cases' || raw === 'case_library_query_exec_cases' || raw === 'query_exec_cases' || raw === 'list_exec_cases' || raw === 'case_library.list_exec_cases' || raw === 'case_library_list_exec_cases') return 'cases.list_current';
+    if (raw === 'case_library.query_cases' || raw === 'case_library_query_cases' || raw === 'query_case_library_cases' || raw === 'search_case_library_cases' || raw === 'case_library_search_case_content' || raw === 'search_case_content') return 'case_library.query_cases';
     if (raw === 'missing_library.list_current' || raw === 'missing_library_list_current' || raw === 'list_missing_library' || raw === 'missing_case_library_list') return 'missing_library.list_current';
     if (raw === 'cross_page.match_missing_cases' || raw === 'cross_page_match_missing_cases' || raw === 'match_missing_cases' || raw === 'match_case_missing_library') return 'cross_page.match_missing_cases';
+    if (raw === 'case_library.search_exec_candidates' || raw === 'case_library_search_exec_candidates' || raw === 'search_case_files_for_exec' || raw === 'search_exec_candidates' || raw === 'case_library.search_exec_cases' || raw === 'case_library_search_exec_cases' || raw === 'search_exec_cases') return 'case_library.search_exec_candidates';
+    if (raw === 'case_library.transfer_to_exec' || raw === 'case_library_transfer_to_exec' || raw === 'transfer_to_exec' || raw === 'transfer_case_to_exec' || raw === 'exec_case_file') return 'case_library.transfer_to_exec';
+    if (raw === 'case_library.batch_update_exec_results' || raw === 'case_library_batch_update_exec_results' || raw === 'batch_update_exec_results' || raw === 'update_exec_results' || raw === 'case_library.batch_set_exec_results' || raw === 'case_library_batch_set_exec_results' || raw === 'batch_set_exec_results' || raw === 'set_exec_results' || raw === 'set_exec_result') return 'case_library.batch_update_exec_results';
+    if (raw === 'case_library.batch_archive_exec_cases' || raw === 'case_library_batch_archive_exec_cases' || raw === 'batch_archive_exec_cases' || raw === 'archive_exec_cases' || raw === 'case_library.batch_archive_cases' || raw === 'case_library_batch_archive_cases' || raw === 'batch_archive_cases' || raw === 'archive_cases') return 'case_library.batch_archive_exec_cases';
     if (raw === 'ui.list_controls' || raw === 'list_controls' || raw === 'list_ui_controls') return 'ui.list_controls';
     if (raw === 'ui.click_control' || raw === 'click_control' || raw === 'click_ui_control') return 'ui.click_control';
     if (raw === 'ui.fill_input' || raw === 'fill_input' || raw === 'fill_ui_input') return 'ui.fill_input';
@@ -5141,24 +7571,134 @@
         if (mode) return mode;
       }
     }
-    if (containsAny(tool, ['nav.switch_tab', 'ui.click_control', 'ui.fill_input', 'tempexec.export_xmind', 'settings.patch', 'case.update', 'case.delete', 'casegen.run', 'missing_recommend.run', 'memo.add', 'memo.toggle', 'memo.remove'])) {
+    if (containsAny(tool, ['nav.switch_tab', 'ui.click_control', 'ui.fill_input', 'tempexec.export_xmind', 'settings.patch', 'case.update', 'case.delete', 'casegen.run', 'missing_recommend.run', 'memo.add', 'memo.toggle', 'memo.remove', 'case_library.batch_update_exec_results', 'case_library.batch_archive_exec_cases'])) {
       return 'write';
     }
     return 'read';
   }
 
+  function hasExecTransferMcpCall(mcpCalls) {
+    var calls = Array.isArray(mcpCalls) ? mcpCalls : [];
+    for (var i = 0; i < calls.length; i += 1) {
+      var call = calls[i] && typeof calls[i] === 'object' ? calls[i] : {};
+      var tool = normalizeMcpToolName(call.tool || call.name || '');
+      if (tool === 'case_library.search_exec_candidates' || tool === 'case_library.transfer_to_exec') return true;
+    }
+    return false;
+  }
+
+
+  function getExecTransferCaseFileIdFromArgs(args) {
+    var payload = args && typeof args === 'object' ? args : {};
+    if (payload.caseFileId !== undefined && payload.caseFileId !== null && String(payload.caseFileId).trim()) {
+      return String(payload.caseFileId).trim();
+    }
+    if (payload.id !== undefined && payload.id !== null && String(payload.id).trim()) {
+      return String(payload.id).trim();
+    }
+    return '';
+  }
+
+  function hasIncompleteExecTransferMcpPlan(mcpCalls) {
+    var calls = Array.isArray(mcpCalls) ? mcpCalls : [];
+    for (var i = 0; i < calls.length; i += 1) {
+      var call = calls[i] && typeof calls[i] === 'object' ? calls[i] : {};
+      var tool = normalizeMcpToolName(call.tool || call.name || '');
+      var args = call.args && typeof call.args === 'object' ? call.args : {};
+      if (tool === 'case_library.transfer_to_exec' && !getExecTransferCaseFileIdFromArgs(args)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function hasCaseUpdateMcpCall(mcpCalls) {
+    var calls = Array.isArray(mcpCalls) ? mcpCalls : [];
+    for (var i = 0; i < calls.length; i += 1) {
+      var call = calls[i] && typeof calls[i] === 'object' ? calls[i] : {};
+      var tool = normalizeMcpToolName(call.tool || call.name || '');
+      if (tool === 'case.update' || tool === 'case_library.batch_update_exec_results') return true;
+    }
+    return false;
+  }
+
+  function hasArchiveMcpCall(mcpCalls) {
+    var calls = Array.isArray(mcpCalls) ? mcpCalls : [];
+    for (var i = 0; i < calls.length; i += 1) {
+      var call = calls[i] && typeof calls[i] === 'object' ? calls[i] : {};
+      var tool = normalizeMcpToolName(call.tool || call.name || '');
+      var args = call.args && typeof call.args === 'object' ? call.args : {};
+      var inspectText = [
+        args.controlId,
+        args.controlText,
+        args.text,
+        args.label,
+        args.name,
+        args.query,
+      ].join(' ');
+      if (tool === 'case_library.batch_archive_exec_cases') return true;
+      if (tool === 'ui.click_control' && containsAny(inspectText, ['归档', 'archive'])) return true;
+    }
+    return false;
+  }
+
+  function hasCaseUpdateAction(actions) {
+    var list = Array.isArray(actions) ? actions : [];
+    for (var i = 0; i < list.length; i += 1) {
+      var action = list[i] && typeof list[i] === 'object' ? list[i] : {};
+      var normalized = normalizeModelActionName(action.action || action.name || '');
+      if (normalized === 'update_case') return true;
+    }
+    return false;
+  }
+
+  function buildExecTransferRepairPrompt(basePrompt, traceEntries, lastOutputText) {
+    var traces = Array.isArray(traceEntries) ? traceEntries : [];
+    var latest = lastOutputText === undefined || lastOutputText === null ? '' : String(lastOutputText).trim();
+    var lines = [
+      basePrompt || '',
+      '',
+      '纠正要求：当前用户要的是“把指定用例从用例库转到当前执行”。',
+      '- 这不等于切换当前执行文件，也不等于只切到用例执行页。',
+      '- 不要只回答“已切换到某执行文件”或“当前已在某执行文件中”。',
+      '- 必须先调用 case_library.search_exec_candidates 搜索候选。',
+      '- 只有唯一明确候选时，才能继续调用 case_library.transfer_to_exec。',
+      '- 如果有多个候选，直接列出编号让用户选择，不要继续切页。',
+      '- 如果 transfer_to_exec 返回需要选择执行版本，必须先询问用户要转入哪个执行版本。',
+      '- 如果用户指定的执行版本不存在，必须先询问是否新建，确认后再继续转执行。',
+      '- 若输出 JSON，仍然只能输出一个 JSON 对象。',
+    ];
+    if (latest) lines.push('', '你上一轮输出/观察到的结果：', latest);
+    if (traces.length) lines.push('', '已发生的工具/动作结果：', traces.join('\n\n'));
+return lines.join('\n');
+  }
+
+  function buildExecTransferNotCompletedText() {
+    return '我还没有真正把目标用例转到当前执行。需要先搜索用例库候选，再确认转入；请再给我一次机会按这个链路执行。';
+  }
+
   function shouldContinueMcpReasoning(userText, mcpCalls, mcpOutputs) {
     var calls = Array.isArray(mcpCalls) ? mcpCalls : [];
     var outputs = Array.isArray(mcpOutputs) ? mcpOutputs : [];
+    var requestedDomains = collectAssistantTaskIntentDomains(userText);
+    var expectsExecTransfer = requestedDomains.indexOf('exec_transfer') !== -1;
+    var needsCaseUpdate = requestedDomains.indexOf('case_update') !== -1;
+    var needsArchive = requestedDomains.indexOf('archive') !== -1;
     if (!calls.length) return false;
     var hasRead = false;
     var hasWrite = false;
+    var hasUiFillInput = false;
     var hasListControls = false;
     var hasPageData = false;
     var hasCaseList = false;
+    var hasCaseLibraryQuery = false;
+    var hasCaseLibraryExecSearch = false;
     var hasCurrentPage = false;
     var hasWebSearch = false;
     var hasTempExecSearch = false;
+    var hasTransferToExecTool = false;
+    var hasCaseUpdateTool = hasCaseUpdateMcpCall(calls);
+    var hasArchiveTool = hasArchiveMcpCall(calls);
     for (var i = 0; i < calls.length; i += 1) {
       var call = calls[i] && typeof calls[i] === 'object' ? calls[i] : {};
       var tool = normalizeMcpToolName(call.tool || call.name || '');
@@ -5166,20 +7706,34 @@
       var mode = getMcpToolMode(tool);
       if (mode === 'write') hasWrite = true;
       else hasRead = true;
+      if (tool === 'ui.fill_input') hasUiFillInput = true;
       if (tool === 'ui.list_controls') hasListControls = true;
       if (tool === 'page.get_data') hasPageData = true;
       if (tool === 'cases.list_current') hasCaseList = true;
+      if (tool === 'case_library.query_cases') hasCaseLibraryQuery = true;
+      if (tool === 'case_library.search_exec_candidates') {
+        hasCaseLibraryExecSearch = true;
+      }
+      if (tool === 'case_library.transfer_to_exec') hasTransferToExecTool = true;
       if (tool === 'page.current_info') hasCurrentPage = true;
       if (tool === 'web.search') hasWebSearch = true;
       if (tool === 'tempexec.search_cases') hasTempExecSearch = true;
     }
     if (hasListControls && !isUiControlListingIntent(userText)) return true;
     if (hasPageData && !isPageDataListingIntent(userText)) return true;
-    if (hasCaseList || hasCurrentPage || hasWebSearch || hasTempExecSearch) return false;
-    if (hasWrite && !hasRead) {
+    if (expectsExecTransfer && !hasTransferToExecTool) return true;
+    if (needsCaseUpdate && !hasCaseUpdateTool) return true;
+    if (needsArchive && !hasArchiveTool) return true;
+    var outText = outputs.join('\n');
+    if (hasCaseLibraryExecSearch) {
+      if (!hasTransferToExecTool && containsAny(outText, ['可继续调用 case_library.transfer_to_exec', '可继续调用case_library.transfer_to_exec'])) return true;
       return false;
     }
-    var outText = outputs.join('\n');
+    if (hasCaseList || hasCaseLibraryQuery || hasCurrentPage || hasWebSearch || hasTempExecSearch) return false;
+    if (hasWrite && !hasRead) {
+      if (hasUiFillInput && isSearchListDisplayIntent(userText)) return true;
+      return false;
+    }
     if (containsAny(outText, ['当前可操作控件：']) && !isUiControlListingIntent(userText)) return true;
     if (containsAny(outText, ['按你的意图返回页面数据']) && !isPageDataListingIntent(userText)) return true;
     return false;
@@ -5187,7 +7741,14 @@
 
   function shouldContinueActionReasoning(userText, actions, actionOutputs) {
     var list = Array.isArray(actions) ? actions : [];
+    var requestedDomains = collectAssistantTaskIntentDomains(userText);
+    var expectsExecTransfer = requestedDomains.indexOf('exec_transfer') !== -1;
+    var needsCaseUpdate = requestedDomains.indexOf('case_update') !== -1;
+    var needsArchive = requestedDomains.indexOf('archive') !== -1;
     if (!list.length) return false;
+    if (expectsExecTransfer) return true;
+    if (needsArchive) return true;
+    if (needsCaseUpdate && !hasCaseUpdateAction(list)) return true;
     var hasQueryPageData = false;
     var hasCaseList = false;
     var hasCurrentPage = false;
@@ -5230,7 +7791,7 @@
     } else {
       lines.push('观察：无有效输出');
     }
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   function buildPlanSignature(type, plans) {
@@ -5250,6 +7811,61 @@
       parts.push(tool + '::' + formatJsonCompact(args));
     });
     return type + '|' + parts.join('|');
+  }
+
+  async function buildAssistantTaskPreviewByModel(assistantApi, userText, options) {
+    var api = assistantApi && typeof assistantApi.callModel === 'function' ? assistantApi : null;
+    var rawText = userText === undefined || userText === null ? '' : String(userText).trim();
+    var opts = options && typeof options === 'object' ? options : {};
+    var res = null;
+    var parsed = null;
+    var mcpCalls = [];
+    var actions = [];
+    var type = '';
+    var preview = null;
+    if (!api || !rawText) return null;
+    try {
+      res = await api.callModel(JSON.stringify({
+        task: 'plan_task_preview',
+        userText: rawText,
+        domains: collectAssistantTaskIntentDomains(rawText),
+        initialPlan: opts.initialPlan || '',
+      }, null, 2), {
+        prompt: buildConversationPromptWithPriority([
+          '你是测试助手平台内置 AI 助手。',
+          '当前任务：先为用户请求生成一份完整的执行计划预览，供任务态展示和后续续跑使用。',
+          '如果用户请求是多步骤任务，必须输出完整步骤，不要只输出第一步。',
+          '优先输出 MCP JSON；只有无法用 MCP 表达时才输出旧 actions。',
+          '如果后续步骤依赖前一步的搜索结果，也要先把后续步骤规划出来；允许在 args 中保留占位或只填已知字段。',
+          '像“搜索候选 -> 转到执行 -> 修改用例 -> 归档”这种复合任务，必须一次给出完整顺序。',
+          '规划 case_library.search_exec_candidates 时，优先保留用户原话里的完整用例短语，例如“皮肤用例”不要无依据缩成“皮肤”。',
+          '若用户原话里已经指定了执行版本（如 912），后续 transfer_to_exec 的 args 中尽量保留 execVersionName。',
+          '任务预览里只使用当前支持的标准工具名；读取当前执行时优先用 cases.list_current，批量改执行结果时优先用 case.update，归档时优先用 case_library.batch_archive_exec_cases。不要输出旧别名，如 case_library.search_exec_cases / case_library.query_exec_cases / case_library.batch_set_exec_results / case_library.batch_archive_cases。',
+          '输出格式只能是一个 JSON 对象，可包含 title、summary，以及 mcp.calls 或 actions。不要代码块。'
+        ].join('\n'), rawText),
+        temperature: 0.1,
+        history: opts.history || buildConversationHistory(3, rawText),
+        contentBlocks: opts.contentBlocks,
+      });
+    } catch (err) {
+      res = null;
+    }
+    if (!res || res.ok !== true || !res.content) return null;
+    parsed = parseJsonObjectFromText(String(res.content || '').trim());
+    if (!parsed || typeof parsed !== 'object') return null;
+    mcpCalls = extractModelMcpCallList(parsed);
+    actions = extractModelActionList(parsed);
+    if (mcpCalls.length >= actions.length && mcpCalls.length >= 2) type = 'mcp';
+    else if (actions.length >= 2) type = 'action';
+    if (!type) return null;
+    preview = buildAssistantTaskPreviewState(type, type === 'mcp' ? mcpCalls : actions, {
+      title: parsed.title,
+      summary: parsed.summary,
+      userText: rawText,
+      responseHint: parsed.response && String(parsed.response).trim() ? String(parsed.response).trim() : '',
+    });
+    if (!preview || !preview.taskState || !preview.continuation) return null;
+    return preview;
   }
 
   function buildMcpReasoningPrompt(basePrompt, traceEntries) {
@@ -5512,6 +8128,56 @@
         items: compactItems,
       };
     }
+    if (name === 'case_library.query_cases') {
+      var libraryItems = Array.isArray(sourceData.items) ? sourceData.items : [];
+      var detailLevel = payloadArgs.detailLevel === undefined || payloadArgs.detailLevel === null
+        ? (sourceData.detailLevel === undefined || sourceData.detailLevel === null ? '' : String(sourceData.detailLevel).trim().toLowerCase())
+        : String(payloadArgs.detailLevel).trim().toLowerCase();
+      var compactFilterInfo = buildCompactCaseListFilterInfo(sourceData.filterInfo);
+      var includeFullFields = detailLevel === 'full' || Boolean(compactFilterInfo);
+      var maxItems = includeFullFields ? 160 : 80;
+      return {
+        tool: name,
+        args: payloadArgs,
+        scope: sourceData.scope || '',
+        projectId: sourceData.projectId || '',
+        projectName: sourceData.projectName || '',
+        queryText: sourceData.queryText || '',
+        total: Number(sourceData.total) || libraryItems.length,
+        matchedFileCount: Number(sourceData.matchedFileCount) || 0,
+        searchedFileCount: Number(sourceData.searchedFileCount) || 0,
+        searchedItemCount: Number(sourceData.searchedItemCount) || 0,
+        projectCount: Number(sourceData.projectCount) || 0,
+        truncated: sourceData.truncated === true,
+        filterSummary: buildCaseListFilterLabel(sourceData.filterInfo),
+        filterInfo: compactFilterInfo,
+        multiAgent: sourceData.multiAgent && typeof sourceData.multiAgent === 'object' ? {
+          used: sourceData.multiAgent.used === true,
+          workerCount: Number(sourceData.multiAgent.workerCount) || 0,
+          chunkCount: Number(sourceData.multiAgent.chunkCount) || 0,
+        } : null,
+        items: libraryItems.slice(0, maxItems).map(function(item, idx) {
+          var row = item && typeof item === 'object' ? item : {};
+          var normalized = {
+            index: row.index === undefined || row.index === null ? (idx + 1) : row.index,
+            id: row.id === undefined || row.id === null ? '' : String(row.id),
+            projectName: trimMcpReasonField(row.projectName, 60),
+            caseFileName: trimMcpReasonField(row.caseFileName, 80),
+            module: trimMcpReasonField(row.module, 60),
+            title: trimMcpReasonField(row.title, 100),
+            priority: row.priority === undefined || row.priority === null ? '' : String(row.priority),
+            matchedKeywords: Array.isArray(row.matchedKeywords) ? row.matchedKeywords.slice(0, 8) : [],
+          };
+          if (includeFullFields) {
+            normalized.precondition = trimMcpReasonField(row.precondition !== undefined && row.precondition !== null ? row.precondition : row.preconditions, 120);
+            normalized.steps = trimMcpReasonField(row.steps, 200);
+            normalized.expected = trimMcpReasonField(row.expected, 200);
+            normalized.remark = trimMcpReasonField(row.remark, 120);
+          }
+          return normalized;
+        }),
+      };
+    }
     if (name === 'missing_library.list_current') {
       var missingItems = Array.isArray(sourceData.items) ? sourceData.items : [];
       return {
@@ -5610,7 +8276,7 @@
     var res = null;
     try {
       res = await apis.assistantApi.callModel(JSON.stringify(payload, null, 2), {
-        prompt: prompt,
+        prompt: buildConversationPromptWithPriority(prompt, userText),
         temperature: 0.1,
         history: history,
       });
@@ -5633,11 +8299,296 @@
     return text;
   }
 
+  function getAssistantMcpToolDefinition(toolName) {
+    var normalized = normalizeMcpToolName(toolName);
+    var tools = getAvailableMcpTools();
+    var i = 0;
+    if (!normalized) return null;
+    if (!Array.isArray(tools)) return null;
+    for (i = 0; i < tools.length; i += 1) {
+      var row = tools[i] && typeof tools[i] === 'object' ? tools[i] : {};
+      if (normalizeMcpToolName(row.name || '') === normalized) return row;
+    }
+    return null;
+  }
+
+  function trimAssistantTaskLabelText(text, maxLen) {
+    return trimConversationHistoryReferenceText(text, maxLen || 32);
+  }
+
+  function buildAssistantTaskStepLabelFromMcpCall(call, userText) {
+    var item = call && typeof call === 'object' ? call : {};
+    var tool = normalizeMcpToolName(item.tool || item.name || '');
+    var args = item.args && typeof item.args === 'object' ? Object.assign({}, item.args) : {};
+    var def = getAssistantMcpToolDefinition(tool);
+    if (tool === 'case.update' && userText) {
+      args = inferCaseUpdateArgsFromText(args, userText);
+      if (!args.field) {
+        var implicitActual = detectImplicitActualBulkUpdate(userText);
+        if (implicitActual) {
+          args.field = implicitActual.field;
+          args.value = implicitActual.value;
+          args.scope = implicitActual.scope;
+          if (!args.context) args.context = 'tempexec';
+        }
+      }
+    }
+    var friendlyLabel = buildAssistantFriendlyTaskLabel(tool, args);
+    var label = friendlyLabel || (def && def.description ? String(def.description) : (tool || '执行工具'));
+    var detail = '';
+    if (!friendlyLabel) {
+      if (args.query !== undefined && args.query !== null && String(args.query).trim()) detail = trimAssistantTaskLabelText(args.query, 24);
+      else if (args.tab !== undefined && args.tab !== null && String(args.tab).trim()) detail = trimAssistantTaskLabelText(getTabLabelById(String(args.tab)) || String(args.tab), 18);
+      else if (args.scaffold !== undefined && args.scaffold !== null && String(args.scaffold).trim()) detail = trimAssistantTaskLabelText(String(args.scaffold), 18);
+      else if (args.name !== undefined && args.name !== null && String(args.name).trim()) detail = trimAssistantTaskLabelText(String(args.name), 18);
+      else if (args.field !== undefined && args.field !== null && String(args.field).trim()) detail = trimAssistantTaskLabelText(String(args.field), 18);
+    }
+    if (detail) label += '：' + detail;
+    return trimAssistantTaskLabelText(label, 42);
+  }
+
+  function buildAssistantTaskStepLabelFromAction(actionPayload) {
+    var payload = actionPayload && typeof actionPayload === 'object' ? actionPayload : {};
+    var action = normalizeModelActionName(payload.action || payload.name || '');
+    var map = {
+      navigate: '切换页面',
+      query_case_list: '读取当前用例列表',
+      query_page_data: '读取页面数据',
+      current_page_info: '识别当前页面',
+      web_search: '联网搜索',
+      memo_list: '读取备忘列表',
+      memo_add: '新增备忘',
+      memo_toggle: '更新备忘状态',
+      memo_remove: '删除备忘',
+      settings_patch: '修改设置',
+      settings_describe: '查看设置说明',
+      update_case: '修改用例',
+      delete_case: '删除用例',
+      run_case_generation: '触发用例生成',
+      run_missing_recommendation: '触发漏测推荐'
+    };
+    var label = map[action] || action || '执行动作';
+    var detail = '';
+    if (payload.query !== undefined && payload.query !== null && String(payload.query).trim()) detail = trimAssistantTaskLabelText(String(payload.query), 24);
+    else if (payload.tab !== undefined && payload.tab !== null && String(payload.tab).trim()) detail = trimAssistantTaskLabelText(getTabLabelById(String(payload.tab)) || String(payload.tab), 18);
+    else if (payload.field !== undefined && payload.field !== null && String(payload.field).trim()) detail = trimAssistantTaskLabelText(String(payload.field), 18);
+    if (detail) label += '：' + detail;
+    return trimAssistantTaskLabelText(label, 42);
+  }
+
+  function buildAssistantTaskPlanKey(type, plan) {
+    var item = plan && typeof plan === 'object' ? plan : {};
+    var normalizedType = type === 'action' ? 'action' : 'mcp';
+    var normalizedName = normalizedType === 'action'
+      ? normalizeModelActionName(item.action || item.name || '')
+      : normalizeMcpToolName(item.tool || item.name || '');
+    if (!normalizedName) return '';
+    return normalizedType + ':' + normalizedName;
+  }
+
+  function findReusableAssistantTaskPreviewStepIndex(taskState, planKey) {
+    var state = taskState && typeof taskState === 'object' ? taskState : null;
+    var steps = state && Array.isArray(state.steps) ? state.steps : [];
+    var fallbackIndex = -1;
+    var i = 0;
+    for (i = 0; i < steps.length; i += 1) {
+      var step = steps[i] && typeof steps[i] === 'object' ? steps[i] : null;
+      if (!step || step.preview !== true) continue;
+      if (step.status && step.status !== 'waiting') continue;
+      if (planKey && step.planKey && step.planKey === planKey) return i;
+      if (fallbackIndex < 0) fallbackIndex = i;
+    }
+    return fallbackIndex;
+  }
+
+  function deriveAssistantTaskStateStatus(taskState) {
+    var steps = taskState && Array.isArray(taskState.steps) ? taskState.steps : [];
+    if (!steps.length) return normalizeAssistantTaskStatus(taskState && taskState.status) || 'running';
+    if (steps.some(function(step) { return step && step.status === 'blocked'; })) return 'blocked';
+    if (steps.some(function(step) { return step && step.status === 'running'; })) return 'running';
+    if (steps.some(function(step) { return step && step.status === 'waiting'; })) return 'waiting';
+    if (steps.some(function(step) { return step && step.status === 'cancelled'; })) return 'cancelled';
+    return 'completed';
+  }
+
+  function appendAssistantTaskPlans(taskState, type, plans, options) {
+    var state = cloneAssistantTaskState(taskState);
+    var list = Array.isArray(plans) ? plans : [];
+    var opts = options && typeof options === 'object' ? options : {};
+    var indices = [];
+    if (!state) {
+      state = {
+        title: '当前任务',
+        summary: '',
+        status: 'running',
+        steps: [],
+      };
+    }
+    list.forEach(function(plan) {
+      var label = type === 'action'
+        ? buildAssistantTaskStepLabelFromAction(plan)
+        : buildAssistantTaskStepLabelFromMcpCall(plan, opts.userText || '');
+      var planKey = buildAssistantTaskPlanKey(type, plan);
+      var previewIndex = -1;
+      if (!label) return;
+      previewIndex = findReusableAssistantTaskPreviewStepIndex(state, planKey);
+      if (previewIndex >= 0 && state.steps[previewIndex]) {
+        state.steps[previewIndex].label = label;
+        state.steps[previewIndex].description = '';
+        state.steps[previewIndex].status = normalizeAssistantTaskStatus(state.steps[previewIndex].status) || 'waiting';
+        state.steps[previewIndex].planKey = planKey || state.steps[previewIndex].planKey || '';
+        state.steps[previewIndex].preview = false;
+        indices.push(previewIndex);
+        return;
+      }
+      state.steps.push({
+        label: label,
+        description: '',
+        status: 'waiting',
+        planKey: planKey,
+        preview: false,
+      });
+      indices.push(state.steps.length - 1);
+    });
+    if (indices.length) {
+      state.status = 'running';
+      state.summary = state.steps.length > 1
+        ? ('已拆分为 ' + state.steps.length + ' 个步骤，正在执行。')
+        : '正在执行任务。';
+    }
+    return {
+      taskState: state,
+      indices: indices,
+    };
+  }
+
+  function buildAssistantTaskPreviewState(type, plans, options) {
+    var normalizedType = type === 'action' ? 'action' : 'mcp';
+    var list = Array.isArray(plans) ? plans : [];
+    var opts = options && typeof options === 'object' ? options : {};
+    var title = opts.title !== undefined && opts.title !== null && String(opts.title).trim()
+      ? String(opts.title).trim()
+      : '当前任务';
+    var steps = [];
+    var stepIndices = [];
+    var i = 0;
+    for (i = 0; i < list.length; i += 1) {
+      var plan = list[i] && typeof list[i] === 'object' ? list[i] : null;
+      var label = '';
+      var planKey = '';
+      if (!plan) continue;
+      label = normalizedType === 'action'
+        ? buildAssistantTaskStepLabelFromAction(plan)
+        : buildAssistantTaskStepLabelFromMcpCall(plan, opts.userText || '');
+      if (!label) continue;
+      planKey = buildAssistantTaskPlanKey(normalizedType, plan);
+      steps.push({
+        label: label,
+        description: '',
+        status: 'waiting',
+        planKey: planKey,
+        preview: true,
+      });
+      stepIndices.push(steps.length - 1);
+    }
+    if (!steps.length) return null;
+    return {
+      taskState: {
+        title: title,
+        summary: opts.summary !== undefined && opts.summary !== null && String(opts.summary).trim()
+          ? String(opts.summary).trim()
+          : (steps.length > 1 ? ('已拆分为 ' + steps.length + ' 个步骤，正在执行。') : '正在执行任务。'),
+        status: 'running',
+        steps: steps,
+      },
+      continuation: buildAssistantTaskContinuation(normalizedType, list.slice(), stepIndices.slice(), opts.userText || '', opts.responseHint || ''),
+      indices: stepIndices,
+    };
+  }
+
+  function buildAssistantTaskPreviewContinuationAfterStep(previewContinuation, type, stepIndex, executedPlan, userText, responseHint) {
+    var data = cloneAssistantTaskContinuation(previewContinuation);
+    var normalizedType = type === 'action' ? 'action' : 'mcp';
+    var matchIndex = -1;
+    var i = 0;
+    if (!data || data.type !== normalizedType || !data.items.length) return null;
+    for (i = 0; i < data.stepIndices.length; i += 1) {
+      if (Number(data.stepIndices[i]) === Number(stepIndex)) {
+        matchIndex = i;
+        break;
+      }
+    }
+    if (matchIndex < 0 && executedPlan && typeof executedPlan === 'object') {
+      var planKey = buildAssistantTaskPlanKey(normalizedType, executedPlan);
+      for (i = 0; i < data.items.length; i += 1) {
+        if (buildAssistantTaskPlanKey(normalizedType, data.items[i]) !== planKey) continue;
+        matchIndex = i;
+        break;
+      }
+    }
+    if (matchIndex < 0) return null;
+    return buildAssistantTaskContinuation(normalizedType, data.items.slice(matchIndex + 1), data.stepIndices.slice(matchIndex + 1), userText || data.userText || '', responseHint || data.responseHint || '');
+  }
+
+  function setAssistantTaskStateStepStatus(taskState, stepIndex, status, summary) {
+    var state = taskState && typeof taskState === 'object' ? taskState : null;
+    var normalized = normalizeAssistantTaskStatus(status) || 'running';
+    if (!state || !Array.isArray(state.steps) || stepIndex < 0 || stepIndex >= state.steps.length) return state;
+    state.steps[stepIndex].status = normalized;
+    if (summary !== undefined && summary !== null) state.summary = String(summary);
+    state.status = deriveAssistantTaskStateStatus(state);
+    return state;
+  }
+
+  function setAssistantTaskStateStatus(taskState, status, summary) {
+    var state = taskState && typeof taskState === 'object' ? taskState : null;
+    var normalized = normalizeAssistantTaskStatus(status);
+    if (!state) return state;
+    if (summary !== undefined && summary !== null) state.summary = String(summary);
+    state.status = normalized || deriveAssistantTaskStateStatus(state);
+    return state;
+  }
+
+  function buildExecTransferPendingTaskState(pending, status, summary) {
+    var data = pending && typeof pending === 'object' ? pending : null;
+    var state = cloneAssistantTaskState(data && data.taskState ? data.taskState : null);
+    var stepIndex = data ? Number(data.taskStepIndex) : -1;
+    if (!Number.isFinite(stepIndex)) stepIndex = -1;
+    if (!state) {
+      state = {
+        title: '当前任务',
+        summary: '',
+        status: normalizeAssistantTaskStatus(status) || 'running',
+        steps: [
+          {
+            label: '转到当前执行',
+            description: '',
+            status: normalizeAssistantTaskStatus(status) || 'running',
+          }
+        ],
+      };
+      stepIndex = 0;
+    }
+    if (stepIndex >= 0 && Array.isArray(state.steps) && stepIndex < state.steps.length) {
+      setAssistantTaskStateStepStatus(state, stepIndex, status, summary === undefined ? null : summary);
+    } else {
+      setAssistantTaskStateStatus(state, status, summary === undefined ? null : summary);
+    }
+    if (summary !== undefined && summary !== null) state.summary = String(summary);
+    state.status = normalizeAssistantTaskStatus(status) || deriveAssistantTaskStateStatus(state);
+    return state;
+  }
+
   async function executeModelMcpToolCall(call, userText, defaultResponse) {
     var item = call && typeof call === 'object' ? call : {};
     var tool = normalizeMcpToolName(item.tool || item.name || '');
     if (!tool) return null;
     var args = item.args && typeof item.args === 'object' ? Object.assign({}, item.args) : {};
+    var rewrittenLegacy = rewriteLegacyExecBatchToolIfNeeded(tool, args, userText);
+    if (rewrittenLegacy && rewrittenLegacy.rewritten === true) {
+      tool = rewrittenLegacy.tool;
+      args = rewrittenLegacy.args && typeof rewrittenLegacy.args === 'object' ? Object.assign({}, rewrittenLegacy.args) : {};
+    }
     var rewritten = rewriteUiFillAsCaseUpdateIfNeeded(tool, args, userText);
     if (rewritten && rewritten.rewritten === true) {
       tool = rewritten.tool;
@@ -5645,6 +8596,9 @@
     }
     if (tool === 'case.update') {
       args = inferCaseUpdateArgsFromText(args, userText);
+    }
+    if (tool === 'case_library.query_cases') {
+      args = await buildCaseLibraryQueryArgsFromUserText(args, userText);
     }
     var responseHint = item.response && String(item.response).trim()
       ? String(item.response).trim()
@@ -5704,6 +8658,13 @@
       confirmedRetryTried = true;
       callResult = await callMcpOnce(confirmedArgs);
     }
+    if (tool === 'case_library.search_exec_candidates') {
+      var repairedSearch = await retryExecTransferSearchByModel(callMcpOnce, args, callResult, userText);
+      if (repairedSearch) {
+        args = repairedSearch.args && typeof repairedSearch.args === 'object' ? Object.assign({}, repairedSearch.args) : args;
+        callResult = repairedSearch.result;
+      }
+    }
     if (!callResult || callResult.ok !== true) {
       var failedReason = callResult && callResult.reason ? String(callResult.reason) : '未知错误';
       var toolMode = getMcpToolMode(tool);
@@ -5742,6 +8703,15 @@
       var clickId = toolData && toolData.controlId ? String(toolData.controlId) : '';
       if (responseHint) return { handled: true, text: responseHint };
       return { handled: true, text: '已执行点击：' + (clickName || clickId || '目标控件') };
+    }
+    if (tool === 'case_library.batch_archive_exec_cases') {
+      var archiveName = toolData && toolData.fileName ? String(toolData.fileName) : '';
+      var archiveReason = toolData && toolData.reason ? String(toolData.reason) : '';
+      if (responseHint) return { handled: true, text: responseHint };
+      return {
+        handled: true,
+        text: '已归档当前执行用例' + (archiveName ? ('：' + archiveName) : '') + (archiveReason ? '（已填写归档原因）' : '。'),
+      };
     }
     if (tool === 'ui.fill_input') {
       var fillName = toolData && toolData.controlText ? String(toolData.controlText) : '';
@@ -5812,6 +8782,44 @@
       var summarizedCases = await summarizeMcpToolResultByModel(userText, tool, args, toolData || {}, fallbackCasesText);
       if (summarizedCases) return { handled: true, text: summarizedCases };
       return { handled: true, text: fallbackCasesText };
+    }
+    if (tool === 'case_library.query_cases') {
+      var libraryToolData = toolData && typeof toolData === 'object' ? toolData : {};
+      var fallbackLibraryText = (args.countOnly === true || args.count === true)
+        ? formatCaseLibraryQueryCountResponse(libraryToolData)
+        : formatCaseLibraryQueryResponse(libraryToolData);
+      var summarizedLibrary = await summarizeMcpToolResultByModel(userText, tool, args, libraryToolData, fallbackLibraryText);
+      if (summarizedLibrary) return { handled: true, text: summarizedLibrary };
+      if (responseHint && responseHint !== fallbackLibraryText) {
+        return { handled: true, text: responseHint + '\n' + fallbackLibraryText };
+      }
+      return { handled: true, text: fallbackLibraryText };
+    }
+    if (tool === 'case_library.search_exec_candidates') {
+      var fallbackExecSearchText = buildExecTransferSearchResultText(toolData || {}, responseHint || '');
+      clearPendingExecTransferManualState();
+      if (toolData && toolData.selectionRequired === true) rememberExecTransferSelection(toolData || {}, {
+        sourceUserText: userText,
+      });
+      else clearPendingExecTransferSelection();
+      return { handled: true, text: fallbackExecSearchText };
+    }
+    if (tool === 'case_library.transfer_to_exec') {
+      var transferText = handleExecTransferToolData(toolData || {}, responseHint || '', {
+        approved: confirmedRetryTried || Boolean(args && args.confirmed === true),
+        sourceUserText: userText,
+        requestedVersionName: args && args.execVersionName !== undefined && args.execVersionName !== null ? String(args.execVersionName).trim() : '',
+      });
+      var autoTransferVersionReply = null;
+      if (pendingExecTransferVersionSelection) {
+        autoTransferVersionReply = await tryAutoResolvePendingExecTransferVersionFromSource(pendingExecTransferVersionSelection, {
+          sourceUserText: userText,
+        });
+        if (autoTransferVersionReply && autoTransferVersionReply.handled === true) {
+          return { handled: true, text: autoTransferVersionReply.text || transferText };
+        }
+      }
+      return { handled: true, text: transferText };
     }
     if (tool === 'missing_library.list_current') {
       var fallbackMissingLibraryText = formatMissingLibraryListResponse(toolData || {});
@@ -6001,7 +9009,7 @@
   function shouldSyncCaseSearchToPage(userText, filterInfo) {
     var raw = String(userText || '').trim();
     if (!raw) return false;
-    if (!containsAny(raw, ['搜索', '查找', '筛选', '过滤', '搜', '找出', '筛出', '挑出', '列出', '列一下', '展示', '显示', '给我看', '看下', '看一下', '看看'])) return false;
+    if (!isSearchListDisplayIntent(raw)) return false;
     var info = filterInfo && typeof filterInfo === 'object' ? filterInfo : {};
     var include = Array.isArray(info.includeKeywords) ? info.includeKeywords : [];
     return include.length > 0;
@@ -6108,8 +9116,84 @@
     return { handled: true, text: fallbackText };
   }
 
+  async function runModelCaseLibraryQueryAction(userText, actionPayload, defaultResponse, options) {
+    var payload = actionPayload && typeof actionPayload === 'object' ? actionPayload : {};
+    var opts = options && typeof options === 'object' ? options : {};
+    var apis = getApis();
+    var queryText = payload.query !== undefined && payload.query !== null ? String(payload.query).trim() : String(userText || '').trim();
+    var responseHint = payload.response && String(payload.response).trim()
+      ? String(payload.response).trim()
+      : (defaultResponse ? String(defaultResponse).trim() : '');
+    var countOnly = payload.countOnly === true || payload.count === true || isCaseCountIntent(queryText || userText);
+    var toolName = 'case_library.query_cases';
+    var mcpArgs = null;
+    var res = null;
+    var libraryData = null;
+    var fallbackText = '';
+    var summarized = '';
+    var fullDetail = false;
+    var clarificationIntent = false;
+    var allCaseDisplayIntent = false;
+    var targetRequired = false;
+    var shouldResolveTarget = false;
+    if (!apis.assistantMcpApi || typeof apis.assistantMcpApi.callTool !== 'function') {
+      return { handled: true, text: '当前环境不支持跨页面查询用例库内容。' };
+    }
+    mcpArgs = await buildCaseLibraryQueryArgsFromUserText(Object.assign({}, payload, {
+      query: queryText || String(userText || '').trim(),
+      countOnly: countOnly,
+    }), queryText || userText);
+    mcpArgs.countOnly = countOnly;
+    if (opts.projectId !== undefined && opts.projectId !== null && String(opts.projectId).trim()) {
+      mcpArgs.projectId = String(opts.projectId).trim();
+    }
+    try {
+      res = await apis.assistantMcpApi.callTool(toolName, mcpArgs);
+    } catch (err) {
+      res = { ok: false, reason: err && err.message ? String(err.message) : '查询异常' };
+    }
+    if (!res || res.ok !== true) {
+      return { handled: true, text: '查询用例库失败：' + (res && res.reason ? String(res.reason) : '未知错误') };
+    }
+    libraryData = Object.assign({}, res.data && typeof res.data === 'object' ? res.data : {}, {
+      detailLevel: mcpArgs.detailLevel || '',
+    });
+    fullDetail = mcpArgs.detailLevel === 'full' || isCurrentCaseFullDetailIntent(queryText || userText) || isCaseDetailClarificationIntent(queryText || userText);
+    clarificationIntent = isCaseDetailClarificationIntent(queryText || userText);
+    allCaseDisplayIntent = isExplicitAllCaseDisplayIntent(queryText || userText);
+    targetRequired = shouldRequireSpecificCaseDetailTarget(queryText || userText) || clarificationIntent;
+    shouldResolveTarget = !allCaseDisplayIntent && (clarificationIntent || hasDirectCaseDetailReference(libraryData, queryText || userText));
+    if (!countOnly && fullDetail && shouldResolveTarget) {
+      var resolvedTarget = resolveRequestedCaseDetailTarget(libraryData, queryText || userText, {
+        includeConversationContext: clarificationIntent,
+      });
+      if (resolvedTarget && resolvedTarget.item) {
+        libraryData = Object.assign({}, libraryData, {
+          items: [Object.assign({}, resolvedTarget.item)],
+          total: 1,
+          truncated: false,
+        });
+      } else if (targetRequired) {
+        return { handled: true, text: buildCaseDetailTargetMissingText(libraryData, queryText || userText) };
+      }
+    }
+    fallbackText = countOnly
+      ? formatCaseLibraryQueryCountResponse(libraryData)
+      : formatCaseLibraryQueryResponse(libraryData);
+    summarized = await summarizeMcpToolResultByModel(userText, toolName, mcpArgs, libraryData, fallbackText);
+    if (summarized) return { handled: true, text: summarized };
+    if (responseHint && responseHint !== fallbackText) {
+      return { handled: true, text: responseHint + '\n' + fallbackText };
+    }
+    return { handled: true, text: fallbackText };
+  }
+
   async function runModelCaseListAction(userText, actionPayload, defaultResponse, options) {
     var payload = actionPayload && typeof actionPayload === 'object' ? actionPayload : {};
+    var queryTextForLibrary = payload.query !== undefined && payload.query !== null ? String(payload.query).trim() : String(userText || '').trim();
+    if (isCaseLibraryContentQueryIntent(queryTextForLibrary || userText)) {
+      return runModelCaseLibraryQueryAction(userText, actionPayload, defaultResponse, options);
+    }
     var opts = options && typeof options === 'object' ? options : {};
     var responseHint = payload.response && String(payload.response).trim()
       ? String(payload.response).trim()
@@ -6485,10 +9569,18 @@
     var contentBlocks = normalizeAssistantContentBlocks(opts.contentBlocks);
     var hasImageInput = assistantContentBlocksHaveImage(contentBlocks) || attachments.length > 0;
     var content = composeAssistantConversationContent(text, attachments);
+    var expectsExecTransfer = isExplicitExecTransferIntent(text);
+    var prefersCaseUpdateModel = shouldPreferModelDrivenCaseUpdateRoute(text);
+    var prefersTaskState = shouldPreferModelDrivenTaskRoute(text) || prefersCaseUpdateModel;
+    var execTransferRepairCount = 0;
+    var onTaskStateChange = typeof opts.onTaskStateChange === 'function' ? opts.onTaskStateChange : null;
+    var taskStateSession = null;
+    var taskPreviewContinuation = null;
+    var taskPreviewPrepared = false;
     if (!content && !hasImageInput) return null;
     var apis = getApis();
     if (!apis.assistantApi || typeof apis.assistantApi.callModel !== 'function') return null;
-    var mcpTools = getAvailableMcpTools();
+    var mcpTools = getAvailableMcpToolsForUserText(text);
     var mcpToolLines = [];
     if (Array.isArray(mcpTools)) {
       for (var i = 0; i < mcpTools.length; i += 1) {
@@ -6506,6 +9598,7 @@
         '- page.get_data [read]',
         '- nav.switch_tab [write]',
         '- cases.list_current [read]',
+        '- case_library.query_cases [read]',
         '- web.search [read]',
       ];
     }
@@ -6520,7 +9613,16 @@
       mcpToolLines.join('\n'),
       '如果平台已有合适的展示手脚架，可调用 assistant.render_scaffold；当不确定有哪些手脚架时，可先调用 assistant.list_scaffolds。',
       hasImageInput ? '若用户附带图片，先理解图片内容，再决定是否需要调用工具；图片理解必须由模型完成。' : '',
+      prefersTaskState ? '当前请求包含多个需要连续执行的动作。请优先输出 MCP JSON 任务计划；若有多个步骤，优先使用 mcp.calls 一次列出完整步骤，让平台进入任务状态；不要只口头回答“我来处理”。' : '',
+      prefersCaseUpdateModel ? '当用户是在修改当前/执行用例字段，尤其是“改回/调回/恢复为”这类自然语言表达时，优先输出 case.update 的 MCP JSON，并直接根据用户原话补齐 field/value/scope；不要把这类表达遗漏成空 value。' : '',
+      isExecArchiveIntent(text) ? '若用户还要求归档，优先继续规划 case_library.batch_archive_exec_cases；若当前执行里仍有未通过项，优先在 args 中补 reason；只有缺少专用能力时，才退回 ui.list_controls / ui.click_control 定位归档入口。' : '',
       '当用户要求“完整展示/完整列出当前或该用例”时，优先使用 cases.list_current 读取完整字段；若需要标准横向用例表，优先调用 assistant.render_scaffold 的 case_table。',
+      '当用户明确要“跨页面查询用例库内容”、在“用例库/全库/跨页”范围内按内容、关键词、模糊条件查用例时，优先调用 case_library.query_cases；不要误用 cases.list_current。若用例库数据量大，允许调用 case_library.query_cases 触发主 agent 拆分子任务并发检索。',
+      '当用户想把某份用例转到当前执行时，先调用 case_library.search_exec_candidates 搜索候选；只有 1 个明确候选时再调用 case_library.transfer_to_exec；若有多个候选，明确列出编号让用户选择；若 transfer_to_exec 返回需要选择执行版本，则明确列出版本让用户选择；若用户给的版本不存在，先征求是否新建，确认后再继续。',
+      '为 case_library.search_exec_candidates 填 args 时，必须优先根据用户原话自行判断，优先保留完整用例短语，不要把“皮肤用例”“联机死亡用例”裁成“皮肤”“死亡这些关键字”。',
+      '用户给出的 912 这类值通常是目标执行版本；除非用户明确在查用例库版本，否则不要把它误塞进搜索条件。',
+      '不要输出缺少 caseFileId 的 case_library.transfer_to_exec。',
+      expectsExecTransfer ? '当前这轮请求属于“转到当前执行”；不要改成 tempexec.switch_file、tempexec.next_file 或单纯 nav.switch_tab。' : '',
       '当问题涉及当前页面/当前执行用例与漏测/易漏用例库的跨页面查询、匹配或补充时，优先调用 cross_page.match_missing_cases；若用户想看漏测库原始明细，再调用 missing_library.list_current。',
       'MCP JSON 格式支持：',
       '{"mcp":{"tool":"tool.name","args":{}},"response":""}',
@@ -6543,11 +9645,48 @@
     var reasoningTrace = [];
     var seenPlanSignatures = {};
 
+    function pushTaskStateUpdate() {
+      if (!onTaskStateChange || !taskStateSession) return;
+      onTaskStateChange(cloneAssistantTaskState(taskStateSession), '已进入任务状态，正在执行。');
+    }
+
+    function syncPendingExecTransferTaskState(stepIndex) {
+      var snapshot = cloneAssistantTaskState(taskStateSession);
+      var targets = [
+        pendingExecTransferSelection,
+        pendingExecTransferVersionSelection,
+        pendingExecTransferCreateVersionConfirm,
+        pendingExecTransferVersionNameClarify,
+      ];
+      var i = 0;
+      if (!snapshot) return;
+      for (i = 0; i < targets.length; i += 1) {
+        if (!targets[i] || typeof targets[i] !== 'object') continue;
+        targets[i].taskState = cloneAssistantTaskState(snapshot);
+        targets[i].taskStepIndex = stepIndex;
+      }
+    }
+
+    function finalizeTaskReply(replyText, fallbackStatus, fallbackSummary) {
+      var messageOptions = {};
+      var finalTask = cloneAssistantTaskState(taskStateSession);
+      var status = '';
+      if (finalTask) {
+        status = normalizeAssistantTaskStatus(fallbackStatus) || deriveAssistantTaskStateStatus(finalTask);
+        if (status === 'running') status = 'completed';
+        finalTask.status = status || 'completed';
+        if (fallbackSummary !== undefined && fallbackSummary !== null) finalTask.summary = String(fallbackSummary);
+        else if (!finalTask.summary && finalTask.status === 'completed') finalTask.summary = '任务已完成。';
+        messageOptions.taskState = finalTask;
+      }
+      return { handled: true, text: replyText, messageOptions: messageOptions };
+    }
+
     async function callModelWithPrompt(promptText) {
       var res = null;
       try {
         res = await apis.assistantApi.callModel(content, {
-          prompt: promptText,
+          prompt: buildConversationPromptWithPriority(promptText, content),
           temperature: 0.2,
           history: conversationHistory,
           contentBlocks: contentBlocks,
@@ -6558,6 +9697,33 @@
       return res;
     }
 
+    async function tryRepairExecTransfer(latestText) {
+      var repairedRes = null;
+      if (!expectsExecTransfer || execTransferRepairCount >= 2) return '';
+      execTransferRepairCount += 1;
+      repairedRes = await callModelWithPrompt(buildExecTransferRepairPrompt(prompt, reasoningTrace, latestText || ''));
+      if (!repairedRes || repairedRes.ok !== true || !repairedRes.content) return '';
+      return String(repairedRes.content || '').trim();
+    }
+
+    async function ensureTaskPreviewSession(parsed) {
+      var previewPlanCount = 0;
+      var preview = null;
+      if (taskPreviewPrepared || !prefersTaskState || !parsed || typeof parsed !== 'object') return;
+      taskPreviewPrepared = true;
+      previewPlanCount = extractModelMcpCallList(parsed).length + extractModelActionList(parsed).length;
+      if (previewPlanCount >= 2) return;
+      preview = await buildAssistantTaskPreviewByModel(apis.assistantApi, content, {
+        history: conversationHistory,
+        contentBlocks: contentBlocks,
+        initialPlan: String(currentRaw || ''),
+      });
+      if (!preview || !preview.taskState || !preview.continuation) return;
+      taskStateSession = preview.taskState;
+      taskPreviewContinuation = preview.continuation;
+      pushTaskStateUpdate();
+    }
+
     var initialRes = await callModelWithPrompt(prompt);
     if (!initialRes || initialRes.ok !== true || !initialRes.content) return null;
     var currentRaw = String(initialRes.content || '').trim();
@@ -6566,46 +9732,153 @@
     for (var round = 1; round <= mcpReasoningMaxRounds; round += 1) {
       var parsed = parseJsonObjectFromText(currentRaw);
       if (!parsed || typeof parsed !== 'object') {
-        return { handled: true, text: currentRaw };
+        if (expectsExecTransfer) {
+          var repairedRaw = await tryRepairExecTransfer(currentRaw);
+          if (repairedRaw) {
+            currentRaw = repairedRaw;
+            continue;
+          }
+          return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
+        }
+        return finalizeTaskReply(currentRaw);
       }
       var topLevelResponse = parsed.response && String(parsed.response).trim() ? String(parsed.response).trim() : '';
+      await ensureTaskPreviewSession(parsed);
 
       var mcpCalls = extractModelMcpCallList(parsed);
       if (mcpCalls.length) {
+        if (hasIncompleteExecTransferMcpPlan(mcpCalls)) {
+          var invalidExecTransferPlanText = '检测到 case_library.transfer_to_exec 缺少 caseFileId，必须先搜索候选并在拿到明确目标后再转执行。';
+          var repairedIncompleteRes = null;
+          var repairedIncompletePlan = '';
+          reasoningTrace.push(formatReasoningTraceEntry(round, 'mcp', mcpCalls, [invalidExecTransferPlanText]));
+          if (execTransferRepairCount >= 2) {
+            return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
+          }
+          execTransferRepairCount += 1;
+          repairedIncompleteRes = await callModelWithPrompt(buildExecTransferRepairPrompt(prompt, reasoningTrace, invalidExecTransferPlanText));
+          if (repairedIncompleteRes && repairedIncompleteRes.ok === true && repairedIncompleteRes.content) {
+            repairedIncompletePlan = String(repairedIncompleteRes.content || '').trim();
+          }
+          if (repairedIncompletePlan && repairedIncompletePlan !== currentRaw) {
+            currentRaw = repairedIncompletePlan;
+            continue;
+          }
+          return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
+        }
         var mcpSignature = buildPlanSignature('mcp', mcpCalls);
+        var mcpHasExecTransferTool = hasExecTransferMcpCall(mcpCalls);
         if (seenPlanSignatures[mcpSignature]) {
-          if (topLevelResponse) return { handled: true, text: topLevelResponse };
-          return { handled: true, text: '工具计划重复，已停止自动重试。' };
+          if (expectsExecTransfer && !mcpHasExecTransferTool) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
+          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
+          return finalizeTaskReply('工具计划重复，已停止自动重试。', 'blocked', '工具计划重复，任务已停止。');
         }
         seenPlanSignatures[mcpSignature] = true;
+        var appendedMcp = appendAssistantTaskPlans(taskStateSession, 'mcp', mcpCalls, { userText: content });
+        taskStateSession = appendedMcp.taskState;
+        var mcpStepIndices = appendedMcp.indices;
+        if (mcpStepIndices.length) pushTaskStateUpdate();
         var mcpOutputs = [];
+        var mcpHaltStatus = '';
+        var mcpHaltSummary = '';
         for (var m = 0; m < mcpCalls.length; m += 1) {
+          var mcpStepIndex = mcpStepIndices[m] !== undefined ? mcpStepIndices[m] : -1;
+          if (taskStateSession && mcpStepIndex >= 0 && taskStateSession.steps[mcpStepIndex]) {
+            setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'running', '正在执行：' + taskStateSession.steps[mcpStepIndex].label);
+            pushTaskStateUpdate();
+          }
           var mcpResult = await executeModelMcpToolCall(mcpCalls[m], content, topLevelResponse);
-          if (!mcpResult || mcpResult.handled !== true) continue;
+          if (!mcpResult || mcpResult.handled !== true) {
+            mcpHaltStatus = 'blocked';
+            mcpHaltSummary = '当前步骤未产出可用结果。';
+            if (taskStateSession && mcpStepIndex >= 0) {
+              setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'blocked', mcpHaltSummary);
+              pushTaskStateUpdate();
+            }
+            break;
+          }
           var mcpTextOut = mcpResult.text === undefined || mcpResult.text === null ? '' : String(mcpResult.text).trim();
-          if (!mcpTextOut) continue;
-          if (mcpOutputs.indexOf(mcpTextOut) === -1) mcpOutputs.push(mcpTextOut);
+          var waitingSummary = getPendingExecTransferWaitingSummary();
+          if (waitingSummary) {
+            var pendingContinuation = buildAssistantTaskContinuation('mcp', mcpCalls.slice(m + 1), mcpStepIndices.slice(m + 1), content, topLevelResponse);
+            var pendingStepIndex = mcpStepIndex;
+            var currentToolName = normalizeMcpToolName(mcpCalls[m] && (mcpCalls[m].tool || mcpCalls[m].name || ''));
+            if (!pendingContinuation && taskPreviewContinuation) {
+              pendingContinuation = buildAssistantTaskPreviewContinuationAfterStep(taskPreviewContinuation, 'mcp', mcpStepIndex, mcpCalls[m], content, topLevelResponse);
+            }
+            mcpHaltStatus = 'waiting';
+            mcpHaltSummary = waitingSummary;
+            if (pendingExecTransferSelection && currentToolName === 'case_library.search_exec_candidates' && pendingContinuation && pendingContinuation.stepIndices.length) {
+              pendingStepIndex = Number(pendingContinuation.stepIndices[0]);
+              if (!Number.isFinite(pendingStepIndex)) pendingStepIndex = mcpStepIndex;
+              if (taskStateSession && mcpStepIndex >= 0) {
+                setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'completed', '已完成当前步骤，等待你确认目标用例。');
+              }
+              if (taskStateSession && pendingStepIndex >= 0 && taskStateSession.steps[pendingStepIndex]) {
+                setAssistantTaskStateStepStatus(taskStateSession, pendingStepIndex, 'waiting', waitingSummary);
+              }
+            } else if (taskStateSession && mcpStepIndex >= 0) {
+              setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'waiting', waitingSummary);
+            }
+            updateActivePendingExecTransferState({
+              taskState: taskStateSession,
+              taskStepIndex: pendingStepIndex,
+              continuation: pendingContinuation,
+              sourceUserText: content,
+            });
+            syncPendingExecTransferTaskState(pendingStepIndex);
+            pushTaskStateUpdate();
+          } else if (mcpTextOut.indexOf('MCP 工具执行失败：') === 0) {
+            mcpHaltStatus = 'blocked';
+            mcpHaltSummary = '当前步骤执行失败。';
+            if (taskStateSession && mcpStepIndex >= 0) {
+              setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'blocked', mcpHaltSummary);
+              pushTaskStateUpdate();
+            }
+          } else if (mcpTextOut === '已取消。') {
+            mcpHaltStatus = 'cancelled';
+            mcpHaltSummary = '当前步骤已取消。';
+            if (taskStateSession && mcpStepIndex >= 0) {
+              setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'cancelled', mcpHaltSummary);
+              pushTaskStateUpdate();
+            }
+          } else if (taskStateSession && mcpStepIndex >= 0) {
+            setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'completed', m < mcpCalls.length - 1 ? '当前步骤已完成，继续执行后续步骤。' : taskStateSession.summary);
+            pushTaskStateUpdate();
+          }
+          if (mcpTextOut && mcpOutputs.indexOf(mcpTextOut) === -1) mcpOutputs.push(mcpTextOut);
+          if (mcpHaltStatus) break;
         }
         if (!mcpOutputs.length && topLevelResponse) mcpOutputs.push(topLevelResponse);
         var mcpText = mcpOutputs.join('\n').trim();
+        if (mcpHaltStatus) {
+          if (mcpText) return finalizeTaskReply(mcpText, mcpHaltStatus, mcpHaltSummary);
+          if (topLevelResponse) return finalizeTaskReply(topLevelResponse, mcpHaltStatus, mcpHaltSummary);
+          return finalizeTaskReply(currentRaw, mcpHaltStatus, mcpHaltSummary);
+        }
         var continueMcp = shouldContinueMcpReasoning(content, mcpCalls, mcpOutputs);
+        if (expectsExecTransfer && !mcpHasExecTransferTool && round >= mcpReasoningMaxRounds) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
         if (!continueMcp || round >= mcpReasoningMaxRounds) {
-          if (mcpText) return { handled: true, text: mcpText };
-          if (topLevelResponse) return { handled: true, text: topLevelResponse };
-          return { handled: true, text: currentRaw };
+          if (mcpText) return finalizeTaskReply(mcpText);
+          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
+          return finalizeTaskReply(currentRaw);
         }
         reasoningTrace.push(formatReasoningTraceEntry(round, 'mcp', mcpCalls, mcpOutputs));
-        var followPrompt = buildMcpReasoningPrompt(prompt, reasoningTrace);
+        var followPrompt = expectsExecTransfer && !mcpHasExecTransferTool
+          ? buildExecTransferRepairPrompt(prompt, reasoningTrace, mcpText || topLevelResponse || currentRaw)
+          : buildMcpReasoningPrompt(prompt, reasoningTrace);
         var followRes = await callModelWithPrompt(followPrompt);
         if (!followRes || followRes.ok !== true || !followRes.content) {
-          if (mcpText) return { handled: true, text: mcpText };
-          if (topLevelResponse) return { handled: true, text: topLevelResponse };
+          if (expectsExecTransfer && !mcpHasExecTransferTool) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
+          if (mcpText) return finalizeTaskReply(mcpText);
+          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
           return null;
         }
         currentRaw = String(followRes.content || '').trim();
         if (!currentRaw) {
-          if (mcpText) return { handled: true, text: mcpText };
-          if (topLevelResponse) return { handled: true, text: topLevelResponse };
+          if (expectsExecTransfer && !mcpHasExecTransferTool) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
+          if (mcpText) return finalizeTaskReply(mcpText);
+          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
           return null;
         }
         continue;
@@ -6615,47 +9888,104 @@
       if (actions.length) {
         var actionSignature = buildPlanSignature('action', actions);
         if (seenPlanSignatures[actionSignature]) {
-          if (topLevelResponse) return { handled: true, text: topLevelResponse };
-          return { handled: true, text: '动作计划重复，已停止自动重试。' };
+          if (expectsExecTransfer) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
+          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
+          return finalizeTaskReply('动作计划重复，已停止自动重试。', 'blocked', '动作计划重复，任务已停止。');
         }
         seenPlanSignatures[actionSignature] = true;
+        var appendedAction = appendAssistantTaskPlans(taskStateSession, 'action', actions);
+        taskStateSession = appendedAction.taskState;
+        var actionStepIndices = appendedAction.indices;
+        if (actionStepIndices.length) pushTaskStateUpdate();
         var actionOutputs = [];
+        var actionHaltStatus = '';
+        var actionHaltSummary = '';
         for (var a = 0; a < actions.length; a += 1) {
+          var actionStepIndex = actionStepIndices[a] !== undefined ? actionStepIndices[a] : -1;
+          if (taskStateSession && actionStepIndex >= 0 && taskStateSession.steps[actionStepIndex]) {
+            setAssistantTaskStateStepStatus(taskStateSession, actionStepIndex, 'running', '正在执行：' + taskStateSession.steps[actionStepIndex].label);
+            pushTaskStateUpdate();
+          }
           var actionResult = await executeModelPlannedAction(actions[a], content, topLevelResponse);
-          if (!actionResult || actionResult.handled !== true) continue;
+          if (!actionResult || actionResult.handled !== true) {
+            actionHaltStatus = 'blocked';
+            actionHaltSummary = '当前步骤未产出可用结果。';
+            if (taskStateSession && actionStepIndex >= 0) {
+              setAssistantTaskStateStepStatus(taskStateSession, actionStepIndex, 'blocked', actionHaltSummary);
+              pushTaskStateUpdate();
+            }
+            break;
+          }
           var actionTextOut = actionResult.text === undefined || actionResult.text === null ? '' : String(actionResult.text).trim();
-          if (!actionTextOut) continue;
-          if (actionOutputs.indexOf(actionTextOut) === -1) actionOutputs.push(actionTextOut);
+          if (actionTextOut === '已取消。') {
+            actionHaltStatus = 'cancelled';
+            actionHaltSummary = '当前步骤已取消。';
+            if (taskStateSession && actionStepIndex >= 0) {
+              setAssistantTaskStateStepStatus(taskStateSession, actionStepIndex, 'cancelled', actionHaltSummary);
+              pushTaskStateUpdate();
+            }
+          } else if (taskStateSession && actionStepIndex >= 0) {
+            setAssistantTaskStateStepStatus(taskStateSession, actionStepIndex, 'completed', a < actions.length - 1 ? '当前步骤已完成，继续执行后续步骤。' : taskStateSession.summary);
+            pushTaskStateUpdate();
+          }
+          if (actionTextOut && actionOutputs.indexOf(actionTextOut) === -1) actionOutputs.push(actionTextOut);
+          if (actionHaltStatus) break;
         }
         if (!actionOutputs.length && topLevelResponse) actionOutputs.push(topLevelResponse);
         var actionText = actionOutputs.join('\n').trim();
+        if (actionHaltStatus) {
+          if (actionText) return finalizeTaskReply(actionText, actionHaltStatus, actionHaltSummary);
+          if (topLevelResponse) return finalizeTaskReply(topLevelResponse, actionHaltStatus, actionHaltSummary);
+          return finalizeTaskReply(currentRaw, actionHaltStatus, actionHaltSummary);
+        }
         var continueAction = shouldContinueActionReasoning(content, actions, actionOutputs);
+        if (expectsExecTransfer && round >= mcpReasoningMaxRounds) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
         if (!continueAction || round >= mcpReasoningMaxRounds) {
-          if (actionText) return { handled: true, text: actionText };
-          if (topLevelResponse) return { handled: true, text: topLevelResponse };
-          return { handled: true, text: currentRaw };
+          if (actionText) return finalizeTaskReply(actionText);
+          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
+          return finalizeTaskReply(currentRaw);
         }
         reasoningTrace.push(formatReasoningTraceEntry(round, 'action', actions, actionOutputs));
-        var actionPrompt = buildMcpReasoningPrompt(prompt, reasoningTrace);
+        var actionPrompt = expectsExecTransfer
+          ? buildExecTransferRepairPrompt(prompt, reasoningTrace, actionText || topLevelResponse || currentRaw)
+          : buildMcpReasoningPrompt(prompt, reasoningTrace);
         var actionFollowRes = await callModelWithPrompt(actionPrompt);
         if (!actionFollowRes || actionFollowRes.ok !== true || !actionFollowRes.content) {
-          if (actionText) return { handled: true, text: actionText };
-          if (topLevelResponse) return { handled: true, text: topLevelResponse };
+          if (expectsExecTransfer) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
+          if (actionText) return finalizeTaskReply(actionText);
+          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
           return null;
         }
         currentRaw = String(actionFollowRes.content || '').trim();
         if (!currentRaw) {
-          if (actionText) return { handled: true, text: actionText };
-          if (topLevelResponse) return { handled: true, text: topLevelResponse };
+          if (expectsExecTransfer) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
+          if (actionText) return finalizeTaskReply(actionText);
+          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
           return null;
         }
         continue;
       }
 
       if (parsed.response && String(parsed.response).trim()) {
-        return { handled: true, text: String(parsed.response).trim() };
+        if (expectsExecTransfer) {
+          var repairedResponse = await tryRepairExecTransfer(String(parsed.response).trim());
+          if (repairedResponse) {
+            currentRaw = repairedResponse;
+            continue;
+          }
+          return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
+        }
+        return finalizeTaskReply(String(parsed.response).trim());
       }
-      return { handled: true, text: currentRaw };
+      if (expectsExecTransfer) {
+        var repairedFallback = await tryRepairExecTransfer(currentRaw);
+        if (repairedFallback) {
+          currentRaw = repairedFallback;
+          continue;
+        }
+        return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
+      }
+      return finalizeTaskReply(currentRaw);
     }
 
     return null;
@@ -6679,7 +10009,7 @@
       });
     }
     if (!lines.length) lines.push('已完成诊断，但没有返回可展示内容。');
-    return lines.join('\n');
+return lines.join('\n');
   }
 
   function pushFailureHistory(entry) {
@@ -6909,6 +10239,24 @@
       addAiReply(finalText || fallbackText, replyOptions || {});
     }
 
+    function updateAiTaskState(taskState, taskText) {
+      var nextTaskState = normalizeAssistantTaskState(taskState);
+      var nextText = taskText === undefined || taskText === null ? '已进入任务状态，正在执行。' : String(taskText);
+      if (!nextTaskState) return;
+      setStatus('');
+      if (pendingReplyId) {
+        replaceMessage(pendingReplyId, nextText, {
+          role: 'ai',
+          title: getRoleTitle('ai'),
+          thinking: false,
+          transient: false,
+          taskState: nextTaskState,
+        });
+        return;
+      }
+      addMessage('ai', nextText, { taskState: nextTaskState });
+    }
+
     if (containsAny(content, ['关闭助手', '禁用助手'])) {
       addAiReply('安全策略限制：助手不能通过聊天关闭自己。请到设置页手动关闭。');
       return;
@@ -6918,6 +10266,7 @@
       var imageFirstReply = await tryHandleModelDrivenReply(text, {
         attachments: attachments,
         contentBlocks: contentBlocks,
+        onTaskStateChange: updateAiTaskState,
       });
       if (imageFirstReply && imageFirstReply.handled && imageFirstReply.text) {
         addAiReply(imageFirstReply.text, imageFirstReply.messageOptions || {});
@@ -6931,6 +10280,44 @@
         await addRouteReply('current_page_follow_up', followUpCurrentPageReply, {
           pageData: getSafePageDataSnapshot(''),
         }, {});
+        return;
+      }
+
+      var pendingExecTransferCreateConfirmReply = await tryHandlePendingExecTransferCreateVersionConfirmIntent(content, { onTaskStateChange: updateAiTaskState });
+      if (pendingExecTransferCreateConfirmReply && pendingExecTransferCreateConfirmReply.handled === true && pendingExecTransferCreateConfirmReply.text) {
+        addAiReply(pendingExecTransferCreateConfirmReply.text, pendingExecTransferCreateConfirmReply.messageOptions || {});
+        return;
+      }
+
+      var pendingExecTransferVersionClarifyReply = await tryHandlePendingExecTransferVersionNameClarifyIntent(content, { onTaskStateChange: updateAiTaskState });
+      if (pendingExecTransferVersionClarifyReply && pendingExecTransferVersionClarifyReply.handled === true && pendingExecTransferVersionClarifyReply.text) {
+        addAiReply(pendingExecTransferVersionClarifyReply.text, pendingExecTransferVersionClarifyReply.messageOptions || {});
+        return;
+      }
+
+      var pendingExecTransferVersionReply = await tryHandlePendingExecTransferVersionSelectionIntent(content, { onTaskStateChange: updateAiTaskState });
+      if (pendingExecTransferVersionReply && pendingExecTransferVersionReply.handled === true && pendingExecTransferVersionReply.text) {
+        addAiReply(pendingExecTransferVersionReply.text, pendingExecTransferVersionReply.messageOptions || {});
+        return;
+      }
+
+      var pendingExecTransferReply = await tryHandlePendingExecTransferSelectionIntent(content, { onTaskStateChange: updateAiTaskState });
+      if (pendingExecTransferReply && pendingExecTransferReply.handled === true && pendingExecTransferReply.text) {
+        addAiReply(pendingExecTransferReply.text, pendingExecTransferReply.messageOptions || {});
+        return;
+      }
+
+      if (isExplicitExecTransferIntent(content)) {
+        var explicitExecTransferReply = await tryHandleModelDrivenReply(content, {
+          attachments: attachments,
+          contentBlocks: contentBlocks,
+          onTaskStateChange: updateAiTaskState,
+        });
+        if (explicitExecTransferReply && explicitExecTransferReply.handled && explicitExecTransferReply.text) {
+          addAiReply(explicitExecTransferReply.text, explicitExecTransferReply.messageOptions || {});
+        } else {
+          addAiReply(buildExecTransferNotCompletedText());
+        }
         return;
       }
 
@@ -6952,7 +10339,31 @@
         return;
       }
 
-      if (isCaseListIntent(content) && !isMissingLibraryIntent(content)) {
+      if (shouldPreferModelDrivenTaskRoute(content)) {
+        var compositeTaskReply = await tryHandleModelDrivenReply(content, {
+          attachments: attachments,
+          contentBlocks: contentBlocks,
+          onTaskStateChange: updateAiTaskState,
+        });
+        if (compositeTaskReply && compositeTaskReply.handled && compositeTaskReply.text) {
+          addAiReply(compositeTaskReply.text, compositeTaskReply.messageOptions || {});
+          return;
+        }
+      }
+
+      if (shouldPreferModelDrivenCaseUpdateRoute(content)) {
+        var modelFirstCaseUpdateReply = await tryHandleModelDrivenReply(content, {
+          attachments: attachments,
+          contentBlocks: contentBlocks,
+          onTaskStateChange: updateAiTaskState,
+        });
+        if (modelFirstCaseUpdateReply && modelFirstCaseUpdateReply.handled && modelFirstCaseUpdateReply.text) {
+          addAiReply(modelFirstCaseUpdateReply.text, modelFirstCaseUpdateReply.messageOptions || {});
+          return;
+        }
+      }
+
+      if (isCaseListIntent(content) && !isMissingLibraryIntent(content) && !isCaseLibraryContentQueryIntent(content)) {
         var earlyCaseListReply = await runModelCaseListAction(content, {
           action: 'query_case_list',
           query: content,
@@ -6988,9 +10399,16 @@
       var modelDriven = await tryHandleModelDrivenReply(content, {
         attachments: attachments,
         contentBlocks: contentBlocks,
+        onTaskStateChange: updateAiTaskState,
       });
       if (modelDriven && modelDriven.handled && modelDriven.text) {
         addAiReply(modelDriven.text, modelDriven.messageOptions || {});
+        return;
+      }
+
+      var caseLibraryContentReply = await tryHandleCaseLibraryContentQueryIntent(content);
+      if (caseLibraryContentReply && caseLibraryContentReply.handled === true && caseLibraryContentReply.text) {
+        addAiReply(caseLibraryContentReply.text);
         return;
       }
 
@@ -7121,7 +10539,7 @@
 
     setStatus('助手思考中...');
     var res = await apis.assistantApi.callModel(content, {
-      prompt: prompt,
+      prompt: buildConversationPromptWithPriority(prompt, content),
       temperature: 0.2,
       history: conversationHistory,
       contentBlocks: contentBlocks,
@@ -7135,6 +10553,63 @@
       attachments: res && res.attachments ? res.attachments : [],
     });
     setStatus('');
+  }
+
+  function dispatchAssistantConversationMessage(text, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var messageText = text === undefined || text === null ? '' : String(text).trim();
+    var attachments = normalizeAssistantMessageAttachments(opts.attachments);
+    var contentBlocks = normalizeAssistantContentBlocks(opts.contentBlocks);
+    if (!messageText && !attachments.length) return false;
+    if (!contentBlocks.length) contentBlocks = buildAssistantRequestContentBlocks(messageText, attachments);
+    addMessage('user', messageText, { attachments: attachments });
+    var thinking = addMessage('ai', '', {
+      thinking: true,
+      transient: true,
+      title: '助手',
+    });
+    var pendingId = thinking && thinking.id ? String(thinking.id) : '';
+    setReplyPending(true);
+    handleUserInput(messageText, {
+      pendingReplyId: pendingId,
+      attachments: attachments,
+      contentBlocks: contentBlocks,
+    }).catch(function(err) {
+      var reason = err && err.message ? String(err.message) : '未知错误';
+      if (pendingId) {
+        var replaced = replaceMessage(pendingId, '回复失败：' + reason, {
+          role: 'ai',
+          title: getRoleTitle('ai'),
+          thinking: false,
+          transient: false,
+        });
+        if (!replaced) addMessage('ai', '回复失败：' + reason);
+      } else {
+        addMessage('ai', '回复失败：' + reason);
+      }
+      setStatus('回复失败');
+    }).finally(function() {
+      setReplyPending(false);
+    });
+    return true;
+  }
+
+  function submitAssistantQuickReply(text) {
+    var replyText = text === undefined || text === null ? '' : String(text).trim();
+    if (!replyText) return false;
+    if (replyPending) {
+      setStatus('助手正在思考中，请稍候。');
+      return false;
+    }
+    if (!isAssistantEnabled()) {
+      setStatus('助手未开启，请先到设置页开启。');
+      openSettingsForAssistant();
+      return false;
+    }
+    return dispatchAssistantConversationMessage(replyText, {
+      attachments: [],
+      contentBlocks: buildAssistantRequestContentBlocks(replyText, []),
+    });
   }
 
   function handleSend() {
@@ -7169,34 +10644,9 @@
     var contentBlocks = buildAssistantRequestContentBlocks(text, attachments);
     inputEl.value = '';
     clearPendingAttachments();
-    addMessage('user', text, { attachments: attachments });
-    var thinking = addMessage('ai', '', {
-      thinking: true,
-      transient: true,
-      title: '助手',
-    });
-    var pendingId = thinking && thinking.id ? String(thinking.id) : '';
-    setReplyPending(true);
-    handleUserInput(text, {
-      pendingReplyId: pendingId,
+    dispatchAssistantConversationMessage(text, {
       attachments: attachments,
       contentBlocks: contentBlocks,
-    }).catch(function(err) {
-      var reason = err && err.message ? String(err.message) : '未知错误';
-      if (pendingId) {
-        var replaced = replaceMessage(pendingId, '回复失败：' + reason, {
-          role: 'ai',
-          title: getRoleTitle('ai'),
-          thinking: false,
-          transient: false,
-        });
-        if (!replaced) addMessage('ai', '回复失败：' + reason);
-      } else {
-        addMessage('ai', '回复失败：' + reason);
-      }
-      setStatus('回复失败');
-    }).finally(function() {
-      setReplyPending(false);
     });
   }
 
@@ -7268,12 +10718,20 @@
     }
     if (attachmentListEl) {
       attachmentListEl.addEventListener('click', function(e) {
-        var node = e && e.target && e.target.closest ? e.target.closest('.assistant-attachment-remove') : null;
-        if (!node) return;
-        e.preventDefault();
-        if (removePendingAttachment(node.dataset.attachmentId || '')) {
-          setStatus('已移除图片。');
+        var removeNode = e && e.target && e.target.closest ? e.target.closest('.assistant-attachment-remove') : null;
+        if (removeNode) {
+          e.preventDefault();
+          if (removePendingAttachment(removeNode.dataset.attachmentId || '')) {
+            setStatus('已移除图片。');
+          }
+          return;
         }
+        var linkNode = e && e.target && e.target.closest ? e.target.closest('.assistant-attachment-link') : null;
+        if (!linkNode) return;
+        e.preventDefault();
+        var attachment = findPendingAttachmentById(linkNode.dataset.attachmentId || '');
+        if (!attachment) return;
+        openAssistantImagePreview(attachment.dataUrl || attachment.url || '', attachment.name || '图片');
       });
     }
     if (messagesEl) {
@@ -7284,6 +10742,12 @@
         if (expandBtn) {
           e.preventDefault();
           openAssistantCasePreviewFromButton(expandBtn);
+          return;
+        }
+        var imageNode = node.closest('.assistant-image-preview-trigger');
+        if (imageNode) {
+          e.preventDefault();
+          openAssistantImagePreview(imageNode.dataset.previewSrc || imageNode.getAttribute('src') || '', imageNode.dataset.previewName || imageNode.getAttribute('alt') || '图片');
           return;
         }
         var target = node.closest('.assistant-code-copy-btn');
@@ -7309,26 +10773,34 @@
         appendPendingAttachments(files, 'paste');
       });
     }
-    if (composerEl) {
+    if (inputBoxEl) {
+      inputBoxEl.addEventListener('click', function(e) {
+        var target = e && e.target ? e.target : null;
+        if (!inputEl || !target || target !== inputBoxEl) return;
+        inputEl.focus();
+      });
       ['dragenter', 'dragover'].forEach(function(name) {
-        composerEl.addEventListener(name, function(e) {
+        inputBoxEl.addEventListener(name, function(e) {
           var files = collectDataTransferImageFiles(e && e.dataTransfer ? e.dataTransfer : null);
           if (!files.length || replyPending || attachmentPendingCount > 0) return;
           e.preventDefault();
-          composerEl.classList.add('dragover');
+          inputBoxEl.classList.add('dragover');
         });
       });
       ['dragleave', 'dragend'].forEach(function(name) {
-        composerEl.addEventListener(name, function() {
-          composerEl.classList.remove('dragover');
+        inputBoxEl.addEventListener(name, function(e) {
+          var related = e && e.relatedTarget ? e.relatedTarget : null;
+          if (related && inputBoxEl.contains(related)) return;
+          inputBoxEl.classList.remove('dragover');
         });
       });
-      composerEl.addEventListener('drop', function(e) {
+      inputBoxEl.addEventListener('drop', function(e) {
         var files = collectDataTransferImageFiles(e && e.dataTransfer ? e.dataTransfer : null);
-        composerEl.classList.remove('dragover');
+        inputBoxEl.classList.remove('dragover');
         if (!files.length || replyPending || attachmentPendingCount > 0) return;
         e.preventDefault();
         appendPendingAttachments(files, 'drop');
+        if (inputEl) inputEl.focus();
       });
     }
     if (modelPicker) {
@@ -7387,10 +10859,11 @@
     statusEl = byId('assistantStatus');
     messagesEl = byId('assistantMessages');
     composerEl = byId('assistantComposer');
+    attachmentsEl = byId('assistantAttachments');
+    inputBoxEl = byId('assistantInputBox');
     attachBtn = byId('assistantAttachBtn');
     imageInputEl = byId('assistantImageInput');
     attachmentListEl = byId('assistantAttachmentList');
-    attachmentEmptyEl = byId('assistantAttachmentEmpty');
     inputEl = byId('assistantInput');
     sendBtn = byId('assistantSendBtn');
     casePreview = byId('assistantCasePreview');

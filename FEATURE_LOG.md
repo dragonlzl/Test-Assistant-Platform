@@ -19,6 +19,198 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 更新记录：2026-03-08 AI 助手补齐 bare `transfer_to_exec` 别名与“全部置失败”中文任务描述
+  - 问题现象：
+    - 任务卡在部分场景仍会直接显示 `transfer_to_exec`，不符合全中文任务描述要求；
+    - 当模型直接输出裸工具名 `transfer_to_exec` 时，运行期会报 `未知 MCP 工具：transfer_to_exec`，导致复合任务停在“执行受阻”；
+    - 对于“然后全部置失败”这类口语化修改指令，预览任务卡会退化成笼统的“修改用例”，用户无法判断到底要改什么。
+  - 修复内容：
+    - `scripts/modules/app.js`
+      - 补齐裸别名归一化：`transfer_to_exec` 会统一映射到标准工具 `case_library.transfer_to_exec`，不再落到 unknown tool。
+    - `scripts/modules/assistant.js`
+      - 同步补齐 `transfer_to_exec` 的任务预览归一化，确保任务卡展示中文步骤而不是原始工具名；
+      - 增强 `case.update` 文案推断：当用户说“全部置失败 / 全部置通过 / 批量置未执行”等口语化表达时，会识别为“批量修改执行结果”；
+      - 为批量修改场景补齐上下文兜底，任务卡会明确显示“把全部执行结果改为失败”“批量修改执行备注”等具体中文描述，而不再退化成“修改用例”。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 / 更新裸 `transfer_to_exec` 回归用例，覆盖“任务卡中文步骤 + 继续执行成功 + 不再出现 unknown tool”；
+      - 回归验证“全部置失败”在复合任务预览里会显示为“把全部执行结果改为失败”。
+  - 使用效果：
+    - 任务卡中的转执行、修改、归档步骤都改为具体中文描述，不再出现裸工具名；
+    - `transfer_to_exec` 不再被误判为缺少 MCP 工具；
+    - “全部置失败”这类说法会被正确理解为批量修改执行结果，确认前就能看懂操作内容。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "assistantMcpApi transfer_to_exec 裸别名会映射到标准工具|裸 transfer_to_exec 会显示中文步骤并继续执行|旧版转执行批处理工具别名会映射为具体任务描述并继续执行" --reporter=line`（通过，3/3）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "assistantMcpApi case.update 确认文案应说明字段和修改内容|assistantMcpApi case_library.batch_archive_exec_cases 会说明归档内容并自动补归档原因|assistantMcpApi ui.click_control 可回退旧归档控件别名到真实按钮|assistantMcpApi transfer_to_exec 裸别名会映射到标准工具|裸 transfer_to_exec 会显示中文步骤并继续执行|旧版转执行批处理工具别名会映射为具体任务描述并继续执行" --reporter=line`（通过，6/6）
+    - 本次未新增 / 修改后端 API，API 自动化回归不适用。
+  - 复用说明：
+    - 复用了现有 `case_library.transfer_to_exec`、`case.update`、任务卡预览和确认链路，没有新增新的 MCP 工具；
+    - 本次属于别名归一化 + 中文摘要推断增强，修复点集中且为最小增量。
+
+- 更新记录：2026-03-08 AI 助手修复“修改后归档”阻塞，并补齐真实归档链路
+  - 问题现象：
+    - 用户执行“转执行 -> 批量修改 -> 归档”类复合任务时，前面的修改步骤虽然能继续，但归档阶段会卡在“点击指定控件”或直接报 `MCP 工具执行失败：未找到目标控件`；
+    - 继续排查后确认，并不是缺少 MCP 工具，而是现有 `case_library.batch_archive_exec_cases` 在运行时仍错误地回退到一个不存在的伪控件 ID：`tempexecArchiveBtn`；
+    - 当模型或旧别名链路触发 `case_library.batch_archive_cases` / `case_library.batch_archive_exec_cases` 时，任务卡与确认文案也容易退化成泛化的“点击控件”，不利于用户判断真实操作。
+  - 修复内容：
+    - `scripts/modules/app.js`
+      - 新增执行用例归档 helper：直接复用现有执行页状态与 `apiClient.archiveExecSet(...)`，不再依赖不存在的伪按钮 ID；
+      - 归档确认前会结合当前执行集统计结果生成具体文案：若仍有未执行/失败/阻塞，会明确展示数量，并在确认后自动补一条归档原因，避免 DB 后端因缺少 reason 再次阻塞；
+      - 为 `ui.click_control` 增加归档兜底定位：即使模型仍输出旧的 `tempexecArchiveBtn`，也会自动回退到真实的 `data-temp-file-archive` / `data-temp-overview-archive` 按钮；
+      - 去掉了归档探测阶段的前置切页，避免“仅探测 confirm_required”时就破坏当前上下文。
+    - `scripts/modules/assistant.js`
+      - 旧版批量归档别名不再重写成泛化 `ui.click_control`，而是保持走专用 `case_library.batch_archive_exec_cases`；
+      - 调整任务预览提示词与归档意图提示：优先使用专用归档 MCP，而不是再引导模型退回按钮点击；
+      - 补充归档成功回包文案与写操作标签，确认框会显示“归档当前执行用例”，成功后返回“已归档当前执行用例：xxx（已填写归档原因）”。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增真实 `assistantMcpApi.callTool('case_library.batch_archive_exec_cases', ...)` 回归，覆盖“确认文案具体 + 自动补 reason + 调用真实 archiveExecSet + 归档后刷新状态”；
+      - 新增 `ui.click_control` 旧归档控件别名兜底回归，确保 `tempexecArchiveBtn` 会回退命中真实归档按钮；
+      - 同步更新旧版归档别名复合任务回归，验证任务卡、确认文案与最终回复都使用具体归档描述。
+  - 使用效果：
+    - 归档步骤不再因为伪控件 ID 丢失而卡死；
+    - 当前执行里还有未通过项时，助手会在确认框里明确说明数量，并自动补齐归档原因继续执行；
+    - 即使模型还输出旧的归档按钮定位方式，前端也能兜底命中真实归档按钮，不再误报“未找到目标控件”。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "assistantMcpApi case_library.batch_archive_exec_cases 会说明归档内容并自动补归档原因|assistantMcpApi ui.click_control 可回退旧归档控件别名到真实按钮|旧版转执行批处理工具别名会映射为具体任务描述并继续执行" --reporter=line`（通过，3/3）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "assistantMcpApi case.update 确认文案应说明字段和修改内容|assistantMcpApi ui.fill_input 命中用例字段需确认并支持追加" --reporter=line`（通过，2/2）
+    - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082`（测试后端，使用隔离测试库）
+    - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_archive.spec.js --grep "archive requires reason when not all passed" --reporter=line`（通过，1/1）
+  - 复用说明：
+    - 复用了现有执行页状态、`apiClient.archiveExecSet(...)`、执行结果统计与确认卡渲染链路，没有新增新的后端接口；
+    - 本次主要是在现有 MCP 分发层补齐真实归档执行与旧按钮别名兜底，属于最小增量修复。
+
+- 更新记录：2026-03-08 AI 助手补齐“修改用例”确认摘要，明确展示字段与修改内容
+  - 问题现象：
+    - 助手执行 `case.update`、批量改执行结果或由 `ui.fill_input` 命中用例字段时，确认卡长期只显示“准备执行：修改用例 / 该操作会写入用例内容”，用户无法从确认框里直接判断到底要改哪个字段、改成什么值。
+  - 修复内容：
+    - `scripts/modules/app.js`
+      - 新增通用确认摘要 helper：根据 `field`、`value`、`scope`、`operation`、`index`、`context` 自动生成更明确的写操作确认文案；
+      - `case.update` 确认前会展示如“修改用例执行结果（批量） / 将当前执行中的全部用例的执行结果改为‘未执行’”；
+      - `case_library.batch_update_exec_results` 复用同一摘要逻辑；
+      - `ui.fill_input` 命中可编辑用例字段时，也会展示如“修改用例标题 / 在当前可见用例的标题末尾追加‘-联机’”。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增真实 `assistantMcpApi.callTool('case.update', ...)` 确认摘要回归；
+      - 补强 `ui.fill_input` 命中用例字段的确认摘要断言。
+  - 使用效果：
+    - 用户在点击“允许操作”前，能明确看到“对什么字段进行什么修改”，降低误操作风险；
+    - 批量修改和追加/前插/清空类修改也会带上更具体的中文说明。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "assistantMcpApi case.update 确认文案应说明字段和修改内容|assistantMcpApi ui.fill_input 命中用例字段需确认并支持追加" --reporter=line`（通过，2/2）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "修改该用例的优先级为P0|改回未执行" --reporter=line`（通过，2/2）
+  - 复用说明：
+    - 复用了现有字段归一化、范围归一化、执行结果标准化与确认卡渲染逻辑，没有新增新的确认组件，只是在现有确认链路前补充摘要生成。
+
+- 更新记录：2026-03-08 AI 助手兼容旧版转执行批处理工具别名，并修复任务卡原始工具名与执行阻塞
+  - 问题现象：
+    - 复合指令如“把皮肤用例转到 912 执行，然后批量失败后归档”时，任务卡有时会直接展示 `case_library.query_exec_cases`、`case_library.batch_set_exec_results`、`case_library.batch_archive_cases` 这类原始工具名；
+    - 当模型输出 `case_library.query_exec_cases` 这类旧版别名时，MCP 执行链会把它当作未知工具，导致任务停在“执行受阻”。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 补充旧版别名归一化：`case_library.query_exec_cases` → `cases.list_current`、`case_library.batch_set_exec_results` → `case_library.batch_update_exec_results`、`case_library.batch_archive_cases` → `case_library.batch_archive_exec_cases`；
+      - 为 `cases.list_current` 增加任务友好文案“读取当前用例列表”，避免任务卡回退展示原始工具名；
+      - 扩充任务预览提示词与本地工具目录，明确读取当前执行/批量改结果/归档的标准工具写法，并继续兼容旧别名续跑。
+    - `scripts/modules/app.js`
+      - 同步补齐助手 MCP 工具名归一化，确保直接调用旧别名时也会落到现有能力，而不是返回“未知 MCP 工具”；
+      - 在工具目录中补登记批量改执行结果、批量归档当前执行两个兼容能力，便于工具描述与执行模式保持一致。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增回归用例，覆盖“旧版工具别名 -> 任务卡展示具体中文步骤 -> 转执行成功 -> 读取当前执行 -> 批量失败 -> 归档”的完整链路；
+      - 同时校验直接调用旧别名时不会再返回 unknown tool。
+  - 使用效果：
+    - 任务卡会稳定展示“读取当前用例列表”“把全部执行结果改为失败”“归档当前执行用例”等具体步骤；
+    - 即使模型偶发输出旧版 MCP 工具别名，助手也会自动映射到现有能力继续执行，不再因为 unknown tool 中断。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js && node --check scripts/modules/app.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "旧版转执行批处理工具别名会映射为具体任务描述并继续执行" --reporter=line`（通过，1/1）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "复合转执行任务会先展示完整任务列表，并在候选确认后自动使用唯一版本继续|旧版转执行批处理工具别名会映射为具体任务描述并继续执行|助手遇到多个候选时会先让用户选用例和执行版本再转执行" --reporter=line`（通过，3/3）
+    - 本次未新增/修改后端 API，API 自动化回归不适用。
+  - 复用说明：
+    - 复用了现有 `cases.list_current`、`case.update`、`ui.click_control` 与转执行 MCP 链路，没有新造一套批处理执行框架；
+    - 主要是在现有助手规划与 MCP 归一化层补齐兼容映射，属于最小增量修复。
+
+- 更新记录：2026-03-08 AI 助手复合“转执行 -> 改结果 -> 归档”链路等待执行明细就绪后再续跑
+  - 问题现象：
+    - 用户执行“帮我把皮肤用例转到912版本的执行，然后执行结果全部改为失败，再归档”这类复合指令时，助手在 `case_library.transfer_to_exec` 成功返回执行集外壳后，就会继续跑 `case.update`；
+    - DB 模式下执行页明细是异步加载的，导致续跑时目标执行集仍处于 `_casesLoading=true`，从而出现“执行受阻”或直接对旧的活动用例继续操作。
+  - 修复内容：
+    - `scripts/modules/caseLibrary.js`
+      - 新增 `waitForTempExecFileCasesReady(fileId, options)`，轮询当前执行区目标执行集，直到 `_casesLoading !== true` 或超时；
+      - DB 模式 `transferItemsToTempExec(...)` 在 `loadTempExecState()`、`setTempExecActive()`、切换到 `tempexec` 后，若 `waitForCasesLoaded=true`，会等待目标执行集明细真正就绪，再返回成功；
+      - `assistantTransferCaseFileToExec(...)` 进入助手链路时默认开启 `waitForCasesLoaded: true`，避免复合任务提前续跑；
+      - 补充失败原因透传：若等待执行明细超时，结果会把具体原因继续返回给助手，而不是只剩泛化的“转到执行失败”。
+  - 使用效果：
+    - 助手在“转执行 -> 改结果 -> 归档”这类顺序任务中，会先等目标执行用例真正加载完成，再继续后续写操作；
+    - 若执行明细异常迟迟未就绪，聊天区能看到明确阻塞原因，便于用户判断是数据加载问题而不是模型理解错误。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/caseLibrary.js tests/ui/assistant_global.spec.js`（通过）
+    - `curl http://127.0.0.1:8082/api/health`（通过，确认 `db_file=apitest.db`）
+    - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_models.spec.js --reporter=line`（通过，1/1）
+    - UI 自动化：已补对应回归场景 `tests/ui/assistant_global.spec.js` 中“真实转执行 helper 在执行明细延迟加载时会等待就绪后再续跑修改结果”；当前沙箱环境下 Playwright 启动 Chromium 会触发 `MachPortRendezvous Permission denied (1100)`，未能在命令行直接完成浏览器回归
+    - 人工验证：通过浏览器 DevTools 在 `http://127.0.0.1:18081/case-exec.html?tab=tempexec` 对真实前端逻辑注入延迟 600ms 的 `listExecCases` 桩，调用真实 `window.app.caseLibraryApi.transferCaseFileToExec(...)` 后，返回耗时约 521ms，且 resolve 时目标执行集 `id=9001` 已经 `loading=false`、`cases.length=2`
+  - 复用说明：
+    - 复用了现有 `tempExecApi.loadTempExecState()`、`tempExecApi.setTempExecActive()`、执行页 `_casesLoading` 状态与助手既有 `case_library.transfer_to_exec` MCP 链路；
+    - 未新增后端接口，也没有改动任务编排框架，只是在现有转执行 helper 上补齐“等待执行明细就绪”的同步点。
+
+- 更新记录：2026-03-08 AI 助手执行版本改为模型判定歧义，并补齐复合任务首轮完整任务预览
+  - 问题现象：
+    - 当用户在转执行链路里输入 `912` 这类值时，旧逻辑会优先按“第 912 个”做本地规则解析，导致唯一命中、歧义命中和新版本名三种情况混在一起，出现误判或死循环；
+    - 复合任务若首轮模型只输出 `case_library.search_exec_candidates`，聊天区只会先显示 1 个步骤，后续即使继续选择候选/版本，也看不到完整任务拆分，且剩余步骤容易丢失；
+    - 用户原始指令里已经明确写了版本名时，旧链路也不会自动复用，只能再次手动输入版本。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增模型驱动的待选项判断能力 `resolveExecTransferChoiceByModel(...)`，执行版本的唯一命中 / 多命中歧义 / 新版本确认全部交给模型判断，不再依赖旧的纯字符串切分规则；
+      - 收紧本地编号直选，只保留 `选第2个` / `选2个` 这类明确编号格式，纯数字值如 `912` 会直接交给模型判断，不再误当成列表索引；
+      - 转执行挂起状态新增 `sourceUserText` 透传原始用户指令，执行版本列表返回后会优先结合原始指令做一次模型判定：唯一命中时自动继续，多命中时保留版本选择，疑似新版本名时进入确认/新建链路；
+      - 新增任务预览规划 `buildAssistantTaskPreviewByModel(...)` 与预览步骤复用逻辑：当复合任务首轮模型只给出第一步时，助手会额外生成完整预览计划，先把完整任务列表展示出来，并把剩余步骤保存为续跑 continuation；
+      - 优化任务等待态：搜索候选后如果进入“选择目标用例”，会把等待状态挂到下一步而不是卡在搜索步骤本身，使任务顺序展示和实际执行顺序一致。
+    - `tests/ui/assistant_global.spec.js`
+      - 更新执行版本相关桩，使 `resolve_exec_transfer_choice` 与 `plan_task_preview` 这类内部模型请求被单独模拟，不再误算进主模型调用次数；
+      - 新增/更新 4 条关键用例，覆盖：
+        - 纯数字版本名先由模型判断再确认；
+        - 否认新版本名后，模型继续判断更像现有版本还是回到选择；
+        - 复合转执行任务首轮先展示完整任务列表，并在候选确认后自动使用唯一版本继续；
+        - 原始指令指定版本存在多个合理命中时，不自动继续而是保留版本选择。
+  - 使用效果：
+    - 用户原始请求里如果指定了像 `912` 这种执行版本，且版本列表中只有一个明显命中，助手会直接继续，不再多问一次；
+    - 如果版本列表同时存在 `912 / aa912 / 912新建` 这类多命中，助手会保留版本选择，不会擅自替用户决定；
+    - 复合任务即使首轮只拿到搜索步骤，聊天区也会先显示完整任务列表，后续选择候选/版本后还能按顺序接着执行剩余步骤。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `python3 -m http.server 8090`（启动本地静态页供 UI 测试使用）
+    - `npx playwright test tests/ui/assistant_global.spec.js --grep "先询问执行版本再把指定用例转到当前执行|多个候选时会先让用户选用例和执行版本再转执行|不存在的执行版本时会先确认是否新建再继续转执行|拒绝新建不存在的执行版本后会保留版本选择上下文|纯数字执行版本输入时会先由模型判断|否认纯数字新版本名后会调用模型判断|完整任务列表，并在候选确认后自动使用唯一版本继续|多个合理命中时会保留版本选择" --reporter=line`（通过，8/8）
+    - `npx playwright test tests/ui/assistant_global.spec.js --reporter=line`（存在历史基线失败，已确认包含 `助手默认锁定并点击引导到设置页`、`思考中应禁止继续发送，刷新页面后中断思考`、若干旧的用例修改断言文案场景；本次新增/修改的版本转执行与任务态相关用例已全部通过）
+    - `curl http://127.0.0.1:8082/api/health` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_models.spec.js --reporter=line`（通过，1/1；`/api/health` 确认 `db_file=apitest.db`）
+  - 复用说明：
+    - 没有新增后端 API；版本歧义判断复用了现有 `assistantApi.callModel(...)`，只是把判断职责从本地规则迁回模型；
+    - 任务预览与续跑逻辑直接复用了既有任务状态卡、continuation 和 MCP 执行链路，没有额外引入新的任务框架或状态存储结构。
+
+- 更新记录：2026-03-08 AI 助手转执行链路补齐“缺少 caseFileId 自动重规划 + 搜索失败交给模型重判”
+  - 问题现象：
+    - 复合指令如“帮我把皮肤用例转到912版本的执行，然后执行结果全部改为失败，再归档”在部分模型输出下仍会执行受阻；
+    - 一类典型情况是模型直接输出缺少 `caseFileId` 的 `case_library.transfer_to_exec`，平台会先弹“允许操作”确认，确认后才因参数不完整失败；
+    - 另一类情况是 `case_library.search_exec_candidates` 首次搜索词过窄或被错误裁剪，导致直接报错/空结果并把任务打成阻塞。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增不完整转执行计划检测：若模型输出的 `case_library.transfer_to_exec` 缺少 `caseFileId`，不会直接执行，而是先触发执行链路重规划，让模型补成“先搜索候选，再转执行”的正确计划；
+      - 新增 `resolveExecTransferSearchArgsByModel(...)` / `retryExecTransferSearchByModel(...)`，当 `case_library.search_exec_candidates` 首次失败或空结果时，会把原始用户指令、上次搜索参数和工具返回再次交给模型判断，并自动重试一次；
+      - 补强提示词：要求模型在规划转执行搜索时优先保留完整用例短语，例如“皮肤用例”不要无依据缩成“皮肤”，也不要把 `912` 这类目标执行版本误塞进搜索条件。
+    - `scripts/modules/app.js`
+      - `case_library.transfer_to_exec` 在进入写操作确认前先校验 `caseFileId`，缺参时直接返回普通失败，避免再出现“先让用户允许，再告诉用户参数错”的反直觉流程。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增回归用例，覆盖“模型先输出缺少 `caseFileId` 的转执行 -> 平台自动重规划为搜索候选 -> 首次搜索失败 -> 再次交给模型修正为 `皮肤用例` 并成功进入候选选择”的完整链路。
+  - 使用效果：
+    - 当模型还没拿到明确候选就直接想转执行时，助手会先自动修正为候选搜索，不再提前弹写操作确认；
+    - 当第一次搜索词不准时，助手会再次结合你的原始话术做模型判断并自动补搜，减少“执行受阻”；
+    - 这类失败现在更倾向于被自动修复并继续走到“请选择候选 / 请选择版本”，而不是中途卡死。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "模型先输出缺少 caseFileId 的转执行时会自动改为搜索候选" --reporter=line`（通过，1/1）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "先询问执行版本再把指定用例转到当前执行|多个候选时会先让用户选用例和执行版本再转执行|不存在的执行版本时会先确认是否新建再继续转执行|拒绝新建不存在的执行版本后会保留版本选择上下文|纯数字执行版本输入时会先由模型判断|否认纯数字新版本名后会调用模型判断|完整任务列表，并在候选确认后自动使用唯一版本继续|多个合理命中时会保留版本选择|模型先输出缺少 caseFileId 的转执行时会自动改为搜索候选" --reporter=line`（通过，9/9）
+    - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_models.spec.js --reporter=line`（通过，1/1）
+  - 复用说明：
+    - 没有新增后端接口；继续复用现有 `assistantApi.callModel(...)`、任务态 continuation 和 MCP 工具调用链，只是在转执行失败前增加了一层模型重判与自动重试。
+
 - 功能名称：AI 助手“模型优先决策 + 写操作二次确认”
 - 功能描述：将 AI 助手改为默认“模型优先决策”模式：先由模型结合可用接口决定最合适的回答或动作，不再依赖大量前置硬编码分流；同时对写入/编辑/删除类动作统一要求二次确认后执行。
 - 操作方式：
@@ -5312,3 +5504,382 @@
     - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
     - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手支持图片附件与文本一起发送给多模态模型|助手在当前模型不支持视觉时阻止图片发送|助手回复中的 Markdown 图片会直接渲染展示|模型可调用 markdown_table scaffold 时也应支持展开查看|多轮对话应承接上下文而非丢失语义" --workers=1`（通过，5/5）
     - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-07 AI 助手图片输入区改为紧凑式文件名条，并支持点击文件名预览
+  - 问题现象：
+    - 旧版图片输入区会为附件单独预留较大的块级区域，即使没有图片也会占空间，输入框整体显得偏重；
+    - 附件入口是文字按钮，和当前助手整体风格不一致，也不够接近 Codex 的输入体验；
+    - 已添加图片只能看到文件名与移除按钮，无法直接点开预览确认，图片拖入命中区域也不够聚焦。
+  - 调整目标：
+    - 去掉空态附件区占位，把图片展示压缩为输入框上方的紧凑文件名条，只有存在附件时才展示；
+    - 将“添加图片”文字按钮改为图标按钮，并把拖拽命中范围收敛到输入框本体；
+    - 支持点击文件名或对话中的图片直接打开预览，便于发送前和回复后快速核对。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 重构输入区 DOM，新增 `assistantAttachments` / `assistantInputBox` 节点，去掉空态说明文案与独立工具条；
+      - 附件列表改为可换行的紧凑文件名条，文件名以按钮形式渲染，支持点击预览，移除按钮改为轻量 `x`；
+      - 新增 `findPendingAttachmentById(...)` 与 `openAssistantImagePreview(...)`，统一复用现有预览弹层展示待发送图片、用户消息图片和 Markdown 图片；
+      - 拖拽高亮与 drop 处理从整块 composer 收敛到输入框容器，避免附件区和大范围空白误触发。
+    - `style.css`
+      - 将附件区样式改为仅在有附件时展示的单行/多行文件名条，不再预留大块空白区域；
+      - 新增输入框包裹层、图标附件按钮、文件名下划线、图片预览弹层和暗色主题适配样式；
+      - 输入框进入拖拽态时只高亮 `assistant-input-box`，整体视觉更聚焦。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `助手附件区在空态不占位且文件名支持预览`，覆盖空态隐藏、文件名下划线展示、布局位置和点击文件名打开预览链路。
+  - 使用效果：
+    - 现在可以直接把图片拖进文字输入框区域，添加后的文件名会显示在输入框上方，按内容自动换行；
+    - 空态下不会再有单独的图片占位框，聊天输入区更紧凑；
+    - 点击文件名、用户消息图片或助手返回图片，都可以直接打开预览弹层查看原图。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手支持图片附件与文本一起发送给多模态模型|助手附件区在空态不占位且文件名支持预览|助手在当前模型不支持视觉时阻止图片发送|助手回复中的 Markdown 图片会直接渲染展示|模型可调用 markdown_table scaffold 时也应支持展开查看|多轮对话应承接上下文而非丢失语义" --workers=1`（通过，6/6）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-07 修复 AI 助手按中文页签名切换页面导致白屏
+  - 问题现象：
+    - 助手跨页面切换时，模型可能返回中文页签名，例如 `用例执行`；旧逻辑会把该值原样写入 URL，形成 `case-exec.html?tab=用例执行`。
+    - 运行时初始化与 `switchTab(...)` 只稳定识别内部 tab key，如 `tempexec`；当收到中文页签名时，会出现所有 `data-tab-section` 都未命中的情况，页面主体被整体隐藏，最终表现为白屏。
+  - 修复内容：
+    - `scripts/core/appRuntime.js`
+      - 新增 `resolveTabName(...)` / `normalizeTabToken(...)`，统一归一化 URL 参数、助手传入页签名、页面名与常见中文别名；
+      - `getTabFromUrl(...)`、`buildTabUrl(...)`、`resolveTabPage(...)`、`hasLocalTabSection(...)`、`redirectToTabPage(...)`、`switchTab(...)`、`resolveInitialTab(...)` 全部改为先做归一化；
+      - 访问 `case-exec.html?tab=用例执行` 这类异常 URL 时，会自动回写为内部 key，如 `case-exec.html?tab=tempexec`，避免再次白屏。
+    - `scripts/modules/app.js`
+      - 暴露 `window.app.resolveTabName`，并让 `assistantGetPageData(...)` 在读取跨页面上下文前先归一化页签名，保证助手与运行时使用同一套解析规则。
+    - `tests/ui/top_nav_preload.spec.js`
+      - 新增 `执行页遇到中文 tab 参数时会自动归一化到内部 key`，覆盖异常 URL 直达场景。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `助手传入中文页签名时也会归一化后再跨页面跳转`，覆盖助手主动切页场景。
+  - 使用效果：
+    - 助手现在即使返回 `用例执行`、`执行总览`、`用例库`、`通用设置` 这类中文页签名，也会先映射到内部 key 再执行切换；
+    - 已经生成的异常 URL 会在加载时自动自愈，不再因为页签名是中文而白屏；
+    - 未识别的页签输入会安全忽略，不会再把当前页面切成空白态。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/core/appRuntime.js scripts/modules/app.js tests/ui/top_nav_preload.spec.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/top_nav_preload.spec.js tests/ui/assistant_global.spec.js -g "执行页遇到中文 tab 参数时会自动归一化到内部 key|助手传入中文页签名时也会归一化后再跨页面跳转" --workers=1`（通过，2/2）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-07 AI 助手支持按指定用例转到执行，并在重名时提示选择
+  - 问题现象：
+    - 当用户直接说“把某项目某份用例转到当前执行”时，助手此前只能切到“用例执行”页，无法真正把目标用例加入当前执行；
+    - 当用例库里存在多份近似名称的用例时，助手也没有“候选选择”能力，既不会提示用户选哪一份，也无法承接“选第 2 个”这类后续回复。
+  - 修复内容：
+    - `scripts/modules/caseLibrary.js`
+      - 新增 `assistantSearchExecCandidates(...)`，按项目名 / 用例名 / 版本名 / caseFileId 搜索可转执行的用例文件候选，并输出候选列表、推荐项与是否需要选择；
+      - 新增 `assistantTransferCaseFileToExec(...)`，复用现有“转到执行”链路，把指定 `caseFileId` 真正转入当前执行，并保留原有切页、结果同步与执行焦点处理；
+      - 通过 `window.app.caseLibraryApi.searchExecCandidates` / `window.app.caseLibraryApi.transferCaseFileToExec` 暴露给助手侧复用。
+    - `scripts/modules/app.js`
+      - MCP 新增 `case_library.search_exec_candidates` 和 `case_library.transfer_to_exec` 两个工具；
+      - `case_library.transfer_to_exec` 统一走聊天区确认卡片，避免模型直接伪造“已转执行”；
+      - 补充工具名归一化与工具清单描述，让模型优先走“先搜候选，再转执行”的链路，而不是只切页。
+    - `scripts/modules/assistant.js`
+      - 为“转执行候选选择”增加挂起上下文：当搜索结果存在多候选时，助手会列出编号并等待用户选择；
+      - 支持承接用户后续回复 `选第2个`、`第2个`、直接回复候选名等表达，再继续执行转入；
+      - 当搜索只命中 1 个明确候选时，允许模型继续推理并直接调用 `case_library.transfer_to_exec`，实现单轮完成“指定用例转执行”。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `助手可把指定用例直接转到当前执行`，覆盖“搜索唯一候选 -> 确认 -> 真正转执行”；
+      - 新增 `助手遇到多个用例候选时会先提示选择再转执行`，覆盖“搜索多候选 -> 用户选编号 -> 确认 -> 真正转执行”。
+  - 使用效果：
+    - 现在用户可以直接对助手说“把 XX 项目 XX 用例转到当前执行”，命中唯一候选时会在确认后直接完成转执行；
+    - 如果存在多份近似用例，助手会先给出候选编号列表，用户回复“选第 N 个”或直接回复候选名即可继续；
+    - 整条链路会复用现有执行页转入逻辑，不再停留在“只切页、不办事”。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/caseLibrary.js scripts/modules/app.js scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手可把指定用例直接转到当前执行|助手遇到多个用例候选时会先提示选择再转执行|助手传入中文页签名时也会归一化后再跨页面跳转" --workers=1`（通过，3/3）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-07 AI 助手修正“转到当前执行”被旧切换回复截断的问题
+  - 问题现象：
+    - 在部分真实对话里，用户明明要求“把某份用例转到当前执行”，模型却先给出“已为你切换到某执行文件 / 当前已在某执行文件中”这类旧回复；
+    - 这类回复有时只是口头答复，有时会误调 `tempexec.switch_file`，都会导致目标用例并没有真正从用例库转入执行页。
+  - 根因分析：
+    - 虽然此前已新增 `case_library.search_exec_candidates` / `case_library.transfer_to_exec`，但助手仍允许模型在这类请求下自由走旧的 `tempexec.switch_file`、`tempexec.next_file` 或直接自然语言收口；
+    - 一旦模型先输出了“已切换到执行文件”这类内容，原逻辑会直接接受，不再强制继续“搜索候选 -> 转执行”的真实链路。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增 `isExplicitExecTransferIntent(...)`，显式识别“转到当前执行 / 加入当前执行 / 转执行”等真实转入意图；
+      - 为该意图增加工具清单过滤：优先暴露 `case_library.search_exec_candidates` / `case_library.transfer_to_exec`，不再把 `tempexec.switch_file` / `tempexec.next_file` 放给模型抢答；
+      - 为模型推理增加纠偏机制：若模型先返回纯文本旧回复，或先错误调用旧切换工具，助手不会直接收口，而是带着“这不等于转执行”的约束再次要求模型继续规划，直到走真实转执行链路或明确失败；
+      - 补齐 fallback MCP 工具清单中的 `case_library.search_exec_candidates` / `case_library.transfer_to_exec`，避免工具枚举异常时模型看不到新能力。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `助手要求转到当前执行时不会被旧的切换执行文件回复截断`，覆盖“模型先口头答非所问 -> 纠偏 -> 搜索 -> 转执行”；
+      - 新增 `助手要求转到当前执行时不会误用旧的执行文件切换工具`，覆盖“模型先误调 `tempexec.switch_file` -> 纠偏 -> 搜索 -> 转执行”。
+  - 使用效果：
+    - 现在即使模型第一反应仍想走“切换执行文件”的旧话术，助手也不会把它当成完成态；
+    - 只有真正完成 `case_library.transfer_to_exec` 后，聊天区才会返回“已将【某用例】转到当前执行”；
+    - 如果模型连续两轮都未给出真实转执行方案，助手会明确告诉用户“还没有真正转到当前执行”，避免继续出现假成功。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手传入中文页签名时也会归一化后再跨页面跳转|助手可把指定用例直接转到当前执行|助手要求转到当前执行时不会被旧的切换执行文件回复截断|助手要求转到当前执行时不会误用旧的执行文件切换工具|助手遇到多个用例候选时会先提示选择再转执行" --workers=1`（通过，5/5）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-07 AI 助手修正“上一轮用例澄清上下文”误抢转执行请求的问题
+  - 问题现象：
+    - 当助手上一轮刚说过“你可以继续直接发我：1. 用例 ID。2. 完整标题。”后，用户下一句如果改为“帮我把 XX 用例转到当前执行”，系统会错误沿用“当前查看用例内找某条条目”的澄清链路；
+    - 最终回复会变成“当前正在查看用例：... 已按当前这份用例的完整条目范围检索...”，而不是调用选择用例执行并真正转执行。
+  - 根因分析：
+    - `isCaseDetailClarificationIntent(...)` 只看到了上一轮 AI 提示里含“用例 ID / 完整标题”，没有排除“转到当前执行”这类新意图；
+    - `isCaseListIntent(...)`、`isCurrentCaseFullDetailIntent(...)`、`shouldPreferCurrentPageScopeForCaseQuery(...)` 也没有显式排除转执行请求，导致当前页/当前用例本地链路有机会先一步抢走处理权。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 在 `isCaseListIntent(...)`、`isCurrentCaseFullDetailIntent(...)`、`isCaseDetailClarificationIntent(...)`、`shouldPreferCurrentPageScopeForCaseQuery(...)` 中统一排除 `isExplicitExecTransferIntent(...)`；
+      - 在 `handleUserInput(...)` 中为“转到当前执行”增加显式优先通道：在挂起候选选择之后，直接优先走 `tryHandleModelDrivenReply(...)`，不再先经过当前用例澄清/完整展示/当前页用例列表等本地分支；
+      - 当模型/工具链未返回有效结果时，直接提示“还没有真正把目标用例转到当前执行”，不再继续掉回错误的当前用例检索回复。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `助手在上一轮要求用例ID后仍会优先按转执行处理`，覆盖“上一轮刚要求 ID/标题 -> 下一轮改为转执行 -> 仍然正确调用转执行链路”的回归场景。
+  - 使用效果：
+    - 现在即使上一轮刚聊到“请给我用例 ID / 完整标题”，下一轮只要用户表达的是“把某份用例转到当前执行”，系统也会直接优先走用例库搜索与转执行；
+    - 聊天区不会再错误出现“当前正在查看用例：狼人技能优化（ID:95）... 已按当前这份用例检索...”这类无关回复。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手传入中文页签名时也会归一化后再跨页面跳转|助手可把指定用例直接转到当前执行|助手要求转到当前执行时不会被旧的切换执行文件回复截断|助手要求转到当前执行时不会误用旧的执行文件切换工具|助手在上一轮要求用例ID后仍会优先按转执行处理|助手遇到多个用例候选时会先提示选择再转执行" --workers=1`（通过，6/6）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+
+- 更新记录：2026-03-08 AI 助手转执行改为先确认执行版本，并支持不存在版本时询问新建
+  - 问题现象：
+    - 之前当用户要求“把某份用例转到当前执行”时，助手在确认写操作后会直接沿用原用例版本或底层默认版本继续转执行，没有先让用户选择真正要转入的执行版本；
+    - 当用户回复一个当前项目下不存在的版本名时，链路也缺少“是否新建版本再继续”的显式确认，人工决策点仍然被底层默认行为吞掉。
+  - 修复内容：
+    - `scripts/modules/caseLibrary.js`
+      - 扩展 `assistantTransferCaseFileToExec(...)`，当未传 `execVersionId` / `execVersionName` 时不再直接转执行，而是返回结构化的 `versionSelectionRequired` 结果；
+      - 当传入的 `execVersionName` 在当前项目下不存在时，返回 `versionCreateConfirmRequired` 结果；只有明确传入 `createVersionIfMissing=true` 时，才会先调用现有版本创建接口再继续转执行；
+      - 复用现有项目/版本缓存与 `apiClient.createVersion(...)`，并把新建版本回填到前端版本缓存，保证后续同轮选择一致。
+    - `scripts/modules/assistant.js`
+      - 新增“待选执行版本”和“待确认新建版本”两段挂起状态，助手会在候选用例确认后继续追问“请选择要转入的执行版本”；
+      - 用户回复不存在的版本名时，助手会先追问“是否为你新建后继续转执行”；用户确认后才真正新建版本并继续转执行，拒绝后会保留当前版本选择上下文；
+      - 调整模型提示与转执行收口逻辑，要求模型在 `transfer_to_exec` 返回版本待选/待新建时继续交给用户决策，不再把这类人工选择静默交给旧分支或底层默认值。
+    - `scripts/modules/app.js`
+      - 更新 `case_library.transfer_to_exec` 的工具描述，明确该工具在未指定执行版本时会返回待选择版本或待确认新建版本结果，便于模型按结构化结果继续对话。
+    - `tests/ui/assistant_global.spec.js`
+      - 更新原有“指定用例转执行”与“多候选转执行”测试，使其覆盖“先询问执行版本再转执行”的真实链路；
+      - 新增“不存在执行版本时先确认是否新建再继续转执行”与“拒绝新建后保留版本选择上下文”两条 UI 回归用例。
+  - 使用效果：
+    - 现在助手在真正转执行前会先明确询问目标执行版本，不会再静默沿用默认版本；
+    - 如果你回复了一个不存在的版本，助手会先征求是否新建，确认后才会新建并继续转执行；
+    - 如果你拒绝新建，助手会保留当前上下文，你可以直接改回复现有版本名或编号继续操作。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/caseLibrary.js scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "助手传入中文页签名时也会归一化后再跨页面跳转|助手会先询问执行版本再把指定用例转到当前执行|助手要求转到当前执行时不会被旧的切换执行文件回复截断|助手要求转到当前执行时不会误用旧的执行文件切换工具|助手在上一轮要求用例ID后仍会优先按转执行处理|助手遇到多个候选时会先让用户选用例和执行版本再转执行|助手遇到不存在的执行版本时会先确认是否新建再继续转执行|助手拒绝新建不存在的执行版本后会保留版本选择上下文" --workers=1`（通过，8/8）
+    - `npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1）
+  - 复用说明：
+    - 版本列表读取、新建版本与实际转执行仍全部复用现有 `listProjectVersions`、`createVersion` 与 `transferItemsToTempExec` 链路，没有新增后端 API；
+    - 本次新增的是助手侧的结构化状态编排，用于把原本隐藏在底层的人工决策步骤显式抬到对话中。
+
+- 更新记录：2026-03-08 AI 助手新增“最新消息优先、历史弱参考”的上下文管理策略
+  - 问题现象：
+    - 之前多轮对话会把最近几轮历史直接整体交给模型，用户即使发的是一条完整的新指令，也容易被上一轮话题、页面或澄清上下文带偏；
+    - 在真实使用里，这会表现为助手把“新的独立请求”误当成“接着上文继续”，导致回复明显没有先理解你当前这句话；
+    - 同时，多轮 MCP 链路里如果模型先调用了 `ui.fill_input`，系统会把这一轮过早当成完成态，像“先填关键词、再继续搜索/统计”的链路会被截断。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增 `conversationHistoryReferenceLimit = 6`，限制传给模型的历史参考条数，并将每条历史裁剪为短摘要，避免旧上下文占比过大；
+      - 新增 `trimConversationHistoryReferenceText(...)`、`buildConversationPriorityPrompt(...)`、`buildConversationPromptWithPriority(...)`，把“本轮最新消息约 90% 权重、历史约 10% 弱参考、先判断是否强相关再回看历史”的策略显式写入模型提示；
+      - 重写 `buildConversationHistory(...)`，不再把历史直接作为普通最近聊天透传，而是统一标记成 `[弱参考上下文#N | 权重约10%]`；
+      - 将主要 `assistantApi.callModel(...)` 调用路径统一接入新的上下文优先提示，确保分流链路、MCP 推理链路和通用问答链路都遵守同一策略；
+      - 补充 `isSearchListDisplayIntent(...)`，并收窄 `shouldContinueMcpReasoning(...)` 的停止条件：仅当 `ui.fill_input` 明显属于搜索/展示链路中的中间步骤时继续推理，避免“先填再搜”被截断，同时不影响单纯“帮我输入某值”的场景。
+    - `tests/ui/assistant_global.spec.js`
+      - 更新 `多轮对话应承接上下文而非丢失语义`，断言提示中包含 90% / 10% 权重说明，且 history 已转为弱参考上下文；
+      - 新增 `完整新指令时提示会要求模型优先按最新消息判断是否使用历史`，覆盖“当前消息是完整新请求”时不应被旧上下文劫持的场景；
+      - 保持 `模型调用 ui.list_controls 后应继续推理下一步操作` 与 `模型可基于多轮 MCP 结果继续调用下一层工具` 回归通过，确保多轮工具链没有被这次改动破坏。
+  - 使用效果：
+    - 现在助手会把你最新发送的消息作为主任务优先理解，只有在模型自己判断“这条消息和上文强相关”时，才会真正利用历史上下文；
+    - 如果你发的是完整独立的新指令，历史内容只会作为弱参考，不会再轻易抢走模型的注意力；
+    - 对于“先识别控件/填值，再继续搜索、统计、筛选”的多轮 MCP 过程，助手会继续把链路走完，而不是停在“已填写输入”。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "模型调用 ui.list_controls 后应继续推理下一步操作|模型可基于多轮 MCP 结果继续调用下一层工具|多轮对话应承接上下文而非丢失语义|完整新指令时提示会要求模型优先按最新消息判断是否使用历史|助手可读取当前用例改动历史详情并按需求整理返回" --workers=1`（通过，5/5）
+    - `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1；`/api/health` 确认 `db_file=apitest.db`）
+  - 复用说明：
+    - 没有新增后端 API；本次直接复用了现有 `assistantApi.callModel(..., { prompt, history })` 协议，把策略收敛到统一的 prompt/history 组装层；
+    - 搜索意图判断也抽成了通用 helper，避免多处写死同一组关键词，后续同类链路可继续复用。
+
+- 更新记录：2026-03-08 AI 助手支持二选一追问按钮，自动把“是/否”“继续/取消”等问题渲染为可点击选项
+  - 问题现象：
+    - 之前助手只有“允许操作 / 不允许”这类写操作确认卡片会展示按钮；
+    - 当助手追问的是明显二选一的问题，例如“是否新建后继续转执行”“回复继续或取消”，用户仍然只能手动输入文字，交互不够直接；
+    - 对于模型自由回答里自然生成的二选一追问，也缺少统一的按钮化能力。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增二选一 quick reply 能力：抽出二选一候选解析、按钮构造、快速回复发送三层通用逻辑；
+      - 在助手消息渲染前增加自动识别：当 AI / 系统消息里出现明确的二选一回复提示（如 `回复“继续”或“取消”`、`回复“是/新建”继续，回复“否/取消”...`）时，会自动生成与“允许/不允许”同风格的按钮；
+      - 新增 `dispatchAssistantConversationMessage(...)` 与 `submitAssistantQuickReply(...)`，让按钮点击后直接走与普通发送一致的聊天链路，而不是只改输入框文本；
+      - 调整消息动作注册与一次性按钮锁定逻辑，保证自动生成按钮也会正确注册 handler，并在点击后禁用同组按钮，避免重复触发；
+      - 保持原有 `assistant-approval-btn` 写操作确认流不变，避免回归已有“允许/不允许”能力。
+    - `tests/ui/assistant_global.spec.js`
+      - 更新“不存在执行版本时先确认是否新建再继续转执行”与“拒绝新建后保留版本选择上下文”两条用例，改为校验并点击 `新建并继续` / `取消` 按钮；
+      - 新增 `模型二选一追问会自动展示继续取消按钮并支持点击回复`，覆盖模型自由回答分支自动出现按钮并能继续对话的场景；
+      - 保留 `MCP ui.click_control 写操作需聊天确认并可拒绝/允许` 回归，确认旧确认按钮逻辑未受影响。
+  - 使用效果：
+    - 现在只要助手问的问题本质上是二选一，聊天区会优先给出可点击按钮，用户不需要再手动输入“是”“否”“继续”“取消”；
+    - 像“是否为你新建后继续转执行”这种场景，会直接出现 `新建并继续` / `取消`；
+    - 对于模型自由回答里自然问出的“是否继续查看详情？回复‘继续’或‘取消’”，也会自动出现 `继续` / `取消` 按钮，并且点击后会直接继续这一轮对话。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "MCP ui.click_control 写操作需聊天确认并可拒绝/允许|助手遇到不存在的执行版本时会先确认是否新建再继续转执行|助手拒绝新建不存在的执行版本后会保留版本选择上下文|模型二选一追问会自动展示继续取消按钮并支持点击回复" --workers=1`（通过，4/4）
+    - `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/settings_models.spec.js`（通过，1/1；`/api/health` 确认 `db_file=apitest.db`）
+  - 复用说明：
+    - 没有新增后端 API；本次复用了现有助手消息动作体系与 `handleUserInput(...)` 发送链路；
+    - 后续只要是同类二选一追问，优先复用这套自动识别 + quick reply 按钮能力，不需要再为每个问题单独手写一套按钮逻辑。
+
+- 更新记录：2026-03-08 AI 助手补齐“执行版本数字名澄清 + 通用任务状态卡 + 跨页面查询回归”
+  - 问题现象：
+    - 当用户在“选择执行版本”阶段直接输入纯数字（如 `912`）时，旧逻辑会优先把它当作“选第 912 个”，导致一直回复“未识别到有效执行版本”，进入死循环；
+    - 即使是明显需要拆分执行的复合指令，聊天区也缺少统一的任务状态展示，用户看不到当前步骤是“执行中 / 等待继续 / 已完成 / 受阻”；
+    - 本轮同时补跑了跨页面用例库内容查询的回归，确保新任务态与版本流不会把 `case_library.query_cases` 的模型链路再次抢坏。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 为消息对象新增 `taskState`，支持在聊天区渲染统一的任务状态卡，并保存在助手历史中；
+      - 新增通用任务步骤推导与状态推进逻辑：模型只要输出多步 MCP / action 计划，助手就会自动展示当前任务区，并随着执行过程更新为“执行中 / 等待继续 / 已完成 / 已取消 / 执行受阻”；
+      - 扩展转执行挂起状态，新增 `pendingExecTransferVersionNameClarify`，当用户在版本选择阶段输入纯数字或模糊版本名时，不再直接判错，而是先追问“这是不是新版本名”；
+      - 当用户对“是否为新版本名”回答“否/取消”时，新增一次模型判断分支，让模型结合现有版本列表判断更像笔误还是应回到版本选择，而不是继续走硬编码重试文案；
+      - 在转执行候选选择、版本选择、新建版本确认等后续回复里同步挂载任务卡，保持等待态和完成态可见。
+    - `style.css`
+      - 新增助手任务状态卡样式与步骤状态样式，统一展示状态徽标、步骤列表与运行/等待/完成/失败视觉区分。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `助手遇到纯数字执行版本输入时会先确认是否按新版本处理`；
+      - 新增 `助手否认纯数字新版本名后会调用模型判断更像现有版本还是回到选择`；
+      - 新增 `多步骤模型执行会展示任务状态卡并动态更新步骤状态`；
+      - 保留并重跑跨页面用例库查询与既有执行版本选择回归，确认没有把旧能力带坏。
+  - 使用效果：
+    - 现在输入类似 `912` 这类纯数字版本名时，助手会先确认你是不是想把它当作新版本，而不是直接进入“未识别”循环；
+    - 如果你否认它是新版本名，助手会让模型继续判断更像现有版本笔误还是回到版本列表，而不是只给一段死板的规则文案；
+    - 当模型把复杂指令拆成多步执行时，聊天区会出现任务状态卡，能直观看到当前步骤在执行、等待你确认，还是已经完成。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "跨页面用例库内容查询会优先调用 case_library.query_cases 而不是当前页用例|大批量用例库内容查询会拆分子任务并聚合返回|助手遇到不存在的执行版本时会先确认是否新建再继续转执行|助手拒绝新建不存在的执行版本后会保留版本选择上下文|助手遇到纯数字执行版本输入时会先确认是否按新版本处理|助手否认纯数字新版本名后会调用模型判断更像现有版本还是回到选择|多步骤模型执行会展示任务状态卡并动态更新步骤状态" --workers=1`（通过，7/7）
+    - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 18080` + `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/settings_models.spec.js --workers=1`（通过，1/1）
+  - 复用说明：
+    - 没有新增后端 API；任务状态卡直接复用了现有助手消息渲染与模型计划解析链路；
+    - “纯数字版本名澄清”能力挂在统一的转执行挂起状态机上，后续同类“先澄清再继续执行”的流程可继续复用这一套状态推进方式。
+
+- 更新记录：2026-03-08 AI 助手复合写指令优先进入模型任务态，避免被单步批量修改分支抢走
+  - 问题现象：
+    - 当用户输入类似 `帮我把皮肤用例也转到这个版本的执行，并把执行结果全部改为失败，再归档` 的复合指令时，旧分流会先命中“批量修改执行结果”的规则分支；
+    - 一旦被旧分支提前处理，模型就失去继续拆分“转执行 -> 批量改结果 -> 归档”等后续步骤的机会，聊天区也不会出现任务状态卡；
+    - 对于 `这个版本的执行` 这类版本指代式说法，旧的转执行识别也偏严格，容易只识别到“执行结果修改”，看起来像助手“只说不干”。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 放宽转执行识别，新增版本指代式判断，支持把 `这个版本的执行`、`该版本的执行`、`版本执行` 等表达纳入转执行意图；
+      - 新增复合任务识别 helper：按 `exec_transfer / case_update / archive / case_library_query` 等域统计同一句里的动作，并结合连接词判断是否属于需要模型接管的多步骤任务；
+      - 在 `handleUserInput(...)` 中把这类复合任务提前交给 `tryHandleModelDrivenReply(...)`，优先进入模型任务链，而不是落回单步规则分支；
+      - 收紧多轮 MCP / action 续跑判断：只有真正出现 `case_library.transfer_to_exec` 才视为已完成“转执行”，避免只搜索候选就提前结束；同时当用户还要求批量改结果或归档、而本轮计划尚未覆盖这些域时，会继续要求模型补齐后续步骤；
+      - 在模型提示中补充“复合动作优先输出多步 MCP 计划、进入任务状态”的要求；若用户还要求归档，也会明确提示模型优先继续规划归档步骤。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `跨域复合写指令会优先进入模型任务态而不是被批量修改分支抢走`，覆盖“转执行 + 批量改失败 + 归档”的复合链路；
+      - 保留并重跑 `助手会先询问执行版本再把指定用例转到当前执行`、`多步骤模型执行会展示任务状态卡并动态更新步骤状态`、`复合指令可同时批量改执行结果并清空备注`，确认旧的转执行、任务卡和单域复合更新逻辑未被带坏。
+  - 使用效果：
+    - 现在这类跨域复合写指令会优先进入模型任务态，聊天区会先显示当前任务与步骤，而不是直接只出现“准备执行：修改用例”；
+    - 用户说 `转到这个版本的执行` 这类版本指代表达时，助手也更容易识别成真正的转执行请求；
+    - 如果模型只完成了搜索候选而还没真正转执行，或者还没覆盖你要求的批量改结果 / 归档步骤，助手会继续让模型补齐，而不是假装任务已经做完。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "跨域复合写指令会优先进入模型任务态而不是被批量修改分支抢走|多步骤模型执行会展示任务状态卡并动态更新步骤状态|复合指令可同时批量改执行结果并清空备注|助手会先询问执行版本再把指定用例转到当前执行" --workers=1`（通过，4/4）
+    - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 18080` + `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/settings_models.spec.js --workers=1`（通过，1/1）
+  - 复用说明：
+    - 没有新增后端 API；本次直接复用了既有 `tryHandleModelDrivenReply(...)`、任务状态卡渲染、MCP 工具调用与确认机制；
+    - 复合任务识别被抽成通用 helper，后续如果还有“跨域多步骤写操作”需求，可继续复用这套入口优先级与续跑覆盖判断。
+
+- 更新记录：2026-03-08 AI 助手修复“执行结果改回未执行”被误判为缺少 value，避免任务态误报执行受阻
+  - 问题现象：
+    - 在用例执行页里，像 `战令用例的执行结果改回未执行` 这类请求，助手会先命中当前用例搜索，再进入 `case.update` 写操作；
+    - 旧的字段值提取器能识别 `变回未执行`，但没有覆盖 `改回未执行` / `调回未执行` 这类表达；
+    - 结果是确认写操作后，`case.update` 仍收到空 `value`，任务卡第二步被标成“执行受阻”，并返回 `MCP 工具执行失败：缺少要写入的值`，看起来像条件明明满足却执行失败。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 补充 `改回` / `调回` 到用例编辑意图识别词表，让这类表达不再漏出 `parseCaseUpdateCommand(...)`；
+      - 扩展 `extractCaseUpdateValue(...)` 内针对执行结果与通用字段的连接词匹配，支持从 `执行结果改回未执行`、`状态调回失败` 这类文本中稳定提取目标值；
+      - 同步补到字段锚定值清洗逻辑，避免模型或工具只给了 `field` 时，助手从用户原话兜底补值时再次漏掉 `改回` 类表达。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `任务态下执行结果“改回未执行”会自动补全 value 并完成修改`，模拟与你截图一致的任务态链路：先搜索当前用例，再执行 `case.update`，确认后应正确写入 `未执行` 而不是报缺值；
+      - 保留并重跑 `MCP case.update 缺少 value 时支持“字段上，值”问法（标题/备注）` 与 `复合指令可同时批量改执行结果并清空备注`，确保原有 value 推断和批量结果修改能力未受影响。
+  - 使用效果：
+    - 现在说 `执行结果改回未执行`、`状态调回失败` 这类话，助手会把目标值正确识别出来；
+    - 任务态里即使前一步先做了搜索，后面的 `case.update` 也不会再因为 value 丢失而误报“执行受阻”；
+    - 用户看到的效果会从 `缺少要写入的值` 变成正常的修改结果回执。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "任务态下执行结果“改回未执行”会自动补全 value 并完成修改|MCP case.update 缺少 value 时支持“字段上，值”问法（标题/备注）|复合指令可同时批量改执行结果并清空备注" --workers=1`（通过，3/3）
+    - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 18080` + `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/settings_models.spec.js --workers=1`（通过，1/1）
+  - 复用说明：
+    - 没有新增后端 API；本次继续复用了现有 `case.update`、任务状态卡与 MCP 确认机制；
+    - 这次补齐的是通用值提取词法，后续同类“改回 / 调回 / 变回”表达都会直接复用这一套识别能力。
+
+- 更新记录：2026-03-08 AI 助手让“改回/调回/恢复类”用例修改优先交给模型判断，规则提取仅做兜底
+  - 问题现象：
+    - 像 `把战令用例的执行结果改回未执行` 这类自然语言修改请求，语义上很明确，但旧链路只有在规则提取器先成功识别出 `field/value` 时，才会稳定进入后续修改；
+    - 一旦这类表达没被本地提取器完全覆盖，助手就可能既进不了模型任务态，也可能在 `case.update` 里把 `value` 漏成空字符串；
+    - 用户预期是这类“改回/调回/恢复为”应先交给模型理解语义，再由平台执行，而不是先被本地词法规则卡住。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增 `containsCaseUpdateActionVerb(...)`、`isLikelyCaseUpdateIntent(...)`、`shouldPreferModelDrivenCaseUpdateRoute(...)`，把“是否属于真实用例修改指令”的判断从“必须先提取成功”改为“先做宽意图识别”；
+      - 在 `handleUserInput(...)` 中新增模型优先分流：当用户是在表达 `改回/调回/恢复为` 这类需要语义理解的用例修改时，优先进入 `tryHandleModelDrivenReply(...)`，让模型直接规划 `case.update`，并显示任务状态卡；
+      - 调整 `collectAssistantTaskIntentDomains(...)`，不再只依赖 `parseCaseUpdateCommand(...)` 成功与否来判断是否属于 `case_update` 域，避免复合任务或自然语言变体因为本地提取失败而漏掉任务态；
+      - 在模型提示词中补充约束：遇到当前/执行用例字段修改，尤其是“改回/调回/恢复为”这类表达时，优先输出 `case.update` 的 MCP JSON，并自行补齐 `field/value/scope`，不要把 value 漏空。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `“改回未执行”类自然语言修改会优先交给模型任务态`，覆盖“无图片、单条自然语言修改也先进模型任务态”的链路；
+      - 保留并重跑 `任务态下执行结果“改回未执行”会自动补全 value 并完成修改`、`跨域复合写指令会优先进入模型任务态而不是被批量修改分支抢走`，确认这次分流调整没有把已有任务态链路带坏。
+  - 使用效果：
+    - 现在这类“改回/调回/恢复”表达，不需要先靠本地提取器完全命中，助手会优先把原话交给模型判断；
+    - 即使只是单步修改，聊天区也可以直接进入模型任务态，先展示当前任务，再按确认流程执行 `case.update`；
+    - 旧的本地直改分支仍保留作为兜底，模型不可用或未产出可执行计划时，平台仍可回退到原有规则链路。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js`
+    - `node --check tests/ui/assistant_global.spec.js`
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "“改回未执行”类自然语言修改会优先交给模型任务态|任务态下执行结果“改回未执行”会自动补全 value 并完成修改|跨域复合写指令会优先进入模型任务态而不是被批量修改分支抢走" --workers=1`（通过，3/3）
+    - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 18080`
+    - `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/settings_models.spec.js --workers=1`（通过，1/1）
+  - 复用说明：
+    - 没有新增后端 API；本次直接复用了现有 `tryHandleModelDrivenReply(...)`、`case.update`、确认按钮和任务状态卡；
+    - 新增的是通用“模型优先写操作分流”判断 helper，后续如果还有其他需要“先让模型理解自然语言、再走已有 MCP 工具”的写操作，也可以沿用这一层入口策略。
+
+- 更新记录：2026-03-08 AI 助手复合转执行任务在等待候选/版本/确认后严格按原顺序继续执行
+  - 问题现象：
+    - 用户输入类似 `帮我把皮肤用例转到912版本的执行，然后执行结果全部改为失败，再归档` 的复合任务时，任务卡片里虽然展示了正确顺序，但实际执行会在等待节点后跑偏；
+    - 典型异常包括：先执行 `case.update` 再去做转执行选择、候选/版本确认后重复执行 `transfer_to_exec`、以及在已完成“修改用例”确认后因为 continuation 中断而丢失后续 `归档` 步骤；
+    - 另外，纯数字版本名如 `912` 会被旧解析逻辑优先当成“第 912 个候选”或“新版本名待确认”，导致明明命中了现有版本却仍进入错误追问分支。
+  - 修复内容：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js`
+      - 新增 `consumeAssistantTaskContinuationStep(...)`，在候选选择、版本选择、新建版本确认、版本名澄清这些“人工确认后继续”的节点里，消费掉已经手动执行过的 `case_library.transfer_to_exec` continuation 步骤，避免后续继续执行时重复回到旧的 transfer 节点；
+      - 在 `tryHandlePendingExecTransferSelectionIntent(...)`、`tryHandlePendingExecTransferVersionSelectionIntent(...)`、`tryHandlePendingExecTransferCreateVersionConfirmIntent(...)`、`tryHandlePendingExecTransferVersionNameClarifyIntent(...)` 中统一透传 `taskState/taskStepIndex/continuation`，确保等待节点切换后仍沿用原任务链，而不是丢失上下文后退化成单步任务；
+      - 把 `getPendingExecTransferWaitingSummary()` 抽到共享作用域，修复 continuation 在继续执行 `case.update -> ui.click_control` 时因找不到该 helper 而在运行时中断的问题；
+      - 调整 `resolvePendingExecTransferVersion(...)` 的识别顺序：当用户回复纯数字时，优先匹配现有执行版本名，再决定是否按序号选择或新建版本，避免把现有版本 `912` 误判为“新版本名待确认”。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`
+      - 继续使用并修通 `复合转执行任务在候选和版本等待时会暂停，并在确认后按顺序继续`；
+      - 该用例现在覆盖完整链路：`search -> transfer_candidate -> transfer_version -> update -> archive`，并验证候选选择前、版本选择前都不会抢跑后续写操作，同时确认按钮通过后能严格按原顺序恢复执行。
+  - 使用效果：
+    - 现在复合任务遇到“先选候选”“再选版本”“再确认写操作”这类等待节点时，会在当前节点暂停，用户回复后从断点继续，不会越过等待点抢跑；
+    - 转执行成功后，后续 `修改用例`、`归档` 会按原任务顺序依次出现确认卡并执行，不会重复弹出完整列表，也不会重复回到转执行；
+    - 输入 `912` 这类纯数字版本名时，如果当前可选执行版本中确实存在 `912`，助手会直接命中该版本继续执行，而不是错误追问“这是不是新版本名”。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - `npm run test:ui -- tests/ui/assistant_global.spec.js -g "复合转执行任务在候选和版本等待时会暂停，并在确认后按顺序继续|跨域复合写指令会优先进入模型任务态而不是被批量修改分支抢走|“改回未执行”类自然语言修改会优先交给模型任务态" --workers=1`（通过，3/3）
+    - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 18080` + `API_BASE_URL=http://127.0.0.1:18080 npm run test:api -- tests/api/settings_models.spec.js --workers=1`（通过，1/1）
+  - 复用说明：
+    - 没有新增后端接口；本次继续复用了现有模型任务态、MCP 工具执行器、确认卡、任务状态卡与转执行待确认状态机；
+    - 新增的是通用 continuation 消费与等待后续执行衔接能力，后续只要还有“模型先规划、用户中途确认、再继续执行”的任务，都可以复用这一层顺序控制逻辑。
+
+- 更新记录：2026-03-08 AI 助手复合转执行任务卡中文化，并在唯一执行版本场景下自动续跑
+  - 问题现象：
+    - 复合任务拆分后，聊天区任务卡仍可能出现偏工具化的步骤文案，不够接近用户真正理解的任务步骤；
+    - 当用户输入类似 `帮我把皮肤用例转到912版本的执行，然后执行结果全部改为失败，再归档` 时，候选用例确认后如果 `transfer_to_exec` 只返回一个执行版本，助手仍可能停在“请选择执行版本”，表现为任务受阻；
+    - 这类卡住场景下，后续 `修改执行结果`、`归档` 不会继续推进，用户看到的是任务链中断，而不是完整执行。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 为转执行挂起状态补充 continuation 步骤读取能力，能够保留原任务里已经规划好的 `execVersionName` 意图，不再在候选确认后丢掉版本上下文；
+      - 在执行版本待选择状态中补充“唯一版本兜底续跑”：当模型没有给出明确选择、但当前只剩 1 个且与原计划版本名一致时，助手会直接继续执行 `transfer_to_exec -> case.update -> ui.click_control` 后续链路；
+      - 保持多命中场景继续交给模型判断，不把 `912 / aa912 / 912新建` 这类情况硬编码成某一个版本；
+      - 任务卡步骤文案继续使用用户可读中文描述，像 `搜索要转执行的用例：皮肤用例`、`把选中的用例转到执行版本：912`、`把全部执行结果改为失败`、`归档当前执行用例` 这类表述会直接展示在任务区。
+    - `tests/ui/assistant_global.spec.js`
+      - 更新复合转执行任务用例断言，直接校验任务卡展示的是中文步骤，而不是泛化的工具名；
+      - 保留并重跑“唯一版本自动继续”“多命中保留询问”相关 UI 场景，确认这次调整没有把已有版本歧义判断带坏。
+  - 使用效果：
+    - 现在复合任务一开始展示的就是用户可读的中文步骤，任务卡不会直接暴露内部接口/工具名称；
+    - 当候选用例确认后只剩唯一执行版本且与原任务指定版本一致时，助手会自动继续，不再停在版本选择；
+    - 如果执行版本存在多个合理命中，助手仍会停下来让用户确认，不会误选。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js scripts/modules/app.js scripts/modules/caseLibrary.js tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js -g "复合转执行任务会先展示完整任务列表|原始指令指定的执行版本存在多个合理命中时会保留版本选择而不是自动继续" --reporter=line`（通过，2/2）
+    - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_association_transfer.spec.js --reporter=line`（通过，5/5）
+  - 复用说明：
+    - 没有新增后端接口；本次继续复用了现有助手任务状态机、MCP 工具执行链、转执行待确认状态与任务卡渲染；
+    - 新增的是转执行 continuation 中的“计划版本意图保留”与“唯一版本兜底续跑”，后续同类“先人工确认，再继续执行”的链路都可以继续复用这一层状态承接能力。

@@ -2273,6 +2273,7 @@
     const generateTempVersionId = appUtils.generateTempVersionId;
     const normalizeTempExecName = appUtils.normalizeTempExecName;
     const stringifyCaseField = appUtils.stringifyCaseField;
+    const buildCaseSearchText = appUtils.buildCaseSearchText;
     const buildMissingReminderKeywords = appUtils.buildMissingReminderKeywords;
     const normalizeMissingReminderMatchConfig = appUtils.normalizeMissingReminderMatchConfig;
     const removePendingTempExecByName = appUtils.removePendingTempExecByName;
@@ -3467,6 +3468,7 @@
       persistWorkflowStateNow = api.persistWorkflowStateNow;
     }
     if (runtime && runtime.switchTab) switchTab = runtime.switchTab;
+    if (runtime && runtime.resolveTabName) window.app.resolveTabName = runtime.resolveTabName;
     window.app.switchTab = switchTab;
 
     function assistantDispatchEvent(name, detail) {
@@ -3755,6 +3757,10 @@
 
     function assistantGetPageData(tabName) {
       var tab = tabName ? String(tabName) : (state.activeTab || '');
+      if (tab && window.app && typeof window.app.resolveTabName === 'function') {
+        var resolvedTab = window.app.resolveTabName(tab);
+        if (resolvedTab) tab = resolvedTab;
+      }
       var data = {
         tab: tab,
         requirementLabel: state.requirementLabel || '',
@@ -4719,6 +4725,527 @@
         });
     }
 
+    function assistantNormalizeCaseLibraryQueryKeywordList(value) {
+      var source = Array.isArray(value)
+        ? value
+        : (value === undefined || value === null ? [] : [value]);
+      var seen = {};
+      var list = [];
+      source.forEach(function(raw) {
+        var text = raw === undefined || raw === null ? '' : String(raw).trim();
+        var key = '';
+        if (!text) return;
+        key = text.toLowerCase();
+        if (seen[key]) return;
+        seen[key] = true;
+        list.push(text);
+      });
+      return list;
+    }
+
+    function assistantNormalizeCaseLibraryQueryParity(value) {
+      var text = value === undefined || value === null ? '' : String(value).trim().toLowerCase();
+      if (!text) return '';
+      if (text === 'odd' || text === '奇数' || text === '单数' || text === '单号') return 'odd';
+      if (text === 'even' || text === '偶数' || text === '双数' || text === '双号') return 'even';
+      return '';
+    }
+
+    function assistantNormalizeCaseLibraryQueryFilterInfo(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var rawFilter = opts.filterInfo && typeof opts.filterInfo === 'object' ? opts.filterInfo : {};
+      var info = {
+        includeKeywords: assistantNormalizeCaseLibraryQueryKeywordList(
+          rawFilter.includeKeywords !== undefined
+            ? rawFilter.includeKeywords
+            : (opts.includeKeywords !== undefined
+              ? opts.includeKeywords
+              : (opts.keywords !== undefined ? opts.keywords : opts.keyword))
+        ),
+        excludeKeywords: assistantNormalizeCaseLibraryQueryKeywordList(
+          rawFilter.excludeKeywords !== undefined
+            ? rawFilter.excludeKeywords
+            : (opts.excludeKeywords !== undefined ? opts.excludeKeywords : opts.exclude)
+        ),
+        indexParity: assistantNormalizeCaseLibraryQueryParity(
+          rawFilter.indexParity !== undefined ? rawFilter.indexParity : (opts.indexParity !== undefined ? opts.indexParity : opts.sequenceParity)
+        ),
+        idParity: assistantNormalizeCaseLibraryQueryParity(
+          rawFilter.idParity !== undefined ? rawFilter.idParity : (opts.idParity !== undefined ? opts.idParity : opts.caseIdParity)
+        ),
+        hasFilter: false,
+      };
+      info.hasFilter = info.includeKeywords.length > 0
+        || info.excludeKeywords.length > 0
+        || Boolean(info.indexParity)
+        || Boolean(info.idParity);
+      return info;
+    }
+
+    function assistantResolveCaseLibraryQueryText(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var candidates = [opts.query, opts.q, opts.text, opts.searchText, opts.search, opts.keyword];
+      for (var i = 0; i < candidates.length; i += 1) {
+        if (candidates[i] === undefined || candidates[i] === null) continue;
+        var text = String(candidates[i]).trim();
+        if (text) return text;
+      }
+      var keywordList = assistantNormalizeCaseLibraryQueryKeywordList(opts.keywords !== undefined ? opts.keywords : opts.includeKeywords);
+      return keywordList.join(' ');
+    }
+
+    function assistantBuildCaseLibraryProjectNameMap(projects) {
+      var list = Array.isArray(projects) ? projects : [];
+      var map = {};
+      list.forEach(function(item) {
+        var row = item && typeof item === 'object' ? item : {};
+        var id = row.id === undefined || row.id === null ? '' : String(row.id);
+        if (!id) return;
+        map[id] = row.name === undefined || row.name === null ? '' : String(row.name);
+      });
+      return map;
+    }
+
+    function assistantResolveCaseLibraryQueryProjectByName(projects, projectName) {
+      var target = projectName === undefined || projectName === null ? '' : String(projectName).trim().toLowerCase();
+      var list = Array.isArray(projects) ? projects : [];
+      var partial = null;
+      if (!target) return null;
+      for (var i = 0; i < list.length; i += 1) {
+        var row = list[i] && typeof list[i] === 'object' ? list[i] : {};
+        var name = row.name === undefined || row.name === null ? '' : String(row.name).trim();
+        var normalized = name.toLowerCase();
+        if (!normalized) continue;
+        if (normalized === target) return row;
+        if (!partial && normalized.indexOf(target) !== -1) partial = row;
+      }
+      return partial;
+    }
+
+    function assistantResolveCaseLibraryQuerySequenceNumber(item, fallbackIndex) {
+      var row = item && typeof item === 'object' ? item : {};
+      var raw = row.order_no;
+      var num = NaN;
+      var match = null;
+      if (raw === undefined || raw === null || raw === '') raw = row.sourceIndex;
+      if (raw === undefined || raw === null || raw === '') raw = row.index;
+      num = Number(raw);
+      if (!Number.isFinite(num)) {
+        match = String(raw === undefined || raw === null ? '' : raw).match(/-?d+/);
+        num = match && match[0] ? Number(match[0]) : NaN;
+      }
+      if (!Number.isFinite(num) || num <= 0) num = Number(fallbackIndex);
+      if (!Number.isFinite(num) || num <= 0) return NaN;
+      return Math.floor(num);
+    }
+
+    function assistantResolveCaseLibraryQueryIdNumber(item) {
+      var row = item && typeof item === 'object' ? item : {};
+      var raw = row.id === undefined || row.id === null ? '' : String(row.id).trim();
+      var num = NaN;
+      if (!raw) return NaN;
+      if (!/^[-+]?d+$/.test(raw)) return NaN;
+      num = Number(raw);
+      if (!Number.isFinite(num)) return NaN;
+      return Math.floor(Math.abs(num));
+    }
+
+    function assistantDoesCaseLibraryNumberMatchParity(num, parity) {
+      if (!Number.isFinite(num)) return false;
+      if (parity === 'even') return Math.abs(num % 2) === 0;
+      if (parity === 'odd') return Math.abs(num % 2) === 1;
+      return true;
+    }
+
+    function assistantBuildCaseLibraryQueryItemSearchText(item, caseFileMeta) {
+      var row = item && typeof item === 'object' ? item : {};
+      var meta = caseFileMeta && typeof caseFileMeta === 'object' ? caseFileMeta : {};
+      var payload = [{
+        id: row.id,
+        index: row.index,
+        sourceIndex: row.sourceIndex,
+        module: row.module,
+        title: row.title,
+        priority: row.priority,
+        precondition: row.precondition,
+        preconditions: row.preconditions,
+        steps: row.steps,
+        expected: row.expected,
+        remark: row.remark,
+        caseFileName: meta.caseFileName || meta.name || '',
+        projectName: meta.projectName || '',
+      }];
+      if (typeof buildCaseSearchText === 'function') {
+        return String(buildCaseSearchText(payload) || '');
+      }
+      return payload.map(function(entry) {
+        return Object.keys(entry).map(function(key) {
+          return stringifyCaseField(entry[key]);
+        }).join(' ');
+      }).join(' ').toLowerCase();
+    }
+
+    function assistantMatchCaseLibraryQueryItem(item, caseFileMeta, filterInfo, queryText, fallbackIndex) {
+      var info = filterInfo && typeof filterInfo === 'object' ? filterInfo : {};
+      var includeKeywords = Array.isArray(info.includeKeywords) ? info.includeKeywords : [];
+      var excludeKeywords = Array.isArray(info.excludeKeywords) ? info.excludeKeywords : [];
+      var indexParity = info.indexParity ? String(info.indexParity).trim() : '';
+      var idParity = info.idParity ? String(info.idParity).trim() : '';
+      var normalizedQuery = queryText === undefined || queryText === null ? '' : String(queryText).trim().toLowerCase();
+      var searchText = assistantBuildCaseLibraryQueryItemSearchText(item, caseFileMeta);
+      var matchedKeywords = [];
+      var i = 0;
+      if (indexParity && !assistantDoesCaseLibraryNumberMatchParity(assistantResolveCaseLibraryQuerySequenceNumber(item, fallbackIndex), indexParity)) {
+        return { matched: false, matchedKeywords: [] };
+      }
+      if (idParity && !assistantDoesCaseLibraryNumberMatchParity(assistantResolveCaseLibraryQueryIdNumber(item), idParity)) {
+        return { matched: false, matchedKeywords: [] };
+      }
+      if (includeKeywords.length) {
+        var includeHit = false;
+        for (i = 0; i < includeKeywords.length; i += 1) {
+          var includeKeyword = String(includeKeywords[i] || '').trim().toLowerCase();
+          if (!includeKeyword) continue;
+          if (searchText.indexOf(includeKeyword) !== -1) {
+            includeHit = true;
+            matchedKeywords.push(String(includeKeywords[i] || '').trim());
+          }
+        }
+        if (!includeHit) return { matched: false, matchedKeywords: [] };
+      } else if (normalizedQuery) {
+        if (searchText.indexOf(normalizedQuery) === -1) {
+          return { matched: false, matchedKeywords: [] };
+        }
+        matchedKeywords.push(String(queryText || '').trim());
+      }
+      for (i = 0; i < excludeKeywords.length; i += 1) {
+        var excludeKeyword = String(excludeKeywords[i] || '').trim().toLowerCase();
+        if (!excludeKeyword) continue;
+        if (searchText.indexOf(excludeKeyword) !== -1) return { matched: false, matchedKeywords: [] };
+      }
+      return {
+        matched: true,
+        matchedKeywords: assistantNormalizeCaseLibraryQueryKeywordList(matchedKeywords),
+      };
+    }
+
+    function assistantBuildCaseLibraryQueryChunks(items, chunkSize) {
+      var list = Array.isArray(items) ? items : [];
+      var size = Number(chunkSize);
+      var chunks = [];
+      var i = 0;
+      if (!Number.isFinite(size) || size <= 0) size = list.length || 1;
+      for (i = 0; i < list.length; i += size) {
+        chunks.push(list.slice(i, i + size));
+      }
+      return chunks;
+    }
+
+    function assistantNormalizeCaseLibraryQueryItem(item, caseFile, projectName, fallbackIndex, matchedKeywords) {
+      var row = item && typeof item === 'object' ? item : {};
+      var file = caseFile && typeof caseFile === 'object' ? caseFile : {};
+      var sourceIndex = assistantResolveCaseLibraryQuerySequenceNumber(row, fallbackIndex);
+      return {
+        index: Number.isFinite(sourceIndex) ? sourceIndex : fallbackIndex,
+        sourceIndex: Number.isFinite(sourceIndex) ? sourceIndex : fallbackIndex,
+        id: row.id === undefined || row.id === null ? '' : String(row.id),
+        module: row.module === undefined || row.module === null ? '' : String(row.module),
+        title: row.title === undefined || row.title === null ? '' : String(row.title),
+        priority: row.priority === undefined || row.priority === null ? '' : String(row.priority),
+        precondition: row.precondition !== undefined && row.precondition !== null
+          ? String(row.precondition)
+          : (row.preconditions !== undefined && row.preconditions !== null ? String(row.preconditions) : ''),
+        preconditions: row.precondition !== undefined && row.precondition !== null
+          ? String(row.precondition)
+          : (row.preconditions !== undefined && row.preconditions !== null ? String(row.preconditions) : ''),
+        steps: row.steps === undefined || row.steps === null ? '' : String(row.steps),
+        expected: row.expected === undefined || row.expected === null ? '' : String(row.expected),
+        remark: row.remark === undefined || row.remark === null ? '' : String(row.remark),
+        caseFileId: file.id === undefined || file.id === null ? '' : String(file.id),
+        caseFileName: file.file_name_clean ? String(file.file_name_clean) : (file.name ? String(file.name) : ''),
+        projectId: file.project_id === undefined || file.project_id === null ? '' : String(file.project_id),
+        projectName: projectName || '',
+        versionId: file.version_id === undefined || file.version_id === null ? '' : String(file.version_id),
+        updatedAt: file.updated_at || file.imported_at || '',
+        matchedKeywords: assistantNormalizeCaseLibraryQueryKeywordList(matchedKeywords),
+      };
+    }
+
+    function assistantQueryCaseLibraryCases(options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var apiClient = window.app && window.app.apiClient ? window.app.apiClient : null;
+      var explicitProjectId = opts.projectId === undefined || opts.projectId === null ? '' : String(opts.projectId).trim();
+      var explicitProjectName = opts.projectName === undefined || opts.projectName === null ? '' : String(opts.projectName).trim();
+      var queryText = assistantResolveCaseLibraryQueryText(opts);
+      var filterInfo = assistantNormalizeCaseLibraryQueryFilterInfo(opts);
+      var limit = Number(opts.limit);
+      var preferCurrentProject = opts.preferCurrentProject !== false;
+      var allProjects = opts.allProjects === true || String(opts.scope || '').trim().toLowerCase() === 'all';
+      var resolvedProjectId = explicitProjectId;
+      var resolvedProjectName = explicitProjectName;
+      var contextProjectId = '';
+      var projectsPromise = Promise.resolve([]);
+      if (!Number.isFinite(limit) || limit <= 0) limit = 20;
+      if (limit > 200) limit = 200;
+      if (!apiClient || typeof apiClient.listCaseFiles !== 'function' || typeof apiClient.listCaseItems !== 'function') {
+        return Promise.resolve({
+          ok: false,
+          reason: '跨页面用例库内容查询能力暂不可用',
+          projectId: resolvedProjectId,
+          projectName: resolvedProjectName,
+          total: 0,
+          items: [],
+        });
+      }
+      if (!resolvedProjectId && !allProjects && preferCurrentProject) {
+        contextProjectId = assistantResolveMissingLibraryProjectId(opts) || assistantResolveCaseLibraryProjectId(opts);
+        if (contextProjectId) resolvedProjectId = String(contextProjectId);
+      }
+      if (typeof apiClient.listProjects === 'function') {
+        try {
+          projectsPromise = Promise.resolve(apiClient.listProjects({ include_all: true })).catch(function() { return []; });
+        } catch (err) {
+          projectsPromise = Promise.resolve([]);
+        }
+      }
+      return projectsPromise.then(function(projects) {
+        var projectMap = assistantBuildCaseLibraryProjectNameMap(projects);
+        var matchedProject = null;
+        if (!resolvedProjectId && explicitProjectName) {
+          matchedProject = assistantResolveCaseLibraryQueryProjectByName(projects, explicitProjectName);
+          if (!matchedProject) {
+            return {
+              ok: false,
+              reason: '未找到项目：' + explicitProjectName,
+              projectId: '',
+              projectName: explicitProjectName,
+              total: 0,
+              items: [],
+            };
+          }
+          resolvedProjectId = matchedProject.id === undefined || matchedProject.id === null ? '' : String(matchedProject.id);
+          resolvedProjectName = matchedProject.name === undefined || matchedProject.name === null ? explicitProjectName : String(matchedProject.name);
+        }
+        if (!resolvedProjectName && resolvedProjectId && projectMap[resolvedProjectId]) {
+          resolvedProjectName = String(projectMap[resolvedProjectId]);
+        }
+        return apiClient.listCaseFiles(resolvedProjectId || undefined)
+          .then(function(files) {
+            var fileList = Array.isArray(files) ? files.slice() : [];
+            var estimatedItemCount = 0;
+            var workerCount = 1;
+            var chunkSize = 1;
+            var chunks = [];
+            var capturePerChunk = 0;
+            fileList.forEach(function(file) {
+              var count = Number(file && file.item_count);
+              if (!Number.isFinite(count) || count < 0) count = 0;
+              estimatedItemCount += count;
+            });
+            if (estimatedItemCount > 120 || fileList.length > 8) workerCount = 2;
+            if (estimatedItemCount > 240 || fileList.length > 18) workerCount = 3;
+            if (estimatedItemCount > 400 || fileList.length > 32) workerCount = 4;
+            if (estimatedItemCount > 700 || fileList.length > 48) workerCount = 5;
+            if (estimatedItemCount > 1000 || fileList.length > 64) workerCount = 6;
+            chunkSize = Math.max(1, Math.ceil((fileList.length || 1) / workerCount));
+            chunks = assistantBuildCaseLibraryQueryChunks(fileList, chunkSize);
+            capturePerChunk = Math.max(40, limit);
+            if (capturePerChunk > 80) capturePerChunk = 80;
+            if (!fileList.length) {
+              return {
+                ok: true,
+                scope: resolvedProjectId ? 'project' : 'all-projects',
+                projectId: resolvedProjectId || '',
+                projectName: resolvedProjectName || '',
+                queryText: queryText,
+                filterInfo: filterInfo,
+                total: 0,
+                matchedFileCount: 0,
+                searchedFileCount: 0,
+                searchedItemCount: 0,
+                projectCount: resolvedProjectId ? 1 : Object.keys(projectMap).length,
+                items: [],
+                files: [],
+                truncated: false,
+                fileTruncated: false,
+                multiAgent: {
+                  used: false,
+                  workerCount: 1,
+                  chunkCount: 0,
+                },
+                errorCount: 0,
+                errors: [],
+              };
+            }
+            var runner = typeof runConcurrent === 'function'
+              ? function(list, concurrency, handler) { return runConcurrent(list, concurrency, handler); }
+              : function(list, concurrency, handler) {
+                return Promise.all((list || []).map(function(item, index) {
+                  return handler(item, index);
+                }));
+              };
+            return runner(chunks, workerCount, async function(chunk, chunkIndex) {
+              var matchItems = [];
+              var matchFiles = [];
+              var errors = [];
+              var searchedItemCount = 0;
+              var matchTotal = 0;
+              for (var i = 0; i < chunk.length; i += 1) {
+                var file = chunk[i] && typeof chunk[i] === 'object' ? chunk[i] : {};
+                var projectId = file.project_id === undefined || file.project_id === null ? '' : String(file.project_id);
+                var projectName = projectMap[projectId] ? String(projectMap[projectId]) : '';
+                var caseFileName = file.file_name_clean ? String(file.file_name_clean) : (file.name ? String(file.name) : ('用例#' + (file.id || (i + 1))));
+                var fileItems = [];
+                var matchedCount = 0;
+                try {
+                  fileItems = await apiClient.listCaseItems(file.id);
+                } catch (err) {
+                  errors.push({
+                    caseFileId: file.id === undefined || file.id === null ? '' : String(file.id),
+                    caseFileName: caseFileName,
+                    reason: err && err.message ? String(err.message) : '读取用例内容失败',
+                  });
+                  continue;
+                }
+                fileItems = Array.isArray(fileItems) ? fileItems : [];
+                searchedItemCount += fileItems.length;
+                for (var j = 0; j < fileItems.length; j += 1) {
+                  var rawItem = fileItems[j] && typeof fileItems[j] === 'object' ? fileItems[j] : {};
+                  var matched = assistantMatchCaseLibraryQueryItem(rawItem, {
+                    caseFileName: caseFileName,
+                    projectName: projectName,
+                  }, filterInfo, queryText, j + 1);
+                  if (!matched.matched) continue;
+                  matchedCount += 1;
+                  matchTotal += 1;
+                  if (matchItems.length < capturePerChunk) {
+                    matchItems.push(assistantNormalizeCaseLibraryQueryItem(rawItem, file, projectName, j + 1, matched.matchedKeywords));
+                  }
+                }
+                if (matchedCount > 0) {
+                  matchFiles.push({
+                    caseFileId: file.id === undefined || file.id === null ? '' : String(file.id),
+                    caseFileName: caseFileName,
+                    projectId: projectId,
+                    projectName: projectName,
+                    versionId: file.version_id === undefined || file.version_id === null ? '' : String(file.version_id),
+                    matchedCount: matchedCount,
+                    itemCount: fileItems.length,
+                    updatedAt: file.updated_at || file.imported_at || '',
+                    workerIndex: chunkIndex + 1,
+                  });
+                }
+              }
+              return {
+                chunkIndex: chunkIndex + 1,
+                matchItems: matchItems,
+                matchFiles: matchFiles,
+                matchTotal: matchTotal,
+                searchedItemCount: searchedItemCount,
+                errorCount: errors.length,
+                errors: errors,
+              };
+            }).then(function(results) {
+              var chunksOut = Array.isArray(results) ? results : [];
+              var allItems = [];
+              var allFiles = [];
+              var errors = [];
+              var total = 0;
+              var searchedItemCount = 0;
+              chunksOut.forEach(function(entry) {
+                var row = entry && typeof entry === 'object' ? entry : {};
+                total += Number(row.matchTotal) || 0;
+                searchedItemCount += Number(row.searchedItemCount) || 0;
+                if (Array.isArray(row.matchItems) && row.matchItems.length) {
+                  allItems = allItems.concat(row.matchItems);
+                }
+                if (Array.isArray(row.matchFiles) && row.matchFiles.length) {
+                  allFiles = allFiles.concat(row.matchFiles);
+                }
+                if (Array.isArray(row.errors) && row.errors.length) {
+                  errors = errors.concat(row.errors);
+                }
+              });
+              return {
+                ok: true,
+                scope: resolvedProjectId ? 'project' : 'all-projects',
+                projectId: resolvedProjectId || '',
+                projectName: resolvedProjectName || '',
+                queryText: queryText,
+                filterInfo: filterInfo,
+                total: total,
+                matchedFileCount: allFiles.length,
+                searchedFileCount: fileList.length,
+                searchedItemCount: searchedItemCount,
+                estimatedItemCount: estimatedItemCount,
+                projectCount: resolvedProjectId ? 1 : Object.keys(projectMap).length,
+                items: allItems.slice(0, limit),
+                files: allFiles.slice(0, 120),
+                truncated: total > Math.min(allItems.length, limit),
+                fileTruncated: allFiles.length > 120,
+                multiAgent: {
+                  used: workerCount > 1,
+                  workerCount: workerCount,
+                  chunkCount: chunks.length,
+                },
+                errorCount: errors.length,
+                errors: errors.slice(0, 30),
+              };
+            });
+          })
+          .catch(function(err) {
+            return {
+              ok: false,
+              reason: err && err.message ? String(err.message) : '查询用例库内容失败',
+              projectId: resolvedProjectId || '',
+              projectName: resolvedProjectName || '',
+              total: 0,
+              items: [],
+            };
+          });
+      });
+    }
+
+    function assistantSearchExecCandidates(options) {
+      var caseLibraryApi = window.app && window.app.caseLibraryApi ? window.app.caseLibraryApi : null;
+      if (!caseLibraryApi || typeof caseLibraryApi.searchExecCandidates !== 'function') {
+        return Promise.resolve({
+          ok: false,
+          reason: '用例转执行候选搜索能力暂不可用',
+          total: 0,
+          items: [],
+        });
+      }
+      try {
+        return Promise.resolve(caseLibraryApi.searchExecCandidates(options || {}));
+      } catch (err) {
+        return Promise.resolve({
+          ok: false,
+          reason: err && err.message ? String(err.message) : '搜索用例失败',
+          total: 0,
+          items: [],
+        });
+      }
+    }
+
+    function assistantTransferCaseFileToExec(options) {
+      var caseLibraryApi = window.app && window.app.caseLibraryApi ? window.app.caseLibraryApi : null;
+      if (!caseLibraryApi || typeof caseLibraryApi.transferCaseFileToExec !== 'function') {
+        return Promise.resolve({
+          ok: false,
+          reason: '转到执行能力暂不可用',
+        });
+      }
+      try {
+        return Promise.resolve(caseLibraryApi.transferCaseFileToExec(options || {}));
+      } catch (err) {
+        return Promise.resolve({
+          ok: false,
+          reason: err && err.message ? String(err.message) : '转到执行失败',
+        });
+      }
+    }
+
     function assistantBuildSearchRequest(url, timeoutMs) {
       var request = {
         url: url,
@@ -5665,6 +6192,120 @@
       return null;
     }
 
+    function assistantBuildCaseUpdateFieldLabel(field) {
+      var fieldLabelMap = {
+        module: '模块',
+        title: '标题',
+        priority: '优先级',
+        precondition: '前置条件',
+        preconditions: '前置条件',
+        steps: '步骤',
+        expected: '预期结果',
+        remark: '备注',
+        actual: '执行结果',
+      };
+      return fieldLabelMap[field] || field || '字段';
+    }
+
+    function assistantTrimCaseUpdateConfirmValue(value, maxLen) {
+      var text = value === undefined || value === null ? '' : String(value);
+      var limit = Number(maxLen);
+      text = text.replace(/\s+/g, ' ').trim();
+      if (!text) return '';
+      if (!Number.isFinite(limit) || limit < 8) limit = 24;
+      if (text.length <= limit) return text;
+      return text.slice(0, limit - 1) + '…';
+    }
+
+    function assistantResolveCaseUpdateRequestIndex(args) {
+      var payload = args && typeof args === 'object' ? args : {};
+      var idxRaw = payload.index;
+      if ((idxRaw === undefined || idxRaw === null) && payload.itemIndex !== undefined && payload.itemIndex !== null) idxRaw = payload.itemIndex;
+      if ((idxRaw === undefined || idxRaw === null) && payload.seq !== undefined && payload.seq !== null) idxRaw = payload.seq;
+      if ((idxRaw === undefined || idxRaw === null) && payload.row !== undefined && payload.row !== null) idxRaw = payload.row;
+      if ((idxRaw === undefined || idxRaw === null) && payload.sourceIndex !== undefined && payload.sourceIndex !== null) idxRaw = payload.sourceIndex;
+      var index = Number(idxRaw);
+      if (!Number.isFinite(index) || index <= 0) return 0;
+      return Math.floor(index);
+    }
+
+    function assistantBuildCaseUpdateConfirmMeta(payload, contextOverride) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var fallbackMeta = {
+        actionLabel: '修改用例',
+        message: '该操作会写入用例内容，请确认继续。',
+      };
+      var contextRaw = args.context === undefined || args.context === null ? '' : String(args.context).trim().toLowerCase();
+      var context = contextRaw || (contextOverride ? String(contextOverride).trim().toLowerCase() : '') || (state.activeTab === 'tempexec' ? 'tempexec' : (state.activeTab === 'case-library' ? 'case-library' : ''));
+      var pair = null;
+      var valueRaw = undefined;
+      var normalizedValue = '';
+      var allowEmptyValue = false;
+      var normalizeValueRes = null;
+      var operation = 'replace';
+      var scope = 'single';
+      var index = 0;
+      var fieldLabel = '';
+      var valueText = '';
+      var targetLabel = '';
+      var isClear = false;
+      var message = '';
+      if (args.patch && typeof args.patch === 'object') {
+        pair = assistantExtractCaseUpdateFromPatch(args.patch, context);
+      }
+      if (!pair) {
+        var fieldRaw = '';
+        if (args.field !== undefined && args.field !== null) fieldRaw = String(args.field);
+        if (!fieldRaw && args.key !== undefined && args.key !== null) fieldRaw = String(args.key);
+        if (!fieldRaw && args.column !== undefined && args.column !== null) fieldRaw = String(args.column);
+        if (!fieldRaw && args.name !== undefined && args.name !== null) fieldRaw = String(args.name);
+        var normalizedField = assistantNormalizeCaseUpdateField(fieldRaw, context);
+        if (!normalizedField) return fallbackMeta;
+        valueRaw = args.value;
+        if (valueRaw === undefined) valueRaw = args.to;
+        if (valueRaw === undefined) valueRaw = args.text;
+        if (valueRaw === undefined) valueRaw = args.content;
+        if (valueRaw === undefined) valueRaw = args.newValue;
+        pair = { field: normalizedField, value: valueRaw };
+      }
+      if (!pair || !pair.field) return fallbackMeta;
+      allowEmptyValue = assistantShouldAllowCaseEmptyValue(pair.field, args);
+      normalizeValueRes = assistantNormalizeCaseUpdateValue(pair.field, pair.value, { allowEmpty: allowEmptyValue });
+      if (normalizeValueRes && normalizeValueRes.ok) {
+        normalizedValue = normalizeValueRes.value;
+      } else {
+        normalizedValue = pair.value === undefined || pair.value === null ? '' : String(pair.value).trim();
+      }
+      operation = assistantNormalizeCaseUpdateOperation(args, 'replace');
+      scope = assistantNormalizeCaseUpdateScope(args);
+      index = assistantResolveCaseUpdateRequestIndex(args);
+      fieldLabel = assistantBuildCaseUpdateFieldLabel(pair.field);
+      valueText = assistantTrimCaseUpdateConfirmValue(normalizedValue, 32);
+      isClear = allowEmptyValue && normalizedValue === '';
+      if (scope === 'all') {
+        targetLabel = context === 'tempexec' ? '当前执行中的全部用例' : '当前可见用例';
+      } else if (index > 0) {
+        targetLabel = '第 ' + index + ' 条用例';
+      } else {
+        targetLabel = context === 'tempexec' ? '当前执行中的目标用例' : '当前可见用例';
+      }
+      if (isClear) {
+        message = '将' + targetLabel + '的' + fieldLabel + '清空。';
+      } else if (operation === 'append') {
+        message = '在' + targetLabel + '的' + fieldLabel + '末尾追加' + (valueText ? ('“' + valueText + '”') : '内容') + '。';
+      } else if (operation === 'prepend') {
+        message = '在' + targetLabel + '的' + fieldLabel + '开头追加' + (valueText ? ('“' + valueText + '”') : '内容') + '。';
+      } else if (valueText) {
+        message = '将' + targetLabel + '的' + fieldLabel + '改为“' + valueText + '”。';
+      } else {
+        message = '将修改' + targetLabel + '的' + fieldLabel + '。';
+      }
+      return {
+        actionLabel: '修改用例' + fieldLabel + (scope === 'all' ? '（批量）' : ''),
+        message: message,
+      };
+    }
+
     function assistantUpdateCase(payload) {
       var args = payload && typeof payload === 'object' ? payload : {};
       var contextRaw = args.context === undefined || args.context === null ? '' : String(args.context).trim().toLowerCase();
@@ -6567,15 +7208,26 @@
     function assistantClickUiControl(payload, tool) {
       var args = payload && typeof payload === 'object' ? payload : {};
       var target = assistantResolveUiControl(args);
+      if (!target && assistantIsExecArchiveControlRequest(args)) target = assistantResolveExecArchiveControl(args);
       if (!target) return { ok: false, tool: tool, reason: '未找到目标控件' };
       var info = assistantInspectUiControl(target);
       if (!info) return { ok: false, tool: tool, reason: '目标控件不可操作' };
       if (!info.visible) return { ok: false, tool: tool, reason: '目标控件当前不可见' };
       if (info.disabled) return { ok: false, tool: tool, reason: '目标控件当前不可用' };
       if (info.requiresConfirm && args.confirmed !== true) {
+        var actionLabel = '点击控件';
+        var message = '该控件可能触发写操作，请确认后执行。';
+        if (assistantIsExecArchiveControlRequest(args)) {
+          var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+          var file = assistantResolveTempExecTargetFile(args, tempApi);
+          var counts = assistantBuildTempExecArchiveCounts(file, tempApi);
+          var confirmMeta = assistantBuildExecArchiveConfirmMeta(args, file, counts);
+          actionLabel = confirmMeta.actionLabel;
+          message = confirmMeta.message;
+        }
         return assistantBuildMcpConfirmRequired(tool, {
-          actionLabel: '点击控件',
-          message: '该控件可能触发写操作，请确认后执行。',
+          actionLabel: actionLabel,
+          message: message,
           controlText: info.text || info.domId || '',
           controlId: args.controlId || '',
         });
@@ -6635,9 +7287,14 @@
       var operation = 'replace';
       if (caseEditableMeta) {
         if (args.confirmed !== true) {
+          var caseEditConfirmMeta = assistantBuildCaseUpdateConfirmMeta(Object.assign({}, args, {
+            context: caseEditableMeta.context,
+            field: caseEditableMeta.field,
+            value: value,
+          }), caseEditableMeta.context);
           return assistantBuildMcpConfirmRequired(tool, {
-            actionLabel: '修改用例',
-            message: '该操作会写入用例内容，请确认继续。',
+            actionLabel: caseEditConfirmMeta.actionLabel,
+            message: caseEditConfirmMeta.message,
             controlText: assistantControlText(target),
             domId: target.id ? String(target.id) : '',
           });
@@ -6711,6 +7368,231 @@
         if (String(item.id || '') === id) return item;
       }
       return null;
+    }
+
+    function assistantResolveTempExecTargetFile(payload, tempApi) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var list = Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      var targetId = '';
+      if (args.fileId !== undefined && args.fileId !== null) targetId = String(args.fileId).trim();
+      if (!targetId && args.execFileId !== undefined && args.execFileId !== null) targetId = String(args.execFileId).trim();
+      if (!targetId && args.caseFileId !== undefined && args.caseFileId !== null) targetId = String(args.caseFileId).trim();
+      if (!targetId && args.caseId !== undefined && args.caseId !== null) targetId = String(args.caseId).trim();
+      var fileNameAlias = '';
+      if (!targetId && args.fileName !== undefined && args.fileName !== null) fileNameAlias = String(args.fileName).trim();
+      if (!targetId && !fileNameAlias && args.name !== undefined && args.name !== null) fileNameAlias = String(args.name).trim();
+      if (!targetId && !fileNameAlias && args.title !== undefined && args.title !== null) fileNameAlias = String(args.title).trim();
+      if (!targetId && !fileNameAlias && args.file !== undefined && args.file !== null) fileNameAlias = String(args.file).trim();
+      if (!targetId && fileNameAlias) targetId = assistantFindTempExecFileIdByName(fileNameAlias);
+      var indexAlias = args.index;
+      if ((indexAlias === undefined || indexAlias === null) && args.fileIndex !== undefined && args.fileIndex !== null) indexAlias = args.fileIndex;
+      if ((indexAlias === undefined || indexAlias === null) && args.seq !== undefined && args.seq !== null) indexAlias = args.seq;
+      if ((indexAlias === undefined || indexAlias === null) && args.position !== undefined && args.position !== null) indexAlias = args.position;
+      if (!targetId && indexAlias !== undefined && indexAlias !== null) {
+        var num = Math.floor(Number(indexAlias));
+        if (Number.isFinite(num) && num > 0 && num <= list.length) {
+          targetId = String(list[num - 1].id || '');
+        }
+      }
+      if (!targetId) targetId = assistantResolveTempExecActiveFileId(tempApi);
+      if (targetId) {
+        var matched = assistantGetTempExecFileById(targetId);
+        if (matched) return matched;
+      }
+      return list.length ? list[0] : null;
+    }
+
+    function assistantBuildTempExecArchiveCounts(file, tempApi) {
+      var counts = { pending: 0, failed: 0, blocked: 0, total: 0 };
+      var rows = file && Array.isArray(file.cases) ? file.cases : [];
+      counts.total = rows.length;
+      for (var i = 0; i < rows.length; i += 1) {
+        var item = rows[i] && typeof rows[i] === 'object' ? rows[i] : {};
+        var label = '';
+        if (tempApi && typeof tempApi.getCaseExecutionDisplay === 'function') {
+          try {
+            var display = tempApi.getCaseExecutionDisplay(file, item);
+            if (display && display.label !== undefined && display.label !== null) label = String(display.label).trim();
+          } catch (_) {
+            label = '';
+          }
+        }
+        if (!label && item.actual !== undefined && item.actual !== null) label = String(item.actual).trim();
+        if (!label && item.status !== undefined && item.status !== null) label = String(item.status).trim();
+        if (!label && item.result !== undefined && item.result !== null) label = String(item.result).trim();
+        label = assistantNormalizeTempExecActualValue(label) || '未执行';
+        if (label === '通过' || label === '不适用') continue;
+        if (label === '失败') counts.failed += 1;
+        else if (label === '阻塞') counts.blocked += 1;
+        else counts.pending += 1;
+      }
+      return counts;
+    }
+
+    function assistantResolveExecArchiveReason(payload, counts) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var explicitReason = assistantReadFirstArgString(args, ['reason', 'archiveReason', 'archive_reason']);
+      if (explicitReason) return explicitReason;
+      var info = counts && typeof counts === 'object' ? counts : { pending: 0, failed: 0, blocked: 0 };
+      if (!(info.pending || info.failed || info.blocked)) return '';
+      return '按用户指令归档；当前仍有未通过用例（未执行 ' + Number(info.pending || 0) + ' / 失败 ' + Number(info.failed || 0) + ' / 阻塞 ' + Number(info.blocked || 0) + '）。';
+    }
+
+    function assistantBuildExecArchiveConfirmMeta(payload, file, counts) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var info = counts && typeof counts === 'object' ? counts : { pending: 0, failed: 0, blocked: 0, total: 0 };
+      var fileName = file && (file.name || file.file_name_clean || file.fileName)
+        ? String(file.name || file.file_name_clean || file.fileName)
+        : '';
+      var targetLabel = fileName ? ('“' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '”') : '当前执行中的该份用例';
+      var explicitReason = assistantReadFirstArgString(args, ['reason', 'archiveReason', 'archive_reason']);
+      var finalReason = assistantResolveExecArchiveReason(args, info);
+      var needReason = Boolean(info.pending || info.failed || info.blocked);
+      var message = '';
+      if (needReason) {
+        var countText = '未执行 ' + Number(info.pending || 0) + ' / 失败 ' + Number(info.failed || 0) + ' / 阻塞 ' + Number(info.blocked || 0);
+        if (explicitReason) {
+          message = '将归档' + targetLabel + '；当前仍有未通过项（' + countText + '），将按提供原因继续：' + '“' + assistantTrimCaseUpdateConfirmValue(finalReason, 40) + '”。';
+        } else {
+          message = '将归档' + targetLabel + '；当前仍有未通过项（' + countText + '），确认后将自动补充归档原因：' + '“' + assistantTrimCaseUpdateConfirmValue(finalReason, 40) + '”。';
+        }
+      } else if (Number(info.total || 0) > 0) {
+        message = '将归档' + targetLabel + '；当前用例已全部执行完成，归档后无法继续修改测试结果。';
+      } else {
+        message = '将归档' + targetLabel + '。';
+      }
+      return {
+        actionLabel: '归档当前执行用例',
+        message: message,
+        reason: finalReason,
+        needReason: needReason,
+      };
+    }
+
+    function assistantIsExecArchiveControlRequest(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      if (String(args.controlId || '').trim() === 'tempexecArchiveBtn') return true;
+      var inspectText = [
+        args.controlText,
+        args.text,
+        args.label,
+        args.name,
+        args.query,
+        args.target,
+        args.title,
+      ].join(' ');
+      return /归档|archive/i.test(inspectText);
+    }
+
+    function assistantResolveExecArchiveControl(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      if (!assistantIsExecArchiveControlRequest(args)) return null;
+      var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      var file = assistantResolveTempExecTargetFile(args, tempApi);
+      var fileId = file && file.id !== undefined && file.id !== null ? String(file.id) : '';
+      var execSetId = '';
+      if (args.execSetId !== undefined && args.execSetId !== null && String(args.execSetId).trim()) execSetId = String(args.execSetId).trim();
+      if (!execSetId && args.setId !== undefined && args.setId !== null && String(args.setId).trim()) execSetId = String(args.setId).trim();
+      if (!execSetId && file && file.execSetId !== undefined && file.execSetId !== null && String(file.execSetId).trim()) execSetId = String(file.execSetId).trim();
+      if (!execSetId && fileId) execSetId = fileId;
+      var fileButtons = [];
+      try {
+        fileButtons = document.querySelectorAll('button[data-temp-file-archive]');
+      } catch (_) {
+        fileButtons = [];
+      }
+      var fallbackFileBtn = null;
+      for (var i = 0; i < fileButtons.length; i += 1) {
+        var fileBtn = fileButtons[i];
+        if (!assistantIsElementVisible(fileBtn) || assistantIsInsideAssistantPanel(fileBtn) || fileBtn.disabled) continue;
+        var currentFileId = fileBtn.getAttribute ? String(fileBtn.getAttribute('data-temp-file-archive') || '') : '';
+        if (fileId && currentFileId === fileId) return fileBtn;
+        if (!fallbackFileBtn) fallbackFileBtn = fileBtn;
+      }
+      var overviewButtons = [];
+      try {
+        overviewButtons = document.querySelectorAll('button[data-temp-overview-archive]');
+      } catch (_) {
+        overviewButtons = [];
+      }
+      var fallbackOverviewBtn = null;
+      for (var j = 0; j < overviewButtons.length; j += 1) {
+        var overviewBtn = overviewButtons[j];
+        if (!assistantIsElementVisible(overviewBtn) || assistantIsInsideAssistantPanel(overviewBtn) || overviewBtn.disabled) continue;
+        var currentExecSetId = overviewBtn.getAttribute ? String(overviewBtn.getAttribute('data-temp-overview-archive') || '') : '';
+        if (execSetId && currentExecSetId === execSetId) return overviewBtn;
+        if (!fallbackOverviewBtn) fallbackOverviewBtn = overviewBtn;
+      }
+      return fallbackFileBtn || fallbackOverviewBtn || null;
+    }
+
+    function assistantArchiveCurrentExecCases(payload, tool) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+      var file = assistantResolveTempExecTargetFile(args, tempApi);
+      if (!file) return Promise.resolve({ ok: false, tool: tool, reason: '当前没有可归档的执行用例' });
+      if (file._casesLoading) return Promise.resolve({ ok: false, tool: tool, reason: '用例加载中，请稍后再试' });
+      if (tempApi && typeof tempApi.setTempExecActive === 'function' && file.id !== undefined && file.id !== null) {
+        try { tempApi.setTempExecActive(String(file.id)); } catch (_) {}
+      }
+      if (!client || typeof client.archiveExecSet !== 'function') {
+        return Promise.resolve({ ok: false, tool: tool, reason: '当前模式不支持归档（需启用 DB 后端）' });
+      }
+      var sidRaw = args.execSetId;
+      if ((sidRaw === undefined || sidRaw === null || String(sidRaw).trim() === '') && args.setId !== undefined && args.setId !== null) sidRaw = args.setId;
+      if ((sidRaw === undefined || sidRaw === null || String(sidRaw).trim() === '') && args.execSet !== undefined && args.execSet !== null) sidRaw = args.execSet;
+      if ((sidRaw === undefined || sidRaw === null || String(sidRaw).trim() === '') && file && file.execSetId !== undefined && file.execSetId !== null) sidRaw = file.execSetId;
+      if ((sidRaw === undefined || sidRaw === null || String(sidRaw).trim() === '') && file && file.id !== undefined && file.id !== null) sidRaw = file.id;
+      var sid = Number(sidRaw);
+      if (!Number.isFinite(sid) || sid <= 0) {
+        return Promise.resolve({ ok: false, tool: tool, reason: '归档失败：执行集 ID 无效' });
+      }
+      var counts = assistantBuildTempExecArchiveCounts(file, tempApi);
+      var confirmMeta = assistantBuildExecArchiveConfirmMeta(args, file, counts);
+      var fileName = file && (file.name || file.file_name_clean || file.fileName)
+        ? String(file.name || file.file_name_clean || file.fileName)
+        : '';
+      if (args.confirmed !== true) {
+        return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
+          actionLabel: confirmMeta.actionLabel,
+          message: confirmMeta.message,
+          execSetId: sid,
+          fileId: file && file.id !== undefined && file.id !== null ? String(file.id) : '',
+          fileName: fileName,
+          reason: confirmMeta.needReason ? confirmMeta.reason : '',
+        }));
+      }
+      var requestPayload = {};
+      if (confirmMeta.needReason && confirmMeta.reason) requestPayload.reason = confirmMeta.reason;
+      return client.archiveExecSet(sid, requestPayload)
+        .then(function() {
+          var loadPromise = null;
+          try {
+            if (tempApi && typeof tempApi.loadTempExecState === 'function') loadPromise = tempApi.loadTempExecState();
+          } catch (_) {
+            loadPromise = null;
+          }
+          return Promise.resolve(loadPromise)
+            .catch(function() { return null; })
+            .then(function() {
+              return {
+                ok: true,
+                tool: tool,
+                data: {
+                  archived: true,
+                  execSetId: sid,
+                  fileId: file && file.id !== undefined && file.id !== null ? String(file.id) : '',
+                  fileName: fileName,
+                  reason: requestPayload.reason || '',
+                  counts: counts,
+                },
+              };
+            });
+        })
+        .catch(function(err) {
+          return { ok: false, tool: tool, reason: err && err.message ? String(err.message) : '归档失败' };
+        });
     }
 
     function assistantFindTempExecFileIdByName(keyword) {
@@ -7132,9 +8014,14 @@
       if (raw === 'page.current_info' || raw === 'current_page_info' || raw === 'page.info') return 'page.current_info';
       if (raw === 'page.get_data' || raw === 'query_page_data' || raw === 'page_data') return 'page.get_data';
       if (raw === 'nav.switch_tab' || raw === 'navigate' || raw === 'switch_tab') return 'nav.switch_tab';
-      if (raw === 'cases.list_current' || raw === 'query_case_list' || raw === 'case_list') return 'cases.list_current';
+      if (raw === 'cases.list_current' || raw === 'query_case_list' || raw === 'case_list' || raw === 'case_library.query_exec_cases' || raw === 'case_library_query_exec_cases' || raw === 'query_exec_cases' || raw === 'list_exec_cases' || raw === 'case_library.list_exec_cases' || raw === 'case_library_list_exec_cases') return 'cases.list_current';
+      if (raw === 'case_library.query_cases' || raw === 'case_library_query_cases' || raw === 'query_case_library_cases' || raw === 'search_case_library_cases' || raw === 'case_library_search_case_content' || raw === 'search_case_content') return 'case_library.query_cases';
       if (raw === 'missing_library.list_current' || raw === 'missing_library_list_current' || raw === 'list_missing_library' || raw === 'missing_case_library_list') return 'missing_library.list_current';
       if (raw === 'cross_page.match_missing_cases' || raw === 'cross_page_match_missing_cases' || raw === 'match_missing_cases' || raw === 'match_case_missing_library') return 'cross_page.match_missing_cases';
+      if (raw === 'case_library.search_exec_candidates' || raw === 'case_library_search_exec_candidates' || raw === 'search_case_files_for_exec' || raw === 'search_exec_candidates' || raw === 'case_library.search_exec_cases' || raw === 'case_library_search_exec_cases' || raw === 'search_exec_cases') return 'case_library.search_exec_candidates';
+      if (raw === 'case_library.transfer_to_exec' || raw === 'case_library_transfer_to_exec' || raw === 'transfer_to_exec' || raw === 'transfer_case_to_exec' || raw === 'exec_case_file') return 'case_library.transfer_to_exec';
+      if (raw === 'case_library.batch_update_exec_results' || raw === 'case_library_batch_update_exec_results' || raw === 'batch_update_exec_results' || raw === 'update_exec_results' || raw === 'case_library.batch_set_exec_results' || raw === 'case_library_batch_set_exec_results' || raw === 'batch_set_exec_results' || raw === 'set_exec_results' || raw === 'set_exec_result') return 'case_library.batch_update_exec_results';
+      if (raw === 'case_library.batch_archive_exec_cases' || raw === 'case_library_batch_archive_exec_cases' || raw === 'batch_archive_exec_cases' || raw === 'archive_exec_cases' || raw === 'case_library.batch_archive_cases' || raw === 'case_library_batch_archive_cases' || raw === 'batch_archive_cases' || raw === 'archive_cases') return 'case_library.batch_archive_exec_cases';
       if (raw === 'ui.list_controls' || raw === 'list_controls' || raw === 'list_ui_controls') return 'ui.list_controls';
       if (raw === 'ui.click_control' || raw === 'click_control' || raw === 'click_ui_control') return 'ui.click_control';
       if (raw === 'ui.fill_input' || raw === 'fill_input' || raw === 'fill_ui_input') return 'ui.fill_input';
@@ -7165,6 +8052,11 @@
         { name: 'page.get_data', mode: 'read', description: '读取指定页面的数据快照' },
         { name: 'nav.switch_tab', mode: 'write', description: '切换到目标页签' },
         { name: 'cases.list_current', mode: 'read', description: '读取当前页面或项目用例列表' },
+        { name: 'case_library.query_cases', mode: 'read', description: '跨页面查询用例库内容，并在大数据量时自动拆分子任务并发检索' },
+        { name: 'case_library.search_exec_candidates', mode: 'read', description: '按项目/名称搜索可转到当前执行的用例文件候选' },
+        { name: 'case_library.transfer_to_exec', mode: 'write', description: '将指定用例文件转到当前执行；若未指定执行版本，会返回待选择版本或待确认新建版本结果' },
+        { name: 'case_library.batch_update_exec_results', mode: 'write', description: '批量修改当前执行用例的执行结果' },
+        { name: 'case_library.batch_archive_exec_cases', mode: 'write', description: '归档当前执行中的用例' },
         { name: 'missing_library.list_current', mode: 'read', description: '读取当前项目的漏测/易漏用例库，可跨页面查询' },
         { name: 'cross_page.match_missing_cases', mode: 'read', description: '将当前页面用例与当前项目漏测用例库做跨页面匹配' },
         { name: 'ui.list_controls', mode: 'read', description: '列出当前页可操作控件（按钮/输入框/选择器等）' },
@@ -7223,6 +8115,73 @@
           return { ok: true, tool: tool, data: res };
         });
       }
+      if (tool === 'case_library.query_cases') {
+        return assistantQueryCaseLibraryCases(payload).then(function(res) {
+          if (!res || res.ok !== true) {
+            return { ok: false, tool: tool, data: res || null, reason: res && res.reason ? String(res.reason) : '查询用例库内容失败' };
+          }
+          return { ok: true, tool: tool, data: res };
+        });
+      }
+      if (tool === 'case_library.search_exec_candidates') {
+        return assistantSearchExecCandidates(payload).then(function(res) {
+          if (!res || res.ok !== true) {
+            return { ok: false, tool: tool, data: res || null, reason: res && res.reason ? String(res.reason) : '搜索转执行候选失败' };
+          }
+          return { ok: true, tool: tool, data: res };
+        });
+      }
+      if (tool === 'case_library.transfer_to_exec') {
+        var caseFileId = payload && payload.caseFileId !== undefined && payload.caseFileId !== null
+          ? String(payload.caseFileId).trim()
+          : (payload && payload.id !== undefined && payload.id !== null ? String(payload.id).trim() : '');
+        if (!caseFileId) {
+          return Promise.resolve({ ok: false, tool: tool, data: payload || null, reason: '缺少 caseFileId' });
+        }
+        if (payload.confirmed !== true) {
+          return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
+            actionLabel: '转到当前执行',
+            message: '该操作会把目标用例加入当前执行，并可能同步覆盖已有执行结果。',
+          }));
+        }
+        return assistantTransferCaseFileToExec(payload).then(function(res) {
+          if (!res || res.ok !== true) {
+            return { ok: false, tool: tool, data: res || null, reason: res && res.reason ? String(res.reason) : '转到执行失败' };
+          }
+          return { ok: true, tool: tool, data: res };
+        });
+      }
+      if (tool === 'case_library.batch_update_exec_results') {
+        var batchUpdatePayload = Object.assign({
+          context: 'tempexec',
+          scope: 'all',
+          field: 'actual',
+        }, payload || {});
+        if (batchUpdatePayload.value === undefined || batchUpdatePayload.value === null || String(batchUpdatePayload.value).trim() === '') {
+          if (batchUpdatePayload.result !== undefined && batchUpdatePayload.result !== null && String(batchUpdatePayload.result).trim()) {
+            batchUpdatePayload.value = String(batchUpdatePayload.result).trim();
+          } else if (batchUpdatePayload.status !== undefined && batchUpdatePayload.status !== null && String(batchUpdatePayload.status).trim()) {
+            batchUpdatePayload.value = String(batchUpdatePayload.status).trim();
+          } else if (batchUpdatePayload.to !== undefined && batchUpdatePayload.to !== null && String(batchUpdatePayload.to).trim()) {
+            batchUpdatePayload.value = String(batchUpdatePayload.to).trim();
+          }
+        }
+        if (batchUpdatePayload.confirmed !== true) {
+          var batchUpdateConfirmMeta = assistantBuildCaseUpdateConfirmMeta(batchUpdatePayload, 'tempexec');
+          return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
+            actionLabel: batchUpdateConfirmMeta.actionLabel,
+            message: batchUpdateConfirmMeta.message,
+          }));
+        }
+        var batchUpdateRes = assistantUpdateCase(batchUpdatePayload);
+        return Promise.resolve(batchUpdateRes && batchUpdateRes.ok
+          ? { ok: true, tool: tool, data: batchUpdateRes }
+          : { ok: false, tool: tool, data: batchUpdateRes || null, reason: batchUpdateRes && batchUpdateRes.reason ? String(batchUpdateRes.reason) : '批量修改执行结果失败' });
+      }
+      if (tool === 'case_library.batch_archive_exec_cases') {
+        return assistantArchiveCurrentExecCases(payload || {}, tool);
+      }
+
       if (tool === 'missing_library.list_current') {
         return assistantReadMissingLibrarySnapshot(payload).then(function(res) {
           if (!res || res.ok !== true) {
@@ -7381,9 +8340,10 @@
       }
       if (tool === 'case.update') {
         if (payload.confirmed !== true) {
+          var updateConfirmMeta = assistantBuildCaseUpdateConfirmMeta(payload || {});
           return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
-            actionLabel: '修改用例',
-            message: '该操作会写入用例内容，请确认继续。',
+            actionLabel: updateConfirmMeta.actionLabel,
+            message: updateConfirmMeta.message,
           }));
         }
         var updateRes = assistantUpdateCase(payload || {});
@@ -7441,6 +8401,7 @@
       getPageData: assistantGetPageData,
       listCurrentCases: assistantListCurrentCases,
       listCaseFiles: assistantListCurrentCases,
+      queryCaseLibraryCases: assistantQueryCaseLibraryCases,
       searchWeb: assistantSearchWeb,
       webSearch: assistantSearchWeb,
       getSettings: assistantGetSettings,

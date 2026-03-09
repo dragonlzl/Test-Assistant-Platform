@@ -857,6 +857,86 @@
       return cfg && cfg.tabPageMap ? cfg.tabPageMap : {};
     }
 
+    function getPageDefaultTabMap() {
+      var cfg = window.app && window.app.config ? window.app.config : {};
+      return cfg && cfg.pageDefaultTabMap ? cfg.pageDefaultTabMap : {};
+    }
+
+    function normalizeTabToken(name) {
+      var raw = name === undefined || name === null ? '' : String(name).trim();
+      if (!raw) return '';
+      raw = raw.replace(/^[?#]+/, '').trim();
+      raw = raw.replace(/(?:页面|页签|界面|tab页|tab|页|中心|模块)$/i, '').trim();
+      return raw;
+    }
+
+    function resolveTabName(name) {
+      var raw = normalizeTabToken(name);
+      var lower = raw.toLowerCase();
+      var map = getTabPageMap();
+      var pageDefaults = getPageDefaultTabMap();
+      var aliases = [
+        { tab: 'settings', keys: ['设置', '通用设置', '配置', 'settings.html'] },
+        { tab: 'assign', keys: ['功能指派', '指派', 'ai-tools.html', 'ai-tools'] },
+        { tab: 'models', keys: ['模型管理', '模型页'] },
+        { tab: 'casesgen', keys: ['用例生成', '生成页'] },
+        { tab: 'tempexec', keys: ['用例执行', '执行页', '执行中心', 'case-exec.html', 'case-exec'] },
+        { tab: 'case-library', keys: ['用例库', '库页面', 'case-library.html'] },
+        { tab: 'case-archive', keys: ['用例归档', '归档'] },
+        { tab: 'exec-overview', keys: ['执行总览', '执行概览', '总览'] },
+        { tab: 'auto', keys: ['一键执行', '功能流程', '自动流程', 'ai-workflow.html', 'ai-workflow'] },
+      ];
+      if (!raw) return '';
+      if (typeof document !== 'undefined') {
+        var exactSection = document.querySelector('[data-tab-section="' + raw + '"]');
+        if (exactSection && exactSection.dataset && exactSection.dataset.tabSection) {
+          return String(exactSection.dataset.tabSection || '');
+        }
+        var exactButton = document.querySelector('[data-tab-btn="' + raw + '"]');
+        if (exactButton && exactButton.dataset && exactButton.dataset.tabBtn) {
+          return String(exactButton.dataset.tabBtn || '');
+        }
+      }
+      var tabKeys = Object.keys(map || {});
+      for (var i = 0; i < tabKeys.length; i += 1) {
+        var tabKey = tabKeys[i] ? String(tabKeys[i]) : '';
+        if (tabKey && tabKey.toLowerCase() === lower) return tabKey;
+      }
+      var pageKeys = Object.keys(pageDefaults || {});
+      for (var j = 0; j < pageKeys.length; j += 1) {
+        var pageKey = pageKeys[j] ? String(pageKeys[j]) : '';
+        var targetTab = pageDefaults && pageDefaults[pageKey] ? String(pageDefaults[pageKey]) : '';
+        if (!pageKey || !targetTab) continue;
+        if (pageKey.toLowerCase() === lower || (pageKey + '.html').toLowerCase() === lower) {
+          return targetTab;
+        }
+      }
+      if (typeof document !== 'undefined') {
+        var buttons = document.querySelectorAll('[data-tab-btn]');
+        if (buttons && buttons.length) {
+          for (var k = 0; k < buttons.length; k += 1) {
+            var btn = buttons[k];
+            if (!btn || !btn.dataset) continue;
+            var tab = btn.dataset.tabBtn ? String(btn.dataset.tabBtn) : '';
+            var label = normalizeTabToken(btn.textContent || '');
+            if (!tab || !label) continue;
+            if (label.toLowerCase() === lower) return tab;
+          }
+        }
+      }
+      for (var a = 0; a < aliases.length; a += 1) {
+        var aliasItem = aliases[a];
+        var keys = aliasItem && Array.isArray(aliasItem.keys) ? aliasItem.keys : [];
+        for (var b = 0; b < keys.length; b += 1) {
+          var alias = normalizeTabToken(keys[b]);
+          if (alias && alias.toLowerCase() === lower) {
+            return aliasItem.tab;
+          }
+        }
+      }
+      return '';
+    }
+
     function parseQuery(search) {
       var result = {};
       if (!search) return result;
@@ -896,13 +976,14 @@
     function getTabFromUrl() {
       if (typeof window === 'undefined' || !window.location) return '';
       var params = parseQuery(window.location.search || '');
-      return params && params.tab ? String(params.tab || '') : '';
+      return params && params.tab ? resolveTabName(params.tab) : '';
     }
 
     function buildTabUrl(path, tabName) {
       if (!path) return '';
       var hash = '';
       var hashIndex = path.indexOf('#');
+      var resolvedTab = resolveTabName(tabName);
       if (hashIndex >= 0) {
         hash = path.slice(hashIndex);
         path = path.slice(0, hashIndex);
@@ -914,8 +995,8 @@
         params = parseQuery(path.slice(queryIndex));
         base = path.slice(0, queryIndex);
       }
-      if (tabName) {
-        params.tab = tabName;
+      if (resolvedTab) {
+        params.tab = resolvedTab;
       } else if (params.tab) {
         delete params.tab;
       }
@@ -933,17 +1014,18 @@
     }
 
     function syncHistoryForTab(name, options) {
-      if (!name) return;
+      var tab = resolveTabName(name);
+      if (!tab) return;
       if (typeof window === 'undefined' || !window.history || typeof window.history.pushState !== 'function') return;
       var current = (window.location ? (window.location.pathname || '') + (window.location.search || '') + (window.location.hash || '') : '');
       if (!current) return;
-      var target = buildTabUrl(current, name);
+      var target = buildTabUrl(current, tab);
       if (!target || target === current) return;
       try {
         if (options && options.replaceHistory) {
-          window.history.replaceState({ tab: name }, '', target);
+          window.history.replaceState({ tab: tab }, '', target);
         } else {
-          window.history.pushState({ tab: name }, '', target);
+          window.history.pushState({ tab: tab }, '', target);
         }
       } catch (err) {
         // ignore
@@ -951,26 +1033,29 @@
     }
 
     function resolveTabPage(name) {
-      if (!name) return '';
+      var tab = resolveTabName(name);
       var map = getTabPageMap();
-      return map && map[name] ? String(map[name]) : '';
+      if (!tab) return '';
+      return map && map[tab] ? String(map[tab]) : '';
     }
 
     function hasLocalTabSection(name) {
-      if (!name || typeof document === 'undefined') return false;
-      return Boolean(document.querySelector('[data-tab-section=\"' + name + '\"]'));
+      var tab = resolveTabName(name);
+      if (!tab || typeof document === 'undefined') return false;
+      return Boolean(document.querySelector('[data-tab-section="' + tab + '"]'));
     }
 
     function redirectToTabPage(name) {
-      var target = resolveTabPage(name);
-      if (!target) return false;
+      var tab = resolveTabName(name);
+      var target = resolveTabPage(tab);
+      if (!tab || !target) return false;
       var current = getCurrentPageName();
       if (current && current === target) return false;
       // Flush workflow snapshot before cross-page navigation to avoid debounce loss.
       persistWorkflowStateNow();
-      persistActiveTabForSession(name);
+      persistActiveTabForSession(tab);
       try {
-        window.location.href = buildTabUrl(target, name) || target;
+        window.location.href = buildTabUrl(target, tab) || target;
       } catch (err) {
         // ignore
       }
@@ -978,6 +1063,8 @@
     }
 
     function switchTab(name, options) {
+      name = resolveTabName(name);
+      if (!name) return;
       var mappedToOtherPage = false;
       if (name) {
         var mappedPage = resolveTabPage(name);
@@ -1141,6 +1228,7 @@
       }
     }
     api.switchTab = switchTab;
+    api.resolveTabName = resolveTabName;
     // 兜底：页面刷新/关闭前再写一次 activeTab，避免少数情况下首次切页后未落到 sessionStorage 的问题。
     try {
       if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
@@ -1357,6 +1445,7 @@
             saved = '';
           }
         }
+        saved = resolveTabName(saved);
         // 仅在同一次登录会话内恢复页签（避免登出/重新登录回到旧页签）。
         try {
           if (saved && typeof sessionStorage !== 'undefined') {
@@ -1389,9 +1478,10 @@
             }
           });
         }
+        defaultTab = resolveTabName(defaultTab) || defaultTab;
         var isValidSaved = saved && tabs.indexOf(saved) !== -1;
         if (isValidSaved) return saved;
-        var hasDefault = tabs.indexOf(defaultTab) !== -1;
+        var hasDefault = defaultTab && tabs.indexOf(defaultTab) !== -1;
         if (hasDefault) return defaultTab;
         return tabs.length ? tabs[0] : defaultTab;
       }
@@ -1596,6 +1686,7 @@
 
     return {
       switchTab: switchTab,
+      resolveTabName: resolveTabName,
       core: core,
       casesGenApi: casesGenApi,
       initApp: initApp,

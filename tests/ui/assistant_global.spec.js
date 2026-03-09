@@ -153,6 +153,28 @@ async function gotoIndex(page) {
   });
 }
 
+async function enableAssistant(page, modelId) {
+  const targetModelId = modelId || 'assistant-model-1';
+  await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+  await expect(page.locator('#assistantModelSelect option[value="' + targetModelId + '"]')).toHaveCount(1);
+  await page.selectOption('#assistantModelSelect', targetModelId);
+  await page.check('#assistantEnabledToggle');
+  await page.click('#saveAssistantSetting');
+  await expect.poll(() => page.evaluate((id) => {
+    if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+    var snap = window.app.assistantSettingsApi.getSettings();
+    return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === String(id || ''));
+  }, targetModelId)).toBe(true);
+}
+
+async function openAssistant(page) {
+  await page.evaluate(() => {
+    var btn = document.getElementById('assistantLauncherBtn');
+    if (btn) btn.click();
+  });
+  await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+}
+
 test.describe('全局AI助手', () => {
   test.beforeEach(async ({ page }) => {
     await allowLocalOnly(page);
@@ -183,6 +205,2609 @@ test.describe('全局AI助手', () => {
     });
     await expect(page).toHaveURL(/settings\.html\?tab=settings/);
     await expect(page.locator('#assistantPanel')).toHaveClass(/hidden/);
+  });
+
+  test('助手传入中文页签名时也会归一化后再跨页面跳转', async ({ page }) => {
+    await Promise.all([
+      page.waitForURL(/case-exec\.html\?tab=tempexec/),
+      page.evaluate(() => {
+        if (window.app && window.app.assistantApi && typeof window.app.assistantApi.switchTab === 'function') {
+          window.app.assistantApi.switchTab('用例执行');
+        }
+      }),
+    ]);
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await expect(page.locator('[data-tab-section="tempexec"]').first()).toBeVisible();
+  });
+
+
+  test('助手会先询问执行版本再把指定用例转到当前执行', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantTransferLog = [];
+      window.__assistantModelCallCount = 0;
+      var recommended = {
+        id: '501',
+        name: '新手礼包用例',
+        projectId: '3001',
+        projectName: '元气骑士项目',
+        versionId: '701',
+        versionName: 'S1',
+        itemCount: 12,
+      };
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.searchExecCandidates = async function() {
+          return {
+            ok: true,
+            query: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            total: 1,
+            selectionRequired: false,
+            truncated: false,
+            recommended: recommended,
+            items: [recommended],
+          };
+        };
+        window.app.caseLibraryApi.transferCaseFileToExec = async function(args) {
+          var payload = Object.assign({}, args || {});
+          window.__assistantTransferLog.push(payload);
+          if (!payload.execVersionId) {
+            return {
+              ok: true,
+              versionSelectionRequired: true,
+              caseFileId: '501',
+              name: '新手礼包用例',
+              projectId: '3001',
+              projectName: '元气骑士项目',
+              importVersionId: '701',
+              importVersionName: 'S1',
+              totalVersions: 2,
+              items: [
+                { id: '701', name: 'S1', isImportedVersion: true },
+                { id: '702', name: 'S2' },
+              ],
+            };
+          }
+          return {
+            ok: true,
+            caseFileId: '501',
+            name: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            versionId: String(payload.execVersionId || ''),
+            versionName: String(payload.execVersionId === '702' ? 'S2' : 'S1'),
+          };
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'resolve_exec_transfer_choice') {
+            var latestInput = String(payload.latestUserInput || '');
+            if (latestInput.indexOf('S2') !== -1) {
+              return {
+                ok: true,
+                content: '{"mode":"select","selectedIndex":2}',
+              };
+            }
+            return {
+              ok: true,
+              content: '{"mode":"invalid","response":""}',
+            };
+          }
+          window.__assistantModelCallCount += 1;
+          if (window.__assistantModelCallCount === 1) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                mcp: {
+                  tool: 'case_library.search_exec_candidates',
+                  args: {
+                    projectName: '元气骑士项目',
+                    query: '新手礼包用例',
+                  },
+                },
+                response: '',
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                tool: 'case_library.transfer_to_exec',
+                args: {
+                  caseFileId: '501',
+                  projectId: '3001',
+                },
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    await Promise.all([
+      page.waitForURL(/case-exec\.html\?tab=tempexec/),
+      page.evaluate(() => {
+        if (window.app && typeof window.app.switchTab === 'function') {
+          window.app.switchTab('tempexec');
+        }
+      }),
+    ]);
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.evaluate((id) => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.applyPatch !== 'function') return null;
+      return window.app.assistantSettingsApi.applyPatch({
+        assistantEnabled: true,
+        assistantModelId: id,
+      }, { source: 'assistant-ui', allowSelfDisable: true });
+    }, modelId);
+    await expect.poll(() => page.evaluate((id) => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === String(id || ''));
+    }, modelId)).toBe(true);
+    await page.evaluate(() => {
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'plan_task_preview') {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                title: '当前任务',
+                mcp: {
+                  calls: [
+                    { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例', projectId: '2001' } },
+                    { tool: 'case_library.transfer_to_exec', args: { caseFileId: '43', projectId: '2001', execVersionName: '912' } },
+                    { tool: 'case.update', args: { context: 'tempexec', scope: 'all', field: 'actual', value: '失败' } },
+                  ],
+                },
+                response: '',
+              }),
+            };
+          }
+          if (payload && payload.task === 'resolve_exec_transfer_choice') {
+            return { ok: true, content: '{"mode":"select","selectedIndex":1}' };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                calls: [
+                  { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例', projectId: '2001' } },
+                  { tool: 'case_library.transfer_to_exec', args: { caseFileId: '43', projectId: '2001', execVersionName: '912' } },
+                  { tool: 'case.update', args: { context: 'tempexec', scope: 'all', field: 'actual', value: '失败' } },
+                ],
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把元气骑士项目新手礼包用例转到当前执行');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await expect(approvalCard).toContainText('准备执行：转到当前执行');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    const versionReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(versionReply).toContainText('请选择要转入的执行版本');
+    await expect(versionReply).toContainText('1. S1（原用例版本）');
+    await expect(versionReply).toContainText('2. S2');
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantTransferLog.length || 0))).toBe(1);
+
+    await page.fill('#assistantInput', '选第2个');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('已将【新手礼包用例】转到当前执行');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.__assistantTransferLog || window.__assistantTransferLog.length < 2) return '';
+      return String(window.__assistantTransferLog[1].execVersionId || '');
+    })).toBe('702');
+    await expect(page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' })).toHaveCount(1);
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantModelCallCount || 0))).toBe(2);
+  });
+
+  test('助手要求转到当前执行时不会被旧的切换执行文件回复截断', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantTransferLog = [];
+      window.__assistantModelCallCount = 0;
+      var recommended = {
+        id: '501',
+        name: '新手礼包用例',
+        projectId: '3001',
+        projectName: '元气骑士项目',
+        versionId: '701',
+        versionName: 'S1',
+        itemCount: 12,
+      };
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.searchExecCandidates = async function() {
+          return {
+            ok: true,
+            query: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            total: 1,
+            selectionRequired: false,
+            truncated: false,
+            recommended: recommended,
+            items: [recommended],
+          };
+        };
+        window.app.caseLibraryApi.transferCaseFileToExec = async function(args) {
+          window.__assistantTransferLog.push(Object.assign({}, args || {}));
+          return {
+            ok: true,
+            caseFileId: '501',
+            name: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+          };
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function() {
+          window.__assistantModelCallCount += 1;
+          if (window.__assistantModelCallCount === 1) {
+            return {
+              ok: true,
+              content: '已为你切换到“元气骑士项目新手礼包用例”执行文件。',
+            };
+          }
+          if (window.__assistantModelCallCount === 2) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                mcp: {
+                  tool: 'case_library.search_exec_candidates',
+                  args: {
+                    projectName: '元气骑士项目',
+                    query: '新手礼包用例',
+                  },
+                },
+                response: '',
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                tool: 'case_library.transfer_to_exec',
+                args: {
+                  caseFileId: '501',
+                  projectId: '3001',
+                },
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把元气骑士项目新手礼包用例转到当前执行');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await expect(approvalCard).toContainText('准备执行：转到当前执行');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('已将【新手礼包用例】转到当前执行');
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantModelCallCount || 0))).toBe(3);
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.__assistantTransferLog || !window.__assistantTransferLog.length) return '';
+      return String(window.__assistantTransferLog[0].caseFileId || '');
+    })).toBe('501');
+  });
+
+  test('助手要求转到当前执行时不会误用旧的执行文件切换工具', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantTransferLog = [];
+      window.__assistantModelCallCount = 0;
+      window.__assistantSwitchFileCallCount = 0;
+      var recommended = {
+        id: '501',
+        name: '新手礼包用例',
+        projectId: '3001',
+        projectName: '元气骑士项目',
+        versionId: '701',
+        versionName: 'S1',
+        itemCount: 12,
+      };
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.searchExecCandidates = async function() {
+          return {
+            ok: true,
+            query: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            total: 1,
+            selectionRequired: false,
+            truncated: false,
+            recommended: recommended,
+            items: [recommended],
+          };
+        };
+        window.app.caseLibraryApi.transferCaseFileToExec = async function(args) {
+          window.__assistantTransferLog.push(Object.assign({}, args || {}));
+          return {
+            ok: true,
+            caseFileId: '501',
+            name: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+          };
+        };
+      }
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var originalCallTool = window.app.assistantMcpApi.callTool.bind(window.app.assistantMcpApi);
+        window.app.assistantMcpApi.callTool = async function(tool, args) {
+          if (tool === 'tempexec.switch_file') {
+            window.__assistantSwitchFileCallCount += 1;
+            return {
+              ok: true,
+              data: {
+                fileId: 'exec-501',
+                fileName: '元气骑士项目新手礼包用例',
+              },
+            };
+          }
+          return originalCallTool(tool, args);
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function() {
+          window.__assistantModelCallCount += 1;
+          if (window.__assistantModelCallCount === 1) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                mcp: {
+                  tool: 'tempexec.switch_file',
+                  args: {
+                    name: '元气骑士项目新手礼包用例',
+                  },
+                },
+                response: '已为你切换到“元气骑士项目新手礼包用例”执行文件。',
+              }),
+            };
+          }
+          if (window.__assistantModelCallCount === 2) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                mcp: {
+                  tool: 'case_library.search_exec_candidates',
+                  args: {
+                    projectName: '元气骑士项目',
+                    query: '新手礼包用例',
+                  },
+                },
+                response: '',
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                tool: 'case_library.transfer_to_exec',
+                args: {
+                  caseFileId: '501',
+                  projectId: '3001',
+                },
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把元气骑士项目新手礼包用例转到当前执行');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await expect(approvalCard).toContainText('准备执行：转到当前执行');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('已将【新手礼包用例】转到当前执行');
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantModelCallCount || 0))).toBe(3);
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantSwitchFileCallCount || 0))).toBe(1);
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.__assistantTransferLog || !window.__assistantTransferLog.length) return '';
+      return String(window.__assistantTransferLog[0].caseFileId || '');
+    })).toBe('501');
+  });
+
+  test('助手在上一轮要求用例ID后仍会优先按转执行处理', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantTransferLog = [];
+      window.__assistantModelCallCount = 0;
+      window.__assistantCaseListToolCount = 0;
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-file-1',
+            name: '狼人技能优化',
+            projectId: '3001',
+            versionId: '701',
+            cases: [
+              { id: '95', module: '通用', title: '狼人技能优化', priority: 'P1', preconditions: '进入房间', steps: '查看技能说明', expected: '技能说明正确', remark: '当前查看用例', actual: '通过' },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-file-1';
+      }
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.searchExecCandidates = async function() {
+          return {
+            ok: true,
+            query: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            total: 1,
+            selectionRequired: false,
+            truncated: false,
+            recommended: {
+              id: '501',
+              name: '新手礼包用例',
+              projectId: '3001',
+              projectName: '元气骑士项目',
+              versionId: '701',
+              versionName: 'S1',
+              itemCount: 12,
+            },
+            items: [{
+              id: '501',
+              name: '新手礼包用例',
+              projectId: '3001',
+              projectName: '元气骑士项目',
+              versionId: '701',
+              versionName: 'S1',
+              itemCount: 12,
+            }],
+          };
+        };
+        window.app.caseLibraryApi.transferCaseFileToExec = async function(args) {
+          window.__assistantTransferLog.push(Object.assign({}, args || {}));
+          return {
+            ok: true,
+            caseFileId: '501',
+            name: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+          };
+        };
+      }
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var originalCallTool = window.app.assistantMcpApi.callTool.bind(window.app.assistantMcpApi);
+        window.app.assistantMcpApi.callTool = async function(tool, args) {
+          if (tool === 'cases.list_current') {
+            window.__assistantCaseListToolCount += 1;
+          }
+          return originalCallTool(tool, args);
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function() {
+          window.__assistantModelCallCount += 1;
+          if (window.__assistantModelCallCount === 1) {
+            return { ok: true, content: '你可以继续直接发我：1. 用例 ID。2. 完整标题。' };
+          }
+          if (window.__assistantModelCallCount === 2) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                mcp: {
+                  tool: 'case_library.search_exec_candidates',
+                  args: {
+                    projectName: '元气骑士项目',
+                    query: '新手礼包用例',
+                  },
+                },
+                response: '',
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                tool: 'case_library.transfer_to_exec',
+                args: {
+                  caseFileId: '501',
+                  projectId: '3001',
+                },
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '模糊问题');
+    await page.click('#assistantSendBtn');
+    await expect(page.locator('#assistantMessages')).toContainText('你可以继续直接发我：1. 用例 ID。2. 完整标题。');
+
+    await page.fill('#assistantInput', '帮我把元气骑士项目新手礼包用例转到当前执行');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await expect(approvalCard).toContainText('准备执行：转到当前执行');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('已将【新手礼包用例】转到当前执行');
+    await expect(page.locator('#assistantMessages')).not.toContainText('当前正在查看用例：狼人技能优化');
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantModelCallCount || 0))).toBe(3);
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantCaseListToolCount || 0))).toBe(0);
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.__assistantTransferLog || !window.__assistantTransferLog.length) return '';
+      return String(window.__assistantTransferLog[0].caseFileId || '');
+    })).toBe('501');
+  });
+
+
+  test('助手遇到多个候选时会先让用户选用例和执行版本再转执行', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantTransferLog = [];
+      window.__assistantModelCallCount = 0;
+      var candidates = [
+        {
+          id: '601',
+          name: '新手礼包用例-iOS',
+          projectId: '3001',
+          projectName: '元气骑士项目',
+          versionId: '701',
+          versionName: 'S1',
+          itemCount: 8,
+        },
+        {
+          id: '602',
+          name: '新手礼包用例-安卓',
+          projectId: '3001',
+          projectName: '元气骑士项目',
+          versionId: '701',
+          versionName: 'S1',
+          itemCount: 9,
+        },
+      ];
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.searchExecCandidates = async function() {
+          return {
+            ok: true,
+            query: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            total: candidates.length,
+            selectionRequired: true,
+            truncated: false,
+            items: candidates.slice(),
+          };
+        };
+        window.app.caseLibraryApi.transferCaseFileToExec = async function(args) {
+          var payload = Object.assign({}, args || {});
+          window.__assistantTransferLog.push(payload);
+          if (!payload.execVersionId) {
+            return {
+              ok: true,
+              versionSelectionRequired: true,
+              caseFileId: String(payload.caseFileId || ''),
+              name: String(payload.caseFileId === '602' ? '新手礼包用例-安卓' : '新手礼包用例-iOS'),
+              projectId: '3001',
+              projectName: '元气骑士项目',
+              importVersionId: '701',
+              importVersionName: 'S1',
+              totalVersions: 2,
+              items: [
+                { id: '701', name: 'S1', isImportedVersion: true },
+                { id: '702', name: 'S2' },
+              ],
+            };
+          }
+          return {
+            ok: true,
+            caseFileId: String(payload.caseFileId || ''),
+            name: String(payload.caseFileId === '602' ? '新手礼包用例-安卓' : '新手礼包用例-iOS'),
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            versionId: String(payload.execVersionId || ''),
+            versionName: String(payload.execVersionId === '702' ? 'S2' : 'S1'),
+          };
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'resolve_exec_transfer_choice') {
+            var latestInput = String(payload.latestUserInput || '');
+            if (latestInput.indexOf('S2') !== -1) {
+              return {
+                ok: true,
+                content: '{"mode":"select","selectedIndex":2}',
+              };
+            }
+            return {
+              ok: true,
+              content: '{"mode":"invalid","response":""}',
+            };
+          }
+          window.__assistantModelCallCount += 1;
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                tool: 'case_library.search_exec_candidates',
+                args: {
+                  projectName: '元气骑士项目',
+                  query: '新手礼包用例',
+                },
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把元气骑士项目新手礼包用例转到当前执行');
+    await page.click('#assistantSendBtn');
+
+    const candidateReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(candidateReply).toContainText('找到 2 个候选用例，请先选择再转执行');
+    await expect(candidateReply).toContainText('1. 新手礼包用例-iOS');
+    await expect(candidateReply).toContainText('2. 新手礼包用例-安卓');
+
+    await page.fill('#assistantInput', '选第2个');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await expect(approvalCard).toContainText('准备执行：转到当前执行');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    const versionReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(versionReply).toContainText('请选择要转入的执行版本');
+    await expect(versionReply).toContainText('1. S1（原用例版本）');
+    await expect(versionReply).toContainText('2. S2');
+
+    await page.fill('#assistantInput', 'S2');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('已将【新手礼包用例-安卓】转到当前执行');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.__assistantTransferLog || window.__assistantTransferLog.length < 2) return '';
+      return String(window.__assistantTransferLog[1].execVersionId || '');
+    })).toBe('702');
+    await expect(page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' })).toHaveCount(1);
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantModelCallCount || 0))).toBe(1);
+  });
+
+  test('助手遇到不存在的执行版本时会先确认是否新建再继续转执行', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantTransferLog = [];
+      window.__assistantModelCallCount = 0;
+      var recommended = {
+        id: '501',
+        name: '新手礼包用例',
+        projectId: '3001',
+        projectName: '元气骑士项目',
+        versionId: '701',
+        versionName: 'S1',
+        itemCount: 12,
+      };
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.searchExecCandidates = async function() {
+          return {
+            ok: true,
+            query: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            total: 1,
+            selectionRequired: false,
+            truncated: false,
+            recommended: recommended,
+            items: [recommended],
+          };
+        };
+        window.app.caseLibraryApi.transferCaseFileToExec = async function(args) {
+          var payload = Object.assign({}, args || {});
+          window.__assistantTransferLog.push(payload);
+          if (!payload.execVersionId && !payload.execVersionName) {
+            return {
+              ok: true,
+              versionSelectionRequired: true,
+              caseFileId: '501',
+              name: '新手礼包用例',
+              projectId: '3001',
+              projectName: '元气骑士项目',
+              importVersionId: '701',
+              importVersionName: 'S1',
+              totalVersions: 1,
+              items: [
+                { id: '701', name: 'S1', isImportedVersion: true },
+              ],
+            };
+          }
+          if (payload.execVersionName === 'S3' && payload.createVersionIfMissing !== true) {
+            return {
+              ok: true,
+              versionCreateConfirmRequired: true,
+              caseFileId: '501',
+              name: '新手礼包用例',
+              projectId: '3001',
+              projectName: '元气骑士项目',
+              requestedVersionName: 'S3',
+              totalVersions: 1,
+              items: [
+                { id: '701', name: 'S1', isImportedVersion: true },
+              ],
+            };
+          }
+          return {
+            ok: true,
+            caseFileId: '501',
+            name: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            versionId: '703',
+            versionName: 'S3',
+            createdVersionId: '703',
+            createdVersionName: 'S3',
+            createdVersionCreated: true,
+          };
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'resolve_exec_transfer_choice') {
+            var latestInput = String(payload.latestUserInput || '');
+            if (latestInput.indexOf('S3') !== -1) {
+              return {
+                ok: true,
+                content: '{"mode":"create_confirm","requestedName":"S3"}',
+              };
+            }
+            return {
+              ok: true,
+              content: '{"mode":"invalid","response":""}',
+            };
+          }
+          window.__assistantModelCallCount += 1;
+          if (window.__assistantModelCallCount === 1) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                mcp: {
+                  tool: 'case_library.search_exec_candidates',
+                  args: {
+                    projectName: '元气骑士项目',
+                    query: '新手礼包用例',
+                  },
+                },
+                response: '',
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                tool: 'case_library.transfer_to_exec',
+                args: {
+                  caseFileId: '501',
+                  projectId: '3001',
+                },
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把元气骑士项目新手礼包用例转到当前执行');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await expect(approvalCard).toContainText('准备执行：转到当前执行');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('请选择要转入的执行版本');
+
+    await page.fill('#assistantInput', 'S3');
+    await page.click('#assistantSendBtn');
+
+    const createConfirmReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(createConfirmReply).toContainText('当前项目下不存在执行版本【S3】');
+    await expect(createConfirmReply).toContainText('回复“是/新建”继续');
+    await expect(createConfirmReply.getByRole('button', { name: '新建并继续' })).toBeVisible();
+    await expect(createConfirmReply.getByRole('button', { name: '取消' })).toBeVisible();
+
+    await createConfirmReply.getByRole('button', { name: '新建并继续' }).click();
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('已新建版本【S3】，并将【新手礼包用例】转到当前执行');
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantTransferLog.length || 0))).toBe(2);
+    await expect(page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' })).toHaveCount(1);
+  });
+
+  test('助手拒绝新建不存在的执行版本后会保留版本选择上下文', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantTransferLog = [];
+      window.__assistantModelCallCount = 0;
+      var recommended = {
+        id: '501',
+        name: '新手礼包用例',
+        projectId: '3001',
+        projectName: '元气骑士项目',
+        versionId: '701',
+        versionName: 'S1',
+        itemCount: 12,
+      };
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.searchExecCandidates = async function() {
+          return {
+            ok: true,
+            query: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            total: 1,
+            selectionRequired: false,
+            truncated: false,
+            recommended: recommended,
+            items: [recommended],
+          };
+        };
+        window.app.caseLibraryApi.transferCaseFileToExec = async function(args) {
+          var payload = Object.assign({}, args || {});
+          window.__assistantTransferLog.push(payload);
+          if (!payload.execVersionId && !payload.execVersionName) {
+            return {
+              ok: true,
+              versionSelectionRequired: true,
+              caseFileId: '501',
+              name: '新手礼包用例',
+              projectId: '3001',
+              projectName: '元气骑士项目',
+              importVersionId: '701',
+              importVersionName: 'S1',
+              totalVersions: 1,
+              items: [
+                { id: '701', name: 'S1', isImportedVersion: true },
+              ],
+            };
+          }
+          if (payload.execVersionName === 'S3' && payload.createVersionIfMissing !== true) {
+            return {
+              ok: true,
+              versionCreateConfirmRequired: true,
+              caseFileId: '501',
+              name: '新手礼包用例',
+              projectId: '3001',
+              projectName: '元气骑士项目',
+              requestedVersionName: 'S3',
+              totalVersions: 1,
+              items: [
+                { id: '701', name: 'S1', isImportedVersion: true },
+              ],
+            };
+          }
+          return {
+            ok: true,
+            caseFileId: '501',
+            name: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            versionId: '701',
+            versionName: 'S1',
+          };
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'resolve_exec_transfer_choice') {
+            var latestInput = String(payload.latestUserInput || '');
+            if (latestInput.indexOf('S1') !== -1) {
+              return {
+                ok: true,
+                content: '{"mode":"select","selectedIndex":1}',
+              };
+            }
+            if (latestInput.indexOf('S3') !== -1) {
+              return {
+                ok: true,
+                content: '{"mode":"create_confirm","requestedName":"S3"}',
+              };
+            }
+            return {
+              ok: true,
+              content: '{"mode":"invalid","response":""}',
+            };
+          }
+          window.__assistantModelCallCount += 1;
+          if (window.__assistantModelCallCount === 1) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                mcp: {
+                  tool: 'case_library.search_exec_candidates',
+                  args: {
+                    projectName: '元气骑士项目',
+                    query: '新手礼包用例',
+                  },
+                },
+                response: '',
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                tool: 'case_library.transfer_to_exec',
+                args: {
+                  caseFileId: '501',
+                  projectId: '3001',
+                },
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把元气骑士项目新手礼包用例转到当前执行');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await expect(approvalCard).toContainText('准备执行：转到当前执行');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('请选择要转入的执行版本');
+
+    await page.fill('#assistantInput', 'S3');
+    await page.click('#assistantSendBtn');
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('当前项目下不存在执行版本【S3】');
+
+    const denyCreateReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(denyCreateReply.getByRole('button', { name: '取消' })).toBeVisible();
+    await denyCreateReply.getByRole('button', { name: '取消' }).click();
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('已取消新建版本，你可以继续回复“选第1个”或直接回复现有版本名');
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantTransferLog.length || 0))).toBe(1);
+
+    await page.fill('#assistantInput', 'S1');
+    await page.click('#assistantSendBtn');
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('已将【新手礼包用例】转到当前执行');
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantTransferLog.length || 0))).toBe(2);
+  });
+
+
+  test('助手遇到纯数字执行版本输入时会先由模型判断再确认是否按新版本处理', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantTransferLog = [];
+      window.__assistantModelCallCount = 0;
+      window.__assistantVersionChoiceCalls = 0;
+      var recommended = {
+        id: '501',
+        name: '新手礼包用例',
+        projectId: '3001',
+        projectName: '元气骑士项目',
+        versionId: '701',
+        versionName: 'S1',
+        itemCount: 12,
+      };
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.searchExecCandidates = async function() {
+          return {
+            ok: true,
+            query: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            total: 1,
+            selectionRequired: false,
+            truncated: false,
+            recommended: recommended,
+            items: [recommended],
+          };
+        };
+        window.app.caseLibraryApi.transferCaseFileToExec = async function(args) {
+          var payload = Object.assign({}, args || {});
+          window.__assistantTransferLog.push(payload);
+          if (!payload.execVersionId && !payload.execVersionName) {
+            return {
+              ok: true,
+              versionSelectionRequired: true,
+              caseFileId: '501',
+              name: '新手礼包用例',
+              projectId: '3001',
+              projectName: '元气骑士项目',
+              importVersionId: '701',
+              importVersionName: 'S1',
+              totalVersions: 1,
+              items: [
+                { id: '701', name: 'S1', isImportedVersion: true },
+              ],
+            };
+          }
+          return {
+            ok: true,
+            caseFileId: '501',
+            name: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            versionId: '912',
+            versionName: '912',
+            createdVersionId: '912',
+            createdVersionName: '912',
+            createdVersionCreated: payload.createVersionIfMissing === true,
+          };
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'resolve_exec_transfer_choice') {
+            var latestInput = String(payload.latestUserInput || '');
+            window.__assistantVersionChoiceCalls += 1;
+            if (latestInput.indexOf('S1') !== -1) {
+              return {
+                ok: true,
+                content: '{"mode":"select","selectedIndex":1}',
+              };
+            }
+            if (latestInput.indexOf('912') === -1) {
+              return {
+                ok: true,
+                content: '{"mode":"invalid","response":""}',
+              };
+            }
+            return {
+              ok: true,
+              content: '{"mode":"clarify_new_name","requestedName":"912","response":"我没有在当前可选执行版本中识别到【912】。这是你想输入的新版本名吗？"}',
+            };
+          }
+          window.__assistantModelCallCount += 1;
+          if (window.__assistantModelCallCount === 1) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                mcp: {
+                  tool: 'case_library.search_exec_candidates',
+                  args: {
+                    projectName: '元气骑士项目',
+                    query: '新手礼包用例',
+                  },
+                },
+                response: '',
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                tool: 'case_library.transfer_to_exec',
+                args: {
+                  caseFileId: '501',
+                  projectId: '3001',
+                },
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把元气骑士项目新手礼包用例转到当前执行');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('请选择要转入的执行版本');
+
+    await page.fill('#assistantInput', '912');
+    await page.click('#assistantSendBtn');
+
+    const clarifyReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(clarifyReply).toContainText('我没有在当前可选执行版本中识别到【912】');
+    await expect(clarifyReply.locator('.assistant-task-card[data-task-status="waiting"]')).toBeVisible();
+    await expect(clarifyReply.getByRole('button', { name: '继续' })).toBeVisible();
+    await expect(clarifyReply.getByRole('button', { name: '取消' })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantVersionChoiceCalls || 0))).toBe(2);
+
+    await clarifyReply.getByRole('button', { name: '继续' }).click();
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已新建版本【912】，并将【新手礼包用例】转到当前执行');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantTransferLog.length || 0))).toBe(2);
+    await expect.poll(() => page.evaluate(() => {
+      var list = window.__assistantTransferLog || [];
+      return JSON.stringify(list[1] || {});
+    })).toContain('"execVersionName":"912"');
+    await expect.poll(() => page.evaluate(() => {
+      var list = window.__assistantTransferLog || [];
+      return JSON.stringify(list[1] || {});
+    })).toContain('"createVersionIfMissing":true');
+  });
+
+  test('助手否认纯数字新版本名后会调用模型判断更像现有版本还是回到选择', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantTransferLog = [];
+      window.__assistantModelCallCount = 0;
+      window.__assistantInterpretVersionCalls = 0;
+      window.__assistantVersionChoiceCalls = 0;
+      var recommended = {
+        id: '501',
+        name: '新手礼包用例',
+        projectId: '3001',
+        projectName: '元气骑士项目',
+        versionId: '701',
+        versionName: 'S1',
+        itemCount: 12,
+      };
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.searchExecCandidates = async function() {
+          return {
+            ok: true,
+            query: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            total: 1,
+            selectionRequired: false,
+            truncated: false,
+            recommended: recommended,
+            items: [recommended],
+          };
+        };
+        window.app.caseLibraryApi.transferCaseFileToExec = async function(args) {
+          var payload = Object.assign({}, args || {});
+          window.__assistantTransferLog.push(payload);
+          if (!payload.execVersionId && !payload.execVersionName) {
+            return {
+              ok: true,
+              versionSelectionRequired: true,
+              caseFileId: '501',
+              name: '新手礼包用例',
+              projectId: '3001',
+              projectName: '元气骑士项目',
+              importVersionId: '701',
+              importVersionName: 'S1',
+              totalVersions: 1,
+              items: [
+                { id: '701', name: 'S1', isImportedVersion: true },
+              ],
+            };
+          }
+          return {
+            ok: true,
+            caseFileId: '501',
+            name: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            versionId: '701',
+            versionName: 'S1',
+          };
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'resolve_exec_transfer_choice') {
+            var latestInput = String(payload.latestUserInput || '');
+            window.__assistantVersionChoiceCalls += 1;
+            if (latestInput.indexOf('S1') !== -1) {
+              return {
+                ok: true,
+                content: '{"mode":"select","selectedIndex":1}',
+              };
+            }
+            if (latestInput.indexOf('912') === -1) {
+              return {
+                ok: true,
+                content: '{"mode":"invalid","response":""}',
+              };
+            }
+            return {
+              ok: true,
+              content: '{"mode":"clarify_new_name","requestedName":"912","response":"我没有在当前可选执行版本中识别到【912】。这是你想输入的新版本名吗？"}',
+            };
+          }
+          if (payload && payload.task === 'interpret_exec_transfer_version_name') {
+            window.__assistantInterpretVersionCalls += 1;
+            return {
+              ok: true,
+              content: '{"mode":"retry_existing","versionName":"S1","response":"我先不把【912】当作新版本，更像是现有版本【S1】。如果是它，直接回复版本名即可。"}',
+            };
+          }
+          window.__assistantModelCallCount += 1;
+          if (window.__assistantModelCallCount === 1) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                mcp: {
+                  tool: 'case_library.search_exec_candidates',
+                  args: {
+                    projectName: '元气骑士项目',
+                    query: '新手礼包用例',
+                  },
+                },
+                response: '',
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                tool: 'case_library.transfer_to_exec',
+                args: {
+                  caseFileId: '501',
+                  projectId: '3001',
+                },
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把元气骑士项目新手礼包用例转到当前执行');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('请选择要转入的执行版本');
+
+    await page.fill('#assistantInput', '912');
+    await page.click('#assistantSendBtn');
+
+    const clarifyReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(clarifyReply).toContainText('我没有在当前可选执行版本中识别到【912】');
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantVersionChoiceCalls || 0))).toBe(2);
+    await clarifyReply.getByRole('button', { name: '取消' }).click();
+
+    const guidanceReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(guidanceReply).toContainText('更像是现有版本【S1】');
+    await expect(guidanceReply.locator('.assistant-task-card[data-task-status="waiting"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantInterpretVersionCalls || 0))).toBe(1);
+
+    await page.fill('#assistantInput', 'S1');
+    await page.click('#assistantSendBtn');
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('已将【新手礼包用例】转到当前执行');
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantTransferLog.length || 0))).toBe(2);
+  });
+
+  test('多步骤模型执行会展示任务状态卡并动态更新步骤状态', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var oldCallTool = window.app.assistantMcpApi.callTool;
+        window.app.assistantMcpApi.callTool = async function(name, args) {
+          if (String(name || '') === 'page.get_data') {
+            await new Promise(function(resolve) {
+              window.setTimeout(resolve, 450);
+            });
+          }
+          return oldCallTool.call(this, name, args);
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.__assistantTaskStateCallCount = 0;
+        window.app.assistantApi.callModel = async function() {
+          window.__assistantTaskStateCallCount += 1;
+          if (window.__assistantTaskStateCallCount === 1) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                mcp: {
+                  calls: [
+                    { tool: 'page.current_info', args: {} },
+                    { tool: 'page.get_data', args: { tab: 'assign' } },
+                  ],
+                },
+                response: '',
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: '当前页面信息和页面数据都已读取完成。',
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '先看看当前页面，再读取一下页面数据');
+    await page.click('#assistantSendBtn');
+
+    const taskCard = page.locator('#assistantMessages .assistant-msg.ai .assistant-task-card').last();
+    await expect(taskCard).toBeVisible();
+    await expect(taskCard).toContainText('当前任务');
+    await expect(taskCard.locator('.assistant-task-step')).toHaveCount(2);
+    await expect.poll(async () => {
+      return await taskCard.locator('.assistant-task-step[data-step-status="running"]').count();
+    }).toBeGreaterThan(0);
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('当前页面是：');
+    await expect(finalReply).toContainText('按你的意图返回页面数据');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
+    await expect(finalReply.locator('.assistant-task-step[data-step-status="completed"]')).toHaveCount(2);
+  });
+
+
+  test('跨域复合写指令会优先进入模型任务态而不是被批量修改分支抢走', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantCompositeTaskCalls = [];
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          window.__assistantCompositeTaskCalls.push(String(inputText || ''));
+          if (window.__assistantCompositeTaskCalls.length === 1) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                mcp: {
+                  calls: [
+                    { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例' } },
+                    { tool: 'case_library.transfer_to_exec', args: { caseFileId: 'case-file-1', projectId: '3001', execVersionId: 'ver-1' } },
+                    { tool: 'case.update', args: { context: 'tempexec', scope: 'all', field: 'actual', value: '失败' } },
+                    { tool: 'ui.click_control', args: { controlId: 'tempexecArchiveBtn', controlText: '归档' } },
+                  ],
+                },
+                response: '',
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: '皮肤用例已转到当前执行，执行结果已批量改为失败，并已归档。',
+          };
+        };
+      }
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var oldCallTool = window.app.assistantMcpApi.callTool;
+        window.app.assistantMcpApi.callTool = async function(name, args) {
+          var toolName = String(name || '');
+          var safeArgs = args && typeof args === 'object' ? JSON.parse(JSON.stringify(args)) : {};
+          if (toolName === 'case_library.search_exec_candidates') {
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                query: '皮肤用例',
+                projectId: '3001',
+                projectName: '狼人项目',
+                selectionRequired: false,
+                items: [
+                  { id: 'case-file-1', name: '皮肤用例', projectId: '3001', projectName: '狼人项目' },
+                ],
+              },
+            };
+          }
+          if (toolName === 'case_library.transfer_to_exec' && safeArgs.confirmed !== true) {
+            return {
+              ok: false,
+              tool: toolName,
+              reason: 'confirm_required',
+              data: {
+                actionLabel: '转到当前执行',
+                message: '该操作会把目标用例加入当前执行，并可能同步覆盖已有执行结果。',
+              },
+            };
+          }
+          if (toolName === 'case_library.transfer_to_exec') {
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                caseFileId: 'case-file-1',
+                name: '皮肤用例',
+                projectId: '3001',
+                projectName: '狼人项目',
+                execVersionId: 'ver-1',
+                execVersionName: '1.0.0',
+              },
+            };
+          }
+          if (toolName === 'case.update' && safeArgs.confirmed !== true) {
+            return {
+              ok: false,
+              tool: toolName,
+              reason: 'confirm_required',
+              data: {
+                actionLabel: '修改用例',
+                message: '该操作会写入用例内容，请确认继续。',
+              },
+            };
+          }
+          if (toolName === 'case.update') {
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                context: 'tempexec',
+                scope: 'all',
+                count: 12,
+                field: 'actual',
+                value: '失败',
+              },
+            };
+          }
+          if (toolName === 'ui.click_control') {
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                controlId: 'tempexecArchiveBtn',
+                controlText: '归档',
+              },
+            };
+          }
+          return oldCallTool.call(this, name, args);
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把皮肤用例也转到这个版本的执行，并把执行结果全部改为失败，再归档');
+    await page.click('#assistantSendBtn');
+
+    const taskCard = page.locator('#assistantMessages .assistant-msg.ai .assistant-task-card').last();
+    await expect(taskCard).toBeVisible();
+    await expect(taskCard.locator('.assistant-task-step')).toHaveCount(4);
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantCompositeTaskCalls) ? window.__assistantCompositeTaskCalls : [];
+      return list.join('|');
+    })).toContain('帮我把皮肤用例也转到这个版本的执行，并把执行结果全部改为失败，再归档');
+
+    const transferApproval = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await expect(transferApproval).toBeVisible();
+    await transferApproval.getByRole('button', { name: '允许操作' }).click();
+
+    const updateApproval = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改用例' }).last();
+    await expect(updateApproval).toBeVisible();
+    await updateApproval.getByRole('button', { name: '允许操作' }).click();
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已将【皮肤用例】转到当前执行');
+    await expect(finalReply).toContainText('已批量修改用例：共 12 条，执行结果 = 失败');
+    await expect(finalReply).toContainText('已执行点击：归档');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
+    await expect(finalReply.locator('.assistant-task-step[data-step-status="completed"]')).toHaveCount(4);
+  });
+
+
+  test('复合转执行任务会先展示完整任务列表，并在候选确认后自动使用唯一版本继续', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantSequentialTransferOrder = [];
+      window.__assistantPreviewPlanCalls = 0;
+      window.__assistantResolveVersionCalls = 0;
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'plan_task_preview') {
+            window.__assistantPreviewPlanCalls += 1;
+            return {
+              ok: true,
+              content: JSON.stringify({
+                title: '当前任务',
+                mcp: {
+                  calls: [
+                    { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例' } },
+                    { tool: 'case_library.transfer_to_exec', args: { caseFileId: 'case-file-1', projectId: '3001', execVersionName: '912' } },
+                    { tool: 'case.update', args: { context: 'tempexec', scope: 'all', field: 'actual', value: '失败' } },
+                    { tool: 'ui.click_control', args: { controlId: 'tempexecArchiveBtn', controlText: '归档' } },
+                  ],
+                },
+                response: '',
+              }),
+            };
+          }
+          if (payload && payload.task === 'resolve_exec_transfer_choice') {
+            window.__assistantResolveVersionCalls += 1;
+            return {
+              ok: true,
+              content: '{"mode":"select","selectedIndex":1}',
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                tool: 'case_library.search_exec_candidates',
+                args: { query: '皮肤用例' },
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var oldCallTool = window.app.assistantMcpApi.callTool;
+        window.app.assistantMcpApi.callTool = async function(name, args) {
+          var toolName = String(name || '');
+          var safeArgs = args && typeof args === 'object' ? JSON.parse(JSON.stringify(args)) : {};
+          if (toolName === 'case_library.search_exec_candidates') {
+            window.__assistantSequentialTransferOrder.push('search');
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                query: '皮肤用例',
+                projectId: '3001',
+                projectName: '狼人项目',
+                selectionRequired: true,
+                items: [
+                  { id: 'case-file-1', name: '111的新皮肤', projectId: '3001', projectName: '狼人项目' },
+                  { id: 'case-file-2', name: '2025年11月新皮肤', projectId: '3001', projectName: '狼人项目' },
+                ],
+              },
+            };
+          }
+          if (toolName === 'case_library.transfer_to_exec') {
+            if (safeArgs.execVersionId) {
+              window.__assistantSequentialTransferOrder.push('transfer_version');
+              return {
+                ok: true,
+                tool: toolName,
+                data: {
+                  caseFileId: safeArgs.caseFileId || 'case-file-1',
+                  name: '111的新皮肤',
+                  projectId: '3001',
+                  projectName: '狼人项目',
+                  execVersionId: String(safeArgs.execVersionId || 'ver-912'),
+                  execVersionName: '912',
+                },
+              };
+            }
+            window.__assistantSequentialTransferOrder.push('transfer_candidate');
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                caseFileId: safeArgs.caseFileId || 'case-file-1',
+                name: '111的新皮肤',
+                projectId: safeArgs.projectId || '3001',
+                projectName: '狼人项目',
+                versionSelectionRequired: true,
+                items: [
+                  { id: 'ver-912', name: '912', updatedAt: '2026-03-08 10:18:40' },
+                ],
+              },
+            };
+          }
+          if (toolName === 'case.update' && safeArgs.confirmed !== true) {
+            return {
+              ok: false,
+              tool: toolName,
+              reason: 'confirm_required',
+              data: {
+                actionLabel: '修改用例',
+                message: '该操作会写入用例内容，请确认继续。',
+              },
+            };
+          }
+          if (toolName === 'case.update') {
+            window.__assistantSequentialTransferOrder.push('update');
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                context: 'tempexec',
+                scope: 'all',
+                count: 12,
+                field: 'actual',
+                value: '失败',
+              },
+            };
+          }
+          if (toolName === 'ui.click_control' && safeArgs.confirmed !== true) {
+            return {
+              ok: false,
+              tool: toolName,
+              reason: 'confirm_required',
+              data: {
+                actionLabel: '点击控件',
+                message: '该控件可能触发写操作，请确认后执行。',
+              },
+            };
+          }
+          if (toolName === 'ui.click_control') {
+            window.__assistantSequentialTransferOrder.push('archive');
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                controlId: 'tempexecArchiveBtn',
+                controlText: '归档',
+              },
+            };
+          }
+          return oldCallTool.call(this, name, args);
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把皮肤用例转到912版本的执行，然后执行结果全部改为失败，再归档');
+    await page.click('#assistantSendBtn');
+
+    const firstReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    const taskCard = firstReply.locator('.assistant-task-card').last();
+    await expect(firstReply).toContainText('找到 2 个候选用例，请先选择再转执行');
+    await expect(taskCard).toBeVisible();
+    await expect(taskCard.locator('.assistant-task-step')).toHaveCount(4);
+    await expect(taskCard).toContainText('搜索要转执行的用例：皮肤用例');
+    await expect(taskCard).toContainText('把选中的用例转到执行版本：912');
+    await expect(taskCard).toContainText('把全部执行结果改为失败');
+    await expect(taskCard).toContainText('归档当前执行用例');
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantPreviewPlanCalls || 0))).toBe(1);
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantSequentialTransferOrder) ? window.__assistantSequentialTransferOrder : [];
+      return list.join('|');
+    })).toBe('search');
+
+    await page.fill('#assistantInput', '选第1个');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').filter({ hasText: '请选择要转入的执行版本' })).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantResolveVersionCalls || 0))).toBe(1);
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantSequentialTransferOrder) ? window.__assistantSequentialTransferOrder : [];
+      return list.join('|');
+    })).toBe('search|transfer_candidate|transfer_version');
+
+    const updateApproval = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改用例' }).last();
+    await expect(updateApproval).toBeVisible();
+    await updateApproval.getByRole('button', { name: '允许操作' }).click();
+
+    const archiveApproval = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：归档当前执行用例' }).last();
+    await expect(archiveApproval).toBeVisible();
+    await archiveApproval.getByRole('button', { name: '允许操作' }).click();
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已将【111的新皮肤】转到当前执行');
+    await expect(finalReply).toContainText('已批量修改用例：共 12 条，执行结果 = 失败');
+    await expect(finalReply).toContainText('已归档当前执行用例：111的新皮肤（已填写归档原因）');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantSequentialTransferOrder) ? window.__assistantSequentialTransferOrder : [];
+      return list.join('|');
+    })).toBe('search|transfer_candidate|transfer_version|update|archive');
+  });
+
+
+  test('旧版转执行批处理工具别名会映射为具体任务描述并继续执行', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(async () => {
+      window.__assistantLegacyAliasOrder = [];
+      window.__assistantLegacyPreviewPlanCalls = 0;
+      window.__assistantLegacyResolveVersionCalls = 0;
+      window.__assistantLegacyAliasProbe = null;
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'alias-probe-exec-1',
+            execSetId: 991,
+            name: '别名探测执行集',
+            cases: [
+              { actual: '未执行' },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'alias-probe-exec-1';
+        window.app.state.tempExecActiveFileId = 'alias-probe-exec-1';
+      }
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var baseCallTool = window.app.assistantMcpApi.callTool;
+        var queryRes = await baseCallTool('case_library.query_exec_cases', {});
+        var batchRes = await baseCallTool('case_library.batch_set_exec_results', { value: '失败' });
+        var archiveRes = await baseCallTool('case_library.batch_archive_cases', {});
+        window.__assistantLegacyAliasProbe = {
+          queryTool: queryRes && queryRes.tool ? String(queryRes.tool) : '',
+          batchTool: batchRes && batchRes.tool ? String(batchRes.tool) : '',
+          batchReason: batchRes && batchRes.reason ? String(batchRes.reason) : '',
+          archiveTool: archiveRes && archiveRes.tool ? String(archiveRes.tool) : '',
+          archiveReason: archiveRes && archiveRes.reason ? String(archiveRes.reason) : '',
+        };
+        window.app.assistantMcpApi.callTool = async function(name, args) {
+          var toolName = String(name || '');
+          var safeArgs = args && typeof args === 'object' ? JSON.parse(JSON.stringify(args)) : {};
+          if (toolName === 'case_library.search_exec_candidates') {
+            window.__assistantLegacyAliasOrder.push('search');
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                query: '皮肤用例',
+                projectId: '3001',
+                projectName: '狼人项目',
+                selectionRequired: true,
+                items: [
+                  { id: 'case-file-1', name: '111的新皮肤', projectId: '3001', projectName: '狼人项目' },
+                  { id: 'case-file-2', name: '2025年11月新皮肤', projectId: '3001', projectName: '狼人项目' },
+                ],
+              },
+            };
+          }
+          if (toolName === 'case_library.transfer_to_exec') {
+            if (safeArgs.execVersionId) {
+              window.__assistantLegacyAliasOrder.push('transfer_version');
+              return {
+                ok: true,
+                tool: toolName,
+                data: {
+                  caseFileId: safeArgs.caseFileId || 'case-file-1',
+                  name: '111的新皮肤',
+                  projectId: '3001',
+                  projectName: '狼人项目',
+                  execVersionId: String(safeArgs.execVersionId || 'ver-912'),
+                  execVersionName: '912',
+                },
+              };
+            }
+            window.__assistantLegacyAliasOrder.push('transfer_candidate');
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                caseFileId: safeArgs.caseFileId || 'case-file-1',
+                name: '111的新皮肤',
+                projectId: safeArgs.projectId || '3001',
+                projectName: '狼人项目',
+                versionSelectionRequired: true,
+                items: [
+                  { id: 'ver-912', name: '912', updatedAt: '2026-03-08 10:18:40' },
+                ],
+              },
+            };
+          }
+          if (toolName === 'cases.list_current') {
+            window.__assistantLegacyAliasOrder.push('list');
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                total: 12,
+                items: [
+                  { id: 'exec-case-1', title: '111的新皮肤' },
+                  { id: 'exec-case-2', title: '111的新皮肤-边界' },
+                ],
+              },
+            };
+          }
+          if (toolName === 'case.update' && safeArgs.confirmed !== true) {
+            return {
+              ok: false,
+              tool: toolName,
+              reason: 'confirm_required',
+              data: {
+                actionLabel: '修改用例',
+                message: '该操作会写入用例内容，请确认继续。',
+              },
+            };
+          }
+          if (toolName === 'case.update') {
+            window.__assistantLegacyAliasOrder.push('update');
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                context: 'tempexec',
+                scope: 'all',
+                count: 12,
+                field: 'actual',
+                value: '失败',
+              },
+            };
+          }
+          if (toolName === 'case_library.batch_archive_exec_cases' && safeArgs.confirmed !== true) {
+            return {
+              ok: false,
+              tool: toolName,
+              reason: 'confirm_required',
+              data: {
+                actionLabel: '归档当前执行用例',
+                message: '将归档“111的新皮肤”；当前仍有未通过项（未执行 12 / 失败 0 / 阻塞 0），确认后将自动补充归档原因。',
+              },
+            };
+          }
+          if (toolName === 'case_library.batch_archive_exec_cases') {
+            window.__assistantLegacyAliasOrder.push('archive');
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                archived: true,
+                fileName: '111的新皮肤',
+                reason: '按用户指令归档；当前仍有未通过用例（未执行 12 / 失败 0 / 阻塞 0）。',
+              },
+            };
+          }
+          return baseCallTool.call(this, name, args);
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'plan_task_preview') {
+            window.__assistantLegacyPreviewPlanCalls += 1;
+            return {
+              ok: true,
+              content: JSON.stringify({
+                title: '当前任务',
+                mcp: {
+                  calls: [
+                    { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例' } },
+                    { tool: 'case_library.transfer_to_exec', args: { caseFileId: 'case-file-1', projectId: '3001', execVersionName: '912' } },
+                    { tool: 'case_library.query_exec_cases', args: {} },
+                    { tool: 'case_library.batch_set_exec_results', args: { value: '失败' } },
+                    { tool: 'case_library.batch_archive_cases', args: {} },
+                  ],
+                },
+                response: '',
+              }),
+            };
+          }
+          if (payload && payload.task === 'resolve_exec_transfer_choice') {
+            window.__assistantLegacyResolveVersionCalls += 1;
+            return {
+              ok: true,
+              content: '{"mode":"select","selectedIndex":1}',
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                calls: [
+                  { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例' } },
+                  { tool: 'case_library.transfer_to_exec', args: { caseFileId: 'case-file-1', projectId: '3001', execVersionName: '912' } },
+                  { tool: 'case_library.query_exec_cases', args: {} },
+                  { tool: 'case_library.batch_set_exec_results', args: { value: '失败' } },
+                  { tool: 'case_library.batch_archive_cases', args: {} },
+                ],
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    const aliasProbe = await page.evaluate(() => window.__assistantLegacyAliasProbe);
+    expect(aliasProbe.queryTool).toBe('cases.list_current');
+    expect(aliasProbe.batchTool).toBe('case_library.batch_update_exec_results');
+    expect(aliasProbe.batchReason).toBe('confirm_required');
+    expect(aliasProbe.archiveTool).toBe('case_library.batch_archive_exec_cases');
+    expect(aliasProbe.archiveReason).toBe('confirm_required');
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把皮肤用例转到912版本的执行，然后执行结果全部改为失败，再归档');
+    await page.click('#assistantSendBtn');
+
+    const firstReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    const taskCard = firstReply.locator('.assistant-task-card').last();
+    await expect(firstReply).toContainText('找到 2 个候选用例，请先选择再转执行');
+    await expect(taskCard).toBeVisible();
+    await expect(taskCard.locator('.assistant-task-step')).toHaveCount(5);
+    await expect(taskCard).toContainText('搜索要转执行的用例：皮肤用例');
+    await expect(taskCard).toContainText('把选中的用例转到执行版本：912');
+    await expect(taskCard).toContainText('读取当前用例列表');
+    await expect(taskCard).toContainText('把全部执行结果改为失败');
+    await expect(taskCard).toContainText('归档当前执行用例');
+    await expect(taskCard).not.toContainText('case_library.query_exec_cases');
+    await expect(taskCard).not.toContainText('case_library.batch_set_exec_results');
+    await expect(taskCard).not.toContainText('case_library.batch_archive_cases');
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantLegacyAliasOrder) ? window.__assistantLegacyAliasOrder : [];
+      return list.join('|');
+    })).toBe('search');
+
+    await page.fill('#assistantInput', '选第1个');
+    await page.click('#assistantSendBtn');
+
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantLegacyResolveVersionCalls || 0))).toBe(1);
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantLegacyAliasOrder) ? window.__assistantLegacyAliasOrder : [];
+      return list.join('|');
+    })).toBe('search|transfer_candidate|transfer_version|list');
+
+    const updateApproval = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改用例' }).last();
+    await expect(updateApproval).toBeVisible();
+    await updateApproval.getByRole('button', { name: '允许操作' }).click();
+
+    const archiveApproval = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：归档当前执行用例' }).last();
+    await expect(archiveApproval).toBeVisible();
+    await archiveApproval.getByRole('button', { name: '允许操作' }).click();
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已将【111的新皮肤】转到当前执行');
+    await expect(finalReply).toContainText('已批量修改用例：共 12 条，执行结果 = 失败');
+    await expect(finalReply).toContainText('已归档当前执行用例：111的新皮肤（已填写归档原因）');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantLegacyAliasOrder) ? window.__assistantLegacyAliasOrder : [];
+      return list.join('|');
+    })).toBe('search|transfer_candidate|transfer_version|list|update|archive');
+  });
+
+
+
+  test('模型先输出缺少 caseFileId 的转执行时会自动改为搜索候选，并在搜索失败后交给模型修正搜索参数', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantRepairPlanCalls = 0;
+      window.__assistantRepairSearchCalls = 0;
+      window.__assistantSearchRetryCalls = [];
+      window.__assistantDirectTransferCalls = 0;
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText, options) {
+          var payload = null;
+          var promptText = options && options.prompt ? String(options.prompt) : '';
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'plan_task_preview') {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                mcp: {
+                  calls: [
+                    { tool: 'page.current_info', args: {} },
+                    { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例' } },
+                    { tool: 'case_library.transfer_to_exec', args: { execVersionName: '912' } },
+                    { tool: 'case.update', args: { field: 'actual', value: '失败', scope: 'all' } },
+                    { tool: 'ui.click_control', args: { controlText: '归档' } },
+                  ],
+                },
+                response: '',
+              }),
+            };
+          }
+          if (payload && payload.task === 'repair_exec_transfer_search_args') {
+            window.__assistantRepairSearchCalls += 1;
+            return {
+              ok: true,
+              content: '{"query":"皮肤用例","caseFileName":"皮肤用例","projectName":"","projectId":"","versionName":"","versionId":""}',
+            };
+          }
+          if (promptText.indexOf('纠正要求：当前用户要的是“把指定用例从用例库转到当前执行”。') !== -1) {
+            window.__assistantRepairPlanCalls += 1;
+            return {
+              ok: true,
+              content: JSON.stringify({
+                mcp: {
+                  calls: [
+                    { tool: 'page.current_info', args: {} },
+                    { tool: 'case_library.search_exec_candidates', args: { query: '皮肤' } },
+                  ],
+                },
+                response: '',
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                calls: [
+                  { tool: 'case_library.transfer_to_exec', args: { execVersionName: '912' } },
+                ],
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var oldCallTool = window.app.assistantMcpApi.callTool;
+        window.app.assistantMcpApi.callTool = async function(name, args) {
+          var toolName = String(name || '');
+          var safeArgs = args && typeof args === 'object' ? JSON.parse(JSON.stringify(args)) : {};
+          if (toolName === 'page.current_info') {
+            return {
+              ok: true,
+              tool: toolName,
+              data: { tab: 'tempexec' },
+            };
+          }
+          if (toolName === 'case_library.search_exec_candidates') {
+            window.__assistantSearchRetryCalls.push(safeArgs);
+            if (safeArgs.query === '皮肤') {
+              return {
+                ok: false,
+                tool: toolName,
+                reason: '未找到匹配用例',
+              };
+            }
+            if (safeArgs.query === '皮肤用例') {
+              return {
+                ok: true,
+                tool: toolName,
+                data: {
+                  query: '皮肤用例',
+                  projectId: '3001',
+                  projectName: '狼人项目',
+                  selectionRequired: true,
+                  items: [
+                    { id: 'case-file-1', name: '111的新皮肤', projectId: '3001', projectName: '狼人项目' },
+                    { id: 'case-file-2', name: '2025年11月新皮肤', projectId: '3001', projectName: '狼人项目' },
+                  ],
+                },
+              };
+            }
+            return {
+              ok: false,
+              tool: toolName,
+              reason: 'unexpected search args',
+            };
+          }
+          if (toolName === 'case_library.transfer_to_exec') {
+            window.__assistantDirectTransferCalls += 1;
+            return {
+              ok: false,
+              tool: toolName,
+              reason: '缺少 caseFileId',
+            };
+          }
+          return oldCallTool.call(this, name, args);
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把皮肤用例转到912版本的执行，然后执行结果全部改为失败，再归档');
+    await page.click('#assistantSendBtn');
+
+    const candidateReply = page.locator('#assistantMessages .assistant-msg.ai').filter({ hasText: '找到 2 个候选用例，请先选择再转执行' }).last();
+    await expect(candidateReply).toBeVisible();
+    await expect(firstReply.locator('.assistant-task-card')).toBeVisible();
+    await expect(page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' })).toHaveCount(0);
+    await expect(firstReply.locator('.assistant-task-card[data-task-status="blocked"]')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantRepairPlanCalls || 0))).toBe(1);
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantRepairSearchCalls || 0))).toBe(1);
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantDirectTransferCalls || 0))).toBe(0);
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantSearchRetryCalls) ? window.__assistantSearchRetryCalls : [];
+      return list.map(function(item) { return String(item && item.query || ''); }).join('|');
+    })).toBe('皮肤|皮肤用例');
+  });
+
+  test('真实转执行 helper 在执行明细延迟加载时会等待就绪后再续跑修改结果', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+    let settingsStore = [];
+    let execSetsStore = [];
+    const execCasesBySet = {
+      '9001': [
+        { id: 5001, order_no: 1, module: '皮肤', title: '新皮肤展示', priority: 'P1', preconditions: '已解锁', steps: '打开皮肤页', expected: '展示新皮肤', actual: '未执行', remark: '' },
+        { id: 5002, order_no: 2, module: '皮肤', title: '新皮肤试穿', priority: 'P1', preconditions: '已解锁', steps: '点击试穿', expected: '试穿成功', actual: '未执行', remark: '' },
+      ],
+    };
+
+    await page.unroute('**/api/**');
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url());
+      const method = route.request().method();
+      const path = url.pathname;
+      function respond(status, body) {
+        return route.fulfill({
+          status: status,
+          contentType: 'application/json',
+          body: JSON.stringify(body),
+        });
+      }
+      if (path === '/api/users/me' && method === 'GET') {
+        return respond(200, { id: 1, username: 'assistant_tester', role: 'admin', level: 'admin' });
+      }
+      if (path === '/api/projects' && method === 'GET') {
+        return respond(200, [
+          { id: 2001, name: '狼人项目', description: '', created_at: '2026-03-01T08:00:00Z', updated_at: '2026-03-01T08:00:00Z' },
+        ]);
+      }
+      if (path === '/api/projects/2001/versions' && method === 'GET') {
+        return respond(200, [
+          { id: 30, project_id: 2001, name: '912', created_at: '2026-03-08T10:18:40Z', updated_at: '2026-03-08T10:18:40Z' },
+        ]);
+      }
+      if (path === '/api/case-files' && method === 'GET') {
+        const pid = String(url.searchParams.get('project_id') || '');
+        const files = [
+          {
+            id: 43,
+            project_id: 2001,
+            version_id: 30,
+            file_name_clean: '111的新皮肤',
+            source: 'import',
+            reuse_enabled: false,
+            association_count: 0,
+            item_count: 2,
+            importer_id: 1,
+            importer_name: 'assistant_tester',
+            imported_at: '2026-03-08T10:10:00Z',
+            updated_at: '2026-03-08T10:20:00Z',
+          },
+          {
+            id: 44,
+            project_id: 2001,
+            version_id: 30,
+            file_name_clean: '2025年11月新皮肤',
+            source: 'import',
+            reuse_enabled: false,
+            association_count: 0,
+            item_count: 2,
+            importer_id: 1,
+            importer_name: 'assistant_tester',
+            imported_at: '2026-03-08T10:11:00Z',
+            updated_at: '2026-03-08T10:19:00Z',
+          },
+        ];
+        return respond(200, pid ? files.filter((item) => String(item.project_id) === pid) : files);
+      }
+      if ((path === '/api/case-files/43/items' || path === '/api/case-files/44/items') && method === 'GET') {
+        return respond(200, [
+          { id: 4301, module: '皮肤', title: '新皮肤展示', priority: 'P1', preconditions: '已解锁', steps: '打开皮肤页', expected: '展示新皮肤' },
+          { id: 4302, module: '皮肤', title: '新皮肤试穿', priority: 'P1', preconditions: '已解锁', steps: '点击试穿', expected: '试穿成功' },
+        ]);
+      }
+      if (path === '/api/settings' && method === 'GET') return respond(200, settingsStore);
+      if (path === '/api/settings' && method === 'PUT') {
+        let payload = {};
+        try { payload = route.request().postDataJSON() || {}; } catch (err) { payload = {}; }
+        settingsStore = Array.isArray(payload.items) ? payload.items.map(function(item) { return item; }) : [];
+        return respond(200, settingsStore);
+      }
+      if (path === '/api/exec/sets' && method === 'GET') {
+        const statusFilter = String(url.searchParams.get('status_filter') || '');
+        if (statusFilter === 'archived') return respond(200, []);
+        return respond(200, execSetsStore);
+      }
+      if (path === '/api/exec/sets/from-case-file' && method === 'POST') {
+        let payload = {};
+        try { payload = route.request().postDataJSON() || {}; } catch (err) { payload = {}; }
+        const execSet = {
+          id: 9001,
+          case_file_id: Number(payload.case_file_id || 43),
+          project_id: 2001,
+          version_id: Number(payload.exec_version_id || 30),
+          name: '111的新皮肤',
+          status: 'active',
+          reuse_enabled: false,
+          association_enabled: false,
+          created_at: '2026-03-08T10:20:00Z',
+          updated_at: '2026-03-08T10:20:00Z',
+          total_cases: 2,
+        };
+        execSetsStore = [execSet];
+        return respond(200, execSet);
+      }
+      if (path === '/api/exec/sets/9001/case-library-sync' && method === 'POST') {
+        return respond(200, { ok: true, changed: false });
+      }
+      if (path === '/api/exec/sets/9001/cases' && method === 'GET') {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        return respond(200, execCasesBySet['9001']);
+      }
+      return respond(200, method === 'GET' ? [] : {});
+    });
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'plan_task_preview') {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                title: '当前任务',
+                mcp: {
+                  calls: [
+                    { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例', projectId: '2001' } },
+                    { tool: 'case_library.transfer_to_exec', args: { caseFileId: '43', projectId: '2001', execVersionName: '912' } },
+                    { tool: 'case.update', args: { context: 'tempexec', scope: 'all', field: 'actual', value: '失败' } },
+                  ],
+                },
+                response: '',
+              }),
+            };
+          }
+          if (payload && payload.task === 'resolve_exec_transfer_choice') {
+            return { ok: true, content: '{"mode":"select","selectedIndex":1}' };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                calls: [
+                  { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例', projectId: '2001' } },
+                  { tool: 'case_library.transfer_to_exec', args: { caseFileId: '43', projectId: '2001', execVersionName: '912' } },
+                  { tool: 'case.update', args: { context: 'tempexec', scope: 'all', field: 'actual', value: '失败' } },
+                ],
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    await Promise.all([
+      page.waitForURL(/case-exec\.html\?tab=tempexec/),
+      page.evaluate(() => {
+        if (window.app && typeof window.app.switchTab === 'function') {
+          window.app.switchTab('tempexec');
+        }
+      }),
+    ]);
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.evaluate((id) => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.applyPatch !== 'function') return null;
+      return window.app.assistantSettingsApi.applyPatch({
+        assistantEnabled: true,
+        assistantModelId: id,
+      }, { source: 'assistant-ui', allowSelfDisable: true });
+    }, modelId);
+    await expect.poll(() => page.evaluate((id) => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === String(id || ''));
+    }, modelId)).toBe(true);
+
+    await openAssistant(page);
+    await page.evaluate(() => {
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.searchExecCandidates = async function() {
+          return {
+            ok: true,
+            query: '皮肤用例',
+            projectId: '2001',
+            projectName: '狼人项目',
+            total: 2,
+            selectionRequired: true,
+            truncated: false,
+            items: [
+              { id: '43', name: '111的新皮肤', projectId: '2001', projectName: '狼人项目' },
+              { id: '44', name: '2025年11月新皮肤', projectId: '2001', projectName: '狼人项目' },
+            ],
+          };
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'plan_task_preview') {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                title: '当前任务',
+                mcp: {
+                  calls: [
+                    { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例', projectId: '2001' } },
+                    { tool: 'case_library.transfer_to_exec', args: { caseFileId: '43', projectId: '2001', execVersionName: '912' } },
+                    { tool: 'case.update', args: { context: 'tempexec', scope: 'all', field: 'actual', value: '失败' } },
+                  ],
+                },
+                response: '',
+              }),
+            };
+          }
+          if (payload && payload.task === 'resolve_exec_transfer_choice') {
+            return { ok: true, content: '{"mode":"select","selectedIndex":1}' };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                calls: [
+                  { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例', projectId: '2001' } },
+                  { tool: 'case_library.transfer_to_exec', args: { caseFileId: '43', projectId: '2001', execVersionName: '912' } },
+                  { tool: 'case.update', args: { context: 'tempexec', scope: 'all', field: 'actual', value: '失败' } },
+                ],
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+    await page.fill('#assistantInput', '帮我把皮肤用例转到912版本的执行，然后执行结果全部改为失败');
+    await page.click('#assistantSendBtn');
+
+    const firstReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(firstReply).toContainText('找到 2 个候选用例，请先选择再转执行');
+
+    await page.fill('#assistantInput', '第一个');
+    await page.click('#assistantSendBtn');
+
+    const transferApproval = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await expect(transferApproval).toBeVisible();
+    await transferApproval.getByRole('button', { name: '允许操作' }).click();
+
+    const updateApproval = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改用例' }).last();
+    await expect(updateApproval).toBeVisible();
+    await updateApproval.getByRole('button', { name: '允许操作' }).click();
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已将【111的新皮肤】转到当前执行');
+    await expect(finalReply).toContainText('已批量修改用例：共 2 条，执行结果 = 失败');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="blocked"]')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => {
+      var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles) ? window.app.state.tempExecFiles : [];
+      var activeId = window.app && window.app.state ? String(window.app.state.tempExecActiveId || '') : '';
+      var file = files.find(function(item) {
+        return item && String(item.id || '') === activeId;
+      }) || null;
+      if (!file || !Array.isArray(file.cases) || !file.cases.length) return '';
+      return file.cases.map(function(item) { return String(item && item.actual || ''); }).join('|');
+    })).toBe('失败|失败');
+  });
+
+
+  test('原始指令指定的执行版本存在多个合理命中时会保留版本选择而不是自动继续', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantTransferLog = [];
+      window.__assistantResolveVersionCalls = 0;
+      var recommended = {
+        id: 'case-file-1',
+        name: '皮肤用例',
+        projectId: '3001',
+        projectName: '狼人项目',
+      };
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.searchExecCandidates = async function() {
+          return {
+            ok: true,
+            query: '皮肤用例',
+            projectId: '3001',
+            projectName: '狼人项目',
+            total: 1,
+            selectionRequired: false,
+            truncated: false,
+            recommended: recommended,
+            items: [recommended],
+          };
+        };
+        window.app.caseLibraryApi.transferCaseFileToExec = async function(args) {
+          var payload = Object.assign({}, args || {});
+          window.__assistantTransferLog.push(payload);
+          if (!payload.execVersionId) {
+            return {
+              ok: true,
+              versionSelectionRequired: true,
+              caseFileId: 'case-file-1',
+              name: '皮肤用例',
+              projectId: '3001',
+              projectName: '狼人项目',
+              items: [
+                { id: 'ver-1', name: '912', updatedAt: '2026-03-08 10:18:40' },
+                { id: 'ver-2', name: 'aa912', updatedAt: '2026-03-08 10:18:50' },
+                { id: 'ver-3', name: '912新建', updatedAt: '2026-03-08 10:19:00' },
+              ],
+            };
+          }
+          return {
+            ok: true,
+            caseFileId: 'case-file-1',
+            name: '皮肤用例',
+            projectId: '3001',
+            projectName: '狼人项目',
+            execVersionId: String(payload.execVersionId || ''),
+          };
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'resolve_exec_transfer_choice') {
+            window.__assistantResolveVersionCalls += 1;
+            return {
+              ok: true,
+              content: '{"mode":"ambiguous","candidateIndices":[1,2,3],"response":"我识别到多个都可能是你说的 912，请你明确选一个版本。"}',
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                calls: [
+                  { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例' } },
+                  { tool: 'case_library.transfer_to_exec', args: { caseFileId: 'case-file-1', projectId: '3001', execVersionName: '912' } },
+                ],
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把皮肤用例转到912版本的执行');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    const versionReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(versionReply).toContainText('请选择要转入的执行版本');
+    await expect(versionReply).toContainText('1. 912');
+    await expect(versionReply).toContainText('2. aa912');
+    await expect(versionReply).toContainText('3. 912新建');
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantResolveVersionCalls || 0))).toBe(1);
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantTransferLog.length || 0))).toBe(1);
+  });
+
+  test('模型二选一追问会自动展示继续取消按钮并支持点击回复', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantBinaryChoiceCalls = [];
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          window.__assistantBinaryChoiceCalls.push(String(inputText || ''));
+          if (window.__assistantBinaryChoiceCalls.length === 1) {
+            return {
+              ok: true,
+              content: '已找到相关结果。是否继续查看详情？回复“继续”或“取消”。',
+            };
+          }
+          return {
+            ok: true,
+            content: '继续处理完成。',
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我看看详情');
+    await page.click('#assistantSendBtn');
+
+    const binaryReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(binaryReply).toContainText('是否继续查看详情');
+    await expect(binaryReply.getByRole('button', { name: '继续' })).toBeVisible();
+    await expect(binaryReply.getByRole('button', { name: '取消' })).toBeVisible();
+
+    await binaryReply.getByRole('button', { name: '继续' }).click();
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('继续处理完成。');
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantBinaryChoiceCalls) ? window.__assistantBinaryChoiceCalls : [];
+      return list.join('|');
+    })).toContain('帮我看看详情|继续');
   });
 
   test('助手面板背景应为非透明', async ({ page }) => {
@@ -1063,6 +3688,205 @@ test.describe('全局AI助手', () => {
         && String(second.value || '') === '测试用的'
         && secondConfirm.confirmed === true
         && String(secondConfirm.value || '') === '测试用的';
+    })).toBe(true);
+  });
+
+
+  test('任务态下执行结果“改回未执行”会自动补全 value 并完成修改', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantRollbackActualCalls = [];
+      if (window.app && window.app.state && Array.isArray(window.app.state.models)) {
+        window.app.state.models.forEach(function(model) {
+          if (String(model && model.id || '') === 'assistant-model-1') {
+            model.capabilities = ['vision', 'image'];
+          }
+        });
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.getSelectedModelInfo = function() {
+          return {
+            configured: true,
+            usable: true,
+            modelId: 'assistant-model-1',
+            modelName: '助手测试模型',
+            supportsImage: true,
+            capabilities: ['vision', 'image'],
+          };
+        };
+        window.app.assistantApi.callModel = async function() {
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                calls: [
+                  { tool: 'tempexec.search_cases', args: { term: '战令' } },
+                  { tool: 'case.update', args: { context: 'tempexec', field: 'actual', scope: 'all' } },
+                ],
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var oldCallTool = window.app.assistantMcpApi.callTool;
+        window.app.assistantMcpApi.callTool = async function(name, args) {
+          var toolName = String(name || '');
+          if (toolName === 'tempexec.search_cases') {
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                term: '战令',
+                matched: 3,
+                total: 20,
+              },
+            };
+          }
+          if (toolName !== 'case.update') return oldCallTool(name, args);
+          var safeArgs = args && typeof args === 'object' ? JSON.parse(JSON.stringify(args)) : {};
+          window.__assistantRollbackActualCalls.push(safeArgs);
+          if (safeArgs.confirmed !== true) {
+            return {
+              ok: false,
+              tool: 'case.update',
+              reason: 'confirm_required',
+              data: {
+                actionLabel: '修改用例',
+                message: '该操作会写入用例内容，请确认继续。',
+              },
+            };
+          }
+          if (!safeArgs.value || !String(safeArgs.value).trim()) {
+            return { ok: false, tool: 'case.update', reason: '缺少要写入的值' };
+          }
+          return {
+            ok: true,
+            tool: 'case.update',
+            data: {
+              context: 'tempexec',
+              field: 'actual',
+              value: String(safeArgs.value || ''),
+              scope: String(safeArgs.scope || 'single'),
+              count: 3,
+            },
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.setInputFiles('#assistantImageInput', [makeTinyPngFile('rollback-proof.png')]);
+    await expect(page.locator('#assistantAttachmentList .assistant-attachment-row')).toHaveCount(1);
+    await page.fill('#assistantInput', '战令用例的执行结果改回未执行');
+    await page.click('#assistantSendBtn');
+
+    const taskCard = page.locator('#assistantMessages .assistant-msg.ai .assistant-task-card').last();
+    await expect(taskCard).toBeVisible();
+    await expect(taskCard.locator('.assistant-task-step')).toHaveCount(2);
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改用例' }).last();
+    await expect(approvalCard).toContainText('准备执行：修改用例');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已搜索关键词“战令”，命中 3 / 20 条。');
+    await expect(finalReply).toContainText('已批量修改用例：共 3 条，执行结果 = 未执行');
+    await expect(finalReply).not.toContainText('缺少要写入的值');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantRollbackActualCalls) ? window.__assistantRollbackActualCalls : [];
+      if (list.length < 2) return '';
+      return String(list[1].value || '');
+    })).toBe('未执行');
+  });
+
+
+  test('“改回未执行”类自然语言修改会优先交给模型任务态', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantModelFirstUpdateModelCalls = [];
+      window.__assistantModelFirstUpdateMcpCalls = [];
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(userText) {
+          window.__assistantModelFirstUpdateModelCalls.push(String(userText || ''));
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                tool: 'case.update',
+                args: { context: 'tempexec', field: 'actual', scope: 'all', value: '未执行' },
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var oldCallTool = window.app.assistantMcpApi.callTool;
+        window.app.assistantMcpApi.callTool = async function(name, args) {
+          var toolName = String(name || '');
+          if (toolName !== 'case.update') return oldCallTool(name, args);
+          var safeArgs = args && typeof args === 'object' ? JSON.parse(JSON.stringify(args)) : {};
+          window.__assistantModelFirstUpdateMcpCalls.push(safeArgs);
+          if (safeArgs.confirmed !== true) {
+            return {
+              ok: false,
+              tool: 'case.update',
+              reason: 'confirm_required',
+              data: {
+                actionLabel: '修改用例',
+                message: '该操作会写入用例内容，请确认继续。',
+              },
+            };
+          }
+          return {
+            ok: true,
+            tool: 'case.update',
+            data: {
+              context: 'tempexec',
+              field: 'actual',
+              value: String(safeArgs.value || ''),
+              scope: 'all',
+              count: 3,
+            },
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '把战令用例的执行结果改回未执行');
+    await page.click('#assistantSendBtn');
+
+    const taskCard = page.locator('#assistantMessages .assistant-msg.ai .assistant-task-card').last();
+    await expect(taskCard).toBeVisible();
+    await expect(taskCard.locator('.assistant-task-step')).toHaveCount(1);
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantModelFirstUpdateModelCalls) ? window.__assistantModelFirstUpdateModelCalls : [];
+      return list.length ? list[0] : '';
+    })).toContain('把战令用例的执行结果改回未执行');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改用例' }).last();
+    await expect(approvalCard).toContainText('准备执行：修改用例');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已批量修改用例：共 3 条，执行结果 = 未执行');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantModelFirstUpdateMcpCalls) ? window.__assistantModelFirstUpdateMcpCalls : [];
+      if (list.length < 2) return false;
+      var second = list[1] || {};
+      return second.confirmed === true
+        && String(second.field || '') === 'actual'
+        && String(second.scope || '') === 'all'
+        && String(second.value || '') === '未执行';
     })).toBe(true);
   });
 
@@ -4469,6 +7293,31 @@ test.describe('全局AI助手', () => {
     expect(result.actuals).toEqual(['通过', '通过', '通过']);
   });
 
+  test('assistantMcpApi case.update 确认文案应说明字段和修改内容', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      var res = { ok: false, reason: 'missing api' };
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        res = await window.app.assistantMcpApi.callTool('case.update', {
+          context: 'tempexec',
+          field: 'actual',
+          value: 'pending',
+          scope: 'all',
+        });
+      }
+      return {
+        ok: !!(res && res.ok),
+        reason: res && res.reason ? String(res.reason) : '',
+        actionLabel: res && res.data && res.data.actionLabel ? String(res.data.actionLabel) : '',
+        message: res && res.data && res.data.message ? String(res.data.message) : '',
+      };
+    });
+
+    expect(result.ok).toBeFalsy();
+    expect(result.reason).toBe('confirm_required');
+    expect(result.actionLabel).toBe('修改用例执行结果（批量）');
+    expect(result.message).toBe('将当前执行中的全部用例的执行结果改为“未执行”。');
+  });
+
   test('assistantMcpApi ui.fill_input 命中用例字段需确认并支持追加', async ({ page }) => {
     const result = await page.evaluate(async () => {
       var old = document.getElementById('assistantCaseFillInput');
@@ -4504,6 +7353,7 @@ test.describe('全局AI助手', () => {
         firstOk: !!(first && first.ok),
         firstReason: first && first.reason ? String(first.reason) : '',
         firstActionLabel: first && first.data && first.data.actionLabel ? String(first.data.actionLabel) : '',
+        firstMessage: first && first.data && first.data.message ? String(first.data.message) : '',
         secondOk: !!(second && second.ok),
         secondReason: second && second.reason ? String(second.reason) : '',
         secondOperation: second && second.data && second.data.operation ? String(second.data.operation) : '',
@@ -4514,12 +7364,367 @@ test.describe('全局AI助手', () => {
 
     expect(result.firstOk).toBeFalsy();
     expect(result.firstReason).toBe('confirm_required');
-    expect(result.firstActionLabel).toBe('修改用例');
+    expect(result.firstActionLabel).toBe('修改用例标题');
+    expect(result.firstMessage).toBe('在当前可见用例的标题末尾追加“\u002d联机”。');
     expect(result.secondOk).toBeTruthy();
     expect(result.secondReason).toBe('');
     expect(result.secondOperation).toBe('append');
     expect(result.secondField).toBe('title');
     expect(result.finalValue).toBe('技能描述-联机');
+  });
+
+
+
+  test('assistantMcpApi transfer_to_exec 裸别名会映射到标准工具', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      var res = { ok: false, reason: 'missing api' };
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        res = await window.app.assistantMcpApi.callTool('transfer_to_exec', {
+          caseFileId: 'case-file-1',
+          projectId: '3001',
+          execVersionName: '912',
+        });
+      }
+      return {
+        ok: !!(res && res.ok),
+        tool: res && res.tool ? String(res.tool) : '',
+        reason: res && res.reason ? String(res.reason) : '',
+        actionLabel: res && res.data && res.data.actionLabel ? String(res.data.actionLabel) : '',
+      };
+    });
+
+    expect(result.ok).toBeFalsy();
+    expect(result.tool).toBe('case_library.transfer_to_exec');
+    expect(result.reason).toBe('confirm_required');
+    expect(result.actionLabel).toBe('转到当前执行');
+  });
+
+  test('裸 transfer_to_exec 会显示中文步骤并继续执行', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantBareTransferAliasOrder = [];
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'plan_task_preview') {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                title: '当前任务',
+                mcp: {
+                  calls: [
+                    { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例' } },
+                    { tool: 'transfer_to_exec', args: { caseFileId: 'case-file-1', projectId: '3001', execVersionName: '912' } },
+                    { tool: 'case.update', args: {} },
+                    { tool: 'case_library.batch_archive_cases', args: {} },
+                  ],
+                },
+                response: '',
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                calls: [
+                  { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例' } },
+                  { tool: 'transfer_to_exec', args: { caseFileId: 'case-file-1', projectId: '3001', execVersionName: '912' } },
+                  { tool: 'case.update', args: {} },
+                  { tool: 'case_library.batch_archive_cases', args: {} },
+                ],
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var oldCallTool = window.app.assistantMcpApi.callTool;
+        window.app.assistantMcpApi.callTool = async function(name, args) {
+          var toolName = String(name || '');
+          var safeArgs = args && typeof args === 'object' ? JSON.parse(JSON.stringify(args)) : {};
+          if (toolName === 'case_library.search_exec_candidates') {
+            window.__assistantBareTransferAliasOrder.push('search');
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                query: '皮肤用例',
+                projectId: '3001',
+                projectName: '狼人项目',
+                selectionRequired: false,
+                items: [
+                  { id: 'case-file-1', name: '111的新皮肤', projectId: '3001', projectName: '狼人项目' },
+                ],
+              },
+            };
+          }
+          if (toolName === 'case_library.transfer_to_exec' && safeArgs.confirmed !== true) {
+            return {
+              ok: false,
+              tool: toolName,
+              reason: 'confirm_required',
+              data: {
+                actionLabel: '转到当前执行',
+                message: '该操作会把目标用例加入当前执行，并可能同步覆盖已有执行结果。',
+              },
+            };
+          }
+          if (toolName === 'case_library.transfer_to_exec') {
+            window.__assistantBareTransferAliasOrder.push('transfer');
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                caseFileId: 'case-file-1',
+                name: '111的新皮肤',
+              },
+            };
+          }
+          if (toolName === 'case.update' && safeArgs.confirmed !== true) {
+            return {
+              ok: false,
+              tool: toolName,
+              reason: 'confirm_required',
+              data: {
+                actionLabel: '修改用例执行结果（批量）',
+                message: '将当前执行中的全部用例的执行结果改为“失败”。',
+              },
+            };
+          }
+          if (toolName === 'case.update') {
+            window.__assistantBareTransferAliasOrder.push('update');
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                context: 'tempexec',
+                scope: 'all',
+                count: 12,
+                field: 'actual',
+                value: '失败',
+              },
+            };
+          }
+          if (toolName === 'case_library.batch_archive_exec_cases' && safeArgs.confirmed !== true) {
+            return {
+              ok: false,
+              tool: toolName,
+              reason: 'confirm_required',
+              data: {
+                actionLabel: '归档当前执行用例',
+                message: '将归档“111的新皮肤”；当前仍有未通过项（未执行 12 / 失败 0 / 阻塞 0），确认后将自动补充归档原因。',
+              },
+            };
+          }
+          if (toolName === 'case_library.batch_archive_exec_cases') {
+            window.__assistantBareTransferAliasOrder.push('archive');
+            return {
+              ok: true,
+              tool: toolName,
+              data: {
+                archived: true,
+                fileName: '111的新皮肤',
+                reason: '按用户指令归档；当前仍有未通过用例（未执行 12 / 失败 0 / 阻塞 0）。',
+              },
+            };
+          }
+          return oldCallTool.call(this, name, args);
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把皮肤用例转到912版本的执行，然后全部置失败，再归档');
+    await page.click('#assistantSendBtn');
+
+    const taskCard = page.locator('#assistantMessages .assistant-msg.ai .assistant-task-card').last();
+    await expect(taskCard).toBeVisible();
+    await expect(taskCard).toContainText('搜索要转执行的用例：皮肤用例');
+    await expect(taskCard).toContainText('把选中的用例转到执行版本：912');
+    await expect(taskCard).toContainText('把全部执行结果改为失败');
+    await expect(taskCard).toContainText('归档当前执行用例');
+    await expect(taskCard).not.toContainText('transfer_to_exec');
+
+    const transferApproval = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await expect(transferApproval).toBeVisible();
+    await transferApproval.getByRole('button', { name: '允许操作' }).click();
+
+    const updateApproval = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改用例执行结果（批量）' }).last();
+    await expect(updateApproval).toBeVisible();
+    await updateApproval.getByRole('button', { name: '允许操作' }).click();
+
+    const archiveApproval = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：归档当前执行用例' }).last();
+    await expect(archiveApproval).toBeVisible();
+    await archiveApproval.getByRole('button', { name: '允许操作' }).click();
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已将【111的新皮肤】转到当前执行');
+    await expect(finalReply).toContainText('已批量修改用例：共 12 条，执行结果 = 失败');
+    await expect(finalReply).toContainText('已归档当前执行用例：111的新皮肤（已填写归档原因）');
+    await expect(finalReply).not.toContainText('未知 MCP 工具');
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantBareTransferAliasOrder) ? window.__assistantBareTransferAliasOrder : [];
+      return list.join('|');
+    })).toBe('search|transfer|update|archive');
+  });
+
+  test('assistantMcpApi case_library.batch_archive_exec_cases 会说明归档内容并自动补归档原因', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      window.__assistantArchiveExecCall = null;
+      window.__assistantArchiveReloadCount = 0;
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-archive-1',
+            execSetId: 901,
+            name: '皮肤用例',
+            cases: [
+              { actual: '未执行' },
+              { actual: '失败' },
+              { actual: '阻塞' },
+              { actual: '通过' },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-archive-1';
+        window.app.state.tempExecActiveFileId = 'exec-archive-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.setTempExecActive = function(fileId) {
+          if (!window.app || !window.app.state) return;
+          window.app.state.tempExecActiveId = String(fileId || '');
+          window.app.state.tempExecActiveFileId = String(fileId || '');
+        };
+        window.app.tempExecApi.getCaseExecutionDisplay = function(file, item) {
+          return { label: item && item.actual ? String(item.actual) : '未执行' };
+        };
+        window.app.tempExecApi.loadTempExecState = async function() {
+          window.__assistantArchiveReloadCount += 1;
+          return { ok: true };
+        };
+      }
+      if (window.app && window.app.apiClient) {
+        window.app.apiClient.archiveExecSet = async function(execSetId, payload) {
+          window.__assistantArchiveExecCall = {
+            execSetId: Number(execSetId),
+            reason: payload && payload.reason ? String(payload.reason) : '',
+          };
+          return { ok: true, exec_set_id: Number(execSetId) };
+        };
+      }
+      var first = { ok: false, reason: 'missing api' };
+      var second = { ok: false, reason: 'missing api' };
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        first = await window.app.assistantMcpApi.callTool('case_library.batch_archive_exec_cases', {});
+        second = await window.app.assistantMcpApi.callTool('case_library.batch_archive_exec_cases', { confirmed: true });
+      }
+      var archiveCall = window.__assistantArchiveExecCall || null;
+      return {
+        firstOk: !!(first && first.ok),
+        firstReason: first && first.reason ? String(first.reason) : '',
+        firstActionLabel: first && first.data && first.data.actionLabel ? String(first.data.actionLabel) : '',
+        firstMessage: first && first.data && first.data.message ? String(first.data.message) : '',
+        secondOk: !!(second && second.ok),
+        secondReason: second && second.reason ? String(second.reason) : '',
+        archiveExecSetId: archiveCall && archiveCall.execSetId ? Number(archiveCall.execSetId) : 0,
+        archiveReason: archiveCall && archiveCall.reason ? String(archiveCall.reason) : '',
+        reloadCount: Number(window.__assistantArchiveReloadCount || 0),
+      };
+    });
+
+    expect(result.firstOk).toBeFalsy();
+    expect(result.firstReason).toBe('confirm_required');
+    expect(result.firstActionLabel).toBe('归档当前执行用例');
+    expect(result.firstMessage).toContain('未执行 1 / 失败 1 / 阻塞 1');
+    expect(result.firstMessage).toContain('自动补充归档原因');
+    expect(result.secondOk).toBeTruthy();
+    expect(result.secondReason).toBe('');
+    expect(result.archiveExecSetId).toBe(901);
+    expect(result.archiveReason).toContain('按用户指令归档');
+    expect(result.reloadCount).toBe(1);
+  });
+
+  test('assistantMcpApi ui.click_control 可回退旧归档控件别名到真实按钮', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      window.__assistantArchiveClickCount = 0;
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-archive-btn-1',
+            execSetId: 902,
+            name: '归档按钮用例',
+            cases: [],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-archive-btn-1';
+        window.app.state.tempExecActiveFileId = 'exec-archive-btn-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.setTempExecActive = function(fileId) {
+          if (!window.app || !window.app.state) return;
+          window.app.state.tempExecActiveId = String(fileId || '');
+          window.app.state.tempExecActiveFileId = String(fileId || '');
+        };
+      }
+      var old = document.getElementById('assistantLegacyArchiveBtn');
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = 'assistantLegacyArchiveBtn';
+      btn.textContent = '归档';
+      btn.setAttribute('data-temp-file-archive', 'exec-archive-btn-1');
+      btn.style.position = 'fixed';
+      btn.style.left = '48px';
+      btn.style.top = '96px';
+      btn.style.zIndex = '3';
+      btn.addEventListener('click', function() {
+        window.__assistantArchiveClickCount += 1;
+      });
+      document.body.appendChild(btn);
+      var first = { ok: false, reason: 'missing api' };
+      var second = { ok: false, reason: 'missing api' };
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        first = await window.app.assistantMcpApi.callTool('ui.click_control', {
+          controlId: 'tempexecArchiveBtn',
+          controlText: '归档',
+        });
+        second = await window.app.assistantMcpApi.callTool('ui.click_control', {
+          controlId: 'tempexecArchiveBtn',
+          controlText: '归档',
+          confirmed: true,
+        });
+      }
+      return {
+        firstOk: !!(first && first.ok),
+        firstReason: first && first.reason ? String(first.reason) : '',
+        firstActionLabel: first && first.data && first.data.actionLabel ? String(first.data.actionLabel) : '',
+        firstMessage: first && first.data && first.data.message ? String(first.data.message) : '',
+        secondOk: !!(second && second.ok),
+        secondReason: second && second.reason ? String(second.reason) : '',
+        secondControlText: second && second.data && second.data.controlText ? String(second.data.controlText) : '',
+        clickCount: Number(window.__assistantArchiveClickCount || 0),
+      };
+    });
+
+    expect(result.firstOk).toBeFalsy();
+    expect(result.firstReason).toBe('confirm_required');
+    expect(result.firstActionLabel).toBe('归档当前执行用例');
+    expect(result.firstMessage).toContain('将归档');
+    expect(result.secondOk).toBeTruthy();
+    expect(result.secondReason).toBe('');
+    expect(result.secondControlText).toBe('归档');
+    expect(result.clickCount).toBe(1);
   });
 
   test('MCP ui.click_control 支持 id 参数别名', async ({ page }) => {
@@ -5750,6 +8955,23 @@ test.describe('全局AI助手', () => {
     })).toBe(true);
 
     await page.evaluate(() => {
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.searchExecCandidates = async function() {
+          return {
+            ok: true,
+            query: '皮肤用例',
+            projectId: '2001',
+            projectName: '狼人项目',
+            total: 2,
+            selectionRequired: true,
+            truncated: false,
+            items: [
+              { id: '43', name: '111的新皮肤', projectId: '2001', projectName: '狼人项目' },
+              { id: '44', name: '2025年11月新皮肤', projectId: '2001', projectName: '狼人项目' },
+            ],
+          };
+        };
+      }
       if (window.app && window.app.assistantApi) {
         window.app.assistantApi.callModel = async function() {
           return { ok: true, content: '这是清空前的回复' };
@@ -5858,9 +9080,98 @@ test.describe('全局AI助手', () => {
         var text = item && item.content ? String(item.content) : '';
         return text.indexOf('深圳') !== -1;
       });
-      return hasWeather && hasCity;
+      var allWeakRef = history.length > 0 && history.every(function(item) {
+        var text = item && item.content ? String(item.content) : '';
+        return text.indexOf('[弱参考上下文#') === 0;
+      });
+      var prompt = latest && latest.prompt ? String(latest.prompt) : '';
+      var hasPriorityPrompt = prompt.indexOf('重要性约 90%') !== -1
+        && prompt.indexOf('重要性约 10%') !== -1
+        && prompt.indexOf('先只根据本轮最新消息判断') !== -1;
+      return hasWeather && hasCity && allWeakRef && hasPriorityPrompt;
     })).toBe(true);
   });
+
+  test('完整新指令时提示会要求模型优先按最新消息判断是否使用历史', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      window.__assistantPrioritySnapshots = [];
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(userText, options) {
+          var history = options && Array.isArray(options.history) ? options.history : [];
+          var prompt = options && options.prompt ? String(options.prompt) : '';
+          window.__assistantPrioritySnapshots.push({
+            userText: String(userText || ''),
+            history: history,
+            prompt: prompt,
+          });
+          var text = String(userText || '').trim();
+          if (text === '今天的天气怎么样？') {
+            return { ok: true, content: '可以，请先告诉我城市。' };
+          }
+          if (text === '顺便给我讲个笑话') {
+            var hasPriorityPrompt = prompt.indexOf('重要性约 90%') !== -1
+              && prompt.indexOf('重要性约 10%') !== -1
+              && prompt.indexOf('新的独立请求') !== -1;
+            var allWeakRef = history.length > 0 && history.every(function(item) {
+              var content = item && item.content ? String(item.content) : '';
+              return content.indexOf('[弱参考上下文#') === 0;
+            });
+            var stillHasWeatherHistory = history.some(function(item) {
+              var content = item && item.content ? String(item.content) : '';
+              return content.indexOf('天气') !== -1;
+            });
+            if (hasPriorityPrompt && allWeakRef && stillHasWeatherHistory) {
+              return { ok: true, content: '收到，我会先按你这条新指令判断，不会直接沿用刚才的话题。' };
+            }
+            return { ok: true, content: '上下文策略缺失。' };
+          }
+          return { ok: true, content: '好的。' };
+        };
+      }
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await page.fill('#assistantInput', '今天的天气怎么样？');
+    await page.click('#assistantSendBtn');
+    await expect(page.locator('#assistantMessages')).toContainText('请先告诉我城市');
+
+    await page.fill('#assistantInput', '顺便给我讲个笑话');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('我会先按你这条新指令判断');
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantPrioritySnapshots) ? window.__assistantPrioritySnapshots : [];
+      if (!list.length) return false;
+      var latest = list[list.length - 1];
+      if (!latest || String(latest.userText || '') !== '顺便给我讲个笑话') return false;
+      var prompt = latest.prompt ? String(latest.prompt) : '';
+      var history = Array.isArray(latest.history) ? latest.history : [];
+      var allWeakRef = history.length > 0 && history.every(function(item) {
+        var text = item && item.content ? String(item.content) : '';
+        return text.indexOf('[弱参考上下文#') === 0;
+      });
+      return prompt.indexOf('新的独立请求') !== -1
+        && prompt.indexOf('重要性约 90%') !== -1
+        && prompt.indexOf('重要性约 10%') !== -1
+        && allWeakRef;
+    })).toBe(true);
+  });
+
   test('助手可在执行页跨页面匹配漏测用例库，并由模型自主调用工具', async ({ page }) => {
     const modelId = 'assistant-model-1';
 
@@ -6228,6 +9539,56 @@ test.describe('全局AI助手', () => {
     expect(String(call.blocks[1] && call.blocks[1].dataUrl || '')).toContain('data:image/');
   });
 
+  test('助手附件区在空态不占位且文件名支持预览', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
+    await page.selectOption('#assistantModelSelect', modelId);
+    await page.check('#assistantEnabledToggle');
+    await page.click('#saveAssistantSetting');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
+    })).toBe(true);
+
+    await page.evaluate(() => {
+      var btn = document.getElementById('assistantLauncherBtn');
+      if (btn) btn.click();
+    });
+    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
+
+    await expect(page.locator('#assistantAttachments')).toHaveClass(/hidden/);
+    await expect(page.locator('#assistantAttachBtn')).toHaveAttribute('aria-label', '添加图片');
+
+    await page.setInputFiles('#assistantImageInput', [makeTinyPngFile('preview-shot.png')]);
+    await expect(page.locator('#assistantAttachments')).not.toHaveClass(/hidden/);
+    await expect(page.locator('#assistantAttachmentList .assistant-attachment-row')).toHaveCount(1);
+    await expect(page.locator('#assistantAttachmentList .assistant-attachment-link')).toHaveText('preview-shot.png');
+
+    const attachMeta = await page.evaluate(() => {
+      var link = document.querySelector('#assistantAttachmentList .assistant-attachment-link');
+      var attachments = document.getElementById('assistantAttachments');
+      var inputBox = document.getElementById('assistantInputBox');
+      if (!link || !attachments || !inputBox) return null;
+      var linkStyle = window.getComputedStyle(link);
+      return {
+        textDecorationLine: String(linkStyle.textDecorationLine || linkStyle.textDecoration || ''),
+        attachmentBottom: attachments.getBoundingClientRect().bottom,
+        inputTop: inputBox.getBoundingClientRect().top,
+      };
+    });
+    expect(attachMeta).not.toBeNull();
+    expect(attachMeta.textDecorationLine).toContain('underline');
+    expect(attachMeta.attachmentBottom).toBeLessThan(attachMeta.inputTop);
+
+    await page.click('#assistantAttachmentList .assistant-attachment-link');
+    await expect(page.locator('#assistantCasePreview')).not.toHaveClass(/hidden/);
+    await expect(page.locator('#assistantCasePreviewBody .assistant-image-preview')).toBeVisible();
+    await expect(page.locator('#assistantCasePreviewBody .assistant-image-preview-name')).toContainText('preview-shot.png');
+  });
+
   test('助手在当前模型不支持视觉时阻止图片发送', async ({ page }) => {
     const modelId = 'assistant-model-1';
 
@@ -6302,5 +9663,283 @@ test.describe('全局AI助手', () => {
     await expect(page.locator('#assistantMessages .assistant-markdown-image').last()).toBeVisible();
     await expect(page.locator('#assistantMessages .assistant-markdown-image').last()).toHaveAttribute('src', /data:image\/png;base64/);
   });
+
+  test('跨页面用例库内容查询会优先调用 case_library.query_cases 而不是当前页用例', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantLibraryQueryToolCalls = [];
+      window.__assistantLibraryQueryPayload = null;
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecActiveId = 'exec-library-query';
+        window.app.state.tempExecActiveFileId = 'exec-library-query';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-library-query',
+            name: '当前执行中的无关用例',
+            projectId: '2001',
+            versionId: '301',
+            cases: [
+              {
+                id: 'exec-current-1',
+                module: '执行页',
+                title: '当前页面无关用例',
+                priority: 'P3',
+                precondition: '无',
+                steps: '无',
+                expected: '无',
+              },
+            ],
+          },
+        ];
+      }
+      if (window.app && window.app.apiClient) {
+        window.app.apiClient.listCaseFiles = async function(projectId) {
+          return [
+            {
+              id: 701,
+              project_id: Number(projectId || 2001),
+              version_id: 301,
+              file_name_clean: '角色死亡链路',
+              item_count: 2,
+              imported_at: '2026-03-01T10:00:00Z',
+              updated_at: '2026-03-03T10:00:00Z',
+            },
+            {
+              id: 702,
+              project_id: Number(projectId || 2001),
+              version_id: 301,
+              file_name_clean: '联机超界校验',
+              item_count: 2,
+              imported_at: '2026-03-02T10:00:00Z',
+              updated_at: '2026-03-04T10:00:00Z',
+            },
+          ];
+        };
+        window.app.apiClient.listCaseItems = async function(caseFileId) {
+          if (String(caseFileId) === '701') {
+            return [
+              {
+                id: 9101,
+                module: '死亡',
+                title: '超界者死亡判定',
+                priority: 'P1',
+                precondition: '超界者进入濒死状态',
+                steps: '继续推进回合',
+                expected: '死亡结算正确',
+              },
+              {
+                id: 9102,
+                module: '死亡',
+                title: '普通角色死亡判定',
+                priority: 'P2',
+                precondition: '普通角色进入濒死状态',
+                steps: '继续推进回合',
+                expected: '死亡结算正确',
+              },
+            ];
+          }
+          if (String(caseFileId) === '702') {
+            return [
+              {
+                id: 9201,
+                module: '联机',
+                title: '超界者联机恢复',
+                priority: 'P1',
+                precondition: '超界者断线重连',
+                steps: '重新进入房间',
+                expected: '状态恢复正确',
+              },
+              {
+                id: 9202,
+                module: '联机',
+                title: '普通角色联机恢复',
+                priority: 'P2',
+                precondition: '普通角色断线重连',
+                steps: '重新进入房间',
+                expected: '状态恢复正确',
+              },
+            ];
+          }
+          return [];
+        };
+      }
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.getCurrentEditorCaseSnapshot = function() {
+          return { ok: true, hasContext: false, scope: 'editor', items: [] };
+        };
+      }
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var oldCallTool = window.app.assistantMcpApi.callTool;
+        window.app.assistantMcpApi.callTool = async function(name, args) {
+          window.__assistantLibraryQueryToolCalls.push({
+            name: String(name || ''),
+            args: JSON.parse(JSON.stringify(args || {})),
+          });
+          return oldCallTool.apply(this, arguments);
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'plan_case_list_filter') {
+            return {
+              ok: true,
+              content: '{"mode":"filter","includeKeywords":["超界者"],"excludeKeywords":[],"indexParity":"","idParity":""}',
+            };
+          }
+          if (payload && payload.toolResult && payload.toolResult.tool === 'case_library.query_cases') {
+            window.__assistantLibraryQueryPayload = payload.toolResult;
+            return {
+              ok: true,
+              content: '用例库中找到了 2 条超界者相关用例：\n1. 超界者死亡判定\n2. 超界者联机恢复',
+            };
+          }
+          return {
+            ok: true,
+            content: '{"mcp":{"tool":"case_library.query_cases","args":{"query":"不是执行，我只想查询，用例库中是否有超界者相关用例"}},"response":""}',
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '不是执行，我只想查询，用例库中是否有超界者相关用例');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages')).toContainText('超界者死亡判定');
+    await expect(page.locator('#assistantMessages')).toContainText('超界者联机恢复');
+    await expect(page.locator('#assistantMessages')).not.toContainText('当前页面无关用例');
+
+    const toolCalls = await page.evaluate(() => window.__assistantLibraryQueryToolCalls || []);
+    expect(toolCalls.map(item => item.name)).toContain('case_library.query_cases');
+    expect(toolCalls.map(item => item.name)).not.toContain('cases.list_current');
+
+    const toolPayload = await page.evaluate(() => window.__assistantLibraryQueryPayload || null);
+    expect(toolPayload && toolPayload.tool).toBe('case_library.query_cases');
+    expect(toolPayload && toolPayload.scope).toBe('project');
+    expect(toolPayload && toolPayload.total).toBe(2);
+    expect(toolPayload && toolPayload.filterInfo && toolPayload.filterInfo.includeKeywords).toContain('超界者');
+  });
+
+  test('大批量用例库内容查询会拆分子任务并聚合返回', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantLibraryMultiAgentToolCalls = [];
+      window.__assistantLibraryMultiAgentPayload = null;
+      var files = [];
+      var caseItemsByFileId = {};
+      for (var i = 1; i <= 20; i += 1) {
+        var fileId = 800 + i;
+        files.push({
+          id: fileId,
+          project_id: 2001,
+          version_id: 301,
+          file_name_clean: '联机用例_' + i,
+          item_count: 2,
+          imported_at: '2026-03-01T10:00:00Z',
+          updated_at: '2026-03-0' + ((i % 8) + 1) + 'T10:00:00Z',
+        });
+        caseItemsByFileId[String(fileId)] = [
+          {
+            id: fileId * 10 + 1,
+            module: '联机',
+            title: i % 5 === 0 ? ('联机房间同步_' + i) : ('普通联机流程_' + i),
+            priority: 'P2',
+            precondition: '玩家已进入房间',
+            steps: '执行常规联机操作',
+            expected: '结果正常',
+          },
+          {
+            id: fileId * 10 + 2,
+            module: '联机',
+            title: i % 5 === 0 ? ('联机重连补偿_' + i) : ('普通断线恢复_' + i),
+            priority: 'P1',
+            precondition: '玩家已断线',
+            steps: '重新连接服务器',
+            expected: '恢复正常',
+          },
+        ];
+      }
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'assign';
+        window.app.state.tempExecFiles = [];
+        window.app.state.tempExecActiveId = '';
+        window.app.state.tempExecActiveFileId = '';
+      }
+      if (window.app && window.app.apiClient) {
+        window.app.apiClient.listCaseFiles = async function() {
+          return files.slice();
+        };
+        window.app.apiClient.listCaseItems = async function(caseFileId) {
+          return caseItemsByFileId[String(caseFileId)] ? caseItemsByFileId[String(caseFileId)].slice() : [];
+        };
+      }
+      if (window.app && window.app.assistantMcpApi && typeof window.app.assistantMcpApi.callTool === 'function') {
+        var oldCallTool = window.app.assistantMcpApi.callTool;
+        window.app.assistantMcpApi.callTool = async function(name, args) {
+          window.__assistantLibraryMultiAgentToolCalls.push({
+            name: String(name || ''),
+            args: JSON.parse(JSON.stringify(args || {})),
+          });
+          return oldCallTool.apply(this, arguments);
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'plan_case_list_filter') {
+            return {
+              ok: true,
+              content: '{"mode":"filter","includeKeywords":["联机重连补偿"],"excludeKeywords":[],"indexParity":"","idParity":""}',
+            };
+          }
+          if (payload && payload.toolResult && payload.toolResult.tool === 'case_library.query_cases') {
+            window.__assistantLibraryMultiAgentPayload = payload.toolResult;
+            return {
+              ok: true,
+              content: '已经跨页面汇总完成，共找到 4 条联机重连补偿相关用例。',
+            };
+          }
+          return {
+            ok: true,
+            content: '{"mcp":{"tool":"case_library.query_cases","args":{"query":"帮我跨页面查用例库里包含联机重连补偿的用例"}},"response":""}',
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我跨页面查用例库里包含联机重连补偿的用例');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages')).toContainText('共找到 4 条联机重连补偿相关用例');
+
+    const toolCalls = await page.evaluate(() => window.__assistantLibraryMultiAgentToolCalls || []);
+    expect(toolCalls.map(item => item.name)).toContain('case_library.query_cases');
+    expect(toolCalls.map(item => item.name)).not.toContain('cases.list_current');
+
+    const toolPayload = await page.evaluate(() => window.__assistantLibraryMultiAgentPayload || null);
+    expect(toolPayload && toolPayload.tool).toBe('case_library.query_cases');
+    expect(toolPayload && toolPayload.total).toBe(4);
+    expect(toolPayload && toolPayload.searchedFileCount).toBe(20);
+    expect(toolPayload && toolPayload.multiAgent && toolPayload.multiAgent.used).toBe(true);
+    expect(Number(toolPayload && toolPayload.multiAgent && toolPayload.multiAgent.chunkCount || 0)).toBeGreaterThan(1);
+  });
+
 
 });
