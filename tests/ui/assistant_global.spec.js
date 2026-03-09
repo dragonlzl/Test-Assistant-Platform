@@ -225,31 +225,32 @@ test.describe('全局AI助手', () => {
     const modelId = 'assistant-model-1';
 
     await enableAssistant(page, modelId);
+    await Promise.all([
+      page.waitForURL(/case-exec\.html\?tab=tempexec/),
+      page.evaluate(() => {
+        if (window.app && typeof window.app.switchTab === 'function') {
+          window.app.switchTab('tempexec');
+        }
+      }),
+    ]);
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.evaluate((id) => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.applyPatch !== 'function') return null;
+      return window.app.assistantSettingsApi.applyPatch({
+        assistantEnabled: true,
+        assistantModelId: id,
+      }, { source: 'assistant-ui', allowSelfDisable: true });
+    }, modelId);
+    await expect.poll(() => page.evaluate((id) => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === String(id || ''));
+    }, modelId)).toBe(true);
     await page.evaluate(() => {
       window.__assistantTransferLog = [];
-      window.__assistantModelCallCount = 0;
-      var recommended = {
-        id: '501',
-        name: '新手礼包用例',
-        projectId: '3001',
-        projectName: '元气骑士项目',
-        versionId: '701',
-        versionName: 'S1',
-        itemCount: 12,
-      };
       if (window.app && window.app.caseLibraryApi) {
-        window.app.caseLibraryApi.searchExecCandidates = async function() {
-          return {
-            ok: true,
-            query: '新手礼包用例',
-            projectId: '3001',
-            projectName: '元气骑士项目',
-            total: 1,
-            selectionRequired: false,
-            truncated: false,
-            recommended: recommended,
-            items: [recommended],
-          };
+        window.app.caseLibraryApi.inspectTransferToExecConflict = async function() {
+          return { ok: true, hasConflict: false };
         };
         window.app.caseLibraryApi.transferCaseFileToExec = async function(args) {
           var payload = Object.assign({}, args || {});
@@ -303,22 +304,6 @@ test.describe('全局AI助手', () => {
               content: '{"mode":"invalid","response":""}',
             };
           }
-          window.__assistantModelCallCount += 1;
-          if (window.__assistantModelCallCount === 1) {
-            return {
-              ok: true,
-              content: JSON.stringify({
-                mcp: {
-                  tool: 'case_library.search_exec_candidates',
-                  args: {
-                    projectName: '元气骑士项目',
-                    query: '新手礼包用例',
-                  },
-                },
-                response: '',
-              }),
-            };
-          }
           return {
             ok: true,
             content: JSON.stringify({
@@ -328,72 +313,6 @@ test.describe('全局AI助手', () => {
                   caseFileId: '501',
                   projectId: '3001',
                 },
-              },
-              response: '',
-            }),
-          };
-        };
-      }
-    });
-
-    await Promise.all([
-      page.waitForURL(/case-exec\.html\?tab=tempexec/),
-      page.evaluate(() => {
-        if (window.app && typeof window.app.switchTab === 'function') {
-          window.app.switchTab('tempexec');
-        }
-      }),
-    ]);
-    await page.waitForFunction(() => window.app && window.app._inited === true);
-    await page.evaluate((id) => {
-      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.applyPatch !== 'function') return null;
-      return window.app.assistantSettingsApi.applyPatch({
-        assistantEnabled: true,
-        assistantModelId: id,
-      }, { source: 'assistant-ui', allowSelfDisable: true });
-    }, modelId);
-    await expect.poll(() => page.evaluate((id) => {
-      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
-      var snap = window.app.assistantSettingsApi.getSettings();
-      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === String(id || ''));
-    }, modelId)).toBe(true);
-    await page.evaluate(() => {
-      if (window.app && window.app.assistantApi) {
-        window.app.assistantApi.callModel = async function(inputText) {
-          var payload = null;
-          try {
-            payload = JSON.parse(String(inputText || ''));
-          } catch (err) {
-            payload = null;
-          }
-          if (payload && payload.task === 'plan_task_preview') {
-            return {
-              ok: true,
-              content: JSON.stringify({
-                title: '当前任务',
-                mcp: {
-                  calls: [
-                    { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例', projectId: '2001' } },
-                    { tool: 'case_library.transfer_to_exec', args: { caseFileId: '43', projectId: '2001', execVersionName: '912' } },
-                    { tool: 'case.update', args: { context: 'tempexec', scope: 'all', field: 'actual', value: '失败' } },
-                  ],
-                },
-                response: '',
-              }),
-            };
-          }
-          if (payload && payload.task === 'resolve_exec_transfer_choice') {
-            return { ok: true, content: '{"mode":"select","selectedIndex":1}' };
-          }
-          return {
-            ok: true,
-            content: JSON.stringify({
-              mcp: {
-                calls: [
-                  { tool: 'case_library.search_exec_candidates', args: { query: '皮肤用例', projectId: '2001' } },
-                  { tool: 'case_library.transfer_to_exec', args: { caseFileId: '43', projectId: '2001', execVersionName: '912' } },
-                  { tool: 'case.update', args: { context: 'tempexec', scope: 'all', field: 'actual', value: '失败' } },
-                ],
               },
               response: '',
             }),
@@ -424,8 +343,140 @@ test.describe('全局AI助手', () => {
       if (!window.__assistantTransferLog || window.__assistantTransferLog.length < 2) return '';
       return String(window.__assistantTransferLog[1].execVersionId || '');
     })).toBe('702');
-    await expect(page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' })).toHaveCount(1);
-    await expect.poll(() => page.evaluate(() => Number(window.__assistantModelCallCount || 0))).toBe(2);
+  });
+
+  test('助手在同执行版本已有同名用例时会二次确认是否覆盖后再转执行', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await Promise.all([
+      page.waitForURL(/case-exec\.html\?tab=tempexec/),
+      page.evaluate(() => {
+        if (window.app && typeof window.app.switchTab === 'function') {
+          window.app.switchTab('tempexec');
+        }
+      }),
+    ]);
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await page.evaluate((id) => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.applyPatch !== 'function') return null;
+      return window.app.assistantSettingsApi.applyPatch({
+        assistantEnabled: true,
+        assistantModelId: id,
+      }, { source: 'assistant-ui', allowSelfDisable: true });
+    }, modelId);
+    await expect.poll(() => page.evaluate((id) => {
+      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
+      var snap = window.app.assistantSettingsApi.getSettings();
+      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === String(id || ''));
+    }, modelId)).toBe(true);
+    await page.evaluate(() => {
+      window.__assistantTransferLog = [];
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.inspectTransferToExecConflict = async function(args) {
+          var payload = Object.assign({}, args || {});
+          if (String(payload.execVersionId || '') !== '701' || payload.overwriteConfirmed === true) {
+            return { ok: true, hasConflict: false };
+          }
+          return {
+            ok: true,
+            hasConflict: true,
+            actionLabel: '覆盖当前执行中的同名用例',
+            message: '执行版本【S1】下已存在同名用例【新手礼包用例】，继续会用最新用例覆盖当前执行内容，并尽量保留可匹配的执行结果；无法匹配的执行数据可能丢失。是否继续覆盖？',
+            confirmPatch: { overwriteConfirmed: true },
+          };
+        };
+        window.app.caseLibraryApi.transferCaseFileToExec = async function(args) {
+          var payload = Object.assign({}, args || {});
+          window.__assistantTransferLog.push(payload);
+          if (!payload.execVersionId) {
+            return {
+              ok: true,
+              versionSelectionRequired: true,
+              caseFileId: '501',
+              name: '新手礼包用例',
+              projectId: '3001',
+              projectName: '元气骑士项目',
+              importVersionId: '701',
+              importVersionName: 'S1',
+              totalVersions: 2,
+              items: [
+                { id: '701', name: 'S1', isImportedVersion: true },
+                { id: '702', name: 'S2' },
+              ],
+            };
+          }
+          return {
+            ok: true,
+            caseFileId: '501',
+            name: '新手礼包用例',
+            projectId: '3001',
+            projectName: '元气骑士项目',
+            versionId: String(payload.execVersionId || ''),
+            versionName: String(payload.execVersionId === '702' ? 'S2' : 'S1'),
+          };
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText) {
+          var payload = null;
+          try {
+            payload = JSON.parse(String(inputText || ''));
+          } catch (err) {
+            payload = null;
+          }
+          if (payload && payload.task === 'resolve_exec_transfer_choice') {
+            return {
+              ok: true,
+              content: '{"mode":"select","selectedIndex":1}',
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              mcp: {
+                tool: 'case_library.transfer_to_exec',
+                args: {
+                  caseFileId: '501',
+                  projectId: '3001',
+                },
+              },
+              response: '',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把元气骑士项目新手礼包用例转到当前执行');
+    await page.click('#assistantSendBtn');
+
+    const firstApproval = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：转到当前执行' }).last();
+    await expect(firstApproval).toContainText('准备执行：转到当前执行');
+    await firstApproval.getByRole('button', { name: '允许操作' }).click();
+
+    const versionReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(versionReply).toContainText('请选择要转入的执行版本');
+    await expect(versionReply).toContainText('1. S1（原用例版本）');
+
+    await page.fill('#assistantInput', '选第1个');
+    await page.click('#assistantSendBtn');
+
+    const overwriteApproval = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：覆盖当前执行中的同名用例' }).last();
+    await expect(overwriteApproval).toContainText('准备执行：覆盖当前执行中的同名用例');
+    await expect(overwriteApproval).toContainText('执行版本【S1】下已存在同名用例【新手礼包用例】');
+    await overwriteApproval.getByRole('button', { name: '允许操作' }).click();
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('已将【新手礼包用例】转到当前执行');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.__assistantTransferLog || window.__assistantTransferLog.length < 2) return '';
+      return JSON.stringify(window.__assistantTransferLog[1]);
+    })).toContain('"overwriteConfirmed":true');
+    await expect.poll(() => page.evaluate(() => {
+      if (!window.__assistantTransferLog || window.__assistantTransferLog.length < 2) return '';
+      return String(window.__assistantTransferLog[1].execVersionId || '');
+    })).toBe('701');
   });
 
   test('助手要求转到当前执行时不会被旧的切换执行文件回复截断', async ({ page }) => {
@@ -7375,6 +7426,67 @@ test.describe('全局AI助手', () => {
 
 
 
+  test('assistantMcpApi transfer_to_exec 仅在同执行版本同名时要求覆盖确认', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      if (window.app && window.app.caseLibraryApi) {
+        window.app.caseLibraryApi.inspectTransferToExecConflict = async function(args) {
+          var payload = Object.assign({}, args || {});
+          if (String(payload.execVersionId || '') === '701' && payload.overwriteConfirmed !== true) {
+            return {
+              ok: true,
+              hasConflict: true,
+              actionLabel: '覆盖当前执行中的同名用例',
+              message: '执行版本【S1】下已存在同名用例【新手礼包用例】，继续会用最新用例覆盖当前执行内容，并尽量保留可匹配的执行结果；无法匹配的执行数据可能丢失。是否继续覆盖？',
+              confirmPatch: { overwriteConfirmed: true },
+            };
+          }
+          return { ok: true, hasConflict: false };
+        };
+        window.app.caseLibraryApi.transferCaseFileToExec = async function(args) {
+          var payload = Object.assign({}, args || {});
+          return {
+            ok: true,
+            caseFileId: '501',
+            name: '新手礼包用例',
+            versionId: String(payload.execVersionId || ''),
+            versionName: String(payload.execVersionId === '701' ? 'S1' : 'S2'),
+          };
+        };
+      }
+      var conflict = await window.app.assistantMcpApi.callTool('case_library.transfer_to_exec', {
+        caseFileId: '501',
+        projectId: '3001',
+        execVersionId: '701',
+        confirmed: true,
+      });
+      var safe = await window.app.assistantMcpApi.callTool('case_library.transfer_to_exec', {
+        caseFileId: '501',
+        projectId: '3001',
+        execVersionId: '702',
+        confirmed: true,
+      });
+      return {
+        conflictOk: !!(conflict && conflict.ok),
+        conflictReason: conflict && conflict.reason ? String(conflict.reason) : '',
+        conflictActionLabel: conflict && conflict.data && conflict.data.actionLabel ? String(conflict.data.actionLabel) : '',
+        conflictMessage: conflict && conflict.data && conflict.data.message ? String(conflict.data.message) : '',
+        conflictOverwriteConfirmed: !!(conflict && conflict.data && conflict.data.confirmPatch && conflict.data.confirmPatch.overwriteConfirmed === true),
+        safeOk: !!(safe && safe.ok),
+        safeReason: safe && safe.reason ? String(safe.reason) : '',
+        safeVersionId: safe && safe.data && safe.data.versionId ? String(safe.data.versionId) : '',
+      };
+    });
+
+    expect(result.conflictOk).toBeFalsy();
+    expect(result.conflictReason).toBe('confirm_required');
+    expect(result.conflictActionLabel).toBe('覆盖当前执行中的同名用例');
+    expect(result.conflictMessage).toContain('执行版本【S1】下已存在同名用例【新手礼包用例】');
+    expect(result.conflictOverwriteConfirmed).toBeTruthy();
+    expect(result.safeOk).toBeTruthy();
+    expect(result.safeReason).toBe('');
+    expect(result.safeVersionId).toBe('702');
+  });
+
   test('assistantMcpApi transfer_to_exec 裸别名会映射到标准工具', async ({ page }) => {
     const result = await page.evaluate(async () => {
       var res = { ok: false, reason: 'missing api' };
@@ -9941,5 +10053,327 @@ test.describe('全局AI助手', () => {
     expect(Number(toolPayload && toolPayload.multiAgent && toolPayload.multiAgent.chunkCount || 0)).toBeGreaterThan(1);
   });
 
+
+  test('assistantMcpApi tempexec.remove_files 会说明具体移除目标并批量执行', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      window.__assistantRemovedExecFiles = [];
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          { id: 'exec-1', name: '战令冒烟用例', scope: 'current', status: 'active' },
+          { id: 'exec-2', name: '战令支付用例', scope: 'current', status: 'active' },
+          { id: 'exec-3', name: '商城冒烟用例', scope: 'current', status: 'active' },
+        ];
+        window.app.state.tempExecActiveId = 'exec-1';
+        window.app.state.tempExecActiveFileId = 'exec-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.removeTempExecFile = function(fileId) {
+          var id = String(fileId || '');
+          window.__assistantRemovedExecFiles.push(id);
+          if (window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)) {
+            window.app.state.tempExecFiles = window.app.state.tempExecFiles.filter(function(item) {
+              return String(item && item.id || '') !== id;
+            });
+            if (String(window.app.state.tempExecActiveId || '') === id) {
+              window.app.state.tempExecActiveId = window.app.state.tempExecFiles.length ? String(window.app.state.tempExecFiles[0].id || '') : '';
+              window.app.state.tempExecActiveFileId = window.app.state.tempExecActiveId;
+            }
+          }
+        };
+      }
+      var first = await window.app.assistantMcpApi.callTool('tempexec.remove_files', { query: '战令用例' });
+      var second = await window.app.assistantMcpApi.callTool('tempexec.remove_files', { query: '战令用例', confirmed: true });
+      return {
+        firstOk: !!(first && first.ok),
+        firstReason: first && first.reason ? String(first.reason) : '',
+        firstTool: first && first.tool ? String(first.tool) : '',
+        firstActionLabel: first && first.data && first.data.actionLabel ? String(first.data.actionLabel) : '',
+        firstMessage: first && first.data && first.data.message ? String(first.data.message) : '',
+        secondOk: !!(second && second.ok),
+        secondReason: second && second.reason ? String(second.reason) : '',
+        secondCount: second && second.data ? Number(second.data.count || 0) : 0,
+        secondNames: second && second.data && Array.isArray(second.data.fileNames) ? second.data.fileNames.slice() : [],
+        removedIds: Array.isArray(window.__assistantRemovedExecFiles) ? window.__assistantRemovedExecFiles.slice() : [],
+        remainingNames: window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+          ? window.app.state.tempExecFiles.map(function(item) { return item && item.name ? String(item.name) : ''; })
+          : [],
+      };
+    });
+
+    expect(result.firstOk).toBeFalsy();
+    expect(result.firstReason).toBe('confirm_required');
+    expect(result.firstTool).toBe('tempexec.remove_files');
+    expect(result.firstActionLabel).toBe('批量移出执行用例');
+    expect(result.firstMessage).toContain('将把当前执行中的 2 份用例移出执行');
+    expect(result.firstMessage).toContain('战令冒烟用例');
+    expect(result.firstMessage).toContain('战令支付用例');
+    expect(result.secondOk).toBeTruthy();
+    expect(result.secondReason).toBe('');
+    expect(result.secondCount).toBe(2);
+    expect(result.secondNames).toEqual(['战令冒烟用例', '战令支付用例']);
+    expect(result.removedIds).toEqual(['exec-1', 'exec-2']);
+    expect(result.remainingNames).toEqual(['商城冒烟用例']);
+  });
+
+  test('助手可按关键词移出当前执行用例并要求允许操作', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantRemovedExecFiles = [];
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          { id: 'exec-1', name: '战令冒烟用例', scope: 'current', status: 'active' },
+          { id: 'exec-2', name: '战令支付用例', scope: 'current', status: 'active' },
+          { id: 'exec-3', name: '商城冒烟用例', scope: 'current', status: 'active' },
+        ];
+        window.app.state.tempExecActiveId = 'exec-1';
+        window.app.state.tempExecActiveFileId = 'exec-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.removeTempExecFile = function(fileId) {
+          var id = String(fileId || '');
+          window.__assistantRemovedExecFiles.push(id);
+          if (window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)) {
+            window.app.state.tempExecFiles = window.app.state.tempExecFiles.filter(function(item) {
+              return String(item && item.id || '') !== id;
+            });
+            if (String(window.app.state.tempExecActiveId || '') === id) {
+              window.app.state.tempExecActiveId = window.app.state.tempExecFiles.length ? String(window.app.state.tempExecFiles[0].id || '') : '';
+              window.app.state.tempExecActiveFileId = window.app.state.tempExecActiveId;
+            }
+          }
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function() {
+          return {
+            ok: true,
+            content: '好的，准备从当前执行中移除“新手礼包用例”。请在界面中确认操作。',
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '把战令用例移出执行');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：批量移出执行用例' }).last();
+    await expect(approvalCard).toBeVisible();
+    await expect(approvalCard).toContainText('将把当前执行中的 2 份用例移出执行');
+    await expect(approvalCard).toContainText('战令冒烟用例');
+    await expect(approvalCard).toContainText('战令支付用例');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已从当前执行移除用例：共 2 份');
+    await expect(finalReply).toContainText('战令冒烟用例');
+    await expect(finalReply).toContainText('战令支付用例');
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantRemovedExecFiles) ? window.__assistantRemovedExecFiles : [];
+      return list.join('|');
+    })).toBe('exec-1|exec-2');
+    await expect.poll(() => page.evaluate(() => {
+      var list = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles) ? window.app.state.tempExecFiles : [];
+      return list.map(function(item) { return item && item.name ? String(item.name) : ''; }).join('|');
+    })).toBe('商城冒烟用例');
+  });
+
+  test('assistantMcpApi tempexec.remove_files 命中同名不同版本时会先要求选择版本', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      window.__assistantRemovedExecFiles = [];
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.projectVersionsByProject = {
+          '2001': [
+            { id: '301', name: 'v1' },
+            { id: '302', name: 'v2' },
+            { id: '303', name: 'v3' },
+          ],
+        };
+        window.app.state.tempExecFiles = [
+          { id: 'exec-1', name: '狼人技能优化', projectId: '2001', versionId: '301', scope: 'current', status: 'active' },
+          { id: 'exec-2', name: '狼人技能优化', projectId: '2001', versionId: '302', scope: 'current', status: 'active' },
+          { id: 'exec-3', name: '商城冒烟用例', projectId: '2001', versionId: '303', scope: 'current', status: 'active' },
+        ];
+        window.app.state.tempExecActiveId = 'exec-1';
+        window.app.state.tempExecActiveFileId = 'exec-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.removeTempExecFile = function(fileId) {
+          var id = String(fileId || '');
+          window.__assistantRemovedExecFiles.push(id);
+          if (window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)) {
+            window.app.state.tempExecFiles = window.app.state.tempExecFiles.filter(function(item) {
+              return String(item && item.id || '') !== id;
+            });
+          }
+        };
+      }
+      var first = await window.app.assistantMcpApi.callTool('tempexec.remove_files', { query: '狼人技能优化用例' });
+      var second = await window.app.assistantMcpApi.callTool('tempexec.remove_files', { fileId: 'exec-1', confirmed: true });
+      return {
+        firstOk: !!(first && first.ok),
+        firstReason: first && first.reason ? String(first.reason) : '',
+        firstMessage: first && first.data && first.data.message ? String(first.data.message) : '',
+        firstItems: first && first.data && Array.isArray(first.data.items) ? first.data.items.map(function(item) { return item && item.label ? String(item.label) : ''; }) : [],
+        secondOk: !!(second && second.ok),
+        secondCount: second && second.data ? Number(second.data.count || 0) : 0,
+        secondNames: second && second.data && Array.isArray(second.data.fileLabels) ? second.data.fileLabels.slice() : [],
+        removedIds: Array.isArray(window.__assistantRemovedExecFiles) ? window.__assistantRemovedExecFiles.slice() : [],
+        remainingIds: window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+          ? window.app.state.tempExecFiles.map(function(item) { return item && item.id ? String(item.id) : ''; })
+          : [],
+      };
+    });
+
+    expect(result.firstOk).toBeFalsy();
+    expect(result.firstReason).toBe('selection_required');
+    expect(result.firstMessage).toContain('请先确认要移出哪一份');
+    expect(result.firstMessage).toContain('版本：v1');
+    expect(result.firstMessage).toContain('版本：v2');
+    expect(result.firstItems).toEqual(['狼人技能优化（版本：v1）', '狼人技能优化（版本：v2）']);
+    expect(result.secondOk).toBeTruthy();
+    expect(result.secondCount).toBe(1);
+    expect(result.secondNames).toEqual(['狼人技能优化（版本：v1）']);
+    expect(result.removedIds).toEqual(['exec-1']);
+    expect(result.remainingIds).toEqual(['exec-2', 'exec-3']);
+  });
+
+  test('助手移除同名不同版本用例时会先询问版本再执行', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantRemovedExecFiles = [];
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.projectVersionsByProject = {
+          '2001': [
+            { id: '301', name: 'v1' },
+            { id: '302', name: 'v2' },
+            { id: '303', name: 'v3' },
+          ],
+        };
+        window.app.state.tempExecFiles = [
+          { id: 'exec-1', name: '狼人技能优化', projectId: '2001', versionId: '301', scope: 'current', status: 'active' },
+          { id: 'exec-2', name: '狼人技能优化', projectId: '2001', versionId: '302', scope: 'current', status: 'active' },
+          { id: 'exec-3', name: '商城冒烟用例', projectId: '2001', versionId: '303', scope: 'current', status: 'active' },
+        ];
+        window.app.state.tempExecActiveId = 'exec-1';
+        window.app.state.tempExecActiveFileId = 'exec-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.removeTempExecFile = function(fileId) {
+          var id = String(fileId || '');
+          window.__assistantRemovedExecFiles.push(id);
+          if (window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)) {
+            window.app.state.tempExecFiles = window.app.state.tempExecFiles.filter(function(item) {
+              return String(item && item.id || '') !== id;
+            });
+            if (String(window.app.state.tempExecActiveId || '') === id) {
+              window.app.state.tempExecActiveId = window.app.state.tempExecFiles.length ? String(window.app.state.tempExecFiles[0].id || '') : '';
+              window.app.state.tempExecActiveFileId = window.app.state.tempExecActiveId;
+            }
+          }
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '把狼人技能优化用例移出执行');
+    await page.click('#assistantSendBtn');
+
+    const clarifyReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(clarifyReply).toContainText('请先确认要移出哪一份');
+    await expect(clarifyReply).toContainText('1. 狼人技能优化（版本：v1）');
+    await expect(clarifyReply).toContainText('2. 狼人技能优化（版本：v2）');
+    await expect(clarifyReply).toContainText('两份都移除');
+
+    await page.fill('#assistantInput', '选第1个');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：移出执行用例' }).last();
+    await expect(approvalCard).toBeVisible();
+    await expect(approvalCard).toContainText('狼人技能优化（版本：v1）');
+    await expect(approvalCard).not.toContainText('版本：v2');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已从当前执行移除用例：共 1 份');
+    await expect(finalReply).toContainText('狼人技能优化（版本：v1）');
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantRemovedExecFiles) ? window.__assistantRemovedExecFiles : [];
+      return list.join('|');
+    })).toBe('exec-1');
+    await expect.poll(() => page.evaluate(() => {
+      var list = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles) ? window.app.state.tempExecFiles : [];
+      return list.map(function(item) { return item && item.id ? String(item.id) : ''; }).join('|');
+    })).toBe('exec-2|exec-3');
+  });
+
+  test('模型规划的 tempexec.remove_files 成功后仍显示成功提示', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantRemovedExecFiles = [];
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.projectVersionsByProject = {
+          '2001': [
+            { id: '301', name: 'v1' },
+            { id: '302', name: 'v2' },
+          ],
+        };
+        window.app.state.tempExecFiles = [
+          { id: 'exec-1', name: '狼人技能优化', projectId: '2001', versionId: '301', scope: 'current', status: 'active' },
+          { id: 'exec-2', name: '商城冒烟用例', projectId: '2001', versionId: '302', scope: 'current', status: 'active' },
+        ];
+        window.app.state.tempExecActiveId = 'exec-1';
+        window.app.state.tempExecActiveFileId = 'exec-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.removeTempExecFile = function(fileId) {
+          var id = String(fileId || '');
+          window.__assistantRemovedExecFiles.push(id);
+          if (window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)) {
+            window.app.state.tempExecFiles = window.app.state.tempExecFiles.filter(function(item) {
+              return String(item && item.id || '') !== id;
+            });
+          }
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function() {
+          return {
+            ok: true,
+            content: '{"mcp":{"tool":"tempexec.remove_files","args":{"query":"狼人技能优化"}},"response":"好的，准备从当前执行中移除，请在界面中确认操作。"}',
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '把当前执行里的狼人技能优化处理掉');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：移出执行用例' }).last();
+    await expect(approvalCard).toBeVisible();
+    await expect(approvalCard).toContainText('狼人技能优化（版本：v1）');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已从当前执行移除用例：共 1 份');
+    await expect(finalReply).toContainText('狼人技能优化（版本：v1）');
+    await expect(finalReply).not.toContainText('请在界面中确认操作');
+    await expect.poll(() => page.evaluate(() => {
+      var list = Array.isArray(window.__assistantRemovedExecFiles) ? window.__assistantRemovedExecFiles : [];
+      return list.join('|');
+    })).toBe('exec-1');
+  });
 
 });

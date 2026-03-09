@@ -5804,6 +5804,407 @@
       return { ok: true, index: picked.index, total: picked.count };
     }
 
+    function assistantNormalizeTempExecRemoveLookupText(value) {
+      return String(value === undefined || value === null ? '' : value)
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[“”"'`]/g, '');
+    }
+
+    function assistantTrimTempExecRemoveQuery(value) {
+      var text = String(value === undefined || value === null ? '' : value).trim();
+      if (!text) return '';
+      text = text.replace(/^(?:请|帮我|麻烦|把|将|把当前执行中的|将当前执行中的|把当前执行里(?:的)?|将当前执行里(?:的)?|把执行中的|将执行中的|把执行里(?:的)?|将执行里(?:的)?)+/, '').trim();
+      text = text.replace(/(?:从当前执行中|从执行中|从执行里)$/g, '').trim();
+      text = text.replace(/(?:用例文件|执行用例|测试用例|用例|测试|case)+$/i, '').trim();
+      text = text.replace(/^[“”"'`]+|[“”"'`]+$/g, '').trim();
+      return text;
+    }
+
+    function assistantResolveTempExecFileDisplayName(file, fallbackIndex) {
+      var row = file && typeof file === 'object' ? file : {};
+      var name = row.name || row.file_name_clean || row.fileName || row.title || '';
+      if (name !== undefined && name !== null && String(name).trim()) return String(name).trim();
+      var id = row.id === undefined || row.id === null ? '' : String(row.id).trim();
+      if (id) return '用例#' + id;
+      var index = Number(fallbackIndex);
+      if (!Number.isFinite(index) || index <= 0) index = 1;
+      return '执行用例' + index;
+    }
+
+    function assistantResolveTempExecRemoveVersionId(file) {
+      var row = file && typeof file === 'object' ? file : {};
+      if (row.versionId !== undefined && row.versionId !== null && String(row.versionId).trim()) return String(row.versionId).trim();
+      if (row.version_id !== undefined && row.version_id !== null && String(row.version_id).trim()) return String(row.version_id).trim();
+      return '';
+    }
+
+    function assistantResolveTempExecRemoveProjectId(file) {
+      var row = file && typeof file === 'object' ? file : {};
+      if (row.projectId !== undefined && row.projectId !== null && String(row.projectId).trim()) return String(row.projectId).trim();
+      if (row.project_id !== undefined && row.project_id !== null && String(row.project_id).trim()) return String(row.project_id).trim();
+      return '';
+    }
+
+    function assistantLookupTempExecRemoveVersionName(projectId, versionId) {
+      var pid = projectId === undefined || projectId === null ? '' : String(projectId).trim();
+      var vid = versionId === undefined || versionId === null ? '' : String(versionId).trim();
+      var versionsByProject = null;
+      var versions = [];
+      var projects = [];
+      var found = null;
+      var i = 0;
+      if (!pid || !vid) return '';
+      versionsByProject = state.projectVersionsByProject && typeof state.projectVersionsByProject === 'object'
+        ? state.projectVersionsByProject
+        : {};
+      versions = pid && Array.isArray(versionsByProject[pid]) ? versionsByProject[pid] : [];
+      for (i = 0; i < versions.length; i += 1) {
+        found = versions[i];
+        if (!found || found.id === undefined || found.id === null) continue;
+        if (String(found.id) !== vid) continue;
+        if (found.name !== undefined && found.name !== null && String(found.name).trim()) return String(found.name).trim();
+      }
+      projects = Array.isArray(state.projects) ? state.projects : [];
+      for (i = 0; i < projects.length; i += 1) {
+        var project = projects[i];
+        var projectVersions = [];
+        if (!project || String(project.id || '') !== pid) continue;
+        projectVersions = Array.isArray(project.versions) ? project.versions : [];
+        for (var j = 0; j < projectVersions.length; j += 1) {
+          found = projectVersions[j];
+          if (!found || found.id === undefined || found.id === null) continue;
+          if (String(found.id) !== vid) continue;
+          if (found.name !== undefined && found.name !== null && String(found.name).trim()) return String(found.name).trim();
+        }
+      }
+      return '';
+    }
+
+    function assistantResolveTempExecRemoveVersionName(file) {
+      var row = file && typeof file === 'object' ? file : {};
+      var raw = row.versionName || row.version_name || row.version || row.execVersionName || row.exec_version_name || '';
+      var versionId = assistantResolveTempExecRemoveVersionId(row);
+      var projectId = assistantResolveTempExecRemoveProjectId(row);
+      var fallbackName = '';
+      if (raw !== undefined && raw !== null && String(raw).trim()) return String(raw).trim();
+      fallbackName = assistantLookupTempExecRemoveVersionName(projectId, versionId);
+      return fallbackName;
+    }
+
+    function assistantResolveTempExecRemoveProjectName(file) {
+      var row = file && typeof file === 'object' ? file : {};
+      var raw = row.projectName || row.project_name || '';
+      return raw !== undefined && raw !== null && String(raw).trim() ? String(raw).trim() : '';
+    }
+
+    function assistantResolveTempExecRemoveVersionLabel(file) {
+      var versionName = assistantResolveTempExecRemoveVersionName(file);
+      var versionId = assistantResolveTempExecRemoveVersionId(file);
+      if (versionName) return versionName;
+      if (versionId) return 'ID ' + versionId;
+      return '';
+    }
+
+    function assistantBuildTempExecRemoveItemMeta(file, fallbackIndex) {
+      var row = file && typeof file === 'object' ? file : {};
+      var name = assistantResolveTempExecFileDisplayName(row, fallbackIndex);
+      var versionId = assistantResolveTempExecRemoveVersionId(row);
+      var versionName = assistantResolveTempExecRemoveVersionName(row);
+      var versionLabel = assistantResolveTempExecRemoveVersionLabel(row);
+      var projectName = assistantResolveTempExecRemoveProjectName(row);
+      var suffixes = [];
+      var id = row.id === undefined || row.id === null ? '' : String(row.id);
+      if (versionLabel) suffixes.push('版本：' + versionLabel);
+      if (projectName) suffixes.push('项目：' + projectName);
+      if (!suffixes.length && id) suffixes.push('执行ID：' + id);
+      return {
+        id: id,
+        name: name,
+        label: name + (suffixes.length ? ('（' + suffixes.join('，') + '）') : ''),
+        versionId: versionId,
+        versionName: versionName,
+        projectName: projectName,
+        file: row,
+      };
+    }
+
+    function assistantBuildTempExecFileLookupCandidates(file, fallbackIndex) {
+      var row = file && typeof file === 'object' ? file : {};
+      var name = assistantResolveTempExecFileDisplayName(row, fallbackIndex);
+      return [
+        name,
+        row.name,
+        row.file_name_clean,
+        row.fileName,
+        row.title,
+        row.projectName,
+        row.project_id,
+        row.projectId,
+        row.versionName,
+        row.version_id,
+        row.versionId,
+        row.requirement,
+      ].filter(function(item) {
+        return item !== undefined && item !== null && String(item).trim();
+      }).map(function(item) {
+        return String(item).trim();
+      });
+    }
+
+    function assistantExtractTempExecRemoveFileIds(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var source = [];
+      var rawList = null;
+      var fileIds = [];
+      if (Array.isArray(args.fileIds)) rawList = args.fileIds;
+      else if (Array.isArray(args.ids)) rawList = args.ids;
+      else if (Array.isArray(args.removeIds)) rawList = args.removeIds;
+      if (rawList) source = rawList.slice();
+      else {
+        if (args.fileId !== undefined && args.fileId !== null) source.push(args.fileId);
+        if (args.id !== undefined && args.id !== null) source.push(args.id);
+      }
+      source.forEach(function(item) {
+        var text = item === undefined || item === null ? '' : String(item).trim();
+        if (!text) return;
+        if (fileIds.indexOf(text) === -1) fileIds.push(text);
+      });
+      return fileIds;
+    }
+
+    function assistantExtractTempExecRemoveQuery(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var candidates = [args.query, args.keyword, args.name, args.text, args.title, args.caseName];
+      for (var i = 0; i < candidates.length; i += 1) {
+        if (candidates[i] === undefined || candidates[i] === null) continue;
+        var text = assistantTrimTempExecRemoveQuery(candidates[i]);
+        if (text) return text;
+      }
+      return '';
+    }
+
+    function assistantMatchTempExecFileQuery(file, queryText, fallbackIndex) {
+      var rawQuery = assistantTrimTempExecRemoveQuery(queryText);
+      var normalizedQuery = assistantNormalizeTempExecRemoveLookupText(rawQuery);
+      var candidates = assistantBuildTempExecFileLookupCandidates(file, fallbackIndex);
+      var lookupText = assistantNormalizeTempExecRemoveLookupText(candidates.join('\n'));
+      var compactQuery = normalizedQuery.replace(/(?:用例文件|执行用例|测试用例|用例|测试|当前执行|执行中|执行里|当前)/g, '');
+      if (!normalizedQuery) return false;
+      if (lookupText.indexOf(normalizedQuery) !== -1) return true;
+      if (compactQuery && compactQuery !== normalizedQuery && lookupText.indexOf(compactQuery) !== -1) return true;
+      var tokens = rawQuery.split(/[\s,，、/]+/).map(function(item) {
+        return assistantNormalizeTempExecRemoveLookupText(assistantTrimTempExecRemoveQuery(item));
+      }).filter(Boolean);
+      if (!tokens.length) return false;
+      return tokens.every(function(token) {
+        return lookupText.indexOf(token) !== -1;
+      });
+    }
+
+    function assistantTempExecRemoveAllowsBatch(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      return args.allowMultiple === true
+        || args.selectAll === true
+        || args.all === true
+        || args.removeAll === true
+        || args.batch === true
+        || String(args.scope || '') === 'all';
+    }
+
+    function assistantBuildTempExecRemoveSelectionMessage(queryText, items) {
+      var list = Array.isArray(items) ? items : [];
+      var labels = list.map(function(item) { return item && item.label ? String(item.label) : (item && item.name ? String(item.name) : ''); }).filter(Boolean);
+      var sameName = list[0] && list[0].name ? String(list[0].name) : (queryText ? String(queryText) : '目标用例');
+      var lines = [];
+      lines.push('当前执行中找到 ' + list.length + ' 份同名用例“' + sameName + '”，请先确认要移出哪一份：');
+      labels.forEach(function(label, idx) {
+        lines.push((idx + 1) + '. ' + label);
+      });
+      lines.push('请直接回复“选第1个”、“移除版本 v1 那份”，或回复“两份都移除”。');
+      return lines.join('\n');
+    }
+
+    function assistantResolveTempExecRemoveTargets(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var activeTab = state.activeTab ? String(state.activeTab) : '';
+      var fileIds = assistantExtractTempExecRemoveFileIds(args);
+      var queryText = assistantExtractTempExecRemoveQuery(args);
+      var list = Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      var activeId = state.tempExecActiveId === undefined || state.tempExecActiveId === null ? '' : String(state.tempExecActiveId);
+      var visibleFiles = [];
+      var matches = [];
+      var uniqueNames = {};
+      var uniqueVersions = {};
+      if (activeTab !== 'tempexec') {
+        return { ok: false, reason: '请先进入“用例执行”页面后再移出执行用例。', query: queryText, items: [] };
+      }
+      visibleFiles = list.filter(function(file) {
+        if (!file || typeof file !== 'object') return false;
+        if (String(file.status || '') === 'archived') return false;
+        return true;
+      });
+      if (!visibleFiles.length) {
+        return { ok: false, reason: '当前没有正在执行的用例可移出。', query: queryText, items: [] };
+      }
+      if (fileIds.length) {
+        visibleFiles.forEach(function(file, idx) {
+          var fileId = file.id === undefined || file.id === null ? '' : String(file.id);
+          if (!fileId || fileIds.indexOf(fileId) === -1) return;
+          matches.push(assistantBuildTempExecRemoveItemMeta(file, idx + 1));
+        });
+      } else if (queryText) {
+        visibleFiles.forEach(function(file, idx) {
+          if (!assistantMatchTempExecFileQuery(file, queryText, idx + 1)) return;
+          matches.push(assistantBuildTempExecRemoveItemMeta(file, idx + 1));
+        });
+      } else if (activeId) {
+        visibleFiles.forEach(function(file, idx) {
+          var fileId = file.id === undefined || file.id === null ? '' : String(file.id);
+          if (!fileId || fileId !== activeId) return;
+          matches.push(assistantBuildTempExecRemoveItemMeta(file, idx + 1));
+        });
+      }
+      if (!matches.length) {
+        if (queryText) {
+          return { ok: false, reason: '当前执行中未找到名称包含“' + queryText + '”的用例。', query: queryText, items: [] };
+        }
+        return { ok: false, reason: '当前未定位到要移出执行的目标用例。', query: queryText, items: [] };
+      }
+      matches.forEach(function(item) {
+        var row = item && typeof item === 'object' ? item : {};
+        var normalizedName = assistantNormalizeTempExecRemoveLookupText(row.name || '');
+        var versionKey = assistantNormalizeTempExecRemoveLookupText(row.versionName || row.versionId || row.id || '');
+        if (normalizedName) uniqueNames[normalizedName] = true;
+        if (versionKey) uniqueVersions[versionKey] = true;
+      });
+      if (!fileIds.length && !assistantTempExecRemoveAllowsBatch(args) && matches.length > 1 && Object.keys(uniqueNames).length === 1) {
+        return {
+          ok: false,
+          reason: 'selection_required',
+          selectionRequired: true,
+          actionLabel: '选择要移出的执行用例',
+          message: assistantBuildTempExecRemoveSelectionMessage(queryText, matches),
+          query: queryText,
+          items: matches,
+        };
+      }
+      return {
+        ok: true,
+        query: queryText,
+        items: matches,
+      };
+    }
+
+    function assistantBuildTempExecRemoveConfirmMeta(payload) {
+      var resolved = assistantResolveTempExecRemoveTargets(payload || {});
+      var items = resolved && Array.isArray(resolved.items) ? resolved.items : [];
+      var labels = items.map(function(item) { return item && (item.label || item.name) ? String(item.label || item.name) : ''; }).filter(Boolean);
+      var label = items.length > 1 ? '批量移出执行用例' : '移出执行用例';
+      var summary = labels.slice(0, 3).join('、');
+      if (labels.length > 3) summary += ' 等 ' + labels.length + ' 份';
+      if (!resolved || resolved.ok !== true) {
+        return {
+          ok: false,
+          selectionRequired: resolved && resolved.selectionRequired === true,
+          reason: resolved && resolved.reason ? String(resolved.reason) : '未找到要移出的执行用例',
+          actionLabel: resolved && resolved.actionLabel ? String(resolved.actionLabel) : label,
+          message: resolved && resolved.message ? String(resolved.message) : '未找到要移出的执行用例。',
+          items: items,
+        };
+      }
+      return {
+        ok: true,
+        actionLabel: label,
+        message: items.length > 1
+          ? ('将把当前执行中的 ' + items.length + ' 份用例移出执行：' + summary + '。')
+          : ('将把当前执行中的用例“' + (summary || '目标用例') + '”移出执行。'),
+        items: items,
+      };
+    }
+
+    function assistantBuildTransferToExecConfirmMeta(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var defaultMeta = {
+        ok: true,
+        hasConflict: false,
+        actionLabel: '转到当前执行',
+        message: '该操作会把目标用例加入当前执行，并可能同步覆盖已有执行结果。',
+        confirmPatch: null,
+      };
+      var caseLibraryApi = window.app && window.app.caseLibraryApi ? window.app.caseLibraryApi : null;
+      if (!caseLibraryApi || typeof caseLibraryApi.inspectTransferToExecConflict !== 'function') {
+        return Promise.resolve(defaultMeta);
+      }
+      try {
+        return Promise.resolve(caseLibraryApi.inspectTransferToExecConflict(args)).then(function(res) {
+          if (!res || res.ok !== true || res.hasConflict !== true) return defaultMeta;
+          return {
+            ok: true,
+            hasConflict: true,
+            actionLabel: res.actionLabel ? String(res.actionLabel) : '覆盖当前执行中的同名用例',
+            message: res.message ? String(res.message) : defaultMeta.message,
+            confirmPatch: res.confirmPatch && typeof res.confirmPatch === 'object'
+              ? Object.assign({}, res.confirmPatch)
+              : { overwriteConfirmed: true },
+          };
+        }).catch(function() {
+          return defaultMeta;
+        });
+      } catch (err) {
+        return Promise.resolve(defaultMeta);
+      }
+    }
+
+    function assistantNotifyTempExecRemoveSuccess(result) {
+      var data = result && typeof result === 'object' ? result : {};
+      var labels = Array.isArray(data.fileLabels) && data.fileLabels.length ? data.fileLabels : (Array.isArray(data.fileNames) ? data.fileNames : []);
+      var count = Number(data.count);
+      var summary = labels.slice(0, 3).join('、');
+      var utils = window.app && window.app.utils ? window.app.utils : null;
+      if (!Number.isFinite(count) || count <= 0) count = labels.length || 1;
+      if (labels.length > 3) summary += ' 等 ' + labels.length + ' 份';
+      if (!utils || typeof utils.showCenterToast !== 'function') return;
+      utils.showCenterToast('已从当前执行移除用例：共 ' + count + ' 份' + (summary ? '，' + summary : '') + '。', 'ok', 3500);
+    }
+
+    function assistantRemoveTempExecFiles(payload) {
+      var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      var resolved = assistantResolveTempExecRemoveTargets(payload || {});
+      var removedNames = [];
+      var removedLabels = [];
+      var removedIds = [];
+      var result = null;
+      if (!tempApi || typeof tempApi.removeTempExecFile !== 'function') {
+        return { ok: false, reason: '移出执行能力暂不可用' };
+      }
+      if (!resolved || resolved.ok !== true) {
+        return { ok: false, reason: resolved && resolved.reason ? String(resolved.reason) : '未找到要移出的执行用例' };
+      }
+      resolved.items.forEach(function(item) {
+        var row = item && typeof item === 'object' ? item : {};
+        var fileId = row.id ? String(row.id) : '';
+        if (!fileId) return;
+        tempApi.removeTempExecFile(fileId);
+        removedIds.push(fileId);
+        if (row.name) removedNames.push(String(row.name));
+        if (row.label) removedLabels.push(String(row.label));
+      });
+      if (!removedIds.length) {
+        return { ok: false, reason: '未找到可移出的执行用例' };
+      }
+      result = {
+        ok: true,
+        count: removedIds.length,
+        fileIds: removedIds,
+        fileNames: removedNames,
+        fileLabels: removedLabels,
+        query: resolved.query || '',
+      };
+      assistantNotifyTempExecRemoveSuccess(result);
+      return result;
+    }
+
     function assistantNormalizeCaseUpdateField(rawField, context) {
       var text = rawField === undefined || rawField === null ? '' : String(rawField).trim().toLowerCase();
       text = text.replace(/\s+/g, '');
@@ -8020,6 +8421,7 @@
       if (raw === 'cross_page.match_missing_cases' || raw === 'cross_page_match_missing_cases' || raw === 'match_missing_cases' || raw === 'match_case_missing_library') return 'cross_page.match_missing_cases';
       if (raw === 'case_library.search_exec_candidates' || raw === 'case_library_search_exec_candidates' || raw === 'search_case_files_for_exec' || raw === 'search_exec_candidates' || raw === 'case_library.search_exec_cases' || raw === 'case_library_search_exec_cases' || raw === 'search_exec_cases') return 'case_library.search_exec_candidates';
       if (raw === 'case_library.transfer_to_exec' || raw === 'case_library_transfer_to_exec' || raw === 'transfer_to_exec' || raw === 'transfer_case_to_exec' || raw === 'exec_case_file') return 'case_library.transfer_to_exec';
+      if (raw === 'tempexec.remove_files' || raw === 'tempexec_remove_files' || raw === 'remove_exec_files' || raw === 'remove_from_exec' || raw === 'remove_current_exec_files' || raw === 'case_library.remove_exec_files' || raw === 'case_library_remove_exec_files' || raw === 'case_library.batch_remove_exec_cases' || raw === 'case_library_batch_remove_exec_cases' || raw === 'batch_remove_exec_cases') return 'tempexec.remove_files';
       if (raw === 'case_library.batch_update_exec_results' || raw === 'case_library_batch_update_exec_results' || raw === 'batch_update_exec_results' || raw === 'update_exec_results' || raw === 'case_library.batch_set_exec_results' || raw === 'case_library_batch_set_exec_results' || raw === 'batch_set_exec_results' || raw === 'set_exec_results' || raw === 'set_exec_result') return 'case_library.batch_update_exec_results';
       if (raw === 'case_library.batch_archive_exec_cases' || raw === 'case_library_batch_archive_exec_cases' || raw === 'batch_archive_exec_cases' || raw === 'archive_exec_cases' || raw === 'case_library.batch_archive_cases' || raw === 'case_library_batch_archive_cases' || raw === 'batch_archive_cases' || raw === 'archive_cases') return 'case_library.batch_archive_exec_cases';
       if (raw === 'ui.list_controls' || raw === 'list_controls' || raw === 'list_ui_controls') return 'ui.list_controls';
@@ -8055,6 +8457,7 @@
         { name: 'case_library.query_cases', mode: 'read', description: '跨页面查询用例库内容，并在大数据量时自动拆分子任务并发检索' },
         { name: 'case_library.search_exec_candidates', mode: 'read', description: '按项目/名称搜索可转到当前执行的用例文件候选' },
         { name: 'case_library.transfer_to_exec', mode: 'write', description: '将指定用例文件转到当前执行；若未指定执行版本，会返回待选择版本或待确认新建版本结果' },
+        { name: 'tempexec.remove_files', mode: 'write', description: '按名称或关键词移出当前执行中的用例文件' },
         { name: 'case_library.batch_update_exec_results', mode: 'write', description: '批量修改当前执行用例的执行结果' },
         { name: 'case_library.batch_archive_exec_cases', mode: 'write', description: '归档当前执行中的用例' },
         { name: 'missing_library.list_current', mode: 'read', description: '读取当前项目的漏测/易漏用例库，可跨页面查询' },
@@ -8138,18 +8541,59 @@
         if (!caseFileId) {
           return Promise.resolve({ ok: false, tool: tool, data: payload || null, reason: '缺少 caseFileId' });
         }
+        return assistantBuildTransferToExecConfirmMeta(payload || {}).then(function(transferConfirmMeta) {
+          var confirmMeta = transferConfirmMeta && transferConfirmMeta.ok === true
+            ? transferConfirmMeta
+            : {
+              ok: true,
+              hasConflict: false,
+              actionLabel: '转到当前执行',
+              message: '该操作会把目标用例加入当前执行，并可能同步覆盖已有执行结果。',
+              confirmPatch: null,
+            };
+          if (payload.confirmed !== true || (confirmMeta.hasConflict === true && payload.overwriteConfirmed !== true)) {
+            return assistantBuildMcpConfirmRequired(tool, {
+              actionLabel: confirmMeta.actionLabel,
+              message: confirmMeta.message,
+              confirmPatch: confirmMeta.confirmPatch,
+            });
+          }
+          return assistantTransferCaseFileToExec(payload).then(function(res) {
+            if (!res || res.ok !== true) {
+              return { ok: false, tool: tool, data: res || null, reason: res && res.reason ? String(res.reason) : '转到执行失败' };
+            }
+            return { ok: true, tool: tool, data: res };
+          });
+        });
+      }
+      if (tool === 'tempexec.remove_files') {
+        var removeConfirmMeta = assistantBuildTempExecRemoveConfirmMeta(payload || {});
+        if (removeConfirmMeta && removeConfirmMeta.selectionRequired === true) {
+          return Promise.resolve({
+            ok: false,
+            tool: tool,
+            data: removeConfirmMeta || null,
+            reason: 'selection_required'
+          });
+        }
+        if (!removeConfirmMeta || removeConfirmMeta.ok !== true) {
+          return Promise.resolve({
+            ok: false,
+            tool: tool,
+            data: removeConfirmMeta || null,
+            reason: removeConfirmMeta && removeConfirmMeta.reason ? String(removeConfirmMeta.reason) : '定位待移出执行用例失败'
+          });
+        }
         if (payload.confirmed !== true) {
           return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
-            actionLabel: '转到当前执行',
-            message: '该操作会把目标用例加入当前执行，并可能同步覆盖已有执行结果。',
+            actionLabel: removeConfirmMeta.actionLabel,
+            message: removeConfirmMeta.message,
           }));
         }
-        return assistantTransferCaseFileToExec(payload).then(function(res) {
-          if (!res || res.ok !== true) {
-            return { ok: false, tool: tool, data: res || null, reason: res && res.reason ? String(res.reason) : '转到执行失败' };
-          }
-          return { ok: true, tool: tool, data: res };
-        });
+        var removeRes = assistantRemoveTempExecFiles(payload || {});
+        return Promise.resolve(removeRes && removeRes.ok
+          ? { ok: true, tool: tool, data: removeRes }
+          : { ok: false, tool: tool, data: removeRes || null, reason: removeRes && removeRes.reason ? String(removeRes.reason) : '移出执行失败' });
       }
       if (tool === 'case_library.batch_update_exec_results') {
         var batchUpdatePayload = Object.assign({

@@ -19,6 +19,93 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 更新记录：2026-03-09 AI 助手转执行仅在明确版本意图时自动续跑，并在同版本同名时先确认覆盖
+  - 问题现象：
+    - 当用户只说“转到当前执行”而没有明确指定执行版本时，助手仍可能根据原始语句自动挑选某个执行版本，导致版本选择阶段被跳过；
+    - 一旦自动命中的版本下恰好已有同名用例，助手会直接进入覆盖确认，用户看不到先选版本再确认覆盖的完整流程，存在误覆盖执行数据的风险。
+  - 修复内容：
+    - `scripts/modules/assistant.js`
+      - 新增 `shouldAutoResolvePendingExecTransferVersionFromSource(...)`，仅当原任务里已经明确携带 `execVersionName` / 版本意图时，才允许从原始请求自动续跑执行版本；
+      - 保留现有多轮确认链路：未明确版本时先停在“请选择要转入的执行版本”，选中存在冲突的版本后，再单独弹出“覆盖当前执行中的同名用例”确认。
+    - `scripts/modules/app.js`、`scripts/modules/caseLibrary.js`
+      - 继续复用本轮已补齐的同版本同名冲突探测、覆盖确认文案与 `overwriteConfirmed` 回填机制，不新增后端接口。
+    - `tests/ui/assistant_global.spec.js`
+      - 回归覆盖“先询问执行版本再转执行”“同执行版本已有同名用例时二次确认覆盖”“原始指令指定版本时保留版本歧义询问”等关键场景。
+  - 使用效果：
+    - 用户没有明确执行版本时，助手会先停在版本选择，不会偷跑到某个版本；
+    - 用户明确选中了存在同名冲突的版本后，助手才会继续提示是否覆盖，避免自动覆盖导致执行数据丢失；
+    - 如果原始指令已经明确给出目标版本，且版本意图可可靠承接，原有自动续跑能力仍然保留。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/caseLibrary.js && node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js -g "助手会先询问执行版本再把指定用例转到当前执行|助手在同执行版本已有同名用例时会二次确认是否覆盖后再转执行|assistantMcpApi transfer_to_exec 仅在同执行版本同名时要求覆盖确认|assistantMcpApi transfer_to_exec 裸别名会映射到标准工具|assistantMcpApi case.update 确认文案应说明字段和修改内容|原始指令指定的执行版本存在多个合理命中时会保留版本选择而不是自动继续" --reporter=line --workers=1`（通过，6/6）
+    - 本次未新增 / 修改后端 API，API 自动化回归不适用。
+  - 复用说明：
+    - 复用了现有转执行待选择状态、MCP 多轮确认循环与冲突检测接口；本次仅补充自动续跑触发条件，属于最小增量修复。
+
+- 更新记录：2026-03-09 AI 助手修复执行用例移除成功提示，并在同名不同版本时先询问版本
+  - 问题现象：
+    - 执行用例实际已经移除成功后，聊天区仍可能残留“请在界面中确认操作”之类的过期提示，缺少明确的成功反馈；
+    - 当当前执行里存在 2 份同名但属于不同版本的用例时，助手会把两份一起命中并直接进入允许操作，未先询问到底移除哪一份，容易误删。
+  - 修复内容：
+    - `scripts/modules/app.js`
+      - 为 `tempexec.remove_files` 增加同名多版本歧义识别：当命中多份同名执行用例且用户未明确说明“全部移除”时，工具会返回待选择结果，而不是直接批量移除；
+      - 移除确认与成功结果统一改为使用更明确的候选标签，如“狼人技能优化（版本：v1）”，避免同名场景下只看到重复文件名；
+      - 当执行文件本身只有 `versionId` 时，会额外回查 `state.projectVersionsByProject` / 项目版本列表补出真实版本名，不再退化成“版本：ID 30”这类难以识别的提示；
+      - 移除成功后额外复用现有 `showCenterToast(...)` 给出一条页面内成功提示，强化“已移除成功”的反馈。
+    - `scripts/modules/assistant.js`
+      - 新增“执行用例移除待选择”状态：当助手收到同名不同版本的命中结果时，会先追问“选第1个 / 移除版本 v1 那份 / 两份都移除”，待用户明确后再进入允许操作；
+      - 待选择后的继续执行会复用现有 MCP + 允许操作链路，确认后只移除用户指定的那一份，成功回复固定显示“已从当前执行移除用例：...”而不再被模型提示词覆盖；
+      - 模型规划链路中的 `tempexec.remove_files` 也改为忽略过期 `responseHint`，避免成功后又回退成“请在界面中确认操作”。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `assistantMcpApi tempexec.remove_files 命中同名不同版本时会先要求选择版本`；
+      - 新增 `助手移除同名不同版本用例时会先询问版本再执行`；
+      - 新增 `模型规划的 tempexec.remove_files 成功后仍显示成功提示`，覆盖模型规划链路的最终回执。
+  - 使用效果：
+    - 如果当前执行里有同名不同版本的用例，助手会先问清楚要移除哪一份，或者是否两份都移除；
+    - 歧义提示、确认卡和成功回执都会优先显示真实版本名；只有在版本信息确实缺失时才会退回到版本 ID；
+    - 允许操作并执行完成后，聊天区会明确回复移除成功，同时页面中央也会出现成功提示；
+    - 即使模型本身给了旧的确认型文案，最终成功回执仍会稳定显示真实的移除结果。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "assistantMcpApi tempexec.remove_files 会说明具体移除目标并批量执行|助手可按关键词移出当前执行用例并要求允许操作|assistantMcpApi tempexec.remove_files 命中同名不同版本时会先要求选择版本|助手移除同名不同版本用例时会先询问版本再执行|模型规划的 tempexec.remove_files 成功后仍显示成功提示" --reporter=line`（通过，5/5）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "assistantMcpApi tempexec.remove_files 命中同名不同版本时会先要求选择版本|助手移除同名不同版本用例时会先询问版本再执行|模型规划的 tempexec.remove_files 成功后仍显示成功提示" --reporter=line`（通过，3/3；执行文件仅保留 `versionId`，提示仍正确显示版本名）
+    - 本次未新增 / 修改后端 API，API 自动化回归不适用。
+  - 复用说明：
+    - 复用了现有 `tempexec.remove_files`、`tempExecApi.removeTempExecFile(...)`、助手允许操作确认卡、任务续跑与页面中央 toast 能力，没有新增后端接口；
+    - 本次是在现有移除执行链路上补齐歧义询问与成功回执，属于最小增量修复。
+
+- 更新记录：2026-03-09 AI 助手支持按关键词移出当前执行中的用例，并要求用户允许
+  - 问题现象：
+    - 用户在“用例执行（tempexec）”页对助手说“把战令用例移出执行”时，助手只能停留在定位/搜索描述，无法真正执行移除；
+    - 现有页面里虽然已经有点击用例卡片 `×` 移出执行的能力，但助手侧没有对应 MCP 工具，也没有具体确认文案与成功回执。
+  - 修复内容：
+    - `scripts/modules/app.js`
+      - 新增 `tempexec.remove_files` MCP 工具，复用现有执行页状态与 `tempExecApi.removeTempExecFile(...)`，按名称/关键词匹配当前执行中的用例文件后执行移出；
+      - 工具在执行前会先生成具体确认信息：命中多少份、准备移出哪些用例；只有用户允许后才真正移除；
+      - 兼容多种别名，如 `remove_exec_files`、`remove_from_exec`、`case_library.batch_remove_exec_cases`，避免模型偶发换写法时再次报 unknown tool。
+    - `scripts/modules/assistant.js`
+      - 新增“移出执行”直达意图识别：像“把战令用例移出执行”“从当前执行中删除这份用例”这类表达，会优先走 `tempexec.remove_files`；
+      - 补充中文任务/操作文案：任务预览会显示“把匹配‘战令’的执行用例移出执行”，确认卡会显示具体命中项，成功后返回“已从当前执行移除用例：共 N 份，xxx”；
+      - `tempexec_remove` 路由的最终回执改为直接使用工具成功结果，并跳过后置模型改写，避免已经移除成功后仍被错误改写成“请在界面中确认操作”；
+      - 更新模型提示词，明确当用户想移出当前执行用例时优先使用 `tempexec.remove_files`。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `assistantMcpApi tempexec.remove_files 会说明具体移除目标并批量执行`，覆盖确认文案与批量移除结果；
+      - 新增 `助手可按关键词移出当前执行用例并要求允许操作`，覆盖聊天区允许操作后的真实执行链路。
+  - 使用效果：
+    - 现在可以直接对助手说“把战令用例移出执行”；
+    - 助手会先给出明确确认卡，说明将移出哪些当前执行用例；
+    - 只有点“允许操作”后才会真正从当前执行中移除，不会静默执行；
+    - 当移除已经成功执行后，聊天区会直接提示“已从当前执行移除用例：...”这类成功通知，不再残留“请在界面中确认操作”的过期提示。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "assistantMcpApi tempexec.remove_files 会说明具体移除目标并批量执行|助手可按关键词移出当前执行用例并要求允许操作|assistantMcpApi transfer_to_exec 裸别名会映射到标准工具|裸 transfer_to_exec 会显示中文步骤并继续执行|assistantMcpApi case_library.batch_archive_exec_cases 会说明归档内容并自动补归档原因" --reporter=line`（通过，5/5）
+    - `node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过，针对本次回执修复复查）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "assistantMcpApi tempexec.remove_files 会说明具体移除目标并批量执行|助手可按关键词移出当前执行用例并要求允许操作" --reporter=line`（通过，2/2；其中文本模型被故意 mock 为过期确认提示，页面仍正确显示移除成功通知）
+    - 本次未新增 / 修改后端 API，API 自动化回归不适用。
+  - 复用说明：
+    - 复用了现有 `tempExecApi.removeTempExecFile(...)`、执行页状态和助手确认卡渲染链路，没有新增新的后端接口；
+    - 本次属于在现有前端助手 / MCP 分发层补齐“移出执行”能力，改动集中且为最小增量。
+
 - 更新记录：2026-03-08 AI 助手补齐 bare `transfer_to_exec` 别名与“全部置失败”中文任务描述
   - 问题现象：
     - 任务卡在部分场景仍会直接显示 `transfer_to_exec`，不符合全中文任务描述要求；
