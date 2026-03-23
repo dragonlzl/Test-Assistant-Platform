@@ -6406,12 +6406,21 @@ tr.import-invalid-locate-active td {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: wrap;
       margin-bottom: 10px;
       gap: 12px;
       padding: 8px 12px;
       border: 1px solid var(--border);
       border-radius: 12px;
       background: #f8fafc;
+    }
+    .temp-reuse-toggle-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1 1 320px;
+      min-width: 0;
+      flex-wrap: wrap;
     }
     .temp-reuse-toggle label {
       display: inline-flex;
@@ -6420,9 +6429,21 @@ tr.import-invalid-locate-active td {
       font-weight: 600;
       cursor: pointer;
     }
+    .temp-reuse-toggle-main .hint {
+      flex: 1 1 220px;
+      min-width: 0;
+    }
     .temp-reuse-toggle input {
       width: 36px;
       height: 18px;
+    }
+    .temp-reuse-expand-toggle {
+      flex-shrink: 0;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      line-height: 1.2;
+      white-space: nowrap;
     }
     .reuse-status {
       border: 1px solid transparent;

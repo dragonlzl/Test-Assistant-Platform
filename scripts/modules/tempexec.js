@@ -7470,6 +7470,38 @@
           if (!Number.isNaN(drIdx) && drLinkId) api.removeTempExecDefectLink(drFileId, drIdx, drLinkId);
           return;
         }
+        var reuseToggleAllBtn = e.target.closest('[data-temp-reuse-toggle-all]');
+        if (reuseToggleAllBtn && api.ensureTempExecReuseOpen && api.renderTempExecView) {
+          var rtaFileId = reuseToggleAllBtn.dataset.tempReuseToggleAll;
+          var reuseVisibleIndexes = (reuseToggleAllBtn.dataset.tempVisible || '').split(',').map(function(val) {
+            var num = Number(val);
+            return Number.isFinite(num) ? num : null;
+          }).filter(function(num) { return num !== null; });
+          if (reuseVisibleIndexes.length) {
+            if (!state.tempExecReuseBatchExpanded || typeof state.tempExecReuseBatchExpanded !== 'object') {
+              state.tempExecReuseBatchExpanded = {};
+            }
+            var reuseOpenSetAll = api.ensureTempExecReuseOpen(rtaFileId);
+            var reuseAllExpanded = reuseToggleAllBtn.dataset.tempExpanded === '1';
+            state.tempExecPreserveScrollOnce = true;
+            clearTempExecReusePlaceholders(rtaFileId, reuseVisibleIndexes);
+            if (reuseAllExpanded) {
+              reuseVisibleIndexes.forEach(function(idx) {
+                reuseOpenSetAll.delete(idx);
+              });
+              state.tempExecReuseBatchExpanded[rtaFileId] = false;
+              api.renderTempExecView();
+            } else {
+              reuseVisibleIndexes.forEach(function(idx) {
+                reuseOpenSetAll.add(idx);
+              });
+              state.tempExecReuseBatchExpanded[rtaFileId] = true;
+              api.renderTempExecView();
+              scheduleTempExecReusePanelHeightRecord(rtaFileId, reuseVisibleIndexes);
+            }
+          }
+          return;
+        }
         var reuseBtn = e.target.closest('[data-temp-reuse-panel]');
         if (reuseBtn && api.ensureTempExecSelection && api.toggleTempExecReusePanel) {
           var rFileId = reuseBtn.dataset.tempReusePanel;
